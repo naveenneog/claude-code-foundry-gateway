@@ -274,6 +274,14 @@ if [ "$1" = "keyvault" ] && [ "$2" = "show" ]; then
 fi
 if [ "$1" = "apim" ] && [ "$2" = "show" ]; then
   query="$(arg_after --query "$@")"
+  if [ -z "$query" ]; then
+    case "${P89_SCENARIO:-}" in
+      reuse-no-identity) printf '{"name":"apim","sku":{"name":"BasicV2"},"identity":null}\n' ;;
+      reuse-classic-sku) printf '{"name":"apim","sku":{"name":"Developer"},"identity":{"type":"SystemAssigned","principalId":"gateway-object-id"}}\n' ;;
+      *) printf '{"name":"apim","sku":{"name":"BasicV2"},"identity":{"type":"SystemAssigned","principalId":"gateway-object-id"}}\n' ;;
+    esac
+    exit 0
+  fi
   case "${P89_SCENARIO:-}" in
     identity-null|identity-patch)
       if [ -f "${P89_STATE_DIR:-.}/identity-enabled" ] && [ "$query" = "identity" ]; then printf '{"type":"SystemAssigned","principalId":"gateway-object-id"}\n'; elif [ "$query" = "identity" ]; then printf 'null\n'; elif [[ "$query" == *identity.principalId* ]]; then
@@ -287,6 +295,11 @@ if [ "$1" = "apim" ] && [ "$2" = "show" ]; then
       if [ "$query" = "identity" ]; then printf '{"type":"SystemAssigned","principalId":"gateway-object-id"}\n'; elif [[ "$query" == *identity.principalId* ]]; then printf 'gateway-object-id\n'; elif [[ "$query" == *id:id* ]]; then printf '{"id":"/subscriptions/sub/resourceGroups/rg/providers/Microsoft.ApiManagement/service/apim","identity":{"type":"SystemAssigned","principalId":"gateway-object-id"}}\n'; else printf '{}\n'; fi
       ;;
   esac
+  exit 0
+fi
+if [ "$1" = "apim" ] && [ "$2" = "list" ]; then
+  if [ "${P89_SCENARIO:-}" = "apim-list-fail" ]; then echo "apim list failed" >&2; exit 3; fi
+  if [ "${P89_SCENARIO:-}" = "apim-existing" ]; then printf '[{"name":"apim"}]\n'; else printf '[]\n'; fi
   exit 0
 fi
 if [ "$1" = "ad" ] && [ "$2" = "group" ] && [ "$3" = "list" ]; then
@@ -340,7 +353,12 @@ if [ "$1" = "ad" ] && [ "$2" = "app" ]; then
       exit 0
       ;;
     update|show)
-      printf '{}\n'
+      if [ "$3" = "show" ]; then
+        if [ "${P89_SCENARIO:-}" = "redirect-extra" ]; then printf '{"appId":"created-app-id","publicClient":{"redirectUris":["https://existing.example/callback"]},"isFallbackPublicClient":false}\n'; else printf '{"appId":"created-app-id","publicClient":{"redirectUris":["http://127.0.0.1/callback"]},"isFallbackPublicClient":true}\n'; fi
+      else
+        printf 'app-update %s\n' "$*" >> "$P89_WRITES"
+        printf '{}\n'
+      fi
       exit 0
       ;;
     delete)
@@ -431,11 +449,15 @@ if [ "$1" = "apim" ] && [ "$2" = "nv" ] && [ "$3" = "show" ]; then
   exit 0
 fi
 if [ "$1" = "apim" ] && [ "$2" = "nv" ] && [ "$3" = "list" ]; then
-  printf '[]\n'
+  if [ "${P89_SCENARIO:-}" = "reuse-installed" ]; then printf '[{"name":"allow-standard"}]\n'; else printf '[]\n'; fi
   exit 0
 fi
 if [ "$1" = "deployment" ] && [ "$2" = "group" ]; then
   action="$3"
+  if [ "$action" = "what-if" ]; then
+    printf 'deployment-what-if %s\n' "$*" >> "$P89_WRITES"
+    exit 0
+  fi
   if [ "$action" = "create" ]; then
     name="$(arg_after -n "$@")"
     printf 'deployment-create %s\n' "$name" >> "$P89_WRITES"
@@ -568,6 +590,8 @@ export STANDARD_GROUP="claude-code-standard"
 export PREMIUM_GROUP="claude-code-premium"
 export GATEWAY_RG="rg"
 export APIM_NAME="apim"
+export PUBLISHER_EMAIL="operator@example.test"
+export PUBLISHER_NAME="AI Platform Team"
 export APIM_PRINCIPAL_ID="gateway-object-id"
 export FOUNDRY_ID="/subscriptions/sub/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/foundry"
 export SUBSCRIPTION_ID="sub"
@@ -587,6 +611,8 @@ export QUOTA_ORG="100000000"
 export CALLS_PER_MINUTE="120"
 export MODELS_STANDARD=",claude-sonnet-5,"
 export MODELS_PREMIUM=",claude-sonnet-5,claude-opus-5,"
+export ENTITLEMENT_CACHE_SECONDS="3600"
+export DESKTOP_EXTRA_AUDIENCE="urn:disabled:claude-extra-audience"
 export DESKTOP_CLIENT_ID="66666666-6666-6666-6666-666666666666"
 export RESOLVER_APP_ID="resolver-app-id"
 export KEYVAULT_NAME="kv"
@@ -622,6 +648,8 @@ function Read-ScenarioFile($Scenario, [string]$Name) {
 }
 
 $groupBlock = Get-MarkedBashBlock $markdown 'GROUP-RECEIPTS'
+$apimAbsentBlock = Get-MarkedBashBlock $markdown 'APIM-ABSENT'
+$reuseApimBlock = Get-MarkedBashBlock $markdown 'REUSE-APIM'
 $identityBlock = Get-MarkedBashBlock $markdown 'GATEWAY-IDENTITY'
 $enableIdentityBlock = Get-MarkedBashBlock $markdown 'ENABLE-APIM-IDENTITY'
 $graphBlock = Get-MarkedBashBlock $markdown 'ENTITLEMENT-GRAPH'
@@ -632,6 +660,7 @@ $roleBlock = Get-MarkedBashBlock $markdown 'FOUNDRY-ROLE'
 $tierBlock = Get-MarkedBashBlock $markdown 'TIER-WRITES'
 $budgetBlock = Get-MarkedBashBlock $markdown 'BUDGET-WRITE'
 $desktopAppBlock = Get-MarkedBashBlock $markdown 'DESKTOP-APP'
+$desktopRedirectsBlock = Get-MarkedBashBlock $markdown 'DESKTOP-REDIRECTS'
 $handoverBlock = Get-MarkedBashBlock $markdown 'HANDOVER'
 $keyVaultBlock = Get-MarkedBashBlock $markdown 'KEYVAULT-ACCESS'
 $bindHostnameBlock = Get-MarkedBashBlock $markdown 'BIND-HOSTNAME'
@@ -669,6 +698,41 @@ $groupCreateFail = Invoke-GuideBashScenario 'group-create-fail' $groupBlock
 Assert 'group create failure refuses with no receipt' (
     $groupCreateFail.Exit -ne 0 -and $groupCreateFail.Output -match 'Tenant settings may block group creation' -and -not (Read-ScenarioFile $groupCreateFail '.p89-receipts/group-standard.json')
 ) $groupCreateFail.Output
+
+$apimListFail = Invoke-GuideBashScenario 'apim-list-fail' $apimAbsentBlock
+Assert 'APIM list failure refuses before what-if or create' (
+    $apimListFail.Exit -ne 0 -and $apimListFail.Output -match 'could not list API Management' -and -not ((Read-ScenarioFile $apimListFail 'calls.log') -match 'deployment group')
+) $apimListFail.Output
+
+$apimExisting = Invoke-GuideBashScenario 'apim-existing' $apimAbsentBlock
+Assert 'existing APIM refuses first-deployment commands' (
+    $apimExisting.Exit -ne 0 -and $apimExisting.Output -match 'already exists' -and -not ((Read-ScenarioFile $apimExisting 'calls.log') -match 'deployment group')
+) $apimExisting.Output
+
+$reuseNoIdentity = Invoke-GuideBashScenario 'reuse-no-identity' $reuseApimBlock
+Assert 'reuse APIM with no identity refuses before what-if' (
+    $reuseNoIdentity.Exit -ne 0 -and $reuseNoIdentity.Output -match 'P89-ENABLE-APIM-IDENTITY' -and -not ((Read-ScenarioFile $reuseNoIdentity 'calls.log') -match 'deployment group what-if')
+) $reuseNoIdentity.Output
+
+$reuseInstalled = Invoke-GuideBashScenario 'reuse-installed' $reuseApimBlock
+Assert 'reuse APIM with existing gateway named value refuses' (
+    $reuseInstalled.Exit -ne 0 -and $reuseInstalled.Output -match 'already has gateway-owned named values' -and -not ((Read-ScenarioFile $reuseInstalled 'calls.log') -match 'deployment group what-if')
+) $reuseInstalled.Output
+
+$reuseClassic = Invoke-GuideBashScenario 'reuse-classic-sku' $reuseApimBlock
+Assert 'reuse APIM with classic SKU refuses' (
+    $reuseClassic.Exit -ne 0 -and $reuseClassic.Output -match 'not BasicV2, StandardV2 or PremiumV2'
+) $reuseClassic.Output
+
+$reuseRoleExisting = Invoke-GuideBashScenario 'role-existing' $reuseApimBlock
+Assert 'reuse APIM with existing Foundry role passes grantFoundryRole false' (
+    $reuseRoleExisting.Exit -eq 0 -and (Read-ScenarioFile $reuseRoleExisting 'calls.log') -match 'grantFoundryRole=false'
+) $reuseRoleExisting.Output
+
+$reuseNoRole = Invoke-GuideBashScenario 'reuse-clean' $reuseApimBlock
+Assert 'reuse APIM without Foundry role passes grantFoundryRole true' (
+    $reuseNoRole.Exit -eq 0 -and (Read-ScenarioFile $reuseNoRole 'calls.log') -match 'grantFoundryRole=true'
+) $reuseNoRole.Output
 
 $emptyPremium = Invoke-GuideBashScenario 'empty-premium' $entitlementScript @{ ALLOW_EMPTY = 'yes' }
 Assert 'empty premium does not empty standard' (
@@ -828,6 +892,33 @@ $appCreateFail = Invoke-GuideBashScenario 'app-create-fail' $desktopAppBlock
 Assert 'app create failure refuses with no receipt' (
     $appCreateFail.Exit -ne 0 -and $appCreateFail.Output -match 'Tenant settings may block app registration' -and -not (Read-ScenarioFile $appCreateFail '.p89-receipts/desktop-app.json')
 ) $appCreateFail.Output
+
+$redirectExtra = Invoke-GuideBashScenario 'redirect-extra' $desktopRedirectsBlock
+Assert 'discovered app redirect update preserves extra URI' (
+    $redirectExtra.Exit -eq 0 -and
+    (Read-ScenarioFile $redirectExtra 'calls.log') -match 'https://existing.example/callback' -and
+    (Read-ScenarioFile $redirectExtra 'calls.log') -match 'http://127.0.0.1/callback'
+) $redirectExtra.Output
+
+$redirectBrowser = Invoke-GuideBashScenario 'redirect-extra' ("export DESKTOP_SIGN_IN_FLOW=browser; " + $desktopRedirectsBlock)
+Assert 'browser Desktop flow adds no broker URIs' (
+    $redirectBrowser.Exit -eq 0 -and
+    -not ((Read-ScenarioFile $redirectBrowser 'calls.log') -match 'ms-appx-web|msauth.com.anthropic')
+) $redirectBrowser.Output
+
+$redirectBroker = Invoke-GuideBashScenario 'redirect-extra' ("export DESKTOP_SIGN_IN_FLOW=broker; " + $desktopRedirectsBlock)
+Assert 'broker Desktop flow adds broker redirect URIs' (
+    $redirectBroker.Exit -eq 0 -and
+    (Read-ScenarioFile $redirectBroker 'calls.log') -match 'ms-appx-web://Microsoft.AAD.BrokerPlugin/66666666-6666-6666-6666-666666666666' -and
+    (Read-ScenarioFile $redirectBroker 'calls.log') -match 'msauth.com.anthropic.claudefordesktop://auth'
+) $redirectBroker.Output
+
+$redirectPlaceholder = Invoke-GuideBashScenario 'redirect-extra' ("export DESKTOP_CLIENT_ID='<desktop-public-client-app-id>'; " + $desktopRedirectsBlock)
+Assert 'empty or placeholder Desktop client id refuses with no update' (
+    $redirectPlaceholder.Exit -ne 0 -and
+    $redirectPlaceholder.Output -match 'DESKTOP_CLIENT_ID' -and
+    -not ((Read-ScenarioFile $redirectPlaceholder 'calls.log') -match 'ad app update')
+) $redirectPlaceholder.Output
 
 $tierWrites = Invoke-GuideBashScenario 'tier-writes' $tierBlock
 Assert 'tier write block writes limits and guarded model list' (

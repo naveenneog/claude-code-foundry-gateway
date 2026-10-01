@@ -32,6 +32,7 @@ export MODELS_STANDARD=",${SONNET_DEPLOYMENT},"
 export MODELS_PREMIUM=",${SONNET_DEPLOYMENT},${OPUS_DEPLOYMENT},"
 export ENTITLEMENT_CACHE_SECONDS="3600"
 export DESKTOP_EXTRA_AUDIENCE="urn:disabled:claude-extra-audience"
+export DESKTOP_SIGN_IN_FLOW="browser"
 ```
 
 References use repository paths and line numbers from the source scripts that this guide mirrors.
@@ -111,6 +112,27 @@ az group show -n "$GATEWAY_RG" --query "{name:name,location:location}" -o json
 
 Expected result: the group exists in the chosen region. This mirrors `deploy.ps1:134`.
 
+Confirm the APIM name is absent before running the first-deployment commands below.
+
+```bash
+# P89-APIM-ABSENT-BEGIN
+p89_apim_absent() {
+  if ! apim_list_json="$(az apim list -g "$GATEWAY_RG" -o json)"; then
+    echo "Refused: could not list API Management instances in '$GATEWAY_RG'; no deployment command ran." >&2
+    return 1
+  fi
+  existing_count="$(printf '%s' "$apim_list_json" | jq --arg name "$APIM_NAME" '[.[] | select(.name == $name)] | length')"
+  if [ "$existing_count" -ne 0 ]; then
+    echo "Refused: APIM '$APIM_NAME' already exists in '$GATEWAY_RG'. For an unused existing APIM, use P89-REUSE-APIM below; for an installed gateway, use Install-ClaudeGateway.ps1 -ExistingApimName so values are read back first, or use the targeted §4, §6 and §9 blocks for single changes." >&2
+    return 1
+  fi
+}
+p89_apim_absent
+# P89-APIM-ABSENT-END
+```
+
+Expected result: no API Management instance with `$APIM_NAME` exists. The first-deployment template commands are destructive when rerun against a live gateway: the template defaults operator-owned named values such as `allow-standard`, `allow-premium`, `quota-overrides`, business-unit values and USD state back to empty values (`infra/main.bicep:170-207`, `:378-389`), can switch projection settings back to command-line defaults (`:144-158`), and PUTs template-owned APIM service properties that can reset omitted TLS, network, portal and hostname settings (`:252-292`).
+
 Validate the gateway template before deployment.
 
 ```bash
@@ -148,6 +170,52 @@ az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" --query "{sku:sku.name,vnet:virtua
 ```
 
 Expected result: SKU is `PremiumV2`, VNet type is `Internal`, and public network access is disabled. This mirrors the v2 SKU and network parameters in `infra/main.bicep:31-68`.
+
+Reuse an existing APIM instance that has never hosted this gateway.
+
+```bash
+# P89-REUSE-APIM-BEGIN
+p89_deploy_reused_apim() {
+  if ! apim_json="$(az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" -o json)"; then
+    echo "Refused: existing APIM '$APIM_NAME' could not be read; no deployment command ran." >&2
+    return 1
+  fi
+  apim_sku="$(printf '%s' "$apim_json" | jq -r '.sku.name // ""')"
+  case "$apim_sku" in BasicV2|StandardV2|PremiumV2) ;; *) echo "Refused: existing APIM SKU '$apim_sku' is not BasicV2, StandardV2 or PremiumV2." >&2; return 1 ;; esac
+  apim_identity_type="$(printf '%s' "$apim_json" | jq -r '.identity.type // "none"')"
+  export APIM_PRINCIPAL_ID="$(printf '%s' "$apim_json" | jq -r '.identity.principalId // ""')"
+  if ! printf '%s' "$apim_identity_type" | grep -q 'SystemAssigned' || [ -z "$APIM_PRINCIPAL_ID" ]; then
+    echo "Refused: existing APIM has no SystemAssigned identity. Run P89-ENABLE-APIM-IDENTITY, then rerun this block." >&2
+    return 1
+  fi
+  if ! nv_json="$(az apim nv list -g "$GATEWAY_RG" --service-name "$APIM_NAME" -o json)"; then
+    echo "Refused: could not read APIM named values; no deployment command ran." >&2
+    return 1
+  fi
+  installed_count="$(printf '%s' "$nv_json" | jq '[.[] | select(.name as $n | ["allow-standard","allow-premium","quota-overrides","bu-registry","bu-members","bu-parents","bu-modes","usd-budgets","usd-budget-state","entitlement-source"] | index($n))] | length')"
+  if [ "$installed_count" -gt 0 ]; then
+    echo "Refused: APIM '$APIM_NAME' already has gateway-owned named values. Use Install-ClaudeGateway.ps1 -ExistingApimName so values are read back and preserved." >&2
+    return 1
+  fi
+  if ! FOUNDRY_ID="$(az cognitiveservices account show -g "$FOUNDRY_RG" -n "$FOUNDRY_ACCOUNT" --query id -o tsv)" || [ -z "$FOUNDRY_ID" ]; then
+    echo "Refused: could not read Foundry resource id; no deployment command ran." >&2
+    return 1
+  fi
+  if ! existing_role="$(az role assignment list --scope "$FOUNDRY_ID" --assignee "$APIM_PRINCIPAL_ID" --include-inherited --query "[?roleDefinitionName=='Cognitive Services User']|[0].id" -o tsv)"; then
+    echo "Refused: could not read gateway Foundry role assignment; no deployment command ran." >&2
+    return 1
+  fi
+  GRANT_FOUNDRY_ROLE="true"
+  if [ -n "$existing_role" ]; then GRANT_FOUNDRY_ROLE="false"; fi
+  az deployment group what-if -g "$GATEWAY_RG" --template-file infra/main.bicep --parameters namePrefix="$NAME_PREFIX" location="$LOCATION" foundryAccountName="$FOUNDRY_ACCOUNT" foundryResourceGroup="$FOUNDRY_RG" publisherEmail="$PUBLISHER_EMAIL" publisherName="$PUBLISHER_NAME" apimSku="$apim_sku" existingApimName="$APIM_NAME" grantFoundryRole="$GRANT_FOUNDRY_ROLE" sonnetDeployment="$SONNET_DEPLOYMENT" opusDeployment="$OPUS_DEPLOYMENT" haikuDeployment="$HAIKU_DEPLOYMENT" tpmStandard="$TPM_STANDARD" quotaStandard="$QUOTA_STANDARD" tpmPremium="$TPM_PREMIUM" quotaPremium="$QUOTA_PREMIUM" quotaOrg="$QUOTA_ORG" modelsStandard="$MODELS_STANDARD" modelsPremium="$MODELS_PREMIUM" callsPerMinute="$CALLS_PER_MINUTE" entitlementSource=named-value entitlementCacheSeconds="$ENTITLEMENT_CACHE_SECONDS" desktopExtraAudience="$DESKTOP_EXTRA_AUDIENCE" || return 1
+  az deployment group create -g "$GATEWAY_RG" -n "claude-gateway-reuse" --template-file infra/main.bicep --parameters namePrefix="$NAME_PREFIX" location="$LOCATION" foundryAccountName="$FOUNDRY_ACCOUNT" foundryResourceGroup="$FOUNDRY_RG" publisherEmail="$PUBLISHER_EMAIL" publisherName="$PUBLISHER_NAME" apimSku="$apim_sku" existingApimName="$APIM_NAME" grantFoundryRole="$GRANT_FOUNDRY_ROLE" sonnetDeployment="$SONNET_DEPLOYMENT" opusDeployment="$OPUS_DEPLOYMENT" haikuDeployment="$HAIKU_DEPLOYMENT" tpmStandard="$TPM_STANDARD" quotaStandard="$QUOTA_STANDARD" tpmPremium="$TPM_PREMIUM" quotaPremium="$QUOTA_PREMIUM" quotaOrg="$QUOTA_ORG" modelsStandard="$MODELS_STANDARD" modelsPremium="$MODELS_PREMIUM" callsPerMinute="$CALLS_PER_MINUTE" entitlementSource=named-value entitlementCacheSeconds="$ENTITLEMENT_CACHE_SECONDS" desktopExtraAudience="$DESKTOP_EXTRA_AUDIENCE" -o json || return 1
+  az deployment group show -g "$GATEWAY_RG" -n "claude-gateway-reuse" --query "properties.outputs.{apim:apimName.value,url:gatewayUrl.value,principal:apimPrincipalId.value}" -o json
+}
+p89_deploy_reused_apim
+# P89-REUSE-APIM-END
+```
+
+Expected result: a clean existing v2 APIM is reused without resetting an already-installed gateway. `grantFoundryRole=false` is passed when the gateway identity already has Cognitive Services User, matching `Install-ClaudeGateway.ps1:1514-1541`.
 
 Read policy deployment state.
 
@@ -712,12 +780,32 @@ Expected result: one exact-name application id is available and `.p89-receipts/d
 Set public-client redirect URIs, including broker redirects when the Desktop profile uses broker flow.
 
 ```bash
-export DESKTOP_CLIENT_ID="<desktop-public-client-app-id>"
-az ad app update --id "$DESKTOP_CLIENT_ID" --is-fallback-public-client true --public-client-redirect-uris "http://127.0.0.1/callback" "ms-appx-web://Microsoft.AAD.BrokerPlugin/${DESKTOP_CLIENT_ID}" "msauth.com.anthropic.claudefordesktop://auth" -o none
-az ad app show --id "$DESKTOP_CLIENT_ID" --query "{appId:appId,publicClient:publicClient.redirectUris,isFallbackPublicClient:isFallbackPublicClient}" -o json
+# P89-DESKTOP-REDIRECTS-BEGIN
+p89_desktop_redirects() {
+  if [ -z "${DESKTOP_CLIENT_ID:-}" ] || printf '%s' "$DESKTOP_CLIENT_ID" | grep -q '<'; then
+    echo "Refused: DESKTOP_CLIENT_ID is empty or still a placeholder; redirect URIs were not changed." >&2
+    return 1
+  fi
+  case "${DESKTOP_SIGN_IN_FLOW:-browser}" in browser|broker) ;; *) echo "Refused: DESKTOP_SIGN_IN_FLOW must be browser or broker." >&2; return 1 ;; esac
+  if ! app_json="$(az ad app show --id "$DESKTOP_CLIENT_ID" -o json)"; then
+    echo "Refused: could not read Desktop app '$DESKTOP_CLIENT_ID'; redirect URIs were not changed." >&2
+    return 1
+  fi
+  required_json="$(jq -n --arg clientId "$DESKTOP_CLIENT_ID" --arg flow "${DESKTOP_SIGN_IN_FLOW:-browser}" '["http://127.0.0.1/callback"] + (if $flow == "broker" then ["ms-appx-web://Microsoft.AAD.BrokerPlugin/" + $clientId, "msauth.com.anthropic.claudefordesktop://auth"] else [] end)')"
+  merged_json="$(jq --argjson required "$required_json" '((.publicClient.redirectUris // []) + $required | unique)' <<< "$app_json")"
+  if jq -e --argjson merged "$merged_json" '(.publicClient.redirectUris // [] | sort) == ($merged | sort) and (.isFallbackPublicClient == true)' <<< "$app_json" >/dev/null; then
+    echo "Desktop redirect URIs already present."
+  else
+    mapfile -t merged_uris < <(jq -r '.[]' <<< "$merged_json")
+    az ad app update --id "$DESKTOP_CLIENT_ID" --is-fallback-public-client true --public-client-redirect-uris "${merged_uris[@]}" -o none || return 1
+  fi
+  az ad app show --id "$DESKTOP_CLIENT_ID" --query "{appId:appId,publicClient:publicClient.redirectUris,isFallbackPublicClient:isFallbackPublicClient}" -o json
+}
+p89_desktop_redirects
+# P89-DESKTOP-REDIRECTS-END
 ```
 
-Expected result: the redirect URI list contains the loopback URI and broker URIs when broker is enabled. This mirrors `scripts/New-ClaudeDesktopEntraApp.ps1:43-64`.
+Expected result: the redirect URI list preserves existing URIs, includes the loopback URI, includes broker URIs only when `DESKTOP_SIGN_IN_FLOW=broker`, and has `isFallbackPublicClient=true`. This mirrors `scripts/New-ClaudeDesktopEntraApp.ps1:47-64` and `Install-ClaudeGateway.ps1:88,1165-1177,1227`.
 
 Publish the Desktop gateway audience into APIM.
 
@@ -744,7 +832,7 @@ export PROJECTION_DEPLOYER="${PROJECTION_DEPLOYER:-./scripts/Deploy-ClaudeProjec
 export AUTH_MODE="${AUTH_MODE:-interactive}"
 STANDARD_MODELS_JSON="$(printf '%s' "$MODELS_STANDARD" | tr ',' '\n' | awk 'NF' | jq -R . | jq -s .)"
 PREMIUM_MODELS_JSON="$(printf '%s' "$MODELS_PREMIUM" | tr ',' '\n' | awk 'NF' | jq -R . | jq -s .)"
-jq -n --arg mode "gateway" --arg gatewayUrl "$GATEWAY_URL" --arg tenantId "$TENANT_ID" --arg apimName "$APIM_NAME" --arg resourceGroup "$GATEWAY_RG" --arg subscriptionId "$SUBSCRIPTION_ID" --arg sku "$SKU" --arg location "$LOCATION" --arg foundryAccount "$FOUNDRY_ACCOUNT" --arg foundryResourceGroup "$FOUNDRY_RG" --arg standardGroup "$STANDARD_GROUP" --arg premiumGroup "$PREMIUM_GROUP" --arg authMode "$AUTH_MODE" --arg entitlementStore "$ENTITLEMENT_STORE" --arg resolverInboundAccess "$RESOLVER_INBOUND_ACCESS" --arg projectionDeployer "$PROJECTION_DEPLOYER" --arg sonnet "$SONNET_DEPLOYMENT" --arg opus "$OPUS_DEPLOYMENT" --arg haiku "$HAIKU_DEPLOYMENT" --argjson standardModels "$STANDARD_MODELS_JSON" --argjson premiumModels "$PREMIUM_MODELS_JSON" --argjson tpmStandard "$TPM_STANDARD" --argjson quotaStandard "$QUOTA_STANDARD" --argjson tpmPremium "$TPM_PREMIUM" --argjson quotaPremium "$QUOTA_PREMIUM" --argjson quotaOrg "$QUOTA_ORG" --argjson callsPerMinute "$CALLS_PER_MINUTE" --arg desktopClientId "$DESKTOP_CLIENT_ID" --arg issuer "https://login.microsoftonline.com/${TENANT_ID}/v2.0" --arg modelsStandard "$MODELS_STANDARD" --arg modelsPremium "$MODELS_PREMIUM" '{
+jq -n --arg mode "gateway" --arg gatewayUrl "$GATEWAY_URL" --arg tenantId "$TENANT_ID" --arg apimName "$APIM_NAME" --arg resourceGroup "$GATEWAY_RG" --arg subscriptionId "$SUBSCRIPTION_ID" --arg sku "$SKU" --arg location "$LOCATION" --arg foundryAccount "$FOUNDRY_ACCOUNT" --arg foundryResourceGroup "$FOUNDRY_RG" --arg standardGroup "$STANDARD_GROUP" --arg premiumGroup "$PREMIUM_GROUP" --arg authMode "$AUTH_MODE" --arg entitlementStore "$ENTITLEMENT_STORE" --arg resolverInboundAccess "$RESOLVER_INBOUND_ACCESS" --arg projectionDeployer "$PROJECTION_DEPLOYER" --arg sonnet "$SONNET_DEPLOYMENT" --arg opus "$OPUS_DEPLOYMENT" --arg haiku "$HAIKU_DEPLOYMENT" --argjson standardModels "$STANDARD_MODELS_JSON" --argjson premiumModels "$PREMIUM_MODELS_JSON" --argjson tpmStandard "$TPM_STANDARD" --argjson quotaStandard "$QUOTA_STANDARD" --argjson tpmPremium "$TPM_PREMIUM" --argjson quotaPremium "$QUOTA_PREMIUM" --argjson quotaOrg "$QUOTA_ORG" --argjson callsPerMinute "$CALLS_PER_MINUTE" --arg desktopClientId "$DESKTOP_CLIENT_ID" --arg flow "${DESKTOP_SIGN_IN_FLOW:-browser}" --arg issuer "https://login.microsoftonline.com/${TENANT_ID}/v2.0" --arg modelsStandard "$MODELS_STANDARD" --arg modelsPremium "$MODELS_PREMIUM" '{
   mode:$mode,
   gatewayUrl:$gatewayUrl,
   tenantId:$tenantId,
@@ -761,7 +849,7 @@ jq -n --arg mode "gateway" --arg gatewayUrl "$GATEWAY_URL" --arg tenantId "$TENA
   entitlementStore:$entitlementStore,
   resolverInboundAccess:$resolverInboundAccess,
   projectionDeployer:$projectionDeployer,
-  desktopSignIn:{kind:"external-idp",flow:"browser",bearerTokenType:"id_token",clientId:$desktopClientId,issuer:$issuer},
+  desktopSignIn:{kind:"external-idp",flow:$flow,bearerTokenType:"id_token",clientId:$desktopClientId,issuer:$issuer},
   deployments:[{name:$sonnet,model:$sonnet},{name:$opus,model:$opus},{name:$haiku,model:$haiku}],
   models:[$sonnet,$opus,$haiku],
   tiers:{

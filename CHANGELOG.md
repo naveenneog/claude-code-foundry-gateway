@@ -49,7 +49,9 @@ exact streaming cache-creation detail remains **U13**.
   enablement block, and prevents empty-assignee Foundry role checks or empty
   receipts after failed role creation. Round 7 makes Key Vault grants exact-scope
   and receipt-backed, preserves live APIM hostnames during company-address PATCH,
-  and refuses empty-scope bypass/teardown reads.
+  and refuses empty-scope bypass/teardown reads. Round 8 adds first-deployment
+  APIM absence and safe reuse blocks, warns against destructive reruns, and
+  merges Desktop redirect URIs instead of replacing live lists.
 - **Final P85 follow-up integration.** P71's owned-process deadline probes and
   precise public-evidence section lookup are merged without production changes.
   The single full AUM run passes all 1,200 cases; refreshed file and whole-check
