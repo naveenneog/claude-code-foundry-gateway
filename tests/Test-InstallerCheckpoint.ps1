@@ -172,7 +172,7 @@ try {
         (Get-Order $f1 'deployment group show*claude-gw-20260101000000*' 'deployment group create*')) (Get-P91Tail $f1)
 
     # ------------------------------------------------------------------ wave 2: reruns
-    $sleeper = Start-Process -FilePath $script:P91Pwsh -ArgumentList @('-NoProfile', '-NonInteractive', '-Command', 'Start-Sleep -Seconds 300') -PassThru -WindowStyle Hidden
+    $sleeper = Start-Process -FilePath $script:P91Pwsh -ArgumentList @('-NoProfile', '-NonInteractive', '-Command', 'Start-Sleep -Seconds 900') -PassThru -WindowStyle Hidden
     $exited = Start-Process -FilePath $script:P91Pwsh -ArgumentList @('-NoProfile', '-NonInteractive', '-Command', 'exit 0') -PassThru -WindowStyle Hidden
     $exited.WaitForExit()
     $hostName = [Environment]::MachineName.ToLowerInvariant().Split('.')[0]
@@ -180,7 +180,7 @@ try {
 
     $copy = { param([string]$Name) New-P91Scenario -Name $Name -Scratch $scratch -From $base }
     $sc = [ordered]@{}
-    foreach ($n in 'tenant', 'subscription', 'group', 'gateway', 'installer', 'version', 'changed', 'template', 'rgMissing', 'apimMissing', 'groupMissing', 'graphLag',
+    foreach ($n in 'tenant', 'subscription', 'group', 'gateway', 'reuse', 'installer', 'version', 'changed', 'template', 'rgMissing', 'apimMissing', 'groupMissing', 'graphLag',
         'readDeployment', 'readGroup', 'readRg', 'truncated', 'schema', 'unknownStep', 'unsafe', 'restart', 'liveLock', 'exitedLock', 'reusedPid', 'otherHost', 'staleHost', 'flow', 'flowRefusal') {
         $sc[$n] = & $copy $n
     }
@@ -213,13 +213,19 @@ try {
     $bounded = New-P91Scenario -Name 'bounded' -Scratch $scratch -From $running
     Edit-P91World $bounded { param($w) foreach ($p in $w.deployments.'rg-p91'.PSObject.Properties) { $p.Value.polls = @('forever') } }
     $hashes = @{}
-    foreach ($n in 'tenant', 'subscription', 'group', 'gateway', 'installer', 'truncated', 'schema', 'unknownStep', 'unsafe') { $file = Get-P91CheckpointFile $sc[$n]; $hashes[$n] = if ($file) { Get-P91Hash $file.FullName } else { '' } }
+    foreach ($n in 'tenant', 'subscription', 'group', 'gateway', 'reuse', 'installer', 'truncated', 'schema', 'unknownStep', 'unsafe') { $file = Get-P91CheckpointFile $sc[$n]; $hashes[$n] = if ($file) { Get-P91Hash $file.FullName } else { '' } }
 
     $flowArgs = "@{ SubscriptionId = '$sub'; FoundryAccount = 'ai-p91'; FoundryResourceGroup = 'rg-ai-p91'; ResourceGroup = 'RG'; Location = 'eastus2'; NamePrefix = 'p91gw'; PublisherEmail = 'ops@contoso.com'; Sku = 'BasicV2'; EntitlementStore = 'named-value'; AuthMode = 'interactive'; DesktopSignInKind = 'helper-script'; AddressMode = 'azure'; SkipFinOpsOffer = `$true; Yes = `$true }"
     $flowCommand = { param($s, [string]$rg) ". '$(Join-Path $s.Repo 'scripts\flow\FlowContract.ps1')'; . '$(Join-Path $s.Repo 'scripts\flow\Foundation.ps1')'; " +
         "try { `$null = Invoke-ClaudeFlowStep -Record ([pscustomobject]@{ decisions = [pscustomobject]@{} }) -Plan ([pscustomobject]@{ Data = [pscustomobject]@{ runsInstaller = `$true; installerArgs = $($flowArgs.Replace("'RG'", "'$rg'")) } }); [Console]::Out.WriteLine('FLOW-STEP-DONE') } " +
         "catch { [Console]::Out.WriteLine('FLOW-CAUGHT: ' + `$_.Exception.Message); exit 3 }" }
     $second = @(
+        # The lock runs first: their locks were written with a last-write time just before this wave.
+        ($runLiveLock = New-P91Run $sc.liveLock -Arguments ($newGateway + '-Yes'))
+        ($runExitedLock = New-P91Run $sc.exitedLock -Arguments ($newGateway + '-Yes'))
+        ($runReusedPid = New-P91Run $sc.reusedPid -Arguments ($newGateway + '-Yes'))
+        ($runOtherHost = New-P91Run $sc.otherHost -Arguments ($newGateway + '-Yes'))
+        ($runStaleHost = New-P91Run $sc.staleHost -Arguments ($newGateway + '-Yes'))
         ($runBase2 = New-P91Run $base -Arguments ($newGateway + '-Yes'))
         ($runIdentity2 = New-P91Run $identity -Arguments ($reused + '-Yes'))
         ($runBu2 = New-P91Run $bu -Arguments ($reused + $quiet) -Attended -Answers @('', 'y', 'platform', '', '', 'n'))
@@ -232,6 +238,7 @@ try {
         ($runInstaller = New-P91Run $sc.installer -Arguments ($newGateway + '-Yes'))
         ($runVersion = New-P91Run $sc.version -Arguments ($newGateway + '-Yes'))
         ($runChanged = New-P91Run $sc.changed -Arguments ($newGateway + '-TpmStandard 30000' + '-Yes'))
+        ($runReuse = New-P91Run $sc.reuse -Arguments ($common + @("-ResourceGroup 'rg-p91'", "-ExistingApimName 'apim-p91gw'", '-Yes')))
         ($runTemplate = New-P91Run $sc.template -Arguments ($newGateway + '-Yes'))
         ($runRgMissing = New-P91Run $sc.rgMissing -Arguments ($newGateway + '-Yes'))
         ($runApimMissing = New-P91Run $sc.apimMissing -Arguments ($newGateway + '-Yes'))
@@ -245,11 +252,6 @@ try {
         ($runUnknownStep = New-P91Run $sc.unknownStep -Arguments ($newGateway + '-Yes'))
         ($runUnsafe = New-P91Run $sc.unsafe -Arguments ($newGateway + '-Yes'))
         ($runRestart = New-P91Run $sc.restart -Arguments ($newGateway + '-Yes', '-Restart'))
-        ($runLiveLock = New-P91Run $sc.liveLock -Arguments ($newGateway + '-Yes'))
-        ($runExitedLock = New-P91Run $sc.exitedLock -Arguments ($newGateway + '-Yes'))
-        ($runReusedPid = New-P91Run $sc.reusedPid -Arguments ($newGateway + '-Yes'))
-        ($runOtherHost = New-P91Run $sc.otherHost -Arguments ($newGateway + '-Yes'))
-        ($runStaleHost = New-P91Run $sc.staleHost -Arguments ($newGateway + '-Yes'))
         ($runFlow = New-P91Run $sc.flow -Command (& $flowCommand $sc.flow 'rg-p91'))
         ($runFlowRefusal = New-P91Run $sc.flowRefusal -Command (& $flowCommand $sc.flowRefusal 'rg-other'))
     )
@@ -365,6 +367,9 @@ try {
     $cg = Get-P91Result $r2 $runChanged
     Assert 'R2 the summary''s Checkpoint row names an answer this run changes, before the confirmation' ($cg.ExitCode -eq 0 -and
         $cg.Out -match '(?m)^\s+Checkpoint\s+.*changed since the checkpoint: TpmStandard' -and (Get-P91Calls $cg 'deployment group create*').Count -eq 1) (Get-P91Tail $cg)
+
+    $ru = Get-P91Result $r2 $runReuse
+    Assert 'S5 the same gateway name, reused where run 1 created it, refuses on one line, names reusedApim and keeps the checkpoint unchanged' ((Test-Refusal $ru 'reusedApim') -and (Test-Kept $sc.reuse $hashes.reuse)) (Get-P91Tail $ru)
 
     $all = @($r1.Values) + @($r2.Values)
     $unexpected = @($all | ForEach-Object { $_.Unexpected } | Where-Object { $_ })

@@ -252,31 +252,41 @@ function New-Run($Scenario, [string[]]$Arguments, [hashtable]$Environment = @{})
     Write-Lf $path $runner
     [pscustomobject]@{ Scenario = $Scenario; Dir = $dir; Logs = $logs; Runner = $path }
 }
-function Invoke-Runs([object[]]$Runs, [int]$TimeoutSeconds = 240) {
-    $started = foreach ($r in $Runs) {
-        $psi = [Diagnostics.ProcessStartInfo]::new($bash)
-        $psi.ArgumentList.Add((ConvertTo-BashPath $r.Runner))
-        $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
-        $psi.StandardOutputEncoding = [Text.Encoding]::UTF8; $psi.StandardErrorEncoding = [Text.Encoding]::UTF8
-        foreach ($name in @($psi.Environment.Keys | Where-Object { $_ -like 'P91_*' -or $_ -like 'CLAUDE_*' -or $_ -in 'CI', 'TF_BUILD', 'GITHUB_ACTIONS', 'AZUREPS_HOST_ENVIRONMENT', 'ACC_CLOUD' })) { [void]$psi.Environment.Remove($name) }
-        $p = [Diagnostics.Process]::Start($psi)
-        [pscustomobject]@{ Run = $r; Process = $p; Out = $p.StandardOutput.ReadToEndAsync(); Err = $p.StandardError.ReadToEndAsync() }
-    }
-    $clock = [Diagnostics.Stopwatch]::StartNew()
+# At most six runs at a time, each with its own time limit: all of a wave at once on a loaded
+# machine ran past one shared limit.
+function Invoke-Runs([object[]]$Runs, [int]$Parallel = 6, [int]$TimeoutSeconds = 300) {
+    $queue = [System.Collections.Generic.Queue[object]]::new()
+    foreach ($r in $Runs) { $queue.Enqueue($r) }
+    $active = [System.Collections.Generic.List[object]]::new()
     $results = @{}
-    foreach ($s in $started) {
-        $timedOut = -not $s.Process.WaitForExit([int][math]::Max(1000, $TimeoutSeconds * 1000 - $clock.ElapsedMilliseconds))
-        if ($timedOut) { try { $s.Process.Kill($true) } catch { } }
-        $out = if ($s.Out.Wait(5000)) { $s.Out.Result } else { '' }
-        $err = if ($s.Err.Wait(5000)) { $s.Err.Result } else { '' }
-        $read = { param($n) $f = Join-Path $s.Run.Logs $n; if (Test-Path -LiteralPath $f) { @(Get-Content -LiteralPath $f | Where-Object { $_ }) } else { @() } }
-        $results[$s.Run.Dir] = [pscustomobject]@{ ExitCode = $(if ($timedOut) { -1 } else { $s.Process.ExitCode }); TimedOut = $timedOut
-            Out = (($out -replace "`e\[[0-9;]*m", '').Replace("`r", '')); Err = (($err -replace "`e\[[0-9;]*m", '').Replace("`r", ''))
-            Az = (& $read 'az.log'); Scripts = (& $read 'scripts.log'); Unexpected = (& $read 'unexpected.log'); Snapshots = (& $read 'snapshots.log') }
+    while ($queue.Count -or $active.Count) {
+        while ($queue.Count -and $active.Count -lt $Parallel) {
+            $r = $queue.Dequeue()
+            $psi = [Diagnostics.ProcessStartInfo]::new($bash)
+            $psi.ArgumentList.Add((ConvertTo-BashPath $r.Runner))
+            $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+            $psi.StandardOutputEncoding = [Text.Encoding]::UTF8; $psi.StandardErrorEncoding = [Text.Encoding]::UTF8
+            foreach ($name in @($psi.Environment.Keys | Where-Object { $_ -like 'P91_*' -or $_ -like 'CLAUDE_*' -or $_ -in 'CI', 'TF_BUILD', 'GITHUB_ACTIONS', 'AZUREPS_HOST_ENVIRONMENT', 'ACC_CLOUD' })) { [void]$psi.Environment.Remove($name) }
+            $p = [Diagnostics.Process]::Start($psi)
+            $active.Add([pscustomobject]@{ Run = $r; Process = $p; Out = $p.StandardOutput.ReadToEndAsync(); Err = $p.StandardError.ReadToEndAsync(); Clock = [Diagnostics.Stopwatch]::StartNew() })
+        }
+        foreach ($s in @($active)) {
+            $timedOut = $s.Clock.Elapsed.TotalSeconds -gt $TimeoutSeconds
+            if (-not $s.Process.HasExited -and -not $timedOut) { continue }
+            if ($timedOut -and -not $s.Process.HasExited) { try { $s.Process.Kill($true) } catch { } }
+            $s.Process.WaitForExit()
+            $out = if ($s.Out.Wait(5000)) { $s.Out.Result } else { '' }
+            $err = if ($s.Err.Wait(5000)) { $s.Err.Result } else { '' }
+            $read = { param($n) $f = Join-Path $s.Run.Logs $n; if (Test-Path -LiteralPath $f) { @(Get-Content -LiteralPath $f | Where-Object { $_ }) } else { @() } }
+            $results[$s.Run.Dir] = [pscustomobject]@{ ExitCode = $(if ($timedOut) { -1 } else { $s.Process.ExitCode }); TimedOut = $timedOut
+                Out = (($out -replace "`e\[[0-9;]*m", '').Replace("`r", '')); Err = (($err -replace "`e\[[0-9;]*m", '').Replace("`r", ''))
+                Az = (& $read 'az.log'); Scripts = (& $read 'scripts.log'); Unexpected = (& $read 'unexpected.log'); Snapshots = (& $read 'snapshots.log') }
+            [void]$active.Remove($s)
+        }
+        Start-Sleep -Milliseconds 100
     }
     return $results
-}
-function Get-Calls($Result, [string]$Pattern) { @($Result.Az | Where-Object { $_ -like $Pattern }) }
+}function Get-Calls($Result, [string]$Pattern) { @($Result.Az | Where-Object { $_ -like $Pattern }) }
 function Get-ErrLines($Result) { @($Result.Err -split "`n" | Where-Object { $_.Trim() }) }
 function Get-Tail($Result) { ((@(($Result.Out + "`n" + $Result.Err) -split "`n" | Where-Object { $_.Trim() }) | Select-Object -Last 3) -join ' | ') }
 function Test-Refusal($Result, [string]$Field) {
@@ -336,7 +346,7 @@ try {
         $dr.Out -notmatch '(?m)\[WARN\].*clouddrive' -and $dr.Out -match '(?m)20 minutes without interactive activity.*Resume: ') (Get-Tail $dr)
 
     # ------------------------------------------------------------------ reruns
-    $sleeperOut = & $bash -c 'sleep 300 >/dev/null 2>&1 & echo $!'
+    $sleeperOut = & $bash -c 'sleep 900 >/dev/null 2>&1 & echo $!'
     $sleeper = "$sleeperOut".Trim()
     Write-Lf $psTable "$sleeper|Thu Oct  1 09:00:00 2026`n"
     $hostName = "$(& $bash -c 'uname -n')".Trim().ToLowerInvariant().Split('.')[0]
@@ -357,6 +367,11 @@ try {
     Edit-World $bounded { param($w) foreach ($p in $w.deployments.'rg-p91'.PSObject.Properties) { $p.Value.polls = @('forever') } }
     $swap = { param([string]$flag, [string]$to) $a = @($args0); $i = [array]::IndexOf($a, $flag); $a[$i + 1] = $to; $a }
     $second = @(
+        # The lock runs first: their locks were written with a last-write time just before this wave.
+        ($runLiveLock = New-Run $sc.liveLock $args0)
+        ($runExitedLock = New-Run $sc.exitedLock $args0)
+        ($runOtherHost = New-Run $sc.otherHost $args0)
+        ($runStaleHost = New-Run $sc.staleHost $args0)
         ($runBase2 = New-Run $base $args0)
         ($runRunning2 = New-Run $running $args0)
         ($runBounded = New-Run $bounded $args0 @{ CLAUDE_GATEWAY_DEPLOY_WAIT_SECONDS = '1' })
@@ -370,10 +385,6 @@ try {
         ($runChanged = New-Run $sc.changed ($args0 + @('--tpm-standard', '30000')))
         ($runTruncated = New-Run $sc.truncated $args0)
         ($runRestart = New-Run $sc.restart ($args0 + '--restart'))
-        ($runLiveLock = New-Run $sc.liveLock $args0)
-        ($runExitedLock = New-Run $sc.exitedLock $args0)
-        ($runOtherHost = New-Run $sc.otherHost $args0)
-        ($runStaleHost = New-Run $sc.staleHost $args0)
     )
     $r2 = Invoke-Runs $second
     $b2 = $r2[$runBase2.Dir]

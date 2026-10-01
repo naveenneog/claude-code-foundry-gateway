@@ -414,10 +414,11 @@ Where the code differs from Decisions 1-16, the code is as follows. The lead rev
   (`scripts/ClaudeInstallCheckpoint.ps1`, `scripts/install-checkpoint.sh`) and the live reads and
   step actions (`scripts/ClaudeInstallResume.ps1`, `scripts/install-resume.sh`), which the first
   file loads. `installerFingerprint` covers the installer and both files.
-- Binding (Decision 5): `reusedApim` is recorded and not compared; the gateway field compares the
-  APIM name (`-ExistingApimName` with `apimName`; `-NamePrefix` or `--name-prefix` with `namePrefix`
-  or `apim-<prefix>` with `apimName`). A subscription passed by name is compared by id after
-  `az account set`, and the checkpoint records the id.
+- Binding (Decision 5): the gateway field compares the APIM name (`-ExistingApimName` with
+  `apimName`; `-NamePrefix` or `--name-prefix` with `namePrefix` or `apim-<prefix>` with
+  `apimName`), and `reusedApim` is compared when the run names the gateway (`-ExistingApimName` is
+  reused, `-NamePrefix` is created; bash always creates). A subscription passed by name is compared
+  by id after `az account set`, and the checkpoint records the id.
 - Version line (Decision 5): each side is one token, `<commit, 12 characters>+<files hash, 8>` in a
   git checkout and `sha256:<files hash, 12>` outside one. The commit and hash are read only on a
   resume or at the commit point. The resume command (Decision 14) carries no commit.

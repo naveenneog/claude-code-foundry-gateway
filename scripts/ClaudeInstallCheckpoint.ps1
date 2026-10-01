@@ -387,6 +387,9 @@ function Open-ClaudeInstallCheckpoint {
     if (@($Bound.Keys) -contains 'NamePrefix' -and [string]$Bound['NamePrefix'] -ne [string]$b.namePrefix -and ('apim-' + $Bound['NamePrefix']) -ne [string]$b.apimName) {
         Stop-ClaudeInstallBinding 'gateway' ([string]$b.apimName) ('apim-' + $Bound['NamePrefix'])
     }
+    # The same name, reused this time and created last time or the other way round, is another gateway.
+    $reused = if (@($Bound.Keys) -contains 'ExistingApimName') { 'true' } elseif (@($Bound.Keys) -contains 'NamePrefix') { 'false' } else { '' }
+    if ($reused -and $reused -ne ([string][bool]$b.reusedApim).ToLowerInvariant()) { Stop-ClaudeInstallBinding 'reusedApim' ([string][bool]$b.reusedApim).ToLowerInvariant() $reused }
     $c.Resuming = $true
     foreach ($p in $cp.answers.PSObject.Properties) { $c.Answers[$p.Name] = $p.Value }
     Write-Host ''
