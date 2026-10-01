@@ -15,7 +15,7 @@
     "Screenshots and the docs that show them": 4.2,
     "Architecture sources, images and code agree": 23.0,
     "Documentation links and commands": 11.1,
-    "Azure CLI setup guide mirrors scripts": 105.0,
+    "Azure CLI setup guide mirrors scripts": 140.0,
     "Portal capture specs and batch safety": 7.3,
     "Resolver - the entitlement read path": 3.7,
     "Named value writes fail loudly": 2.9,
@@ -105,6 +105,7 @@
     "Guided flow across permutations": 145.0,
     "Guided flow plans in one order on both shells": 17.8,
     "Installer summary across permutations": 41.9,
-    "Tier groups follow their gateway": 1.2
+    "Tier groups follow their gateway": 1.2,
+    "Azure CLI setup guide portal path": 2.0
   }
 }

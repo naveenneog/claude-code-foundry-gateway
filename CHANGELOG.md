@@ -29,14 +29,17 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
-- **P90 portal path for the Azure CLI setup guide.** `docs/AZ-COMMANDS.md`
-  now pairs each setup part and expected-result step with a portal blade path,
-  matching fields/buttons, change-later guidance and verified existing
-  screenshots where a redacted capture already exists. A pending-captures table
-  and `guide/captures-pending/p90.json` stage the remaining live captures
-  outside the loaded capture directory until their PNGs and provenance records
-  are added. `Test-AzPortalGuide.ps1` guards portal/change-later coverage,
-  image provenance, pending capture/spec parity and the 12-row overview table.
+- **P90 portal path for the Azure CLI setup guide, round 2.** `docs/AZ-COMMANDS.md`
+  now has one `### Part N in the portal` subsection per part 1-12 instead of
+  repeated per-step portal/change-later paragraphs. The overview table links to
+  those subsections; each subsection contains matching portal steps, no-portal
+  reasons for command-only work and one change-later paragraph. The guide embeds
+  26 verified existing capture references, prunes P90 pending captures to
+  `p90-company-custom-domains`, references the four existing P60 Desktop capture
+  specs, and records tooling gaps for create wizards, tenant-wide Entra creation
+  entry points and resource-group delete discovery. `Test-AzPortalGuide.ps1`
+  now guards all parts, portal subsection shape, duplicate long prose, image
+  provenance, pending-table/spec-file parity and overview portal anchors.
 - **P89 Azure CLI setup guide.** `docs/AZ-COMMANDS.md` mirrors the installer and
   in-scope administration scripts with Cloud Shell bash commands, verification
   commands, expected results and source references; `Test-AzCommandsGuide.ps1`
@@ -49,7 +52,10 @@ exact streaming cache-creation detail remains **U13**.
   the installer and projection scripts. Round 4 makes runner file transfer
   fail-closed with SHA-256 verification, requires teardown receipts for external
   deletes, records group/app creation receipts and documents the Microsoft Graph
-  advanced-query eventual-consistency retry.
+  advanced-query eventual-consistency retry. Round 5 wraps refusal blocks in
+  functions so Cloud Shell stays open, makes group/app discovery fail closed,
+  tightens Graph 404 parsing, checks runner error text, and verifies teardown
+  receipts before deleting anything.
 - **Final P85 follow-up integration.** P71's owned-process deadline probes and
   precise public-evidence section lookup are merged without production changes.
   The single full AUM run passes all 1,200 cases; refreshed file and whole-check

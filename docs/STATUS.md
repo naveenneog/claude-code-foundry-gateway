@@ -40,30 +40,42 @@ Round 4 council-fix validation, 2026-10-01:
 - Teardown now refuses missing receipts, records/deletes only receipt-created Foundry role assignments, Entra groups and Desktop app registrations, and preserves pre-existing external objects.
 - Group creation now records receipts and Graph advanced-query reads retry bounded 404s only for new or younger-than-15-minute groups; older 404s and 403s stop immediately. The guide cites Microsoft Learn's advanced-query eventual consistency/index-store behavior, accessed 2026-10-01.
 - Validation: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS; `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS with 468 checks; `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS with 43 guides. No live Azure command ran.
+Round 5 council-fix validation, 2026-10-01:
+- All guarded bash blocks now use named functions and `return 1`; the guide has no `exit` or `set -e`. A refusal prints `Refused: ...`, returns to the prompt, and leaves exported variables already set.
+- Group and Desktop app discovery now list exact names, refuse list failures, duplicates, single quotes and create failures, and record created/pre-existing receipts. This intentionally differs from the scripts' lookup-error-create behavior.
+- Graph retry now keys on `Not Found(` or `Request_ResourceNotFound`, not a loose `404` substring; `Forbidden(` with a request id containing 404 stops immediately. Unparseable `createdAt` is treated as not-young with a note.
+- Runner transfer now also refuses `ERROR|InvalidCommandLength|terminated with non-zero` text even when `az container exec` exits 0.
+- Teardown checks role and both group receipts before deleting anything; missing premium receipt preserves the role and standard group. Desktop app receipt is optional.
+- Validation: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS; `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS with 558 checks in 165.09 s; `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS with 43 guides. No live Azure command ran.
 
 ## P90 Portal path and staged screenshots for the Azure CLI setup guide, 2026-10-01
 
 Owner request: extend the P89 Azure CLI setup guide with per-part portal paths, screenshots and edit-later guidance so readers can create or modify each configuration through `az` or the portal.
 
 Contract:
-- `docs/AZ-COMMANDS.md` has a 12-row overview table covering every part, the Azure object/setting, the `az` section, the portal blade path, screenshot state and the change-later surface.
-- Each configuring step's expected result is followed by a portal path, matching fields/buttons, a cited repository or Microsoft Learn source and a change-later note. Steps without a portal equivalent say why.
+- `docs/AZ-COMMANDS.md` has a 12-row overview table covering every part, the Azure object/setting, the `az` section, a link to that part's portal subsection, screenshot state and the change-later surface.
+- Parts 1-12 each have exactly one `### Part N in the portal` subsection. Each subsection lists matching portal steps, identifies command-only work with a no-portal-equivalent reason, and has one part-specific `**Change later.**` paragraph.
 - Existing screenshots are embedded only after viewing the PNG and confirming the `docs/guide/portal-captures.json` record is live, redacted and hash-matching.
-- A pending-captures table lists the remaining screenshots, and `guide/captures-pending/p90.json` stages matching capture specs outside `guide/captures/` so unloaded outputs do not break the capture runner.
+- A pending-captures table has a `spec file` column and covers the single remaining P90 staged capture plus the pre-existing P60 Desktop-app staged captures.
 - Non-goals: no live Azure, no browser capture, no image edits, no portal-capture tooling changes, no edits to P89 fenced command blocks or `tests/Test-AzCommandsGuide.ps1`, no Test-All or Ironclad gate.
 
-Results:
-- Added `tests/Test-AzPortalGuide.ps1` and registered it in Test-All after `Test-AzCommandsGuide.ps1`.
-- Added portal paths and change-later notes to all 51 expected-result steps in `docs/AZ-COMMANDS.md`.
-- Embedded nine existing, verified captures: `architecture-foundry-overview`, `gateway-overview`, `gateway-identity`, `docs-review-foundry-iam`, `gateway-named-values`, `docs-review-entra-groups`, `docs-review-daily-quota-editor`, `docs-review-cosmos-networking` and `docs-review-resolver-authentication`. No provenance mismatch was found.
-- Staged six pending captures: `p90-gateway-networking`, `p90-desktop-app-overview`, `p90-desktop-app-authentication`, `p90-company-custom-domains`, `p90-gateway-diagnostic-settings` and `p90-resource-group-delete`.
-- Tooling gaps: the capture schema cannot express a pre-resource create wizard or tenant-wide Entra creation entry point without a discovered target; those portal paths are documented but not staged as automated captures.
+Round 2 results:
+- Merged P89 round 5 commit `c87bff6` into `p90-portal-guide`, keeping P89 guarded bash blocks and prose.
+- Replaced 66 repeated `**Portal.**` paragraphs and 51 repeated `**Change later.**` paragraphs with 12 part-level portal subsections and 12 change-later paragraphs.
+- Embedded 17 additional existing, verified captures for a total of 26 capture references in the guide. New round-2 embeds include `docs-review-api-settings`, `docs-review-api-policy`, `docs-review-gateway-diagnostics`, `p54-apim-network`, `docs-review-gateway-identity`, `architecture-foundry-access`, `p54-vault-certificate`, `p54-vault-role`, `p54-private-endpoint`, `p54-private-dns`, `architecture-projection-networking`, `docs-review-resolver-networking`, `docs-review-workspace-tables`, `docs-review-workspace-functions` and `docs-review-workspace-workbooks`.
+- Pruned `guide/captures-pending/p90.json` to one valid staged step, `p90-company-custom-domains`. Removed `p90-gateway-networking`, `p90-gateway-diagnostic-settings`, the duplicate `p90-desktop-app-*` steps and `p90-resource-group-delete`.
+- Pending captures are now `p90-company-custom-domains` in `guide/captures-pending/p90.json` and `p60-desktop-app-overview`, `p60-desktop-app-authentication`, `p60-desktop-app-api-permissions`, `p60-gateway-desktop-audience` in `guide/captures/p60.json`.
+- Tooling gaps: create wizards and tenant-wide Entra creation entry points still require a discovered target before capture; resource-group delete is not staged because generic discovery uses `az resource list --resource-type`, which lists resources rather than resource groups.
+- Accuracy fixes: §2 states the portal creates only the APIM service and the Claude API/policy/named values/logger/diagnostics come from `infra/main.bicep`; §2 named-value readback uses the Named values edit blade; §3 covers missing system-assigned identity on reused APIM, the Object principal ID, Foundry IAM role assignment and the `az apim update` identity-clearing source; §12 no longer asserts an unverified portal label for APIM soft-delete.
 
 RED / GREEN:
 - RED: `pwsh -NoProfile -File .\tests\Test-AzPortalGuide.ps1` failed on the P89 guide with 25 named failures: parts 2-12 lacked portal/change-later blocks, the pending table/spec were missing and the overview table was missing.
-- GREEN: `pwsh -NoProfile -File .\tests\Test-AzPortalGuide.ps1` PASS, 89 checks, 1.16 s.
-- Negative proofs against temporary copies: removing portal headings failed `part 2 has a Portal block`; changing an image path failed `image resolves`; corrupting a temporary capture record failed `record sha256 matches file`; changing a caption failed `caption id matches record id`; removing a pending spec step failed `pending table and staged spec list the same ids and outputs`; deleting an overview row failed `overview table has one row per part, 1-12`.
-- Validation: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS with 468 checks using isolated `AZURE_CONFIG_DIR`; `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS with 43 guides. No live Azure command ran.
+- RED: the round-2 structural guard failed before the pending-captures section was restored: `pending-captures table exists with spec file column` and `every p90.json pending step appears in the table` failed.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-AzPortalGuide.ps1` PASS, 234 checks, 1.8 s.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS, 558 checks, 193.2 s, isolated `AZURE_CONFIG_DIR`.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS, 43 guides, 1.7 s.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-PortalCaptureSpecs.ps1` PASS, 0 fail / 0 cancelled / 0 skipped / 0 todo, 8.2 s.
+- Negative proofs against temporary copies: removing one portal subsection fails `part 2 has exactly one portal subsection`; removing all part-2 numbered markers fails `part 2 portal subsection has a numbered step`; duplicating a change-later paragraph fails `part 2 has exactly one portal Change later paragraph`; removing the part-8 no-portal sentence fails `part 8 documents no portal equivalent`; adding a duplicate long paragraph fails the duplicate-prose assertion; changing an image path fails `image resolves`; corrupting a temporary capture record fails `record sha256 matches file`; changing a caption fails `caption id matches record id`; removing a pending row fails `every p90.json pending step appears in the table`; deleting an overview portal link fails `overview portal column links to part 2 subsection`.
 
 ## P71 follow-up: a lookup starts one refresh, 2026-09-30
 
