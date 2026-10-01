@@ -182,27 +182,115 @@ Expected result: the value length is at most 4,096, and the final read returns t
 Read the gateway identity and Foundry scope.
 
 ```bash
-export APIM_PRINCIPAL_ID="$(az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" --query identity.principalId -o tsv)"
-export FOUNDRY_ID="$(az cognitiveservices account show -g "$FOUNDRY_RG" -n "$FOUNDRY_ACCOUNT" --query id -o tsv)"
-az role assignment list --scope "$FOUNDRY_ID" --assignee "$APIM_PRINCIPAL_ID" --include-inherited --query "[?roleDefinitionName=='Cognitive Services User'].{role:roleDefinitionName,scope:scope}" -o table
+# P89-GATEWAY-IDENTITY-BEGIN
+p89_gateway_identity() {
+  if ! APIM_IDENTITY_JSON="$(az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" --query identity -o json)"; then
+    echo "Refused: could not read API Management identity; no role check ran." >&2
+    return 1
+  fi
+  APIM_IDENTITY_TYPE="$(printf '%s' "$APIM_IDENTITY_JSON" | jq -r '.type // "none"')"
+  export APIM_PRINCIPAL_ID="$(printf '%s' "$APIM_IDENTITY_JSON" | jq -r '.principalId // ""')"
+  if ! printf '%s' "$APIM_IDENTITY_TYPE" | grep -q 'SystemAssigned' || [ -z "$APIM_PRINCIPAL_ID" ]; then
+    echo "Refused: API Management managed identity is '${APIM_IDENTITY_TYPE:-none}' and principalId is empty." >&2
+    echo "Fix: portal > API Management > Security > Managed identities > System assigned > Status On > Save, then rerun." >&2
+    echo "Do not use 'az apim update' for this; without --enable-managed-identity true, azure-cli apim_update sets instance.identity = None." >&2
+    return 1
+  fi
+  if ! FOUNDRY_ID="$(az cognitiveservices account show -g "$FOUNDRY_RG" -n "$FOUNDRY_ACCOUNT" --query id -o tsv)" || [ -z "$FOUNDRY_ID" ]; then
+    echo "Refused: could not read Foundry resource id; no role check ran." >&2
+    return 1
+  fi
+  export FOUNDRY_ID
+  az role assignment list --scope "$FOUNDRY_ID" --assignee "$APIM_PRINCIPAL_ID" --include-inherited --query "[?roleDefinitionName=='Cognitive Services User'].{role:roleDefinitionName,scope:scope}" -o table
+}
+p89_gateway_identity
+# P89-GATEWAY-IDENTITY-END
 ```
 
-Expected result: an existing assignment is listed, or the table is empty before the grant. This mirrors `Install-ClaudeGateway.ps1:1524-1537`.
+Expected result: a SystemAssigned identity and nonempty APIM principal id are present, and role assignment listing is scoped to that exact principal. If the identity is missing, the guide refuses before calling `--assignee`; otherwise `az role assignment list --assignee ""` can list every principal at the Foundry scope. The field failure is the same root cause as ARM refusing `apim.identity.principalId` in `infra/main.bicep:506-513`; `Install-ClaudeGateway.ps1:586-588` only warns for a non-SystemAssigned identity and does not cover a missing identity.
+
+Optional: enable a missing system-assigned identity on an existing APIM instance, then reread it.
+
+```bash
+# P89-ENABLE-APIM-IDENTITY-BEGIN
+p89_enable_apim_identity() {
+  if ! APIM_STATE="$(az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" --query "{id:id,identity:identity}" -o json)"; then
+    echo "Refused: could not read API Management instance; identity was not changed." >&2
+    return 1
+  fi
+  APIM_ID="$(printf '%s' "$APIM_STATE" | jq -r '.id // ""')"
+  APIM_IDENTITY_TYPE="$(printf '%s' "$APIM_STATE" | jq -r '.identity.type // "none"')"
+  if printf '%s' "$APIM_IDENTITY_TYPE" | grep -q 'SystemAssigned'; then
+    echo "SystemAssigned identity already enabled."
+    return 0
+  fi
+  if [ "$APIM_IDENTITY_TYPE" = "UserAssigned" ]; then
+    echo "Refused: APIM has only UserAssigned identity. Use the portal toggle so existing user-assigned identities are preserved." >&2
+    return 1
+  fi
+  if [ -z "$APIM_ID" ]; then
+    echo "Refused: APIM resource id is empty; identity was not changed." >&2
+    return 1
+  fi
+  az rest --method patch --headers "Content-Type=application/json" --body '{"identity":{"type":"SystemAssigned"}}' --url "https://management.azure.com${APIM_ID}?api-version=2024-05-01" -o none || {
+    echo "Refused: APIM identity PATCH failed." >&2
+    return 1
+  }
+  IDENTITY_WAIT_ATTEMPTS="${IDENTITY_WAIT_ATTEMPTS:-20}"
+  IDENTITY_WAIT_DELAY_SECONDS="${IDENTITY_WAIT_DELAY_SECONDS:-30}"
+  attempt=1
+  while [ "$attempt" -le "$IDENTITY_WAIT_ATTEMPTS" ]; do
+    APIM_PRINCIPAL_ID="$(az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" --query identity.principalId -o tsv)"
+    if [ -n "$APIM_PRINCIPAL_ID" ]; then
+      export APIM_PRINCIPAL_ID
+      printf '%s\n' "$APIM_PRINCIPAL_ID"
+      return 0
+    fi
+    sleep "$IDENTITY_WAIT_DELAY_SECONDS"
+    attempt=$((attempt + 1))
+  done
+  echo "Refused: SystemAssigned identity was requested, but principalId did not appear before the bounded wait ended." >&2
+  return 1
+}
+p89_enable_apim_identity
+# P89-ENABLE-APIM-IDENTITY-END
+```
+
+Expected result: when the identity is absent, a PATCH sets only `identity.type=SystemAssigned`, then the block waits for `identity.principalId`. The PATCH body is valid because the API Management Service Update request body for API version 2024-05-01 includes `identity` (`ApiManagementServiceIdentity`) on Microsoft Learn: https://learn.microsoft.com/en-us/rest/api/apimanagement/api-management-service/update?view=rest-apimanagement-2024-05-01. PATCH is used because a PUT would reset omitted service properties; `infra/main.bicep:252-265` records the same risk.
 
 Grant `Cognitive Services User` to the APIM managed identity when the list above is empty.
 
 ```bash
 # P89-FOUNDRY-ROLE-BEGIN
-mkdir -p .p89-receipts
-EXISTING_FOUNDRY_ROLE_ID="$(az role assignment list --scope "$FOUNDRY_ID" --assignee "$APIM_PRINCIPAL_ID" --include-inherited --query "[?roleDefinitionName=='Cognitive Services User']|[0].id" -o tsv)"
-if [ -n "$EXISTING_FOUNDRY_ROLE_ID" ]; then
-  jq -n --arg existing "$EXISTING_FOUNDRY_ROLE_ID" '{foundryRole:{created:false,existingId:$existing}}' > .p89-receipts/foundry-role.json
-  echo "Existing Cognitive Services User assignment recorded; teardown will not delete it."
-else
-  az role assignment create --assignee-object-id "$APIM_PRINCIPAL_ID" --assignee-principal-type ServicePrincipal --role "Cognitive Services User" --scope "$FOUNDRY_ID" -o json \
-    | jq '{foundryRole:{created:true,id:.id}}' > .p89-receipts/foundry-role.json
-fi
-az role assignment list --scope "$FOUNDRY_ID" --assignee "$APIM_PRINCIPAL_ID" --include-inherited --query "[?roleDefinitionName=='Cognitive Services User'].{role:roleDefinitionName,scope:scope}" -o table
+p89_foundry_role() {
+  mkdir -p .p89-receipts
+  if [ -z "${APIM_PRINCIPAL_ID:-}" ] || [ -z "${FOUNDRY_ID:-}" ]; then
+    echo "Refused: APIM_PRINCIPAL_ID or FOUNDRY_ID is empty; no role assignment command ran." >&2
+    return 1
+  fi
+  if ! EXISTING_FOUNDRY_ROLE_ID="$(az role assignment list --scope "$FOUNDRY_ID" --assignee "$APIM_PRINCIPAL_ID" --include-inherited --query "[?roleDefinitionName=='Cognitive Services User']|[0].id" -o tsv)"; then
+    echo "Refused: could not list existing Foundry role assignments; nothing recorded." >&2
+    return 1
+  fi
+  if [ -n "$EXISTING_FOUNDRY_ROLE_ID" ]; then
+    jq -n --arg existing "$EXISTING_FOUNDRY_ROLE_ID" '{foundryRole:{created:false,existingId:$existing}}' > .p89-receipts/foundry-role.json
+    echo "Existing Cognitive Services User assignment recorded; teardown will not delete it."
+  else
+    if ! created_role_json="$(az role assignment create --assignee-object-id "$APIM_PRINCIPAL_ID" --assignee-principal-type ServicePrincipal --role "Cognitive Services User" --scope "$FOUNDRY_ID" -o json)"; then
+      rm -f .p89-receipts/foundry-role.json
+      echo "Refused: role assignment create failed; no receipt was written." >&2
+      return 1
+    fi
+    printf '%s' "$created_role_json" | jq '{foundryRole:{created:true,id:.id}}' > .p89-receipts/foundry-role.json
+  fi
+  jq -e '(.foundryRole.created == true and (.foundryRole.id | type == "string" and length > 0)) or (.foundryRole.created == false and (.foundryRole.existingId | type == "string" and length > 0))' .p89-receipts/foundry-role.json >/dev/null || {
+    rm -f .p89-receipts/foundry-role.json
+    echo "Refused: Foundry role receipt is invalid; nothing recorded." >&2
+    return 1
+  }
+  az role assignment list --scope "$FOUNDRY_ID" --assignee "$APIM_PRINCIPAL_ID" --include-inherited --query "[?roleDefinitionName=='Cognitive Services User'].{role:roleDefinitionName,scope:scope}" -o table
+}
+p89_foundry_role
 # P89-FOUNDRY-ROLE-END
 ```
 

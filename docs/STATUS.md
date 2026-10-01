@@ -47,6 +47,11 @@ Round 5 council-fix validation, 2026-10-01:
 - Runner transfer now also refuses `ERROR|InvalidCommandLength|terminated with non-zero` text even when `az container exec` exits 0.
 - Teardown checks role and both group receipts before deleting anything; missing premium receipt preserves the role and standard group. Desktop app receipt is optional.
 - Validation: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS; `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS with 558 checks in 165.09 s; `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS with 43 guides. No live Azure command ran.
+Round 6 field-failure fix, 2026-10-01:
+- §3 now reads APIM `identity.type` and `identity.principalId` through `p89_gateway_identity`, refuses missing or non-SystemAssigned identity before any role lookup, and never calls `az role assignment list --assignee ""`.
+- Added optional `p89_enable_apim_identity`, using `az rest --method patch` with `{"identity":{"type":"SystemAssigned"}}`, then polling for `identity.principalId`; UserAssigned-only identity refuses and points to the portal so user-assigned identities are preserved.
+- `p89_foundry_role` refuses empty ids, checks role-list exit status, captures role-create output before writing the receipt, and removes empty receipts on create failure.
+- Validation: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS; `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS with 571 checks in 217.27 s; `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS with 43 guides. No live Azure command ran.
 
 ## P71 follow-up: a lookup starts one refresh, 2026-09-30
 

@@ -258,6 +258,23 @@ if [ "$1" = "ad" ] && [ "$2" = "group" ] && [ "$3" = "show" ]; then
   if [ "$group" = "$STANDARD_GROUP" ]; then printf 'standard-id\n'; else printf 'premium-id\n'; fi
   exit 0
 fi
+if [ "$1" = "apim" ] && [ "$2" = "show" ]; then
+  query="$(arg_after --query "$@")"
+  case "${P89_SCENARIO:-}" in
+    identity-null|identity-patch)
+      if [ -f "${P89_STATE_DIR:-.}/identity-enabled" ] && [ "$query" = "identity" ]; then printf '{"type":"SystemAssigned","principalId":"gateway-object-id"}\n'; elif [ "$query" = "identity" ]; then printf 'null\n'; elif [[ "$query" == *identity.principalId* ]]; then
+        state="${P89_STATE_DIR:-.}/identity-poll"; n=0; [ -f "$state" ] && n="$(cat "$state")"; n=$((n+1)); printf '%s' "$n" > "$state"; [ "$n" -ge 2 ] && printf 'gateway-object-id\n'
+      elif [[ "$query" == *id:id* ]]; then printf '{"id":"/subscriptions/sub/resourceGroups/rg/providers/Microsoft.ApiManagement/service/apim","identity":null}\n'; else printf '{}\n'; fi
+      ;;
+    identity-userassigned)
+      if [ "$query" = "identity" ]; then printf '{"type":"UserAssigned","principalId":null}\n'; elif [[ "$query" == *id:id* ]]; then printf '{"id":"/subscriptions/sub/resourceGroups/rg/providers/Microsoft.ApiManagement/service/apim","identity":{"type":"UserAssigned"}}\n'; else printf '\n'; fi
+      ;;
+    *)
+      if [ "$query" = "identity" ]; then printf '{"type":"SystemAssigned","principalId":"gateway-object-id"}\n'; elif [[ "$query" == *identity.principalId* ]]; then printf 'gateway-object-id\n'; elif [[ "$query" == *id:id* ]]; then printf '{"id":"/subscriptions/sub/resourceGroups/rg/providers/Microsoft.ApiManagement/service/apim","identity":{"type":"SystemAssigned","principalId":"gateway-object-id"}}\n'; else printf '{}\n'; fi
+      ;;
+  esac
+  exit 0
+fi
 if [ "$1" = "ad" ] && [ "$2" = "group" ] && [ "$3" = "list" ]; then
   filter="$(arg_after --filter "$@")"
   if [ "${P89_SCENARIO:-}" = "group-list-fail" ]; then echo "Forbidden({\"error\":{\"code\":\"Authorization_RequestDenied\"}})" >&2; exit 3; fi
@@ -326,6 +343,7 @@ if [ "$1" = "role" ] && [ "$2" = "assignment" ]; then
       exit 0
       ;;
     create)
+      if [ "${P89_SCENARIO:-}" = "role-create-fail" ]; then echo "Role create failed" >&2; exit 3; fi
       printf '{"id":"created-role-id"}\n'
       exit 0
       ;;
@@ -337,6 +355,11 @@ if [ "$1" = "role" ] && [ "$2" = "assignment" ]; then
   esac
 fi
 if [ "$1" = "rest" ]; then
+  if [ "$2" = "--method" ] && [ "$3" = "patch" ]; then
+    printf 'rest-patch %s\n' "$*" >> "$P89_WRITES"
+    printf '1' > "${P89_STATE_DIR:-.}/identity-enabled"
+    exit 0
+  fi
   url="$(arg_after --url "$@")"
   if [ "${P89_SCENARIO:-}" = "graph403" ] && [[ "$url" == *standard-id*servicePrincipal* ]]; then
     echo "Forbidden({\"error\":{\"code\":\"Authorization_RequestDenied\",\"innerError\":{\"request-id\":\"40400000-0000-0000-0000-000000000000\"}}})" >&2
@@ -415,6 +438,10 @@ if [ "$1" = "deployment" ] && [ "$2" = "group" ]; then
     esac
     exit 0
   fi
+fi
+if [ "$1" = "cognitiveservices" ] && [ "$2" = "account" ] && [ "$3" = "show" ]; then
+  printf '/subscriptions/sub/resourceGroups/foundry-rg/providers/Microsoft.CognitiveServices/accounts/foundry\n'
+  exit 0
 fi
 if [ "$1" = "cosmosdb" ] && [ "$2" = "sql" ] && [ "$3" = "role" ] && [ "$4" = "assignment" ] && [ "$5" = "create" ]; then
   printf 'cosmos-role\n' >> "$P89_WRITES"
@@ -556,6 +583,8 @@ function Read-ScenarioFile($Scenario, [string]$Name) {
 }
 
 $groupBlock = Get-MarkedBashBlock $markdown 'GROUP-RECEIPTS'
+$identityBlock = Get-MarkedBashBlock $markdown 'GATEWAY-IDENTITY'
+$enableIdentityBlock = Get-MarkedBashBlock $markdown 'ENABLE-APIM-IDENTITY'
 $graphBlock = Get-MarkedBashBlock $markdown 'ENTITLEMENT-GRAPH'
 $publishBlock = Get-MarkedBashBlock $markdown 'ENTITLEMENT-PUBLISH'
 $addBlock = Get-MarkedBashBlock $markdown 'DEVELOPER-ADD'
@@ -703,6 +732,35 @@ Assert 'role assignment block records pre-existing assignment without creating' 
     (Read-ScenarioFile $roleExisting '.p89-receipts/foundry-role.json' | ConvertFrom-Json).foundryRole.created -eq $false -and
     -not ((Read-ScenarioFile $roleExisting 'writes.log') -match 'created-role-id')
 ) $roleExisting.Output
+
+$identityNullRead = Invoke-GuideBashScenario 'identity-null' (Join-GuideBlocks @($identityBlock, $roleBlock))
+Assert 'missing APIM identity refuses before role list or create' (
+    $identityNullRead.Exit -ne 0 -and
+    $identityNullRead.Output -match 'Managed identities > System assigned > Status On' -and
+    -not ((Read-ScenarioFile $identityNullRead 'calls.log') -match 'role assignment list --scope .* --assignee  ') -and
+    -not ((Read-ScenarioFile $identityNullRead 'calls.log') -match 'role assignment create')
+) $identityNullRead.Output
+
+$identityUserAssigned = Invoke-GuideBashScenario 'identity-userassigned' (Join-GuideBlocks @($enableIdentityBlock, $identityBlock))
+Assert 'UserAssigned-only APIM identity refuses without PATCH' (
+    $identityUserAssigned.Exit -ne 0 -and
+    $identityUserAssigned.Output -match 'UserAssigned' -and
+    -not ((Read-ScenarioFile $identityUserAssigned 'writes.log') -match 'rest-patch')
+) $identityUserAssigned.Output
+
+$identityPatch = Invoke-GuideBashScenario 'identity-patch' (Join-GuideBlocks @($enableIdentityBlock, $identityBlock))
+Assert 'missing APIM identity can be enabled with one PATCH then principal appears' (
+    $identityPatch.Exit -eq 0 -and
+    @((Read-ScenarioFile $identityPatch 'writes.log') -split "`n" | Where-Object { $_ -match 'rest-patch .*"identity":\{"type":"SystemAssigned"\}' }).Count -eq 1 -and
+    $identityPatch.Output -match 'gateway-object-id'
+) $identityPatch.Output
+
+$roleCreateFail = Invoke-GuideBashScenario 'role-create-fail' (Join-GuideBlocks @($identityBlock, $roleBlock))
+Assert 'failing role create refuses and leaves no receipt' (
+    $roleCreateFail.Exit -ne 0 -and
+    $roleCreateFail.Output -match 'role assignment create failed' -and
+    -not (Read-ScenarioFile $roleCreateFail '.p89-receipts/foundry-role.json')
+) $roleCreateFail.Output
 
 $desktopAppCreated = Invoke-GuideBashScenario 'app-new' $desktopAppBlock
 Assert 'desktop app block records created app receipt' (
