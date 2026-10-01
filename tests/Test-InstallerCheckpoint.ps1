@@ -407,7 +407,7 @@ try {
         $ad = Get-P91Result $r2 $runAclDir; $af = Get-P91Result $r2 $runAclFile
         $adLine = [string]@(Get-P91ErrLines $ad)[0]; $afLine = [string]@(Get-P91ErrLines $af)[0]
         Assert 'R6 a state directory with a rule that lets Everyone write refuses at startup on one line naming the rule; nothing is read or changed' ($ad.ExitCode -eq 1 -and
-            @(Get-P91ErrLines $ad).Count -eq 1 -and $adLine -match '^Refused: ' -and $adLine.Contains($sc.aclDir.State) -and $adLine -match 'S-1-1-0' -and $adLine -match 'Nothing was read or changed' -and
+            @(Get-P91ErrLines $ad).Count -eq 1 -and $adLine -match '^Refused: the install checkpoint directory ' -and $adLine.Contains($sc.aclDir.State) -and $adLine -match 'S-1-1-0' -and $adLine -match 'Nothing was read or changed' -and
             -not (Get-P91Calls $ad 'account set*').Count -and (Test-Kept $sc.aclDir $hashes.aclDir) -and -not @(Get-ChildItem -LiteralPath $sc.aclDir.State -Filter '*.lock').Count) (Get-P91Tail $ad)
         Assert 'R6 a checkpoint with a rule that lets Users write refuses at startup on one line naming the file and the rule' ($af.ExitCode -eq 1 -and @(Get-P91ErrLines $af).Count -eq 1 -and
             $afLine -match '^Refused: ' -and $afLine -match 'install-[0-9a-f]{16}\.json' -and $afLine -match 'S-1-5-32-545' -and $afLine -match 'Nothing was read or changed' -and

@@ -517,7 +517,7 @@ try {
     $pm = $r2[$runPermSeam.Dir]
     $pmLine = [string]@(Get-ErrLines $pm)[0]
     Assert 'R6 bash a state directory another user owns (probe seam) refuses at startup on one line naming the owner; nothing is read or changed' ($pm.ExitCode -eq 1 -and @(Get-ErrLines $pm).Count -eq 1 -and
-        $pmLine -match '^Refused: ' -and $pmLine -match 'p91-other-user' -and $pmLine -match 'Nothing was read or changed' -and -not (Get-Calls $pm 'account set*').Count -and
+        $pmLine -match '^Refused: the install checkpoint directory ' -and $pmLine -match 'p91-other-user' -and $pmLine -match 'Nothing was read or changed' -and -not (Get-Calls $pm 'account set*').Count -and
         $hashes.permSeam -and (Get-Hash $sc.permSeam) -eq $hashes.permSeam -and -not @(Get-ChildItem -LiteralPath $sc.permSeam.State -Filter '*.lock').Count) (Get-Tail $pm)
     if (-not $script:windows) {
         $pd = $r2[$runPermDirReal.Dir]; $pf = $r2[$runPermFileReal.Dir]
