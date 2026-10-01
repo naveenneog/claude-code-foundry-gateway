@@ -22,6 +22,13 @@ Final builder validation:
 - `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1`: PASS, 34 checks, 7.71 s.
 - `pwsh -NoProfile -File .\tests\Test-RunnerIntegrity.ps1`: PASS, 68 checks, 182.91 s, registration integrity only; Test-All itself was not run.
 - `az bicep build` for `infra/main.bicep`, `infra/projection-network.bicep`, `infra/projection.bicep` and `infra/resolver.bicep`: PASS, 21.45 s.
+Round 2 lead-review fix, 2026-10-01:
+- Fixed §5 so Graph responses are written to files, every file must contain a `value` array, `@odata.nextLink` is refused before publishing, Graph failures stop before writes, and empty lists require `ALLOW_EMPTY=yes` with the access-loss consequence stated.
+- Replaced the unsafe empty-premium `grep -v -f` set difference with sorted `comm -23`, and guarded all APIM named-value writes that could exceed 4,096 characters.
+- The add/remove developer examples now state that they edit direct tier groups and require the Graph read plus publish block before gateway enforcement changes.
+- Sweep fixes outside §5: the initialization section no longer empties live allow lists or quota overrides, personal budget writes preserve existing overrides and stop on oversize, and the non-entitled verification uses a non-entitled token instead of clearing live entitlement.
+- Execution guard added: the marked guide bash blocks run under Git Bash with a stub `az`; scenarios cover normal premium/standard publication, empty premium with intact standard, Graph 403, `@odata.nextLink`, oversize allow list, both empty groups with and without `ALLOW_EMPTY`, developer add/remove, missing Graph files, and the old empty-premium `grep -v -f` bug.
+- Validation: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS; `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS with 422 checks; `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS with 43 guides. No live Azure command ran.
 
 ## P71 follow-up: a lookup starts one refresh, 2026-09-30
 

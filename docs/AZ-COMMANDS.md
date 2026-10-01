@@ -160,9 +160,13 @@ Write and read back one named value the same way the helper does.
 
 ```bash
 VALUE_LENGTH="$(printf '%s' "$MODELS_STANDARD" | wc -c | tr -d ' ')"
-test "$VALUE_LENGTH" -le 4096
 az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --query value -o tsv
-az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --value "$MODELS_STANDARD" -o none
+if [ "$VALUE_LENGTH" -le 4096 ]; then
+  az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --value "$MODELS_STANDARD" -o none
+else
+  echo "Refused: models-standard is $VALUE_LENGTH characters, over the 4,096-character APIM named-value limit. Nothing was written." >&2
+  exit 1
+fi
 az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --query value -o tsv
 ```
 
@@ -221,17 +225,13 @@ az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id en
 
 Expected result: `tenant-id` matches the deployment tenant and `entitlement-source` is `named-value`. This mirrors `infra/main.bicep:350`, `infra/main.bicep:144-160`, `infra/main.bicep:372-376` and `docs/SCALE.md:639-675`.
 
-Initialize authorization and budget override lists.
+Verify the authorization and budget named values that the template initialized.
 
 ```bash
-az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id allow-standard --value "," -o none
-az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id allow-premium --value "," -o none
-az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id quota-overrides --value ",," -o none
-az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id external-idp-extra-audience --value "$DESKTOP_EXTRA_AUDIENCE" -o none
 az apim nv list -g "$GATEWAY_RG" --service-name "$APIM_NAME" --query "[?name=='allow-standard' || name=='allow-premium' || name=='quota-overrides' || name=='external-idp-extra-audience'].{name:name,value:value}" -o table
 ```
 
-Expected result: `allow-*` values are comma-sentinel lists, `quota-overrides` is `,,`, and the Desktop audience is the disabled sentinel until external sign-in is configured. This mirrors `infra/main.bicep:215-224`, `infra/main.bicep:367-370`, `scripts/Sync-ClaudeAccess.ps1:122-129`, `scripts/ClaudeBudgetOverride.ps1:1-29` and `scripts/ApimNamedValue.ps1:150-154`.
+Expected result: `allow-*` values are comma-sentinel lists, `quota-overrides` is `,,` until personal overrides exist, and the Desktop audience is the disabled sentinel until external sign-in is configured. Do not reset these values on an existing gateway; entitlement sync and budget commands own them after deployment. This mirrors `infra/main.bicep:215-224`, `infra/main.bicep:367-370`, `scripts/Sync-ClaudeAccess.ps1:122-129`, `scripts/ClaudeBudgetOverride.ps1:1-29` and `scripts/ApimNamedValue.ps1:150-154`.
 
 ## 5. Entra groups and entitlement publishing
 
@@ -249,55 +249,125 @@ Expected result: each group has an object id; run the create commands only when 
 Read transitive members from Microsoft Graph as users and service principals.
 
 ```bash
-export GRAPH_TOKEN="$(az account get-access-token --resource https://graph.microsoft.com --query accessToken -o tsv)"
-export STANDARD_GROUP_ID="$(az ad group show --group "$STANDARD_GROUP" --query id -o tsv)"
-export PREMIUM_GROUP_ID="$(az ad group show --group "$PREMIUM_GROUP" --query id -o tsv)"
-az rest --method get --url "https://graph.microsoft.com/v1.0/groups/${PREMIUM_GROUP_ID}/transitiveMembers/microsoft.graph.user?\$select=id,displayName,userPrincipalName&\$top=999&\$count=true" --headers "ConsistencyLevel=eventual" --resource https://graph.microsoft.com -o json
-az rest --method get --url "https://graph.microsoft.com/v1.0/groups/${PREMIUM_GROUP_ID}/transitiveMembers/microsoft.graph.servicePrincipal?\$select=id,displayName&\$top=999&\$count=true" --headers "ConsistencyLevel=eventual" --resource https://graph.microsoft.com -o json
-az rest --method get --url "https://graph.microsoft.com/v1.0/groups/${STANDARD_GROUP_ID}/transitiveMembers/microsoft.graph.user?\$select=id,displayName,userPrincipalName&\$top=999&\$count=true" --headers "ConsistencyLevel=eventual" --resource https://graph.microsoft.com -o json
-az rest --method get --url "https://graph.microsoft.com/v1.0/groups/${STANDARD_GROUP_ID}/transitiveMembers/microsoft.graph.servicePrincipal?\$select=id,displayName&\$top=999&\$count=true" --headers "ConsistencyLevel=eventual" --resource https://graph.microsoft.com -o json
+# P89-ENTITLEMENT-GRAPH-BEGIN
+if ! STANDARD_GROUP_ID="$(az ad group show --group "$STANDARD_GROUP" --query id -o tsv)" || [ -z "$STANDARD_GROUP_ID" ]; then
+  echo "Could not resolve standard group '$STANDARD_GROUP'; no entitlement values were changed." >&2
+  exit 1
+fi
+if ! PREMIUM_GROUP_ID="$(az ad group show --group "$PREMIUM_GROUP" --query id -o tsv)" || [ -z "$PREMIUM_GROUP_ID" ]; then
+  echo "Could not resolve premium group '$PREMIUM_GROUP'; no entitlement values were changed." >&2
+  exit 1
+fi
+
+graph_get() {
+  url="$1"
+  file="$2"
+  if ! az rest --method get --url "$url" --headers "ConsistencyLevel=eventual" --resource https://graph.microsoft.com -o json > "$file"; then
+    rm -f "$file"
+    echo "Graph read failed for $url; no entitlement values were changed." >&2
+    exit 1
+  fi
+  if ! jq -e 'has("value") and (.value | type == "array")' "$file" >/dev/null; then
+    echo "Graph response $file is not a confirmed collection; no entitlement values were changed." >&2
+    exit 1
+  fi
+  if jq -e 'has("@odata.nextLink")' "$file" >/dev/null; then
+    echo "Graph response $file is paged. Follow @odata.nextLink and combine every page before publishing; no entitlement values were changed." >&2
+    exit 1
+  fi
+}
+
+graph_get "https://graph.microsoft.com/v1.0/groups/${PREMIUM_GROUP_ID}/transitiveMembers/microsoft.graph.user?\$select=id,displayName,userPrincipalName&\$top=999&\$count=true" premium-users.json
+graph_get "https://graph.microsoft.com/v1.0/groups/${PREMIUM_GROUP_ID}/transitiveMembers/microsoft.graph.servicePrincipal?\$select=id,displayName&\$top=999&\$count=true" premium-service-principals.json
+graph_get "https://graph.microsoft.com/v1.0/groups/${STANDARD_GROUP_ID}/transitiveMembers/microsoft.graph.user?\$select=id,displayName,userPrincipalName&\$top=999&\$count=true" standard-users.json
+graph_get "https://graph.microsoft.com/v1.0/groups/${STANDARD_GROUP_ID}/transitiveMembers/microsoft.graph.servicePrincipal?\$select=id,displayName&\$top=999&\$count=true" standard-service-principals.json
+# P89-ENTITLEMENT-GRAPH-END
 ```
 
-Expected result: each successful response contains a JSON `value` array. A Graph error is an error, not an empty group; only a successful empty `value` array is empty. This mirrors `scripts/ClaudeGraphMembership.ps1:31-151`. The script uses direct REST in PowerShell because `az.cmd` on Windows re-parses `&`; in Cloud Shell bash, `az rest` is safe when the URL is quoted.
+Expected result: the four JSON files exist and each contains a `value` array with no `@odata.nextLink`. A Graph error is an error, not an empty group; only a successful empty `value` array is empty. This mirrors `scripts/ClaudeGraphMembership.ps1:31-151`. The script uses direct REST in PowerShell because `az.cmd` on Windows re-parses `&`; in Cloud Shell bash, `az rest` is safe when the URL is quoted. The named-value path holds roughly 110 object ids per list; larger groups need the projection path.
 
 Publish premium first, then standard without duplicates.
 
 ```bash
-PREMIUM_OIDS="$(jq -r '.value[].id' premium-users.json premium-service-principals.json 2>/dev/null | awk 'NF' | sort -u | paste -sd, -)"
-STANDARD_OIDS="$(jq -r '.value[].id' standard-users.json standard-service-principals.json 2>/dev/null | awk 'NF' | sort -u | grep -iv -f <(printf '%s\n' "$PREMIUM_OIDS" | tr ',' '\n') | paste -sd, -)"
-PREMIUM_VALUE="$(test -n "$PREMIUM_OIDS" && printf ',%s,' "$PREMIUM_OIDS" || printf ',')"
-STANDARD_VALUE="$(test -n "$STANDARD_OIDS" && printf ',%s,' "$STANDARD_OIDS" || printf ',')"
-test "$(printf '%s' "$PREMIUM_VALUE" | wc -c | tr -d ' ')" -le 4096
-test "$(printf '%s' "$STANDARD_VALUE" | wc -c | tr -d ' ')" -le 4096
-az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id allow-premium --value "$PREMIUM_VALUE" -o none
-az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id allow-standard --value "$STANDARD_VALUE" -o none
+# P89-ENTITLEMENT-PUBLISH-BEGIN
+for file in premium-users.json premium-service-principals.json standard-users.json standard-service-principals.json; do
+  if ! jq -e 'has("value") and (.value | type == "array") and (has("@odata.nextLink") | not)' "$file" >/dev/null; then
+    echo "Refused: $file is missing, invalid or incomplete; no entitlement values were changed." >&2
+    exit 1
+  fi
+done
+
+jq -r '.value[].id' premium-users.json premium-service-principals.json | awk 'NF' | sort -fu > premium-oids.txt
+jq -r '.value[].id' standard-users.json standard-service-principals.json | awk 'NF' | sort -fu > standard-all-oids.txt
+comm -23 standard-all-oids.txt premium-oids.txt > standard-oids.txt
+
+oid_file_to_value() {
+  file="$1"
+  if [ -s "$file" ]; then
+    printf ',%s,' "$(paste -sd, "$file")"
+  else
+    printf ','
+  fi
+}
+
+PREMIUM_VALUE="$(oid_file_to_value premium-oids.txt)"
+STANDARD_VALUE="$(oid_file_to_value standard-oids.txt)"
+
+write_allow_value() {
+  id="$1"
+  value="$2"
+  len="$(printf '%s' "$value" | wc -c | tr -d ' ')"
+  if [ "$len" -gt 4096 ]; then
+    echo "Refused: $id is $len characters, over the 4,096-character APIM named-value limit. Nothing was written." >&2
+    exit 1
+  fi
+  if [ "$value" = "," ] && [ "${ALLOW_EMPTY:-no}" != "yes" ]; then
+    echo "Refused: $id is empty. Set ALLOW_EMPTY=yes only after review; everyone in that tier loses access after propagation." >&2
+    exit 1
+  fi
+  az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id "$id" --value "$value" -o none
+}
+
+write_allow_value allow-premium "$PREMIUM_VALUE"
+write_allow_value allow-standard "$STANDARD_VALUE"
 az apim nv list -g "$GATEWAY_RG" --service-name "$APIM_NAME" --query "[?name=='allow-premium' || name=='allow-standard'].{name:name,value:value}" -o table
+# P89-ENTITLEMENT-PUBLISH-END
 ```
 
-Expected result: each allow list has the `,oid,` form. A person in both groups appears only in `allow-premium`; premium precedence is deliberate. The 4,096-character tests fail before writing rather than truncating. This mirrors `scripts/Sync-ClaudeAccess.ps1:77-130` and `scripts/ApimNamedValue.ps1:35-73`.
+Expected result: `allow-premium` and `allow-standard` each have the `,oid,` form. A person in both groups appears only in `allow-premium`; premium precedence is deliberate. An empty tier is refused unless `ALLOW_EMPTY=yes` is set for an explicit review, because everyone in that tier loses access after propagation. The 4,096-character checks stop before any write. This mirrors `scripts/Sync-ClaudeAccess.ps1:77-130` and `scripts/ApimNamedValue.ps1:35-73`.
 
 Add one developer to a tier and publish.
 
 ```bash
+# P89-DEVELOPER-ADD-BEGIN
 export DEVELOPER_UPN="<developer-upn-or-mail>"
-export DEVELOPER_ID="$(az ad user show --id "$DEVELOPER_UPN" --query id -o tsv)"
+if ! DEVELOPER_ID="$(az ad user show --id "$DEVELOPER_UPN" --query id -o tsv)" || [ -z "$DEVELOPER_ID" ]; then
+  echo "Could not resolve developer '$DEVELOPER_UPN'; no group membership was changed." >&2
+  exit 1
+fi
 az ad group member add --group "$STANDARD_GROUP" --member-id "$DEVELOPER_ID"
 az ad group member remove --group "$PREMIUM_GROUP" --member-id "$DEVELOPER_ID"
 az ad group member list --group "$STANDARD_GROUP" --query "[?id=='${DEVELOPER_ID}'].id" -o tsv
+az ad group member list --group "$PREMIUM_GROUP" --query "[?id=='${DEVELOPER_ID}'].id" -o tsv
+# P89-DEVELOPER-ADD-END
 ```
 
-Expected result: the developer id appears in the standard group and not in premium. This mirrors `scripts/Set-ClaudeDeveloper.ps1:175-260`.
+Expected result: the developer id appears in the standard group and not in premium. This mirrors `scripts/Set-ClaudeDeveloper.ps1:175-260`: adding someone to one tier removes them from the other direct tier group so the portal and the published allow lists are unambiguous. Run the Graph read block and the publish block above after the group edit; until then the directory is updated but the gateway named values still hold the previous publication.
 
 Remove one developer from both tiers and publish.
 
 ```bash
+# P89-DEVELOPER-REMOVE-BEGIN
 az ad group member remove --group "$STANDARD_GROUP" --member-id "$DEVELOPER_ID"
 az ad group member remove --group "$PREMIUM_GROUP" --member-id "$DEVELOPER_ID"
 az ad group member list --group "$STANDARD_GROUP" --query "[?id=='${DEVELOPER_ID}'].id" -o tsv
 az ad group member list --group "$PREMIUM_GROUP" --query "[?id=='${DEVELOPER_ID}'].id" -o tsv
+# P89-DEVELOPER-REMOVE-END
 ```
 
 Expected result: both verification commands return no rows. This mirrors `scripts/Set-ClaudeDeveloper.ps1:175-260`.
+
+Run the Graph read block and the publish block above after removal. The removal is not enforced at the gateway until the allow lists are republished.
 
 ## 6. Day-two tier operations
 
@@ -314,7 +384,13 @@ Change one tier's model list and limits.
 ```bash
 az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id tpm-standard --value "30000" -o none
 az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id quota-standard --value "750000" -o none
-az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --value ",${SONNET_DEPLOYMENT}," -o none
+MODELS_STANDARD_NEXT=",${SONNET_DEPLOYMENT},"
+if [ "$(printf '%s' "$MODELS_STANDARD_NEXT" | wc -c | tr -d ' ')" -le 4096 ]; then
+  az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --value "$MODELS_STANDARD_NEXT" -o none
+else
+  echo "Refused: models-standard would exceed 4,096 characters. Nothing was written." >&2
+  exit 1
+fi
 az apim nv list -g "$GATEWAY_RG" --service-name "$APIM_NAME" --query "[?name=='tpm-standard' || name=='quota-standard' || name=='models-standard'].{name:name,value:value}" -o table
 ```
 
@@ -325,8 +401,14 @@ Set one person's daily token budget.
 ```bash
 export BUDGET_OID="$(az ad user show --id "$DEVELOPER_UPN" --query id -o tsv | tr '[:upper:]' '[:lower:]')"
 export CURRENT_OVERRIDES="$(az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id quota-overrides --query value -o tsv)"
-export NEW_OVERRIDES=",${BUDGET_OID}=2000000,"
-test "$(printf '%s' "$NEW_OVERRIDES" | wc -c | tr -d ' ')" -le 4096
+printf '%s\n' "$CURRENT_OVERRIDES" | grep -Eq '^,([^,=]+=([0-9]+),)*$|^,,$' || { echo "Refused: quota-overrides is malformed; no budget was written." >&2; exit 1; }
+EXISTING_OVERRIDES="$(printf '%s' "$CURRENT_OVERRIDES" | tr ',' '\n' | awk -F= -v oid="$BUDGET_OID" 'NF && $1 != oid { print $0 }')"
+NEW_OVERRIDES="$(printf '%s\n%s=2000000\n' "$EXISTING_OVERRIDES" "$BUDGET_OID" | awk 'NF' | paste -sd, -)"
+NEW_OVERRIDES=",${NEW_OVERRIDES},"
+if [ "$(printf '%s' "$NEW_OVERRIDES" | wc -c | tr -d ' ')" -gt 4096 ]; then
+  echo "Refused: quota-overrides would exceed 4,096 characters; no budget was written." >&2
+  exit 1
+fi
 az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id quota-overrides --value "$NEW_OVERRIDES" -o none
 az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id quota-overrides --query value -o tsv
 ```
@@ -369,7 +451,12 @@ Add the deployed model to tiers and record prices.
 export NEW_MODEL="<deployment-name>"
 export MODELS_PREMIUM_NOW="$(az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-premium --query value -o tsv)"
 export MODELS_PREMIUM_NEXT="$(printf '%s' "$MODELS_PREMIUM_NOW" | sed 's/,$//'),${NEW_MODEL},"
-az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-premium --value "$MODELS_PREMIUM_NEXT" -o none
+if [ "$(printf '%s' "$MODELS_PREMIUM_NEXT" | wc -c | tr -d ' ')" -le 4096 ]; then
+  az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-premium --value "$MODELS_PREMIUM_NEXT" -o none
+else
+  echo "Refused: models-premium would exceed 4,096 characters. Nothing was written." >&2
+  exit 1
+fi
 jq --arg model "$NEW_MODEL" --argjson input 5 --argjson output 25 '.date=(now|strftime("%Y-%m-%d")) | .source="list price, https://platform.claude.com/docs/en/about-claude/pricing" | .models[$model]={inputPerM:$input,outputPerM:$output}' config/price-book.json > config/price-book.next.json
 mv config/price-book.next.json config/price-book.json
 az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-premium --query value -o tsv
@@ -549,20 +636,27 @@ Expected result: an entitled caller receives HTTP `200` and a model response. Th
 Verify a non-entitled caller is refused.
 
 ```bash
-az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id allow-standard --value "," -o none
-az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id allow-premium --value "," -o none
-curl -sS -o response-forbidden.json -w "%{http_code}\n" -H "Authorization: Bearer ${FOUNDRY_TOKEN}" -H "Content-Type: application/json" -d "{\"model\":\"${SONNET_DEPLOYMENT}\",\"max_tokens\":32,\"messages\":[{\"role\":\"user\",\"content\":\"Return the word ok.\"}]}" "${GATEWAY_URL}/v1/messages"
+export NON_ENTITLED_TOKEN="<token-for-a-caller-not-in-allow-standard-or-allow-premium>"
+curl -sS -o response-forbidden.json -w "%{http_code}\n" -H "Authorization: Bearer ${NON_ENTITLED_TOKEN}" -H "Content-Type: application/json" -d "{\"model\":\"${SONNET_DEPLOYMENT}\",\"max_tokens\":32,\"messages\":[{\"role\":\"user\",\"content\":\"Return the word ok.\"}]}" "${GATEWAY_URL}/v1/messages"
 jq -r '.error.message' response-forbidden.json
 ```
 
-Expected result: HTTP `403` with an entitlement refusal. Restore allow lists from the group sync after this check. This mirrors `scripts/Test-ClaudeHealth.ps1` and `scripts/Sync-ClaudeAccess.ps1`.
+Expected result: HTTP `403` with an entitlement refusal. Do not empty the live allow lists to make this test; use a caller that is not entitled. This mirrors `scripts/Test-ClaudeHealth.ps1` and `scripts/Sync-ClaudeAccess.ps1`.
 
 Verify a model outside the tier is refused.
 
 ```bash
-az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --value ",${SONNET_DEPLOYMENT}," -o none
+MODELS_STANDARD_BEFORE="$(az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --query value -o tsv)"
+MODELS_STANDARD_NEXT=",${SONNET_DEPLOYMENT},"
+if [ "$(printf '%s' "$MODELS_STANDARD_NEXT" | wc -c | tr -d ' ')" -le 4096 ]; then
+  az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --value "$MODELS_STANDARD_NEXT" -o none
+else
+  echo "Refused: models-standard would exceed 4,096 characters. Nothing was written." >&2
+  exit 1
+fi
 curl -sS -o response-model.json -w "%{http_code}\n" -H "Authorization: Bearer ${FOUNDRY_TOKEN}" -H "Content-Type: application/json" -d "{\"model\":\"${OPUS_DEPLOYMENT}\",\"max_tokens\":32,\"messages\":[{\"role\":\"user\",\"content\":\"Return the word ok.\"}]}" "${GATEWAY_URL}/v1/messages"
 jq -r '.error.message' response-model.json
+az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --value "$MODELS_STANDARD_BEFORE" -o none
 ```
 
 Expected result: HTTP `403` or gateway refusal naming the model outside the tier. This mirrors `scripts/Test-ClaudeHealth.ps1` and `scripts/Measure-ClaudeCeiling.ps1`.

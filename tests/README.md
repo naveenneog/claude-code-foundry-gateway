@@ -176,6 +176,7 @@ source identity, queue-to-merge wall time and individual job times. Artifact ret
 pwsh -NoProfile -File .\tests\Test-TestAllSharding.ps1
 pwsh -NoProfile -File .\tests\Test-RemoteTestAll.ps1
 pwsh -NoProfile -File .\tests\Test-RunnerIntegrity.ps1
+pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1
 ```
 
 The fast suites use synthetic invalid receipts and workflow records. RunnerIntegrity uses
@@ -198,6 +199,11 @@ pwsh -NoProfile -File .\.github\scripts\Test-InfrastructureProof.ps1 -Mode Runne
 `-BaselineOnly` runs short diagnostics without mutations and is forbidden in the CI workflow.
 Full local proof runs acquire the sibling `.gate-lock`, retry every 60 seconds and remove only
 their own lock in `finally`. Isolated GitHub-hosted VMs do not use the workstation lock.
+
+`Test-AzCommandsGuide.ps1` uses Azure CLI `--help` only, plus Git Bash with `jq`
+for the execution harness around `docs/AZ-COMMANDS.md` entitlement publishing
+blocks. The harness puts a stub `az` first on `PATH`; it does not use the
+operator's Azure session or write Azure resources.
 
 The first complete P79-integrated hosted proof was
 [run 36457223984](https://github.com/naveenneog/claude-code-foundry-gateway/actions/runs/36457223984),
