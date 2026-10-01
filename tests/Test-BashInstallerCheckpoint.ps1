@@ -139,8 +139,12 @@ case "$*" in
     jq -c --arg r "$rg" --arg n "$nm" '[.deployments[$r][$n] | select(.error != null) | {properties: {provisioningState: "Failed", statusMessage: {error: .error}}}]' "$W" ;;
   "ad group list "*)
     # --display-name is a prefix ("Object's display name or its prefix", az ad group list --help).
+    # inject.groupLists holds Graph's answer for a name, as a scenario states it; the name reaches jq
+    # on standard input, so no command-line encoding touches it.
     g="$(argv_ --display-name "$@")"
-    jq -c --arg g "$g" '[.groups | to_entries[] | select((.value | ascii_downcase) | startswith($g | ascii_downcase)) | {id: .key, displayName: .value}]' "$W" ;;
+    given="$( { printf '%s' "$g" | jq -Rs .; cat "$W"; } | jq -s -c '.[0] as $g | (.[1].inject.groupLists // {})[$g] // empty')"
+    if [ -n "$given" ]; then printf '%s\n' "$given"
+    else jq -c --arg g "$g" '[.groups | to_entries[] | select((.value | ascii_downcase) | startswith($g | ascii_downcase)) | {id: .key, displayName: .value}]' "$W"; fi ;;
   "ad group show "*)
     g="$(argv_ --group "$@")"
     case "$g" in
@@ -340,6 +344,31 @@ try {
     $noDir = New-Scenario 'nodir' (New-World)
     $blocker = Join-Path $noDir.Dir 'blocker'
     Write-Lf $blocker 'a file where the state directory would be'
+    # Group names beyond ASCII (ADR-0046 decision 11): Graph's answer for the name is given, and a
+    # returned group is the named one only when it has as many Unicode code points as the name.
+    # PowerShell variable names ignore case, so each spelling has its own variable name.
+    $nameLower = "$([char]0xE9)quipe"; $nameUpper = "$([char]0xC9)QUIPE"; $nameTitle = "$([char]0xC9)quipe"
+    # The same name with e and a combining acute accent: 7 code points, where PowerShell -eq finds it equal.
+    $nameNfd = "e$([char]0x301)quipe"
+    $rocketLower = 'team-' + [char]::ConvertFromUtf32(0x1F680); $rocketUpper = 'TEAM-' + [char]::ConvertFromUtf32(0x1F680)
+    $gid = { param([int]$n) '00000000-0000-4000-8000-{0:x12}' -f (0x1e0 + $n) }
+    # -Keep: the premium group cannot be created, so the checkpoint keeps the group receipts.
+    $unicodeWorld = { param([string]$Name, [object[]]$Answer, [switch]$Keep)
+        $w = New-World
+        foreach ($a in $Answer) { $w.groups[$a.id] = $a.displayName }
+        $w.inject['groupLists'] = [ordered]@{ $Name = @($Answer) }
+        if ($Keep) { $w.inject.groupCreateFail = @('claude-code-premium') }
+        $w }
+    $nameCase = New-Scenario 'name-case' (& $unicodeWorld $nameLower @([ordered]@{ id = (& $gid 1); displayName = $nameUpper }) -Keep)
+    $nameLonger = New-Scenario 'name-longer' (& $unicodeWorld $nameLower @([ordered]@{ id = (& $gid 2); displayName = "$nameLower-old" }, [ordered]@{ id = (& $gid 8); displayName = $nameNfd }))
+    $nameTwins = New-Scenario 'name-twins' (& $unicodeWorld $nameLower @([ordered]@{ id = (& $gid 3); displayName = $nameUpper }, [ordered]@{ id = (& $gid 4); displayName = $nameTitle }))
+    # 'team-' and a rocket: 6 code points, 7 UTF-16 units and 9 UTF-8 bytes. Graph returns names that
+    # start with the given one; 'team-ab' and 'team-abcd' are not such names and stand in for a count
+    # in another unit: they have the name's 7 UTF-16 units and its 9 bytes, and only 'TEAM-' and a
+    # rocket has its 6 code points.
+    $nameAstral = New-Scenario 'name-astral' (& $unicodeWorld $rocketLower @([ordered]@{ id = (& $gid 5); displayName = $rocketUpper },
+        [ordered]@{ id = (& $gid 6); displayName = 'team-ab' }, [ordered]@{ id = (& $gid 7); displayName = 'team-abcd' }) -Keep)
+    $nameArgs = { param([string]$Name) $a = @($args0); $i = [array]::IndexOf($a, '--yes'); @($a[0..($i - 1)]) + @('--standard-group', $Name) + @($a[$i..($a.Count - 1)]) }
     $shellEnv = @{ AZUREPS_HOST_ENVIRONMENT = 'cloud-shell/1.0'; CLAUDE_GATEWAY_STATE_DIR = $null }
     $first = @(
         ($runBase1 = New-Run $base $args0)
@@ -353,6 +382,10 @@ try {
         ($runGraphTwins = New-Run $graphTwins $args0)
         ($runUnrecorded = New-Run $unrecorded $args0)
         ($runNoDir = New-Run $noDir $args0 @{ CLAUDE_GATEWAY_STATE_DIR = ((ConvertTo-BashPath $blocker) + '/state') })
+        ($runNameCase = New-Run $nameCase (& $nameArgs $nameLower))
+        ($runNameLonger = New-Run $nameLonger (& $nameArgs $nameLower))
+        ($runNameTwins = New-Run $nameTwins (& $nameArgs $nameLower))
+        ($runNameAstral = New-Run $nameAstral (& $nameArgs $rocketLower))
     )
     $r1 = Invoke-Runs $first
     $b1 = $r1[$runBase1.Dir]
@@ -394,6 +427,23 @@ try {
     Assert 'R6 bash a state directory that cannot be created: the run warns, prints the resume command with the answers and completes' ($nx.ExitCode -eq 0 -and
         $nx.Out -match '(?m)\[WARN\].*could not be created' -and $nx.Out -match "(?m)^\s*Resume: cd '.+' && \./install-claude-gateway\.sh .*--resource-group 'rg-p91'" -and
         (Get-Calls $nx 'deployment group create*').Count -eq 1) (Get-Tail $nx)
+    $standardOf = { param($Scenario) $f = Get-CheckpointFile $Scenario; if ($f) { $c = [IO.File]::ReadAllText($f.FullName) | ConvertFrom-Json
+            @(@($c.steps | Where-Object { $_ -and $_.id -eq 'entra-groups' })[0].receipt.groups | Where-Object { $_ -and $_.role -eq 'standard' })[0] } }
+    $uc = $r1[$runNameCase.Dir]
+    $ucGroup = & $standardOf $nameCase
+    Assert 'R5 bash a non-ASCII name whose one same-length candidate differs in case is that group: its id is recorded as pre-existing, nothing is created' ($uc.ExitCode -eq 0 -and
+        $ucGroup.id -eq (& $gid 1) -and $ucGroup.origin -eq 'pre-existing' -and -not (Get-Calls $uc "ad group create --display-name $nameLower *").Count) (Get-Tail $uc)
+    $ul = $r1[$runNameLonger.Dir]
+    Assert 'R5 bash longer names that start with a non-ASCII name, the name in another normalization form among them, are not that group: created once' ($ul.ExitCode -eq 0 -and
+        @($ul.Az | Where-Object { $_ -clike "ad group create --display-name $nameLower *" }).Count -eq 1) (Get-Tail $ul)
+    $ut = $r1[$runNameTwins.Dir]
+    $utLine = [string]@(Get-ErrLines $ut)[0]
+    Assert 'R5 bash two same-length candidates for a non-ASCII name refuse on one line naming both ids, and create nothing' ((Test-Refusal $ut 'by name') -and
+        $utLine -match '0000000001e3' -and $utLine -match '0000000001e4' -and -not (Get-Calls $ut 'ad group create*').Count) (Get-Tail $ut)
+    $ua = $r1[$runNameAstral.Dir]
+    $uaGroup = & $standardOf $nameAstral
+    Assert 'R5 bash an astral-plane name counts code points as PowerShell does: the one candidate with as many code points is recorded, nothing is created' ($ua.ExitCode -eq 0 -and
+        $uaGroup.id -eq (& $gid 5) -and $uaGroup.origin -eq 'pre-existing' -and -not (Get-Calls $ua "ad group create --display-name $rocketLower *").Count) (Get-Tail $ua)
 
     # ------------------------------------------------------------------ reruns
     $sleeperOut = & $bash -c 'sleep 900 >/dev/null 2>&1 & echo $!'
@@ -402,7 +452,7 @@ try {
     $hostName = "$(& $bash -c 'uname -n')".Trim().ToLowerInvariant().Split('.')[0]
     $sc = [ordered]@{}
     foreach ($n in 'tenant', 'subscription', 'group', 'prefix', 'installer', 'version', 'changed', 'truncated', 'restart', 'liveLock', 'exitedLock', 'otherHost', 'staleHost',
-        'schemaName', 'schemaVersion', 'unknownStep', 'subscriptionName', 'tamperDeployment', 'tamperGroup', 'permSeam', 'permDirReal', 'permFileReal') { $sc[$n] = New-Scenario $n $null $base }
+        'schemaName', 'schemaVersion', 'unknownStep', 'subscriptionName', 'tamperDeployment', 'tamperGroup', 'permSeam', 'permDirReal', 'permFileReal', 'renamed') { $sc[$n] = New-Scenario $n $null $base }
     foreach ($s in @($base) + @($sc.Values)) { Edit-World $s { param($w) $w.inject.groupCreateFail = @() } }
     Edit-World $sc.tenant { param($w) $w.tenantId = '00000000-0000-4000-8000-0000000000f9' }
     Edit-Checkpoint $sc.installer { param($c) $c.installer = 'pwsh' }
@@ -463,6 +513,8 @@ try {
         ($runPermSeam = New-Run $sc.permSeam $args0)
         ($runPermDirReal = New-Run $sc.permDirReal $args0)
         ($runPermFileReal = New-Run $sc.permFileReal $args0)
+        # A receipt applies to the name it records, compared code point by code point (jq ==).
+        ($runRenamed = New-Run $sc.renamed (& $nameArgs 'Claude-Code-Standard'))
     )
     $r2 = Invoke-Runs $second
     $b2 = $r2[$runBase2.Dir]
@@ -527,6 +579,9 @@ try {
             $hashes.permFileReal -and (Get-Hash $sc.permFileReal) -eq $hashes.permFileReal -and -not (Get-Calls $pd 'account set*').Count) ((Get-Tail $pd) + ' || ' + (Get-Tail $pf))
     }
     else { Write-Host '  [SKIP] R6 bash (real modes): runs on Linux and macOS (installer-unix.yml); Git Bash reports fixed modes' -ForegroundColor DarkGray }
+    $rn = $r2[$runRenamed.Dir]
+    Assert 'R5 bash a resume that names a group in another case than its receipt does not use the receipt: the name is looked up, reused and not created' ($rn.ExitCode -eq 0 -and
+        @($rn.Az | Where-Object { $_ -clike 'ad group list --display-name Claude-Code-Standard *' }).Count -eq 1 -and -not (Get-Calls $rn 'ad group create --display-name claude-code-standard*').Count) (Get-Tail $rn)
     $all = @($r1.Values) + @($r2.Values)
     $unexpected = @($all | ForEach-Object { $_.Unexpected } | Where-Object { $_ })
     Assert 'harness: every az call was one the stub knows, and no run timed out' (-not $unexpected.Count -and -not @($all | Where-Object { $_.TimedOut }).Count) (($unexpected | Select-Object -Unique -First 4) -join ' | ')

@@ -111,6 +111,31 @@ try {
     $noDir = New-P91Scenario -Name 'nodir' -Scratch $scratch -Template $template -World (New-P91World)
     $blocker = Join-Path $noDir.Dir 'blocker'
     Write-P91Text $blocker 'a file where the state directory would be'
+    # Group names beyond ASCII (ADR-0046 decision 11): Graph's answer for the name is given, and a
+    # returned group is the named one only when it has as many Unicode code points as the name.
+    # PowerShell variable names ignore case, so each spelling has its own variable name.
+    $nameLower = "$([char]0xE9)quipe"; $nameUpper = "$([char]0xC9)QUIPE"; $nameTitle = "$([char]0xC9)quipe"
+    # The same name with e and a combining acute accent: 7 code points, where PowerShell -eq finds it equal.
+    $nameNfd = "e$([char]0x301)quipe"
+    $rocketLower = 'team-' + [char]::ConvertFromUtf32(0x1F680); $rocketUpper = 'TEAM-' + [char]::ConvertFromUtf32(0x1F680)
+    $gid = { param([int]$n) '00000000-0000-4000-8000-{0:x12}' -f (0x1e0 + $n) }
+    # -Keep: the sync after the groups step fails, so the checkpoint keeps the group receipts.
+    $unicodeWorld = { param([string]$Name, [object[]]$Answer, [switch]$Keep)
+        $w = New-P91World
+        foreach ($a in $Answer) { $w.groups[$a.id] = $a.displayName }
+        $w.inject['groupLists'] = [ordered]@{ $Name = @($Answer) }
+        if ($Keep) { $w.inject.sync = 'graph404' }
+        $w }
+    $nameCase = New-P91Scenario -Name 'name-case' -Scratch $scratch -Template $template -World (& $unicodeWorld $nameLower @([ordered]@{ id = (& $gid 1); displayName = $nameUpper }) -Keep)
+    $nameLonger = New-P91Scenario -Name 'name-longer' -Scratch $scratch -Template $template -World (& $unicodeWorld $nameLower @([ordered]@{ id = (& $gid 2); displayName = "$nameLower-old" },
+        [ordered]@{ id = (& $gid 8); displayName = $nameNfd }))
+    $nameTwins = New-P91Scenario -Name 'name-twins' -Scratch $scratch -Template $template -World (& $unicodeWorld $nameLower @([ordered]@{ id = (& $gid 3); displayName = $nameUpper }, [ordered]@{ id = (& $gid 4); displayName = $nameTitle }))
+    # 'team-' and a rocket: 6 code points, 7 UTF-16 units and 9 UTF-8 bytes. Graph returns names that
+    # start with the given one; 'team-ab' and 'team-abcd' are not such names and stand in for a count
+    # in another unit: they have the name's 7 UTF-16 units and its 9 bytes, and only 'TEAM-' and a
+    # rocket has its 6 code points.
+    $nameAstral = New-P91Scenario -Name 'name-astral' -Scratch $scratch -Template $template -World (& $unicodeWorld $rocketLower @([ordered]@{ id = (& $gid 5); displayName = $rocketUpper },
+        [ordered]@{ id = (& $gid 6); displayName = 'team-ab' }, [ordered]@{ id = (& $gid 7); displayName = 'team-abcd' }) -Keep)
 
     $first = @(
         ($runBase1 = New-P91Run $base -Arguments ($newGateway + $secret + '-Yes'))
@@ -126,6 +151,10 @@ try {
         ($runGraphRead = New-P91Run $graphRead -Arguments ($newGateway + '-Yes'))
         ($runGraphTwins = New-P91Run $graphTwins -Arguments ($newGateway + '-Yes'))
         ($runNoDir = New-P91Run $noDir -Arguments ($newGateway + '-Yes') -Environment @{ CLAUDE_GATEWAY_STATE_DIR = (Join-Path $blocker 'state') })
+        ($runNameCase = New-P91Run $nameCase -Arguments ($newGateway + "-StandardGroup '$nameLower'" + '-Yes'))
+        ($runNameLonger = New-P91Run $nameLonger -Arguments ($newGateway + "-StandardGroup '$nameLower'" + '-Yes'))
+        ($runNameTwins = New-P91Run $nameTwins -Arguments ($newGateway + "-StandardGroup '$nameLower'" + '-Yes'))
+        ($runNameAstral = New-P91Run $nameAstral -Arguments ($newGateway + "-StandardGroup '$rocketLower'" + '-Yes'))
     )
     $r1 = Invoke-P91Runs $first
     $b1 = Get-P91Result $r1 $runBase1
@@ -206,6 +235,22 @@ try {
     Assert 'R6 a state directory that cannot be created: the run warns, prints the resume command with the answers and completes' ($nx.ExitCode -eq 0 -and
         $nx.Out -match '(?m)\[WARN\].*could not be created' -and $nx.Out -match "(?m)^\s*Resume: .*Install-ClaudeGateway\.ps1 .*-ResourceGroup 'rg-p91'" -and
         (Get-P91Calls $nx 'deployment group create*').Count -eq 1) (Get-P91Tail $nx)
+    $standardOf = { param($Scenario) @((Get-Step (Get-Checkpoint $Scenario) 'entra-groups').receipt.groups | Where-Object { $_ -and $_.role -eq 'standard' })[0] }
+    $uc = Get-P91Result $r1 $runNameCase
+    $ucGroup = & $standardOf $nameCase
+    Assert 'R5 a non-ASCII name whose one same-length candidate differs in case is that group: its id is recorded as pre-existing, nothing is created' (
+        $ucGroup.id -eq (& $gid 1) -and $ucGroup.origin -eq 'pre-existing' -and -not (Get-P91Calls $uc "ad group create --display-name $nameLower *").Count) (Get-P91Tail $uc)
+    $ul = Get-P91Result $r1 $runNameLonger
+    Assert 'R5 longer names that start with a non-ASCII name, the name in another normalization form among them, are not that group: created once' ($ul.ExitCode -eq 0 -and
+        @($ul.Az | Where-Object { $_ -clike "ad group create --display-name $nameLower *" }).Count -eq 1) (Get-P91Tail $ul)
+    $ut = Get-P91Result $r1 $runNameTwins
+    $utLine = [string]@(Get-P91ErrLines $ut)[0]
+    Assert 'R5 two same-length candidates for a non-ASCII name refuse on one line naming both ids, and create nothing' ((Test-Refusal $ut 'by name') -and
+        $utLine -match '0000000001e3' -and $utLine -match '0000000001e4' -and -not (Get-P91Calls $ut 'ad group create*').Count) (Get-P91Tail $ut)
+    $ua = Get-P91Result $r1 $runNameAstral
+    $uaGroup = & $standardOf $nameAstral
+    Assert 'R5 an astral-plane name counts code points as jq does: the one candidate with as many code points is recorded, nothing is created' (
+        $uaGroup.id -eq (& $gid 5) -and $uaGroup.origin -eq 'pre-existing' -and -not (Get-P91Calls $ua "ad group create --display-name $rocketLower *").Count) (Get-P91Tail $ua)
     $f1 = Get-P91Result $r1 $runForeign
     Assert 'S4 an unrecorded running claude-gw- deployment is awaited before the new one is created' ($f1.ExitCode -eq 0 -and
         (Get-Order $f1 'deployment group show*claude-gw-20260101000000*' 'deployment group create*')) (Get-P91Tail $f1)
@@ -221,7 +266,7 @@ try {
     $sc = [ordered]@{}
     foreach ($n in 'tenant', 'subscription', 'group', 'gateway', 'reuse', 'installer', 'version', 'changed', 'template', 'rgMissing', 'apimMissing', 'groupMissing', 'graphLag',
         'readDeployment', 'readGroup', 'readRg', 'truncated', 'schema', 'unknownStep', 'unsafe', 'restart', 'liveLock', 'exitedLock', 'reusedPid', 'otherHost', 'staleHost', 'flow', 'flowRefusal',
-        'aclDir', 'aclFile', 'tamperDeployment', 'tamperGroup', 'tamperRole') {
+        'aclDir', 'aclFile', 'tamperDeployment', 'tamperGroup', 'tamperRole', 'renamed') {
         $sc[$n] = & $copy $n
     }
     $sc['existingName'] = New-P91Scenario -Name 'existingName' -Scratch $scratch -From $identity
@@ -312,6 +357,8 @@ try {
         ($runTamperGroup = New-P91Run $sc.tamperGroup -Arguments ($newGateway + '-Yes'))
         ($runTamperRole = New-P91Run $sc.tamperRole -Arguments ($newGateway + '-Yes'))
         ($runExistingName = New-P91Run $sc.existingName -Arguments ($common + @("-ResourceGroup 'rg-p91'", "-ExistingApimName 'apim-other'", '-Yes')))
+        # A receipt applies to the name it records, compared code point by code point as jq's == does.
+        ($runRenamed = New-P91Run $sc.renamed -Arguments ($newGateway + "-StandardGroup 'Claude-Code-Standard'" + '-Yes'))
     )
     $r2 = Invoke-P91Runs $second
 
@@ -422,6 +469,9 @@ try {
     $enLine = [string]@(Get-P91ErrLines $en)[0]
     Assert 'S5 a different -ExistingApimName refuses on one line, names both gateways and keeps the checkpoint unchanged' ((Test-Refusal $en 'gateway') -and $enLine -match 'apim-p91reuse' -and
         $enLine -match 'apim-other' -and (Test-Kept $sc.existingName $hashes.existingName)) (Get-P91Tail $en)
+    $rn = Get-P91Result $r2 $runRenamed
+    Assert 'R5 a resume that names a group in another case than its receipt does not use the receipt: the name is looked up, reused and not created' ($rn.ExitCode -eq 0 -and
+        @($rn.Az | Where-Object { $_ -clike 'ad group list --display-name Claude-Code-Standard *' }).Count -eq 1 -and -not (Get-P91Calls $rn 'ad group create*').Count) (Get-P91Tail $rn)
 
     $fl = Get-P91Result $r2 $runFlow; $fr = Get-P91Result $r2 $runFlowRefusal
     Assert 'Flow the guided flow''s foundation step resumes the installer from its checkpoint' ($fl.ExitCode -eq 0 -and $fl.Out -match 'FLOW-STEP-DONE' -and $fl.Out -match $resumesAt -and

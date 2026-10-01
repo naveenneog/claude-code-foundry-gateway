@@ -89,6 +89,19 @@ section moves to `docs/status/P91.md` under P87's ADR-0042.
   among the failures; every bash mutant passes `bash -n` ([measurement](measurements/p91-mutations-council1.json)).
   The three Linux and macOS checks were not mutation-run here. `docs/SETUP.md` lines 760, 787 and 804
   predate P91 (`0874024`, `e001e30`) and are unchanged.
+- Council round 2, first result, 2026-10-01: UX PASS; Coder BLOCK; Security and QA still reviewing
+  `132d358`. The Coder's finding: the installers matched a group name differently beyond ASCII.
+  PowerShell `-eq` ignores case for all of Unicode and jq `ascii_downcase` folds only A-Z, so for an
+  existing group `ÉQUIPE` and the configured name `équipe` PowerShell reused the group and bash
+  created a second one (`scripts/ClaudeInstallResume.ps1:178`, `scripts/install-resume.sh:200`).
+  RED: `Test-InstallerCheckpoint.ps1` 73 checks, 2 failed; `Test-BashInstallerCheckpoint.ps1` 43, 2
+  failed. Failure lines read: "R5 bash a non-ASCII name whose one same-length candidate differs in
+  case is that group" and "R5 bash two same-length candidates for a non-ASCII name refuse on one
+  line" (bash created the group); "R5 longer names that start with a non-ASCII name, the name in
+  another normalization form among them, are not that group" (PowerShell `-eq` also equates é with e
+  and a combining accent, and reused that group); "R5 a resume that names a group in another case
+  than its receipt does not use the receipt" (PowerShell matched the receipt's name ignoring case,
+  where jq's `==` compares code points).
 
 Acceptance criteria, for both installers unless one is named:
 

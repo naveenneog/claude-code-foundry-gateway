@@ -224,7 +224,11 @@ function global:az {
         }
         'ad group list*' {
             # --display-name is a prefix ("Object's display name or its prefix", az ad group list --help).
+            # inject.groupLists holds Graph's answer for a name, as a scenario states it.
             $prefix = [string](& $value @('--display-name'))
+            $lists = Get-P91Property $w.inject 'groupLists'
+            $given = if ($lists) { Get-P91Property $lists $prefix } else { $null }
+            if ($null -ne $given) { return (ConvertTo-Json -InputObject @($given) -Depth 4 -Compress) }
             $list = @(foreach ($p in $w.groups.PSObject.Properties) { if ([string]$p.Value -like "$prefix*") { [pscustomobject]@{ id = $p.Name; displayName = [string]$p.Value } } })
             return (ConvertTo-Json -InputObject $list -Depth 4 -Compress)
         }
