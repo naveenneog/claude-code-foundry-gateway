@@ -204,7 +204,7 @@ exit 0
 $template = Join-Path $scratch 'template'
 foreach ($d in 'scripts', 'infra') { New-Item -ItemType Directory -Force -Path (Join-Path $template $d) | Out-Null }
 Copy-Item -LiteralPath $installerPath -Destination $template
-foreach ($f in 'scripts\banner.sh', 'scripts\preflight.sh', 'scripts\install-checkpoint.sh') { Copy-Item -LiteralPath (Join-Path $root $f) -Destination (Join-Path $template $f) }
+foreach ($f in 'scripts\banner.sh', 'scripts\preflight.sh', 'scripts\install-checkpoint.sh', 'scripts\install-resume.sh') { Copy-Item -LiteralPath (Join-Path $root $f) -Destination (Join-Path $template $f) }
 foreach ($f in 'scripts\Sync-ClaudeAccess.ps1', 'scripts\Select-ClaudeFinOpsTooling.ps1', 'infra\main.bicep') { Write-Lf (Join-Path $template $f) '# placeholder' }
 
 function New-InstallerRun {

@@ -1,0 +1,308 @@
+# Live reads and step actions of the install checkpoint (docs/adr/0046-installer-checkpoint-and-resume.md).
+# Dot-sourced by scripts/ClaudeInstallCheckpoint.ps1. Each read answers present, absent or
+# inconclusive, and only present skips a step (R1). Runs on Windows PowerShell 5.1 and PowerShell 7.
+
+function Invoke-ClaudeInstallAzRead {
+    # present, absent (an error code on the read's not-found list) or inconclusive (anything else).
+    # Invoke-AzOptional cannot tell absent from unreadable, so it is not used for a verification.
+    param([string[]]$Arguments, [string[]]$NotFound = @())
+    $saved = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $global:LASTEXITCODE = 0
+    try { $all = @(& az @Arguments 2>&1); $code = $LASTEXITCODE } catch { $all = @($_); $code = 1 } finally { $ErrorActionPreference = $saved }
+    $err = (@($all | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] } | ForEach-Object { $_.ToString() }) -join ' ').Trim()
+    $out = (@($all | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] } | ForEach-Object { [string]$_ }) -join "`n").Trim()
+    $verdict = if ($code -eq 0) { 'present' } elseif (@($NotFound | Where-Object { $err.Contains($_) }).Count) { 'absent' } else { 'inconclusive' }
+    $detail = if ($err) { ($err -split '(?<=\.)\s')[0] } else { "az exited $code" }
+    return [pscustomobject]@{ Verdict = $verdict; Output = $out; Error = $err; Detail = $detail }
+}
+$script:ClaudeInstallGraphNotFound = @('Request_ResourceNotFound', 'does not exist or one of its queried reference-property objects are not present')
+
+function Get-ClaudeInstallSetting([string]$Name, [int]$Default) {
+    $v = 0
+    if ([int]::TryParse([string][Environment]::GetEnvironmentVariable($Name), [ref]$v) -and $v -ge 0) { return $v }
+    return $Default
+}
+
+function Write-ClaudeInstallCloudShellLine([int]$Seconds = [int]::MaxValue) {
+    # Before any wait that can outlast Cloud Shell's 20-minute idle limit (FAQ; ADR-0046 decision 10):
+    # a bounded wait longer than 60 s, or az deployment group create, which has no bound.
+    $c = $script:ClaudeInstall
+    if (-not $c -or -not $c.Location.CloudShell -or $c.CloudShellNoted -or $Seconds -le 60) { return }
+    $c.CloudShellNoted = $true
+    $resume = if ($c.Location.Persistent) { Format-ClaudeInstallResume } else { Format-ClaudeInstallResume -WithAnswers }
+    Write-Host "    Cloud Shell ends a session after 20 minutes without interactive activity; the install checkpoint and the ARM deployment outlive the session. Resume: $resume" -ForegroundColor Yellow
+}
+
+function Get-ClaudeInstallDeploymentState([string]$ResourceGroup, [string]$Name) {
+    $r = Invoke-ClaudeInstallAzRead @('deployment', 'group', 'show', '-g', $ResourceGroup, '-n', $Name, '-o', 'json') @('DeploymentNotFound')
+    $state = [pscustomobject]@{ Verdict = $r.Verdict; State = ''; GatewayUrl = ''; Error = ''; Detail = $r.Detail }
+    if ($r.Verdict -ne 'present') { return $state }
+    try { $d = $r.Output | ConvertFrom-Json -ErrorAction Stop } catch { $state.Verdict = 'inconclusive'; $state.Detail = 'the deployment record is not JSON'; return $state }
+    $state.State = [string]$d.properties.provisioningState
+    if ($d.properties.outputs -and $d.properties.outputs.gatewayUrl) { $state.GatewayUrl = [string]$d.properties.outputs.gatewayUrl.value }
+    if ($d.properties.error) { $state.Error = "$($d.properties.error.code): $($d.properties.error.message)" }
+    if ($state.State -eq 'Deleted') { $state.Verdict = 'absent' }
+    return $state
+}
+
+function Wait-ClaudeInstallDeployment([string]$ResourceGroup, [string]$Name) {
+    # A bounded wait on a deployment ARM is still running; az deployment group wait is not used (U68).
+    $poll = Get-ClaudeInstallSetting 'CLAUDE_GATEWAY_DEPLOY_POLL_SECONDS' 30
+    $bound = Get-ClaudeInstallSetting 'CLAUDE_GATEWAY_DEPLOY_WAIT_SECONDS' 3600
+    Write-ClaudeInstallCloudShellLine $bound
+    $watch = [Diagnostics.Stopwatch]::StartNew()
+    $last = ''
+    while ($true) {
+        $s = Get-ClaudeInstallDeploymentState $ResourceGroup $Name
+        if ($s.Verdict -ne 'present' -or $s.State -in $script:ClaudeInstallTerminal) { return $s }
+        if ($s.State -ne $last) { Write-Host ("    Deployment {0} is {1} after {2:N0} s; waiting up to {3} s." -f $Name, $s.State, $watch.Elapsed.TotalSeconds, $bound) -ForegroundColor DarkGray; $last = $s.State }
+        if ($watch.Elapsed.TotalSeconds -ge $bound) {
+            Stop-ClaudeInstall "deployment $Name in resource group $ResourceGroup is still running after $bound s, and Azure Resource Manager continues it without this session. Nothing was changed. Resume: $(Format-ClaudeInstallResume)"
+        }
+        if ($poll -gt 0) { Start-Sleep -Seconds $poll }
+    }
+}
+
+function Wait-ClaudeInstallMainDeployments([string]$ResourceGroup) {
+    # Never two main.bicep deployments at once: claude-gw- (both installers), claude-gateway- (deploy.ps1).
+    $r = Invoke-ClaudeInstallAzRead @('deployment', 'group', 'list', '-g', $ResourceGroup, '-o', 'json') @('ResourceGroupNotFound')
+    if ($r.Verdict -eq 'absent') { return }
+    if ($r.Verdict -ne 'present') { Stop-ClaudeInstall "the deployments of resource group $ResourceGroup could not be listed ($($r.Detail)), so another main.bicep deployment cannot be ruled out. Nothing was changed. Resume: $(Format-ClaudeInstallResume)" }
+    $parsed = if ($r.Output) { $r.Output | ConvertFrom-Json } else { @() }
+    foreach ($d in @($parsed)) {
+        $state = [string]$d.properties.provisioningState
+        if ([string]$d.name -notmatch '^(claude-gw-|claude-gateway-)' -or $state -in ($script:ClaudeInstallTerminal + 'Deleted')) { continue }
+        Write-Host "    Deployment $($d.name) is $state; waiting for it before deploying." -ForegroundColor Yellow
+        $null = Wait-ClaudeInstallDeployment $ResourceGroup ([string]$d.name)
+    }
+}
+
+function Test-ClaudeInstallGateway([string]$ResourceGroup, [string]$ApimName, $Receipt) {
+    $apim = Invoke-ClaudeInstallAzRead @('apim', 'show', '-g', $ResourceGroup, '-n', $ApimName, '--query', 'name', '-o', 'tsv') @('ResourceNotFound')
+    if ($apim.Verdict -ne 'present') { return [pscustomobject]@{ Verdict = $apim.Verdict; Detail = "API Management $ApimName is not readable or gone ($($apim.Detail))" } }
+    $api = Invoke-ClaudeInstallAzRead @('apim', 'api', 'show', '-g', $ResourceGroup, '--service-name', $ApimName, '--api-id', 'claude-foundry', '-o', 'none') @('ResourceNotFound')
+    if ($api.Verdict -ne 'present') { return [pscustomobject]@{ Verdict = $api.Verdict; Detail = "the Claude API on $ApimName is not readable or gone ($($api.Detail))" } }
+    if ($Receipt -and $Receipt.roleOrigin -eq 'created' -and $Receipt.roleAssignmentId) {
+        $role = Invoke-ClaudeInstallAzRead @('rest', '--method', 'get', '--url', "https://management.azure.com$($Receipt.roleAssignmentId)?api-version=2022-04-01", '-o', 'none') @('RoleAssignmentNotFound')
+        if ($role.Verdict -ne 'present') { return [pscustomobject]@{ Verdict = $role.Verdict; Detail = "the gateway's Foundry role assignment is not readable or gone ($($role.Detail))" } }
+    }
+    return [pscustomobject]@{ Verdict = 'present'; Detail = '' }
+}
+
+function Resolve-ClaudeInstallGatewayStep {
+    # Whether the gateway deployment runs. A recorded deployment still running is awaited, one that
+    # succeeded is verified live, one that failed is shown; the installer's read-backs then run
+    # before any new deployment (ADR-0046 decision 10).
+    param([string]$ResourceGroup, [string]$ApimName)
+    $title = $script:ClaudeInstallSteps['gateway-deployment']
+    $hash = Get-ClaudeInstallInputHash 'gateway-deployment'
+    $step = Get-ClaudeInstallStep 'gateway-deployment'
+    $recorded = if ($step -and $step.receipt) { @($step.receipt.deployments | Where-Object { $null -ne $_ }) | Select-Object -Last 1 } else { $null }
+    if ($recorded) {
+        $name = [string]$recorded.name
+        $s = Get-ClaudeInstallDeploymentState $ResourceGroup $name
+        if ($s.Verdict -eq 'present' -and $s.State -notin $script:ClaudeInstallTerminal) { $s = Wait-ClaudeInstallDeployment $ResourceGroup $name }
+        if ($s.Verdict -eq 'inconclusive') { Stop-ClaudeInstall "deployment $name in resource group $ResourceGroup could not be read ($($s.Detail)), so it is neither skipped nor repeated. Nothing was changed. Resume: $(Format-ClaudeInstallResume)" }
+        if ($s.Verdict -eq 'absent') { Write-Host "    ${title}: deployment $name is not in the resource group's history; deploying again" -ForegroundColor Yellow }
+        elseif ($s.State -ne 'Succeeded') {
+            Write-Host "    ${title}: deployment $name $($s.State): $($s.Error)" -ForegroundColor Yellow
+            $ops = Invoke-ClaudeInstallAzRead @('deployment', 'operation', 'group', 'list', '-g', $ResourceGroup, '-n', $name, '-o', 'json') @()
+            if ($ops.Verdict -eq 'present' -and $ops.Output) {
+                foreach ($o in @($ops.Output | ConvertFrom-Json)) { if ($o.properties.provisioningState -eq 'Failed') { Write-Host "      failed operation: $($o.properties.targetResource.resourceName): $($o.properties.statusMessage.error.message)" -ForegroundColor DarkGray } }
+            }
+        }
+        elseif ([string]$step.inputHash -ne $hash) { Write-Host "    ${title}: the templates or answers changed since deployment $name; deploying again" -ForegroundColor Yellow }
+        else {
+            $live = Test-ClaudeInstallGateway $ResourceGroup $ApimName $step.receipt
+            if ($live.Verdict -eq 'inconclusive') { Stop-ClaudeInstall "$title could not be verified ($($live.Detail)). Nothing was changed. Resume: $(Format-ClaudeInstallResume)" }
+            if ($live.Verdict -eq 'present') {
+                $url = if ($s.GatewayUrl) { $s.GatewayUrl } else { [string]$step.receipt.gatewayUrl }
+                if ($step.state -ne 'completed') { $recorded.lastState = 'Succeeded'; Set-ClaudeInstallReceiptValue $step.receipt 'gatewayUrl' $url; Complete-ClaudeInstallStep 'gateway-deployment' -Receipt $step.receipt }
+                Write-Host "    [OK]   ${title}: verified live, skipped (deployment $name)" -ForegroundColor Green
+                return [pscustomobject]@{ Run = $false; GatewayUrl = $url }
+            }
+            Write-Host "    ${title}: $($live.Detail); deploying again" -ForegroundColor Yellow
+        }
+    }
+    Wait-ClaudeInstallMainDeployments $ResourceGroup
+    Set-ClaudeInstallStep -Id 'gateway-deployment' -State 'started' -InputHash $hash -Receipt $(if ($step) { $step.receipt } else { $null })
+    return [pscustomobject]@{ Run = $true; GatewayUrl = '' }
+}
+
+function Set-ClaudeInstallReceiptValue($Receipt, [string]$Name, $Value) {
+    if ($Receipt.PSObject.Properties.Name -contains $Name) { $Receipt.$Name = $Value } else { $Receipt | Add-Member -NotePropertyName $Name -NotePropertyValue $Value }
+}
+
+function Register-ClaudeInstallDeployment([string]$Name, [bool]$CreatedApim) {
+    # Recorded before az deployment group create, so a resume finds the deployment by name (R4). The
+    # APIM's origin is recorded with the first deployment: a resume finds the APIM that deployment made.
+    $step = Get-ClaudeInstallStep 'gateway-deployment'
+    $receipt = if ($step -and $step.receipt) { $step.receipt } else { [pscustomobject][ordered]@{ deployments = @() } }
+    $now = [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ', [Globalization.CultureInfo]::InvariantCulture)
+    $receipt.deployments = @(@($receipt.deployments | Where-Object { $null -ne $_ }) + [pscustomobject][ordered]@{ name = $Name; recordedUtc = $now; lastState = 'started' })
+    if ($receipt.PSObject.Properties.Name -notcontains 'origin') { Set-ClaudeInstallReceiptValue $receipt 'origin' $(if ($CreatedApim) { 'created' } else { 'pre-existing' }) }
+    Set-ClaudeInstallStep -Id 'gateway-deployment' -State 'started' -Receipt $receipt
+    Write-ClaudeInstallCloudShellLine
+}
+
+function Complete-ClaudeInstallGatewayStep {
+    param([string]$ResourceGroup, [string]$ApimName, [string]$GatewayUrl, [bool]$GrantedRole, [string]$FoundryResourceGroup, [string]$FoundryAccount, [string]$DesktopClientId)
+    $step = Get-ClaudeInstallStep 'gateway-deployment'
+    if (-not $step) { return }
+    $receipt = $step.receipt
+    @($receipt.deployments)[-1].lastState = 'Succeeded'
+    Set-ClaudeInstallReceiptValue $receipt 'apimName' $ApimName
+    Set-ClaudeInstallReceiptValue $receipt 'gatewayUrl' $GatewayUrl
+    $principal = Invoke-ClaudeInstallAzRead @('apim', 'show', '-g', $ResourceGroup, '-n', $ApimName, '--query', 'identity.principalId', '-o', 'tsv')
+    $scope = Invoke-ClaudeInstallAzRead @('cognitiveservices', 'account', 'show', '-g', $FoundryResourceGroup, '-n', $FoundryAccount, '--query', 'id', '-o', 'tsv')
+    # Both values non-empty: az role assignment list treats an empty scope or assignee as no filter.
+    if ($principal.Output -and $scope.Output) {
+        $list = Invoke-ClaudeInstallAzRead @('role', 'assignment', 'list', '--assignee-object-id', $principal.Output, '--scope', $scope.Output, '--role', 'Cognitive Services User', '-o', 'json')
+        $match = if ($list.Verdict -eq 'present' -and $list.Output) { @($list.Output | ConvertFrom-Json | Where-Object { $_.scope -eq $scope.Output }) | Select-Object -First 1 } else { $null }
+        if ($match) { Set-ClaudeInstallReceiptValue $receipt 'roleAssignmentId' ([string]$match.id); Set-ClaudeInstallReceiptValue $receipt 'roleOrigin' $(if ($GrantedRole) { 'created' } else { 'pre-existing' }) }
+    }
+    if ($DesktopClientId) { Set-ClaudeInstallReceiptValue $receipt 'desktopClientId' $DesktopClientId }
+    Complete-ClaudeInstallStep 'gateway-deployment' -Receipt $receipt
+}
+
+function Invoke-ClaudeInstallGroups {
+    # The tier groups, with receipts: a resume reads each by id and never creates a second group
+    # with the same name (ADR-0046 decision 11). A name finds a group only by exact display name.
+    param([object[]]$Groups)
+    $step = Get-ClaudeInstallStep 'entra-groups'
+    $old = if ($step -and $step.receipt) { @($step.receipt.groups | Where-Object { $null -ne $_ }) } else { @() }
+    $hash = Get-ClaudeInstallInputHash 'entra-groups'
+    $resume = Format-ClaudeInstallResume
+    Set-ClaudeInstallStep -Id 'entra-groups' -State 'started' -InputHash $hash -Receipt $(if ($step) { $step.receipt } else { $null })
+    $made = [System.Collections.Generic.List[object]]::new()
+    $complete = $true
+    $verified = 0
+    foreach ($g in $Groups) {
+        $rec = @($old | Where-Object { $_.role -eq $g.Role -and $_.displayName -eq $g.Name }) | Select-Object -First 1
+        if ($rec -and $rec.id) {
+            $r = Invoke-ClaudeInstallAzRead @('ad', 'group', 'show', '--group', [string]$rec.id, '--query', 'id', '-o', 'tsv') $script:ClaudeInstallGraphNotFound
+            if ($r.Verdict -eq 'present') { Write-Host "    [OK]   $($g.Name) exists ($($rec.id))" -ForegroundColor Green; $made.Add($rec); $verified++; continue }
+            if ($r.Verdict -eq 'inconclusive') { Stop-ClaudeInstall "Entra group '$($g.Name)' ($($rec.id)) could not be read ($($r.Detail)), so it is neither skipped nor created again. Nothing was changed. Resume: $resume" }
+            if ($rec.origin -eq 'created') {
+                Stop-ClaudeInstall "Entra group '$($g.Name)' ($($rec.id)), created by this run at $($rec.createdUtc), is not returned by Microsoft Graph. A group created moments ago can take time to appear in Microsoft Graph, and a rerun later continues without creating a second group. Nothing was changed. Resume: $resume"
+            }
+            Write-Host "    $($g.Name) ($($rec.id)) is gone; looking it up by name." -ForegroundColor Yellow
+        }
+        $found = Invoke-ClaudeInstallAzRead @('ad', 'group', 'show', '--group', $g.Name, '-o', 'json')
+        $obj = $null
+        if ($found.Verdict -eq 'present') { try { $obj = $found.Output | ConvertFrom-Json -ErrorAction Stop } catch { $obj = $null } }
+        if ($obj -and [string]$obj.displayName -ceq $g.Name -and $obj.id) {
+            Write-Host "    [OK]   $($g.Name) exists" -ForegroundColor Green
+            $made.Add([pscustomobject][ordered]@{ role = $g.Role; displayName = $g.Name; id = [string]$obj.id; origin = 'pre-existing'; createdUtc = $null })
+            continue
+        }
+        $created = Invoke-ClaudeInstallAzRead @('ad', 'group', 'create', '--display-name', $g.Name, '--mail-nickname', $g.Name, '-o', 'json')
+        $obj = $null
+        if ($created.Verdict -eq 'present') { try { $obj = $created.Output | ConvertFrom-Json -ErrorAction Stop } catch { $obj = $null } }
+        if ($obj -and $obj.id) {
+            Write-Host "    [OK]   $($g.Name) created" -ForegroundColor Green
+            $made.Add([pscustomobject][ordered]@{ role = $g.Role; displayName = $g.Name; id = [string]$obj.id; origin = 'created'; createdUtc = [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ', [Globalization.CultureInfo]::InvariantCulture) })
+        }
+        else {
+            Write-Host "    [WARN] Could not create '$($g.Name)' - your tenant may restrict group creation." -ForegroundColor Yellow
+            Write-Host '    Ask an admin to create it, then re-run.' -ForegroundColor DarkGray
+            $complete = $false
+        }
+    }
+    if ($verified -eq @($Groups).Count) { Write-Host "    [OK]   $($script:ClaudeInstallSteps['entra-groups']): verified live, skipped" -ForegroundColor Green }
+    Complete-ClaudeInstallStep 'entra-groups' -Receipt ([pscustomobject]@{ groups = @($made) }) -Incomplete:(-not $complete)
+}
+
+function Get-ClaudeInstallVerdict([string]$Verdict, [string]$Detail) { return [pscustomobject]@{ Verdict = $Verdict; Detail = $Detail } }
+
+function Add-ClaudeInstallBusinessUnit([string]$Id, [string]$GroupId, [string]$GroupOrigin) {
+    # Each unit written, so a resume after a later refusal verifies it in bu-registry (S3).
+    $step = Get-ClaudeInstallStep 'business-units'
+    if (-not $step) { return }
+    $units = @(if ($step.receipt) { $step.receipt.units | Where-Object { $null -ne $_ -and $_.id -ne $Id } })
+    $units += [pscustomobject][ordered]@{ id = $Id; groupId = $GroupId; groupOrigin = $GroupOrigin }
+    Set-ClaudeInstallStep -Id 'business-units' -State 'started' -Receipt ([pscustomobject]@{ units = @($units) })
+}
+
+function Get-ClaudeInstallResolverApp([string]$NamePrefix, [string]$Supplied) {
+    # The projection's resolver app by id when known: supplied, recorded by an earlier attempt, or the
+    # one app with the display name Deploy-ClaudeProjection.ps1 gives it (ClaudeProjectionChecks.ps1:167).
+    if ($Supplied) { return [pscustomobject]@{ Id = $Supplied; Origin = 'pre-existing' } }
+    $step = Get-ClaudeInstallStep 'projection'
+    if ($step -and $step.receipt -and $step.receipt.resolverAppId) { return [pscustomobject]@{ Id = [string]$step.receipt.resolverAppId; Origin = [string]$step.receipt.resolverOrigin } }
+    $r = Invoke-ClaudeInstallAzRead @('ad', 'app', 'list', '--display-name', "claude-projection-resolver-$NamePrefix", '--query', '[].appId', '-o', 'tsv')
+    $ids = @(if ($r.Verdict -eq 'present') { $r.Output -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ } })
+    if ($ids.Count -eq 1) { return [pscustomobject]@{ Id = $ids[0]; Origin = 'pre-existing' } }
+    return [pscustomobject]@{ Id = ''; Origin = 'created' }
+}
+
+function Complete-ClaudeInstallProjection([string]$ResourceGroup, [string]$NamePrefix, $App) {
+    $id = [string]$App.Id
+    if (-not $id) {
+        $r = Invoke-ClaudeInstallAzRead @('deployment', 'group', 'show', '-g', $ResourceGroup, '-n', "projection-resolver-$NamePrefix", '--query', 'properties.parameters.resolverAppId.value', '-o', 'tsv')
+        if ($r.Verdict -eq 'present') { $id = $r.Output }
+    }
+    Complete-ClaudeInstallStep 'projection' -Receipt ([pscustomobject][ordered]@{ resolverAppId = $id; resolverOrigin = [string]$App.Origin })
+}
+
+function Test-ClaudeInstallResourceGroup([string]$Name) {
+    $r = Invoke-ClaudeInstallAzRead @('group', 'show', '-n', $Name, '--query', 'location', '-o', 'tsv') @('ResourceGroupNotFound')
+    $detail = if ($r.Verdict -eq 'absent') { "resource group $Name is gone" } else { "resource group $Name could not be read ($($r.Detail))" }
+    return (Get-ClaudeInstallVerdict $r.Verdict $detail)
+}
+
+function Test-ClaudeInstallBusinessUnits([string]$ResourceGroup, [string]$ApimName, $Receipt) {
+    $units = @(if ($Receipt) { $Receipt.units | Where-Object { $null -ne $_ } })
+    if (-not $units.Count) { return (Get-ClaudeInstallVerdict 'present' '') }
+    $r = Invoke-ClaudeInstallAzRead @('apim', 'nv', 'show', '-g', $ResourceGroup, '--service-name', $ApimName, '--named-value-id', 'bu-registry', '--query', 'value', '-o', 'tsv') @('ResourceNotFound')
+    if ($r.Verdict -ne 'present') { return (Get-ClaudeInstallVerdict $r.Verdict "bu-registry could not be read ($($r.Detail))") }
+    $missing = @($units | Where-Object { $r.Output -notmatch (',' + [regex]::Escape([string]$_.id) + '=') })
+    if ($missing.Count) { return (Get-ClaudeInstallVerdict 'absent' "business unit $($missing[0].id) is not in bu-registry") }
+    return (Get-ClaudeInstallVerdict 'present' '')
+}
+
+function Test-ClaudeInstallDeployments([string]$ResourceGroup, [string[]]$Names) {
+    foreach ($n in $Names) {
+        $s = Get-ClaudeInstallDeploymentState $ResourceGroup $n
+        if ($s.Verdict -ne 'present') { return (Get-ClaudeInstallVerdict $s.Verdict "deployment $n is gone or unreadable ($($s.Detail))") }
+        if ($s.State -ne 'Succeeded') { return (Get-ClaudeInstallVerdict 'absent' "deployment $n is $($s.State)") }
+    }
+    return (Get-ClaudeInstallVerdict 'present' '')
+}
+
+function Test-ClaudeInstallModelDeployment([string]$ResourceGroup, [string]$Account, [string]$Name) {
+    $r = Invoke-ClaudeInstallAzRead @('cognitiveservices', 'account', 'deployment', 'show', '-g', $ResourceGroup, '-n', $Account, '--deployment-name', $Name, '--query', 'properties.provisioningState', '-o', 'tsv') @('DeploymentNotFound', 'ResourceNotFound')
+    if ($r.Verdict -ne 'present') { return (Get-ClaudeInstallVerdict $r.Verdict "Claude deployment $Name is gone or unreadable ($($r.Detail))") }
+    if ($r.Output -eq 'Succeeded') { return (Get-ClaudeInstallVerdict 'present' '') }
+    if ($r.Output -eq 'Failed') { return (Get-ClaudeInstallVerdict 'absent' "Claude deployment $Name failed") }
+    return (Get-ClaudeInstallVerdict 'inconclusive' "Claude deployment $Name is $($r.Output)")
+}
+
+function Get-ClaudeInstallPendingDeployment {
+    # The Claude deployment an interrupted run recorded and Azure does not show yet, with the
+    # provider answers it needs; nothing when none was recorded or it now exists (R1).
+    $recorded = Get-ClaudeInstallAnswer 'PendingClaudeDeployment'
+    if (-not $recorded) { return $null }
+    $v = Test-ClaudeInstallModelDeployment ([string]$recorded.resourceGroup) ([string]$recorded.account) ([string]$recorded.name)
+    if ($v.Verdict -eq 'present') { return $null }
+    if ($v.Verdict -eq 'inconclusive') { Stop-ClaudeInstall "$($v.Detail), so it is neither skipped nor created again. Nothing was changed. Resume: $(Format-ClaudeInstallResume)" }
+    $a = $script:ClaudeInstall.Answers
+    return [pscustomobject]@{ Deployment = $recorded; ProviderData = @{ organizationName = [string]$a['ModelOrganizationName']; industry = [string]$a['ModelIndustry']; countryCode = [string]$a['ModelCountryCode'] } }
+}
+
+function Test-ClaudeInstallAddress([string]$ResourceGroup, [string]$ApimName, [string]$Hostname, [string]$RecordPath) {
+    $r = Invoke-ClaudeInstallAzRead @('apim', 'show', '-g', $ResourceGroup, '-n', $ApimName, '-o', 'json') @('ResourceNotFound')
+    if ($r.Verdict -ne 'present') { return (Get-ClaudeInstallVerdict $r.Verdict "API Management $ApimName could not be read ($($r.Detail))") }
+    $names = @(($r.Output | ConvertFrom-Json).hostnameConfigurations | ForEach-Object { [string]$_.hostName })
+    $record = if (Test-Path -LiteralPath $RecordPath) { [IO.File]::ReadAllText($RecordPath) | ConvertFrom-Json } else { $null }
+    if ($names -notcontains $Hostname -or -not $record -or -not $record.address -or $record.pendingAddress) { return (Get-ClaudeInstallVerdict 'absent' "the company address $Hostname is not bound and recorded") }
+    return (Get-ClaudeInstallVerdict 'present' '')
+}
+
+function Assert-ClaudeInstallDesktopApp([string]$ClientId) {
+    # A supplied Desktop app is pre-existing by definition; a resume reads it by id (decision 8).
+    if (-not (Test-ClaudeInstallResuming) -or -not $ClientId) { return }
+    $r = Invoke-ClaudeInstallAzRead @('ad', 'app', 'show', '--id', $ClientId, '--query', 'appId', '-o', 'tsv') $script:ClaudeInstallGraphNotFound
+    if ($r.Verdict -ne 'present') { Stop-ClaudeInstall "the Claude Desktop app $ClientId is gone or unreadable ($($r.Detail)); scripts/New-ClaudeDesktopEntraApp.ps1 creates one. Nothing was changed." }
+}

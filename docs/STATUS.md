@@ -34,7 +34,14 @@ section moves to `docs/status/P91.md` under P87's ADR-0042.
       `scripts/install-checkpoint.sh` (bash 3.2, jq); `tests/Test-BashInstallerCheckpoint.ps1` 23
       checks, 0 failed. One RED test defect is fixed: the S4 bounded check indexed one character of
       a single error line. `tests/Test-BashInstaller.ps1` copies the library and stubs the new reads.
-- [ ] REFACTOR, COUNCIL (five seats), GATE, LOG.
+- [x] REFACTOR, 2026-10-01: each library split by responsibility, the store and run state
+      (`scripts/ClaudeInstallCheckpoint.ps1` 595 lines, `scripts/install-checkpoint.sh` 499) and the
+      live reads and step actions (`scripts/ClaudeInstallResume.ps1` 309, `scripts/install-resume.sh`
+      239); both are in the installer fingerprint. The bash resource group step and confirmation
+      moved into the library, so `install-claude-gateway.sh` is 698 lines (base 688, budget 700).
+      `docs/architecture/manifest.json` re-rendered (the company-address diagram reads
+      `Install-ClaudeGateway.ps1`; no image changed).
+- [ ] COUNCIL (five seats), GATE, LOG.
 
 Acceptance criteria, for both installers unless one is named:
 

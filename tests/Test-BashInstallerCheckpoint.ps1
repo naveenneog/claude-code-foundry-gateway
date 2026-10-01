@@ -35,12 +35,14 @@ function Get-BashKey([string]$Checkout) {
 }
 
 $installerPath = Join-Path $root 'install-claude-gateway.sh'
-$libraryPath = Join-Path $root 'scripts\install-checkpoint.sh'
+$libraryPaths = @('scripts\install-checkpoint.sh', 'scripts\install-resume.sh') | ForEach-Object { Join-Path $root $_ }
 
 # ------------------------------------------------------------------ static checks
 # macOS ships bash 3.2 (runner image macOS 26: Bash 3.2.57, docs/UNKNOWNS.md U71), and BSD tools.
-$library = if (Test-Path -LiteralPath $libraryPath) { [IO.File]::ReadAllText($libraryPath) } else { '' }
-Assert 'the checkpoint library exists and passes bash -n' ($library -and ((& $bash -n (ConvertTo-BashPath $libraryPath) 2>&1 | Out-String).Trim() -eq '') -and $LASTEXITCODE -eq 0)
+$library = if (-not @($libraryPaths | Where-Object { -not (Test-Path -LiteralPath $_) }).Count) { @($libraryPaths | ForEach-Object { [IO.File]::ReadAllText($_) }) -join "`n" } else { '' }
+$syntaxOk = [bool]$library
+foreach ($p in $libraryPaths) { if (-not (Test-Path -LiteralPath $p) -or (& $bash -n (ConvertTo-BashPath $p) 2>&1 | Out-String).Trim() -ne '' -or $LASTEXITCODE -ne 0) { $syntaxOk = $false } }
+Assert 'the checkpoint libraries exist and pass bash -n' $syntaxOk
 $forbidden = '(?m)^[^#\n]*(\b(declare|local|typeset)\s+-[a-zA-Z]*A\b|\bmapfile\b|\breadarray\b|\$\{[^}\n]*(,,|\^\^)[^}\n]*\}|\|&|&>>|\bcoproc\b|\bsed\s+-i(\s|$)|\bdate\s+(-[a-zA-Z]*\s+)*-d\b|\breadlink\s+-f\b|\bstat\s+-c\b|\bfind\b[^\n]*-printf\b|\bgrep\s+-[a-zA-Z]*P)'
 $hits = @([regex]::Matches(([IO.File]::ReadAllText($installerPath) + "`n" + $library), $forbidden) | ForEach-Object { $_.Value.Trim() })
 Assert 'the installer and its library use nothing that needs bash 4 or GNU tools' ($library -and -not $hits.Count) ($hits -join ' | ')
@@ -189,7 +191,7 @@ $scratch = Join-Path ([IO.Path]::GetTempPath()) ('p91-bash-checkpoint-' + [guid]
 $template = Join-Path $scratch 'template'
 foreach ($d in 'scripts', 'infra') { New-Item -ItemType Directory -Force -Path (Join-Path $template $d) | Out-Null }
 Copy-Item -LiteralPath $installerPath -Destination $template
-foreach ($f in 'scripts\banner.sh', 'scripts\preflight.sh', 'scripts\install-checkpoint.sh', 'infra\main.bicep', 'infra\foundry-role.bicep', 'infra\policy.xml') {
+foreach ($f in 'scripts\banner.sh', 'scripts\preflight.sh', 'scripts\install-checkpoint.sh', 'scripts\install-resume.sh', 'infra\main.bicep', 'infra\foundry-role.bicep', 'infra\policy.xml') {
     if (Test-Path -LiteralPath (Join-Path $root $f)) { Copy-Item -LiteralPath (Join-Path $root $f) -Destination (Join-Path $template $f) }
 }
 foreach ($f in 'scripts\Sync-ClaudeAccess.ps1', 'scripts\Select-ClaudeFinOpsTooling.ps1') { Write-Lf (Join-Path $template $f) '# placeholder' }
