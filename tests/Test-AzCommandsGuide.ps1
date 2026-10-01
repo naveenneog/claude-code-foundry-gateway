@@ -451,14 +451,18 @@ if [ "$1" = "role" ] && [ "$2" = "assignment" ]; then
   case "$action" in
     list)
       query="$(arg_after --query "$@")"
-      if [[ "$*" == *created-role-id* ]]; then if [ "${P89_SCENARIO:-}" = "teardown-role-live-mismatch" ]; then printf '{"id":"created-role-id","scope":"/subscriptions/sub/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/foundry","roleDefinitionName":"Reader","principalId":"gateway-object-id"}\n'; else printf '{"id":"created-role-id","scope":"/subscriptions/sub/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/foundry","roleDefinitionName":"Cognitive Services User","principalId":"gateway-object-id"}\n'; fi
+      scope="$(arg_after --scope "$@" || true)"
+      allflag="false"; for a in "$@"; do [ "$a" = "--all" ] && allflag="true"; done
+      if [ -z "$scope" ] && [ "$allflag" != "true" ]; then printf 'null\n'; exit 0; fi
+      if [[ "$*" == *kv-created-role-id* ]]; then if [ "${P89_SCENARIO:-}" = "teardown-kv-role-live-mismatch" ]; then printf '{"id":"kv-created-role-id","scope":"/subscriptions/sub/resourceGroups/kv-rg/providers/Microsoft.KeyVault/vaults/kv","roleDefinitionName":"Reader","principalId":"gateway-object-id"}\n'; else printf '{"id":"kv-created-role-id","scope":"/subscriptions/sub/resourceGroups/kv-rg/providers/Microsoft.KeyVault/vaults/kv","roleDefinitionName":"Key Vault Secrets User","principalId":"gateway-object-id"}\n'; fi
+      elif [[ "$*" == *created-role-id* ]]; then if [ "${P89_SCENARIO:-}" = "teardown-role-live-mismatch" ]; then printf '{"id":"created-role-id","scope":"/subscriptions/sub/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/foundry","roleDefinitionName":"Reader","principalId":"gateway-object-id"}\n'; else printf '{"id":"created-role-id","scope":"/subscriptions/sub/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/foundry","roleDefinitionName":"Cognitive Services User","principalId":"gateway-object-id"}\n'; fi
       elif [ "${P89_SCENARIO:-}" = "role-existing" ]; then printf 'existing-role-id\n'; elif [ "${P89_SCENARIO:-}" = "keyvault-existing" ]; then printf 'kv-existing-role-id\n'; fi
       exit 0
       ;;
     create)
       if [ "${P89_SCENARIO:-}" = "role-create-fail" ]; then echo "Role create failed" >&2; exit 3; fi
       role="$(arg_after --role "$@")"
-      if [ "$role" = "Key Vault Secrets User" ]; then printf '{"id":"kv-created-role-id"}\n'; else printf '{"id":"created-role-id","scope":"/subscriptions/sub/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/foundry","roleDefinitionName":"Cognitive Services User","principalId":"gateway-object-id"}\n'; fi
+      if [ "$role" = "Key Vault Secrets User" ]; then printf '{"id":"kv-created-role-id","scope":"/subscriptions/sub/resourceGroups/kv-rg/providers/Microsoft.KeyVault/vaults/kv","roleDefinitionName":"Key Vault Secrets User","principalId":"gateway-object-id"}\n'; else printf '{"id":"created-role-id","scope":"/subscriptions/sub/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/foundry","roleDefinitionName":"Cognitive Services User","principalId":"gateway-object-id"}\n'; fi
       exit 0
       ;;
     delete)
@@ -866,6 +870,10 @@ $modelRefusalExpected = [regex]::Match($markdown, '(?s)# P89-MODEL-REFUSAL-END\s
 Assert 'model refusal expected result states standard-tier callers are narrowed until restore' (
     $modelRefusalExpected -match 'Between the narrowing write and the restore, every standard-tier caller is refused models outside the narrowed list\.'
 ) $modelRefusalExpected
+Assert 'resolver deploy removes stale zip before packaging' ($resolverDeployBlock -match 'rm -f resolver\.zip') $resolverDeployBlock
+Assert 'resolver deploy builds zip in a subshell so cwd is restored on zip failure' ($resolverDeployBlock -match '\(cd resolver && zip -r \.\./resolver\.zip \.\) \|\| return 1') $resolverDeployBlock
+$guideTestSource = Read-Text $PSCommandPath
+Assert 'az role assignment stub matches CLI default scope behavior' ($guideTestSource -match 'if \[ -z "\$scope" \] && \[ "\$allflag" != "true" \]; then printf ''null\\n''; exit 0; fi') 'role assignment list without --scope or --all must not return resource-scoped assignments.'
 
 $normal = Invoke-GuideBashScenario 'normal' $entitlementScript
 Assert 'guide execution publishes premium and standard exact values' (
@@ -956,7 +964,7 @@ Assert 'resource group exists failure refuses with no create' (
 
 $reuseNoIdentity = Invoke-GuideBashScenario 'reuse-no-identity' $reuseApimBlock
 Assert 'reuse APIM with no identity refuses before what-if' (
-    $reuseNoIdentity.Exit -ne 0 -and $reuseNoIdentity.Output -match 'P89-ENABLE-APIM-IDENTITY' -and -not ((Read-ScenarioFile $reuseNoIdentity 'calls.log') -match 'deployment group what-if')
+    $reuseNoIdentity.Exit -ne 0 -and $reuseNoIdentity.Output -match 'p89_enable_apim_identity' -and -not ((Read-ScenarioFile $reuseNoIdentity 'calls.log') -match 'deployment group what-if')
 ) $reuseNoIdentity.Output
 
 $reuseInstalled = Invoke-GuideBashScenario 'reuse-installed' $reuseApimBlock
@@ -1305,7 +1313,9 @@ $kvCreated = Invoke-GuideBashScenario 'keyvault-new' $keyVaultBlock
 Assert 'RBAC Key Vault without assignment creates exact-vault-scope receipt' (
     $kvCreated.Exit -eq 0 -and
     (Read-ScenarioFile $kvCreated 'calls.log') -match 'role assignment create .*--scope /subscriptions/sub/resourceGroups/kv-rg/providers/Microsoft.KeyVault/vaults/kv' -and
-    (Read-ScenarioFile $kvCreated '.p89-receipts/keyvault-role.json' | ConvertFrom-Json).keyVaultRole.created -eq $true
+    (Read-ScenarioFile $kvCreated '.p89-receipts/keyvault-role.json' | ConvertFrom-Json).keyVaultRole.created -eq $true -and
+    (Read-ScenarioFile $kvCreated '.p89-receipts/keyvault-role.json' | ConvertFrom-Json).keyVaultRole.scope -eq '/subscriptions/sub/resourceGroups/kv-rg/providers/Microsoft.KeyVault/vaults/kv' -and
+    (Read-ScenarioFile $kvCreated '.p89-receipts/keyvault-role.json' | ConvertFrom-Json).keyVaultRole.principalId -eq 'gateway-object-id'
 ) $kvCreated.Output
 
 $kvExisting = Invoke-GuideBashScenario 'keyvault-existing' $keyVaultBlock
@@ -1609,11 +1619,14 @@ Assert 'model refusal restore read-back mismatch refuses and prints restore valu
 ) $modelRestoreMismatch.Output
 
 $allCreatedReceipts = "mkdir -p .p89-receipts; printf '%s\n' '{""foundryRole"":{""created"":true,""id"":""created-role-id"",""scope"":""/subscriptions/sub/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/foundry"",""roleDefinitionName"":""Cognitive Services User"",""principalId"":""gateway-object-id""}}' > .p89-receipts/foundry-role.json; printf '%s\n' '{""group"":{""created"":true,""id"":""standard-id"",""displayName"":""claude-code-standard"",""createdAt"":""2020-01-01T00:00:00Z""}}' > .p89-receipts/group-standard.json; printf '%s\n' '{""group"":{""created"":true,""id"":""premium-id"",""displayName"":""claude-code-premium"",""createdAt"":""2020-01-01T00:00:00Z""}}' > .p89-receipts/group-premium.json; printf '%s\n' '{""app"":{""created"":true,""appId"":""created-app-id"",""objectId"":""created-object-id"",""displayName"":""Claude Desktop gateway""}}' > .p89-receipts/desktop-app.json;"
+$keyVaultCreatedReceipt = "printf '%s\n' '{""keyVaultRole"":{""created"":true,""id"":""kv-created-role-id"",""scope"":""/subscriptions/sub/resourceGroups/kv-rg/providers/Microsoft.KeyVault/vaults/kv"",""roleDefinitionName"":""Key Vault Secrets User"",""principalId"":""gateway-object-id""}}' > .p89-receipts/keyvault-role.json;"
 $allExistingReceipts = "mkdir -p .p89-receipts; printf '%s\n' '{""foundryRole"":{""created"":false,""existingId"":""existing-role-id""}}' > .p89-receipts/foundry-role.json; printf '%s\n' '{""group"":{""created"":false,""id"":""standard-id""}}' > .p89-receipts/group-standard.json; printf '%s\n' '{""group"":{""created"":false,""id"":""premium-id""}}' > .p89-receipts/group-premium.json; printf '%s\n' '{""app"":{""created"":false,""appId"":""existing-app-id""}}' > .p89-receipts/desktop-app.json;"
 
 $teardownCreated = Invoke-GuideBashScenario 'teardown-created' (Join-GuideBlocks @($allCreatedReceipts, $teardownExternalBlock))
 Assert 'teardown deletes only receipt-created role assignment' (
-    $teardownCreated.Exit -eq 0 -and (Read-ScenarioFile $teardownCreated 'writes.log') -match 'delete-role created-role-id'
+    $teardownCreated.Exit -eq 0 -and
+    (Read-ScenarioFile $teardownCreated 'calls.log') -match 'role assignment list --scope /subscriptions/sub/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/foundry' -and
+    (Read-ScenarioFile $teardownCreated 'writes.log') -match 'delete-role created-role-id'
 ) $teardownCreated.Output
 Assert 'teardown deletes receipt-created groups and app' (
     $teardownCreated.Exit -eq 0 -and
@@ -1644,6 +1657,20 @@ Assert 'teardown skips app delete when live app differs from receipt' (
     $teardownAppMismatch.Output -match 'live Desktop app registration does not match' -and
     -not ((Read-ScenarioFile $teardownAppMismatch 'writes.log') -match 'delete-app created-app-id')
 ) $teardownAppMismatch.Output
+
+$teardownKvRole = Invoke-GuideBashScenario 'teardown-kv-role' (Join-GuideBlocks @($allCreatedReceipts, $keyVaultCreatedReceipt, $teardownExternalBlock))
+Assert 'teardown deletes matching receipt-created Key Vault role assignment' (
+    $teardownKvRole.Exit -eq 0 -and
+    (Read-ScenarioFile $teardownKvRole 'calls.log') -match 'role assignment list --scope /subscriptions/sub/resourceGroups/kv-rg/providers/Microsoft.KeyVault/vaults/kv' -and
+    (Read-ScenarioFile $teardownKvRole 'writes.log') -match 'delete-role kv-created-role-id'
+) $teardownKvRole.Output
+
+$teardownKvRoleMismatch = Invoke-GuideBashScenario 'teardown-kv-role-live-mismatch' (Join-GuideBlocks @($allCreatedReceipts, $keyVaultCreatedReceipt, $teardownExternalBlock))
+Assert 'teardown skips Key Vault role delete when live role differs from receipt' (
+    $teardownKvRoleMismatch.Exit -eq 0 -and
+    $teardownKvRoleMismatch.Output -match 'live Key Vault role assignment does not match' -and
+    -not ((Read-ScenarioFile $teardownKvRoleMismatch 'writes.log') -match 'delete-role kv-created-role-id')
+) $teardownKvRoleMismatch.Output
 
 $teardownExisting = Invoke-GuideBashScenario 'teardown-existing' (Join-GuideBlocks @($allExistingReceipts, $teardownExternalBlock))
 Assert 'teardown preserves pre-existing role assignment' (

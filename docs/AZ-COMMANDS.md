@@ -240,7 +240,7 @@ p89_deploy_reused_apim() {
   apim_identity_type="$(printf '%s' "$apim_json" | jq -r '.identity.type // "none"')"
   export APIM_PRINCIPAL_ID="$(printf '%s' "$apim_json" | jq -r '.identity.principalId // ""')"
   if ! printf '%s' "$apim_identity_type" | grep -q 'SystemAssigned' || [ -z "$APIM_PRINCIPAL_ID" ]; then
-    echo "Refused: existing APIM has no SystemAssigned identity. Run P89-ENABLE-APIM-IDENTITY, then rerun this block." >&2
+    echo "Refused: existing APIM has no SystemAssigned identity. Run p89_enable_apim_identity, the optional identity block in section 3, then rerun this block." >&2
     return 1
   fi
   if ! nv_json="$(az apim nv list -g "$GATEWAY_RG" --service-name "$APIM_NAME" -o json)"; then
@@ -323,7 +323,7 @@ p89_gateway_identity() {
   APIM_IDENTITY_TYPE="$(printf '%s' "$APIM_IDENTITY_JSON" | jq -r '.type // "none"')"
   export APIM_PRINCIPAL_ID="$(printf '%s' "$APIM_IDENTITY_JSON" | jq -r '.principalId // ""')"
   if ! printf '%s' "$APIM_IDENTITY_TYPE" | grep -q 'SystemAssigned' || [ -z "$APIM_PRINCIPAL_ID" ]; then
-    echo "Refused: no Foundry role check ran because API Management managed identity is '${APIM_IDENTITY_TYPE:-none}' and principalId is empty; next step is portal > API Management > Security > Managed identities > System assigned > Status On > Save, or P89-ENABLE-APIM-IDENTITY. az apim update without --enable-managed-identity true sets the identity to None (azure-cli apim/custom.py apim_update)." >&2
+    echo "Refused: no Foundry role check ran because API Management managed identity is '${APIM_IDENTITY_TYPE:-none}' and principalId is empty; next step is portal > API Management > Security > Managed identities > System assigned > Status On > Save, or p89_enable_apim_identity, the optional identity block in section 3. az apim update without --enable-managed-identity true sets the identity to None (azure-cli apim/custom.py apim_update)." >&2
     return 1
   fi
   if ! FOUNDRY_ID="$(az cognitiveservices account show -g "$FOUNDRY_RG" -n "$FOUNDRY_ACCOUNT" --query id -o tsv)" || [ -z "$FOUNDRY_ID" ]; then
@@ -1062,9 +1062,9 @@ p89_keyvault_access() {
       echo "Refused: Key Vault role assignment create failed; no receipt was written." >&2
       return 1
     fi
-    printf '%s' "$created_kv_role" | jq '{keyVaultRole:{created:true,id:.id}}' > .p89-receipts/keyvault-role.json
+    printf '%s' "$created_kv_role" | jq --arg scope "$KEYVAULT_ID" --arg principal "$APIM_PRINCIPAL_ID" '{keyVaultRole:{created:true,id:.id,scope:(.scope // $scope),roleDefinitionName:(.roleDefinitionName // "Key Vault Secrets User"),principalId:(.principalId // $principal)}}' > .p89-receipts/keyvault-role.json
   fi
-  jq -e '(.keyVaultRole.created == true and (.keyVaultRole.id | type == "string" and length > 0)) or (.keyVaultRole.created == false and (.keyVaultRole.existingId | type == "string" and length > 0))' .p89-receipts/keyvault-role.json >/dev/null || {
+  jq -e '(.keyVaultRole.created == true and (.keyVaultRole.id | type == "string" and length > 0) and (.keyVaultRole.scope | type == "string" and length > 0) and (.keyVaultRole.roleDefinitionName == "Key Vault Secrets User") and (.keyVaultRole.principalId | type == "string" and length > 0)) or (.keyVaultRole.created == false and (.keyVaultRole.existingId | type == "string" and length > 0))' .p89-receipts/keyvault-role.json >/dev/null || {
     rm -f .p89-receipts/keyvault-role.json
     echo "Refused: Key Vault role receipt is invalid; nothing recorded." >&2
     return 1
@@ -1281,7 +1281,8 @@ p89_resolver_deploy() {
     return 1
   }
   az deployment group create -g "$GATEWAY_RG" -n "projection-resolver-${NAME_PREFIX}" --template-file infra/resolver.bicep --parameters @resolver-params.json -o none || return 1
-  cd resolver && zip -r ../resolver.zip . && cd .. || return 1
+  rm -f resolver.zip
+  (cd resolver && zip -r ../resolver.zip .) || return 1
   if ! RESOLVER_SITE_NAME="$(az deployment group show -g "$GATEWAY_RG" -n "projection-resolver-${NAME_PREFIX}" --query "properties.outputs.siteName.value" -o tsv)" || [ -z "$RESOLVER_SITE_NAME" ]; then
     echo "Refused: could not read resolver site name output; code upload did not run." >&2
     return 1
@@ -1532,8 +1533,13 @@ p89_teardown_external() {
     fi
     if jq -e '.foundryRole.created == true and (.foundryRole.id | type == "string" and length > 0)' "$receipt" >/dev/null; then
       role_id="$(jq -r '.foundryRole.id' "$receipt")"
-      if ! live_role="$(az role assignment list --query "[?id=='${role_id}']|[0]" -o json)"; then
-        echo "Refused: live Foundry role assignment does not match its receipt; that delete was skipped." >&2
+      role_scope="$(jq -r '.foundryRole.scope // ""' "$receipt")"
+      if [ -z "$role_scope" ]; then
+        echo "Refused: Foundry role receipt scope is empty; that delete was skipped." >&2
+        return 0
+      fi
+      if ! live_role="$(az role assignment list --scope "$role_scope" --query "[?id=='${role_id}']|[0]" -o json)"; then
+        echo "Refused: could not read live Foundry role assignment; that delete was skipped." >&2
         return 0
       fi
       live_role_id="$(jq -r '.id // ""' <<< "$live_role")"
@@ -1541,7 +1547,7 @@ p89_teardown_external() {
       live_role_name="$(jq -r '.roleDefinitionName // ""' <<< "$live_role")"
       live_role_principal="$(jq -r '.principalId // ""' <<< "$live_role")"
       if [ "$live_role_id" != "$role_id" ] ||
-         [ "$live_role_scope" != "$(jq -r '.foundryRole.scope // ""' "$receipt")" ] ||
+         [ "$live_role_scope" != "$role_scope" ] ||
          [ "$live_role_name" != "$(jq -r '.foundryRole.roleDefinitionName // ""' "$receipt")" ] ||
          [ "$live_role_principal" != "$(jq -r '.foundryRole.principalId // ""' "$receipt")" ]; then
         echo "Refused: live Foundry role assignment does not match its receipt; that delete was skipped." >&2
@@ -1597,7 +1603,28 @@ p89_teardown_external() {
       return 0
     fi
     if jq -e '.keyVaultRole.created == true and (.keyVaultRole.id | type == "string" and length > 0)' "$receipt" >/dev/null; then
-      az role assignment delete --ids "$(jq -r '.keyVaultRole.id' "$receipt")"
+      role_id="$(jq -r '.keyVaultRole.id' "$receipt")"
+      role_scope="$(jq -r '.keyVaultRole.scope // ""' "$receipt")"
+      if [ -z "$role_scope" ]; then
+        echo "Refused: Key Vault role receipt scope is empty; that delete was skipped." >&2
+        return 0
+      fi
+      if ! live_role="$(az role assignment list --scope "$role_scope" --query "[?id=='${role_id}']|[0]" -o json)"; then
+        echo "Refused: could not read live Key Vault role assignment; that delete was skipped." >&2
+        return 0
+      fi
+      live_role_id="$(jq -r '.id // ""' <<< "$live_role")"
+      live_role_scope="$(jq -r '.scope // ""' <<< "$live_role")"
+      live_role_name="$(jq -r '.roleDefinitionName // ""' <<< "$live_role")"
+      live_role_principal="$(jq -r '.principalId // ""' <<< "$live_role")"
+      if [ "$live_role_id" != "$role_id" ] ||
+         [ "$live_role_scope" != "$role_scope" ] ||
+         [ "$live_role_name" != "$(jq -r '.keyVaultRole.roleDefinitionName // ""' "$receipt")" ] ||
+         [ "$live_role_principal" != "$(jq -r '.keyVaultRole.principalId // ""' "$receipt")" ]; then
+        echo "Refused: live Key Vault role assignment does not match its receipt; that delete was skipped." >&2
+        return 0
+      fi
+      az role assignment delete --ids "$role_id"
     else
       echo "Key Vault role assignment was pre-existing; not deleting it."
     fi
