@@ -27,6 +27,7 @@ function Get-GuideFiles([string]$Repo) {
     foreach ($folder in @('docs', 'onboarding')) {
         $p = Join-Path $Repo $folder
         if (-not (Test-Path -LiteralPath $p -PathType Container)) { continue }
+        # docs/status/*.md are packet ledger archives, not user guides.
         Get-ChildItem -LiteralPath $p -Filter '*.md' -File |
             Where-Object { $_.Name -notin @('STATUS.md', 'ROADMAP.md', 'UNKNOWNS.md', 'CHARTER.md') }
     }
@@ -208,6 +209,7 @@ function Get-DocReferenceFailures([string]$Repo) {
                 }
             }
         }
+            
         for ($i = 0; $i -lt $lines.Count; $i++) {
             $number = $i + 1
             $line = $lines[$i].Original
@@ -247,6 +249,122 @@ function Get-DocReferenceFailures([string]$Repo) {
     }
 }
 
+function Get-WorstCaseCrlfByteCount([string]$Path) {
+                $text = [IO.File]::ReadAllText($Path)
+                [Text.Encoding]::UTF8.GetByteCount($text) + ([regex]::Matches($text, '(?<!\r)\n').Count)
+            }
+
+            function Get-GateMaxScanBytes([string]$Repo) {
+                $gate = Get-Content (Join-Path $Repo '.ironclad\gate.mjs') -Raw
+                if ($gate -notmatch 'MAX_SCAN_BYTES\s*=\s*(\d+)\s*\*\s*(\d+)') {
+                    throw 'Cannot parse MAX_SCAN_BYTES from .ironclad/gate.mjs'
+                }
+                [int]$Matches[1] * [int]$Matches[2]
+            }
+
+            function Get-TrackedFiles([string]$Repo) {
+                $git = Get-Command git -ErrorAction SilentlyContinue
+                if ($git) {
+                    $out = & $git.Source -C $Repo ls-files 2>$null
+                    if ($LASTEXITCODE -eq 0 -and $out) { return @($out) }
+                }
+                @(Get-ChildItem -LiteralPath $Repo -Recurse -File |
+                    Where-Object { $_.FullName -notmatch '\\(?:\.git|\.venv|node_modules)\\' } |
+                    ForEach-Object { $_.FullName.Substring($Repo.TrimEnd('\', '/').Length + 1) })
+            }
+
+            function Get-StatusSizeFailures([string]$Repo) {
+                $failures = @()
+                $statusPath = Join-Path $Repo 'docs\STATUS.md'
+                if (Test-Path -LiteralPath $statusPath -PathType Leaf) {
+                    $statusBytes = Get-WorstCaseCrlfByteCount $statusPath
+                    if ($statusBytes -gt 64kb) {
+                        $failures += [pscustomobject]@{ File = 'docs/STATUS.md'; Limit = 64kb; Bytes = $statusBytes; Kind = 'status-64k' }
+                    }
+                }
+                $maxScan = Get-GateMaxScanBytes $Repo
+                $scanLimit = [int][math]::Floor($maxScan * 0.75)
+                $scanFiles = @('README.md', 'docs\ROADMAP.md', 'docs\STATUS.md', 'CHANGELOG.md', 'docs\UNKNOWNS.md')
+                $archive = Join-Path $Repo 'docs\status'
+                if (Test-Path -LiteralPath $archive -PathType Container) {
+                    $scanFiles += @(Get-ChildItem -LiteralPath $archive -Filter '*.md' -File | ForEach-Object {
+                            $_.FullName.Substring($Repo.TrimEnd('\', '/').Length + 1)
+                        })
+                }
+                foreach ($rel in $scanFiles) {
+                    $p = Join-Path $Repo $rel
+                    if (-not (Test-Path -LiteralPath $p -PathType Leaf)) { continue }
+                    $bytes = Get-WorstCaseCrlfByteCount $p
+                    if ($bytes -ge $scanLimit) {
+                        $failures += [pscustomobject]@{ File = ($rel -replace '\\', '/'); Limit = $scanLimit; Bytes = $bytes; Kind = 'gate-75pct' }
+                    }
+                }
+                $failures
+            }
+
+            function Get-StatusLinkFailures([string]$Repo, [switch]$OnlyStatusPages) {
+                $anchorCache = @{}
+                $directoryCache = @{}
+                $files = if ($OnlyStatusPages) {
+                    $statusFiles = @()
+                    $statusPath = Join-Path $Repo 'docs\STATUS.md'
+                    if (Test-Path -LiteralPath $statusPath -PathType Leaf) { $statusFiles += Get-Item -LiteralPath $statusPath }
+                    $archive = Join-Path $Repo 'docs\status'
+                    if (Test-Path -LiteralPath $archive -PathType Container) {
+                        $statusFiles += @(Get-ChildItem -LiteralPath $archive -Filter '*.md' -File)
+                    }
+                    $statusFiles
+                }
+                else {
+                    foreach ($rel in @(Get-TrackedFiles $Repo)) {
+                        if ($rel -notmatch '\.(md|ps1|py|json|mjs|js|yml|yaml|txt)$') { continue }
+                        $p = Join-Path $Repo $rel
+                        if (Test-Path -LiteralPath $p -PathType Leaf) { Get-Item -LiteralPath $p }
+                    }
+                }
+                foreach ($file in @($files)) {
+                    $relative = $file.FullName.Substring($Repo.TrimEnd('\', '/').Length + 1)
+                    $text = [IO.File]::ReadAllText($file.FullName)
+                    $lines = @(Get-MarkdownLines $text)
+                    foreach ($link in @(Get-MarkdownLinks $lines)) {
+                        $target = $link.Target -replace '\\([() ])', '$1'
+                        if ($target -match '^(?:[a-z][a-z0-9+.-]*:|//)') { continue }
+                        $parts = $target -split '#', 2
+                        $path = [uri]::UnescapeDataString(($parts[0] -split '\?', 2)[0])
+                        if (-not $path) { $resolved = $file.FullName }
+                        elseif ($path.StartsWith('/')) { $resolved = Join-Path $Repo $path.TrimStart('/') }
+                        else { $resolved = Join-Path $file.DirectoryName $path }
+                        $resolved = [IO.Path]::GetFullPath($resolved)
+                        if ($OnlyStatusPages) {
+                            if (-not (Test-Path -LiteralPath $resolved)) {
+                                New-ReferenceFailure $relative $link.Line 'status-link' $target
+                                continue
+                            }
+                            if (-not (Test-ExactRepositoryPath $Repo $resolved $directoryCache)) {
+                                New-ReferenceFailure $relative $link.Line 'status-link-case' $target
+                                continue
+                            }
+                        }
+                        else {
+                            if ($parts.Count -ne 2 -or -not $parts[1]) { continue }
+                            $relResolved = $resolved.Substring($Repo.TrimEnd('\', '/').Length + 1) -replace '\\', '/'
+                            if ($relResolved -ne 'docs/STATUS.md' -and $relResolved -notmatch '^docs/status/[^/]+\.md$') { continue }
+                            if (-not (Test-Path -LiteralPath $resolved -PathType Leaf)) {
+                                New-ReferenceFailure $relative $link.Line 'status-anchor-file' $target
+                                continue
+                            }
+                        }
+                        if ($parts.Count -eq 2 -and $parts[1] -and [IO.Path]::GetExtension($resolved) -eq '.md') {
+                            if (-not $anchorCache.ContainsKey($resolved)) { $anchorCache[$resolved] = Get-DocumentAnchors $resolved }
+                            $anchor = [uri]::UnescapeDataString($parts[1])
+                            if (-not $anchorCache[$resolved].Contains($anchor)) {
+                                New-ReferenceFailure $relative $link.Line 'status-anchor' $target
+                            }
+                        }
+                    }
+                }
+            }
+
 Write-Host 'Documentation references - files, GitHub anchors, scripts and parameters' -ForegroundColor Cyan
 $guides = @(Get-GuideFiles $Root)
 Assert 'user-facing guides were found' ($guides.Count -gt 0)
@@ -255,6 +373,24 @@ foreach ($b in $broken) {
     Write-Host ("  [FAIL] {0}:{1} [{2}] {3}" -f $b.File, $b.Line, $b.Kind, $b.Detail) -ForegroundColor Red
 }
 Assert 'every user-facing reference resolves' ($broken.Count -eq 0) "$($broken.Count) broken reference(s)"
+
+$statusSizeFailures = @(Get-StatusSizeFailures $Root)
+Assert 'docs/STATUS.md is at most 64 KiB worst-case CRLF' (
+    @($statusSizeFailures | Where-Object Kind -eq 'status-64k').Count -eq 0) (
+    ($statusSizeFailures | Where-Object Kind -eq 'status-64k' | ForEach-Object { "$($_.File) $($_.Bytes)/$($_.Limit)" }) -join '; ')
+Assert 'gate-read ledger and status archive files stay under 75 percent of MAX_SCAN_BYTES' (
+    @($statusSizeFailures | Where-Object Kind -eq 'gate-75pct').Count -eq 0) (
+    ($statusSizeFailures | Where-Object Kind -eq 'gate-75pct' | ForEach-Object { "$($_.File) $($_.Bytes)/$($_.Limit)" }) -join '; ')
+$statusAnchorFailures = @(Get-StatusLinkFailures $Root)
+foreach ($b in $statusAnchorFailures) {
+    Write-Host ("  [FAIL] {0}:{1} [{2}] {3}" -f $b.File, $b.Line, $b.Kind, $b.Detail) -ForegroundColor Red
+}
+Assert 'every tracked link into STATUS or docs/status anchors resolves' ($statusAnchorFailures.Count -eq 0) "$($statusAnchorFailures.Count) broken status anchor(s)"
+$statusRelativeFailures = @(Get-StatusLinkFailures $Root -OnlyStatusPages)
+foreach ($b in $statusRelativeFailures) {
+    Write-Host ("  [FAIL] {0}:{1} [{2}] {3}" -f $b.File, $b.Line, $b.Kind, $b.Detail) -ForegroundColor Red
+}
+Assert 'every relative link inside STATUS and docs/status resolves' ($statusRelativeFailures.Count -eq 0) "$($statusRelativeFailures.Count) broken status link(s)"
 
 $readme = Get-Content (Join-Path $Root 'README.md') -Raw
 $mdmPath = Join-Path $Root 'docs\MDM.md'
@@ -397,6 +533,74 @@ Get-Help ./scripts/Get-Example.ps1 -Full
         $r = @(Get-DocReferenceFailures $scratch)
         Assert "detected: $($mutation.Label)" (@($r | Where-Object Kind -eq $mutation.Kind).Count -gt 0) ($r | Out-String)
     }
+}
+finally { if (Test-Path -LiteralPath $scratch) { Remove-Item -LiteralPath $scratch -Recurse -Force } }
+
+$scratch = Join-Path $scratchRoot ('status-guard-' + [guid]::NewGuid().ToString('N'))
+try {
+    New-Item -ItemType Directory -Path (Join-Path $scratch '.ironclad'), (Join-Path $scratch 'docs\status') -Force | Out-Null
+    Write-Fixture (Join-Path $scratch '.ironclad\gate.mjs') 'const MAX_SCAN_BYTES = 1000 * 1;'
+    Write-Fixture (Join-Path $scratch 'README.md') '# Home'
+    Write-Fixture (Join-Path $scratch 'CHANGELOG.md') '# Changelog'
+    Write-Fixture (Join-Path $scratch 'docs\ROADMAP.md') '# Roadmap'
+    Write-Fixture (Join-Path $scratch 'docs\UNKNOWNS.md') '# Unknowns'
+    Write-Fixture (Join-Path $scratch 'docs\STATUS.md') @'
+# Status
+
+[P1](status/P1.md#p1-good)
+'@
+    Write-Fixture (Join-Path $scratch 'docs\status\P1.md') @'
+# P1 status
+
+## P1 good
+
+[root](../../README.md)
+'@
+    Assert 'status guard fixture starts green: sizes' (@(Get-StatusSizeFailures $scratch).Count -eq 0) ((Get-StatusSizeFailures $scratch | Out-String))
+    Assert 'status guard fixture starts green: tracked anchors' (@(Get-StatusLinkFailures $scratch).Count -eq 0) ((Get-StatusLinkFailures $scratch | Out-String))
+    Assert 'status guard fixture starts green: status relative links' (@(Get-StatusLinkFailures $scratch -OnlyStatusPages).Count -eq 0) ((Get-StatusLinkFailures $scratch -OnlyStatusPages | Out-String))
+
+    Write-Fixture (Join-Path $scratch 'docs\STATUS.md') ('# Status' + "`r`n" + ('x' * 70000))
+    Assert 'detected: STATUS above 64 KiB' (@(Get-StatusSizeFailures $scratch | Where-Object Kind -eq 'status-64k').Count -gt 0)
+    Write-Fixture (Join-Path $scratch 'docs\STATUS.md') @'
+# Status
+
+[P1](status/P1.md#p1-good)
+'@
+    Assert 'restored: STATUS size guard passes' (@(Get-StatusSizeFailures $scratch | Where-Object Kind -eq 'status-64k').Count -eq 0)
+
+    Write-Fixture (Join-Path $scratch 'docs\status\P1.md') ("# P1 status`r`n`r`n## P1 good`r`n`r`n" + ('y' * 800))
+    Assert 'detected: status archive above 75 percent of gate scan limit' (@(Get-StatusSizeFailures $scratch | Where-Object Kind -eq 'gate-75pct').Count -gt 0)
+    Write-Fixture (Join-Path $scratch 'docs\status\P1.md') @'
+# P1 status
+
+## P1 good
+
+[root](../../README.md)
+'@
+    Assert 'restored: gate scan size guard passes' (@(Get-StatusSizeFailures $scratch | Where-Object Kind -eq 'gate-75pct').Count -eq 0)
+
+    Write-Fixture (Join-Path $scratch 'README.md') '[bad](docs/status/P1.md#missing)'
+    Assert 'detected: tracked status anchor link is broken' (@(Get-StatusLinkFailures $scratch | Where-Object Kind -eq 'status-anchor').Count -gt 0)
+    Write-Fixture (Join-Path $scratch 'README.md') '[good](docs/status/P1.md#p1-good)'
+    Assert 'restored: tracked status anchor link passes' (@(Get-StatusLinkFailures $scratch).Count -eq 0)
+
+    Write-Fixture (Join-Path $scratch 'docs\status\P1.md') @'
+# P1 status
+
+## P1 good
+
+[missing](missing.md)
+'@
+    Assert 'detected: relative link inside status archive is broken' (@(Get-StatusLinkFailures $scratch -OnlyStatusPages | Where-Object Kind -eq 'status-link').Count -gt 0)
+    Write-Fixture (Join-Path $scratch 'docs\status\P1.md') @'
+# P1 status
+
+## P1 good
+
+[root](../../README.md)
+'@
+    Assert 'restored: status relative link passes' (@(Get-StatusLinkFailures $scratch -OnlyStatusPages).Count -eq 0)
 }
 finally { if (Test-Path -LiteralPath $scratch) { Remove-Item -LiteralPath $scratch -Recurse -Force } }
 
