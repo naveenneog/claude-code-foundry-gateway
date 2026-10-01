@@ -87,6 +87,7 @@ premise does not carry over.
 | P84 | Merged (`3e4430b`) with the owner's approval on 2026-09-29, after council round 3 and the packet gate at `5612c94` | Projection deployment checks everything before it writes and never switches into an outage. Read-only preflight, fail-closed Graph, sanitized runner/app failures and unconditional switch refusal until P86, across deployer/installer/flow. ADR-0040 rejects ARM-only admission; 197 preflight assertions, 86 council assertions and 95 current mutations pass. |
 | P85 | Merged (`171b248`) with the owner's approval on 2026-09-30, after council round 5 and the packet gate at `86798f6` | AUM TUI manages people, units, teams and budgets with full tests. |
 | P86 | Proposed; owner decision pending | Scheduled projection reconciler and tenant-admin pack: managed identity with Graph `GroupMember.Read.All` granted by a tenant admin, an hourly job and lease alerts. Proposed admission reads destination-bound Cosmos oldest expiry and generation advances through the runner, with a tested image/entrypoint and dry-run overrides rejected. P84 refuses switching and creates no schedule. |
+| P87 | Owner-approved docs packet; merge pending | Archive merged `docs/STATUS.md` sections into `docs/status/<ID>.md`, keep `docs/STATUS.md` below the gate read limit, update links and tests, and add a durable documentation guard. |
 
 M0 is shipped. The table below is the queue; the checklist under it is what the gate tracks.
 
@@ -432,9 +433,9 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       (update, tier, projection, network, Desktop sign-in), diagnostics and the FinOps steps
       (tool, token and dollar budgets with a scheduled reconciler, workbooks, reports), each
       proven live on an isolated gateway; an integrated run on 2026-09-27 found and fixed nine
-      defects ([STATUS](STATUS.md#p66-guided-flow-2026-09-27)). Open: the 403 message names the
+      defects ([STATUS](status/P66.md#p66-guided-flow-2026-09-27)). Open: the 403 message names the
       default tier groups; the FinOps steps have not yet run on the same estate as the others
-- [x] P67 developer workstation fixes from the owner's test, merged 2026-09-27 (`ea31a5f`, `4327563`, `25bda4d`; [STATUS](STATUS.md#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)) — acceptance: Claude Desktop Entra
+- [x] P67 developer workstation fixes from the owner's test, merged 2026-09-27 (`ea31a5f`, `4327563`, `25bda4d`; [STATUS](status/P67.md#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)) — acceptance: Claude Desktop Entra
       sign-in uses the key spelling the Desktop release that reads it knows, including a running
       build older than the installed one; Claude Code declares capabilities by model family for
       the recorded models, pins each alias to the newest model in its family, and is compared
@@ -442,7 +443,7 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       and end with a real Claude Code reply; diagnostics never wait for input and read the real
       Desktop configuration and logs.
       [ADR-0031](adr/0031-client-keys-every-release-reads.md), **U27**, **U28**, **U29**
-- [x] P68 guided flow redesign from the owner's test, merged 2026-09-28 (`fc9c86c`, [STATUS](STATUS.md#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)) — acceptance: `Start-ClaudeGateway.ps1`
+- [x] P68 guided flow redesign from the owner's test, merged 2026-09-28 (`fc9c86c`, [STATUS](status/P68.md#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)) — acceptance: `Start-ClaudeGateway.ps1`
       shows its first question within seconds and names each slow step while it runs; Setup
       hands every installer decision (tiers, sections, defaults) back to the installer's own
       prompts instead of passing `-Yes`, and a projection choice no longer stops the installer;

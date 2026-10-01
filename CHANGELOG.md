@@ -29,6 +29,9 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P87 archives merged status sections.** `docs/STATUS.md` keeps the active packet, archive index,
+  proof commands and next work; merged packet evidence now lives under `docs/status/` so the gate
+  can read the active-packet line and all archived status files.
 - **Final P85 follow-up integration.** P71's owned-process deadline probes and
   precise public-evidence section lookup are merged without production changes.
   The single full AUM run passes all 1,200 cases; refreshed file and whole-check
@@ -125,7 +128,7 @@ exact streaming cache-creation detail remains **U13**.
   Its 65 files plan at 141/140/140/140 s across four complete shards; coverage,
   runner integrity, mutation ownership, documentation, encoding and architecture
   checks pass. The combined publication fingerprint review and source-preserving
-  removal proofs are recorded in [P80 STATUS](docs/STATUS.md#final-main-integration-and-reviewed-aum-test-shards-2026-09-30).
+  removal proofs are recorded in [P80 STATUS](docs/status/P80.md#final-main-integration-and-reviewed-aum-test-shards-2026-09-30).
 
 - **P80/P71 publication integration.** Existing AUM actions retain guarded notifications,
   text-only report/profile paths, origin-checked local saves and recovery scrolling;
@@ -221,7 +224,7 @@ exact streaming cache-creation detail remains **U13**.
   rendering retain their source. Application titles stay static, raw exit
   messages are refused, and queued message/notification representations omit
   backend text before Textual logging. The seven scheduler cases enable visible
-  notifications. [Corrections and evidence](docs/STATUS.md#council-round-10-corrections),
+  notifications. [Corrections and evidence](docs/status/P71.md#council-round-10-corrections),
   [approval recipe](docs/adr/0035-aum-bounded-readiness-and-progressive-reads.md#approval-recipe-for-attributes-and-builtins).
   Diagnostic sealing now preserves Textual's exact-type message suppression
   and disabled-message controls, preventing duplicate tab/selector refreshes
@@ -241,7 +244,7 @@ exact streaming cache-creation detail remains **U13**.
   Real-caller and locale tests cover en-GB/de-DE and supported PowerShell hosts. Earlier proof
   receipts remain historical, not acceptance of the rejected design. Revised proof at `eca8b55`:
   197 preflight assertions, 83 council assertions and 95/95 valid-syntax, count-preserving
-  mutations ([P84 status](docs/STATUS.md)).
+  mutations ([P84 status](docs/status/P84.md)).
 
 - **P78 parallel hosted checks.** Opt-in deterministic Test-All shards retain
   isolated processes, exclusive checks and deadlines, with commit/tree-bound receipts and an
@@ -249,7 +252,7 @@ exact streaming cache-creation detail remains **U13**.
   Python environments and offline prerequisites. The remote helper validates exact-source jobs
   and artifacts rather than a workflow badge. The wizard and preflight retain native Windows
   boundaries through isolated fixtures instead of an operator's Azure session.
-  [Test execution](tests/README.md), [P78 evidence](docs/STATUS.md),
+  [Test execution](tests/README.md), [P78 evidence](docs/status/P78.md),
   [draft ADR-0039](docs/adr/0039-test-suite-hosted-runners.md).
   The charter, product scripts and deployed resources are unchanged.
   The first hosted attempt exposed missing Chromium installation and an error-pattern assertion
