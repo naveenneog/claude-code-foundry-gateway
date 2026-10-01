@@ -3,11 +3,14 @@ import importlib
 import pkgutil
 import datetime as datetime_module
 from pathlib import Path
+from datetime import datetime as stdlib_datetime, timezone
 
 import httpx
 import pytest
 
 import claude_finops
+import claude_finops.service_writes as service_writes
+from aum_clock import PINNED_CLOCK_INSTANT, PINNED_MONTH, PinnedDateTime
 from claude_finops.backend import connect
 from claude_finops.config import Config
 from claude_finops.engine import Engine
@@ -127,26 +130,33 @@ def test_service_engine_forwards_reason_and_uses_synchronous_receipt():
         engine.apply(apply=True)
 
 
-def test_aum_test_clock_covers_finops_modules_and_current_month_writes():
-    modules = []
+def _clock_reader_module_names():
+    names = set()
     package_root = Path(claude_finops.__path__[0])
     for info in pkgutil.walk_packages(claude_finops.__path__, claude_finops.__name__ + "."):
         relative = info.name.removeprefix(claude_finops.__name__ + ".").split(".")
         module_path = package_root.joinpath(*relative).with_suffix(".py")
-        try:
-            with open(module_path, encoding="utf-8") as handle:
-                if "datetime.now(" not in handle.read():
-                    continue
-            module = importlib.import_module(info.name)
-        except Exception:
-            continue
-        modules.append(module)
+        if module_path.is_file() and "datetime.now(" in module_path.read_text(encoding="utf-8"):
+            names.add(info.name)
+    return names
 
-    assert modules
-    observed = {datetime_module.datetime.now().strftime("%Y-%m-%dT%H")}
-    observed.update(module.datetime.now().strftime("%Y-%m-%dT%H")
-                    for module in modules if hasattr(module, "datetime"))
-    assert observed == {"2026-09-24T12"}
+
+def test_aum_test_clock_covers_finops_modules_and_current_month_writes(aum_finops_modules):
+    expected = _clock_reader_module_names()
+    verified = set()
+    for module in aum_finops_modules:
+        if module.__name__ not in expected:
+            continue
+        if hasattr(module, "datetime"):
+            observed = module.datetime.now(timezone.utc)
+        else:
+            imported = __import__("datetime", module.__dict__, {}, ("datetime",), 0)
+            observed = imported.datetime.now(timezone.utc)
+        assert observed.strftime("%Y-%m") == PINNED_MONTH
+        assert abs((observed - PINNED_CLOCK_INSTANT).total_seconds()) < 86400
+        verified.add(module.__name__)
+
+    assert verified == expected
 
     backend, calls = service(lambda request: httpx.Response(200, json={"revision": "revision-2",
         "audit_id": "audit-1", "result": {"verified": True}}) if request.method == "PUT" else None)
@@ -154,6 +164,21 @@ def test_aum_test_clock_covers_finops_modules_and_current_month_writes():
     backend.write("budget", dict(token_limit=1000), scope_type="user", scope_id=OID,
                   month="2026-09", reason="Approved capacity")
     assert [call.method for call in calls if call.url.path == "/api/v1/budgets/user/" + OID] == ["PUT"]
+
+
+@pytest.mark.real_clock
+def test_real_clock_opt_out_restores_product_and_test_datetime():
+    from datetime import datetime as imported_datetime
+
+    real_now = stdlib_datetime.now(timezone.utc)
+    assert imported_datetime is stdlib_datetime
+    assert service_writes.datetime is stdlib_datetime
+    assert abs((service_writes.datetime.now(timezone.utc) - real_now).total_seconds()) < 5
+
+
+def test_aum_pin_does_not_replace_stdlib_datetime_module():
+    assert datetime_module.datetime is stdlib_datetime
+    assert service_writes.datetime is PinnedDateTime
 
 
 def test_service_request_detail_rechecks_authority_instead_of_serving_cache():
