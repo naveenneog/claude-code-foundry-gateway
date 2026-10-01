@@ -383,8 +383,8 @@ try {
     Assert 'S11 S4 after run 1 died while its deployment ran, the rerun waits for it and creates none' ($g1.ExitCode -ne 0 -and $g2.ExitCode -eq 0 -and -not (Get-Calls $g2 'deployment group create*').Count -and
         (Get-Calls $g2 'deployment group show*').Count -ge 3) (Get-Tail $g2)
     $bb = $r2[$runBounded.Dir]
-    Assert 'S11 S4 past the bound the rerun refuses on one line with the resume command' ($bb.ExitCode -eq 1 -and @(Get-ErrLines $bb).Count -eq 1 -and (Get-ErrLines $bb)[0] -match 'still running' -and
-        (Get-ErrLines $bb)[0] -match 'install-claude-gateway\.sh' -and -not (Get-Calls $bb 'deployment group create*').Count) (Get-Tail $bb)
+    Assert 'S11 S4 past the bound the rerun refuses on one line with the resume command' ($bb.ExitCode -eq 1 -and @(Get-ErrLines $bb).Count -eq 1 -and @(Get-ErrLines $bb)[0] -match 'still running' -and
+        @(Get-ErrLines $bb)[0] -match 'install-claude-gateway\.sh' -and -not (Get-Calls $bb 'deployment group create*').Count) (Get-Tail $bb)
     $p2 = $r2[$runPre2.Dir]
     Assert 'Decision 9 a bash resume does not redeploy over an APIM it did not create, and names the PowerShell path' ((Test-Refusal $p2 'Install-ClaudeGateway\.ps1 -ExistingApimName') -and
         -not (Get-Calls $p2 'deployment group create*').Count) (Get-Tail $p2)

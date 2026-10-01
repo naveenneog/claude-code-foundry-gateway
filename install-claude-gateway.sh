@@ -18,8 +18,10 @@ SUBSCRIPTION=""; FOUNDRY_ACCOUNT=""; FOUNDRY_RG=""; RESOURCE_GROUP=""
 LOCATION=""; NAME_PREFIX=""; PUBLISHER_EMAIL=""; SKU=""
 TPM_STANDARD=""; QUOTA_STANDARD=""; TPM_PREMIUM=""; QUOTA_PREMIUM=""; CALLS_PER_MINUTE=""
 STANDARD_GROUP="claude-code-standard"; PREMIUM_GROUP="claude-code-premium"
-ASSUME_YES=0; WHAT_IF=0; CHOOSE_FINOPS=0; SKIP_FINOPS_OFFER=0
+ASSUME_YES=0; WHAT_IF=0; CHOOSE_FINOPS=0; SKIP_FINOPS_OFFER=0; RESTART=0
 FOUNDRY_LOCATION=""
+# The flags this run names: each wins over the answer an interrupted run recorded (ADR-0046).
+CKPT_SEEN=""
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
@@ -306,6 +308,7 @@ show_tier_prices_() {
 }
 
 while [ $# -gt 0 ]; do
+  CKPT_SEEN="$CKPT_SEEN $1"
   case "$1" in
     --subscription)     SUBSCRIPTION="${2:-}"; shift 2 ;;
     --foundry-account)  FOUNDRY_ACCOUNT="${2:-}"; shift 2 ;;
@@ -326,6 +329,7 @@ while [ $# -gt 0 ]; do
     --what-if)          WHAT_IF=1; shift ;;
     --choose-finops)    CHOOSE_FINOPS=1; shift ;;
     --skip-finops-offer) SKIP_FINOPS_OFFER=1; shift ;;
+    --restart)          RESTART=1; shift ;;
     -h|--help)          usage_ ;;
     *) echo "Unknown option: $1" >&2; exit 2 ;;
   esac
@@ -350,6 +354,12 @@ else
   command -v jq >/dev/null 2>&1 || { echo "jq is required." >&2; exit 1; }
 fi
 
+# An interrupted run's checkpoint: where a rerun resumes, and its answers, used as if passed
+# (docs/adr/0046-installer-checkpoint-and-resume.md). --restart sets it aside.
+[ -f "$HERE/scripts/install-checkpoint.sh" ] || { echo "scripts/install-checkpoint.sh is missing from this checkout." >&2; exit 1; }
+. "$HERE/scripts/install-checkpoint.sh"
+ckpt_open_ "$HERE" "$RESTART" "$WHAT_IF"
+
 # ------------------------------------------------------------------ sign-in
 
 step_ "Azure sign-in"
@@ -361,6 +371,7 @@ USER_NAME="$(az account show --query user.name -o tsv)"
 TENANT_ID="$(az account show --query tenantId -o tsv)"
 ok_ "$USER_NAME"
 note_ "tenant $TENANT_ID"
+ckpt_assert_tenant_ "$TENANT_ID"
 
 if [ -z "$SUBSCRIPTION" ]; then
   # Listing every subscription is unusable on a large tenant - some accounts
@@ -400,6 +411,7 @@ fi
 az account set --subscription "$SUBSCRIPTION"
 SUB_NAME="$(az account show --query name -o tsv)"
 ok_ "subscription: $SUB_NAME"
+ckpt_assert_subscription_
 
 # ----------------------------------------------------------- Foundry account
 
@@ -466,7 +478,7 @@ if [ -z "$LOCATION" ]; then
   exit 1
 fi
 [ -z "$RESOURCE_GROUP" ] && RESOURCE_GROUP="$(ask_ "Resource group" "$FOUNDRY_RG" "Created if it does not exist. Same region as Foundry keeps latency down.")"
-if [ "$ASSUME_YES" = "1" ]; then LOCATION="$(arm_region_ "$LOCATION")"; else read_gateway_region_ "$(arm_region_ "$LOCATION")"; fi
+if [ "$ASSUME_YES" = "1" ] || [ "$CKPT_RESUMING" = "1" ]; then LOCATION="$(arm_region_ "$LOCATION")"; else read_gateway_region_ "$(arm_region_ "$LOCATION")"; fi
 
 # No pre-flight check on v2 SKU availability - there is no reliable CLI call for
 # it, and a guess that reports the wrong answer is worse than none. The
@@ -505,8 +517,10 @@ step_ "Safety valve"
 
 step_ "Entitlement groups"
 note_ "Membership of these Entra groups is what grants access."
-STANDARD_GROUP="$(ask_ "Standard tier group" "$STANDARD_GROUP")"
-PREMIUM_GROUP="$(ask_ "Premium tier group" "$PREMIUM_GROUP")"
+if [ "$CKPT_RESUMING" != "1" ]; then
+  STANDARD_GROUP="$(ask_ "Standard tier group" "$STANDARD_GROUP")"
+  PREMIUM_GROUP="$(ask_ "Premium tier group" "$PREMIUM_GROUP")"
+fi
 
 # ------------------------------------------------------------------ summary
 
@@ -527,6 +541,7 @@ printf '  %-24s %s tokens/min, %s tokens/day\n' "Premium tier"  "$(fmt_ "$TPM_PR
 printf '  %-24s %s requests/min\n'              "Request ceiling" "$CALLS_PER_MINUTE"
 echo
 printf '  %-24s %s\n' "Entra groups" "$STANDARD_GROUP, $PREMIUM_GROUP"
+[ "$CKPT_RESUMING" = "1" ] && printf '  %-24s %s\n' "Checkpoint" "$(ckpt_summary_row_)"
 echo
 # Priced for the tier and region being created, as Install-ClaudeGateway.ps1 does. This line used
 # to name one fixed Basic v2 price, whatever tier and region were chosen.
@@ -543,19 +558,45 @@ printf '  %sProvisioning takes minutes on the v2 tiers - a Premium v2 install me
 echo
 
 if [ "$WHAT_IF" = "1" ]; then warn_ "--what-if - stopping before any change"; exit 0; fi
-ask_yn_ "Create these resources?" "y" || { echo; echo "Cancelled."; exit 0; }
+CONFIRM_QUESTION="Create these resources?"
+[ "$CKPT_RESUMING" = "1" ] && CONFIRM_QUESTION="Resume from $(ckpt_resume_title_)?"
+if ! ask_yn_ "$CONFIRM_QUESTION" "y"; then
+  echo; echo "Cancelled."
+  [ "$CKPT_RESUMING" = "1" ] && note_ "The install checkpoint is kept. To discard it and start again: $(ckpt_resume_cmd_) --restart"
+  exit 0
+fi
+# The checkpoint is written here, after the summary is confirmed and before the first change (ADR-0032).
+ckpt_save_
 
 # ------------------------------------------------------------------- deploy
 
 head_ "Deploying"
 
 step_ "Resource group"
-az group create -n "$RESOURCE_GROUP" -l "$LOCATION" -o none
-ok_ "$RESOURCE_GROUP"
+if ! ckpt_skip_ resource-group 1 ckpt_verify_rg_ "$RESOURCE_GROUP"; then
+  # Created only when absent; a failed create stops here rather than deploying into nothing.
+  RG_LOCATION="$(az group show -n "$RESOURCE_GROUP" --query location -o tsv 2>/dev/null | tr -d '\r')"
+  if [ -n "$RG_LOCATION" ]; then
+    ok_ "$RESOURCE_GROUP (exists, $RG_LOCATION)"
+    ckpt_set_step_ resource-group completed __keep__ "$(jq -cn --arg n "$RESOURCE_GROUP" --arg l "$RG_LOCATION" '{name: $n, location: $l, origin: "pre-existing"}' | tr -d '\r')"
+  else
+    if ! az group create -n "$RESOURCE_GROUP" -l "$LOCATION" -o none; then
+      bad_ "could not create resource group '$RESOURCE_GROUP' in '$LOCATION' - see the error above"
+      exit 1
+    fi
+    ok_ "$RESOURCE_GROUP"
+    ckpt_set_step_ resource-group completed __keep__ "$(jq -cn --arg n "$RESOURCE_GROUP" --arg l "$LOCATION" '{name: $n, location: $l, origin: "created"}' | tr -d '\r')"
+  fi
+fi
 
 step_ "API Management and Application Insights (a few minutes)"
 note_ "safe to leave running"
+# A recorded deployment is awaited, used or shown first; the body below is not re-indented.
+ckpt_gateway_plan_ "$RESOURCE_GROUP" "$APIM_NAME"
+GATEWAY_URL="$CKPT_GW_URL"
+if [ "$CKPT_GW_RUN" = "1" ]; then
 DEPLOY_NAME="claude-gw-$(date +%Y%m%d%H%M%S)"
+ckpt_register_deployment_ "$DEPLOY_NAME" "$RESOURCE_GROUP" "$APIM_NAME"
 if ! az deployment group create \
       --name "$DEPLOY_NAME" \
       -g "$RESOURCE_GROUP" \
@@ -580,37 +621,32 @@ ok_ "deployed"
 
 GATEWAY_URL="$(az deployment group show -g "$RESOURCE_GROUP" -n "$DEPLOY_NAME" --query "properties.outputs.gatewayUrl.value" -o tsv 2>/dev/null || true)"
 [ -z "$GATEWAY_URL" ] && GATEWAY_URL="https://$APIM_NAME.azure-api.net/claude"
+ckpt_complete_gateway_ "$APIM_NAME" "$GATEWAY_URL"
+fi
 
 # -------------------------------------------------------------------- groups
 
 step_ "Entra groups"
-for g in "$STANDARD_GROUP" "$PREMIUM_GROUP"; do
-  if az ad group show --group "$g" >/dev/null 2>&1; then
-    ok_ "$g exists"
-  else
-    if az ad group create --display-name "$g" --mail-nickname "$g" -o none 2>/dev/null; then
-      ok_ "$g created"
-    else
-      warn_ "could not create '$g' - your tenant may restrict group creation"
-      note_ "ask an admin to create it, then re-run"
-    fi
-  fi
-done
+ckpt_groups_ "$STANDARD_GROUP" "$PREMIUM_GROUP"
 
 step_ "Sync entitlement"
+ckpt_set_step_ sync started
+SYNC_STATE=completed
 if command -v pwsh >/dev/null 2>&1; then
   pwsh -NoProfile -File "$HERE/scripts/Sync-ClaudeAccess.ps1" \
     -ApimName "$APIM_NAME" -ResourceGroup "$RESOURCE_GROUP" \
-    -StandardGroup "$STANDARD_GROUP" -PremiumGroup "$PREMIUM_GROUP" || warn_ "sync reported a problem"
+    -StandardGroup "$STANDARD_GROUP" -PremiumGroup "$PREMIUM_GROUP" || { warn_ "sync reported a problem"; SYNC_STATE=incomplete; }
 else
   warn_ "PowerShell 7 (pwsh) not found - skipping the entitlement sync"
   note_ "install pwsh, or run this after adding members:"
   note_ "  pwsh -File scripts/Sync-ClaudeAccess.ps1 -ApimName $APIM_NAME -ResourceGroup $RESOURCE_GROUP"
 fi
+ckpt_set_step_ sync "$SYNC_STATE"
 
 # ------------------------------------------------------------------ package
 
 step_ "Onboarding package"
+ckpt_set_step_ onboarding-package started
 PKG="$HERE/onboarding"
 mkdir -p "$PKG"
 CONFIG_PATH="$PKG/claude-gateway.json"
@@ -639,6 +675,8 @@ jq -n \
     requestsPerMinute:$rpm,
     generated:$gen }' > "$CONFIG_PATH"
 ok_ "config: $CONFIG_PATH"
+ckpt_set_step_ onboarding-package completed __keep__ "$(jq -cn --arg p "$CONFIG_PATH" '{path: $p}' | tr -d '\r')"
+ckpt_close_
 
 # --------------------------------------------------------------------- next
 

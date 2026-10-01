@@ -30,7 +30,11 @@ section moves to `docs/status/P91.md` under P87's ADR-0042.
       the new file and calls: the copy lists of `Test-CompanyInstaller.ps1` and
       `Test-CompanyAddressNegative.ps1`, the first one's az stub and one state directory per call,
       and `CLAUDE_GATEWAY_STATE_DIR` per check in `Test-All.ps1`.
-- [ ] GREEN (bash), REFACTOR, COUNCIL (five seats), GATE, LOG.
+- [x] GREEN (bash), 2026-10-01: `install-claude-gateway.sh` hooks with the logic in
+      `scripts/install-checkpoint.sh` (bash 3.2, jq); `tests/Test-BashInstallerCheckpoint.ps1` 23
+      checks, 0 failed. One RED test defect is fixed: the S4 bounded check indexed one character of
+      a single error line. `tests/Test-BashInstaller.ps1` copies the library and stubs the new reads.
+- [ ] REFACTOR, COUNCIL (five seats), GATE, LOG.
 
 Acceptance criteria, for both installers unless one is named:
 
