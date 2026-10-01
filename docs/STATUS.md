@@ -47,6 +47,21 @@ Round 5 council-fix validation, 2026-10-01:
 - Runner transfer now also refuses `ERROR|InvalidCommandLength|terminated with non-zero` text even when `az container exec` exits 0.
 - Teardown checks role and both group receipts before deleting anything; missing premium receipt preserves the role and standard group. Desktop app receipt is optional.
 - Validation: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS; `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS with 558 checks in 165.09 s; `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS with 43 guides. No live Azure command ran.
+Round 6 field-failure fix, 2026-10-01:
+- §3 now reads APIM `identity.type` and `identity.principalId` through `p89_gateway_identity`, refuses missing or non-SystemAssigned identity before any role lookup, and never calls `az role assignment list --assignee ""`.
+- Added optional `p89_enable_apim_identity`, using `az rest --method patch` with `{"identity":{"type":"SystemAssigned"}}`, then polling for `identity.principalId`; UserAssigned-only identity refuses and points to the portal so user-assigned identities are preserved.
+- `p89_foundry_role` refuses empty ids, checks role-list exit status, captures role-create output before writing the receipt, and removes empty receipts on create failure.
+- Validation: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS; `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS with 571 checks in 217.27 s; `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS with 43 guides. No live Azure command ran.
+Round 7 council-fix validation, 2026-10-01:
+- §9 Key Vault grant now validates certificate metadata, vault id/subscription, RBAC mode and existing exact-scope assignment before creating a Key Vault Secrets User role receipt; access-policy vaults refuse with portal/script routes.
+- §9 hostname PATCH now reads live APIM state, preserves unrelated hostnames, refuses unsafe StandardV2 replacement, and uses `GATEWAY_HOSTNAME` rather than bash `HOSTNAME`.
+- §11 bypass and §12 teardown reads now refuse empty `FOUNDRY_ID` or `APIM_PRINCIPAL_ID`, so Azure CLI cannot fall back to subscription scope or omit assignee filtering.
+- Validation: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS; `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS with 595 checks in 210.89 s; `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS with 43 guides. No live Azure command ran.
+Round 8 council-fix validation, 2026-10-01:
+- §2 now has `p89_apim_absent` before first-deployment commands and `p89_deploy_reused_apim` for clean existing v2 APIM reuse. The guide states rerun reset risks for operator-owned named values, projection settings and APIM PUT-owned properties.
+- Reuse path refuses missing identity, installed gateway named values and classic SKUs; it passes `grantFoundryRole=false` when the gateway identity already has Cognitive Services User and `true` otherwise.
+- §7 now uses `DESKTOP_SIGN_IN_FLOW`, preserves existing redirect URIs through a checked read + union, adds broker URIs only for broker flow, and refuses empty/placeholder client ids.
+- Validation: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS; `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS with 681 checks in 203.67 s; `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS with 43 guides. No live Azure command ran.
 
 ## P90 Portal path and staged screenshots for the Azure CLI setup guide, 2026-10-01
 

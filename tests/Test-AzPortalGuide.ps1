@@ -48,6 +48,32 @@ function Get-CodeFenceText([string]$Markdown) {
     @([regex]::Matches($Markdown, '(?ms)^```(?:bash|powershell)?\r?\n(.*?)^```') | ForEach-Object { $_.Groups[1].Value }) -join "`n"
 }
 
+function Get-MarkedBlockText([string]$Markdown, [string]$Marker) {
+    $begin = [regex]::Escape("# $Marker-BEGIN")
+    $end = [regex]::Escape("# $Marker-END")
+    $match = [regex]::Match($Markdown, "(?ms)$begin\s*(.*?)\s*$end")
+    if ($match.Success) { return $match.Groups[1].Value }
+    return ''
+}
+
+function Get-AzLeadSentences([string]$PartBody) {
+    $lines = $PartBody -split "`r?`n"
+    $leads = @()
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -match '^```bash') {
+            for ($j = $i - 1; $j -ge 0; $j--) {
+                $lead = $lines[$j].Trim()
+                if (-not $lead) { continue }
+                if ($lead -notmatch '^Expected result:' -and $lead -notmatch '^### ' -and $lead -notmatch '^```') {
+                    $leads += $lead
+                }
+                break
+            }
+        }
+    }
+    $leads
+}
+
 function ConvertTo-RepoPath([string]$MarkdownPath) {
     $withoutAnchor = ($MarkdownPath -replace '#.*$', '')
     if (-not $withoutAnchor) { return $null }
@@ -78,12 +104,12 @@ $expectedPortalSteps = [ordered]@{
     )
     '2' = @(
         'Create the resource group'
+        'Confirm the APIM name is absent'
         'Validate the gateway template before deployment'
         'Deploy the gateway template'
-        'Read back the deployment outputs'
+        'Reuse an existing APIM instance that has never hosted this gateway'
         'Read policy deployment state'
         'Write and read back one named value'
-        'Review template-created gateway diagnostics'
     )
     '3' = @(
         'Read the gateway identity and Foundry scope'
@@ -145,6 +171,84 @@ $expectedPortalSteps = [ordered]@{
     )
 }
 
+$azPortalMapping = [ordered]@{
+    '1' = @(
+        @{ portal = 'Set the subscription and confirm the signed-in tenant'; az = @('Set the subscription and confirm the signed-in tenant.') }
+        @{ portal = 'Register the resource providers'; az = @('Register the resource providers the setup uses.') }
+        @{ portal = 'Discover the Foundry account and Claude deployments'; az = @('Discover the Foundry account and Claude deployments.') }
+        @{ portal = 'List deployable Claude models when no deployment exists'; az = @('List deployable Claude models when no deployment exists.') }
+        @{ portal = 'Check the operator roles without changing them'; az = @('Check the operator roles without changing them.') }
+    )
+    '2' = @(
+        @{ portal = 'Create the resource group'; az = @('Create the resource group.') }
+        @{ portal = 'Confirm the APIM name is absent'; az = @('Confirm the APIM name is absent before running the first-deployment commands below.') }
+        @{ portal = 'Validate the gateway template before deployment'; az = @('Validate the gateway template before deployment.') }
+        @{ portal = 'Deploy the gateway template'; az = @('Deploy Basic v2.', 'Deploy Standard v2 when outbound VNet integration is required.', 'Deploy Premium v2 when the gateway itself must be injected privately.') }
+        @{ portal = 'Reuse an existing APIM instance that has never hosted this gateway'; az = @('Reuse an existing APIM instance that has never hosted this gateway.') }
+        @{ portal = 'Read policy deployment state'; az = @('Read policy deployment state.') }
+        @{ portal = 'Write and read back one named value'; az = @('Write and read back one named value the same way the helper does.') }
+    )
+    '3' = @(
+        @{ portal = 'Read the gateway identity and Foundry scope'; az = @('Read the gateway identity and Foundry scope.') }
+        @{ portal = 'Enable a missing system-assigned identity before deployment reuses APIM'; az = @('Optional: enable a missing system-assigned identity on an existing APIM instance, then reread it.') }
+        @{ portal = 'Grant `Cognitive Services User` to the APIM managed identity when the list above is empty'; az = @('Grant `Cognitive Services User` to the APIM managed identity when the list above is empty.') }
+    )
+    '4' = @(
+        @{ portal = 'Set tier limits, organisation ceiling, per-minute calls and model allow lists'; az = @('Set tier limits, organisation ceiling, per-minute calls and model allow lists.') }
+        @{ portal = 'Set entitlement source and resolver placeholders for the named-value path'; az = @('Set entitlement source and resolver placeholders for the named-value path.') }
+        @{ portal = 'Verify the authorization and budget named values that the template initialized'; az = @('Verify the authorization and budget named values that the template initialized.') }
+    )
+    '5' = @(
+        @{ portal = 'Create or discover the two tier groups'; az = @('Create or discover the two tier groups.') }
+        @{ portal = 'Read transitive members from Microsoft Graph as users and service principals'; az = @('Read transitive members from Microsoft Graph as users and service principals.') }
+        @{ portal = 'Publish the entitlement lists to APIM named values'; az = @('Publish premium first, then standard without duplicates.') }
+        @{ portal = 'Add one developer to a tier and publish'; az = @('Add one developer to a tier and publish.') }
+        @{ portal = 'Remove one developer from both tiers and publish'; az = @('Remove one developer from both tiers and publish.') }
+    )
+    '6' = @(
+        @{ portal = 'List the two tiers'; az = @('List the two tiers.') }
+        @{ portal = 'Change one tier''s model list and limits'; az = @('Change one tier''s model list and limits.') }
+        @{ portal = 'Set one person''s daily token budget'; az = @('Set one person''s daily token budget.') }
+        @{ portal = 'Clear that person''s daily token budget'; az = @('Clear that person''s daily token budget.') }
+        @{ portal = 'Review Foundry deployments before adding a model'; az = @('Review Foundry deployments before adding a model.') }
+        @{ portal = 'Deploy a new Claude model through ARM when Azure requires Anthropic provider data'; az = @('Deploy a new Claude model through ARM when Azure requires Anthropic provider data.') }
+        @{ portal = 'Add the deployed model to tiers and record prices'; az = @('Add the deployed model to tiers and record prices.') }
+    )
+    '7' = @(
+        @{ portal = 'Create or discover the Desktop public-client app'; az = @('Create or discover the Desktop public-client app.') }
+        @{ portal = 'Configure Desktop redirect URIs'; az = @('Set public-client redirect URIs, including broker redirects when the Desktop profile uses broker flow.') }
+        @{ portal = 'Configure API permissions if tenant policy requires review'; none = 'No az command grants consent or configures API permissions.' }
+        @{ portal = 'Publish the Desktop audience to APIM'; az = @('Publish the Desktop gateway audience into APIM.') }
+    )
+    '8' = @(
+        @{ portal = 'Write the developer handover file'; az = @('Generate `onboarding/claude-gateway.json` with the same schema the installer writes.') }
+    )
+    '9' = @(
+        @{ portal = 'Review the current gateway hostnames before binding a company address'; az = @('Review the current gateway hostnames before binding a company address.') }
+        @{ portal = 'Validate a Key Vault certificate and grant APIM access'; az = @('Validate a Key Vault certificate and grant APIM access.') }
+        @{ portal = 'Patch APIM hostname configurations and prove TLS before publishing the handover URL'; az = @('Patch APIM hostname configurations and prove TLS before publishing the handover URL.') }
+    )
+    '10' = @(
+        @{ portal = 'Run read-only preflight checks before any projection write'; az = @('Run read-only preflight checks before any projection write.') }
+        @{ portal = 'Create the resolver app registration as a tenant-admin step'; az = @('Create the resolver app registration as a tenant-admin step.') }
+        @{ portal = 'Deploy private projection storage and networking'; az = @('Deploy private projection storage and networking.') }
+        @{ portal = 'Deploy the resolver with Standard v2 outbound VNet integration and upload code'; az = @('Deploy the resolver with Standard v2 outbound VNet integration and upload code.') }
+        @{ portal = 'Set resolver named values without switching entitlement'; az = @('Set resolver named values without switching entitlement.') }
+        @{ portal = 'Populate and compare the projection through an in-VNet runner container'; az = @('Populate and compare the projection through an in-VNet runner container.') }
+        @{ none = 'Projection switch status is read-only and intentionally has no portal step.'; az = @('Projection switch status.') }
+    )
+    '11' = @(
+        @{ portal = 'Resolve the gateway URL and run an entitled request'; az = @("Send a real request with the signed-in user's Foundry token through the gateway.") }
+        @{ portal = 'Verify non-entitled, model-refusal, bypass-audit and call-ceiling behavior'; az = @('Verify a non-entitled caller is refused.', 'Verify a model outside the tier is refused.', 'Check for direct Foundry bypass.', 'Measure the per-minute call ceiling.') }
+        @{ portal = 'Review gateway diagnostic settings and Log Analytics tables'; none = 'Diagnostic portal review has no az command lead sentence.' }
+    )
+    '12' = @(
+        @{ portal = 'Delete the gateway resource group after external receipts are reviewed'; az = @('Delete the gateway resource group when the deployment was isolated to it.') }
+        @{ portal = 'Review soft-deleted APIM instances before name reuse'; none = 'Soft-delete review has no portal label asserted by an az block.' }
+        @{ portal = 'Delete receipt-created external objects'; az = @('Read resources before deletion.', 'Remove only external resources this guide recorded as created.') }
+    )
+}
+
 for ($part = 1; $part -le 12; $part++) {
     $body = Get-PartBody $markdown $part
     Assert "part $part exists" ($body.Length -gt 0) "part=$part"
@@ -161,6 +265,32 @@ for ($part = 1; $part -le 12; $part++) {
     Assert 'part 8 documents no portal equivalent' (($part -ne 8) -or ($portal -match '(?i)No portal equivalent')) 'part=8'
     $changeLaterCount = @([regex]::Matches($portal, '(?m)^\*\*Change later\.\*\*')).Count
     Assert "part $part has exactly one portal Change later paragraph" ($changeLaterCount -eq 1) "count=$changeLaterCount"
+
+    $azLeads = @(Get-AzLeadSentences $body)
+    $mappings = @($azPortalMapping[[string]$part])
+    $mappedPortalTitles = @($mappings | Where-Object { $_.ContainsKey('portal') } | ForEach-Object { $_.portal })
+    Assert "part $part every portal step has an az mapping or declared no-portal entry" ((@($titles | Sort-Object) -join "`n") -eq (@($mappedPortalTitles | Sort-Object) -join "`n")) "portal=$($titles -join ' | ') mapped=$($mappedPortalTitles -join ' | ')"
+
+    foreach ($mapping in $mappings) {
+        if ($mapping.ContainsKey('portal')) {
+            Assert "part $part mapped portal step exists: $($mapping.portal)" ($titles -contains $mapping.portal) $mapping.portal
+        }
+        else {
+            Assert "part $part no-portal entry declares a reason" ($mapping.none.Length -gt 0) ($mapping.none)
+        }
+        if ($mapping.ContainsKey('az')) {
+            foreach ($lead in @($mapping.az)) {
+                $count = @($azLeads | Where-Object { $_ -eq $lead }).Count
+                Assert "part $part mapped az lead exists exactly once: $lead" ($count -eq 1) "count=$count"
+            }
+        }
+    }
+
+    $mappedLeads = @()
+    foreach ($mapping in $mappings) {
+        if ($mapping.ContainsKey('az')) { $mappedLeads += @($mapping.az) }
+    }
+    Assert "part $part az lead set matches mapping" ((@($azLeads | Sort-Object) -join "`n") -eq (@($mappedLeads | Sort-Object) -join "`n")) "az=$($azLeads -join ' | ') mapped=$($mappedLeads -join ' | ')"
 }
 
 Assert 'per-step Portal paragraphs are removed' (-not ($markdown -match '(?m)^\*\*Portal\.\*\*'))
@@ -347,7 +477,12 @@ if ($overview.Success) {
 $part7Body = Get-PartBody $markdown 7
 $part7Portal = Get-PortalBody $part7Body 7
 $part7Code = Get-CodeFenceText $part7Body
-$commandRedirectUris = @([regex]::Matches($part7Code, '(?<![A-Za-z0-9+.-])(https?://[^"\s]+|ms-appx-web://[^"\s]+|msauth\.[^"\s]+://[^"\s]+)') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+$desktopRedirectsBlock = Get-MarkedBlockText $part7Body 'P89-DESKTOP-REDIRECTS'
+$commandRedirectUris = @([regex]::Matches($desktopRedirectsBlock, '(?<![A-Za-z0-9+.-])(https?://[^"\s\]]+|msauth\.[^"\s\]]+://[^"\s\]]+)') | ForEach-Object { $_.Groups[1].Value.TrimEnd('"') })
+if ($desktopRedirectsBlock -match 'ms-appx-web://Microsoft\.AAD\.BrokerPlugin/" \+ \$clientId') {
+    $commandRedirectUris += 'ms-appx-web://Microsoft.AAD.BrokerPlugin/${DESKTOP_CLIENT_ID}'
+}
+$commandRedirectUris = @($commandRedirectUris | Sort-Object -Unique)
 $portalRedirectUris = @([regex]::Matches($part7Portal, '`(https?://[^`\s;,)]+|ms-appx-web://[^`\s;,)]+|msauth\.[^`\s;,)]+://[^`\s;,)]+)`') | ForEach-Object { $_.Groups[1].Value.TrimEnd('.') } | Sort-Object -Unique)
 Assert 'part 7 portal redirect URI literals match the bash block' (($portalRedirectUris -join "`n") -eq ($commandRedirectUris -join "`n")) "portal=$($portalRedirectUris -join ', ') command=$($commandRedirectUris -join ', ')"
 Assert 'part 7 portal does not use localhost redirect shorthand' (-not ($part7Portal -match 'http://localhost(\b|/)'))
@@ -364,12 +499,14 @@ $definedVariables = [System.Collections.Generic.HashSet[string]]::new([StringCom
 foreach ($match in [regex]::Matches($allCode, '(?m)(?:^|[;\s])(?:export\s+)?([A-Z][A-Z0-9_]*)=')) {
     [void]$definedVariables.Add($match.Groups[1].Value)
 }
+foreach ($match in [regex]::Matches($allCode, '\$\{([A-Z][A-Z0-9_]*):=')) {
+    [void]$definedVariables.Add($match.Groups[1].Value)
+}
 $allowedPendingVariables = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-[void]$allowedPendingVariables.Add('DESKTOP_SIGN_IN_FLOW')
 $portalUndefined = [System.Collections.Generic.SortedSet[string]]::new([StringComparer]::Ordinal)
 for ($part = 1; $part -le 12; $part++) {
     $portal = Get-PortalBody (Get-PartBody $markdown $part) $part
-    foreach ($match in [regex]::Matches($portal, '\$([A-Z][A-Z0-9_]*)')) {
+    foreach ($match in [regex]::Matches($portal, '\$\{?([A-Z][A-Z0-9_]*)\}?')) {
         $name = $match.Groups[1].Value
         if (-not $definedVariables.Contains($name) -and -not $allowedPendingVariables.Contains($name)) {
             [void]$portalUndefined.Add($name)

@@ -32,6 +32,7 @@ export MODELS_STANDARD=",${SONNET_DEPLOYMENT},"
 export MODELS_PREMIUM=",${SONNET_DEPLOYMENT},${OPUS_DEPLOYMENT},"
 export ENTITLEMENT_CACHE_SECONDS="3600"
 export DESKTOP_EXTRA_AUDIENCE="urn:disabled:claude-extra-audience"
+export DESKTOP_SIGN_IN_FLOW="browser"
 ```
 
 References use repository paths and line numbers from the source scripts that this guide mirrors.
@@ -148,6 +149,26 @@ az group show -n "$GATEWAY_RG" --query "{name:name,location:location}" -o json
 
 Expected result: the group exists in the chosen region. This mirrors `deploy.ps1:134`.
 
+Confirm the APIM name is absent before running the first-deployment commands below.
+
+```bash
+# P89-APIM-ABSENT-BEGIN
+p89_apim_absent() {
+  if ! apim_list_json="$(az apim list -g "$GATEWAY_RG" -o json)"; then
+    echo "Refused: could not list API Management instances in '$GATEWAY_RG'; no deployment command ran." >&2
+    return 1
+  fi
+  existing_count="$(printf '%s' "$apim_list_json" | jq --arg name "$APIM_NAME" '[.[] | select(.name == $name)] | length')"
+  if [ "$existing_count" -ne 0 ]; then
+    echo "Refused: APIM '$APIM_NAME' already exists in '$GATEWAY_RG'. For an unused existing APIM, use P89-REUSE-APIM below; for an installed gateway, use Install-ClaudeGateway.ps1 -ExistingApimName so values are read back first, or use the targeted §4, §6 and §9 blocks for single changes." >&2
+    return 1
+  fi
+}
+p89_apim_absent
+# P89-APIM-ABSENT-END
+```
+
+Expected result: no API Management instance with `$APIM_NAME` exists. The first-deployment template commands are destructive when rerun against a live gateway: the template defaults operator-owned named values such as `allow-standard`, `allow-premium`, `quota-overrides`, business-unit values and USD state back to empty values (`infra/main.bicep:170-207`, `:378-389`), can switch projection settings back to command-line defaults (`:144-158`), and PUTs template-owned APIM service properties that can reset omitted TLS, network, portal and hostname settings (`:252-292`).
 
 Validate the gateway template before deployment.
 
@@ -187,6 +208,52 @@ az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" --query "{sku:sku.name,vnet:virtua
 
 Expected result: SKU is `PremiumV2`, VNet type is `Internal`, and public network access is disabled. This mirrors the v2 SKU and network parameters in `infra/main.bicep:31-68`.
 
+Reuse an existing APIM instance that has never hosted this gateway.
+
+```bash
+# P89-REUSE-APIM-BEGIN
+p89_deploy_reused_apim() {
+  if ! apim_json="$(az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" -o json)"; then
+    echo "Refused: existing APIM '$APIM_NAME' could not be read; no deployment command ran." >&2
+    return 1
+  fi
+  apim_sku="$(printf '%s' "$apim_json" | jq -r '.sku.name // ""')"
+  case "$apim_sku" in BasicV2|StandardV2|PremiumV2) ;; *) echo "Refused: existing APIM SKU '$apim_sku' is not BasicV2, StandardV2 or PremiumV2." >&2; return 1 ;; esac
+  apim_identity_type="$(printf '%s' "$apim_json" | jq -r '.identity.type // "none"')"
+  export APIM_PRINCIPAL_ID="$(printf '%s' "$apim_json" | jq -r '.identity.principalId // ""')"
+  if ! printf '%s' "$apim_identity_type" | grep -q 'SystemAssigned' || [ -z "$APIM_PRINCIPAL_ID" ]; then
+    echo "Refused: existing APIM has no SystemAssigned identity. Run P89-ENABLE-APIM-IDENTITY, then rerun this block." >&2
+    return 1
+  fi
+  if ! nv_json="$(az apim nv list -g "$GATEWAY_RG" --service-name "$APIM_NAME" -o json)"; then
+    echo "Refused: could not read APIM named values; no deployment command ran." >&2
+    return 1
+  fi
+  installed_count="$(printf '%s' "$nv_json" | jq '[.[] | select(.name as $n | ["allow-standard","allow-premium","quota-overrides","bu-registry","bu-members","bu-parents","bu-modes","usd-budgets","usd-budget-state","entitlement-source"] | index($n))] | length')"
+  if [ "$installed_count" -gt 0 ]; then
+    echo "Refused: APIM '$APIM_NAME' already has gateway-owned named values. Use Install-ClaudeGateway.ps1 -ExistingApimName so values are read back and preserved." >&2
+    return 1
+  fi
+  if ! FOUNDRY_ID="$(az cognitiveservices account show -g "$FOUNDRY_RG" -n "$FOUNDRY_ACCOUNT" --query id -o tsv)" || [ -z "$FOUNDRY_ID" ]; then
+    echo "Refused: could not read Foundry resource id; no deployment command ran." >&2
+    return 1
+  fi
+  if ! existing_role="$(az role assignment list --scope "$FOUNDRY_ID" --assignee "$APIM_PRINCIPAL_ID" --include-inherited --query "[?roleDefinitionName=='Cognitive Services User']|[0].id" -o tsv)"; then
+    echo "Refused: could not read gateway Foundry role assignment; no deployment command ran." >&2
+    return 1
+  fi
+  GRANT_FOUNDRY_ROLE="true"
+  if [ -n "$existing_role" ]; then GRANT_FOUNDRY_ROLE="false"; fi
+  az deployment group what-if -g "$GATEWAY_RG" --template-file infra/main.bicep --parameters namePrefix="$NAME_PREFIX" location="$LOCATION" foundryAccountName="$FOUNDRY_ACCOUNT" foundryResourceGroup="$FOUNDRY_RG" publisherEmail="$PUBLISHER_EMAIL" publisherName="$PUBLISHER_NAME" apimSku="$apim_sku" existingApimName="$APIM_NAME" grantFoundryRole="$GRANT_FOUNDRY_ROLE" sonnetDeployment="$SONNET_DEPLOYMENT" opusDeployment="$OPUS_DEPLOYMENT" haikuDeployment="$HAIKU_DEPLOYMENT" tpmStandard="$TPM_STANDARD" quotaStandard="$QUOTA_STANDARD" tpmPremium="$TPM_PREMIUM" quotaPremium="$QUOTA_PREMIUM" quotaOrg="$QUOTA_ORG" modelsStandard="$MODELS_STANDARD" modelsPremium="$MODELS_PREMIUM" callsPerMinute="$CALLS_PER_MINUTE" entitlementSource=named-value entitlementCacheSeconds="$ENTITLEMENT_CACHE_SECONDS" desktopExtraAudience="$DESKTOP_EXTRA_AUDIENCE" || return 1
+  az deployment group create -g "$GATEWAY_RG" -n "claude-gateway-reuse" --template-file infra/main.bicep --parameters namePrefix="$NAME_PREFIX" location="$LOCATION" foundryAccountName="$FOUNDRY_ACCOUNT" foundryResourceGroup="$FOUNDRY_RG" publisherEmail="$PUBLISHER_EMAIL" publisherName="$PUBLISHER_NAME" apimSku="$apim_sku" existingApimName="$APIM_NAME" grantFoundryRole="$GRANT_FOUNDRY_ROLE" sonnetDeployment="$SONNET_DEPLOYMENT" opusDeployment="$OPUS_DEPLOYMENT" haikuDeployment="$HAIKU_DEPLOYMENT" tpmStandard="$TPM_STANDARD" quotaStandard="$QUOTA_STANDARD" tpmPremium="$TPM_PREMIUM" quotaPremium="$QUOTA_PREMIUM" quotaOrg="$QUOTA_ORG" modelsStandard="$MODELS_STANDARD" modelsPremium="$MODELS_PREMIUM" callsPerMinute="$CALLS_PER_MINUTE" entitlementSource=named-value entitlementCacheSeconds="$ENTITLEMENT_CACHE_SECONDS" desktopExtraAudience="$DESKTOP_EXTRA_AUDIENCE" -o json || return 1
+  az deployment group show -g "$GATEWAY_RG" -n "claude-gateway-reuse" --query "properties.outputs.{apim:apimName.value,url:gatewayUrl.value,principal:apimPrincipalId.value}" -o json
+}
+p89_deploy_reused_apim
+# P89-REUSE-APIM-END
+```
+
+Expected result: a clean existing v2 APIM is reused without resetting an already-installed gateway. `grantFoundryRole=false` is passed when the gateway identity already has Cognitive Services User, matching `Install-ClaudeGateway.ps1:1514-1541`.
+
 Read policy deployment state.
 
 ```bash
@@ -218,8 +285,9 @@ Expected result: the value length is at most 4,096, and the final read returns t
 ### Part 2 in the portal
 
 1. **Create the resource group.** portal.azure.com > Resource groups > Create: Subscription `$SUBSCRIPTION_ID`; Resource group `$GATEWAY_RG`; Region `$LOCATION`; **Review + create**; **Create**.
-2. **Validate the gateway template before deployment.** The command builds `infra/main.json` from `infra/main.bicep` before what-if (`az bicep build --file infra/main.bicep`). The portal route for the same template is portal.azure.com > Deploy a custom template > Build your own template in the editor > Load file: select the JSON from the build; Parameters: use the same values as the §2 deployment command, including `apimCapacity=1`. Source: `docs/AZ-COMMANDS.md:154-156`.
-3. **Deploy the gateway template.** portal.azure.com > Create a resource > Integration > API Management > Basics: Subscription `$SUBSCRIPTION_ID`; Resource group `$GATEWAY_RG`; Region `$LOCATION`; Resource name `$APIM_NAME`; Organization name `$PUBLISHER_NAME`; Administrator email `$PUBLISHER_EMAIL`; Pricing tier `Basic v2`, `Standard v2` or `Premium v2`; Units `1`; Monitor + secure can select Log Analytics; Networking can select tier-supported inbound/outbound options; Managed identity: System assigned **On**; Tags can add tags; **Review + create**; **Create**. The system-assigned identity is required because `infra/main.bicep:506-513` reads `apim.identity.principalId`; a missing identity produces `The language expression property 'identity' doesn't exist`. The portal wizard creates the API Management service only. The `claude` API, operations, policy, named values, `appinsights` logger, API diagnostic and `claude-llm-logs` diagnostic setting come from `infra/main.bicep`; when `existingApimName=$APIM_NAME` is passed, the template reads the existing service name (`infra/main.bicep:178-181`) and does not write the service resource (`infra/main.bicep:250-296`). P89 round 8 names the reuse block `p89_deploy_reused_apim` with marker `P89-REUSE-APIM`. Source: https://learn.microsoft.com/azure/api-management/get-started-create-service-instance.
+2. **Confirm the APIM name is absent.** portal.azure.com > API Management services: filter Resource group to `$GATEWAY_RG`; confirm no service is named `$APIM_NAME`. No Save button is used for read-only review. This mirrors `p89_apim_absent` (`P89-APIM-ABSENT`).
+3. **Validate the gateway template before deployment.** The command builds `infra/main.json` from `infra/main.bicep` before what-if (`az bicep build --file infra/main.bicep`), and what-if has no portal equivalent. The portal's template validation route is portal.azure.com > Deploy a custom template > Build your own template in the editor > Load file: select the JSON from the build; Parameters: use the same values as the §2 deployment command, including `apimCapacity=1`; **Review + create**. Learn documents **Deploy a custom template**, **Build your own template in editor** and loading a template into the editor before deployment. Source: `docs/AZ-COMMANDS.md:178-180` and https://learn.microsoft.com/azure/azure-resource-manager/templates/deploy-portal.
+4. **Deploy the gateway template.** In the custom template deployment from step 3, **Create** is the one-to-one portal equivalent of the §2 `az deployment group create` commands for Basic v2, Standard v2 or Premium v2. The API Management wizard route is portal.azure.com > Create a resource > Integration > API Management > Basics: Subscription `$SUBSCRIPTION_ID`; Resource group `$GATEWAY_RG`; Region `$LOCATION`; Resource name `$APIM_NAME`; Organization name `$PUBLISHER_NAME`; Administrator email `$PUBLISHER_EMAIL`; Pricing tier `Basic v2`, `Standard v2` or `Premium v2`; Units `1`; Managed identity: System assigned **On**; **Review + create**; **Create**. The wizard creates the service only; after that, the reuse step deploys the `claude` API, operations, policy, named values, `appinsights` logger, API diagnostic and `claude-llm-logs` diagnostic setting. The system-assigned identity is required because `infra/main.bicep:506-513` reads `apim.identity.principalId`; a missing identity produces `The language expression property 'identity' doesn't exist`. Source: https://learn.microsoft.com/azure/api-management/get-started-create-service-instance.
 
 ![API Management gateway Overview blade with redacted resource and gateway URL fields](guide/a3-apim-overview.png)
 
@@ -229,8 +297,8 @@ Capture id: `gateway-overview`.
 
 Capture id: `p54-apim-network`.
 
-4. **Read back the deployment outputs.** API Management services > `$APIM_NAME` > Overview: compare Gateway URL with the deployment output. No Save button is used.
-5. **Read policy deployment state.** API Management services > `$APIM_NAME` > APIs > `claude-foundry` > Settings: confirm API URL suffix `claude`, HTTPS and subscription setting; APIs > `claude-foundry` > Design > All operations: confirm operations and policy sections. The fields are template output, not portal-create fields.
+5. **Reuse an existing APIM instance that has never hosted this gateway.** API Management services > `$APIM_NAME` > Overview or Pricing tier: SKU is `Basic v2`, `Standard v2` or `Premium v2`; Security > Managed identities > System assigned: Status **On**; APIs > Named values: none of `allow-standard`, `allow-premium`, `quota-overrides`, `bu-registry`, `bu-members`, `bu-parents`, `bu-modes`, `usd-budgets`, `usd-budget-state` or `entitlement-source` exists; Foundry account > Access control (IAM) > Role assignments: check whether the gateway identity already has `Cognitive Services User`. Then deploy the custom template with `existingApimName=$APIM_NAME`; `infra/main.bicep:178-181` reads the existing service name and `infra/main.bicep:250-296` does not write the service resource. This mirrors `p89_deploy_reused_apim` (`P89-REUSE-APIM`).
+6. **Read policy deployment state.** API Management services > `$APIM_NAME` > APIs > `claude-foundry` > Settings: confirm API URL suffix `claude`, HTTPS and subscription setting; APIs > `claude-foundry` > Design > All operations: confirm operations and policy sections. The fields are template output, not portal-create fields.
 
 ![API Management API Settings tab for the Claude API showing API URL suffix and subscription state](guide/docs-review-api-settings.png)
 
@@ -240,26 +308,94 @@ Capture id: `docs-review-api-settings`.
 
 Capture id: `docs-review-api-policy`.
 
-6. **Write and read back one named value.** API Management services > `$APIM_NAME` > APIs > Named values > `models-standard` > Edit: Value `$MODELS_STANDARD`; **Save**.
-7. **Review template-created gateway diagnostics.** API Management services > `$APIM_NAME` > Monitoring > Diagnostic settings: confirm `claude-llm-logs` targets the Log Analytics workspace. This setting is deployed by `infra/main.bicep`, not by the APIM create wizard.
+7. **Write and read back one named value.** API Management services > `$APIM_NAME` > APIs > Named values > `models-standard` > Edit: Value `$MODELS_STANDARD`; **Save**. API Management services > `$APIM_NAME` > Monitoring > Diagnostic settings shows `claude-llm-logs`, which is template-created and read-only for this step.
 
 ![API Management Diagnostic settings blade showing `claude-llm-logs` sending to a Log Analytics workspace](guide/docs-review-gateway-diagnostics.png)
 
 Capture id: `docs-review-gateway-diagnostics`.
 
-**Change later.** Single named-value, tier-limit and hostname changes go through §4, §6 and §9. A full redeploy over a live gateway goes through `Install-ClaudeGateway.ps1 -ExistingApimName`, which reads back operator-owned named values and APIM network, portal, custom-property and hostname state before deployment (`Install-ClaudeGateway.ps1:1401-1512`). A direct §2 template rerun can reset operator-owned named values (`infra/main.bicep:170-207`, `infra/main.bicep:378-389`), entitlement resolver values (`infra/main.bicep:144-158`) and owned-APIM service properties (`infra/main.bicep:252-292`). P89 round 8 names the absent-APIM refusal block `p89_apim_absent` with marker `P89-APIM-ABSENT`. Basic v2 ↔ Standard v2 changes use API Management services > `$APIM_NAME` > Pricing tier: select the tier and units; **Save**. Learn documents **Pricing tier** for changing service tier and **Scale** for v2 units. Source: https://learn.microsoft.com/azure/api-management/upgrade-and-scale.
+**Change later.** Single named-value, tier-limit and hostname changes go through §4, §6 and §9. A full redeploy over a live gateway goes through `Install-ClaudeGateway.ps1 -ExistingApimName`, which reads back operator-owned named values and APIM network, portal, custom-property and hostname state before deployment (`Install-ClaudeGateway.ps1:1401-1512`). A direct §2 template rerun can reset operator-owned named values (`infra/main.bicep:170-207`, `infra/main.bicep:378-389`), entitlement resolver values (`infra/main.bicep:144-158`) and owned-APIM service properties (`infra/main.bicep:252-292`). The absent-name check is `p89_apim_absent` (`P89-APIM-ABSENT`). Basic v2 ↔ Standard v2 changes use API Management services > `$APIM_NAME` > Pricing tier: select the tier and units; **Save**. Learn documents **Pricing tier** for changing service tier and **Scale** for v2 units. Source: https://learn.microsoft.com/azure/api-management/upgrade-and-scale.
 
 ## 3. Gateway managed identity and Foundry role
 
 Read the gateway identity and Foundry scope.
 
 ```bash
-export APIM_PRINCIPAL_ID="$(az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" --query identity.principalId -o tsv)"
-export FOUNDRY_ID="$(az cognitiveservices account show -g "$FOUNDRY_RG" -n "$FOUNDRY_ACCOUNT" --query id -o tsv)"
-az role assignment list --scope "$FOUNDRY_ID" --assignee "$APIM_PRINCIPAL_ID" --include-inherited --query "[?roleDefinitionName=='Cognitive Services User'].{role:roleDefinitionName,scope:scope}" -o table
+# P89-GATEWAY-IDENTITY-BEGIN
+p89_gateway_identity() {
+  if ! APIM_IDENTITY_JSON="$(az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" --query identity -o json)"; then
+    echo "Refused: could not read API Management identity; no role check ran." >&2
+    return 1
+  fi
+  APIM_IDENTITY_TYPE="$(printf '%s' "$APIM_IDENTITY_JSON" | jq -r '.type // "none"')"
+  export APIM_PRINCIPAL_ID="$(printf '%s' "$APIM_IDENTITY_JSON" | jq -r '.principalId // ""')"
+  if ! printf '%s' "$APIM_IDENTITY_TYPE" | grep -q 'SystemAssigned' || [ -z "$APIM_PRINCIPAL_ID" ]; then
+    echo "Refused: API Management managed identity is '${APIM_IDENTITY_TYPE:-none}' and principalId is empty." >&2
+    echo "Fix: portal > API Management > Security > Managed identities > System assigned > Status On > Save, then rerun." >&2
+    echo "Do not use 'az apim update' for this; without --enable-managed-identity true, azure-cli apim_update sets instance.identity = None." >&2
+    return 1
+  fi
+  if ! FOUNDRY_ID="$(az cognitiveservices account show -g "$FOUNDRY_RG" -n "$FOUNDRY_ACCOUNT" --query id -o tsv)" || [ -z "$FOUNDRY_ID" ]; then
+    echo "Refused: could not read Foundry resource id; no role check ran." >&2
+    return 1
+  fi
+  export FOUNDRY_ID
+  az role assignment list --scope "$FOUNDRY_ID" --assignee "$APIM_PRINCIPAL_ID" --include-inherited --query "[?roleDefinitionName=='Cognitive Services User'].{role:roleDefinitionName,scope:scope}" -o table
+}
+p89_gateway_identity
+# P89-GATEWAY-IDENTITY-END
 ```
 
-Expected result: an existing assignment is listed, or the table is empty before the grant. This mirrors `Install-ClaudeGateway.ps1:1524-1537`.
+Expected result: a SystemAssigned identity and nonempty APIM principal id are present, and role assignment listing is scoped to that exact principal. If the identity is missing, the guide refuses before calling `--assignee`; otherwise `az role assignment list --assignee ""` can list every principal at the Foundry scope. The field failure is the same root cause as ARM refusing `apim.identity.principalId` in `infra/main.bicep:506-513`; `Install-ClaudeGateway.ps1:586-588` only warns for a non-SystemAssigned identity and does not cover a missing identity.
+
+Optional: enable a missing system-assigned identity on an existing APIM instance, then reread it.
+
+```bash
+# P89-ENABLE-APIM-IDENTITY-BEGIN
+p89_enable_apim_identity() {
+  if ! APIM_STATE="$(az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" --query "{id:id,identity:identity}" -o json)"; then
+    echo "Refused: could not read API Management instance; identity was not changed." >&2
+    return 1
+  fi
+  APIM_ID="$(printf '%s' "$APIM_STATE" | jq -r '.id // ""')"
+  APIM_IDENTITY_TYPE="$(printf '%s' "$APIM_STATE" | jq -r '.identity.type // "none"')"
+  if printf '%s' "$APIM_IDENTITY_TYPE" | grep -q 'SystemAssigned'; then
+    echo "SystemAssigned identity already enabled."
+    return 0
+  fi
+  if [ "$APIM_IDENTITY_TYPE" = "UserAssigned" ]; then
+    echo "Refused: APIM has only UserAssigned identity. Use the portal toggle so existing user-assigned identities are preserved." >&2
+    return 1
+  fi
+  if [ -z "$APIM_ID" ]; then
+    echo "Refused: APIM resource id is empty; identity was not changed." >&2
+    return 1
+  fi
+  az rest --method patch --headers "Content-Type=application/json" --body '{"identity":{"type":"SystemAssigned"}}' --url "https://management.azure.com${APIM_ID}?api-version=2024-05-01" -o none || {
+    echo "Refused: APIM identity PATCH failed." >&2
+    return 1
+  }
+  IDENTITY_WAIT_ATTEMPTS="${IDENTITY_WAIT_ATTEMPTS:-20}"
+  IDENTITY_WAIT_DELAY_SECONDS="${IDENTITY_WAIT_DELAY_SECONDS:-30}"
+  attempt=1
+  while [ "$attempt" -le "$IDENTITY_WAIT_ATTEMPTS" ]; do
+    APIM_PRINCIPAL_ID="$(az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" --query identity.principalId -o tsv)"
+    if [ -n "$APIM_PRINCIPAL_ID" ]; then
+      export APIM_PRINCIPAL_ID
+      printf '%s\n' "$APIM_PRINCIPAL_ID"
+      return 0
+    fi
+    sleep "$IDENTITY_WAIT_DELAY_SECONDS"
+    attempt=$((attempt + 1))
+  done
+  echo "Refused: SystemAssigned identity was requested, but principalId did not appear before the bounded wait ended." >&2
+  return 1
+}
+p89_enable_apim_identity
+# P89-ENABLE-APIM-IDENTITY-END
+```
+
+Expected result: when the identity is absent, a PATCH sets only `identity.type=SystemAssigned`, then the block waits for `identity.principalId`. The PATCH body is valid because the API Management Service Update request body for API version 2024-05-01 includes `identity` (`ApiManagementServiceIdentity`) on Microsoft Learn: https://learn.microsoft.com/en-us/rest/api/apimanagement/api-management-service/update?view=rest-apimanagement-2024-05-01. PATCH is used because a PUT would reset omitted service properties; `infra/main.bicep:252-265` records the same risk.
 
 
 
@@ -267,16 +403,35 @@ Grant `Cognitive Services User` to the APIM managed identity when the list above
 
 ```bash
 # P89-FOUNDRY-ROLE-BEGIN
-mkdir -p .p89-receipts
-EXISTING_FOUNDRY_ROLE_ID="$(az role assignment list --scope "$FOUNDRY_ID" --assignee "$APIM_PRINCIPAL_ID" --include-inherited --query "[?roleDefinitionName=='Cognitive Services User']|[0].id" -o tsv)"
-if [ -n "$EXISTING_FOUNDRY_ROLE_ID" ]; then
-  jq -n --arg existing "$EXISTING_FOUNDRY_ROLE_ID" '{foundryRole:{created:false,existingId:$existing}}' > .p89-receipts/foundry-role.json
-  echo "Existing Cognitive Services User assignment recorded; teardown will not delete it."
-else
-  az role assignment create --assignee-object-id "$APIM_PRINCIPAL_ID" --assignee-principal-type ServicePrincipal --role "Cognitive Services User" --scope "$FOUNDRY_ID" -o json \
-    | jq '{foundryRole:{created:true,id:.id}}' > .p89-receipts/foundry-role.json
-fi
-az role assignment list --scope "$FOUNDRY_ID" --assignee "$APIM_PRINCIPAL_ID" --include-inherited --query "[?roleDefinitionName=='Cognitive Services User'].{role:roleDefinitionName,scope:scope}" -o table
+p89_foundry_role() {
+  mkdir -p .p89-receipts
+  if [ -z "${APIM_PRINCIPAL_ID:-}" ] || [ -z "${FOUNDRY_ID:-}" ]; then
+    echo "Refused: APIM_PRINCIPAL_ID or FOUNDRY_ID is empty; no role assignment command ran." >&2
+    return 1
+  fi
+  if ! EXISTING_FOUNDRY_ROLE_ID="$(az role assignment list --scope "$FOUNDRY_ID" --assignee "$APIM_PRINCIPAL_ID" --include-inherited --query "[?roleDefinitionName=='Cognitive Services User']|[0].id" -o tsv)"; then
+    echo "Refused: could not list existing Foundry role assignments; nothing recorded." >&2
+    return 1
+  fi
+  if [ -n "$EXISTING_FOUNDRY_ROLE_ID" ]; then
+    jq -n --arg existing "$EXISTING_FOUNDRY_ROLE_ID" '{foundryRole:{created:false,existingId:$existing}}' > .p89-receipts/foundry-role.json
+    echo "Existing Cognitive Services User assignment recorded; teardown will not delete it."
+  else
+    if ! created_role_json="$(az role assignment create --assignee-object-id "$APIM_PRINCIPAL_ID" --assignee-principal-type ServicePrincipal --role "Cognitive Services User" --scope "$FOUNDRY_ID" -o json)"; then
+      rm -f .p89-receipts/foundry-role.json
+      echo "Refused: role assignment create failed; no receipt was written." >&2
+      return 1
+    fi
+    printf '%s' "$created_role_json" | jq '{foundryRole:{created:true,id:.id}}' > .p89-receipts/foundry-role.json
+  fi
+  jq -e '(.foundryRole.created == true and (.foundryRole.id | type == "string" and length > 0)) or (.foundryRole.created == false and (.foundryRole.existingId | type == "string" and length > 0))' .p89-receipts/foundry-role.json >/dev/null || {
+    rm -f .p89-receipts/foundry-role.json
+    echo "Refused: Foundry role receipt is invalid; nothing recorded." >&2
+    return 1
+  }
+  az role assignment list --scope "$FOUNDRY_ID" --assignee "$APIM_PRINCIPAL_ID" --include-inherited --query "[?roleDefinitionName=='Cognitive Services User'].{role:roleDefinitionName,scope:scope}" -o table
+}
+p89_foundry_role
 # P89-FOUNDRY-ROLE-END
 ```
 
@@ -771,12 +926,32 @@ Expected result: one exact-name application id is available and `.p89-receipts/d
 Set public-client redirect URIs, including broker redirects when the Desktop profile uses broker flow.
 
 ```bash
-export DESKTOP_CLIENT_ID="<desktop-public-client-app-id>"
-az ad app update --id "$DESKTOP_CLIENT_ID" --is-fallback-public-client true --public-client-redirect-uris "http://127.0.0.1/callback" "ms-appx-web://Microsoft.AAD.BrokerPlugin/${DESKTOP_CLIENT_ID}" "msauth.com.anthropic.claudefordesktop://auth" -o none
-az ad app show --id "$DESKTOP_CLIENT_ID" --query "{appId:appId,publicClient:publicClient.redirectUris,isFallbackPublicClient:isFallbackPublicClient}" -o json
+# P89-DESKTOP-REDIRECTS-BEGIN
+p89_desktop_redirects() {
+  if [ -z "${DESKTOP_CLIENT_ID:-}" ] || printf '%s' "$DESKTOP_CLIENT_ID" | grep -q '<'; then
+    echo "Refused: DESKTOP_CLIENT_ID is empty or still a placeholder; redirect URIs were not changed." >&2
+    return 1
+  fi
+  case "${DESKTOP_SIGN_IN_FLOW:-browser}" in browser|broker) ;; *) echo "Refused: DESKTOP_SIGN_IN_FLOW must be browser or broker." >&2; return 1 ;; esac
+  if ! app_json="$(az ad app show --id "$DESKTOP_CLIENT_ID" -o json)"; then
+    echo "Refused: could not read Desktop app '$DESKTOP_CLIENT_ID'; redirect URIs were not changed." >&2
+    return 1
+  fi
+  required_json="$(jq -n --arg clientId "$DESKTOP_CLIENT_ID" --arg flow "${DESKTOP_SIGN_IN_FLOW:-browser}" '["http://127.0.0.1/callback"] + (if $flow == "broker" then ["ms-appx-web://Microsoft.AAD.BrokerPlugin/" + $clientId, "msauth.com.anthropic.claudefordesktop://auth"] else [] end)')"
+  merged_json="$(jq --argjson required "$required_json" '((.publicClient.redirectUris // []) + $required | unique)' <<< "$app_json")"
+  if jq -e --argjson merged "$merged_json" '(.publicClient.redirectUris // [] | sort) == ($merged | sort) and (.isFallbackPublicClient == true)' <<< "$app_json" >/dev/null; then
+    echo "Desktop redirect URIs already present."
+  else
+    mapfile -t merged_uris < <(jq -r '.[]' <<< "$merged_json")
+    az ad app update --id "$DESKTOP_CLIENT_ID" --is-fallback-public-client true --public-client-redirect-uris "${merged_uris[@]}" -o none || return 1
+  fi
+  az ad app show --id "$DESKTOP_CLIENT_ID" --query "{appId:appId,publicClient:publicClient.redirectUris,isFallbackPublicClient:isFallbackPublicClient}" -o json
+}
+p89_desktop_redirects
+# P89-DESKTOP-REDIRECTS-END
 ```
 
-Expected result: the redirect URI list contains the loopback URI and broker URIs when broker is enabled. This mirrors `scripts/New-ClaudeDesktopEntraApp.ps1:43-64`.
+Expected result: the redirect URI list preserves existing URIs, includes the loopback URI, includes broker URIs only when `DESKTOP_SIGN_IN_FLOW=broker`, and has `isFallbackPublicClient=true`. This mirrors `scripts/New-ClaudeDesktopEntraApp.ps1:47-64` and `Install-ClaudeGateway.ps1:88,1165-1177,1227`.
 
 Publish the Desktop gateway audience into APIM.
 
@@ -791,7 +966,7 @@ Expected result: the app id is stored as `external-idp-extra-audience` for id-to
 ### Part 7 in the portal
 
 1. **Create or discover the Desktop public-client app.** entra.microsoft.com > App registrations > New registration: Name `Claude Desktop gateway`; Supported account types **Accounts in this organizational directory only**; **Register**. Pending capture id: `p60-desktop-app-overview`.
-2. **Configure Desktop redirect URIs.** App registrations > `Claude Desktop gateway` > Authentication > Add a platform > Mobile and desktop applications: Custom redirect URI `http://127.0.0.1/callback`; keep existing redirect URIs already on the app; when `$DESKTOP_SIGN_IN_FLOW` is `broker`, also include `ms-appx-web://Microsoft.AAD.BrokerPlugin/${DESKTOP_CLIENT_ID}` and `msauth.com.anthropic.claudefordesktop://auth`; **Configure**; Advanced settings > **Allow public client flows**: **Yes**; **Save**. Learn places redirect URI configuration on the **Authentication** page, names **Mobile and desktop applications** as the platform for desktop apps, and documents **Advanced settings** > **Allow public client flows** > **Yes** for public clients. Source: `scripts/New-ClaudeDesktopEntraApp.ps1:47-64`, `Install-ClaudeGateway.ps1:88`, `Install-ClaudeGateway.ps1:1165-1177`, https://learn.microsoft.com/entra/identity-platform/how-to-add-redirect-uri and https://learn.microsoft.com/entra/identity-platform/scenario-desktop-app-registration. Pending capture id: `p60-desktop-app-authentication`.
+2. **Configure Desktop redirect URIs.** App registrations > `Claude Desktop gateway` > Authentication > Add a platform > Mobile and desktop applications: Custom redirect URI `http://127.0.0.1/callback`; keep existing redirect URIs already on the app; when `$DESKTOP_SIGN_IN_FLOW` is `broker`, also include `ms-appx-web://Microsoft.AAD.BrokerPlugin/${DESKTOP_CLIENT_ID}` and `msauth.com.anthropic.claudefordesktop://auth`; **Configure**; Advanced settings > **Allow public client flows**: **Yes**; **Save**. This mirrors `p89_desktop_redirects` (`P89-DESKTOP-REDIRECTS`). Learn places redirect URI configuration on the **Authentication** page, names **Mobile and desktop applications** as the platform for desktop apps, and documents **Advanced settings** > **Allow public client flows** > **Yes** for public clients. Source: `scripts/New-ClaudeDesktopEntraApp.ps1:47-64`, `Install-ClaudeGateway.ps1:88`, `Install-ClaudeGateway.ps1:1165-1177`, https://learn.microsoft.com/entra/identity-platform/how-to-add-redirect-uri and https://learn.microsoft.com/entra/identity-platform/scenario-desktop-app-registration. Pending capture id: `p60-desktop-app-authentication`.
 3. **Configure API permissions if tenant policy requires review.** App registrations > `Claude Desktop gateway` > API permissions: add or review delegated permissions required by the Desktop sign-in flow; **Add permissions**. Pending capture id: `p60-desktop-app-api-permissions`.
 4. **Publish the Desktop audience to APIM.** API Management services > `$APIM_NAME` > APIs > Named values > `external-idp-extra-audience` > Edit: Value `$DESKTOP_GATEWAY_AUDIENCE`, the Desktop application (client) id; **Save**. Pending capture id: `p60-gateway-desktop-audience`.
 
@@ -812,7 +987,7 @@ export PROJECTION_DEPLOYER="${PROJECTION_DEPLOYER:-./scripts/Deploy-ClaudeProjec
 export AUTH_MODE="${AUTH_MODE:-interactive}"
 STANDARD_MODELS_JSON="$(printf '%s' "$MODELS_STANDARD" | tr ',' '\n' | awk 'NF' | jq -R . | jq -s .)"
 PREMIUM_MODELS_JSON="$(printf '%s' "$MODELS_PREMIUM" | tr ',' '\n' | awk 'NF' | jq -R . | jq -s .)"
-jq -n --arg mode "gateway" --arg gatewayUrl "$GATEWAY_URL" --arg tenantId "$TENANT_ID" --arg apimName "$APIM_NAME" --arg resourceGroup "$GATEWAY_RG" --arg subscriptionId "$SUBSCRIPTION_ID" --arg sku "$SKU" --arg location "$LOCATION" --arg foundryAccount "$FOUNDRY_ACCOUNT" --arg foundryResourceGroup "$FOUNDRY_RG" --arg standardGroup "$STANDARD_GROUP" --arg premiumGroup "$PREMIUM_GROUP" --arg authMode "$AUTH_MODE" --arg entitlementStore "$ENTITLEMENT_STORE" --arg resolverInboundAccess "$RESOLVER_INBOUND_ACCESS" --arg projectionDeployer "$PROJECTION_DEPLOYER" --arg sonnet "$SONNET_DEPLOYMENT" --arg opus "$OPUS_DEPLOYMENT" --arg haiku "$HAIKU_DEPLOYMENT" --argjson standardModels "$STANDARD_MODELS_JSON" --argjson premiumModels "$PREMIUM_MODELS_JSON" --argjson tpmStandard "$TPM_STANDARD" --argjson quotaStandard "$QUOTA_STANDARD" --argjson tpmPremium "$TPM_PREMIUM" --argjson quotaPremium "$QUOTA_PREMIUM" --argjson quotaOrg "$QUOTA_ORG" --argjson callsPerMinute "$CALLS_PER_MINUTE" --arg desktopClientId "$DESKTOP_CLIENT_ID" --arg issuer "https://login.microsoftonline.com/${TENANT_ID}/v2.0" --arg modelsStandard "$MODELS_STANDARD" --arg modelsPremium "$MODELS_PREMIUM" '{
+jq -n --arg mode "gateway" --arg gatewayUrl "$GATEWAY_URL" --arg tenantId "$TENANT_ID" --arg apimName "$APIM_NAME" --arg resourceGroup "$GATEWAY_RG" --arg subscriptionId "$SUBSCRIPTION_ID" --arg sku "$SKU" --arg location "$LOCATION" --arg foundryAccount "$FOUNDRY_ACCOUNT" --arg foundryResourceGroup "$FOUNDRY_RG" --arg standardGroup "$STANDARD_GROUP" --arg premiumGroup "$PREMIUM_GROUP" --arg authMode "$AUTH_MODE" --arg entitlementStore "$ENTITLEMENT_STORE" --arg resolverInboundAccess "$RESOLVER_INBOUND_ACCESS" --arg projectionDeployer "$PROJECTION_DEPLOYER" --arg sonnet "$SONNET_DEPLOYMENT" --arg opus "$OPUS_DEPLOYMENT" --arg haiku "$HAIKU_DEPLOYMENT" --argjson standardModels "$STANDARD_MODELS_JSON" --argjson premiumModels "$PREMIUM_MODELS_JSON" --argjson tpmStandard "$TPM_STANDARD" --argjson quotaStandard "$QUOTA_STANDARD" --argjson tpmPremium "$TPM_PREMIUM" --argjson quotaPremium "$QUOTA_PREMIUM" --argjson quotaOrg "$QUOTA_ORG" --argjson callsPerMinute "$CALLS_PER_MINUTE" --arg desktopClientId "$DESKTOP_CLIENT_ID" --arg flow "${DESKTOP_SIGN_IN_FLOW:-browser}" --arg issuer "https://login.microsoftonline.com/${TENANT_ID}/v2.0" --arg modelsStandard "$MODELS_STANDARD" --arg modelsPremium "$MODELS_PREMIUM" '{
   mode:$mode,
   gatewayUrl:$gatewayUrl,
   tenantId:$tenantId,
@@ -829,7 +1004,7 @@ jq -n --arg mode "gateway" --arg gatewayUrl "$GATEWAY_URL" --arg tenantId "$TENA
   entitlementStore:$entitlementStore,
   resolverInboundAccess:$resolverInboundAccess,
   projectionDeployer:$projectionDeployer,
-  desktopSignIn:{kind:"external-idp",flow:"browser",bearerTokenType:"id_token",clientId:$desktopClientId,issuer:$issuer},
+  desktopSignIn:{kind:"external-idp",flow:$flow,bearerTokenType:"id_token",clientId:$desktopClientId,issuer:$issuer},
   deployments:[{name:$sonnet,model:$sonnet},{name:$opus,model:$opus},{name:$haiku,model:$haiku}],
   models:[$sonnet,$opus,$haiku],
   tiers:{
@@ -865,31 +1040,136 @@ Expected result: built-in Azure hostname remains, and any existing custom Proxy 
 Validate a Key Vault certificate and grant APIM access.
 
 ```bash
-export HOSTNAME="<gateway.company.example>"
-export KEYVAULT_NAME="<key-vault-name>"
-export CERT_NAME="<certificate-name>"
-export CERT_SECRET_ID="$(az keyvault certificate show --vault-name "$KEYVAULT_NAME" --name "$CERT_NAME" --query sid -o tsv)"
-az keyvault certificate show --vault-name "$KEYVAULT_NAME" --name "$CERT_NAME" --query "{enabled:attributes.enabled,subject:policy.x509CertificateProperties.subject,secretContentType:policy.secretProperties.contentType}" -o json
-az role assignment create --assignee-object-id "$APIM_PRINCIPAL_ID" --assignee-principal-type ServicePrincipal --role "Key Vault Secrets User" --scope "$(az keyvault show -n "$KEYVAULT_NAME" --query id -o tsv)" -o json
+# P89-KEYVAULT-ACCESS-BEGIN
+p89_keyvault_access() {
+  mkdir -p .p89-receipts
+  : "${GATEWAY_HOSTNAME:=<gateway.company.example>}"
+  : "${KEYVAULT_NAME:=<key-vault-name>}"
+  : "${CERT_NAME:=<certificate-name>}"
+  export GATEWAY_HOSTNAME KEYVAULT_NAME CERT_NAME
+  for pair in "APIM_PRINCIPAL_ID:$APIM_PRINCIPAL_ID" "KEYVAULT_NAME:$KEYVAULT_NAME" "CERT_NAME:$CERT_NAME"; do
+    name="${pair%%:*}"
+    value="${pair#*:}"
+    if [ -z "$value" ] || printf '%s' "$value" | grep -Eq '^<.*>$'; then
+      echo "Refused: $name is empty or still a placeholder; Key Vault access was not changed." >&2
+      return 1
+    fi
+  done
+  if ! cert_json="$(az keyvault certificate show --vault-name "$KEYVAULT_NAME" --name "$CERT_NAME" -o json)"; then
+    echo "Refused: could not read Key Vault certificate '$CERT_NAME' in '$KEYVAULT_NAME'; no role assignment was made." >&2
+    return 1
+  fi
+  if [ "$(printf '%s' "$cert_json" | jq -r '.attributes.enabled // false')" != "true" ] ||
+     [ "$(printf '%s' "$cert_json" | jq -r '.policy.keyProperties.exportable // false')" != "true" ] ||
+     [ "$(printf '%s' "$cert_json" | jq -r '.policy.secretProperties.contentType // ""')" != "application/x-pkcs12" ]; then
+    echo "Refused: certificate must be enabled, exportable, and backed by an application/x-pkcs12 secret." >&2
+    return 1
+  fi
+  export CERT_SECRET_ID="$(printf '%s' "$cert_json" | jq -r '.sid // ""')"
+  if [ -z "$CERT_SECRET_ID" ]; then
+    echo "Refused: certificate secret id is empty; no role assignment was made." >&2
+    return 1
+  fi
+  if ! KEYVAULT_STATE="$(az keyvault show -n "$KEYVAULT_NAME" --query "{id:id,rbac:properties.enableRbacAuthorization}" -o json)"; then
+    echo "Refused: could not read Key Vault '$KEYVAULT_NAME'; no role assignment was made." >&2
+    return 1
+  fi
+  KEYVAULT_ID="$(printf '%s' "$KEYVAULT_STATE" | jq -r '.id // ""')"
+  KEYVAULT_RBAC="$(printf '%s' "$KEYVAULT_STATE" | jq -r '.rbac // false')"
+  CURRENT_SUBSCRIPTION_ID="$(az account show --query id -o tsv)" || {
+    echo "Refused: could not read current subscription id; no role assignment was made." >&2
+    return 1
+  }
+  expected="^/subscriptions/${CURRENT_SUBSCRIPTION_ID}/resourceGroups/[^/]+/providers/Microsoft.KeyVault/vaults/${KEYVAULT_NAME}$"
+  if ! printf '%s' "$KEYVAULT_ID" | grep -Eiq "$expected"; then
+    echo "Refused: Key Vault id '$KEYVAULT_ID' is not the expected vault in subscription '$CURRENT_SUBSCRIPTION_ID'; no role assignment was made." >&2
+    return 1
+  fi
+  if [ "$KEYVAULT_RBAC" != "true" ]; then
+    echo "Refused: Key Vault '$KEYVAULT_NAME' uses access policies, not RBAC. Portal route: Key Vault > Access policies > Create, Secret permissions Get and List, principal = the gateway identity. Script route: ./scripts/Set-ClaudeGatewayAddress.ps1, which uses accessPolicies/add. Do not use az keyvault set-policy; it rewrites that principal's secret permission list." >&2
+    return 1
+  fi
+  if ! existing_kv_role="$(az role assignment list --scope "$KEYVAULT_ID" --assignee "$APIM_PRINCIPAL_ID" --include-inherited --query "[?roleDefinitionName=='Key Vault Secrets User']|[0].id" -o tsv)"; then
+    echo "Refused: could not list Key Vault role assignments; nothing recorded." >&2
+    return 1
+  fi
+  if [ -n "$existing_kv_role" ]; then
+    jq -n --arg existing "$existing_kv_role" '{keyVaultRole:{created:false,existingId:$existing}}' > .p89-receipts/keyvault-role.json
+  else
+    if ! created_kv_role="$(az role assignment create --assignee-object-id "$APIM_PRINCIPAL_ID" --assignee-principal-type ServicePrincipal --role "Key Vault Secrets User" --scope "$KEYVAULT_ID" -o json)"; then
+      rm -f .p89-receipts/keyvault-role.json
+      echo "Refused: Key Vault role assignment create failed; no receipt was written." >&2
+      return 1
+    fi
+    printf '%s' "$created_kv_role" | jq '{keyVaultRole:{created:true,id:.id}}' > .p89-receipts/keyvault-role.json
+  fi
+  jq -e '(.keyVaultRole.created == true and (.keyVaultRole.id | type == "string" and length > 0)) or (.keyVaultRole.created == false and (.keyVaultRole.existingId | type == "string" and length > 0))' .p89-receipts/keyvault-role.json >/dev/null || {
+    rm -f .p89-receipts/keyvault-role.json
+    echo "Refused: Key Vault role receipt is invalid; nothing recorded." >&2
+    return 1
+  }
+}
+p89_keyvault_access
+# P89-KEYVAULT-ACCESS-END
 ```
 
-Expected result: the certificate is enabled, backed by a PFX secret, and the gateway identity can read it. This mirrors `scripts/ClaudeGatewayCertificate.ps1:80-103` and `scripts/ClaudeGatewayAddress.ps1:107-115`.
+Expected result: the certificate is enabled, exportable and backed by a PFX secret; `CERT_SECRET_ID` is set; and an RBAC Key Vault gets only an exact-vault-scope `Key Vault Secrets User` assignment for the gateway identity. Access-policy vaults are refused with the portal and script routes. This mirrors `scripts/ClaudeGatewayCertificate.ps1:80-101` and `scripts/ClaudeGatewayAddress.ps1:159-184`.
 
 Patch APIM hostname configurations and prove TLS before publishing the handover URL.
 
 ```bash
-APIM_ID="$(az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" --query id -o tsv)"
-az rest --method patch --headers "Content-Type=application/json" --body "{\"properties\":{\"hostnameConfigurations\":[{\"type\":\"Proxy\",\"hostName\":\"${HOSTNAME}\",\"certificateSource\":\"KeyVault\",\"keyVaultId\":\"${CERT_SECRET_ID}\",\"identityClientId\":null}]}}" --url "https://management.azure.com${APIM_ID}?api-version=2024-05-01" -o json
-az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" --query "hostnameConfigurations[?hostName=='${HOSTNAME}'].{hostName:hostName,status:certificateStatus}" -o json
-curl -sS -o /dev/null -w "%{http_code}\n" "https://${HOSTNAME}/claude/v1/messages"
+# P89-BIND-HOSTNAME-BEGIN
+p89_bind_hostname() {
+  if [ -z "${APIM_ID:-}" ]; then
+    APIM_ID="$(az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" --query id -o tsv)" || return 1
+  fi
+  for pair in "APIM_ID:${APIM_ID:-}" "CERT_SECRET_ID:${CERT_SECRET_ID:-}" "GATEWAY_HOSTNAME:${GATEWAY_HOSTNAME:-}"; do
+    name="${pair%%:*}"
+    value="${pair#*:}"
+    if [ -z "$value" ] || printf '%s' "$value" | grep -Eq '^<.*>$'; then
+      echo "Refused: $name is empty or still a placeholder; hostname was not changed." >&2
+      return 1
+    fi
+  done
+  if ! apim_live="$(az rest --method get --url "https://management.azure.com${APIM_ID}?api-version=2024-05-01" -o json)"; then
+    echo "Refused: could not read live APIM hostnames; hostname was not changed." >&2
+    return 1
+  fi
+  sku="$(printf '%s' "$apim_live" | jq -r '.sku.name // ""')"
+  other_proxy_count="$(printf '%s' "$apim_live" | jq --arg h "$GATEWAY_HOSTNAME" '[.properties.hostnameConfigurations[]? | select(.type=="Proxy" and (.certificateSource // "BuiltIn") != "BuiltIn" and (.hostName|ascii_downcase) != ($h|ascii_downcase))] | length')"
+  if [ "$sku" != "PremiumV2" ] && [ "$other_proxy_count" -gt 0 ] && [ -z "${REPLACE_HOSTNAME:-}" ]; then
+    echo "Refused: $sku has another custom Proxy hostname. Set REPLACE_HOSTNAME to the exact hostname to replace, or use PremiumV2." >&2
+    return 1
+  fi
+  if [ -n "${REPLACE_HOSTNAME:-}" ]; then
+    replace_count="$(printf '%s' "$apim_live" | jq --arg h "$REPLACE_HOSTNAME" --arg new "$GATEWAY_HOSTNAME" '[.properties.hostnameConfigurations[]? | select(.type=="Proxy" and (.certificateSource // "BuiltIn") != "BuiltIn" and (.hostName|ascii_downcase)==($h|ascii_downcase) and (.hostName|ascii_downcase)!=($new|ascii_downcase))] | length')"
+    if [ "$replace_count" -ne 1 ]; then
+      echo "Refused: REPLACE_HOSTNAME must name exactly one live custom Proxy hostname different from GATEWAY_HOSTNAME." >&2
+      return 1
+    fi
+  fi
+  printf '%s' "$apim_live" | jq --arg h "$GATEWAY_HOSTNAME" --arg replace "${REPLACE_HOSTNAME:-}" --arg cert "$CERT_SECRET_ID" '
+    (.properties.hostnameConfigurations // []) as $hosts
+    | {properties:{hostnameConfigurations:(
+        ($hosts | map(select(
+          .type != "Proxy" or
+          ((.hostName|ascii_downcase) != ($h|ascii_downcase) and (($replace == "") or (.hostName|ascii_downcase) != ($replace|ascii_downcase)))
+        ))) + [{type:"Proxy",hostName:$h,certificateSource:"KeyVault",keyVaultId:$cert,identityClientId:null,defaultSslBinding:false,negotiateClientCertificate:false}]
+      )}}' > hostname-patch.json
+  az rest --method patch --headers "Content-Type=application/json" --body @hostname-patch.json --url "https://management.azure.com${APIM_ID}?api-version=2024-05-01" -o json || return 1
+  az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" --query "hostnameConfigurations[?hostName=='${GATEWAY_HOSTNAME}'].{hostName:hostName,status:certificateStatus}" -o json
+  curl -sS -o /dev/null -w "%{http_code}\n" "https://${GATEWAY_HOSTNAME}/claude/v1/messages"
+}
+p89_bind_hostname
+# P89-BIND-HOSTNAME-END
 ```
 
-Expected result: the hostname binding exists and an unauthenticated request returns `401`, proving DNS, SNI and certificate before clients use the address. This mirrors `scripts/ClaudeGatewayAddress.ps1:248-351`.
+Expected result: the hostname binding exists, unauthenticated HTTPS returns `401`, and other hostname configurations remain in the PATCH body. This mirrors `scripts/ClaudeGatewayAddress.ps1:88-91`, `:136-141` and `:289-292`.
 
 ### Part 9 in the portal
 
 1. **Review the current gateway hostnames before binding a company address.** API Management services > `$APIM_NAME` > Deployment + infrastructure > Custom domains: review existing Gateway hostnames. No Save button is used for read-only review.
-2. **Validate a Key Vault certificate and grant APIM access.** Key Vault > `$KEYVAULT_NAME` > Objects > Certificates > `$CERT_NAME`: confirm Enabled and certificate status. Key Vault > Access configuration shows whether the vault uses Azure role-based access control or Vault access policy. For Azure role-based access control, Key Vault > Access control (IAM) > Add > Add role assignment: Role **Key Vault Secrets User**; Assign access to **Managed identity**; Members: gateway identity; **Review + assign**. For Vault access policy, Key Vault > Access policies > Create: Secret permissions **Get** and **List**; Principal: the gateway managed identity; **Create**. The access-policy route mirrors the additive `accessPolicies/add` call in `scripts/ClaudeGatewayAddress.ps1:173-184`.
+2. **Validate a Key Vault certificate and grant APIM access.** Key Vault > `$KEYVAULT_NAME` > Objects > Certificates > `$CERT_NAME`: confirm Enabled and certificate status; Certificate policy or Issuance policy shows an exportable private key and Secret content type `application/x-pkcs12`. Key Vault > Access configuration shows whether the vault uses Azure role-based access control or Vault access policy. For Azure role-based access control, Key Vault > Access control (IAM) > Add > Add role assignment: Role **Key Vault Secrets User**; Assign access to **Managed identity**; Members: gateway identity; **Review + assign**. For Vault access policy, Key Vault > Access policies > Create: Secret permissions **Get** and **List**; Principal: the gateway managed identity; **Create**. This mirrors `p89_keyvault_access` (`P89-KEYVAULT-ACCESS`), and the access-policy route mirrors the additive `accessPolicies/add` call in `scripts/ClaudeGatewayAddress.ps1:173-184`.
 
 ![Key Vault Certificates blade showing the enabled listener certificate from the network-restricted deployment](guide/network-final-certificate.png)
 
@@ -899,7 +1179,7 @@ Capture id: `p54-vault-certificate`.
 
 Capture id: `p54-vault-role`.
 
-3. **Patch APIM hostname configurations and prove TLS before publishing the handover URL.** API Management services > `$APIM_NAME` > Deployment + infrastructure > Custom domains > Gateway > Add: Hostname `$HOSTNAME`; Certificate source **Key Vault**; Key Vault certificate secret `$CERT_SECRET_ID`; **Add** or **Save**. Pending capture id: `p90-company-custom-domains`.
+3. **Patch APIM hostname configurations and prove TLS before publishing the handover URL.** DNS has a CNAME from `$GATEWAY_HOSTNAME` to the default API Management hostname before binding. API Management services > `$APIM_NAME` > Deployment + infrastructure > Custom domains > **+ Add**: Type **Gateway**; Hostname `$GATEWAY_HOSTNAME`; Certificate **Key Vault**; select the Key Vault certificate; Client identity: the system-assigned identity; **Add**; **Save**. Existing hostnames stay in the PATCH body. Basic v2 and Standard v2 use `REPLACE_HOSTNAME` when another custom Proxy hostname is already present; Premium v2 can keep multiple Gateway hostnames. Learn documents **Custom domains**, **+Add**, **Type**, **Hostname**, **Key Vault**, **Client identity**, **Add** and **Save**; it also documents CNAME mapping to the default API Management service hostname and states custom domain changes can take 15 minutes or longer. Source: https://learn.microsoft.com/azure/api-management/configure-custom-domain. Pending capture id: `p90-company-custom-domains`.
 
 **Change later.** Change the APIM Gateway custom-domain binding, Key Vault certificate and DNS record together; then rerun the TLS proof and update handover/client configuration if the URL changes.
 
@@ -1086,7 +1366,7 @@ Capture id: `docs-review-resolver-networking`.
 5. **Set resolver named values without switching entitlement.** API Management services > `$APIM_NAME` > APIs > Named values: edit `entitlement-resolver-url` and `entitlement-resolver-audience`; Value: `$RESOLVER_URL` and `$RESOLVER_AUDIENCE`; **Save**. Keep `entitlement-source` as `named-value`.
 6. **Populate and compare the projection through an in-VNet runner container.** No portal equivalent: the runner transfer, hash check, package install and compare are command-line computation steps.
 
-**Change later.** Projection resources are deployed by the §10 commands through `scripts/Deploy-ClaudeProjection.ps1:107-122`, `infra/projection.bicep:11-68`, `infra/projection-network.bicep:26-49`, `scripts/Deploy-ClaudeProjection.ps1:130-168`, `infra/resolver.bicep:385-387` and `scripts/Deploy-ClaudeProjection.ps1:199-221`. Cosmos DB > Networking changes the Cosmos public/private network posture; the private endpoint > DNS configuration changes private DNS attachment; Function App > Networking changes private endpoint and VNet integration; Function App > Authentication changes the Microsoft identity provider; Function App > Environment variables changes app settings. Resource shape, private endpoint, DNS, resolver deployment and runner population changes use the §10 commands so outputs and comparison files stay aligned. Resolver named values, app authentication settings, network toggles and environment variables can be changed in the portal when the same values are then checked. Rerun the relevant §10 readback or compare command, then rerun the §11 data-plane and diagnostics checks affected by the change.
+**Change later.** The §10 commands deploy `infra/projection.bicep`, `infra/projection-network.bicep` and `infra/resolver.bicep` with `az deployment group create`; `scripts/Deploy-ClaudeProjection.ps1` runs the same deployments at `:106-127`, `:129-164` and `:197-223`. Cosmos DB > Networking changes the Cosmos public/private network posture; rerun **Deploy private projection storage and networking**. The private endpoint > DNS configuration changes private DNS attachment; rerun **Deploy private projection storage and networking**. Function App > Networking changes private endpoint and VNet integration; rerun **Deploy the resolver with Standard v2 outbound VNet integration and upload code**. Function App > Authentication changes the Microsoft identity provider; rerun **Deploy the resolver with Standard v2 outbound VNet integration and upload code**. Function App > Environment variables changes app settings; rerun **Deploy the resolver with Standard v2 outbound VNet integration and upload code** and **Set resolver named values without switching entitlement** when URL or audience settings change. Resolver named values can be changed in API Management named values and then checked with **Set resolver named values without switching entitlement**. While `entitlement-source` is `named-value`, `infra/policy.xml:86-92` does not call the resolver, so projection and resolver changes do not change §11 request results. Rerun **Populate and compare the projection through an in-VNet runner container** after entitlement data changes, then rerun §11 diagnostics only when log routing or policy settings changed.
 
 ## 11. Verification
 
@@ -1135,8 +1415,17 @@ Expected result: HTTP `403` or gateway refusal naming the model outside the tier
 Check for direct Foundry bypass.
 
 ```bash
-az role assignment list --scope "$FOUNDRY_ID" --include-inherited --query "[?roleDefinitionName=='Cognitive Services User'].{principal:principalName,principalType:principalType,scope:scope}" -o table
-az role assignment list --scope "$FOUNDRY_ID" --include-inherited --query "[?roleDefinitionName=='Cognitive Services User' && principalId!='${APIM_PRINCIPAL_ID}'].{principal:principalName,principalId:principalId}" -o table
+# P89-BYPASS-READ-BEGIN
+p89_bypass_read() {
+  if [ -z "${FOUNDRY_ID:-}" ] || [ -z "${APIM_PRINCIPAL_ID:-}" ]; then
+    echo "Refused: FOUNDRY_ID or APIM_PRINCIPAL_ID is empty; bypass read did not run." >&2
+    return 1
+  fi
+  az role assignment list --scope "$FOUNDRY_ID" --include-inherited --query "[?roleDefinitionName=='Cognitive Services User'].{principal:principalName,principalType:principalType,scope:scope}" -o table || return 1
+  az role assignment list --scope "$FOUNDRY_ID" --include-inherited --query "[?roleDefinitionName=='Cognitive Services User' && principalId!='${APIM_PRINCIPAL_ID}'].{principal:principalName,principalId:principalId}" -o table
+}
+p89_bypass_read
+# P89-BYPASS-READ-END
 ```
 
 Expected result: the gateway identity has the role; developers do not hold direct `Cognitive Services User` unless there is an explicitly approved bypass. This mirrors `scripts/Get-ClaudeBypass.ps1`.
@@ -1180,10 +1469,19 @@ Read resources before deletion.
 
 ```bash
 az resource list -g "$GATEWAY_RG" --query "[].{type:type,name:name}" -o table
-az role assignment list --scope "$FOUNDRY_ID" --assignee "$APIM_PRINCIPAL_ID" --query "[].{id:id,role:roleDefinitionName}" -o table
+# P89-TEARDOWN-READ-BEGIN
+p89_teardown_read() {
+  if [ -z "${FOUNDRY_ID:-}" ] || [ -z "${APIM_PRINCIPAL_ID:-}" ]; then
+    echo "Refused: FOUNDRY_ID or APIM_PRINCIPAL_ID is empty; role assignment read did not run." >&2
+    return 1
+  fi
+  az role assignment list --scope "$FOUNDRY_ID" --assignee "$APIM_PRINCIPAL_ID" --query "[].{id:id,role:roleDefinitionName}" -o table
+}
+p89_teardown_read
+# P89-TEARDOWN-READ-END
 ```
 
-Expected result: the operator sees the exact resources and role assignments that will be removed. This mirrors the installer's explicit review style before writes.
+Expected result: the operator sees resources and the exact receipt-created role assignment id that teardown may remove. Empty `FOUNDRY_ID` or `APIM_PRINCIPAL_ID` refuses before role reads, so Azure CLI cannot fall back to the subscription scope or omit the assignee filter. This mirrors the installer's explicit review style before writes.
 
 Delete the gateway resource group when the deployment was isolated to it.
 
@@ -1239,6 +1537,19 @@ p89_teardown_external() {
     fi
   }
 
+  delete_created_keyvault_role() {
+    receipt=".p89-receipts/keyvault-role.json"
+    if [ ! -r "$receipt" ]; then
+      echo "No Key Vault role receipt; nothing deleted for it."
+      return 0
+    fi
+    if jq -e '.keyVaultRole.created == true and (.keyVaultRole.id | type == "string" and length > 0)' "$receipt" >/dev/null; then
+      az role assignment delete --ids "$(jq -r '.keyVaultRole.id' "$receipt")"
+    else
+      echo "Key Vault role assignment was pre-existing; not deleting it."
+    fi
+  }
+
   for required in .p89-receipts/foundry-role.json .p89-receipts/group-standard.json .p89-receipts/group-premium.json; do
     if [ ! -r "$required" ]; then
       echo "Refused: No receipt: $required is missing or unreadable; nothing deleted." >&2
@@ -1249,25 +1560,26 @@ p89_teardown_external() {
   delete_created_group standard || return 1
   delete_created_group premium || return 1
   delete_created_app || return 1
+  delete_created_keyvault_role || return 1
   az role assignment list --scope "$FOUNDRY_ID" --assignee "$APIM_PRINCIPAL_ID" --query "[?roleDefinitionName=='Cognitive Services User'].id" -o tsv
 }
 p89_teardown_external
 # P89-TEARDOWN-EXTERNAL-END
 ```
 
-Expected result: only role assignments, tier groups and Desktop app registrations recorded with `created:true` are deleted. Missing role or group receipts refuse and delete nothing; the Desktop app receipt is optional, because §7 can be skipped, and a missing app receipt prints "No Desktop app receipt; nothing deleted for it." Pre-existing directory objects survive. This mirrors the Foundry role assignment in `infra/foundry-role.bicep`, `deploy.ps1:182-187` and `scripts/New-ClaudeDesktopEntraApp.ps1:29-39`.
+Expected result: only role assignments, tier groups, Key Vault role assignments and Desktop app registrations recorded with `created:true` are deleted. Missing role or group receipts refuse and delete nothing; the Desktop app and Key Vault role receipts are optional, because §7 and §9 can be skipped. Pre-existing directory objects survive. This mirrors the Foundry role assignment in `infra/foundry-role.bicep`, `deploy.ps1:182-187` and `scripts/New-ClaudeDesktopEntraApp.ps1:29-39`.
 
 ### Part 12 in the portal
 
 1. **Delete the gateway resource group after external receipts are reviewed.** portal.azure.com > Resource groups > `$GATEWAY_RG` > Delete resource group: type `$GATEWAY_RG`; **Delete**. Source: https://learn.microsoft.com/azure/api-management/get-started-create-service-instance.
 2. **Review soft-deleted APIM instances before name reuse.** No portal label is asserted here. The Learn soft-delete page documents REST API, Azure CLI and SDK support for deleted services, including `az apim deletedservice show/list/purge`, but not an Azure portal blade label. Source: https://learn.microsoft.com/azure/api-management/soft-delete.
-3. **Delete receipt-created external objects.** entra.microsoft.com > Groups: select a group created by the receipt; **Delete**. entra.microsoft.com > App registrations: select the Desktop app created by the receipt; **Delete**. Foundry account > Access control (IAM) > Role assignments: select the receipt-created Cognitive Services User assignment; **Remove**.
+3. **Delete receipt-created external objects.** entra.microsoft.com > Groups: select a group created by the receipt; **Delete**. entra.microsoft.com > App registrations: select the Desktop app created by the receipt; **Delete**. Foundry account > Access control (IAM) > Role assignments: select the receipt-created Cognitive Services User assignment; **Remove**. Key Vault > Access control (IAM) > Role assignments: select the receipt-created Key Vault Secrets User assignment; **Remove**.
 
 **Change later.** Teardown is destructive; restore by redeploying or recreating only the owned resource and do not rerun receipt deletes against objects that were pre-existing or already removed.
 
 ## Pending portal captures
 
-The staged P90 spec is `guide/captures-pending/p90.json`. It stays outside `guide/captures/` because the output below does not exist yet and would fail loaded capture/documentation checks. The Desktop app rows reuse the existing staged P60 spec from `guide/captures/p60.json`; their outputs are pending and are referenced in `DEVELOPER.md:654-660`.
+The staged spec is `guide/captures-pending/p90.json`. It stays outside `guide/captures/` because the output below does not exist yet and would fail loaded capture/documentation checks. The Desktop app rows reuse the existing staged P60 spec from `guide/captures/p60.json`; their outputs are pending and are referenced in `DEVELOPER.md:654-660`.
 
 | planned capture id | output path under `docs/guide/` | spec file | blade | which step it illustrates | what must exist live | capture discovery kind |
 |---|---|---|---|---|---|---|
