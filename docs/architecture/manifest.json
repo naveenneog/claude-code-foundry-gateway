@@ -521,7 +521,7 @@
       "source": "docs/architecture/16-install-checkpoint.json",
       "inputs": {
         "Install-ClaudeGateway.ps1": "2696e922bab06afe12866dc175e25b151c0b9340a3280eef18ca34cd1f4ed856",
-        "docs/architecture/16-install-checkpoint.json": "7543a24ab57a865096b5086fdb03ba1e63051233b4225a142258bae574827778",
+        "docs/architecture/16-install-checkpoint.json": "bced876cb8380894e6b2dbe4a936aa358546e6a78d2c3955e7fc30ac1006f10b",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
@@ -529,15 +529,15 @@
         "install-claude-gateway.sh": "c3d63b3c210273fcb692d7e24e3fef4d26fe98536f89e7456f86995aca88e80b",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "scripts/ClaudeInstallCheckpoint.ps1": "eb33f72c4fc3964ac627ae27c9c433ed63cfbd5c4ca6ba3bdf328a747a2cde65",
-        "scripts/ClaudeInstallResume.ps1": "7490925f3096a8382169e0307437150c419c4027496b1341a2a3fae87883fa1f",
+        "scripts/ClaudeInstallResume.ps1": "42c7d6d1671e6e2c6310b8545ae950a09122371b788dff0fdae269db8ab2576f",
         "scripts/flow/Foundation.ps1": "fb0d43ee4fbe00a140410bf3f9594b1a6d43bc4f226748f8231c6f23743c7ed4",
         "scripts/install-checkpoint.sh": "2ed2279bf2ab6f12615deb5dc24886947515f3e253ce8542e36466a3676f9d71",
-        "scripts/install-resume.sh": "c36f10641cc355494be44dff05054992ad8a15f7e9706b3bb6388f5a8067c82a"
+        "scripts/install-resume.sh": "120a217ddd465633e523c14adb000e5264798922f9163b1c61cc7e2ffb2f8173"
       },
       "outputs": [
         {
           "path": "docs/images/architecture/install-checkpoint.png",
-          "sha256": "9b438aef8c895d94012c6e76e916371551e0dd2630066e751bc91af59cf270d9"
+          "sha256": "acffdaed6815d322d6616c577198852f33a0ee9aa5f5f7794879ab5333f5cd30"
         }
       ]
     }

@@ -167,23 +167,53 @@ function Complete-ClaudeInstallGatewayStep {
     Complete-ClaudeInstallStep 'gateway-deployment' -Receipt $receipt
 }
 
+function Get-ClaudeInstallCodePointLength([string]$Text) {
+    # Unicode code points, as jq's length counts a string: a surrogate pair is one. Windows
+    # PowerShell 5.1 runs on .NET Framework, which has no String.EnumerateRunes.
+    $count = 0
+    for ($i = 0; $i -lt $Text.Length; $i++) {
+        if ([char]::IsHighSurrogate($Text[$i]) -and $i + 1 -lt $Text.Length -and [char]::IsLowSurrogate($Text[$i + 1])) { $i++ }
+        $count++
+    }
+    return $count
+}
+
 function Find-ClaudeInstallGroupByName([string]$Name) {
-    # A group by display name. az ad group list --display-name matches a prefix (its --help), so only
-    # a name equal to it, ignoring case, is the group. present: one such group; absent: none, or only
-    # longer names; inconclusive: a failed read, an unreadable list, or more than one such group.
+    # A group by display name (ADR-0046 decision 11). az ad group list --display-name sends
+    # startswith(displayName,'<name>') to Microsoft Graph, so each listed name starts with the name
+    # under Graph's own comparison, and a listed name with as many code points is the name. No name
+    # is compared here, as in install-resume.sh. present: one such group with an id; absent: none
+    # (longer names only); inconclusive: a failed read, output that is not a JSON list of groups, a
+    # name that is not text, or a group of that length without an id, or more than one.
     $r = Invoke-ClaudeInstallAzRead @('ad', 'group', 'list', '--display-name', $Name, '-o', 'json')
     $result = { param([string]$Verdict, [string]$Id, [string]$Detail) [pscustomobject]@{ Verdict = $Verdict; Id = $Id; Detail = $Detail } }
     if ($r.Verdict -ne 'present') { return (& $result 'inconclusive' '' $r.Detail) }
-    try { $parsed = $r.Output | ConvertFrom-Json -ErrorAction Stop } catch { return (& $result 'inconclusive' '' 'the group list is not JSON') }
-    $exact = @(foreach ($item in $parsed) { if ($item -and [string]$item.displayName -eq $Name -and $item.id) { [string]$item.id } })
-    if ($exact.Count -gt 1) { return (& $result 'inconclusive' '' "$($exact.Count) groups have that name: $($exact -join ', ')") }
-    if ($exact.Count -eq 1) { return (& $result 'present' $exact[0] '') }
+    $unreadable = 'the group list is not a JSON list of groups'
+    if (-not $r.Output.StartsWith('[')) { return (& $result 'inconclusive' '' $unreadable) }
+    # PowerShell 7 reads an ISO 8601 string as a date unless -DateKind String (7.5 and later) is given.
+    $convert = @{ ErrorAction = 'Stop' }
+    if ((Get-Command ConvertFrom-Json).Parameters.ContainsKey('DateKind')) { $convert['DateKind'] = 'String' }
+    try { $parsed = $r.Output | ConvertFrom-Json @convert } catch { return (& $result 'inconclusive' '' $unreadable) }
+    $length = Get-ClaudeInstallCodePointLength $Name
+    $same = [System.Collections.Generic.List[object]]::new()
+    foreach ($item in $parsed) {
+        if ($null -eq $item) { continue }
+        if ($item -isnot [System.Management.Automation.PSCustomObject]) { return (& $result 'inconclusive' '' $unreadable) }
+        $shown = $item.displayName
+        if ($null -ne $shown -and $shown -isnot [string]) { return (& $result 'inconclusive' '' $unreadable) }
+        if ($shown -is [string] -and (Get-ClaudeInstallCodePointLength $shown) -eq $length) { $same.Add($item) }
+    }
+    $ids = @($same | ForEach-Object { if ($_.id -is [string] -and $_.id) { $_.id } else { '?' } })
+    if ($same.Count -gt 1) { return (& $result 'inconclusive' '' "$($same.Count) groups have a name of that length: $($ids -join ', ')") }
+    if ($same.Count -eq 1 -and $ids[0] -eq '?') { return (& $result 'inconclusive' '' 'the group with a name of that length has no id') }
+    if ($same.Count -eq 1) { return (& $result 'present' $ids[0] '') }
     return (& $result 'absent' '' '')
 }
 
 function Invoke-ClaudeInstallGroups {
     # The tier groups, with receipts: a resume reads each by id and never creates a second group
-    # with the same name (ADR-0046 decision 11). A name finds a group only by exact display name.
+    # with the same name (ADR-0046 decision 11). A receipt applies to the name it records, compared
+    # code point by code point as jq's == compares, and a name finds a group by its length.
     param([object[]]$Groups)
     $step = Get-ClaudeInstallStep 'entra-groups'
     $old = if ($step -and $step.receipt) { @($step.receipt.groups | Where-Object { $null -ne $_ }) } else { @() }
@@ -194,7 +224,7 @@ function Invoke-ClaudeInstallGroups {
     $complete = $true
     $verified = 0
     foreach ($g in $Groups) {
-        $rec = @($old | Where-Object { $_.role -eq $g.Role -and $_.displayName -eq $g.Name }) | Select-Object -First 1
+        $rec = @($old | Where-Object { $_.role -eq $g.Role -and [string]::Equals([string]$_.displayName, [string]$g.Name, [StringComparison]::Ordinal) }) | Select-Object -First 1
         if ($rec -and $rec.id) {
             $r = Invoke-ClaudeInstallAzRead @('ad', 'group', 'show', '--group', [string]$rec.id, '--query', 'id', '-o', 'tsv') $script:ClaudeInstallGraphNotFound
             if ($r.Verdict -eq 'present') { Write-Host "    [OK]   $($g.Name) exists ($($rec.id))" -ForegroundColor Green; $made.Add($rec); $verified++; continue }

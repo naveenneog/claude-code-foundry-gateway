@@ -61,7 +61,7 @@
     ]},
     {"id": "groups", "x": 876, "y": 456, "w": 385, "h": 248, "tone": "blue", "title": "6 - Receipts by id", "lines": [
       "[[groups]] records each Entra group's id and whether this run created it.",
-      "A resume reads each group by id; by name only an exact match counts, and a failed read creates nothing."
+      "A resume reads each group by id; by name only the one listed group with the name's length counts, and a failed read creates nothing."
     ]},
     {"id": "verify", "x": 18, "y": 836, "w": 385, "h": 248, "tone": "teal", "title": "7 - Verify before a skip", "lines": [
       "[[skip]] and [[shskip]] skip a step only on a live read.",

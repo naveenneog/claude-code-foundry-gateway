@@ -165,7 +165,8 @@ ckpt_complete_gateway_() {
 }
 
 # The tier groups, with receipts: a resume reads each by id and never creates a second group with the
-# same name (ADR-0046 decision 11). A name finds a group only by its exact display name.
+# same name (ADR-0046 decision 11). A receipt applies to the name it records (jq ==, code point by
+# code point), and a name finds a group by its length.
 ckpt_groups_() {
   local old made="" complete=1 verified=0 role name rec id origin when obj resume
   resume="$(ckpt_resume_cmd_)"
@@ -192,22 +193,35 @@ EOF
       fi
       note_ "$name ($id) is gone; looking it up by name."
     fi
-    # By display name: az ad group list --display-name matches a prefix (its --help), so only a name
-    # equal to it, ignoring case, is the group; none, or only longer names, is absent. A failed read,
-    # an unreadable list or more than one such group creates nothing (R1, R5).
+    # By display name (ADR-0046 decision 11): az ad group list --display-name sends
+    # startswith(displayName,'<name>') to Microsoft Graph, so each listed name starts with the name
+    # under Graph's own comparison, and a listed name with as many code points (jq length) is the
+    # name. No name is compared here, as in ClaudeInstallResume.ps1. One such group with an id is
+    # reused; none (longer names only) is absent. A failed read, output that is not a JSON list of
+    # groups, a name that is not text, or a group of that length without an id, or more than one,
+    # creates nothing (R1, R5).
     ckpt_az_read_ '' ad group list --display-name "$name" -o json
     [ "$AZ_VERDICT" = "present" ] || ckpt_refuse_ "Entra group '$name' could not be looked up by name ($AZ_DETAIL), so it is neither reused nor created. Nothing was changed by this step. Resume: $resume"
-    if ! obj="$(printf '%s' "$AZ_OUT" | ckpt_jq_ -r --arg n "$name" '[.[] | select(((.displayName // "") | ascii_downcase) == ($n | ascii_downcase) and (.id // "") != "") | .id] | "\(length) \(join(", "))"' 2>/dev/null)" || [ -z "$obj" ]; then
-      ckpt_refuse_ "Entra group '$name' could not be looked up by name (the group list is not JSON), so it is neither reused nor created. Nothing was changed by this step. Resume: $resume"
+    if ! obj="$(printf '%s' "$AZ_OUT" | ckpt_jq_ -s -r --arg n "$name" '
+        if length != 1 or (.[0] | type) != "array" then error("not a list") else .[0] end
+        | if any(.[]; . != null and type != "object") then error("not a list of groups") else . end
+        | if any(.[]; . != null and .displayName != null and (.displayName | type) != "string") then error("a name is not text") else . end
+        | [.[] | select(. != null and (.displayName | type) == "string" and (.displayName | length) == ($n | length))]
+        | [.[] | if (.id | type) == "string" and .id != "" then .id else "?" end] as $ids
+        | if length > 1 then "inconclusive \(length) groups have a name of that length: \($ids | join(", "))"
+          elif length == 1 and $ids[0] == "?" then "inconclusive the group with a name of that length has no id"
+          elif length == 1 then "present \($ids[0])"
+          else "absent" end' 2>/dev/null)" || [ -z "$obj" ]; then
+      ckpt_refuse_ "Entra group '$name' could not be looked up by name (the group list is not a JSON list of groups), so it is neither reused nor created. Nothing was changed by this step. Resume: $resume"
     fi
     case "$obj" in
-      "0 "*) ;;
-      "1 "*)
+      absent) ;;
+      "present "*)
         ok_ "$name exists"
-        made="$made$(ckpt_jq_ -cn --arg r "$role" --arg n "$name" --arg i "${obj#1 }" '{role: $r, displayName: $n, id: $i, origin: "pre-existing", createdUtc: null}')
+        made="$made$(ckpt_jq_ -cn --arg r "$role" --arg n "$name" --arg i "${obj#present }" '{role: $r, displayName: $n, id: $i, origin: "pre-existing", createdUtc: null}')
 "
         continue ;;
-      *) ckpt_refuse_ "Entra group '$name' could not be looked up by name (${obj%% *} groups have that name: ${obj#* }), so it is neither reused nor created. Nothing was changed by this step. Resume: $resume" ;;
+      *) ckpt_refuse_ "Entra group '$name' could not be looked up by name (${obj#inconclusive }), so it is neither reused nor created. Nothing was changed by this step. Resume: $resume" ;;
     esac
     ckpt_az_read_ '' ad group create --display-name "$name" --mail-nickname "$name" --query id -o tsv
     if [ "$AZ_VERDICT" = "present" ] && [ -n "$AZ_OUT" ]; then
