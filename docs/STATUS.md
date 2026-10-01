@@ -98,6 +98,11 @@ Round 14 addendum mutation validation, 2026-10-01:
 - Validation reused the current guide code checks: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS with 635 checks; `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS with 896 checks in 324.89 s using isolated `AZURE_CONFIG_DIR`; `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS with 34 checks in 9.93 s and `Documentation references hold: 43 guides; all mutations caught.` No live Azure command ran.
 - Addendum mutations run: m33 stale resolver params caught yes; m36 live role scope comparison removed caught yes; m37 live role principal comparison removed caught yes; m40 init error-text guard removed caught yes; m41 init-failure refusal continued caught yes; m42 finalize-failure refusal continued caught yes; m44 Section 7 optional sentence removed caught yes; m45 second identity-refusal stderr line caught yes; m46 Basic v2 resolver sentence removed caught yes; m26 literal asterisk header caught yes with stable count.
 
+Round 15 Key Vault teardown mutation validation, 2026-10-01:
+- Added Key Vault role teardown mismatch scenarios for live id, scope, role name and principal, mirroring the Foundry role field checks.
+- Validation: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS with 647 checks; `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS with 34 checks in 9.60 s and `Documentation references hold: 43 guides; all mutations caught.` No live Azure command ran.
+- Mutations run: m47 Key Vault live-role scope comparison removed caught yes (645 pass, 2 fail, 647 total); m48 Key Vault live-role principal comparison removed caught yes (646 pass, 1 fail, 647 total). m33 was equivalent and unchanged.
+
 
 ## P71 follow-up: a lookup starts one refresh, 2026-09-30
 
