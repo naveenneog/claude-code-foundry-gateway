@@ -8,7 +8,8 @@
  * path with the projection, and a difference in code would read as drift.
  */
 
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { toEntitlement } from '../../resolver/src/entitlement.mjs';
 
 export const TIERS_BY_PRECEDENCE = ['premium', 'standard'];
 export const MAX_PROJECTION_AGE_SECONDS = 7200;
@@ -282,6 +283,10 @@ export function evaluateProjectionAdmission({
     now,
   });
   if (!evidence) return refuse('admission must read live entitlement records, not only status history');
+  if (evidence.invalidCount > 0) {
+    const samples = (evidence.invalidSamples ?? []).map((s) => s.oidHash).filter(Boolean).join(', ');
+    return refuse(`${evidence.invalidCount} live entitlement record(s) would be refused by the resolver${samples ? `; oid-sha256 samples: ${samples}` : ''}`);
+  }
   if (evidence.olderActiveCount > 0) {
     return refuse(`${evidence.olderActiveCount} live entitlement record(s) still carry an older generation`);
   }
@@ -314,12 +319,18 @@ export function evaluateProjectionAdmission({
 export function summarizeEntitlementEvidence(records, { tenantId, latestGeneration, now = new Date() } = {}) {
   if (!Array.isArray(records)) return null;
   const nowSeconds = Math.floor(now.getTime() / 1000);
-  const live = records.filter((r) => !isStatusRecord(r) && (!tenantId || r.tenantId === tenantId) &&
-    Number.isInteger(r.expiresAt) && r.expiresAt > nowSeconds);
+  const live = records.filter((r) => !isStatusRecord(r) &&
+    (Number.isInteger(r.expiresAt) ? r.expiresAt > nowSeconds : r.expiresAt !== undefined));
   const memberCounts = {};
   let olderActiveCount = 0;
   let oldestExpiresAt = Infinity;
+  const invalid = [];
   for (const record of live) {
+    const verdict = toEntitlement(record, { tenantId, now });
+    if (!verdict.ok) {
+      invalid.push({ oid: record.oid ?? record.id ?? '', status: verdict.status, reason: verdict.reason });
+      continue;
+    }
     memberCounts[record.tier] = (memberCounts[record.tier] ?? 0) + 1;
     if (record.reconciliationGeneration !== latestGeneration) olderActiveCount++;
     if (record.expiresAt < oldestExpiresAt) oldestExpiresAt = record.expiresAt;
@@ -329,8 +340,14 @@ export function summarizeEntitlementEvidence(records, { tenantId, latestGenerati
     oldestExpiresAt: Number.isFinite(oldestExpiresAt) ? oldestExpiresAt : null,
     latestGeneration,
     olderActiveCount,
+    invalidCount: invalid.length,
+    invalidSamples: invalid.slice(0, 3).map((r) => ({ oidHash: digest(r.oid), status: r.status })),
     memberCounts: normalizeCounts(memberCounts),
   };
+}
+
+function digest(value) {
+  return createHash('sha256').update(String(value)).digest('hex').slice(0, 12);
 }
 
 function normalizeCounts(counts) {

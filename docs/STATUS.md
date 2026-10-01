@@ -37,7 +37,16 @@ RED will add offline tests before implementation for the Node renewal/status pat
 U56 is the design target for this packet: ARM cron, bindings, digest and one succeeded execution are not admission evidence (`docs/UNKNOWNS.md:96`). P86 will close the offline part by proving destination-bound status, history, dry-run rejection and switch admission tests. U17 remains open for live positive Graph consent in a tenant where an administrator grants `GroupMember.Read.All`; this round can prove the tenant-admin commands and the denied path, not a successful customer-tenant Graph read (`docs/UNKNOWNS.md:26`).
 
 
-### Council round 1 and round 2 fixes
+
+### Council round 2 and round 3 fixes
+
+Council round 2 on `f5941c4` blocked all five seats on two remaining defects. Admission counted unexpired records the resolver would refuse, because the admission aggregate selected only a subset of fields and did not apply resolver validation. The guided-flow test also asserted only the runner resource group and stopped before the guarded `entitlement-source` write, so it did not prove the gateway target.
+
+RED added a resolver/admission parity table for valid standard, valid premium, unknown tier, missing tenant, malformed expiry, wrong tenant and older generation records. It also changed the good-evidence flow test to satisfy the snapshot guard and reach the stubbed named-value write. Before GREEN, `npm --prefix sync test` failed the new parity/live-record tests and the flow test would not prove the gateway write.
+
+GREEN imports the resolver's `toEntitlement` validation into admission evidence summarization and `check-admission.mjs` now selects every field that validation needs. Invalid unexpired records refuse admission with a count and up to three SHA-256 oid samples, never raw identity mappings. The flow test now reaches the stubbed `Set-ApimNamedValue` call and asserts `rg-p84` plus `apim-p84` are the switch target.
+
+Round 3 negative detector pairs were broken and restored: invalid live records accepted, admission not using resolver validation, and flow switch target drift. Each mutation failed its targeted suite and passed after restoration.### Council round 1 and round 2 fixes
 
 Council round 1 on `615051b` blocked all five seats on two defects. First, admission trusted self-reported status freshness: a fresh status history with old real entitlement records could pass. Second, guided Entitlement used `$target` before assignment in the projection switch path, and the existing Core test stopped earlier on missing evidence.
 

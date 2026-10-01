@@ -134,13 +134,15 @@ $discoveryGood=[pscustomobject]@{
     }
 }
 $planGood=Get-ClaudeFlowStepPlan -Record $record -Discovery $discoveryGood
+$planGood.Data.SnapshotPath = Join-Path ([IO.Path]::GetTempPath()) 'p86-flow-good-snapshot.json'
+$planGood.Data.SnapshotTaken = $true
 Reset-ProjectionFixture
 $FixtureJob.properties.template.containers[0].image='example.invalid/projection@sha256:' + ('a' * 64)
 $FixtureJob.properties.template.containers[0].command=@()
 $FixtureJob.properties.template.containers[0].args=@()
 Capture { Invoke-ClaudeFlowStep -Record $record -Plan $planGood }
 Assert 'real Entitlement good evidence reaches admission with the plan target resource group' (($FixtureCalls -join "`n") -match 'az container exec -g rg-p84 -n aci-projtest-p84fixture')
-Assert 'real Entitlement good evidence reaches admission before the snapshot write guard' ($Failure -and $Output -match 'snapshot path' -and ($FixtureCalls -join "`n") -notmatch 'az container exec -g\\s+-n')
+Assert 'real Entitlement good evidence writes only the plan gateway named value' (-not $Failure -and ($FixtureCalls -join "`n") -match 'az apim nv update -g rg-p84 --service-name apim-p84 --named-value-id entitlement-source --value projection')
 
 $goodJob = $FixtureJob | ConvertTo-Json -Depth 20 | ConvertFrom-Json
 $goodJob.properties.template.containers[0].image = 'example.invalid/projection@sha256:' + ('a' * 64)

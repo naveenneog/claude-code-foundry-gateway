@@ -52,10 +52,8 @@ while (it.hasMoreResults()) {
 }
 
 const entitlementQuery = {
-  query: "SELECT c.oid, c.tenantId, c.tier, c.reconciliationGeneration, c.expiresAt FROM c WHERE (NOT IS_DEFINED(c.type) OR c.type != 'projection-reconciliation-status') AND c.tenantId = @tenantId",
-  parameters: [
-    { name: '@tenantId', value: tenantId },
-  ],
+  query: "SELECT c.id, c.oid, c.tenantId, c.tier, c.businessUnit, c.mappingVersion, c.effectiveFrom, c.reconciliationGeneration, c.lastVerifiedAt, c.expiresAt FROM c WHERE NOT IS_DEFINED(c.type) OR c.type != 'projection-reconciliation-status'",
+  parameters: [],
 };
 const entitlementRecords = [];
 const entitlementIterator = container.items.query(entitlementQuery, { maxItemCount: 1000 });
