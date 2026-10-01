@@ -40,6 +40,14 @@ function Get-PortalBody([string]$PartBody, [int]$Part) {
     return ''
 }
 
+function Get-PortalStepTitles([string]$PortalBody) {
+    @([regex]::Matches($PortalBody, '(?m)^\d+\. \*\*(.*?)\.\*\*') | ForEach-Object { $_.Groups[1].Value })
+}
+
+function Get-CodeFenceText([string]$Markdown) {
+    @([regex]::Matches($Markdown, '(?ms)^```(?:bash|powershell)?\r?\n(.*?)^```') | ForEach-Object { $_.Groups[1].Value }) -join "`n"
+}
+
 function ConvertTo-RepoPath([string]$MarkdownPath) {
     $withoutAnchor = ($MarkdownPath -replace '#.*$', '')
     if (-not $withoutAnchor) { return $null }
@@ -60,19 +68,97 @@ function Load-Spec([string]$RelativePath) {
 Write-Host 'Azure CLI portal guide contract' -ForegroundColor Cyan
 $markdown = Read-Text $GuidePath
 
+$expectedPortalSteps = [ordered]@{
+    '1' = @(
+        'Set the subscription and confirm the signed-in tenant'
+        'Register the resource providers'
+        'Discover the Foundry account and Claude deployments'
+        'List deployable Claude models when no deployment exists'
+        'Check the operator roles without changing them'
+    )
+    '2' = @(
+        'Create the resource group'
+        'Validate the gateway template before deployment'
+        'Deploy the gateway template'
+        'Read back the deployment outputs'
+        'Read policy deployment state'
+        'Write and read back one named value'
+        'Review template-created gateway diagnostics'
+    )
+    '3' = @(
+        'Read the gateway identity and Foundry scope'
+        'Enable a missing system-assigned identity before deployment reuses APIM'
+        'Grant `Cognitive Services User` to the APIM managed identity when the list above is empty'
+    )
+    '4' = @(
+        'Set tier limits, organisation ceiling, per-minute calls and model allow lists'
+        'Set entitlement source and resolver placeholders for the named-value path'
+        'Verify the authorization and budget named values that the template initialized'
+    )
+    '5' = @(
+        'Create or discover the two tier groups'
+        'Read transitive members from Microsoft Graph as users and service principals'
+        'Publish the entitlement lists to APIM named values'
+        'Add one developer to a tier and publish'
+        'Remove one developer from both tiers and publish'
+    )
+    '6' = @(
+        'List the two tiers'
+        'Change one tier''s model list and limits'
+        'Set one person''s daily token budget'
+        'Clear that person''s daily token budget'
+        'Review Foundry deployments before adding a model'
+        'Deploy a new Claude model through ARM when Azure requires Anthropic provider data'
+        'Add the deployed model to tiers and record prices'
+    )
+    '7' = @(
+        'Create or discover the Desktop public-client app'
+        'Configure Desktop redirect URIs'
+        'Configure API permissions if tenant policy requires review'
+        'Publish the Desktop audience to APIM'
+    )
+    '8' = @(
+        'Write the developer handover file'
+    )
+    '9' = @(
+        'Review the current gateway hostnames before binding a company address'
+        'Validate a Key Vault certificate and grant APIM access'
+        'Patch APIM hostname configurations and prove TLS before publishing the handover URL'
+    )
+    '10' = @(
+        'Run read-only preflight checks before any projection write'
+        'Create the resolver app registration as a tenant-admin step'
+        'Deploy private projection storage and networking'
+        'Deploy the resolver with Standard v2 outbound VNet integration and upload code'
+        'Set resolver named values without switching entitlement'
+        'Populate and compare the projection through an in-VNet runner container'
+    )
+    '11' = @(
+        'Resolve the gateway URL and run an entitled request'
+        'Verify non-entitled, model-refusal, bypass-audit and call-ceiling behavior'
+        'Review gateway diagnostic settings and Log Analytics tables'
+    )
+    '12' = @(
+        'Delete the gateway resource group after external receipts are reviewed'
+        'Review soft-deleted APIM instances before name reuse'
+        'Delete receipt-created external objects'
+    )
+}
+
 for ($part = 1; $part -le 12; $part++) {
     $body = Get-PartBody $markdown $part
     Assert "part $part exists" ($body.Length -gt 0) "part=$part"
     $portalHeadingCount = @([regex]::Matches($body, "(?m)^### Part $part in the portal\s*$")).Count
     Assert "part $part has exactly one portal subsection" ($portalHeadingCount -eq 1) "count=$portalHeadingCount"
     $portal = Get-PortalBody $body $part
-    $numbered = @([regex]::Matches($portal, '(?m)^\d+\. \*\*')).Count
-    if ($part -eq 8) {
-        Assert 'part 8 documents no portal equivalent' ($portal -match '(?i)No portal equivalent') 'part=8'
+    $titles = @(Get-PortalStepTitles $portal)
+    $expectedTitles = @($expectedPortalSteps[[string]$part])
+    Assert "part $part portal step count is fixed" ($titles.Count -eq $expectedTitles.Count) "actual=$($titles.Count) expected=$($expectedTitles.Count)"
+    for ($i = 0; $i -lt $expectedTitles.Count; $i++) {
+        $actualTitle = if ($i -lt $titles.Count) { $titles[$i] } else { '<missing>' }
+        Assert "part $part portal step $($i + 1) title is ordered" ($actualTitle -eq $expectedTitles[$i]) "actual=$actualTitle expected=$($expectedTitles[$i])"
     }
-    else {
-        Assert "part $part portal subsection has a numbered step" ($numbered -ge 1) "count=$numbered"
-    }
+    Assert 'part 8 documents no portal equivalent' (($part -ne 8) -or ($portal -match '(?i)No portal equivalent')) 'part=8'
     $changeLaterCount = @([regex]::Matches($portal, '(?m)^\*\*Change later\.\*\*')).Count
     Assert "part $part has exactly one portal Change later paragraph" ($changeLaterCount -eq 1) "count=$changeLaterCount"
 }
@@ -90,7 +176,6 @@ $duplicateParagraphs = @(
 )
 Assert 'no duplicate prose paragraphs of 80+ chars outside fenced blocks' ($duplicateParagraphs.Count -eq 0) ($duplicateParagraphs -join ' || ')
 
-$imageMatches = @([regex]::Matches($markdown, '!\[[^\]]+\]\(([^)]+\.png)\)'))
 $captureDoc = Read-Text $CapturePath | ConvertFrom-Json
 $recordsByOutput = @{}
 foreach ($record in $captureDoc.captures) {
@@ -100,28 +185,64 @@ $recordsById = @{}
 foreach ($record in $captureDoc.captures) {
     $recordsById[$record.id] = $record
 }
-$captionMatches = @([regex]::Matches($markdown, 'Capture id:\s+`([^`]+)`\.'))
-$captionIds = @($captionMatches | ForEach-Object { $_.Groups[1].Value })
-
-foreach ($match in $imageMatches) {
-    $relative = $match.Groups[1].Value
-    $file = ConvertTo-RepoPath $relative
-    $repoOutput = (Resolve-Path -LiteralPath $file -ErrorAction SilentlyContinue)
-    Assert "image resolves: $relative" ($null -ne $repoOutput) $relative
-    if (-not $repoOutput) { continue }
-    $output = [IO.Path]::GetRelativePath($root, $repoOutput.Path).Replace('\', '/')
-    $record = $recordsByOutput[$output]
-    Assert "image has portal capture record: $output" ($null -ne $record) $output
-    if ($record) {
-        Assert "record is live and redacted: $output" ([bool]$record.live -and [bool]$record.redaction.applied -and [bool]$record.redaction.leak_check_passed) $record.id
-        $sha = (Get-FileHash -LiteralPath $repoOutput.Path -Algorithm SHA256).Hash.ToLowerInvariant()
-        Assert "record sha256 matches file: $output" ($sha -eq $record.sha256) "$sha != $($record.sha256)"
-        Assert "caption id matches record id: $output" ($captionIds -contains $record.id) $record.id
-    }
+$expectedLiveCaptureIds = @(
+    'architecture-foundry-overview'
+    'architecture-foundry-access'
+    'gateway-overview'
+    'p54-apim-network'
+    'docs-review-api-settings'
+    'docs-review-api-policy'
+    'docs-review-gateway-diagnostics'
+    'gateway-identity'
+    'docs-review-gateway-identity'
+    'docs-review-foundry-iam'
+    'gateway-named-values'
+    'docs-review-entra-groups'
+    'docs-review-daily-quota-editor'
+    'p54-vault-certificate'
+    'p54-vault-role'
+    'docs-review-cosmos-networking'
+    'p54-private-endpoint'
+    'p54-private-dns'
+    'architecture-projection-networking'
+    'docs-review-resolver-authentication'
+    'docs-review-resolver-networking'
+    'docs-review-workspace-tables'
+    'docs-review-workspace-functions'
+    'docs-review-workspace-workbooks'
+)
+$imageCaptionMatches = @([regex]::Matches($markdown, '(?ms)!\[[^\]]+\]\(([^)]+\.png)\)\s*\r?\n\s*\r?\nCapture id:\s+`([^`]+)`\.'))
+$imagesByCaption = @{}
+foreach ($match in $imageCaptionMatches) {
+    $imagesByCaption[$match.Groups[2].Value] = $match.Groups[1].Value
 }
-
-foreach ($captionId in $captionIds) {
-    Assert "caption id exists in capture inventory: $captionId" ($recordsById.ContainsKey($captionId)) $captionId
+$captionIds = @([regex]::Matches($markdown, 'Capture id:\s+`([^`]+)`\.') | ForEach-Object { $_.Groups[1].Value } | Sort-Object)
+$expectedLiveCaptionIds = @($expectedLiveCaptureIds + @('architecture-foundry-access', 'docs-review-gateway-diagnostics') | Sort-Object)
+Assert 'live capture captions match the fixed expected set' (($captionIds -join "`n") -eq ($expectedLiveCaptionIds -join "`n")) "actual=$($captionIds -join ', ') expected=$($expectedLiveCaptionIds -join ', ')"
+foreach ($expectedId in $expectedLiveCaptureIds) {
+    Assert "expected live capture is referenced: $expectedId" ($captionIds -contains $expectedId) $expectedId
+    $relative = if ($imagesByCaption.ContainsKey($expectedId)) { $imagesByCaption[$expectedId] } else { '' }
+    Assert "expected live capture has an image: $expectedId" ($relative.Length -gt 0) $expectedId
+    $file = if ($relative) { ConvertTo-RepoPath $relative } else { Join-Path $root '__missing__.png' }
+    $repoOutput = (Resolve-Path -LiteralPath $file -ErrorAction SilentlyContinue)
+    Assert "image resolves for capture: $expectedId" ($null -ne $repoOutput) $relative
+    $output = if ($repoOutput) { [IO.Path]::GetRelativePath($root, $repoOutput.Path).Replace('\', '/') } else { '' }
+    $record = if ($output) { $recordsByOutput[$output] } else { $null }
+    Assert "image has portal capture record: $expectedId" ($null -ne $record) $output
+    $recordOk = $false
+    $shaOk = $false
+    $recordId = ''
+    if ($record) {
+        $recordId = $record.id
+        $recordOk = [bool]$record.live -and [bool]$record.redaction.applied -and [bool]$record.redaction.leak_check_passed
+        if ($repoOutput) {
+            $sha = (Get-FileHash -LiteralPath $repoOutput.Path -Algorithm SHA256).Hash.ToLowerInvariant()
+            $shaOk = $sha -eq $record.sha256
+        }
+    }
+    Assert "record is live and redacted: $expectedId" $recordOk $recordId
+    Assert "record sha256 matches file: $expectedId" $shaOk $output
+    Assert "caption id matches record id: $expectedId" ($recordId -eq $expectedId) $recordId
 }
 
 $pendingMatch = [regex]::Match($markdown, '(?ms)^## Pending portal captures.*?(?<table>\| planned capture id \| output path under `docs/guide/` \| spec file \| blade \| which step it illustrates \| what must exist live \| capture discovery kind \|\s*\r?\n\|[- |`]+\|\s*\r?\n(?<rows>(?:\|.*\|\s*\r?\n)+))')
@@ -141,15 +262,33 @@ if ($pendingMatch.Success) {
     }
 }
 
+$allSpecPairs = @()
 $specCache = @{}
-foreach ($item in $pending) {
-    if (-not $specCache.ContainsKey($item.specFile)) {
-        $specCache[$item.specFile] = Load-Spec $item.specFile
+foreach ($specFile in @('guide/captures-pending/p90.json', 'guide/captures/p60.json')) {
+    if (-not $specCache.ContainsKey($specFile)) {
+        $specCache[$specFile] = Load-Spec $specFile
     }
-    $match = @($specCache[$item.specFile].steps | Where-Object { $_.id -eq $item.id -and $_.output -eq $item.output })
-    Assert "pending row exists in named spec: $($item.id)" ($match.Count -eq 1) "$($item.specFile) $($item.output)"
+    foreach ($step in @($specCache[$specFile].steps)) {
+        $allSpecPairs += [pscustomobject]@{
+            id = $step.id
+            output = $step.output
+            specFile = $specFile
+        }
+    }
+}
+
+$pendingPairs = @($pending | ForEach-Object { "$($_.id)|$($_.output)|$($_.specFile)" } | Sort-Object)
+$specPairs = @($allSpecPairs | ForEach-Object { "$($_.id)|$($_.output)|$($_.specFile)" } | Sort-Object)
+Assert 'pending table matches every staged spec row in both directions' (($pendingPairs -join "`n") -eq ($specPairs -join "`n")) "table=$($pendingPairs -join ', ') spec=$($specPairs -join ', ')"
+foreach ($item in $allSpecPairs) {
+    $row = @($pending | Where-Object { $_.id -eq $item.id -and $_.output -eq $item.output -and $_.specFile -eq $item.specFile })
+    Assert "pending row exists in table for spec step: $($item.id)" ($row.Count -eq 1) "$($item.specFile) $($item.output)"
     Assert "pending output is not already present: $($item.output)" (-not (Test-Path -LiteralPath (Join-Path $root ($item.output -replace '/', '\')) -PathType Leaf)) $item.output
 }
+
+$pendingIdsInBody = @([regex]::Matches($markdown, 'Pending capture id:\s+`([^`]+)`\.') | ForEach-Object { $_.Groups[1].Value } | Sort-Object)
+$pendingIdsInTable = @($pending | ForEach-Object { $_.id } | Sort-Object)
+Assert 'every body pending capture id has one pending table row' (($pendingIdsInBody -join "`n") -eq ($pendingIdsInTable -join "`n")) "body=$($pendingIdsInBody -join ', ') table=$($pendingIdsInTable -join ', ')"
 
 Assert 'staged pending capture spec exists' (Test-Path -LiteralPath $SpecPath -PathType Leaf) $SpecPath
 $spec = $null
@@ -204,6 +343,40 @@ if ($overview.Success) {
     $partList = @($parts | Sort-Object) -join ','
     Assert 'overview table has one row per part, 1-12' ($partList -eq '1,2,3,4,5,6,7,8,9,10,11,12') ($parts -join ',')
 }
+
+$part7Body = Get-PartBody $markdown 7
+$part7Portal = Get-PortalBody $part7Body 7
+$part7Code = Get-CodeFenceText $part7Body
+$commandRedirectUris = @([regex]::Matches($part7Code, '(?<![A-Za-z0-9+.-])(https?://[^"\s]+|ms-appx-web://[^"\s]+|msauth\.[^"\s]+://[^"\s]+)') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+$portalRedirectUris = @([regex]::Matches($part7Portal, '`(https?://[^`\s;,)]+|ms-appx-web://[^`\s;,)]+|msauth\.[^`\s;,)]+://[^`\s;,)]+)`') | ForEach-Object { $_.Groups[1].Value.TrimEnd('.') } | Sort-Object -Unique)
+Assert 'part 7 portal redirect URI literals match the bash block' (($portalRedirectUris -join "`n") -eq ($commandRedirectUris -join "`n")) "portal=$($portalRedirectUris -join ', ') command=$($commandRedirectUris -join ', ')"
+Assert 'part 7 portal does not use localhost redirect shorthand' (-not ($part7Portal -match 'http://localhost(\b|/)'))
+Assert 'part 7 broker redirect URIs are conditional' (($part7Portal -match 'DESKTOP_SIGN_IN_FLOW') -and ($part7Portal -match '\bbroker\b')) 'DESKTOP_SIGN_IN_FLOW broker'
+
+$audienceWrite = [regex]::Match($part7Code, 'az apim nv update[^\r\n]+--named-value-id external-idp-extra-audience[^\r\n]+--value "\$([A-Z][A-Z0-9_]*)"')
+$audienceVariable = if ($audienceWrite.Success) { $audienceWrite.Groups[1].Value } else { '' }
+Assert 'part 7 bash writes a Desktop audience variable' ($audienceVariable.Length -gt 0)
+Assert 'part 7 portal audience variable equals the bash write variable' ($part7Portal -match [regex]::Escape("`$$audienceVariable")) "expected=`$$audienceVariable"
+Assert 'part 7 portal does not publish the disabled audience sentinel variable' (-not ($part7Portal -match '\$DESKTOP_EXTRA_AUDIENCE'))
+
+$allCode = Get-CodeFenceText $markdown
+$definedVariables = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+foreach ($match in [regex]::Matches($allCode, '(?m)(?:^|[;\s])(?:export\s+)?([A-Z][A-Z0-9_]*)=')) {
+    [void]$definedVariables.Add($match.Groups[1].Value)
+}
+$allowedPendingVariables = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+[void]$allowedPendingVariables.Add('DESKTOP_SIGN_IN_FLOW')
+$portalUndefined = [System.Collections.Generic.SortedSet[string]]::new([StringComparer]::Ordinal)
+for ($part = 1; $part -le 12; $part++) {
+    $portal = Get-PortalBody (Get-PartBody $markdown $part) $part
+    foreach ($match in [regex]::Matches($portal, '\$([A-Z][A-Z0-9_]*)')) {
+        $name = $match.Groups[1].Value
+        if (-not $definedVariables.Contains($name) -and -not $allowedPendingVariables.Contains($name)) {
+            [void]$portalUndefined.Add($name)
+        }
+    }
+}
+Assert 'every portal variable is defined in a bash block or declared pending' ($portalUndefined.Count -eq 0) ($portalUndefined -join ', ')
 
 if ($script:fail) {
     Write-Host "Azure CLI portal guide contract failed: $script:fail check(s)." -ForegroundColor Red
