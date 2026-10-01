@@ -12,6 +12,9 @@ import { randomUUID } from 'node:crypto';
 
 export const TIERS_BY_PRECEDENCE = ['premium', 'standard'];
 export const MAX_PROJECTION_AGE_SECONDS = 7200;
+export const STATUS_RECORD_TYPE = 'projection-reconciliation-status';
+export const STATUS_PARTITION_PREFIX = 'projection-status::';
+export const STATUS_TTL_SECONDS = 21600;
 
 export function createReconciliation({ verifiedAt, now = new Date(), maxAgeSeconds = MAX_PROJECTION_AGE_SECONDS } = {}) {
   const start = new Date(verifiedAt).getTime();
@@ -88,7 +91,9 @@ export function planChanges(resolved, existing, { allowEmpty = false, keepOrphan
     }
     toWrite.push(r);
   }
-  const orphans = [...existing.keys()].filter((oid) => !wanted.has(oid));
+  const orphans = [...existing.entries()]
+    .filter(([oid, doc]) => !wanted.has(oid) && !isStatusRecord({ id: oid, oid, ...doc }))
+    .map(([oid]) => oid);
   return {
     refused: false,
     toWrite,
@@ -116,6 +121,71 @@ export function toDocument(r, { tenantId, mappingVersion, reconciliation }) {
   };
 }
 
+export function statusPartitionKey(tenantId) {
+  if (!GUID.test(tenantId ?? '')) throw new Error('tenantId is not a guid');
+  return `${STATUS_PARTITION_PREFIX}${tenantId}`;
+}
+
+export function isStatusPartitionKey(value) {
+  return typeof value === 'string' && value.startsWith(STATUS_PARTITION_PREFIX) && !GUID.test(value);
+}
+
+export function isStatusRecord(doc) {
+  return Boolean(doc) && (
+    doc.type === STATUS_RECORD_TYPE ||
+    isStatusPartitionKey(doc.oid) ||
+    (typeof doc.id === 'string' && doc.id.startsWith(STATUS_PARTITION_PREFIX))
+  );
+}
+
+export function toStatusDocument({
+  tenantId,
+  accountResourceId,
+  databaseName,
+  containerName,
+  runId,
+  imageDigest,
+  entrypoint,
+  command = [],
+  dryRun = false,
+  commandOverride = false,
+  memberCounts = {},
+  writeCounts = {},
+  oldestExpiresAt,
+  reconciliation,
+  startedAt,
+  finishedAt,
+}) {
+  if (!reconciliation || !GUID.test(reconciliation.reconciliationGeneration ?? '')) {
+    throw new Error('status requires a reconciliation generation');
+  }
+  const oid = statusPartitionKey(tenantId);
+  return {
+    id: `${oid}::${reconciliation.reconciliationGeneration}`,
+    oid,
+    type: STATUS_RECORD_TYPE,
+    ttl: STATUS_TTL_SECONDS,
+    tenantId,
+    accountResourceId,
+    databaseName,
+    containerName,
+    runId,
+    imageDigest,
+    entrypoint,
+    command,
+    dryRun: Boolean(dryRun),
+    commandOverride: Boolean(commandOverride),
+    memberCounts,
+    writeCounts,
+    oldestExpiresAt,
+    startedAt,
+    finishedAt,
+    reconciliationGeneration: reconciliation.reconciliationGeneration,
+    lastVerifiedAt: reconciliation.lastVerifiedAt,
+    expiresAt: reconciliation.expiresAt,
+  };
+}
+
 const GUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
 /**
@@ -138,6 +208,7 @@ export function compareWithGateway(gateway, records, { tenantId, now = new Date(
   const gwTier = (oid) => (premium.has(oid) ? 'premium' : standard.has(oid) ? 'standard' : 'denied');
   const byOid = new Map();
   for (const r of records) {
+    if (isStatusRecord(r)) continue;
     if (!tenantId || r.tenantId !== tenantId || freshnessProblems(r, now).length) continue;
     byOid.set(r.oid ?? r.id, r);
   }
@@ -152,6 +223,7 @@ export function compareWithGateway(gateway, records, { tenantId, now = new Date(
       differences.push({ oid, kind, gateway: now, projection: next });
       continue;
     }
+
     if (now !== 'denied') {
       const gu = units[oid] ?? '';
       const pu = rec?.businessUnit ?? '';
@@ -159,6 +231,62 @@ export function compareWithGateway(gateway, records, { tenantId, now = new Date(
     }
   }
   return { compared: all.size, differences };
+}
+
+export function evaluateProjectionAdmission({
+  statuses = [],
+  expected = {},
+  job = {},
+  now = new Date(),
+  minExpiryMarginSeconds = 3600,
+  maxNewestAgeSeconds = 2700,
+  historyWindowSeconds = 7200,
+} = {}) {
+  if (!expected.actionGroupResourceId && expected.actionGroupResourceId !== undefined) {
+    return refuse('missing action group; deploy alerts with email receivers before switching');
+  }
+  const image = job.image ?? '';
+  if (expected.imageDigest && image !== expected.imageDigest) {
+    return refuse('job image is not the tested pinned digest');
+  }
+  if ((job.command?.length ?? 0) || (job.args?.length ?? 0)) {
+    const text = [...(job.command ?? []), ...(job.args ?? [])].join(' ');
+    return refuse(/--whatif|--dry-run|whatif/i.test(text)
+      ? 'job definition contains a dry-run override'
+      : 'job definition contains a command or args override');
+  }
+  const expectedEntry = expected.entrypoint ?? '';
+  const cutoff = now.getTime() - historyWindowSeconds * 1000;
+  const valid = statuses
+    .filter(isStatusRecord)
+    .filter((s) => s.tenantId === expected.tenantId &&
+      s.accountResourceId === expected.accountResourceId &&
+      s.databaseName === expected.databaseName &&
+      s.containerName === expected.containerName)
+    .filter((s) => !s.dryRun && !s.commandOverride)
+    .filter((s) => !expected.imageDigest || s.imageDigest === expected.imageDigest)
+    .filter((s) => !expectedEntry || s.entrypoint === expectedEntry)
+    .filter((s) => Date.parse(s.finishedAt) >= cutoff)
+    .sort((a, b) => Date.parse(a.finishedAt) - Date.parse(b.finishedAt));
+  if (!valid.length) return refuse('no destination-bound Cosmos renewal evidence for this tenant and container');
+  const newest = valid.at(-1);
+  const newestAge = (now.getTime() - Date.parse(newest.finishedAt)) / 1000;
+  if (!Number.isFinite(newestAge) || newestAge > maxNewestAgeSeconds) {
+    return refuse('newest successful renewal is older than 45 minutes');
+  }
+  const oldestExpiry = Math.min(...valid.map((s) => Number(s.oldestExpiresAt)).filter(Number.isFinite));
+  if (!Number.isFinite(oldestExpiry) || oldestExpiry - Math.floor(now.getTime() / 1000) < minExpiryMarginSeconds) {
+    return refuse('oldest entitlement expiry has less than 60 minutes of margin');
+  }
+  const generations = [...new Set(valid.map((s) => s.reconciliationGeneration).filter(Boolean))];
+  if (generations.length < 3) {
+    return refuse('reconciliation generation has not advanced at least twice within two hours; wait about 60-90 minutes on the 30-minute schedule');
+  }
+  return { ok: true, newestFinishedAt: newest.finishedAt, oldestExpiresAt: oldestExpiry, generations: generations.length };
+}
+
+function refuse(reason) {
+  return { ok: false, reason, remedy: reason };
 }
 
 /**

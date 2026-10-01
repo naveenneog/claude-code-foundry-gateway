@@ -29,6 +29,12 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P86 scheduled projection renewal.** A 30-minute Container Apps renewal job,
+  tenant-admin Graph grant script, Cosmos status evidence, email-backed alerts
+  and evidence-gated switch admission replace P84's unconditional projection
+  refusal. Admission reads Cosmos through the in-VNet runner and separately
+  verifies the pinned no-override job definition; rollback to named values
+  remains available after refresh and comparison.
 - **Final P85 follow-up integration.** P71's owned-process deadline probes and
   precise public-evidence section lookup are merged without production changes.
   The single full AUM run passes all 1,200 cases; refreshed file and whole-check

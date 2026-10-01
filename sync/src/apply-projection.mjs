@@ -29,7 +29,7 @@
 import { readFileSync } from 'node:fs';
 import { CosmosClient } from '@azure/cosmos';
 import { DefaultAzureCredential } from '@azure/identity';
-import { mergeMembership, planChanges, toDocument, validateSnapshot, compareWithGateway, createReconciliation } from './plan.mjs';
+import { mergeMembership, planChanges, toDocument, toStatusDocument, validateSnapshot, compareWithGateway, createReconciliation } from './plan.mjs';
 import { resolveGroupId, getTransitiveMembers } from './graph.mjs';
 
 const argv = process.argv.slice(2);
@@ -86,10 +86,10 @@ async function resolveMembership() {
 
 async function readExisting(container) {
   const existing = new Map();
-  const iterator = container.items.query('SELECT c.id, c.tier, c.businessUnit FROM c', { maxItemCount: 1000 });
+  const iterator = container.items.query("SELECT c.id, c.tier, c.businessUnit, c.expiresAt FROM c WHERE NOT IS_DEFINED(c.type) OR c.type != 'projection-reconciliation-status'", { maxItemCount: 1000 });
   while (iterator.hasMoreResults()) {
     const { resources } = await iterator.fetchNext();
-    for (const d of resources ?? []) existing.set(d.id, { tier: d.tier, businessUnit: d.businessUnit ?? '' });
+    for (const d of resources ?? []) existing.set(d.id, { tier: d.tier, businessUnit: d.businessUnit ?? '', expiresAt: d.expiresAt });
   }
   return existing;
 }
@@ -141,7 +141,37 @@ const writes = await bulk(container, plan.toWrite.map((r) => ({
 })));
 const deletes = await bulk(container, plan.toDelete.map((oid) => ({ operationType: 'Delete', id: oid, partitionKey: oid })));
 const expired = reconciliation.expiresAt <= Math.floor(Date.now() / 1000);
-Object.assign(summary, { ok: !(writes.failed || deletes.failed), expired, written: writes.ok, writeFailed: writes.failed, deleted: deletes.ok, deleteFailed: deletes.failed, mappingVersion, ...reconciliation, seconds: (Date.now() - started) / 1000 });
+const writeCounts = { written: writes.ok, writeFailed: writes.failed, deleted: deletes.ok, deleteFailed: deletes.failed };
+Object.assign(summary, { ok: !(writes.failed || deletes.failed), expired, ...writeCounts, mappingVersion, ...reconciliation, seconds: (Date.now() - started) / 1000 });
 summary.ok = summary.ok && !expired;
+if (summary.ok) {
+  const retainedExpiries = [
+    ...plan.toWrite.map(() => reconciliation.expiresAt),
+    ...plan.keptOrphans.map((oid) => existing.get(oid)?.expiresAt).filter(Number.isFinite),
+  ];
+  const oldestExpiresAt = Math.min(...retainedExpiries);
+  const memberCounts = records.reduce((counts, r) => ({ ...counts, [r.tier]: (counts[r.tier] ?? 0) + 1 }), {});
+  const status = toStatusDocument({
+    tenantId,
+    accountResourceId: process.env.PROJECTION_ACCOUNT_RESOURCE_ID ?? '',
+    databaseName,
+    containerName,
+    runId: process.env.CONTAINER_APP_JOB_EXECUTION_NAME ?? process.env.PROJECTION_RUN_ID ?? `local-${started}`,
+    imageDigest: process.env.PROJECTION_IMAGE_DIGEST ?? '',
+    entrypoint: process.env.PROJECTION_ENTRYPOINT ?? 'node /app/sync/src/apply-projection.mjs',
+    command: process.argv.slice(1),
+    dryRun: whatIf,
+    commandOverride: Boolean(process.env.PROJECTION_COMMAND_OVERRIDE),
+    memberCounts,
+    writeCounts,
+    oldestExpiresAt: Number.isFinite(oldestExpiresAt) ? oldestExpiresAt : reconciliation.expiresAt,
+    reconciliation,
+    startedAt: new Date(started).toISOString(),
+    finishedAt: new Date().toISOString(),
+  });
+  const statusWrite = await bulk(container, [{ operationType: 'Upsert', partitionKey: status.oid, resourceBody: status }]);
+  Object.assign(summary, { statusWritten: statusWrite.ok, statusWriteFailed: statusWrite.failed, oldestExpiresAt: status.oldestExpiresAt });
+  summary.ok = statusWrite.failed === 0;
+}
 console.log(JSON.stringify(summary));
-process.exit(writes.failed || deletes.failed || expired ? 3 : 0);
+process.exit(summary.ok ? 0 : 3);

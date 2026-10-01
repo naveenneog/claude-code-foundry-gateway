@@ -66,3 +66,93 @@ test('migration comparison refuses an expired record rather than approving the f
   const r = plan.compareWithGateway({ standard: [oid] }, [{ ...doc, expiresAt: now.getTime() / 1000 }], { tenantId, now });
   assert.equal(r.differences[0]?.kind, 'would-lose-access');
 });
+
+test('status records use a non-guid partition and retain six hours of history', () => {
+  const status = plan.toStatusDocument({
+    tenantId,
+    accountResourceId: '/subscriptions/sub/resourceGroups/rg/providers/Microsoft.DocumentDB/databaseAccounts/cosmos',
+    databaseName: 'claude',
+    containerName: 'entitlement',
+    runId: 'run-1',
+    imageDigest: 'sha256:' + 'a'.repeat(64),
+    entrypoint: '/app/reconcile.mjs',
+    command: ['node', '/app/reconcile.mjs'],
+    memberCounts: { standard: 1 },
+    writeCounts: { written: 1 },
+    oldestExpiresAt: lease.expiresAt,
+    reconciliation: lease,
+    startedAt: '2026-09-24T11:00:00.000Z',
+    finishedAt: '2026-09-24T11:01:00.000Z',
+  });
+  assert.equal(status.id, `projection-status::${tenantId}::${lease.reconciliationGeneration}`);
+  assert.equal(status.oid, `projection-status::${tenantId}`);
+  assert.equal(status.type, 'projection-reconciliation-status');
+  assert.equal(status.ttl, 21600);
+  assert.equal(plan.isStatusRecord(status), true);
+  assert.equal(plan.isStatusPartitionKey(status.oid), true);
+  assert.equal(plan.isStatusPartitionKey(lease.reconciliationGeneration), false);
+});
+
+test('status records cannot be returned as entitlements by point read or comparison query paths', () => {
+  const status = {
+    id: `projection-status::${tenantId}::${lease.reconciliationGeneration}`,
+    oid: `projection-status::${tenantId}`,
+    type: 'projection-reconciliation-status',
+    tenantId,
+    tier: 'standard',
+    ...lease,
+  };
+  const point = toEntitlement(status, { tenantId, now });
+  assert.equal(point.ok, false);
+  assert.equal(point.status, 404);
+  const r = plan.compareWithGateway({ standard: [] }, [{ ...status }], { tenantId, now });
+  assert.equal(r.compared, 0);
+  assert.deepEqual(r.differences, []);
+});
+
+test('status records are never deleted as orphaned entitlement records', () => {
+  const statusPk = `projection-status::${tenantId}`;
+  const r = plan.planChanges([{ oid, tier: 'standard' }], new Map([
+    [oid, { tier: 'standard' }],
+    [statusPk, { type: 'projection-reconciliation-status' }],
+    ['33333333-3333-4333-8333-333333333333', { tier: 'premium' }],
+  ]), { refresh: true });
+  assert.deepEqual(r.toDelete, ['33333333-3333-4333-8333-333333333333']);
+});
+
+test('admission requires fresh destination evidence, two advances, tested image and no overrides', () => {
+  const baseStatus = {
+    type: 'projection-reconciliation-status',
+    tenantId,
+    accountResourceId: '/subscriptions/sub/resourceGroups/rg/providers/Microsoft.DocumentDB/databaseAccounts/cosmos',
+    databaseName: 'claude',
+    containerName: 'entitlement',
+    finishedAt: '2026-09-24T11:40:00.000Z',
+    oldestExpiresAt: Date.parse('2026-09-24T13:30:00Z') / 1000,
+    imageDigest: 'sha256:' + 'a'.repeat(64),
+    entrypoint: '/app/reconcile.mjs',
+    dryRun: false,
+    commandOverride: false,
+  };
+  const statuses = [
+    { ...baseStatus, reconciliationGeneration: '33333333-3333-4333-8333-333333333331', finishedAt: '2026-09-24T11:00:00.000Z' },
+    { ...baseStatus, reconciliationGeneration: '33333333-3333-4333-8333-333333333332', finishedAt: '2026-09-24T11:30:00.000Z' },
+    { ...baseStatus, reconciliationGeneration: '33333333-3333-4333-8333-333333333333' },
+  ];
+  const expected = {
+    tenantId,
+    accountResourceId: baseStatus.accountResourceId,
+    databaseName: 'claude',
+    containerName: 'entitlement',
+    imageDigest: baseStatus.imageDigest,
+    entrypoint: baseStatus.entrypoint,
+  };
+  const job = { image: baseStatus.imageDigest, command: [], args: [] };
+  assert.equal(plan.evaluateProjectionAdmission({ statuses, expected, job, now }).ok, true);
+  assert.match(plan.evaluateProjectionAdmission({ statuses: statuses.slice(2), expected, job, now }).reason, /advanced at least twice/);
+  assert.match(plan.evaluateProjectionAdmission({ statuses: statuses.map(s => ({ ...s, oldestExpiresAt: Date.parse('2026-09-24T12:50:00Z') / 1000 })), expected, job, now }).reason, /60 minute/);
+  assert.match(plan.evaluateProjectionAdmission({ statuses: statuses.map(s => ({ ...s, finishedAt: '2026-09-24T11:00:00.000Z' })), expected, job, now }).reason, /45 minute/);
+  assert.match(plan.evaluateProjectionAdmission({ statuses: statuses.map(s => ({ ...s, accountResourceId: '/wrong' })), expected, job, now }).reason, /destination/);
+  assert.match(plan.evaluateProjectionAdmission({ statuses, expected, job: { ...job, args: ['--whatif'] }, now }).reason, /override|dry-run/);
+  assert.match(plan.evaluateProjectionAdmission({ statuses, expected: { ...expected, actionGroupResourceId: '' }, job, now }).reason, /action group/);
+});

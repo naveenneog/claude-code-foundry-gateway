@@ -36,6 +36,15 @@ RED will add offline tests before implementation for the Node renewal/status pat
 
 U56 is the design target for this packet: ARM cron, bindings, digest and one succeeded execution are not admission evidence (`docs/UNKNOWNS.md:96`). P86 will close the offline part by proving destination-bound status, history, dry-run rejection and switch admission tests. U17 remains open for live positive Graph consent in a tenant where an administrator grants `GroupMember.Read.All`; this round can prove the tenant-admin commands and the denied path, not a successful customer-tenant Graph read (`docs/UNKNOWNS.md:26`).
 
+### RED and GREEN evidence
+
+RED added offline sync tests for status record shape, resolver exclusion on point-read/query paths, status preservation across generations and admission rejection for stale, missing, wrong-destination, dry-run/override, missing-action-group and single-generation evidence. Initial RED: `npm --prefix sync test` failed 4 of 36 tests because `toStatusDocument` and `evaluateProjectionAdmission` did not exist, status records could authorize through the resolver, and status records could be deleted as orphans.
+
+GREEN implements `sync/src/plan.mjs` status/admission helpers, `sync/src/apply-projection.mjs` status writes, `sync/src/check-admission.mjs` runner-side JSON evidence, resolver status filtering, `infra/projection-renewal.bicep`, `sync/Dockerfile`, `scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1`, and evidence-gated deployer/installer/flow switch paths. The P86 job defaults to 30 minutes, requires an email-backed action group, and refuses switch admission unless Cosmos evidence and the ARM job definition both pass.
+
+Negative detector pairs were broken and restored: status point-read authorization, two-generation-advance admission, 60-minute expiry-margin admission and ARM args override rejection each failed its targeted suite when mutated and passed after restoration.
+
+Validation on the restored tree: `npm --prefix sync test` passed 36/36; `npm --prefix resolver test` passed 14/14; `pwsh -NoProfile -File .\tests\Test-ProjectionInstaller.ps1` passed; `pwsh -NoProfile -File .\tests\Test-ProjectionCouncil.ps1 -Group Core` passed 74 assertions; `az bicep build --file infra\projection-network.bicep --stdout` and `az bicep build --file infra\projection-renewal.bicep --stdout` both exited 0 under the isolated `AZURE_CONFIG_DIR`.
 ## P71 follow-up: a lookup starts one refresh, 2026-09-30
 
 **Merged as `b5c2120` on 2026-09-30, as a follow-up to P71, which the owner approved.** Council
