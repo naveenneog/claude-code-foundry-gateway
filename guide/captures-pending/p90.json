@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "steps": [
+    {
+      "id": "p90-gateway-networking",
+      "output": "docs/guide/p90-gateway-networking.png",
+      "target": { "discover": "gateway", "selectionKey": "gateway" },
+      "blade": "/overview",
+      "waitFor": { "text": "Gateway URL" },
+      "clicks": [
+        { "text": "Deployment + infrastructure", "exact": true, "waitFor": { "text": "Network" } },
+        { "text": "Network", "exact": true, "waitFor": { "text": "Public network access" } }
+      ],
+      "settle": 1500,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "p90-desktop-app-overview",
+      "output": "docs/guide/p90-desktop-app-overview.png",
+      "target": { "discover": "entra-app", "nameFilterEnv": "P90_DESKTOP_APP_NAME", "selectionKey": "desktop-app" },
+      "entraBlade": { "kind": "app-registration", "name": "Overview" },
+      "waitFor": { "text": "Application (client) ID" },
+      "settle": 1500,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE", "people": true }
+    },
+    {
+      "id": "p90-desktop-app-authentication",
+      "output": "docs/guide/p90-desktop-app-authentication.png",
+      "target": { "discover": "entra-app", "nameFilterEnv": "P90_DESKTOP_APP_NAME", "selectionKey": "desktop-app" },
+      "entraBlade": { "kind": "app-registration", "name": "Authentication" },
+      "waitFor": { "text": "Redirect URIs" },
+      "settle": 1500,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE", "people": true }
+    },
+    {
+      "id": "p90-company-custom-domains",
+      "output": "docs/guide/p90-company-custom-domains.png",
+      "target": { "discover": "gateway", "selectionKey": "gateway" },
+      "blade": "/overview",
+      "waitFor": { "text": "Gateway URL" },
+      "clicks": [
+        { "text": "Deployment + infrastructure", "exact": true, "waitFor": { "text": "Custom domains" } },
+        { "text": "Custom domains", "exact": true, "waitFor": { "text": "Gateway" } }
+      ],
+      "settle": 1500,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "p90-gateway-diagnostic-settings",
+      "output": "docs/guide/p90-gateway-diagnostic-settings.png",
+      "target": { "discover": "gateway", "selectionKey": "gateway" },
+      "blade": "/overview",
+      "waitFor": { "text": "Gateway URL" },
+      "clicks": [
+        { "text": "Monitoring", "exact": true, "waitFor": { "text": "Diagnostic settings" } },
+        { "text": "Diagnostic settings", "exact": true, "waitFor": { "text": "Add diagnostic setting" } }
+      ],
+      "settle": 1500,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "p90-resource-group-delete",
+      "output": "docs/guide/p90-resource-group-delete.png",
+      "target": { "discover": "resource", "resourceType": "Microsoft.Resources/resourceGroups", "nameFilterEnv": "P90_GATEWAY_RG", "selectionKey": "gateway-rg" },
+      "blade": "/overview",
+      "waitFor": { "text": "Delete resource group" },
+      "settle": 1500,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    }
+  ]
+}

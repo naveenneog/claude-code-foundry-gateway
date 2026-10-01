@@ -29,6 +29,14 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P90 portal path for the Azure CLI setup guide.** `docs/AZ-COMMANDS.md`
+  now pairs each setup part and expected-result step with a portal blade path,
+  matching fields/buttons, change-later guidance and verified existing
+  screenshots where a redacted capture already exists. A pending-captures table
+  and `guide/captures-pending/p90.json` stage the remaining live captures
+  outside the loaded capture directory until their PNGs and provenance records
+  are added. `Test-AzPortalGuide.ps1` guards portal/change-later coverage,
+  image provenance, pending capture/spec parity and the 12-row overview table.
 - **P89 Azure CLI setup guide.** `docs/AZ-COMMANDS.md` mirrors the installer and
   in-scope administration scripts with Cloud Shell bash commands, verification
   commands, expected results and source references; `Test-AzCommandsGuide.ps1`

@@ -41,6 +41,30 @@ Round 4 council-fix validation, 2026-10-01:
 - Group creation now records receipts and Graph advanced-query reads retry bounded 404s only for new or younger-than-15-minute groups; older 404s and 403s stop immediately. The guide cites Microsoft Learn's advanced-query eventual consistency/index-store behavior, accessed 2026-10-01.
 - Validation: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS; `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS with 468 checks; `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS with 43 guides. No live Azure command ran.
 
+## P90 Portal path and staged screenshots for the Azure CLI setup guide, 2026-10-01
+
+Owner request: extend the P89 Azure CLI setup guide with per-part portal paths, screenshots and edit-later guidance so readers can create or modify each configuration through `az` or the portal.
+
+Contract:
+- `docs/AZ-COMMANDS.md` has a 12-row overview table covering every part, the Azure object/setting, the `az` section, the portal blade path, screenshot state and the change-later surface.
+- Each configuring step's expected result is followed by a portal path, matching fields/buttons, a cited repository or Microsoft Learn source and a change-later note. Steps without a portal equivalent say why.
+- Existing screenshots are embedded only after viewing the PNG and confirming the `docs/guide/portal-captures.json` record is live, redacted and hash-matching.
+- A pending-captures table lists the remaining screenshots, and `guide/captures-pending/p90.json` stages matching capture specs outside `guide/captures/` so unloaded outputs do not break the capture runner.
+- Non-goals: no live Azure, no browser capture, no image edits, no portal-capture tooling changes, no edits to P89 fenced command blocks or `tests/Test-AzCommandsGuide.ps1`, no Test-All or Ironclad gate.
+
+Results:
+- Added `tests/Test-AzPortalGuide.ps1` and registered it in Test-All after `Test-AzCommandsGuide.ps1`.
+- Added portal paths and change-later notes to all 51 expected-result steps in `docs/AZ-COMMANDS.md`.
+- Embedded nine existing, verified captures: `architecture-foundry-overview`, `gateway-overview`, `gateway-identity`, `docs-review-foundry-iam`, `gateway-named-values`, `docs-review-entra-groups`, `docs-review-daily-quota-editor`, `docs-review-cosmos-networking` and `docs-review-resolver-authentication`. No provenance mismatch was found.
+- Staged six pending captures: `p90-gateway-networking`, `p90-desktop-app-overview`, `p90-desktop-app-authentication`, `p90-company-custom-domains`, `p90-gateway-diagnostic-settings` and `p90-resource-group-delete`.
+- Tooling gaps: the capture schema cannot express a pre-resource create wizard or tenant-wide Entra creation entry point without a discovered target; those portal paths are documented but not staged as automated captures.
+
+RED / GREEN:
+- RED: `pwsh -NoProfile -File .\tests\Test-AzPortalGuide.ps1` failed on the P89 guide with 25 named failures: parts 2-12 lacked portal/change-later blocks, the pending table/spec were missing and the overview table was missing.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-AzPortalGuide.ps1` PASS, 89 checks, 1.16 s.
+- Negative proofs against temporary copies: removing portal headings failed `part 2 has a Portal block`; changing an image path failed `image resolves`; corrupting a temporary capture record failed `record sha256 matches file`; changing a caption failed `caption id matches record id`; removing a pending spec step failed `pending table and staged spec list the same ids and outputs`; deleting an overview row failed `overview table has one row per part, 1-12`.
+- Validation: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS with 468 checks using isolated `AZURE_CONFIG_DIR`; `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS with 43 guides. No live Azure command ran.
+
 ## P71 follow-up: a lookup starts one refresh, 2026-09-30
 
 **Merged as `b5c2120` on 2026-09-30, as a follow-up to P71, which the owner approved.** Council

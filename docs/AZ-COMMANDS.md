@@ -34,6 +34,23 @@ export DESKTOP_EXTRA_AUDIENCE="urn:disabled:claude-extra-audience"
 
 References use repository paths and line numbers from the source scripts that this guide mirrors.
 
+## Portal and CLI overview
+
+| Part | What it configures (the Azure object and setting) | az section (anchor link) | Portal blade path | Screenshot (existing, or pending capture) | Change later |
+|---|---|---|---|---|---|
+| 1 | Subscription, tenant, resource providers, Foundry account and model deployments | [§1](#1-variables-prerequisites-and-discovery) | portal.azure.com > Subscriptions / Resource providers; portal.azure.com > Foundry account > Overview / Access control (IAM); ai.azure.com > Models + endpoints | Existing: `docs/images/architecture-live/foundry-overview.png` (`architecture-foundry-overview`), `docs/images/architecture-live/foundry-access.png` (`architecture-foundry-access`) | Change the selected subscription, Foundry account or deployment variables before running later commands; provider registration has no gateway rerun. |
+| 2 | API Management v2 instance, API path, operations, SKU, network mode and first named value write | [§2](#2-gateway) | portal.azure.com > API Management services > `$APIM_NAME` > Overview, APIs, Named values, Network | Existing: `docs/guide/a3-apim-overview.png` (`gateway-overview`); pending capture: `p90-gateway-networking` | Change SKU/network by redeploying `infra/main.bicep` with the intended parameters; named-value edits apply on the next request. |
+| 3 | Gateway system-assigned managed identity and Foundry `Cognitive Services User` role assignment | [§3](#3-gateway-managed-identity-and-foundry-role) | portal.azure.com > API Management > `$APIM_NAME` > Security > Managed identities; Foundry account > Access control (IAM) | Existing: `docs/guide/a4-identity.png` (`gateway-identity`), `docs/guide/docs-review-live-foundry-iam.png` (`docs-review-foundry-iam`) | If the identity changes, grant the new principal and remove only unneeded old assignments after checking consumers. |
+| 4 | API Management named values for limits, model allow lists, entitlement source and Desktop audience | [§4](#4-named-values-the-policy-needs) | portal.azure.com > API Management > `$APIM_NAME` > APIs > Named values | Existing: `docs/guide/a6-named-values.png` (`gateway-named-values`) | Edit the named value; APIM policy reads the new value on the next request. |
+| 5 | Entra tier groups, direct membership and published `allow-standard` / `allow-premium` named values | [§5](#5-entra-groups-and-entitlement-publishing) | entra.microsoft.com > Groups > tier group > Members; portal.azure.com > API Management > Named values | Existing: `docs/guide/docs-review-entra-groups.png` (`docs-review-entra-groups`) | Add/remove members in Entra, then rerun the Graph read and publish blocks before the gateway enforces the change. |
+| 6 | Day-two tier limits, personal overrides, model deployments and tier model lists | [§6](#6-day-two-tier-operations) | portal.azure.com > API Management > Named values; ai.azure.com > Model catalog / Models + endpoints | Existing: `docs/guide/docs-review-daily-quota-editor.png` (`docs-review-daily-quota-editor`) | Named values apply on the next request; model changes also need a Foundry deployment and price-book entry. |
+| 7 | Desktop public-client app registration, redirect URIs and APIM Desktop audience | [§7](#7-developer-sign-in-mode-and-claude-desktop-sign-in) | entra.microsoft.com > App registrations > Desktop app > Overview / Authentication; portal.azure.com > API Management > Named values | Pending captures: `p90-desktop-app-overview`, `p90-desktop-app-authentication` | Edit the app registration for redirect URIs and the `external-idp-extra-audience` named value for the gateway audience. |
+| 8 | `onboarding/claude-gateway.json` developer handover artifact | [§8](#8-developer-handover-file) | No portal blade; this is a repository-local JSON file consumed by workstation scripts | No screenshot; no portal equivalent | Regenerate and redistribute the file after gateway URL, tenant, app id, tier model or SKU changes. |
+| 9 | Optional company gateway hostname, certificate source and APIM custom domain binding | [§9](#9-optional-company-address) | portal.azure.com > API Management > `$APIM_NAME` > Custom domains; Key Vault > Certificates | Pending capture: `p90-company-custom-domains` | Change the Proxy hostname/certificate in Custom domains; update DNS and redistribute the handover URL if the address changes. |
+| 10 | Optional Cosmos projection, resolver app, private networking, resolver auth and APIM resolver named values | [§10](#10-optional-cosmos-projection) | portal.azure.com > Cosmos DB > Networking; Function App > Authentication / Networking; API Management > Named values; entra.microsoft.com > App registrations | Existing: `docs/guide/docs-review-cosmos-networking.png` (`docs-review-cosmos-networking`), `docs/guide/docs-review-resolver-authentication.png` (`docs-review-resolver-authentication`) | Keep `entitlement-source` as `named-value` until the supported reconciler/switch exists; resolver URL/audience named values apply on the next request. |
+| 11 | Data-plane verification, non-entitled refusal, model refusal, bypass audit and call ceiling check | [§11](#11-verification) | portal.azure.com > API Management > Overview / APIs / Named values / Diagnostic settings; Foundry > Access control (IAM) | Pending capture: `p90-gateway-diagnostic-settings` | Change the underlying named values, groups or role assignments, then rerun the relevant verification command. |
+| 12 | Teardown of the gateway resource group and receipt-created external role/group/app objects | [§12](#12-teardown) | portal.azure.com > Resource groups > `$GATEWAY_RG`; API Management > Deleted services; entra.microsoft.com > Groups / App registrations | Pending capture: `p90-resource-group-delete` | Delete only owned resources and receipt-created external objects; shared resources require a separate owner review. |
+
 ## Out of scope
 
 FinOps beyond the gateway's named values (AUM, Turnstile, chargeback reports, USD reconciler, Grafana), business units and teams, workstation setup scripts, the network WAF edge, backup/restore/update, and analytics and data deletion.
@@ -57,6 +74,14 @@ az account list --query "[].{name:name,id:id,tenant:tenantId,state:state,isDefau
 
 Expected result: the intended subscription and tenant appear. This mirrors `Install-ClaudeGateway.ps1:307`, `Install-ClaudeGateway.ps1:326` and `deploy.ps1:67`.
 
+**Portal.** portal.azure.com > Subscriptions shows the active subscription and tenant; portal.azure.com > Subscriptions > Resource providers shows provider registration state; portal.azure.com > Foundry account > Overview and Access control (IAM), or ai.azure.com > Models + endpoints, shows the Foundry account and deployments. Match `SUBSCRIPTION_ID`, `TENANT_ID`, `FOUNDRY_RG`, `FOUNDRY_ACCOUNT` and the deployment names to the values in the command block, then use Register for any unregistered provider and Deploy in ai.azure.com only when a model deployment is missing. Source: `docs/SETUP.md:107`, `docs/COMPARISON.md:123` and https://learn.microsoft.com/azure/ai-foundry/how-to/deploy-models-managed.
+
+![Foundry account Overview blade with redacted subscription and endpoint details](images/architecture-live/foundry-overview.png)
+
+Capture id: `architecture-foundry-overview`.
+
+**Change later.** Change the subscription, tenant, Foundry resource group, account or deployment variables before running later blocks. Provider registration is subscription state and does not require rerunning the gateway unless a later deployment failed because a provider was missing.
+
 Register the resource providers the setup uses.
 
 ```bash
@@ -70,6 +95,10 @@ az provider show --namespace Microsoft.CognitiveServices --query registrationSta
 
 Expected result: each provider reaches `Registered`. This mirrors the prerequisite phase in `scripts/Test-Prerequisites.ps1` and the resource provider checks named in `docs/SETUP.md` section 2.
 
+**Portal.** portal.azure.com > Subscriptions shows the active subscription and tenant; portal.azure.com > Subscriptions > Resource providers shows provider registration state; portal.azure.com > Foundry account > Overview and Access control (IAM), or ai.azure.com > Models + endpoints, shows the Foundry account and deployments. Match `SUBSCRIPTION_ID`, `TENANT_ID`, `FOUNDRY_RG`, `FOUNDRY_ACCOUNT` and the deployment names to the values in the command block, then use Register for any unregistered provider and Deploy in ai.azure.com only when a model deployment is missing. Source: `docs/SETUP.md:107`, `docs/COMPARISON.md:123` and https://learn.microsoft.com/azure/ai-foundry/how-to/deploy-models-managed.
+
+**Change later.** Change the subscription, tenant, Foundry resource group, account or deployment variables before running later blocks. Provider registration is subscription state and does not require rerunning the gateway unless a later deployment failed because a provider was missing.
+
 Discover the Foundry account and Claude deployments.
 
 ```bash
@@ -80,6 +109,10 @@ az cognitiveservices account deployment list -g "$FOUNDRY_RG" -n "$FOUNDRY_ACCOU
 
 Expected result: the account kind is `AIServices`, the Foundry endpoint is present, and Claude deployments are listed. This mirrors `Get-FoundryValues.ps1`, `deploy.ps1:80-106`, and `scripts/ClaudeModelDeployment.ps1:1-120`.
 
+**Portal.** portal.azure.com > Subscriptions shows the active subscription and tenant; portal.azure.com > Subscriptions > Resource providers shows provider registration state; portal.azure.com > Foundry account > Overview and Access control (IAM), or ai.azure.com > Models + endpoints, shows the Foundry account and deployments. Match `SUBSCRIPTION_ID`, `TENANT_ID`, `FOUNDRY_RG`, `FOUNDRY_ACCOUNT` and the deployment names to the values in the command block, then use Register for any unregistered provider and Deploy in ai.azure.com only when a model deployment is missing. Source: `docs/SETUP.md:107`, `docs/COMPARISON.md:123` and https://learn.microsoft.com/azure/ai-foundry/how-to/deploy-models-managed.
+
+**Change later.** Change the subscription, tenant, Foundry resource group, account or deployment variables before running later blocks. Provider registration is subscription state and does not require rerunning the gateway unless a later deployment failed because a provider was missing.
+
 List deployable Claude models when no deployment exists.
 
 ```bash
@@ -87,6 +120,10 @@ az cognitiveservices account list-models -g "$FOUNDRY_RG" -n "$FOUNDRY_ACCOUNT" 
 ```
 
 Expected result: available Claude offers are visible, or an empty table states that the account cannot deploy Claude in that region. This mirrors `Install-ClaudeGateway.ps1:418` and `scripts/ClaudeModelDeployment.ps1:160-205`.
+
+**Portal.** portal.azure.com > Subscriptions shows the active subscription and tenant; portal.azure.com > Subscriptions > Resource providers shows provider registration state; portal.azure.com > Foundry account > Overview and Access control (IAM), or ai.azure.com > Models + endpoints, shows the Foundry account and deployments. Match `SUBSCRIPTION_ID`, `TENANT_ID`, `FOUNDRY_RG`, `FOUNDRY_ACCOUNT` and the deployment names to the values in the command block, then use Register for any unregistered provider and Deploy in ai.azure.com only when a model deployment is missing. Source: `docs/SETUP.md:107`, `docs/COMPARISON.md:123` and https://learn.microsoft.com/azure/ai-foundry/how-to/deploy-models-managed.
+
+**Change later.** Change the subscription, tenant, Foundry resource group, account or deployment variables before running later blocks. Provider registration is subscription state and does not require rerunning the gateway unless a later deployment failed because a provider was missing.
 
 Check the operator roles without changing them.
 
@@ -97,6 +134,10 @@ az role assignment list --scope "/subscriptions/${SUBSCRIPTION_ID}/resourceGroup
 ```
 
 Expected result: the operator has enough rights to deploy the gateway resource group and to inspect or assign the Foundry data-plane role. This mirrors `Install-ClaudeGateway.ps1:1526-1537` and `docs/SETUP.md` section 2.
+
+**Portal.** portal.azure.com > Subscriptions shows the active subscription and tenant; portal.azure.com > Subscriptions > Resource providers shows provider registration state; portal.azure.com > Foundry account > Overview and Access control (IAM), or ai.azure.com > Models + endpoints, shows the Foundry account and deployments. Match `SUBSCRIPTION_ID`, `TENANT_ID`, `FOUNDRY_RG`, `FOUNDRY_ACCOUNT` and the deployment names to the values in the command block, then use Register for any unregistered provider and Deploy in ai.azure.com only when a model deployment is missing. Source: `docs/SETUP.md:107`, `docs/COMPARISON.md:123` and https://learn.microsoft.com/azure/ai-foundry/how-to/deploy-models-managed.
+
+**Change later.** Change the subscription, tenant, Foundry resource group, account or deployment variables before running later blocks. Provider registration is subscription state and does not require rerunning the gateway unless a later deployment failed because a provider was missing.
 
 ## 2. Gateway
 
@@ -109,6 +150,14 @@ az group show -n "$GATEWAY_RG" --query "{name:name,location:location}" -o json
 
 Expected result: the group exists in the chosen region. This mirrors `deploy.ps1:134`.
 
+**Portal.** portal.azure.com > Create a resource > API Management opens the equivalent create path; portal.azure.com > API Management services > `$APIM_NAME` > Overview, APIs, Named values and Network shows the deployed result. Match Resource group `$GATEWAY_RG`, Region `$LOCATION`, Organization name `$PUBLISHER_NAME`, Administrator email `$PUBLISHER_EMAIL`, pricing tier Basic v2 / Standard v2 / Premium v2, subnet and public network access to the command parameters, then use Review + create for a new instance or Save on the edited blade. Source: `docs/SETUP.md:107` and https://learn.microsoft.com/azure/api-management/get-started-create-service-instance.
+
+![API Management gateway Overview blade with redacted resource and gateway URL fields](guide/a3-apim-overview.png)
+
+Capture id: `gateway-overview`.
+
+**Change later.** Change SKU, capacity, network mode, subnet or public access by redeploying `infra/main.bicep` with the intended values; change API operations and policy through the template or policy script. A named-value edit takes effect on the next request.
+
 Validate the gateway template before deployment.
 
 ```bash
@@ -118,6 +167,10 @@ az deployment group what-if -g "$GATEWAY_RG" --template-file infra/main.bicep --
 
 Expected result: Bicep builds and what-if shows APIM, API, policy, logger, named values, diagnostics, workspace and role-assignment changes. This mirrors `deploy.ps1:157-170`, `Install-ClaudeGateway.ps1:1543-1585` and `infra/main.bicep:8-179`.
 
+**Portal.** portal.azure.com > Create a resource > API Management opens the equivalent create path; portal.azure.com > API Management services > `$APIM_NAME` > Overview, APIs, Named values and Network shows the deployed result. Match Resource group `$GATEWAY_RG`, Region `$LOCATION`, Organization name `$PUBLISHER_NAME`, Administrator email `$PUBLISHER_EMAIL`, pricing tier Basic v2 / Standard v2 / Premium v2, subnet and public network access to the command parameters, then use Review + create for a new instance or Save on the edited blade. Source: `docs/SETUP.md:107` and https://learn.microsoft.com/azure/api-management/get-started-create-service-instance.
+
+**Change later.** Change SKU, capacity, network mode, subnet or public access by redeploying `infra/main.bicep` with the intended values; change API operations and policy through the template or policy script. A named-value edit takes effect on the next request.
+
 Deploy Basic v2.
 
 ```bash
@@ -126,6 +179,10 @@ az deployment group show -g "$GATEWAY_RG" -n "claude-gateway-basicv2" --query "p
 ```
 
 Expected result: outputs include the APIM name, gateway URL and APIM principal id. Basic v2 has no outbound VNet integration. This mirrors `infra/main.bicep:31-35`, `infra/main.bicep:443-460` and `Install-ClaudeGateway.ps1:1585`.
+
+**Portal.** portal.azure.com > Create a resource > API Management opens the equivalent create path; portal.azure.com > API Management services > `$APIM_NAME` > Overview, APIs, Named values and Network shows the deployed result. Match Resource group `$GATEWAY_RG`, Region `$LOCATION`, Organization name `$PUBLISHER_NAME`, Administrator email `$PUBLISHER_EMAIL`, pricing tier Basic v2 / Standard v2 / Premium v2, subnet and public network access to the command parameters, then use Review + create for a new instance or Save on the edited blade. Source: `docs/SETUP.md:107` and https://learn.microsoft.com/azure/api-management/get-started-create-service-instance.
+
+**Change later.** Change SKU, capacity, network mode, subnet or public access by redeploying `infra/main.bicep` with the intended values; change API operations and policy through the template or policy script. A named-value edit takes effect on the next request.
 
 Deploy Standard v2 when outbound VNet integration is required.
 
@@ -137,6 +194,10 @@ az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" --query "{sku:sku.name,vnet:virtua
 
 Expected result: SKU is `StandardV2`, `virtualNetworkType` is `External`, and the subnet id is retained. This mirrors `infra/main.bicep:53-80` and the preservation comments in `infra/main.bicep:36-52`.
 
+**Portal.** portal.azure.com > Create a resource > API Management opens the equivalent create path; portal.azure.com > API Management services > `$APIM_NAME` > Overview, APIs, Named values and Network shows the deployed result. Match Resource group `$GATEWAY_RG`, Region `$LOCATION`, Organization name `$PUBLISHER_NAME`, Administrator email `$PUBLISHER_EMAIL`, pricing tier Basic v2 / Standard v2 / Premium v2, subnet and public network access to the command parameters, then use Review + create for a new instance or Save on the edited blade. Source: `docs/SETUP.md:107` and https://learn.microsoft.com/azure/api-management/get-started-create-service-instance.
+
+**Change later.** Change SKU, capacity, network mode, subnet or public access by redeploying `infra/main.bicep` with the intended values; change API operations and policy through the template or policy script. A named-value edit takes effect on the next request.
+
 Deploy Premium v2 when the gateway itself must be injected privately.
 
 ```bash
@@ -147,6 +208,10 @@ az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" --query "{sku:sku.name,vnet:virtua
 
 Expected result: SKU is `PremiumV2`, VNet type is `Internal`, and public network access is disabled. This mirrors the v2 SKU and network parameters in `infra/main.bicep:31-68`.
 
+**Portal.** portal.azure.com > Create a resource > API Management opens the equivalent create path; portal.azure.com > API Management services > `$APIM_NAME` > Overview, APIs, Named values and Network shows the deployed result. Match Resource group `$GATEWAY_RG`, Region `$LOCATION`, Organization name `$PUBLISHER_NAME`, Administrator email `$PUBLISHER_EMAIL`, pricing tier Basic v2 / Standard v2 / Premium v2, subnet and public network access to the command parameters, then use Review + create for a new instance or Save on the edited blade. Source: `docs/SETUP.md:107` and https://learn.microsoft.com/azure/api-management/get-started-create-service-instance.
+
+**Change later.** Change SKU, capacity, network mode, subnet or public access by redeploying `infra/main.bicep` with the intended values; change API operations and policy through the template or policy script. A named-value edit takes effect on the next request.
+
 Read policy deployment state.
 
 ```bash
@@ -155,6 +220,10 @@ az apim api operation list -g "$GATEWAY_RG" --service-name "$APIM_NAME" --api-id
 ```
 
 Expected result: the API path is `claude`, subscription keys are disabled, and operations include `/v1/messages` and `/v1/messages/count_tokens`. This mirrors `infra/main.bicep:303-342` and `scripts/Set-GatewayPolicy.ps1`.
+
+**Portal.** portal.azure.com > Create a resource > API Management opens the equivalent create path; portal.azure.com > API Management services > `$APIM_NAME` > Overview, APIs, Named values and Network shows the deployed result. Match Resource group `$GATEWAY_RG`, Region `$LOCATION`, Organization name `$PUBLISHER_NAME`, Administrator email `$PUBLISHER_EMAIL`, pricing tier Basic v2 / Standard v2 / Premium v2, subnet and public network access to the command parameters, then use Review + create for a new instance or Save on the edited blade. Source: `docs/SETUP.md:107` and https://learn.microsoft.com/azure/api-management/get-started-create-service-instance.
+
+**Change later.** Change SKU, capacity, network mode, subnet or public access by redeploying `infra/main.bicep` with the intended values; change API operations and policy through the template or policy script. A named-value edit takes effect on the next request.
 
 Write and read back one named value the same way the helper does.
 
@@ -172,6 +241,10 @@ az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id mo
 
 Expected result: the value length is at most 4,096, and the final read returns the exact value written. This mirrors `scripts/ApimNamedValue.ps1:35-73` and `scripts/ApimNamedValue.ps1:125-191`.
 
+**Portal.** portal.azure.com > Create a resource > API Management opens the equivalent create path; portal.azure.com > API Management services > `$APIM_NAME` > Overview, APIs, Named values and Network shows the deployed result. Match Resource group `$GATEWAY_RG`, Region `$LOCATION`, Organization name `$PUBLISHER_NAME`, Administrator email `$PUBLISHER_EMAIL`, pricing tier Basic v2 / Standard v2 / Premium v2, subnet and public network access to the command parameters, then use Review + create for a new instance or Save on the edited blade. Source: `docs/SETUP.md:107` and https://learn.microsoft.com/azure/api-management/get-started-create-service-instance.
+
+**Change later.** Change SKU, capacity, network mode, subnet or public access by redeploying `infra/main.bicep` with the intended values; change API operations and policy through the template or policy script. A named-value edit takes effect on the next request.
+
 ## 3. Gateway managed identity and Foundry role
 
 Read the gateway identity and Foundry scope.
@@ -183,6 +256,18 @@ az role assignment list --scope "$FOUNDRY_ID" --assignee "$APIM_PRINCIPAL_ID" --
 ```
 
 Expected result: an existing assignment is listed, or the table is empty before the grant. This mirrors `Install-ClaudeGateway.ps1:1524-1537`.
+
+**Portal.** portal.azure.com > API Management > `$APIM_NAME` > Security > Managed identities shows the system-assigned identity; portal.azure.com > Foundry account > Access control (IAM) > Add role assignment grants `Cognitive Services User` to the gateway principal id. Match the Object (principal) ID to `$APIM_PRINCIPAL_ID`, select the Foundry account scope, press Review + assign, and wait for propagation. Source: `docs/SETUP.md:270` and `docs/SETUP.md:902`.
+
+![API Management Managed identities blade showing system-assigned identity status and redacted principal id](guide/a4-identity.png)
+
+Capture id: `gateway-identity`.
+
+![Foundry Access control IAM blade with role assignment actions visible and identifiers redacted](guide/docs-review-live-foundry-iam.png)
+
+Capture id: `docs-review-foundry-iam`.
+
+**Change later.** If APIM is recreated or identity is toggled, grant `Cognitive Services User` to the new principal and remove only confirmed-unused old assignments. Existing requests start using the new identity after APIM receives tokens for it.
 
 Grant `Cognitive Services User` to the APIM managed identity when the list above is empty.
 
@@ -203,6 +288,10 @@ az role assignment list --scope "$FOUNDRY_ID" --assignee "$APIM_PRINCIPAL_ID" --
 
 Expected result: one assignment exists. `.p89-receipts/foundry-role.json` records whether this guide created it or found it already present. This mirrors `infra/foundry-role.bicep` and `infra/main.bicep:430-442`.
 
+**Portal.** portal.azure.com > API Management > `$APIM_NAME` > Security > Managed identities shows the system-assigned identity; portal.azure.com > Foundry account > Access control (IAM) > Add role assignment grants `Cognitive Services User` to the gateway principal id. Match the Object (principal) ID to `$APIM_PRINCIPAL_ID`, select the Foundry account scope, press Review + assign, and wait for propagation. Source: `docs/SETUP.md:270` and `docs/SETUP.md:902`.
+
+**Change later.** If APIM is recreated or identity is toggled, grant `Cognitive Services User` to the new principal and remove only confirmed-unused old assignments. Existing requests start using the new identity after APIM receives tokens for it.
+
 ## 4. Named values the policy needs
 
 Set tier limits, organisation ceiling, per-minute calls and model allow lists.
@@ -221,6 +310,14 @@ az apim nv list -g "$GATEWAY_RG" --service-name "$APIM_NAME" --query "[?starts_w
 
 Expected result: values match the variables. Model lists use sentinel commas: `,claude-sonnet-5,` means only that deployment; `,,` means no model restriction. This mirrors `infra/main.bicep:350-377`, `scripts/Set-ClaudeTier.ps1:75-181` and `scripts/Add-ClaudeModel.ps1:245-253`.
 
+**Portal.** portal.azure.com > API Management > `$APIM_NAME` > APIs > Named values lists and edits the policy values. Select the named value id from the command, set Value to the matching variable (`TPM_STANDARD`, `QUOTA_ORG`, `MODELS_STANDARD`, `entitlement-source`, resolver URL/audience or Desktop audience), then press Save. Source: `docs/BUDGETS.md:317` and https://learn.microsoft.com/azure/api-management/api-management-howto-properties.
+
+![API Management Named values blade showing gateway policy values with identifiers redacted](guide/a6-named-values.png)
+
+Capture id: `gateway-named-values`.
+
+**Change later.** Edit the named value in APIM or rerun the matching command. Limits, model allow lists, resolver settings and Desktop audience are read by policy on subsequent requests; model names still need matching Foundry deployments.
+
 Set entitlement source and resolver placeholders for the named-value path.
 
 ```bash
@@ -235,6 +332,10 @@ az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id en
 
 Expected result: `tenant-id` matches the deployment tenant and `entitlement-source` is `named-value`. This mirrors `infra/main.bicep:350`, `infra/main.bicep:144-160`, `infra/main.bicep:372-376` and `docs/SCALE.md:639-675`.
 
+**Portal.** portal.azure.com > API Management > `$APIM_NAME` > APIs > Named values lists and edits the policy values. Select the named value id from the command, set Value to the matching variable (`TPM_STANDARD`, `QUOTA_ORG`, `MODELS_STANDARD`, `entitlement-source`, resolver URL/audience or Desktop audience), then press Save. Source: `docs/BUDGETS.md:317` and https://learn.microsoft.com/azure/api-management/api-management-howto-properties.
+
+**Change later.** Edit the named value in APIM or rerun the matching command. Limits, model allow lists, resolver settings and Desktop audience are read by policy on subsequent requests; model names still need matching Foundry deployments.
+
 Verify the authorization and budget named values that the template initialized.
 
 ```bash
@@ -242,6 +343,10 @@ az apim nv list -g "$GATEWAY_RG" --service-name "$APIM_NAME" --query "[?name=='a
 ```
 
 Expected result: `allow-*` values are comma-sentinel lists, `quota-overrides` is `,,` until personal overrides exist, and the Desktop audience is the disabled sentinel until external sign-in is configured. Do not reset these values on an existing gateway; entitlement sync and budget commands own them after deployment. This mirrors `infra/main.bicep:215-224`, `infra/main.bicep:367-370`, `scripts/Sync-ClaudeAccess.ps1:122-129`, `scripts/ClaudeBudgetOverride.ps1:1-29` and `scripts/ApimNamedValue.ps1:150-154`.
+
+**Portal.** portal.azure.com > API Management > `$APIM_NAME` > APIs > Named values lists and edits the policy values. Select the named value id from the command, set Value to the matching variable (`TPM_STANDARD`, `QUOTA_ORG`, `MODELS_STANDARD`, `entitlement-source`, resolver URL/audience or Desktop audience), then press Save. Source: `docs/BUDGETS.md:317` and https://learn.microsoft.com/azure/api-management/api-management-howto-properties.
+
+**Change later.** Edit the named value in APIM or rerun the matching command. Limits, model allow lists, resolver settings and Desktop audience are read by policy on subsequent requests; model names still need matching Foundry deployments.
 
 ## 5. Entra groups and entitlement publishing
 
@@ -269,6 +374,14 @@ record_group premium "$PREMIUM_GROUP"
 ```
 
 Expected result: each group has an object id and `.p89-receipts/group-standard.json` / `.p89-receipts/group-premium.json` record whether this guide created it. Teardown uses those receipts and never deletes pre-existing groups. This mirrors `deploy.ps1:182-187` and `Install-ClaudeGateway.ps1:1597-1600`.
+
+**Portal.** entra.microsoft.com > Groups > New group creates `STANDARD_GROUP` and `PREMIUM_GROUP`; Groups > tier group > Members adds or removes users and service principals. portal.azure.com > API Management > `$APIM_NAME` > Named values shows the published `allow-standard` and `allow-premium` lists after the Graph read and publish blocks run. Press Create for a new group, Add members or Remove for membership, and Save only for named-value edits. Source: `docs/SETUP.md:320`, `docs/ONBOARDING.md:106`, `docs/ONBOARDING.md:137` and `docs/ONBOARDING.md:198`.
+
+![Entra group Members blade showing direct members with object ids redacted](guide/docs-review-entra-groups.png)
+
+Capture id: `docs-review-entra-groups`.
+
+**Change later.** Change group membership in Entra, then rerun the §5 Graph read and publish blocks. The gateway continues enforcing the old `allow-*` named values until publication completes.
 
 Read transitive members from Microsoft Graph as users and service principals.
 
@@ -339,6 +452,10 @@ graph_get "https://graph.microsoft.com/v1.0/groups/${STANDARD_GROUP_ID}/transiti
 
 Expected result: the four JSON files exist and each contains a `value` array with no `@odata.nextLink`. A Graph error is an error, not an empty group; only a successful empty `value` array is empty. Microsoft Graph advanced directory queries use a separate index store and require `ConsistencyLevel: eventual` with `$count`; a just-created group can therefore be temporarily invisible to this query shape, so this block retries only for new or younger-than-15-minute groups and treats older 404s or any 403 as immediate errors (Microsoft Learn, "Advanced query capabilities on Microsoft Entra ID objects", accessed 2026-10-01). This mirrors `scripts/ClaudeGraphMembership.ps1:31-151`. The script uses direct REST in PowerShell because `az.cmd` on Windows re-parses `&`; in Cloud Shell bash, `az rest` is safe when the URL is quoted. The named-value path holds roughly 110 object ids per list; larger groups need the projection path.
 
+**Portal.** entra.microsoft.com > Groups > New group creates `STANDARD_GROUP` and `PREMIUM_GROUP`; Groups > tier group > Members adds or removes users and service principals. portal.azure.com > API Management > `$APIM_NAME` > Named values shows the published `allow-standard` and `allow-premium` lists after the Graph read and publish blocks run. Press Create for a new group, Add members or Remove for membership, and Save only for named-value edits. Source: `docs/SETUP.md:320`, `docs/ONBOARDING.md:106`, `docs/ONBOARDING.md:137` and `docs/ONBOARDING.md:198`.
+
+**Change later.** Change group membership in Entra, then rerun the §5 Graph read and publish blocks. The gateway continues enforcing the old `allow-*` named values until publication completes.
+
 Publish premium first, then standard without duplicates.
 
 ```bash
@@ -389,6 +506,10 @@ az apim nv list -g "$GATEWAY_RG" --service-name "$APIM_NAME" --query "[?name=='a
 
 Expected result: `allow-premium` and `allow-standard` each have the `,oid,` form. A person in both groups appears only in `allow-premium`; premium precedence is deliberate. An empty tier is refused unless `ALLOW_EMPTY=yes` is set for an explicit review, because everyone in that tier loses access after propagation. The 4,096-character checks stop before any write. This mirrors `scripts/Sync-ClaudeAccess.ps1:77-130` and `scripts/ApimNamedValue.ps1:35-73`.
 
+**Portal.** entra.microsoft.com > Groups > New group creates `STANDARD_GROUP` and `PREMIUM_GROUP`; Groups > tier group > Members adds or removes users and service principals. portal.azure.com > API Management > `$APIM_NAME` > Named values shows the published `allow-standard` and `allow-premium` lists after the Graph read and publish blocks run. Press Create for a new group, Add members or Remove for membership, and Save only for named-value edits. Source: `docs/SETUP.md:320`, `docs/ONBOARDING.md:106`, `docs/ONBOARDING.md:137` and `docs/ONBOARDING.md:198`.
+
+**Change later.** Change group membership in Entra, then rerun the §5 Graph read and publish blocks. The gateway continues enforcing the old `allow-*` named values until publication completes.
+
 Add one developer to a tier and publish.
 
 ```bash
@@ -407,6 +528,10 @@ az ad group member list --group "$PREMIUM_GROUP" --query "[?id=='${DEVELOPER_ID}
 
 Expected result: the developer id appears in the standard group and not in premium. This mirrors `scripts/Set-ClaudeDeveloper.ps1:175-260`: adding someone to one tier removes them from the other direct tier group so the portal and the published allow lists are unambiguous. Run the Graph read block and the publish block above after the group edit; until then the directory is updated but the gateway named values still hold the previous publication.
 
+**Portal.** entra.microsoft.com > Groups > New group creates `STANDARD_GROUP` and `PREMIUM_GROUP`; Groups > tier group > Members adds or removes users and service principals. portal.azure.com > API Management > `$APIM_NAME` > Named values shows the published `allow-standard` and `allow-premium` lists after the Graph read and publish blocks run. Press Create for a new group, Add members or Remove for membership, and Save only for named-value edits. Source: `docs/SETUP.md:320`, `docs/ONBOARDING.md:106`, `docs/ONBOARDING.md:137` and `docs/ONBOARDING.md:198`.
+
+**Change later.** Change group membership in Entra, then rerun the §5 Graph read and publish blocks. The gateway continues enforcing the old `allow-*` named values until publication completes.
+
 Remove one developer from both tiers and publish.
 
 ```bash
@@ -420,6 +545,10 @@ az ad group member list --group "$PREMIUM_GROUP" --query "[?id=='${DEVELOPER_ID}
 
 Expected result: both verification commands return no rows. This mirrors `scripts/Set-ClaudeDeveloper.ps1:175-260`.
 
+**Portal.** entra.microsoft.com > Groups > New group creates `STANDARD_GROUP` and `PREMIUM_GROUP`; Groups > tier group > Members adds or removes users and service principals. portal.azure.com > API Management > `$APIM_NAME` > Named values shows the published `allow-standard` and `allow-premium` lists after the Graph read and publish blocks run. Press Create for a new group, Add members or Remove for membership, and Save only for named-value edits. Source: `docs/SETUP.md:320`, `docs/ONBOARDING.md:106`, `docs/ONBOARDING.md:137` and `docs/ONBOARDING.md:198`.
+
+**Change later.** Change group membership in Entra, then rerun the §5 Graph read and publish blocks. The gateway continues enforcing the old `allow-*` named values until publication completes.
+
 Run the Graph read block and the publish block above after removal. The removal is not enforced at the gateway until the allow lists are republished.
 
 ## 6. Day-two tier operations
@@ -431,6 +560,14 @@ az apim nv list -g "$GATEWAY_RG" --service-name "$APIM_NAME" --query "[?name=='t
 ```
 
 Expected result: only `standard` and `premium` tier values are listed. A third tier is a policy change, not a named-value operation, because the policy names the two tiers directly (`docs/ONBOARDING.md:408-412`, `docs/ONBOARDING.md:472-476`). This mirrors `scripts/Set-ClaudeTier.ps1:1-34`.
+
+**Portal.** portal.azure.com > API Management > `$APIM_NAME` > Named values edits tier limits, `quota-overrides`, `quota-org`, `calls-per-minute` and model allow lists; ai.azure.com > Model catalog > Claude model > Deploy and Models + endpoints covers a new Foundry deployment. Match the named-value id and value to the command, press Save for named values, and press Deploy for a new model deployment after reviewing version, capacity and provider details. Source: `docs/BUDGETS.md:317`, `docs/SETUP.md:171` and https://learn.microsoft.com/azure/ai-foundry/how-to/deploy-models-managed.
+
+![API Management named value editor for quota-standard with the value field visible](guide/docs-review-daily-quota-editor.png)
+
+Capture id: `docs-review-daily-quota-editor`.
+
+**Change later.** Tier limits and personal overrides are APIM named-value edits and apply on the next request. A model change needs both a Foundry deployment and the tier model-list named value; price-book changes are repository changes, not portal state.
 
 Change one tier's model list and limits.
 
@@ -450,6 +587,10 @@ az apim nv list -g "$GATEWAY_RG" --service-name "$APIM_NAME" --query "[?name=='t
 ```
 
 Expected result: the new values appear and take effect on the next request. This mirrors `scripts/Set-ClaudeTier.ps1:112-181`.
+
+**Portal.** portal.azure.com > API Management > `$APIM_NAME` > Named values edits tier limits, `quota-overrides`, `quota-org`, `calls-per-minute` and model allow lists; ai.azure.com > Model catalog > Claude model > Deploy and Models + endpoints covers a new Foundry deployment. Match the named-value id and value to the command, press Save for named values, and press Deploy for a new model deployment after reviewing version, capacity and provider details. Source: `docs/BUDGETS.md:317`, `docs/SETUP.md:171` and https://learn.microsoft.com/azure/ai-foundry/how-to/deploy-models-managed.
+
+**Change later.** Tier limits and personal overrides are APIM named-value edits and apply on the next request. A model change needs both a Foundry deployment and the tier model-list named value; price-book changes are repository changes, not portal state.
 
 Set one person's daily token budget.
 
@@ -472,6 +613,10 @@ az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id qu
 
 Expected result: `quota-overrides` contains `,<oid>=2000000,`. Preserve existing entries when more than one person has an override; the script reads the full map before changing it. This mirrors `scripts/Set-ClaudeBudget.ps1:1-41`, `scripts/Set-ClaudeBudget.ps1:137-220` and `scripts/ClaudeBudgetOverride.ps1:1-29`.
 
+**Portal.** portal.azure.com > API Management > `$APIM_NAME` > Named values edits tier limits, `quota-overrides`, `quota-org`, `calls-per-minute` and model allow lists; ai.azure.com > Model catalog > Claude model > Deploy and Models + endpoints covers a new Foundry deployment. Match the named-value id and value to the command, press Save for named values, and press Deploy for a new model deployment after reviewing version, capacity and provider details. Source: `docs/BUDGETS.md:317`, `docs/SETUP.md:171` and https://learn.microsoft.com/azure/ai-foundry/how-to/deploy-models-managed.
+
+**Change later.** Tier limits and personal overrides are APIM named-value edits and apply on the next request. A model change needs both a Foundry deployment and the tier model-list named value; price-book changes are repository changes, not portal state.
+
 Clear that person's daily token budget.
 
 ```bash
@@ -481,6 +626,10 @@ az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id qu
 
 Expected result: `,,` means no personal overrides. This mirrors `scripts/ClaudeBudgetOverride.ps1:24-29`.
 
+**Portal.** portal.azure.com > API Management > `$APIM_NAME` > Named values edits tier limits, `quota-overrides`, `quota-org`, `calls-per-minute` and model allow lists; ai.azure.com > Model catalog > Claude model > Deploy and Models + endpoints covers a new Foundry deployment. Match the named-value id and value to the command, press Save for named values, and press Deploy for a new model deployment after reviewing version, capacity and provider details. Source: `docs/BUDGETS.md:317`, `docs/SETUP.md:171` and https://learn.microsoft.com/azure/ai-foundry/how-to/deploy-models-managed.
+
+**Change later.** Tier limits and personal overrides are APIM named-value edits and apply on the next request. A model change needs both a Foundry deployment and the tier model-list named value; price-book changes are repository changes, not portal state.
+
 Review Foundry deployments before adding a model.
 
 ```bash
@@ -489,6 +638,10 @@ az apim nv list -g "$GATEWAY_RG" --service-name "$APIM_NAME" --query "[?name=='m
 ```
 
 Expected result: the deployment exists before it is added to a tier. This mirrors `scripts/Sync-ClaudeModels.ps1:1-91` and `scripts/Add-ClaudeModel.ps1:109-153`.
+
+**Portal.** portal.azure.com > API Management > `$APIM_NAME` > Named values edits tier limits, `quota-overrides`, `quota-org`, `calls-per-minute` and model allow lists; ai.azure.com > Model catalog > Claude model > Deploy and Models + endpoints covers a new Foundry deployment. Match the named-value id and value to the command, press Save for named values, and press Deploy for a new model deployment after reviewing version, capacity and provider details. Source: `docs/BUDGETS.md:317`, `docs/SETUP.md:171` and https://learn.microsoft.com/azure/ai-foundry/how-to/deploy-models-managed.
+
+**Change later.** Tier limits and personal overrides are APIM named-value edits and apply on the next request. A model change needs both a Foundry deployment and the tier model-list named value; price-book changes are repository changes, not portal state.
 
 Deploy a new Claude model through ARM when Azure requires Anthropic provider data.
 
@@ -501,6 +654,10 @@ az cognitiveservices account deployment show -g "$FOUNDRY_RG" -n "$FOUNDRY_ACCOU
 ```
 
 Expected result: provisioning reaches `Succeeded`. This mirrors `scripts/ClaudeModelDeployment.ps1:319-395`; it uses ARM because `az cognitiveservices account deployment create` cannot send `modelProviderData` for Anthropic deployments.
+
+**Portal.** portal.azure.com > API Management > `$APIM_NAME` > Named values edits tier limits, `quota-overrides`, `quota-org`, `calls-per-minute` and model allow lists; ai.azure.com > Model catalog > Claude model > Deploy and Models + endpoints covers a new Foundry deployment. Match the named-value id and value to the command, press Save for named values, and press Deploy for a new model deployment after reviewing version, capacity and provider details. Source: `docs/BUDGETS.md:317`, `docs/SETUP.md:171` and https://learn.microsoft.com/azure/ai-foundry/how-to/deploy-models-managed.
+
+**Change later.** Tier limits and personal overrides are APIM named-value edits and apply on the next request. A model change needs both a Foundry deployment and the tier model-list named value; price-book changes are repository changes, not portal state.
 
 Add the deployed model to tiers and record prices.
 
@@ -520,6 +677,10 @@ az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id mo
 ```
 
 Expected result: the premium model list contains the new deployment with sentinel commas, and `config/price-book.json` has a dated price entry. This mirrors `scripts/Add-ClaudeModel.ps1:208-253`.
+
+**Portal.** portal.azure.com > API Management > `$APIM_NAME` > Named values edits tier limits, `quota-overrides`, `quota-org`, `calls-per-minute` and model allow lists; ai.azure.com > Model catalog > Claude model > Deploy and Models + endpoints covers a new Foundry deployment. Match the named-value id and value to the command, press Save for named values, and press Deploy for a new model deployment after reviewing version, capacity and provider details. Source: `docs/BUDGETS.md:317`, `docs/SETUP.md:171` and https://learn.microsoft.com/azure/ai-foundry/how-to/deploy-models-managed.
+
+**Change later.** Tier limits and personal overrides are APIM named-value edits and apply on the next request. A model change needs both a Foundry deployment and the tier model-list named value; price-book changes are repository changes, not portal state.
 
 ## 7. Developer sign-in mode and Claude Desktop sign-in
 
@@ -543,6 +704,10 @@ jq -e '.app.appId | type == "string" and length > 0' .p89-receipts/desktop-app.j
 
 Expected result: one application id is available and `.p89-receipts/desktop-app.json` records whether this guide created it. Teardown uses that receipt and never deletes a pre-existing app registration. This mirrors `scripts/New-ClaudeDesktopEntraApp.ps1:29-39`.
 
+**Portal.** entra.microsoft.com > App registrations > New registration creates the Desktop public-client app; App registrations > app > Authentication sets the loopback and broker redirect URIs and public-client setting; portal.azure.com > API Management > `$APIM_NAME` > Named values stores `external-idp-extra-audience`. Match the app display name, single-tenant audience, redirect URIs and app id to the command, then press Register or Save. Source: https://learn.microsoft.com/entra/identity-platform/quickstart-register-app and `docs/SECURE-PROJECTION.md:322`.
+
+**Change later.** Redirect URI and public-client changes are saved on the app registration. A Desktop audience change also needs the APIM `external-idp-extra-audience` named value and redistributed client settings.
+
 Set public-client redirect URIs, including broker redirects when the Desktop profile uses broker flow.
 
 ```bash
@@ -553,6 +718,10 @@ az ad app show --id "$DESKTOP_CLIENT_ID" --query "{appId:appId,publicClient:publ
 
 Expected result: the redirect URI list contains the loopback URI and broker URIs when broker is enabled. This mirrors `scripts/New-ClaudeDesktopEntraApp.ps1:43-64`.
 
+**Portal.** entra.microsoft.com > App registrations > New registration creates the Desktop public-client app; App registrations > app > Authentication sets the loopback and broker redirect URIs and public-client setting; portal.azure.com > API Management > `$APIM_NAME` > Named values stores `external-idp-extra-audience`. Match the app display name, single-tenant audience, redirect URIs and app id to the command, then press Register or Save. Source: https://learn.microsoft.com/entra/identity-platform/quickstart-register-app and `docs/SECURE-PROJECTION.md:322`.
+
+**Change later.** Redirect URI and public-client changes are saved on the app registration. A Desktop audience change also needs the APIM `external-idp-extra-audience` named value and redistributed client settings.
+
 Publish the Desktop gateway audience into APIM.
 
 ```bash
@@ -562,6 +731,10 @@ az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id ex
 ```
 
 Expected result: the app id is stored as `external-idp-extra-audience` for id-token mode. For access-token mode, store the gateway API audience instead. Consent is not granted by these commands; a tenant admin grants user/admin consent for scopes that require it. This mirrors `Install-ClaudeGateway.ps1:1141-1238`, `Install-ClaudeGateway.ps1:1573` and `scripts/ClaudeDesktopSignIn.ps1:92-101`.
+
+**Portal.** entra.microsoft.com > App registrations > New registration creates the Desktop public-client app; App registrations > app > Authentication sets the loopback and broker redirect URIs and public-client setting; portal.azure.com > API Management > `$APIM_NAME` > Named values stores `external-idp-extra-audience`. Match the app display name, single-tenant audience, redirect URIs and app id to the command, then press Register or Save. Source: https://learn.microsoft.com/entra/identity-platform/quickstart-register-app and `docs/SECURE-PROJECTION.md:322`.
+
+**Change later.** Redirect URI and public-client changes are saved on the app registration. A Desktop audience change also needs the APIM `external-idp-extra-audience` named value and redistributed client settings.
 
 ## 8. Developer handover file
 
@@ -612,6 +785,10 @@ jq -e '.mode=="gateway" and (.gatewayUrl|test("^https://")) and (.desktopSignIn.
 
 Expected result: `jq -e` exits 0, and the file contains no secrets. The key set matches the installer record, including subscription, SKU, region, Foundry account, entitlement store, projection deployer, tier model arrays, tier model allow-list strings and request ceiling. This mirrors `Install-ClaudeGateway.ps1:1699-1726` and `onboarding/README.md:13-41`. `scripts/Setup-ClaudeWorkstation.ps1` consumes this file through `-ConfigPath`; `Onboard-ClaudeDeveloper.ps1` distributes the same handover artifact rather than changing its schema.
 
+**Portal.** No portal equivalent. `onboarding/claude-gateway.json` is a repository-local handover file consumed by `scripts/Setup-ClaudeWorkstation.ps1`; Azure, Entra and Foundry blades do not own or validate that JSON schema. Use the command output and the repository file. Source: `docs/ONBOARDING.md:449`.
+
+**Change later.** Regenerate and redistribute `onboarding/claude-gateway.json` after gateway URL, tenant, SKU, Desktop app id, entitlement store or tier model changes. No Azure rerun is caused by editing only the local handover file.
+
 ## 9. Optional company address
 
 Review the current gateway hostnames before binding a company address.
@@ -621,6 +798,10 @@ az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" --query "{sku:sku.name,hosts:hostn
 ```
 
 Expected result: built-in Azure hostname remains, and any existing custom Proxy hostname is visible before replacement. This mirrors `scripts/ClaudeGatewayAddress.ps1:12-18`, `scripts/ClaudeGatewayAddress.ps1:88-91` and `scripts/Set-ClaudeGatewayAddress.ps1`.
+
+**Portal.** portal.azure.com > API Management > `$APIM_NAME` > Custom domains > Gateway binds a company hostname; portal.azure.com > Key Vault > Certificates shows the certificate backing the Key Vault secret. Match `HOSTNAME`, `CERT_SECRET_ID` and the gateway Proxy endpoint, then press Add or Save after DNS and certificate ownership are ready. Source: `docs/DECISIONS.md:35` and https://learn.microsoft.com/azure/api-management/configure-custom-domain.
+
+**Change later.** Change the Custom domains Proxy binding and Key Vault certificate reference, then verify TLS and update handover/client configuration if the URL changes. DNS and certificate readiness are outside APIM.
 
 Validate a Key Vault certificate and grant APIM access.
 
@@ -635,6 +816,10 @@ az role assignment create --assignee-object-id "$APIM_PRINCIPAL_ID" --assignee-p
 
 Expected result: the certificate is enabled, backed by a PFX secret, and the gateway identity can read it. This mirrors `scripts/ClaudeGatewayCertificate.ps1:80-103` and `scripts/ClaudeGatewayAddress.ps1:107-115`.
 
+**Portal.** portal.azure.com > API Management > `$APIM_NAME` > Custom domains > Gateway binds a company hostname; portal.azure.com > Key Vault > Certificates shows the certificate backing the Key Vault secret. Match `HOSTNAME`, `CERT_SECRET_ID` and the gateway Proxy endpoint, then press Add or Save after DNS and certificate ownership are ready. Source: `docs/DECISIONS.md:35` and https://learn.microsoft.com/azure/api-management/configure-custom-domain.
+
+**Change later.** Change the Custom domains Proxy binding and Key Vault certificate reference, then verify TLS and update handover/client configuration if the URL changes. DNS and certificate readiness are outside APIM.
+
 Patch APIM hostname configurations and prove TLS before publishing the handover URL.
 
 ```bash
@@ -645,6 +830,10 @@ curl -sS -o /dev/null -w "%{http_code}\n" "https://${HOSTNAME}/claude/v1/message
 ```
 
 Expected result: the hostname binding exists and an unauthenticated request returns `401`, proving DNS, SNI and certificate before clients use the address. This mirrors `scripts/ClaudeGatewayAddress.ps1:248-351`.
+
+**Portal.** portal.azure.com > API Management > `$APIM_NAME` > Custom domains > Gateway binds a company hostname; portal.azure.com > Key Vault > Certificates shows the certificate backing the Key Vault secret. Match `HOSTNAME`, `CERT_SECRET_ID` and the gateway Proxy endpoint, then press Add or Save after DNS and certificate ownership are ready. Source: `docs/DECISIONS.md:35` and https://learn.microsoft.com/azure/api-management/configure-custom-domain.
+
+**Change later.** Change the Custom domains Proxy binding and Key Vault certificate reference, then verify TLS and update handover/client configuration if the URL changes. DNS and certificate readiness are outside APIM.
 
 ## 10. Optional Cosmos projection
 
@@ -659,6 +848,18 @@ az deployment group what-if -g "$GATEWAY_RG" --template-file infra/projection.bi
 
 Expected result: current entitlement source is visible, APIM has an identity, and what-if is reviewed. This mirrors `scripts/Deploy-ClaudeProjection.ps1`, `scripts/ClaudeProjectionChecks.ps1` and `docs/SCALE.md:515-527`.
 
+**Portal.** portal.azure.com > Cosmos DB account > Networking shows projection storage access; Function App > Authentication and Networking shows resolver auth and VNet integration; entra.microsoft.com > App registrations creates the resolver app; API Management > Named values stores resolver URL, audience and source. Match `COSMOS_ACCOUNT`, resolver app id, gateway caller ids, private networking outputs and resolver named values to the commands, then press Create, Save or Add provider on the corresponding blade. Source: `docs/SECURE-PROJECTION.md:322` and `docs/SCALE.md:681`.
+
+![Cosmos DB Networking blade showing public network access disabled](guide/docs-review-cosmos-networking.png)
+
+Capture id: `docs-review-cosmos-networking`.
+
+![Function App Authentication blade showing Microsoft identity provider and redacted app client id](guide/docs-review-resolver-authentication.png)
+
+Capture id: `docs-review-resolver-authentication`.
+
+**Change later.** Resolver URL and audience edits are APIM named values and apply on later requests. Do not switch `entitlement-source` to `projection` until the supported renewal/switch work lands; otherwise stale projection records can deny access.
+
 Create the resolver app registration as a tenant-admin step.
 
 ```bash
@@ -668,6 +869,10 @@ az ad app show --id "<resolver-app-id>" --query "{appId:appId,identifierUris:ide
 ```
 
 Expected result: a tenant admin owns the app-registration step and later grants any required Graph permissions. This mirrors the resolver boundary in `infra/resolver.bicep:41-51` and P84's tenant-admin separation.
+
+**Portal.** portal.azure.com > Cosmos DB account > Networking shows projection storage access; Function App > Authentication and Networking shows resolver auth and VNet integration; entra.microsoft.com > App registrations creates the resolver app; API Management > Named values stores resolver URL, audience and source. Match `COSMOS_ACCOUNT`, resolver app id, gateway caller ids, private networking outputs and resolver named values to the commands, then press Create, Save or Add provider on the corresponding blade. Source: `docs/SECURE-PROJECTION.md:322` and `docs/SCALE.md:681`.
+
+**Change later.** Resolver URL and audience edits are APIM named values and apply on later requests. Do not switch `entitlement-source` to `projection` until the supported renewal/switch work lands; otherwise stale projection records can deny access.
 
 Deploy private projection storage and networking.
 
@@ -684,6 +889,10 @@ az deployment group show -g "$GATEWAY_RG" -n "$PROJECTION_NETWORK_NAME" --query 
 ```
 
 Expected result: `projection.bicep` deploys first, then `projection-network.bicep` uses the Cosmos account output and creates private endpoints, DNS and the in-VNet runner. This mirrors `scripts/Deploy-ClaudeProjection.ps1:107-122`, `infra/projection.bicep:11-68` and `infra/projection-network.bicep:26-49`.
+
+**Portal.** portal.azure.com > Cosmos DB account > Networking shows projection storage access; Function App > Authentication and Networking shows resolver auth and VNet integration; entra.microsoft.com > App registrations creates the resolver app; API Management > Named values stores resolver URL, audience and source. Match `COSMOS_ACCOUNT`, resolver app id, gateway caller ids, private networking outputs and resolver named values to the commands, then press Create, Save or Add provider on the corresponding blade. Source: `docs/SECURE-PROJECTION.md:322` and `docs/SCALE.md:681`.
+
+**Change later.** Resolver URL and audience edits are APIM named values and apply on later requests. Do not switch `entitlement-source` to `projection` until the supported renewal/switch work lands; otherwise stale projection records can deny access.
 
 Deploy the resolver with Standard v2 outbound VNet integration and upload code.
 
@@ -703,6 +912,10 @@ az functionapp show -g "$GATEWAY_RG" -n "$RESOLVER_SITE_NAME" --query "{name:nam
 
 Expected result: the Function app is running with VNet integration and resolver code uploaded. `allowedCallerAppIds` is the gateway managed identity application id, and `allowedCallerObjectIds` is the gateway object id; otherwise the resolver refuses the gateway. This mirrors `scripts/Deploy-ClaudeProjection.ps1:130-168` and `infra/resolver.bicep:385-387`.
 
+**Portal.** portal.azure.com > Cosmos DB account > Networking shows projection storage access; Function App > Authentication and Networking shows resolver auth and VNet integration; entra.microsoft.com > App registrations creates the resolver app; API Management > Named values stores resolver URL, audience and source. Match `COSMOS_ACCOUNT`, resolver app id, gateway caller ids, private networking outputs and resolver named values to the commands, then press Create, Save or Add provider on the corresponding blade. Source: `docs/SECURE-PROJECTION.md:322` and `docs/SCALE.md:681`.
+
+**Change later.** Resolver URL and audience edits are APIM named values and apply on later requests. Do not switch `entitlement-source` to `projection` until the supported renewal/switch work lands; otherwise stale projection records can deny access.
+
 Set resolver named values without switching entitlement.
 
 ```bash
@@ -714,6 +927,10 @@ az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id en
 ```
 
 Expected result: resolver URL and audience are set, while `entitlement-source` remains `named-value`. This mirrors `docs/SCALE.md:670-675`.
+
+**Portal.** portal.azure.com > Cosmos DB account > Networking shows projection storage access; Function App > Authentication and Networking shows resolver auth and VNet integration; entra.microsoft.com > App registrations creates the resolver app; API Management > Named values stores resolver URL, audience and source. Match `COSMOS_ACCOUNT`, resolver app id, gateway caller ids, private networking outputs and resolver named values to the commands, then press Create, Save or Add provider on the corresponding blade. Source: `docs/SECURE-PROJECTION.md:322` and `docs/SCALE.md:681`.
+
+**Change later.** Resolver URL and audience edits are APIM named values and apply on later requests. Do not switch `entitlement-source` to `projection` until the supported renewal/switch work lands; otherwise stale projection records can deny access.
 
 Populate and compare the projection through an in-VNet runner container.
 
@@ -769,6 +986,10 @@ az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node /work/
 
 Expected result: population and comparison run through the runner created by `projection-network.bicep`. `send_runner_file` mirrors `scripts/ClaudeRunner.ps1:113-148`: base64url chunks are appended through `az container exec` and decoded in the container. The snapshot and gateway-decision files are produced by the repository scripts because their Graph and named-value comparison logic is not an Azure CLI data-plane operation. This mirrors `scripts/Deploy-ClaudeProjection.ps1:199-221`, `scripts/Sync-ClaudeProjection.ps1`, `scripts/ClaudeRunner.ps1`, `docs/SCALE.md:681-726` and `infra/projection-network.bicep:46-49`.
 
+**Portal.** portal.azure.com > Cosmos DB account > Networking shows projection storage access; Function App > Authentication and Networking shows resolver auth and VNet integration; entra.microsoft.com > App registrations creates the resolver app; API Management > Named values stores resolver URL, audience and source. Match `COSMOS_ACCOUNT`, resolver app id, gateway caller ids, private networking outputs and resolver named values to the commands, then press Create, Save or Add provider on the corresponding blade. Source: `docs/SECURE-PROJECTION.md:322` and `docs/SCALE.md:681`.
+
+**Change later.** Resolver URL and audience edits are APIM named values and apply on later requests. Do not switch `entitlement-source` to `projection` until the supported renewal/switch work lands; otherwise stale projection records can deny access.
+
 Projection switch status.
 
 ```bash
@@ -776,6 +997,10 @@ az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id en
 ```
 
 Expected result: the value stays `named-value`. P84 refuses automated switching. `docs/SCALE.md:744-760` states the reason: records lease for at most two hours, and without renewal every developer receives 503 after expiry. The legacy manual command can change `entitlement-source` to `projection`, but it is not P84-protected admission, creates no reconciler, and can cause that outage. P86, in progress on another branch, will add supported renewal and switch; this guide does not include P86's content.
+
+**Portal.** portal.azure.com > Cosmos DB account > Networking shows projection storage access; Function App > Authentication and Networking shows resolver auth and VNet integration; entra.microsoft.com > App registrations creates the resolver app; API Management > Named values stores resolver URL, audience and source. Match `COSMOS_ACCOUNT`, resolver app id, gateway caller ids, private networking outputs and resolver named values to the commands, then press Create, Save or Add provider on the corresponding blade. Source: `docs/SECURE-PROJECTION.md:322` and `docs/SCALE.md:681`.
+
+**Change later.** Resolver URL and audience edits are APIM named values and apply on later requests. Do not switch `entitlement-source` to `projection` until the supported renewal/switch work lands; otherwise stale projection records can deny access.
 
 ## 11. Verification
 
@@ -790,6 +1015,10 @@ jq -r '.content[0].text // .error.message' response.json
 
 Expected result: an entitled caller receives HTTP `200` and a model response. This mirrors `scripts/Test-ClaudeHealth.ps1`.
 
+**Portal.** portal.azure.com > API Management > `$APIM_NAME` > Overview, APIs, Named values and Monitoring > Diagnostic settings, plus Foundry > Access control (IAM), can inspect the configuration used by the verification commands. There is no single portal health button and no portal blade sends the Claude data-plane request; use Save only when correcting the named value, diagnostic setting or role assignment before rerunning the command. Source: `docs/OPERATIONS.md:102`.
+
+**Change later.** Fix the underlying named values, group publication, model deployment, role assignment or diagnostic setting, then rerun the same verification command. A portal view alone is not a data-plane proof.
+
 Verify a non-entitled caller is refused.
 
 ```bash
@@ -799,6 +1028,10 @@ jq -r '.error.message' response-forbidden.json
 ```
 
 Expected result: HTTP `403` with an entitlement refusal. Do not empty the live allow lists to make this test; use a caller that is not entitled. This mirrors `scripts/Test-ClaudeHealth.ps1` and `scripts/Sync-ClaudeAccess.ps1`.
+
+**Portal.** portal.azure.com > API Management > `$APIM_NAME` > Overview, APIs, Named values and Monitoring > Diagnostic settings, plus Foundry > Access control (IAM), can inspect the configuration used by the verification commands. There is no single portal health button and no portal blade sends the Claude data-plane request; use Save only when correcting the named value, diagnostic setting or role assignment before rerunning the command. Source: `docs/OPERATIONS.md:102`.
+
+**Change later.** Fix the underlying named values, group publication, model deployment, role assignment or diagnostic setting, then rerun the same verification command. A portal view alone is not a data-plane proof.
 
 Verify a model outside the tier is refused.
 
@@ -818,6 +1051,10 @@ az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id 
 
 Expected result: HTTP `403` or gateway refusal naming the model outside the tier. This mirrors `scripts/Test-ClaudeHealth.ps1` and `scripts/Measure-ClaudeCeiling.ps1`.
 
+**Portal.** portal.azure.com > API Management > `$APIM_NAME` > Overview, APIs, Named values and Monitoring > Diagnostic settings, plus Foundry > Access control (IAM), can inspect the configuration used by the verification commands. There is no single portal health button and no portal blade sends the Claude data-plane request; use Save only when correcting the named value, diagnostic setting or role assignment before rerunning the command. Source: `docs/OPERATIONS.md:102`.
+
+**Change later.** Fix the underlying named values, group publication, model deployment, role assignment or diagnostic setting, then rerun the same verification command. A portal view alone is not a data-plane proof.
+
 Check for direct Foundry bypass.
 
 ```bash
@@ -827,6 +1064,10 @@ az role assignment list --scope "$FOUNDRY_ID" --include-inherited --query "[?rol
 
 Expected result: the gateway identity has the role; developers do not hold direct `Cognitive Services User` unless there is an explicitly approved bypass. This mirrors `scripts/Get-ClaudeBypass.ps1`.
 
+**Portal.** portal.azure.com > API Management > `$APIM_NAME` > Overview, APIs, Named values and Monitoring > Diagnostic settings, plus Foundry > Access control (IAM), can inspect the configuration used by the verification commands. There is no single portal health button and no portal blade sends the Claude data-plane request; use Save only when correcting the named value, diagnostic setting or role assignment before rerunning the command. Source: `docs/OPERATIONS.md:102`.
+
+**Change later.** Fix the underlying named values, group publication, model deployment, role assignment or diagnostic setting, then rerun the same verification command. A portal view alone is not a data-plane proof.
+
 Measure the per-minute call ceiling.
 
 ```bash
@@ -835,6 +1076,10 @@ for i in $(seq 1 5); do curl -sS -o /dev/null -w "%{http_code}\n" -H "Authorizat
 ```
 
 Expected result: normal traffic returns `200`; a deliberate high-rate test eventually returns the gateway's rate-limit status. This mirrors `scripts/Measure-ClaudeCeiling.ps1`.
+
+**Portal.** portal.azure.com > API Management > `$APIM_NAME` > Overview, APIs, Named values and Monitoring > Diagnostic settings, plus Foundry > Access control (IAM), can inspect the configuration used by the verification commands. There is no single portal health button and no portal blade sends the Claude data-plane request; use Save only when correcting the named value, diagnostic setting or role assignment before rerunning the command. Source: `docs/OPERATIONS.md:102`.
+
+**Change later.** Fix the underlying named values, group publication, model deployment, role assignment or diagnostic setting, then rerun the same verification command. A portal view alone is not a data-plane proof.
 
 ## 12. Teardown
 
@@ -847,6 +1092,10 @@ az role assignment list --scope "$FOUNDRY_ID" --assignee "$APIM_PRINCIPAL_ID" --
 
 Expected result: the operator sees the exact resources and role assignments that will be removed. This mirrors the installer's explicit review style before writes.
 
+**Portal.** portal.azure.com > Resource groups > `$GATEWAY_RG` > Delete resource group removes the isolated resource group; API Management > Deleted services can purge a soft-deleted APIM name; entra.microsoft.com > Groups and App registrations delete receipt-created directory objects. Match the resource group, role assignment receipt, group receipts and Desktop app receipt before pressing Delete, and do not delete pre-existing external objects. Source: `docs/OPERATIONS.md:210`.
+
+**Change later.** Teardown is destructive. Restore by redeploying or recreating only the owned resource; do not rerun receipt deletes against objects that were pre-existing or already removed.
+
 Delete the gateway resource group when the deployment was isolated to it.
 
 ```bash
@@ -855,6 +1104,10 @@ az group exists -n "$GATEWAY_RG"
 ```
 
 Expected result: the group deletion starts; `az group exists` eventually returns `false`. Do not use this command if the group contains shared resources. This mirrors the resource-group boundary created by `deploy.ps1:134`.
+
+**Portal.** portal.azure.com > Resource groups > `$GATEWAY_RG` > Delete resource group removes the isolated resource group; API Management > Deleted services can purge a soft-deleted APIM name; entra.microsoft.com > Groups and App registrations delete receipt-created directory objects. Match the resource group, role assignment receipt, group receipts and Desktop app receipt before pressing Delete, and do not delete pre-existing external objects. Source: `docs/OPERATIONS.md:210`.
+
+**Change later.** Teardown is destructive. Restore by redeploying or recreating only the owned resource; do not rerun receipt deletes against objects that were pre-existing or already removed.
 
 Remove only external resources this guide recorded as created.
 
@@ -909,3 +1162,21 @@ az role assignment list --scope "$FOUNDRY_ID" --assignee "$APIM_PRINCIPAL_ID" --
 ```
 
 Expected result: only role assignments, tier groups and Desktop app registrations recorded with `created:true` are deleted. A missing receipt refuses and exits nonzero from the block; pre-existing directory objects survive. This mirrors the Foundry role assignment in `infra/foundry-role.bicep`, `deploy.ps1:182-187` and `scripts/New-ClaudeDesktopEntraApp.ps1:29-39`.
+**Portal.** portal.azure.com > Resource groups > `$GATEWAY_RG` > Delete resource group removes the isolated resource group; API Management > Deleted services can purge a soft-deleted APIM name; entra.microsoft.com > Groups and App registrations delete receipt-created directory objects. Match the resource group, role assignment receipt, group receipts and Desktop app receipt before pressing Delete, and do not delete pre-existing external objects. Source: `docs/OPERATIONS.md:210`.
+
+**Change later.** Teardown is destructive. Restore by redeploying or recreating only the owned resource; do not rerun receipt deletes against objects that were pre-existing or already removed.
+
+## Pending portal captures
+
+The staged spec is `guide/captures-pending/p90.json`. It stays outside `guide/captures/` because the outputs below do not exist yet and would fail the loaded capture/documentation checks. In the capture commit, move it into `guide/captures/`, run the capture tool, add the redacted PNG files under `docs/guide/`, add records to `docs/guide/portal-captures.json`, and keep the documented output paths unchanged.
+
+| planned capture id | output path under `docs/guide/` | blade | which step it illustrates | what must exist live | capture discovery kind |
+|---|---|---|---|---|---|
+| `p90-gateway-networking` | `p90-gateway-networking.png` | portal.azure.com > API Management > gateway > Deployment + infrastructure > Network | §2 Standard v2 / Premium v2 network settings and public access | A deployed gateway | `gateway` |
+| `p90-desktop-app-overview` | `p90-desktop-app-overview.png` | entra.microsoft.com > App registrations > Desktop app > Overview | §7 Desktop app id discovery | A Desktop app registration | `entra-app` |
+| `p90-desktop-app-authentication` | `p90-desktop-app-authentication.png` | entra.microsoft.com > App registrations > Desktop app > Authentication | §7 public-client redirect URIs | A Desktop app registration with redirect URIs | `entra-app` |
+| `p90-company-custom-domains` | `p90-company-custom-domains.png` | portal.azure.com > API Management > gateway > Custom domains | §9 company address binding | A gateway and, for a final capture, a certificate/DNS-ready hostname | `gateway` |
+| `p90-gateway-diagnostic-settings` | `p90-gateway-diagnostic-settings.png` | portal.azure.com > API Management > gateway > Monitoring > Diagnostic settings | §11 verification surfaces for logs and gateway diagnostics | A gateway with monitoring enabled or ready to enable | `gateway` |
+| `p90-resource-group-delete` | `p90-resource-group-delete.png` | portal.azure.com > Resource groups > gateway resource group > Overview | §12 resource-group teardown review | The isolated gateway resource group | `resource` |
+
+Tooling gaps: the current capture schema cannot express a pre-resource create wizard such as Create a resource > API Management > Basics, because every step needs a discovered target. It also cannot express tenant-wide Entra creation entry points without an existing app or group target. Those are documented as portal paths above but are not staged as automated captures.
