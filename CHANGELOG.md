@@ -52,6 +52,11 @@ exact streaming cache-creation detail remains **U13**.
   parity for live gateway URL/SKU resolution, custom hostname receipts,
   model-refusal restore checks and receipt-gated resource-group teardown, and
   guards the new mappings plus imperative Change-later wording.
+- **P90 portal path for the Azure CLI setup guide, round 6.** P90 now merges
+  P89 rounds 11-12, preserves all P89 bash fences byte-identical, documents the
+  immediate missing-`dig` refusal, the 600-second CNAME wait, the 2,700-second
+  hostname wait, and the reused-APIM `appinsights` logger portal view, with
+  guard mutations for each new assertion.
 - **P89 Azure CLI setup guide.** `docs/AZ-COMMANDS.md` mirrors the installer and
   in-scope administration scripts with Cloud Shell bash commands, verification
   commands, expected results and source references; `Test-AzCommandsGuide.ps1`

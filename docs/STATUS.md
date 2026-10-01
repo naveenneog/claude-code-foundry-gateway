@@ -69,6 +69,18 @@ Round 9 and 10 council-fix validation, 2026-10-01:
 - Validation: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS with 504 checks; `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS with 763 checks in 253.41 s using isolated `AZURE_CONFIG_DIR`; `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS with 34 checks in 10.25 s. No live Azure command ran.
 - Mutations: resource-group new/existing/created-rerun/deleted-after-receipt/exists-failure; reuse what-if-only/create-only/bad-argument; Desktop read-back missing URI/fallback false; hostname non-Succeeded, wrong CNAME, missing preserve of `negotiateClientCertificate`, Key Vault retry removed, non-Key Vault retry allowed, Updating wait removed, Failed state allowed, certificate timeout allowed, non-401 receipt write, gateway URL ignoring address receipt; model failed read, empty read, curl-failure restore skipped, restore mismatch ignored; teardown pre-existing refusal on stdout. Each mutation keeps the suite loadable with the baseline check count for that run and at least one check fails; bash-block mutants also parse with `bash -n`.
 
+Round 11 mutation-fix validation, 2026-10-01:
+- Hostname binding guard now detects the reviewed misses: a live APIM `Updating` state with correct DNS refuses before PATCH, and post-PATCH `Failed`, `Canceled` and certificate `Failed` states refuse with their specific messages instead of falling through to timeout. The hostname wait now mirrors the scripts' `2700` second default and completes only when state is `Succeeded`, exactly one Proxy binding exists and certificate status is not `InProgress`; an existing binding with no certificate status is complete, while no binding times out.
+- DNS CNAME verification now waits up to `P89_DNS_TIMEOUT_SECONDS=600` with the hostname poll interval, then refuses with the expected `<apim>.azure-api.net` target. Gateway-address receipt writing creates `.p89-receipts` first. Section 11 now states that standard-tier callers are narrowed until the restore runs.
+- Validation: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS with 525 checks; `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS with 784 checks in 290.23 s using isolated `AZURE_CONFIG_DIR`; `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS with 34 checks in 10.29 s and `Documentation references hold: 43 guides; all mutations caught.` No live Azure command ran.
+- Mutations: m01 replaced the pre-PATCH provisioning-state refusal with `if false`; m07 replaced the post-PATCH Failed/Canceled/certificate Failed refusal with `if false`; post-PATCH Failed changed to timeout, Canceled changed to timeout, certificate Failed changed to timeout, Failed wrote a receipt, Canceled wrote a receipt, certificate Failed wrote a receipt, DNS second-poll success did not retry, DNS-never used the wrong target message, DNS-never PATCHed, empty certificate status timed out, missing Proxy binding succeeded, missing Proxy binding wrote a receipt, receipt-directory creation removed, hostname default changed back to 900, and the Section 11 narrowing sentence removed. Each mutation keeps the suite loadable with the baseline check count for that run and at least one check fails; bash-block mutants also parse with `bash -n`.
+
+Round 12 mutation-fix validation, 2026-10-01:
+- Derived-default guards now parse `scripts/Set-ClaudeGatewayAddress.ps1` and `P89-BIND-HOSTNAME` so hostname timeout, DNS timeout and poll defaults match the script without hand-written constants. The model-refusal expected-result paragraph is checked for the narrowing-window sentence.
+- Hostname binding now refuses immediately when `dig` is absent, naming Cloud Shell and the Learn page that lists `dig` as preinstalled, before any PATCH.
+- Validation: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS with 532 checks; `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS with 791 checks in 298.78 s using isolated `AZURE_CONFIG_DIR`; `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS with 34 checks in 7.13 s and `Documentation references hold: 43 guides; all mutations caught.` No live Azure command ran.
+- Mutations run and caught: m21 hostname default `2700` to `900` (531 pass, 1 fail, 532 total), m23 DNS default `600` to `60` (531 pass, 1 fail, 532 total), m22 model-refusal narrowing sentence removed (531 pass, 1 fail, 532 total), and dig presence guard changed to `if false` (531 pass, 1 fail, 532 total).
+
 
 ## P90 Portal path and staged screenshots for the Azure CLI setup guide, 2026-10-01
 
@@ -133,6 +145,18 @@ Round 5 results:
 - GREEN: `pwsh -NoProfile -File .\tests\Test-PortalCaptureSpecs.ps1` PASS, 45 checks, 2.22 s.
 - GREEN: `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS, 43 guides, 12.29 s.
 - Negative proofs against repository-local temporary copies, each at the 588-check baseline with at least one failure: removed `P89-RESOURCE-GROUP`; changed the reused-APIM create lead; removed the Part 8 URL/SKU portal step; removed `P89-GATEWAY-URL`; removed `P89-MODEL-REFUSAL`; changed the teardown-group lead; removed `P89-TEARDOWN-GROUP`; started a Change-later paragraph with `Regenerate`.
+
+
+Round 6 results:
+- Merged P89 rounds 11-12 commit `c02dc1c` into `p90-portal-guide`. P89 fenced bash blocks compare byte-identical after the merge: 57 bash fences, 0 differences; all 55 P89 `Expected result:` lines are present. The P89 lead sentences did not change, so the round-5 az↔portal mappings remain unchanged.
+- Part 9 now states that the command route refuses immediately when `dig` is absent, that Git Bash lacks it while Cloud Shell lists it as preinstalled, and that the command waits up to 600 s for the CNAME before refusing. The hostname wait now says up to 2,700 s (45 minutes), sourced from `P89_HOSTNAME_TIMEOUT_SECONDS=2700` in the §9 expected result and `scripts/Set-ClaudeGatewayAddress.ps1:16`.
+- Part 12 step 1 now includes the reused-APIM `appinsights` logger view: API Management services > `$APIM_NAME` > Monitoring > Application Insights > logger `appinsights`, matching the P89 out-of-scope artifact list.
+- `tests/Test-AzPortalGuide.ps1` now guards the Part 9 dig-absence wording, 600-second DNS wait, 2,700-second hostname wait and Part 12 `appinsights` logger portal view.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-AzPortalGuide.ps1` PASS, 592 checks, 3.18 s.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS, 532 checks, 755.97 s.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS, 43 guides, 10.98 s.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-PortalCaptureSpecs.ps1` PASS, 45 checks, 1.51 s.
+- Negative proofs against repository-local temporary copies, each at the 592-check baseline with at least one failure: removed the immediate `dig` absence statement; changed the DNS wait from 600 s to 60 s; changed the hostname wait from 2,700 s to 900 s; removed the `appinsights` logger portal view.
 
 ## P71 follow-up: a lookup starts one refresh, 2026-09-30
 
@@ -1699,6 +1723,18 @@ Round 5 results:
 - GREEN: `pwsh -NoProfile -File .\tests\Test-PortalCaptureSpecs.ps1` PASS, 45 checks, 2.22 s.
 - GREEN: `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS, 43 guides, 12.29 s.
 - Negative proofs against repository-local temporary copies, each at the 588-check baseline with at least one failure: removed `P89-RESOURCE-GROUP`; changed the reused-APIM create lead; removed the Part 8 URL/SKU portal step; removed `P89-GATEWAY-URL`; removed `P89-MODEL-REFUSAL`; changed the teardown-group lead; removed `P89-TEARDOWN-GROUP`; started a Change-later paragraph with `Regenerate`.
+
+
+Round 6 results:
+- Merged P89 rounds 11-12 commit `c02dc1c` into `p90-portal-guide`. P89 fenced bash blocks compare byte-identical after the merge: 57 bash fences, 0 differences; all 55 P89 `Expected result:` lines are present. The P89 lead sentences did not change, so the round-5 az↔portal mappings remain unchanged.
+- Part 9 now states that the command route refuses immediately when `dig` is absent, that Git Bash lacks it while Cloud Shell lists it as preinstalled, and that the command waits up to 600 s for the CNAME before refusing. The hostname wait now says up to 2,700 s (45 minutes), sourced from `P89_HOSTNAME_TIMEOUT_SECONDS=2700` in the §9 expected result and `scripts/Set-ClaudeGatewayAddress.ps1:16`.
+- Part 12 step 1 now includes the reused-APIM `appinsights` logger view: API Management services > `$APIM_NAME` > Monitoring > Application Insights > logger `appinsights`, matching the P89 out-of-scope artifact list.
+- `tests/Test-AzPortalGuide.ps1` now guards the Part 9 dig-absence wording, 600-second DNS wait, 2,700-second hostname wait and Part 12 `appinsights` logger portal view.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-AzPortalGuide.ps1` PASS, 592 checks, 3.18 s.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS, 532 checks, 755.97 s.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS, 43 guides, 10.98 s.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-PortalCaptureSpecs.ps1` PASS, 45 checks, 1.51 s.
+- Negative proofs against repository-local temporary copies, each at the 592-check baseline with at least one failure: removed the immediate `dig` absence statement; changed the DNS wait from 600 s to 60 s; changed the hostname wait from 2,700 s to 900 s; removed the `appinsights` logger portal view.
 
 ## P71 follow-up: the deadline tests prove termination without racing it, 2026-09-30
 

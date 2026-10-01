@@ -295,8 +295,16 @@ for ($part = 1; $part -le 12; $part++) {
         Assert 'part 2 portal cites the reused-APIM create lead' ($portal -match [regex]::Escape('The create follows review of the what-if output.')) 'The create follows review of the what-if output.'
     }
     if ($part -eq 8) { Assert 'part 8 portal cites gateway URL marker' ($portal -match 'P89-GATEWAY-URL') 'P89-GATEWAY-URL' }
+    if ($part -eq 9) {
+        Assert 'part 9 portal documents immediate dig absence refusal' ($portal -match 'refuses at once when `dig` is absent') 'dig absence refusal'
+        Assert 'part 9 portal documents 600-second DNS wait' (($portal -match '600 s') -and ($portal -match 'P89_DNS_TIMEOUT_SECONDS=600')) '600 s P89_DNS_TIMEOUT_SECONDS=600'
+        Assert 'part 9 portal documents 2700-second hostname wait' (($portal -match '2,700 s \(45 minutes\)') -and ($portal -match 'P89_HOSTNAME_TIMEOUT_SECONDS=2700') -and ($portal -match 'scripts/Set-ClaudeGatewayAddress.ps1:16')) '2,700 s P89_HOSTNAME_TIMEOUT_SECONDS=2700 scripts/Set-ClaudeGatewayAddress.ps1:16'
+    }
     if ($part -eq 11) { Assert 'part 11 portal cites model-refusal marker' ($portal -match 'P89-MODEL-REFUSAL') 'P89-MODEL-REFUSAL' }
-    if ($part -eq 12) { Assert 'part 12 portal cites teardown-group marker' ($portal -match 'P89-TEARDOWN-GROUP') 'P89-TEARDOWN-GROUP' }
+    if ($part -eq 12) {
+        Assert 'part 12 portal cites teardown-group marker' ($portal -match 'P89-TEARDOWN-GROUP') 'P89-TEARDOWN-GROUP'
+        Assert 'part 12 portal lists appinsights logger view' (($portal -match 'Monitoring > Application Insights') -and ($portal -match 'logger `appinsights`')) 'Monitoring > Application Insights logger `appinsights`'
+    }
 
     $azLeads = @(Get-AzLeadSentences $body)
     $mappings = @($azPortalMapping[[string]$part])
