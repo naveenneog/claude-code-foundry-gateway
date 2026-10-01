@@ -35,6 +35,11 @@ Round 3 council-fix validation, 2026-10-01:
 - UX fixes: runner steps use the network-template runner, script-produced snapshot and decisions files, ClaudeRunner-style base64url ACI exec transfer, sync package extraction, npm install, apply and compare.
 - Security fixes: Foundry role assignment creation records whether the assignment was created or pre-existing; teardown deletes only a receipt-created id and preserves pre-existing external assignments.
 - Validation: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS; `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS with 456 checks; `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS with 43 guides. No live Azure command ran.
+Round 4 council-fix validation, 2026-10-01:
+- Runner transfer now checks every `az container exec`, refuses failed chunks, computes local and remote SHA-256, and stops before apply/compare on mismatch.
+- Teardown now refuses missing receipts, records/deletes only receipt-created Foundry role assignments, Entra groups and Desktop app registrations, and preserves pre-existing external objects.
+- Group creation now records receipts and Graph advanced-query reads retry bounded 404s only for new or younger-than-15-minute groups; older 404s and 403s stop immediately. The guide cites Microsoft Learn's advanced-query eventual consistency/index-store behavior, accessed 2026-10-01.
+- Validation: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS; `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS with 468 checks; `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS with 43 guides. No live Azure command ran.
 
 ## P71 follow-up: a lookup starts one refresh, 2026-09-30
 

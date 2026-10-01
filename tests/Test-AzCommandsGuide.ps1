@@ -235,13 +235,30 @@ json_members() {
     oversized:standard-user) printf '{"value":[{"id":"33333333-3333-3333-3333-333333333333"}]}' ;;
     nextlink:premium-user) printf '{"value":[{"id":"11111111-1111-1111-1111-111111111111"}],"@odata.nextLink":"https://graph.microsoft.com/v1.0/next"}' ;;
     nextlink:*) printf '{"value":[]}' ;;
+    group404-twice:premium-user|group404-twice:premium-sp) printf '{"value":[{"id":"11111111-1111-1111-1111-111111111111"}]}' ;;
+    group404-twice:standard-user|group404-twice:standard-sp) printf '{"value":[{"id":"33333333-3333-3333-3333-333333333333"}]}' ;;
     *) printf '{"value":[]}' ;;
   esac
 }
 
 if [ "$1" = "ad" ] && [ "$2" = "group" ] && [ "$3" = "show" ]; then
   group="$(arg_after --group "$@")"
+  query="$(arg_after --query "$@")"
+  if [[ "$query" == *createdDateTime* ]]; then
+    if [ "${P89_SCENARIO:-}" = "group-young" ]; then date -u +"%Y-%m-%dT%H:%M:%SZ"; else printf '2020-01-01T00:00:00Z\n'; fi
+    exit 0
+  fi
   if [ "$group" = "$STANDARD_GROUP" ]; then printf 'standard-id\n'; else printf 'premium-id\n'; fi
+  exit 0
+fi
+if [ "$1" = "ad" ] && [ "$2" = "group" ] && [ "$3" = "create" ]; then
+  name="$(arg_after --display-name "$@")"
+  id="premium-id"; [ "$name" = "$STANDARD_GROUP" ] && id="standard-id"
+  printf '{"id":"%s","displayName":"%s","createdDateTime":"%s"}\n' "$id" "$name" "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  exit 0
+fi
+if [ "$1" = "ad" ] && [ "$2" = "group" ] && [ "$3" = "delete" ]; then
+  printf 'delete-group %s\n' "$(arg_after --group "$@")" >> "$P89_WRITES"
   exit 0
 fi
 if [ "$1" = "ad" ] && [ "$2" = "user" ] && [ "$3" = "show" ]; then
@@ -260,6 +277,26 @@ fi
 if [ "$1" = "ad" ] && [ "$2" = "sp" ] && [ "$3" = "show" ]; then
   printf 'gateway-app-id\n'
   exit 0
+fi
+if [ "$1" = "ad" ] && [ "$2" = "app" ]; then
+  case "$3" in
+    list)
+      if [ "${P89_SCENARIO:-}" = "app-existing" ]; then printf 'existing-app-id\n'; fi
+      exit 0
+      ;;
+    create)
+      printf '{"appId":"created-app-id","displayName":"Claude Desktop gateway"}\n'
+      exit 0
+      ;;
+    update|show)
+      printf '{}\n'
+      exit 0
+      ;;
+    delete)
+      printf 'delete-app %s\n' "$(arg_after --id "$@")" >> "$P89_WRITES"
+      exit 0
+      ;;
+  esac
 fi
 if [ "$1" = "role" ] && [ "$2" = "assignment" ]; then
   action="$3"
@@ -283,6 +320,20 @@ if [ "$1" = "rest" ]; then
   url="$(arg_after --url "$@")"
   if [ "${P89_SCENARIO:-}" = "graph403" ] && [[ "$url" == *standard-id*servicePrincipal* ]]; then
     echo "Graph 403" >&2
+    exit 3
+  fi
+  if [ "${P89_SCENARIO:-}" = "graph403-window" ]; then
+    echo "Graph 403" >&2
+    exit 3
+  fi
+  if [ "${P89_SCENARIO:-}" = "group404-twice" ]; then
+    state="${P89_STATE_DIR:-.}/404-count"
+    n=0; [ -f "$state" ] && n="$(cat "$state")"
+    n=$((n+1)); printf '%s' "$n" > "$state"
+    if [ "$n" -le 2 ]; then echo "Graph 404" >&2; exit 3; fi
+  fi
+  if [ "${P89_SCENARIO:-}" = "group404-old" ]; then
+    echo "Graph 404" >&2
     exit 3
   fi
   tier=standard; [[ "$url" == *premium-id* ]] && tier=premium
@@ -352,6 +403,23 @@ fi
 if [ "$1" = "container" ] && [ "$2" = "exec" ]; then
   cmd="$(arg_after --exec-command "$@")"
   printf 'container-exec %s\n' "$cmd" >> "$P89_WRITES"
+  if [ "${P89_SCENARIO:-}" = "runner-chunk-fail" ] && [[ "$cmd" == *appendFileSync* ]]; then
+    echo "chunk failed" >&2
+    exit 9
+  fi
+  if [[ "$cmd" == *createHash* ]]; then
+    if [ "${P89_SCENARIO:-}" = "runner-hash-mismatch" ]; then
+      printf 'remote-bad-hash\n'
+    elif [[ "$cmd" == *sync-source.tar.gz* ]]; then
+      sha256sum sync-source.tar.gz | awk '{print $1}'
+    elif [[ "$cmd" == *snapshot.json* ]]; then
+      sha256sum snapshot.json | awk '{print $1}'
+    elif [[ "$cmd" == *gateway-decisions.json* ]]; then
+      sha256sum gateway-decisions.json | awk '{print $1}'
+    else
+      printf 'unknown-hash\n'
+    fi
+  fi
   exit 0
 fi
 if [ "$1" = "functionapp" ]; then
@@ -402,6 +470,7 @@ export P89_SCENARIO="$Name"
 export P89_CALLS="$(ConvertTo-BashPath (Join-Path $dir 'calls.log'))"
 export P89_WRITES="$(ConvertTo-BashPath (Join-Path $dir 'writes.log'))"
 export P89_MEMBER_CALLS="$(ConvertTo-BashPath (Join-Path $dir 'members.log'))"
+export P89_STATE_DIR="$(ConvertTo-BashPath $dir)"
 export STANDARD_GROUP="claude-code-standard"
 export PREMIUM_GROUP="claude-code-premium"
 export GATEWAY_RG="rg"
@@ -429,6 +498,8 @@ export DESKTOP_CLIENT_ID="66666666-6666-6666-6666-666666666666"
 export RESOLVER_APP_ID="resolver-app-id"
 export DEVELOPER_UPN="dev@example.test"
 export DEVELOPER_ID="55555555-5555-5555-5555-555555555555"
+export GRAPH_RETRY_DELAY_SECONDS="0"
+export GRAPH_RETRY_ATTEMPTS="3"
 cd "$(ConvertTo-BashPath $dir)"
 mkdir -p scripts sync/src onboarding .p89-receipts resolver/src
 cat > scripts/Sync-ClaudeProjection.ps1 <<'EOS'
@@ -466,6 +537,7 @@ function Read-ScenarioFile($Scenario, [string]$Name) {
     if (Test-Path -LiteralPath $path) { Get-Content -LiteralPath $path -Raw } else { '' }
 }
 
+$groupBlock = Get-MarkedBashBlock $markdown 'GROUP-RECEIPTS'
 $graphBlock = Get-MarkedBashBlock $markdown 'ENTITLEMENT-GRAPH'
 $publishBlock = Get-MarkedBashBlock $markdown 'ENTITLEMENT-PUBLISH'
 $addBlock = Get-MarkedBashBlock $markdown 'DEVELOPER-ADD'
@@ -473,12 +545,13 @@ $removeBlock = Get-MarkedBashBlock $markdown 'DEVELOPER-REMOVE'
 $roleBlock = Get-MarkedBashBlock $markdown 'FOUNDRY-ROLE'
 $tierBlock = Get-MarkedBashBlock $markdown 'TIER-WRITES'
 $budgetBlock = Get-MarkedBashBlock $markdown 'BUDGET-WRITE'
+$desktopAppBlock = Get-MarkedBashBlock $markdown 'DESKTOP-APP'
 $handoverBlock = Get-MarkedBashBlock $markdown 'HANDOVER'
 $projectionDeployBlock = Get-MarkedBashBlock $markdown 'PROJECTION-DEPLOY'
 $resolverDeployBlock = Get-MarkedBashBlock $markdown 'RESOLVER-DEPLOY'
 $projectionRunnerBlock = Get-MarkedBashBlock $markdown 'PROJECTION-RUNNER'
 $teardownExternalBlock = Get-MarkedBashBlock $markdown 'TEARDOWN-EXTERNAL'
-$entitlementScript = $graphBlock + "`n" + $publishBlock
+$entitlementScript = $groupBlock + "`n" + $graphBlock + "`n" + $publishBlock
 
 $normal = Invoke-GuideBashScenario 'normal' $entitlementScript
 Assert 'guide execution publishes premium and standard exact values' (
@@ -498,6 +571,26 @@ $graph403 = Invoke-GuideBashScenario 'graph403' $entitlementScript
 Assert 'Graph failure stops before entitlement writes' (
     $graph403.Exit -ne 0 -and -not (Read-ScenarioFile $graph403 'writes.log')
 ) $graph403.Output
+
+$newGroupReceipts = "mkdir -p .p89-receipts; now=`$(date -u +%Y-%m-%dT%H:%M:%SZ); printf '%s\n' '{""group"":{""created"":true,""id"":""standard-id"",""displayName"":""claude-code-standard"",""createdAt"":""'`$now'""}}' > .p89-receipts/group-standard.json; printf '%s\n' '{""group"":{""created"":true,""id"":""premium-id"",""displayName"":""claude-code-premium"",""createdAt"":""'`$now'""}}' > .p89-receipts/group-premium.json;"
+$oldGroupReceipts = "mkdir -p .p89-receipts; printf '%s\n' '{""group"":{""created"":false,""id"":""standard-id"",""displayName"":""claude-code-standard"",""createdAt"":""2020-01-01T00:00:00Z""}}' > .p89-receipts/group-standard.json; printf '%s\n' '{""group"":{""created"":false,""id"":""premium-id"",""displayName"":""claude-code-premium"",""createdAt"":""2020-01-01T00:00:00Z""}}' > .p89-receipts/group-premium.json;"
+
+$group404Then200 = Invoke-GuideBashScenario 'group404-twice' ($newGroupReceipts + "`n" + $graphBlock + "`n" + $publishBlock)
+Assert 'new group 404 retries then publishes after Graph index catches up' (
+    $group404Then200.Exit -eq 0 -and
+    (Read-ScenarioFile $group404Then200 'writes.log') -match 'allow-premium=' -and
+    $group404Then200.Output -match 'retrying after index propagation'
+) $group404Then200.Output
+
+$group404Old = Invoke-GuideBashScenario 'group404-old' ($oldGroupReceipts + "`n" + $graphBlock + "`n" + $publishBlock)
+Assert 'old group 404 stops with no entitlement write' (
+    $group404Old.Exit -ne 0 -and -not ((Read-ScenarioFile $group404Old 'writes.log') -match 'allow-')
+) $group404Old.Output
+
+$graph403Window = Invoke-GuideBashScenario 'graph403-window' ($newGroupReceipts + "`n" + $graphBlock + "`n" + $publishBlock)
+Assert 'Graph 403 inside retry window stops immediately with no entitlement write' (
+    $graph403Window.Exit -ne 0 -and -not ((Read-ScenarioFile $graph403Window 'writes.log') -match 'allow-') -and -not ($graph403Window.Output -match 'retrying after index propagation')
+) $graph403Window.Output
 
 $nextLink = Invoke-GuideBashScenario 'nextlink' $entitlementScript
 Assert 'paged Graph response is refused before writes' (
@@ -569,6 +662,18 @@ Assert 'role assignment block records pre-existing assignment without creating' 
     (Read-ScenarioFile $roleExisting '.p89-receipts/foundry-role.json' | ConvertFrom-Json).foundryRole.created -eq $false -and
     -not ((Read-ScenarioFile $roleExisting 'writes.log') -match 'created-role-id')
 ) $roleExisting.Output
+
+$desktopAppCreated = Invoke-GuideBashScenario 'app-new' $desktopAppBlock
+Assert 'desktop app block records created app receipt' (
+    $desktopAppCreated.Exit -eq 0 -and
+    (Read-ScenarioFile $desktopAppCreated '.p89-receipts/desktop-app.json' | ConvertFrom-Json).app.created -eq $true
+) $desktopAppCreated.Output
+
+$desktopAppExisting = Invoke-GuideBashScenario 'app-existing' $desktopAppBlock
+Assert 'desktop app block records pre-existing app receipt' (
+    $desktopAppExisting.Exit -eq 0 -and
+    (Read-ScenarioFile $desktopAppExisting '.p89-receipts/desktop-app.json' | ConvertFrom-Json).app.created -eq $false
+) $desktopAppExisting.Output
 
 $tierWrites = Invoke-GuideBashScenario 'tier-writes' $tierBlock
 Assert 'tier write block writes limits and guarded model list' (
@@ -642,14 +747,48 @@ Assert 'projection runner block assigns Cosmos role and transfers files before a
     $runnerCalls -match 'apply-projection\.mjs --cosmos .* --compare /work/gateway-decisions\.json'
 ) $projectionRunner.Output
 
-$teardownCreated = Invoke-GuideBashScenario 'teardown-created' ("mkdir -p .p89-receipts; printf '%s\n' '{""foundryRole"":{""created"":true,""id"":""created-role-id""}}' > .p89-receipts/foundry-role.json; " + $teardownExternalBlock)
+$runnerChunkFail = Invoke-GuideBashScenario 'runner-chunk-fail' ($projectionDeployBlock + "`n" + $projectionRunnerBlock)
+Assert 'runner failed chunk stops before apply and compare' (
+    $runnerChunkFail.Exit -ne 0 -and
+    $runnerChunkFail.Output -match 'Refused: runner transfer chunk failed' -and
+    -not ((Read-ScenarioFile $runnerChunkFail 'writes.log') -match 'apply-projection\.mjs')
+) $runnerChunkFail.Output
+
+$runnerHashMismatch = Invoke-GuideBashScenario 'runner-hash-mismatch' ($projectionDeployBlock + "`n" + $projectionRunnerBlock)
+Assert 'runner hash mismatch stops before apply and compare' (
+    $runnerHashMismatch.Exit -ne 0 -and
+    $runnerHashMismatch.Output -match 'Refused: runner transfer hash mismatch' -and
+    -not ((Read-ScenarioFile $runnerHashMismatch 'writes.log') -match 'apply-projection\.mjs')
+) $runnerHashMismatch.Output
+
+$allCreatedReceipts = "mkdir -p .p89-receipts; printf '%s\n' '{""foundryRole"":{""created"":true,""id"":""created-role-id""}}' > .p89-receipts/foundry-role.json; printf '%s\n' '{""group"":{""created"":true,""id"":""standard-id""}}' > .p89-receipts/group-standard.json; printf '%s\n' '{""group"":{""created"":true,""id"":""premium-id""}}' > .p89-receipts/group-premium.json; printf '%s\n' '{""app"":{""created"":true,""appId"":""created-app-id""}}' > .p89-receipts/desktop-app.json;"
+$allExistingReceipts = "mkdir -p .p89-receipts; printf '%s\n' '{""foundryRole"":{""created"":false,""existingId"":""existing-role-id""}}' > .p89-receipts/foundry-role.json; printf '%s\n' '{""group"":{""created"":false,""id"":""standard-id""}}' > .p89-receipts/group-standard.json; printf '%s\n' '{""group"":{""created"":false,""id"":""premium-id""}}' > .p89-receipts/group-premium.json; printf '%s\n' '{""app"":{""created"":false,""appId"":""existing-app-id""}}' > .p89-receipts/desktop-app.json;"
+
+$teardownCreated = Invoke-GuideBashScenario 'teardown-created' ($allCreatedReceipts + $teardownExternalBlock)
 Assert 'teardown deletes only receipt-created role assignment' (
     $teardownCreated.Exit -eq 0 -and (Read-ScenarioFile $teardownCreated 'writes.log') -match 'delete-role created-role-id'
 ) $teardownCreated.Output
+Assert 'teardown deletes receipt-created groups and app' (
+    $teardownCreated.Exit -eq 0 -and
+    (Read-ScenarioFile $teardownCreated 'writes.log') -match 'delete-group standard-id' -and
+    (Read-ScenarioFile $teardownCreated 'writes.log') -match 'delete-group premium-id' -and
+    (Read-ScenarioFile $teardownCreated 'writes.log') -match 'delete-app created-app-id'
+) $teardownCreated.Output
 
-$teardownExisting = Invoke-GuideBashScenario 'teardown-existing' ("mkdir -p .p89-receipts; printf '%s\n' '{""foundryRole"":{""created"":false,""existingId"":""existing-role-id""}}' > .p89-receipts/foundry-role.json; " + $teardownExternalBlock)
+$teardownExisting = Invoke-GuideBashScenario 'teardown-existing' ($allExistingReceipts + $teardownExternalBlock)
 Assert 'teardown preserves pre-existing role assignment' (
     $teardownExisting.Exit -eq 0 -and -not ((Read-ScenarioFile $teardownExisting 'writes.log') -match 'delete-role')
 ) $teardownExisting.Output
+Assert 'teardown preserves pre-existing groups and app' (
+    $teardownExisting.Exit -eq 0 -and
+    -not ((Read-ScenarioFile $teardownExisting 'writes.log') -match 'delete-group|delete-app')
+) $teardownExisting.Output
+
+$teardownMissingReceipt = Invoke-GuideBashScenario 'teardown-missing-receipt' $teardownExternalBlock
+Assert 'teardown with missing receipt refuses and deletes nothing' (
+    $teardownMissingReceipt.Exit -ne 0 -and
+    $teardownMissingReceipt.Output -match 'No receipt' -and
+    -not ((Read-ScenarioFile $teardownMissingReceipt 'writes.log') -match 'delete-')
+) $teardownMissingReceipt.Output
 
 if ($script:fail) { throw "$script:fail assertion(s) failed." }

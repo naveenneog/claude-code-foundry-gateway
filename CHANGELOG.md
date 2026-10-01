@@ -38,7 +38,10 @@ exact streaming cache-creation detail remains **U13**.
   oversize APIM named values, with a Git Bash execution harness around the
   guide's bash blocks. Round 3 aligns projection deployment order, resolver
   caller ids, runner transfer, handover JSON shape and teardown receipts with
-  the installer and projection scripts.
+  the installer and projection scripts. Round 4 makes runner file transfer
+  fail-closed with SHA-256 verification, requires teardown receipts for external
+  deletes, records group/app creation receipts and documents the Microsoft Graph
+  advanced-query eventual-consistency retry.
 - **Final P85 follow-up integration.** P71's owned-process deadline probes and
   precise public-evidence section lookup are merged without production changes.
   The single full AUM run passes all 1,200 cases; refreshed file and whole-check

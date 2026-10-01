@@ -2,7 +2,7 @@
 
 **Status:** commands checked against Azure CLI 2.86.0 help and the Bicep templates; not yet run end to end. The scripts remain the tested setup path. This guide is the plain Azure CLI equivalent for a reviewed customer deployment.
 
-Run the commands in **Azure Cloud Shell bash** from the repository root. Cloud Shell has `az`, `jq`, `git` and `node`. Windows users run the bash blocks in Cloud Shell, WSL or Git Bash. In Windows PowerShell, `az` arguments containing `( ) | & < > ^` are re-parsed by `cmd.exe` through the `az.cmd` shim; `--query` expressions and Graph URLs are common examples. Keep variables in the block below and substitute environment-specific values there, not inline.
+Run the commands in **Azure Cloud Shell bash** from the repository root; if Cloud Shell opens in PowerShell, switch with `bash` or the shell selector. Cloud Shell has `az`, `jq`, `git` and `node`. Windows users run the bash blocks in Cloud Shell, WSL or Git Bash. In Windows PowerShell, `az` arguments containing `( ) | & < > ^` are re-parsed by `cmd.exe` through the `az.cmd` shim; `--query` expressions and Graph URLs are common examples. Keep variables in the block below and substitute environment-specific values there, not inline.
 
 ```bash
 export SUBSCRIPTION_ID="<subscription-id>"
@@ -248,13 +248,27 @@ Expected result: `allow-*` values are comma-sentinel lists, `quota-overrides` is
 Create or discover the two tier groups.
 
 ```bash
-az ad group show --group "$STANDARD_GROUP" --query "{id:id,displayName:displayName}" -o json
-az ad group show --group "$PREMIUM_GROUP" --query "{id:id,displayName:displayName}" -o json
-az ad group create --display-name "$STANDARD_GROUP" --mail-nickname "$STANDARD_GROUP" --query "{id:id,displayName:displayName}" -o json
-az ad group create --display-name "$PREMIUM_GROUP" --mail-nickname "$PREMIUM_GROUP" --query "{id:id,displayName:displayName}" -o json
+# P89-GROUP-RECEIPTS-BEGIN
+mkdir -p .p89-receipts
+record_group() {
+  tier="$1"
+  name="$2"
+  receipt=".p89-receipts/group-${tier}.json"
+  if id="$(az ad group show --group "$name" --query id -o tsv)" && [ -n "$id" ]; then
+    created_at="$(az ad group show --group "$name" --query createdDateTime -o tsv)"
+    jq -n --arg id "$id" --arg name "$name" --arg createdAt "$created_at" '{group:{created:false,id:$id,displayName:$name,createdAt:$createdAt}}' > "$receipt"
+  else
+    created_group_json="$(az ad group create --display-name "$name" --mail-nickname "$name" -o json)"
+    printf '%s' "$created_group_json" | jq --arg name "$name" '{group:{created:true,id:.id,displayName:$name,createdAt:(.createdDateTime // "")}}' > "$receipt"
+  fi
+  jq -e '.group.id | type == "string" and length > 0' "$receipt" >/dev/null
+}
+record_group standard "$STANDARD_GROUP"
+record_group premium "$PREMIUM_GROUP"
+# P89-GROUP-RECEIPTS-END
 ```
 
-Expected result: each group has an object id; run the create commands only when the show command confirms absence. This mirrors `deploy.ps1:182-187` and `Install-ClaudeGateway.ps1:1597-1600`.
+Expected result: each group has an object id and `.p89-receipts/group-standard.json` / `.p89-receipts/group-premium.json` record whether this guide created it. Teardown uses those receipts and never deletes pre-existing groups. This mirrors `deploy.ps1:182-187` and `Install-ClaudeGateway.ps1:1597-1600`.
 
 Read transitive members from Microsoft Graph as users and service principals.
 
@@ -269,14 +283,43 @@ if ! PREMIUM_GROUP_ID="$(az ad group show --group "$PREMIUM_GROUP" --query id -o
   exit 1
 fi
 
+GROUPS_JUST_CREATED="$(jq -s -r '[.[].group.created] | any' .p89-receipts/group-standard.json .p89-receipts/group-premium.json)"
+GROUPS_YOUNG="false"
+for receipt in .p89-receipts/group-standard.json .p89-receipts/group-premium.json; do
+  created_at="$(jq -r '.group.createdAt // ""' "$receipt")"
+  if [ -n "$created_at" ] && [ "$created_at" != "null" ]; then
+    created_epoch="$(date -u -d "$created_at" +%s)"
+    now_epoch="$(date -u +%s)"
+    if [ $((now_epoch - created_epoch)) -lt 900 ]; then GROUPS_YOUNG="true"; fi
+  fi
+done
+GRAPH_RETRY_ATTEMPTS="${GRAPH_RETRY_ATTEMPTS:-20}"
+GRAPH_RETRY_DELAY_SECONDS="${GRAPH_RETRY_DELAY_SECONDS:-30}"
+
 graph_get() {
   url="$1"
   file="$2"
-  if ! az rest --method get --url "$url" --headers "ConsistencyLevel=eventual" --resource https://graph.microsoft.com -o json > "$file"; then
+  err="${file}.err"
+  attempt=1
+  while [ "$attempt" -le "$GRAPH_RETRY_ATTEMPTS" ]; do
+    if az rest --method get --url "$url" --headers "ConsistencyLevel=eventual" --resource https://graph.microsoft.com -o json > "$file" 2> "$err"; then
+      rm -f "$err"
+      break
+    fi
     rm -f "$file"
+    if grep -q '404' "$err" && { [ "$GROUPS_JUST_CREATED" = "true" ] || [ "$GROUPS_YOUNG" = "true" ]; }; then
+      if [ "$attempt" -lt "$GRAPH_RETRY_ATTEMPTS" ]; then
+        echo "Graph advanced query returned 404 for a new group; retrying after index propagation ($attempt/$GRAPH_RETRY_ATTEMPTS)." >&2
+        sleep "$GRAPH_RETRY_DELAY_SECONDS"
+        attempt=$((attempt + 1))
+        continue
+      fi
+      echo "Refused: Graph advanced query still returned 404 after bounded retry; no entitlement values were changed." >&2
+      exit 1
+    fi
     echo "Graph read failed for $url; no entitlement values were changed." >&2
     exit 1
-  fi
+  done
   if ! jq -e 'has("value") and (.value | type == "array")' "$file" >/dev/null; then
     echo "Graph response $file is not a confirmed collection; no entitlement values were changed." >&2
     exit 1
@@ -294,7 +337,7 @@ graph_get "https://graph.microsoft.com/v1.0/groups/${STANDARD_GROUP_ID}/transiti
 # P89-ENTITLEMENT-GRAPH-END
 ```
 
-Expected result: the four JSON files exist and each contains a `value` array with no `@odata.nextLink`. A Graph error is an error, not an empty group; only a successful empty `value` array is empty. This mirrors `scripts/ClaudeGraphMembership.ps1:31-151`. The script uses direct REST in PowerShell because `az.cmd` on Windows re-parses `&`; in Cloud Shell bash, `az rest` is safe when the URL is quoted. The named-value path holds roughly 110 object ids per list; larger groups need the projection path.
+Expected result: the four JSON files exist and each contains a `value` array with no `@odata.nextLink`. A Graph error is an error, not an empty group; only a successful empty `value` array is empty. Microsoft Graph advanced directory queries use a separate index store and require `ConsistencyLevel: eventual` with `$count`; a just-created group can therefore be temporarily invisible to this query shape, so this block retries only for new or younger-than-15-minute groups and treats older 404s or any 403 as immediate errors (Microsoft Learn, "Advanced query capabilities on Microsoft Entra ID objects", accessed 2026-10-01). This mirrors `scripts/ClaudeGraphMembership.ps1:31-151`. The script uses direct REST in PowerShell because `az.cmd` on Windows re-parses `&`; in Cloud Shell bash, `az rest` is safe when the URL is quoted. The named-value path holds roughly 110 object ids per list; larger groups need the projection path.
 
 Publish premium first, then standard without duplicates.
 
@@ -483,12 +526,22 @@ Expected result: the premium model list contains the new deployment with sentine
 Create or discover the Desktop public-client app.
 
 ```bash
+# P89-DESKTOP-APP-BEGIN
+mkdir -p .p89-receipts
 export DESKTOP_APP_NAME="Claude Desktop gateway"
-az ad app list --display-name "$DESKTOP_APP_NAME" --query "[].{appId:appId,displayName:displayName}" -o table
-az ad app create --display-name "$DESKTOP_APP_NAME" --sign-in-audience AzureADMyOrg --query "{appId:appId,displayName:displayName}" -o json
+EXISTING_DESKTOP_APP_ID="$(az ad app list --display-name "$DESKTOP_APP_NAME" --query "[?displayName=='${DESKTOP_APP_NAME}']|[0].appId" -o tsv)"
+if [ -n "$EXISTING_DESKTOP_APP_ID" ]; then
+  jq -n --arg appId "$EXISTING_DESKTOP_APP_ID" --arg displayName "$DESKTOP_APP_NAME" '{app:{created:false,appId:$appId,displayName:$displayName}}' > .p89-receipts/desktop-app.json
+else
+  az ad app create --display-name "$DESKTOP_APP_NAME" --sign-in-audience AzureADMyOrg -o json \
+    | jq '{app:{created:true,appId:.appId,displayName:.displayName}}' > .p89-receipts/desktop-app.json
+fi
+export DESKTOP_CLIENT_ID="$(jq -r '.app.appId' .p89-receipts/desktop-app.json)"
+jq -e '.app.appId | type == "string" and length > 0' .p89-receipts/desktop-app.json >/dev/null
+# P89-DESKTOP-APP-END
 ```
 
-Expected result: one application id is available. Run create only when list confirms absence. This mirrors `scripts/New-ClaudeDesktopEntraApp.ps1:29-39`.
+Expected result: one application id is available and `.p89-receipts/desktop-app.json` records whether this guide created it. Teardown uses that receipt and never deletes a pre-existing app registration. This mirrors `scripts/New-ClaudeDesktopEntraApp.ps1:29-39`.
 
 Set public-client redirect URIs, including broker redirects when the Desktop profile uses broker flow.
 
@@ -677,14 +730,29 @@ send_runner_file() {
   dest="$2"
   tmp="${dest}.b64"
   dir="${dest%/*}"
+  local_hash="$(sha256sum "$src" | awk '{print $1}')"
   b64="$(base64 < "$src" | tr '+/' '-_' | tr -d '=[:space:]')"
-  az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node -e require('fs').mkdirSync('$dir',{recursive:true});require('fs').writeFileSync('$tmp','')"
+  if ! az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node -e require('fs').mkdirSync('$dir',{recursive:true});require('fs').writeFileSync('$tmp','')"; then
+    echo "Refused: runner could not initialize transfer for $dest." >&2
+    exit 1
+  fi
   while [ -n "$b64" ]; do
     chunk="${b64:0:4900}"
     b64="${b64:4900}"
-    az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node -e require('fs').appendFileSync('$tmp','$chunk')"
+    if ! az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node -e require('fs').appendFileSync('$tmp','$chunk')"; then
+      echo "Refused: runner transfer chunk failed for $dest." >&2
+      exit 1
+    fi
   done
-  az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node -e f=require('fs');f.writeFileSync('$dest',Buffer.from(f.readFileSync('$tmp','utf8'),'base64url'));f.unlinkSync('$tmp')"
+  if ! remote_output="$(az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node -e f=require('fs');c=require('crypto');f.writeFileSync('$dest',Buffer.from(f.readFileSync('$tmp','utf8'),'base64url'));f.unlinkSync('$tmp');console.log(c.createHash('sha256').update(f.readFileSync('$dest')).digest('hex'))")"; then
+    echo "Refused: runner could not finalize transfer for $dest." >&2
+    exit 1
+  fi
+  remote_hash="$(printf '%s\n' "$remote_output" | tail -n 1 | tr -d '\r')"
+  if [ "$remote_hash" != "$local_hash" ]; then
+    echo "Refused: runner transfer hash mismatch for $dest. Local $local_hash, remote $remote_hash." >&2
+    exit 1
+  fi
 }
 
 send_runner_file sync-source.tar.gz /work/sync-source.tar.gz
@@ -792,14 +860,52 @@ Remove only external resources this guide recorded as created.
 
 ```bash
 # P89-TEARDOWN-EXTERNAL-BEGIN
-if jq -e '.foundryRole.created == true and (.foundryRole.id | type == "string" and length > 0)' .p89-receipts/foundry-role.json >/dev/null; then
-  ROLE_ASSIGNMENT_ID="$(jq -r '.foundryRole.id' .p89-receipts/foundry-role.json)"
-  az role assignment delete --ids "$ROLE_ASSIGNMENT_ID"
-else
-  echo "Foundry role assignment was pre-existing or not recorded as created; not deleting it."
-fi
+delete_created_role() {
+  receipt=".p89-receipts/foundry-role.json"
+  if [ ! -r "$receipt" ]; then
+    echo "Refused: No receipt: this guide did not record creating the Foundry role assignment; nothing deleted." >&2
+    return 1
+  fi
+  if jq -e '.foundryRole.created == true and (.foundryRole.id | type == "string" and length > 0)' "$receipt" >/dev/null; then
+    az role assignment delete --ids "$(jq -r '.foundryRole.id' "$receipt")"
+  else
+    echo "Foundry role assignment was pre-existing; not deleting it."
+  fi
+}
+
+delete_created_group() {
+  tier="$1"
+  receipt=".p89-receipts/group-${tier}.json"
+  if [ ! -r "$receipt" ]; then
+    echo "Refused: No receipt: this guide did not record creating group ${tier}; nothing deleted." >&2
+    return 1
+  fi
+  if jq -e '.group.created == true and (.group.id | type == "string" and length > 0)' "$receipt" >/dev/null; then
+    az ad group delete --group "$(jq -r '.group.id' "$receipt")"
+  else
+    echo "Group ${tier} was pre-existing; not deleting it."
+  fi
+}
+
+delete_created_app() {
+  receipt=".p89-receipts/desktop-app.json"
+  if [ ! -r "$receipt" ]; then
+    echo "Refused: No receipt: this guide did not record creating the Desktop app; nothing deleted." >&2
+    return 1
+  fi
+  if jq -e '.app.created == true and (.app.appId | type == "string" and length > 0)' "$receipt" >/dev/null; then
+    az ad app delete --id "$(jq -r '.app.appId' "$receipt")"
+  else
+    echo "Desktop app registration was pre-existing; not deleting it."
+  fi
+}
+
+delete_created_role || exit 1
+delete_created_group standard || exit 1
+delete_created_group premium || exit 1
+delete_created_app || exit 1
 az role assignment list --scope "$FOUNDRY_ID" --assignee "$APIM_PRINCIPAL_ID" --query "[?roleDefinitionName=='Cognitive Services User'].id" -o tsv
 # P89-TEARDOWN-EXTERNAL-END
 ```
 
-Expected result: only a role assignment recorded with `{created:true}` in `.p89-receipts/foundry-role.json` is deleted. A pre-existing assignment survives. Apply the same rule to Entra groups or app registrations: delete only object ids captured by this guide as newly created; do not delete pre-existing directory objects. This mirrors the Foundry role assignment in `infra/foundry-role.bicep`.
+Expected result: only role assignments, tier groups and Desktop app registrations recorded with `created:true` are deleted. A missing receipt refuses and exits nonzero from the block; pre-existing directory objects survive. This mirrors the Foundry role assignment in `infra/foundry-role.bicep`, `deploy.ps1:182-187` and `scripts/New-ClaudeDesktopEntraApp.ps1:29-39`.
