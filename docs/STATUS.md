@@ -12,7 +12,17 @@ section moves to `docs/status/P91.md` under P87's ADR-0042.
 - [x] PLAN: acceptance criteria A1-A10 below, one for each requirement R1-R10 of the lead's brief.
 - [x] CONTRACT: [ADR-0046](adr/0046-installer-checkpoint-and-resume.md) (proposed), U63-U74
       ([UNKNOWNS](UNKNOWNS.md#p91-research-before-implementation)), RED checks in ADR-0046 "Tests".
-- [ ] RED, GREEN, REFACTOR, COUNCIL (five seats), GATE, LOG.
+- [x] RED, 2026-10-01: `tests/Test-InstallerCheckpoint.ps1` 53 checks, 52 failed (85.1 s), and
+      `tests/Test-BashInstallerCheckpoint.ps1` 23 checks, 22 failed (53.7 s). The check that
+      passes in each is the harness guard (every az call known to the stub, no run timed out).
+      Failure lines read: "S1 the rerun completes and creates no deployment and no group -
+      deployment group create --name claude-gw-20261001165513 ..."; "S2 ... - claude-gw-20261001165435
+      -> claude-gw-20261001165513" (no recorded name, a second deployment); "S8 -Restart ... - A
+      parameter cannot be found that matches parameter name 'Restart'"; "ADR-0032 ... -
+      confirmed=False"; bash "the checkpoint library exists and passes bash -n", "S11 S8 --restart
+      ... - Unknown option: --restart" and "S11 the checkpoint exists before the first change ... -
+      checkpoint-at-group-create none".
+- [ ] GREEN, REFACTOR, COUNCIL (five seats), GATE, LOG.
 
 Acceptance criteria, for both installers unless one is named:
 

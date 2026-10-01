@@ -208,6 +208,7 @@ try {
     $installerBash = if ($IsWindows -or $env:OS -eq 'Windows_NT') { @(@('C:\Program Files\Git\bin\bash.exe', 'C:\Program Files\Git\usr\bin\bash.exe', (Join-Path "$env:LOCALAPPDATA" 'Programs\Git\bin\bash.exe')) | Where-Object { Test-Path -LiteralPath $_ }) | Select-Object -First 1 } else { (Get-Command bash -ErrorAction SilentlyContinue | Select-Object -First 1).Source }
     $bashInstallerSkip = if (-not $installerBash) { 'macOS/Linux installer: no Git Bash (Windows) or bash on this machine.' } elseif (-not (& $installerBash -c 'command -v jq' 2>$null)) { 'macOS/Linux installer: jq is not on the bash PATH; the installer needs it.' } else { '' }
     Invoke-Check 'macOS/Linux installer prices and record'  'Test-BashInstaller.ps1' -SkipReason $bashInstallerSkip
+    Invoke-Check 'macOS/Linux installer checkpoint and resume' 'Test-BashInstallerCheckpoint.ps1' -SkipReason $bashInstallerSkip
     Invoke-Check 'Preflight on both PowerShell hosts'      'Test-PreflightBothHosts.ps1' -SerialLane
     Invoke-Check 'Guided diagnostics and support bundles'  'Test-Diagnose.ps1' -SerialLane
     Invoke-Check 'Wizard reaches summary on PS 5.1'        'Test-On-PS51.ps1' -SerialLane
@@ -308,6 +309,7 @@ try {
     Invoke-Check 'Guided flow across permutations'           'Test-FlowPermutations.ps1' -SerialLane
     Invoke-Check 'Guided flow plans in one order on both shells' 'Test-FlowOrdinalOrder.ps1' -SerialLane
     Invoke-Check 'Installer summary across permutations'     'Test-InstallerPermutations.ps1'
+    Invoke-Check 'Installer checkpoint and resume'           'Test-InstallerCheckpoint.ps1'
 Invoke-Check 'Tier groups follow their gateway'          'Test-TierGroupTarget.ps1'
 
     if ($IncludeAzure) {
