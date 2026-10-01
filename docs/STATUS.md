@@ -93,5 +93,5 @@ node .ironclad/gate.mjs --stage packet                  # definition of done
 
 ## Next
 
-The active packet is named in the line above. The current proposed and open packet queue is in the
+The active packet is named at the top of this file. The current proposed and open packet queue is in the
 [ROADMAP packet table](ROADMAP.md#packets), including P86 as proposed.

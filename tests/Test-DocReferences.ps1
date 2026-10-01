@@ -58,12 +58,11 @@ function Get-MarkdownLines([string]$Text) {
     $lines = $Text -split '\r?\n'
     for ($i = 0; $i -lt $lines.Count; $i++) {
         $line = $lines[$i] -replace '^(?:[ ]{0,3}>[ ]?)+', ''
-        if ($line -match '^[ ]{0,3}(`{3,}|~{3,})(.*)$') {
-            $mark = $Matches[1]
-            if (-not $fence) { $fence = $mark.Substring(0, 1); $length = $mark.Length }
-            elseif ($mark.StartsWith($fence) -and $mark.Length -ge $length -and -not $Matches[2].Trim()) {
-                $fence = ''
-            }
+        $fenceMatch = Get-FenceMatch $line $fence $length
+        if ($fenceMatch) {
+            $mark = $fenceMatch.Mark
+            if ($fenceMatch.Kind -eq 'open') { $fence = $mark.Substring(0, 1); $length = $mark.Length }
+            elseif ($fenceMatch.Kind -eq 'close') { $fence = ''; $length = 0 }
             [pscustomobject]@{ Number = $i + 1; Text = ''; Original = $lines[$i] }
         }
         else {
@@ -71,6 +70,43 @@ function Get-MarkdownLines([string]$Text) {
             [pscustomobject]@{ Number = $i + 1; Text = $visible; Original = $lines[$i] }
         }
     }
+}
+
+function Get-FenceMatch([string]$Line, [string]$Fence = '', [int]$Length = 0) {
+    if ($Line -notmatch '^[ ]{0,3}(`{3,}|~{3,})(.*)$') { return $null }
+    $mark = $Matches[1]
+    $rest = $Matches[2]
+    if (-not $Fence) {
+        [pscustomobject]@{ Kind = 'open'; Mark = $mark }
+    }
+    elseif ($mark.StartsWith($Fence) -and $mark.Length -ge $Length -and -not $rest.Trim()) {
+        [pscustomobject]@{ Kind = 'close'; Mark = $mark }
+    }
+    else { $null }
+}
+
+function Test-MarkdownFenceBalance([string]$Text) {
+    $fence = ''
+    $length = 0
+    $start = 0
+    $lines = $Text -split '\r?\n'
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        $line = $lines[$i] -replace '^(?:[ ]{0,3}>[ ]?)+', ''
+        $fenceMatch = Get-FenceMatch $line $fence $length
+        if ($fenceMatch) {
+            if ($fenceMatch.Kind -eq 'open') {
+                $fence = $fenceMatch.Mark.Substring(0, 1)
+                $length = $fenceMatch.Mark.Length
+                $start = $i + 1
+            }
+            elseif ($fenceMatch.Kind -eq 'close') {
+                $fence = ''
+                $length = 0
+                $start = 0
+            }
+        }
+    }
+    [pscustomobject]@{ Balanced = -not $fence; Line = $start }
 }
 
 function Get-HeadingSlug([string]$Heading) {
@@ -405,24 +441,8 @@ function Get-StatusFenceFailures([string]$Repo) {
     }
     foreach ($file in $statusFiles) {
         $relative = $file.FullName.Substring($Repo.TrimEnd('\', '/').Length + 1)
-        $lines = [IO.File]::ReadAllText($file.FullName) -split '\r?\n'
-        $fence = ''
-        $start = 0
-        for ($i = 0; $i -lt $lines.Count; $i++) {
-            $line = $lines[$i] -replace '^(?:[ ]{0,3}>[ ]?)+', ''
-            if ($line -match '^[ ]{0,3}(`{3,}|~{3,})(.*)$') {
-                $mark = $Matches[1]
-                if (-not $fence) {
-                    $fence = $mark.Substring(0, 1)
-                    $start = $i + 1
-                }
-                elseif ($mark.StartsWith($fence) -and $mark.Length -ge 3 -and -not $Matches[2].Trim()) {
-                    $fence = ''
-                    $start = 0
-                }
-            }
-        }
-        if ($fence) { New-ReferenceFailure $relative $start 'status-fence' 'unclosed fenced code block' }
+        $result = Test-MarkdownFenceBalance ([IO.File]::ReadAllText($file.FullName))
+        if (-not $result.Balanced) { New-ReferenceFailure $relative $result.Line 'status-fence' 'unclosed fenced code block' }
     }
 }
 
@@ -632,6 +652,11 @@ try {
     Assert 'status guard fixture starts green: status relative links' (@(Get-StatusLinkFailures $scratch -OnlyStatusPages).Count -eq 0) ((Get-StatusLinkFailures $scratch -OnlyStatusPages | Out-String))
     Assert 'status guard fixture starts green: packet STATUS links' (@(Get-PacketStatusIndexLinkFailures $scratch).Count -eq 0) ((Get-PacketStatusIndexLinkFailures $scratch | Out-String))
     Assert 'status guard fixture starts green: fenced code blocks' (@(Get-StatusFenceFailures $scratch).Count -eq 0) ((Get-StatusFenceFailures $scratch | Out-String))
+    Assert 'a shorter closing fence does not close' (-not (Test-MarkdownFenceBalance (@('````powershell', 'not a heading', '```') -join "`n")).Balanced)
+    Assert 'a tilde fence is not closed by backticks' (-not (Test-MarkdownFenceBalance (@('~~~text', 'not a heading', '```') -join "`n")).Balanced)
+    Assert 'a closing fence with an info string does not close' (-not (Test-MarkdownFenceBalance (@('```powershell', 'not a heading', '``` still open') -join "`n")).Balanced)
+    Assert 'a longer closing fence closes' ((Test-MarkdownFenceBalance (@('```powershell', 'not a heading', '````') -join "`n")).Balanced)
+    Assert 'an indented fence of up to three spaces counts' ((Test-MarkdownFenceBalance (@('   ```powershell', 'not a heading', '   ```') -join "`n")).Balanced)
 
     Write-Fixture (Join-Path $scratch 'docs\STATUS.md') ('# Status' + "`r`n" + ('x' * 70000))
     Assert 'detected: STATUS above 64 KiB' (@(Get-StatusSizeFailures $scratch | Where-Object Kind -eq 'status-64k').Count -gt 0)
