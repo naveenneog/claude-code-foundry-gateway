@@ -257,6 +257,28 @@ if [ "$1" = "ad" ] && [ "$2" = "group" ] && [ "$3" = "member" ]; then
   fi
   exit 0
 fi
+if [ "$1" = "ad" ] && [ "$2" = "sp" ] && [ "$3" = "show" ]; then
+  printf 'gateway-app-id\n'
+  exit 0
+fi
+if [ "$1" = "role" ] && [ "$2" = "assignment" ]; then
+  action="$3"
+  case "$action" in
+    list)
+      if [ "${P89_SCENARIO:-}" = "role-existing" ]; then printf 'existing-role-id\n'; fi
+      exit 0
+      ;;
+    create)
+      printf '{"id":"created-role-id"}\n'
+      exit 0
+      ;;
+    delete)
+      id="$(arg_after --ids "$@")"
+      printf 'delete-role %s\n' "$id" >> "$P89_WRITES"
+      exit 0
+      ;;
+  esac
+fi
 if [ "$1" = "rest" ]; then
   url="$(arg_after --url "$@")"
   if [ "${P89_SCENARIO:-}" = "graph403" ] && [[ "$url" == *standard-id*servicePrincipal* ]]; then
@@ -273,12 +295,88 @@ if [ "$1" = "apim" ] && [ "$2" = "nv" ] && [ "$3" = "update" ]; then
   printf '%s=%s\n' "$id" "$value" >> "$P89_WRITES"
   exit 0
 fi
+if [ "$1" = "apim" ] && [ "$2" = "nv" ] && [ "$3" = "show" ]; then
+  id="$(arg_after --named-value-id "$@")"
+  case "$id" in
+    quota-overrides)
+      if [ "${P89_SCENARIO:-}" = "budget-oversize" ]; then
+        printf ','
+        for i in $(seq 1 115); do printf 'aaaaaaaa-aaaa-aaaa-aaaa-%012d=1,' "$i"; done
+        printf '\n'
+      else
+        printf ',aaaaaaaa-aaaa-aaaa-aaaa-000000000001=100,55555555-5555-5555-5555-555555555555=50,\n'
+      fi
+      ;;
+    models-premium) printf ',claude-sonnet-5,\n' ;;
+    models-standard) printf ',claude-sonnet-5,claude-opus-5,\n' ;;
+    *) printf 'value\n' ;;
+  esac
+  exit 0
+fi
 if [ "$1" = "apim" ] && [ "$2" = "nv" ] && [ "$3" = "list" ]; then
   printf '[]\n'
   exit 0
 fi
+if [ "$1" = "deployment" ] && [ "$2" = "group" ]; then
+  action="$3"
+  if [ "$action" = "create" ]; then
+    name="$(arg_after -n "$@")"
+    printf 'deployment-create %s\n' "$name" >> "$P89_WRITES"
+    exit 0
+  fi
+  if [ "$action" = "show" ]; then
+    name="$(arg_after -n "$@")"
+    query="$(arg_after --query "$@")"
+    case "$name" in
+      claude-gateway-basicv2) printf 'https://gateway.example/claude\n' ;;
+      projection-network-*)
+        case "$query" in
+          *runnerName.value*) printf 'runner-aci\n' ;;
+          *runnerPrincipalId.value*) printf 'runner-principal\n' ;;
+          *) printf '{"runnerName":{"value":"runner-aci"},"runnerPrincipalId":{"value":"runner-principal"},"resolverSubnetId":{"value":"resolver-subnet"},"endpointsSubnetId":{"value":"endpoints-subnet"},"sitesDnsZoneId":{"value":"sites-zone"},"blobDnsZoneId":{"value":"blob-zone"},"queueDnsZoneId":{"value":"queue-zone"},"tableDnsZoneId":{"value":"table-zone"}}\n' ;;
+        esac
+        ;;
+      projection-resolver-*) printf 'func-resolver\n' ;;
+      projection-*)
+        if [[ "$query" == *accountName.value* ]]; then printf 'cosmos-prefix\n'; else printf '{"accountName":{"value":"cosmos-prefix"}}\n'; fi
+        ;;
+      *) printf '{}\n' ;;
+    esac
+    exit 0
+  fi
+fi
+if [ "$1" = "cosmosdb" ] && [ "$2" = "sql" ] && [ "$3" = "role" ] && [ "$4" = "assignment" ] && [ "$5" = "create" ]; then
+  printf 'cosmos-role\n' >> "$P89_WRITES"
+  exit 0
+fi
+if [ "$1" = "container" ] && [ "$2" = "exec" ]; then
+  cmd="$(arg_after --exec-command "$@")"
+  printf 'container-exec %s\n' "$cmd" >> "$P89_WRITES"
+  exit 0
+fi
+if [ "$1" = "functionapp" ]; then
+  printf 'functionapp %s\n' "$*" >> "$P89_WRITES"
+  if [ "$2" = "show" ]; then printf '{"name":"func-resolver","state":"Running","host":"func-resolver.azurewebsites.net"}\n'; fi
+  exit 0
+fi
 printf 'unsupported az stub call: %s\n' "$*" >&2
 exit 2
+'@ | Set-Content -LiteralPath $path -NoNewline
+    $path
+}
+
+function New-GuideZipStub([string]$Directory) {
+    $path = Join-Path $Directory 'zip'
+    @'
+#!/usr/bin/env bash
+out=""
+for arg in "$@"; do
+  case "$arg" in
+    *.zip) out="$arg"; break ;;
+  esac
+done
+[ -n "$out" ] && printf 'zip' > "$out"
+exit 0
 '@ | Set-Content -LiteralPath $path -NoNewline
     $path
 }
@@ -294,6 +392,7 @@ function Invoke-GuideBashScenario([string]$Name, [string]$Script, [hashtable]$Ex
     $dir = Join-Path ([IO.Path]::GetTempPath()) ('p89-guide-' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
     New-GuideAzStub $dir | Out-Null
+    New-GuideZipStub $dir | Out-Null
     $scriptPath = Join-Path $dir 'run.sh'
     @"
 #!/usr/bin/env bash
@@ -307,9 +406,45 @@ export STANDARD_GROUP="claude-code-standard"
 export PREMIUM_GROUP="claude-code-premium"
 export GATEWAY_RG="rg"
 export APIM_NAME="apim"
+export APIM_PRINCIPAL_ID="gateway-object-id"
+export FOUNDRY_ID="/subscriptions/sub/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/foundry"
+export SUBSCRIPTION_ID="sub"
+export TENANT_ID="tenant"
+export LOCATION="eastus"
+export NAME_PREFIX="prefix"
+export FOUNDRY_ACCOUNT="foundry"
+export FOUNDRY_RG="foundry-rg"
+export SONNET_DEPLOYMENT="claude-sonnet-5"
+export OPUS_DEPLOYMENT="claude-opus-5"
+export HAIKU_DEPLOYMENT="claude-haiku-4-5"
+export TPM_STANDARD="20000"
+export QUOTA_STANDARD="500000"
+export TPM_PREMIUM="80000"
+export QUOTA_PREMIUM="5000000"
+export QUOTA_ORG="100000000"
+export CALLS_PER_MINUTE="120"
+export MODELS_STANDARD=",claude-sonnet-5,"
+export MODELS_PREMIUM=",claude-sonnet-5,claude-opus-5,"
+export DESKTOP_CLIENT_ID="66666666-6666-6666-6666-666666666666"
+export RESOLVER_APP_ID="resolver-app-id"
 export DEVELOPER_UPN="dev@example.test"
 export DEVELOPER_ID="55555555-5555-5555-5555-555555555555"
 cd "$(ConvertTo-BashPath $dir)"
+mkdir -p scripts sync/src onboarding .p89-receipts resolver/src
+cat > scripts/Sync-ClaudeProjection.ps1 <<'EOS'
+#!/usr/bin/env bash
+while [ "$#" -gt 0 ]; do if [ "$1" = "-ExportPath" ]; then shift; printf '{"members":[]}\n' > "$1"; fi; shift || true; done
+EOS
+cat > scripts/Compare-ClaudeEntitlement.ps1 <<'EOS'
+#!/usr/bin/env bash
+while [ "$#" -gt 0 ]; do if [ "$1" = "-ExportGatewayPath" ]; then shift; printf '{"decisions":[]}\n' > "$1"; fi; shift || true; done
+EOS
+chmod +x scripts/Sync-ClaudeProjection.ps1 scripts/Compare-ClaudeEntitlement.ps1
+printf '{"scripts":{}}\n' > sync/package.json
+printf 'console.log("ok")\n' > sync/src/apply-projection.mjs
+printf '{}\n' > resolver/host.json
+printf '{"dependencies":{}}\n' > resolver/package.json
+printf 'module.exports={}\n' > resolver/src/index.js
 touch "`$P89_CALLS" "`$P89_WRITES" "`$P89_MEMBER_CALLS"
 $Script
 "@ | Set-Content -LiteralPath $scriptPath -NoNewline
@@ -335,6 +470,14 @@ $graphBlock = Get-MarkedBashBlock $markdown 'ENTITLEMENT-GRAPH'
 $publishBlock = Get-MarkedBashBlock $markdown 'ENTITLEMENT-PUBLISH'
 $addBlock = Get-MarkedBashBlock $markdown 'DEVELOPER-ADD'
 $removeBlock = Get-MarkedBashBlock $markdown 'DEVELOPER-REMOVE'
+$roleBlock = Get-MarkedBashBlock $markdown 'FOUNDRY-ROLE'
+$tierBlock = Get-MarkedBashBlock $markdown 'TIER-WRITES'
+$budgetBlock = Get-MarkedBashBlock $markdown 'BUDGET-WRITE'
+$handoverBlock = Get-MarkedBashBlock $markdown 'HANDOVER'
+$projectionDeployBlock = Get-MarkedBashBlock $markdown 'PROJECTION-DEPLOY'
+$resolverDeployBlock = Get-MarkedBashBlock $markdown 'RESOLVER-DEPLOY'
+$projectionRunnerBlock = Get-MarkedBashBlock $markdown 'PROJECTION-RUNNER'
+$teardownExternalBlock = Get-MarkedBashBlock $markdown 'TEARDOWN-EXTERNAL'
 $entitlementScript = $graphBlock + "`n" + $publishBlock
 
 $normal = Invoke-GuideBashScenario 'normal' $entitlementScript
@@ -403,6 +546,7 @@ $bugScript = Join-Path $bugDir 'bug.sh'
 @'
 #!/usr/bin/env bash
 set -uo pipefail
+cd "$(dirname "$0")"
 printf '33333333-3333-3333-3333-333333333333\n' > standard-all-oids.txt
 PREMIUM_OIDS=""
 grep -iv -f <(printf '%s\n' "$PREMIUM_OIDS" | tr ',' '\n') standard-all-oids.txt > standard-oids.txt
@@ -411,5 +555,101 @@ test -s standard-oids.txt
 $bashForBug = 'C:\Program Files\Git\bin\bash.exe'
 $bugOutput = & $bashForBug (ConvertTo-BashPath $bugScript) 2>&1 | Out-String
 Assert 'execution harness catches the old empty-premium grep -v -f bug' ($LASTEXITCODE -ne 0) $bugOutput
+
+$roleCreated = Invoke-GuideBashScenario 'role-new' $roleBlock
+Assert 'role assignment block records newly created assignment id' (
+    $roleCreated.Exit -eq 0 -and
+    (Read-ScenarioFile $roleCreated '.p89-receipts/foundry-role.json' | ConvertFrom-Json).foundryRole.created -eq $true -and
+    (Read-ScenarioFile $roleCreated '.p89-receipts/foundry-role.json') -match 'created-role-id'
+) $roleCreated.Output
+
+$roleExisting = Invoke-GuideBashScenario 'role-existing' $roleBlock
+Assert 'role assignment block records pre-existing assignment without creating' (
+    $roleExisting.Exit -eq 0 -and
+    (Read-ScenarioFile $roleExisting '.p89-receipts/foundry-role.json' | ConvertFrom-Json).foundryRole.created -eq $false -and
+    -not ((Read-ScenarioFile $roleExisting 'writes.log') -match 'created-role-id')
+) $roleExisting.Output
+
+$tierWrites = Invoke-GuideBashScenario 'tier-writes' $tierBlock
+Assert 'tier write block writes limits and guarded model list' (
+    $tierWrites.Exit -eq 0 -and
+    (Read-ScenarioFile $tierWrites 'writes.log') -match 'tpm-standard=30000' -and
+    (Read-ScenarioFile $tierWrites 'writes.log') -match 'quota-standard=750000' -and
+    (Read-ScenarioFile $tierWrites 'writes.log') -match 'models-standard=,claude-sonnet-5,'
+) $tierWrites.Output
+
+$budgetWrite = Invoke-GuideBashScenario 'budget-write' $budgetBlock
+Assert 'budget write block preserves other overrides and replaces target oid' (
+    $budgetWrite.Exit -eq 0 -and
+    (Read-ScenarioFile $budgetWrite 'writes.log') -match 'quota-overrides=,aaaaaaaa-aaaa-aaaa-aaaa-000000000001=100,55555555-5555-5555-5555-555555555555=2000000,'
+) $budgetWrite.Output
+
+$budgetOversize = Invoke-GuideBashScenario 'budget-oversize' $budgetBlock
+Assert 'budget write block refuses oversize quota-overrides before write' (
+    $budgetOversize.Exit -ne 0 -and
+    -not ((Read-ScenarioFile $budgetOversize 'writes.log') -match 'quota-overrides=') -and
+    $budgetOversize.Output -match '4,096'
+) $budgetOversize.Output
+
+$handover = Invoke-GuideBashScenario 'handover' $handoverBlock
+$handoverJson = Read-ScenarioFile $handover 'onboarding/claude-gateway.json'
+$installerText = Read-Text (Join-Path $root 'Install-ClaudeGateway.ps1')
+$configBlock = [regex]::Match($installerText, '(?s)\$config = \[ordered\]@\{(.*?)\n\}').Groups[1].Value
+$installerKeys = @([regex]::Matches($configBlock, '(?m)^    ([A-Za-z][A-Za-z0-9]*)\s*=') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+$guideKeys = @((($handoverJson | ConvertFrom-Json).PSObject.Properties.Name) | Sort-Object -Unique)
+Assert 'handover block emits installer top-level key set' (
+    $handover.Exit -eq 0 -and
+    (($installerKeys -join '|') -ceq ($guideKeys -join '|'))
+) "installer=$($installerKeys -join ',') guide=$($guideKeys -join ',') output=$($handover.Output)"
+$handoverObject = $handoverJson | ConvertFrom-Json
+Assert 'handover block emits installer value types used by workstation setup' (
+    $handoverObject.subscriptionId -is [string] -and
+    @($handoverObject.tiers.standard.models).Count -ge 1 -and
+    $handoverObject.tiers.standard.modelAllowList -is [string] -and
+    $handoverObject.requestsPerMinute -is [ValueType]
+) $handoverJson
+$setupText = Read-Text (Join-Path $root 'scripts\Setup-ClaudeWorkstation.ps1')
+$onboardText = Read-Text (Join-Path $root 'scripts\Onboard-ClaudeDeveloper.ps1')
+Assert 'workstation setup and onboarding scripts accept ConfigPath handover input' (
+    $setupText -match '\[string\]\$ConfigPath' -and $onboardText -match '\[Parameter\(Mandatory = \$true\)\]\[string\]\$ConfigPath' -and $onboardText -match '\[switch\]\$PreflightOnly'
+)
+
+$projectionDeploy = Invoke-GuideBashScenario 'projection-deploy' $projectionDeployBlock
+$projectionDeployWrites = Read-ScenarioFile $projectionDeploy 'writes.log'
+Assert 'projection deployment block deploys store before network' (
+    $projectionDeploy.Exit -eq 0 -and
+    $projectionDeployWrites.IndexOf('deployment-create projection-prefix') -ge 0 -and
+    $projectionDeployWrites.IndexOf('deployment-create projection-network-prefix') -gt $projectionDeployWrites.IndexOf('deployment-create projection-prefix')
+) $projectionDeploy.Output
+
+$resolverDeploy = Invoke-GuideBashScenario 'resolver-deploy' ($projectionDeployBlock + "`n" + $resolverDeployBlock)
+$resolverParams = Read-ScenarioFile $resolverDeploy 'resolver-params.json'
+Assert 'resolver deployment block allows the gateway managed identity app and object ids' (
+    $resolverDeploy.Exit -eq 0 -and
+    ($resolverParams | ConvertFrom-Json).parameters.allowedCallerAppIds.value[0] -ceq 'gateway-app-id' -and
+    ($resolverParams | ConvertFrom-Json).parameters.allowedCallerObjectIds.value[0] -ceq 'gateway-object-id'
+) $resolverDeploy.Output
+
+$projectionRunner = Invoke-GuideBashScenario 'projection-runner' ($projectionDeployBlock + "`n" + $projectionRunnerBlock)
+$runnerCalls = Read-ScenarioFile $projectionRunner 'writes.log'
+Assert 'projection runner block assigns Cosmos role and transfers files before apply and compare' (
+    $projectionRunner.Exit -eq 0 -and
+    $runnerCalls -match 'cosmos-role' -and
+    $runnerCalls -match 'sync-source\.tar\.gz' -and
+    $runnerCalls -match 'snapshot\.json' -and
+    $runnerCalls -match 'apply-projection\.mjs --cosmos .* --snapshot /work/snapshot\.json' -and
+    $runnerCalls -match 'gateway-decisions\.json' -and
+    $runnerCalls -match 'apply-projection\.mjs --cosmos .* --compare /work/gateway-decisions\.json'
+) $projectionRunner.Output
+
+$teardownCreated = Invoke-GuideBashScenario 'teardown-created' ("mkdir -p .p89-receipts; printf '%s\n' '{""foundryRole"":{""created"":true,""id"":""created-role-id""}}' > .p89-receipts/foundry-role.json; " + $teardownExternalBlock)
+Assert 'teardown deletes only receipt-created role assignment' (
+    $teardownCreated.Exit -eq 0 -and (Read-ScenarioFile $teardownCreated 'writes.log') -match 'delete-role created-role-id'
+) $teardownCreated.Output
+
+$teardownExisting = Invoke-GuideBashScenario 'teardown-existing' ("mkdir -p .p89-receipts; printf '%s\n' '{""foundryRole"":{""created"":false,""existingId"":""existing-role-id""}}' > .p89-receipts/foundry-role.json; " + $teardownExternalBlock)
+Assert 'teardown preserves pre-existing role assignment' (
+    $teardownExisting.Exit -eq 0 -and -not ((Read-ScenarioFile $teardownExisting 'writes.log') -match 'delete-role')
+) $teardownExisting.Output
 
 if ($script:fail) { throw "$script:fail assertion(s) failed." }

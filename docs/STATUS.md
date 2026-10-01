@@ -29,6 +29,12 @@ Round 2 lead-review fix, 2026-10-01:
 - Sweep fixes outside §5: the initialization section no longer empties live allow lists or quota overrides, personal budget writes preserve existing overrides and stop on oversize, and the non-entitled verification uses a non-entitled token instead of clearing live entitlement.
 - Execution guard added: the marked guide bash blocks run under Git Bash with a stub `az`; scenarios cover normal premium/standard publication, empty premium with intact standard, Graph 403, `@odata.nextLink`, oversize allow list, both empty groups with and without `ALLOW_EMPTY`, developer add/remove, missing Graph files, and the old empty-premium `grep -v -f` bug.
 - Validation: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS; `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS with 422 checks; `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS with 43 guides. No live Azure command ran.
+Round 3 council-fix validation, 2026-10-01:
+- Architect fixes: projection storage deploys before projection network with the script's parameter set; resolver parameters now use gateway managed identity app id and object id; projection deployment, resolver deployment and runner blocks are executed by the guide harness.
+- Coder fixes: `onboarding/claude-gateway.json` now emits the installer top-level key set and value types, including subscription, SKU, location, Foundry account/group, entitlement store, projection deployer, tier model arrays, model allow-list strings and request ceiling.
+- UX fixes: runner steps use the network-template runner, script-produced snapshot and decisions files, ClaudeRunner-style base64url ACI exec transfer, sync package extraction, npm install, apply and compare.
+- Security fixes: Foundry role assignment creation records whether the assignment was created or pre-existing; teardown deletes only a receipt-created id and preserves pre-existing external assignments.
+- Validation: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS; `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS with 456 checks; `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS with 43 guides. No live Azure command ran.
 
 ## P71 follow-up: a lookup starts one refresh, 2026-09-30
 

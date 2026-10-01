@@ -36,7 +36,9 @@ exact streaming cache-creation detail remains **U13**.
   parameters and relative links. Round 2 makes entitlement publishing fail
   closed on Graph errors, missing files, empty groups, incomplete pages and
   oversize APIM named values, with a Git Bash execution harness around the
-  guide's bash blocks.
+  guide's bash blocks. Round 3 aligns projection deployment order, resolver
+  caller ids, runner transfer, handover JSON shape and teardown receipts with
+  the installer and projection scripts.
 - **Final P85 follow-up integration.** P71's owned-process deadline probes and
   precise public-evidence section lookup are merged without production changes.
   The single full AUM run passes all 1,200 cases; refreshed file and whole-check

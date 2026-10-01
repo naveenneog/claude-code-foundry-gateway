@@ -187,11 +187,21 @@ Expected result: an existing assignment is listed, or the table is empty before 
 Grant `Cognitive Services User` to the APIM managed identity when the list above is empty.
 
 ```bash
-az role assignment create --assignee-object-id "$APIM_PRINCIPAL_ID" --assignee-principal-type ServicePrincipal --role "Cognitive Services User" --scope "$FOUNDRY_ID" -o json
+# P89-FOUNDRY-ROLE-BEGIN
+mkdir -p .p89-receipts
+EXISTING_FOUNDRY_ROLE_ID="$(az role assignment list --scope "$FOUNDRY_ID" --assignee "$APIM_PRINCIPAL_ID" --include-inherited --query "[?roleDefinitionName=='Cognitive Services User']|[0].id" -o tsv)"
+if [ -n "$EXISTING_FOUNDRY_ROLE_ID" ]; then
+  jq -n --arg existing "$EXISTING_FOUNDRY_ROLE_ID" '{foundryRole:{created:false,existingId:$existing}}' > .p89-receipts/foundry-role.json
+  echo "Existing Cognitive Services User assignment recorded; teardown will not delete it."
+else
+  az role assignment create --assignee-object-id "$APIM_PRINCIPAL_ID" --assignee-principal-type ServicePrincipal --role "Cognitive Services User" --scope "$FOUNDRY_ID" -o json \
+    | jq '{foundryRole:{created:true,id:.id}}' > .p89-receipts/foundry-role.json
+fi
 az role assignment list --scope "$FOUNDRY_ID" --assignee "$APIM_PRINCIPAL_ID" --include-inherited --query "[?roleDefinitionName=='Cognitive Services User'].{role:roleDefinitionName,scope:scope}" -o table
+# P89-FOUNDRY-ROLE-END
 ```
 
-Expected result: one assignment exists. This mirrors `infra/foundry-role.bicep` and `infra/main.bicep:430-442`.
+Expected result: one assignment exists. `.p89-receipts/foundry-role.json` records whether this guide created it or found it already present. This mirrors `infra/foundry-role.bicep` and `infra/main.bicep:430-442`.
 
 ## 4. Named values the policy needs
 
@@ -382,6 +392,7 @@ Expected result: only `standard` and `premium` tier values are listed. A third t
 Change one tier's model list and limits.
 
 ```bash
+# P89-TIER-WRITES-BEGIN
 az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id tpm-standard --value "30000" -o none
 az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id quota-standard --value "750000" -o none
 MODELS_STANDARD_NEXT=",${SONNET_DEPLOYMENT},"
@@ -392,6 +403,7 @@ else
   exit 1
 fi
 az apim nv list -g "$GATEWAY_RG" --service-name "$APIM_NAME" --query "[?name=='tpm-standard' || name=='quota-standard' || name=='models-standard'].{name:name,value:value}" -o table
+# P89-TIER-WRITES-END
 ```
 
 Expected result: the new values appear and take effect on the next request. This mirrors `scripts/Set-ClaudeTier.ps1:112-181`.
@@ -399,6 +411,7 @@ Expected result: the new values appear and take effect on the next request. This
 Set one person's daily token budget.
 
 ```bash
+# P89-BUDGET-WRITE-BEGIN
 export BUDGET_OID="$(az ad user show --id "$DEVELOPER_UPN" --query id -o tsv | tr '[:upper:]' '[:lower:]')"
 export CURRENT_OVERRIDES="$(az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id quota-overrides --query value -o tsv)"
 printf '%s\n' "$CURRENT_OVERRIDES" | grep -Eq '^,([^,=]+=([0-9]+),)*$|^,,$' || { echo "Refused: quota-overrides is malformed; no budget was written." >&2; exit 1; }
@@ -411,6 +424,7 @@ if [ "$(printf '%s' "$NEW_OVERRIDES" | wc -c | tr -d ' ')" -gt 4096 ]; then
 fi
 az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id quota-overrides --value "$NEW_OVERRIDES" -o none
 az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id quota-overrides --query value -o tsv
+# P89-BUDGET-WRITE-END
 ```
 
 Expected result: `quota-overrides` contains `,<oid>=2000000,`. Preserve existing entries when more than one person has an override; the script reads the full map before changing it. This mirrors `scripts/Set-ClaudeBudget.ps1:1-41`, `scripts/Set-ClaudeBudget.ps1:137-220` and `scripts/ClaudeBudgetOverride.ps1:1-29`.
@@ -501,13 +515,49 @@ Expected result: the app id is stored as `external-idp-extra-audience` for id-to
 Generate `onboarding/claude-gateway.json` with the same schema the installer writes.
 
 ```bash
+# P89-HANDOVER-BEGIN
 mkdir -p onboarding
 GATEWAY_URL="$(az deployment group show -g "$GATEWAY_RG" -n "claude-gateway-basicv2" --query properties.outputs.gatewayUrl.value -o tsv)"
-jq -n --arg gatewayUrl "$GATEWAY_URL" --arg tenantId "$TENANT_ID" --arg apimName "$APIM_NAME" --arg resourceGroup "$GATEWAY_RG" --arg standardGroup "$STANDARD_GROUP" --arg premiumGroup "$PREMIUM_GROUP" --arg sonnet "$SONNET_DEPLOYMENT" --arg opus "$OPUS_DEPLOYMENT" --arg haiku "$HAIKU_DEPLOYMENT" --argjson tpmStandard "$TPM_STANDARD" --argjson quotaStandard "$QUOTA_STANDARD" --argjson tpmPremium "$TPM_PREMIUM" --argjson quotaPremium "$QUOTA_PREMIUM" --argjson quotaOrg "$QUOTA_ORG" --arg desktopClientId "$DESKTOP_CLIENT_ID" --arg issuer "https://login.microsoftonline.com/${TENANT_ID}/v2.0" '{mode:"gateway",gatewayUrl:$gatewayUrl,tenantId:$tenantId,apimName:$apimName,resourceGroup:$resourceGroup,standardGroup:$standardGroup,premiumGroup:$premiumGroup,authMode:"interactive",desktopSignIn:{kind:"external-idp",flow:"browser",bearerTokenType:"id_token",clientId:$desktopClientId,issuer:$issuer},deployments:[{name:$sonnet,model:$sonnet},{name:$opus,model:$opus},{name:$haiku,model:$haiku}],models:[$sonnet,$opus,$haiku],tiers:{standard:{tokensPerMinute:$tpmStandard,tokensPerDay:$quotaStandard},premium:{tokensPerMinute:$tpmPremium,tokensPerDay:$quotaPremium}},organisation:{tokensPerMonth:$quotaOrg,shared:true,softCap:true},generated:(now|strftime("%Y-%m-%d %H:%M"))}' > onboarding/claude-gateway.json
-jq -e '.mode=="gateway" and (.gatewayUrl|test("^https://")) and (.desktopSignIn.kind=="external-idp" or .desktopSignIn.kind=="helper-script")' onboarding/claude-gateway.json
+export SKU="${SKU:-BasicV2}"
+export ENTITLEMENT_STORE="${ENTITLEMENT_STORE:-named-value}"
+export RESOLVER_INBOUND_ACCESS="${RESOLVER_INBOUND_ACCESS:-private}"
+export PROJECTION_DEPLOYER="${PROJECTION_DEPLOYER:-./scripts/Deploy-ClaudeProjection.ps1}"
+export AUTH_MODE="${AUTH_MODE:-interactive}"
+STANDARD_MODELS_JSON="$(printf '%s' "$MODELS_STANDARD" | tr ',' '\n' | awk 'NF' | jq -R . | jq -s .)"
+PREMIUM_MODELS_JSON="$(printf '%s' "$MODELS_PREMIUM" | tr ',' '\n' | awk 'NF' | jq -R . | jq -s .)"
+jq -n --arg mode "gateway" --arg gatewayUrl "$GATEWAY_URL" --arg tenantId "$TENANT_ID" --arg apimName "$APIM_NAME" --arg resourceGroup "$GATEWAY_RG" --arg subscriptionId "$SUBSCRIPTION_ID" --arg sku "$SKU" --arg location "$LOCATION" --arg foundryAccount "$FOUNDRY_ACCOUNT" --arg foundryResourceGroup "$FOUNDRY_RG" --arg standardGroup "$STANDARD_GROUP" --arg premiumGroup "$PREMIUM_GROUP" --arg authMode "$AUTH_MODE" --arg entitlementStore "$ENTITLEMENT_STORE" --arg resolverInboundAccess "$RESOLVER_INBOUND_ACCESS" --arg projectionDeployer "$PROJECTION_DEPLOYER" --arg sonnet "$SONNET_DEPLOYMENT" --arg opus "$OPUS_DEPLOYMENT" --arg haiku "$HAIKU_DEPLOYMENT" --argjson standardModels "$STANDARD_MODELS_JSON" --argjson premiumModels "$PREMIUM_MODELS_JSON" --argjson tpmStandard "$TPM_STANDARD" --argjson quotaStandard "$QUOTA_STANDARD" --argjson tpmPremium "$TPM_PREMIUM" --argjson quotaPremium "$QUOTA_PREMIUM" --argjson quotaOrg "$QUOTA_ORG" --argjson callsPerMinute "$CALLS_PER_MINUTE" --arg desktopClientId "$DESKTOP_CLIENT_ID" --arg issuer "https://login.microsoftonline.com/${TENANT_ID}/v2.0" --arg modelsStandard "$MODELS_STANDARD" --arg modelsPremium "$MODELS_PREMIUM" '{
+  mode:$mode,
+  gatewayUrl:$gatewayUrl,
+  tenantId:$tenantId,
+  apimName:$apimName,
+  resourceGroup:$resourceGroup,
+  subscriptionId:$subscriptionId,
+  sku:$sku,
+  location:$location,
+  foundryAccount:$foundryAccount,
+  foundryResourceGroup:$foundryResourceGroup,
+  standardGroup:$standardGroup,
+  premiumGroup:$premiumGroup,
+  authMode:$authMode,
+  entitlementStore:$entitlementStore,
+  resolverInboundAccess:$resolverInboundAccess,
+  projectionDeployer:$projectionDeployer,
+  desktopSignIn:{kind:"external-idp",flow:"browser",bearerTokenType:"id_token",clientId:$desktopClientId,issuer:$issuer},
+  deployments:[{name:$sonnet,model:$sonnet},{name:$opus,model:$opus},{name:$haiku,model:$haiku}],
+  models:[$sonnet,$opus,$haiku],
+  tiers:{
+    standard:{tokensPerMinute:$tpmStandard,tokensPerDay:$quotaStandard,models:$standardModels,modelAllowList:$modelsStandard},
+    premium:{tokensPerMinute:$tpmPremium,tokensPerDay:$quotaPremium,models:$premiumModels,modelAllowList:$modelsPremium}
+  },
+  organisation:{tokensPerMonth:$quotaOrg,shared:true,softCap:true},
+  requestsPerMinute:$callsPerMinute,
+  generated:(now|strftime("%Y-%m-%d %H:%M"))
+}' > onboarding/claude-gateway.json
+jq -e '.mode=="gateway" and (.gatewayUrl|test("^https://")) and (.desktopSignIn.kind=="external-idp" or .desktopSignIn.kind=="helper-script") and (.subscriptionId|type=="string") and (.tiers.standard.models|type=="array") and (.requestsPerMinute|type=="number")' onboarding/claude-gateway.json
+# P89-HANDOVER-END
 ```
 
-Expected result: `jq -e` exits 0, and the file contains no secrets. This mirrors `Install-ClaudeGateway.ps1:1712-1729` and `onboarding/README.md:13-41`.
+Expected result: `jq -e` exits 0, and the file contains no secrets. The key set matches the installer record, including subscription, SKU, region, Foundry account, entitlement store, projection deployer, tier model arrays, tier model allow-list strings and request ceiling. This mirrors `Install-ClaudeGateway.ps1:1699-1726` and `onboarding/README.md:13-41`. `scripts/Setup-ClaudeWorkstation.ps1` consumes this file through `-ConfigPath`; `Onboard-ClaudeDeveloper.ps1` distributes the same handover artifact rather than changing its schema.
 
 ## 9. Optional company address
 
@@ -551,8 +601,7 @@ Run read-only preflight checks before any projection write.
 az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id entitlement-source --query value -o tsv
 az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" --query "{sku:sku.name,principal:identity.principalId,location:location}" -o json
 az cognitiveservices account show -g "$FOUNDRY_RG" -n "$FOUNDRY_ACCOUNT" --query "{id:id,kind:kind}" -o json
-az deployment group what-if -g "$GATEWAY_RG" --template-file infra/projection-network.bicep --parameters namePrefix="$NAME_PREFIX" cosmosAccountName="cosmos-${NAME_PREFIX}" -o json
-az deployment group what-if -g "$GATEWAY_RG" --template-file infra/projection.bicep --parameters namePrefix="$NAME_PREFIX" networkAccess=private-only redundancy=single throughput=400 -o json
+az deployment group what-if -g "$GATEWAY_RG" --template-file infra/projection.bicep --parameters namePrefix="$NAME_PREFIX" location="$LOCATION" networkAccess=private-only -o json
 ```
 
 Expected result: current entitlement source is visible, APIM has an identity, and what-if is reviewed. This mirrors `scripts/Deploy-ClaudeProjection.ps1`, `scripts/ClaudeProjectionChecks.ps1` and `docs/SCALE.md:515-527`.
@@ -570,25 +619,36 @@ Expected result: a tenant admin owns the app-registration step and later grants 
 Deploy private projection storage and networking.
 
 ```bash
-az deployment group create -g "$GATEWAY_RG" -n "claude-projection-network" --template-file infra/projection-network.bicep --parameters namePrefix="$NAME_PREFIX" cosmosAccountName="cosmos-${NAME_PREFIX}" runnerEnabled=true -o json
-az deployment group create -g "$GATEWAY_RG" -n "claude-projection-store" --template-file infra/projection.bicep --parameters namePrefix="$NAME_PREFIX" networkAccess=private-only redundancy=single throughput=400 -o json
-az deployment group show -g "$GATEWAY_RG" -n "claude-projection-store" --query properties.outputs -o json
+# P89-PROJECTION-DEPLOY-BEGIN
+export PROJECTION_NAME="projection-${NAME_PREFIX}"
+export PROJECTION_NETWORK_NAME="projection-network-${NAME_PREFIX}"
+az deployment group create -g "$GATEWAY_RG" -n "$PROJECTION_NAME" --template-file infra/projection.bicep --parameters namePrefix="$NAME_PREFIX" location="$LOCATION" networkAccess=private-only -o none
+export COSMOS_ACCOUNT="$(az deployment group show -g "$GATEWAY_RG" -n "$PROJECTION_NAME" --query "properties.outputs.accountName.value" -o tsv)"
+az deployment group create -g "$GATEWAY_RG" -n "$PROJECTION_NETWORK_NAME" --template-file infra/projection-network.bicep --parameters namePrefix="$NAME_PREFIX" location="$LOCATION" cosmosAccountName="$COSMOS_ACCOUNT" runnerEnabled=true -o none
+az deployment group show -g "$GATEWAY_RG" -n "$PROJECTION_NAME" --query properties.outputs -o json
+az deployment group show -g "$GATEWAY_RG" -n "$PROJECTION_NETWORK_NAME" --query properties.outputs -o json
+# P89-PROJECTION-DEPLOY-END
 ```
 
-Expected result: Cosmos DB is private and outputs provide account/database/container names. This mirrors `infra/projection-network.bicep:26-49`, `infra/projection.bicep:11-68` and `scripts/Deploy-ClaudeProjection.ps1`.
+Expected result: `projection.bicep` deploys first, then `projection-network.bicep` uses the Cosmos account output and creates private endpoints, DNS and the in-VNet runner. This mirrors `scripts/Deploy-ClaudeProjection.ps1:107-122`, `infra/projection.bicep:11-68` and `infra/projection-network.bicep:26-49`.
 
 Deploy the resolver with Standard v2 outbound VNet integration and upload code.
 
 ```bash
-export INTEGRATION_SUBNET_ID="<resolver-integration-subnet-id>"
+# P89-RESOLVER-DEPLOY-BEGIN
 export RESOLVER_APP_ID="<resolver-app-id>"
-az deployment group create -g "$GATEWAY_RG" -n "claude-resolver" --template-file infra/resolver.bicep --parameters namePrefix="$NAME_PREFIX" cosmosAccountName="cosmos-${NAME_PREFIX}" integrationSubnetId="$INTEGRATION_SUBNET_ID" resolverAppId="$RESOLVER_APP_ID" allowedCallerAppIds="$RESOLVER_APP_ID" -o json
+export GATEWAY_APP_ID="$(az ad sp show --id "$APIM_PRINCIPAL_ID" --query appId -o tsv)"
+export NETWORK_OUTPUTS="$(az deployment group show -g "$GATEWAY_RG" -n "$PROJECTION_NETWORK_NAME" --query properties.outputs -o json)"
+jq -n --arg namePrefix "$NAME_PREFIX" --arg location "$LOCATION" --arg cosmos "$COSMOS_ACCOUNT" --arg resolverAppId "$RESOLVER_APP_ID" --arg gatewayAppId "$GATEWAY_APP_ID" --arg gatewayObjectId "$APIM_PRINCIPAL_ID" --argjson network "$NETWORK_OUTPUTS" '{"$schema":"https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#","contentVersion":"1.0.0.0",parameters:{namePrefix:{value:$namePrefix},location:{value:$location},cosmosAccountName:{value:$cosmos},integrationSubnetId:{value:$network.resolverSubnetId.value},privateEndpointSubnetId:{value:$network.endpointsSubnetId.value},sitesDnsZoneId:{value:$network.sitesDnsZoneId.value},blobDnsZoneId:{value:$network.blobDnsZoneId.value},queueDnsZoneId:{value:$network.queueDnsZoneId.value},tableDnsZoneId:{value:$network.tableDnsZoneId.value},resolverAppId:{value:$resolverAppId},allowedCallerAppIds:{value:[$gatewayAppId]},allowedCallerObjectIds:{value:[$gatewayObjectId]},inboundAccess:{value:"private"}}}' > resolver-params.json
+az deployment group create -g "$GATEWAY_RG" -n "projection-resolver-${NAME_PREFIX}" --template-file infra/resolver.bicep --parameters @resolver-params.json -o none
 cd resolver && zip -r ../resolver.zip . && cd ..
-az functionapp deployment source config-zip -g "$GATEWAY_RG" -n "func-${NAME_PREFIX}-resolver" --src resolver.zip -o json
-az functionapp show -g "$GATEWAY_RG" -n "func-${NAME_PREFIX}-resolver" --query "{name:name,state:state,host:defaultHostName}" -o json
+export RESOLVER_SITE_NAME="$(az deployment group show -g "$GATEWAY_RG" -n "projection-resolver-${NAME_PREFIX}" --query "properties.outputs.siteName.value" -o tsv)"
+az functionapp deployment source config-zip -g "$GATEWAY_RG" -n "$RESOLVER_SITE_NAME" --src resolver.zip -o none
+az functionapp show -g "$GATEWAY_RG" -n "$RESOLVER_SITE_NAME" --query "{name:name,state:state,host:defaultHostName}" -o json
+# P89-RESOLVER-DEPLOY-END
 ```
 
-Expected result: the Function app is running with VNet integration and resolver code uploaded. This mirrors `infra/resolver.bicep:27-108`, `scripts/Deploy-ClaudeProjection.ps1` and `scripts/ClaudeRunner.ps1`.
+Expected result: the Function app is running with VNet integration and resolver code uploaded. `allowedCallerAppIds` is the gateway managed identity application id, and `allowedCallerObjectIds` is the gateway object id; otherwise the resolver refuses the gateway. This mirrors `scripts/Deploy-ClaudeProjection.ps1:130-168` and `infra/resolver.bicep:385-387`.
 
 Set resolver named values without switching entitlement.
 
@@ -605,12 +665,41 @@ Expected result: resolver URL and audience are set, while `entitlement-source` r
 Populate and compare the projection through an in-VNet runner container.
 
 ```bash
-az container create -g "$GATEWAY_RG" -n "aci-${NAME_PREFIX}-runner" --image mcr.microsoft.com/devcontainers/javascript-node:22 --restart-policy Never --command-line "sleep 3600" -o json
-az container exec -g "$GATEWAY_RG" -n "aci-${NAME_PREFIX}-runner" --exec-command "/bin/bash -lc 'node /work/sync/src/apply-projection.mjs --cosmos https://cosmos-${NAME_PREFIX}.documents.azure.com:443/ --tenant ${TENANT_ID} --snapshot /work/snapshot.json'"
-az container exec -g "$GATEWAY_RG" -n "aci-${NAME_PREFIX}-runner" --exec-command "/bin/bash -lc 'node /work/sync/src/apply-projection.mjs --cosmos https://cosmos-${NAME_PREFIX}.documents.azure.com:443/ --tenant ${TENANT_ID} --compare /work/gateway-decisions.json'"
+# P89-PROJECTION-RUNNER-BEGIN
+export RUNNER_NAME="$(az deployment group show -g "$GATEWAY_RG" -n "$PROJECTION_NETWORK_NAME" --query "properties.outputs.runnerName.value" -o tsv)"
+export RUNNER_PRINCIPAL_ID="$(az deployment group show -g "$GATEWAY_RG" -n "$PROJECTION_NETWORK_NAME" --query "properties.outputs.runnerPrincipalId.value" -o tsv)"
+az cosmosdb sql role assignment create --account-name "$COSMOS_ACCOUNT" --resource-group "$GATEWAY_RG" --scope /dbs/claude/colls/entitlement --principal-id "$RUNNER_PRINCIPAL_ID" --role-definition-id 00000000-0000-0000-0000-000000000002 -o none
+./scripts/Sync-ClaudeProjection.ps1 -Account "$COSMOS_ACCOUNT" -ApimName "$APIM_NAME" -ResourceGroup "$GATEWAY_RG" -StandardGroup "$STANDARD_GROUP" -PremiumGroup "$PREMIUM_GROUP" -ExportPath snapshot.json
+tar -c -z -f sync-source.tar.gz -C sync package.json src
+
+send_runner_file() {
+  src="$1"
+  dest="$2"
+  tmp="${dest}.b64"
+  dir="${dest%/*}"
+  b64="$(base64 < "$src" | tr '+/' '-_' | tr -d '=[:space:]')"
+  az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node -e require('fs').mkdirSync('$dir',{recursive:true});require('fs').writeFileSync('$tmp','')"
+  while [ -n "$b64" ]; do
+    chunk="${b64:0:4900}"
+    b64="${b64:4900}"
+    az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node -e require('fs').appendFileSync('$tmp','$chunk')"
+  done
+  az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node -e f=require('fs');f.writeFileSync('$dest',Buffer.from(f.readFileSync('$tmp','utf8'),'base64url'));f.unlinkSync('$tmp')"
+}
+
+send_runner_file sync-source.tar.gz /work/sync-source.tar.gz
+send_runner_file snapshot.json /work/snapshot.json
+az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node -e require('fs').mkdirSync('/work/sync',{recursive:true})"
+az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "tar -x -z -f /work/sync-source.tar.gz -C /work/sync"
+az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "npm --prefix /work/sync install --omit=dev --no-audit --fund=false"
+az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node /work/sync/src/apply-projection.mjs --cosmos https://${COSMOS_ACCOUNT}.documents.azure.com:443/ --tenant ${TENANT_ID} --snapshot /work/snapshot.json"
+./scripts/Compare-ClaudeEntitlement.ps1 -ResourceGroup "$GATEWAY_RG" -ApimName "$APIM_NAME" -StandardGroup "$STANDARD_GROUP" -PremiumGroup "$PREMIUM_GROUP" -ExportGatewayPath gateway-decisions.json -FailOnDrift
+send_runner_file gateway-decisions.json /work/gateway-decisions.json
+az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node /work/sync/src/apply-projection.mjs --cosmos https://${COSMOS_ACCOUNT}.documents.azure.com:443/ --tenant ${TENANT_ID} --compare /work/gateway-decisions.json"
+# P89-PROJECTION-RUNNER-END
 ```
 
-Expected result: population and comparison run from inside the VNet. Cosmos is private, and Azure CLI has no supported data-plane write path for this projection, so the runner performs the writes and comparison. This mirrors `scripts/Sync-ClaudeProjection.ps1`, `scripts/ClaudeRunner.ps1`, `docs/SCALE.md:681-726` and `infra/projection-network.bicep:46-49`.
+Expected result: population and comparison run through the runner created by `projection-network.bicep`. `send_runner_file` mirrors `scripts/ClaudeRunner.ps1:113-148`: base64url chunks are appended through `az container exec` and decoded in the container. The snapshot and gateway-decision files are produced by the repository scripts because their Graph and named-value comparison logic is not an Azure CLI data-plane operation. This mirrors `scripts/Deploy-ClaudeProjection.ps1:199-221`, `scripts/Sync-ClaudeProjection.ps1`, `scripts/ClaudeRunner.ps1`, `docs/SCALE.md:681-726` and `infra/projection-network.bicep:46-49`.
 
 Projection switch status.
 
@@ -699,12 +788,18 @@ az group exists -n "$GATEWAY_RG"
 
 Expected result: the group deletion starts; `az group exists` eventually returns `false`. Do not use this command if the group contains shared resources. This mirrors the resource-group boundary created by `deploy.ps1:134`.
 
-Remove the Foundry role assignment if the gateway identity remains after partial teardown.
+Remove only external resources this guide recorded as created.
 
 ```bash
-ROLE_ASSIGNMENT_ID="$(az role assignment list --scope "$FOUNDRY_ID" --assignee "$APIM_PRINCIPAL_ID" --query "[?roleDefinitionName=='Cognitive Services User']|[0].id" -o tsv)"
-az role assignment delete --ids "$ROLE_ASSIGNMENT_ID"
+# P89-TEARDOWN-EXTERNAL-BEGIN
+if jq -e '.foundryRole.created == true and (.foundryRole.id | type == "string" and length > 0)' .p89-receipts/foundry-role.json >/dev/null; then
+  ROLE_ASSIGNMENT_ID="$(jq -r '.foundryRole.id' .p89-receipts/foundry-role.json)"
+  az role assignment delete --ids "$ROLE_ASSIGNMENT_ID"
+else
+  echo "Foundry role assignment was pre-existing or not recorded as created; not deleting it."
+fi
 az role assignment list --scope "$FOUNDRY_ID" --assignee "$APIM_PRINCIPAL_ID" --query "[?roleDefinitionName=='Cognitive Services User'].id" -o tsv
+# P89-TEARDOWN-EXTERNAL-END
 ```
 
-Expected result: no assignment remains for that gateway identity. This mirrors the Foundry role assignment in `infra/foundry-role.bicep`.
+Expected result: only a role assignment recorded with `{created:true}` in `.p89-receipts/foundry-role.json` is deleted. A pre-existing assignment survives. Apply the same rule to Entra groups or app registrations: delete only object ids captured by this guide as newly created; do not delete pre-existing directory objects. This mirrors the Foundry role assignment in `infra/foundry-role.bicep`.
