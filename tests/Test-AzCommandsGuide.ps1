@@ -460,7 +460,14 @@ if [ "$1" = "role" ] && [ "$2" = "assignment" ]; then
       scope="$(arg_after --scope "$@" || true)"
       allflag="false"; for a in "$@"; do [ "$a" = "--all" ] && allflag="true"; done
       if [ -z "$scope" ] && [ "$allflag" != "true" ]; then printf 'null\n'; exit 0; fi
-      if [[ "$*" == *kv-created-role-id* ]]; then if [ "${P89_SCENARIO:-}" = "teardown-kv-role-live-mismatch" ]; then printf '{"id":"kv-created-role-id","scope":"/subscriptions/sub/resourceGroups/kv-rg/providers/Microsoft.KeyVault/vaults/kv","roleDefinitionName":"Reader","principalId":"gateway-object-id"}\n'; else printf '{"id":"kv-created-role-id","scope":"/subscriptions/sub/resourceGroups/kv-rg/providers/Microsoft.KeyVault/vaults/kv","roleDefinitionName":"Key Vault Secrets User","principalId":"gateway-object-id"}\n'; fi
+      if [[ "$*" == *kv-created-role-id* ]]; then
+        case "${P89_SCENARIO:-}" in
+          teardown-kv-role-id-mismatch) printf '{"id":"other-kv-role-id","scope":"/subscriptions/sub/resourceGroups/kv-rg/providers/Microsoft.KeyVault/vaults/kv","roleDefinitionName":"Key Vault Secrets User","principalId":"gateway-object-id"}\n' ;;
+          teardown-kv-role-scope-mismatch) printf '{"id":"kv-created-role-id","scope":"/subscriptions/subscription-scope","roleDefinitionName":"Key Vault Secrets User","principalId":"gateway-object-id"}\n' ;;
+          teardown-kv-role-live-mismatch|teardown-kv-role-name-mismatch) printf '{"id":"kv-created-role-id","scope":"/subscriptions/sub/resourceGroups/kv-rg/providers/Microsoft.KeyVault/vaults/kv","roleDefinitionName":"Reader","principalId":"gateway-object-id"}\n' ;;
+          teardown-kv-role-principal-mismatch) printf '{"id":"kv-created-role-id","scope":"/subscriptions/sub/resourceGroups/kv-rg/providers/Microsoft.KeyVault/vaults/kv","roleDefinitionName":"Key Vault Secrets User","principalId":"other-principal"}\n' ;;
+          *) printf '{"id":"kv-created-role-id","scope":"/subscriptions/sub/resourceGroups/kv-rg/providers/Microsoft.KeyVault/vaults/kv","roleDefinitionName":"Key Vault Secrets User","principalId":"gateway-object-id"}\n' ;;
+        esac
       elif [[ "$*" == *created-role-id* ]]; then
         case "${P89_SCENARIO:-}" in
           teardown-role-id-mismatch) printf '{"id":"other-role-id","scope":"/subscriptions/sub/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/foundry","roleDefinitionName":"Cognitive Services User","principalId":"gateway-object-id"}\n' ;;
@@ -1726,6 +1733,16 @@ Assert 'teardown skips Key Vault role delete when live role differs from receipt
     $teardownKvRoleMismatch.Output -match 'live Key Vault role assignment does not match' -and
     -not ((Read-ScenarioFile $teardownKvRoleMismatch 'writes.log') -match 'delete-role kv-created-role-id')
 ) $teardownKvRoleMismatch.Output
+
+foreach ($case in @('id','scope','name','principal')) {
+    $scenario = "teardown-kv-role-$case-mismatch"
+    $run = Invoke-GuideBashScenario $scenario (Join-GuideBlocks @($allCreatedReceipts, $keyVaultCreatedReceipt, $teardownExternalBlock))
+    Assert "teardown skips Key Vault role delete when live role $case differs from receipt" (
+        $run.Exit -eq 0 -and
+        $run.Output -match 'live Key Vault role assignment does not match' -and
+        -not ((Read-ScenarioFile $run 'writes.log') -match 'delete-role kv-created-role-id')
+    ) $run.Output
+}
 
 $teardownExisting = Invoke-GuideBashScenario 'teardown-existing' (Join-GuideBlocks @($allExistingReceipts, $teardownExternalBlock))
 Assert 'teardown preserves pre-existing role assignment' (
