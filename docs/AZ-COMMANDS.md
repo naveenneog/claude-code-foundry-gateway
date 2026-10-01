@@ -4,6 +4,8 @@
 
 Run the commands in **Azure Cloud Shell bash** from the repository root; if Cloud Shell opens in PowerShell, switch with `bash` or the shell selector. Cloud Shell has `az`, `jq`, `git` and `node`. Windows users run the bash blocks in Cloud Shell, WSL or Git Bash. In Windows PowerShell, `az` arguments containing `( ) | & < > ^` are re-parsed by `cmd.exe` through the `az.cmd` shim; `--query` expressions and Graph URLs are common examples. Keep variables in the block below and substitute environment-specific values there, not inline.
 
+A refusal prints `Refused: ...`, returns to the prompt, runs nothing after it in that block, and leaves the exported variables already set in the shell.
+
 ```bash
 export SUBSCRIPTION_ID="<subscription-id>"
 export TENANT_ID="<tenant-id>"
@@ -159,15 +161,18 @@ Expected result: the API path is `claude`, subscription keys are disabled, and o
 Write and read back one named value the same way the helper does.
 
 ```bash
-VALUE_LENGTH="$(printf '%s' "$MODELS_STANDARD" | wc -c | tr -d ' ')"
-az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --query value -o tsv
-if [ "$VALUE_LENGTH" -le 4096 ]; then
-  az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --value "$MODELS_STANDARD" -o none
-else
-  echo "Refused: models-standard is $VALUE_LENGTH characters, over the 4,096-character APIM named-value limit. Nothing was written." >&2
-  exit 1
-fi
-az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --query value -o tsv
+p89_named_value_readback() {
+  VALUE_LENGTH="$(printf '%s' "$MODELS_STANDARD" | wc -c | tr -d ' ')"
+  az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --query value -o tsv
+  if [ "$VALUE_LENGTH" -le 4096 ]; then
+    az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --value "$MODELS_STANDARD" -o none
+  else
+    echo "Refused: models-standard is $VALUE_LENGTH characters, over the 4,096-character APIM named-value limit. Nothing was written." >&2
+    return 1
+  fi
+  az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --query value -o tsv
+}
+p89_named_value_readback
 ```
 
 Expected result: the value length is at most 4,096, and the final read returns the exact value written. This mirrors `scripts/ApimNamedValue.ps1:35-73` and `scripts/ApimNamedValue.ps1:125-191`.
@@ -249,141 +254,177 @@ Create or discover the two tier groups.
 
 ```bash
 # P89-GROUP-RECEIPTS-BEGIN
-mkdir -p .p89-receipts
-record_group() {
-  tier="$1"
-  name="$2"
-  receipt=".p89-receipts/group-${tier}.json"
-  if id="$(az ad group show --group "$name" --query id -o tsv)" && [ -n "$id" ]; then
-    created_at="$(az ad group show --group "$name" --query createdDateTime -o tsv)"
-    jq -n --arg id "$id" --arg name "$name" --arg createdAt "$created_at" '{group:{created:false,id:$id,displayName:$name,createdAt:$createdAt}}' > "$receipt"
-  else
-    created_group_json="$(az ad group create --display-name "$name" --mail-nickname "$name" -o json)"
-    printf '%s' "$created_group_json" | jq --arg name "$name" '{group:{created:true,id:.id,displayName:$name,createdAt:(.createdDateTime // "")}}' > "$receipt"
-  fi
-  jq -e '.group.id | type == "string" and length > 0' "$receipt" >/dev/null
+p89_group_receipts() {
+  mkdir -p .p89-receipts
+  record_group() {
+    tier="$1"
+    name="$2"
+    receipt=".p89-receipts/group-${tier}.json"
+    if printf '%s' "$name" | grep -q "'"; then
+      echo "Refused: group name contains a single quote; nothing created or recorded." >&2
+      return 1
+    fi
+    filter="displayName eq '$name'"
+    if ! list_json="$(az ad group list --filter "$filter" --query "[].{id:id,createdDateTime:createdDateTime}" -o json)"; then
+      echo "Refused: could not list group '$name'; nothing created or recorded." >&2
+      return 1
+    fi
+    count="$(printf '%s' "$list_json" | jq 'length')"
+    if [ "$count" -eq 1 ]; then
+      printf '%s' "$list_json" | jq --arg name "$name" '{group:{created:false,id:.[0].id,displayName:$name,createdAt:(.[0].createdDateTime // "")}}' > "$receipt"
+    elif [ "$count" -eq 0 ]; then
+      if ! created_group_json="$(az ad group create --display-name "$name" --mail-nickname "$name" -o json)"; then
+        echo "Refused: group '$name' could not be created. Tenant settings may block group creation by this principal; ask the tenant admin to create the group or grant permission. Nothing recorded." >&2
+        return 1
+      fi
+      printf '%s' "$created_group_json" | jq --arg name "$name" '{group:{created:true,id:.id,displayName:$name,createdAt:(.createdDateTime // "")}}' > "$receipt"
+    else
+      echo "Refused: $count groups are named '$name'; nothing created or recorded." >&2
+      return 1
+    fi
+    jq -e '.group.id | type == "string" and length > 0' "$receipt" >/dev/null || {
+      rm -f "$receipt"
+      echo "Refused: group '$name' receipt is invalid; nothing recorded." >&2
+      return 1
+    }
+  }
+  record_group standard "$STANDARD_GROUP" || return 1
+  record_group premium "$PREMIUM_GROUP" || return 1
 }
-record_group standard "$STANDARD_GROUP"
-record_group premium "$PREMIUM_GROUP"
+p89_group_receipts
 # P89-GROUP-RECEIPTS-END
 ```
 
-Expected result: each group has an object id and `.p89-receipts/group-standard.json` / `.p89-receipts/group-premium.json` record whether this guide created it. Teardown uses those receipts and never deletes pre-existing groups. This mirrors `deploy.ps1:182-187` and `Install-ClaudeGateway.ps1:1597-1600`.
+Expected result: each group has one exact-name match or is created, and `.p89-receipts/group-standard.json` / `.p89-receipts/group-premium.json` record whether this guide created it. This guide deliberately differs from `deploy.ps1:182-189`, which creates after a lookup error: a list failure, duplicate exact name or create failure refuses so teardown cannot delete the wrong directory object.
 
 Read transitive members from Microsoft Graph as users and service principals.
 
 ```bash
 # P89-ENTITLEMENT-GRAPH-BEGIN
-if ! STANDARD_GROUP_ID="$(az ad group show --group "$STANDARD_GROUP" --query id -o tsv)" || [ -z "$STANDARD_GROUP_ID" ]; then
-  echo "Could not resolve standard group '$STANDARD_GROUP'; no entitlement values were changed." >&2
-  exit 1
-fi
-if ! PREMIUM_GROUP_ID="$(az ad group show --group "$PREMIUM_GROUP" --query id -o tsv)" || [ -z "$PREMIUM_GROUP_ID" ]; then
-  echo "Could not resolve premium group '$PREMIUM_GROUP'; no entitlement values were changed." >&2
-  exit 1
-fi
-
-GROUPS_JUST_CREATED="$(jq -s -r '[.[].group.created] | any' .p89-receipts/group-standard.json .p89-receipts/group-premium.json)"
-GROUPS_YOUNG="false"
-for receipt in .p89-receipts/group-standard.json .p89-receipts/group-premium.json; do
-  created_at="$(jq -r '.group.createdAt // ""' "$receipt")"
-  if [ -n "$created_at" ] && [ "$created_at" != "null" ]; then
-    created_epoch="$(date -u -d "$created_at" +%s)"
-    now_epoch="$(date -u +%s)"
-    if [ $((now_epoch - created_epoch)) -lt 900 ]; then GROUPS_YOUNG="true"; fi
+p89_graph_membership_read() {
+  if ! STANDARD_GROUP_ID="$(jq -r '.group.id // ""' .p89-receipts/group-standard.json)" || [ -z "$STANDARD_GROUP_ID" ]; then
+    echo "Refused: could not resolve standard group receipt; no entitlement values were changed." >&2
+    return 1
   fi
-done
-GRAPH_RETRY_ATTEMPTS="${GRAPH_RETRY_ATTEMPTS:-20}"
-GRAPH_RETRY_DELAY_SECONDS="${GRAPH_RETRY_DELAY_SECONDS:-30}"
+  if ! PREMIUM_GROUP_ID="$(jq -r '.group.id // ""' .p89-receipts/group-premium.json)" || [ -z "$PREMIUM_GROUP_ID" ]; then
+    echo "Refused: could not resolve premium group receipt; no entitlement values were changed." >&2
+    return 1
+  fi
 
-graph_get() {
-  url="$1"
-  file="$2"
-  err="${file}.err"
-  attempt=1
-  while [ "$attempt" -le "$GRAPH_RETRY_ATTEMPTS" ]; do
-    if az rest --method get --url "$url" --headers "ConsistencyLevel=eventual" --resource https://graph.microsoft.com -o json > "$file" 2> "$err"; then
-      rm -f "$err"
-      break
-    fi
-    rm -f "$file"
-    if grep -q '404' "$err" && { [ "$GROUPS_JUST_CREATED" = "true" ] || [ "$GROUPS_YOUNG" = "true" ]; }; then
-      if [ "$attempt" -lt "$GRAPH_RETRY_ATTEMPTS" ]; then
-        echo "Graph advanced query returned 404 for a new group; retrying after index propagation ($attempt/$GRAPH_RETRY_ATTEMPTS)." >&2
-        sleep "$GRAPH_RETRY_DELAY_SECONDS"
-        attempt=$((attempt + 1))
-        continue
+  GROUPS_JUST_CREATED="$(jq -s -r '[.[].group.created] | any' .p89-receipts/group-standard.json .p89-receipts/group-premium.json)"
+  GROUPS_YOUNG="false"
+  for receipt in .p89-receipts/group-standard.json .p89-receipts/group-premium.json; do
+    created_at="$(jq -r '.group.createdAt // ""' "$receipt")"
+    if [ -n "$created_at" ] && [ "$created_at" != "null" ]; then
+      if created_epoch="$(date -u -d "$created_at" +%s 2>/dev/null)"; then
+        now_epoch="$(date -u +%s)"
+        if [ $((now_epoch - created_epoch)) -lt 900 ]; then GROUPS_YOUNG="true"; fi
+      else
+        echo "Graph retry note: could not parse createdAt '$created_at'; treating the group as not young." >&2
       fi
-      echo "Refused: Graph advanced query still returned 404 after bounded retry; no entitlement values were changed." >&2
-      exit 1
     fi
-    echo "Graph read failed for $url; no entitlement values were changed." >&2
-    exit 1
   done
-  if ! jq -e 'has("value") and (.value | type == "array")' "$file" >/dev/null; then
-    echo "Graph response $file is not a confirmed collection; no entitlement values were changed." >&2
-    exit 1
-  fi
-  if jq -e 'has("@odata.nextLink")' "$file" >/dev/null; then
-    echo "Graph response $file is paged. Follow @odata.nextLink and combine every page before publishing; no entitlement values were changed." >&2
-    exit 1
-  fi
-}
+  GRAPH_RETRY_ATTEMPTS="${GRAPH_RETRY_ATTEMPTS:-20}"
+  GRAPH_RETRY_DELAY_SECONDS="${GRAPH_RETRY_DELAY_SECONDS:-30}"
 
-graph_get "https://graph.microsoft.com/v1.0/groups/${PREMIUM_GROUP_ID}/transitiveMembers/microsoft.graph.user?\$select=id,displayName,userPrincipalName&\$top=999&\$count=true" premium-users.json
-graph_get "https://graph.microsoft.com/v1.0/groups/${PREMIUM_GROUP_ID}/transitiveMembers/microsoft.graph.servicePrincipal?\$select=id,displayName&\$top=999&\$count=true" premium-service-principals.json
-graph_get "https://graph.microsoft.com/v1.0/groups/${STANDARD_GROUP_ID}/transitiveMembers/microsoft.graph.user?\$select=id,displayName,userPrincipalName&\$top=999&\$count=true" standard-users.json
-graph_get "https://graph.microsoft.com/v1.0/groups/${STANDARD_GROUP_ID}/transitiveMembers/microsoft.graph.servicePrincipal?\$select=id,displayName&\$top=999&\$count=true" standard-service-principals.json
+  graph_get() {
+    url="$1"
+    file="$2"
+    err="${file}.err"
+    attempt=1
+    while [ "$attempt" -le "$GRAPH_RETRY_ATTEMPTS" ]; do
+      if az rest --method get --url "$url" --headers "ConsistencyLevel=eventual" --resource https://graph.microsoft.com -o json > "$file" 2> "$err"; then
+        rm -f "$err"
+        break
+      fi
+      rm -f "$file"
+      error_text="$(cat "$err")"
+      retryable_not_found="false"
+      if printf '%s' "$error_text" | grep -Eq '(^|[[:space:]])Not Found\(' || printf '%s' "$error_text" | grep -q 'Request_ResourceNotFound'; then
+        retryable_not_found="true"
+      fi
+      if [ "$retryable_not_found" = "true" ] && { [ "$GROUPS_JUST_CREATED" = "true" ] || [ "$GROUPS_YOUNG" = "true" ]; }; then
+        if [ "$attempt" -lt "$GRAPH_RETRY_ATTEMPTS" ]; then
+          echo "Graph advanced query returned 404 for a new group; retrying after index propagation ($attempt/$GRAPH_RETRY_ATTEMPTS)." >&2
+          sleep "$GRAPH_RETRY_DELAY_SECONDS"
+          attempt=$((attempt + 1))
+          continue
+        fi
+        echo "Refused: Graph advanced query still returned 404 after bounded retry; no entitlement values were changed." >&2
+        return 1
+      fi
+      echo "Graph read failed for $url; no entitlement values were changed." >&2
+      return 1
+    done
+    if ! jq -e 'has("value") and (.value | type == "array")' "$file" >/dev/null; then
+      echo "Graph response $file is not a confirmed collection; no entitlement values were changed." >&2
+      return 1
+    fi
+    if jq -e 'has("@odata.nextLink")' "$file" >/dev/null; then
+      echo "Graph response $file is paged. Follow @odata.nextLink and combine every page before publishing; no entitlement values were changed." >&2
+      return 1
+    fi
+  }
+
+  graph_get "https://graph.microsoft.com/v1.0/groups/${PREMIUM_GROUP_ID}/transitiveMembers/microsoft.graph.user?\$select=id,displayName,userPrincipalName&\$top=999&\$count=true" premium-users.json || return 1
+  graph_get "https://graph.microsoft.com/v1.0/groups/${PREMIUM_GROUP_ID}/transitiveMembers/microsoft.graph.servicePrincipal?\$select=id,displayName&\$top=999&\$count=true" premium-service-principals.json || return 1
+  graph_get "https://graph.microsoft.com/v1.0/groups/${STANDARD_GROUP_ID}/transitiveMembers/microsoft.graph.user?\$select=id,displayName,userPrincipalName&\$top=999&\$count=true" standard-users.json || return 1
+  graph_get "https://graph.microsoft.com/v1.0/groups/${STANDARD_GROUP_ID}/transitiveMembers/microsoft.graph.servicePrincipal?\$select=id,displayName&\$top=999&\$count=true" standard-service-principals.json || return 1
+}
+p89_graph_membership_read
 # P89-ENTITLEMENT-GRAPH-END
 ```
 
-Expected result: the four JSON files exist and each contains a `value` array with no `@odata.nextLink`. A Graph error is an error, not an empty group; only a successful empty `value` array is empty. Microsoft Graph advanced directory queries use a separate index store and require `ConsistencyLevel: eventual` with `$count`; a just-created group can therefore be temporarily invisible to this query shape, so this block retries only for new or younger-than-15-minute groups and treats older 404s or any 403 as immediate errors (Microsoft Learn, "Advanced query capabilities on Microsoft Entra ID objects", accessed 2026-10-01). This mirrors `scripts/ClaudeGraphMembership.ps1:31-151`. The script uses direct REST in PowerShell because `az.cmd` on Windows re-parses `&`; in Cloud Shell bash, `az rest` is safe when the URL is quoted. The named-value path holds roughly 110 object ids per list; larger groups need the projection path.
+Expected result: the four JSON files exist and each contains a `value` array with no `@odata.nextLink`. A Graph error is an error, not an empty group; only a successful empty `value` array is empty. Microsoft Graph advanced directory queries use a separate index store and require `ConsistencyLevel: eventual` with `$count`; a just-created group can therefore be temporarily invisible to this query shape, so this block retries only for new or younger-than-15-minute groups and treats older 404s or any 403 as immediate errors (Microsoft Learn, "Advanced query capabilities on Microsoft Entra ID objects", https://learn.microsoft.com/graph/aad-advanced-queries, accessed 2026-10-01). Azure CLI 2.86.0's installed `azure/cli/core/util.pyc` for `send_raw_request` carries the `Reason(body)` formatting constants (`'{} {}'`, `'({})'`), so the retry checks the `Not Found(` reason or Graph `Request_ResourceNotFound` code, not any `404` substring. This mirrors `scripts/ClaudeGraphMembership.ps1:31-151`. The script uses direct REST in PowerShell because `az.cmd` on Windows re-parses `&`; in Cloud Shell bash, `az rest` is safe when the URL is quoted. The named-value path holds roughly 110 object ids per list; larger groups need the projection path.
 
 Publish premium first, then standard without duplicates.
 
 ```bash
 # P89-ENTITLEMENT-PUBLISH-BEGIN
-for file in premium-users.json premium-service-principals.json standard-users.json standard-service-principals.json; do
-  if ! jq -e 'has("value") and (.value | type == "array") and (has("@odata.nextLink") | not)' "$file" >/dev/null; then
-    echo "Refused: $file is missing, invalid or incomplete; no entitlement values were changed." >&2
-    exit 1
-  fi
-done
+p89_entitlement_publish() {
+  for file in premium-users.json premium-service-principals.json standard-users.json standard-service-principals.json; do
+    if ! jq -e 'has("value") and (.value | type == "array") and (has("@odata.nextLink") | not)' "$file" >/dev/null; then
+      echo "Refused: $file is missing, invalid or incomplete; no entitlement values were changed." >&2
+      return 1
+    fi
+  done
 
-jq -r '.value[].id' premium-users.json premium-service-principals.json | awk 'NF' | sort -fu > premium-oids.txt
-jq -r '.value[].id' standard-users.json standard-service-principals.json | awk 'NF' | sort -fu > standard-all-oids.txt
-comm -23 standard-all-oids.txt premium-oids.txt > standard-oids.txt
+  jq -r '.value[].id' premium-users.json premium-service-principals.json | awk 'NF' | sort -fu > premium-oids.txt
+  jq -r '.value[].id' standard-users.json standard-service-principals.json | awk 'NF' | sort -fu > standard-all-oids.txt
+  comm -23 standard-all-oids.txt premium-oids.txt > standard-oids.txt
 
-oid_file_to_value() {
-  file="$1"
-  if [ -s "$file" ]; then
-    printf ',%s,' "$(paste -sd, "$file")"
-  else
-    printf ','
-  fi
+  oid_file_to_value() {
+    file="$1"
+    if [ -s "$file" ]; then
+      printf ',%s,' "$(paste -sd, "$file")"
+    else
+      printf ','
+    fi
+  }
+
+  PREMIUM_VALUE="$(oid_file_to_value premium-oids.txt)"
+  STANDARD_VALUE="$(oid_file_to_value standard-oids.txt)"
+
+  write_allow_value() {
+    id="$1"
+    value="$2"
+    len="$(printf '%s' "$value" | wc -c | tr -d ' ')"
+    if [ "$len" -gt 4096 ]; then
+      echo "Refused: $id is $len characters, over the 4,096-character APIM named-value limit. Nothing was written." >&2
+      return 1
+    fi
+    if [ "$value" = "," ] && [ "${ALLOW_EMPTY:-no}" != "yes" ]; then
+      echo "Refused: $id is empty. Set ALLOW_EMPTY=yes only after review; everyone in that tier loses access after propagation." >&2
+      return 1
+    fi
+    az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id "$id" --value "$value" -o none
+  }
+
+  write_allow_value allow-premium "$PREMIUM_VALUE" || return 1
+  write_allow_value allow-standard "$STANDARD_VALUE" || return 1
+  az apim nv list -g "$GATEWAY_RG" --service-name "$APIM_NAME" --query "[?name=='allow-premium' || name=='allow-standard'].{name:name,value:value}" -o table
 }
-
-PREMIUM_VALUE="$(oid_file_to_value premium-oids.txt)"
-STANDARD_VALUE="$(oid_file_to_value standard-oids.txt)"
-
-write_allow_value() {
-  id="$1"
-  value="$2"
-  len="$(printf '%s' "$value" | wc -c | tr -d ' ')"
-  if [ "$len" -gt 4096 ]; then
-    echo "Refused: $id is $len characters, over the 4,096-character APIM named-value limit. Nothing was written." >&2
-    exit 1
-  fi
-  if [ "$value" = "," ] && [ "${ALLOW_EMPTY:-no}" != "yes" ]; then
-    echo "Refused: $id is empty. Set ALLOW_EMPTY=yes only after review; everyone in that tier loses access after propagation." >&2
-    exit 1
-  fi
-  az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id "$id" --value "$value" -o none
-}
-
-write_allow_value allow-premium "$PREMIUM_VALUE"
-write_allow_value allow-standard "$STANDARD_VALUE"
-az apim nv list -g "$GATEWAY_RG" --service-name "$APIM_NAME" --query "[?name=='allow-premium' || name=='allow-standard'].{name:name,value:value}" -o table
+p89_entitlement_publish
 # P89-ENTITLEMENT-PUBLISH-END
 ```
 
@@ -393,15 +434,18 @@ Add one developer to a tier and publish.
 
 ```bash
 # P89-DEVELOPER-ADD-BEGIN
-export DEVELOPER_UPN="<developer-upn-or-mail>"
-if ! DEVELOPER_ID="$(az ad user show --id "$DEVELOPER_UPN" --query id -o tsv)" || [ -z "$DEVELOPER_ID" ]; then
-  echo "Could not resolve developer '$DEVELOPER_UPN'; no group membership was changed." >&2
-  exit 1
-fi
-az ad group member add --group "$STANDARD_GROUP" --member-id "$DEVELOPER_ID"
-az ad group member remove --group "$PREMIUM_GROUP" --member-id "$DEVELOPER_ID"
-az ad group member list --group "$STANDARD_GROUP" --query "[?id=='${DEVELOPER_ID}'].id" -o tsv
-az ad group member list --group "$PREMIUM_GROUP" --query "[?id=='${DEVELOPER_ID}'].id" -o tsv
+p89_developer_add_standard() {
+  export DEVELOPER_UPN="<developer-upn-or-mail>"
+  if ! DEVELOPER_ID="$(az ad user show --id "$DEVELOPER_UPN" --query id -o tsv)" || [ -z "$DEVELOPER_ID" ]; then
+    echo "Refused: could not resolve developer '$DEVELOPER_UPN'; no group membership was changed." >&2
+    return 1
+  fi
+  az ad group member add --group "$STANDARD_GROUP" --member-id "$DEVELOPER_ID" || return 1
+  az ad group member remove --group "$PREMIUM_GROUP" --member-id "$DEVELOPER_ID" || return 1
+  az ad group member list --group "$STANDARD_GROUP" --query "[?id=='${DEVELOPER_ID}'].id" -o tsv
+  az ad group member list --group "$PREMIUM_GROUP" --query "[?id=='${DEVELOPER_ID}'].id" -o tsv
+}
+p89_developer_add_standard
 # P89-DEVELOPER-ADD-END
 ```
 
@@ -411,10 +455,13 @@ Remove one developer from both tiers and publish.
 
 ```bash
 # P89-DEVELOPER-REMOVE-BEGIN
-az ad group member remove --group "$STANDARD_GROUP" --member-id "$DEVELOPER_ID"
-az ad group member remove --group "$PREMIUM_GROUP" --member-id "$DEVELOPER_ID"
-az ad group member list --group "$STANDARD_GROUP" --query "[?id=='${DEVELOPER_ID}'].id" -o tsv
-az ad group member list --group "$PREMIUM_GROUP" --query "[?id=='${DEVELOPER_ID}'].id" -o tsv
+p89_developer_remove() {
+  az ad group member remove --group "$STANDARD_GROUP" --member-id "$DEVELOPER_ID" || return 1
+  az ad group member remove --group "$PREMIUM_GROUP" --member-id "$DEVELOPER_ID" || return 1
+  az ad group member list --group "$STANDARD_GROUP" --query "[?id=='${DEVELOPER_ID}'].id" -o tsv
+  az ad group member list --group "$PREMIUM_GROUP" --query "[?id=='${DEVELOPER_ID}'].id" -o tsv
+}
+p89_developer_remove
 # P89-DEVELOPER-REMOVE-END
 ```
 
@@ -436,16 +483,19 @@ Change one tier's model list and limits.
 
 ```bash
 # P89-TIER-WRITES-BEGIN
-az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id tpm-standard --value "30000" -o none
-az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id quota-standard --value "750000" -o none
-MODELS_STANDARD_NEXT=",${SONNET_DEPLOYMENT},"
-if [ "$(printf '%s' "$MODELS_STANDARD_NEXT" | wc -c | tr -d ' ')" -le 4096 ]; then
-  az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --value "$MODELS_STANDARD_NEXT" -o none
-else
-  echo "Refused: models-standard would exceed 4,096 characters. Nothing was written." >&2
-  exit 1
-fi
-az apim nv list -g "$GATEWAY_RG" --service-name "$APIM_NAME" --query "[?name=='tpm-standard' || name=='quota-standard' || name=='models-standard'].{name:name,value:value}" -o table
+p89_tier_writes() {
+  az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id tpm-standard --value "30000" -o none || return 1
+  az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id quota-standard --value "750000" -o none || return 1
+  MODELS_STANDARD_NEXT=",${SONNET_DEPLOYMENT},"
+  if [ "$(printf '%s' "$MODELS_STANDARD_NEXT" | wc -c | tr -d ' ')" -le 4096 ]; then
+    az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --value "$MODELS_STANDARD_NEXT" -o none || return 1
+  else
+    echo "Refused: models-standard would exceed 4,096 characters. Nothing was written." >&2
+    return 1
+  fi
+  az apim nv list -g "$GATEWAY_RG" --service-name "$APIM_NAME" --query "[?name=='tpm-standard' || name=='quota-standard' || name=='models-standard'].{name:name,value:value}" -o table
+}
+p89_tier_writes
 # P89-TIER-WRITES-END
 ```
 
@@ -455,18 +505,21 @@ Set one person's daily token budget.
 
 ```bash
 # P89-BUDGET-WRITE-BEGIN
-export BUDGET_OID="$(az ad user show --id "$DEVELOPER_UPN" --query id -o tsv | tr '[:upper:]' '[:lower:]')"
-export CURRENT_OVERRIDES="$(az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id quota-overrides --query value -o tsv)"
-printf '%s\n' "$CURRENT_OVERRIDES" | grep -Eq '^,([^,=]+=([0-9]+),)*$|^,,$' || { echo "Refused: quota-overrides is malformed; no budget was written." >&2; exit 1; }
-EXISTING_OVERRIDES="$(printf '%s' "$CURRENT_OVERRIDES" | tr ',' '\n' | awk -F= -v oid="$BUDGET_OID" 'NF && $1 != oid { print $0 }')"
-NEW_OVERRIDES="$(printf '%s\n%s=2000000\n' "$EXISTING_OVERRIDES" "$BUDGET_OID" | awk 'NF' | paste -sd, -)"
-NEW_OVERRIDES=",${NEW_OVERRIDES},"
-if [ "$(printf '%s' "$NEW_OVERRIDES" | wc -c | tr -d ' ')" -gt 4096 ]; then
-  echo "Refused: quota-overrides would exceed 4,096 characters; no budget was written." >&2
-  exit 1
-fi
-az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id quota-overrides --value "$NEW_OVERRIDES" -o none
-az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id quota-overrides --query value -o tsv
+p89_budget_write() {
+  export BUDGET_OID="$(az ad user show --id "$DEVELOPER_UPN" --query id -o tsv | tr '[:upper:]' '[:lower:]')"
+  export CURRENT_OVERRIDES="$(az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id quota-overrides --query value -o tsv)"
+  printf '%s\n' "$CURRENT_OVERRIDES" | grep -Eq '^,([^,=]+=([0-9]+),)*$|^,,$' || { echo "Refused: quota-overrides is malformed; no budget was written." >&2; return 1; }
+  EXISTING_OVERRIDES="$(printf '%s' "$CURRENT_OVERRIDES" | tr ',' '\n' | awk -F= -v oid="$BUDGET_OID" 'NF && $1 != oid { print $0 }')"
+  NEW_OVERRIDES="$(printf '%s\n%s=2000000\n' "$EXISTING_OVERRIDES" "$BUDGET_OID" | awk 'NF' | paste -sd, -)"
+  NEW_OVERRIDES=",${NEW_OVERRIDES},"
+  if [ "$(printf '%s' "$NEW_OVERRIDES" | wc -c | tr -d ' ')" -gt 4096 ]; then
+    echo "Refused: quota-overrides would exceed 4,096 characters; no budget was written." >&2
+    return 1
+  fi
+  az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id quota-overrides --value "$NEW_OVERRIDES" -o none || return 1
+  az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id quota-overrides --query value -o tsv
+}
+p89_budget_write
 # P89-BUDGET-WRITE-END
 ```
 
@@ -505,18 +558,21 @@ Expected result: provisioning reaches `Succeeded`. This mirrors `scripts/ClaudeM
 Add the deployed model to tiers and record prices.
 
 ```bash
-export NEW_MODEL="<deployment-name>"
-export MODELS_PREMIUM_NOW="$(az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-premium --query value -o tsv)"
-export MODELS_PREMIUM_NEXT="$(printf '%s' "$MODELS_PREMIUM_NOW" | sed 's/,$//'),${NEW_MODEL},"
-if [ "$(printf '%s' "$MODELS_PREMIUM_NEXT" | wc -c | tr -d ' ')" -le 4096 ]; then
-  az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-premium --value "$MODELS_PREMIUM_NEXT" -o none
-else
-  echo "Refused: models-premium would exceed 4,096 characters. Nothing was written." >&2
-  exit 1
-fi
-jq --arg model "$NEW_MODEL" --argjson input 5 --argjson output 25 '.date=(now|strftime("%Y-%m-%d")) | .source="list price, https://platform.claude.com/docs/en/about-claude/pricing" | .models[$model]={inputPerM:$input,outputPerM:$output}' config/price-book.json > config/price-book.next.json
-mv config/price-book.next.json config/price-book.json
-az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-premium --query value -o tsv
+p89_add_model_to_premium() {
+  export NEW_MODEL="<deployment-name>"
+  export MODELS_PREMIUM_NOW="$(az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-premium --query value -o tsv)"
+  export MODELS_PREMIUM_NEXT="$(printf '%s' "$MODELS_PREMIUM_NOW" | sed 's/,$//'),${NEW_MODEL},"
+  if [ "$(printf '%s' "$MODELS_PREMIUM_NEXT" | wc -c | tr -d ' ')" -le 4096 ]; then
+    az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-premium --value "$MODELS_PREMIUM_NEXT" -o none || return 1
+  else
+    echo "Refused: models-premium would exceed 4,096 characters. Nothing was written." >&2
+    return 1
+  fi
+  jq --arg model "$NEW_MODEL" --argjson input 5 --argjson output 25 '.date=(now|strftime("%Y-%m-%d")) | .source="list price, https://platform.claude.com/docs/en/about-claude/pricing" | .models[$model]={inputPerM:$input,outputPerM:$output}' config/price-book.json > config/price-book.next.json
+  mv config/price-book.next.json config/price-book.json
+  az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-premium --query value -o tsv
+}
+p89_add_model_to_premium
 ```
 
 Expected result: the premium model list contains the new deployment with sentinel commas, and `config/price-book.json` has a dated price entry. This mirrors `scripts/Add-ClaudeModel.ps1:208-253`.
@@ -527,21 +583,43 @@ Create or discover the Desktop public-client app.
 
 ```bash
 # P89-DESKTOP-APP-BEGIN
-mkdir -p .p89-receipts
-export DESKTOP_APP_NAME="Claude Desktop gateway"
-EXISTING_DESKTOP_APP_ID="$(az ad app list --display-name "$DESKTOP_APP_NAME" --query "[?displayName=='${DESKTOP_APP_NAME}']|[0].appId" -o tsv)"
-if [ -n "$EXISTING_DESKTOP_APP_ID" ]; then
-  jq -n --arg appId "$EXISTING_DESKTOP_APP_ID" --arg displayName "$DESKTOP_APP_NAME" '{app:{created:false,appId:$appId,displayName:$displayName}}' > .p89-receipts/desktop-app.json
-else
-  az ad app create --display-name "$DESKTOP_APP_NAME" --sign-in-audience AzureADMyOrg -o json \
-    | jq '{app:{created:true,appId:.appId,displayName:.displayName}}' > .p89-receipts/desktop-app.json
-fi
-export DESKTOP_CLIENT_ID="$(jq -r '.app.appId' .p89-receipts/desktop-app.json)"
-jq -e '.app.appId | type == "string" and length > 0' .p89-receipts/desktop-app.json >/dev/null
+p89_desktop_app_receipt() {
+  mkdir -p .p89-receipts
+  export DESKTOP_APP_NAME="Claude Desktop gateway"
+  if printf '%s' "$DESKTOP_APP_NAME" | grep -q "'"; then
+    echo "Refused: Desktop app name contains a single quote; nothing created or recorded." >&2
+    return 1
+  fi
+  filter="displayName eq '$DESKTOP_APP_NAME'"
+  if ! app_list_json="$(az ad app list --filter "$filter" --query "[].{appId:appId,id:id}" -o json)"; then
+    echo "Refused: could not list app '$DESKTOP_APP_NAME'; nothing created or recorded." >&2
+    return 1
+  fi
+  count="$(printf '%s' "$app_list_json" | jq 'length')"
+  if [ "$count" -eq 1 ]; then
+    printf '%s' "$app_list_json" | jq --arg displayName "$DESKTOP_APP_NAME" '{app:{created:false,appId:.[0].appId,objectId:.[0].id,displayName:$displayName}}' > .p89-receipts/desktop-app.json
+  elif [ "$count" -eq 0 ]; then
+    if ! created_app_json="$(az ad app create --display-name "$DESKTOP_APP_NAME" --sign-in-audience AzureADMyOrg -o json)"; then
+      echo "Refused: app '$DESKTOP_APP_NAME' could not be created. Tenant settings may block app registration by this principal; ask the tenant admin to create the app or grant permission. Nothing recorded." >&2
+      return 1
+    fi
+    printf '%s' "$created_app_json" | jq '{app:{created:true,appId:.appId,objectId:(.id // ""),displayName:.displayName}}' > .p89-receipts/desktop-app.json
+  else
+    echo "Refused: $count apps are named '$DESKTOP_APP_NAME'; nothing created or recorded." >&2
+    return 1
+  fi
+  export DESKTOP_CLIENT_ID="$(jq -r '.app.appId' .p89-receipts/desktop-app.json)"
+  jq -e '.app.appId | type == "string" and length > 0' .p89-receipts/desktop-app.json >/dev/null || {
+    rm -f .p89-receipts/desktop-app.json
+    echo "Refused: Desktop app receipt is invalid; nothing recorded." >&2
+    return 1
+  }
+}
+p89_desktop_app_receipt
 # P89-DESKTOP-APP-END
 ```
 
-Expected result: one application id is available and `.p89-receipts/desktop-app.json` records whether this guide created it. Teardown uses that receipt and never deletes a pre-existing app registration. This mirrors `scripts/New-ClaudeDesktopEntraApp.ps1:29-39`.
+Expected result: one exact-name application id is available and `.p89-receipts/desktop-app.json` records whether this guide created it. This guide deliberately differs from `New-ClaudeDesktopEntraApp.ps1:31-37`, which creates after a lookup miss: a list failure, duplicate exact name or create failure refuses so teardown cannot delete the wrong app registration.
 
 Set public-client redirect URIs, including broker redirects when the Desktop profile uses broker flow.
 
@@ -719,51 +797,66 @@ Populate and compare the projection through an in-VNet runner container.
 
 ```bash
 # P89-PROJECTION-RUNNER-BEGIN
-export RUNNER_NAME="$(az deployment group show -g "$GATEWAY_RG" -n "$PROJECTION_NETWORK_NAME" --query "properties.outputs.runnerName.value" -o tsv)"
-export RUNNER_PRINCIPAL_ID="$(az deployment group show -g "$GATEWAY_RG" -n "$PROJECTION_NETWORK_NAME" --query "properties.outputs.runnerPrincipalId.value" -o tsv)"
-az cosmosdb sql role assignment create --account-name "$COSMOS_ACCOUNT" --resource-group "$GATEWAY_RG" --scope /dbs/claude/colls/entitlement --principal-id "$RUNNER_PRINCIPAL_ID" --role-definition-id 00000000-0000-0000-0000-000000000002 -o none
-./scripts/Sync-ClaudeProjection.ps1 -Account "$COSMOS_ACCOUNT" -ApimName "$APIM_NAME" -ResourceGroup "$GATEWAY_RG" -StandardGroup "$STANDARD_GROUP" -PremiumGroup "$PREMIUM_GROUP" -ExportPath snapshot.json
-tar -c -z -f sync-source.tar.gz -C sync package.json src
+p89_projection_runner() {
+  export RUNNER_NAME="$(az deployment group show -g "$GATEWAY_RG" -n "$PROJECTION_NETWORK_NAME" --query "properties.outputs.runnerName.value" -o tsv)"
+  export RUNNER_PRINCIPAL_ID="$(az deployment group show -g "$GATEWAY_RG" -n "$PROJECTION_NETWORK_NAME" --query "properties.outputs.runnerPrincipalId.value" -o tsv)"
+  az cosmosdb sql role assignment create --account-name "$COSMOS_ACCOUNT" --resource-group "$GATEWAY_RG" --scope /dbs/claude/colls/entitlement --principal-id "$RUNNER_PRINCIPAL_ID" --role-definition-id 00000000-0000-0000-0000-000000000002 -o none || return 1
+  ./scripts/Sync-ClaudeProjection.ps1 -Account "$COSMOS_ACCOUNT" -ApimName "$APIM_NAME" -ResourceGroup "$GATEWAY_RG" -StandardGroup "$STANDARD_GROUP" -PremiumGroup "$PREMIUM_GROUP" -ExportPath snapshot.json || return 1
+  tar -c -z -f sync-source.tar.gz -C sync package.json src || return 1
 
-send_runner_file() {
-  src="$1"
-  dest="$2"
-  tmp="${dest}.b64"
-  dir="${dest%/*}"
-  local_hash="$(sha256sum "$src" | awk '{print $1}')"
-  b64="$(base64 < "$src" | tr '+/' '-_' | tr -d '=[:space:]')"
-  if ! az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node -e require('fs').mkdirSync('$dir',{recursive:true});require('fs').writeFileSync('$tmp','')"; then
-    echo "Refused: runner could not initialize transfer for $dest." >&2
-    exit 1
-  fi
-  while [ -n "$b64" ]; do
-    chunk="${b64:0:4900}"
-    b64="${b64:4900}"
-    if ! az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node -e require('fs').appendFileSync('$tmp','$chunk')"; then
-      echo "Refused: runner transfer chunk failed for $dest." >&2
-      exit 1
+  send_runner_file() {
+    src="$1"
+    dest="$2"
+    tmp="${dest}.b64"
+    dir="${dest%/*}"
+    local_hash="$(sha256sum "$src" | awk '{print $1}')"
+    b64="$(base64 < "$src" | tr '+/' '-_' | tr -d '=[:space:]')"
+    if ! init_output="$(az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node -e require('fs').mkdirSync('$dir',{recursive:true});require('fs').writeFileSync('$tmp','')" 2>&1)"; then
+      echo "Refused: runner could not initialize transfer for $dest. $init_output" >&2
+      return 1
     fi
-  done
-  if ! remote_output="$(az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node -e f=require('fs');c=require('crypto');f.writeFileSync('$dest',Buffer.from(f.readFileSync('$tmp','utf8'),'base64url'));f.unlinkSync('$tmp');console.log(c.createHash('sha256').update(f.readFileSync('$dest')).digest('hex'))")"; then
-    echo "Refused: runner could not finalize transfer for $dest." >&2
-    exit 1
-  fi
-  remote_hash="$(printf '%s\n' "$remote_output" | tail -n 1 | tr -d '\r')"
-  if [ "$remote_hash" != "$local_hash" ]; then
-    echo "Refused: runner transfer hash mismatch for $dest. Local $local_hash, remote $remote_hash." >&2
-    exit 1
-  fi
-}
+    if printf '%s' "$init_output" | grep -Eq 'ERROR|InvalidCommandLength|terminated with non-zero'; then
+      echo "Refused: runner initialization reported an error for $dest. $init_output" >&2
+      return 1
+    fi
+    while [ -n "$b64" ]; do
+      chunk="${b64:0:4900}"
+      b64="${b64:4900}"
+      if ! chunk_output="$(az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node -e require('fs').appendFileSync('$tmp','$chunk')" 2>&1)"; then
+        echo "Refused: runner transfer chunk failed for $dest. $chunk_output" >&2
+        return 1
+      fi
+      if printf '%s' "$chunk_output" | grep -Eq 'ERROR|InvalidCommandLength|terminated with non-zero'; then
+        echo "Refused: runner transfer chunk reported an error for $dest. $chunk_output" >&2
+        return 1
+      fi
+    done
+    if ! remote_output="$(az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node -e f=require('fs');c=require('crypto');f.writeFileSync('$dest',Buffer.from(f.readFileSync('$tmp','utf8'),'base64url'));f.unlinkSync('$tmp');console.log(c.createHash('sha256').update(f.readFileSync('$dest')).digest('hex'))" 2>&1)"; then
+      echo "Refused: runner could not finalize transfer for $dest. $remote_output" >&2
+      return 1
+    fi
+    if printf '%s' "$remote_output" | grep -Eq 'ERROR|InvalidCommandLength|terminated with non-zero'; then
+      echo "Refused: runner finalization reported an error for $dest. $remote_output" >&2
+      return 1
+    fi
+    remote_hash="$(printf '%s\n' "$remote_output" | tail -n 1 | tr -d '\r')"
+    if [ "$remote_hash" != "$local_hash" ]; then
+      echo "Refused: runner transfer hash mismatch for $dest. Local $local_hash, remote $remote_hash." >&2
+      return 1
+    fi
+  }
 
-send_runner_file sync-source.tar.gz /work/sync-source.tar.gz
-send_runner_file snapshot.json /work/snapshot.json
-az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node -e require('fs').mkdirSync('/work/sync',{recursive:true})"
-az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "tar -x -z -f /work/sync-source.tar.gz -C /work/sync"
-az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "npm --prefix /work/sync install --omit=dev --no-audit --fund=false"
-az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node /work/sync/src/apply-projection.mjs --cosmos https://${COSMOS_ACCOUNT}.documents.azure.com:443/ --tenant ${TENANT_ID} --snapshot /work/snapshot.json"
-./scripts/Compare-ClaudeEntitlement.ps1 -ResourceGroup "$GATEWAY_RG" -ApimName "$APIM_NAME" -StandardGroup "$STANDARD_GROUP" -PremiumGroup "$PREMIUM_GROUP" -ExportGatewayPath gateway-decisions.json -FailOnDrift
-send_runner_file gateway-decisions.json /work/gateway-decisions.json
-az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node /work/sync/src/apply-projection.mjs --cosmos https://${COSMOS_ACCOUNT}.documents.azure.com:443/ --tenant ${TENANT_ID} --compare /work/gateway-decisions.json"
+  send_runner_file sync-source.tar.gz /work/sync-source.tar.gz || return 1
+  send_runner_file snapshot.json /work/snapshot.json || return 1
+  az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node -e require('fs').mkdirSync('/work/sync',{recursive:true})" || return 1
+  az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "tar -x -z -f /work/sync-source.tar.gz -C /work/sync" || return 1
+  az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "npm --prefix /work/sync install --omit=dev --no-audit --fund=false" || return 1
+  az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node /work/sync/src/apply-projection.mjs --cosmos https://${COSMOS_ACCOUNT}.documents.azure.com:443/ --tenant ${TENANT_ID} --snapshot /work/snapshot.json" || return 1
+  ./scripts/Compare-ClaudeEntitlement.ps1 -ResourceGroup "$GATEWAY_RG" -ApimName "$APIM_NAME" -StandardGroup "$STANDARD_GROUP" -PremiumGroup "$PREMIUM_GROUP" -ExportGatewayPath gateway-decisions.json -FailOnDrift || return 1
+  send_runner_file gateway-decisions.json /work/gateway-decisions.json || return 1
+  az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node /work/sync/src/apply-projection.mjs --cosmos https://${COSMOS_ACCOUNT}.documents.azure.com:443/ --tenant ${TENANT_ID} --compare /work/gateway-decisions.json"
+}
+p89_projection_runner
 # P89-PROJECTION-RUNNER-END
 ```
 
@@ -803,17 +896,20 @@ Expected result: HTTP `403` with an entitlement refusal. Do not empty the live a
 Verify a model outside the tier is refused.
 
 ```bash
-MODELS_STANDARD_BEFORE="$(az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --query value -o tsv)"
-MODELS_STANDARD_NEXT=",${SONNET_DEPLOYMENT},"
-if [ "$(printf '%s' "$MODELS_STANDARD_NEXT" | wc -c | tr -d ' ')" -le 4096 ]; then
-  az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --value "$MODELS_STANDARD_NEXT" -o none
-else
-  echo "Refused: models-standard would exceed 4,096 characters. Nothing was written." >&2
-  exit 1
-fi
-curl -sS -o response-model.json -w "%{http_code}\n" -H "Authorization: Bearer ${FOUNDRY_TOKEN}" -H "Content-Type: application/json" -d "{\"model\":\"${OPUS_DEPLOYMENT}\",\"max_tokens\":32,\"messages\":[{\"role\":\"user\",\"content\":\"Return the word ok.\"}]}" "${GATEWAY_URL}/v1/messages"
-jq -r '.error.message' response-model.json
-az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --value "$MODELS_STANDARD_BEFORE" -o none
+p89_verify_model_refusal() {
+  MODELS_STANDARD_BEFORE="$(az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --query value -o tsv)"
+  MODELS_STANDARD_NEXT=",${SONNET_DEPLOYMENT},"
+  if [ "$(printf '%s' "$MODELS_STANDARD_NEXT" | wc -c | tr -d ' ')" -le 4096 ]; then
+    az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --value "$MODELS_STANDARD_NEXT" -o none || return 1
+  else
+    echo "Refused: models-standard would exceed 4,096 characters. Nothing was written." >&2
+    return 1
+  fi
+  curl -sS -o response-model.json -w "%{http_code}\n" -H "Authorization: ******" -H "Content-Type: application/json" -d "{\"model\":\"${OPUS_DEPLOYMENT}\",\"max_tokens\":32,\"messages\":[{\"role\":\"user\",\"content\":\"Return the word ok.\"}]}" "${GATEWAY_URL}/v1/messages"
+  jq -r '.error.message' response-model.json
+  az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --value "$MODELS_STANDARD_BEFORE" -o none
+}
+p89_verify_model_refusal
 ```
 
 Expected result: HTTP `403` or gateway refusal naming the model outside the tier. This mirrors `scripts/Test-ClaudeHealth.ps1` and `scripts/Measure-ClaudeCeiling.ps1`.
@@ -860,52 +956,61 @@ Remove only external resources this guide recorded as created.
 
 ```bash
 # P89-TEARDOWN-EXTERNAL-BEGIN
-delete_created_role() {
-  receipt=".p89-receipts/foundry-role.json"
-  if [ ! -r "$receipt" ]; then
-    echo "Refused: No receipt: this guide did not record creating the Foundry role assignment; nothing deleted." >&2
-    return 1
-  fi
-  if jq -e '.foundryRole.created == true and (.foundryRole.id | type == "string" and length > 0)' "$receipt" >/dev/null; then
-    az role assignment delete --ids "$(jq -r '.foundryRole.id' "$receipt")"
-  else
-    echo "Foundry role assignment was pre-existing; not deleting it."
-  fi
-}
+p89_teardown_external() {
+  delete_created_role() {
+    receipt=".p89-receipts/foundry-role.json"
+    if [ ! -r "$receipt" ]; then
+      echo "Refused: No receipt: this guide did not record creating the Foundry role assignment; nothing deleted." >&2
+      return 1
+    fi
+    if jq -e '.foundryRole.created == true and (.foundryRole.id | type == "string" and length > 0)' "$receipt" >/dev/null; then
+      az role assignment delete --ids "$(jq -r '.foundryRole.id' "$receipt")"
+    else
+      echo "Foundry role assignment was pre-existing; not deleting it."
+    fi
+  }
 
-delete_created_group() {
-  tier="$1"
-  receipt=".p89-receipts/group-${tier}.json"
-  if [ ! -r "$receipt" ]; then
-    echo "Refused: No receipt: this guide did not record creating group ${tier}; nothing deleted." >&2
-    return 1
-  fi
-  if jq -e '.group.created == true and (.group.id | type == "string" and length > 0)' "$receipt" >/dev/null; then
-    az ad group delete --group "$(jq -r '.group.id' "$receipt")"
-  else
-    echo "Group ${tier} was pre-existing; not deleting it."
-  fi
-}
+  delete_created_group() {
+    tier="$1"
+    receipt=".p89-receipts/group-${tier}.json"
+    if [ ! -r "$receipt" ]; then
+      echo "Refused: No receipt: this guide did not record creating group ${tier}; nothing deleted." >&2
+      return 1
+    fi
+    if jq -e '.group.created == true and (.group.id | type == "string" and length > 0)' "$receipt" >/dev/null; then
+      az ad group delete --group "$(jq -r '.group.id' "$receipt")"
+    else
+      echo "Group ${tier} was pre-existing; not deleting it."
+    fi
+  }
 
-delete_created_app() {
-  receipt=".p89-receipts/desktop-app.json"
-  if [ ! -r "$receipt" ]; then
-    echo "Refused: No receipt: this guide did not record creating the Desktop app; nothing deleted." >&2
-    return 1
-  fi
-  if jq -e '.app.created == true and (.app.appId | type == "string" and length > 0)' "$receipt" >/dev/null; then
-    az ad app delete --id "$(jq -r '.app.appId' "$receipt")"
-  else
-    echo "Desktop app registration was pre-existing; not deleting it."
-  fi
-}
+  delete_created_app() {
+    receipt=".p89-receipts/desktop-app.json"
+    if [ ! -r "$receipt" ]; then
+      echo "No Desktop app receipt; nothing deleted for it."
+      return 0
+    fi
+    if jq -e '.app.created == true and (.app.appId | type == "string" and length > 0)' "$receipt" >/dev/null; then
+      az ad app delete --id "$(jq -r '.app.appId' "$receipt")"
+    else
+      echo "Desktop app registration was pre-existing; not deleting it."
+    fi
+  }
 
-delete_created_role || exit 1
-delete_created_group standard || exit 1
-delete_created_group premium || exit 1
-delete_created_app || exit 1
-az role assignment list --scope "$FOUNDRY_ID" --assignee "$APIM_PRINCIPAL_ID" --query "[?roleDefinitionName=='Cognitive Services User'].id" -o tsv
+  for required in .p89-receipts/foundry-role.json .p89-receipts/group-standard.json .p89-receipts/group-premium.json; do
+    if [ ! -r "$required" ]; then
+      echo "Refused: No receipt: $required is missing or unreadable; nothing deleted." >&2
+      return 1
+    fi
+  done
+  delete_created_role || return 1
+  delete_created_group standard || return 1
+  delete_created_group premium || return 1
+  delete_created_app || return 1
+  az role assignment list --scope "$FOUNDRY_ID" --assignee "$APIM_PRINCIPAL_ID" --query "[?roleDefinitionName=='Cognitive Services User'].id" -o tsv
+}
+p89_teardown_external
 # P89-TEARDOWN-EXTERNAL-END
 ```
 
-Expected result: only role assignments, tier groups and Desktop app registrations recorded with `created:true` are deleted. A missing receipt refuses and exits nonzero from the block; pre-existing directory objects survive. This mirrors the Foundry role assignment in `infra/foundry-role.bicep`, `deploy.ps1:182-187` and `scripts/New-ClaudeDesktopEntraApp.ps1:29-39`.
+Expected result: only role assignments, tier groups and Desktop app registrations recorded with `created:true` are deleted. Missing role or group receipts refuse and delete nothing; the Desktop app receipt is optional, because §7 can be skipped, and a missing app receipt prints "No Desktop app receipt; nothing deleted for it." Pre-existing directory objects survive. This mirrors the Foundry role assignment in `infra/foundry-role.bicep`, `deploy.ps1:182-187` and `scripts/New-ClaudeDesktopEntraApp.ps1:29-39`.

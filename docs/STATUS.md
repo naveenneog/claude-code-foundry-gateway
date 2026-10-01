@@ -40,6 +40,13 @@ Round 4 council-fix validation, 2026-10-01:
 - Teardown now refuses missing receipts, records/deletes only receipt-created Foundry role assignments, Entra groups and Desktop app registrations, and preserves pre-existing external objects.
 - Group creation now records receipts and Graph advanced-query reads retry bounded 404s only for new or younger-than-15-minute groups; older 404s and 403s stop immediately. The guide cites Microsoft Learn's advanced-query eventual consistency/index-store behavior, accessed 2026-10-01.
 - Validation: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS; `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS with 468 checks; `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS with 43 guides. No live Azure command ran.
+Round 5 council-fix validation, 2026-10-01:
+- All guarded bash blocks now use named functions and `return 1`; the guide has no `exit` or `set -e`. A refusal prints `Refused: ...`, returns to the prompt, and leaves exported variables already set.
+- Group and Desktop app discovery now list exact names, refuse list failures, duplicates, single quotes and create failures, and record created/pre-existing receipts. This intentionally differs from the scripts' lookup-error-create behavior.
+- Graph retry now keys on `Not Found(` or `Request_ResourceNotFound`, not a loose `404` substring; `Forbidden(` with a request id containing 404 stops immediately. Unparseable `createdAt` is treated as not-young with a note.
+- Runner transfer now also refuses `ERROR|InvalidCommandLength|terminated with non-zero` text even when `az container exec` exits 0.
+- Teardown checks role and both group receipts before deleting anything; missing premium receipt preserves the role and standard group. Desktop app receipt is optional.
+- Validation: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS; `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS with 558 checks in 165.09 s; `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS with 43 guides. No live Azure command ran.
 
 ## P71 follow-up: a lookup starts one refresh, 2026-09-30
 

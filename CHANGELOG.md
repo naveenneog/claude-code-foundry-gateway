@@ -41,7 +41,10 @@ exact streaming cache-creation detail remains **U13**.
   the installer and projection scripts. Round 4 makes runner file transfer
   fail-closed with SHA-256 verification, requires teardown receipts for external
   deletes, records group/app creation receipts and documents the Microsoft Graph
-  advanced-query eventual-consistency retry.
+  advanced-query eventual-consistency retry. Round 5 wraps refusal blocks in
+  functions so Cloud Shell stays open, makes group/app discovery fail closed,
+  tightens Graph 404 parsing, checks runner error text, and verifies teardown
+  receipts before deleting anything.
 - **Final P85 follow-up integration.** P71's owned-process deadline probes and
   precise public-evidence section lookup are merged without production changes.
   The single full AUM run passes all 1,200 cases; refreshed file and whole-check
