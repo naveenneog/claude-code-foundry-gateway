@@ -4,7 +4,7 @@
 
 ## P86 Scheduled projection renewal and evidence-gated switching, 2026-10-01
 
-**Stage:** CONTRACT on `p86-projection-renewal`, based on `origin/main` `0fed315`. No live Azure or Entra mutation is part of this round. Every `az` validation in this packet uses the isolated config directory `C:\Users\navg\.copilot\session-state\af7c7fa8-f971-4b4e-a8ba-c90265a135f5\files\az-isolated-p86`; only `az --help` and `az bicep build` are allowed.
+**Stage:** GREEN committed as `391b329` on `p86-projection-renewal`, based on `origin/main` `0fed315`. No live Azure or Entra mutation is part of this round. Every `az` validation in this packet uses the isolated config directory `C:\Users\navg\.copilot\session-state\af7c7fa8-f971-4b4e-a8ba-c90265a135f5\files\az-isolated-p86`; only `az --help` and `az bicep build` are allowed.
 
 ### Contract
 
