@@ -48,6 +48,7 @@ FinOps beyond the gateway's named values (AUM, Turnstile, chargeback reports, US
 - `bu-unassigned` — not covered: business-unit assignment behavior is out of scope for this guide.
 - `usd-budgets` — not covered: USD reconciler and FinOps budget projection are out of scope.
 - `usd-budget-state` — not covered: USD reconciler state is out of scope.
+- Removing gateway artifacts from a reused APIM is out of scope: API `claude-foundry`, named values, logger `appinsights`, diagnostics, diagnostic setting `claude-llm-logs`, `appi-<prefix>` and `log-<prefix>`.
 
 ## 1. Variables, prerequisites and discovery
 
@@ -106,11 +107,24 @@ Expected result: the operator has enough rights to deploy the gateway resource g
 Create the resource group.
 
 ```bash
-az group create -n "$GATEWAY_RG" -l "$LOCATION" -o none
+p89_resource_group() {
+  mkdir -p .p89-receipts
+  if ! existed="$(az group exists -n "$GATEWAY_RG")"; then
+    echo "Refused: could not check resource group existence; no create ran." >&2
+    return 1
+  fi
+  if [ "$existed" = "true" ]; then
+    jq -n --arg name "$GATEWAY_RG" '{resourceGroup:{created:false,name:$name}}' > .p89-receipts/resource-group.json
+  else
+    az group create -n "$GATEWAY_RG" -l "$LOCATION" -o none || return 1
+    jq -n --arg name "$GATEWAY_RG" '{resourceGroup:{created:true,name:$name}}' > .p89-receipts/resource-group.json
+  fi
+}
+p89_resource_group
 az group show -n "$GATEWAY_RG" --query "{name:name,location:location}" -o json
 ```
 
-Expected result: the group exists in the chosen region. This mirrors `deploy.ps1:134`.
+Expected result: the group exists in the chosen region, and `.p89-receipts/resource-group.json` records whether this guide created it. This mirrors `deploy.ps1:134`.
 
 Confirm the APIM name is absent before running the first-deployment commands below.
 
@@ -122,7 +136,7 @@ p89_apim_absent() {
     return 1
   fi
   existing_count="$(printf '%s' "$apim_list_json" | jq --arg name "$APIM_NAME" '[.[] | select(.name == $name)] | length')"
-  if [ "$existing_count" -ne 0 ]; then
+  if [ "$existing_count" != "0" ]; then
     echo "Refused: APIM '$APIM_NAME' already exists in '$GATEWAY_RG'. For an unused existing APIM, use P89-REUSE-APIM below; for an installed gateway, use Install-ClaudeGateway.ps1 -ExistingApimName so values are read back first, or use the targeted §4, §6 and §9 blocks for single changes." >&2
     return 1
   fi
@@ -193,7 +207,7 @@ p89_deploy_reused_apim() {
     return 1
   fi
   installed_count="$(printf '%s' "$nv_json" | jq '[.[] | select(.name as $n | ["allow-standard","allow-premium","quota-overrides","bu-registry","bu-members","bu-parents","bu-modes","usd-budgets","usd-budget-state","entitlement-source"] | index($n))] | length')"
-  if [ "$installed_count" -gt 0 ]; then
+  if [ -z "$installed_count" ] || [ "$installed_count" != "0" ]; then
     echo "Refused: APIM '$APIM_NAME' already has gateway-owned named values. Use Install-ClaudeGateway.ps1 -ExistingApimName so values are read back and preserved." >&2
     return 1
   fi
@@ -426,9 +440,9 @@ p89_group_receipts() {
       return 1
     fi
     count="$(printf '%s' "$list_json" | jq 'length')"
-    if [ "$count" -eq 1 ]; then
+    if [ "$count" = "1" ]; then
       printf '%s' "$list_json" | jq --arg name "$name" '{group:{created:false,id:.[0].id,displayName:$name,createdAt:(.[0].createdDateTime // "")}}' > "$receipt"
-    elif [ "$count" -eq 0 ]; then
+    elif [ "$count" = "0" ]; then
       if ! created_group_json="$(az ad group create --display-name "$name" --mail-nickname "$name" -o json)"; then
         echo "Refused: group '$name' could not be created. Tenant settings may block group creation by this principal; ask the tenant admin to create the group or grant permission. Nothing recorded." >&2
         return 1
@@ -752,9 +766,9 @@ p89_desktop_app_receipt() {
     return 1
   fi
   count="$(printf '%s' "$app_list_json" | jq 'length')"
-  if [ "$count" -eq 1 ]; then
+  if [ "$count" = "1" ]; then
     printf '%s' "$app_list_json" | jq --arg displayName "$DESKTOP_APP_NAME" '{app:{created:false,appId:.[0].appId,objectId:.[0].id,displayName:$displayName}}' > .p89-receipts/desktop-app.json
-  elif [ "$count" -eq 0 ]; then
+  elif [ "$count" = "0" ]; then
     if ! created_app_json="$(az ad app create --display-name "$DESKTOP_APP_NAME" --sign-in-audience AzureADMyOrg -o json)"; then
       echo "Refused: app '$DESKTOP_APP_NAME' could not be created. Tenant settings may block app registration by this principal; ask the tenant admin to create the app or grant permission. Nothing recorded." >&2
       return 1
@@ -819,48 +833,80 @@ Expected result: the app id is stored as `external-idp-extra-audience` for id-to
 
 ## 8. Developer handover file
 
+Resolve the live gateway URL and SKU.
+
+```bash
+# P89-GATEWAY-URL-BEGIN
+p89_gateway_url() {
+  if ! apim_state="$(az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" -o json)"; then
+    echo "Refused: could not read APIM gateway URL; no handover value was produced." >&2
+    return 1
+  fi
+  gateway_base="$(printf '%s' "$apim_state" | jq -r '.gatewayUrl // ""')"
+  export SKU="$(printf '%s' "$apim_state" | jq -r '.sku.name // ""')"
+  if [ -z "$gateway_base" ] || [ -z "$SKU" ]; then
+    echo "Refused: APIM gatewayUrl or SKU is empty; no handover value was produced." >&2
+    return 1
+  fi
+  if [ -r .p89-receipts/gateway-address.json ]; then
+    receipt_host="$(jq -r '.address.hostname // ""' .p89-receipts/gateway-address.json)"
+    if [ -n "$receipt_host" ] && printf '%s' "$apim_state" | jq -e --arg h "$receipt_host" '(.hostnameConfigurations // .properties.hostnameConfigurations // [])[]? | select(.type=="Proxy" and (.hostName|ascii_downcase)==($h|ascii_downcase))' >/dev/null; then
+      gateway_base="https://${receipt_host}"
+    fi
+  fi
+  export GATEWAY_URL="${gateway_base%/}/claude"
+  printf '%s\n' "$GATEWAY_URL"
+}
+p89_gateway_url
+# P89-GATEWAY-URL-END
+```
+
+Expected result: `GATEWAY_URL` is the live APIM gateway URL plus `/claude`, matching `infra/main.bicep:516` and `Install-ClaudeGateway.ps1:1585-1586`. When §9 has a verified `.p89-receipts/gateway-address.json` and the live APIM still lists that Proxy hostname, the URL is `https://<hostname>/claude`, matching `Install-ClaudeGateway.ps1:1590` and `scripts/ClaudeGatewayAddress.ps1:118,123`.
+
 Generate `onboarding/claude-gateway.json` with the same schema the installer writes.
 
 ```bash
 # P89-HANDOVER-BEGIN
-mkdir -p onboarding
-GATEWAY_URL="$(az deployment group show -g "$GATEWAY_RG" -n "claude-gateway-basicv2" --query properties.outputs.gatewayUrl.value -o tsv)"
-export SKU="${SKU:-BasicV2}"
-export ENTITLEMENT_STORE="${ENTITLEMENT_STORE:-named-value}"
-export RESOLVER_INBOUND_ACCESS="${RESOLVER_INBOUND_ACCESS:-private}"
-export PROJECTION_DEPLOYER="${PROJECTION_DEPLOYER:-./scripts/Deploy-ClaudeProjection.ps1}"
-export AUTH_MODE="${AUTH_MODE:-interactive}"
-STANDARD_MODELS_JSON="$(printf '%s' "$MODELS_STANDARD" | tr ',' '\n' | awk 'NF' | jq -R . | jq -s .)"
-PREMIUM_MODELS_JSON="$(printf '%s' "$MODELS_PREMIUM" | tr ',' '\n' | awk 'NF' | jq -R . | jq -s .)"
-jq -n --arg mode "gateway" --arg gatewayUrl "$GATEWAY_URL" --arg tenantId "$TENANT_ID" --arg apimName "$APIM_NAME" --arg resourceGroup "$GATEWAY_RG" --arg subscriptionId "$SUBSCRIPTION_ID" --arg sku "$SKU" --arg location "$LOCATION" --arg foundryAccount "$FOUNDRY_ACCOUNT" --arg foundryResourceGroup "$FOUNDRY_RG" --arg standardGroup "$STANDARD_GROUP" --arg premiumGroup "$PREMIUM_GROUP" --arg authMode "$AUTH_MODE" --arg entitlementStore "$ENTITLEMENT_STORE" --arg resolverInboundAccess "$RESOLVER_INBOUND_ACCESS" --arg projectionDeployer "$PROJECTION_DEPLOYER" --arg sonnet "$SONNET_DEPLOYMENT" --arg opus "$OPUS_DEPLOYMENT" --arg haiku "$HAIKU_DEPLOYMENT" --argjson standardModels "$STANDARD_MODELS_JSON" --argjson premiumModels "$PREMIUM_MODELS_JSON" --argjson tpmStandard "$TPM_STANDARD" --argjson quotaStandard "$QUOTA_STANDARD" --argjson tpmPremium "$TPM_PREMIUM" --argjson quotaPremium "$QUOTA_PREMIUM" --argjson quotaOrg "$QUOTA_ORG" --argjson callsPerMinute "$CALLS_PER_MINUTE" --arg desktopClientId "$DESKTOP_CLIENT_ID" --arg flow "${DESKTOP_SIGN_IN_FLOW:-browser}" --arg issuer "https://login.microsoftonline.com/${TENANT_ID}/v2.0" --arg modelsStandard "$MODELS_STANDARD" --arg modelsPremium "$MODELS_PREMIUM" '{
-  mode:$mode,
-  gatewayUrl:$gatewayUrl,
-  tenantId:$tenantId,
-  apimName:$apimName,
-  resourceGroup:$resourceGroup,
-  subscriptionId:$subscriptionId,
-  sku:$sku,
-  location:$location,
-  foundryAccount:$foundryAccount,
-  foundryResourceGroup:$foundryResourceGroup,
-  standardGroup:$standardGroup,
-  premiumGroup:$premiumGroup,
-  authMode:$authMode,
-  entitlementStore:$entitlementStore,
-  resolverInboundAccess:$resolverInboundAccess,
-  projectionDeployer:$projectionDeployer,
-  desktopSignIn:{kind:"external-idp",flow:$flow,bearerTokenType:"id_token",clientId:$desktopClientId,issuer:$issuer},
-  deployments:[{name:$sonnet,model:$sonnet},{name:$opus,model:$opus},{name:$haiku,model:$haiku}],
-  models:[$sonnet,$opus,$haiku],
-  tiers:{
-    standard:{tokensPerMinute:$tpmStandard,tokensPerDay:$quotaStandard,models:$standardModels,modelAllowList:$modelsStandard},
-    premium:{tokensPerMinute:$tpmPremium,tokensPerDay:$quotaPremium,models:$premiumModels,modelAllowList:$modelsPremium}
-  },
-  organisation:{tokensPerMonth:$quotaOrg,shared:true,softCap:true},
-  requestsPerMinute:$callsPerMinute,
-  generated:(now|strftime("%Y-%m-%d %H:%M"))
-}' > onboarding/claude-gateway.json
-jq -e '.mode=="gateway" and (.gatewayUrl|test("^https://")) and (.desktopSignIn.kind=="external-idp" or .desktopSignIn.kind=="helper-script") and (.subscriptionId|type=="string") and (.tiers.standard.models|type=="array") and (.requestsPerMinute|type=="number")' onboarding/claude-gateway.json
+p89_handover() {
+  mkdir -p onboarding
+  p89_gateway_url || return 1
+  export ENTITLEMENT_STORE="${ENTITLEMENT_STORE:-named-value}"
+  export RESOLVER_INBOUND_ACCESS="${RESOLVER_INBOUND_ACCESS:-private}"
+  export PROJECTION_DEPLOYER="${PROJECTION_DEPLOYER:-./scripts/Deploy-ClaudeProjection.ps1}"
+  export AUTH_MODE="${AUTH_MODE:-interactive}"
+  STANDARD_MODELS_JSON="$(printf '%s' "$MODELS_STANDARD" | tr ',' '\n' | awk 'NF' | jq -R . | jq -s .)"
+  PREMIUM_MODELS_JSON="$(printf '%s' "$MODELS_PREMIUM" | tr ',' '\n' | awk 'NF' | jq -R . | jq -s .)"
+  jq -n --arg mode "gateway" --arg gatewayUrl "$GATEWAY_URL" --arg tenantId "$TENANT_ID" --arg apimName "$APIM_NAME" --arg resourceGroup "$GATEWAY_RG" --arg subscriptionId "$SUBSCRIPTION_ID" --arg sku "$SKU" --arg location "$LOCATION" --arg foundryAccount "$FOUNDRY_ACCOUNT" --arg foundryResourceGroup "$FOUNDRY_RG" --arg standardGroup "$STANDARD_GROUP" --arg premiumGroup "$PREMIUM_GROUP" --arg authMode "$AUTH_MODE" --arg entitlementStore "$ENTITLEMENT_STORE" --arg resolverInboundAccess "$RESOLVER_INBOUND_ACCESS" --arg projectionDeployer "$PROJECTION_DEPLOYER" --arg sonnet "$SONNET_DEPLOYMENT" --arg opus "$OPUS_DEPLOYMENT" --arg haiku "$HAIKU_DEPLOYMENT" --argjson standardModels "$STANDARD_MODELS_JSON" --argjson premiumModels "$PREMIUM_MODELS_JSON" --argjson tpmStandard "$TPM_STANDARD" --argjson quotaStandard "$QUOTA_STANDARD" --argjson tpmPremium "$TPM_PREMIUM" --argjson quotaPremium "$QUOTA_PREMIUM" --argjson quotaOrg "$QUOTA_ORG" --argjson callsPerMinute "$CALLS_PER_MINUTE" --arg desktopClientId "$DESKTOP_CLIENT_ID" --arg flow "${DESKTOP_SIGN_IN_FLOW:-browser}" --arg issuer "https://login.microsoftonline.com/${TENANT_ID}/v2.0" --arg modelsStandard "$MODELS_STANDARD" --arg modelsPremium "$MODELS_PREMIUM" '{
+    mode:$mode,
+    gatewayUrl:$gatewayUrl,
+    tenantId:$tenantId,
+    apimName:$apimName,
+    resourceGroup:$resourceGroup,
+    subscriptionId:$subscriptionId,
+    sku:$sku,
+    location:$location,
+    foundryAccount:$foundryAccount,
+    foundryResourceGroup:$foundryResourceGroup,
+    standardGroup:$standardGroup,
+    premiumGroup:$premiumGroup,
+    authMode:$authMode,
+    entitlementStore:$entitlementStore,
+    resolverInboundAccess:$resolverInboundAccess,
+    projectionDeployer:$projectionDeployer,
+    desktopSignIn:{kind:"external-idp",flow:$flow,bearerTokenType:"id_token",clientId:$desktopClientId,issuer:$issuer},
+    deployments:[{name:$sonnet,model:$sonnet},{name:$opus,model:$opus},{name:$haiku,model:$haiku}],
+    models:[$sonnet,$opus,$haiku],
+    tiers:{
+      standard:{tokensPerMinute:$tpmStandard,tokensPerDay:$quotaStandard,models:$standardModels,modelAllowList:$modelsStandard},
+      premium:{tokensPerMinute:$tpmPremium,tokensPerDay:$quotaPremium,models:$premiumModels,modelAllowList:$modelsPremium}
+    },
+    organisation:{tokensPerMonth:$quotaOrg,shared:true,softCap:true},
+    requestsPerMinute:$callsPerMinute,
+    generated:(now|strftime("%Y-%m-%d %H:%M"))
+  }' > onboarding/claude-gateway.json
+  jq -e '.mode=="gateway" and (.gatewayUrl|test("^https://")) and (.desktopSignIn.kind=="external-idp" or .desktopSignIn.kind=="helper-script") and (.subscriptionId|type=="string") and (.tiers.standard.models|type=="array") and (.requestsPerMinute|type=="number")' onboarding/claude-gateway.json
+}
+p89_handover
 # P89-HANDOVER-END
 ```
 
@@ -976,13 +1022,17 @@ p89_bind_hostname() {
   fi
   sku="$(printf '%s' "$apim_live" | jq -r '.sku.name // ""')"
   other_proxy_count="$(printf '%s' "$apim_live" | jq --arg h "$GATEWAY_HOSTNAME" '[.properties.hostnameConfigurations[]? | select(.type=="Proxy" and (.certificateSource // "BuiltIn") != "BuiltIn" and (.hostName|ascii_downcase) != ($h|ascii_downcase))] | length')"
-  if [ "$sku" != "PremiumV2" ] && [ "$other_proxy_count" -gt 0 ] && [ -z "${REPLACE_HOSTNAME:-}" ]; then
+  if [ -z "$other_proxy_count" ]; then
+    echo "Refused: could not count existing custom Proxy hostnames." >&2
+    return 1
+  fi
+  if [ "$sku" != "PremiumV2" ] && [ "$other_proxy_count" != "0" ] && [ -z "${REPLACE_HOSTNAME:-}" ]; then
     echo "Refused: $sku has another custom Proxy hostname. Set REPLACE_HOSTNAME to the exact hostname to replace, or use PremiumV2." >&2
     return 1
   fi
   if [ -n "${REPLACE_HOSTNAME:-}" ]; then
     replace_count="$(printf '%s' "$apim_live" | jq --arg h "$REPLACE_HOSTNAME" --arg new "$GATEWAY_HOSTNAME" '[.properties.hostnameConfigurations[]? | select(.type=="Proxy" and (.certificateSource // "BuiltIn") != "BuiltIn" and (.hostName|ascii_downcase)==($h|ascii_downcase) and (.hostName|ascii_downcase)!=($new|ascii_downcase))] | length')"
-    if [ "$replace_count" -ne 1 ]; then
+    if [ "$replace_count" != "1" ]; then
       echo "Refused: REPLACE_HOSTNAME must name exactly one live custom Proxy hostname different from GATEWAY_HOSTNAME." >&2
       return 1
     fi
@@ -1155,7 +1205,7 @@ Expected result: the value stays `named-value`. P84 refuses automated switching.
 Send a real request with the signed-in user's Foundry token through the gateway.
 
 ```bash
-export GATEWAY_URL="$(az deployment group show -g "$GATEWAY_RG" -n "claude-gateway-basicv2" --query properties.outputs.gatewayUrl.value -o tsv)"
+p89_gateway_url
 export FOUNDRY_TOKEN="$(az account get-access-token --resource https://ai.azure.com --query accessToken -o tsv)"
 curl -sS -o response.json -w "%{http_code}\n" -H "Authorization: Bearer ${FOUNDRY_TOKEN}" -H "Content-Type: application/json" -d "{\"model\":\"${SONNET_DEPLOYMENT}\",\"max_tokens\":32,\"messages\":[{\"role\":\"user\",\"content\":\"Return the word ok.\"}]}" "${GATEWAY_URL}/v1/messages"
 jq -r '.content[0].text // .error.message' response.json
@@ -1241,14 +1291,28 @@ p89_teardown_read
 
 Expected result: the operator sees resources and the exact receipt-created role assignment id that teardown may remove. Empty `FOUNDRY_ID` or `APIM_PRINCIPAL_ID` refuses before role reads, so Azure CLI cannot fall back to the subscription scope or omit the assignee filter. This mirrors the installer's explicit review style before writes.
 
-Delete the gateway resource group when the deployment was isolated to it.
+Delete the gateway resource group only when this guide created it.
 
 ```bash
-az group delete -n "$GATEWAY_RG" --yes --no-wait
-az group exists -n "$GATEWAY_RG"
+# P89-TEARDOWN-GROUP-BEGIN
+p89_teardown_group() {
+  az resource list -g "$GATEWAY_RG" --query "[].{type:type,name:name}" -o table || return 1
+  if [ ! -r .p89-receipts/resource-group.json ]; then
+    echo "Refused: no resource-group receipt; group was not deleted." >&2
+    return 1
+  fi
+  if jq -e '.resourceGroup.created == true and .resourceGroup.name == env.GATEWAY_RG' .p89-receipts/resource-group.json >/dev/null; then
+    az group delete -n "$GATEWAY_RG" --yes --no-wait
+  else
+    echo "Refused: resource group was pre-existing; group was not deleted."
+    return 1
+  fi
+}
+p89_teardown_group
+# P89-TEARDOWN-GROUP-END
 ```
 
-Expected result: the group deletion starts; `az group exists` eventually returns `false`. Do not use this command if the group contains shared resources. This mirrors the resource-group boundary created by `deploy.ps1:134`.
+Expected result: the resource list is shown, and deletion starts only when `.p89-receipts/resource-group.json` says this guide created the group. Reused-APIM deployments leave artifacts inside the customer's APIM; inspect them with `az apim api show`, `az apim nv list`, `az apim logger show`, `az apim api diagnostic list` and `az monitor diagnostic-settings list`, but removal of reused-APIM artifacts is out of scope for this guide.
 
 Remove only external resources this guide recorded as created.
 

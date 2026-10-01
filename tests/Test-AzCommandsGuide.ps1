@@ -190,11 +190,31 @@ foreach ($cmd in $commands) {
 $docRef = Join-Path $PSScriptRoot 'Test-DocReferences.ps1'
 Assert 'relative-link checker exists for guide links' (Test-Path -LiteralPath $docRef)
 
+
 function Get-MarkedBashBlock([string]$Text, [string]$Name) {
     $m = [regex]::Match($Text, "(?ms)# P89-$Name-BEGIN\s*(.*?)# P89-$Name-END")
     if (-not $m.Success) { throw "Missing P89-$Name marked bash block." }
     return $m.Groups[1].Value.Trim()
 }
+
+function Convert-ExistingParamToNamedValue([string]$Name) {
+    $base = $Name -replace 'Existing$','' -replace 'Value$',''
+    $words = [regex]::Replace($base, '([a-z0-9])([A-Z])', '$1-$2').ToLowerInvariant()
+    $words
+}
+
+$operatorOwnedFromBicep = @([regex]::Matches($bicep, '(?m)^\s*param\s+([A-Za-z][A-Za-z0-9]*Existing)\s+') |
+    ForEach-Object { Convert-ExistingParamToNamedValue $_.Groups[1].Value } |
+    Sort-Object -Unique)
+$expectedReuseRefusal = @($operatorOwnedFromBicep + 'entitlement-source' | Sort-Object -Unique)
+$reuseBlockText = Get-MarkedBashBlock $markdown 'REUSE-APIM'
+$reuseListMatch = [regex]::Match($reuseBlockText, '\[("allow-standard".*?"entitlement-source")\]')
+$reuseRefusalList = if ($reuseListMatch.Success) {
+    @([regex]::Matches($reuseListMatch.Groups[1].Value, '"([^"]+)"') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+} else { @() }
+Assert 'reuse refusal list equals operator-owned Existing named values plus entitlement-source' (
+    ($expectedReuseRefusal -join '|') -ceq ($reuseRefusalList -join '|')
+) "expected=$($expectedReuseRefusal -join ',') actual=$($reuseRefusalList -join ',')"
 
 function Join-GuideBlocks([string[]]$Blocks) {
     ($Blocks | Where-Object { $_ }) -join "`nrc=`$?; [ `"`$rc`" -eq 0 ] || exit `"`$rc`"`n"
@@ -278,7 +298,8 @@ if [ "$1" = "apim" ] && [ "$2" = "show" ]; then
     case "${P89_SCENARIO:-}" in
       reuse-no-identity) printf '{"name":"apim","sku":{"name":"BasicV2"},"identity":null}\n' ;;
       reuse-classic-sku) printf '{"name":"apim","sku":{"name":"Developer"},"identity":{"type":"SystemAssigned","principalId":"gateway-object-id"}}\n' ;;
-      *) printf '{"name":"apim","sku":{"name":"BasicV2"},"identity":{"type":"SystemAssigned","principalId":"gateway-object-id"}}\n' ;;
+      gateway-address) printf '{"name":"apim","gatewayUrl":"https://apim.azure-api.net","sku":{"name":"PremiumV2"},"identity":{"type":"SystemAssigned","principalId":"gateway-object-id"},"hostnameConfigurations":[{"type":"Proxy","hostName":"custom.example"}]}\n' ;;
+      *) printf '{"name":"apim","gatewayUrl":"https://apim.azure-api.net","sku":{"name":"BasicV2"},"identity":{"type":"SystemAssigned","principalId":"gateway-object-id"}}\n' ;;
     esac
     exit 0
   fi
@@ -295,6 +316,17 @@ if [ "$1" = "apim" ] && [ "$2" = "show" ]; then
       if [ "$query" = "identity" ]; then printf '{"type":"SystemAssigned","principalId":"gateway-object-id"}\n'; elif [[ "$query" == *identity.principalId* ]]; then printf 'gateway-object-id\n'; elif [[ "$query" == *id:id* ]]; then printf '{"id":"/subscriptions/sub/resourceGroups/rg/providers/Microsoft.ApiManagement/service/apim","identity":{"type":"SystemAssigned","principalId":"gateway-object-id"}}\n'; else printf '{}\n'; fi
       ;;
   esac
+  exit 0
+fi
+if [ "$1" = "group" ]; then
+  case "$2" in
+    exists) if [ "${P89_SCENARIO:-}" = "rg-existing" ]; then printf 'true\n'; else printf 'false\n'; fi; exit 0 ;;
+    create) printf 'group-create %s\n' "$*" >> "$P89_WRITES"; exit 0 ;;
+    delete) printf 'group-delete %s\n' "$*" >> "$P89_WRITES"; exit 0 ;;
+  esac
+fi
+if [ "$1" = "resource" ] && [ "$2" = "list" ]; then
+  printf '[]\n'
   exit 0
 fi
 if [ "$1" = "apim" ] && [ "$2" = "list" ]; then
@@ -661,6 +693,7 @@ $tierBlock = Get-MarkedBashBlock $markdown 'TIER-WRITES'
 $budgetBlock = Get-MarkedBashBlock $markdown 'BUDGET-WRITE'
 $desktopAppBlock = Get-MarkedBashBlock $markdown 'DESKTOP-APP'
 $desktopRedirectsBlock = Get-MarkedBashBlock $markdown 'DESKTOP-REDIRECTS'
+$gatewayUrlBlock = Get-MarkedBashBlock $markdown 'GATEWAY-URL'
 $handoverBlock = Get-MarkedBashBlock $markdown 'HANDOVER'
 $keyVaultBlock = Get-MarkedBashBlock $markdown 'KEYVAULT-ACCESS'
 $bindHostnameBlock = Get-MarkedBashBlock $markdown 'BIND-HOSTNAME'
@@ -669,6 +702,7 @@ $resolverDeployBlock = Get-MarkedBashBlock $markdown 'RESOLVER-DEPLOY'
 $projectionRunnerBlock = Get-MarkedBashBlock $markdown 'PROJECTION-RUNNER'
 $bypassReadBlock = Get-MarkedBashBlock $markdown 'BYPASS-READ'
 $teardownReadBlock = Get-MarkedBashBlock $markdown 'TEARDOWN-READ'
+$teardownGroupBlock = Get-MarkedBashBlock $markdown 'TEARDOWN-GROUP'
 $teardownExternalBlock = Get-MarkedBashBlock $markdown 'TEARDOWN-EXTERNAL'
 $entitlementScript = Join-GuideBlocks @($groupBlock, $graphBlock, $publishBlock)
 
@@ -920,6 +954,18 @@ Assert 'empty or placeholder Desktop client id refuses with no update' (
     -not ((Read-ScenarioFile $redirectPlaceholder 'calls.log') -match 'ad app update')
 ) $redirectPlaceholder.Output
 
+$gatewayUrlDefault = Invoke-GuideBashScenario 'gateway-url-default' $gatewayUrlBlock
+Assert 'gateway URL helper uses live APIM gatewayUrl and SKU' (
+    $gatewayUrlDefault.Exit -eq 0 -and
+    $gatewayUrlDefault.Output -match 'https://apim.azure-api.net/claude'
+) $gatewayUrlDefault.Output
+
+$gatewayUrlAddress = Invoke-GuideBashScenario 'gateway-address' ("mkdir -p .p89-receipts; printf '%s\n' '{""address"":{""hostname"":""custom.example""}}' > .p89-receipts/gateway-address.json; " + $gatewayUrlBlock)
+Assert 'gateway URL helper prefers verified company address receipt when live hostname remains' (
+    $gatewayUrlAddress.Exit -eq 0 -and
+    $gatewayUrlAddress.Output -match 'https://custom.example/claude'
+) $gatewayUrlAddress.Output
+
 $tierWrites = Invoke-GuideBashScenario 'tier-writes' $tierBlock
 Assert 'tier write block writes limits and guarded model list' (
     $tierWrites.Exit -eq 0 -and
@@ -941,7 +987,7 @@ Assert 'budget write block refuses oversize quota-overrides before write' (
     $budgetOversize.Output -match '4,096'
 ) $budgetOversize.Output
 
-$handover = Invoke-GuideBashScenario 'handover' $handoverBlock
+$handover = Invoke-GuideBashScenario 'handover' (Join-GuideBlocks @($gatewayUrlBlock, $handoverBlock))
 $handoverJson = Read-ScenarioFile $handover 'onboarding/claude-gateway.json'
 $installerText = Read-Text (Join-Path $root 'Install-ClaudeGateway.ps1')
 $configBlock = [regex]::Match($installerText, '(?s)\$config = \[ordered\]@\{(.*?)\n\}').Groups[1].Value
@@ -1118,6 +1164,16 @@ $teardownNoApp = Invoke-GuideBashScenario 'teardown-no-app-receipt' (Join-GuideB
 Assert 'missing optional Desktop app receipt does not fail teardown' (
     $teardownNoApp.Exit -eq 0 -and $teardownNoApp.Output -match 'No Desktop app receipt'
 ) $teardownNoApp.Output
+
+$teardownGroupCreated = Invoke-GuideBashScenario 'teardown-group-created' ("mkdir -p .p89-receipts; printf '%s\n' '{""resourceGroup"":{""created"":true,""name"":""rg""}}' > .p89-receipts/resource-group.json; " + $teardownGroupBlock)
+Assert 'teardown group deletes only receipt-created resource group' (
+    $teardownGroupCreated.Exit -eq 0 -and (Read-ScenarioFile $teardownGroupCreated 'writes.log') -match 'group-delete'
+) $teardownGroupCreated.Output
+
+$teardownGroupExisting = Invoke-GuideBashScenario 'teardown-group-existing' ("mkdir -p .p89-receipts; printf '%s\n' '{""resourceGroup"":{""created"":false,""name"":""rg""}}' > .p89-receipts/resource-group.json; " + $teardownGroupBlock)
+Assert 'teardown group refuses pre-existing resource group' (
+    $teardownGroupExisting.Exit -ne 0 -and -not ((Read-ScenarioFile $teardownGroupExisting 'writes.log') -match 'group-delete')
+) $teardownGroupExisting.Output
 
 $bypassEmpty = Invoke-GuideBashScenario 'bypass-empty' ("unset APIM_PRINCIPAL_ID; " + $bypassReadBlock)
 Assert 'bypass read with empty APIM principal refuses before role list' (

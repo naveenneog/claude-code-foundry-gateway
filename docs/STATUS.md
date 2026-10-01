@@ -60,8 +60,8 @@ Round 7 council-fix validation, 2026-10-01:
 Round 8 council-fix validation, 2026-10-01:
 - §2 now has `p89_apim_absent` before first-deployment commands and `p89_deploy_reused_apim` for clean existing v2 APIM reuse. The guide states rerun reset risks for operator-owned named values, projection settings and APIM PUT-owned properties.
 - Reuse path refuses missing identity, installed gateway named values and classic SKUs; it passes `grantFoundryRole=false` when the gateway identity already has Cognitive Services User and `true` otherwise.
-- §7 now uses `DESKTOP_SIGN_IN_FLOW`, preserves existing redirect URIs through a checked read + union, adds broker URIs only for broker flow, and refuses empty/placeholder client ids.
-- Validation: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS; `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS with 681 checks in 203.67 s; `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS with 43 guides. No live Azure command ran.
+- §7 now uses `DESKTOP_SIGN_IN_FLOW`, preserves existing redirect URIs through a checked read + union, adds broker URIs only for broker flow, and refuses empty/placeholder client ids. §8/§11 use the live APIM gateway URL and SKU, and §12 resource-group teardown deletes only receipt-created groups.
+- Validation: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS; `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS with 696 checks in 245.49 s; `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS with 43 guides. No live Azure command ran.
 
 ## P71 follow-up: a lookup starts one refresh, 2026-09-30
 
