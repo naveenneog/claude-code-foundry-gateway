@@ -775,6 +775,25 @@ $teardownExternalBlock = Get-MarkedBashBlock $markdown 'TEARDOWN-EXTERNAL'
 $modelRefusalBlock = Get-MarkedBashBlock $markdown 'MODEL-REFUSAL'
 $entitlementScript = Join-GuideBlocks @($groupBlock, $graphBlock, $publishBlock)
 
+$addressScript = Read-Text (Join-Path $root 'scripts\Set-ClaudeGatewayAddress.ps1')
+$scriptTimeoutDefaults = @{
+    Hostname = [regex]::Match($addressScript, '\[int\]\$TimeoutSeconds\s*=\s*(\d+)').Groups[1].Value
+    Dns = [regex]::Match($addressScript, '\[int\]\$DnsTimeoutSeconds\s*=\s*(\d+)').Groups[1].Value
+    Poll = [regex]::Match($addressScript, '\[int\]\$PollSeconds\s*=\s*(\d+)').Groups[1].Value
+}
+$guideTimeoutDefaults = @{
+    Hostname = [regex]::Match($bindHostnameBlock, 'P89_HOSTNAME_TIMEOUT_SECONDS="\$\{P89_HOSTNAME_TIMEOUT_SECONDS:-(\d+)\}"').Groups[1].Value
+    Dns = [regex]::Match($bindHostnameBlock, 'P89_DNS_TIMEOUT_SECONDS="\$\{P89_DNS_TIMEOUT_SECONDS:-(\d+)\}"').Groups[1].Value
+    Poll = [regex]::Match($bindHostnameBlock, 'P89_HOSTNAME_POLL_SECONDS="\$\{P89_HOSTNAME_POLL_SECONDS:-(\d+)\}"').Groups[1].Value
+}
+Assert 'hostname timeout default mirrors Set-ClaudeGatewayAddress.ps1 TimeoutSeconds' ($guideTimeoutDefaults.Hostname -and $guideTimeoutDefaults.Hostname -eq $scriptTimeoutDefaults.Hostname) "guide=$($guideTimeoutDefaults.Hostname) script=$($scriptTimeoutDefaults.Hostname)"
+Assert 'DNS timeout default mirrors Set-ClaudeGatewayAddress.ps1 DnsTimeoutSeconds' ($guideTimeoutDefaults.Dns -and $guideTimeoutDefaults.Dns -eq $scriptTimeoutDefaults.Dns) "guide=$($guideTimeoutDefaults.Dns) script=$($scriptTimeoutDefaults.Dns)"
+Assert 'hostname poll default mirrors Set-ClaudeGatewayAddress.ps1 PollSeconds' ($guideTimeoutDefaults.Poll -and $guideTimeoutDefaults.Poll -eq $scriptTimeoutDefaults.Poll) "guide=$($guideTimeoutDefaults.Poll) script=$($scriptTimeoutDefaults.Poll)"
+$modelRefusalExpected = [regex]::Match($markdown, '(?s)# P89-MODEL-REFUSAL-END\s*```\s*Expected result:(.*?)(?:\r?\n\r?\n[A-Z][^\r\n]*\.|\r?\n## )').Groups[1].Value
+Assert 'model refusal expected result states standard-tier callers are narrowed until restore' (
+    $modelRefusalExpected -match 'Between the narrowing write and the restore, every standard-tier caller is refused models outside the narrowed list\.'
+) $modelRefusalExpected
+
 $normal = Invoke-GuideBashScenario 'normal' $entitlementScript
 Assert 'guide execution publishes premium and standard exact values' (
     $normal.Exit -eq 0 -and
@@ -1232,6 +1251,13 @@ Assert 'hostname bind refuses when DNS CNAME never points to gateway' (
     $hostnameDnsNever.Output -match "does not point to 'apim.azure-api.net'" -and
     -not ((Read-ScenarioFile $hostnameDnsNever 'calls.log') -match 'rest --method patch')
 ) $hostnameDnsNever.Output
+
+$hostnameNoDig = Invoke-GuideBashScenario 'hostname-no-dig' ("rm -f dig; " + $bindHostnameBlock)
+Assert 'hostname bind refuses immediately when dig is absent' (
+    $hostnameNoDig.Exit -ne 0 -and
+    $hostnameNoDig.Output -match 'Cloud Shell.*dig.*preinstalled' -and
+    -not ((Read-ScenarioFile $hostnameNoDig 'calls.log') -match 'rest --method patch')
+) $hostnameNoDig.Output
 
 $hostnamePreserveClientCert = Invoke-GuideBashScenario 'hostname-preserve-clientcert' $bindHostnameBlock
 $hostnamePreserveBody = Read-ScenarioFile $hostnamePreserveClientCert 'hostname-patch.json'

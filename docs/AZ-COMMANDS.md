@@ -1071,6 +1071,10 @@ p89_bind_hostname() {
     return 1
   fi
   default_host="${APIM_NAME}.azure-api.net"
+  if ! command -v dig >/dev/null 2>&1; then
+    echo "Refused: dig is required for DNS CNAME checks in this Cloud Shell bash block; Azure Cloud Shell lists dig as preinstalled: https://learn.microsoft.com/azure/cloud-shell/features." >&2
+    return 1
+  fi
   dns_start="$(date +%s)"
   while :; do
     cname_answers="$(dig +short CNAME "$GATEWAY_HOSTNAME" || true)"
