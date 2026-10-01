@@ -191,22 +191,28 @@ $docRef = Join-Path $PSScriptRoot 'Test-DocReferences.ps1'
 Assert 'relative-link checker exists for guide links' (Test-Path -LiteralPath $docRef)
 
 $assignedAuthVars = New-Object 'System.Collections.Generic.HashSet[string]'
+$authorizationHeaders = New-Object Collections.Generic.List[string]
 foreach ($block in [regex]::Matches($markdown, '(?ms)^```(?:bash|sh)\s*$(.*?)^```\s*$')) {
     $blockText = $block.Groups[1].Value
-    Assert 'bash authorization headers do not contain masked literals' ($blockText -notmatch 'Authorization:\s*\*{6}')
     foreach ($line in ($blockText -split "`r?`n")) {
         foreach ($assign in [regex]::Matches($line, '^\s*(?:export\s+)?([A-Z_]+)=["'']?')) {
             [void]$assignedAuthVars.Add($assign.Groups[1].Value)
         }
-        foreach ($header in [regex]::Matches($line, 'Authorization:\s*Bearer\s+\$([A-Z_]+)')) {
-            $var = $header.Groups[1].Value
-            Assert "authorization header variable $var is assigned before use" ($assignedAuthVars.Contains($var)) $header.Value
+        foreach ($auth in [regex]::Matches($line, 'Authorization:\s*([^"]+)')) {
+            $authorizationHeaders.Add($auth.Value)
         }
     }
-    foreach ($auth in [regex]::Matches($blockText, 'Authorization:\s*([^"]+)')) {
-        Assert 'authorization header uses Bearer variable form' ($auth.Value -match '^Authorization:\s*Bearer\s+\$[A-Z_]+$') $auth.Value
-    }
 }
+Assert 'guide has four Authorization headers in bash fences' ($authorizationHeaders.Count -eq 4) "count=$($authorizationHeaders.Count)"
+for ($i = 0; $i -lt 4; $i++) {
+    $header = if ($i -lt $authorizationHeaders.Count) { $authorizationHeaders[$i] } else { '' }
+    $varMatch = [regex]::Match($header, '^Authorization:\s*Bearer\s+\$([A-Z_]+)$')
+    Assert "authorization header $i uses Bearer variable form" ($varMatch.Success) $header
+    Assert "authorization header $i has no masked literal" ($header -notmatch '\*{6}') $header
+    $var = if ($varMatch.Success) { $varMatch.Groups[1].Value } else { '' }
+    Assert "authorization header variable $i is assigned before use" ($var -and $assignedAuthVars.Contains($var)) $header
+}
+
 
 
 function Get-MarkedBashBlock([string]$Text, [string]$Name) {
@@ -455,7 +461,14 @@ if [ "$1" = "role" ] && [ "$2" = "assignment" ]; then
       allflag="false"; for a in "$@"; do [ "$a" = "--all" ] && allflag="true"; done
       if [ -z "$scope" ] && [ "$allflag" != "true" ]; then printf 'null\n'; exit 0; fi
       if [[ "$*" == *kv-created-role-id* ]]; then if [ "${P89_SCENARIO:-}" = "teardown-kv-role-live-mismatch" ]; then printf '{"id":"kv-created-role-id","scope":"/subscriptions/sub/resourceGroups/kv-rg/providers/Microsoft.KeyVault/vaults/kv","roleDefinitionName":"Reader","principalId":"gateway-object-id"}\n'; else printf '{"id":"kv-created-role-id","scope":"/subscriptions/sub/resourceGroups/kv-rg/providers/Microsoft.KeyVault/vaults/kv","roleDefinitionName":"Key Vault Secrets User","principalId":"gateway-object-id"}\n'; fi
-      elif [[ "$*" == *created-role-id* ]]; then if [ "${P89_SCENARIO:-}" = "teardown-role-live-mismatch" ]; then printf '{"id":"created-role-id","scope":"/subscriptions/sub/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/foundry","roleDefinitionName":"Reader","principalId":"gateway-object-id"}\n'; else printf '{"id":"created-role-id","scope":"/subscriptions/sub/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/foundry","roleDefinitionName":"Cognitive Services User","principalId":"gateway-object-id"}\n'; fi
+      elif [[ "$*" == *created-role-id* ]]; then
+        case "${P89_SCENARIO:-}" in
+          teardown-role-id-mismatch) printf '{"id":"other-role-id","scope":"/subscriptions/sub/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/foundry","roleDefinitionName":"Cognitive Services User","principalId":"gateway-object-id"}\n' ;;
+          teardown-role-scope-mismatch) printf '{"id":"created-role-id","scope":"/subscriptions/subscription-scope","roleDefinitionName":"Cognitive Services User","principalId":"gateway-object-id"}\n' ;;
+          teardown-role-live-mismatch|teardown-role-name-mismatch) printf '{"id":"created-role-id","scope":"/subscriptions/sub/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/foundry","roleDefinitionName":"Reader","principalId":"gateway-object-id"}\n' ;;
+          teardown-role-principal-mismatch) printf '{"id":"created-role-id","scope":"/subscriptions/sub/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/foundry","roleDefinitionName":"Cognitive Services User","principalId":"other-principal"}\n' ;;
+          *) printf '{"id":"created-role-id","scope":"/subscriptions/sub/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/foundry","roleDefinitionName":"Cognitive Services User","principalId":"gateway-object-id"}\n' ;;
+        esac
       elif [ "${P89_SCENARIO:-}" = "role-existing" ]; then printf 'existing-role-id\n'; elif [ "${P89_SCENARIO:-}" = "keyvault-existing" ]; then printf 'kv-existing-role-id\n'; fi
       exit 0
       ;;
@@ -616,6 +629,10 @@ if [ "$1" = "container" ] && [ "$2" = "exec" ]; then
   if [ "${P89_SCENARIO:-}" = "runner-init-fail" ] && [[ "$cmd" == *writeFileSync* && "$cmd" == *".b64"* ]]; then
     echo "init failed" >&2
     exit 9
+  fi
+  if [ "${P89_SCENARIO:-}" = "runner-init-error-text" ] && [[ "$cmd" == *writeFileSync* && "$cmd" == *".b64"* ]]; then
+    echo "ERROR: init reported error"
+    exit 0
   fi
   if [ "${P89_SCENARIO:-}" = "runner-finalize-fail" ] && [[ "$cmd" == *Buffer.from* ]]; then
     echo "finalize failed" >&2
@@ -872,8 +889,11 @@ Assert 'model refusal expected result states standard-tier callers are narrowed 
 ) $modelRefusalExpected
 Assert 'resolver deploy removes stale zip before packaging' ($resolverDeployBlock -match 'rm -f resolver\.zip') $resolverDeployBlock
 Assert 'resolver deploy builds zip in a subshell so cwd is restored on zip failure' ($resolverDeployBlock -match '\(cd resolver && zip -r \.\./resolver\.zip \.\) \|\| return 1') $resolverDeployBlock
+Assert 'resolver deploy removes stale params before jq generation' ($resolverDeployBlock -match 'rm -f resolver-params\.json') $resolverDeployBlock
 $guideTestSource = Read-Text $PSCommandPath
 Assert 'az role assignment stub matches CLI default scope behavior' ($guideTestSource -match 'if \[ -z "\$scope" \] && \[ "\$allflag" != "true" \]; then printf ''null\\n''; exit 0; fi') 'role assignment list without --scope or --all must not return resource-scoped assignments.'
+Assert 'Desktop sign-in section states helper-script needs no app registration' ($markdown -match '§7 applies only to `external-idp-browser` and `external-idp-broker` Desktop sign-in; `helper-script` uses the developer''s Azure CLI sign-in and no app registration') 'missing §7 optional-flow sentence'
+Assert 'projection prose states Basic v2 cannot use private resolver path' ($markdown -match 'Basic v2 cannot use this path') 'missing Basic v2 resolver SKU sentence'
 
 $normal = Invoke-GuideBashScenario 'normal' $entitlementScript
 Assert 'guide execution publishes premium and standard exact values' (
@@ -1119,6 +1139,14 @@ Assert 'missing APIM identity refuses before role list or create' (
     -not ((Read-ScenarioFile $identityNullRead 'calls.log') -match 'role assignment list --scope .* --assignee  ') -and
     -not ((Read-ScenarioFile $identityNullRead 'calls.log') -match 'role assignment create')
 ) $identityNullRead.Output
+
+$identityNullStderr = Invoke-GuideBashScenario 'identity-null' (($identityBlock -replace 'p89_gateway_identity\s*$', 'p89_gateway_identity >stdout.txt 2>stderr.txt'))
+$identityNullStderrLines = @((Read-ScenarioFile $identityNullStderr 'stderr.txt') -split "`r?`n" | Where-Object { $_ })
+Assert 'missing APIM identity refusal emits exactly one stderr line' (
+    $identityNullStderr.Exit -ne 0 -and
+    $identityNullStderrLines.Count -eq 1 -and
+    $identityNullStderrLines[0] -match 'no Foundry role check ran'
+) "stderr=$($identityNullStderrLines -join ' | ') output=$($identityNullStderr.Output)"
 
 $identityUserAssigned = Invoke-GuideBashScenario 'identity-userassigned' (Join-GuideBlocks @($enableIdentityBlock, $identityBlock))
 Assert 'UserAssigned-only APIM identity refuses without PATCH' (
@@ -1526,6 +1554,14 @@ Assert 'resolver deployment refuses missing network output fields before deploym
     -not ((Read-ScenarioFile $resolverNetworkMissing 'writes.log') -match 'projection-resolver-prefix')
 ) $resolverNetworkMissing.Output
 
+$resolverJqFail = Invoke-GuideBashScenario 'resolver-jq-fail' (Join-GuideBlocks @($projectionDeployBlock, "printf '%s\n' stale > resolver-params.json; jq() { if [ `"`${1:-}`" = -n ]; then return 3; fi; command jq `"`$@`"; }", $resolverDeployBlock))
+Assert 'resolver deployment removes stale params and refuses jq generation failure before deployment' (
+    $resolverJqFail.Exit -ne 0 -and
+    $resolverJqFail.Output -match 'resolver parameters could not be generated' -and
+    -not (Read-ScenarioFile $resolverJqFail 'resolver-params.json') -and
+    -not ((Read-ScenarioFile $resolverJqFail 'writes.log') -match 'projection-resolver-prefix')
+) $resolverJqFail.Output
+
 $resolverSiteEmpty = Invoke-GuideBashScenario 'resolver-site-empty' (Join-GuideBlocks @($projectionDeployBlock, $resolverDeployBlock))
 Assert 'resolver deployment refuses empty resolver site output before code upload' (
     $resolverSiteEmpty.Exit -ne 0 -and
@@ -1556,8 +1592,15 @@ $runnerInitFail = Invoke-GuideBashScenario 'runner-init-fail' (Join-GuideBlocks 
 Assert 'runner failed init stops before apply and compare' (
     $runnerInitFail.Exit -ne 0 -and
     $runnerInitFail.Output -match 'could not initialize transfer' -and
-    -not ((Read-ScenarioFile $runnerInitFail 'writes.log') -match 'apply-projection\.mjs')
+    -not ((Read-ScenarioFile $runnerInitFail 'writes.log') -match 'appendFileSync|Buffer\.from|tar -x|npm --prefix|apply-projection\.mjs')
 ) $runnerInitFail.Output
+
+$runnerInitErrorText = Invoke-GuideBashScenario 'runner-init-error-text' (Join-GuideBlocks @($projectionDeployBlock, $projectionRunnerBlock))
+Assert 'runner init error text with exit zero stops before chunk and finalization' (
+    $runnerInitErrorText.Exit -ne 0 -and
+    $runnerInitErrorText.Output -match 'runner initialization reported an error' -and
+    -not ((Read-ScenarioFile $runnerInitErrorText 'writes.log') -match 'appendFileSync|Buffer\.from|tar -x|npm --prefix|apply-projection\.mjs')
+) $runnerInitErrorText.Output
 
 $runnerHashMismatch = Invoke-GuideBashScenario 'runner-hash-mismatch' (Join-GuideBlocks @($projectionDeployBlock, $projectionRunnerBlock))
 Assert 'runner hash mismatch stops before apply and compare' (
@@ -1570,14 +1613,15 @@ $runnerFinalizeFail = Invoke-GuideBashScenario 'runner-finalize-fail' (Join-Guid
 Assert 'runner failed finalization stops before apply and compare' (
     $runnerFinalizeFail.Exit -ne 0 -and
     $runnerFinalizeFail.Output -match 'could not finalize transfer' -and
-    -not ((Read-ScenarioFile $runnerFinalizeFail 'writes.log') -match 'apply-projection\.mjs')
+    $runnerFinalizeFail.Output -notmatch 'hash mismatch' -and
+    -not ((Read-ScenarioFile $runnerFinalizeFail 'writes.log') -match 'tar -x|npm --prefix|apply-projection\.mjs')
 ) $runnerFinalizeFail.Output
 
 $runnerFinalizeErrorText = Invoke-GuideBashScenario 'runner-finalize-error-text' (Join-GuideBlocks @($projectionDeployBlock, $projectionRunnerBlock))
 Assert 'runner finalization error text with exit zero stops before apply and compare' (
     $runnerFinalizeErrorText.Exit -ne 0 -and
     $runnerFinalizeErrorText.Output -match 'runner finalization reported an error' -and
-    -not ((Read-ScenarioFile $runnerFinalizeErrorText 'writes.log') -match 'apply-projection\.mjs')
+    -not ((Read-ScenarioFile $runnerFinalizeErrorText 'writes.log') -match 'tar -x|npm --prefix|apply-projection\.mjs')
 ) $runnerFinalizeErrorText.Output
 
 $runnerChunkErrorText = Invoke-GuideBashScenario 'runner-chunk-error-text' (Join-GuideBlocks @($projectionDeployBlock, $projectionRunnerBlock))
@@ -1642,6 +1686,17 @@ Assert 'teardown skips role delete when live role differs from receipt and conti
     -not ((Read-ScenarioFile $teardownRoleMismatch 'writes.log') -match 'delete-role created-role-id') -and
     (Read-ScenarioFile $teardownRoleMismatch 'writes.log') -match 'delete-group standard-id'
 ) $teardownRoleMismatch.Output
+
+foreach ($case in @('id','scope','name','principal')) {
+    $scenario = "teardown-role-$case-mismatch"
+    $run = Invoke-GuideBashScenario $scenario (Join-GuideBlocks @($allCreatedReceipts, $teardownExternalBlock))
+    Assert "teardown skips role delete when live role $case differs from receipt" (
+        $run.Exit -eq 0 -and
+        $run.Output -match 'live Foundry role assignment does not match' -and
+        -not ((Read-ScenarioFile $run 'writes.log') -match 'delete-role created-role-id') -and
+        (Read-ScenarioFile $run 'writes.log') -match 'delete-group standard-id'
+    ) $run.Output
+}
 
 $teardownGroupMismatch = Invoke-GuideBashScenario 'teardown-group-live-mismatch' (Join-GuideBlocks @($allCreatedReceipts, $teardownExternalBlock))
 Assert 'teardown skips group delete when live group differs from receipt and continues' (
