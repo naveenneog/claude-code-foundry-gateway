@@ -110,6 +110,7 @@ $expectedPortalSteps = [ordered]@{
         'Reuse an existing APIM instance that has never hosted this gateway'
         'Read policy deployment state'
         'Write and read back one named value'
+        'Review template-created diagnostic settings'
     )
     '3' = @(
         'Read the gateway identity and Foundry scope'
@@ -188,6 +189,7 @@ $azPortalMapping = [ordered]@{
         @{ portal = 'Reuse an existing APIM instance that has never hosted this gateway'; az = @('Reuse an existing APIM instance that has never hosted this gateway.', 'The create follows review of the what-if output.') }
         @{ portal = 'Read policy deployment state'; az = @('Read policy deployment state.') }
         @{ portal = 'Write and read back one named value'; az = @('Write and read back one named value the same way the helper does.') }
+        @{ portal = 'Review template-created diagnostic settings'; none = 'Template-created diagnostic settings are a portal read-only review.' }
     )
     '3' = @(
         @{ portal = 'Read the gateway identity and Foundry scope'; az = @('Read the gateway identity and Foundry scope.') }
@@ -291,19 +293,26 @@ for ($part = 1; $part -le 12; $part++) {
     Assert "part $part Change later does not start with a bare imperative verb" (-not $imperative.Success) $imperative.Value
 
     if ($part -eq 2) {
-        Assert 'part 2 portal cites the resource-group marker' ($portal -match 'P89-RESOURCE-GROUP') 'P89-RESOURCE-GROUP'
-        Assert 'part 2 portal cites the reused-APIM create lead' ($portal -match [regex]::Escape('The create follows review of the what-if output.')) 'The create follows review of the what-if output.'
+        Assert 'part 2 portal cites the resource-group function' ($portal -match 'p89_resource_group') 'p89_resource_group'
+        Assert 'part 2 portal cites the reused-APIM create text' ($portal -match [regex]::Escape('The create follows review of the what-if output.')) 'The create follows review of the what-if output.'
     }
-    if ($part -eq 8) { Assert 'part 8 portal cites gateway URL marker' ($portal -match 'P89-GATEWAY-URL') 'P89-GATEWAY-URL' }
+    if ($part -eq 8) { Assert 'part 8 portal cites gateway URL function' ($portal -match 'p89_gateway_url') 'p89_gateway_url' }
     if ($part -eq 9) {
         Assert 'part 9 portal documents immediate dig absence refusal' ($portal -match 'refuses at once when `dig` is absent') 'dig absence refusal'
         Assert 'part 9 portal documents 600-second DNS wait' (($portal -match '600 s') -and ($portal -match 'P89_DNS_TIMEOUT_SECONDS=600')) '600 s P89_DNS_TIMEOUT_SECONDS=600'
         Assert 'part 9 portal documents 2700-second hostname wait' (($portal -match '2,700 s \(45 minutes\)') -and ($portal -match 'P89_HOSTNAME_TIMEOUT_SECONDS=2700') -and ($portal -match 'scripts/Set-ClaudeGatewayAddress.ps1:16')) '2,700 s P89_HOSTNAME_TIMEOUT_SECONDS=2700 scripts/Set-ClaudeGatewayAddress.ps1:16'
     }
-    if ($part -eq 11) { Assert 'part 11 portal cites model-refusal marker' ($portal -match 'P89-MODEL-REFUSAL') 'P89-MODEL-REFUSAL' }
+    if ($part -eq 11) { Assert 'part 11 portal cites model-refusal function' ($portal -match 'p89_verify_model_refusal') 'p89_verify_model_refusal' }
     if ($part -eq 12) {
-        Assert 'part 12 portal cites teardown-group marker' ($portal -match 'P89-TEARDOWN-GROUP') 'P89-TEARDOWN-GROUP'
+        Assert 'part 12 portal cites teardown-group function' ($portal -match 'p89_teardown_group') 'p89_teardown_group'
         Assert 'part 12 portal lists appinsights logger view' (($portal -match 'Monitoring > Application Insights') -and ($portal -match 'logger `appinsights`')) 'Monitoring > Application Insights logger `appinsights`'
+        Assert 'part 12 portal documents no receipts for portal-created objects' (($portal -match 'no `\.p89-receipts` entry') -and ($portal -match 'exact name, creation time and the gateway they serve')) 'portal-created objects receipt wording'
+    }
+    if ($part -eq 7) {
+        Assert 'part 7 portal states external-idp applicability' (($portal -match 'external-idp-browser') -and ($portal -match 'external-idp-broker') -and ($portal -match 'helper-script')) 'external-idp-browser external-idp-broker helper-script'
+    }
+    if ($part -eq 10) {
+        Assert 'part 10 Change later is a table' ($portal -match '(?m)^\| Changed item \| Portal blade \| Block that reruns \| Effect while `entitlement-source` is `named-value` \|') 'Change later table header'
     }
 
     $azLeads = @(Get-AzLeadSentences $body)
@@ -336,6 +345,10 @@ for ($part = 1; $part -le 12; $part++) {
 Assert 'per-step Portal paragraphs are removed' (-not ($markdown -match '(?m)^\*\*Portal\.\*\*'))
 
 $withoutFences = [regex]::Replace($markdown, '(?ms)^```.*?^```', '')
+$outsideMarker = [regex]::Match($withoutFences, 'P89-[A-Z-]+')
+Assert 'guide prose outside fences avoids P89 marker names' (-not $outsideMarker.Success) $outsideMarker.Value
+$outsideLeadSentence = [regex]::Match($withoutFences, '(?i)lead sentence')
+Assert 'guide prose outside fences avoids lead sentence wording' (-not $outsideLeadSentence.Success) $outsideLeadSentence.Value
 $paragraphs = @(
     [regex]::Split($withoutFences, "(?:\r?\n){2,}") |
     ForEach-Object { ($_.Trim() -replace '\s+', ' ') } |
@@ -387,7 +400,7 @@ foreach ($match in $imageCaptionMatches) {
     $imagesByCaption[$match.Groups[2].Value] = $match.Groups[1].Value
 }
 $captionIds = @([regex]::Matches($markdown, 'Capture id:\s+`([^`]+)`\.') | ForEach-Object { $_.Groups[1].Value } | Sort-Object)
-$expectedLiveCaptionIds = @($expectedLiveCaptureIds + @('architecture-foundry-access', 'docs-review-gateway-diagnostics') | Sort-Object)
+$expectedLiveCaptionIds = @($expectedLiveCaptureIds + @('architecture-foundry-access', 'docs-review-gateway-diagnostics', 'gateway-named-values') | Sort-Object)
 Assert 'live capture captions match the fixed expected set' (($captionIds -join "`n") -eq ($expectedLiveCaptionIds -join "`n")) "actual=$($captionIds -join ', ') expected=$($expectedLiveCaptionIds -join ', ')"
 foreach ($expectedId in $expectedLiveCaptureIds) {
     Assert "expected live capture is referenced: $expectedId" ($captionIds -contains $expectedId) $expectedId
@@ -508,6 +521,9 @@ if ($overview.Success) {
         if ($line -match '^\|\s*(\d+)\b') {
             $part = [int]$matches[1]
             Assert "overview portal column links to part $part subsection" ($line -match "\(#part-$part-in-the-portal\)") $line
+            if ($part -eq 7) {
+                Assert 'overview part 7 states external-idp optionality' (($line -match 'external-idp-browser') -and ($line -match 'external-idp-broker') -and ($line -match 'helper-script')) $line
+            }
         }
     }
     $partList = @($parts | Sort-Object) -join ','

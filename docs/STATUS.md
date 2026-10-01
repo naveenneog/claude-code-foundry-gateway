@@ -158,6 +158,19 @@ Round 6 results:
 - GREEN: `pwsh -NoProfile -File .\tests\Test-PortalCaptureSpecs.ps1` PASS, 45 checks, 1.51 s.
 - Negative proofs against repository-local temporary copies, each at the 592-check baseline with at least one failure: removed the immediate `dig` absence statement; changed the DNS wait from 600 s to 60 s; changed the hostname wait from 2,700 s to 900 s; removed the `appinsights` logger portal view.
 
+
+Round 7 council results and fixes:
+- Five-seat council on `0666636`: Architect PASS; UX BLOCK for Part 2 screenshot mismatch, optional §7 scope and reader-facing internal marker names; Coder BLOCK for guard coverage around those prose rules; Security BLOCK until marker/lead wording stayed out of reader prose; QA BLOCK until the new portal mutations were proven. QA independently confirmed 12 existing portal-guard mutations were caught.
+- Part 2 step 7 is now only the `models-standard` named-value write/read-back and embeds verified live capture `gateway-named-values` (`docs/guide/a6-named-values.png`, hash `225b213d0d20fe8a1331a48850d50897666687d13ce460cbe11fc2dbb49444b5`). A new Part 2 step 8 separately reviews template-created diagnostic settings with the diagnostics capture.
+- Part 7 now states in the overview row and portal subsection that the Desktop app steps apply only to `external-idp-browser` and `external-idp-broker`; the default `helper-script` path needs no app registration, consent review or gateway audience named value (`DEVELOPER.md:600-604`, `docs/SETUP.md:426`, `Install-ClaudeGateway.ps1:1172-1173`).
+- Reader prose no longer contains `P89-*` marker names or "lead sentence" wording outside fenced bash blocks; references use function names or step text. The guard now rejects those phrases outside fences.
+- §10 Change later is now a table with changed item, portal blade, block that reruns and effect while `entitlement-source` is `named-value`.
+- Part 12 now states that CLI receipts exist only for objects created by the CLI route; portal-created objects have no `.p89-receipts` entry and are identified by exact name, creation time and the gateway they serve before deletion.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-AzPortalGuide.ps1` PASS, 600 checks, 2.17 s.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS, 43 guides, 7.47 s.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-PortalCaptureSpecs.ps1` PASS, 45 checks, 1.81 s.
+- Negative proofs against repository-local temporary copies, each at the 600-check baseline with at least one failure: changed the Part 2 named-value capture id; removed `helper-script` from the overview row; removed the Part 7 applicability sentence; inserted a `P89-*` marker outside a fence; inserted "lead sentence" outside a fence; removed the §10 Change-later table header; removed the Part 12 portal-created receipt wording.
+
 ## P71 follow-up: a lookup starts one refresh, 2026-09-30
 
 **Merged as `b5c2120` on 2026-09-30, as a follow-up to P71, which the owner approved.** Council
@@ -1735,6 +1748,19 @@ Round 6 results:
 - GREEN: `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS, 43 guides, 10.98 s.
 - GREEN: `pwsh -NoProfile -File .\tests\Test-PortalCaptureSpecs.ps1` PASS, 45 checks, 1.51 s.
 - Negative proofs against repository-local temporary copies, each at the 592-check baseline with at least one failure: removed the immediate `dig` absence statement; changed the DNS wait from 600 s to 60 s; changed the hostname wait from 2,700 s to 900 s; removed the `appinsights` logger portal view.
+
+
+Round 7 council results and fixes:
+- Five-seat council on `0666636`: Architect PASS; UX BLOCK for Part 2 screenshot mismatch, optional §7 scope and reader-facing internal marker names; Coder BLOCK for guard coverage around those prose rules; Security BLOCK until marker/lead wording stayed out of reader prose; QA BLOCK until the new portal mutations were proven. QA independently confirmed 12 existing portal-guard mutations were caught.
+- Part 2 step 7 is now only the `models-standard` named-value write/read-back and embeds verified live capture `gateway-named-values` (`docs/guide/a6-named-values.png`, hash `225b213d0d20fe8a1331a48850d50897666687d13ce460cbe11fc2dbb49444b5`). A new Part 2 step 8 separately reviews template-created diagnostic settings with the diagnostics capture.
+- Part 7 now states in the overview row and portal subsection that the Desktop app steps apply only to `external-idp-browser` and `external-idp-broker`; the default `helper-script` path needs no app registration, consent review or gateway audience named value (`DEVELOPER.md:600-604`, `docs/SETUP.md:426`, `Install-ClaudeGateway.ps1:1172-1173`).
+- Reader prose no longer contains `P89-*` marker names or "lead sentence" wording outside fenced bash blocks; references use function names or step text. The guard now rejects those phrases outside fences.
+- §10 Change later is now a table with changed item, portal blade, block that reruns and effect while `entitlement-source` is `named-value`.
+- Part 12 now states that CLI receipts exist only for objects created by the CLI route; portal-created objects have no `.p89-receipts` entry and are identified by exact name, creation time and the gateway they serve before deletion.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-AzPortalGuide.ps1` PASS, 600 checks, 2.17 s.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS, 43 guides, 7.47 s.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-PortalCaptureSpecs.ps1` PASS, 45 checks, 1.81 s.
+- Negative proofs against repository-local temporary copies, each at the 600-check baseline with at least one failure: changed the Part 2 named-value capture id; removed `helper-script` from the overview row; removed the Part 7 applicability sentence; inserted a `P89-*` marker outside a fence; inserted "lead sentence" outside a fence; removed the §10 Change-later table header; removed the Part 12 portal-created receipt wording.
 
 ## P71 follow-up: the deadline tests prove termination without racing it, 2026-09-30
 

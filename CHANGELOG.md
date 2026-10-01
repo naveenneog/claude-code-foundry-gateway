@@ -57,6 +57,11 @@ exact streaming cache-creation detail remains **U13**.
   immediate missing-`dig` refusal, the 600-second CNAME wait, the 2,700-second
   hostname wait, and the reused-APIM `appinsights` logger portal view, with
   guard mutations for each new assertion.
+- **P90 portal path for the Azure CLI setup guide, round 7.** The council fixes
+  split Part 2 named-value and diagnostic screenshots, mark Part 7 as only for
+  external-IdP Desktop sign-in modes, remove internal P89 marker names from
+  reader prose, convert §10 Change later into a table, and document how portal
+  teardown identifies objects that have no CLI receipt.
 - **P89 Azure CLI setup guide.** `docs/AZ-COMMANDS.md` mirrors the installer and
   in-scope administration scripts with Cloud Shell bash commands, verification
   commands, expected results and source references; `Test-AzCommandsGuide.ps1`
