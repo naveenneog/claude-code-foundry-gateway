@@ -144,6 +144,7 @@ $expectedPortalSteps = [ordered]@{
         'Publish the Desktop audience to APIM'
     )
     '8' = @(
+        'Resolve the live gateway URL and SKU'
         'Write the developer handover file'
     )
     '9' = @(
@@ -184,7 +185,7 @@ $azPortalMapping = [ordered]@{
         @{ portal = 'Confirm the APIM name is absent'; az = @('Confirm the APIM name is absent before running the first-deployment commands below.') }
         @{ portal = 'Validate the gateway template before deployment'; az = @('Validate the gateway template before deployment.') }
         @{ portal = 'Deploy the gateway template'; az = @('Deploy Basic v2.', 'Deploy Standard v2 when outbound VNet integration is required.', 'Deploy Premium v2 when the gateway itself must be injected privately.') }
-        @{ portal = 'Reuse an existing APIM instance that has never hosted this gateway'; az = @('Reuse an existing APIM instance that has never hosted this gateway.') }
+        @{ portal = 'Reuse an existing APIM instance that has never hosted this gateway'; az = @('Reuse an existing APIM instance that has never hosted this gateway.', 'The create follows review of the what-if output.') }
         @{ portal = 'Read policy deployment state'; az = @('Read policy deployment state.') }
         @{ portal = 'Write and read back one named value'; az = @('Write and read back one named value the same way the helper does.') }
     )
@@ -221,6 +222,7 @@ $azPortalMapping = [ordered]@{
         @{ portal = 'Publish the Desktop audience to APIM'; az = @('Publish the Desktop gateway audience into APIM.') }
     )
     '8' = @(
+        @{ portal = 'Resolve the live gateway URL and SKU'; az = @('Resolve the live gateway URL and SKU.') }
         @{ portal = 'Write the developer handover file'; az = @('Generate `onboarding/claude-gateway.json` with the same schema the installer writes.') }
     )
     '9' = @(
@@ -243,7 +245,7 @@ $azPortalMapping = [ordered]@{
         @{ portal = 'Review gateway diagnostic settings and Log Analytics tables'; none = 'Diagnostic portal review has no az command lead sentence.' }
     )
     '12' = @(
-        @{ portal = 'Delete the gateway resource group after external receipts are reviewed'; az = @('Delete the gateway resource group when the deployment was isolated to it.') }
+        @{ portal = 'Delete the gateway resource group after external receipts are reviewed'; az = @('Delete the gateway resource group only when this guide created it.') }
         @{ portal = 'Review soft-deleted APIM instances before name reuse'; none = 'Soft-delete review has no portal label asserted by an az block.' }
         @{ portal = 'Delete receipt-created external objects'; az = @('Read resources before deletion.', 'Remove only external resources this guide recorded as created.') }
     )
@@ -282,6 +284,19 @@ for ($part = 1; $part -le 12; $part++) {
         $found = [regex]::Match($scanText, $entry.Value)
         Assert "part $part $($entry.Key)" (-not $found.Success) $found.Value
     }
+    $changeLaterText = ''
+    $changeLater = [regex]::Match($portal, '(?ms)^\*\*Change later\.\*\*\s*(?<text>.*?)(?=\r?\n\r?\n|\z)')
+    if ($changeLater.Success) { $changeLaterText = $changeLater.Groups['text'].Value.Trim() }
+    $imperative = [regex]::Match($changeLaterText, '^(Change|Edit|Rerun|Update|Delete|Add|Set|Run|Regenerate|Redistribute)\b', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    Assert "part $part Change later does not start with a bare imperative verb" (-not $imperative.Success) $imperative.Value
+
+    if ($part -eq 2) {
+        Assert 'part 2 portal cites the resource-group marker' ($portal -match 'P89-RESOURCE-GROUP') 'P89-RESOURCE-GROUP'
+        Assert 'part 2 portal cites the reused-APIM create lead' ($portal -match [regex]::Escape('The create follows review of the what-if output.')) 'The create follows review of the what-if output.'
+    }
+    if ($part -eq 8) { Assert 'part 8 portal cites gateway URL marker' ($portal -match 'P89-GATEWAY-URL') 'P89-GATEWAY-URL' }
+    if ($part -eq 11) { Assert 'part 11 portal cites model-refusal marker' ($portal -match 'P89-MODEL-REFUSAL') 'P89-MODEL-REFUSAL' }
+    if ($part -eq 12) { Assert 'part 12 portal cites teardown-group marker' ($portal -match 'P89-TEARDOWN-GROUP') 'P89-TEARDOWN-GROUP' }
 
     $azLeads = @(Get-AzLeadSentences $body)
     $mappings = @($azPortalMapping[[string]$part])

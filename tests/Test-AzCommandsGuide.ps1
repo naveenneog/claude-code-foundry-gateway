@@ -190,11 +190,31 @@ foreach ($cmd in $commands) {
 $docRef = Join-Path $PSScriptRoot 'Test-DocReferences.ps1'
 Assert 'relative-link checker exists for guide links' (Test-Path -LiteralPath $docRef)
 
+
 function Get-MarkedBashBlock([string]$Text, [string]$Name) {
     $m = [regex]::Match($Text, "(?ms)# P89-$Name-BEGIN\s*(.*?)# P89-$Name-END")
     if (-not $m.Success) { throw "Missing P89-$Name marked bash block." }
     return $m.Groups[1].Value.Trim()
 }
+
+function Convert-ExistingParamToNamedValue([string]$Name) {
+    $base = $Name -replace 'Existing$','' -replace 'Value$',''
+    $words = [regex]::Replace($base, '([a-z0-9])([A-Z])', '$1-$2').ToLowerInvariant()
+    $words
+}
+
+$operatorOwnedFromBicep = @([regex]::Matches($bicep, '(?m)^\s*param\s+([A-Za-z][A-Za-z0-9]*Existing)\s+') |
+    ForEach-Object { Convert-ExistingParamToNamedValue $_.Groups[1].Value } |
+    Sort-Object -Unique)
+$expectedReuseRefusal = @($operatorOwnedFromBicep + 'entitlement-source' | Sort-Object -Unique)
+$reuseBlockText = Get-MarkedBashBlock $markdown 'REUSE-APIM'
+$reuseListMatch = [regex]::Match($reuseBlockText, '\[("allow-standard".*?"entitlement-source")\]')
+$reuseRefusalList = if ($reuseListMatch.Success) {
+    @([regex]::Matches($reuseListMatch.Groups[1].Value, '"([^"]+)"') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+} else { @() }
+Assert 'reuse refusal list equals operator-owned Existing named values plus entitlement-source' (
+    ($expectedReuseRefusal -join '|') -ceq ($reuseRefusalList -join '|')
+) "expected=$($expectedReuseRefusal -join ',') actual=$($reuseRefusalList -join ',')"
 
 function Join-GuideBlocks([string[]]$Blocks) {
     ($Blocks | Where-Object { $_ }) -join "`nrc=`$?; [ `"`$rc`" -eq 0 ] || exit `"`$rc`"`n"
@@ -278,7 +298,9 @@ if [ "$1" = "apim" ] && [ "$2" = "show" ]; then
     case "${P89_SCENARIO:-}" in
       reuse-no-identity) printf '{"name":"apim","sku":{"name":"BasicV2"},"identity":null}\n' ;;
       reuse-classic-sku) printf '{"name":"apim","sku":{"name":"Developer"},"identity":{"type":"SystemAssigned","principalId":"gateway-object-id"}}\n' ;;
-      *) printf '{"name":"apim","sku":{"name":"BasicV2"},"identity":{"type":"SystemAssigned","principalId":"gateway-object-id"}}\n' ;;
+      gateway-address) printf '{"name":"apim","gatewayUrl":"https://apim.azure-api.net","sku":{"name":"PremiumV2"},"identity":{"type":"SystemAssigned","principalId":"gateway-object-id"},"hostnameConfigurations":[{"type":"Proxy","hostName":"custom.example"}]}\n' ;;
+      hostname-success) printf '{"name":"apim","gatewayUrl":"https://apim.azure-api.net","sku":{"name":"PremiumV2"},"identity":{"type":"SystemAssigned","principalId":"gateway-object-id"},"hostnameConfigurations":[{"type":"Proxy","hostName":"new.example"}]}\n' ;;
+      *) printf '{"name":"apim","gatewayUrl":"https://apim.azure-api.net","sku":{"name":"BasicV2"},"identity":{"type":"SystemAssigned","principalId":"gateway-object-id"}}\n' ;;
     esac
     exit 0
   fi
@@ -295,6 +317,17 @@ if [ "$1" = "apim" ] && [ "$2" = "show" ]; then
       if [ "$query" = "identity" ]; then printf '{"type":"SystemAssigned","principalId":"gateway-object-id"}\n'; elif [[ "$query" == *identity.principalId* ]]; then printf 'gateway-object-id\n'; elif [[ "$query" == *id:id* ]]; then printf '{"id":"/subscriptions/sub/resourceGroups/rg/providers/Microsoft.ApiManagement/service/apim","identity":{"type":"SystemAssigned","principalId":"gateway-object-id"}}\n'; else printf '{}\n'; fi
       ;;
   esac
+  exit 0
+fi
+if [ "$1" = "group" ]; then
+  case "$2" in
+    exists) if [ "${P89_SCENARIO:-}" = "rg-exists-fail" ]; then echo "exists failed" >&2; exit 3; elif [ "${P89_SCENARIO:-}" = "rg-existing" ]; then printf 'true\n'; else printf 'false\n'; fi; exit 0 ;;
+    create) printf 'group-create %s\n' "$*" >> "$P89_WRITES"; exit 0 ;;
+    delete) printf 'group-delete %s\n' "$*" >> "$P89_WRITES"; exit 0 ;;
+  esac
+fi
+if [ "$1" = "resource" ] && [ "$2" = "list" ]; then
+  printf '[]\n'
   exit 0
 fi
 if [ "$1" = "apim" ] && [ "$2" = "list" ]; then
@@ -354,9 +387,14 @@ if [ "$1" = "ad" ] && [ "$2" = "app" ]; then
       ;;
     update|show)
       if [ "$3" = "show" ]; then
-        if [ "${P89_SCENARIO:-}" = "redirect-extra" ]; then printf '{"appId":"created-app-id","publicClient":{"redirectUris":["https://existing.example/callback"]},"isFallbackPublicClient":false}\n'; else printf '{"appId":"created-app-id","publicClient":{"redirectUris":["http://127.0.0.1/callback"]},"isFallbackPublicClient":true}\n'; fi
+        if [ "${P89_SCENARIO:-}" = "redirect-missing-uri" ]; then printf '{"appId":"created-app-id","publicClient":{"redirectUris":["https://existing.example/callback"]},"isFallbackPublicClient":true}\n'
+        elif [ "${P89_SCENARIO:-}" = "redirect-fallback-false" ]; then printf '{"appId":"created-app-id","publicClient":{"redirectUris":["https://existing.example/callback","http://127.0.0.1/callback","ms-appx-web://Microsoft.AAD.BrokerPlugin/66666666-6666-6666-6666-666666666666","msauth.com.anthropic.claudefordesktop://auth"]},"isFallbackPublicClient":false}\n'
+        elif [ -f "${P89_STATE_DIR:-.}/app-updated" ]; then printf '{"appId":"created-app-id","publicClient":{"redirectUris":["https://existing.example/callback","http://127.0.0.1/callback","ms-appx-web://Microsoft.AAD.BrokerPlugin/66666666-6666-6666-6666-666666666666","msauth.com.anthropic.claudefordesktop://auth"]},"isFallbackPublicClient":true}\n'
+        elif [ "${P89_SCENARIO:-}" = "redirect-extra" ]; then printf '{"appId":"created-app-id","publicClient":{"redirectUris":["https://existing.example/callback"]},"isFallbackPublicClient":false}\n'
+        else printf '{"appId":"created-app-id","publicClient":{"redirectUris":["http://127.0.0.1/callback"]},"isFallbackPublicClient":true}\n'; fi
       else
         printf 'app-update %s\n' "$*" >> "$P89_WRITES"
+        printf '1' > "${P89_STATE_DIR:-.}/app-updated"
         printf '{}\n'
       fi
       exit 0
@@ -392,7 +430,19 @@ if [ "$1" = "rest" ]; then
   url="$(arg_after --url "$@")"
   if [ "$method" = "get" ] && [[ "$url" == *Microsoft.ApiManagement/service* ]]; then
     sku="PremiumV2"; [ "${P89_SCENARIO:-}" = "hostname-standard-refuse" ] && sku="StandardV2"
-    printf '{"sku":{"name":"%s"},"properties":{"hostnameConfigurations":[{"type":"Proxy","hostName":"x.azure-api.net","certificateSource":"BuiltIn"},{"type":"Proxy","hostName":"other.example","certificateSource":"KeyVault","keyVaultId":"oldsecret","defaultSslBinding":false,"negotiateClientCertificate":false},{"type":"DeveloperPortal","hostName":"portal.example","certificateSource":"KeyVault","keyVaultId":"portalsecret"}]}}\n' "$sku"
+    provisioning="Succeeded"; certStatus="Ready"; sameBinding=''
+    case "${P89_SCENARIO:-}" in
+      hostname-not-succeeded) provisioning="Updating" ;;
+      hostname-preserve-clientcert) sameBinding=',{"type":"Proxy","hostName":"new.example","certificateSource":"KeyVault","keyVaultId":"oldsecret","defaultSslBinding":true,"negotiateClientCertificate":true,"certificateStatus":"Ready"}' ;;
+      hostname-updating-then-succeeded)
+        if [ -f "${P89_STATE_DIR:-.}/hostname-patched" ]; then
+          state="${P89_STATE_DIR:-.}/hostname-updating-seen"; if [ ! -f "$state" ]; then printf '1' > "$state"; provisioning="Updating"; fi
+        fi
+        ;;
+      hostname-failed) [ -f "${P89_STATE_DIR:-.}/hostname-patched" ] && provisioning="Failed" ;;
+      hostname-cert-timeout) [ -f "${P89_STATE_DIR:-.}/hostname-patched" ] && certStatus="InProgress" ;;
+    esac
+    printf '{"sku":{"name":"%s"},"properties":{"provisioningState":"%s","hostnameConfigurations":[{"type":"Proxy","hostName":"x.azure-api.net","certificateSource":"BuiltIn"},{"type":"Proxy","hostName":"other.example","certificateSource":"KeyVault","keyVaultId":"oldsecret","defaultSslBinding":false,"negotiateClientCertificate":false,"certificateStatus":"Ready"},{"type":"DeveloperPortal","hostName":"portal.example","certificateSource":"KeyVault","keyVaultId":"portalsecret"}%s,{"type":"Proxy","hostName":"new.example","certificateSource":"KeyVault","keyVaultId":"https://kv.vault.azure.net/secrets/cert/ver","defaultSslBinding":false,"negotiateClientCertificate":false,"certificateStatus":"%s"}]}}\n' "$sku" "$provisioning" "$sameBinding" "$certStatus"
     exit 0
   fi
   if [ "$2" = "--method" ] && [ "$3" = "patch" ]; then
@@ -400,6 +450,11 @@ if [ "$1" = "rest" ]; then
     printf 'rest-patch-command %s\n' "$*" >> "$P89_WRITES"
     if [ -n "$body" ] && [ -f "${body#@}" ]; then printf 'rest-patch-body '; cat "${body#@}" >> "$P89_WRITES"; printf '\n' >> "$P89_WRITES"; else printf 'rest-patch %s\n' "$*" >> "$P89_WRITES"; fi
     printf '1' > "${P89_STATE_DIR:-.}/identity-enabled"
+    if [[ "$url" == *Microsoft.ApiManagement/service* ]]; then
+      if [ "${P89_SCENARIO:-}" = "hostname-kv-retry" ] && [ ! -f "${P89_STATE_DIR:-.}/kv-retried" ]; then printf '1' > "${P89_STATE_DIR:-.}/kv-retried"; echo 'KeyVault Forbidden' >&2; exit 3; fi
+      if [ "${P89_SCENARIO:-}" = "hostname-patch-other-error" ]; then echo 'BadRequest unrelated' >&2; exit 3; fi
+      printf '1' > "${P89_STATE_DIR:-.}/hostname-patched"
+    fi
     exit 0
   fi
   if [ "${P89_SCENARIO:-}" = "graph403" ] && [[ "$url" == *standard-id*servicePrincipal* ]]; then
@@ -428,6 +483,7 @@ fi
 if [ "$1" = "apim" ] && [ "$2" = "nv" ] && [ "$3" = "update" ]; then
   id="$(arg_after --named-value-id "$@")"; value="$(arg_after --value "$@")"
   printf '%s=%s\n' "$id" "$value" >> "$P89_WRITES"
+  [ "$id" = "models-standard" ] && printf '1' > "${P89_STATE_DIR:-.}/models-updated"
   exit 0
 fi
 if [ "$1" = "apim" ] && [ "$2" = "nv" ] && [ "$3" = "show" ]; then
@@ -443,7 +499,11 @@ if [ "$1" = "apim" ] && [ "$2" = "nv" ] && [ "$3" = "show" ]; then
       fi
       ;;
     models-premium) printf ',claude-sonnet-5,\n' ;;
-    models-standard) printf ',claude-sonnet-5,claude-opus-5,\n' ;;
+    models-standard)
+      if [ "${P89_SCENARIO:-}" = "model-read-fail" ]; then echo "read failed" >&2; exit 3; fi
+      if [ "${P89_SCENARIO:-}" = "model-read-empty" ]; then printf '\n'; exit 0; fi
+      if [ "${P89_SCENARIO:-}" = "model-restore-mismatch" ] && [ -f "${P89_STATE_DIR:-.}/models-updated" ]; then printf ',different,\n'; else printf ',claude-sonnet-5,claude-opus-5,\n'; fi
+      ;;
     *) printf 'value\n' ;;
   esac
   exit 0
@@ -549,7 +609,25 @@ function New-GuideCurlStub([string]$Directory) {
     $path = Join-Path $Directory 'curl'
     @'
 #!/usr/bin/env bash
+case "${P89_SCENARIO:-}" in
+  hostname-non401) printf '403\n'; exit 0 ;;
+  model-curl-fail) echo 'curl failed' >&2; exit 7 ;;
+esac
 printf '401\n'
+exit 0
+'@ | Set-Content -LiteralPath $path -NoNewline
+    $path
+}
+
+function New-GuideDigStub([string]$Directory) {
+    $path = Join-Path $Directory 'dig'
+    @'
+#!/usr/bin/env bash
+if [ "${P89_SCENARIO:-}" = "hostname-wrong-cname" ]; then
+  printf 'wrong.azure-api.net.\n'
+else
+  printf '%s.azure-api.net.\n' "${APIM_NAME:-apim}"
+fi
 exit 0
 '@ | Set-Content -LiteralPath $path -NoNewline
     $path
@@ -568,6 +646,7 @@ function Invoke-GuideBashScenario([string]$Name, [string]$Script, [hashtable]$Ex
     New-GuideAzStub $dir | Out-Null
     New-GuideZipStub $dir | Out-Null
     New-GuideCurlStub $dir | Out-Null
+    New-GuideDigStub $dir | Out-Null
     New-Item -ItemType Directory -Force -Path (Join-Path $dir 'scripts'), (Join-Path $dir 'sync\src'), (Join-Path $dir 'resolver\src'), (Join-Path $dir 'onboarding'), (Join-Path $dir '.p89-receipts') | Out-Null
     [IO.File]::WriteAllText((Join-Path $dir 'scripts\Sync-ClaudeProjection.ps1'), "#!/usr/bin/env bash`nwhile [ `"`$#`" -gt 0 ]; do if [ `"`$1`" = `"-ExportPath`" ]; then shift; printf '{`"members`":[]}\n' > `"`$1`"; fi; shift || true; done`n")
     [IO.File]::WriteAllText((Join-Path $dir 'scripts\Compare-ClaudeEntitlement.ps1'), "#!/usr/bin/env bash`nwhile [ `"`$#`" -gt 0 ]; do if [ `"`$1`" = `"-ExportGatewayPath`" ]; then shift; printf '{`"decisions`":[]}\n' > `"`$1`"; fi; shift || true; done`n")
@@ -619,11 +698,15 @@ export KEYVAULT_NAME="kv"
 export CERT_NAME="cert"
 export CERT_SECRET_ID="https://kv.vault.azure.net/secrets/cert/ver"
 export GATEWAY_HOSTNAME="new.example"
+export GATEWAY_URL="https://apim.azure-api.net/claude"
 export APIM_ID="/subscriptions/sub/resourceGroups/rg/providers/Microsoft.ApiManagement/service/apim"
 export DEVELOPER_UPN="dev@example.test"
 export DEVELOPER_ID="55555555-5555-5555-5555-555555555555"
 export GRAPH_RETRY_DELAY_SECONDS="0"
 export GRAPH_RETRY_ATTEMPTS="3"
+export P89_KEYVAULT_PATCH_TIMEOUT_SECONDS="5"
+export P89_HOSTNAME_TIMEOUT_SECONDS="1"
+export P89_HOSTNAME_POLL_SECONDS="0"
 cd "$(ConvertTo-BashPath $dir)"
 chmod +x scripts/Sync-ClaudeProjection.ps1 scripts/Compare-ClaudeEntitlement.ps1
 touch "`$P89_CALLS" "`$P89_WRITES" "`$P89_MEMBER_CALLS"
@@ -647,6 +730,7 @@ function Read-ScenarioFile($Scenario, [string]$Name) {
     if (Test-Path -LiteralPath $path) { Get-Content -LiteralPath $path -Raw } else { '' }
 }
 
+$resourceGroupBlock = Get-MarkedBashBlock $markdown 'RESOURCE-GROUP'
 $groupBlock = Get-MarkedBashBlock $markdown 'GROUP-RECEIPTS'
 $apimAbsentBlock = Get-MarkedBashBlock $markdown 'APIM-ABSENT'
 $reuseApimBlock = Get-MarkedBashBlock $markdown 'REUSE-APIM'
@@ -661,6 +745,7 @@ $tierBlock = Get-MarkedBashBlock $markdown 'TIER-WRITES'
 $budgetBlock = Get-MarkedBashBlock $markdown 'BUDGET-WRITE'
 $desktopAppBlock = Get-MarkedBashBlock $markdown 'DESKTOP-APP'
 $desktopRedirectsBlock = Get-MarkedBashBlock $markdown 'DESKTOP-REDIRECTS'
+$gatewayUrlBlock = Get-MarkedBashBlock $markdown 'GATEWAY-URL'
 $handoverBlock = Get-MarkedBashBlock $markdown 'HANDOVER'
 $keyVaultBlock = Get-MarkedBashBlock $markdown 'KEYVAULT-ACCESS'
 $bindHostnameBlock = Get-MarkedBashBlock $markdown 'BIND-HOSTNAME'
@@ -669,7 +754,9 @@ $resolverDeployBlock = Get-MarkedBashBlock $markdown 'RESOLVER-DEPLOY'
 $projectionRunnerBlock = Get-MarkedBashBlock $markdown 'PROJECTION-RUNNER'
 $bypassReadBlock = Get-MarkedBashBlock $markdown 'BYPASS-READ'
 $teardownReadBlock = Get-MarkedBashBlock $markdown 'TEARDOWN-READ'
+$teardownGroupBlock = Get-MarkedBashBlock $markdown 'TEARDOWN-GROUP'
 $teardownExternalBlock = Get-MarkedBashBlock $markdown 'TEARDOWN-EXTERNAL'
+$modelRefusalBlock = Get-MarkedBashBlock $markdown 'MODEL-REFUSAL'
 $entitlementScript = Join-GuideBlocks @($groupBlock, $graphBlock, $publishBlock)
 
 $normal = Invoke-GuideBashScenario 'normal' $entitlementScript
@@ -709,6 +796,41 @@ Assert 'existing APIM refuses first-deployment commands' (
     $apimExisting.Exit -ne 0 -and $apimExisting.Output -match 'already exists' -and -not ((Read-ScenarioFile $apimExisting 'calls.log') -match 'deployment group')
 ) $apimExisting.Output
 
+$rgNew = Invoke-GuideBashScenario 'rg-new' $resourceGroupBlock
+Assert 'resource group new create records created true' (
+    $rgNew.Exit -eq 0 -and
+    (Read-ScenarioFile $rgNew 'writes.log') -match 'group-create' -and
+    (Read-ScenarioFile $rgNew '.p89-receipts/resource-group.json' | ConvertFrom-Json).resourceGroup.created -eq $true
+) $rgNew.Output
+
+$rgExisting = Invoke-GuideBashScenario 'rg-existing' $resourceGroupBlock
+Assert 'resource group existing records created false' (
+    $rgExisting.Exit -eq 0 -and
+    -not ((Read-ScenarioFile $rgExisting 'writes.log') -match 'group-create') -and
+    (Read-ScenarioFile $rgExisting '.p89-receipts/resource-group.json' | ConvertFrom-Json).resourceGroup.created -eq $false
+) $rgExisting.Output
+
+$rgReceiptRerun = Invoke-GuideBashScenario 'rg-existing' ("mkdir -p .p89-receipts; printf '%s\n' '{""resourceGroup"":{""created"":true,""name"":""rg""}}' > .p89-receipts/resource-group.json; " + $resourceGroupBlock)
+Assert 'resource group rerun keeps created true receipt when group still exists' (
+    $rgReceiptRerun.Exit -eq 0 -and
+    -not ((Read-ScenarioFile $rgReceiptRerun 'writes.log') -match 'group-create') -and
+    (Read-ScenarioFile $rgReceiptRerun '.p89-receipts/resource-group.json' | ConvertFrom-Json).resourceGroup.created -eq $true
+) $rgReceiptRerun.Output
+
+$rgReceiptDeleted = Invoke-GuideBashScenario 'rg-new' ("mkdir -p .p89-receipts; printf '%s\n' '{""resourceGroup"":{""created"":true,""name"":""rg""}}' > .p89-receipts/resource-group.json; " + $resourceGroupBlock)
+Assert 'resource group deleted after created true receipt is recreated' (
+    $rgReceiptDeleted.Exit -eq 0 -and
+    (Read-ScenarioFile $rgReceiptDeleted 'writes.log') -match 'group-create' -and
+    (Read-ScenarioFile $rgReceiptDeleted '.p89-receipts/resource-group.json' | ConvertFrom-Json).resourceGroup.created -eq $true
+) $rgReceiptDeleted.Output
+
+$rgExistsFail = Invoke-GuideBashScenario 'rg-exists-fail' $resourceGroupBlock
+Assert 'resource group exists failure refuses with no create' (
+    $rgExistsFail.Exit -ne 0 -and
+    $rgExistsFail.Output -match 'could not check resource group existence' -and
+    -not ((Read-ScenarioFile $rgExistsFail 'writes.log') -match 'group-create')
+) $rgExistsFail.Output
+
 $reuseNoIdentity = Invoke-GuideBashScenario 'reuse-no-identity' $reuseApimBlock
 Assert 'reuse APIM with no identity refuses before what-if' (
     $reuseNoIdentity.Exit -ne 0 -and $reuseNoIdentity.Output -match 'P89-ENABLE-APIM-IDENTITY' -and -not ((Read-ScenarioFile $reuseNoIdentity 'calls.log') -match 'deployment group what-if')
@@ -733,6 +855,25 @@ $reuseNoRole = Invoke-GuideBashScenario 'reuse-clean' $reuseApimBlock
 Assert 'reuse APIM without Foundry role passes grantFoundryRole true' (
     $reuseNoRole.Exit -eq 0 -and (Read-ScenarioFile $reuseNoRole 'calls.log') -match 'grantFoundryRole=true'
 ) $reuseNoRole.Output
+
+Assert 'reuse APIM what-if block does not create deployment' (
+    $reuseNoRole.Exit -eq 0 -and
+    (Read-ScenarioFile $reuseNoRole 'writes.log') -match 'deployment-what-if' -and
+    -not ((Read-ScenarioFile $reuseNoRole 'writes.log') -match 'deployment-create')
+) $reuseNoRole.Output
+
+$reuseCreate = Invoke-GuideBashScenario 'reuse-clean' ($reuseApimBlock -replace 'p89_deploy_reused_apim whatif', 'p89_deploy_reused_apim create')
+Assert 'reuse APIM create argument runs deployment create' (
+    $reuseCreate.Exit -eq 0 -and
+    (Read-ScenarioFile $reuseCreate 'writes.log') -match 'deployment-create claude-gateway-reuse'
+) $reuseCreate.Output
+
+$reuseBadArg = Invoke-GuideBashScenario 'reuse-clean' ($reuseApimBlock -replace 'p89_deploy_reused_apim whatif', 'p89_deploy_reused_apim bad')
+Assert 'reuse APIM bad argument refuses without deployment call' (
+    $reuseBadArg.Exit -ne 0 -and
+    $reuseBadArg.Output -match "pass 'whatif' or 'create'" -and
+    -not ((Read-ScenarioFile $reuseBadArg 'writes.log') -match 'deployment-')
+) $reuseBadArg.Output
 
 $emptyPremium = Invoke-GuideBashScenario 'empty-premium' $entitlementScript @{ ALLOW_EMPTY = 'yes' }
 Assert 'empty premium does not empty standard' (
@@ -920,6 +1061,31 @@ Assert 'empty or placeholder Desktop client id refuses with no update' (
     -not ((Read-ScenarioFile $redirectPlaceholder 'calls.log') -match 'ad app update')
 ) $redirectPlaceholder.Output
 
+$redirectMissingUri = Invoke-GuideBashScenario 'redirect-missing-uri' ("export DESKTOP_SIGN_IN_FLOW=broker; " + $desktopRedirectsBlock)
+Assert 'Desktop redirect read-back missing required URI refuses' (
+    $redirectMissingUri.Exit -ne 0 -and
+    $redirectMissingUri.Output -match 'read-back' -and
+    (Read-ScenarioFile $redirectMissingUri 'calls.log') -match 'ad app update'
+) $redirectMissingUri.Output
+
+$redirectFallbackFalse = Invoke-GuideBashScenario 'redirect-fallback-false' ("export DESKTOP_SIGN_IN_FLOW=broker; " + $desktopRedirectsBlock)
+Assert 'Desktop redirect read-back fallback false refuses' (
+    $redirectFallbackFalse.Exit -ne 0 -and
+    $redirectFallbackFalse.Output -match 'isFallbackPublicClient'
+) $redirectFallbackFalse.Output
+
+$gatewayUrlDefault = Invoke-GuideBashScenario 'gateway-url-default' $gatewayUrlBlock
+Assert 'gateway URL helper uses live APIM gatewayUrl and SKU' (
+    $gatewayUrlDefault.Exit -eq 0 -and
+    $gatewayUrlDefault.Output -match 'https://apim.azure-api.net/claude'
+) $gatewayUrlDefault.Output
+
+$gatewayUrlAddress = Invoke-GuideBashScenario 'gateway-address' ("mkdir -p .p89-receipts; printf '%s\n' '{""address"":{""hostname"":""custom.example""}}' > .p89-receipts/gateway-address.json; " + $gatewayUrlBlock)
+Assert 'gateway URL helper prefers verified company address receipt when live hostname remains' (
+    $gatewayUrlAddress.Exit -eq 0 -and
+    $gatewayUrlAddress.Output -match 'https://custom.example/claude'
+) $gatewayUrlAddress.Output
+
 $tierWrites = Invoke-GuideBashScenario 'tier-writes' $tierBlock
 Assert 'tier write block writes limits and guarded model list' (
     $tierWrites.Exit -eq 0 -and
@@ -941,7 +1107,7 @@ Assert 'budget write block refuses oversize quota-overrides before write' (
     $budgetOversize.Output -match '4,096'
 ) $budgetOversize.Output
 
-$handover = Invoke-GuideBashScenario 'handover' $handoverBlock
+$handover = Invoke-GuideBashScenario 'handover' (Join-GuideBlocks @($gatewayUrlBlock, $handoverBlock))
 $handoverJson = Read-ScenarioFile $handover 'onboarding/claude-gateway.json'
 $installerText = Read-Text (Join-Path $root 'Install-ClaudeGateway.ps1')
 $configBlock = [regex]::Match($installerText, '(?s)\$config = \[ordered\]@\{(.*?)\n\}').Groups[1].Value
@@ -1023,6 +1189,74 @@ Assert 'unset GATEWAY_HOSTNAME refuses instead of using bash HOSTNAME' (
     $hostnameUnset.Output -match 'GATEWAY_HOSTNAME is empty'
 ) $hostnameUnset.Output
 
+$hostnameNotSucceeded = Invoke-GuideBashScenario 'hostname-not-succeeded' $bindHostnameBlock
+Assert 'hostname bind refuses non-Succeeded APIM before patch' (
+    $hostnameNotSucceeded.Exit -ne 0 -and
+    $hostnameNotSucceeded.Output -match 'provisioningState' -and
+    -not ((Read-ScenarioFile $hostnameNotSucceeded 'writes.log') -match 'rest-patch-body')
+) $hostnameNotSucceeded.Output
+
+$hostnameWrongCname = Invoke-GuideBashScenario 'hostname-wrong-cname' $bindHostnameBlock
+Assert 'hostname bind refuses missing or wrong CNAME before patch' (
+    $hostnameWrongCname.Exit -ne 0 -and
+    $hostnameWrongCname.Output -match 'DNS CNAME' -and
+    -not ((Read-ScenarioFile $hostnameWrongCname 'writes.log') -match 'rest-patch-body')
+) $hostnameWrongCname.Output
+
+$hostnamePreserveClientCert = Invoke-GuideBashScenario 'hostname-preserve-clientcert' $bindHostnameBlock
+$hostnamePreserveBody = Read-ScenarioFile $hostnamePreserveClientCert 'hostname-patch.json'
+Assert 'hostname bind preserves existing negotiateClientCertificate true in patch' (
+    $hostnamePreserveClientCert.Exit -eq 0 -and
+    $hostnamePreserveBody -match '"hostName"\s*:\s*"new.example"' -and
+    $hostnamePreserveBody -match '"negotiateClientCertificate"\s*:\s*true'
+) $hostnamePreserveClientCert.Output
+
+$hostnameKvRetry = Invoke-GuideBashScenario 'hostname-kv-retry' $bindHostnameBlock
+Assert 'hostname bind retries Key Vault propagation error then succeeds' (
+    $hostnameKvRetry.Exit -eq 0 -and
+    @((Read-ScenarioFile $hostnameKvRetry 'writes.log') -split "`n" | Where-Object { $_ -match 'rest-patch-command' }).Count -ge 2 -and
+    $hostnameKvRetry.Output -match 'new.example'
+) $hostnameKvRetry.Output
+
+$hostnamePatchOtherError = Invoke-GuideBashScenario 'hostname-patch-other-error' $bindHostnameBlock
+Assert 'hostname bind refuses non-Key Vault patch error at once' (
+    $hostnamePatchOtherError.Exit -ne 0 -and
+    @((Read-ScenarioFile $hostnamePatchOtherError 'writes.log') -split "`n" | Where-Object { $_ -match 'rest-patch-command' }).Count -eq 1 -and
+    $hostnamePatchOtherError.Output -match 'BadRequest unrelated'
+) $hostnamePatchOtherError.Output
+
+$hostnameUpdatingThenSucceeded = Invoke-GuideBashScenario 'hostname-updating-then-succeeded' ("export P89_HOSTNAME_TIMEOUT_SECONDS=5; " + $bindHostnameBlock)
+Assert 'hostname bind waits through Updating then Succeeded' (
+    $hostnameUpdatingThenSucceeded.Exit -eq 0 -and
+    $hostnameUpdatingThenSucceeded.Output -match 'new.example'
+) $hostnameUpdatingThenSucceeded.Output
+
+$hostnameFailed = Invoke-GuideBashScenario 'hostname-failed' $bindHostnameBlock
+Assert 'hostname bind refuses Failed provisioning state after patch' (
+    $hostnameFailed.Exit -ne 0 -and
+    $hostnameFailed.Output -match 'Failed'
+) $hostnameFailed.Output
+
+$hostnameCertTimeout = Invoke-GuideBashScenario 'hostname-cert-timeout' $bindHostnameBlock
+Assert 'hostname bind refuses certificateStatus InProgress timeout' (
+    $hostnameCertTimeout.Exit -ne 0 -and
+    $hostnameCertTimeout.Output -match 'InProgress'
+) $hostnameCertTimeout.Output
+
+$hostnameNon401 = Invoke-GuideBashScenario 'hostname-non401' $bindHostnameBlock
+Assert 'hostname bind non-401 proof refuses with no receipt' (
+    $hostnameNon401.Exit -ne 0 -and
+    $hostnameNon401.Output -match 'not 401' -and
+    -not (Read-ScenarioFile $hostnameNon401 '.p89-receipts/gateway-address.json')
+) $hostnameNon401.Output
+
+$hostnameSuccess = Invoke-GuideBashScenario 'hostname-success' (Join-GuideBlocks @($bindHostnameBlock, $gatewayUrlBlock))
+Assert 'hostname bind success writes receipt and gateway URL uses hostname' (
+    $hostnameSuccess.Exit -eq 0 -and
+    (Read-ScenarioFile $hostnameSuccess '.p89-receipts/gateway-address.json') -match '"hostname": "new.example"' -and
+    $hostnameSuccess.Output -match 'https://new.example/claude'
+) $hostnameSuccess.Output
+
 $projectionDeploy = Invoke-GuideBashScenario 'projection-deploy' $projectionDeployBlock
 $projectionDeployWrites = Read-ScenarioFile $projectionDeploy 'writes.log'
 Assert 'projection deployment block deploys store before network' (
@@ -1077,6 +1311,32 @@ Assert 'chunk error-text guard mutation reaches apply and is caught' (
     $chunkErrorMutationRun.Exit -eq 0 -and (Read-ScenarioFile $chunkErrorMutationRun 'writes.log') -match 'apply-projection\.mjs'
 ) $chunkErrorMutationRun.Output
 
+$modelReadFail = Invoke-GuideBashScenario 'model-read-fail' $modelRefusalBlock
+Assert 'model refusal failed read refuses with no write' (
+    $modelReadFail.Exit -ne 0 -and
+    $modelReadFail.Output -match 'could not read models-standard' -and
+    -not ((Read-ScenarioFile $modelReadFail 'writes.log') -match 'models-standard=')
+) $modelReadFail.Output
+
+$modelReadEmpty = Invoke-GuideBashScenario 'model-read-empty' $modelRefusalBlock
+Assert 'model refusal empty read refuses with no write' (
+    $modelReadEmpty.Exit -ne 0 -and
+    $modelReadEmpty.Output -match 'could not read models-standard' -and
+    -not ((Read-ScenarioFile $modelReadEmpty 'writes.log') -match 'models-standard=')
+) $modelReadEmpty.Output
+
+$modelCurlFail = Invoke-GuideBashScenario 'model-curl-fail' $modelRefusalBlock
+Assert 'model refusal restores models-standard when curl fails' (
+    $modelCurlFail.Exit -eq 0 -and
+    @((Read-ScenarioFile $modelCurlFail 'writes.log') -split "`n" | Where-Object { $_ -match 'models-standard=' }).Count -ge 2
+) $modelCurlFail.Output
+
+$modelRestoreMismatch = Invoke-GuideBashScenario 'model-restore-mismatch' $modelRefusalBlock
+Assert 'model refusal restore read-back mismatch refuses and prints restore value' (
+    $modelRestoreMismatch.Exit -ne 0 -and
+    $modelRestoreMismatch.Output -match 'Restore this value manually: ,claude-sonnet-5,claude-opus-5,'
+) $modelRestoreMismatch.Output
+
 $allCreatedReceipts = "mkdir -p .p89-receipts; printf '%s\n' '{""foundryRole"":{""created"":true,""id"":""created-role-id""}}' > .p89-receipts/foundry-role.json; printf '%s\n' '{""group"":{""created"":true,""id"":""standard-id""}}' > .p89-receipts/group-standard.json; printf '%s\n' '{""group"":{""created"":true,""id"":""premium-id""}}' > .p89-receipts/group-premium.json; printf '%s\n' '{""app"":{""created"":true,""appId"":""created-app-id""}}' > .p89-receipts/desktop-app.json;"
 $allExistingReceipts = "mkdir -p .p89-receipts; printf '%s\n' '{""foundryRole"":{""created"":false,""existingId"":""existing-role-id""}}' > .p89-receipts/foundry-role.json; printf '%s\n' '{""group"":{""created"":false,""id"":""standard-id""}}' > .p89-receipts/group-standard.json; printf '%s\n' '{""group"":{""created"":false,""id"":""premium-id""}}' > .p89-receipts/group-premium.json; printf '%s\n' '{""app"":{""created"":false,""appId"":""existing-app-id""}}' > .p89-receipts/desktop-app.json;"
 
@@ -1118,6 +1378,23 @@ $teardownNoApp = Invoke-GuideBashScenario 'teardown-no-app-receipt' (Join-GuideB
 Assert 'missing optional Desktop app receipt does not fail teardown' (
     $teardownNoApp.Exit -eq 0 -and $teardownNoApp.Output -match 'No Desktop app receipt'
 ) $teardownNoApp.Output
+
+$teardownGroupCreated = Invoke-GuideBashScenario 'teardown-group-created' ("mkdir -p .p89-receipts; printf '%s\n' '{""resourceGroup"":{""created"":true,""name"":""rg""}}' > .p89-receipts/resource-group.json; " + $teardownGroupBlock)
+Assert 'teardown group deletes only receipt-created resource group' (
+    $teardownGroupCreated.Exit -eq 0 -and (Read-ScenarioFile $teardownGroupCreated 'writes.log') -match 'group-delete'
+) $teardownGroupCreated.Output
+
+$teardownGroupExisting = Invoke-GuideBashScenario 'teardown-group-existing' ("mkdir -p .p89-receipts; printf '%s\n' '{""resourceGroup"":{""created"":false,""name"":""rg""}}' > .p89-receipts/resource-group.json; " + $teardownGroupBlock)
+Assert 'teardown group refuses pre-existing resource group' (
+    $teardownGroupExisting.Exit -ne 0 -and -not ((Read-ScenarioFile $teardownGroupExisting 'writes.log') -match 'group-delete')
+) $teardownGroupExisting.Output
+
+$teardownGroupStderr = Invoke-GuideBashScenario 'teardown-group-existing' ("mkdir -p .p89-receipts; printf '%s\n' '{""resourceGroup"":{""created"":false,""name"":""rg""}}' > .p89-receipts/resource-group.json; " + ($teardownGroupBlock -replace 'p89_teardown_group\s*$', 'p89_teardown_group >stdout.txt 2>stderr.txt'))
+Assert 'teardown group pre-existing refusal goes to stderr' (
+    $teardownGroupStderr.Exit -ne 0 -and
+    (Read-ScenarioFile $teardownGroupStderr 'stderr.txt') -match 'resource group was pre-existing' -and
+    -not ((Read-ScenarioFile $teardownGroupStderr 'stdout.txt') -match 'resource group was pre-existing')
+) $teardownGroupStderr.Output
 
 $bypassEmpty = Invoke-GuideBashScenario 'bypass-empty' ("unset APIM_PRINCIPAL_ID; " + $bypassReadBlock)
 Assert 'bypass read with empty APIM principal refuses before role list' (

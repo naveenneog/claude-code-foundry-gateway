@@ -47,6 +47,11 @@ exact streaming cache-creation detail remains **U13**.
   rejects editorial wording in portal/change-later text. The §2 custom-template
   route, §7 Desktop consent review and §9 Key Vault/custom-domain labels now
   cite the matching Microsoft Learn pages fetched for the round.
+- **P90 portal path for the Azure CLI setup guide, round 5.** P90 now merges
+  P89 round 10 while keeping all P89 bash fences byte-identical, adds portal
+  parity for live gateway URL/SKU resolution, custom hostname receipts,
+  model-refusal restore checks and receipt-gated resource-group teardown, and
+  guards the new mappings plus imperative Change-later wording.
 - **P89 Azure CLI setup guide.** `docs/AZ-COMMANDS.md` mirrors the installer and
   in-scope administration scripts with Cloud Shell bash commands, verification
   commands, expected results and source references; `Test-AzCommandsGuide.ps1`

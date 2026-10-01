@@ -60,8 +60,15 @@ Round 7 council-fix validation, 2026-10-01:
 Round 8 council-fix validation, 2026-10-01:
 - §2 now has `p89_apim_absent` before first-deployment commands and `p89_deploy_reused_apim` for clean existing v2 APIM reuse. The guide states rerun reset risks for operator-owned named values, projection settings and APIM PUT-owned properties.
 - Reuse path refuses missing identity, installed gateway named values and classic SKUs; it passes `grantFoundryRole=false` when the gateway identity already has Cognitive Services User and `true` otherwise.
-- §7 now uses `DESKTOP_SIGN_IN_FLOW`, preserves existing redirect URIs through a checked read + union, adds broker URIs only for broker flow, and refuses empty/placeholder client ids.
-- Validation: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS; `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS with 681 checks in 203.67 s; `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS with 43 guides. No live Azure command ran.
+- §7 now uses `DESKTOP_SIGN_IN_FLOW`, preserves existing redirect URIs through a checked read + union, adds broker URIs only for broker flow, and refuses empty/placeholder client ids. §8/§11 use the live APIM gateway URL and SKU, and §12 resource-group teardown deletes only receipt-created groups.
+- Validation: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS; `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS with 696 checks in 245.49 s; `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS with 43 guides. No live Azure command ran.
+Round 9 and 10 council-fix validation, 2026-10-01:
+- Section 2 `p89_resource_group` now rechecks a `created:true` receipt before returning, recreates a deleted guide-created group, refuses failed existence checks before create, and is marked `P89-RESOURCE-GROUP`. Reused APIM what-if and create are separate paste blocks with explicit `whatif|create` modes.
+- Section 7 Desktop redirects now fail closed on read-back when any required URI is missing or `isFallbackPublicClient` is false. Section 9 hostname binding now checks APIM `Succeeded`, verifies a `dig` CNAME to `<apim>.azure-api.net`, preserves existing Proxy TLS flags, retries transient Key Vault PATCH access errors, waits for provisioning/certificate completion, proves HTTPS `401`, and writes `.p89-receipts/gateway-address.json` for `p89_gateway_url`.
+- Section 11 model refusal now refuses failed/empty pre-read before writes, restores after curl failure, and refuses restore read-back drift with the previous value. Wording was made factual for `az apim update`, `az keyvault set-policy` and the non-entitled-caller test. Resource-group teardown now sends the pre-existing-group refusal to stderr.
+- Validation: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS with 504 checks; `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS with 763 checks in 253.41 s using isolated `AZURE_CONFIG_DIR`; `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS with 34 checks in 10.25 s. No live Azure command ran.
+- Mutations: resource-group new/existing/created-rerun/deleted-after-receipt/exists-failure; reuse what-if-only/create-only/bad-argument; Desktop read-back missing URI/fallback false; hostname non-Succeeded, wrong CNAME, missing preserve of `negotiateClientCertificate`, Key Vault retry removed, non-Key Vault retry allowed, Updating wait removed, Failed state allowed, certificate timeout allowed, non-401 receipt write, gateway URL ignoring address receipt; model failed read, empty read, curl-failure restore skipped, restore mismatch ignored; teardown pre-existing refusal on stdout. Each mutation keeps the suite loadable with the baseline check count for that run and at least one check fails; bash-block mutants also parse with `bash -n`.
+
 
 ## P90 Portal path and staged screenshots for the Azure CLI setup guide, 2026-10-01
 
@@ -110,6 +117,22 @@ Round 4 results:
 - GREEN: `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS, 43 guides, 7.83 s.
 - GREEN: `pwsh -NoProfile -File .\tests\Test-PortalCaptureSpecs.ps1` PASS, 45 checks, 1.35 s.
 - Negative proofs against repository-local temporary copies, each at the 567-check baseline with at least one failure: renamed Part 2 portal title; changed mapped Basic v2 az lead; added unmapped Part 8 portal step; used undefined `$UNDEFINED_RESOLVER_URL`; used undefined `${UNDEFINED_CLIENT_ID}`; altered Part 7 loopback redirect; removed `DESKTOP_SIGN_IN_FLOW` from broker wording; published `$DESKTOP_EXTRA_AUDIENCE`; removed the P90 pending row; added a fake pending row; emptied the temporary P90 staged spec; removed the Part 2 overview portal anchor; inserted a banned `Do not` phrase.
+
+
+Round 5 results:
+- Merged P89 round 10 commit `1a088d4` into `p90-portal-guide` and resolved only portal-guide prose around the new P89 command content. P89 fenced bash blocks compare byte-identical after the merge: 57 bash fences, 0 differences; all 55 P89 `Expected result:` lines are present.
+- Portal mapping updates cover P89's new lead sentences: `The create follows review of the what-if output.` maps to Part 2 reuse; `Resolve the live gateway URL and SKU.` maps to the new Part 8 URL/SKU step; `Delete the gateway resource group only when this guide created it.` maps to Part 12 delete. Portal steps cite `P89-RESOURCE-GROUP`, `P89-GATEWAY-URL`, `P89-MODEL-REFUSAL` and `P89-TEARDOWN-GROUP`.
+- Part 8 now states the portal views for Gateway URL and pricing tier, the `/claude` handover URL suffix from `infra/main.bicep:516`, and the custom-hostname receipt rule from §9. The JSON handover-file step keeps the no-portal-equivalent sentence.
+- Part 9 now states the command route's APIM `Succeeded` prerequisite, Cloud Shell `dig` availability, CNAME check, post-Save 15-minute-or-longer wait, provisioning/certificate polling, and no-portal-equivalent HTTPS 401/local receipt proof.
+- Part 11 now states the `/claude` request base and the custom-hostname rule, and describes model-refusal parity through `models-standard` narrowing, restore and read-back comparison.
+- Part 12 now binds resource-group deletion to `.p89-receipts/resource-group.json` `created:true`; reused-APIM gateway artifacts remain in place and have read-only portal views, while removal stays out of scope.
+- Part 2 now states that the API Management **Managed identity** tab is optional in Learn but required for this gateway because `infra/main.bicep:506-513` reads `apim.identity.principalId`.
+- `tests/Test-AzPortalGuide.ps1` now guards the new mappings and marker citations and rejects `**Change later.**` paragraphs that start with bare imperative verbs: Change, Edit, Rerun, Update, Delete, Add, Set, Run, Regenerate or Redistribute.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-AzPortalGuide.ps1` PASS, 588 checks, 2.57 s.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS, 504 checks, 326.49 s.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-PortalCaptureSpecs.ps1` PASS, 45 checks, 2.22 s.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS, 43 guides, 12.29 s.
+- Negative proofs against repository-local temporary copies, each at the 588-check baseline with at least one failure: removed `P89-RESOURCE-GROUP`; changed the reused-APIM create lead; removed the Part 8 URL/SKU portal step; removed `P89-GATEWAY-URL`; removed `P89-MODEL-REFUSAL`; changed the teardown-group lead; removed `P89-TEARDOWN-GROUP`; started a Change-later paragraph with `Regenerate`.
 
 ## P71 follow-up: a lookup starts one refresh, 2026-09-30
 
@@ -1660,6 +1683,22 @@ Round 4 results:
 - GREEN: `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS, 43 guides, 7.83 s.
 - GREEN: `pwsh -NoProfile -File .\tests\Test-PortalCaptureSpecs.ps1` PASS, 45 checks, 1.35 s.
 - Negative proofs against repository-local temporary copies, each at the 567-check baseline with at least one failure: renamed Part 2 portal title; changed mapped Basic v2 az lead; added unmapped Part 8 portal step; used undefined `$UNDEFINED_RESOLVER_URL`; used undefined `${UNDEFINED_CLIENT_ID}`; altered Part 7 loopback redirect; removed `DESKTOP_SIGN_IN_FLOW` from broker wording; published `$DESKTOP_EXTRA_AUDIENCE`; removed the P90 pending row; added a fake pending row; emptied the temporary P90 staged spec; removed the Part 2 overview portal anchor; inserted a banned `Do not` phrase.
+
+
+Round 5 results:
+- Merged P89 round 10 commit `1a088d4` into `p90-portal-guide` and resolved only portal-guide prose around the new P89 command content. P89 fenced bash blocks compare byte-identical after the merge: 57 bash fences, 0 differences; all 55 P89 `Expected result:` lines are present.
+- Portal mapping updates cover P89's new lead sentences: `The create follows review of the what-if output.` maps to Part 2 reuse; `Resolve the live gateway URL and SKU.` maps to the new Part 8 URL/SKU step; `Delete the gateway resource group only when this guide created it.` maps to Part 12 delete. Portal steps cite `P89-RESOURCE-GROUP`, `P89-GATEWAY-URL`, `P89-MODEL-REFUSAL` and `P89-TEARDOWN-GROUP`.
+- Part 8 now states the portal views for Gateway URL and pricing tier, the `/claude` handover URL suffix from `infra/main.bicep:516`, and the custom-hostname receipt rule from §9. The JSON handover-file step keeps the no-portal-equivalent sentence.
+- Part 9 now states the command route's APIM `Succeeded` prerequisite, Cloud Shell `dig` availability, CNAME check, post-Save 15-minute-or-longer wait, provisioning/certificate polling, and no-portal-equivalent HTTPS 401/local receipt proof.
+- Part 11 now states the `/claude` request base and the custom-hostname rule, and describes model-refusal parity through `models-standard` narrowing, restore and read-back comparison.
+- Part 12 now binds resource-group deletion to `.p89-receipts/resource-group.json` `created:true`; reused-APIM gateway artifacts remain in place and have read-only portal views, while removal stays out of scope.
+- Part 2 now states that the API Management **Managed identity** tab is optional in Learn but required for this gateway because `infra/main.bicep:506-513` reads `apim.identity.principalId`.
+- `tests/Test-AzPortalGuide.ps1` now guards the new mappings and marker citations and rejects `**Change later.**` paragraphs that start with bare imperative verbs: Change, Edit, Rerun, Update, Delete, Add, Set, Run, Regenerate or Redistribute.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-AzPortalGuide.ps1` PASS, 588 checks, 2.57 s.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS, 504 checks, 326.49 s.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-PortalCaptureSpecs.ps1` PASS, 45 checks, 2.22 s.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS, 43 guides, 12.29 s.
+- Negative proofs against repository-local temporary copies, each at the 588-check baseline with at least one failure: removed `P89-RESOURCE-GROUP`; changed the reused-APIM create lead; removed the Part 8 URL/SKU portal step; removed `P89-GATEWAY-URL`; removed `P89-MODEL-REFUSAL`; changed the teardown-group lead; removed `P89-TEARDOWN-GROUP`; started a Change-later paragraph with `Regenerate`.
 
 ## P71 follow-up: the deadline tests prove termination without racing it, 2026-09-30
 

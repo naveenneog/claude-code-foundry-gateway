@@ -65,6 +65,7 @@ FinOps beyond the gateway's named values (AUM, Turnstile, chargeback reports, US
 - `bu-unassigned` — not covered: business-unit assignment behavior is out of scope for this guide.
 - `usd-budgets` — not covered: USD reconciler and FinOps budget projection are out of scope.
 - `usd-budget-state` — not covered: USD reconciler state is out of scope.
+- Removing gateway artifacts from a reused APIM is out of scope: API `claude-foundry`, named values, logger `appinsights`, diagnostics, diagnostic setting `claude-llm-logs`, `appi-<prefix>` and `log-<prefix>`.
 
 ## 1. Variables, prerequisites and discovery
 
@@ -143,11 +144,46 @@ Capture id: `architecture-foundry-access`.
 Create the resource group.
 
 ```bash
-az group create -n "$GATEWAY_RG" -l "$LOCATION" -o none
+# P89-RESOURCE-GROUP-BEGIN
+p89_resource_group() {
+  mkdir -p .p89-receipts
+  if [ -r .p89-receipts/resource-group.json ] && jq -e --arg name "$GATEWAY_RG" '.resourceGroup.created == true and .resourceGroup.name == $name' .p89-receipts/resource-group.json >/dev/null; then
+    if ! existed="$(az group exists -n "$GATEWAY_RG")"; then
+      echo "Refused: could not check resource group existence; no create ran." >&2
+      return 1
+    fi
+    if [ "$existed" = "true" ]; then
+      echo "Existing receipt says this guide created '$GATEWAY_RG'; keeping it."
+      return 0
+    fi
+    if [ "$existed" = "false" ]; then
+      az group create -n "$GATEWAY_RG" -l "$LOCATION" -o none || return 1
+      jq -n --arg name "$GATEWAY_RG" '{resourceGroup:{created:true,name:$name}}' > .p89-receipts/resource-group.json
+      return 0
+    fi
+    echo "Refused: resource group existence check returned '$existed'; no create ran." >&2
+    return 1
+  fi
+  if ! existed="$(az group exists -n "$GATEWAY_RG")"; then
+    echo "Refused: could not check resource group existence; no create ran." >&2
+    return 1
+  fi
+  if [ "$existed" = "true" ]; then
+    jq -n --arg name "$GATEWAY_RG" '{resourceGroup:{created:false,name:$name}}' > .p89-receipts/resource-group.json
+  elif [ "$existed" = "false" ]; then
+    az group create -n "$GATEWAY_RG" -l "$LOCATION" -o none || return 1
+    jq -n --arg name "$GATEWAY_RG" '{resourceGroup:{created:true,name:$name}}' > .p89-receipts/resource-group.json
+  else
+    echo "Refused: resource group existence check returned '$existed'; no create ran." >&2
+    return 1
+  fi
+}
+p89_resource_group
+# P89-RESOURCE-GROUP-END
 az group show -n "$GATEWAY_RG" --query "{name:name,location:location}" -o json
 ```
 
-Expected result: the group exists in the chosen region. This mirrors `deploy.ps1:134`.
+Expected result: the group exists in the chosen region, and `.p89-receipts/resource-group.json` records whether this guide created it. This mirrors `deploy.ps1:134`.
 
 Confirm the APIM name is absent before running the first-deployment commands below.
 
@@ -159,7 +195,7 @@ p89_apim_absent() {
     return 1
   fi
   existing_count="$(printf '%s' "$apim_list_json" | jq --arg name "$APIM_NAME" '[.[] | select(.name == $name)] | length')"
-  if [ "$existing_count" -ne 0 ]; then
+  if [ "$existing_count" != "0" ]; then
     echo "Refused: APIM '$APIM_NAME' already exists in '$GATEWAY_RG'. For an unused existing APIM, use P89-REUSE-APIM below; for an installed gateway, use Install-ClaudeGateway.ps1 -ExistingApimName so values are read back first, or use the targeted §4, §6 and §9 blocks for single changes." >&2
     return 1
   fi
@@ -213,6 +249,8 @@ Reuse an existing APIM instance that has never hosted this gateway.
 ```bash
 # P89-REUSE-APIM-BEGIN
 p89_deploy_reused_apim() {
+  mode="${1:-}"
+  case "$mode" in whatif|create) ;; *) echo "Refused: pass 'whatif' or 'create'." >&2; return 1 ;; esac
   if ! apim_json="$(az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" -o json)"; then
     echo "Refused: existing APIM '$APIM_NAME' could not be read; no deployment command ran." >&2
     return 1
@@ -230,7 +268,7 @@ p89_deploy_reused_apim() {
     return 1
   fi
   installed_count="$(printf '%s' "$nv_json" | jq '[.[] | select(.name as $n | ["allow-standard","allow-premium","quota-overrides","bu-registry","bu-members","bu-parents","bu-modes","usd-budgets","usd-budget-state","entitlement-source"] | index($n))] | length')"
-  if [ "$installed_count" -gt 0 ]; then
+  if [ -z "$installed_count" ] || [ "$installed_count" != "0" ]; then
     echo "Refused: APIM '$APIM_NAME' already has gateway-owned named values. Use Install-ClaudeGateway.ps1 -ExistingApimName so values are read back and preserved." >&2
     return 1
   fi
@@ -244,12 +282,21 @@ p89_deploy_reused_apim() {
   fi
   GRANT_FOUNDRY_ROLE="true"
   if [ -n "$existing_role" ]; then GRANT_FOUNDRY_ROLE="false"; fi
-  az deployment group what-if -g "$GATEWAY_RG" --template-file infra/main.bicep --parameters namePrefix="$NAME_PREFIX" location="$LOCATION" foundryAccountName="$FOUNDRY_ACCOUNT" foundryResourceGroup="$FOUNDRY_RG" publisherEmail="$PUBLISHER_EMAIL" publisherName="$PUBLISHER_NAME" apimSku="$apim_sku" existingApimName="$APIM_NAME" grantFoundryRole="$GRANT_FOUNDRY_ROLE" sonnetDeployment="$SONNET_DEPLOYMENT" opusDeployment="$OPUS_DEPLOYMENT" haikuDeployment="$HAIKU_DEPLOYMENT" tpmStandard="$TPM_STANDARD" quotaStandard="$QUOTA_STANDARD" tpmPremium="$TPM_PREMIUM" quotaPremium="$QUOTA_PREMIUM" quotaOrg="$QUOTA_ORG" modelsStandard="$MODELS_STANDARD" modelsPremium="$MODELS_PREMIUM" callsPerMinute="$CALLS_PER_MINUTE" entitlementSource=named-value entitlementCacheSeconds="$ENTITLEMENT_CACHE_SECONDS" desktopExtraAudience="$DESKTOP_EXTRA_AUDIENCE" || return 1
+  if [ "$mode" = "whatif" ]; then
+    az deployment group what-if -g "$GATEWAY_RG" --template-file infra/main.bicep --parameters namePrefix="$NAME_PREFIX" location="$LOCATION" foundryAccountName="$FOUNDRY_ACCOUNT" foundryResourceGroup="$FOUNDRY_RG" publisherEmail="$PUBLISHER_EMAIL" publisherName="$PUBLISHER_NAME" apimSku="$apim_sku" existingApimName="$APIM_NAME" grantFoundryRole="$GRANT_FOUNDRY_ROLE" sonnetDeployment="$SONNET_DEPLOYMENT" opusDeployment="$OPUS_DEPLOYMENT" haikuDeployment="$HAIKU_DEPLOYMENT" tpmStandard="$TPM_STANDARD" quotaStandard="$QUOTA_STANDARD" tpmPremium="$TPM_PREMIUM" quotaPremium="$QUOTA_PREMIUM" quotaOrg="$QUOTA_ORG" modelsStandard="$MODELS_STANDARD" modelsPremium="$MODELS_PREMIUM" callsPerMinute="$CALLS_PER_MINUTE" entitlementSource=named-value entitlementCacheSeconds="$ENTITLEMENT_CACHE_SECONDS" desktopExtraAudience="$DESKTOP_EXTRA_AUDIENCE"
+    return $?
+  fi
   az deployment group create -g "$GATEWAY_RG" -n "claude-gateway-reuse" --template-file infra/main.bicep --parameters namePrefix="$NAME_PREFIX" location="$LOCATION" foundryAccountName="$FOUNDRY_ACCOUNT" foundryResourceGroup="$FOUNDRY_RG" publisherEmail="$PUBLISHER_EMAIL" publisherName="$PUBLISHER_NAME" apimSku="$apim_sku" existingApimName="$APIM_NAME" grantFoundryRole="$GRANT_FOUNDRY_ROLE" sonnetDeployment="$SONNET_DEPLOYMENT" opusDeployment="$OPUS_DEPLOYMENT" haikuDeployment="$HAIKU_DEPLOYMENT" tpmStandard="$TPM_STANDARD" quotaStandard="$QUOTA_STANDARD" tpmPremium="$TPM_PREMIUM" quotaPremium="$QUOTA_PREMIUM" quotaOrg="$QUOTA_ORG" modelsStandard="$MODELS_STANDARD" modelsPremium="$MODELS_PREMIUM" callsPerMinute="$CALLS_PER_MINUTE" entitlementSource=named-value entitlementCacheSeconds="$ENTITLEMENT_CACHE_SECONDS" desktopExtraAudience="$DESKTOP_EXTRA_AUDIENCE" -o json || return 1
   az deployment group show -g "$GATEWAY_RG" -n "claude-gateway-reuse" --query "properties.outputs.{apim:apimName.value,url:gatewayUrl.value,principal:apimPrincipalId.value}" -o json
 }
-p89_deploy_reused_apim
+p89_deploy_reused_apim whatif
 # P89-REUSE-APIM-END
+```
+
+The create follows review of the what-if output.
+
+```bash
+p89_deploy_reused_apim create
 ```
 
 Expected result: a clean existing v2 APIM is reused without resetting an already-installed gateway. `grantFoundryRole=false` is passed when the gateway identity already has Cognitive Services User, matching `Install-ClaudeGateway.ps1:1514-1541`.
@@ -284,10 +331,10 @@ Expected result: the value length is at most 4,096, and the final read returns t
 
 ### Part 2 in the portal
 
-1. **Create the resource group.** portal.azure.com > Resource groups > Create: Subscription `$SUBSCRIPTION_ID`; Resource group `$GATEWAY_RG`; Region `$LOCATION`; **Review + create**; **Create**.
+1. **Create the resource group.** portal.azure.com > Resource groups > Create: Subscription `$SUBSCRIPTION_ID`; Resource group `$GATEWAY_RG`; Region `$LOCATION`; **Review + create**; **Create**. This mirrors `p89_resource_group` (`P89-RESOURCE-GROUP`).
 2. **Confirm the APIM name is absent.** portal.azure.com > API Management services: filter Resource group to `$GATEWAY_RG`; confirm no service is named `$APIM_NAME`. No Save button is used for read-only review. This mirrors `p89_apim_absent` (`P89-APIM-ABSENT`).
 3. **Validate the gateway template before deployment.** The command builds `infra/main.json` from `infra/main.bicep` before what-if (`az bicep build --file infra/main.bicep`). What-if has no portal equivalent; Learn states that what-if is available through Azure PowerShell, Azure CLI or REST API operations. The portal's template validation route is portal.azure.com search **deploy a custom template** > **Build your own template in the editor**; replace the blank template with the JSON from `infra/main.json`; **Save**; on the deployment values pane use the same values as the §2 deployment command, including `apimCapacity=1`; **Review + create**. The portal validates the template and values, and **Create** starts deployment after validation. Source: §2 lead sentence `Validate the gateway template before deployment.`, https://learn.microsoft.com/azure/azure-resource-manager/templates/quickstart-create-templates-use-the-portal and https://learn.microsoft.com/azure/azure-resource-manager/templates/deploy-what-if.
-4. **Deploy the gateway template.** In the custom template deployment from step 3, **Create** is the one-to-one portal equivalent of the §2 `az deployment group create` commands for Basic v2, Standard v2 or Premium v2. The API Management wizard route is portal.azure.com > Create a resource > Integration > API Management > Basics: Subscription `$SUBSCRIPTION_ID`; Resource group `$GATEWAY_RG`; Region `$LOCATION`; Resource name `$APIM_NAME`; Organization name `$PUBLISHER_NAME`; Administrator email `$PUBLISHER_EMAIL`; Pricing tier `Basic v2`, `Standard v2` or `Premium v2`; Units `1`; Managed identity tab: optionally enable a system-assigned managed identity; **Review + create**; **Create**. The wizard creates the service only; after that, the reuse step deploys the `claude` API, operations, policy, named values, `appinsights` logger, API diagnostic and `claude-llm-logs` diagnostic setting. The system-assigned identity is required because `infra/main.bicep:506-513` reads `apim.identity.principalId`; a missing identity produces `The language expression property 'identity' doesn't exist`. Source: https://learn.microsoft.com/azure/api-management/get-started-create-service-instance.
+4. **Deploy the gateway template.** In the custom template deployment from step 3, **Create** is the one-to-one portal equivalent of the §2 `az deployment group create` commands for Basic v2, Standard v2 or Premium v2. The API Management wizard route is portal.azure.com > Create a resource > Integration > API Management > Basics: Subscription `$SUBSCRIPTION_ID`; Resource group `$GATEWAY_RG`; Region `$LOCATION`; Resource name `$APIM_NAME`; Organization name `$PUBLISHER_NAME`; Administrator email `$PUBLISHER_EMAIL`; Pricing tier `Basic v2`, `Standard v2` or `Premium v2`; Units `1`; **Managed identity** tab: enable the system-assigned managed identity; **Review + create**; **Create**. Learn lists the tab as optional; this gateway requires the identity because `infra/main.bicep:506-513` reads `apim.identity.principalId`. The wizard creates the service only; after that, the reuse step deploys the `claude` API, operations, policy, named values, `appinsights` logger, API diagnostic and `claude-llm-logs` diagnostic setting. The system-assigned identity is required because `infra/main.bicep:506-513` reads `apim.identity.principalId`; a missing identity produces `The language expression property 'identity' doesn't exist`. Source: https://learn.microsoft.com/azure/api-management/get-started-create-service-instance.
 
 ![API Management gateway Overview blade with redacted resource and gateway URL fields](guide/a3-apim-overview.png)
 
@@ -297,7 +344,7 @@ Capture id: `gateway-overview`.
 
 Capture id: `p54-apim-network`.
 
-5. **Reuse an existing APIM instance that has never hosted this gateway.** API Management services > `$APIM_NAME` > Overview or Pricing tier: SKU is `Basic v2`, `Standard v2` or `Premium v2`; Security > Managed identities > System assigned: Status **On**; APIs > Named values: none of `allow-standard`, `allow-premium`, `quota-overrides`, `bu-registry`, `bu-members`, `bu-parents`, `bu-modes`, `usd-budgets`, `usd-budget-state` or `entitlement-source` exists; Foundry account > Access control (IAM) > Role assignments: check whether the gateway identity already has `Cognitive Services User`. Then deploy the custom template with `existingApimName=$APIM_NAME`; `infra/main.bicep:178-181` reads the existing service name and `infra/main.bicep:250-296` does not write the service resource. This mirrors `p89_deploy_reused_apim` (`P89-REUSE-APIM`).
+5. **Reuse an existing APIM instance that has never hosted this gateway.** API Management services > `$APIM_NAME` > Overview or Pricing tier: SKU is `Basic v2`, `Standard v2` or `Premium v2`; Security > Managed identities > System assigned: Status **On**; APIs > Named values: none of `allow-standard`, `allow-premium`, `quota-overrides`, `bu-registry`, `bu-members`, `bu-parents`, `bu-modes`, `usd-budgets`, `usd-budget-state` or `entitlement-source` exists; Foundry account > Access control (IAM) > Role assignments: check whether the gateway identity already has `Cognitive Services User`. The portal custom-template pane runs the `existingApimName=$APIM_NAME` deployment after the what-if output review; `infra/main.bicep:178-181` reads the existing service name and `infra/main.bicep:250-296` does not write the service resource. This mirrors `p89_deploy_reused_apim` (`P89-REUSE-APIM`) and the create block under the lead sentence `The create follows review of the what-if output.`
 6. **Read policy deployment state.** API Management services > `$APIM_NAME` > APIs > `claude-foundry` > Settings: confirm API URL suffix `claude`, HTTPS and subscription setting; APIs > `claude-foundry` > Design > All operations: confirm operations and policy sections. The fields are template output, not portal-create fields.
 
 ![API Management API Settings tab for the Claude API showing API URL suffix and subscription state](guide/docs-review-api-settings.png)
@@ -332,7 +379,7 @@ p89_gateway_identity() {
   if ! printf '%s' "$APIM_IDENTITY_TYPE" | grep -q 'SystemAssigned' || [ -z "$APIM_PRINCIPAL_ID" ]; then
     echo "Refused: API Management managed identity is '${APIM_IDENTITY_TYPE:-none}' and principalId is empty." >&2
     echo "Fix: portal > API Management > Security > Managed identities > System assigned > Status On > Save, then rerun." >&2
-    echo "Do not use 'az apim update' for this; without --enable-managed-identity true, azure-cli apim_update sets instance.identity = None." >&2
+    echo "az apim update without --enable-managed-identity true sets the identity to None (azure-cli apim/custom.py apim_update); this block uses az rest PATCH." >&2
     return 1
   fi
   if ! FOUNDRY_ID="$(az cognitiveservices account show -g "$FOUNDRY_RG" -n "$FOUNDRY_ACCOUNT" --query id -o tsv)" || [ -z "$FOUNDRY_ID" ]; then
@@ -501,7 +548,7 @@ Verify the authorization and budget named values that the template initialized.
 az apim nv list -g "$GATEWAY_RG" --service-name "$APIM_NAME" --query "[?name=='allow-standard' || name=='allow-premium' || name=='quota-overrides' || name=='external-idp-extra-audience'].{name:name,value:value}" -o table
 ```
 
-Expected result: `allow-*` values are comma-sentinel lists, `quota-overrides` is `,,` until personal overrides exist, and the Desktop audience is the disabled sentinel until external sign-in is configured. Do not reset these values on an existing gateway; entitlement sync and budget commands own them after deployment. This mirrors `infra/main.bicep:215-224`, `infra/main.bicep:367-370`, `scripts/Sync-ClaudeAccess.ps1:122-129`, `scripts/ClaudeBudgetOverride.ps1:1-29` and `scripts/ApimNamedValue.ps1:150-154`.
+Expected result: `allow-*` values are comma-sentinel lists, `quota-overrides` is `,,` until personal overrides exist, and the Desktop audience is the disabled sentinel until external sign-in is configured. On an existing gateway, entitlement sync and budget commands own these values after deployment. This mirrors `infra/main.bicep:215-224`, `infra/main.bicep:367-370`, `scripts/Sync-ClaudeAccess.ps1:122-129`, `scripts/ClaudeBudgetOverride.ps1:1-29` and `scripts/ApimNamedValue.ps1:150-154`.
 
 ### Part 4 in the portal
 
@@ -538,9 +585,9 @@ p89_group_receipts() {
       return 1
     fi
     count="$(printf '%s' "$list_json" | jq 'length')"
-    if [ "$count" -eq 1 ]; then
+    if [ "$count" = "1" ]; then
       printf '%s' "$list_json" | jq --arg name "$name" '{group:{created:false,id:.[0].id,displayName:$name,createdAt:(.[0].createdDateTime // "")}}' > "$receipt"
-    elif [ "$count" -eq 0 ]; then
+    elif [ "$count" = "0" ]; then
       if ! created_group_json="$(az ad group create --display-name "$name" --mail-nickname "$name" -o json)"; then
         echo "Refused: group '$name' could not be created. Tenant settings may block group creation by this principal; ask the tenant admin to create the group or grant permission. Nothing recorded." >&2
         return 1
@@ -751,7 +798,7 @@ Capture id: `docs-review-entra-groups`.
 4. **Add one developer to a tier and publish.** entra.microsoft.com > Groups > `$STANDARD_GROUP` > Members > Add members: select `$DEVELOPER_UPN`; **Add**. Remove the same object from `$PREMIUM_GROUP` when moving tiers.
 5. **Remove one developer from both tiers and publish.** entra.microsoft.com > Groups > tier group > Members: select the developer; **Remove**; confirm removal.
 
-**Change later.** Change group membership in Entra, rerun the §5 Graph read and publish blocks, then verify the `allow-standard` and `allow-premium` named values before relying on enforcement.
+**Change later.** Entra group membership changes are followed by the §5 Graph read and publish blocks; the `allow-standard` and `allow-premium` named values are verified before relying on enforcement.
 
 ## 6. Day-two tier operations
 
@@ -877,7 +924,7 @@ Capture id: `docs-review-daily-quota-editor`.
 6. **Deploy a new Claude model through ARM when Azure requires Anthropic provider data.** ai.azure.com > Model catalog > Claude model > Deploy: deployment name `<deployment-name>`; capacity and version matching the deployment body; **Deploy**. Source: https://learn.microsoft.com/azure/ai-foundry/how-to/deploy-models-managed.
 7. **Add the deployed model to tiers and record prices.** API Management services > `$APIM_NAME` > APIs > Named values > `models-premium` or `models-standard` > Edit: add the deployment name with sentinel commas; **Save**. No portal equivalent for the repository `config/price-book.json` edit.
 
-**Change later.** Change tier limits and personal overrides in APIM named values; for a model change, deploy the model in Foundry, update the tier model-list named value and update `config/price-book.json` in the repository.
+**Change later.** Tier limits and personal overrides live in APIM named values; model changes involve Foundry deployment, the tier model-list named value and `config/price-book.json` in the repository.
 
 ## 7. Developer sign-in mode and Claude Desktop sign-in
 
@@ -898,9 +945,9 @@ p89_desktop_app_receipt() {
     return 1
   fi
   count="$(printf '%s' "$app_list_json" | jq 'length')"
-  if [ "$count" -eq 1 ]; then
+  if [ "$count" = "1" ]; then
     printf '%s' "$app_list_json" | jq --arg displayName "$DESKTOP_APP_NAME" '{app:{created:false,appId:.[0].appId,objectId:.[0].id,displayName:$displayName}}' > .p89-receipts/desktop-app.json
-  elif [ "$count" -eq 0 ]; then
+  elif [ "$count" = "0" ]; then
     if ! created_app_json="$(az ad app create --display-name "$DESKTOP_APP_NAME" --sign-in-audience AzureADMyOrg -o json)"; then
       echo "Refused: app '$DESKTOP_APP_NAME' could not be created. Tenant settings may block app registration by this principal; ask the tenant admin to create the app or grant permission. Nothing recorded." >&2
       return 1
@@ -945,7 +992,15 @@ p89_desktop_redirects() {
     mapfile -t merged_uris < <(jq -r '.[]' <<< "$merged_json")
     az ad app update --id "$DESKTOP_CLIENT_ID" --is-fallback-public-client true --public-client-redirect-uris "${merged_uris[@]}" -o none || return 1
   fi
-  az ad app show --id "$DESKTOP_CLIENT_ID" --query "{appId:appId,publicClient:publicClient.redirectUris,isFallbackPublicClient:isFallbackPublicClient}" -o json
+  readback_json="$(az ad app show --id "$DESKTOP_CLIENT_ID" -o json)" || {
+    echo "Refused: could not read Desktop app after redirect update." >&2
+    return 1
+  }
+  jq -e --argjson required "$required_json" '. as $app | (.isFallbackPublicClient == true) and (all($required[]; . as $u | ($app.publicClient.redirectUris // []) | index($u)))' <<< "$readback_json" >/dev/null || {
+    echo "Refused: Desktop app read-back does not contain every required redirect URI or isFallbackPublicClient is not true." >&2
+    return 1
+  }
+  jq '{appId, publicClient:{redirectUris:.publicClient.redirectUris}, isFallbackPublicClient}' <<< "$readback_json"
 }
 p89_desktop_redirects
 # P89-DESKTOP-REDIRECTS-END
@@ -974,48 +1029,80 @@ Expected result: the app id is stored as `external-idp-extra-audience` for id-to
 
 ## 8. Developer handover file
 
+Resolve the live gateway URL and SKU.
+
+```bash
+# P89-GATEWAY-URL-BEGIN
+p89_gateway_url() {
+  if ! apim_state="$(az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" -o json)"; then
+    echo "Refused: could not read APIM gateway URL; no handover value was produced." >&2
+    return 1
+  fi
+  gateway_base="$(printf '%s' "$apim_state" | jq -r '.gatewayUrl // ""')"
+  export SKU="$(printf '%s' "$apim_state" | jq -r '.sku.name // ""')"
+  if [ -z "$gateway_base" ] || [ -z "$SKU" ]; then
+    echo "Refused: APIM gatewayUrl or SKU is empty; no handover value was produced." >&2
+    return 1
+  fi
+  if [ -r .p89-receipts/gateway-address.json ]; then
+    receipt_host="$(jq -r '.address.hostname // ""' .p89-receipts/gateway-address.json)"
+    if [ -n "$receipt_host" ] && printf '%s' "$apim_state" | jq -e --arg h "$receipt_host" '(.hostnameConfigurations // .properties.hostnameConfigurations // [])[]? | select(.type=="Proxy" and (.hostName|ascii_downcase)==($h|ascii_downcase))' >/dev/null; then
+      gateway_base="https://${receipt_host}"
+    fi
+  fi
+  export GATEWAY_URL="${gateway_base%/}/claude"
+  printf '%s\n' "$GATEWAY_URL"
+}
+p89_gateway_url
+# P89-GATEWAY-URL-END
+```
+
+Expected result: `GATEWAY_URL` is the live APIM gateway URL plus `/claude`, matching `infra/main.bicep:516` and `Install-ClaudeGateway.ps1:1585-1586`. When §9 has a verified `.p89-receipts/gateway-address.json` and the live APIM still lists that Proxy hostname, the URL is `https://<hostname>/claude`, matching `Install-ClaudeGateway.ps1:1590` and `scripts/ClaudeGatewayAddress.ps1:118,123`.
+
 Generate `onboarding/claude-gateway.json` with the same schema the installer writes.
 
 ```bash
 # P89-HANDOVER-BEGIN
-mkdir -p onboarding
-GATEWAY_URL="$(az deployment group show -g "$GATEWAY_RG" -n "claude-gateway-basicv2" --query properties.outputs.gatewayUrl.value -o tsv)"
-export SKU="${SKU:-BasicV2}"
-export ENTITLEMENT_STORE="${ENTITLEMENT_STORE:-named-value}"
-export RESOLVER_INBOUND_ACCESS="${RESOLVER_INBOUND_ACCESS:-private}"
-export PROJECTION_DEPLOYER="${PROJECTION_DEPLOYER:-./scripts/Deploy-ClaudeProjection.ps1}"
-export AUTH_MODE="${AUTH_MODE:-interactive}"
-STANDARD_MODELS_JSON="$(printf '%s' "$MODELS_STANDARD" | tr ',' '\n' | awk 'NF' | jq -R . | jq -s .)"
-PREMIUM_MODELS_JSON="$(printf '%s' "$MODELS_PREMIUM" | tr ',' '\n' | awk 'NF' | jq -R . | jq -s .)"
-jq -n --arg mode "gateway" --arg gatewayUrl "$GATEWAY_URL" --arg tenantId "$TENANT_ID" --arg apimName "$APIM_NAME" --arg resourceGroup "$GATEWAY_RG" --arg subscriptionId "$SUBSCRIPTION_ID" --arg sku "$SKU" --arg location "$LOCATION" --arg foundryAccount "$FOUNDRY_ACCOUNT" --arg foundryResourceGroup "$FOUNDRY_RG" --arg standardGroup "$STANDARD_GROUP" --arg premiumGroup "$PREMIUM_GROUP" --arg authMode "$AUTH_MODE" --arg entitlementStore "$ENTITLEMENT_STORE" --arg resolverInboundAccess "$RESOLVER_INBOUND_ACCESS" --arg projectionDeployer "$PROJECTION_DEPLOYER" --arg sonnet "$SONNET_DEPLOYMENT" --arg opus "$OPUS_DEPLOYMENT" --arg haiku "$HAIKU_DEPLOYMENT" --argjson standardModels "$STANDARD_MODELS_JSON" --argjson premiumModels "$PREMIUM_MODELS_JSON" --argjson tpmStandard "$TPM_STANDARD" --argjson quotaStandard "$QUOTA_STANDARD" --argjson tpmPremium "$TPM_PREMIUM" --argjson quotaPremium "$QUOTA_PREMIUM" --argjson quotaOrg "$QUOTA_ORG" --argjson callsPerMinute "$CALLS_PER_MINUTE" --arg desktopClientId "$DESKTOP_CLIENT_ID" --arg flow "${DESKTOP_SIGN_IN_FLOW:-browser}" --arg issuer "https://login.microsoftonline.com/${TENANT_ID}/v2.0" --arg modelsStandard "$MODELS_STANDARD" --arg modelsPremium "$MODELS_PREMIUM" '{
-  mode:$mode,
-  gatewayUrl:$gatewayUrl,
-  tenantId:$tenantId,
-  apimName:$apimName,
-  resourceGroup:$resourceGroup,
-  subscriptionId:$subscriptionId,
-  sku:$sku,
-  location:$location,
-  foundryAccount:$foundryAccount,
-  foundryResourceGroup:$foundryResourceGroup,
-  standardGroup:$standardGroup,
-  premiumGroup:$premiumGroup,
-  authMode:$authMode,
-  entitlementStore:$entitlementStore,
-  resolverInboundAccess:$resolverInboundAccess,
-  projectionDeployer:$projectionDeployer,
-  desktopSignIn:{kind:"external-idp",flow:$flow,bearerTokenType:"id_token",clientId:$desktopClientId,issuer:$issuer},
-  deployments:[{name:$sonnet,model:$sonnet},{name:$opus,model:$opus},{name:$haiku,model:$haiku}],
-  models:[$sonnet,$opus,$haiku],
-  tiers:{
-    standard:{tokensPerMinute:$tpmStandard,tokensPerDay:$quotaStandard,models:$standardModels,modelAllowList:$modelsStandard},
-    premium:{tokensPerMinute:$tpmPremium,tokensPerDay:$quotaPremium,models:$premiumModels,modelAllowList:$modelsPremium}
-  },
-  organisation:{tokensPerMonth:$quotaOrg,shared:true,softCap:true},
-  requestsPerMinute:$callsPerMinute,
-  generated:(now|strftime("%Y-%m-%d %H:%M"))
-}' > onboarding/claude-gateway.json
-jq -e '.mode=="gateway" and (.gatewayUrl|test("^https://")) and (.desktopSignIn.kind=="external-idp" or .desktopSignIn.kind=="helper-script") and (.subscriptionId|type=="string") and (.tiers.standard.models|type=="array") and (.requestsPerMinute|type=="number")' onboarding/claude-gateway.json
+p89_handover() {
+  mkdir -p onboarding
+  p89_gateway_url || return 1
+  export ENTITLEMENT_STORE="${ENTITLEMENT_STORE:-named-value}"
+  export RESOLVER_INBOUND_ACCESS="${RESOLVER_INBOUND_ACCESS:-private}"
+  export PROJECTION_DEPLOYER="${PROJECTION_DEPLOYER:-./scripts/Deploy-ClaudeProjection.ps1}"
+  export AUTH_MODE="${AUTH_MODE:-interactive}"
+  STANDARD_MODELS_JSON="$(printf '%s' "$MODELS_STANDARD" | tr ',' '\n' | awk 'NF' | jq -R . | jq -s .)"
+  PREMIUM_MODELS_JSON="$(printf '%s' "$MODELS_PREMIUM" | tr ',' '\n' | awk 'NF' | jq -R . | jq -s .)"
+  jq -n --arg mode "gateway" --arg gatewayUrl "$GATEWAY_URL" --arg tenantId "$TENANT_ID" --arg apimName "$APIM_NAME" --arg resourceGroup "$GATEWAY_RG" --arg subscriptionId "$SUBSCRIPTION_ID" --arg sku "$SKU" --arg location "$LOCATION" --arg foundryAccount "$FOUNDRY_ACCOUNT" --arg foundryResourceGroup "$FOUNDRY_RG" --arg standardGroup "$STANDARD_GROUP" --arg premiumGroup "$PREMIUM_GROUP" --arg authMode "$AUTH_MODE" --arg entitlementStore "$ENTITLEMENT_STORE" --arg resolverInboundAccess "$RESOLVER_INBOUND_ACCESS" --arg projectionDeployer "$PROJECTION_DEPLOYER" --arg sonnet "$SONNET_DEPLOYMENT" --arg opus "$OPUS_DEPLOYMENT" --arg haiku "$HAIKU_DEPLOYMENT" --argjson standardModels "$STANDARD_MODELS_JSON" --argjson premiumModels "$PREMIUM_MODELS_JSON" --argjson tpmStandard "$TPM_STANDARD" --argjson quotaStandard "$QUOTA_STANDARD" --argjson tpmPremium "$TPM_PREMIUM" --argjson quotaPremium "$QUOTA_PREMIUM" --argjson quotaOrg "$QUOTA_ORG" --argjson callsPerMinute "$CALLS_PER_MINUTE" --arg desktopClientId "$DESKTOP_CLIENT_ID" --arg flow "${DESKTOP_SIGN_IN_FLOW:-browser}" --arg issuer "https://login.microsoftonline.com/${TENANT_ID}/v2.0" --arg modelsStandard "$MODELS_STANDARD" --arg modelsPremium "$MODELS_PREMIUM" '{
+    mode:$mode,
+    gatewayUrl:$gatewayUrl,
+    tenantId:$tenantId,
+    apimName:$apimName,
+    resourceGroup:$resourceGroup,
+    subscriptionId:$subscriptionId,
+    sku:$sku,
+    location:$location,
+    foundryAccount:$foundryAccount,
+    foundryResourceGroup:$foundryResourceGroup,
+    standardGroup:$standardGroup,
+    premiumGroup:$premiumGroup,
+    authMode:$authMode,
+    entitlementStore:$entitlementStore,
+    resolverInboundAccess:$resolverInboundAccess,
+    projectionDeployer:$projectionDeployer,
+    desktopSignIn:{kind:"external-idp",flow:$flow,bearerTokenType:"id_token",clientId:$desktopClientId,issuer:$issuer},
+    deployments:[{name:$sonnet,model:$sonnet},{name:$opus,model:$opus},{name:$haiku,model:$haiku}],
+    models:[$sonnet,$opus,$haiku],
+    tiers:{
+      standard:{tokensPerMinute:$tpmStandard,tokensPerDay:$quotaStandard,models:$standardModels,modelAllowList:$modelsStandard},
+      premium:{tokensPerMinute:$tpmPremium,tokensPerDay:$quotaPremium,models:$premiumModels,modelAllowList:$modelsPremium}
+    },
+    organisation:{tokensPerMonth:$quotaOrg,shared:true,softCap:true},
+    requestsPerMinute:$callsPerMinute,
+    generated:(now|strftime("%Y-%m-%d %H:%M"))
+  }' > onboarding/claude-gateway.json
+  jq -e '.mode=="gateway" and (.gatewayUrl|test("^https://")) and (.desktopSignIn.kind=="external-idp" or .desktopSignIn.kind=="helper-script") and (.subscriptionId|type=="string") and (.tiers.standard.models|type=="array") and (.requestsPerMinute|type=="number")' onboarding/claude-gateway.json
+}
+p89_handover
 # P89-HANDOVER-END
 ```
 
@@ -1023,9 +1110,10 @@ Expected result: `jq -e` exits 0, and the file contains no secrets. The key set 
 
 ### Part 8 in the portal
 
-1. **Write the developer handover file.** No portal equivalent: `onboarding/claude-gateway.json` is a repository-local JSON artifact consumed by workstation scripts, and Azure, Entra and Foundry blades have no owner or validator for that schema.
+1. **Resolve the live gateway URL and SKU.** API Management services > `$APIM_NAME` > Overview shows Gateway URL and the pricing tier. The handover URL is the Gateway URL plus `/claude` (`infra/main.bicep:516`). When §9 wrote `.p89-receipts/gateway-address.json` and Custom domains still lists that Gateway hostname, the URL is `https://<hostname>/claude`. This mirrors `p89_gateway_url` (`P89-GATEWAY-URL`).
+2. **Write the developer handover file.** No portal equivalent: `onboarding/claude-gateway.json` is a repository-local JSON artifact consumed by workstation scripts, and Azure, Entra and Foundry blades have no owner or validator for that schema.
 
-**Change later.** Regenerate and redistribute `onboarding/claude-gateway.json` after gateway URL, tenant, SKU, Desktop app id, entitlement store or tier model changes.
+**Change later.** `onboarding/claude-gateway.json` is regenerated and redistributed after gateway URL, tenant, SKU, Desktop app id, entitlement store or tier model changes.
 
 ## 9. Optional company address
 
@@ -1086,7 +1174,7 @@ p89_keyvault_access() {
     return 1
   fi
   if [ "$KEYVAULT_RBAC" != "true" ]; then
-    echo "Refused: Key Vault '$KEYVAULT_NAME' uses access policies, not RBAC. Portal route: Key Vault > Access policies > Create, Secret permissions Get and List, principal = the gateway identity. Script route: ./scripts/Set-ClaudeGatewayAddress.ps1, which uses accessPolicies/add. Do not use az keyvault set-policy; it rewrites that principal's secret permission list." >&2
+    echo "Refused: Key Vault '$KEYVAULT_NAME' uses access policies, not RBAC. Portal route: Key Vault > Access policies > Create, Secret permissions Get and List, principal = the gateway identity. Script route: ./scripts/Set-ClaudeGatewayAddress.ps1, which uses accessPolicies/add. az keyvault set-policy replaces the secret permission list of the principal's existing access-policy entry (azure-cli keyvault/custom.py set_policy)." >&2
     return 1
   fi
   if ! existing_kv_role="$(az role assignment list --scope "$KEYVAULT_ID" --assignee "$APIM_PRINCIPAL_ID" --include-inherited --query "[?roleDefinitionName=='Key Vault Secrets User']|[0].id" -o tsv)"; then
@@ -1120,6 +1208,9 @@ Patch APIM hostname configurations and prove TLS before publishing the handover 
 ```bash
 # P89-BIND-HOSTNAME-BEGIN
 p89_bind_hostname() {
+  P89_KEYVAULT_PATCH_TIMEOUT_SECONDS="${P89_KEYVAULT_PATCH_TIMEOUT_SECONDS:-600}"
+  P89_HOSTNAME_TIMEOUT_SECONDS="${P89_HOSTNAME_TIMEOUT_SECONDS:-900}"
+  P89_HOSTNAME_POLL_SECONDS="${P89_HOSTNAME_POLL_SECONDS:-15}"
   if [ -z "${APIM_ID:-}" ]; then
     APIM_ID="$(az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" --query id -o tsv)" || return 1
   fi
@@ -1135,40 +1226,106 @@ p89_bind_hostname() {
     echo "Refused: could not read live APIM hostnames; hostname was not changed." >&2
     return 1
   fi
+  provisioning_state="$(printf '%s' "$apim_live" | jq -r '.properties.provisioningState // ""')"
+  if [ "$provisioning_state" != "Succeeded" ]; then
+    echo "Refused: APIM provisioningState is '${provisioning_state:-empty}', not Succeeded; hostname was not changed." >&2
+    return 1
+  fi
+  default_host="${APIM_NAME}.azure-api.net"
+  if ! cname_answers="$(dig +short CNAME "$GATEWAY_HOSTNAME")" || [ -z "$cname_answers" ]; then
+    echo "Refused: DNS CNAME for '$GATEWAY_HOSTNAME' was not found; hostname was not changed." >&2
+    return 1
+  fi
+  cname_count="$(printf '%s\n' "$cname_answers" | awk -v target="$default_host" 'BEGIN{c=0} {gsub(/\.$/, "", $0); if (tolower($0)==tolower(target)) c++} END{print c}')"
+  if [ "$cname_count" = "0" ]; then
+    echo "Refused: DNS CNAME for '$GATEWAY_HOSTNAME' does not point to '$default_host'; hostname was not changed." >&2
+    return 1
+  fi
   sku="$(printf '%s' "$apim_live" | jq -r '.sku.name // ""')"
   other_proxy_count="$(printf '%s' "$apim_live" | jq --arg h "$GATEWAY_HOSTNAME" '[.properties.hostnameConfigurations[]? | select(.type=="Proxy" and (.certificateSource // "BuiltIn") != "BuiltIn" and (.hostName|ascii_downcase) != ($h|ascii_downcase))] | length')"
-  if [ "$sku" != "PremiumV2" ] && [ "$other_proxy_count" -gt 0 ] && [ -z "${REPLACE_HOSTNAME:-}" ]; then
+  if [ -z "$other_proxy_count" ]; then
+    echo "Refused: could not count existing custom Proxy hostnames." >&2
+    return 1
+  fi
+  if [ "$sku" != "PremiumV2" ] && [ "$other_proxy_count" != "0" ] && [ -z "${REPLACE_HOSTNAME:-}" ]; then
     echo "Refused: $sku has another custom Proxy hostname. Set REPLACE_HOSTNAME to the exact hostname to replace, or use PremiumV2." >&2
     return 1
   fi
   if [ -n "${REPLACE_HOSTNAME:-}" ]; then
     replace_count="$(printf '%s' "$apim_live" | jq --arg h "$REPLACE_HOSTNAME" --arg new "$GATEWAY_HOSTNAME" '[.properties.hostnameConfigurations[]? | select(.type=="Proxy" and (.certificateSource // "BuiltIn") != "BuiltIn" and (.hostName|ascii_downcase)==($h|ascii_downcase) and (.hostName|ascii_downcase)!=($new|ascii_downcase))] | length')"
-    if [ "$replace_count" -ne 1 ]; then
+    if [ "$replace_count" != "1" ]; then
       echo "Refused: REPLACE_HOSTNAME must name exactly one live custom Proxy hostname different from GATEWAY_HOSTNAME." >&2
       return 1
     fi
   fi
   printf '%s' "$apim_live" | jq --arg h "$GATEWAY_HOSTNAME" --arg replace "${REPLACE_HOSTNAME:-}" --arg cert "$CERT_SECRET_ID" '
     (.properties.hostnameConfigurations // []) as $hosts
+    | ($hosts | map(select(.type == "Proxy" and (.hostName|ascii_downcase) == ($h|ascii_downcase))) | first) as $current
     | {properties:{hostnameConfigurations:(
         ($hosts | map(select(
           .type != "Proxy" or
           ((.hostName|ascii_downcase) != ($h|ascii_downcase) and (($replace == "") or (.hostName|ascii_downcase) != ($replace|ascii_downcase)))
-        ))) + [{type:"Proxy",hostName:$h,certificateSource:"KeyVault",keyVaultId:$cert,identityClientId:null,defaultSslBinding:false,negotiateClientCertificate:false}]
+        ))) + [{type:"Proxy",hostName:$h,certificateSource:"KeyVault",keyVaultId:$cert,identityClientId:null,defaultSslBinding:($current.defaultSslBinding // false),negotiateClientCertificate:($current.negotiateClientCertificate // false)}]
       )}}' > hostname-patch.json
-  az rest --method patch --headers "Content-Type=application/json" --body @hostname-patch.json --url "https://management.azure.com${APIM_ID}?api-version=2024-05-01" -o json || return 1
-  az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" --query "hostnameConfigurations[?hostName=='${GATEWAY_HOSTNAME}'].{hostName:hostName,status:certificateStatus}" -o json
-  curl -sS -o /dev/null -w "%{http_code}\n" "https://${GATEWAY_HOSTNAME}/claude/v1/messages"
+  patch_start="$(date +%s)"
+  while :; do
+    if az rest --method patch --headers "Content-Type=application/json" --body @hostname-patch.json --url "https://management.azure.com${APIM_ID}?api-version=2024-05-01" -o json > hostname-patch-result.json 2> hostname-patch-error.txt; then
+      break
+    fi
+    patch_error="$(cat hostname-patch-error.txt)"
+    now="$(date +%s)"
+    elapsed="$((now - patch_start))"
+    if printf '%s' "$patch_error" | grep -Eiq 'KeyVault.*(Access|Forbidden)|Failed to access.*KeyVault|Access denied.*Key Vault' && [ "$elapsed" -lt "$P89_KEYVAULT_PATCH_TIMEOUT_SECONDS" ]; then
+      echo "Key Vault access has not propagated to the gateway identity; retrying hostname PATCH." >&2
+      sleep "$P89_HOSTNAME_POLL_SECONDS"
+    else
+      echo "Refused: hostname PATCH failed: $patch_error" >&2
+      return 1
+    fi
+  done
+  wait_start="$(date +%s)"
+  while :; do
+    if ! apim_after="$(az rest --method get --url "https://management.azure.com${APIM_ID}?api-version=2024-05-01" -o json)"; then
+      echo "Refused: could not read APIM hostname status after PATCH." >&2
+      return 1
+    fi
+    state="$(printf '%s' "$apim_after" | jq -r '.properties.provisioningState // ""')"
+    status="$(printf '%s' "$apim_after" | jq -r --arg h "$GATEWAY_HOSTNAME" '(.properties.hostnameConfigurations // [])[]? | select(.type=="Proxy" and (.hostName|ascii_downcase)==($h|ascii_downcase)) | .certificateStatus // ""' | head -n 1)"
+    if [ "$state" = "Failed" ] || [ "$state" = "Canceled" ] || [ "$status" = "Failed" ]; then
+      echo "Refused: APIM hostname update state is '$state' and certificateStatus is '${status:-empty}'." >&2
+      return 1
+    fi
+    if [ "$state" = "Succeeded" ] && [ -n "$status" ] && [ "$status" != "InProgress" ]; then
+      break
+    fi
+    now="$(date +%s)"
+    elapsed="$((now - wait_start))"
+    if [ "$elapsed" -ge "$P89_HOSTNAME_TIMEOUT_SECONDS" ]; then
+      echo "Refused: APIM hostname binding did not finish before ${P89_HOSTNAME_TIMEOUT_SECONDS}s; last provisioningState '$state', certificateStatus '${status:-empty}'." >&2
+      return 1
+    fi
+    sleep "$P89_HOSTNAME_POLL_SECONDS"
+  done
+  if ! http_code="$(curl -sS -o /dev/null -w "%{http_code}\n" "https://${GATEWAY_HOSTNAME}/claude/v1/messages")"; then
+    echo "Refused: HTTPS proof failed; gateway address receipt was not written." >&2
+    return 1
+  fi
+  if [ "$http_code" != "401" ]; then
+    echo "Refused: HTTPS proof returned '$http_code', not 401; gateway address receipt was not written." >&2
+    return 1
+  fi
+  jq -n --arg hostname "$GATEWAY_HOSTNAME" '{address:{hostname:$hostname}}' > .p89-receipts/gateway-address.json
+  jq -r '.address.hostname' .p89-receipts/gateway-address.json
 }
 p89_bind_hostname
 # P89-BIND-HOSTNAME-END
 ```
 
-Expected result: the hostname binding exists, unauthenticated HTTPS returns `401`, and other hostname configurations remain in the PATCH body. This mirrors `scripts/ClaudeGatewayAddress.ps1:88-91`, `:136-141` and `:289-292`.
+Expected result: the hostname binding exists, unauthenticated HTTPS returns `401`, and `.p89-receipts/gateway-address.json` stores `{"address":{"hostname":"<GATEWAY_HOSTNAME>"}}`. Before the PATCH the block requires APIM provisioning state `Succeeded`, a `dig` CNAME from the custom hostname to `<apim>.azure-api.net`, and preservation of any existing Proxy binding's `defaultSslBinding` and `negotiateClientCertificate`; Cloud Shell lists `dig` as a preinstalled Linux tool (https://learn.microsoft.com/azure/cloud-shell/features), and API Management documents the Gateway default domain and custom-domain DNS prerequisite (https://learn.microsoft.com/azure/api-management/configure-custom-domain). The PATCH retries Key Vault access propagation for up to `P89_KEYVAULT_PATCH_TIMEOUT_SECONDS=600`; after PATCH, `az rest` has sent one request, so the block waits up to `P89_HOSTNAME_TIMEOUT_SECONDS=900` with `P89_HOSTNAME_POLL_SECONDS=15` until provisioning is complete and certificate status is not `InProgress`. API Management states custom-domain infrastructure changes can take 15 minutes or longer (https://learn.microsoft.com/azure/api-management/configure-custom-domain). curl's default TLS verification proves trust and hostname before the receipt is written. This mirrors `scripts/ClaudeGatewayAddress.ps1:247`, `:276-293`, `:305-321`, `:325-339` and `:350-359`.
 
 ### Part 9 in the portal
 
-1. **Review the current gateway hostnames before binding a company address.** API Management services > `$APIM_NAME` > Deployment + infrastructure > Custom domains: review existing Gateway hostnames. No Save button is used for read-only review.
+1. **Review the current gateway hostnames before binding a company address.** API Management services > `$APIM_NAME` > Deployment + infrastructure > Custom domains: review existing Gateway hostnames and provisioning state. The command route refuses unless provisioningState is `Succeeded`; Learn states that while the service is updating, other service infrastructure changes cannot be made. No Save button is used for read-only review. Source: https://learn.microsoft.com/azure/api-management/configure-custom-domain.
 2. **Validate a Key Vault certificate and grant APIM access.** Key Vault > `$KEYVAULT_NAME` > Objects > Certificates > `$CERT_NAME`: confirm Enabled and certificate status; Certificate policy or Issuance policy shows an exportable private key and Secret content type `application/x-pkcs12`. Key Vault > **Settings** > **Access configuration** > **Permission model** shows whether the vault uses Azure role-based access control or Vault access policy. The portal route grants Key Vault access when it imports the certificate to API Management; the §9 command route grants access through `p89_keyvault_access` before the hostname patch. For access policies, Key Vault > **Access policies** > **+ Create** > **Permissions** tab: **Secret permissions** **Get** and **List**; **Next** > **Principal** tab: gateway managed identity; **Review + create** tab > **Create**. For RBAC, Key Vault > **Access control (IAM)** > **Add role assignment** > **Role** tab: **Key Vault Secrets User**; **Members** tab: **Managed identity** > **+ Select members** > gateway managed identity > **Select** > **Review + assign**. Source: `p89_keyvault_access` (`P89-KEYVAULT-ACCESS`), `scripts/ClaudeGatewayAddress.ps1:173-184` and https://learn.microsoft.com/azure/api-management/configure-custom-domain.
 
 ![Key Vault Certificates blade showing the enabled listener certificate from the network-restricted deployment](guide/network-final-certificate.png)
@@ -1179,9 +1336,9 @@ Capture id: `p54-vault-certificate`.
 
 Capture id: `p54-vault-role`.
 
-3. **Patch APIM hostname configurations and prove TLS before publishing the handover URL.** DNS has a CNAME from `$GATEWAY_HOSTNAME` to the default API Management hostname before binding. API Management services > `$APIM_NAME` > Deployment + infrastructure > Custom domains > **+Add**: for a new binding, select the Gateway endpoint; for an existing binding, select the existing endpoint to update. Type **Gateway**; Hostname `$GATEWAY_HOSTNAME`; Certificate **Key Vault** > **Select**; in the Key Vault picker choose Subscription, Key vault and Certificate, then **Select**; Client identity: the system-assigned identity. For an existing endpoint, **Update** applies the binding; for a new endpoint, **Add** and **Save** apply it. An existing binding keeps its current **Negotiate client certificate** and **Default SSL binding** values; `scripts/ClaudeGatewayAddress.ps1:289-293` preserves those existing hostname configurations in the PATCH body. Basic v2 and Standard v2 use `REPLACE_HOSTNAME` when another custom Proxy hostname is already present; Premium v2 can keep multiple Gateway hostnames. Learn documents **Custom domains**, **+Add**, existing endpoint update, **Type**, **Hostname**, **Key Vault**, **Select**, **Client identity**, **Update**, **Add**, **Save**, CNAME mapping to the default API Management service hostname, and custom domain changes taking 15 minutes or longer. Source: https://learn.microsoft.com/azure/api-management/configure-custom-domain. Pending capture id: `p90-company-custom-domains`.
+3. **Patch APIM hostname configurations and prove TLS before publishing the handover URL.** DNS has a CNAME from `$GATEWAY_HOSTNAME` to the default API Management hostname before binding; the command route checks it with `dig`, which Cloud Shell lists as preinstalled. API Management services > `$APIM_NAME` > Deployment + infrastructure > Custom domains > **+Add** for a new Gateway hostname, or the existing endpoint for a hostname that is already bound. Type **Gateway**; Hostname `$GATEWAY_HOSTNAME`; Certificate **Key Vault** > **Select**; in the Key Vault picker choose Subscription, Key vault and Certificate, then **Select**; Client identity: the system-assigned identity. For an existing endpoint, **Update** applies the binding; for a new endpoint, **Add** and **Save** apply it. After **Save**, the change can take 15 minutes or longer; the command route polls until provisioning succeeds and certificateStatus is not InProgress. An existing binding keeps its current **Negotiate client certificate** and **Default SSL binding** values; `scripts/ClaudeGatewayAddress.ps1:289-293` preserves those existing hostname configurations in the PATCH body. The HTTPS 401 proof and `.p89-receipts/gateway-address.json` receipt have no portal equivalent because they are curl and local-file checks. Learn documents **Custom domains**, **+Add**, existing endpoint update, **Type**, **Hostname**, **Key Vault**, **Select**, **Client identity**, **Update**, **Add**, **Save**, CNAME mapping to the default API Management service hostname, and custom domain changes taking 15 minutes or longer. Source: https://learn.microsoft.com/azure/api-management/configure-custom-domain and https://learn.microsoft.com/azure/cloud-shell/features. Pending capture id: `p90-company-custom-domains`.
 
-**Change later.** Change the APIM Gateway custom-domain binding, Key Vault certificate and DNS record together; then rerun the TLS proof and update handover/client configuration if the URL changes.
+**Change later.** APIM Gateway custom-domain binding, Key Vault certificate and DNS record changes move together; the TLS proof reruns afterward and handover/client configuration changes when the URL changes.
 
 ## 10. Optional Cosmos projection
 
@@ -1373,7 +1530,7 @@ Capture id: `docs-review-resolver-networking`.
 Send a real request with the signed-in user's Foundry token through the gateway.
 
 ```bash
-export GATEWAY_URL="$(az deployment group show -g "$GATEWAY_RG" -n "claude-gateway-basicv2" --query properties.outputs.gatewayUrl.value -o tsv)"
+p89_gateway_url
 export FOUNDRY_TOKEN="$(az account get-access-token --resource https://ai.azure.com --query accessToken -o tsv)"
 curl -sS -o response.json -w "%{http_code}\n" -H "Authorization: Bearer ${FOUNDRY_TOKEN}" -H "Content-Type: application/json" -d "{\"model\":\"${SONNET_DEPLOYMENT}\",\"max_tokens\":32,\"messages\":[{\"role\":\"user\",\"content\":\"Return the word ok.\"}]}" "${GATEWAY_URL}/v1/messages"
 jq -r '.content[0].text // .error.message' response.json
@@ -1389,13 +1546,17 @@ curl -sS -o response-forbidden.json -w "%{http_code}\n" -H "Authorization: Beare
 jq -r '.error.message' response-forbidden.json
 ```
 
-Expected result: HTTP `403` with an entitlement refusal. Do not empty the live allow lists to make this test; use a caller that is not entitled. This mirrors `scripts/Test-ClaudeHealth.ps1` and `scripts/Sync-ClaudeAccess.ps1`.
+Expected result: HTTP `403` with an entitlement refusal. The test uses a caller that is not entitled; emptying the live allow lists would refuse every developer. This mirrors `scripts/Test-ClaudeHealth.ps1` and `scripts/Sync-ClaudeAccess.ps1`.
 
 Verify a model outside the tier is refused.
 
 ```bash
+# P89-MODEL-REFUSAL-BEGIN
 p89_verify_model_refusal() {
-  MODELS_STANDARD_BEFORE="$(az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --query value -o tsv)"
+  if ! MODELS_STANDARD_BEFORE="$(az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --query value -o tsv)" || [ -z "$MODELS_STANDARD_BEFORE" ]; then
+    echo "Refused: could not read models-standard before narrowing it; nothing was changed." >&2
+    return 1
+  fi
   MODELS_STANDARD_NEXT=",${SONNET_DEPLOYMENT},"
   if [ "$(printf '%s' "$MODELS_STANDARD_NEXT" | wc -c | tr -d ' ')" -le 4096 ]; then
     az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --value "$MODELS_STANDARD_NEXT" -o none || return 1
@@ -1405,12 +1566,19 @@ p89_verify_model_refusal() {
   fi
   curl -sS -o response-model.json -w "%{http_code}\n" -H "Authorization: ******" -H "Content-Type: application/json" -d "{\"model\":\"${OPUS_DEPLOYMENT}\",\"max_tokens\":32,\"messages\":[{\"role\":\"user\",\"content\":\"Return the word ok.\"}]}" "${GATEWAY_URL}/v1/messages"
   jq -r '.error.message' response-model.json
-  az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --value "$MODELS_STANDARD_BEFORE" -o none
+  restore_rc=0
+  az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --value "$MODELS_STANDARD_BEFORE" -o none || restore_rc=$?
+  restored="$(az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --query value -o tsv)"
+  if [ "$restore_rc" -ne 0 ] || [ "$restored" != "$MODELS_STANDARD_BEFORE" ]; then
+    echo "Refused: models-standard restore did not verify. Restore this value manually: $MODELS_STANDARD_BEFORE" >&2
+    return 1
+  fi
 }
 p89_verify_model_refusal
+# P89-MODEL-REFUSAL-END
 ```
 
-Expected result: HTTP `403` or gateway refusal naming the model outside the tier. This mirrors `scripts/Test-ClaudeHealth.ps1` and `scripts/Measure-ClaudeCeiling.ps1`.
+Expected result: HTTP `403` or gateway refusal naming the model outside the tier, for a caller whose tier excludes `$OPUS_DEPLOYMENT`. This mirrors `scripts/Test-ClaudeHealth.ps1` and `scripts/Measure-ClaudeCeiling.ps1`.
 
 Check for direct Foundry bypass.
 
@@ -1441,8 +1609,8 @@ Expected result: normal traffic returns `200`; a deliberate high-rate test event
 
 ### Part 11 in the portal
 
-1. **Resolve the gateway URL and run an entitled request.** API Management services > `$APIM_NAME` > Overview: copy Gateway URL; no Save button is used.
-2. **Verify non-entitled, model-refusal, bypass-audit and call-ceiling behavior.** No portal equivalent: these are data-plane request and policy-result checks.
+1. **Resolve the gateway URL and run an entitled request.** API Management services > `$APIM_NAME` > Overview shows Gateway URL; the request URL is Gateway URL plus `/claude`. When §9 wrote `.p89-receipts/gateway-address.json` and Custom domains still lists that Gateway hostname, the request URL is `https://<hostname>/claude`. The signed request itself has no portal equivalent. This mirrors `p89_gateway_url` (`P89-GATEWAY-URL`).
+2. **Verify non-entitled, model-refusal, bypass-audit and call-ceiling behavior.** API Management services > `$APIM_NAME` > APIs > Named values > `models-standard` > Edit narrows the value for the model-refusal check, then restores the saved value; the restored value is compared to the saved value. Between the narrowing write and the restore, every standard-tier caller is refused models outside the narrowed list. The request itself, non-entitled proof, bypass-audit read and call-ceiling loop have no portal equivalent because they are data-plane request and policy-result checks. This mirrors `p89_verify_model_refusal` (`P89-MODEL-REFUSAL`).
 3. **Review gateway diagnostic settings and Log Analytics tables.** API Management services > `$APIM_NAME` > Monitoring > Diagnostic settings: confirm `claude-llm-logs`; Log Analytics workspace > Tables/Logs/Workbooks: confirm emitted tables, functions and workbook surfaces.
 
 ![API Management Diagnostic settings blade showing `claude-llm-logs` sending to a Log Analytics workspace](guide/docs-review-gateway-diagnostics.png)
@@ -1461,7 +1629,7 @@ Capture id: `docs-review-workspace-functions`.
 
 Capture id: `docs-review-workspace-workbooks`.
 
-**Change later.** Change the named values, groups or role assignments that drive the failed verification, then rerun the specific §11 command and check diagnostic settings if log routing is part of the change.
+**Change later.** Named values, groups or role assignments drive failed verification results; the specific §11 command reruns after those changes, and diagnostic settings are checked when log routing changes.
 
 ## 12. Teardown
 
@@ -1483,14 +1651,28 @@ p89_teardown_read
 
 Expected result: the operator sees resources and the exact receipt-created role assignment id that teardown may remove. Empty `FOUNDRY_ID` or `APIM_PRINCIPAL_ID` refuses before role reads, so Azure CLI cannot fall back to the subscription scope or omit the assignee filter. This mirrors the installer's explicit review style before writes.
 
-Delete the gateway resource group when the deployment was isolated to it.
+Delete the gateway resource group only when this guide created it.
 
 ```bash
-az group delete -n "$GATEWAY_RG" --yes --no-wait
-az group exists -n "$GATEWAY_RG"
+# P89-TEARDOWN-GROUP-BEGIN
+p89_teardown_group() {
+  az resource list -g "$GATEWAY_RG" --query "[].{type:type,name:name}" -o table || return 1
+  if [ ! -r .p89-receipts/resource-group.json ]; then
+    echo "Refused: no resource-group receipt; group was not deleted." >&2
+    return 1
+  fi
+  if jq -e '.resourceGroup.created == true and .resourceGroup.name == env.GATEWAY_RG' .p89-receipts/resource-group.json >/dev/null; then
+    az group delete -n "$GATEWAY_RG" --yes --no-wait
+  else
+    echo "Refused: resource group was pre-existing; group was not deleted." >&2
+    return 1
+  fi
+}
+p89_teardown_group
+# P89-TEARDOWN-GROUP-END
 ```
 
-Expected result: the group deletion starts; `az group exists` eventually returns `false`. Do not use this command if the group contains shared resources. This mirrors the resource-group boundary created by `deploy.ps1:134`.
+Expected result: the resource list is shown, and deletion starts only when `.p89-receipts/resource-group.json` says this guide created the group. Reused-APIM deployments leave artifacts inside the customer's APIM; inspect them with `az apim api show`, `az apim nv list`, `az apim logger show`, `az apim api diagnostic list` and `az monitor diagnostic-settings list`, but removal of reused-APIM artifacts is out of scope for this guide.
 
 Remove only external resources this guide recorded as created.
 
@@ -1571,7 +1753,7 @@ Expected result: only role assignments, tier groups, Key Vault role assignments 
 
 ### Part 12 in the portal
 
-1. **Delete the gateway resource group after external receipts are reviewed.** portal.azure.com > Resource groups > `$GATEWAY_RG` > Delete resource group: type `$GATEWAY_RG`; **Delete**. Source: https://learn.microsoft.com/azure/api-management/get-started-create-service-instance.
+1. **Delete the gateway resource group after external receipts are reviewed.** The delete applies only when `.p89-receipts/resource-group.json` says `created:true`. portal.azure.com > Resource groups > `$GATEWAY_RG` > Delete resource group: type `$GATEWAY_RG`; **Delete**. For a reused APIM the group is not deleted. Its gateway artifacts remain in API Management services > `$APIM_NAME`: APIs > `claude-foundry`; APIs > Named values; Monitoring > Diagnostic settings > `claude-llm-logs`; APIs > `claude-foundry` > Settings > Diagnostics; and Monitoring/Application Insights or Log Analytics resources named `appi-<prefix>` and `log-<prefix>`. Their removal is out of scope, matching the out-of-scope list above. This mirrors `p89_teardown_group` (`P89-TEARDOWN-GROUP`). Source: https://learn.microsoft.com/azure/api-management/get-started-create-service-instance.
 2. **Review soft-deleted APIM instances before name reuse.** No portal label is asserted here. The Learn soft-delete page documents REST API, Azure CLI and SDK support for deleted services, including `az apim deletedservice show/list/purge`, but not an Azure portal blade label. Source: https://learn.microsoft.com/azure/api-management/soft-delete.
 3. **Delete receipt-created external objects.** entra.microsoft.com > Groups: select a group created by the receipt; **Delete**. entra.microsoft.com > App registrations: select the Desktop app created by the receipt; **Delete**. Foundry account > Access control (IAM) > Role assignments: select the receipt-created Cognitive Services User assignment; **Remove**. Key Vault > Access control (IAM) > Role assignments: select the receipt-created Key Vault Secrets User assignment; **Remove**.
 
