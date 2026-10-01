@@ -38,9 +38,10 @@ exact streaming cache-creation detail remains **U13**.
   line for another tenant, subscription, resource group, gateway or installer, and for a
   store another account could have written; records the deployment name before
   `az deployment group create` and starts no second main.bicep deployment; reads
-  Entra groups by id, and by name only as an exact match; and checks receipt values
-  before they reach `az`. `-Restart`/`--restart` sets the checkpoint aside. 68
-  PowerShell, 38 bash and 9 store checks
+  Entra groups by id, and by name only as the one listed group with as many Unicode
+  code points as the configured name, alike in both installers; and checks receipt values
+  before they reach `az`. `-Restart`/`--restart` sets the checkpoint aside. 73
+  PowerShell, 43 bash and 9 store checks
   ([installer checkpoint design record (ADR-0046)](docs/adr/0046-installer-checkpoint-and-resume.md),
   [Setup](docs/SETUP.md#resume-after-a-failure)). `.github/workflows/installer-unix.yml`
   runs the bash suites and the store suite on `ubuntu-latest` and `macos-latest`

@@ -364,12 +364,27 @@ Receipts record what each step found or made, with `origin` `created` or `pre-ex
 resume finds every object by id:
 
 - Entra groups: id from `az ad group list --display-name <name>` or `az ad group create ...
-  --query id`, then `az ad group show --group <id>` on resume. The list matches a prefix ("Object's
-  display name or its prefix", `az ad group list --help`), so only a listed group whose `displayName`
-  equals the requested name, ignoring case (U76), is the group (origin `pre-existing`). An empty list,
-  or one with only longer names, is absent, and the step creates the group. A failed read, a list that
-  is not JSON, or more than one group with the name refuses on one line and creates nothing (council
-  round 1). A group this run created that Graph does not
+  --query id`, then `az ad group show --group <id>` on resume. A receipt applies to the name it
+  records, compared code point by code point in both installers (.NET ordinal equality in
+  PowerShell, `==` in jq), so a resume that names a group differently looks it up by name (council
+  round 2). The lookup sends `startswith(displayName,'<name>')` to Microsoft Graph (azure-cli 2.86.0
+  `role/custom.py:1898-1905`; `--help`: "Object's display name or its prefix"), so each listed
+  group's name starts with the requested name under Graph's own comparison. A listed name with as
+  many Unicode code points as the requested name is taken as equal to it under that comparison,
+  which holds when Graph compares code point by code point, ignoring case or not (U76), and neither
+  installer compares names itself (council round 2; before it, PowerShell `-eq` ignored case for all
+  of Unicode and jq `ascii_downcase` only for A-Z).
+  Exactly one such group with an id is the group (origin `pre-existing`). None, with or without
+  longer names, is absent, and the step creates the group. Two or more such groups, one without an
+  id, a failed read, output that is not a JSON list of groups, or a listed name that is not text
+  refuses on one line and creates nothing. jq's `length` counts a string's code points (jq 1.8
+  manual, `length`); PowerShell counts UTF-16 code units with a surrogate pair as one, because
+  Windows PowerShell 5.1 runs on .NET Framework 4.8, which has no `String.EnumerateRunes` (checked on
+  5.1.26100). A name in another Unicode normalization form, for example é written as e and a
+  combining accent, has another number of code points and is a different name in both installers.
+  PowerShell 7.5 and later read the list with `ConvertFrom-Json -DateKind String` (the parameter
+  was introduced in 7.5); earlier PowerShell 7 reads an ISO 8601 display name as a date, which the
+  PowerShell installer refuses as a name that is not text where the bash installer reads it. A group this run created that Graph does not
   return by id is inconclusive, so the run refuses instead of creating a second group with the same
   name (U74). The refusal is one line: a group created moments ago can take time to appear in
   Microsoft Graph, a rerun later continues without creating a second group, and the resume command.
@@ -527,6 +542,12 @@ Council round 1 (2026-10-01) added checks, RED first for each behaviour change:
 | Schema drift | both libraries name one schema and the same step ids in one order | store |
 | Directory that cannot be created | the run warns, prints the resume command with the answers and completes | both installers |
 
+Council round 2 (2026-10-01) added checks, RED first:
+
+| Finding | Check | Suite |
+|---|---|---|
+| Group names beyond ASCII matched differently | a non-ASCII case variant, the one listed name of the same length, is recorded by its id as pre-existing; longer names, the name in another normalization form among them, are created once; two same-length names refuse naming both ids; an astral-plane name counts code points (stand-in names with the name's UTF-16 units and UTF-8 bytes are not taken); a resume naming a group in another case than its receipt looks the name up | both installers |
+
 Every new check gets a mutation that breaks what it guards; a mutation counts only when the suite
 loads with its baseline check count and at least one check fails, and a bash mutant also passes
 `bash -n`.
@@ -563,8 +584,10 @@ A prepared, unpushed workflow runs the bash checks and the POSIX permission and 
   otherwise than U66 assumes, or the detection variables absent (U64).
 - A support case shows a second main.bicep deployment, a duplicate Entra group or a skipped step
   whose result Azure did not show.
-- Graph lists display names by `startswith` with case (U76), so a group whose name differs only in
-  case is not found and a second group is created.
+- Graph's `startswith` on `displayName` matches a name it does not treat as equal, for example by
+  ignoring accents, so a listed name of the same length is another group (U76).
+- The PowerShell installer on Windows reads a non-ASCII display name from az with another number of
+  characters than Graph holds (U77), so the group is read as a longer name and created again.
 
 ## References
 
@@ -585,3 +608,5 @@ Accessed 2026-10-01.
 - `Environment.SpecialFolder`: <https://learn.microsoft.com/dotnet/api/system.environment.specialfolder>
 - XDG Base Directory Specification 0.8: <https://specifications.freedesktop.org/basedir-spec/latest/>
 - GitHub-hosted runner images, commit `14d8569`: <https://github.com/actions/runner-images>
+- jq 1.8 manual, `length` ("The length of a string is the number of Unicode codepoints it contains"): <https://jqlang.org/manual/v1.8/#length>
+- `ConvertFrom-Json -DateKind` ("This parameter was introduced in PowerShell 7.5", ms.date 2025-01-30): <https://learn.microsoft.com/powershell/module/microsoft.powershell.utility/convertfrom-json?view=powershell-7.5>
