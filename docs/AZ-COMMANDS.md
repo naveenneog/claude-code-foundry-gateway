@@ -116,12 +116,25 @@ p89_resource_group() {
       return 1
     fi
     if [ "$existed" = "true" ]; then
+      receipt_nonce="$(jq -r '.resourceGroup.nonce // ""' .p89-receipts/resource-group.json)"
+      live_nonce="$(az group show -n "$GATEWAY_RG" --query "tags.\"claude-gateway-receipt\"" -o tsv)" || {
+        echo "Refused: could not read resource group receipt tag; no create or delete ran." >&2
+        return 1
+      }
+      if [ -z "$receipt_nonce" ] || [ "$live_nonce" != "$receipt_nonce" ]; then
+        echo "Refused: resource group receipt tag does not match the live group; no create or delete ran." >&2
+        return 1
+      fi
       echo "Existing receipt says this guide created '$GATEWAY_RG'; keeping it."
       return 0
     fi
     if [ "$existed" = "false" ]; then
-      az group create -n "$GATEWAY_RG" -l "$LOCATION" -o none || return 1
-      jq -n --arg name "$GATEWAY_RG" '{resourceGroup:{created:true,name:$name}}' > .p89-receipts/resource-group.json
+      receipt_nonce="$(python3 -c 'import uuid; print(uuid.uuid4())')" || {
+        echo "Refused: could not generate resource group receipt nonce; no create ran." >&2
+        return 1
+      }
+      az group create -n "$GATEWAY_RG" -l "$LOCATION" --tags claude-gateway-receipt="$receipt_nonce" -o none || return 1
+      jq -n --arg name "$GATEWAY_RG" --arg nonce "$receipt_nonce" '{resourceGroup:{created:true,name:$name,nonce:$nonce}}' > .p89-receipts/resource-group.json
       return 0
     fi
     echo "Refused: resource group existence check returned '$existed'; no create ran." >&2
@@ -134,8 +147,12 @@ p89_resource_group() {
   if [ "$existed" = "true" ]; then
     jq -n --arg name "$GATEWAY_RG" '{resourceGroup:{created:false,name:$name}}' > .p89-receipts/resource-group.json
   elif [ "$existed" = "false" ]; then
-    az group create -n "$GATEWAY_RG" -l "$LOCATION" -o none || return 1
-    jq -n --arg name "$GATEWAY_RG" '{resourceGroup:{created:true,name:$name}}' > .p89-receipts/resource-group.json
+    receipt_nonce="$(python3 -c 'import uuid; print(uuid.uuid4())')" || {
+      echo "Refused: could not generate resource group receipt nonce; no create ran." >&2
+      return 1
+    }
+    az group create -n "$GATEWAY_RG" -l "$LOCATION" --tags claude-gateway-receipt="$receipt_nonce" -o none || return 1
+    jq -n --arg name "$GATEWAY_RG" --arg nonce "$receipt_nonce" '{resourceGroup:{created:true,name:$name,nonce:$nonce}}' > .p89-receipts/resource-group.json
   else
     echo "Refused: resource group existence check returned '$existed'; no create ran." >&2
     return 1
@@ -146,7 +163,7 @@ p89_resource_group
 az group show -n "$GATEWAY_RG" --query "{name:name,location:location}" -o json
 ```
 
-Expected result: the group exists in the chosen region, and `.p89-receipts/resource-group.json` records whether this guide created it. This mirrors `deploy.ps1:134`.
+Expected result: the group exists in the chosen region, and `.p89-receipts/resource-group.json` records whether this guide created it. When this guide creates the group, it stores a `claude-gateway-receipt` nonce tag and records that nonce in the receipt; a tag policy can deny the tag, in which case create fails and nothing is recorded. This mirrors `deploy.ps1:134`.
 
 Confirm the APIM name is absent before running the first-deployment commands below.
 
@@ -306,9 +323,7 @@ p89_gateway_identity() {
   APIM_IDENTITY_TYPE="$(printf '%s' "$APIM_IDENTITY_JSON" | jq -r '.type // "none"')"
   export APIM_PRINCIPAL_ID="$(printf '%s' "$APIM_IDENTITY_JSON" | jq -r '.principalId // ""')"
   if ! printf '%s' "$APIM_IDENTITY_TYPE" | grep -q 'SystemAssigned' || [ -z "$APIM_PRINCIPAL_ID" ]; then
-    echo "Refused: API Management managed identity is '${APIM_IDENTITY_TYPE:-none}' and principalId is empty." >&2
-    echo "Fix: portal > API Management > Security > Managed identities > System assigned > Status On > Save, then rerun." >&2
-    echo "az apim update without --enable-managed-identity true sets the identity to None (azure-cli apim/custom.py apim_update); this block uses az rest PATCH." >&2
+    echo "Refused: no Foundry role check ran because API Management managed identity is '${APIM_IDENTITY_TYPE:-none}' and principalId is empty; next step is portal > API Management > Security > Managed identities > System assigned > Status On > Save, or P89-ENABLE-APIM-IDENTITY. az apim update without --enable-managed-identity true sets the identity to None (azure-cli apim/custom.py apim_update)." >&2
     return 1
   fi
   if ! FOUNDRY_ID="$(az cognitiveservices account show -g "$FOUNDRY_RG" -n "$FOUNDRY_ACCOUNT" --query id -o tsv)" || [ -z "$FOUNDRY_ID" ]; then
@@ -396,7 +411,7 @@ p89_foundry_role() {
       echo "Refused: role assignment create failed; no receipt was written." >&2
       return 1
     fi
-    printf '%s' "$created_role_json" | jq '{foundryRole:{created:true,id:.id}}' > .p89-receipts/foundry-role.json
+    printf '%s' "$created_role_json" | jq --arg scope "$FOUNDRY_ID" --arg principal "$APIM_PRINCIPAL_ID" '{foundryRole:{created:true,id:.id,scope:(.scope // $scope),roleDefinitionName:(.roleDefinitionName // "Cognitive Services User"),principalId:(.principalId // $principal)}}' > .p89-receipts/foundry-role.json
   fi
   jq -e '(.foundryRole.created == true and (.foundryRole.id | type == "string" and length > 0)) or (.foundryRole.created == false and (.foundryRole.existingId | type == "string" and length > 0))' .p89-receipts/foundry-role.json >/dev/null || {
     rm -f .p89-receipts/foundry-role.json
@@ -709,7 +724,15 @@ Set one person's daily token budget.
 ```bash
 # P89-BUDGET-WRITE-BEGIN
 p89_budget_write() {
-  export BUDGET_OID="$(az ad user show --id "$DEVELOPER_UPN" --query id -o tsv | tr '[:upper:]' '[:lower:]')"
+  if ! BUDGET_OID="$(az ad user show --id "$DEVELOPER_UPN" --query id -o tsv | tr '[:upper:]' '[:lower:]')" || [ -z "$BUDGET_OID" ]; then
+    echo "Refused: could not read developer object id; quota-overrides was not changed." >&2
+    return 1
+  fi
+  if ! printf '%s' "$BUDGET_OID" | grep -Eq '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'; then
+    echo "Refused: developer object id '$BUDGET_OID' is not a GUID; quota-overrides was not changed." >&2
+    return 1
+  fi
+  export BUDGET_OID
   export CURRENT_OVERRIDES="$(az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id quota-overrides --query value -o tsv)"
   printf '%s\n' "$CURRENT_OVERRIDES" | grep -Eq '^,([^,=]+=([0-9]+),)*$|^,,$' || { echo "Refused: quota-overrides is malformed; no budget was written." >&2; return 1; }
   EXISTING_OVERRIDES="$(printf '%s' "$CURRENT_OVERRIDES" | tr ',' '\n' | awk -F= -v oid="$BUDGET_OID" 'NF && $1 != oid { print $0 }')"
@@ -761,9 +784,18 @@ Expected result: provisioning reaches `Succeeded`. This mirrors `scripts/ClaudeM
 Add the deployed model to tiers and record prices.
 
 ```bash
+# P89-ADD-MODEL-BEGIN
 p89_add_model_to_premium() {
   export NEW_MODEL="<deployment-name>"
-  export MODELS_PREMIUM_NOW="$(az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-premium --query value -o tsv)"
+  if ! MODELS_PREMIUM_NOW="$(az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-premium --query value -o tsv)" || [ -z "$MODELS_PREMIUM_NOW" ]; then
+    echo "Refused: could not read models-premium; nothing was changed." >&2
+    return 1
+  fi
+  if ! printf '%s' "$MODELS_PREMIUM_NOW" | grep -Eq '^,([^,]+,)*$|^,,$'; then
+    echo "Refused: models-premium is not a comma-sentinel list; nothing was changed." >&2
+    return 1
+  fi
+  export MODELS_PREMIUM_NOW
   export MODELS_PREMIUM_NEXT="$(printf '%s' "$MODELS_PREMIUM_NOW" | sed 's/,$//'),${NEW_MODEL},"
   if [ "$(printf '%s' "$MODELS_PREMIUM_NEXT" | wc -c | tr -d ' ')" -le 4096 ]; then
     az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-premium --value "$MODELS_PREMIUM_NEXT" -o none || return 1
@@ -776,11 +808,14 @@ p89_add_model_to_premium() {
   az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-premium --query value -o tsv
 }
 p89_add_model_to_premium
+# P89-ADD-MODEL-END
 ```
 
 Expected result: the premium model list contains the new deployment with sentinel commas, and `config/price-book.json` has a dated price entry. This mirrors `scripts/Add-ClaudeModel.ps1:208-253`.
 
 ## 7. Developer sign-in mode and Claude Desktop sign-in
+
+§7 applies only to `external-idp-browser` and `external-idp-broker` Desktop sign-in; `helper-script` uses the developer's Azure CLI sign-in and no app registration (`DEVELOPER.md:600-604`, `docs/SETUP.md:426`, `Install-ClaudeGateway.ps1:1172-1173`).
 
 Create or discover the Desktop public-client app.
 
@@ -1200,31 +1235,62 @@ Deploy private projection storage and networking.
 
 ```bash
 # P89-PROJECTION-DEPLOY-BEGIN
-export PROJECTION_NAME="projection-${NAME_PREFIX}"
-export PROJECTION_NETWORK_NAME="projection-network-${NAME_PREFIX}"
-az deployment group create -g "$GATEWAY_RG" -n "$PROJECTION_NAME" --template-file infra/projection.bicep --parameters namePrefix="$NAME_PREFIX" location="$LOCATION" networkAccess=private-only -o none
-export COSMOS_ACCOUNT="$(az deployment group show -g "$GATEWAY_RG" -n "$PROJECTION_NAME" --query "properties.outputs.accountName.value" -o tsv)"
-az deployment group create -g "$GATEWAY_RG" -n "$PROJECTION_NETWORK_NAME" --template-file infra/projection-network.bicep --parameters namePrefix="$NAME_PREFIX" location="$LOCATION" cosmosAccountName="$COSMOS_ACCOUNT" runnerEnabled=true -o none
-az deployment group show -g "$GATEWAY_RG" -n "$PROJECTION_NAME" --query properties.outputs -o json
-az deployment group show -g "$GATEWAY_RG" -n "$PROJECTION_NETWORK_NAME" --query properties.outputs -o json
+p89_projection_deploy() {
+  export PROJECTION_NAME="projection-${NAME_PREFIX}"
+  export PROJECTION_NETWORK_NAME="projection-network-${NAME_PREFIX}"
+  az deployment group create -g "$GATEWAY_RG" -n "$PROJECTION_NAME" --template-file infra/projection.bicep --parameters namePrefix="$NAME_PREFIX" location="$LOCATION" networkAccess=private-only -o none || return 1
+  if ! COSMOS_ACCOUNT="$(az deployment group show -g "$GATEWAY_RG" -n "$PROJECTION_NAME" --query "properties.outputs.accountName.value" -o tsv)" || [ -z "$COSMOS_ACCOUNT" ]; then
+    echo "Refused: could not read projection Cosmos account output; network deployment did not run." >&2
+    return 1
+  fi
+  export COSMOS_ACCOUNT
+  az deployment group create -g "$GATEWAY_RG" -n "$PROJECTION_NETWORK_NAME" --template-file infra/projection-network.bicep --parameters namePrefix="$NAME_PREFIX" location="$LOCATION" cosmosAccountName="$COSMOS_ACCOUNT" runnerEnabled=true -o none || return 1
+  az deployment group show -g "$GATEWAY_RG" -n "$PROJECTION_NAME" --query properties.outputs -o json || return 1
+  az deployment group show -g "$GATEWAY_RG" -n "$PROJECTION_NETWORK_NAME" --query properties.outputs -o json
+}
+p89_projection_deploy
 # P89-PROJECTION-DEPLOY-END
 ```
 
-Expected result: `projection.bicep` deploys first, then `projection-network.bicep` uses the Cosmos account output and creates private endpoints, DNS and the in-VNet runner. This mirrors `scripts/Deploy-ClaudeProjection.ps1:107-122`, `infra/projection.bicep:11-68` and `infra/projection-network.bicep:26-49`.
+Expected result: `projection.bicep` deploys first, then `projection-network.bicep` uses the Cosmos account output and creates private endpoints, DNS and the in-VNet runner. The private resolver path requires a gateway SKU with outbound VNet integration; Basic v2 cannot use this path (`docs/SCALE.md:628-635`). This mirrors `scripts/Deploy-ClaudeProjection.ps1:107-122`, `infra/projection.bicep:11-68` and `infra/projection-network.bicep:26-49`.
 
 Deploy the resolver with Standard v2 outbound VNet integration and upload code.
 
 ```bash
 # P89-RESOLVER-DEPLOY-BEGIN
-export RESOLVER_APP_ID="<resolver-app-id>"
-export GATEWAY_APP_ID="$(az ad sp show --id "$APIM_PRINCIPAL_ID" --query appId -o tsv)"
-export NETWORK_OUTPUTS="$(az deployment group show -g "$GATEWAY_RG" -n "$PROJECTION_NETWORK_NAME" --query properties.outputs -o json)"
-jq -n --arg namePrefix "$NAME_PREFIX" --arg location "$LOCATION" --arg cosmos "$COSMOS_ACCOUNT" --arg resolverAppId "$RESOLVER_APP_ID" --arg gatewayAppId "$GATEWAY_APP_ID" --arg gatewayObjectId "$APIM_PRINCIPAL_ID" --argjson network "$NETWORK_OUTPUTS" '{"$schema":"https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#","contentVersion":"1.0.0.0",parameters:{namePrefix:{value:$namePrefix},location:{value:$location},cosmosAccountName:{value:$cosmos},integrationSubnetId:{value:$network.resolverSubnetId.value},privateEndpointSubnetId:{value:$network.endpointsSubnetId.value},sitesDnsZoneId:{value:$network.sitesDnsZoneId.value},blobDnsZoneId:{value:$network.blobDnsZoneId.value},queueDnsZoneId:{value:$network.queueDnsZoneId.value},tableDnsZoneId:{value:$network.tableDnsZoneId.value},resolverAppId:{value:$resolverAppId},allowedCallerAppIds:{value:[$gatewayAppId]},allowedCallerObjectIds:{value:[$gatewayObjectId]},inboundAccess:{value:"private"}}}' > resolver-params.json
-az deployment group create -g "$GATEWAY_RG" -n "projection-resolver-${NAME_PREFIX}" --template-file infra/resolver.bicep --parameters @resolver-params.json -o none
-cd resolver && zip -r ../resolver.zip . && cd ..
-export RESOLVER_SITE_NAME="$(az deployment group show -g "$GATEWAY_RG" -n "projection-resolver-${NAME_PREFIX}" --query "properties.outputs.siteName.value" -o tsv)"
-az functionapp deployment source config-zip -g "$GATEWAY_RG" -n "$RESOLVER_SITE_NAME" --src resolver.zip -o none
-az functionapp show -g "$GATEWAY_RG" -n "$RESOLVER_SITE_NAME" --query "{name:name,state:state,host:defaultHostName}" -o json
+p89_resolver_deploy() {
+  export RESOLVER_APP_ID="<resolver-app-id>"
+  if ! GATEWAY_APP_ID="$(az ad sp show --id "$APIM_PRINCIPAL_ID" --query appId -o tsv)" || [ -z "$GATEWAY_APP_ID" ]; then
+    echo "Refused: could not read gateway managed identity app id; resolver deployment did not run." >&2
+    return 1
+  fi
+  export GATEWAY_APP_ID
+  if ! NETWORK_OUTPUTS="$(az deployment group show -g "$GATEWAY_RG" -n "$PROJECTION_NETWORK_NAME" --query properties.outputs -o json)" || [ -z "$NETWORK_OUTPUTS" ]; then
+    echo "Refused: could not read projection network outputs; resolver deployment did not run." >&2
+    return 1
+  fi
+  printf '%s' "$NETWORK_OUTPUTS" | jq -e '.resolverSubnetId.value and .endpointsSubnetId.value and .sitesDnsZoneId.value and .blobDnsZoneId.value and .queueDnsZoneId.value and .tableDnsZoneId.value' >/dev/null || {
+    echo "Refused: projection network outputs are missing required fields; resolver deployment did not run." >&2
+    return 1
+  }
+  export NETWORK_OUTPUTS
+  rm -f resolver-params.json
+  jq -n --arg namePrefix "$NAME_PREFIX" --arg location "$LOCATION" --arg cosmos "$COSMOS_ACCOUNT" --arg resolverAppId "$RESOLVER_APP_ID" --arg gatewayAppId "$GATEWAY_APP_ID" --arg gatewayObjectId "$APIM_PRINCIPAL_ID" --argjson network "$NETWORK_OUTPUTS" '{"$schema":"https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#","contentVersion":"1.0.0.0",parameters:{namePrefix:{value:$namePrefix},location:{value:$location},cosmosAccountName:{value:$cosmos},integrationSubnetId:{value:$network.resolverSubnetId.value},privateEndpointSubnetId:{value:$network.endpointsSubnetId.value},sitesDnsZoneId:{value:$network.sitesDnsZoneId.value},blobDnsZoneId:{value:$network.blobDnsZoneId.value},queueDnsZoneId:{value:$network.queueDnsZoneId.value},tableDnsZoneId:{value:$network.tableDnsZoneId.value},resolverAppId:{value:$resolverAppId},allowedCallerAppIds:{value:[$gatewayAppId]},allowedCallerObjectIds:{value:[$gatewayObjectId]},inboundAccess:{value:"private"}}}' > resolver-params.json || {
+    rm -f resolver-params.json
+    echo "Refused: resolver parameters could not be generated; resolver deployment did not run." >&2
+    return 1
+  }
+  az deployment group create -g "$GATEWAY_RG" -n "projection-resolver-${NAME_PREFIX}" --template-file infra/resolver.bicep --parameters @resolver-params.json -o none || return 1
+  cd resolver && zip -r ../resolver.zip . && cd .. || return 1
+  if ! RESOLVER_SITE_NAME="$(az deployment group show -g "$GATEWAY_RG" -n "projection-resolver-${NAME_PREFIX}" --query "properties.outputs.siteName.value" -o tsv)" || [ -z "$RESOLVER_SITE_NAME" ]; then
+    echo "Refused: could not read resolver site name output; code upload did not run." >&2
+    return 1
+  fi
+  export RESOLVER_SITE_NAME
+  az functionapp deployment source config-zip -g "$GATEWAY_RG" -n "$RESOLVER_SITE_NAME" --src resolver.zip -o none || return 1
+  az functionapp show -g "$GATEWAY_RG" -n "$RESOLVER_SITE_NAME" --query "{name:name,state:state,host:defaultHostName}" -o json
+}
+p89_resolver_deploy
 # P89-RESOLVER-DEPLOY-END
 ```
 
@@ -1326,7 +1392,7 @@ Send a real request with the signed-in user's Foundry token through the gateway.
 ```bash
 p89_gateway_url
 export FOUNDRY_TOKEN="$(az account get-access-token --resource https://ai.azure.com --query accessToken -o tsv)"
-curl -sS -o response.json -w "%{http_code}\n" -H "Authorization: Bearer ${FOUNDRY_TOKEN}" -H "Content-Type: application/json" -d "{\"model\":\"${SONNET_DEPLOYMENT}\",\"max_tokens\":32,\"messages\":[{\"role\":\"user\",\"content\":\"Return the word ok.\"}]}" "${GATEWAY_URL}/v1/messages"
+curl -sS -o response.json -w "%{http_code}\n" -H "Authorization: Bearer $FOUNDRY_TOKEN" -H "Content-Type: application/json" -d "{\"model\":\"${SONNET_DEPLOYMENT}\",\"max_tokens\":32,\"messages\":[{\"role\":\"user\",\"content\":\"Return the word ok.\"}]}" "${GATEWAY_URL}/v1/messages"
 jq -r '.content[0].text // .error.message' response.json
 ```
 
@@ -1336,7 +1402,7 @@ Verify a non-entitled caller is refused.
 
 ```bash
 export NON_ENTITLED_TOKEN="<token-for-a-caller-not-in-allow-standard-or-allow-premium>"
-curl -sS -o response-forbidden.json -w "%{http_code}\n" -H "Authorization: Bearer ${NON_ENTITLED_TOKEN}" -H "Content-Type: application/json" -d "{\"model\":\"${SONNET_DEPLOYMENT}\",\"max_tokens\":32,\"messages\":[{\"role\":\"user\",\"content\":\"Return the word ok.\"}]}" "${GATEWAY_URL}/v1/messages"
+curl -sS -o response-forbidden.json -w "%{http_code}\n" -H "Authorization: Bearer $NON_ENTITLED_TOKEN" -H "Content-Type: application/json" -d "{\"model\":\"${SONNET_DEPLOYMENT}\",\"max_tokens\":32,\"messages\":[{\"role\":\"user\",\"content\":\"Return the word ok.\"}]}" "${GATEWAY_URL}/v1/messages"
 jq -r '.error.message' response-forbidden.json
 ```
 
@@ -1358,7 +1424,7 @@ p89_verify_model_refusal() {
     echo "Refused: models-standard would exceed 4,096 characters. Nothing was written." >&2
     return 1
   fi
-  curl -sS -o response-model.json -w "%{http_code}\n" -H "Authorization: ******" -H "Content-Type: application/json" -d "{\"model\":\"${OPUS_DEPLOYMENT}\",\"max_tokens\":32,\"messages\":[{\"role\":\"user\",\"content\":\"Return the word ok.\"}]}" "${GATEWAY_URL}/v1/messages"
+  curl -sS -o response-model.json -w "%{http_code}\n" -H "Authorization: Bearer $FOUNDRY_TOKEN" -H "Content-Type: application/json" -d "{\"model\":\"${OPUS_DEPLOYMENT}\",\"max_tokens\":32,\"messages\":[{\"role\":\"user\",\"content\":\"Return the word ok.\"}]}" "${GATEWAY_URL}/v1/messages"
   jq -r '.error.message' response-model.json
   restore_rc=0
   az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --value "$MODELS_STANDARD_BEFORE" -o none || restore_rc=$?
@@ -1396,7 +1462,7 @@ Measure the per-minute call ceiling.
 
 ```bash
 az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id calls-per-minute --query value -o tsv
-for i in $(seq 1 5); do curl -sS -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer ${FOUNDRY_TOKEN}" -H "Content-Type: application/json" -d "{\"model\":\"${SONNET_DEPLOYMENT}\",\"max_tokens\":1,\"messages\":[{\"role\":\"user\",\"content\":\"ok\"}]}" "${GATEWAY_URL}/v1/messages"; done
+for i in $(seq 1 5); do curl -sS -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $FOUNDRY_TOKEN" -H "Content-Type: application/json" -d "{\"model\":\"${SONNET_DEPLOYMENT}\",\"max_tokens\":1,\"messages\":[{\"role\":\"user\",\"content\":\"ok\"}]}" "${GATEWAY_URL}/v1/messages"; done
 ```
 
 Expected result: normal traffic returns `200`; a deliberate high-rate test eventually returns the gateway's rate-limit status. This mirrors `scripts/Measure-ClaudeCeiling.ps1`.
@@ -1432,6 +1498,15 @@ p89_teardown_group() {
     return 1
   fi
   if jq -e '.resourceGroup.created == true and .resourceGroup.name == env.GATEWAY_RG' .p89-receipts/resource-group.json >/dev/null; then
+    receipt_nonce="$(jq -r '.resourceGroup.nonce // ""' .p89-receipts/resource-group.json)"
+    live_nonce="$(az group show -n "$GATEWAY_RG" --query "tags.\"claude-gateway-receipt\"" -o tsv)" || {
+      echo "Refused: could not read resource group receipt tag; group was not deleted." >&2
+      return 1
+    }
+    if [ -z "$receipt_nonce" ] || [ "$live_nonce" != "$receipt_nonce" ]; then
+      echo "Refused: resource group receipt tag does not match the live group; group was not deleted." >&2
+      return 1
+    fi
     az group delete -n "$GATEWAY_RG" --yes --no-wait
   else
     echo "Refused: resource group was pre-existing; group was not deleted." >&2
@@ -1442,7 +1517,7 @@ p89_teardown_group
 # P89-TEARDOWN-GROUP-END
 ```
 
-Expected result: the resource list is shown, and deletion starts only when `.p89-receipts/resource-group.json` says this guide created the group. Reused-APIM deployments leave artifacts inside the customer's APIM; inspect them with `az apim api show`, `az apim nv list`, `az apim logger show`, `az apim api diagnostic list` and `az monitor diagnostic-settings list`, but removal of reused-APIM artifacts is out of scope for this guide.
+Expected result: the resource list is shown, and deletion starts only when `.p89-receipts/resource-group.json` says this guide created the group and the live `claude-gateway-receipt` tag matches the receipt nonce. Reused-APIM deployments leave artifacts inside the customer's APIM; inspect them with `az apim api show`, `az apim nv list`, `az apim logger show`, `az apim api diagnostic list` and `az monitor diagnostic-settings list`, but removal of reused-APIM artifacts is out of scope for this guide.
 
 Remove only external resources this guide recorded as created.
 
@@ -1456,7 +1531,23 @@ p89_teardown_external() {
       return 1
     fi
     if jq -e '.foundryRole.created == true and (.foundryRole.id | type == "string" and length > 0)' "$receipt" >/dev/null; then
-      az role assignment delete --ids "$(jq -r '.foundryRole.id' "$receipt")"
+      role_id="$(jq -r '.foundryRole.id' "$receipt")"
+      if ! live_role="$(az role assignment list --query "[?id=='${role_id}']|[0]" -o json)"; then
+        echo "Refused: live Foundry role assignment does not match its receipt; that delete was skipped." >&2
+        return 0
+      fi
+      live_role_id="$(jq -r '.id // ""' <<< "$live_role")"
+      live_role_scope="$(jq -r '.scope // ""' <<< "$live_role")"
+      live_role_name="$(jq -r '.roleDefinitionName // ""' <<< "$live_role")"
+      live_role_principal="$(jq -r '.principalId // ""' <<< "$live_role")"
+      if [ "$live_role_id" != "$role_id" ] ||
+         [ "$live_role_scope" != "$(jq -r '.foundryRole.scope // ""' "$receipt")" ] ||
+         [ "$live_role_name" != "$(jq -r '.foundryRole.roleDefinitionName // ""' "$receipt")" ] ||
+         [ "$live_role_principal" != "$(jq -r '.foundryRole.principalId // ""' "$receipt")" ]; then
+        echo "Refused: live Foundry role assignment does not match its receipt; that delete was skipped." >&2
+        return 0
+      fi
+      az role assignment delete --ids "$role_id"
     else
       echo "Foundry role assignment was pre-existing; not deleting it."
     fi
@@ -1470,7 +1561,12 @@ p89_teardown_external() {
       return 1
     fi
     if jq -e '.group.created == true and (.group.id | type == "string" and length > 0)' "$receipt" >/dev/null; then
-      az ad group delete --group "$(jq -r '.group.id' "$receipt")"
+      group_id="$(jq -r '.group.id' "$receipt")"
+      if ! live_group="$(az ad group show --group "$group_id" --query "{id:id,displayName:displayName,createdDateTime:createdDateTime}" -o json)" || ! jq -e --arg id "$group_id" --arg name "$(jq -r '.group.displayName // ""' "$receipt")" --arg created "$(jq -r '.group.createdAt // ""' "$receipt")" '.id == $id and .displayName == $name and (($created == "") or (.createdDateTime == $created))' <<< "$live_group" >/dev/null; then
+        echo "Refused: live group ${tier} does not match its receipt; that delete was skipped." >&2
+        return 0
+      fi
+      az ad group delete --group "$group_id"
     else
       echo "Group ${tier} was pre-existing; not deleting it."
     fi
@@ -1483,7 +1579,12 @@ p89_teardown_external() {
       return 0
     fi
     if jq -e '.app.created == true and (.app.appId | type == "string" and length > 0)' "$receipt" >/dev/null; then
-      az ad app delete --id "$(jq -r '.app.appId' "$receipt")"
+      app_id="$(jq -r '.app.appId' "$receipt")"
+      if ! live_app="$(az ad app show --id "$app_id" -o json)" || ! jq -e --arg appId "$app_id" --arg objectId "$(jq -r '.app.objectId // ""' "$receipt")" --arg displayName "$(jq -r '.app.displayName // ""' "$receipt")" '.appId == $appId and .id == $objectId and .displayName == $displayName' <<< "$live_app" >/dev/null; then
+        echo "Refused: live Desktop app registration does not match its receipt; that delete was skipped." >&2
+        return 0
+      fi
+      az ad app delete --id "$app_id"
     else
       echo "Desktop app registration was pre-existing; not deleting it."
     fi
@@ -1519,4 +1620,4 @@ p89_teardown_external
 # P89-TEARDOWN-EXTERNAL-END
 ```
 
-Expected result: only role assignments, tier groups, Key Vault role assignments and Desktop app registrations recorded with `created:true` are deleted. Missing role or group receipts refuse and delete nothing; the Desktop app and Key Vault role receipts are optional, because §7 and §9 can be skipped. Pre-existing directory objects survive. This mirrors the Foundry role assignment in `infra/foundry-role.bicep`, `deploy.ps1:182-187` and `scripts/New-ClaudeDesktopEntraApp.ps1:29-39`.
+Expected result: only role assignments, tier groups, Key Vault role assignments and Desktop app registrations recorded with `created:true` are deleted. Missing role or group receipts refuse and delete nothing; the Desktop app and Key Vault role receipts are optional, because §7 and §9 can be skipped. Pre-existing directory objects survive. Receipt-gated teardown covers objects the CLI route created; objects created in the portal have no receipts. This mirrors the Foundry role assignment in `infra/foundry-role.bicep`, `deploy.ps1:182-187` and `scripts/New-ClaudeDesktopEntraApp.ps1:29-39`.

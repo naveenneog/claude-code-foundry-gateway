@@ -190,6 +190,24 @@ foreach ($cmd in $commands) {
 $docRef = Join-Path $PSScriptRoot 'Test-DocReferences.ps1'
 Assert 'relative-link checker exists for guide links' (Test-Path -LiteralPath $docRef)
 
+$assignedAuthVars = New-Object 'System.Collections.Generic.HashSet[string]'
+foreach ($block in [regex]::Matches($markdown, '(?ms)^```(?:bash|sh)\s*$(.*?)^```\s*$')) {
+    $blockText = $block.Groups[1].Value
+    Assert 'bash authorization headers do not contain masked literals' ($blockText -notmatch 'Authorization:\s*\*{6}')
+    foreach ($line in ($blockText -split "`r?`n")) {
+        foreach ($assign in [regex]::Matches($line, '^\s*(?:export\s+)?([A-Z_]+)=["'']?')) {
+            [void]$assignedAuthVars.Add($assign.Groups[1].Value)
+        }
+        foreach ($header in [regex]::Matches($line, 'Authorization:\s*Bearer\s+\$([A-Z_]+)')) {
+            $var = $header.Groups[1].Value
+            Assert "authorization header variable $var is assigned before use" ($assignedAuthVars.Contains($var)) $header.Value
+        }
+    }
+    foreach ($auth in [regex]::Matches($blockText, 'Authorization:\s*([^"]+)')) {
+        Assert 'authorization header uses Bearer variable form' ($auth.Value -match '^Authorization:\s*Bearer\s+\$[A-Z_]+$') $auth.Value
+    }
+}
+
 
 function Get-MarkedBashBlock([string]$Text, [string]$Name) {
     $m = [regex]::Match($Text, "(?ms)# P89-$Name-BEGIN\s*(.*?)# P89-$Name-END")
@@ -271,6 +289,11 @@ json_members() {
 if [ "$1" = "ad" ] && [ "$2" = "group" ] && [ "$3" = "show" ]; then
   group="$(arg_after --group "$@")"
   query="$(arg_after --query "$@")"
+  if [[ "$query" == *displayName* ]]; then
+    if [ "${P89_SCENARIO:-}" = "teardown-group-live-mismatch" ] && [ "$group" = "standard-id" ]; then printf '{"id":"standard-id","displayName":"other","createdDateTime":"2020-01-01T00:00:00Z"}\n'
+    elif [ "$group" = "standard-id" ]; then printf '{"id":"standard-id","displayName":"claude-code-standard","createdDateTime":"2020-01-01T00:00:00Z"}\n'; else printf '{"id":"premium-id","displayName":"claude-code-premium","createdDateTime":"2020-01-01T00:00:00Z"}\n'; fi
+    exit 0
+  fi
   if [[ "$query" == *createdDateTime* ]]; then
     if [ "${P89_SCENARIO:-}" = "group-young" ]; then date -u +"%Y-%m-%dT%H:%M:%SZ"; else printf '2020-01-01T00:00:00Z\n'; fi
     exit 0
@@ -305,9 +328,9 @@ if [ "$1" = "apim" ] && [ "$2" = "show" ]; then
     exit 0
   fi
   case "${P89_SCENARIO:-}" in
-    identity-null|identity-patch)
+    identity-null|identity-patch|identity-timeout)
       if [ -f "${P89_STATE_DIR:-.}/identity-enabled" ] && [ "$query" = "identity" ]; then printf '{"type":"SystemAssigned","principalId":"gateway-object-id"}\n'; elif [ "$query" = "identity" ]; then printf 'null\n'; elif [[ "$query" == *identity.principalId* ]]; then
-        state="${P89_STATE_DIR:-.}/identity-poll"; n=0; [ -f "$state" ] && n="$(cat "$state")"; n=$((n+1)); printf '%s' "$n" > "$state"; [ "$n" -ge 2 ] && printf 'gateway-object-id\n'
+        state="${P89_STATE_DIR:-.}/identity-poll"; n=0; [ -f "$state" ] && n="$(cat "$state")"; n=$((n+1)); printf '%s' "$n" > "$state"; [ "${P89_SCENARIO:-}" != "identity-timeout" ] && [ "$n" -ge 2 ] && printf 'gateway-object-id\n'
       elif [[ "$query" == *id:id* ]]; then printf '{"id":"/subscriptions/sub/resourceGroups/rg/providers/Microsoft.ApiManagement/service/apim","identity":null}\n'; else printf '{}\n'; fi
       ;;
     identity-userassigned)
@@ -321,8 +344,21 @@ if [ "$1" = "apim" ] && [ "$2" = "show" ]; then
 fi
 if [ "$1" = "group" ]; then
   case "$2" in
-    exists) if [ "${P89_SCENARIO:-}" = "rg-exists-fail" ]; then echo "exists failed" >&2; exit 3; elif [ "${P89_SCENARIO:-}" = "rg-existing" ]; then printf 'true\n'; else printf 'false\n'; fi; exit 0 ;;
+    exists) if [ "${P89_SCENARIO:-}" = "rg-exists-fail" ]; then echo "exists failed" >&2; exit 3; elif [ "${P89_SCENARIO:-}" = "rg-existing" ] || [ "${P89_SCENARIO:-}" = "rg-tag-mismatch" ] || [ "${P89_SCENARIO:-}" = "rg-tag-missing" ]; then printf 'true\n'; else printf 'false\n'; fi; exit 0 ;;
     create) printf 'group-create %s\n' "$*" >> "$P89_WRITES"; exit 0 ;;
+    show)
+      query="$(arg_after --query "$@")"
+      if [[ "$query" == *claude-gateway-receipt* ]]; then
+        case "${P89_SCENARIO:-}" in
+          rg-tag-mismatch|teardown-group-tag-mismatch) printf 'other-nonce\n' ;;
+          rg-tag-missing|teardown-group-tag-missing) printf '\n' ;;
+          *) printf 'receipt-nonce\n' ;;
+        esac
+      else
+        printf '{"name":"rg","location":"eastus","tags":{"claude-gateway-receipt":"receipt-nonce"}}\n'
+      fi
+      exit 0
+      ;;
     delete) printf 'group-delete %s\n' "$*" >> "$P89_WRITES"; exit 0 ;;
   esac
 fi
@@ -355,6 +391,9 @@ if [ "$1" = "ad" ] && [ "$2" = "group" ] && [ "$3" = "delete" ]; then
   exit 0
 fi
 if [ "$1" = "ad" ] && [ "$2" = "user" ] && [ "$3" = "show" ]; then
+  if [ "${P89_SCENARIO:-}" = "budget-user-fail" ]; then echo "user read failed" >&2; exit 3; fi
+  if [ "${P89_SCENARIO:-}" = "budget-user-empty" ]; then printf '\n'; exit 0; fi
+  if [ "${P89_SCENARIO:-}" = "budget-user-bad" ]; then printf 'not-a-guid\n'; exit 0; fi
   printf '55555555-5555-5555-5555-555555555555\n'
   exit 0
 fi
@@ -368,6 +407,7 @@ if [ "$1" = "ad" ] && [ "$2" = "group" ] && [ "$3" = "member" ]; then
   exit 0
 fi
 if [ "$1" = "ad" ] && [ "$2" = "sp" ] && [ "$3" = "show" ]; then
+  if [ "${P89_SCENARIO:-}" = "resolver-gateway-app-fail" ]; then echo "sp read failed" >&2; exit 3; fi
   printf 'gateway-app-id\n'
   exit 0
 fi
@@ -382,16 +422,17 @@ if [ "$1" = "ad" ] && [ "$2" = "app" ]; then
       ;;
     create)
       if [ "${P89_SCENARIO:-}" = "app-create-fail" ]; then echo "Authorization_RequestDenied" >&2; exit 3; fi
-      printf '{"appId":"created-app-id","displayName":"Claude Desktop gateway"}\n'
+      printf '{"appId":"created-app-id","id":"created-object-id","displayName":"Claude Desktop gateway"}\n'
       exit 0
       ;;
     update|show)
       if [ "$3" = "show" ]; then
-        if [ "${P89_SCENARIO:-}" = "redirect-missing-uri" ]; then printf '{"appId":"created-app-id","publicClient":{"redirectUris":["https://existing.example/callback"]},"isFallbackPublicClient":true}\n'
-        elif [ "${P89_SCENARIO:-}" = "redirect-fallback-false" ]; then printf '{"appId":"created-app-id","publicClient":{"redirectUris":["https://existing.example/callback","http://127.0.0.1/callback","ms-appx-web://Microsoft.AAD.BrokerPlugin/66666666-6666-6666-6666-666666666666","msauth.com.anthropic.claudefordesktop://auth"]},"isFallbackPublicClient":false}\n'
-        elif [ -f "${P89_STATE_DIR:-.}/app-updated" ]; then printf '{"appId":"created-app-id","publicClient":{"redirectUris":["https://existing.example/callback","http://127.0.0.1/callback","ms-appx-web://Microsoft.AAD.BrokerPlugin/66666666-6666-6666-6666-666666666666","msauth.com.anthropic.claudefordesktop://auth"]},"isFallbackPublicClient":true}\n'
-        elif [ "${P89_SCENARIO:-}" = "redirect-extra" ]; then printf '{"appId":"created-app-id","publicClient":{"redirectUris":["https://existing.example/callback"]},"isFallbackPublicClient":false}\n'
-        else printf '{"appId":"created-app-id","publicClient":{"redirectUris":["http://127.0.0.1/callback"]},"isFallbackPublicClient":true}\n'; fi
+        if [ "${P89_SCENARIO:-}" = "redirect-missing-uri" ]; then printf '{"appId":"created-app-id","id":"created-object-id","displayName":"Claude Desktop gateway","publicClient":{"redirectUris":["https://existing.example/callback"]},"isFallbackPublicClient":true}\n'
+        elif [ "${P89_SCENARIO:-}" = "redirect-fallback-false" ]; then printf '{"appId":"created-app-id","id":"created-object-id","displayName":"Claude Desktop gateway","publicClient":{"redirectUris":["https://existing.example/callback","http://127.0.0.1/callback","ms-appx-web://Microsoft.AAD.BrokerPlugin/66666666-6666-6666-6666-666666666666","msauth.com.anthropic.claudefordesktop://auth"]},"isFallbackPublicClient":false}\n'
+        elif [ -f "${P89_STATE_DIR:-.}/app-updated" ]; then printf '{"appId":"created-app-id","id":"created-object-id","displayName":"Claude Desktop gateway","publicClient":{"redirectUris":["https://existing.example/callback","http://127.0.0.1/callback","ms-appx-web://Microsoft.AAD.BrokerPlugin/66666666-6666-6666-6666-666666666666","msauth.com.anthropic.claudefordesktop://auth"]},"isFallbackPublicClient":true}\n'
+        elif [ "${P89_SCENARIO:-}" = "redirect-extra" ]; then printf '{"appId":"created-app-id","id":"created-object-id","displayName":"Claude Desktop gateway","publicClient":{"redirectUris":["https://existing.example/callback"]},"isFallbackPublicClient":false}\n'
+        elif [ "${P89_SCENARIO:-}" = "teardown-app-live-mismatch" ]; then printf '{"appId":"created-app-id","id":"other-object-id","displayName":"Claude Desktop gateway","publicClient":{"redirectUris":["http://127.0.0.1/callback"]},"isFallbackPublicClient":true}\n'
+        else printf '{"appId":"created-app-id","id":"created-object-id","displayName":"Claude Desktop gateway","publicClient":{"redirectUris":["http://127.0.0.1/callback"]},"isFallbackPublicClient":true}\n'; fi
       else
         printf 'app-update %s\n' "$*" >> "$P89_WRITES"
         printf '1' > "${P89_STATE_DIR:-.}/app-updated"
@@ -409,13 +450,15 @@ if [ "$1" = "role" ] && [ "$2" = "assignment" ]; then
   action="$3"
   case "$action" in
     list)
-      if [ "${P89_SCENARIO:-}" = "role-existing" ]; then printf 'existing-role-id\n'; elif [ "${P89_SCENARIO:-}" = "keyvault-existing" ]; then printf 'kv-existing-role-id\n'; fi
+      query="$(arg_after --query "$@")"
+      if [[ "$*" == *created-role-id* ]]; then if [ "${P89_SCENARIO:-}" = "teardown-role-live-mismatch" ]; then printf '{"id":"created-role-id","scope":"/subscriptions/sub/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/foundry","roleDefinitionName":"Reader","principalId":"gateway-object-id"}\n'; else printf '{"id":"created-role-id","scope":"/subscriptions/sub/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/foundry","roleDefinitionName":"Cognitive Services User","principalId":"gateway-object-id"}\n'; fi
+      elif [ "${P89_SCENARIO:-}" = "role-existing" ]; then printf 'existing-role-id\n'; elif [ "${P89_SCENARIO:-}" = "keyvault-existing" ]; then printf 'kv-existing-role-id\n'; fi
       exit 0
       ;;
     create)
       if [ "${P89_SCENARIO:-}" = "role-create-fail" ]; then echo "Role create failed" >&2; exit 3; fi
       role="$(arg_after --role "$@")"
-      if [ "$role" = "Key Vault Secrets User" ]; then printf '{"id":"kv-created-role-id"}\n'; else printf '{"id":"created-role-id"}\n'; fi
+      if [ "$role" = "Key Vault Secrets User" ]; then printf '{"id":"kv-created-role-id"}\n'; else printf '{"id":"created-role-id","scope":"/subscriptions/sub/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/foundry","roleDefinitionName":"Cognitive Services User","principalId":"gateway-object-id"}\n'; fi
       exit 0
       ;;
     delete)
@@ -506,7 +549,10 @@ if [ "$1" = "apim" ] && [ "$2" = "nv" ] && [ "$3" = "show" ]; then
         printf ',aaaaaaaa-aaaa-aaaa-aaaa-000000000001=100,55555555-5555-5555-5555-555555555555=50,\n'
       fi
       ;;
-    models-premium) printf ',claude-sonnet-5,\n' ;;
+    models-premium)
+      if [ "${P89_SCENARIO:-}" = "models-premium-read-fail" ]; then echo "read failed" >&2; exit 3; fi
+      if [ "${P89_SCENARIO:-}" = "models-premium-malformed" ]; then printf 'claude-sonnet-5\n'; else printf ',claude-sonnet-5,\n'; fi
+      ;;
     models-standard)
       if [ "${P89_SCENARIO:-}" = "model-read-fail" ]; then echo "read failed" >&2; exit 3; fi
       if [ "${P89_SCENARIO:-}" = "model-read-empty" ]; then printf '\n'; exit 0; fi
@@ -540,12 +586,12 @@ if [ "$1" = "deployment" ] && [ "$2" = "group" ]; then
         case "$query" in
           *runnerName.value*) printf 'runner-aci\n' ;;
           *runnerPrincipalId.value*) printf 'runner-principal\n' ;;
-          *) printf '{"runnerName":{"value":"runner-aci"},"runnerPrincipalId":{"value":"runner-principal"},"resolverSubnetId":{"value":"resolver-subnet"},"endpointsSubnetId":{"value":"endpoints-subnet"},"sitesDnsZoneId":{"value":"sites-zone"},"blobDnsZoneId":{"value":"blob-zone"},"queueDnsZoneId":{"value":"queue-zone"},"tableDnsZoneId":{"value":"table-zone"}}\n' ;;
+          *) if [ "${P89_SCENARIO:-}" = "resolver-network-missing" ]; then printf '{"runnerName":{"value":"runner-aci"}}\n'; else printf '{"runnerName":{"value":"runner-aci"},"runnerPrincipalId":{"value":"runner-principal"},"resolverSubnetId":{"value":"resolver-subnet"},"endpointsSubnetId":{"value":"endpoints-subnet"},"sitesDnsZoneId":{"value":"sites-zone"},"blobDnsZoneId":{"value":"blob-zone"},"queueDnsZoneId":{"value":"queue-zone"},"tableDnsZoneId":{"value":"table-zone"}}\n'; fi ;;
         esac
         ;;
-      projection-resolver-*) printf 'func-resolver\n' ;;
+      projection-resolver-*) if [ "${P89_SCENARIO:-}" = "resolver-site-empty" ]; then printf '\n'; else printf 'func-resolver\n'; fi ;;
       projection-*)
-        if [[ "$query" == *accountName.value* ]]; then printf 'cosmos-prefix\n'; else printf '{"accountName":{"value":"cosmos-prefix"}}\n'; fi
+        if [[ "$query" == *accountName.value* ]]; then if [ "${P89_SCENARIO:-}" = "projection-cosmos-empty" ]; then printf '\n'; else printf 'cosmos-prefix\n'; fi; else printf '{"accountName":{"value":"cosmos-prefix"}}\n'; fi
         ;;
       *) printf '{}\n' ;;
     esac
@@ -553,7 +599,7 @@ if [ "$1" = "deployment" ] && [ "$2" = "group" ]; then
   fi
 fi
 if [ "$1" = "cognitiveservices" ] && [ "$2" = "account" ] && [ "$3" = "show" ]; then
-  printf '/subscriptions/sub/resourceGroups/foundry-rg/providers/Microsoft.CognitiveServices/accounts/foundry\n'
+  printf '/subscriptions/sub/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/foundry\n'
   exit 0
 fi
 if [ "$1" = "cosmosdb" ] && [ "$2" = "sql" ] && [ "$3" = "role" ] && [ "$4" = "assignment" ] && [ "$5" = "create" ]; then
@@ -563,6 +609,18 @@ fi
 if [ "$1" = "container" ] && [ "$2" = "exec" ]; then
   cmd="$(arg_after --exec-command "$@")"
   printf 'container-exec %s\n' "$cmd" >> "$P89_WRITES"
+  if [ "${P89_SCENARIO:-}" = "runner-init-fail" ] && [[ "$cmd" == *writeFileSync* && "$cmd" == *".b64"* ]]; then
+    echo "init failed" >&2
+    exit 9
+  fi
+  if [ "${P89_SCENARIO:-}" = "runner-finalize-fail" ] && [[ "$cmd" == *Buffer.from* ]]; then
+    echo "finalize failed" >&2
+    exit 9
+  fi
+  if [ "${P89_SCENARIO:-}" = "runner-finalize-error-text" ] && [[ "$cmd" == *Buffer.from* ]]; then
+    echo "ERROR: finalize reported error"
+    exit 0
+  fi
   if [ "${P89_SCENARIO:-}" = "runner-chunk-fail" ] && [[ "$cmd" == *appendFileSync* ]]; then
     echo "chunk failed" >&2
     exit 9
@@ -648,6 +706,16 @@ exit 0
     $path
 }
 
+function New-GuidePythonStub([string]$Directory) {
+    $path = Join-Path $Directory 'python3'
+    @'
+#!/usr/bin/env bash
+printf 'receipt-nonce\n'
+exit 0
+'@ | Set-Content -LiteralPath $path -NoNewline
+    $path
+}
+
 function Invoke-GuideBashScenario([string]$Name, [string]$Script, [hashtable]$ExtraEnv = @{}) {
     $bash = 'C:\Program Files\Git\bin\bash.exe'
     Assert 'Git Bash is available for guide execution tests' (Test-Path -LiteralPath $bash) $bash
@@ -662,7 +730,8 @@ function Invoke-GuideBashScenario([string]$Name, [string]$Script, [hashtable]$Ex
     New-GuideZipStub $dir | Out-Null
     New-GuideCurlStub $dir | Out-Null
     New-GuideDigStub $dir | Out-Null
-    New-Item -ItemType Directory -Force -Path (Join-Path $dir 'scripts'), (Join-Path $dir 'sync\src'), (Join-Path $dir 'resolver\src'), (Join-Path $dir 'onboarding'), (Join-Path $dir '.p89-receipts') | Out-Null
+    New-GuidePythonStub $dir | Out-Null
+    New-Item -ItemType Directory -Force -Path (Join-Path $dir 'scripts'), (Join-Path $dir 'sync\src'), (Join-Path $dir 'resolver\src'), (Join-Path $dir 'onboarding'), (Join-Path $dir 'config'), (Join-Path $dir '.p89-receipts') | Out-Null
     [IO.File]::WriteAllText((Join-Path $dir 'scripts\Sync-ClaudeProjection.ps1'), "#!/usr/bin/env bash`nwhile [ `"`$#`" -gt 0 ]; do if [ `"`$1`" = `"-ExportPath`" ]; then shift; printf '{`"members`":[]}\n' > `"`$1`"; fi; shift || true; done`n")
     [IO.File]::WriteAllText((Join-Path $dir 'scripts\Compare-ClaudeEntitlement.ps1'), "#!/usr/bin/env bash`nwhile [ `"`$#`" -gt 0 ]; do if [ `"`$1`" = `"-ExportGatewayPath`" ]; then shift; printf '{`"decisions`":[]}\n' > `"`$1`"; fi; shift || true; done`n")
     [IO.File]::WriteAllText((Join-Path $dir 'sync\package.json'), "{`"scripts`":{}}`n")
@@ -670,6 +739,7 @@ function Invoke-GuideBashScenario([string]$Name, [string]$Script, [hashtable]$Ex
     [IO.File]::WriteAllText((Join-Path $dir 'resolver\host.json'), "{}`n")
     [IO.File]::WriteAllText((Join-Path $dir 'resolver\package.json'), "{`"dependencies`":{}}`n")
     [IO.File]::WriteAllText((Join-Path $dir 'resolver\src\index.js'), "module.exports={}`n")
+    [IO.File]::WriteAllText((Join-Path $dir 'config\price-book.json'), "{`"models`":{}}`n")
     $scriptPath = Join-Path $dir 'run.sh'
     @"
 #!/usr/bin/env bash
@@ -714,6 +784,8 @@ export CERT_NAME="cert"
 export CERT_SECRET_ID="https://kv.vault.azure.net/secrets/cert/ver"
 export GATEWAY_HOSTNAME="new.example"
 export GATEWAY_URL="https://apim.azure-api.net/claude"
+export FOUNDRY_TOKEN="foundry-token"
+export NON_ENTITLED_TOKEN="non-entitled-token"
 export APIM_ID="/subscriptions/sub/resourceGroups/rg/providers/Microsoft.ApiManagement/service/apim"
 export DEVELOPER_UPN="dev@example.test"
 export DEVELOPER_ID="55555555-5555-5555-5555-555555555555"
@@ -759,6 +831,7 @@ $removeBlock = Get-MarkedBashBlock $markdown 'DEVELOPER-REMOVE'
 $roleBlock = Get-MarkedBashBlock $markdown 'FOUNDRY-ROLE'
 $tierBlock = Get-MarkedBashBlock $markdown 'TIER-WRITES'
 $budgetBlock = Get-MarkedBashBlock $markdown 'BUDGET-WRITE'
+$addModelBlock = Get-MarkedBashBlock $markdown 'ADD-MODEL'
 $desktopAppBlock = Get-MarkedBashBlock $markdown 'DESKTOP-APP'
 $desktopRedirectsBlock = Get-MarkedBashBlock $markdown 'DESKTOP-REDIRECTS'
 $gatewayUrlBlock = Get-MarkedBashBlock $markdown 'GATEWAY-URL'
@@ -835,6 +908,7 @@ $rgNew = Invoke-GuideBashScenario 'rg-new' $resourceGroupBlock
 Assert 'resource group new create records created true' (
     $rgNew.Exit -eq 0 -and
     (Read-ScenarioFile $rgNew 'writes.log') -match 'group-create' -and
+    (Read-ScenarioFile $rgNew 'writes.log') -match 'claude-gateway-receipt=receipt-nonce' -and
     (Read-ScenarioFile $rgNew '.p89-receipts/resource-group.json' | ConvertFrom-Json).resourceGroup.created -eq $true
 ) $rgNew.Output
 
@@ -845,14 +919,28 @@ Assert 'resource group existing records created false' (
     (Read-ScenarioFile $rgExisting '.p89-receipts/resource-group.json' | ConvertFrom-Json).resourceGroup.created -eq $false
 ) $rgExisting.Output
 
-$rgReceiptRerun = Invoke-GuideBashScenario 'rg-existing' ("mkdir -p .p89-receipts; printf '%s\n' '{""resourceGroup"":{""created"":true,""name"":""rg""}}' > .p89-receipts/resource-group.json; " + $resourceGroupBlock)
+$rgReceiptRerun = Invoke-GuideBashScenario 'rg-existing' ("mkdir -p .p89-receipts; printf '%s\n' '{""resourceGroup"":{""created"":true,""name"":""rg"",""nonce"":""receipt-nonce""}}' > .p89-receipts/resource-group.json; " + $resourceGroupBlock)
 Assert 'resource group rerun keeps created true receipt when group still exists' (
     $rgReceiptRerun.Exit -eq 0 -and
     -not ((Read-ScenarioFile $rgReceiptRerun 'writes.log') -match 'group-create') -and
     (Read-ScenarioFile $rgReceiptRerun '.p89-receipts/resource-group.json' | ConvertFrom-Json).resourceGroup.created -eq $true
 ) $rgReceiptRerun.Output
 
-$rgReceiptDeleted = Invoke-GuideBashScenario 'rg-new' ("mkdir -p .p89-receipts; printf '%s\n' '{""resourceGroup"":{""created"":true,""name"":""rg""}}' > .p89-receipts/resource-group.json; " + $resourceGroupBlock)
+$rgReceiptMismatch = Invoke-GuideBashScenario 'rg-tag-mismatch' ("mkdir -p .p89-receipts; printf '%s\n' '{""resourceGroup"":{""created"":true,""name"":""rg"",""nonce"":""receipt-nonce""}}' > .p89-receipts/resource-group.json; " + $resourceGroupBlock)
+Assert 'resource group rerun refuses mismatched receipt tag' (
+    $rgReceiptMismatch.Exit -ne 0 -and
+    $rgReceiptMismatch.Output -match 'receipt tag does not match' -and
+    -not ((Read-ScenarioFile $rgReceiptMismatch 'writes.log') -match 'group-create')
+) $rgReceiptMismatch.Output
+
+$rgReceiptMissingTag = Invoke-GuideBashScenario 'rg-tag-missing' ("mkdir -p .p89-receipts; printf '%s\n' '{""resourceGroup"":{""created"":true,""name"":""rg"",""nonce"":""receipt-nonce""}}' > .p89-receipts/resource-group.json; " + $resourceGroupBlock)
+Assert 'resource group rerun refuses missing receipt tag' (
+    $rgReceiptMissingTag.Exit -ne 0 -and
+    $rgReceiptMissingTag.Output -match 'receipt tag does not match' -and
+    -not ((Read-ScenarioFile $rgReceiptMissingTag 'writes.log') -match 'group-create')
+) $rgReceiptMissingTag.Output
+
+$rgReceiptDeleted = Invoke-GuideBashScenario 'rg-new' ("mkdir -p .p89-receipts; printf '%s\n' '{""resourceGroup"":{""created"":true,""name"":""rg"",""nonce"":""receipt-nonce""}}' > .p89-receipts/resource-group.json; " + $resourceGroupBlock)
 Assert 'resource group deleted after created true receipt is recreated' (
     $rgReceiptDeleted.Exit -eq 0 -and
     (Read-ScenarioFile $rgReceiptDeleted 'writes.log') -match 'group-create' -and
@@ -1019,7 +1107,7 @@ Assert 'role assignment block records pre-existing assignment without creating' 
 $identityNullRead = Invoke-GuideBashScenario 'identity-null' (Join-GuideBlocks @($identityBlock, $roleBlock))
 Assert 'missing APIM identity refuses before role list or create' (
     $identityNullRead.Exit -ne 0 -and
-    $identityNullRead.Output -match 'Managed identities > System assigned > Status On' -and
+    $identityNullRead.Output -match 'no Foundry role check ran' -and
     -not ((Read-ScenarioFile $identityNullRead 'calls.log') -match 'role assignment list --scope .* --assignee  ') -and
     -not ((Read-ScenarioFile $identityNullRead 'calls.log') -match 'role assignment create')
 ) $identityNullRead.Output
@@ -1037,6 +1125,13 @@ Assert 'missing APIM identity can be enabled with one PATCH then principal appea
     @((Read-ScenarioFile $identityPatch 'writes.log') -split "`n" | Where-Object { $_ -match 'rest-patch .*"identity":\{"type":"SystemAssigned"\}' }).Count -eq 1 -and
     $identityPatch.Output -match 'gateway-object-id'
 ) $identityPatch.Output
+
+$identityTimeout = Invoke-GuideBashScenario 'identity-timeout' ("export IDENTITY_WAIT_ATTEMPTS=2; export IDENTITY_WAIT_DELAY_SECONDS=0; " + $enableIdentityBlock)
+Assert 'identity enable bounded wait refuses when principal never appears' (
+    $identityTimeout.Exit -ne 0 -and
+    $identityTimeout.Output -match 'principalId did not appear' -and
+    (Read-ScenarioFile $identityTimeout 'writes.log') -match 'rest-patch'
+) $identityTimeout.Output
 
 $roleCreateFail = Invoke-GuideBashScenario 'role-create-fail' (Join-GuideBlocks @($identityBlock, $roleBlock))
 Assert 'failing role create refuses and leaves no receipt' (
@@ -1141,6 +1236,40 @@ Assert 'budget write block refuses oversize quota-overrides before write' (
     -not ((Read-ScenarioFile $budgetOversize 'writes.log') -match 'quota-overrides=') -and
     $budgetOversize.Output -match '4,096'
 ) $budgetOversize.Output
+
+$budgetUserFail = Invoke-GuideBashScenario 'budget-user-fail' $budgetBlock
+Assert 'budget write block refuses failed developer id read before write' (
+    $budgetUserFail.Exit -ne 0 -and
+    $budgetUserFail.Output -match 'could not read developer object id' -and
+    -not ((Read-ScenarioFile $budgetUserFail 'writes.log') -match 'quota-overrides=')
+) $budgetUserFail.Output
+
+$budgetUserBad = Invoke-GuideBashScenario 'budget-user-bad' $budgetBlock
+Assert 'budget write block refuses non-GUID developer id before write' (
+    $budgetUserBad.Exit -ne 0 -and
+    $budgetUserBad.Output -match 'not a GUID' -and
+    -not ((Read-ScenarioFile $budgetUserBad 'writes.log') -match 'quota-overrides=')
+) $budgetUserBad.Output
+
+$addModel = Invoke-GuideBashScenario 'add-model' $addModelBlock
+Assert 'add model block preserves existing premium models' (
+    $addModel.Exit -eq 0 -and
+    (Read-ScenarioFile $addModel 'writes.log') -match 'models-premium=,claude-sonnet-5,<deployment-name>,'
+) $addModel.Output
+
+$addModelReadFail = Invoke-GuideBashScenario 'models-premium-read-fail' $addModelBlock
+Assert 'add model block refuses failed models-premium read before write' (
+    $addModelReadFail.Exit -ne 0 -and
+    $addModelReadFail.Output -match 'could not read models-premium' -and
+    -not ((Read-ScenarioFile $addModelReadFail 'writes.log') -match 'models-premium=')
+) $addModelReadFail.Output
+
+$addModelMalformed = Invoke-GuideBashScenario 'models-premium-malformed' $addModelBlock
+Assert 'add model block refuses malformed models-premium before write' (
+    $addModelMalformed.Exit -ne 0 -and
+    $addModelMalformed.Output -match 'comma-sentinel' -and
+    -not ((Read-ScenarioFile $addModelMalformed 'writes.log') -match 'models-premium=')
+) $addModelMalformed.Output
 
 $handover = Invoke-GuideBashScenario 'handover' (Join-GuideBlocks @($gatewayUrlBlock, $handoverBlock))
 $handoverJson = Read-ScenarioFile $handover 'onboarding/claude-gateway.json'
@@ -1358,6 +1487,13 @@ Assert 'projection deployment block deploys store before network' (
     $projectionDeployWrites.IndexOf('deployment-create projection-network-prefix') -gt $projectionDeployWrites.IndexOf('deployment-create projection-prefix')
 ) $projectionDeploy.Output
 
+$projectionCosmosEmpty = Invoke-GuideBashScenario 'projection-cosmos-empty' $projectionDeployBlock
+Assert 'projection deployment refuses empty Cosmos account output before network deploy' (
+    $projectionCosmosEmpty.Exit -ne 0 -and
+    $projectionCosmosEmpty.Output -match 'Cosmos account output' -and
+    -not ((Read-ScenarioFile $projectionCosmosEmpty 'writes.log') -match 'projection-network-prefix')
+) $projectionCosmosEmpty.Output
+
 $resolverDeploy = Invoke-GuideBashScenario 'resolver-deploy' (Join-GuideBlocks @($projectionDeployBlock, $resolverDeployBlock))
 $resolverParams = Read-ScenarioFile $resolverDeploy 'resolver-params.json'
 Assert 'resolver deployment block allows the gateway managed identity app and object ids' (
@@ -1365,6 +1501,27 @@ Assert 'resolver deployment block allows the gateway managed identity app and ob
     ($resolverParams | ConvertFrom-Json).parameters.allowedCallerAppIds.value[0] -ceq 'gateway-app-id' -and
     ($resolverParams | ConvertFrom-Json).parameters.allowedCallerObjectIds.value[0] -ceq 'gateway-object-id'
 ) $resolverDeploy.Output
+
+$resolverGatewayAppFail = Invoke-GuideBashScenario 'resolver-gateway-app-fail' (Join-GuideBlocks @($projectionDeployBlock, $resolverDeployBlock))
+Assert 'resolver deployment refuses failed gateway app id read before deployment' (
+    $resolverGatewayAppFail.Exit -ne 0 -and
+    $resolverGatewayAppFail.Output -match 'gateway managed identity app id' -and
+    -not ((Read-ScenarioFile $resolverGatewayAppFail 'writes.log') -match 'projection-resolver-prefix')
+) $resolverGatewayAppFail.Output
+
+$resolverNetworkMissing = Invoke-GuideBashScenario 'resolver-network-missing' (Join-GuideBlocks @($projectionDeployBlock, $resolverDeployBlock))
+Assert 'resolver deployment refuses missing network output fields before deployment' (
+    $resolverNetworkMissing.Exit -ne 0 -and
+    $resolverNetworkMissing.Output -match 'network outputs are missing' -and
+    -not ((Read-ScenarioFile $resolverNetworkMissing 'writes.log') -match 'projection-resolver-prefix')
+) $resolverNetworkMissing.Output
+
+$resolverSiteEmpty = Invoke-GuideBashScenario 'resolver-site-empty' (Join-GuideBlocks @($projectionDeployBlock, $resolverDeployBlock))
+Assert 'resolver deployment refuses empty resolver site output before code upload' (
+    $resolverSiteEmpty.Exit -ne 0 -and
+    $resolverSiteEmpty.Output -match 'resolver site name output' -and
+    -not ((Read-ScenarioFile $resolverSiteEmpty 'writes.log') -match 'functionapp deployment')
+) $resolverSiteEmpty.Output
 
 $projectionRunner = Invoke-GuideBashScenario 'projection-runner' (Join-GuideBlocks @($projectionDeployBlock, $projectionRunnerBlock))
 $runnerCalls = Read-ScenarioFile $projectionRunner 'writes.log'
@@ -1385,12 +1542,33 @@ Assert 'runner failed chunk stops before apply and compare' (
     -not ((Read-ScenarioFile $runnerChunkFail 'writes.log') -match 'apply-projection\.mjs')
 ) $runnerChunkFail.Output
 
+$runnerInitFail = Invoke-GuideBashScenario 'runner-init-fail' (Join-GuideBlocks @($projectionDeployBlock, $projectionRunnerBlock))
+Assert 'runner failed init stops before apply and compare' (
+    $runnerInitFail.Exit -ne 0 -and
+    $runnerInitFail.Output -match 'could not initialize transfer' -and
+    -not ((Read-ScenarioFile $runnerInitFail 'writes.log') -match 'apply-projection\.mjs')
+) $runnerInitFail.Output
+
 $runnerHashMismatch = Invoke-GuideBashScenario 'runner-hash-mismatch' (Join-GuideBlocks @($projectionDeployBlock, $projectionRunnerBlock))
 Assert 'runner hash mismatch stops before apply and compare' (
     $runnerHashMismatch.Exit -ne 0 -and
     $runnerHashMismatch.Output -match 'Refused: runner transfer hash mismatch' -and
     -not ((Read-ScenarioFile $runnerHashMismatch 'writes.log') -match 'apply-projection\.mjs')
 ) $runnerHashMismatch.Output
+
+$runnerFinalizeFail = Invoke-GuideBashScenario 'runner-finalize-fail' (Join-GuideBlocks @($projectionDeployBlock, $projectionRunnerBlock))
+Assert 'runner failed finalization stops before apply and compare' (
+    $runnerFinalizeFail.Exit -ne 0 -and
+    $runnerFinalizeFail.Output -match 'could not finalize transfer' -and
+    -not ((Read-ScenarioFile $runnerFinalizeFail 'writes.log') -match 'apply-projection\.mjs')
+) $runnerFinalizeFail.Output
+
+$runnerFinalizeErrorText = Invoke-GuideBashScenario 'runner-finalize-error-text' (Join-GuideBlocks @($projectionDeployBlock, $projectionRunnerBlock))
+Assert 'runner finalization error text with exit zero stops before apply and compare' (
+    $runnerFinalizeErrorText.Exit -ne 0 -and
+    $runnerFinalizeErrorText.Output -match 'runner finalization reported an error' -and
+    -not ((Read-ScenarioFile $runnerFinalizeErrorText 'writes.log') -match 'apply-projection\.mjs')
+) $runnerFinalizeErrorText.Output
 
 $runnerChunkErrorText = Invoke-GuideBashScenario 'runner-chunk-error-text' (Join-GuideBlocks @($projectionDeployBlock, $projectionRunnerBlock))
 Assert 'runner chunk error text with exit zero stops before apply and compare' (
@@ -1430,7 +1608,7 @@ Assert 'model refusal restore read-back mismatch refuses and prints restore valu
     $modelRestoreMismatch.Output -match 'Restore this value manually: ,claude-sonnet-5,claude-opus-5,'
 ) $modelRestoreMismatch.Output
 
-$allCreatedReceipts = "mkdir -p .p89-receipts; printf '%s\n' '{""foundryRole"":{""created"":true,""id"":""created-role-id""}}' > .p89-receipts/foundry-role.json; printf '%s\n' '{""group"":{""created"":true,""id"":""standard-id""}}' > .p89-receipts/group-standard.json; printf '%s\n' '{""group"":{""created"":true,""id"":""premium-id""}}' > .p89-receipts/group-premium.json; printf '%s\n' '{""app"":{""created"":true,""appId"":""created-app-id""}}' > .p89-receipts/desktop-app.json;"
+$allCreatedReceipts = "mkdir -p .p89-receipts; printf '%s\n' '{""foundryRole"":{""created"":true,""id"":""created-role-id"",""scope"":""/subscriptions/sub/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/foundry"",""roleDefinitionName"":""Cognitive Services User"",""principalId"":""gateway-object-id""}}' > .p89-receipts/foundry-role.json; printf '%s\n' '{""group"":{""created"":true,""id"":""standard-id"",""displayName"":""claude-code-standard"",""createdAt"":""2020-01-01T00:00:00Z""}}' > .p89-receipts/group-standard.json; printf '%s\n' '{""group"":{""created"":true,""id"":""premium-id"",""displayName"":""claude-code-premium"",""createdAt"":""2020-01-01T00:00:00Z""}}' > .p89-receipts/group-premium.json; printf '%s\n' '{""app"":{""created"":true,""appId"":""created-app-id"",""objectId"":""created-object-id"",""displayName"":""Claude Desktop gateway""}}' > .p89-receipts/desktop-app.json;"
 $allExistingReceipts = "mkdir -p .p89-receipts; printf '%s\n' '{""foundryRole"":{""created"":false,""existingId"":""existing-role-id""}}' > .p89-receipts/foundry-role.json; printf '%s\n' '{""group"":{""created"":false,""id"":""standard-id""}}' > .p89-receipts/group-standard.json; printf '%s\n' '{""group"":{""created"":false,""id"":""premium-id""}}' > .p89-receipts/group-premium.json; printf '%s\n' '{""app"":{""created"":false,""appId"":""existing-app-id""}}' > .p89-receipts/desktop-app.json;"
 
 $teardownCreated = Invoke-GuideBashScenario 'teardown-created' (Join-GuideBlocks @($allCreatedReceipts, $teardownExternalBlock))
@@ -1443,6 +1621,29 @@ Assert 'teardown deletes receipt-created groups and app' (
     (Read-ScenarioFile $teardownCreated 'writes.log') -match 'delete-group premium-id' -and
     (Read-ScenarioFile $teardownCreated 'writes.log') -match 'delete-app created-app-id'
 ) $teardownCreated.Output
+
+$teardownRoleMismatch = Invoke-GuideBashScenario 'teardown-role-live-mismatch' (Join-GuideBlocks @($allCreatedReceipts, $teardownExternalBlock))
+Assert 'teardown skips role delete when live role differs from receipt and continues' (
+    $teardownRoleMismatch.Exit -eq 0 -and
+    $teardownRoleMismatch.Output -match 'live Foundry role assignment does not match' -and
+    -not ((Read-ScenarioFile $teardownRoleMismatch 'writes.log') -match 'delete-role created-role-id') -and
+    (Read-ScenarioFile $teardownRoleMismatch 'writes.log') -match 'delete-group standard-id'
+) $teardownRoleMismatch.Output
+
+$teardownGroupMismatch = Invoke-GuideBashScenario 'teardown-group-live-mismatch' (Join-GuideBlocks @($allCreatedReceipts, $teardownExternalBlock))
+Assert 'teardown skips group delete when live group differs from receipt and continues' (
+    $teardownGroupMismatch.Exit -eq 0 -and
+    $teardownGroupMismatch.Output -match 'live group standard does not match' -and
+    -not ((Read-ScenarioFile $teardownGroupMismatch 'writes.log') -match 'delete-group standard-id') -and
+    (Read-ScenarioFile $teardownGroupMismatch 'writes.log') -match 'delete-group premium-id'
+) $teardownGroupMismatch.Output
+
+$teardownAppMismatch = Invoke-GuideBashScenario 'teardown-app-live-mismatch' (Join-GuideBlocks @($allCreatedReceipts, $teardownExternalBlock))
+Assert 'teardown skips app delete when live app differs from receipt' (
+    $teardownAppMismatch.Exit -eq 0 -and
+    $teardownAppMismatch.Output -match 'live Desktop app registration does not match' -and
+    -not ((Read-ScenarioFile $teardownAppMismatch 'writes.log') -match 'delete-app created-app-id')
+) $teardownAppMismatch.Output
 
 $teardownExisting = Invoke-GuideBashScenario 'teardown-existing' (Join-GuideBlocks @($allExistingReceipts, $teardownExternalBlock))
 Assert 'teardown preserves pre-existing role assignment' (
@@ -1472,10 +1673,17 @@ Assert 'missing optional Desktop app receipt does not fail teardown' (
     $teardownNoApp.Exit -eq 0 -and $teardownNoApp.Output -match 'No Desktop app receipt'
 ) $teardownNoApp.Output
 
-$teardownGroupCreated = Invoke-GuideBashScenario 'teardown-group-created' ("mkdir -p .p89-receipts; printf '%s\n' '{""resourceGroup"":{""created"":true,""name"":""rg""}}' > .p89-receipts/resource-group.json; " + $teardownGroupBlock)
+$teardownGroupCreated = Invoke-GuideBashScenario 'teardown-group-created' ("mkdir -p .p89-receipts; printf '%s\n' '{""resourceGroup"":{""created"":true,""name"":""rg"",""nonce"":""receipt-nonce""}}' > .p89-receipts/resource-group.json; " + $teardownGroupBlock)
 Assert 'teardown group deletes only receipt-created resource group' (
     $teardownGroupCreated.Exit -eq 0 -and (Read-ScenarioFile $teardownGroupCreated 'writes.log') -match 'group-delete'
 ) $teardownGroupCreated.Output
+
+$teardownGroupTagMismatch = Invoke-GuideBashScenario 'teardown-group-tag-mismatch' ("mkdir -p .p89-receipts; printf '%s\n' '{""resourceGroup"":{""created"":true,""name"":""rg"",""nonce"":""receipt-nonce""}}' > .p89-receipts/resource-group.json; " + $teardownGroupBlock)
+Assert 'teardown group refuses mismatched receipt nonce before delete' (
+    $teardownGroupTagMismatch.Exit -ne 0 -and
+    $teardownGroupTagMismatch.Output -match 'receipt tag does not match' -and
+    -not ((Read-ScenarioFile $teardownGroupTagMismatch 'writes.log') -match 'group-delete')
+) $teardownGroupTagMismatch.Output
 
 $teardownGroupExisting = Invoke-GuideBashScenario 'teardown-group-existing' ("mkdir -p .p89-receipts; printf '%s\n' '{""resourceGroup"":{""created"":false,""name"":""rg""}}' > .p89-receipts/resource-group.json; " + $teardownGroupBlock)
 Assert 'teardown group refuses pre-existing resource group' (
