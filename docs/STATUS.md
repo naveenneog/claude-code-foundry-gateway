@@ -42,6 +42,17 @@ section moves to `docs/status/P91.md` under P87's ADR-0042.
       `docs/architecture/manifest.json` re-rendered (the company-address diagram reads
       `Install-ClaudeGateway.ps1`; no image changed).
 - [ ] COUNCIL (five seats), GATE, LOG.
+- Changes after REFACTOR, 2026-10-01: the summary's Checkpoint row names each changed answer (both
+  installers); `reusedApim` refuses, as amendment 1 requires; the bash heartbeat stops with its
+  installer; the bash suite runs six installers at a time. [ADR-0046](adr/0046-installer-checkpoint-and-resume.md)
+  Decision 17 lists every difference from Decisions 1-16. `tests/Test-InstallerCheckpoint.ps1` 55
+  checks, 0 failed, 99.7 s; `tests/Test-BashInstallerCheckpoint.ps1` 24 checks, 0 failed, 136.9 s
+  (run together; Windows, Git Bash 5.3.15).
+- Mutations at `55bd3da`: 79 of 79 caught, 55 PowerShell and 24 bash, each at its suite's baseline
+  count with its own check among the failures; every bash mutant passes `bash -n`
+  ([measurement](measurements/p91-mutations.json)).
+- `.github/workflows/installer-unix.yml` runs the two bash suites on `ubuntu-latest` and
+  `macos-latest`; committed, not pushed and not run.
 
 Acceptance criteria, for both installers unless one is named:
 
