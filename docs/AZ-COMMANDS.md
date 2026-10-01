@@ -1047,7 +1047,8 @@ Patch APIM hostname configurations and prove TLS before publishing the handover 
 # P89-BIND-HOSTNAME-BEGIN
 p89_bind_hostname() {
   P89_KEYVAULT_PATCH_TIMEOUT_SECONDS="${P89_KEYVAULT_PATCH_TIMEOUT_SECONDS:-600}"
-  P89_HOSTNAME_TIMEOUT_SECONDS="${P89_HOSTNAME_TIMEOUT_SECONDS:-900}"
+  P89_DNS_TIMEOUT_SECONDS="${P89_DNS_TIMEOUT_SECONDS:-600}"
+  P89_HOSTNAME_TIMEOUT_SECONDS="${P89_HOSTNAME_TIMEOUT_SECONDS:-2700}"
   P89_HOSTNAME_POLL_SECONDS="${P89_HOSTNAME_POLL_SECONDS:-15}"
   if [ -z "${APIM_ID:-}" ]; then
     APIM_ID="$(az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" --query id -o tsv)" || return 1
@@ -1070,15 +1071,21 @@ p89_bind_hostname() {
     return 1
   fi
   default_host="${APIM_NAME}.azure-api.net"
-  if ! cname_answers="$(dig +short CNAME "$GATEWAY_HOSTNAME")" || [ -z "$cname_answers" ]; then
-    echo "Refused: DNS CNAME for '$GATEWAY_HOSTNAME' was not found; hostname was not changed." >&2
-    return 1
-  fi
-  cname_count="$(printf '%s\n' "$cname_answers" | awk -v target="$default_host" 'BEGIN{c=0} {gsub(/\.$/, "", $0); if (tolower($0)==tolower(target)) c++} END{print c}')"
-  if [ "$cname_count" = "0" ]; then
-    echo "Refused: DNS CNAME for '$GATEWAY_HOSTNAME' does not point to '$default_host'; hostname was not changed." >&2
-    return 1
-  fi
+  dns_start="$(date +%s)"
+  while :; do
+    cname_answers="$(dig +short CNAME "$GATEWAY_HOSTNAME" || true)"
+    cname_count="$(printf '%s\n' "$cname_answers" | awk -v target="$default_host" 'BEGIN{c=0} {gsub(/\.$/, "", $0); if (tolower($0)==tolower(target)) c++} END{print c}')"
+    if [ "$cname_count" != "0" ]; then
+      break
+    fi
+    now="$(date +%s)"
+    elapsed="$((now - dns_start))"
+    if [ "$elapsed" -ge "$P89_DNS_TIMEOUT_SECONDS" ]; then
+      echo "Refused: DNS CNAME for '$GATEWAY_HOSTNAME' does not point to '$default_host'; hostname was not changed." >&2
+      return 1
+    fi
+    sleep "$P89_HOSTNAME_POLL_SECONDS"
+  done
   sku="$(printf '%s' "$apim_live" | jq -r '.sku.name // ""')"
   other_proxy_count="$(printf '%s' "$apim_live" | jq --arg h "$GATEWAY_HOSTNAME" '[.properties.hostnameConfigurations[]? | select(.type=="Proxy" and (.certificateSource // "BuiltIn") != "BuiltIn" and (.hostName|ascii_downcase) != ($h|ascii_downcase))] | length')"
   if [ -z "$other_proxy_count" ]; then
@@ -1129,11 +1136,12 @@ p89_bind_hostname() {
     fi
     state="$(printf '%s' "$apim_after" | jq -r '.properties.provisioningState // ""')"
     status="$(printf '%s' "$apim_after" | jq -r --arg h "$GATEWAY_HOSTNAME" '(.properties.hostnameConfigurations // [])[]? | select(.type=="Proxy" and (.hostName|ascii_downcase)==($h|ascii_downcase)) | .certificateStatus // ""' | head -n 1)"
+    binding_count="$(printf '%s' "$apim_after" | jq --arg h "$GATEWAY_HOSTNAME" '[.properties.hostnameConfigurations[]? | select(.type=="Proxy" and (.hostName|ascii_downcase)==($h|ascii_downcase))] | length')"
     if [ "$state" = "Failed" ] || [ "$state" = "Canceled" ] || [ "$status" = "Failed" ]; then
       echo "Refused: APIM hostname update state is '$state' and certificateStatus is '${status:-empty}'." >&2
       return 1
     fi
-    if [ "$state" = "Succeeded" ] && [ -n "$status" ] && [ "$status" != "InProgress" ]; then
+    if [ "$state" = "Succeeded" ] && [ "$binding_count" = "1" ] && [ "$status" != "InProgress" ]; then
       break
     fi
     now="$(date +%s)"
@@ -1152,6 +1160,7 @@ p89_bind_hostname() {
     echo "Refused: HTTPS proof returned '$http_code', not 401; gateway address receipt was not written." >&2
     return 1
   fi
+  mkdir -p .p89-receipts
   jq -n --arg hostname "$GATEWAY_HOSTNAME" '{address:{hostname:$hostname}}' > .p89-receipts/gateway-address.json
   jq -r '.address.hostname' .p89-receipts/gateway-address.json
 }
@@ -1159,7 +1168,7 @@ p89_bind_hostname
 # P89-BIND-HOSTNAME-END
 ```
 
-Expected result: the hostname binding exists, unauthenticated HTTPS returns `401`, and `.p89-receipts/gateway-address.json` stores `{"address":{"hostname":"<GATEWAY_HOSTNAME>"}}`. Before the PATCH the block requires APIM provisioning state `Succeeded`, a `dig` CNAME from the custom hostname to `<apim>.azure-api.net`, and preservation of any existing Proxy binding's `defaultSslBinding` and `negotiateClientCertificate`; Cloud Shell lists `dig` as a preinstalled Linux tool (https://learn.microsoft.com/azure/cloud-shell/features), and API Management documents the Gateway default domain and custom-domain DNS prerequisite (https://learn.microsoft.com/azure/api-management/configure-custom-domain). The PATCH retries Key Vault access propagation for up to `P89_KEYVAULT_PATCH_TIMEOUT_SECONDS=600`; after PATCH, `az rest` has sent one request, so the block waits up to `P89_HOSTNAME_TIMEOUT_SECONDS=900` with `P89_HOSTNAME_POLL_SECONDS=15` until provisioning is complete and certificate status is not `InProgress`. API Management states custom-domain infrastructure changes can take 15 minutes or longer (https://learn.microsoft.com/azure/api-management/configure-custom-domain). curl's default TLS verification proves trust and hostname before the receipt is written. This mirrors `scripts/ClaudeGatewayAddress.ps1:247`, `:276-293`, `:305-321`, `:325-339` and `:350-359`.
+Expected result: the hostname binding exists, unauthenticated HTTPS returns `401`, and `.p89-receipts/gateway-address.json` stores `{"address":{"hostname":"<GATEWAY_HOSTNAME>"}}`. Before the PATCH the block requires APIM provisioning state `Succeeded`, waits up to `P89_DNS_TIMEOUT_SECONDS=600` for a `dig` CNAME from the custom hostname to `<apim>.azure-api.net`, and preserves any existing Proxy binding's `defaultSslBinding` and `negotiateClientCertificate`; Cloud Shell lists `dig` as a preinstalled Linux tool (https://learn.microsoft.com/azure/cloud-shell/features), and API Management documents the Gateway default domain and custom-domain DNS prerequisite (https://learn.microsoft.com/azure/api-management/configure-custom-domain). The PATCH retries Key Vault access propagation for up to `P89_KEYVAULT_PATCH_TIMEOUT_SECONDS=600`; after PATCH, `az rest` has sent one request, so the block waits up to `P89_HOSTNAME_TIMEOUT_SECONDS=2700` with `P89_HOSTNAME_POLL_SECONDS=15` until provisioning is complete, exactly one Proxy binding exists, and certificate status is not `InProgress`. API Management states custom-domain infrastructure changes can take 15 minutes or longer (https://learn.microsoft.com/azure/api-management/configure-custom-domain). curl's default TLS verification proves trust and hostname before the receipt is written. This mirrors `scripts/Set-ClaudeGatewayAddress.ps1:16-17`, `scripts/ClaudeGatewayAddress.ps1:231`, `:247`, `:276-293`, `:305-321`, `:325-339` and `:350-359`.
 ## 10. Optional Cosmos projection
 
 Run read-only preflight checks before any projection write.
@@ -1359,7 +1368,7 @@ p89_verify_model_refusal
 # P89-MODEL-REFUSAL-END
 ```
 
-Expected result: HTTP `403` or gateway refusal naming the model outside the tier, for a caller whose tier excludes `$OPUS_DEPLOYMENT`. This mirrors `scripts/Test-ClaudeHealth.ps1` and `scripts/Measure-ClaudeCeiling.ps1`.
+Expected result: HTTP `403` or gateway refusal naming the model outside the tier, for a caller whose tier excludes `$OPUS_DEPLOYMENT`. Between the narrowing write and the restore, every standard-tier caller is refused models outside the narrowed list. This mirrors `scripts/Test-ClaudeHealth.ps1` and `scripts/Measure-ClaudeCeiling.ps1`.
 
 Check for direct Foundry bypass.
 

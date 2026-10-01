@@ -430,19 +430,27 @@ if [ "$1" = "rest" ]; then
   url="$(arg_after --url "$@")"
   if [ "$method" = "get" ] && [[ "$url" == *Microsoft.ApiManagement/service* ]]; then
     sku="PremiumV2"; [ "${P89_SCENARIO:-}" = "hostname-standard-refuse" ] && sku="StandardV2"
-    provisioning="Succeeded"; certStatus="Ready"; sameBinding=''
+    provisioning="Succeeded"; certStatus="Ready"; sameBinding=''; includeNew="true"; certStatusProperty='true'
     case "${P89_SCENARIO:-}" in
       hostname-not-succeeded) provisioning="Updating" ;;
-      hostname-preserve-clientcert) sameBinding=',{"type":"Proxy","hostName":"new.example","certificateSource":"KeyVault","keyVaultId":"oldsecret","defaultSslBinding":true,"negotiateClientCertificate":true,"certificateStatus":"Ready"}' ;;
+      hostname-preserve-clientcert) sameBinding=',{"type":"Proxy","hostName":"new.example","certificateSource":"KeyVault","keyVaultId":"oldsecret","defaultSslBinding":true,"negotiateClientCertificate":true,"certificateStatus":"Ready"}'; includeNew="false" ;;
       hostname-updating-then-succeeded)
         if [ -f "${P89_STATE_DIR:-.}/hostname-patched" ]; then
           state="${P89_STATE_DIR:-.}/hostname-updating-seen"; if [ ! -f "$state" ]; then printf '1' > "$state"; provisioning="Updating"; fi
         fi
         ;;
       hostname-failed) [ -f "${P89_STATE_DIR:-.}/hostname-patched" ] && provisioning="Failed" ;;
+      hostname-canceled) [ -f "${P89_STATE_DIR:-.}/hostname-patched" ] && provisioning="Canceled" ;;
+      hostname-cert-failed) [ -f "${P89_STATE_DIR:-.}/hostname-patched" ] && certStatus="Failed" ;;
       hostname-cert-timeout) [ -f "${P89_STATE_DIR:-.}/hostname-patched" ] && certStatus="InProgress" ;;
+      hostname-empty-certstatus) certStatusProperty='false' ;;
+      hostname-no-binding) includeNew='false' ;;
     esac
-    printf '{"sku":{"name":"%s"},"properties":{"provisioningState":"%s","hostnameConfigurations":[{"type":"Proxy","hostName":"x.azure-api.net","certificateSource":"BuiltIn"},{"type":"Proxy","hostName":"other.example","certificateSource":"KeyVault","keyVaultId":"oldsecret","defaultSslBinding":false,"negotiateClientCertificate":false,"certificateStatus":"Ready"},{"type":"DeveloperPortal","hostName":"portal.example","certificateSource":"KeyVault","keyVaultId":"portalsecret"}%s,{"type":"Proxy","hostName":"new.example","certificateSource":"KeyVault","keyVaultId":"https://kv.vault.azure.net/secrets/cert/ver","defaultSslBinding":false,"negotiateClientCertificate":false,"certificateStatus":"%s"}]}}\n' "$sku" "$provisioning" "$sameBinding" "$certStatus"
+    printf '{"sku":{"name":"%s"},"properties":{"provisioningState":"%s","hostnameConfigurations":[{"type":"Proxy","hostName":"x.azure-api.net","certificateSource":"BuiltIn"},{"type":"Proxy","hostName":"other.example","certificateSource":"KeyVault","keyVaultId":"oldsecret","defaultSslBinding":false,"negotiateClientCertificate":false,"certificateStatus":"Ready"},{"type":"DeveloperPortal","hostName":"portal.example","certificateSource":"KeyVault","keyVaultId":"portalsecret"}%s' "$sku" "$provisioning" "$sameBinding"
+    if [ "$includeNew" = "true" ]; then
+      if [ "$certStatusProperty" = "true" ]; then printf ',{"type":"Proxy","hostName":"new.example","certificateSource":"KeyVault","keyVaultId":"https://kv.vault.azure.net/secrets/cert/ver","defaultSslBinding":false,"negotiateClientCertificate":false,"certificateStatus":"%s"}' "$certStatus"; else printf ',{"type":"Proxy","hostName":"new.example","certificateSource":"KeyVault","keyVaultId":"https://kv.vault.azure.net/secrets/cert/ver","defaultSslBinding":false,"negotiateClientCertificate":false}'; fi
+    fi
+    printf ']}}\n'
     exit 0
   fi
   if [ "$2" = "--method" ] && [ "$3" = "patch" ]; then
@@ -623,11 +631,18 @@ function New-GuideDigStub([string]$Directory) {
     $path = Join-Path $Directory 'dig'
     @'
 #!/usr/bin/env bash
-if [ "${P89_SCENARIO:-}" = "hostname-wrong-cname" ]; then
-  printf 'wrong.azure-api.net.\n'
-else
-  printf '%s.azure-api.net.\n' "${APIM_NAME:-apim}"
-fi
+case "${P89_SCENARIO:-}" in
+  hostname-wrong-cname|hostname-dns-never)
+    printf 'wrong.azure-api.net.\n'
+    ;;
+  hostname-dns-second)
+    state="${P89_STATE_DIR:-.}/dns-count"; n=0; [ -f "$state" ] && n="$(cat "$state")"; n=$((n+1)); printf '%s' "$n" > "$state"
+    if [ "$n" -ge 2 ]; then printf '%s.azure-api.net.\n' "${APIM_NAME:-apim}"; else printf 'wrong.azure-api.net.\n'; fi
+    ;;
+  *)
+    printf '%s.azure-api.net.\n' "${APIM_NAME:-apim}"
+    ;;
+esac
 exit 0
 '@ | Set-Content -LiteralPath $path -NoNewline
     $path
@@ -705,6 +720,7 @@ export DEVELOPER_ID="55555555-5555-5555-5555-555555555555"
 export GRAPH_RETRY_DELAY_SECONDS="0"
 export GRAPH_RETRY_ATTEMPTS="3"
 export P89_KEYVAULT_PATCH_TIMEOUT_SECONDS="5"
+export P89_DNS_TIMEOUT_SECONDS="1"
 export P89_HOSTNAME_TIMEOUT_SECONDS="1"
 export P89_HOSTNAME_POLL_SECONDS="0"
 cd "$(ConvertTo-BashPath $dir)"
@@ -1192,16 +1208,30 @@ Assert 'unset GATEWAY_HOSTNAME refuses instead of using bash HOSTNAME' (
 $hostnameNotSucceeded = Invoke-GuideBashScenario 'hostname-not-succeeded' $bindHostnameBlock
 Assert 'hostname bind refuses non-Succeeded APIM before patch' (
     $hostnameNotSucceeded.Exit -ne 0 -and
-    $hostnameNotSucceeded.Output -match 'provisioningState' -and
-    -not ((Read-ScenarioFile $hostnameNotSucceeded 'writes.log') -match 'rest-patch-body')
+    $hostnameNotSucceeded.Output -match "provisioningState is 'Updating'" -and
+    -not ((Read-ScenarioFile $hostnameNotSucceeded 'calls.log') -match 'rest --method patch')
 ) $hostnameNotSucceeded.Output
 
-$hostnameWrongCname = Invoke-GuideBashScenario 'hostname-wrong-cname' $bindHostnameBlock
+$hostnameWrongCname = Invoke-GuideBashScenario 'hostname-wrong-cname' ("export P89_DNS_TIMEOUT_SECONDS=1; " + $bindHostnameBlock)
 Assert 'hostname bind refuses missing or wrong CNAME before patch' (
     $hostnameWrongCname.Exit -ne 0 -and
-    $hostnameWrongCname.Output -match 'DNS CNAME' -and
+    $hostnameWrongCname.Output -match "does not point to 'apim.azure-api.net'" -and
     -not ((Read-ScenarioFile $hostnameWrongCname 'writes.log') -match 'rest-patch-body')
 ) $hostnameWrongCname.Output
+
+$hostnameDnsSecond = Invoke-GuideBashScenario 'hostname-dns-second' ("export P89_DNS_TIMEOUT_SECONDS=5; " + $bindHostnameBlock)
+Assert 'hostname bind waits for DNS CNAME to appear on second poll' (
+    $hostnameDnsSecond.Exit -eq 0 -and
+    $hostnameDnsSecond.Output -match 'new.example' -and
+    (Read-ScenarioFile $hostnameDnsSecond 'dns-count') -match '2'
+) $hostnameDnsSecond.Output
+
+$hostnameDnsNever = Invoke-GuideBashScenario 'hostname-dns-never' ("export P89_DNS_TIMEOUT_SECONDS=1; " + $bindHostnameBlock)
+Assert 'hostname bind refuses when DNS CNAME never points to gateway' (
+    $hostnameDnsNever.Exit -ne 0 -and
+    $hostnameDnsNever.Output -match "does not point to 'apim.azure-api.net'" -and
+    -not ((Read-ScenarioFile $hostnameDnsNever 'calls.log') -match 'rest --method patch')
+) $hostnameDnsNever.Output
 
 $hostnamePreserveClientCert = Invoke-GuideBashScenario 'hostname-preserve-clientcert' $bindHostnameBlock
 $hostnamePreserveBody = Read-ScenarioFile $hostnamePreserveClientCert 'hostname-patch.json'
@@ -1234,14 +1264,45 @@ Assert 'hostname bind waits through Updating then Succeeded' (
 $hostnameFailed = Invoke-GuideBashScenario 'hostname-failed' $bindHostnameBlock
 Assert 'hostname bind refuses Failed provisioning state after patch' (
     $hostnameFailed.Exit -ne 0 -and
-    $hostnameFailed.Output -match 'Failed'
+    $hostnameFailed.Output -match "update state is 'Failed'" -and
+    $hostnameFailed.Output -notmatch 'did not finish' -and
+    -not (Read-ScenarioFile $hostnameFailed '.p89-receipts/gateway-address.json')
 ) $hostnameFailed.Output
+
+$hostnameCanceled = Invoke-GuideBashScenario 'hostname-canceled' $bindHostnameBlock
+Assert 'hostname bind refuses Canceled provisioning state after patch' (
+    $hostnameCanceled.Exit -ne 0 -and
+    $hostnameCanceled.Output -match "update state is 'Canceled'" -and
+    $hostnameCanceled.Output -notmatch 'did not finish' -and
+    -not (Read-ScenarioFile $hostnameCanceled '.p89-receipts/gateway-address.json')
+) $hostnameCanceled.Output
+
+$hostnameCertFailed = Invoke-GuideBashScenario 'hostname-cert-failed' $bindHostnameBlock
+Assert 'hostname bind refuses Failed certificateStatus after patch' (
+    $hostnameCertFailed.Exit -ne 0 -and
+    $hostnameCertFailed.Output -match "certificateStatus is 'Failed'" -and
+    $hostnameCertFailed.Output -notmatch 'did not finish' -and
+    -not (Read-ScenarioFile $hostnameCertFailed '.p89-receipts/gateway-address.json')
+) $hostnameCertFailed.Output
 
 $hostnameCertTimeout = Invoke-GuideBashScenario 'hostname-cert-timeout' $bindHostnameBlock
 Assert 'hostname bind refuses certificateStatus InProgress timeout' (
     $hostnameCertTimeout.Exit -ne 0 -and
     $hostnameCertTimeout.Output -match 'InProgress'
 ) $hostnameCertTimeout.Output
+
+$hostnameEmptyStatus = Invoke-GuideBashScenario 'hostname-empty-certstatus' $bindHostnameBlock
+Assert 'hostname bind treats empty certificateStatus with existing binding as success' (
+    $hostnameEmptyStatus.Exit -eq 0 -and
+    $hostnameEmptyStatus.Output -match 'new.example'
+) $hostnameEmptyStatus.Output
+
+$hostnameNoBinding = Invoke-GuideBashScenario 'hostname-no-binding' $bindHostnameBlock
+Assert 'hostname bind refuses when Succeeded never has the Proxy binding' (
+    $hostnameNoBinding.Exit -ne 0 -and
+    $hostnameNoBinding.Output -match 'did not finish' -and
+    -not (Read-ScenarioFile $hostnameNoBinding '.p89-receipts/gateway-address.json')
+) $hostnameNoBinding.Output
 
 $hostnameNon401 = Invoke-GuideBashScenario 'hostname-non401' $bindHostnameBlock
 Assert 'hostname bind non-401 proof refuses with no receipt' (
@@ -1256,6 +1317,12 @@ Assert 'hostname bind success writes receipt and gateway URL uses hostname' (
     (Read-ScenarioFile $hostnameSuccess '.p89-receipts/gateway-address.json') -match '"hostname": "new.example"' -and
     $hostnameSuccess.Output -match 'https://new.example/claude'
 ) $hostnameSuccess.Output
+
+$hostnameNoReceiptDir = Invoke-GuideBashScenario 'hostname-success' ("rm -rf .p89-receipts; " + $bindHostnameBlock)
+Assert 'hostname bind creates receipt directory before writing address receipt' (
+    $hostnameNoReceiptDir.Exit -eq 0 -and
+    (Read-ScenarioFile $hostnameNoReceiptDir '.p89-receipts/gateway-address.json') -match '"hostname": "new.example"'
+) $hostnameNoReceiptDir.Output
 
 $projectionDeploy = Invoke-GuideBashScenario 'projection-deploy' $projectionDeployBlock
 $projectionDeployWrites = Read-ScenarioFile $projectionDeploy 'writes.log'
