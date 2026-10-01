@@ -107,20 +107,42 @@ Expected result: the operator has enough rights to deploy the gateway resource g
 Create the resource group.
 
 ```bash
+# P89-RESOURCE-GROUP-BEGIN
 p89_resource_group() {
   mkdir -p .p89-receipts
+  if [ -r .p89-receipts/resource-group.json ] && jq -e --arg name "$GATEWAY_RG" '.resourceGroup.created == true and .resourceGroup.name == $name' .p89-receipts/resource-group.json >/dev/null; then
+    if ! existed="$(az group exists -n "$GATEWAY_RG")"; then
+      echo "Refused: could not check resource group existence; no create ran." >&2
+      return 1
+    fi
+    if [ "$existed" = "true" ]; then
+      echo "Existing receipt says this guide created '$GATEWAY_RG'; keeping it."
+      return 0
+    fi
+    if [ "$existed" = "false" ]; then
+      az group create -n "$GATEWAY_RG" -l "$LOCATION" -o none || return 1
+      jq -n --arg name "$GATEWAY_RG" '{resourceGroup:{created:true,name:$name}}' > .p89-receipts/resource-group.json
+      return 0
+    fi
+    echo "Refused: resource group existence check returned '$existed'; no create ran." >&2
+    return 1
+  fi
   if ! existed="$(az group exists -n "$GATEWAY_RG")"; then
     echo "Refused: could not check resource group existence; no create ran." >&2
     return 1
   fi
   if [ "$existed" = "true" ]; then
     jq -n --arg name "$GATEWAY_RG" '{resourceGroup:{created:false,name:$name}}' > .p89-receipts/resource-group.json
-  else
+  elif [ "$existed" = "false" ]; then
     az group create -n "$GATEWAY_RG" -l "$LOCATION" -o none || return 1
     jq -n --arg name "$GATEWAY_RG" '{resourceGroup:{created:true,name:$name}}' > .p89-receipts/resource-group.json
+  else
+    echo "Refused: resource group existence check returned '$existed'; no create ran." >&2
+    return 1
   fi
 }
 p89_resource_group
+# P89-RESOURCE-GROUP-END
 az group show -n "$GATEWAY_RG" --query "{name:name,location:location}" -o json
 ```
 
@@ -190,6 +212,8 @@ Reuse an existing APIM instance that has never hosted this gateway.
 ```bash
 # P89-REUSE-APIM-BEGIN
 p89_deploy_reused_apim() {
+  mode="${1:-}"
+  case "$mode" in whatif|create) ;; *) echo "Refused: pass 'whatif' or 'create'." >&2; return 1 ;; esac
   if ! apim_json="$(az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" -o json)"; then
     echo "Refused: existing APIM '$APIM_NAME' could not be read; no deployment command ran." >&2
     return 1
@@ -221,12 +245,21 @@ p89_deploy_reused_apim() {
   fi
   GRANT_FOUNDRY_ROLE="true"
   if [ -n "$existing_role" ]; then GRANT_FOUNDRY_ROLE="false"; fi
-  az deployment group what-if -g "$GATEWAY_RG" --template-file infra/main.bicep --parameters namePrefix="$NAME_PREFIX" location="$LOCATION" foundryAccountName="$FOUNDRY_ACCOUNT" foundryResourceGroup="$FOUNDRY_RG" publisherEmail="$PUBLISHER_EMAIL" publisherName="$PUBLISHER_NAME" apimSku="$apim_sku" existingApimName="$APIM_NAME" grantFoundryRole="$GRANT_FOUNDRY_ROLE" sonnetDeployment="$SONNET_DEPLOYMENT" opusDeployment="$OPUS_DEPLOYMENT" haikuDeployment="$HAIKU_DEPLOYMENT" tpmStandard="$TPM_STANDARD" quotaStandard="$QUOTA_STANDARD" tpmPremium="$TPM_PREMIUM" quotaPremium="$QUOTA_PREMIUM" quotaOrg="$QUOTA_ORG" modelsStandard="$MODELS_STANDARD" modelsPremium="$MODELS_PREMIUM" callsPerMinute="$CALLS_PER_MINUTE" entitlementSource=named-value entitlementCacheSeconds="$ENTITLEMENT_CACHE_SECONDS" desktopExtraAudience="$DESKTOP_EXTRA_AUDIENCE" || return 1
+  if [ "$mode" = "whatif" ]; then
+    az deployment group what-if -g "$GATEWAY_RG" --template-file infra/main.bicep --parameters namePrefix="$NAME_PREFIX" location="$LOCATION" foundryAccountName="$FOUNDRY_ACCOUNT" foundryResourceGroup="$FOUNDRY_RG" publisherEmail="$PUBLISHER_EMAIL" publisherName="$PUBLISHER_NAME" apimSku="$apim_sku" existingApimName="$APIM_NAME" grantFoundryRole="$GRANT_FOUNDRY_ROLE" sonnetDeployment="$SONNET_DEPLOYMENT" opusDeployment="$OPUS_DEPLOYMENT" haikuDeployment="$HAIKU_DEPLOYMENT" tpmStandard="$TPM_STANDARD" quotaStandard="$QUOTA_STANDARD" tpmPremium="$TPM_PREMIUM" quotaPremium="$QUOTA_PREMIUM" quotaOrg="$QUOTA_ORG" modelsStandard="$MODELS_STANDARD" modelsPremium="$MODELS_PREMIUM" callsPerMinute="$CALLS_PER_MINUTE" entitlementSource=named-value entitlementCacheSeconds="$ENTITLEMENT_CACHE_SECONDS" desktopExtraAudience="$DESKTOP_EXTRA_AUDIENCE"
+    return $?
+  fi
   az deployment group create -g "$GATEWAY_RG" -n "claude-gateway-reuse" --template-file infra/main.bicep --parameters namePrefix="$NAME_PREFIX" location="$LOCATION" foundryAccountName="$FOUNDRY_ACCOUNT" foundryResourceGroup="$FOUNDRY_RG" publisherEmail="$PUBLISHER_EMAIL" publisherName="$PUBLISHER_NAME" apimSku="$apim_sku" existingApimName="$APIM_NAME" grantFoundryRole="$GRANT_FOUNDRY_ROLE" sonnetDeployment="$SONNET_DEPLOYMENT" opusDeployment="$OPUS_DEPLOYMENT" haikuDeployment="$HAIKU_DEPLOYMENT" tpmStandard="$TPM_STANDARD" quotaStandard="$QUOTA_STANDARD" tpmPremium="$TPM_PREMIUM" quotaPremium="$QUOTA_PREMIUM" quotaOrg="$QUOTA_ORG" modelsStandard="$MODELS_STANDARD" modelsPremium="$MODELS_PREMIUM" callsPerMinute="$CALLS_PER_MINUTE" entitlementSource=named-value entitlementCacheSeconds="$ENTITLEMENT_CACHE_SECONDS" desktopExtraAudience="$DESKTOP_EXTRA_AUDIENCE" -o json || return 1
   az deployment group show -g "$GATEWAY_RG" -n "claude-gateway-reuse" --query "properties.outputs.{apim:apimName.value,url:gatewayUrl.value,principal:apimPrincipalId.value}" -o json
 }
-p89_deploy_reused_apim
+p89_deploy_reused_apim whatif
 # P89-REUSE-APIM-END
+```
+
+The create follows review of the what-if output.
+
+```bash
+p89_deploy_reused_apim create
 ```
 
 Expected result: a clean existing v2 APIM is reused without resetting an already-installed gateway. `grantFoundryRole=false` is passed when the gateway identity already has Cognitive Services User, matching `Install-ClaudeGateway.ps1:1514-1541`.
@@ -275,7 +308,7 @@ p89_gateway_identity() {
   if ! printf '%s' "$APIM_IDENTITY_TYPE" | grep -q 'SystemAssigned' || [ -z "$APIM_PRINCIPAL_ID" ]; then
     echo "Refused: API Management managed identity is '${APIM_IDENTITY_TYPE:-none}' and principalId is empty." >&2
     echo "Fix: portal > API Management > Security > Managed identities > System assigned > Status On > Save, then rerun." >&2
-    echo "Do not use 'az apim update' for this; without --enable-managed-identity true, azure-cli apim_update sets instance.identity = None." >&2
+    echo "az apim update without --enable-managed-identity true sets the identity to None (azure-cli apim/custom.py apim_update); this block uses az rest PATCH." >&2
     return 1
   fi
   if ! FOUNDRY_ID="$(az cognitiveservices account show -g "$FOUNDRY_RG" -n "$FOUNDRY_ACCOUNT" --query id -o tsv)" || [ -z "$FOUNDRY_ID" ]; then
@@ -416,7 +449,7 @@ Verify the authorization and budget named values that the template initialized.
 az apim nv list -g "$GATEWAY_RG" --service-name "$APIM_NAME" --query "[?name=='allow-standard' || name=='allow-premium' || name=='quota-overrides' || name=='external-idp-extra-audience'].{name:name,value:value}" -o table
 ```
 
-Expected result: `allow-*` values are comma-sentinel lists, `quota-overrides` is `,,` until personal overrides exist, and the Desktop audience is the disabled sentinel until external sign-in is configured. Do not reset these values on an existing gateway; entitlement sync and budget commands own them after deployment. This mirrors `infra/main.bicep:215-224`, `infra/main.bicep:367-370`, `scripts/Sync-ClaudeAccess.ps1:122-129`, `scripts/ClaudeBudgetOverride.ps1:1-29` and `scripts/ApimNamedValue.ps1:150-154`.
+Expected result: `allow-*` values are comma-sentinel lists, `quota-overrides` is `,,` until personal overrides exist, and the Desktop audience is the disabled sentinel until external sign-in is configured. On an existing gateway, entitlement sync and budget commands own these values after deployment. This mirrors `infra/main.bicep:215-224`, `infra/main.bicep:367-370`, `scripts/Sync-ClaudeAccess.ps1:122-129`, `scripts/ClaudeBudgetOverride.ps1:1-29` and `scripts/ApimNamedValue.ps1:150-154`.
 
 ## 5. Entra groups and entitlement publishing
 
@@ -813,7 +846,15 @@ p89_desktop_redirects() {
     mapfile -t merged_uris < <(jq -r '.[]' <<< "$merged_json")
     az ad app update --id "$DESKTOP_CLIENT_ID" --is-fallback-public-client true --public-client-redirect-uris "${merged_uris[@]}" -o none || return 1
   fi
-  az ad app show --id "$DESKTOP_CLIENT_ID" --query "{appId:appId,publicClient:publicClient.redirectUris,isFallbackPublicClient:isFallbackPublicClient}" -o json
+  readback_json="$(az ad app show --id "$DESKTOP_CLIENT_ID" -o json)" || {
+    echo "Refused: could not read Desktop app after redirect update." >&2
+    return 1
+  }
+  jq -e --argjson required "$required_json" '. as $app | (.isFallbackPublicClient == true) and (all($required[]; . as $u | ($app.publicClient.redirectUris // []) | index($u)))' <<< "$readback_json" >/dev/null || {
+    echo "Refused: Desktop app read-back does not contain every required redirect URI or isFallbackPublicClient is not true." >&2
+    return 1
+  }
+  jq '{appId, publicClient:{redirectUris:.publicClient.redirectUris}, isFallbackPublicClient}' <<< "$readback_json"
 }
 p89_desktop_redirects
 # P89-DESKTOP-REDIRECTS-END
@@ -971,7 +1012,7 @@ p89_keyvault_access() {
     return 1
   fi
   if [ "$KEYVAULT_RBAC" != "true" ]; then
-    echo "Refused: Key Vault '$KEYVAULT_NAME' uses access policies, not RBAC. Portal route: Key Vault > Access policies > Create, Secret permissions Get and List, principal = the gateway identity. Script route: ./scripts/Set-ClaudeGatewayAddress.ps1, which uses accessPolicies/add. Do not use az keyvault set-policy; it rewrites that principal's secret permission list." >&2
+    echo "Refused: Key Vault '$KEYVAULT_NAME' uses access policies, not RBAC. Portal route: Key Vault > Access policies > Create, Secret permissions Get and List, principal = the gateway identity. Script route: ./scripts/Set-ClaudeGatewayAddress.ps1, which uses accessPolicies/add. az keyvault set-policy replaces the secret permission list of the principal's existing access-policy entry (azure-cli keyvault/custom.py set_policy)." >&2
     return 1
   fi
   if ! existing_kv_role="$(az role assignment list --scope "$KEYVAULT_ID" --assignee "$APIM_PRINCIPAL_ID" --include-inherited --query "[?roleDefinitionName=='Key Vault Secrets User']|[0].id" -o tsv)"; then
@@ -1005,6 +1046,9 @@ Patch APIM hostname configurations and prove TLS before publishing the handover 
 ```bash
 # P89-BIND-HOSTNAME-BEGIN
 p89_bind_hostname() {
+  P89_KEYVAULT_PATCH_TIMEOUT_SECONDS="${P89_KEYVAULT_PATCH_TIMEOUT_SECONDS:-600}"
+  P89_HOSTNAME_TIMEOUT_SECONDS="${P89_HOSTNAME_TIMEOUT_SECONDS:-900}"
+  P89_HOSTNAME_POLL_SECONDS="${P89_HOSTNAME_POLL_SECONDS:-15}"
   if [ -z "${APIM_ID:-}" ]; then
     APIM_ID="$(az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" --query id -o tsv)" || return 1
   fi
@@ -1018,6 +1062,21 @@ p89_bind_hostname() {
   done
   if ! apim_live="$(az rest --method get --url "https://management.azure.com${APIM_ID}?api-version=2024-05-01" -o json)"; then
     echo "Refused: could not read live APIM hostnames; hostname was not changed." >&2
+    return 1
+  fi
+  provisioning_state="$(printf '%s' "$apim_live" | jq -r '.properties.provisioningState // ""')"
+  if [ "$provisioning_state" != "Succeeded" ]; then
+    echo "Refused: APIM provisioningState is '${provisioning_state:-empty}', not Succeeded; hostname was not changed." >&2
+    return 1
+  fi
+  default_host="${APIM_NAME}.azure-api.net"
+  if ! cname_answers="$(dig +short CNAME "$GATEWAY_HOSTNAME")" || [ -z "$cname_answers" ]; then
+    echo "Refused: DNS CNAME for '$GATEWAY_HOSTNAME' was not found; hostname was not changed." >&2
+    return 1
+  fi
+  cname_count="$(printf '%s\n' "$cname_answers" | awk -v target="$default_host" 'BEGIN{c=0} {gsub(/\.$/, "", $0); if (tolower($0)==tolower(target)) c++} END{print c}')"
+  if [ "$cname_count" = "0" ]; then
+    echo "Refused: DNS CNAME for '$GATEWAY_HOSTNAME' does not point to '$default_host'; hostname was not changed." >&2
     return 1
   fi
   sku="$(printf '%s' "$apim_live" | jq -r '.sku.name // ""')"
@@ -1039,21 +1098,68 @@ p89_bind_hostname() {
   fi
   printf '%s' "$apim_live" | jq --arg h "$GATEWAY_HOSTNAME" --arg replace "${REPLACE_HOSTNAME:-}" --arg cert "$CERT_SECRET_ID" '
     (.properties.hostnameConfigurations // []) as $hosts
+    | ($hosts | map(select(.type == "Proxy" and (.hostName|ascii_downcase) == ($h|ascii_downcase))) | first) as $current
     | {properties:{hostnameConfigurations:(
         ($hosts | map(select(
           .type != "Proxy" or
           ((.hostName|ascii_downcase) != ($h|ascii_downcase) and (($replace == "") or (.hostName|ascii_downcase) != ($replace|ascii_downcase)))
-        ))) + [{type:"Proxy",hostName:$h,certificateSource:"KeyVault",keyVaultId:$cert,identityClientId:null,defaultSslBinding:false,negotiateClientCertificate:false}]
+        ))) + [{type:"Proxy",hostName:$h,certificateSource:"KeyVault",keyVaultId:$cert,identityClientId:null,defaultSslBinding:($current.defaultSslBinding // false),negotiateClientCertificate:($current.negotiateClientCertificate // false)}]
       )}}' > hostname-patch.json
-  az rest --method patch --headers "Content-Type=application/json" --body @hostname-patch.json --url "https://management.azure.com${APIM_ID}?api-version=2024-05-01" -o json || return 1
-  az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" --query "hostnameConfigurations[?hostName=='${GATEWAY_HOSTNAME}'].{hostName:hostName,status:certificateStatus}" -o json
-  curl -sS -o /dev/null -w "%{http_code}\n" "https://${GATEWAY_HOSTNAME}/claude/v1/messages"
+  patch_start="$(date +%s)"
+  while :; do
+    if az rest --method patch --headers "Content-Type=application/json" --body @hostname-patch.json --url "https://management.azure.com${APIM_ID}?api-version=2024-05-01" -o json > hostname-patch-result.json 2> hostname-patch-error.txt; then
+      break
+    fi
+    patch_error="$(cat hostname-patch-error.txt)"
+    now="$(date +%s)"
+    elapsed="$((now - patch_start))"
+    if printf '%s' "$patch_error" | grep -Eiq 'KeyVault.*(Access|Forbidden)|Failed to access.*KeyVault|Access denied.*Key Vault' && [ "$elapsed" -lt "$P89_KEYVAULT_PATCH_TIMEOUT_SECONDS" ]; then
+      echo "Key Vault access has not propagated to the gateway identity; retrying hostname PATCH." >&2
+      sleep "$P89_HOSTNAME_POLL_SECONDS"
+    else
+      echo "Refused: hostname PATCH failed: $patch_error" >&2
+      return 1
+    fi
+  done
+  wait_start="$(date +%s)"
+  while :; do
+    if ! apim_after="$(az rest --method get --url "https://management.azure.com${APIM_ID}?api-version=2024-05-01" -o json)"; then
+      echo "Refused: could not read APIM hostname status after PATCH." >&2
+      return 1
+    fi
+    state="$(printf '%s' "$apim_after" | jq -r '.properties.provisioningState // ""')"
+    status="$(printf '%s' "$apim_after" | jq -r --arg h "$GATEWAY_HOSTNAME" '(.properties.hostnameConfigurations // [])[]? | select(.type=="Proxy" and (.hostName|ascii_downcase)==($h|ascii_downcase)) | .certificateStatus // ""' | head -n 1)"
+    if [ "$state" = "Failed" ] || [ "$state" = "Canceled" ] || [ "$status" = "Failed" ]; then
+      echo "Refused: APIM hostname update state is '$state' and certificateStatus is '${status:-empty}'." >&2
+      return 1
+    fi
+    if [ "$state" = "Succeeded" ] && [ -n "$status" ] && [ "$status" != "InProgress" ]; then
+      break
+    fi
+    now="$(date +%s)"
+    elapsed="$((now - wait_start))"
+    if [ "$elapsed" -ge "$P89_HOSTNAME_TIMEOUT_SECONDS" ]; then
+      echo "Refused: APIM hostname binding did not finish before ${P89_HOSTNAME_TIMEOUT_SECONDS}s; last provisioningState '$state', certificateStatus '${status:-empty}'." >&2
+      return 1
+    fi
+    sleep "$P89_HOSTNAME_POLL_SECONDS"
+  done
+  if ! http_code="$(curl -sS -o /dev/null -w "%{http_code}\n" "https://${GATEWAY_HOSTNAME}/claude/v1/messages")"; then
+    echo "Refused: HTTPS proof failed; gateway address receipt was not written." >&2
+    return 1
+  fi
+  if [ "$http_code" != "401" ]; then
+    echo "Refused: HTTPS proof returned '$http_code', not 401; gateway address receipt was not written." >&2
+    return 1
+  fi
+  jq -n --arg hostname "$GATEWAY_HOSTNAME" '{address:{hostname:$hostname}}' > .p89-receipts/gateway-address.json
+  jq -r '.address.hostname' .p89-receipts/gateway-address.json
 }
 p89_bind_hostname
 # P89-BIND-HOSTNAME-END
 ```
 
-Expected result: the hostname binding exists, unauthenticated HTTPS returns `401`, and other hostname configurations remain in the PATCH body. This mirrors `scripts/ClaudeGatewayAddress.ps1:88-91`, `:136-141` and `:289-292`.
+Expected result: the hostname binding exists, unauthenticated HTTPS returns `401`, and `.p89-receipts/gateway-address.json` stores `{"address":{"hostname":"<GATEWAY_HOSTNAME>"}}`. Before the PATCH the block requires APIM provisioning state `Succeeded`, a `dig` CNAME from the custom hostname to `<apim>.azure-api.net`, and preservation of any existing Proxy binding's `defaultSslBinding` and `negotiateClientCertificate`; Cloud Shell lists `dig` as a preinstalled Linux tool (https://learn.microsoft.com/azure/cloud-shell/features), and API Management documents the Gateway default domain and custom-domain DNS prerequisite (https://learn.microsoft.com/azure/api-management/configure-custom-domain). The PATCH retries Key Vault access propagation for up to `P89_KEYVAULT_PATCH_TIMEOUT_SECONDS=600`; after PATCH, `az rest` has sent one request, so the block waits up to `P89_HOSTNAME_TIMEOUT_SECONDS=900` with `P89_HOSTNAME_POLL_SECONDS=15` until provisioning is complete and certificate status is not `InProgress`. API Management states custom-domain infrastructure changes can take 15 minutes or longer (https://learn.microsoft.com/azure/api-management/configure-custom-domain). curl's default TLS verification proves trust and hostname before the receipt is written. This mirrors `scripts/ClaudeGatewayAddress.ps1:247`, `:276-293`, `:305-321`, `:325-339` and `:350-359`.
 ## 10. Optional Cosmos projection
 
 Run read-only preflight checks before any projection write.
@@ -1221,13 +1327,17 @@ curl -sS -o response-forbidden.json -w "%{http_code}\n" -H "Authorization: Beare
 jq -r '.error.message' response-forbidden.json
 ```
 
-Expected result: HTTP `403` with an entitlement refusal. Do not empty the live allow lists to make this test; use a caller that is not entitled. This mirrors `scripts/Test-ClaudeHealth.ps1` and `scripts/Sync-ClaudeAccess.ps1`.
+Expected result: HTTP `403` with an entitlement refusal. The test uses a caller that is not entitled; emptying the live allow lists would refuse every developer. This mirrors `scripts/Test-ClaudeHealth.ps1` and `scripts/Sync-ClaudeAccess.ps1`.
 
 Verify a model outside the tier is refused.
 
 ```bash
+# P89-MODEL-REFUSAL-BEGIN
 p89_verify_model_refusal() {
-  MODELS_STANDARD_BEFORE="$(az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --query value -o tsv)"
+  if ! MODELS_STANDARD_BEFORE="$(az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --query value -o tsv)" || [ -z "$MODELS_STANDARD_BEFORE" ]; then
+    echo "Refused: could not read models-standard before narrowing it; nothing was changed." >&2
+    return 1
+  fi
   MODELS_STANDARD_NEXT=",${SONNET_DEPLOYMENT},"
   if [ "$(printf '%s' "$MODELS_STANDARD_NEXT" | wc -c | tr -d ' ')" -le 4096 ]; then
     az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --value "$MODELS_STANDARD_NEXT" -o none || return 1
@@ -1237,12 +1347,19 @@ p89_verify_model_refusal() {
   fi
   curl -sS -o response-model.json -w "%{http_code}\n" -H "Authorization: ******" -H "Content-Type: application/json" -d "{\"model\":\"${OPUS_DEPLOYMENT}\",\"max_tokens\":32,\"messages\":[{\"role\":\"user\",\"content\":\"Return the word ok.\"}]}" "${GATEWAY_URL}/v1/messages"
   jq -r '.error.message' response-model.json
-  az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --value "$MODELS_STANDARD_BEFORE" -o none
+  restore_rc=0
+  az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --value "$MODELS_STANDARD_BEFORE" -o none || restore_rc=$?
+  restored="$(az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id models-standard --query value -o tsv)"
+  if [ "$restore_rc" -ne 0 ] || [ "$restored" != "$MODELS_STANDARD_BEFORE" ]; then
+    echo "Refused: models-standard restore did not verify. Restore this value manually: $MODELS_STANDARD_BEFORE" >&2
+    return 1
+  fi
 }
 p89_verify_model_refusal
+# P89-MODEL-REFUSAL-END
 ```
 
-Expected result: HTTP `403` or gateway refusal naming the model outside the tier. This mirrors `scripts/Test-ClaudeHealth.ps1` and `scripts/Measure-ClaudeCeiling.ps1`.
+Expected result: HTTP `403` or gateway refusal naming the model outside the tier, for a caller whose tier excludes `$OPUS_DEPLOYMENT`. This mirrors `scripts/Test-ClaudeHealth.ps1` and `scripts/Measure-ClaudeCeiling.ps1`.
 
 Check for direct Foundry bypass.
 
@@ -1304,7 +1421,7 @@ p89_teardown_group() {
   if jq -e '.resourceGroup.created == true and .resourceGroup.name == env.GATEWAY_RG' .p89-receipts/resource-group.json >/dev/null; then
     az group delete -n "$GATEWAY_RG" --yes --no-wait
   else
-    echo "Refused: resource group was pre-existing; group was not deleted."
+    echo "Refused: resource group was pre-existing; group was not deleted." >&2
     return 1
   fi
 }
