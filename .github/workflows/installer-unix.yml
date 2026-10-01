@@ -2,18 +2,22 @@ name: Installer checkpoint on macOS and Linux
 
 # The bash installer and its install checkpoint (docs/adr/0046-installer-checkpoint-and-resume.md)
 # on bash 5 (ubuntu-latest) and on the macOS system bash 3.2 (macos-latest); tool versions in
-# docs/UNKNOWNS.md U71. Test-All (test-all.yml) runs the same checks on Windows with Git Bash.
+# docs/UNKNOWNS.md U71. Test-All (test-all.yml) runs the same checks on Windows with Git Bash. The
+# store suite's real POSIX mode checks, for both installers' libraries, run only here.
 on:
   pull_request:
     paths:
       - install-claude-gateway.sh
       - scripts/install-checkpoint.sh
       - scripts/install-resume.sh
+      - scripts/ClaudeInstallCheckpoint.ps1
+      - scripts/ClaudeInstallResume.ps1
       - scripts/preflight.sh
       - scripts/banner.sh
       - infra/main.bicep
       - tests/Test-BashInstaller.ps1
       - tests/Test-BashInstallerCheckpoint.ps1
+      - tests/Test-InstallerCheckpointStore.ps1
       - .github/workflows/installer-unix.yml
   workflow_dispatch:
 
@@ -52,6 +56,11 @@ jobs:
         shell: pwsh
         run: |
           pwsh -NoProfile -File tests/Test-BashInstallerCheckpoint.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Installer checkpoint store permissions (both libraries, real modes)
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File tests/Test-InstallerCheckpointStore.ps1
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Installer prices, record and FinOps offer (bash)
         shell: pwsh

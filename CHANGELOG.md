@@ -29,18 +29,21 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
-- **P91 installer checkpoint and resume.** `Install-ClaudeGateway.ps1` and
+- **Installers resume after a failure.** `Install-ClaudeGateway.ps1` and
   `install-claude-gateway.sh` keep one checkpoint per checkout in a per-user state
-  directory (`clouddrive` in Azure Cloud Shell), from the confirmed summary until
-  the last step completes. A rerun resumes after the last step whose result a live
-  Azure read still shows, with the recorded answers; refuses on one line for another
-  tenant, subscription, resource group, gateway or installer; records the deployment
-  name before `az deployment group create` and starts no second main.bicep
-  deployment; and reads Entra groups by id. `-Restart`/`--restart` sets the
-  checkpoint aside. 55 PowerShell and 24 bash checks; 79 of 79 mutations caught
-  ([ADR-0046](docs/adr/0046-installer-checkpoint-and-resume.md),
+  directory, from the confirmed summary until the last step completes; in Azure Cloud
+  Shell it is in `clouddrive` when storage is mounted, otherwise in the session's
+  `$HOME`, with the full resume command printed. A rerun resumes after the last step
+  whose result a live Azure read still shows, with the recorded answers; refuses on one
+  line for another tenant, subscription, resource group, gateway or installer, and for a
+  store another account could have written; records the deployment name before
+  `az deployment group create` and starts no second main.bicep deployment; reads
+  Entra groups by id, and by name only as an exact match; and checks receipt values
+  before they reach `az`. `-Restart`/`--restart` sets the checkpoint aside. 68
+  PowerShell, 38 bash and 9 store checks
+  ([installer checkpoint design record (ADR-0046)](docs/adr/0046-installer-checkpoint-and-resume.md),
   [Setup](docs/SETUP.md#resume-after-a-failure)). `.github/workflows/installer-unix.yml`
-  runs the two bash suites on `ubuntu-latest` and `macos-latest`
+  runs the bash suites and the store suite on `ubuntu-latest` and `macos-latest`
   ([U75](docs/UNKNOWNS.md#p91-research-before-implementation)).
 - **Final P85 follow-up integration.** P71's owned-process deadline probes and
   precise public-evidence section lookup are merged without production changes.

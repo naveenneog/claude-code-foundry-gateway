@@ -3,7 +3,7 @@
   "id": "install-checkpoint",
   "kind": "flow",
   "title": "Install checkpoint: resume after the last verified step",
-  "subtitle": "P91 / ADR-0046. Both installers, on Windows, Linux, macOS and Azure Cloud Shell. The checkpoint says where a rerun starts; a live Azure read decides whether a step is skipped.",
+  "subtitle": "Installer checkpoint design record (ADR-0046). Both installers, on Windows, Linux, macOS and Azure Cloud Shell. The checkpoint says where a rerun starts; a live Azure read decides whether a step is skipped.",
   "width": 1280,
   "height": 1100,
   "outputs": ["docs/images/architecture/install-checkpoint.png"],
@@ -28,7 +28,8 @@
     "shskip": {"label": "ckpt_skip_", "source": "scripts/install-checkpoint.sh", "match": "ckpt_skip_() {"},
     "azread": {"label": "Invoke-ClaudeInstallAzRead", "source": "scripts/ClaudeInstallResume.ps1", "match": "function Invoke-ClaudeInstallAzRead"},
     "gateway": {"label": "Resolve-ClaudeInstallGatewayStep", "source": "scripts/ClaudeInstallResume.ps1", "match": "function Resolve-ClaudeInstallGatewayStep"},
-    "cloudline": {"label": "Write-ClaudeInstallCloudShellLine", "source": "scripts/ClaudeInstallResume.ps1", "match": "function Write-ClaudeInstallCloudShellLine"}
+    "cloudline": {"label": "Write-ClaudeInstallCloudShellLine", "source": "scripts/ClaudeInstallResume.ps1", "match": "function Write-ClaudeInstallCloudShellLine"},
+    "storecheck": {"label": "Assert-ClaudeInstallStorePath", "source": "scripts/ClaudeInstallCheckpoint.ps1", "match": "function Assert-ClaudeInstallStorePath"}
   },
   "groups": [
     {"x": 0, "y": 0, "w": 1280, "h": 340, "tone": "purple", "title": "Operator side - one checkpoint per checkout, with no tokens, keys or connection strings"},
@@ -37,7 +38,7 @@
   ],
   "nodes": [
     {"id": "flow", "x": 18, "y": 76, "w": 385, "h": 248, "tone": "purple", "title": "1 - Guided flow", "lines": [
-      "[[flowcall]] runs the installer; a rerun of the lead phase resumes it.",
+      "[[flowcall]] runs the installer; a rerun of the flow's first phase resumes it.",
       "[[record]] keeps applied values only.",
       "A refusal reaches the flow as an exception."
     ]},
@@ -48,7 +49,7 @@
     ]},
     {"id": "store", "x": 876, "y": 76, "w": 385, "h": 248, "tone": "purple", "title": "3 - Per-user state directory", "lines": [
       "[[location]]: [[statedir]] when set, [[clouddrive]] in Cloud Shell, else LOCALAPPDATA or XDG state.",
-      "Owner-only creation, rename into place, lock by PID and start time."
+      "[[storecheck]] refuses a store another account can write, before it is read."
     ]},
     {"id": "save", "x": 18, "y": 456, "w": 385, "h": 248, "tone": "blue", "title": "4 - Commit point", "lines": [
       "[[save]] and [[shsave]] record the binding, the answers and the lock.",
@@ -60,7 +61,7 @@
     ]},
     {"id": "groups", "x": 876, "y": 456, "w": 385, "h": 248, "tone": "blue", "title": "6 - Receipts by id", "lines": [
       "[[groups]] records each Entra group's id and whether this run created it.",
-      "A resume reads each group by id and creates no second group."
+      "A resume reads each group by id; by name only an exact match counts, and a failed read creates nothing."
     ]},
     {"id": "verify", "x": 18, "y": 836, "w": 385, "h": 248, "tone": "teal", "title": "7 - Verify before a skip", "lines": [
       "[[skip]] and [[shskip]] skip a step only on a live read.",
@@ -71,7 +72,7 @@
       "Read-backs run before a PowerShell deployment; bash redeploys only a gateway its own run created."
     ]},
     {"id": "cloud", "x": 876, "y": 836, "w": 385, "h": 248, "tone": "teal", "title": "9 - Azure Cloud Shell", "lines": [
-      "Without clouddrive: a warning and the resume command.",
+      "Without clouddrive: the session's $HOME, a warning and the full resume command.",
       "[[cloudline]]: the 20-minute idle limit before a wait over 60 s."
     ]}
   ],
@@ -84,5 +85,5 @@
     {"from": "store", "to": "verify", "kind": "data", "label": "a rerun reads the checkpoint", "labelAt": [900, 808], "points": [[1261, 270], [1272, 270], [1272, 808], [210, 808], [210, 836]]},
     {"from": "verify", "to": "gateway", "kind": "control", "points": [[403, 960], [447, 960]]}
   ],
-  "notice": "ADR-0046 decision 17: the POSIX owner and mode refusal of decision 2 is not implemented; the council's Security seat rules on it. P91 adds no Azure resource or identity: the live reads use the operator's Azure CLI sign-in, and the checkpoint is a file on the operator's machine, or in clouddrive in Cloud Shell."
+  "notice": "The installers add no Azure resource or identity: the live reads use the operator's Azure CLI sign-in. The checkpoint is a file on the operator's machine; in Cloud Shell it is in clouddrive when storage is mounted, otherwise in the session's $HOME, with the full resume command printed."
 }

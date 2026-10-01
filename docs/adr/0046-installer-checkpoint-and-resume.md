@@ -109,23 +109,45 @@ Decisions 7 and 10.
 
 - **Owner-only.** POSIX: directory 0700 and files 0600, created under `umask 077` and set with
   `chmod`. Windows: the directory gets a protected ACL with one rule, the current user's SID with
-  full control, inherited by its files. On POSIX a checkpoint or lock that is not owned by the
-  current user (`test -O`) or is group- or other-writable (`find -perm -020`, `-perm -002`) is
-  refused, except under `clouddrive`, where the mount sets the mode and the storage account's access
-  control applies (U66); there the installer prints the measured mode once. Files in `clouddrive`
-  are readable by every principal with access to the Cloud Shell storage account: "users with
-  sufficient access rights in the subscription can access the storage accounts and file shares"
-  ([Persist files](https://learn.microsoft.com/azure/cloud-shell/persisting-shell-storage#securing-storage-access)).
-  The no-secrets rule (Decision 15) is what makes that acceptable.
+  full control, inherited by its files.
+- **Trusted store (council round 1, 2026-10-01).** Before either installer reads, parses, locks,
+  renames or replaces anything in the store, it checks the state directory, the checkpoint and the
+  lock, and before each rename its own temporary file (`Assert-ClaudeInstallStorePath`,
+  `ckpt_perm_check_`):
+  - Linux, macOS and Cloud Shell outside `clouddrive`: a path the current user does not own
+    (`test -O`), a path its group or other users can write (the mode `ls -ldL` prints), or a
+    checkpoint, lock or temporary file that is a symbolic link is refused. A
+    `CLAUDE_GATEWAY_STATE_DIR` in a shared directory such as `/tmp` is refused.
+  - Windows (`Install-ClaudeGateway.ps1`): a path with an allow rule, inherited or explicit, that lets
+    an account other than the current user, SYSTEM (S-1-5-18) or BUILTIN\Administrators
+    (S-1-5-32-544) write, append, delete, change permissions or take ownership is refused.
+  - `clouddrive` is exempt: its mount sets the modes, and the Cloud Shell storage account's access
+    control applies (U66). Files there are readable by every principal with access to the storage
+    account: "users with sufficient access rights in the subscription can access the storage
+    accounts and file shares"
+    ([Persist files](https://learn.microsoft.com/azure/cloud-shell/persisting-shell-storage#securing-storage-access)).
+    The no-secrets rule (Decision 15) is what makes that acceptable.
+  - The refusal is one line: the path, the owner, mode or access rule found, that nothing was read or
+    changed, and the resume command; for a temporary file mid-run, that the checkpoint was not
+    replaced.
+  - The POSIX probe is a function (`Get-ClaudeInstallPosixStat`, `ckpt_perm_probe_`) that tests
+    replace. Git Bash's default `noacl` mount reports every file as the current user's with fixed
+    modes (measured 2026-10-01), so under Git Bash the check passes; the real-mode checks run on the
+    Linux and macOS jobs of `.github/workflows/installer-unix.yml`. The bash installer reads no
+    Windows access rules.
 - **Atomic writes.** Each write goes to `install-<key>.json.tmp-<random>` in the same directory and
   replaces the checkpoint by rename: `[IO.File]::Replace` when the file exists and `[IO.File]::Move`
   when it does not (PowerShell 5.1 and 7), `mv -f` in bash. A reader sees the old file or the new
   one. Temporary files are ignored by readers and removed by the next write of the same run.
 - **Corrupt checkpoint.** A file that is not JSON, has another `schema` or `schemaVersion`, lacks a
-  required field, holds an unknown step id, or holds an answer that fails the installer's own
+  required field, holds an unknown step id, holds an answer that fails the installer's own
   validation (`ValidateSet`, `ValidatePattern`, `Assert-AzArgumentsSafe` at
-  `Install-ClaudeGateway.ps1:267-281`) is refused on one line naming the field and the path. The file
-  is not changed, moved or deleted.
+  `Install-ClaudeGateway.ps1:267-281`), or holds a receipt value of another shape than the installer
+  writes is refused on one line naming the field and the path. Receipt values reach `az` as
+  arguments on a resume, so each is checked on read: a deployment name against
+  `^claude-(gw|gateway)-[A-Za-z0-9-]+$`, group, app and client ids as GUIDs, the role assignment id
+  as a resource id, and origins as `created` or `pre-existing` (council round 1). The file is not
+  changed, moved or deleted.
 
 ### 3. Lock
 
@@ -141,7 +163,10 @@ Decisions 7 and 10.
   live PID counts as held.
 - Held, from another host: the lock's last-write time is less than 5 minutes old.
 - A lock that cannot be parsed counts as held for 5 minutes after its last write.
-- A held lock refuses the run on one line naming the host, PID, process start and lock path.
+- A held lock refuses the run on one line: the host, PID and process start of the run that holds it,
+  the lock path, that nothing was changed, when a later run takes the lock over (on the same host,
+  once that process has exited; from another host, after 5 minutes without a heartbeat), and the
+  resume command (council round 1).
 - A stale lock is renamed to `install-<key>.lock.stale-<runId>` (one rename wins a race), then the
   run creates its own lock and prints a note naming the stale holder.
 - The run deletes its own lock on exit (`finally` and an `EXIT` trap). `-WhatIf` and `--what-if`
@@ -329,17 +354,22 @@ outside P91.
 and the bound for tests. Cloud Shell ends a session after 20 minutes without interactive activity
 (U63, U73), which a wait of up to 3,600 s exceeds. In Cloud Shell, before any wait that can last
 longer than 60 s (this wait and `az deployment group create` itself), the installer prints one line:
-that fact, that the checkpoint and the ARM deployment outlive the session, and the resume command.
+that fact; that the checkpoint and the ARM deployment outlive the session, or, without `clouddrive`,
+that the ARM deployment outlives it and this checkpoint does not; and the resume command, with the
+answers when the checkpoint does not persist.
 
 ### 11. Receipts
 
 Receipts record what each step found or made, with `origin` `created` or `pre-existing`, and a
 resume finds every object by id:
 
-- Entra groups: id from `az ad group show --group <name> --query id` or `az ad group create ...
-  --query id`, then `az ad group show --group <id>` on resume. A group found by name counts as
-  pre-existing only when its `displayName` equals the requested name exactly; a prefix match counts
-  as not found, and the step creates the exact group. A group this run created that Graph does not
+- Entra groups: id from `az ad group list --display-name <name>` or `az ad group create ...
+  --query id`, then `az ad group show --group <id>` on resume. The list matches a prefix ("Object's
+  display name or its prefix", `az ad group list --help`), so only a listed group whose `displayName`
+  equals the requested name, ignoring case (U76), is the group (origin `pre-existing`). An empty list,
+  or one with only longer names, is absent, and the step creates the group. A failed read, a list that
+  is not JSON, or more than one group with the name refuses on one line and creates nothing (council
+  round 1). A group this run created that Graph does not
   return by id is inconclusive, so the run refuses instead of creating a second group with the same
   name (U74). The refusal is one line: a group created moments ago can take time to appear in
   Microsoft Graph, a rerun later continues without creating a second group, and the resume command.
@@ -406,9 +436,9 @@ an allowlist of fields; `AddressCertificatePassword` (`securestring`) and the AR
   gateway refuses on the binding and names the field; `-Restart` sets the checkpoint aside as
   `-ArchiveSavedRecord` sets the record aside.
 
-### 17. As built (GREEN and REFACTOR, 2026-10-01)
+### 17. As built (GREEN and REFACTOR, 2026-10-01; council round 1)
 
-Where the code differs from Decisions 1-16, the code is as follows. The lead reviews each item.
+Where the code differs from Decisions 1-16, the code is as follows.
 
 - Files: each installer's logic is in two files, the store and run state
   (`scripts/ClaudeInstallCheckpoint.ps1`, `scripts/install-checkpoint.sh`) and the live reads and
@@ -427,24 +457,6 @@ Where the code differs from Decisions 1-16, the code is as follows. The lead rev
   heartbeat stops when the installer's process is gone (`kill -0`).
 - `-WhatIf` and `--what-if` read no checkpoint into the run: they preview a first run and print one
   line when a checkpoint exists.
-- Owner and mode (Decision 2): the refusal of a POSIX checkpoint or lock that another user owns or
-  that group or others can write is not implemented. The store is protected instead by:
-  - a per-user directory (Decision 1);
-  - owner-only creation: bash runs `chmod 700` on the directory at each commit point and writes each
-    file under `umask 077` with `chmod 600` before the rename (`scripts/install-checkpoint.sh:338-339`,
-    `:362`, `:397`); PowerShell gives a directory it creates the protected ACL on Windows or mode 0700
-    elsewhere, and sets 0600 on each file outside Windows (`scripts/ClaudeInstallCheckpoint.ps1:118-129`,
-    `:142`, `:299`, `:505-508`); under PowerShell a directory that already exists keeps its ACL or mode;
-  - validation on read: a checkpoint whose schema, binding, step ids or any recorded answer fails the
-    installer's checks is refused and kept (`scripts/ClaudeInstallCheckpoint.ps1:165-225`;
-    `CKPT_VALIDATE`, `scripts/install-checkpoint.sh:164-194`, `:241`). Step receipts (deployment names,
-    object ids, the resolver app id) are not validated on read and reach `az` as argument values
-    (`scripts/ClaudeInstallResume.ps1:103`, `:184`, `:233`; `scripts/install-resume.sh:182`).
-
-  Git Bash's default `noacl` mount reports 0644 whatever `chmod` sets (measured 2026-10-01), so a mode
-  check cannot run on the Windows CI. The council's Security seat rules on this deviation. The check,
-  with a test on the `ubuntu-latest` and `macos-latest` jobs, is an unassigned row in
-  [ROADMAP](../ROADMAP.md).
 - Changed answers (Decision 6): the summary's Checkpoint row names each answer that differs from the
   recorded one, before the confirmation.
 - Prompts: an attended resume asks none of the recorded questions, including the region, the
@@ -462,15 +474,16 @@ Where the code differs from Decisions 1-16, the code is as follows. The lead rev
   keeps the existing warning and completes the step.
 - PowerShell top level (Decision 14): no calling script, not dot-sourced, and a host other than
   `Default Host`; an in-process runspace (`tests/Test-CompanyInstaller.ps1`) gets the exception.
-- Cloud Shell without `clouddrive`: the wait line's resume command carries the answers in both
-  installers. The bash line says that the ARM deployment outlives the session and the install
-  checkpoint does not (`scripts/install-resume.sh:32-40`); the PowerShell line says that both
-  outlive it whether or not the checkpoint persists (`scripts/ClaudeInstallResume.ps1:27-35`), and
-  no check covers that wording.
+- Refusals other than those of Decisions 2, 3, 5, 7, 10 and 11 end without a resume command: the
+  current subscription cannot be read, the lock cannot be created or taken, and a supplied Desktop app
+  is gone (it names `scripts/New-ClaudeDesktopEntraApp.ps1`); the bash refusal of Decision 9 names
+  `Install-ClaudeGateway.ps1 -ExistingApimName` instead.
 - Tests: the bash suite has its own harness; the guided-flow checks are in
-  `tests/Test-InstallerCheckpoint.ps1`; `tests/Test-All.ps1` gives each check its own
+  `tests/Test-InstallerCheckpoint.ps1`; the store check's decision runs through each library's probe
+  in `tests/Test-InstallerCheckpointStore.ps1`, with its real access-rule checks on Windows and its
+  real mode checks on Linux and macOS; `tests/Test-All.ps1` gives each check its own
   `CLAUDE_GATEWAY_STATE_DIR`; `.github/workflows/installer-unix.yml` (not pushed) runs the two bash
-  suites on `ubuntu-latest` and `macos-latest`, without a POSIX mode check.
+  suites and the store suite on `ubuntu-latest` and `macos-latest`.
 
 ## Tests (RED, mapped to the owner's scenarios)
 
@@ -500,6 +513,20 @@ the installer reads and a fresh `CLAUDE_GATEWAY_STATE_DIR`.
 | ADR-0032 | a confirmed summary writes the checkpoint before the first change; `-WhatIf`, `--what-if` and a cancelled summary write none | no checkpoint is written after the confirmation |
 | Flow | a guided-flow rerun resumes the installer from its checkpoint | the installer starts over |
 
+Council round 1 (2026-10-01) added checks, RED first for each behaviour change:
+
+| Finding | Check | Suite |
+|---|---|---|
+| A Graph read error treated as "group absent" | a failed read by name refuses and creates no group; two groups with the name refuse; a prefix-only match is created and an exact one reused | both installers |
+| The store trusted without a permission check | a state directory with an Everyone write rule and a checkpoint with a Users write rule refuse at startup (real access rules); a state directory another user owns refuses (probe seam); a 0777 directory and a 0666 checkpoint refuse (real modes, Linux and macOS); the decision for each owner, mode, link and `clouddrive` case | PowerShell, bash, store |
+| Cloud Shell line without `clouddrive` | says the ARM deployment outlives the session and this checkpoint does not | PowerShell |
+| Held-lock refusal without a next step | names host, PID and start, when a later run takes the lock over, and the resume command | both installers |
+| Receipts not validated on read | a tampered deployment name, group id and role assignment id each refuse as a corrupt checkpoint and keep the file | both installers (role id: PowerShell) |
+| Bash coverage | wrong schema, wrong `schemaVersion`, unknown step id; an unrecorded running `claude-gw-` deployment; a subscription passed by name that resolves to another id | bash |
+| PowerShell coverage | a different `-ExistingApimName` refuses | PowerShell |
+| Schema drift | both libraries name one schema and the same step ids in one order | store |
+| Directory that cannot be created | the run warns, prints the resume command with the answers and completes | both installers |
+
 Every new check gets a mutation that breaks what it guards; a mutation counts only when the suite
 loads with its baseline check count and at least one check fails, and a bash mutant also passes
 `bash -n`.
@@ -521,6 +548,9 @@ A prepared, unpushed workflow runs the bash checks and the POSIX permission and 
   the 700-line budget, gains only the step hooks, and `install-claude-gateway.sh` stays within it.
 - The checkpoint is a new operator-side data store, so `docs/ARCHITECTURE.md` and a diagram spec
   change in LOG.
+- A store another account can write stops the installer before it reads anything, so a
+  `CLAUDE_GATEWAY_STATE_DIR` in a shared directory, or a state directory whose inherited access rules
+  let other accounts write, needs another location or owner-only rules before a rerun.
 
 ## How we'd know this was wrong
 
@@ -533,6 +563,8 @@ A prepared, unpushed workflow runs the bash checks and the POSIX permission and 
   otherwise than U66 assumes, or the detection variables absent (U64).
 - A support case shows a second main.bicep deployment, a duplicate Entra group or a skipped step
   whose result Azure did not show.
+- Graph lists display names by `startswith` with case (U76), so a group whose name differs only in
+  case is not found and a second group is created.
 
 ## References
 
