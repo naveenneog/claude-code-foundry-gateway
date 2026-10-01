@@ -791,27 +791,131 @@ Expected result: built-in Azure hostname remains, and any existing custom Proxy 
 Validate a Key Vault certificate and grant APIM access.
 
 ```bash
-export HOSTNAME="<gateway.company.example>"
-export KEYVAULT_NAME="<key-vault-name>"
-export CERT_NAME="<certificate-name>"
-export CERT_SECRET_ID="$(az keyvault certificate show --vault-name "$KEYVAULT_NAME" --name "$CERT_NAME" --query sid -o tsv)"
-az keyvault certificate show --vault-name "$KEYVAULT_NAME" --name "$CERT_NAME" --query "{enabled:attributes.enabled,subject:policy.x509CertificateProperties.subject,secretContentType:policy.secretProperties.contentType}" -o json
-az role assignment create --assignee-object-id "$APIM_PRINCIPAL_ID" --assignee-principal-type ServicePrincipal --role "Key Vault Secrets User" --scope "$(az keyvault show -n "$KEYVAULT_NAME" --query id -o tsv)" -o json
+# P89-KEYVAULT-ACCESS-BEGIN
+p89_keyvault_access() {
+  mkdir -p .p89-receipts
+  : "${GATEWAY_HOSTNAME:=<gateway.company.example>}"
+  : "${KEYVAULT_NAME:=<key-vault-name>}"
+  : "${CERT_NAME:=<certificate-name>}"
+  export GATEWAY_HOSTNAME KEYVAULT_NAME CERT_NAME
+  for pair in "APIM_PRINCIPAL_ID:$APIM_PRINCIPAL_ID" "KEYVAULT_NAME:$KEYVAULT_NAME" "CERT_NAME:$CERT_NAME"; do
+    name="${pair%%:*}"
+    value="${pair#*:}"
+    if [ -z "$value" ] || printf '%s' "$value" | grep -Eq '^<.*>$'; then
+      echo "Refused: $name is empty or still a placeholder; Key Vault access was not changed." >&2
+      return 1
+    fi
+  done
+  if ! cert_json="$(az keyvault certificate show --vault-name "$KEYVAULT_NAME" --name "$CERT_NAME" -o json)"; then
+    echo "Refused: could not read Key Vault certificate '$CERT_NAME' in '$KEYVAULT_NAME'; no role assignment was made." >&2
+    return 1
+  fi
+  if [ "$(printf '%s' "$cert_json" | jq -r '.attributes.enabled // false')" != "true" ] ||
+     [ "$(printf '%s' "$cert_json" | jq -r '.policy.keyProperties.exportable // false')" != "true" ] ||
+     [ "$(printf '%s' "$cert_json" | jq -r '.policy.secretProperties.contentType // ""')" != "application/x-pkcs12" ]; then
+    echo "Refused: certificate must be enabled, exportable, and backed by an application/x-pkcs12 secret." >&2
+    return 1
+  fi
+  export CERT_SECRET_ID="$(printf '%s' "$cert_json" | jq -r '.sid // ""')"
+  if [ -z "$CERT_SECRET_ID" ]; then
+    echo "Refused: certificate secret id is empty; no role assignment was made." >&2
+    return 1
+  fi
+  if ! KEYVAULT_STATE="$(az keyvault show -n "$KEYVAULT_NAME" --query "{id:id,rbac:properties.enableRbacAuthorization}" -o json)"; then
+    echo "Refused: could not read Key Vault '$KEYVAULT_NAME'; no role assignment was made." >&2
+    return 1
+  fi
+  KEYVAULT_ID="$(printf '%s' "$KEYVAULT_STATE" | jq -r '.id // ""')"
+  KEYVAULT_RBAC="$(printf '%s' "$KEYVAULT_STATE" | jq -r '.rbac // false')"
+  CURRENT_SUBSCRIPTION_ID="$(az account show --query id -o tsv)" || {
+    echo "Refused: could not read current subscription id; no role assignment was made." >&2
+    return 1
+  }
+  expected="^/subscriptions/${CURRENT_SUBSCRIPTION_ID}/resourceGroups/[^/]+/providers/Microsoft.KeyVault/vaults/${KEYVAULT_NAME}$"
+  if ! printf '%s' "$KEYVAULT_ID" | grep -Eiq "$expected"; then
+    echo "Refused: Key Vault id '$KEYVAULT_ID' is not the expected vault in subscription '$CURRENT_SUBSCRIPTION_ID'; no role assignment was made." >&2
+    return 1
+  fi
+  if [ "$KEYVAULT_RBAC" != "true" ]; then
+    echo "Refused: Key Vault '$KEYVAULT_NAME' uses access policies, not RBAC. Portal route: Key Vault > Access policies > Create, Secret permissions Get and List, principal = the gateway identity. Script route: ./scripts/Set-ClaudeGatewayAddress.ps1, which uses accessPolicies/add. Do not use az keyvault set-policy; it rewrites that principal's secret permission list." >&2
+    return 1
+  fi
+  if ! existing_kv_role="$(az role assignment list --scope "$KEYVAULT_ID" --assignee "$APIM_PRINCIPAL_ID" --include-inherited --query "[?roleDefinitionName=='Key Vault Secrets User']|[0].id" -o tsv)"; then
+    echo "Refused: could not list Key Vault role assignments; nothing recorded." >&2
+    return 1
+  fi
+  if [ -n "$existing_kv_role" ]; then
+    jq -n --arg existing "$existing_kv_role" '{keyVaultRole:{created:false,existingId:$existing}}' > .p89-receipts/keyvault-role.json
+  else
+    if ! created_kv_role="$(az role assignment create --assignee-object-id "$APIM_PRINCIPAL_ID" --assignee-principal-type ServicePrincipal --role "Key Vault Secrets User" --scope "$KEYVAULT_ID" -o json)"; then
+      rm -f .p89-receipts/keyvault-role.json
+      echo "Refused: Key Vault role assignment create failed; no receipt was written." >&2
+      return 1
+    fi
+    printf '%s' "$created_kv_role" | jq '{keyVaultRole:{created:true,id:.id}}' > .p89-receipts/keyvault-role.json
+  fi
+  jq -e '(.keyVaultRole.created == true and (.keyVaultRole.id | type == "string" and length > 0)) or (.keyVaultRole.created == false and (.keyVaultRole.existingId | type == "string" and length > 0))' .p89-receipts/keyvault-role.json >/dev/null || {
+    rm -f .p89-receipts/keyvault-role.json
+    echo "Refused: Key Vault role receipt is invalid; nothing recorded." >&2
+    return 1
+  }
+}
+p89_keyvault_access
+# P89-KEYVAULT-ACCESS-END
 ```
 
-Expected result: the certificate is enabled, backed by a PFX secret, and the gateway identity can read it. This mirrors `scripts/ClaudeGatewayCertificate.ps1:80-103` and `scripts/ClaudeGatewayAddress.ps1:107-115`.
+Expected result: the certificate is enabled, exportable and backed by a PFX secret; `CERT_SECRET_ID` is set; and an RBAC Key Vault gets only an exact-vault-scope `Key Vault Secrets User` assignment for the gateway identity. Access-policy vaults are refused with the portal and script routes. This mirrors `scripts/ClaudeGatewayCertificate.ps1:80-101` and `scripts/ClaudeGatewayAddress.ps1:159-184`.
 
 Patch APIM hostname configurations and prove TLS before publishing the handover URL.
 
 ```bash
-APIM_ID="$(az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" --query id -o tsv)"
-az rest --method patch --headers "Content-Type=application/json" --body "{\"properties\":{\"hostnameConfigurations\":[{\"type\":\"Proxy\",\"hostName\":\"${HOSTNAME}\",\"certificateSource\":\"KeyVault\",\"keyVaultId\":\"${CERT_SECRET_ID}\",\"identityClientId\":null}]}}" --url "https://management.azure.com${APIM_ID}?api-version=2024-05-01" -o json
-az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" --query "hostnameConfigurations[?hostName=='${HOSTNAME}'].{hostName:hostName,status:certificateStatus}" -o json
-curl -sS -o /dev/null -w "%{http_code}\n" "https://${HOSTNAME}/claude/v1/messages"
+# P89-BIND-HOSTNAME-BEGIN
+p89_bind_hostname() {
+  if [ -z "${APIM_ID:-}" ]; then
+    APIM_ID="$(az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" --query id -o tsv)" || return 1
+  fi
+  for pair in "APIM_ID:${APIM_ID:-}" "CERT_SECRET_ID:${CERT_SECRET_ID:-}" "GATEWAY_HOSTNAME:${GATEWAY_HOSTNAME:-}"; do
+    name="${pair%%:*}"
+    value="${pair#*:}"
+    if [ -z "$value" ] || printf '%s' "$value" | grep -Eq '^<.*>$'; then
+      echo "Refused: $name is empty or still a placeholder; hostname was not changed." >&2
+      return 1
+    fi
+  done
+  if ! apim_live="$(az rest --method get --url "https://management.azure.com${APIM_ID}?api-version=2024-05-01" -o json)"; then
+    echo "Refused: could not read live APIM hostnames; hostname was not changed." >&2
+    return 1
+  fi
+  sku="$(printf '%s' "$apim_live" | jq -r '.sku.name // ""')"
+  other_proxy_count="$(printf '%s' "$apim_live" | jq --arg h "$GATEWAY_HOSTNAME" '[.properties.hostnameConfigurations[]? | select(.type=="Proxy" and (.certificateSource // "BuiltIn") != "BuiltIn" and (.hostName|ascii_downcase) != ($h|ascii_downcase))] | length')"
+  if [ "$sku" != "PremiumV2" ] && [ "$other_proxy_count" -gt 0 ] && [ -z "${REPLACE_HOSTNAME:-}" ]; then
+    echo "Refused: $sku has another custom Proxy hostname. Set REPLACE_HOSTNAME to the exact hostname to replace, or use PremiumV2." >&2
+    return 1
+  fi
+  if [ -n "${REPLACE_HOSTNAME:-}" ]; then
+    replace_count="$(printf '%s' "$apim_live" | jq --arg h "$REPLACE_HOSTNAME" --arg new "$GATEWAY_HOSTNAME" '[.properties.hostnameConfigurations[]? | select(.type=="Proxy" and (.certificateSource // "BuiltIn") != "BuiltIn" and (.hostName|ascii_downcase)==($h|ascii_downcase) and (.hostName|ascii_downcase)!=($new|ascii_downcase))] | length')"
+    if [ "$replace_count" -ne 1 ]; then
+      echo "Refused: REPLACE_HOSTNAME must name exactly one live custom Proxy hostname different from GATEWAY_HOSTNAME." >&2
+      return 1
+    fi
+  fi
+  printf '%s' "$apim_live" | jq --arg h "$GATEWAY_HOSTNAME" --arg replace "${REPLACE_HOSTNAME:-}" --arg cert "$CERT_SECRET_ID" '
+    (.properties.hostnameConfigurations // []) as $hosts
+    | {properties:{hostnameConfigurations:(
+        ($hosts | map(select(
+          .type != "Proxy" or
+          ((.hostName|ascii_downcase) != ($h|ascii_downcase) and (($replace == "") or (.hostName|ascii_downcase) != ($replace|ascii_downcase)))
+        ))) + [{type:"Proxy",hostName:$h,certificateSource:"KeyVault",keyVaultId:$cert,identityClientId:null,defaultSslBinding:false,negotiateClientCertificate:false}]
+      )}}' > hostname-patch.json
+  az rest --method patch --headers "Content-Type=application/json" --body @hostname-patch.json --url "https://management.azure.com${APIM_ID}?api-version=2024-05-01" -o json || return 1
+  az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" --query "hostnameConfigurations[?hostName=='${GATEWAY_HOSTNAME}'].{hostName:hostName,status:certificateStatus}" -o json
+  curl -sS -o /dev/null -w "%{http_code}\n" "https://${GATEWAY_HOSTNAME}/claude/v1/messages"
+}
+p89_bind_hostname
+# P89-BIND-HOSTNAME-END
 ```
 
-Expected result: the hostname binding exists and an unauthenticated request returns `401`, proving DNS, SNI and certificate before clients use the address. This mirrors `scripts/ClaudeGatewayAddress.ps1:248-351`.
-
+Expected result: the hostname binding exists, unauthenticated HTTPS returns `401`, and other hostname configurations remain in the PATCH body. This mirrors `scripts/ClaudeGatewayAddress.ps1:88-91`, `:136-141` and `:289-292`.
 ## 10. Optional Cosmos projection
 
 Run read-only preflight checks before any projection write.
@@ -1005,8 +1109,17 @@ Expected result: HTTP `403` or gateway refusal naming the model outside the tier
 Check for direct Foundry bypass.
 
 ```bash
-az role assignment list --scope "$FOUNDRY_ID" --include-inherited --query "[?roleDefinitionName=='Cognitive Services User'].{principal:principalName,principalType:principalType,scope:scope}" -o table
-az role assignment list --scope "$FOUNDRY_ID" --include-inherited --query "[?roleDefinitionName=='Cognitive Services User' && principalId!='${APIM_PRINCIPAL_ID}'].{principal:principalName,principalId:principalId}" -o table
+# P89-BYPASS-READ-BEGIN
+p89_bypass_read() {
+  if [ -z "${FOUNDRY_ID:-}" ] || [ -z "${APIM_PRINCIPAL_ID:-}" ]; then
+    echo "Refused: FOUNDRY_ID or APIM_PRINCIPAL_ID is empty; bypass read did not run." >&2
+    return 1
+  fi
+  az role assignment list --scope "$FOUNDRY_ID" --include-inherited --query "[?roleDefinitionName=='Cognitive Services User'].{principal:principalName,principalType:principalType,scope:scope}" -o table || return 1
+  az role assignment list --scope "$FOUNDRY_ID" --include-inherited --query "[?roleDefinitionName=='Cognitive Services User' && principalId!='${APIM_PRINCIPAL_ID}'].{principal:principalName,principalId:principalId}" -o table
+}
+p89_bypass_read
+# P89-BYPASS-READ-END
 ```
 
 Expected result: the gateway identity has the role; developers do not hold direct `Cognitive Services User` unless there is an explicitly approved bypass. This mirrors `scripts/Get-ClaudeBypass.ps1`.
@@ -1026,10 +1139,19 @@ Read resources before deletion.
 
 ```bash
 az resource list -g "$GATEWAY_RG" --query "[].{type:type,name:name}" -o table
-az role assignment list --scope "$FOUNDRY_ID" --assignee "$APIM_PRINCIPAL_ID" --query "[].{id:id,role:roleDefinitionName}" -o table
+# P89-TEARDOWN-READ-BEGIN
+p89_teardown_read() {
+  if [ -z "${FOUNDRY_ID:-}" ] || [ -z "${APIM_PRINCIPAL_ID:-}" ]; then
+    echo "Refused: FOUNDRY_ID or APIM_PRINCIPAL_ID is empty; role assignment read did not run." >&2
+    return 1
+  fi
+  az role assignment list --scope "$FOUNDRY_ID" --assignee "$APIM_PRINCIPAL_ID" --query "[].{id:id,role:roleDefinitionName}" -o table
+}
+p89_teardown_read
+# P89-TEARDOWN-READ-END
 ```
 
-Expected result: the operator sees the exact resources and role assignments that will be removed. This mirrors the installer's explicit review style before writes.
+Expected result: the operator sees resources and the exact receipt-created role assignment id that teardown may remove. Empty `FOUNDRY_ID` or `APIM_PRINCIPAL_ID` refuses before role reads, so Azure CLI cannot fall back to the subscription scope or omit the assignee filter. This mirrors the installer's explicit review style before writes.
 
 Delete the gateway resource group when the deployment was isolated to it.
 
@@ -1085,6 +1207,19 @@ p89_teardown_external() {
     fi
   }
 
+  delete_created_keyvault_role() {
+    receipt=".p89-receipts/keyvault-role.json"
+    if [ ! -r "$receipt" ]; then
+      echo "No Key Vault role receipt; nothing deleted for it."
+      return 0
+    fi
+    if jq -e '.keyVaultRole.created == true and (.keyVaultRole.id | type == "string" and length > 0)' "$receipt" >/dev/null; then
+      az role assignment delete --ids "$(jq -r '.keyVaultRole.id' "$receipt")"
+    else
+      echo "Key Vault role assignment was pre-existing; not deleting it."
+    fi
+  }
+
   for required in .p89-receipts/foundry-role.json .p89-receipts/group-standard.json .p89-receipts/group-premium.json; do
     if [ ! -r "$required" ]; then
       echo "Refused: No receipt: $required is missing or unreadable; nothing deleted." >&2
@@ -1095,10 +1230,11 @@ p89_teardown_external() {
   delete_created_group standard || return 1
   delete_created_group premium || return 1
   delete_created_app || return 1
+  delete_created_keyvault_role || return 1
   az role assignment list --scope "$FOUNDRY_ID" --assignee "$APIM_PRINCIPAL_ID" --query "[?roleDefinitionName=='Cognitive Services User'].id" -o tsv
 }
 p89_teardown_external
 # P89-TEARDOWN-EXTERNAL-END
 ```
 
-Expected result: only role assignments, tier groups and Desktop app registrations recorded with `created:true` are deleted. Missing role or group receipts refuse and delete nothing; the Desktop app receipt is optional, because §7 can be skipped, and a missing app receipt prints "No Desktop app receipt; nothing deleted for it." Pre-existing directory objects survive. This mirrors the Foundry role assignment in `infra/foundry-role.bicep`, `deploy.ps1:182-187` and `scripts/New-ClaudeDesktopEntraApp.ps1:29-39`.
+Expected result: only role assignments, tier groups, Key Vault role assignments and Desktop app registrations recorded with `created:true` are deleted. Missing role or group receipts refuse and delete nothing; the Desktop app and Key Vault role receipts are optional, because §7 and §9 can be skipped. Pre-existing directory objects survive. This mirrors the Foundry role assignment in `infra/foundry-role.bicep`, `deploy.ps1:182-187` and `scripts/New-ClaudeDesktopEntraApp.ps1:29-39`.

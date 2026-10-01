@@ -47,7 +47,9 @@ exact streaming cache-creation detail remains **U13**.
   receipts before deleting anything. Round 6 refuses existing APIM instances
   without SystemAssigned managed identity, adds an optional PATCH-only identity
   enablement block, and prevents empty-assignee Foundry role checks or empty
-  receipts after failed role creation.
+  receipts after failed role creation. Round 7 makes Key Vault grants exact-scope
+  and receipt-backed, preserves live APIM hostnames during company-address PATCH,
+  and refuses empty-scope bypass/teardown reads.
 - **Final P85 follow-up integration.** P71's owned-process deadline probes and
   precise public-evidence section lookup are merged without production changes.
   The single full AUM run passes all 1,200 cases; refreshed file and whole-check

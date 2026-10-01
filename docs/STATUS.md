@@ -52,6 +52,11 @@ Round 6 field-failure fix, 2026-10-01:
 - Added optional `p89_enable_apim_identity`, using `az rest --method patch` with `{"identity":{"type":"SystemAssigned"}}`, then polling for `identity.principalId`; UserAssigned-only identity refuses and points to the portal so user-assigned identities are preserved.
 - `p89_foundry_role` refuses empty ids, checks role-list exit status, captures role-create output before writing the receipt, and removes empty receipts on create failure.
 - Validation: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS; `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS with 571 checks in 217.27 s; `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS with 43 guides. No live Azure command ran.
+Round 7 council-fix validation, 2026-10-01:
+- §9 Key Vault grant now validates certificate metadata, vault id/subscription, RBAC mode and existing exact-scope assignment before creating a Key Vault Secrets User role receipt; access-policy vaults refuse with portal/script routes.
+- §9 hostname PATCH now reads live APIM state, preserves unrelated hostnames, refuses unsafe StandardV2 replacement, and uses `GATEWAY_HOSTNAME` rather than bash `HOSTNAME`.
+- §11 bypass and §12 teardown reads now refuse empty `FOUNDRY_ID` or `APIM_PRINCIPAL_ID`, so Azure CLI cannot fall back to subscription scope or omit assignee filtering.
+- Validation: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS; `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS with 595 checks in 210.89 s; `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS with 43 guides. No live Azure command ran.
 
 ## P71 follow-up: a lookup starts one refresh, 2026-09-30
 
