@@ -222,6 +222,12 @@ function global:az {
             if (-not $assignment) { Write-P91Failure "ERROR: Not Found({`"error`":{`"code`":`"RoleAssignmentNotFound`",`"message`":`"The role assignment '$id' is not found.`"}})" 3; return }
             return ([pscustomobject]@{ id = $id; properties = [pscustomobject]@{ principalId = $assignment.principalId; scope = $assignment.scope } } | ConvertTo-Json -Depth 4 -Compress)
         }
+        'ad group list*' {
+            # --display-name is a prefix ("Object's display name or its prefix", az ad group list --help).
+            $prefix = [string](& $value @('--display-name'))
+            $list = @(foreach ($p in $w.groups.PSObject.Properties) { if ([string]$p.Value -like "$prefix*") { [pscustomobject]@{ id = $p.Name; displayName = [string]$p.Value } } })
+            return (ConvertTo-Json -InputObject $list -Depth 4 -Compress)
+        }
         'ad group show*' {
             $group = & $value @('--group', '-g')
             $found = @()

@@ -92,6 +92,25 @@ try {
     $shellEnv = @{ AZUREPS_HOST_ENVIRONMENT = 'cloud-shell/1.0'; CLAUDE_GATEWAY_STATE_DIR = $null }
     $whatIf = New-P91Scenario -Name 'whatif' -Scratch $scratch -Template $template -World (New-P91World)
     $cancel = New-P91Scenario -Name 'cancel' -Scratch $scratch -Template $template -World (New-P91World)
+    # A group read by name: az ad group list --display-name matches a prefix, so only an exact name is
+    # the group; a failed read or two groups with the name create nothing.
+    $prefixWorld = New-P91World
+    $prefixWorld.groups['00000000-0000-4000-8000-0000000000e7'] = 'claude-code-standard-old'
+    $prefixWorld.groups[$premiumId] = 'claude-code-premium'
+    $graphPrefix = New-P91Scenario -Name 'graph-prefix' -Scratch $scratch -Template $template -World $prefixWorld
+    $readNameWorld = New-P91World
+    $readNameWorld.groups[$premiumId] = 'claude-code-premium'
+    $denied = 'ERROR: Insufficient privileges to complete the operation. (Authorization_RequestDenied)'
+    $readNameWorld.inject.readErrors = @([ordered]@{ match = 'ad group show --group claude-code-standard*'; text = $denied }, [ordered]@{ match = 'ad group list --display-name claude-code-standard*'; text = $denied })
+    $graphRead = New-P91Scenario -Name 'graph-read' -Scratch $scratch -Template $template -World $readNameWorld
+    $twinsWorld = New-P91World
+    $twinsWorld.groups['00000000-0000-4000-8000-0000000000e8'] = 'claude-code-standard'
+    $twinsWorld.groups['00000000-0000-4000-8000-0000000000e9'] = 'claude-code-standard'
+    $twinsWorld.groups[$premiumId] = 'claude-code-premium'
+    $graphTwins = New-P91Scenario -Name 'graph-twins' -Scratch $scratch -Template $template -World $twinsWorld
+    $noDir = New-P91Scenario -Name 'nodir' -Scratch $scratch -Template $template -World (New-P91World)
+    $blocker = Join-Path $noDir.Dir 'blocker'
+    Write-P91Text $blocker 'a file where the state directory would be'
 
     $first = @(
         ($runBase1 = New-P91Run $base -Arguments ($newGateway + $secret + '-Yes'))
@@ -103,6 +122,10 @@ try {
         ($runDrive = New-P91Run $drive -Arguments ($newGateway + '-Yes') -Environment ($shellEnv + @{ HOME = $homeB }))
         ($runWhatIf = New-P91Run $whatIf -Arguments ($newGateway + '-Yes', '-WhatIf'))
         ($runCancel = New-P91Run $cancel -Arguments ($newGateway + $quiet) -Attended -Answers @('', '', '', '', '', '', 'n'))
+        ($runGraphPrefix = New-P91Run $graphPrefix -Arguments ($newGateway + '-Yes'))
+        ($runGraphRead = New-P91Run $graphRead -Arguments ($newGateway + '-Yes'))
+        ($runGraphTwins = New-P91Run $graphTwins -Arguments ($newGateway + '-Yes'))
+        ($runNoDir = New-P91Run $noDir -Arguments ($newGateway + '-Yes') -Environment @{ CLAUDE_GATEWAY_STATE_DIR = (Join-Path $blocker 'state') })
     )
     $r1 = Invoke-P91Runs $first
     $b1 = Get-P91Result $r1 $runBase1
@@ -167,6 +190,22 @@ try {
     Assert 'S12 with clouddrive the checkpoint is under $HOME/clouddrive/.claude-gateway, with no warning' (
         $null -ne (Get-P91CheckpointFile $drive (Join-Path $homeB 'clouddrive\.claude-gateway')) -and $dr.Out -notmatch '(?m)\[WARN\].*clouddrive') (Get-P91Tail $dr)
     Assert 'S12 in Cloud Shell the run prints the 20-minute line before the deployment' ($dr.Out -match '(?m)20 minutes without interactive activity.*Resume: ')
+    Assert 'S12 without clouddrive the 20-minute line says the ARM deployment outlives the session and this checkpoint does not, with the answers' (
+        $nd.Out -match "(?m)20 minutes without interactive activity; the ARM deployment outlives the session and this install checkpoint does not\. Resume: .*Install-ClaudeGateway\.ps1 .*-ResourceGroup 'rg-p91'") (Get-P91Tail $nd)
+    $gp = Get-P91Result $r1 $runGraphPrefix
+    Assert 'R5 a group name that only longer names start with is absent and created once; an exact name is reused' ($gp.ExitCode -eq 0 -and
+        (Get-P91Calls $gp 'ad group create --display-name claude-code-standard*').Count -eq 1 -and -not (Get-P91Calls $gp 'ad group create --display-name claude-code-premium*').Count) (Get-P91Tail $gp)
+    $gr = Get-P91Result $r1 $runGraphRead
+    Assert 'R5 a failed read of a group by name refuses on one line and creates no group' ((Test-Refusal $gr 'claude-code-standard') -and @(Get-P91ErrLines $gr)[0] -match 'by name' -and
+        -not (Get-P91Calls $gr 'ad group create*').Count) (Get-P91Tail $gr)
+    $gt = Get-P91Result $r1 $runGraphTwins
+    $gtLine = [string]@(Get-P91ErrLines $gt)[0]
+    Assert 'R5 two groups with the configured name refuse on one line naming both ids, and no third group is created' ((Test-Refusal $gt 'claude-code-standard') -and
+        $gtLine -match '0000000000e8' -and $gtLine -match '0000000000e9' -and -not (Get-P91Calls $gt 'ad group create*').Count) (Get-P91Tail $gt)
+    $nx = Get-P91Result $r1 $runNoDir
+    Assert 'R6 a state directory that cannot be created: the run warns, prints the resume command with the answers and completes' ($nx.ExitCode -eq 0 -and
+        $nx.Out -match '(?m)\[WARN\].*could not be created' -and $nx.Out -match "(?m)^\s*Resume: .*Install-ClaudeGateway\.ps1 .*-ResourceGroup 'rg-p91'" -and
+        (Get-P91Calls $nx 'deployment group create*').Count -eq 1) (Get-P91Tail $nx)
     $f1 = Get-P91Result $r1 $runForeign
     Assert 'S4 an unrecorded running claude-gw- deployment is awaited before the new one is created' ($f1.ExitCode -eq 0 -and
         (Get-Order $f1 'deployment group show*claude-gw-20260101000000*' 'deployment group create*')) (Get-P91Tail $f1)
@@ -181,9 +220,11 @@ try {
     $copy = { param([string]$Name) New-P91Scenario -Name $Name -Scratch $scratch -From $base }
     $sc = [ordered]@{}
     foreach ($n in 'tenant', 'subscription', 'group', 'gateway', 'reuse', 'installer', 'version', 'changed', 'template', 'rgMissing', 'apimMissing', 'groupMissing', 'graphLag',
-        'readDeployment', 'readGroup', 'readRg', 'truncated', 'schema', 'unknownStep', 'unsafe', 'restart', 'liveLock', 'exitedLock', 'reusedPid', 'otherHost', 'staleHost', 'flow', 'flowRefusal') {
+        'readDeployment', 'readGroup', 'readRg', 'truncated', 'schema', 'unknownStep', 'unsafe', 'restart', 'liveLock', 'exitedLock', 'reusedPid', 'otherHost', 'staleHost', 'flow', 'flowRefusal',
+        'aclDir', 'aclFile', 'tamperDeployment', 'tamperGroup', 'tamperRole') {
         $sc[$n] = & $copy $n
     }
+    $sc['existingName'] = New-P91Scenario -Name 'existingName' -Scratch $scratch -From $identity
     foreach ($s in @($base) + @($sc.Values)) { Edit-P91World $s { param($w) $w.inject.sync = '' } }
     Edit-P91World $sc.tenant { param($w) $w.tenantId = '00000000-0000-4000-8000-0000000000f9' }
     Edit-Checkpoint $sc.installer { param($cp) $cp.installer = 'bash' }
@@ -203,6 +244,17 @@ try {
     Edit-Checkpoint $sc.schema { param($cp) $cp.schemaVersion = 99 }
     Edit-Checkpoint $sc.unknownStep { param($cp) $first = @($cp.steps | Where-Object { $_ })[0]; if ($first) { $first.id = 'gateway-deploy' } }
     Edit-Checkpoint $sc.unsafe { param($cp) if ($cp.answers) { $cp.answers | Add-Member -NotePropertyName PublisherEmail -NotePropertyValue '@C:\p91-secret.txt' -Force } }
+    # Receipt values reach az as arguments on a resume, so a value of another shape is a corrupt checkpoint.
+    $stepOf = { param($cp, [string]$id) @($cp.steps | Where-Object { $_ -and $_.id -eq $id })[0] }
+    Edit-Checkpoint $sc.tamperDeployment { param($cp) $st = & $stepOf $cp 'gateway-deployment'; if ($st) { @($st.receipt.deployments)[0].name = 'p91-not-a-deployment' } }
+    Edit-Checkpoint $sc.tamperGroup { param($cp) $st = & $stepOf $cp 'entra-groups'; if ($st) { @($st.receipt.groups)[0].id = '@C:\p91-secret.txt' } }
+    Edit-Checkpoint $sc.tamperRole { param($cp) $st = & $stepOf $cp 'gateway-deployment'; if ($st) { $st.receipt | Add-Member -NotePropertyName roleAssignmentId -NotePropertyValue 'https://p91.invalid/collect?id=' -Force } }
+    if ($env:OS -eq 'Windows_NT') {
+        # Real access rules: Everyone may modify the state directory; Users may write the checkpoint.
+        Protect-P91Directory $sc.aclDir.State -AlsoWritableBy 'S-1-1-0'
+        $aclTarget = Get-P91CheckpointFile $sc.aclFile
+        if ($aclTarget) { Add-P91FileWriter $aclTarget.FullName 'S-1-5-32-545' }
+    }
     Write-Lock $sc.liveLock @{ pid = $sleeper.Id; processStart = (& $startOf $sleeper); host = $hostName; installer = 'pwsh'; runId = ('a' * 32); acquiredUtc = '2026-10-01T00:00:00Z' }
     Write-Lock $sc.exitedLock @{ pid = $exited.Id; processStart = (& $startOf $exited); host = $hostName; installer = 'pwsh'; runId = ('b' * 32); acquiredUtc = '2026-10-01T00:00:00Z' }
     Write-Lock $sc.reusedPid @{ pid = $sleeper.Id; processStart = '2001-01-01T00:00:00Z'; host = $hostName; installer = 'pwsh'; runId = ('c' * 32); acquiredUtc = '2026-10-01T00:00:00Z' }
@@ -213,7 +265,7 @@ try {
     $bounded = New-P91Scenario -Name 'bounded' -Scratch $scratch -From $running
     Edit-P91World $bounded { param($w) foreach ($p in $w.deployments.'rg-p91'.PSObject.Properties) { $p.Value.polls = @('forever') } }
     $hashes = @{}
-    foreach ($n in 'tenant', 'subscription', 'group', 'gateway', 'reuse', 'installer', 'truncated', 'schema', 'unknownStep', 'unsafe') { $file = Get-P91CheckpointFile $sc[$n]; $hashes[$n] = if ($file) { Get-P91Hash $file.FullName } else { '' } }
+    foreach ($n in 'tenant', 'subscription', 'group', 'gateway', 'reuse', 'installer', 'truncated', 'schema', 'unknownStep', 'unsafe', 'aclDir', 'aclFile', 'tamperDeployment', 'tamperGroup', 'tamperRole', 'existingName') { $file = Get-P91CheckpointFile $sc[$n]; $hashes[$n] = if ($file) { Get-P91Hash $file.FullName } else { '' } }
 
     $flowArgs = "@{ SubscriptionId = '$sub'; FoundryAccount = 'ai-p91'; FoundryResourceGroup = 'rg-ai-p91'; ResourceGroup = 'RG'; Location = 'eastus2'; NamePrefix = 'p91gw'; PublisherEmail = 'ops@contoso.com'; Sku = 'BasicV2'; EntitlementStore = 'named-value'; AuthMode = 'interactive'; DesktopSignInKind = 'helper-script'; AddressMode = 'azure'; SkipFinOpsOffer = `$true; Yes = `$true }"
     $flowCommand = { param($s, [string]$rg) ". '$(Join-Path $s.Repo 'scripts\flow\FlowContract.ps1')'; . '$(Join-Path $s.Repo 'scripts\flow\Foundation.ps1')'; " +
@@ -254,6 +306,12 @@ try {
         ($runRestart = New-P91Run $sc.restart -Arguments ($newGateway + '-Yes', '-Restart'))
         ($runFlow = New-P91Run $sc.flow -Command (& $flowCommand $sc.flow 'rg-p91'))
         ($runFlowRefusal = New-P91Run $sc.flowRefusal -Command (& $flowCommand $sc.flowRefusal 'rg-other'))
+        ($runAclDir = New-P91Run $sc.aclDir -Arguments ($newGateway + '-Yes'))
+        ($runAclFile = New-P91Run $sc.aclFile -Arguments ($newGateway + '-Yes'))
+        ($runTamperDeployment = New-P91Run $sc.tamperDeployment -Arguments ($newGateway + '-Yes'))
+        ($runTamperGroup = New-P91Run $sc.tamperGroup -Arguments ($newGateway + '-Yes'))
+        ($runTamperRole = New-P91Run $sc.tamperRole -Arguments ($newGateway + '-Yes'))
+        ($runExistingName = New-P91Run $sc.existingName -Arguments ($common + @("-ResourceGroup 'rg-p91'", "-ExistingApimName 'apim-other'", '-Yes')))
     )
     $r2 = Invoke-P91Runs $second
 
@@ -339,6 +397,31 @@ try {
     Assert 'S9 a lock whose PID now names another process (start time differs) is stale' ($l3.ExitCode -eq 0 -and $l3.Out -match '(?m)stale lock') (Get-P91Tail $l3)
     Assert 'S9 another host''s lock with a recent heartbeat refuses and names the host' (Test-Refusal $l4 'p91-other-host') (Get-P91Tail $l4)
     Assert 'S9 another host''s lock without a heartbeat for 5 minutes is stale' ($l5.ExitCode -eq 0 -and $l5.Out -match '(?m)stale lock') (Get-P91Tail $l5)
+    $l1Line = [string]@(Get-P91ErrLines $l1)[0]; $l4Line = [string]@(Get-P91ErrLines $l4)[0]
+    Assert 'S9 the held-lock refusal names host, PID and start, says the lock ends with that run, and ends with the resume command' ($l1Line -match (
+        "^Refused: another install run \(host [^,]+, PID $($sleeper.Id), started [^)]+\) holds the lock .+; nothing was changed\. The lock ends with that run: a later run takes it over once that process has exited\. Resume: .*Install-ClaudeGateway\.ps1")) $l1Line
+    Assert 'S9 another host''s held lock says when a later run takes it over, and ends with the resume command' ($l4Line -match (
+        '^Refused: another install run \(host p91-other-host, PID 4242, started [^,]+, last heartbeat \d+ minute\(s\) ago\) holds the lock .+; nothing was changed\. The lock ends with that run: a later run takes it over after 5 minutes without a heartbeat\. Resume: .*Install-ClaudeGateway\.ps1')) $l4Line
+
+    if ($env:OS -eq 'Windows_NT') {
+        $ad = Get-P91Result $r2 $runAclDir; $af = Get-P91Result $r2 $runAclFile
+        $adLine = [string]@(Get-P91ErrLines $ad)[0]; $afLine = [string]@(Get-P91ErrLines $af)[0]
+        Assert 'R6 a state directory with a rule that lets Everyone write refuses at startup on one line naming the rule; nothing is read or changed' ($ad.ExitCode -eq 1 -and
+            @(Get-P91ErrLines $ad).Count -eq 1 -and $adLine -match '^Refused: ' -and $adLine.Contains($sc.aclDir.State) -and $adLine -match 'S-1-1-0' -and $adLine -match 'Nothing was read or changed' -and
+            -not (Get-P91Calls $ad 'account show*').Count -and (Test-Kept $sc.aclDir $hashes.aclDir) -and -not @(Get-ChildItem -LiteralPath $sc.aclDir.State -Filter '*.lock').Count) (Get-P91Tail $ad)
+        Assert 'R6 a checkpoint with a rule that lets Users write refuses at startup on one line naming the file and the rule' ($af.ExitCode -eq 1 -and @(Get-P91ErrLines $af).Count -eq 1 -and
+            $afLine -match '^Refused: ' -and $afLine -match 'install-[0-9a-f]{16}\.json' -and $afLine -match 'S-1-5-32-545' -and $afLine -match 'Nothing was read or changed' -and
+            -not (Get-P91Calls $af 'account show*').Count -and (Test-Kept $sc.aclFile $hashes.aclFile)) (Get-P91Tail $af)
+    }
+    foreach ($case in @(@('tamperDeployment', $runTamperDeployment, 'receipt of step gateway-deployment that names the deployment'),
+            @('tamperGroup', $runTamperGroup, 'receipt of step entra-groups that holds the group id'), @('tamperRole', $runTamperRole, 'receipt of step gateway-deployment that holds the role assignment id'))) {
+        $res = Get-P91Result $r2 $case[1]
+        Assert "R5 a tampered receipt ($($case[0])) refuses on one line as a corrupt checkpoint and keeps the file byte for byte" ((Test-Refusal $res $case[2]) -and (Test-Kept $sc[$case[0]] $hashes[$case[0]])) (Get-P91Tail $res)
+    }
+    $en = Get-P91Result $r2 $runExistingName
+    $enLine = [string]@(Get-P91ErrLines $en)[0]
+    Assert 'S5 a different -ExistingApimName refuses on one line, names both gateways and keeps the checkpoint unchanged' ((Test-Refusal $en 'gateway') -and $enLine -match 'apim-p91reuse' -and
+        $enLine -match 'apim-other' -and (Test-Kept $sc.existingName $hashes.existingName)) (Get-P91Tail $en)
 
     $fl = Get-P91Result $r2 $runFlow; $fr = Get-P91Result $r2 $runFlowRefusal
     Assert 'Flow the guided flow''s foundation step resumes the installer from its checkpoint' ($fl.ExitCode -eq 0 -and $fl.Out -match 'FLOW-STEP-DONE' -and $fl.Out -match $resumesAt -and

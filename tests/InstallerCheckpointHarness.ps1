@@ -69,6 +69,29 @@ function New-P91World {
     return $world
 }
 
+function Protect-P91Directory([string]$Path, [string[]]$AlsoWritableBy = @()) {
+    # Owner-only, as the installer creates a state directory (ADR-0046 decision 2): a copied state
+    # directory would otherwise inherit its parent's rules, and the installer refuses a store that
+    # another account can write. -AlsoWritableBy adds Modify rules for other SIDs. .NET writes the
+    # access section only; Set-Acl also writes the audit rules, which needs SeSecurityPrivilege.
+    if ($env:OS -eq 'Windows_NT') {
+        $acl = New-Object System.Security.AccessControl.DirectorySecurity
+        $acl.SetAccessRuleProtection($true, $false)
+        $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule([Security.Principal.WindowsIdentity]::GetCurrent().User, 'FullControl', 'ContainerInherit, ObjectInherit', 'None', 'Allow')))
+        foreach ($sid in $AlsoWritableBy) { $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule((New-Object Security.Principal.SecurityIdentifier($sid)), 'Modify', 'ContainerInherit, ObjectInherit', 'None', 'Allow'))) }
+        [System.IO.FileSystemAclExtensions]::SetAccessControl([IO.DirectoryInfo]::new($Path), $acl)
+    }
+    else { & chmod 700 $Path }
+}
+
+function Add-P91FileWriter([string]$Path, [string]$Sid) {
+    # An explicit Write rule for another SID beside the file's inherited rules; .NET writes the access
+    # section only, where Set-Acl on a file also writes the audit rules (SeSecurityPrivilege).
+    $acl = New-Object System.Security.AccessControl.FileSecurity
+    $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule((New-Object Security.Principal.SecurityIdentifier($Sid)), 'Write', 'Allow')))
+    [System.IO.FileSystemAclExtensions]::SetAccessControl([IO.FileInfo]::new($Path), $acl)
+}
+
 function New-P91Scenario {
     # A fresh scenario from the template, or a copy of another scenario's checkout, world and state.
     param([Parameter(Mandatory = $true)][string]$Name, [string]$Scratch, [string]$Template, $World, $From)
@@ -79,6 +102,7 @@ function New-P91Scenario {
         Copy-Item -LiteralPath $From.Repo -Destination $s.Repo -Recurse
         Copy-Item -LiteralPath $From.World -Destination $s.World
         New-Item -ItemType Directory -Force -Path $s.State | Out-Null
+        Protect-P91Directory $s.State
         # The checkpoint is keyed by its checkout, so a copy is renamed for the new checkout.
         foreach ($f in @(Get-ChildItem -LiteralPath $From.State -File -ErrorAction SilentlyContinue)) {
             $target = $f.Name -replace '^install-[0-9a-f]{16}', (Get-P91Key $s.Repo)

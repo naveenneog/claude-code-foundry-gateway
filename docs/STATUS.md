@@ -57,6 +57,17 @@ section moves to `docs/status/P91.md` under P87's ADR-0042.
   with `docs/architecture/16-install-checkpoint.json` (rendered and inspected; no other image
   changed), U75, a ROADMAP row for the POSIX owner and mode check (ADR-0046 Decision 17), and the
   two suites' Test-All seconds in `tests/test-all-durations.json` (265.3 and 89.6).
+- Council round 1 on `eb8a96e` (code) and `56f2867` (docs), 2026-10-01: Architect PASS; Coder,
+  Security, UX and QA BLOCK (QA's independent run caught 14 of 18 mutations). RED for the fixes:
+  `Test-InstallerCheckpoint.ps1` 68 checks, 11 failed; `Test-BashInstallerCheckpoint.ps1` 38, 8
+  failed, one Linux and macOS check skipped; `Test-InstallerCheckpointStore.ps1` (new) 9, 8 failed.
+  Failure lines read: "R5 a failed read of a group by name refuses on one line and creates no group"
+  (the run created the group); "R6 a state directory with a rule that lets Everyone write refuses at
+  startup" (the run resumed); "R5 a tampered receipt (tamperGroup)" (refused at the group read, after
+  a checkpoint write); "S9 the held-lock refusal ... ends with the resume command" ("Refused: another
+  install run holds the lock ... Nothing was changed."); "R6 a state directory that cannot be created"
+  (PowerShell: "Cannot find path"); "The term 'Assert-ClaudeInstallStorePath' is not recognized";
+  "ckpt_perm_check_: command not found".
 
 Acceptance criteria, for both installers unless one is named:
 
