@@ -35,7 +35,7 @@ function Get-BashKey([string]$Checkout) {
 }
 
 $installerPath = Join-Path $root 'install-claude-gateway.sh'
-$libraryPaths = @('scripts\install-checkpoint.sh', 'scripts\install-resume.sh') | ForEach-Object { Join-Path $root $_ }
+$libraryPaths = @('scripts/install-checkpoint.sh', 'scripts/install-resume.sh') | ForEach-Object { Join-Path $root $_ }
 
 # ------------------------------------------------------------------ static checks
 # macOS ships bash 3.2 (runner image macOS 26: Bash 3.2.57, docs/UNKNOWNS.md U71), and BSD tools.
@@ -191,10 +191,10 @@ $scratch = Join-Path ([IO.Path]::GetTempPath()) ('p91-bash-checkpoint-' + [guid]
 $template = Join-Path $scratch 'template'
 foreach ($d in 'scripts', 'infra') { New-Item -ItemType Directory -Force -Path (Join-Path $template $d) | Out-Null }
 Copy-Item -LiteralPath $installerPath -Destination $template
-foreach ($f in 'scripts\banner.sh', 'scripts\preflight.sh', 'scripts\install-checkpoint.sh', 'scripts\install-resume.sh', 'infra\main.bicep', 'infra\foundry-role.bicep', 'infra\policy.xml') {
+foreach ($f in 'scripts/banner.sh', 'scripts/preflight.sh', 'scripts/install-checkpoint.sh', 'scripts/install-resume.sh', 'infra/main.bicep', 'infra/foundry-role.bicep', 'infra/policy.xml') {
     if (Test-Path -LiteralPath (Join-Path $root $f)) { Copy-Item -LiteralPath (Join-Path $root $f) -Destination (Join-Path $template $f) }
 }
-foreach ($f in 'scripts\Sync-ClaudeAccess.ps1', 'scripts\Select-ClaudeFinOpsTooling.ps1') { Write-Lf (Join-Path $template $f) '# placeholder' }
+foreach ($f in 'scripts/Sync-ClaudeAccess.ps1', 'scripts/Select-ClaudeFinOpsTooling.ps1') { Write-Lf (Join-Path $template $f) '# placeholder' }
 $psTable = Join-Path $scratch 'ps-table.txt'
 Write-Lf $psTable ''
 $sub = '00000000-0000-4000-8000-0000000000a1'
@@ -208,7 +208,7 @@ function New-World {
     }
 }
 function New-Scenario([string]$Name, $World, $From) {
-    $dir = Join-Path $scratch "scenarios\$Name"
+    $dir = Join-Path $scratch "scenarios/$Name"
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
     $s = [pscustomobject]@{ Name = $Name; Dir = $dir; Repo = (Join-Path $dir 'repo'); State = (Join-Path $dir 'state'); World = (Join-Path $dir 'world.json'); Home = (Join-Path $dir 'home'); Runs = 0 }
     New-Item -ItemType Directory -Force -Path $s.Home | Out-Null
@@ -332,7 +332,7 @@ try {
         $nd.Out -match "(?m)^\s*Resume: cd '.+' && \./install-claude-gateway\.sh .*--resource-group 'rg-p91'.*--name-prefix 'p91gw'" -and
         $null -ne (Get-CheckpointFile $noDrive (Join-Path $noDrive.Home '.claude-gateway'))) (Get-Tail $nd)
     $dr = $r1[$runDrive.Dir]
-    Assert 'S12 bash with clouddrive keeps the checkpoint under it and prints the 20-minute line before the deployment' ($null -ne (Get-CheckpointFile $drive (Join-Path $drive.Home 'clouddrive\.claude-gateway')) -and
+    Assert 'S12 bash with clouddrive keeps the checkpoint under it and prints the 20-minute line before the deployment' ($null -ne (Get-CheckpointFile $drive (Join-Path $drive.Home 'clouddrive/.claude-gateway')) -and
         $dr.Out -notmatch '(?m)\[WARN\].*clouddrive' -and $dr.Out -match '(?m)20 minutes without interactive activity.*Resume: ') (Get-Tail $dr)
 
     # ------------------------------------------------------------------ reruns
@@ -341,7 +341,7 @@ try {
     Write-Lf $psTable "$sleeper|Thu Oct  1 09:00:00 2026`n"
     $hostName = "$(& $bash -c 'uname -n')".Trim().ToLowerInvariant().Split('.')[0]
     $sc = [ordered]@{}
-    foreach ($n in 'tenant', 'subscription', 'group', 'prefix', 'installer', 'version', 'truncated', 'restart', 'liveLock', 'exitedLock', 'otherHost', 'staleHost') { $sc[$n] = New-Scenario $n $null $base }
+    foreach ($n in 'tenant', 'subscription', 'group', 'prefix', 'installer', 'version', 'changed', 'truncated', 'restart', 'liveLock', 'exitedLock', 'otherHost', 'staleHost') { $sc[$n] = New-Scenario $n $null $base }
     foreach ($s in @($base) + @($sc.Values)) { Edit-World $s { param($w) $w.inject.groupCreateFail = @() } }
     Edit-World $sc.tenant { param($w) $w.tenantId = '00000000-0000-4000-8000-0000000000f9' }
     Edit-Checkpoint $sc.installer { param($c) $c.installer = 'pwsh' }
@@ -367,6 +367,7 @@ try {
         ($runPrefix = New-Run $sc.prefix (& $swap '--name-prefix' 'p91other'))
         ($runInstaller = New-Run $sc.installer $args0)
         ($runVersion = New-Run $sc.version $args0)
+        ($runChanged = New-Run $sc.changed ($args0 + @('--tpm-standard', '30000')))
         ($runTruncated = New-Run $sc.truncated $args0)
         ($runRestart = New-Run $sc.restart ($args0 + '--restart'))
         ($runLiveLock = New-Run $sc.liveLock $args0)
@@ -397,6 +398,9 @@ try {
     $v2 = $r2[$runVersion.Dir]
     Assert 'S11 S5 a different installer version resumes and says which wrote the checkpoint' ($v2.ExitCode -eq 0 -and $v2.Out -match '(?m)checkpoint written by install-claude-gateway\.sh \S+; running install-claude-gateway\.sh \S+' -and
         -not (Get-Calls $v2 'deployment group create*').Count) (Get-Tail $v2)
+    $ch = $r2[$runChanged.Dir]
+    Assert 'R2 bash the summary''s Checkpoint row names an answer this run changes, before the confirmation' ($ch.ExitCode -eq 0 -and
+        $ch.Out -match '(?m)^\s+Checkpoint\s+.*changed since the checkpoint: TpmStandard' -and (Get-Calls $ch 'deployment group create*').Count -eq 1) (Get-Tail $ch)
     $tr = $r2[$runTruncated.Dir]
     Assert 'S11 S8 a corrupt checkpoint refuses on one line and keeps the file' ((Test-Refusal $tr 'not valid JSON') -and $hashes.truncated -and (Get-Hash $sc.truncated) -eq $hashes.truncated) (Get-Tail $tr)
     $rs = $r2[$runRestart.Dir]

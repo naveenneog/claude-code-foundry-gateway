@@ -305,7 +305,13 @@ ckpt_assert_subscription_() {
   [ -n "$current" ] || ckpt_refuse_ "the current subscription could not be read with az account show, so the install checkpoint $CKPT_FILE cannot be matched to it. Nothing was changed."
   ckpt_same_ "$current" "$b" || ckpt_binding_refuse_ subscription "$b" "$current"
 }
-ckpt_summary_row_() { printf '%s, run %s, %s recorded answers reused, resumes at %s' "$CKPT_FILE" "$CKPT_RUN_ID" "$CKPT_ANSWER_COUNT" "$(ckpt_resume_title_)"; }
+# The summary's Checkpoint row; an answer this run changes is named, so the confirmation covers it.
+ckpt_summary_row_() {
+  local changed
+  changed="$(printf '%s' "$CKPT_JSON" | ckpt_jq_ -r --argjson a "$(ckpt_answers_json_ "$(ckpt_subscription_id_)")" '.answers as $o | [$a | to_entries[] | select($o[.key] != .value) | .key] | join(", ")')"
+  printf '%s, run %s, %s recorded answers reused, resumes at %s' "$CKPT_FILE" "$CKPT_RUN_ID" "$CKPT_ANSWER_COUNT" "$(ckpt_resume_title_)"
+  if [ -n "$changed" ]; then printf '; changed since the checkpoint: %s' "$changed"; fi
+}
 
 # This run's answers, read from the installer's variables after its summary is confirmed. No secret
 # is among them (decision 15).
@@ -324,7 +330,7 @@ EOF
 # taken here, so a run still asking its questions holds nothing.
 ckpt_save_() {
   [ "$CKPT_WHAT_IF" = "1" ] && return 0
-  local sub answers now changed name
+  local sub answers now
   ckpt_version_info_
   sub="$(ckpt_subscription_id_)"; [ -n "$sub" ] || sub="$SUBSCRIPTION"
   answers="$(ckpt_answers_json_ "$sub")"
@@ -332,8 +338,6 @@ ckpt_save_() {
   if ! mkdir -p "$CKPT_DIR" 2>/dev/null; then warn_ "the install checkpoint directory $CKPT_DIR could not be created; this run keeps no checkpoint"; return 0; fi
   chmod 700 "$CKPT_DIR" 2>/dev/null
   if [ "$CKPT_RESUMING" = "1" ]; then
-    changed="$(printf '%s' "$CKPT_JSON" | ckpt_jq_ -r --argjson a "$answers" '.answers as $o | $a | to_entries[] | select($o[.key] != .value) | .key')"
-    for name in $changed; do printf '    %sChanged since the checkpoint: %s%s\n' "$C_YELLOW" "$name" "$C_OFF"; done
     CKPT_JSON="$(printf '%s' "$CKPT_JSON" | ckpt_jq_ -c --argjson a "$answers" --arg f "$CKPT_FINGERPRINT" --arg c "$CKPT_COMMIT" '.answers = $a | .installerFingerprint = $f | .installerCommit = $c')"
   else
     CKPT_RUN_ID="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n\r')"
@@ -392,8 +396,9 @@ ckpt_lock_() {
   while [ "$attempt" -lt 3 ]; do
     if ( set -C; umask 077; printf '%s' "$fields" > "$CKPT_LOCK" ) 2>/dev/null; then
       CKPT_LOCKED=1
-      # The heartbeat lets another host tell a live run from a closed Cloud Shell session.
-      ( while sleep 60; do [ -f "$CKPT_LOCK" ] || exit 0; touch "$CKPT_LOCK" 2>/dev/null || exit 0; done ) >/dev/null 2>&1 &
+      # The heartbeat lets another host tell a live run from a closed Cloud Shell session; it stops
+      # with the installer even when no EXIT trap runs.
+      ( parent=$$; while sleep 60; do kill -0 "$parent" 2>/dev/null || exit 0; [ -f "$CKPT_LOCK" ] || exit 0; touch "$CKPT_LOCK" 2>/dev/null || exit 0; done ) >/dev/null 2>&1 &
       CKPT_HEARTBEAT=$!
       return 0
     fi

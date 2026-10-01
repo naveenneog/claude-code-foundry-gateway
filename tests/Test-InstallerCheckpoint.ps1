@@ -180,7 +180,7 @@ try {
 
     $copy = { param([string]$Name) New-P91Scenario -Name $Name -Scratch $scratch -From $base }
     $sc = [ordered]@{}
-    foreach ($n in 'tenant', 'subscription', 'group', 'gateway', 'installer', 'version', 'template', 'rgMissing', 'apimMissing', 'groupMissing', 'graphLag',
+    foreach ($n in 'tenant', 'subscription', 'group', 'gateway', 'installer', 'version', 'changed', 'template', 'rgMissing', 'apimMissing', 'groupMissing', 'graphLag',
         'readDeployment', 'readGroup', 'readRg', 'truncated', 'schema', 'unknownStep', 'unsafe', 'restart', 'liveLock', 'exitedLock', 'reusedPid', 'otherHost', 'staleHost', 'flow', 'flowRefusal') {
         $sc[$n] = & $copy $n
     }
@@ -231,6 +231,7 @@ try {
         ($runGateway = New-P91Run $sc.gateway -Arguments (($newGateway -replace "'p91gw'", "'p91other'") + '-Yes'))
         ($runInstaller = New-P91Run $sc.installer -Arguments ($newGateway + '-Yes'))
         ($runVersion = New-P91Run $sc.version -Arguments ($newGateway + '-Yes'))
+        ($runChanged = New-P91Run $sc.changed -Arguments ($newGateway + '-TpmStandard 30000' + '-Yes'))
         ($runTemplate = New-P91Run $sc.template -Arguments ($newGateway + '-Yes'))
         ($runRgMissing = New-P91Run $sc.rgMissing -Arguments ($newGateway + '-Yes'))
         ($runApimMissing = New-P91Run $sc.apimMissing -Arguments ($newGateway + '-Yes'))
@@ -360,6 +361,10 @@ try {
         $noTemp = -not @(Get-ChildItem -LiteralPath $atomicDir -Filter '*.tmp-*').Count
     }
     Assert 'R6 a write interrupted before its rename keeps the previous checkpoint and leaves no temporary file' ($kept -and $noTemp)
+
+    $cg = Get-P91Result $r2 $runChanged
+    Assert 'R2 the summary''s Checkpoint row names an answer this run changes, before the confirmation' ($cg.ExitCode -eq 0 -and
+        $cg.Out -match '(?m)^\s+Checkpoint\s+.*changed since the checkpoint: TpmStandard' -and (Get-P91Calls $cg 'deployment group create*').Count -eq 1) (Get-P91Tail $cg)
 
     $all = @($r1.Values) + @($r2.Values)
     $unexpected = @($all | ForEach-Object { $_.Unexpected } | Where-Object { $_ })

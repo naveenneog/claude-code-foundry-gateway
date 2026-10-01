@@ -406,6 +406,55 @@ an allowlist of fields; `AddressCertificatePassword` (`securestring`) and the AR
   gateway refuses on the binding and names the field; `-Restart` sets the checkpoint aside as
   `-ArchiveSavedRecord` sets the record aside.
 
+### 17. As built (GREEN and REFACTOR, 2026-10-01)
+
+Where the code differs from Decisions 1-16, the code is as follows. The lead reviews each item.
+
+- Files: each installer's logic is in two files, the store and run state
+  (`scripts/ClaudeInstallCheckpoint.ps1`, `scripts/install-checkpoint.sh`) and the live reads and
+  step actions (`scripts/ClaudeInstallResume.ps1`, `scripts/install-resume.sh`), which the first
+  file loads. `installerFingerprint` covers the installer and both files.
+- Binding (Decision 5): `reusedApim` is recorded and not compared; the gateway field compares the
+  APIM name (`-ExistingApimName` with `apimName`; `-NamePrefix` or `--name-prefix` with `namePrefix`
+  or `apim-<prefix>` with `apimName`). A subscription passed by name is compared by id after
+  `az account set`, and the checkpoint records the id.
+- Version line (Decision 5): each side is one token, `<commit, 12 characters>+<files hash, 8>` in a
+  git checkout and `sha256:<files hash, 12>` outside one. The commit and hash are read only on a
+  resume or at the commit point. The resume command (Decision 14) carries no commit.
+- Lock (Decision 3): a held lock refuses at startup, before any question; the run takes the lock at
+  the commit point. A stale lock is renamed `install-<key>.lock.stale-<runId>-<n>`. The bash
+  heartbeat stops when the installer's process is gone (`kill -0`).
+- `-WhatIf` and `--what-if` read no checkpoint into the run: they preview a first run and print one
+  line when a checkpoint exists.
+- Owner and mode (Decision 2): a POSIX owner or mode check of an existing checkpoint or lock is not
+  implemented. Files are created under `umask 077` with `chmod 600` in a `chmod 700` directory
+  (bash), in a directory with the protected ACL (PowerShell on Windows), and every recorded answer is
+  validated on read. Git Bash's default `noacl` mount reports 0644 whatever `chmod` sets (measured
+  2026-10-01), so a mode check cannot run on the Windows CI.
+- Changed answers (Decision 6): the summary's Checkpoint row names each answer that differs from the
+  recorded one, before the confirmation.
+- Prompts: an attended resume asks none of the recorded questions, including the region, the
+  developer estimate, the tier groups, the revocation window, the budget and unassigned-developer
+  behaviour and the named-value ceiling question; the confirmation is "Resume from <step>?".
+- Claude deployment: a recorded `PendingClaudeDeployment` is restored before the model selection
+  only when `az cognitiveservices account deployment show` does not show it; an unreadable read
+  refuses.
+- Projection resolver app (Decision 11): the id is `-ProjectionResolverAppId`, an earlier attempt's
+  receipt, or the one app named `claude-projection-resolver-<prefix>` before the step (origin
+  `pre-existing`); otherwise the step creates it and its id is read from the resolver deployment's
+  `resolverAppId` parameter (origin `created`).
+- Bash resource group: `az group show` runs first; an existing group is not created again, and a
+  failed `az group create` stops the run. Bash sync: a failed sync is `incomplete`; a missing `pwsh`
+  keeps the existing warning and completes the step.
+- PowerShell top level (Decision 14): no calling script, not dot-sourced, and a host other than
+  `Default Host`; an in-process runspace (`tests/Test-CompanyInstaller.ps1`) gets the exception.
+- Cloud Shell without `clouddrive`: the wait line says that the ARM deployment outlives the session
+  and the install checkpoint does not, and its resume command carries the answers.
+- Tests: the bash suite has its own harness; the guided-flow checks are in
+  `tests/Test-InstallerCheckpoint.ps1`; `tests/Test-All.ps1` gives each check its own
+  `CLAUDE_GATEWAY_STATE_DIR`; `.github/workflows/installer-unix.yml` (not pushed) runs the two bash
+  suites on `ubuntu-latest` and `macos-latest`, without a POSIX mode check.
+
 ## Tests (RED, mapped to the owner's scenarios)
 
 New checks: `tests/Test-InstallerCheckpoint.ps1` (PowerShell installer, in-process az stubs after
@@ -451,8 +500,8 @@ A prepared, unpushed workflow runs the bash checks and the POSIX permission and 
 - Each platform gets a state directory that a support case needs to know about; the run prints its
   path.
 - Bash keeps its missing read-back on a first run; P91 refuses only the resume case.
-- New code lives in two libraries (`scripts/ClaudeInstallCheckpoint.ps1`, `scripts/install-checkpoint.sh`),
-  so `Install-ClaudeGateway.ps1`, already over the 700-line budget, gains only the step hooks.
+- New code lives in four library files (Decision 17), so `Install-ClaudeGateway.ps1`, already over
+  the 700-line budget, gains only the step hooks, and `install-claude-gateway.sh` stays within it.
 - The checkpoint is a new operator-side data store, so `docs/ARCHITECTURE.md` and a diagram spec
   change in LOG.
 

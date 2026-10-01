@@ -431,8 +431,14 @@ function Assert-ClaudeInstallSubscription {
     if ($current -ne [string]$c.Checkpoint.binding.subscriptionId) { Stop-ClaudeInstallBinding 'subscription' ([string]$c.Checkpoint.binding.subscriptionId) $current }
 }
 function Get-ClaudeInstallSummaryRow {
+    # The summary's Checkpoint row; an answer this run changes is named, so the confirmation covers it.
     $c = $script:ClaudeInstall
-    return "$($c.Location.Checkpoint), run $($c.Checkpoint.runId), $($c.Answers.Count) recorded answers reused, resumes at $(Get-ClaudeInstallResumeTitle)"
+    $now = Get-ClaudeInstallAnswers
+    $changed = @(@($now.Keys) + @($c.Answers.Keys) | Select-Object -Unique | Where-Object {
+            (ConvertTo-ClaudeFlowCanonical $(if ($now.Contains($_)) { $now[$_] })) -ne (ConvertTo-ClaudeFlowCanonical $(if ($c.Answers.Contains($_)) { $c.Answers[$_] })) })
+    $row = "$($c.Location.Checkpoint), run $($c.Checkpoint.runId), $($c.Answers.Count) recorded answers reused, resumes at $(Get-ClaudeInstallResumeTitle)"
+    if ($changed.Count) { $row += "; changed since the checkpoint: $($changed -join ', ')" }
+    return $row
 }
 
 function Get-ClaudeInstallAnswers {
@@ -498,9 +504,6 @@ function Save-ClaudeInstallCheckpoint {
         Set-ClaudeInstallOwnerOnly $c.Location.Directory -Directory
     }
     if ($c.Checkpoint) {
-        foreach ($k in $answers.Keys) {
-            if ($c.Answers.Contains($k) -and (ConvertTo-ClaudeFlowCanonical $c.Answers[$k]) -ne (ConvertTo-ClaudeFlowCanonical $answers[$k])) { Write-Host "    Changed since the checkpoint: $k" -ForegroundColor Yellow }
-        }
         $c.Checkpoint.answers = [pscustomobject]$answers
     }
     else {
