@@ -2,7 +2,7 @@
   "SchemaVersion": 1,
   "ShardCount": 12,
   "DefaultSeconds": 60,
-  "Source": "95 PASS, 0 FAIL, 0 SKIP; hosted run 36457223984 attempt 1, f82981270702f0af5eeceb41a4e8d776524acf28, 2026-09-28. Per-check elapsed seconds seed future whole-check LPT assignment; setup/proof time is separate. P85 (2026-09-29) replaced the unsharded AUM check (130.4 s) with four shards and added 'AUM shards run every test file once' at its local 14 s. P85 final follow-up integration (2026-09-30 IST, 8139c06) refreshes the four planned weights from one serial JUnit run: all 1200 cases passed, 983.3 s summed case time. Planned seconds are 259, 259, 258 and 258; current and earlier integration results remain recorded in docs/STATUS.md.",
+  "Source": "95 PASS, 0 FAIL, 0 SKIP; hosted run 36457223984 attempt 1, f82981270702f0af5eeceb41a4e8d776524acf28, 2026-09-28. Per-check elapsed seconds seed future whole-check LPT assignment; setup/proof time is separate. P85 (2026-09-29) replaced the unsharded AUM check (130.4 s) with four shards and added 'AUM shards run every test file once' at its local 14 s. P85 final follow-up integration (2026-09-30 IST, 8139c06) refreshes the four planned weights from one serial JUnit run: all 1200 cases passed, 983.3 s summed case time. Planned seconds are 259, 259, 258 and 258; current and earlier integration results remain recorded in docs/STATUS.md. P91 (2026-10-01, eb8a96e) adds its two checks at their elapsed seconds in one local Test-All run at throttle 6 (98 PASS, 0 FAIL, 5 SKIP): 265.3 for the bash suite and 89.6 for the PowerShell suite.",
   "SourceRunUrl": "https://github.com/naveenneog/claude-code-foundry-gateway/actions/runs/36457223984",
   "SourceReceiptSha256": "03dee5e0919ce0a183881b46649d9aca379ea2d49b82994ace882a465ae533e4",
   "Seconds": {
@@ -22,6 +22,7 @@
     "Azure CLI arguments vs cmd.exe": 6.7,
     "Shell scripts - syntax and banner": 4.5,
     "macOS/Linux installer prices and record": 46.8,
+    "macOS/Linux installer checkpoint and resume": 265.3,
     "Preflight on both PowerShell hosts": 25.7,
     "Guided diagnostics and support bundles": 13.3,
     "Wizard reaches summary on PS 5.1": 5.6,
@@ -104,6 +105,7 @@
     "Guided flow across permutations": 145.0,
     "Guided flow plans in one order on both shells": 17.8,
     "Installer summary across permutations": 41.9,
+    "Installer checkpoint and resume": 89.6,
     "Tier groups follow their gateway": 1.2
   }
 }
