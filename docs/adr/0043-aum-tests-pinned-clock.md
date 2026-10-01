@@ -22,17 +22,27 @@ so a per-test monkeypatch after collection is too late.
 
 ## Decision
 
-`cli/finops/tests/conftest.py` patches the Python `datetime` module during test
-collection so AUM tests import an advancing subclass whose base instant is
-`2026-09-24T12:00:00Z`. The fixture then repatches loaded `claude_finops` and
-test helper modules before each test so modules that imported `datetime` before
-collection also see the pinned clock. The pinned clock adds real elapsed UTC time
-to the base instant.
+`cli/finops/tests/aum_clock.py` owns the pinned clock contract: the pinned instant is
+`2026-09-24T12:00:00Z`, the pinned month is `2026-09`, and `PinnedDateTime`
+returns that instant plus real elapsed UTC time. It does not assign to
+`datetime.datetime` in the stdlib module.
 
-Tests that need the real workstation clock opt out with `@pytest.mark.real_clock`.
-The fixture does not shift `time.time()`: JWT token expiry is epoch-based
-(`cli/finops/src/claude_finops/config.py:116`), and the P88 failures were all
-month comparisons through `datetime.now(timezone.utc)`.
+`cli/finops/tests/conftest.py` imports every `claude_finops` submodule once in a
+session-scoped fixture. Any import failure is a test error naming the module. For
+each normal test, an autouse fixture uses a local `pytest.MonkeyPatch` to set
+`datetime` to `PinnedDateTime` on product modules and test/helper modules whose
+`datetime` attribute is the stdlib class. It also installs a per-test import hook
+scoped to `claude_finops`, `test_*` and `p85_fixtures` so local
+`from datetime import datetime` statements in those modules receive
+`PinnedDateTime`. The hook is restored after the test. Third-party modules and the
+stdlib datetime module are not changed by the committed fixture.
+
+Tests that need the workstation clock use `@pytest.mark.real_clock`; those tests
+receive no AUM clock patch. Collection-time constants use `PINNED_MONTH` from the
+helper instead of reading the clock at import. The fixture does not shift
+`time.time()`: JWT token expiry is epoch-based
+(`cli/finops/src/claude_finops/config.py:116`), and the P88 failures were month
+comparisons through `datetime.now(timezone.utc)`.
 
 ## Consequences
 
@@ -40,7 +50,10 @@ month comparisons through `datetime.now(timezone.utc)`.
   regardless of the date the suite runs.
 - Timeout and duration tests keep advancing because the pinned clock is an
   offset clock, not a frozen instant.
-- Module-level fixture constants such as `test_direct_speed.MONTH` are computed
-  from the pinned clock during collection.
+- Module-level fixture constants such as `test_direct_speed.MONTH` are set from
+  the helper's pinned month.
 - New `claude_finops` modules that call `datetime.now(` are covered by a guard
-  test that imports those modules and asserts they see the pinned hour.
+  test that imports those modules, fails on import errors and verifies the pinned
+  month within a bounded one-day window.
+- `@pytest.mark.real_clock` tests and third-party modules see the real stdlib
+  datetime module in normal committed runs.

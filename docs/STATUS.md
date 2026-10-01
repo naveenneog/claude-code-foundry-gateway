@@ -15,19 +15,23 @@ The survey used a session-only offset clock that patched `claude_finops` modules
 
 | Simulated UTC instant | Result before fix | Cause | Result after fix |
 |---|---:|---|---:|
-| Real current time, 2026-10-01 IST | 3 failed | September fixture data was no longer the current UTC month for Direct/service budget writes. | 1,281 passed across shards; see validation below. |
-| 2026-09-24T12:00:00Z control | 3 passed | Fixture month and current UTC month matched. | 6 targeted guard/known cases passed. |
-| 2026-10-31T23:59:30Z | 3 failed, 1,278 passed | The same September current-month assumptions failed in shard 0 and 1. | 1,281 passed: 311, 269, 328, 373 by shard. |
-| 2027-01-01T00:00:30Z | 5 failed, 1,276 passed | The three known failures plus both `test_direct_speed` parametrizations, where module-level `MONTH` was imported from the then-current month and later compared to product current month. | 1,281 passed: 311, 269, 328, 373 by shard. |
-| 2027-03-15T12:00:00Z | 5 failed, 1,276 passed | Same as year start. | Not rerun after the fix because the year-start and month-end controls cover the discovered failure modes. |
+| Real current time, 2026-10-01 IST | 3 failed | September fixture data was no longer the current UTC month for Direct/service budget writes. | 1,283 passed across shards; see validation below. |
+| 2026-09-24T12:00:00Z control | 3 passed | Fixture month and current UTC month matched. | 19 targeted guard/known/resource-token cases passed. |
+| 2026-10-31T23:59:30Z | 3 failed, 1,278 passed | The same September current-month assumptions failed in shard 0 and 1. | 1,283 passed: 311, 271, 328, 373 by shard. |
+| 2027-01-01T00:00:30Z | 5 failed, 1,276 passed | The three known failures plus both `test_direct_speed` parametrizations, where module-level `MONTH` was imported from the then-current month and later compared to product current month. | 1,283 passed: 311, 271, 328, 373 by shard. |
+| 2027-03-15T12:00:00Z | 5 failed, 1,276 passed | Same as year start. | Covered by the same round 2 guards; the required post-fix full-suite reruns were month-end and year-start. |
 
 ### GREEN and guard
 
-`cli/finops/tests/conftest.py` pins AUM pytest clocks to `2026-09-24T12:00:00Z` plus real elapsed time, so durations and timeouts still advance. It patches the datetime module before collection for module-level constants and repatches loaded `claude_finops` and test helper modules per test. Tests can opt out with `@pytest.mark.real_clock`.
+Council round 1 on `8345d9d` blocked the first design because it assigned to `datetime.datetime` in the stdlib module, making `@pytest.mark.real_clock` non-reversible; its guard skipped import failures; and it asserted the exact pinned hour even though the clock advances. Security passed.
 
-The guard in `cli/finops/tests/test_aum_service_backend.py` imports every `claude_finops` module whose source calls `datetime.now(` and asserts the observed hour is `2026-09-24T12`; it also performs a September AUM service budget write that would fail outside the pinned month. Negative proof: temporarily removing `cli/finops/tests/conftest.py` made the guard and the three original tests fail 4 of 4; restoring it made the targeted set pass 6 of 6.
+Round 2 moves the contract into `cli/finops/tests/aum_clock.py` and applies it per test from `cli/finops/tests/conftest.py`. The committed fixture imports every `claude_finops` submodule once and fails with the module name on import errors. Normal tests patch product and AUM test/helper module datetime bindings, plus local datetime imports scoped to those modules, with `pytest.MonkeyPatch`; `@pytest.mark.real_clock` receives no patch, and the stdlib datetime module is unchanged. `test_direct_speed.MONTH` now uses the helper's pinned month instead of an import-time clock read.
 
-Validation at the real current date with `CI=1` and `FORCE_COLOR=0`: `tests/Test-FinOps.ps1 -Shard 0/4` passed 311 in 348.99 s, shard 1 passed 269 in 363.33 s, shard 2 passed 328 in 330.65 s, shard 3 passed 373 in 323.95 s, for 1,281 passed cases and 0 failures. `tests/Test-FinOpsShards.ps1` passed and confirmed all 76 files run exactly once, with planned shard loads of 293, 293, 293 and 292 s.
+Round 2 guards in `cli/finops/tests/test_aum_service_backend.py` verify: the exact set of `claude_finops` modules whose source contains `datetime.now(` sees the pinned month within one day of `2026-09-24T12:00:00Z`; import failures fail with the module name; `@pytest.mark.real_clock` sees the real product/test datetime class; the stdlib datetime module is not replaced in a pinned test; and a September AUM service budget write succeeds. Negative proofs: a raising `claude_finops.p88_guard_skip_probe` failed with its module name; a two-day-shifted pinned class failed the one-day window; a setup-time global stdlib datetime replacement failed both real-clock/stdlib guards; and disabling the pin made the guard plus the three original tests fail 4 of 4. Restored GREEN targeted checks passed 19 of 19.
+
+The process-wide shift shim was proven on archived main `0fed315`: at `2026-10-31T23:59:30Z`, the three known tests failed exactly as RED. With the round 2 fixture, shifted full-suite runs passed at `2026-10-31T23:59:30Z` (311, 271, 328, 373 passed by shard) and `2027-01-01T00:00:30Z` (311, 271, 328, 373 passed by shard).
+
+Validation at the real current date with `CI=1` and `FORCE_COLOR=0`: `tests/Test-FinOps.ps1 -Shard 0/4` passed 311 in 321.54 s, shard 1 passed 271 in 331.93 s, shard 2 passed 328 in 301.48 s, shard 3 passed 373 in 296.15 s, for 1,283 passed cases and 0 failures. `tests/Test-FinOpsShards.ps1` passed and confirmed all 76 files run exactly once, with planned shard loads of 293, 293, 293 and 292 s.
 
 ## P71 follow-up: a lookup starts one refresh, 2026-09-30
 
