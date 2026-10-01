@@ -185,6 +185,7 @@ cd claude-code-foundry-gateway
 **Portal:** [Setup option C](docs/SETUP.md#option-c--portal) covers template
 deployment and the group, sync and handover steps it does not perform.
 For preview and unattended parameters, see [Setup](docs/SETUP.md#3-deploy).
+A rerun after a failure resumes from the install checkpoint ([Setup](docs/SETUP.md#resume-after-a-failure)).
 
 ### What it does
 

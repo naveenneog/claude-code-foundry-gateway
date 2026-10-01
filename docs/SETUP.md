@@ -645,6 +645,84 @@ without PowerShell 7, the command is a numbered next step instead. Its record,
 `onboarding/claude-gateway.json`, holds the tier, the region and the Foundry
 account and resource group, as the PowerShell installer's record does.
 
+### Resume after a failure
+
+Both installers keep an install checkpoint for each checkout, from the confirmed
+summary until the last step completes
+([ADR-0046](adr/0046-installer-checkpoint-and-resume.md)). A rerun after a failure
+resumes after the last step whose result a live Azure read still shows. A run that
+completes removes the checkpoint, so the next run asks every question again
+(`Close-ClaudeInstallCheckpoint` in `scripts/ClaudeInstallCheckpoint.ps1`,
+`ckpt_close_` in `scripts/install-checkpoint.sh`).
+
+| On a rerun | Behaviour | Source |
+|---|---|---|
+| Start | The checkpoint path, the run id, each completed step as `done <UTC time>  <step>`, and `resumes at: <step>`. | ADR-0046 Decision 14 |
+| Questions | Recorded non-secret answers are reused without asking. A parameter or flag passed again wins, and the summary's `Checkpoint` row names each answer that changed. Attended, the confirmation reads `Resume from <step>?`; under `-Yes` or `--yes` the run resumes without a question. | Decisions 6 and 17 |
+| Completed steps | Skipped only when a live read shows the result (`verified live, skipped`). A missing result runs the step again; an unreadable one refuses, except in the resource group step, which runs again. | Decision 7 |
+| Gateway deployment | The deployment name is recorded before `az deployment group create`. A recorded deployment that is still running is awaited for up to 3,600 s; one that succeeded supplies its outputs; one that failed or was cancelled is shown with its error and deployed again, after the read-backs in `Install-ClaudeGateway.ps1`. A new deployment first waits for any running `claude-gw-` or `claude-gateway-` deployment in the resource group, and the run refuses when that list cannot be read. | Decision 10 |
+| Changed files | A changed `infra/main.bicep`, or a file it references (`infra/foundry-role.bicep`, `infra/policy.xml`), runs the deployment step again; a changed projection template runs the projection step of `Install-ClaudeGateway.ps1` again. A changed installer alone resumes and prints `checkpoint written by <installer> <version>; running <installer> <version>`. | Decision 5 |
+| Entra groups | Read by the id the checkpoint recorded, not by name. A group that existed before the run and is gone is looked up by its exact name, then created. | Decision 11 |
+
+`-Restart` (`Install-ClaudeGateway.ps1`) and `--restart` (`install-claude-gateway.sh`)
+rename the checkpoint to `install-<key>.discarded-<UTC time>.json` and run as a
+first run (Decision 6). `-WhatIf` and `--what-if` preview a first run and write
+nothing (Decision 17).
+
+The checkpoint is `install-<key>.json` beside a lock file `install-<key>.lock`;
+the key is the first 16 hexadecimal digits of the SHA-256 of the checkout path
+(Decision 1). It holds answers, step states and the ids of what the run created or
+found, and no token, key, password or connection string (Decision 15).
+
+| Where the installer runs | Directory |
+|---|---|
+| Any platform, `CLAUDE_GATEWAY_STATE_DIR` set | that directory |
+| Azure Cloud Shell, storage mounted | `$HOME/clouddrive/.claude-gateway` |
+| Azure Cloud Shell, ephemeral session | `$HOME/.claude-gateway` |
+| Windows, `Install-ClaudeGateway.ps1` | `%LOCALAPPDATA%\claude-gateway` |
+| Linux and macOS, either installer; Git Bash on Windows | `${XDG_STATE_HOME:-$HOME/.local/state}/claude-gateway` |
+
+Source: `Get-ClaudeInstallLocation` in `scripts/ClaudeInstallCheckpoint.ps1` and
+`ckpt_location_` in `scripts/install-checkpoint.sh`. A directory the installer
+creates is owner-only: a protected access-control list for the current user on
+Windows, mode 0700 with 0600 files on Linux and macOS (Decisions 2 and 17).
+
+**Azure Cloud Shell.** The installers detect Cloud Shell by
+`AZUREPS_HOST_ENVIRONMENT` beginning `cloud-shell/` or a non-empty `ACC_CLOUD`
+([U64](UNKNOWNS.md#p91-research-before-implementation)).
+
+- With storage mounted, the checkpoint is in `clouddrive`, which persists across
+  sessions. Principals with sufficient access rights in the subscription can read
+  the file share ([Persist files in Cloud Shell](https://learn.microsoft.com/azure/cloud-shell/persisting-shell-storage#securing-storage-access)).
+- In an ephemeral session, `$HOME` is deleted when the session ends
+  ([Cloud Shell FAQ](https://learn.microsoft.com/azure/cloud-shell/faq-troubleshooting)).
+  At the confirmed summary the run prints `[WARN] Cloud Shell without clouddrive
+  (...)` and a `Resume:` line that passes every recorded parameter answer;
+  the PowerShell installer also names the prompt-only answers that a new session
+  asks again (Decision 14).
+- Cloud Shell ends a session after 20 minutes without interactive activity
+  ([Cloud Shell FAQ](https://learn.microsoft.com/azure/cloud-shell/faq-troubleshooting)).
+  Before the gateway deployment, and before any wait longer than 60 s, the run
+  prints one line with that fact, that the ARM deployment outlives the session,
+  and the resume command (Decision 10).
+
+**Refusals.** A refusal is one line on standard error that begins `Refused:`,
+states that nothing was changed, ends with the command that resumes or restarts,
+and exits 1 (Decision 14). It names:
+
+| Cause | What the line names | Source |
+|---|---|---|
+| The checkpoint is bound to another tenant, subscription, resource group, gateway or `reusedApim`, or was written by the other installer | the field, the recorded value and this run's value | Decisions 5, 13 and 17 |
+| The checkpoint cannot be read: not JSON, another `schemaVersion`, an unknown step id or an unsafe answer | the reason; the file is kept unchanged | Decision 2 |
+| Another run holds the lock | its host, process id and start time | Decision 3 |
+| A live read fails for a step that is not idempotent | the step and the first sentence of the error | Decision 7 |
+| A recorded deployment still runs after the wait | the deployment and resource group | Decision 10 |
+| An Entra group this run created is not returned by Microsoft Graph | the group, its id and creation time; a group created moments ago can take time to appear in Microsoft Graph, and a rerun later continues without creating a second group | Decision 11, [U74](UNKNOWNS.md#p91-research-before-implementation) |
+| `install-claude-gateway.sh` would deploy again over an API Management instance this run did not create | `Install-ClaudeGateway.ps1 -ExistingApimName`, which reads the named values back first | Decision 9 |
+
+The guided flow's resume of the steps after the installer is separate
+([Guided flow](GUIDED-FLOW.md#resume-after-failure)).
+
 ### Option B — non-interactive script
 
 The interactive installer's projection flags are separate from `deploy.ps1`:

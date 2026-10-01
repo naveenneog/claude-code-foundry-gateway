@@ -53,6 +53,10 @@ section moves to `docs/status/P91.md` under P87's ADR-0042.
   ([measurement](measurements/p91-mutations.json)).
 - `.github/workflows/installer-unix.yml` runs the two bash suites on `ubuntu-latest` and
   `macos-latest`; committed, not pushed and not run.
+- LOG docs, 2026-10-01: SETUP "Resume after a failure", README, GUIDED-FLOW, CHANGELOG, ARCHITECTURE
+  with `docs/architecture/16-install-checkpoint.json` (rendered and inspected; no other image
+  changed), U75, a ROADMAP row for the POSIX owner and mode check (ADR-0046 Decision 17), and the
+  two suites' Test-All seconds in `tests/test-all-durations.json` (265.3 and 89.6).
 
 Acceptance criteria, for both installers unless one is named:
 
@@ -106,8 +110,9 @@ resource group:
    assignment id (U70).
 7. The throwaway resource group and the groups whose receipts say `created` are deleted.
 
-Architecture: the checkpoint is a new operator-side data store, so `docs/ARCHITECTURE.md` and a
-diagram spec change in LOG; no Azure component, identity, network path or schedule changes.
+Architecture: the checkpoint is a new operator-side data store, recorded in `docs/ARCHITECTURE.md`
+and `docs/architecture/16-install-checkpoint.json`; no Azure component, identity, network path or
+schedule changes.
 
 ## P71 follow-up: a lookup starts one refresh, 2026-09-30
 

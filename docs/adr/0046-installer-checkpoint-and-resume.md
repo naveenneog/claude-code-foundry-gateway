@@ -427,11 +427,24 @@ Where the code differs from Decisions 1-16, the code is as follows. The lead rev
   heartbeat stops when the installer's process is gone (`kill -0`).
 - `-WhatIf` and `--what-if` read no checkpoint into the run: they preview a first run and print one
   line when a checkpoint exists.
-- Owner and mode (Decision 2): a POSIX owner or mode check of an existing checkpoint or lock is not
-  implemented. Files are created under `umask 077` with `chmod 600` in a `chmod 700` directory
-  (bash), in a directory with the protected ACL (PowerShell on Windows), and every recorded answer is
-  validated on read. Git Bash's default `noacl` mount reports 0644 whatever `chmod` sets (measured
-  2026-10-01), so a mode check cannot run on the Windows CI.
+- Owner and mode (Decision 2): the refusal of a POSIX checkpoint or lock that another user owns or
+  that group or others can write is not implemented. The store is protected instead by:
+  - a per-user directory (Decision 1);
+  - owner-only creation: bash runs `chmod 700` on the directory at each commit point and writes each
+    file under `umask 077` with `chmod 600` before the rename (`scripts/install-checkpoint.sh:338-339`,
+    `:362`, `:397`); PowerShell gives a directory it creates the protected ACL on Windows or mode 0700
+    elsewhere, and sets 0600 on each file outside Windows (`scripts/ClaudeInstallCheckpoint.ps1:118-129`,
+    `:142`, `:299`, `:505-508`); under PowerShell a directory that already exists keeps its ACL or mode;
+  - validation on read: a checkpoint whose schema, binding, step ids or any recorded answer fails the
+    installer's checks is refused and kept (`scripts/ClaudeInstallCheckpoint.ps1:165-225`;
+    `CKPT_VALIDATE`, `scripts/install-checkpoint.sh:164-194`, `:241`). Step receipts (deployment names,
+    object ids, the resolver app id) are not validated on read and reach `az` as argument values
+    (`scripts/ClaudeInstallResume.ps1:103`, `:184`, `:233`; `scripts/install-resume.sh:182`).
+
+  Git Bash's default `noacl` mount reports 0644 whatever `chmod` sets (measured 2026-10-01), so a mode
+  check cannot run on the Windows CI. The council's Security seat rules on this deviation. The check,
+  with a test on the `ubuntu-latest` and `macos-latest` jobs, is an unassigned row in
+  [ROADMAP](../ROADMAP.md).
 - Changed answers (Decision 6): the summary's Checkpoint row names each answer that differs from the
   recorded one, before the confirmation.
 - Prompts: an attended resume asks none of the recorded questions, including the region, the
@@ -449,8 +462,11 @@ Where the code differs from Decisions 1-16, the code is as follows. The lead rev
   keeps the existing warning and completes the step.
 - PowerShell top level (Decision 14): no calling script, not dot-sourced, and a host other than
   `Default Host`; an in-process runspace (`tests/Test-CompanyInstaller.ps1`) gets the exception.
-- Cloud Shell without `clouddrive`: the wait line says that the ARM deployment outlives the session
-  and the install checkpoint does not, and its resume command carries the answers.
+- Cloud Shell without `clouddrive`: the wait line's resume command carries the answers in both
+  installers. The bash line says that the ARM deployment outlives the session and the install
+  checkpoint does not (`scripts/install-resume.sh:32-40`); the PowerShell line says that both
+  outlive it whether or not the checkpoint persists (`scripts/ClaudeInstallResume.ps1:27-35`), and
+  no check covers that wording.
 - Tests: the bash suite has its own harness; the guided-flow checks are in
   `tests/Test-InstallerCheckpoint.ps1`; `tests/Test-All.ps1` gives each check its own
   `CLAUDE_GATEWAY_STATE_DIR`; `.github/workflows/installer-unix.yml` (not pushed) runs the two bash

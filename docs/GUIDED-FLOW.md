@@ -234,6 +234,23 @@ skipped. This happens only when the steps present are the recorded ones. When a
 step was added or removed since, for example a new prerequisite of a recorded
 step, the run prints that the steps differ and plans every step again.
 
+The installer keeps its own checkpoint in a per-user state directory, not in the
+decision record ([ADR-0046](adr/0046-installer-checkpoint-and-resume.md) Decision 16;
+[Setup](SETUP.md#resume-after-a-failure)). `activeRun` resumes the steps after the
+installer; the checkpoint resumes the installer's own steps. When the flow runs its
+lead phase again, the installer that `Invoke-ClaudeFlowStep` starts
+(`scripts/flow/Foundation.ps1:438`) resumes after its last step whose result a live
+Azure read still shows. Called from the flow, the installer raises a refusal, for
+example a checkpoint bound to another resource group, as an exception; the flow's
+trap prints its message and exits 1 (`Start-ClaudeGateway.ps1:25-35`). The decision
+record still holds applied values only ([ADR-0030](adr/0030-guided-flow.md)), and
+in-flight installer answers live in the checkpoint. The installer writes nothing
+before its summary is confirmed
+([ADR-0032](adr/0032-guided-flow-starts-at-once.md)), so its first checkpoint write
+follows that confirmation. After the address step has written the record mid-run,
+Setup checks the recorded gateway instead of running the installer, and the installer
+resumes through `-Action Change -Change foundation` or when run directly.
+
 ## Update
 
 ```powershell
@@ -442,6 +459,7 @@ planning and names `-Action Setup`.
 | `tests/Test-FlowPermutations.ps1` | The same copy over Setup, Change foundation, Guide and Status × no record, a matching gateway, another gateway URL, a missing gateway, signed out and no Azure CLI × attended, `-PlanOnly` and unattended apply, then `-WhatIf`, Update with no record, and cancels through callers that use `&` or dot-source it, on both shells; the stub installer takes the real installer's parameter block; Foundation's installer arguments over 432 combinations in process | The installer runs only for Change foundation or a Setup with no gateway recorded; `-Yes` exactly when unattended; `-DeployProjection` exactly when unattended with the projection store; drift stops Setup and Change; a failed read is not drift; `-PlanOnly` and Status write nothing; a refusal has no code excerpt, and a caller receives it as an exception; each argument is valid for its installer parameter; a recorded foundation comes back unchanged through an unattended Change; one plan has one fingerprint on both shells |
 | `tests/Test-FlowOrdinalOrder.ps1` | Every shipped Setup step and the Update migration `0002`, planned offline from one record on PowerShell 7 and Windows PowerShell 5.1; `Sort-ClaudeFlowOrdinal` on both shells | Each step has the same canonical text and the Setup plan one fingerprint on both shells; no `Sort-Object` remains in `scripts/flow` |
 | `tests/Test-InstallerPermutations.ps1` | The real installer under `-WhatIf -Yes`, in process, with the Azure CLI and the Retail Prices API stubbed, on PowerShell 7 and Windows PowerShell 5.1: every combination of tier × entitlement store × developer sign-in × Desktop sign-in (96 cases), six refusals and a reused gateway; `-Live` and `-Pairs` run 16 cases that cover every pair of levels. It runs a copy of the installer's inputs without the checkout's saved record (`onboarding\claude-gateway.json`), so a record for another gateway on the machine does not change the cases | The summary names each choice; an external IdP Desktop sign-in derives its gateway audience with or without `-AuthMode`; each refusal comes before the summary, names what to pass and says that nothing was created; both shells print the same summary; the checkout's own saved record is neither changed nor created |
+| `tests/Test-InstallerCheckpoint.ps1` | The real installer in a child PowerShell per scenario over a stubbed Azure CLI, including two runs through `Invoke-ClaudeFlowStep` | The Foundation step resumes the installer from its checkpoint and creates no second deployment; called from a script, the installer raises a refusal as an exception that the caller catches. Its other 53 checks cover the installer alone ([ADR-0046](adr/0046-installer-checkpoint-and-resume.md#tests-red-mapped-to-the-owners-scenarios)) |
 
 `tests/Test-InstallerPermutations.ps1 -Live -FoundryAccount <account>
 -FoundryResourceGroup <group> -ReuseGateway <gateway> -ReuseResourceGroup <group>`
