@@ -112,7 +112,7 @@ Outbound firewall or forced-tunnel rules must allow `login.microsoftonline.com`,
 
 Deployment order: deploy the projection and renewal job; the tenant admin grants `GroupMember.Read.All`; runs succeed; evidence accumulates for about 60-90 minutes on the 30-minute schedule; switch; rollback by refreshing and comparing named values, then setting `entitlement-source` back to `named-value`.
 
-Admission runs fixed repository code through `scripts/ClaudeRunner.ps1`, reads Cosmos status history and oldest expiry, and separately reads the ARM job definition. It requires at least 60 minutes of oldest-expiry margin, two generation advances within two hours, newest success within 45 minutes, the tested image digest, no command/args override and an email-backed action group. Refusals name the reason and remedy.
+Admission runs fixed repository code through `scripts/ClaudeRunner.ps1`, reads Cosmos status history and computes the oldest expiry from the live entitlement records the resolver can serve, then separately reads the ARM job definition. It requires at least 60 minutes of live-record expiry margin, two generation advances within two hours, newest success within 45 minutes, matching status/member counts, no unexpired entitlement records on an older generation, the tested image digest, no command/args override and an email-backed action group. The live-record aggregate is a one-time cross-partition scan during switching, acceptable at 500,000 records; it is not on the request path. Refusals name the reason and remedy.
 
 ### One-command deployment
 

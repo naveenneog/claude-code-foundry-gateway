@@ -135,9 +135,9 @@ test('admission requires fresh destination evidence, two advances, tested image 
     commandOverride: false,
   };
   const statuses = [
-    { ...baseStatus, reconciliationGeneration: '33333333-3333-4333-8333-333333333331', finishedAt: '2026-09-24T11:00:00.000Z' },
-    { ...baseStatus, reconciliationGeneration: '33333333-3333-4333-8333-333333333332', finishedAt: '2026-09-24T11:30:00.000Z' },
-    { ...baseStatus, reconciliationGeneration: '33333333-3333-4333-8333-333333333333' },
+    { ...baseStatus, memberCounts: { standard: 1 }, reconciliationGeneration: '33333333-3333-4333-8333-333333333331', finishedAt: '2026-09-24T11:00:00.000Z' },
+    { ...baseStatus, memberCounts: { standard: 1 }, reconciliationGeneration: '33333333-3333-4333-8333-333333333332', finishedAt: '2026-09-24T11:30:00.000Z' },
+    { ...baseStatus, memberCounts: { standard: 1 }, reconciliationGeneration: '33333333-3333-4333-8333-333333333333' },
   ];
   const expected = {
     tenantId,
@@ -148,11 +148,65 @@ test('admission requires fresh destination evidence, two advances, tested image 
     entrypoint: baseStatus.entrypoint,
   };
   const job = { image: baseStatus.imageDigest, command: [], args: [] };
-  assert.equal(plan.evaluateProjectionAdmission({ statuses, expected, job, now }).ok, true);
-  assert.match(plan.evaluateProjectionAdmission({ statuses: statuses.slice(2), expected, job, now }).reason, /advanced at least twice/);
-  assert.match(plan.evaluateProjectionAdmission({ statuses: statuses.map(s => ({ ...s, oldestExpiresAt: Date.parse('2026-09-24T12:50:00Z') / 1000 })), expected, job, now }).reason, /60 minute/);
-  assert.match(plan.evaluateProjectionAdmission({ statuses: statuses.map(s => ({ ...s, finishedAt: '2026-09-24T11:00:00.000Z' })), expected, job, now }).reason, /45 minute/);
-  assert.match(plan.evaluateProjectionAdmission({ statuses: statuses.map(s => ({ ...s, accountResourceId: '/wrong' })), expected, job, now }).reason, /destination/);
-  assert.match(plan.evaluateProjectionAdmission({ statuses, expected, job: { ...job, args: ['--whatif'] }, now }).reason, /override|dry-run/);
-  assert.match(plan.evaluateProjectionAdmission({ statuses, expected: { ...expected, actionGroupResourceId: '' }, job, now }).reason, /action group/);
+  const entitlementEvidence = {
+    total: 1,
+    oldestExpiresAt: baseStatus.oldestExpiresAt,
+    latestGeneration: '33333333-3333-4333-8333-333333333333',
+    olderActiveCount: 0,
+    memberCounts: { standard: 1 },
+  };
+  assert.equal(plan.evaluateProjectionAdmission({ statuses, entitlementEvidence, expected, job, now }).ok, true);
+  assert.match(plan.evaluateProjectionAdmission({ statuses: statuses.slice(2), entitlementEvidence, expected, job, now }).reason, /advanced at least twice/);
+  const lowExpiry = Date.parse('2026-09-24T12:50:00Z') / 1000;
+  assert.match(plan.evaluateProjectionAdmission({ statuses: statuses.map(s => ({ ...s, oldestExpiresAt: lowExpiry })), entitlementEvidence: { ...entitlementEvidence, oldestExpiresAt: lowExpiry }, expected, job, now }).reason, /60 minute/);
+  assert.match(plan.evaluateProjectionAdmission({ statuses: statuses.map(s => ({ ...s, finishedAt: '2026-09-24T11:00:00.000Z' })), entitlementEvidence, expected, job, now }).reason, /45 minute/);
+  assert.match(plan.evaluateProjectionAdmission({ statuses: statuses.map(s => ({ ...s, accountResourceId: '/wrong' })), entitlementEvidence, expected, job, now }).reason, /destination/);
+  assert.match(plan.evaluateProjectionAdmission({ statuses, entitlementEvidence, expected, job: { ...job, args: ['--whatif'] }, now }).reason, /override|dry-run/);
+  assert.match(plan.evaluateProjectionAdmission({ statuses, entitlementEvidence, expected: { ...expected, actionGroupResourceId: '' }, job, now }).reason, /action group/);
+  assert.match(plan.evaluateProjectionAdmission({ statuses, expected, job, now }).reason, /entitlement records/);
+  assert.match(plan.evaluateProjectionAdmission({ statuses, entitlementEvidence: { ...entitlementEvidence, oldestExpiresAt: baseStatus.oldestExpiresAt - 60 }, expected, job, now }).reason, /mismatch/);
+  assert.match(plan.evaluateProjectionAdmission({ statuses, entitlementEvidence: { ...entitlementEvidence, olderActiveCount: 1 }, expected, job, now }).reason, /older generation/);
+  assert.match(plan.evaluateProjectionAdmission({ statuses, entitlementEvidence: { ...entitlementEvidence, memberCounts: { standard: 2 } }, expected, job, now }).reason, /member count/);
+});
+
+test('admission computes freshness from resolver-served entitlement records, not status claims', () => {
+  const latest = '33333333-3333-4333-8333-333333333333';
+  const older = '33333333-3333-4333-8333-333333333332';
+  const baseStatus = {
+    type: 'projection-reconciliation-status',
+    tenantId,
+    accountResourceId: '/subscriptions/sub/resourceGroups/rg/providers/Microsoft.DocumentDB/databaseAccounts/cosmos',
+    databaseName: 'claude',
+    containerName: 'entitlement',
+    imageDigest: 'sha256:' + 'a'.repeat(64),
+    entrypoint: '/app/reconcile.mjs',
+    dryRun: false,
+    commandOverride: false,
+    memberCounts: { standard: 1 },
+    oldestExpiresAt: Date.parse('2026-09-24T13:30:00Z') / 1000,
+  };
+  const statuses = [
+    { ...baseStatus, reconciliationGeneration: '33333333-3333-4333-8333-333333333331', finishedAt: '2026-09-24T11:00:00.000Z' },
+    { ...baseStatus, reconciliationGeneration: older, finishedAt: '2026-09-24T11:30:00.000Z' },
+    { ...baseStatus, reconciliationGeneration: latest, finishedAt: '2026-09-24T11:40:00.000Z' },
+  ];
+  const expected = {
+    tenantId,
+    accountResourceId: baseStatus.accountResourceId,
+    databaseName: 'claude',
+    containerName: 'entitlement',
+    imageDigest: baseStatus.imageDigest,
+    entrypoint: baseStatus.entrypoint,
+    actionGroupResourceId: '/subscriptions/sub/resourceGroups/rg/providers/Microsoft.Insights/actionGroups/ag',
+  };
+  const job = { image: baseStatus.imageDigest, command: [], args: [] };
+  const staleRecords = [{ oid, tenantId, tier: 'standard', reconciliationGeneration: older, expiresAt: Date.parse('2026-09-24T13:30:00Z') / 1000 }];
+  assert.match(plan.evaluateProjectionAdmission({ statuses, entitlementRecords: staleRecords, expected, job, now }).reason, /older generation/);
+  const mismatchExpiry = [{ ...staleRecords[0], reconciliationGeneration: latest, expiresAt: Date.parse('2026-09-24T13:00:00Z') / 1000 }];
+  assert.match(plan.evaluateProjectionAdmission({ statuses, entitlementRecords: mismatchExpiry, expected, job, now }).reason, /oldest expiry mismatch/);
+  const mismatchCount = [
+    { ...staleRecords[0], reconciliationGeneration: latest },
+    { oid: '44444444-4444-4444-8444-444444444444', tenantId, tier: 'standard', reconciliationGeneration: latest, expiresAt: staleRecords[0].expiresAt },
+  ];
+  assert.match(plan.evaluateProjectionAdmission({ statuses, entitlementRecords: mismatchCount, expected, job, now }).reason, /member count/);
 });

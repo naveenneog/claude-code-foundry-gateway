@@ -36,7 +36,16 @@ RED will add offline tests before implementation for the Node renewal/status pat
 
 U56 is the design target for this packet: ARM cron, bindings, digest and one succeeded execution are not admission evidence (`docs/UNKNOWNS.md:96`). P86 will close the offline part by proving destination-bound status, history, dry-run rejection and switch admission tests. U17 remains open for live positive Graph consent in a tenant where an administrator grants `GroupMember.Read.All`; this round can prove the tenant-admin commands and the denied path, not a successful customer-tenant Graph read (`docs/UNKNOWNS.md:26`).
 
-### RED and GREEN evidence
+
+### Council round 1 and round 2 fixes
+
+Council round 1 on `615051b` blocked all five seats on two defects. First, admission trusted self-reported status freshness: a fresh status history with old real entitlement records could pass. Second, guided Entitlement used `$target` before assignment in the projection switch path, and the existing Core test stopped earlier on missing evidence.
+
+RED added permanent tests for the real-record aggregate and the guided-flow good-evidence path. `npm --prefix sync test` failed one new admission case before the fix because status-only evidence still admitted stale real records. `Test-ProjectionCouncil.ps1 -Group Core` failed the new good-evidence flow assertions before the fix.
+
+GREEN makes admission compute oldest expiry, member counts and latest-generation coverage from the non-status entitlement records the resolver can serve. Unexpired records must all carry the latest successful status generation; expired older records may remain because the resolver refuses them. Status oldest expiry and member counts are cross-checked against the live-record aggregate. `check-admission.mjs` now reads non-status entitlement records as well as status history. The flow now assigns `$target = $Plan.Data.Target` before calling admission, and the fixture covers the good-evidence path through admission with the plan target resource group.
+
+Round 2 negative detector pairs were broken and restored: fresh status with old real records, status count mismatch, status oldest-expiry mismatch and flow target assignment. Each mutation failed its targeted suite and passed after restoration. Validation: `npm --prefix sync test` passed 37/37; `npm --prefix resolver test` passed 14/14; `tests/Test-ProjectionInstaller.ps1` passed; `tests/Test-ProjectionCouncil.ps1 -Group Core` passed 76 assertions; `az bicep build --file infra\projection-renewal.bicep --stdout` exited 0 under the isolated Azure config.### RED and GREEN evidence
 
 RED added offline sync tests for status record shape, resolver exclusion on point-read/query paths, status preservation across generations and admission rejection for stale, missing, wrong-destination, dry-run/override, missing-action-group and single-generation evidence. Initial RED: `npm --prefix sync test` failed 4 of 36 tests because `toStatusDocument` and `evaluateProjectionAdmission` did not exist, status records could authorize through the resolver, and status records could be deleted as orphans.
 

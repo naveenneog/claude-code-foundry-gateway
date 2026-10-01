@@ -128,7 +128,7 @@ function Assert-ClaudeProjectionAdmission {
 
     $token = Invoke-ClaudeNetworkAz @('account','get-access-token','--resource','https://management.azure.com')
     if (-not $token.accessToken) { throw 'Projection switch refused: could not get a management-plane token to read the renewal job definition.' }
-    $job = Invoke-RestMethod -Method Get -Headers @{ Authorization = "Bearer $($token.accessToken)" } -Uri "https://management.azure.com$ReconcilerResourceId?api-version=2024-03-01" -ErrorAction Stop
+    $job = Invoke-RestMethod -Method Get -Headers @{ Authorization = "Bearer $($token.accessToken)" } -Uri "https://management.azure.com${ReconcilerResourceId}?api-version=2024-03-01" -ErrorAction Stop
     $null = Assert-ClaudeProjectionJobDefinition -Job $job -ImageDigest $ImageDigest
     return $admission
 }

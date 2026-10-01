@@ -49,12 +49,27 @@ Admission reads two sources and both must pass:
    image digest and no command/args override.
 
 The switch is admitted only when the oldest expiry has at least 60 minutes of
-margin, the reconciliation generation advanced at least twice in two hours, the
-newest successful renewal is within 45 minutes, the status records are bound to
+margin, computed from the live entitlement records the resolver can serve, not
+from status records alone. The latest successful status generation must match
+every unexpired entitlement record; P86 does not accept a "newer" unknown
+generation because generations are UUIDs and not orderable. Expired older
+records may remain because the resolver refuses them. The latest status record's
+oldest-expiry and member counts must match the live-record aggregate. The status
+history still has to show at least two generation advances in two hours, and the
+newest successful renewal must be within 45 minutes. Status records are bound to
 the destination account/database/container and tenant, and an email-backed
 action group exists for the alerts. Otherwise the deployer, installer and guided
 flow refuse with the reason and remedy. Too-little-history refusals name the
 expected 60-90 minute wait on the 30-minute schedule.
+
+The admission-time live-record aggregate is a cross-partition read over the
+`entitlement` container excluding status records, projecting only object id,
+tier, `reconciliationGeneration` and `expiresAt`. It can scan about 500,000
+records once during a switch. This is acceptable as an admission cost rather
+than a request-path cost; live RU measurement remains a deployment receipt, but
+the projection already measured point reads at about 1 RU and write estimates
+use the measured 5.9 RU create cost. The aggregate is expected to cost on the
+order of a one-time analytical/container scan, not a standing request-path bill.
 
 Azure Monitor scheduled-query alerts cover no successful run in 45 minutes,
 oldest expiry margin below 60 minutes, and Graph read denied or failed. The

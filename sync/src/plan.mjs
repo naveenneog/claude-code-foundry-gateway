@@ -235,6 +235,8 @@ export function compareWithGateway(gateway, records, { tenantId, now = new Date(
 
 export function evaluateProjectionAdmission({
   statuses = [],
+  entitlementRecords,
+  entitlementEvidence,
   expected = {},
   job = {},
   now = new Date(),
@@ -274,7 +276,31 @@ export function evaluateProjectionAdmission({
   if (!Number.isFinite(newestAge) || newestAge > maxNewestAgeSeconds) {
     return refuse('newest successful renewal is older than 45 minutes');
   }
-  const oldestExpiry = Math.min(...valid.map((s) => Number(s.oldestExpiresAt)).filter(Number.isFinite));
+  const evidence = entitlementEvidence ?? summarizeEntitlementEvidence(entitlementRecords, {
+    tenantId: expected.tenantId,
+    latestGeneration: newest.reconciliationGeneration,
+    now,
+  });
+  if (!evidence) return refuse('admission must read live entitlement records, not only status history');
+  if (evidence.olderActiveCount > 0) {
+    return refuse(`${evidence.olderActiveCount} live entitlement record(s) still carry an older generation`);
+  }
+  if (evidence.latestGeneration !== newest.reconciliationGeneration) {
+    return refuse('status generation does not match the live entitlement records');
+  }
+  const statusOldest = Number(newest.oldestExpiresAt);
+  if (Number.isFinite(statusOldest) && Number.isFinite(evidence.oldestExpiresAt) && statusOldest !== evidence.oldestExpiresAt) {
+    return refuse('status oldest expiry mismatch with live entitlement records');
+  }
+  const statusCounts = normalizeCounts(newest.memberCounts ?? {});
+  const liveCounts = normalizeCounts(evidence.memberCounts ?? {});
+  if (JSON.stringify(statusCounts) !== JSON.stringify(liveCounts)) {
+    return refuse('status member count mismatch with live entitlement records');
+  }
+  if (Number.isFinite(evidence.total) && evidence.total !== Object.values(liveCounts).reduce((a, b) => a + b, 0)) {
+    return refuse('live entitlement total does not match member counts');
+  }
+  const oldestExpiry = Number(evidence.oldestExpiresAt);
   if (!Number.isFinite(oldestExpiry) || oldestExpiry - Math.floor(now.getTime() / 1000) < minExpiryMarginSeconds) {
     return refuse('oldest entitlement expiry has less than 60 minutes of margin');
   }
@@ -283,6 +309,35 @@ export function evaluateProjectionAdmission({
     return refuse('reconciliation generation has not advanced at least twice within two hours; wait about 60-90 minutes on the 30-minute schedule');
   }
   return { ok: true, newestFinishedAt: newest.finishedAt, oldestExpiresAt: oldestExpiry, generations: generations.length };
+}
+
+export function summarizeEntitlementEvidence(records, { tenantId, latestGeneration, now = new Date() } = {}) {
+  if (!Array.isArray(records)) return null;
+  const nowSeconds = Math.floor(now.getTime() / 1000);
+  const live = records.filter((r) => !isStatusRecord(r) && (!tenantId || r.tenantId === tenantId) &&
+    Number.isInteger(r.expiresAt) && r.expiresAt > nowSeconds);
+  const memberCounts = {};
+  let olderActiveCount = 0;
+  let oldestExpiresAt = Infinity;
+  for (const record of live) {
+    memberCounts[record.tier] = (memberCounts[record.tier] ?? 0) + 1;
+    if (record.reconciliationGeneration !== latestGeneration) olderActiveCount++;
+    if (record.expiresAt < oldestExpiresAt) oldestExpiresAt = record.expiresAt;
+  }
+  return {
+    total: live.length,
+    oldestExpiresAt: Number.isFinite(oldestExpiresAt) ? oldestExpiresAt : null,
+    latestGeneration,
+    olderActiveCount,
+    memberCounts: normalizeCounts(memberCounts),
+  };
+}
+
+function normalizeCounts(counts) {
+  return Object.fromEntries(Object.entries(counts)
+    .filter(([, value]) => Number(value) > 0)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => [key, Number(value)]));
 }
 
 function refuse(reason) {

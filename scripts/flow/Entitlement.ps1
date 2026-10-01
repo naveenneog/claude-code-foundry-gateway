@@ -74,6 +74,7 @@ function Get-ClaudeFlowStepPlan {
 function Invoke-ClaudeFlowStep {
     param([Parameter(Mandatory = $true)]$Record, [Parameter(Mandatory = $true)]$Plan)
     if (Test-ClaudeFlowPlanIsNoop $Plan) { return @{} }
+    $target = $Plan.Data.Target
     if ($Plan.Data.Desired -eq 'projection') {
         . (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'scripts\ClaudeProjectionChecks.ps1')
         $renewal = $Plan.Data.Renewal
@@ -86,7 +87,6 @@ function Invoke-ClaudeFlowStep {
             -ActionGroupResourceId $renewal.actionGroupResourceId
     }
     Assert-ClaudeFlowLifecycleSnapshotBeforeWrite -Plan $Plan
-    $target = $Plan.Data.Target
     . (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'scripts\ApimNamedValue.ps1')
     Set-ApimNamedValue -ResourceGroup $target.ResourceGroup -ApimName $target.ApimName -Id 'entitlement-source' -Value $Plan.Data.Desired
     Add-ClaudeDecisionHistory -Record $Record -Action Change -Decision entitlementStore -From $Plan.Data.Current -To $Plan.Data.Desired -Commit (Get-ClaudeFlowReleaseInfo).commit

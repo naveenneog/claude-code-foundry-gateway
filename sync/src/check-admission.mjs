@@ -51,10 +51,24 @@ while (it.hasMoreResults()) {
   statuses.push(...(resources ?? []));
 }
 
+const entitlementQuery = {
+  query: "SELECT c.oid, c.tenantId, c.tier, c.reconciliationGeneration, c.expiresAt FROM c WHERE (NOT IS_DEFINED(c.type) OR c.type != 'projection-reconciliation-status') AND c.tenantId = @tenantId",
+  parameters: [
+    { name: '@tenantId', value: tenantId },
+  ],
+};
+const entitlementRecords = [];
+const entitlementIterator = container.items.query(entitlementQuery, { maxItemCount: 1000 });
+while (entitlementIterator.hasMoreResults()) {
+  const { resources } = await entitlementIterator.fetchNext();
+  entitlementRecords.push(...(resources ?? []));
+}
+
 const result = evaluateProjectionAdmission({
   statuses,
+  entitlementRecords,
   expected: { tenantId, accountResourceId, databaseName, containerName, imageDigest, entrypoint, actionGroupResourceId },
   job: { image: imageDigest, command: [], args: [] },
 });
-console.log(JSON.stringify({ ...result, mode: 'projection-admission', statuses: statuses.length }));
+console.log(JSON.stringify({ ...result, mode: 'projection-admission', statuses: statuses.length, entitlementRecords: entitlementRecords.length }));
 process.exit(result.ok ? 0 : 4);

@@ -125,6 +125,23 @@ Reset-ProjectionFixture
 Capture { Invoke-ClaudeFlowStep -Record $record -Plan $plan }
 Assert 'real Entitlement refuses missing P86 evidence with expected wait' ($Failure -and $Output -match 'P86 admission needs' -and $Output -match '60-90 minutes' -and $FixtureCalls.Count -eq 0)
 
+$discoveryGood=[pscustomobject]@{
+    resourceGroup='rg-p84';apimName='apim-p84';sku='BasicV2';namedValues=@{'entitlement-source'='named-value'};cleanComparison=$true
+    renewal=[pscustomobject]@{
+        runnerName='aci-projtest-p84fixture'; cosmosAccount='cosmos-p84fixture'; tenantId=$FixtureTenant; accountResourceId=$FixtureCosmosId
+        reconcilerResourceId=$FixtureJobId; imageDigest=('sha256:' + ('a' * 64)); actionGroupResourceId="$FixtureRgId/providers/Microsoft.Insights/actionGroups/ag-projection-renewal"
+        entryPoint='node /app/sync/src/apply-projection.mjs'
+    }
+}
+$planGood=Get-ClaudeFlowStepPlan -Record $record -Discovery $discoveryGood
+Reset-ProjectionFixture
+$FixtureJob.properties.template.containers[0].image='example.invalid/projection@sha256:' + ('a' * 64)
+$FixtureJob.properties.template.containers[0].command=@()
+$FixtureJob.properties.template.containers[0].args=@()
+Capture { Invoke-ClaudeFlowStep -Record $record -Plan $planGood }
+Assert 'real Entitlement good evidence reaches admission with the plan target resource group' (($FixtureCalls -join "`n") -match 'az container exec -g rg-p84 -n aci-projtest-p84fixture')
+Assert 'real Entitlement good evidence reaches admission before the snapshot write guard' ($Failure -and $Output -match 'snapshot path' -and ($FixtureCalls -join "`n") -notmatch 'az container exec -g\\s+-n')
+
 $goodJob = $FixtureJob | ConvertTo-Json -Depth 20 | ConvertFrom-Json
 $goodJob.properties.template.containers[0].image = 'example.invalid/projection@sha256:' + ('a' * 64)
 $goodJob.properties.template.containers[0].command = @()
