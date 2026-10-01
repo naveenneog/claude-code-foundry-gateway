@@ -94,6 +94,13 @@ function Load-Spec([string]$RelativePath) {
 Write-Host 'Azure CLI portal guide contract' -ForegroundColor Cyan
 $markdown = Read-Text $GuidePath
 
+Assert 'guide contains no six-asterisk Authorization mask' (-not $markdown.Contains('******')) '******'
+$authorizationValues = @([regex]::Matches($markdown, 'Authorization: ([^"
+]+)') | ForEach-Object { $_.Groups[1].Value })
+foreach ($value in $authorizationValues) {
+    Assert 'Authorization header starts with Bearer' ($value.StartsWith('Bearer ')) $value
+}
+
 $expectedPortalSteps = [ordered]@{
     '1' = @(
         'Set the subscription and confirm the signed-in tenant'
@@ -306,10 +313,15 @@ for ($part = 1; $part -le 12; $part++) {
     if ($part -eq 12) {
         Assert 'part 12 portal cites teardown-group function' ($portal -match 'p89_teardown_group') 'p89_teardown_group'
         Assert 'part 12 portal lists appinsights logger view' (($portal -match 'Monitoring > Application Insights') -and ($portal -match 'logger `appinsights`')) 'Monitoring > Application Insights logger `appinsights`'
+        Assert 'part 12 portal documents resource-group receipt tag' (($portal -match 'claude-gateway-receipt') -and ($portal -match 'Resource groups > `\$GATEWAY_RG` > Tags')) 'claude-gateway-receipt Resource group > Tags'
         Assert 'part 12 portal documents no receipts for portal-created objects' (($portal -match 'no `\.p89-receipts` entry') -and ($portal -match 'exact name, creation time and the gateway they serve')) 'portal-created objects receipt wording'
+        Assert 'part 12 portal documents role scope and principal checks' (($portal -match 'Foundry role assignments') -and ($portal -match 'verify role, scope and principal') -and ($portal -match 'Key Vault role assignments')) 'role scope principal checks'
     }
     if ($part -eq 7) {
         Assert 'part 7 portal states external-idp applicability' (($portal -match 'external-idp-browser') -and ($portal -match 'external-idp-broker') -and ($portal -match 'helper-script')) 'external-idp-browser external-idp-broker helper-script'
+    }
+    if ($part -eq 7) {
+        Assert 'part 7 intro matches P89 applicability' ($body.Contains("§7 applies only to ``external-idp-browser`` and ``external-idp-broker`` Desktop sign-in; ``helper-script`` uses the developer's Azure CLI sign-in and no app registration")) 'P89 §7 applicability sentence'
     }
     if ($part -eq 10) {
         Assert 'part 10 Change later is a table' ($portal -match '(?m)^\| Changed item \| Portal blade \| Block that reruns \| Effect while `entitlement-source` is `named-value` \|') 'Change later table header'

@@ -81,6 +81,23 @@ Round 12 mutation-fix validation, 2026-10-01:
 - Validation: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS with 532 checks; `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS with 791 checks in 298.78 s using isolated `AZURE_CONFIG_DIR`; `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS with 34 checks in 7.13 s and `Documentation references hold: 43 guides; all mutations caught.` No live Azure command ran.
 - Mutations run and caught: m21 hostname default `2700` to `900` (531 pass, 1 fail, 532 total), m23 DNS default `600` to `60` (531 pass, 1 fail, 532 total), m22 model-refusal narrowing sentence removed (531 pass, 1 fail, 532 total), and dig presence guard changed to `if false` (531 pass, 1 fail, 532 total).
 
+Round 13 council-fix validation, 2026-10-01:
+- Council verdicts on combined head with P90 `0666636`: Architect PASS. Coder BLOCK found the literal Authorization header, unchecked budget/model/projection/resolver captures and the multi-line identity refusal; fixes added Bearer-variable guards, checked captures and one-line refusal. Security BLOCK found stale resource-group and external teardown receipts could delete later-owned objects; fixes added nonce-tag validation and live object matching before deletes. UX BLOCK found Section 7 read as mandatory; the guide now states it applies only to external-idp browser/broker flows. QA BLOCK found missing identity-timeout and runner-transfer scenarios; both are guarded.
+- Minor fixes: Section 10 states the private resolver path requires a SKU with outbound VNet integration; Section 12 states receipt-gated teardown covers CLI-created objects, not portal-created objects. Deferred owner decision: UX listed about 53 lead sentences such as "Set the subscription..." as imperative; they stay as step labels because P90 maps those lead sentences.
+- Validation: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS with 654 checks; `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS with 915 checks in 716.77 s using isolated `AZURE_CONFIG_DIR`; `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS with 34 checks in 30.89 s and `Documentation references hold: 43 guides; all mutations caught.` No live Azure command ran.
+- Mutation list for lead rerun: literal Authorization header, missing auth variable assignment, budget id read failure ignored, non-GUID budget id accepted, failed models-premium read accepted, malformed models-premium accepted, Cosmos output unchecked, gateway app id unchecked, missing network output accepted, stale resolver params deployed after jq failure, empty resolver site uploaded, identity refusal split, Section 7 optional sentence removed, resource-group tag omitted, rerun tag mismatch accepted, teardown tag mismatch accepted, role live-match skipped, group live-match skipped, app live-match skipped, runner init failure ignored, runner finalize failure ignored, runner finalize error text ignored, identity wait timeout accepted, Basic v2 resolver sentence removed, portal-created teardown sentence removed.
+
+Round 14 teardown-fix validation, 2026-10-01:
+- Foundry role teardown now reads the live assignment at the receipt scope before comparing and prints a could-not-read refusal on read failure. Key Vault role receipts now record scope, role name and principal id, and Key Vault role teardown verifies those fields before delete. The role-assignment stub now matches Azure CLI scope behavior: without `--scope` or `--all`, resource-scoped assignments are not returned; the no-scope Foundry teardown mutation failed under that stub.
+- Operator text now names `p89_enable_apim_identity` and the optional identity block in section 3. Resolver packaging removes `resolver.zip` before building and runs zip in a subshell so a zip failure does not leave the caller in `resolver/`.
+- Validation: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS with 635 checks; `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS with 896 checks in 324.89 s using isolated `AZURE_CONFIG_DIR`; `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS with 34 checks in 9.93 s and `Documentation references hold: 43 guides; all mutations caught.` No live Azure command ran.
+- Mutations run: Foundry teardown without `--scope` caught yes (660 pass, 2 fail, 662 total before the stub static check was added); Key Vault role delete-by-id caught yes (650 pass, 12 fail, 662 total); stub returns resource-scoped roles without `--scope` caught yes (662 pass, 1 fail, 663 total); identity refusal names `P89-ENABLE-APIM-IDENTITY` caught yes (661 pass, 1 fail, 662 total); stale resolver zip command caught yes (661 pass, 2 fail, 663 total).
+
+Round 14 addendum mutation validation, 2026-10-01:
+- Added fixed-count Authorization header assertions so literal masked headers fail without reducing the check count. Added addendum coverage for stale resolver parameters on jq failure, Foundry role id/scope/role/principal mismatches, runner init/finalize message-specific stops, the Section 7 optional-flow sentence, single-line Section 3 identity refusal, and the Section 10 Basic v2 resolver sentence.
+- Validation reused the current guide code checks: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS with 635 checks; `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS with 896 checks in 324.89 s using isolated `AZURE_CONFIG_DIR`; `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS with 34 checks in 9.93 s and `Documentation references hold: 43 guides; all mutations caught.` No live Azure command ran.
+- Addendum mutations run: m33 stale resolver params caught yes; m36 live role scope comparison removed caught yes; m37 live role principal comparison removed caught yes; m40 init error-text guard removed caught yes; m41 init-failure refusal continued caught yes; m42 finalize-failure refusal continued caught yes; m44 Section 7 optional sentence removed caught yes; m45 second identity-refusal stderr line caught yes; m46 Basic v2 resolver sentence removed caught yes; m26 literal asterisk header caught yes with stable count.
+
 
 ## P90 Portal path and staged screenshots for the Azure CLI setup guide, 2026-10-01
 
@@ -170,6 +187,19 @@ Round 7 council results and fixes:
 - GREEN: `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS, 43 guides, 7.47 s.
 - GREEN: `pwsh -NoProfile -File .\tests\Test-PortalCaptureSpecs.ps1` PASS, 45 checks, 1.81 s.
 - Negative proofs against repository-local temporary copies, each at the 600-check baseline with at least one failure: changed the Part 2 named-value capture id; removed `helper-script` from the overview row; removed the Part 7 applicability sentence; inserted a `P89-*` marker outside a fence; inserted "lead sentence" outside a fence; removed the §10 Change-later table header; removed the Part 12 portal-created receipt wording.
+
+
+Round 8 results:
+- Merged P89 rounds 13-14 commit `8068c07` into `p90-portal-guide`. P89 fenced bash blocks compare byte-identical after the merge: 57 bash fences, 0 differences; all 55 P89 `Expected result:` lines are present. The §7 applicability sentence changed in P89, but P89 kept the lead sentences, so the az↔portal mappings needed no lead-sentence changes.
+- Byte verification on `docs/AZ-COMMANDS.md`: no six-asterisk mask remains, and all 4 Authorization headers start with `Bearer `.
+- Part 12 now states that guide-created resource groups carry the `claude-gateway-receipt` tag, the CLI deletes only when the live tag matches the receipt, and the portal route checks Resource group > Tags before deletion. Portal teardown for groups, apps and role assignments now checks exact name, creation time, scope and principal before deletion, matching the round-14 CLI checks.
+- Part 7 retains the same applicability as P89 §7: only `external-idp-browser` and `external-idp-broker`; `helper-script` uses Azure CLI sign-in and needs no app registration.
+- `tests/Test-AzPortalGuide.ps1` now guards Authorization header bytes, Part 7 exact applicability, resource-group receipt-tag wording, and role scope/principal deletion checks.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-AzPortalGuide.ps1` PASS, 608 checks, 3.53 s.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS, 635 checks, 481.6 s.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS, 43 guides, 14.58 s.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-PortalCaptureSpecs.ps1` PASS, 45 checks, 3.43 s.
+- Negative proofs against repository-local temporary copies, each at the 608-check baseline with at least one failure: replaced one Bearer header with a six-asterisk mask; removed the Bearer prefix from one Authorization header; changed the §7 applicability sentence; removed the resource-group receipt-tag portal wording; removed role scope/principal checks.
 
 ## P71 follow-up: a lookup starts one refresh, 2026-09-30
 
@@ -1761,6 +1791,19 @@ Round 7 council results and fixes:
 - GREEN: `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS, 43 guides, 7.47 s.
 - GREEN: `pwsh -NoProfile -File .\tests\Test-PortalCaptureSpecs.ps1` PASS, 45 checks, 1.81 s.
 - Negative proofs against repository-local temporary copies, each at the 600-check baseline with at least one failure: changed the Part 2 named-value capture id; removed `helper-script` from the overview row; removed the Part 7 applicability sentence; inserted a `P89-*` marker outside a fence; inserted "lead sentence" outside a fence; removed the §10 Change-later table header; removed the Part 12 portal-created receipt wording.
+
+
+Round 8 results:
+- Merged P89 rounds 13-14 commit `8068c07` into `p90-portal-guide`. P89 fenced bash blocks compare byte-identical after the merge: 57 bash fences, 0 differences; all 55 P89 `Expected result:` lines are present. The §7 applicability sentence changed in P89, but P89 kept the lead sentences, so the az↔portal mappings needed no lead-sentence changes.
+- Byte verification on `docs/AZ-COMMANDS.md`: no six-asterisk mask remains, and all 4 Authorization headers start with `Bearer `.
+- Part 12 now states that guide-created resource groups carry the `claude-gateway-receipt` tag, the CLI deletes only when the live tag matches the receipt, and the portal route checks Resource group > Tags before deletion. Portal teardown for groups, apps and role assignments now checks exact name, creation time, scope and principal before deletion, matching the round-14 CLI checks.
+- Part 7 retains the same applicability as P89 §7: only `external-idp-browser` and `external-idp-broker`; `helper-script` uses Azure CLI sign-in and needs no app registration.
+- `tests/Test-AzPortalGuide.ps1` now guards Authorization header bytes, Part 7 exact applicability, resource-group receipt-tag wording, and role scope/principal deletion checks.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-AzPortalGuide.ps1` PASS, 608 checks, 3.53 s.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS, 635 checks, 481.6 s.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS, 43 guides, 14.58 s.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-PortalCaptureSpecs.ps1` PASS, 45 checks, 3.43 s.
+- Negative proofs against repository-local temporary copies, each at the 608-check baseline with at least one failure: replaced one Bearer header with a six-asterisk mask; removed the Bearer prefix from one Authorization header; changed the §7 applicability sentence; removed the resource-group receipt-tag portal wording; removed role scope/principal checks.
 
 ## P71 follow-up: the deadline tests prove termination without racing it, 2026-09-30
 

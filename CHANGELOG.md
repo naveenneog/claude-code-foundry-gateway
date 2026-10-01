@@ -62,6 +62,11 @@ exact streaming cache-creation detail remains **U13**.
   external-IdP Desktop sign-in modes, remove internal P89 marker names from
   reader prose, convert §10 Change later into a table, and document how portal
   teardown identifies objects that have no CLI receipt.
+- **P90 portal path for the Azure CLI setup guide, round 8.** P90 now merges
+  P89 rounds 13-14, preserves all P89 bash fences byte-identical, verifies
+  unmasked Bearer authorization headers, keeps the §7 external-IdP applicability
+  sentence aligned with P89, and documents receipt-tag and live-object checks for
+  portal teardown parity.
 - **P89 Azure CLI setup guide.** `docs/AZ-COMMANDS.md` mirrors the installer and
   in-scope administration scripts with Cloud Shell bash commands, verification
   commands, expected results and source references; `Test-AzCommandsGuide.ps1`
