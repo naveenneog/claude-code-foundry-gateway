@@ -140,7 +140,7 @@ $expectedPortalSteps = [ordered]@{
     '7' = @(
         'Create or discover the Desktop public-client app'
         'Configure Desktop redirect URIs'
-        'Configure API permissions if tenant policy requires review'
+        'Review Desktop consent state without adding API permissions'
         'Publish the Desktop audience to APIM'
     )
     '8' = @(
@@ -217,7 +217,7 @@ $azPortalMapping = [ordered]@{
     '7' = @(
         @{ portal = 'Create or discover the Desktop public-client app'; az = @('Create or discover the Desktop public-client app.') }
         @{ portal = 'Configure Desktop redirect URIs'; az = @('Set public-client redirect URIs, including broker redirects when the Desktop profile uses broker flow.') }
-        @{ portal = 'Configure API permissions if tenant policy requires review'; none = 'No az command grants consent or configures API permissions.' }
+        @{ portal = 'Review Desktop consent state without adding API permissions'; none = 'No az command grants consent or configures API permissions.' }
         @{ portal = 'Publish the Desktop audience to APIM'; az = @('Publish the Desktop gateway audience into APIM.') }
     )
     '8' = @(
@@ -265,6 +265,23 @@ for ($part = 1; $part -le 12; $part++) {
     Assert 'part 8 documents no portal equivalent' (($part -ne 8) -or ($portal -match '(?i)No portal equivalent')) 'part=8'
     $changeLaterCount = @([regex]::Matches($portal, '(?m)^\*\*Change later\.\*\*')).Count
     Assert "part $part has exactly one portal Change later paragraph" ($changeLaterCount -eq 1) "count=$changeLaterCount"
+    $scanText = $portal
+    $bannedPatterns = [ordered]@{
+        'portal prose avoids Do not' = '(?i)\bDo not\b'
+        'portal prose avoids Don''t' = '(?i)\bDon''t\b'
+        'portal prose avoids Make sure' = '(?i)\bMake sure\b'
+        'portal prose avoids Ensure' = '(?i)\bEnsure\b'
+        'portal prose avoids Remember' = '(?i)\bRemember\b'
+        'portal prose avoids Note that' = '(?i)\bNote that\b'
+        'portal prose avoids important' = '(?i)\bimportant\b'
+        'portal prose avoids leading Keep outside titles' = '(?m)^(?!\d+\. \*\*)\s*Keep\b'
+        'portal prose avoids leading Edit outside titles' = '(?m)^(?!\d+\. \*\*)\s*Edit\b'
+        'portal prose avoids leading Use outside titles' = '(?m)^(?!\d+\. \*\*)\s*Use\b'
+    }
+    foreach ($entry in $bannedPatterns.GetEnumerator()) {
+        $found = [regex]::Match($scanText, $entry.Value)
+        Assert "part $part $($entry.Key)" (-not $found.Success) $found.Value
+    }
 
     $azLeads = @(Get-AzLeadSentences $body)
     $mappings = @($azPortalMapping[[string]$part])

@@ -92,6 +92,25 @@ RED / GREEN:
 - GREEN: `pwsh -NoProfile -File .\tests\Test-PortalCaptureSpecs.ps1` PASS, 0 fail / 0 cancelled / 0 skipped / 0 todo, 8.2 s.
 - Negative proofs against temporary copies: removing one portal subsection fails `part 2 has exactly one portal subsection`; removing all part-2 numbered markers fails `part 2 portal subsection has a numbered step`; duplicating a change-later paragraph fails `part 2 has exactly one portal Change later paragraph`; removing the part-8 no-portal sentence fails `part 8 documents no portal equivalent`; adding a duplicate long paragraph fails the duplicate-prose assertion; changing an image path fails `image resolves`; corrupting a temporary capture record fails `record sha256 matches file`; changing a caption fails `caption id matches record id`; removing a pending row fails `every p90.json pending step appears in the table`; deleting an overview portal link fails `overview portal column links to part 2 subsection`.
 
+
+Round 3 results:
+- Commit `2fb88c5` fixed P90 council findings in the portal guide: §2 destructive redeploy guidance, APIM reuse wording, §3 identity/Foundry role wording, Part 7 redirect and audience parity, Part 9 Key Vault/custom-domain wording, and Part 10 change-later routing. `docs/UPDATE-AND-CHANGE.md` received the related APIM managed-identity pointer.
+- `tests/Test-AzPortalGuide.ps1` grew ordered portal-step checks, pending-spec parity, Part 7 redirect URI parity, Desktop audience parity and portal-variable definition checks, including `${VAR}` syntax.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-AzPortalGuide.ps1` PASS, 318 checks, 1.7 s.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS, 558 checks, 160.2 s, isolated `AZURE_CONFIG_DIR`.
+- Negative proofs reported for round 3: localhost redirect shorthand, removed P60 pending row, swapped Part 4 titles, deleted Part 3 role-assignment step, changed bash redirect URI, braced undefined audience variable, plus the builder's three additional parity/definition mutations; all kept the 318-check baseline and produced at least one failure.
+
+Round 4 results:
+- Commit `2262eb3` merged P89 round 8 commit `36b1f92` into P90 without editing P89 fenced bash blocks or `tests/Test-AzCommandsGuide.ps1`.
+- The portal guide now maps az lead sentences to portal steps both ways, covers all portal steps or declared no-portal entries, checks portal variables including `${VAR}`, checks Part 7 redirect URI parity and broker conditionality, checks the Desktop audience variable, checks pending tables both ways including empty staged-list handling, and checks overview links.
+- Lead-review fixes A-E completed: §2 now cites the custom-template quickstart sequence and the what-if CLI/PowerShell/REST scope; §2 APIM creation uses the Learn managed-identity wording; §7 API-permissions text is read-only and states this product configures no required API permissions; §9 Key Vault and custom-domain labels follow the APIM custom-domain Learn page, including **+Add**, **Select**, existing-endpoint **Update**, **Client identity**, access-policy and RBAC paths; wording in portal subsections and change-later paragraphs is factual.
+- `tests/Test-AzPortalGuide.ps1` now rejects banned editorial phrases in portal and Change-later text: `Do not`, `Don't`, `Make sure`, `Ensure`, `Remember`, `Note that`, `important`, and leading `Keep`, `Edit` or `Use` outside step titles.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-AzPortalGuide.ps1` PASS, 567 checks, 1.81 s.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS, 416 checks, 164.71 s.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS, 43 guides, 7.83 s.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-PortalCaptureSpecs.ps1` PASS, 45 checks, 1.35 s.
+- Negative proofs against repository-local temporary copies, each at the 567-check baseline with at least one failure: renamed Part 2 portal title; changed mapped Basic v2 az lead; added unmapped Part 8 portal step; used undefined `$UNDEFINED_RESOLVER_URL`; used undefined `${UNDEFINED_CLIENT_ID}`; altered Part 7 loopback redirect; removed `DESKTOP_SIGN_IN_FLOW` from broker wording; published `$DESKTOP_EXTRA_AUDIENCE`; removed the P90 pending row; added a fake pending row; emptied the temporary P90 staged spec; removed the Part 2 overview portal anchor; inserted a banned `Do not` phrase.
+
 ## P71 follow-up: a lookup starts one refresh, 2026-09-30
 
 **Merged as `b5c2120` on 2026-09-30, as a follow-up to P71, which the owner approved.** Council
@@ -1622,6 +1641,25 @@ The full JUnit/log are `$env:TEMP\p85-full-aum.xml` and
 `$env:TEMP\p85-final-test-summary.json`. The branch is
 `p85-aum-tui-manage` in `accel-p85`. No merge, push, history rewrite, Azure
 write, Azure resource creation or reference-gateway operation occurred.
+
+
+Round 3 results:
+- Commit `2fb88c5` fixed P90 council findings in the portal guide: §2 destructive redeploy guidance, APIM reuse wording, §3 identity/Foundry role wording, Part 7 redirect and audience parity, Part 9 Key Vault/custom-domain wording, and Part 10 change-later routing. `docs/UPDATE-AND-CHANGE.md` received the related APIM managed-identity pointer.
+- `tests/Test-AzPortalGuide.ps1` grew ordered portal-step checks, pending-spec parity, Part 7 redirect URI parity, Desktop audience parity and portal-variable definition checks, including `${VAR}` syntax.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-AzPortalGuide.ps1` PASS, 318 checks, 1.7 s.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1` PASS, 558 checks, 160.2 s, isolated `AZURE_CONFIG_DIR`.
+- Negative proofs reported for round 3: localhost redirect shorthand, removed P60 pending row, swapped Part 4 titles, deleted Part 3 role-assignment step, changed bash redirect URI, braced undefined audience variable, plus the builder's three additional parity/definition mutations; all kept the 318-check baseline and produced at least one failure.
+
+Round 4 results:
+- Commit `2262eb3` merged P89 round 8 commit `36b1f92` into P90 without editing P89 fenced bash blocks or `tests/Test-AzCommandsGuide.ps1`.
+- The portal guide now maps az lead sentences to portal steps both ways, covers all portal steps or declared no-portal entries, checks portal variables including `${VAR}`, checks Part 7 redirect URI parity and broker conditionality, checks the Desktop audience variable, checks pending tables both ways including empty staged-list handling, and checks overview links.
+- Lead-review fixes A-E completed: §2 now cites the custom-template quickstart sequence and the what-if CLI/PowerShell/REST scope; §2 APIM creation uses the Learn managed-identity wording; §7 API-permissions text is read-only and states this product configures no required API permissions; §9 Key Vault and custom-domain labels follow the APIM custom-domain Learn page, including **+Add**, **Select**, existing-endpoint **Update**, **Client identity**, access-policy and RBAC paths; wording in portal subsections and change-later paragraphs is factual.
+- `tests/Test-AzPortalGuide.ps1` now rejects banned editorial phrases in portal and Change-later text: `Do not`, `Don't`, `Make sure`, `Ensure`, `Remember`, `Note that`, `important`, and leading `Keep`, `Edit` or `Use` outside step titles.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-AzPortalGuide.ps1` PASS, 567 checks, 1.81 s.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1 -SkipAzHelp` PASS, 416 checks, 164.71 s.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-DocReferences.ps1` PASS, 43 guides, 7.83 s.
+- GREEN: `pwsh -NoProfile -File .\tests\Test-PortalCaptureSpecs.ps1` PASS, 45 checks, 1.35 s.
+- Negative proofs against repository-local temporary copies, each at the 567-check baseline with at least one failure: renamed Part 2 portal title; changed mapped Basic v2 az lead; added unmapped Part 8 portal step; used undefined `$UNDEFINED_RESOLVER_URL`; used undefined `${UNDEFINED_CLIENT_ID}`; altered Part 7 loopback redirect; removed `DESKTOP_SIGN_IN_FLOW` from broker wording; published `$DESKTOP_EXTRA_AUDIENCE`; removed the P90 pending row; added a fake pending row; emptied the temporary P90 staged spec; removed the Part 2 overview portal anchor; inserted a banned `Do not` phrase.
 
 ## P71 follow-up: the deadline tests prove termination without racing it, 2026-09-30
 

@@ -40,6 +40,13 @@ exact streaming cache-creation detail remains **U13**.
   entry points and resource-group delete discovery. `Test-AzPortalGuide.ps1`
   now guards all parts, portal subsection shape, duplicate long prose, image
   provenance, pending-table/spec-file parity and overview portal anchors.
+- **P90 portal path for the Azure CLI setup guide, rounds 3-4.** The portal
+  guide now cross-checks az lead sentences and portal steps both ways, validates
+  portal variables including braced `${VAR}` syntax, verifies Desktop redirect
+  URI and audience parity, checks pending-capture tables in both directions and
+  rejects editorial wording in portal/change-later text. The §2 custom-template
+  route, §7 Desktop consent review and §9 Key Vault/custom-domain labels now
+  cite the matching Microsoft Learn pages fetched for the round.
 - **P89 Azure CLI setup guide.** `docs/AZ-COMMANDS.md` mirrors the installer and
   in-scope administration scripts with Cloud Shell bash commands, verification
   commands, expected results and source references; `Test-AzCommandsGuide.ps1`
