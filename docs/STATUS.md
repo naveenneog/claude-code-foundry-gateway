@@ -2,7 +2,7 @@
 
 **Active packet (2026-09-30):** P81 USD budgets are the primary enforcer ([ROADMAP](ROADMAP.md)), on its own branch; it merges only with the owner's explicit approval. P87 archives merged sections into per-packet files on this branch; future packets write their section in `docs/status/<ID>.md`, and a merge updates this index and active line. P85 AUM's terminal UI manages people, units, teams and budgets end to end, with tests is merged with the owner's approval (`171b248`, [below](status/P85.md#p85-aums-terminal-ui-manages-people-units-teams-and-budgets-end-to-end-with-tests-2026-09-29)), and its follow-up, the Cloud Shell tests name paths without Git Bash's /tmp mount (`db11723`, [below](status/P85.md#p85-follow-up-the-cloud-shell-tests-name-paths-without-git-bashs-tmp-mount-2026-09-30)). P80 AUM shows every action it has, connects in one step, and its guide starts with installation is merged with the owner's approval (`3f77754`, [below](status/P80.md#p80-aum-shows-every-action-it-has-connects-in-one-step-and-its-guide-starts-with-installation-2026-09-28)). P71 AUM answers fast and says why it cannot is merged with the owner's approval (`01bb6c7`, [below](status/P71.md#p71-aum-answers-fast-and-says-why-it-cannot-2026-09-28)), with its follow-ups: the deadline tests prove termination without racing it (`dc0e311`, [below](status/P71.md#p71-follow-up-the-deadline-tests-prove-termination-without-racing-it-2026-09-30)), and a lookup starts one refresh (`b5c2120`, [below](status/P71.md#p71-follow-up-a-lookup-starts-one-refresh-2026-09-30)). P84 projection deployment checks everything before it writes and never switches into an outage is merged with the owner's approval (`3e4430b`, [below](status/P84.md#p84-projection-deployment-checks-everything-before-it-writes-and-never-switches-into-an-outage-2026-09-29)); switching entitlement to the projection waits for P86. P78 the test suite runs in parallel on GitHub-hosted runners is merged with the owner's approval (`2737232`, [below](status/P78.md#p78-the-test-suite-runs-in-parallel-on-github-hosted-runners-2026-09-28)); ADR-0039's proposed charter change is not enacted. P79 fixes from the owner's test on 2026-09-28 is merged (`6468235`, [below](status/P79.md#p79-fixes-from-the-owners-test-on-2026-09-28)), and its follow-up, the installer permutation check reads only its own record (`05dea1b`, [below](status/P79.md#p79-follow-up-the-installer-permutation-check-reads-only-its-own-record-2026-09-28)). P69 the company address in the flow is merged (`69db07a`, [below](status/P69.md#p69-the-company-address-in-the-flow-2026-09-28)); its proof of a request through a company address needs an owned, publicly delegated domain and is P74. P77 a 60-minute gate budget while the exclusive checks are sharded is merged (`e393487`, [below](status/P77.md#p77-a-60-minute-gate-budget-while-the-exclusive-checks-are-sharded-2026-09-28)). P75 the macOS/Linux installer prices its choices is merged (`5d1cd03`, [below](status/P75.md#p75-the-macoslinux-installer-prices-its-choices-2026-09-28)). P76 one plan, one order on both shells is merged (`d731023`, [below](status/P76.md#p76-one-plan-one-order-on-both-shells-2026-09-28)). P70 newly deployed models reach the tiers and the workstations is merged (`bb75aab`, [below](status/P70.md#p70-newly-deployed-models-reach-the-tiers-and-the-workstations-2026-09-28)). P72 permutation tests of the guided flow and the installer is merged (`cac1260`, [below](status/P72.md#p72-permutation-tests-of-the-guided-flow-and-the-installer-2026-09-28)). P68 the guided flow starts at once and gives the foundation to the installer is merged (`fc9c86c`, [below](status/P68.md#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](status/P67.md#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](status/P66.md#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](status/P62.md#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](status/P61.md#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](status/P64.md#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](status/P60.md#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](status/P65.md#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](status/P59.md#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](status/P52.md#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](status/P54.md#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)). P87 STATUS archive split is on this branch ([status/P87.md](status/P87.md#p87-status-archive-split-2026-10-01)).
 
-Merged packet sections live under [`docs/status/`](status/), one file per packet or date; [`ADR-0042`](adr/0042-status-sections-per-packet.md) records the gate limit and the rule for future packets. `docs/STATUS.md` keeps the active packet, this index, commands and next work.
+Merged packet sections live under [`docs/status/`](status/), one file per packet or date; a packet's STATUS section means its section in `docs/status/<ID>.md`. [`ADR-0042`](adr/0042-status-sections-per-packet.md) records the gate limit and the rule for future packets. `docs/STATUS.md` keeps the active packet, this index, commands and next work.
 
 | Packet | Section heading | Date |
 |---|---|---|
@@ -72,8 +72,11 @@ Merged packet sections live under [`docs/status/`](status/), one file per packet
 | P26 | [P26 acceptance criteria — the installer finds or creates a model](status/P26.md#p26-acceptance-criteria--the-installer-finds-or-creates-a-model) |  |
 | P24-P27 | [P24/P27 acceptance criteria — the Observe half](status/P24-P27.md#p24p27-acceptance-criteria--the-observe-half) |  |
 
-## Commands that prove it```powershell./tests/Test-All.ps1                                    # 17 checks, offline
-./tests/Test-All.ps1 -IncludeAzure                      # plus the seven that call Azure
+## Commands that prove it
+
+```powershell
+./tests/Test-All.ps1                                    # 101 default checks, offline
+./tests/Test-All.ps1 -IncludeAzure                      # plus 7 checks that call Azure
 ./scripts/Get-ClaudeTelemetry.ps1                       # where this gateway logs, and whether metrics are on
 ./scripts/Get-ClaudeAnalytics.ps1 -Days 30              # the usage report
 ./scripts/Get-ClaudeBudget.ps1                          # effective limits and spend to date
@@ -90,40 +93,5 @@ node .ironclad/gate.mjs --stage packet                  # definition of done
 
 ## Next
 
-In flight on 2026-09-25, each on its own branch and merged when its gate passes:
-
-- **P52 AUM (Azure Usage Management).** The terminal console renamed, redesigned as a
-  dashboard, and independent of Turnstile (the gateway directly as a first-class backend, and the
-  AUM service), with live redacted screens; then the end-to-end journeys driven from AUM on each
-  backend: groups, unit and team, budgets, modes, and enforcement proven with real requests.
-- **P55's journey.** AUM driving the AUM service on its dedicated test gateway, and the
-  service's manager-only journey.
-
-Merged on 2026-09-25: P54, the regional enterprise network edge ([above](status/P54.md#p54-the-enterprise-network-2026-09-25)),
-which delivers the gateway's part of P49; P58 architecture generation; and P53 phase 2, the
-manager-only journeys (**U21**).
-
-Waiting on the owner:
-
-- **One portal sign-in**, for one batch capture of every packet's portal pictures: run
-  `node guide/auth.mjs` with `AZURE_TENANT` set, then the lead runs all `guide/captures/*.json`
-  specs in one window with the original profile. P54's 24 edge pictures also need the owner to
-  approve a short-lived redeployment of the evaluation edge, because it was removed.
-- **Cost decisions on running test resources**: the Premium v2 test gateway (about $2,800 a month
-  at list price), the dedicated AUM test gateway (Basic v2, about $150 a month), and the chargeback
-  reports deployment ($29.70 a month standing).
-
-Waiting on a tenant administrator: **U17** (Graph `GroupMember.Read.All`, so the apply job can
-refresh membership itself) and **U19** (consent for Turnstile's web sign-in button). Neither
-blocks use today: an admin's own delegated refresh and the consent-free Azure CLI sign-in work.
-
-Planned: P47's endpoints in Turnstile, so AUM is complete on that backend too; P48, budgets and
-overrides in the projection with one queue-driven writer; P14, the plugin marketplace, whose
-acceptance U6 rewrote to immutable approved content rather than signing; and P19's installer
-default (`cos-default`, `cos-upgrade`).
-
-Fourteen unknowns are open: U2, U3, U8, U9, U10, U11, U13, U16, U17, U18, U19, U20, U21 and U22.
-
-Outside the packet queue: an earlier audit found seven principals holding `Cognitive Services
-User` directly on the Foundry account, which bypasses every budget here. Re-run the audit in
-`SETUP.md` section 4.2.
+The active packet is named in the line above. The current proposed and open packet queue is in the
+[ROADMAP packet table](ROADMAP.md#packets), including P86 as proposed.

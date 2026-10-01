@@ -365,6 +365,67 @@ function Get-WorstCaseCrlfByteCount([string]$Path) {
                 }
             }
 
+function Get-PacketStatusIndexLinkFailures([string]$Repo) {
+    foreach ($rel in @(Get-TrackedFiles $Repo)) {
+        if ($rel -notmatch '\.md$') { continue }
+        $p = Join-Path $Repo $rel
+        if (-not (Test-Path -LiteralPath $p -PathType Leaf)) { continue }
+        $relative = $p.Substring($Repo.TrimEnd('\', '/').Length + 1)
+        $lines = @(Get-MarkdownLines ([IO.File]::ReadAllText($p)))
+        foreach ($line in $lines) {
+            $lineText = $line.Text -replace '(`+)(.*?)\1', ''
+            foreach ($m in [regex]::Matches($lineText, '(?<!\\)\[(?<label>[^\]]*(?:\bP\d+[A-Za-z-]*\b[^\]]*\bSTATUS\b|\bSTATUS\b[^\]]*\bP\d+[A-Za-z-]*\b)[^\]]*)\]\(\s*(?:<(?<angle>[^>]+)>|(?<bare>(?:[^()\s\\]|\\.|(?<open>\()|(?<-open>\)))+)(?(open)(?!)))(?:\s+["''][^"'']*["''])?\s*\)')) {
+            $target = if ($m.Groups['angle'].Success) { $m.Groups['angle'].Value } else { $m.Groups['bare'].Value }
+            $target = $target -replace '\\([() ])', '$1'
+            if ($target -match '^(?:[a-z][a-z0-9+.-]*:|//)') { continue }
+            $path = [uri]::UnescapeDataString((($target -split '#', 2)[0] -split '\?', 2)[0])
+            if (-not $path) { continue }
+            if ($path.StartsWith('/')) { $resolved = Join-Path $Repo $path.TrimStart('/') }
+            else { $resolved = Join-Path (Split-Path $p -Parent) $path }
+            $resolved = [IO.Path]::GetFullPath($resolved)
+            $relResolved = $resolved.Substring($Repo.TrimEnd('\', '/').Length + 1) -replace '\\', '/'
+            if ($relResolved -eq 'docs/STATUS.md') {
+                New-ReferenceFailure $relative $line.Number 'packet-status-index' $target
+            }
+            elseif ($relResolved -notmatch '^docs/status/[^/]+\.md$') {
+                New-ReferenceFailure $relative $line.Number 'packet-status-target' $target
+            }
+            }
+        }
+    }
+}
+
+function Get-StatusFenceFailures([string]$Repo) {
+    $statusFiles = @()
+    $statusPath = Join-Path $Repo 'docs\STATUS.md'
+    if (Test-Path -LiteralPath $statusPath -PathType Leaf) { $statusFiles += Get-Item -LiteralPath $statusPath }
+    $archive = Join-Path $Repo 'docs\status'
+    if (Test-Path -LiteralPath $archive -PathType Container) {
+        $statusFiles += @(Get-ChildItem -LiteralPath $archive -Filter '*.md' -File)
+    }
+    foreach ($file in $statusFiles) {
+        $relative = $file.FullName.Substring($Repo.TrimEnd('\', '/').Length + 1)
+        $lines = [IO.File]::ReadAllText($file.FullName) -split '\r?\n'
+        $fence = ''
+        $start = 0
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            $line = $lines[$i] -replace '^(?:[ ]{0,3}>[ ]?)+', ''
+            if ($line -match '^[ ]{0,3}(`{3,}|~{3,})(.*)$') {
+                $mark = $Matches[1]
+                if (-not $fence) {
+                    $fence = $mark.Substring(0, 1)
+                    $start = $i + 1
+                }
+                elseif ($mark.StartsWith($fence) -and $mark.Length -ge 3 -and -not $Matches[2].Trim()) {
+                    $fence = ''
+                    $start = 0
+                }
+            }
+        }
+        if ($fence) { New-ReferenceFailure $relative $start 'status-fence' 'unclosed fenced code block' }
+    }
+}
+
 Write-Host 'Documentation references - files, GitHub anchors, scripts and parameters' -ForegroundColor Cyan
 $guides = @(Get-GuideFiles $Root)
 Assert 'user-facing guides were found' ($guides.Count -gt 0)
@@ -391,6 +452,16 @@ foreach ($b in $statusRelativeFailures) {
     Write-Host ("  [FAIL] {0}:{1} [{2}] {3}" -f $b.File, $b.Line, $b.Kind, $b.Detail) -ForegroundColor Red
 }
 Assert 'every relative link inside STATUS and docs/status resolves' ($statusRelativeFailures.Count -eq 0) "$($statusRelativeFailures.Count) broken status link(s)"
+$packetStatusFailures = @(Get-PacketStatusIndexLinkFailures $Root)
+foreach ($b in $packetStatusFailures) {
+    Write-Host ("  [FAIL] {0}:{1} [{2}] {3}" -f $b.File, $b.Line, $b.Kind, $b.Detail) -ForegroundColor Red
+}
+Assert 'packet STATUS links target docs/status packet files, not the STATUS index' ($packetStatusFailures.Count -eq 0) "$($packetStatusFailures.Count) packet STATUS link(s) target the index"
+$statusFenceFailures = @(Get-StatusFenceFailures $Root)
+foreach ($b in $statusFenceFailures) {
+    Write-Host ("  [FAIL] {0}:{1} [{2}] {3}" -f $b.File, $b.Line, $b.Kind, $b.Detail) -ForegroundColor Red
+}
+Assert 'fenced code blocks are balanced in STATUS and docs/status' ($statusFenceFailures.Count -eq 0) "$($statusFenceFailures.Count) unbalanced fence(s)"
 
 $readme = Get-Content (Join-Path $Root 'README.md') -Raw
 $mdmPath = Join-Path $Root 'docs\MDM.md'
@@ -559,6 +630,8 @@ try {
     Assert 'status guard fixture starts green: sizes' (@(Get-StatusSizeFailures $scratch).Count -eq 0) ((Get-StatusSizeFailures $scratch | Out-String))
     Assert 'status guard fixture starts green: tracked anchors' (@(Get-StatusLinkFailures $scratch).Count -eq 0) ((Get-StatusLinkFailures $scratch | Out-String))
     Assert 'status guard fixture starts green: status relative links' (@(Get-StatusLinkFailures $scratch -OnlyStatusPages).Count -eq 0) ((Get-StatusLinkFailures $scratch -OnlyStatusPages | Out-String))
+    Assert 'status guard fixture starts green: packet STATUS links' (@(Get-PacketStatusIndexLinkFailures $scratch).Count -eq 0) ((Get-PacketStatusIndexLinkFailures $scratch | Out-String))
+    Assert 'status guard fixture starts green: fenced code blocks' (@(Get-StatusFenceFailures $scratch).Count -eq 0) ((Get-StatusFenceFailures $scratch | Out-String))
 
     Write-Fixture (Join-Path $scratch 'docs\STATUS.md') ('# Status' + "`r`n" + ('x' * 70000))
     Assert 'detected: STATUS above 64 KiB' (@(Get-StatusSizeFailures $scratch | Where-Object Kind -eq 'status-64k').Count -gt 0)
@@ -601,6 +674,46 @@ try {
 [root](../../README.md)
 '@
     Assert 'restored: status relative link passes' (@(Get-StatusLinkFailures $scratch -OnlyStatusPages).Count -eq 0)
+
+    Write-Fixture (Join-Path $scratch 'README.md') '[P1 STATUS](docs/STATUS.md)'
+    Assert 'detected: packet STATUS link targets the index' (@(Get-PacketStatusIndexLinkFailures $scratch | Where-Object Kind -eq 'packet-status-index').Count -gt 0)
+    Write-Fixture (Join-Path $scratch 'README.md') '[P1 STATUS](docs/status/P1.md#p1-good)'
+    Assert 'restored: packet STATUS link targets archive file' (@(Get-PacketStatusIndexLinkFailures $scratch).Count -eq 0)
+
+    Write-Fixture (Join-Path $scratch 'docs\STATUS.md') @'
+# Status
+
+```powershell
+## hidden
+'@
+    Assert 'detected: unclosed status code fence' (@(Get-StatusFenceFailures $scratch | Where-Object Kind -eq 'status-fence').Count -gt 0)
+    Write-Fixture (Join-Path $scratch 'docs\STATUS.md') @'
+# Status
+
+[P1](status/P1.md#p1-good)
+'@
+    Assert 'restored: status fenced code blocks are balanced' (@(Get-StatusFenceFailures $scratch).Count -eq 0)
+
+    Write-Fixture (Join-Path $scratch 'docs\status\P1.md') @'
+# P1 status
+
+## P1 good
+
+```markdown
+## hidden
+```
+'@
+    Write-Fixture (Join-Path $scratch 'README.md') '[hidden](docs/status/P1.md#hidden)'
+    Assert 'detected: status heading inside code fence is ignored' (@(Get-StatusLinkFailures $scratch | Where-Object Kind -eq 'status-anchor').Count -gt 0)
+    Write-Fixture (Join-Path $scratch 'docs\status\P1.md') @'
+# P1 status
+
+## P1 good
+
+[root](../../README.md)
+'@
+    Write-Fixture (Join-Path $scratch 'README.md') '[good](docs/status/P1.md#p1-good)'
+    Assert 'restored: status heading extraction still resolves real headings' (@(Get-StatusLinkFailures $scratch).Count -eq 0)
 }
 finally { if (Test-Path -LiteralPath $scratch) { Remove-Item -LiteralPath $scratch -Recurse -Force } }
 

@@ -18,7 +18,8 @@ the large status file.
 ## Decision
 
 Merged packet sections move to `docs/status/<ID>.md`, one file per packet ID, or to
-`docs/status/YYYY-MM-DD.md` when a section has no packet ID. `docs/STATUS.md` keeps only the active
+`docs/status/YYYY-MM-DD.md` when a section has no packet ID. A packet's STATUS section means
+its section in `docs/status/<ID>.md`. `docs/STATUS.md` keeps only the active
 packet line, a short index, the proof commands and next work. A future packet writes its evidence
 section in `docs/status/<ID>.md` on its branch; when it merges, `docs/STATUS.md` gets one index row
 and the active line is updated.
