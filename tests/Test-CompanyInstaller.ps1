@@ -10,7 +10,7 @@ function Check([string]$Name,[scriptblock]$Test) {
 }
 try {
     foreach($dir in 'scripts\flow\lib','onboarding\profiles\standard'){New-Item -ItemType Directory -Path (Join-Path $scratch $dir) -Force|Out-Null}
-    foreach($file in 'Install-ClaudeGateway.ps1','scripts\Show-Banner.ps1','scripts\Test-Prerequisites.ps1','scripts\ClaudeModelDeployment.ps1','scripts\ClaudeDesktopSignIn.ps1','scripts\ClaudeChoice.ps1','scripts\ClaudeGatewayRegion.ps1','scripts\AzureRetailPrice.ps1','scripts\flow\FlowContract.ps1','scripts\flow\Foundation.ps1','scripts\flow\lib\LifecycleCommon.ps1'){
+    foreach($file in 'Install-ClaudeGateway.ps1','scripts\Show-Banner.ps1','scripts\Test-Prerequisites.ps1','scripts\ClaudeModelDeployment.ps1','scripts\ClaudeDesktopSignIn.ps1','scripts\ClaudeChoice.ps1','scripts\ClaudeGatewayRegion.ps1','scripts\ClaudeInstallCheckpoint.ps1','scripts\AzureRetailPrice.ps1','scripts\flow\FlowContract.ps1','scripts\flow\Foundation.ps1','scripts\flow\lib\LifecycleCommon.ps1'){
         Copy-Item -LiteralPath (Join-Path $root $file) -Destination (Join-Path $scratch $file)
     }
     $inputs=Join-Path $root 'scripts\ClaudeGatewayAddressInput.ps1'
@@ -73,7 +73,10 @@ function az {
     if($s -like 'group show*'){return 'eastus2'}
     if($s -like 'deployment group create*'){$global:P69InstallWrites.Add('deployment');return}
     if($s -like 'deployment group show*'){return 'https://apim-contoso.azure-api.net/claude'}
-    if($s -like 'ad group show*'){return '00000000-0000-0000-0000-000000000002'}
+    if($s -like 'deployment group list*'){return '[]'}
+    if($s -like 'cognitiveservices account show*'){return '/subscriptions/00000000-0000-0000-0000-000000000001/resourceGroups/rg-contoso/providers/Microsoft.CognitiveServices/accounts/ai-contoso'}
+    if($s -like 'role assignment list*'){return '[]'}
+    if($s -like 'ad group show*'){if($s -like '*-o json*'){return (@{id='00000000-0000-0000-0000-000000000002';displayName=$args[4]}|ConvertTo-Json -Compress)};return '00000000-0000-0000-0000-000000000002'}
     $global:P69InstallUnexpected.Add($s); throw "Unexpected az call: $s"
 }
 function Invoke-WebRequest {param($Uri,$Method,$TimeoutSec,$ErrorAction,[switch]$UseBasicParsing);[pscustomobject]@{StatusCode=200}}
@@ -95,6 +98,8 @@ catch {$failure=$_.Exception.Message}
     function Invoke-Installer([hashtable]$Overrides=@{},[bool]$Decline=$false,$SavedRecord=$initial,[string]$ArchiveAnswer=''){
         [IO.File]::WriteAllText($recordPath,($SavedRecord|ConvertTo-Json -Depth 15))
         [IO.File]::WriteAllText((Join-Path $scratch 'onboarding\profiles\standard\managed-settings.json'),'{"gatewayUrl":"https://old.contoso.test/claude"}')
+        # Each call is a first run: an earlier call's install checkpoint (ADR-0046) would make it a resume.
+        $env:CLAUDE_GATEWAY_STATE_DIR=Join-Path $scratch ('install-state-'+[guid]::NewGuid().ToString('N'))
         $values=@{SubscriptionId=$sub;FoundryAccount='ai-contoso';FoundryResourceGroup='rg-contoso';ResourceGroup='rg-contoso';ExistingApimName='apim-contoso';Location='eastus2';Sku='BasicV2';AuthMode='interactive';EntitlementStore='named-value';SkipFinOpsOffer=$true;Yes=$true}
         foreach($k in $Overrides.Keys){$values[$k]=$Overrides[$k]}
         $ps=[powershell]::Create()

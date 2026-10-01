@@ -22,7 +22,15 @@ section moves to `docs/status/P91.md` under P87's ADR-0042.
       confirmed=False"; bash "the checkpoint library exists and passes bash -n", "S11 S8 --restart
       ... - Unknown option: --restart" and "S11 the checkpoint exists before the first change ... -
       checkpoint-at-group-create none".
-- [ ] GREEN, REFACTOR, COUNCIL (five seats), GATE, LOG.
+- [x] GREEN (PowerShell), 2026-10-01: `Install-ClaudeGateway.ps1` hooks with the logic in
+      `scripts/ClaudeInstallCheckpoint.ps1`; `tests/Test-InstallerCheckpoint.ps1` 53 checks, 0
+      failed. Two RED test defects are fixed: the U74 check indexed the first character of a
+      single error line (`(Get-P91ErrLines $lag)[0]`), and the S2 first-run check now joins the
+      stub's error record, which PowerShell's error view wraps at the console width. Fixtures follow
+      the new file and calls: the copy lists of `Test-CompanyInstaller.ps1` and
+      `Test-CompanyAddressNegative.ps1`, the first one's az stub and one state directory per call,
+      and `CLAUDE_GATEWAY_STATE_DIR` per check in `Test-All.ps1`.
+- [ ] GREEN (bash), REFACTOR, COUNCIL (five seats), GATE, LOG.
 
 Acceptance criteria, for both installers unless one is named:
 

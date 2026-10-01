@@ -132,6 +132,8 @@ function Start-Check($check) {
     $startInfo.StandardOutputEncoding = [Text.Encoding]::UTF8
     $startInfo.StandardErrorEncoding = [Text.Encoding]::UTF8
     foreach ($key in 'TEMP', 'TMP', 'TMPDIR') { $startInfo.Environment[$key] = $scratch }
+    # An installer run past its summary keeps its checkpoint here, not in the user's state directory (ADR-0046).
+    $startInfo.Environment['CLAUDE_GATEWAY_STATE_DIR'] = Join-Path $scratch 'claude-gateway-state'
     foreach ($arg in @('-NoProfile', '-NonInteractive', '-File', $path)) { $startInfo.ArgumentList.Add($arg) }
     foreach ($key in $check.Params.Keys) {
         $value = $check.Params[$key]

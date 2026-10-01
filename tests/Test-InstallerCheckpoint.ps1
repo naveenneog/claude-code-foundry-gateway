@@ -201,8 +201,8 @@ try {
     & $truncate $sc.truncated
     & $truncate $sc.restart
     Edit-Checkpoint $sc.schema { param($cp) $cp.schemaVersion = 99 }
-    Edit-Checkpoint $sc.unknownStep { param($cp) @($cp.steps)[0].id = 'gateway-deploy' }
-    Edit-Checkpoint $sc.unsafe { param($cp) $cp.answers.PublisherEmail = '@C:\p91-secret.txt' }
+    Edit-Checkpoint $sc.unknownStep { param($cp) $first = @($cp.steps | Where-Object { $_ })[0]; if ($first) { $first.id = 'gateway-deploy' } }
+    Edit-Checkpoint $sc.unsafe { param($cp) if ($cp.answers) { $cp.answers | Add-Member -NotePropertyName PublisherEmail -NotePropertyValue '@C:\p91-secret.txt' -Force } }
     Write-Lock $sc.liveLock @{ pid = $sleeper.Id; processStart = (& $startOf $sleeper); host = $hostName; installer = 'pwsh'; runId = ('a' * 32); acquiredUtc = '2026-10-01T00:00:00Z' }
     Write-Lock $sc.exitedLock @{ pid = $exited.Id; processStart = (& $startOf $exited); host = $hostName; installer = 'pwsh'; runId = ('b' * 32); acquiredUtc = '2026-10-01T00:00:00Z' }
     Write-Lock $sc.reusedPid @{ pid = $sleeper.Id; processStart = '2001-01-01T00:00:00Z'; host = $hostName; installer = 'pwsh'; runId = ('c' * 32); acquiredUtc = '2026-10-01T00:00:00Z' }
@@ -271,7 +271,10 @@ try {
     $firstName = [string](@(Get-P91Calls $i1 'deployment group create*')[0] -replace '^.*--name (\S+).*$', '$1')
     $secondCreate = @(Get-P91Calls $i2 'deployment group create*')
     $secondName = if ($secondCreate.Count) { [string]($secondCreate[0] -replace '^.*--name (\S+).*$', '$1') } else { '' }
-    Assert 'S2 after the identity error of run 1, the rerun shows the recorded deployment''s error' ($i1.ExitCode -ne 0 -and ($i1.Out + $i1.Err) -match "property 'identity' doesn't exist" -and
+    # The stub's az error is a PowerShell error record, which the error view wraps at the console
+    # width; az itself writes the text unwrapped.
+    $i1Text = ($i1.Out + $i1.Err) -replace '\s*\n\s*(\|\s*)?', ' '
+    Assert 'S2 after the identity error of run 1, the rerun shows the recorded deployment''s error' ($i1.ExitCode -ne 0 -and $i1Text -match "property 'identity' doesn't exist" -and
         $i2.Out -match "(?m)^.*$([regex]::Escape($firstName)).*Failed.*property 'identity' doesn't exist") (Get-P91Tail $i2)
     Assert 'S2 the read-backs run before a new deployment whose name differs and was recorded before it was created' ($i2.ExitCode -eq 0 -and $secondName -and $secondName -ne $firstName -and
         (Get-Order $i2 'apim nv show*allow-standard*' 'deployment group create*') -and (Get-Order $i2 'REST Get https://management.azure.com/*' 'deployment group create*') -and
@@ -311,7 +314,7 @@ try {
         (Get-P91Calls $m3 'ad group create --display-name claude-code-premium*').Count -eq 1 -and -not (Get-P91Calls $m3 'ad group create --display-name claude-code-standard*').Count) (Get-P91Tail $m3)
     $lag = Get-P91Result $r2 $runGraphLag
     Assert 'U74 a group this run created that Graph does not return refuses on one line, with the Graph delay and the resume command' (
-        (Test-Refusal $lag 'Microsoft Graph') -and (Get-P91ErrLines $lag)[0] -match 'without creating a second group' -and (Get-P91ErrLines $lag)[0] -match 'Install-ClaudeGateway\.ps1' -and
+        (Test-Refusal $lag 'Microsoft Graph') -and @(Get-P91ErrLines $lag)[0] -match 'without creating a second group' -and @(Get-P91ErrLines $lag)[0] -match 'Install-ClaudeGateway\.ps1' -and
         -not (Get-P91Calls $lag 'ad group create*').Count) (Get-P91Tail $lag)
     $e1 = Get-P91Result $r2 $runReadDeployment; $e2 = Get-P91Result $r2 $runReadGroup; $e3 = Get-P91Result $r2 $runReadRg
     Assert 'S7 a deployment read error refuses and creates nothing' ((Test-Refusal $e1 'deployment') -and -not (Get-P91Calls $e1 'deployment group create*').Count) (Get-P91Tail $e1)
