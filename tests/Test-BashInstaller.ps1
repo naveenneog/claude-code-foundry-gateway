@@ -169,6 +169,7 @@ case "$*" in
   "group show "*) echo "ERROR: (ResourceGroupNotFound) Resource group could not be found." >&2; exit 3 ;;
   "apim show "*) echo "ERROR: (ResourceNotFound) The Resource was not found." >&2; exit 3 ;;
   "deployment group list "*) echo '[]' ;;
+  "ad group list --display-name "*) printf '[{"id":"00000000-0000-0000-0000-0000000000a5","displayName":"%s"}]\n' "$5" ;;
   "ad group show --group "*"-o json") printf '{"id":"00000000-0000-0000-0000-0000000000a5","displayName":"%s"}\n' "$5" ;;
   "ad group show --group "*) exit 0 ;;
   *) echo "stub az: unexpected call: $*" >&2; printf 'UNEXPECTED %s\n' "$*" >> "$P75_LOG/az.log"; exit 2 ;;

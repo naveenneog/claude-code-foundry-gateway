@@ -76,6 +76,7 @@ function az {
     if($s -like 'deployment group list*'){return '[]'}
     if($s -like 'cognitiveservices account show*'){return '/subscriptions/00000000-0000-0000-0000-000000000001/resourceGroups/rg-contoso/providers/Microsoft.CognitiveServices/accounts/ai-contoso'}
     if($s -like 'role assignment list*'){return '[]'}
+    if($s -like 'ad group list*'){return (ConvertTo-Json -InputObject @(@{id='00000000-0000-0000-0000-000000000002';displayName=$args[4]}) -Compress)}
     if($s -like 'ad group show*'){if($s -like '*-o json*'){return (@{id='00000000-0000-0000-0000-000000000002';displayName=$args[4]}|ConvertTo-Json -Compress)};return '00000000-0000-0000-0000-000000000002'}
     $global:P69InstallUnexpected.Add($s); throw "Unexpected az call: $s"
 }

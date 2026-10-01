@@ -31,7 +31,8 @@ function Write-ClaudeInstallCloudShellLine([int]$Seconds = [int]::MaxValue) {
     if (-not $c -or -not $c.Location.CloudShell -or $c.CloudShellNoted -or $Seconds -le 60) { return }
     $c.CloudShellNoted = $true
     $resume = if ($c.Location.Persistent) { Format-ClaudeInstallResume } else { Format-ClaudeInstallResume -WithAnswers }
-    Write-Host "    Cloud Shell ends a session after 20 minutes without interactive activity; the install checkpoint and the ARM deployment outlive the session. Resume: $resume" -ForegroundColor Yellow
+    $outlive = if ($c.Location.Persistent) { 'the install checkpoint and the ARM deployment outlive the session' } else { 'the ARM deployment outlives the session and this install checkpoint does not' }
+    Write-Host "    Cloud Shell ends a session after 20 minutes without interactive activity; $outlive. Resume: $resume" -ForegroundColor Yellow
 }
 
 function Get-ClaudeInstallDeploymentState([string]$ResourceGroup, [string]$Name) {
@@ -166,6 +167,20 @@ function Complete-ClaudeInstallGatewayStep {
     Complete-ClaudeInstallStep 'gateway-deployment' -Receipt $receipt
 }
 
+function Find-ClaudeInstallGroupByName([string]$Name) {
+    # A group by display name. az ad group list --display-name matches a prefix (its --help), so only
+    # a name equal to it, ignoring case, is the group. present: one such group; absent: none, or only
+    # longer names; inconclusive: a failed read, an unreadable list, or more than one such group.
+    $r = Invoke-ClaudeInstallAzRead @('ad', 'group', 'list', '--display-name', $Name, '-o', 'json')
+    $result = { param([string]$Verdict, [string]$Id, [string]$Detail) [pscustomobject]@{ Verdict = $Verdict; Id = $Id; Detail = $Detail } }
+    if ($r.Verdict -ne 'present') { return (& $result 'inconclusive' '' $r.Detail) }
+    try { $parsed = $r.Output | ConvertFrom-Json -ErrorAction Stop } catch { return (& $result 'inconclusive' '' 'the group list is not JSON') }
+    $exact = @(foreach ($item in $parsed) { if ($item -and [string]$item.displayName -eq $Name -and $item.id) { [string]$item.id } })
+    if ($exact.Count -gt 1) { return (& $result 'inconclusive' '' "$($exact.Count) groups have that name: $($exact -join ', ')") }
+    if ($exact.Count -eq 1) { return (& $result 'present' $exact[0] '') }
+    return (& $result 'absent' '' '')
+}
+
 function Invoke-ClaudeInstallGroups {
     # The tier groups, with receipts: a resume reads each by id and never creates a second group
     # with the same name (ADR-0046 decision 11). A name finds a group only by exact display name.
@@ -189,12 +204,11 @@ function Invoke-ClaudeInstallGroups {
             }
             Write-Host "    $($g.Name) ($($rec.id)) is gone; looking it up by name." -ForegroundColor Yellow
         }
-        $found = Invoke-ClaudeInstallAzRead @('ad', 'group', 'show', '--group', $g.Name, '-o', 'json')
-        $obj = $null
-        if ($found.Verdict -eq 'present') { try { $obj = $found.Output | ConvertFrom-Json -ErrorAction Stop } catch { $obj = $null } }
-        if ($obj -and [string]$obj.displayName -ceq $g.Name -and $obj.id) {
+        $found = Find-ClaudeInstallGroupByName $g.Name
+        if ($found.Verdict -eq 'inconclusive') { Stop-ClaudeInstall "Entra group '$($g.Name)' could not be looked up by name ($($found.Detail)), so it is neither reused nor created. Nothing was changed by this step. Resume: $resume" }
+        if ($found.Verdict -eq 'present') {
             Write-Host "    [OK]   $($g.Name) exists" -ForegroundColor Green
-            $made.Add([pscustomobject][ordered]@{ role = $g.Role; displayName = $g.Name; id = [string]$obj.id; origin = 'pre-existing'; createdUtc = $null })
+            $made.Add([pscustomobject][ordered]@{ role = $g.Role; displayName = $g.Name; id = $found.Id; origin = 'pre-existing'; createdUtc = $null })
             continue
         }
         $created = Invoke-ClaudeInstallAzRead @('ad', 'group', 'create', '--display-name', $g.Name, '--mail-nickname', $g.Name, '-o', 'json')

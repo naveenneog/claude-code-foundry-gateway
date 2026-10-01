@@ -29,12 +29,12 @@ StandardGroup STANDARD_GROUP --standard-group s
 PremiumGroup PREMIUM_GROUP --premium-group s'
 CKPT_US=$'\x1f'
 
-CKPT_ROOT=""; CKPT_DIR=""; CKPT_FILE=""; CKPT_LOCK=""; CKPT_PERSISTENT=1; CKPT_WARNING=""; CKPT_CLOUDSHELL=""
+CKPT_ROOT=""; CKPT_DIR=""; CKPT_FILE=""; CKPT_LOCK=""; CKPT_PERSISTENT=1; CKPT_WARNING=""; CKPT_CLOUDSHELL=""; CKPT_CLOUDDRIVE=0
 CKPT_RESUMING=0; CKPT_JSON=""; CKPT_RUN_ID=""; CKPT_LOCKED=0; CKPT_HEARTBEAT=""; CKPT_REFUSED=0; CKPT_WHAT_IF=0
 CKPT_FINGERPRINT=""; CKPT_COMMIT=""; CKPT_TEMPLATES=""; CKPT_NOTED=0; CKPT_SUB_ID=""; CKPT_ANSWER_COUNT=0; CKPT_WRITE_WARNED=0
 CKPT_GW_RUN=1; CKPT_GW_URL=""
-AZ_VERDICT=""; AZ_OUT=""; AZ_ERR=""; AZ_DETAIL=""; V_VERDICT=""; V_DETAIL=""; LOCK_STATE=""; LOCK_DETAIL=""
-DS_VERDICT=""; DS_STATE=""; DS_URL=""; DS_ERROR=""; DS_DETAIL=""
+AZ_VERDICT=""; AZ_OUT=""; AZ_ERR=""; AZ_DETAIL=""; V_VERDICT=""; V_DETAIL=""; LOCK_STATE=""; LOCK_DETAIL=""; LOCK_HOLDER=""; LOCK_ENDS=""
+DS_VERDICT=""; DS_STATE=""; DS_URL=""; DS_ERROR=""; DS_DETAIL=""; PERM_LINK=0; PERM_MINE=0; PERM_MODE=""; PERM_OWNER=""; PERM_WHY=""
 
 ckpt_title_() {
   case "$1" in
@@ -110,13 +110,49 @@ ckpt_location_() {
   if [ -n "${CLAUDE_GATEWAY_STATE_DIR:-}" ]; then CKPT_DIR="$CLAUDE_GATEWAY_STATE_DIR"
   elif [ -n "$CKPT_CLOUDSHELL" ]; then
     drive="$HOME/clouddrive"
-    if ckpt_writable_ "$drive"; then CKPT_DIR="$drive/.claude-gateway"
+    if ckpt_writable_ "$drive"; then CKPT_DIR="$drive/.claude-gateway"; CKPT_CLOUDDRIVE=1
     else
       CKPT_DIR="$HOME/.claude-gateway"; CKPT_PERSISTENT=0
       CKPT_WARNING="Cloud Shell without clouddrive ($CKPT_CLOUDSHELL is set and $drive is not a writable directory): the install checkpoint is kept in $CKPT_DIR, which does not persist when the session ends."
     fi
   else CKPT_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/claude-gateway"; fi
   CKPT_FILE="$CKPT_DIR/$key.json"; CKPT_LOCK="$CKPT_DIR/$key.lock"
+}
+
+# The probe of the store check: whether the path is a symbolic link, whether the current user owns it
+# (test -O), and its owner and mode as ls -ldL prints them. Tests replace it, because Git Bash's noacl
+# mount reports every file as the current user's with fixed modes.
+ckpt_perm_probe_() {
+  local line
+  PERM_LINK=0; PERM_MINE=0
+  [ -L "$1" ] && PERM_LINK=1
+  [ -O "$1" ] && PERM_MINE=1
+  line="$(LC_ALL=C ls -ldL "$1" 2>/dev/null | head -n 1 | tr -d '\r')"
+  PERM_MODE="$(printf '%s' "$line" | cut -c1-10)"
+  PERM_OWNER="$(printf '%s' "$line" | awk '{ print $3 }')"
+}
+# path kind: PERM_WHY says why another account could have written the path, or is empty. clouddrive is
+# exempt: its mount sets the modes, and the Cloud Shell storage account's access control applies (U66).
+ckpt_perm_why_() {
+  PERM_WHY=""
+  [ "$CKPT_CLOUDDRIVE" = "1" ] && return 0
+  { [ -e "$1" ] || [ -L "$1" ]; } || return 0
+  ckpt_perm_probe_ "$1"
+  if [ "$2" = "file" ] && [ "$PERM_LINK" = "1" ]; then PERM_WHY="is a symbolic link"
+  elif [ "$PERM_MINE" != "1" ]; then PERM_WHY="is owned by ${PERM_OWNER:-another user}, not by the current user"
+  else
+    case "$PERM_MODE" in ?????w*|????????w*) PERM_WHY="has mode $PERM_MODE (owner $PERM_OWNER), so its group or other users can write it" ;; esac
+  fi
+  return 0
+}
+# path kind [tail]: refuses a store path another account could have written, before the installer
+# reads, parses, locks, renames or replaces anything (ADR-0046 decision 2).
+ckpt_perm_check_() {
+  local tail="${3:-}"
+  ckpt_perm_why_ "$1" "$2"
+  [ -n "$PERM_WHY" ] || return 0
+  [ -n "$tail" ] || tail="Nothing was read or changed. Resume: $(ckpt_resume_cmd_)"
+  ckpt_refuse_ "the install checkpoint $2 $1 $PERM_WHY, so it is not trusted; a state directory the installer creates is owner-only. $tail"
 }
 
 # Each file hashed with carriage returns removed, so a Windows and a Linux checkout of one commit agree.
@@ -175,6 +211,32 @@ def problem($n; $v):
   elif $n == "Sku" and (["BasicV2", "StandardV2", "PremiumV2"] | index([$v])) == null then "is not one of BasicV2, StandardV2, PremiumV2"
   elif $n == "SubscriptionId" and ($v | guid | not) then "is not a subscription id"
   else empty end;
+def text: type == "string" and ((explode | map(select(. < 32)) | length) == 0) and (startswith("@") | not);
+def shaped($re): type == "string" and test($re) and text;
+def origin: . == null or . == "created" or . == "pre-existing";
+def nonempty: . != null and . != "";
+# A receipt value reaches az as an argument on a resume, so a value of another shape is a corrupt checkpoint.
+def rproblem($id):
+  if . == null then empty
+  elif type != "object" then "is not an object"
+  elif $id == "resource-group" then
+    (if (.name | shaped("^[A-Za-z0-9._()-]{1,90}$") | not) then "names the resource group \(.name | tojson)"
+     elif (.location | nonempty) and (.location | shaped("^[a-z0-9]+$") | not) then "names the location \(.location | tojson)"
+     elif (.origin | origin | not) then "has the origin \(.origin | tojson)"
+     else empty end)
+  elif $id == "gateway-deployment" then
+    ([(.deployments // [])[] | select(. != null) | select(.name | shaped("^claude-(gw|gateway)-[A-Za-z0-9-]+$") | not) | "names the deployment \(.name | tojson)"] | first)
+    // (if (.apimName | nonempty) and (.apimName | shaped("^[A-Za-z][A-Za-z0-9-]{0,49}$") | not) then "names the gateway \(.apimName | tojson)" else empty end)
+    // (if (.gatewayUrl | nonempty) and (.gatewayUrl | shaped("^https://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._~/-]*)?$") | not) then "holds the gateway URL \(.gatewayUrl | tojson)" else empty end)
+    // (if (.origin | origin | not) then "has the origin \(.origin | tojson)" else empty end)
+  elif $id == "entra-groups" then
+    ([(.groups // [])[] | select(. != null)
+      | if (.id | guid | not) or (.id | text | not) then "holds the group id \(.id | tojson)"
+        elif ((.role == "standard" or .role == "premium") and (.origin | origin) and (.displayName | text)) | not then "holds the group \(.displayName | tojson) with role \(.role | tojson) and origin \(.origin | tojson)"
+        else empty end] | first) // empty
+  elif $id == "onboarding-package" then
+    (if .path != null and ((.path | type) != "string" or ((.path | explode | map(select(. < 32)) | length) > 0)) then "holds the path \(.path | tojson)" else empty end)
+  else empty end;
 if type != "object" then "is not valid JSON (no object)"
 elif .schema != "claude-gateway-install-checkpoint" then "has schema \u0027\(.schema)\u0027, not claude-gateway-install-checkpoint"
 elif (.schemaVersion | tostring) != "1" then "has schemaVersion \(.schemaVersion), and this installer reads schemaVersion 1"
@@ -190,6 +252,7 @@ else
         | if (($ids | split(" ")) | index([$id])) == null then "holds an unknown step id \u0027\($id)\u0027"
           elif $s != "started" and $s != "completed" and $s != "incomplete" then "holds the step \($id) in state \u0027\($s)\u0027"
           else empty end] | first)
+  // ([(.steps // [])[] | select(. != null) | .id as $id | (.receipt | rproblem($id)) as $p | "holds a receipt of step \($id) that \($p)"] | first)
   // empty
 end'
 
@@ -225,8 +288,11 @@ ckpt_open_() {
     if [ -f "$CKPT_FILE" ]; then note_ "An install checkpoint exists at $CKPT_FILE; --what-if previews a first run and changes nothing."; fi
     return 0
   fi
+  ckpt_perm_check_ "$CKPT_DIR" directory
+  ckpt_perm_check_ "$CKPT_FILE" file
+  ckpt_perm_check_ "$CKPT_LOCK" file
   ckpt_lock_state_ "$CKPT_LOCK"
-  [ "$LOCK_STATE" = "held" ] && ckpt_refuse_ "another install run holds the lock $CKPT_LOCK ($LOCK_DETAIL). Nothing was changed."
+  [ "$LOCK_STATE" = "held" ] && ckpt_lock_held_
   if [ "$restart" = "1" ] && [ -f "$CKPT_FILE" ]; then
     aside="${CKPT_FILE%.json}.discarded-$(date -u '+%Y%m%dT%H%M%SZ').json"
     mv -f "$CKPT_FILE" "$aside"
@@ -335,8 +401,14 @@ ckpt_save_() {
   sub="$(ckpt_subscription_id_)"; [ -n "$sub" ] || sub="$SUBSCRIPTION"
   answers="$(ckpt_answers_json_ "$sub")"
   now="$(ckpt_now_)"
-  if ! mkdir -p "$CKPT_DIR" 2>/dev/null; then warn_ "the install checkpoint directory $CKPT_DIR could not be created; this run keeps no checkpoint"; return 0; fi
+  # A state directory that cannot be created leaves the run without a checkpoint (decision 1).
+  if ! mkdir -p "$CKPT_DIR" 2>/dev/null; then
+    warn_ "the install checkpoint directory $CKPT_DIR could not be created; this run keeps no checkpoint"
+    printf '    Resume: %s\n' "$(ckpt_resume_cmd_ with-answers)"
+    return 0
+  fi
   chmod 700 "$CKPT_DIR" 2>/dev/null
+  ckpt_perm_check_ "$CKPT_DIR" directory
   if [ "$CKPT_RESUMING" = "1" ]; then
     CKPT_JSON="$(printf '%s' "$CKPT_JSON" | ckpt_jq_ -c --argjson a "$answers" --arg f "$CKPT_FINGERPRINT" --arg c "$CKPT_COMMIT" '.answers = $a | .installerFingerprint = $f | .installerCommit = $c')"
   else
@@ -359,15 +431,22 @@ ckpt_write_() {
   [ "$CKPT_LOCKED" = "1" ] && [ -n "$CKPT_JSON" ] || return 0
   local tmp="$CKPT_FILE.tmp-$$-$RANDOM"
   CKPT_JSON="$(printf '%s' "$CKPT_JSON" | ckpt_jq_ -c --arg now "$(ckpt_now_)" '.updatedUtc = $now')"
-  if ( umask 077; printf '%s' "$CKPT_JSON" | jq . | tr -d '\r' > "$tmp" ) 2>/dev/null && chmod 600 "$tmp" 2>/dev/null && mv -f "$tmp" "$CKPT_FILE" 2>/dev/null; then return 0; fi
+  if ( umask 077; printf '%s' "$CKPT_JSON" | jq . | tr -d '\r' > "$tmp" ) 2>/dev/null && chmod 600 "$tmp" 2>/dev/null; then
+    ckpt_perm_why_ "$tmp" file
+    if [ -n "$PERM_WHY" ]; then
+      rm -f "$tmp"
+      ckpt_refuse_ "the install checkpoint file $tmp $PERM_WHY, so it is not trusted. The checkpoint was not replaced, and the run stops here. Resume: $(ckpt_resume_cmd_)"
+    fi
+    mv -f "$tmp" "$CKPT_FILE" 2>/dev/null && return 0
+  fi
   rm -f "$tmp"
   if [ "$CKPT_WRITE_WARNED" != "1" ]; then CKPT_WRITE_WARNED=1; warn_ "the install checkpoint could not be written to $CKPT_FILE"; fi
 }
 
-# free, held or stale, and who holds it (ADR-0046 decision 3).
+# free, held or stale, who holds it, and when a later run may take it over (ADR-0046 decision 3).
 ckpt_lock_state_() {
-  local path="$1" fields pid host start recent=1 current
-  LOCK_STATE=free; LOCK_DETAIL=""
+  local path="$1" fields pid host start recent=1 current heartbeat="a later run takes it over after 5 minutes without a heartbeat"
+  LOCK_STATE=free; LOCK_DETAIL=""; LOCK_HOLDER=""; LOCK_ENDS=""
   [ -f "$path" ] || return 0
   [ -n "$(find "$path" -mmin +5 2>/dev/null)" ] && recent=0
   fields="$(ckpt_jq_ -r '[(.pid // "" | tostring), (.host // ""), (.processStart // "")] | join("\u001f")' "$path" 2>/dev/null)"
@@ -376,18 +455,23 @@ $fields
 EOF
   if [ -z "$pid" ] || [ -z "$host" ]; then
     if [ "$recent" = "1" ]; then LOCK_STATE=held; else LOCK_STATE=stale; fi
-    LOCK_DETAIL="an unreadable lock"; return 0
+    LOCK_DETAIL="an unreadable lock"; LOCK_HOLDER="its lock is unreadable"; LOCK_ENDS="$heartbeat"; return 0
   fi
-  LOCK_DETAIL="host $host, process $pid started $start"
+  LOCK_DETAIL="host $host, PID $pid, started $start"; LOCK_HOLDER="$LOCK_DETAIL"
   if [ "$host" != "$(ckpt_host_)" ]; then
+    LOCK_ENDS="$heartbeat"
     if [ "$recent" = "1" ]; then LOCK_STATE=held; LOCK_DETAIL="$LOCK_DETAIL, last heartbeat under 5 minutes ago"
     else LOCK_STATE=stale; LOCK_DETAIL="$LOCK_DETAIL, no heartbeat for 5 minutes"; fi
+    LOCK_HOLDER="$LOCK_DETAIL"
     return 0
   fi
   current="$(ckpt_process_start_ "$pid")"
   if [ -z "$current" ] && ! kill -0 "$pid" 2>/dev/null; then LOCK_STATE=stale; LOCK_DETAIL="$LOCK_DETAIL, which has exited"; return 0; fi
   if [ -n "$current" ] && [ -n "$start" ] && [ "$current" != "$start" ]; then LOCK_STATE=stale; LOCK_DETAIL="$LOCK_DETAIL; that id now names a process started $current"; return 0; fi
-  LOCK_STATE=held
+  LOCK_STATE=held; LOCK_ENDS="a later run takes it over once that process has exited"
+}
+ckpt_lock_held_() {
+  ckpt_refuse_ "another install run ($LOCK_HOLDER) holds the lock $CKPT_LOCK; nothing was changed. The lock ends with that run: $LOCK_ENDS. Resume: $(ckpt_resume_cmd_)"
 }
 ckpt_lock_() {
   local attempt=0 fields
@@ -403,8 +487,9 @@ ckpt_lock_() {
       return 0
     fi
     [ -f "$CKPT_LOCK" ] || ckpt_refuse_ "the lock $CKPT_LOCK could not be created. Nothing was changed."
+    ckpt_perm_check_ "$CKPT_LOCK" file
     ckpt_lock_state_ "$CKPT_LOCK"
-    [ "$LOCK_STATE" = "held" ] && ckpt_refuse_ "another install run holds the lock $CKPT_LOCK ($LOCK_DETAIL). Nothing was changed."
+    [ "$LOCK_STATE" = "held" ] && ckpt_lock_held_
     printf '    %sTaking over a stale lock: %s.%s\n' "$C_YELLOW" "$LOCK_DETAIL" "$C_OFF"
     mv -f "$CKPT_LOCK" "$CKPT_LOCK.stale-$CKPT_RUN_ID-$attempt" 2>/dev/null
     attempt=$((attempt + 1))

@@ -517,14 +517,14 @@ try {
     $pm = $r2[$runPermSeam.Dir]
     $pmLine = [string]@(Get-ErrLines $pm)[0]
     Assert 'R6 bash a state directory another user owns (probe seam) refuses at startup on one line naming the owner; nothing is read or changed' ($pm.ExitCode -eq 1 -and @(Get-ErrLines $pm).Count -eq 1 -and
-        $pmLine -match '^Refused: ' -and $pmLine -match 'p91-other-user' -and $pmLine -match 'Nothing was read or changed' -and -not (Get-Calls $pm 'account show*').Count -and
+        $pmLine -match '^Refused: ' -and $pmLine -match 'p91-other-user' -and $pmLine -match 'Nothing was read or changed' -and -not (Get-Calls $pm 'account set*').Count -and
         $hashes.permSeam -and (Get-Hash $sc.permSeam) -eq $hashes.permSeam -and -not @(Get-ChildItem -LiteralPath $sc.permSeam.State -Filter '*.lock').Count) (Get-Tail $pm)
     if (-not $script:windows) {
         $pd = $r2[$runPermDirReal.Dir]; $pf = $r2[$runPermFileReal.Dir]
         $pdLine = [string]@(Get-ErrLines $pd)[0]; $pfLine = [string]@(Get-ErrLines $pf)[0]
         Assert 'R6 bash (real modes) a 0777 state directory and a 0666 checkpoint refuse at startup naming the mode; nothing is read or changed' ($pd.ExitCode -eq 1 -and
             $pdLine -match '^Refused: .*drwxrwxrwx' -and $pdLine -match 'Nothing was read or changed' -and $pf.ExitCode -eq 1 -and $pfLine -match '^Refused: .*-rw-rw-rw-' -and
-            $hashes.permFileReal -and (Get-Hash $sc.permFileReal) -eq $hashes.permFileReal -and -not (Get-Calls $pd 'account show*').Count) ((Get-Tail $pd) + ' || ' + (Get-Tail $pf))
+            $hashes.permFileReal -and (Get-Hash $sc.permFileReal) -eq $hashes.permFileReal -and -not (Get-Calls $pd 'account set*').Count) ((Get-Tail $pd) + ' || ' + (Get-Tail $pf))
     }
     else { Write-Host '  [SKIP] R6 bash (real modes): runs on Linux and macOS (installer-unix.yml); Git Bash reports fixed modes' -ForegroundColor DarkGray }
     $all = @($r1.Values) + @($r2.Values)

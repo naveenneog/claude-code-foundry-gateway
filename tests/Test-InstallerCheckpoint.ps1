@@ -408,10 +408,10 @@ try {
         $adLine = [string]@(Get-P91ErrLines $ad)[0]; $afLine = [string]@(Get-P91ErrLines $af)[0]
         Assert 'R6 a state directory with a rule that lets Everyone write refuses at startup on one line naming the rule; nothing is read or changed' ($ad.ExitCode -eq 1 -and
             @(Get-P91ErrLines $ad).Count -eq 1 -and $adLine -match '^Refused: ' -and $adLine.Contains($sc.aclDir.State) -and $adLine -match 'S-1-1-0' -and $adLine -match 'Nothing was read or changed' -and
-            -not (Get-P91Calls $ad 'account show*').Count -and (Test-Kept $sc.aclDir $hashes.aclDir) -and -not @(Get-ChildItem -LiteralPath $sc.aclDir.State -Filter '*.lock').Count) (Get-P91Tail $ad)
+            -not (Get-P91Calls $ad 'account set*').Count -and (Test-Kept $sc.aclDir $hashes.aclDir) -and -not @(Get-ChildItem -LiteralPath $sc.aclDir.State -Filter '*.lock').Count) (Get-P91Tail $ad)
         Assert 'R6 a checkpoint with a rule that lets Users write refuses at startup on one line naming the file and the rule' ($af.ExitCode -eq 1 -and @(Get-P91ErrLines $af).Count -eq 1 -and
             $afLine -match '^Refused: ' -and $afLine -match 'install-[0-9a-f]{16}\.json' -and $afLine -match 'S-1-5-32-545' -and $afLine -match 'Nothing was read or changed' -and
-            -not (Get-P91Calls $af 'account show*').Count -and (Test-Kept $sc.aclFile $hashes.aclFile)) (Get-P91Tail $af)
+            -not (Get-P91Calls $af 'account set*').Count -and (Test-Kept $sc.aclFile $hashes.aclFile)) (Get-P91Tail $af)
     }
     foreach ($case in @(@('tamperDeployment', $runTamperDeployment, 'receipt of step gateway-deployment that names the deployment'),
             @('tamperGroup', $runTamperGroup, 'receipt of step entra-groups that holds the group id'), @('tamperRole', $runTamperRole, 'receipt of step gateway-deployment that holds the role assignment id'))) {
@@ -432,6 +432,7 @@ try {
     $library = Join-Path $script:P91Root 'scripts\ClaudeInstallCheckpoint.ps1'
     $atomicDir = Join-Path $scratch 'atomic'
     New-Item -ItemType Directory -Force -Path $atomicDir | Out-Null
+    Protect-P91Directory $atomicDir
     $kept = $false; $noTemp = $false
     if (Test-Path -LiteralPath $library) {
         . $library

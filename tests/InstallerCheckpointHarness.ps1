@@ -137,6 +137,9 @@ function New-P91Run {
     $body = if ($Command) { $Command } else { "& '$installer' $($Arguments -join ' ')" }
     $text = ". '$($script:P91StubsPath)' -World '$($Scenario.World)' -Log '$logs'; `$global:LASTEXITCODE = 0; $body; if (-not `$?) { exit 1 }; exit 0"
     $envs = [ordered]@{ P91_WORLD = $Scenario.World; P91_LOG = $logs; CLAUDE_GATEWAY_STATE_DIR = $Scenario.State; CLAUDE_GATEWAY_DEPLOY_POLL_SECONDS = '0'; CLAUDE_GATEWAY_DEPLOY_WAIT_SECONDS = '30' }
+    # Each run its own TEMP: two runs that deploy in the same second share a deployment name, and the
+    # installer names its parameter file in TEMP after it.
+    $envs['TEMP'] = $logs; $envs['TMP'] = $logs
     if ($Attended) { $envs['CLAUDE_INTERACTIVE'] = '1' }
     foreach ($k in $Environment.Keys) { $envs[$k] = $Environment[$k] }
     [pscustomobject]@{ Scenario = $Scenario; Logs = $logs; Text = $text; Env = $envs; Answers = $Answers; Attended = [bool]$Attended }

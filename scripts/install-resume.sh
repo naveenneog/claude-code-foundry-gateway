@@ -192,16 +192,23 @@ EOF
       fi
       note_ "$name ($id) is gone; looking it up by name."
     fi
-    ckpt_az_read_ '' ad group show --group "$name" -o json
-    if [ "$AZ_VERDICT" = "present" ]; then
-      obj="$(printf '%s' "$AZ_OUT" | ckpt_jq_ -r --arg n "$name" 'if .displayName == $n and (.id // "") != "" then .id else empty end' 2>/dev/null)"
-      if [ -n "$obj" ]; then
-        ok_ "$name exists"
-        made="$made$(ckpt_jq_ -cn --arg r "$role" --arg n "$name" --arg i "$obj" '{role: $r, displayName: $n, id: $i, origin: "pre-existing", createdUtc: null}')
-"
-        continue
-      fi
+    # By display name: az ad group list --display-name matches a prefix (its --help), so only a name
+    # equal to it, ignoring case, is the group; none, or only longer names, is absent. A failed read,
+    # an unreadable list or more than one such group creates nothing (R1, R5).
+    ckpt_az_read_ '' ad group list --display-name "$name" -o json
+    [ "$AZ_VERDICT" = "present" ] || ckpt_refuse_ "Entra group '$name' could not be looked up by name ($AZ_DETAIL), so it is neither reused nor created. Nothing was changed by this step. Resume: $resume"
+    if ! obj="$(printf '%s' "$AZ_OUT" | ckpt_jq_ -r --arg n "$name" '[.[] | select(((.displayName // "") | ascii_downcase) == ($n | ascii_downcase) and (.id // "") != "") | .id] | "\(length) \(join(", "))"' 2>/dev/null)" || [ -z "$obj" ]; then
+      ckpt_refuse_ "Entra group '$name' could not be looked up by name (the group list is not JSON), so it is neither reused nor created. Nothing was changed by this step. Resume: $resume"
     fi
+    case "$obj" in
+      "0 "*) ;;
+      "1 "*)
+        ok_ "$name exists"
+        made="$made$(ckpt_jq_ -cn --arg r "$role" --arg n "$name" --arg i "${obj#1 }" '{role: $r, displayName: $n, id: $i, origin: "pre-existing", createdUtc: null}')
+"
+        continue ;;
+      *) ckpt_refuse_ "Entra group '$name' could not be looked up by name (${obj%% *} groups have that name: ${obj#* }), so it is neither reused nor created. Nothing was changed by this step. Resume: $resume" ;;
+    esac
     ckpt_az_read_ '' ad group create --display-name "$name" --mail-nickname "$name" --query id -o tsv
     if [ "$AZ_VERDICT" = "present" ] && [ -n "$AZ_OUT" ]; then
       ok_ "$name created"

@@ -128,6 +128,69 @@ function Set-ClaudeInstallOwnerOnly {
     else { & chmod $(if ($Directory) { '700' } else { '600' }) $Path 2>$null }
 }
 
+function Get-ClaudeInstallPosixStat([string]$Path) {
+    # The probe of the POSIX store check: whether the path is a symbolic link, whether the current user
+    # owns it (test -O), and its owner and mode as ls -ldL prints them. Tests replace it, because Git Bash
+    # and Windows have no POSIX modes.
+    $link = $false
+    try { $link = [bool](Get-Item -LiteralPath $Path -Force -ErrorAction Stop).LinkType } catch { $link = $false }
+    $global:LASTEXITCODE = 1
+    try { & /bin/sh -c 'test -O "$1"' sh $Path 2>$null } catch { }
+    $mine = ($LASTEXITCODE -eq 0)
+    $line = ''
+    try { $line = [string](@(& env LC_ALL=C ls -ldL -- $Path 2>$null) | Select-Object -First 1) } catch { $line = '' }
+    $fields = @($line.Trim() -split '\s+')
+    [pscustomobject]@{ Link = $link; Mine = $mine; Owner = $(if ($fields.Count -gt 2) { $fields[2] } else { '' }); Mode = $(if ($line.Length -ge 10) { $line.Substring(0, 10) } else { '' }) }
+}
+
+function Get-ClaudeInstallWindowsWriters([string]$Path) {
+    # The allow rules on a path that let an account other than the current user, SYSTEM (S-1-5-18) or
+    # BUILTIN\Administrators (S-1-5-32-544) write, modify, delete or take control of it.
+    $trusted = @([System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value, 'S-1-5-18', 'S-1-5-32-544')
+    # WriteData, AppendData, WriteExtendedAttributes, DeleteSubdirectoriesAndFiles, WriteAttributes,
+    # Delete, ChangePermissions, TakeOwnership, GENERIC_ALL and GENERIC_WRITE.
+    $write = 0x2 -bor 0x4 -bor 0x10 -bor 0x40 -bor 0x100 -bor 0x10000 -bor 0x40000 -bor 0x80000 -bor 0x10000000 -bor 0x40000000
+    foreach ($rule in @((Get-Acl -LiteralPath $Path).GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]))) {
+        if ([string]$rule.AccessControlType -ne 'Allow' -or $trusted -contains [string]$rule.IdentityReference.Value) { continue }
+        if (([int64][int]$rule.FileSystemRights -band $write) -eq 0) { continue }
+        $name = [string]$rule.IdentityReference.Value
+        try { $name = $rule.IdentityReference.Translate([System.Security.Principal.NTAccount]).Value } catch { }
+        [pscustomobject]@{ Sid = [string]$rule.IdentityReference.Value; Name = $name; Rights = [string]$rule.FileSystemRights }
+    }
+}
+
+function Assert-ClaudeInstallStorePath {
+    # Refuses a store path that another account could have written, before the installer reads, parses,
+    # locks, renames or replaces anything (ADR-0046 decision 2). clouddrive is exempt: its mount sets the
+    # modes, and the Cloud Shell storage account's access control applies (U66).
+    param([Parameter(Mandatory = $true)][string]$Path, [ValidateSet('directory', 'file')][string]$Kind = 'file', [string]$Tail)
+    $c = $script:ClaudeInstall
+    if ($c -and $c.Location -and $c.Location.CloudDrive) { return }
+    if (-not (Test-Path -LiteralPath $Path)) { return }
+    if (-not $Tail) { $Tail = 'Nothing was read or changed.' + $(if ($c -and $c.Root) { " Resume: $(Format-ClaudeInstallResume)" } else { '' }) }
+    if (Test-ClaudeInstallWindows) {
+        $writer = @(Get-ClaudeInstallWindowsWriters $Path)[0]
+        if ($writer) {
+            Stop-ClaudeInstall "the install checkpoint $Kind $Path has an access rule that lets $($writer.Name) ($($writer.Sid)) write it ($($writer.Rights)), so it is not trusted; only the current user, SYSTEM and Administrators may write the store, and a state directory the installer creates is owner-only. $Tail"
+        }
+        return
+    }
+    $s = Get-ClaudeInstallPosixStat $Path
+    $why = ''
+    if ($Kind -eq 'file' -and $s.Link) { $why = 'is a symbolic link' }
+    elseif (-not $s.Mine) { $why = "is owned by $(if ($s.Owner) { $s.Owner } else { 'another user' }), not by the current user" }
+    elseif ([string]$s.Mode -match '^.{5}w' -or [string]$s.Mode -match '^.{8}w') { $why = "has mode $($s.Mode) (owner $($s.Owner)), so its group or other users can write it" }
+    if ($why) { Stop-ClaudeInstall "the install checkpoint $Kind $Path $why, so it is not trusted; a state directory the installer creates is owner-only. $Tail" }
+}
+
+function Assert-ClaudeInstallStore {
+    # The state directory, the checkpoint and the lock, before any of them is read.
+    $l = $script:ClaudeInstall.Location
+    Assert-ClaudeInstallStorePath -Path $l.Directory -Kind directory
+    Assert-ClaudeInstallStorePath -Path $l.Checkpoint -Kind file
+    Assert-ClaudeInstallStorePath -Path $l.Lock -Kind file
+}
+
 function Move-ClaudeInstallCheckpointFile {
     # The rename that publishes a write; File.Replace is atomic where File.Move cannot overwrite.
     param([string]$Source, [string]$Destination)
@@ -140,6 +203,7 @@ function Write-ClaudeInstallCheckpoint {
     try {
         [IO.File]::WriteAllText($temp, ($Checkpoint | ConvertTo-Json -Depth 20), (New-Object Text.UTF8Encoding($false)))
         if (-not (Test-ClaudeInstallWindows)) { Set-ClaudeInstallOwnerOnly $temp }
+        Assert-ClaudeInstallStorePath -Path $temp -Kind file -Tail "The checkpoint was not replaced, and the run stops here.$(if ($script:ClaudeInstall -and $script:ClaudeInstall.Root) { " Resume: $(Format-ClaudeInstallResume)" })"
         Move-ClaudeInstallCheckpointFile -Source $temp -Destination $Path
     }
     finally { if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue } }
@@ -193,6 +257,62 @@ function Test-ClaudeInstallAnswer {
     return ''
 }
 
+function Test-ClaudeInstallReceipt {
+    # '' when a step's receipt holds only values of the shape the installer writes. A receipt value
+    # reaches az as an argument on a resume, so any other value makes the checkpoint corrupt (R5).
+    param([string]$Id, $Receipt)
+    if ($null -eq $Receipt) { return '' }
+    if ($Receipt -isnot [System.Management.Automation.PSCustomObject]) { return 'is not an object' }
+    $guid = '^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$'
+    $guidPart = '[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}'
+    $show = { param($v) ConvertTo-Json -InputObject ([string]$v) -Compress }
+    $bad = { param($v, [string]$Pattern) [string]$v -cnotmatch $Pattern -or [bool](Test-ClaudeInstallAnswerText ([string]$v)) }
+    $origin = { param($v) $null -ne $v -and [string]$v -notin 'created', 'pre-existing' }
+    $name = '^[A-Za-z0-9._()-]{1,90}$'
+    $r = $Receipt
+    switch ($Id) {
+        'claude-deployment' {
+            foreach ($p in 'account', 'resourceGroup', 'name') { if (& $bad $r.$p $name) { return "names the $p $(& $show $r.$p)" } }
+            if (& $origin $r.origin) { return "has the origin $(& $show $r.origin)" }
+        }
+        'resource-group' {
+            if (& $bad $r.name $name) { return "names the resource group $(& $show $r.name)" }
+            if ($r.location -and (& $bad $r.location '^[a-z0-9]+$')) { return "names the location $(& $show $r.location)" }
+            if (& $origin $r.origin) { return "has the origin $(& $show $r.origin)" }
+        }
+        'gateway-deployment' {
+            foreach ($d in @($r.deployments | Where-Object { $null -ne $_ })) {
+                if (& $bad $d.name '^claude-(gw|gateway)-[A-Za-z0-9-]+$') { return "names the deployment $(& $show $d.name)" }
+            }
+            if ($r.apimName -and (& $bad $r.apimName '^[A-Za-z][A-Za-z0-9-]{0,49}$')) { return "names the gateway $(& $show $r.apimName)" }
+            if ($r.gatewayUrl -and (& $bad $r.gatewayUrl '^https://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._~/-]*)?$')) { return "holds the gateway URL $(& $show $r.gatewayUrl)" }
+            if ($r.roleAssignmentId -and (& $bad $r.roleAssignmentId "^/subscriptions/$guidPart(/[^/\s]+/[^/\s]+)*/providers/Microsoft\.Authorization/roleAssignments/$guidPart$")) { return "holds the role assignment id $(& $show $r.roleAssignmentId)" }
+            if ($r.desktopClientId -and (& $bad $r.desktopClientId $guid)) { return "holds the Desktop client id $(& $show $r.desktopClientId)" }
+            foreach ($p in 'origin', 'roleOrigin') { if (& $origin $r.$p) { return "has the $p $(& $show $r.$p)" } }
+        }
+        'company-address' { if ($r.hostname -and (& $bad $r.hostname '^[A-Za-z0-9.-]{1,253}$')) { return "names the hostname $(& $show $r.hostname)" } }
+        'entra-groups' {
+            foreach ($g in @($r.groups | Where-Object { $null -ne $_ })) {
+                if (& $bad $g.id $guid) { return "holds the group id $(& $show $g.id)" }
+                if ([string]$g.role -notin 'standard', 'premium' -or (& $origin $g.origin) -or (Test-ClaudeInstallAnswerText ([string]$g.displayName))) { return "holds the group $(& $show $g.displayName) with role $(& $show $g.role) and origin $(& $show $g.origin)" }
+            }
+        }
+        'business-units' {
+            foreach ($u in @($r.units | Where-Object { $null -ne $_ })) {
+                if (& $bad $u.id '^[a-z0-9][a-z0-9-]*$') { return "names the business unit $(& $show $u.id)" }
+                if (& $bad $u.groupId $guid) { return "holds the group id $(& $show $u.groupId)" }
+                if (& $origin $u.groupOrigin) { return "has the group origin $(& $show $u.groupOrigin)" }
+            }
+        }
+        'projection' {
+            if ($r.resolverAppId -and (& $bad $r.resolverAppId $guid)) { return "holds the resolver app id $(& $show $r.resolverAppId)" }
+            if ($r.resolverAppId -and (& $origin $r.resolverOrigin)) { return "has the resolver origin $(& $show $r.resolverOrigin)" }
+        }
+        'onboarding-package' { if ([string]$r.path -match '[\x00-\x1f]') { return "holds the path $(& $show $r.path)" } }
+    }
+    return ''
+}
+
 function Read-ClaudeInstallCheckpoint {
     # The checkpoint, or $null when there is none. A file the installer cannot trust is refused and
     # kept as it is (ADR-0046 decision 2).
@@ -218,6 +338,8 @@ function Read-ClaudeInstallCheckpoint {
         foreach ($s in @($cp.steps | Where-Object { $null -ne $_ })) {
             if (-not $script:ClaudeInstallSteps.Contains([string]$s.id)) { $why = "holds an unknown step id '$($s.id)'"; break }
             if ($s.state -notin 'started', 'completed', 'incomplete') { $why = "holds the step $($s.id) in state '$($s.state)'"; break }
+            $reason = Test-ClaudeInstallReceipt ([string]$s.id) $s.receipt
+            if ($reason) { $why = "holds a receipt of step $($s.id) that $reason"; break }
         }
     }
     if ($why) { Stop-ClaudeInstall "the install checkpoint $Path $why$tail" }
@@ -261,23 +383,30 @@ function Get-ClaudeInstallProcessStart([int]$ProcessId) {
 }
 
 function Get-ClaudeInstallLockState {
-    # free, held or stale, and who holds it (ADR-0046 decision 3).
+    # free, held or stale, who holds it, and when a later run may take it over (ADR-0046 decision 3).
     param([string]$Path)
-    if (-not (Test-Path -LiteralPath $Path)) { return [pscustomobject]@{ State = 'free'; Detail = '' } }
+    if (-not (Test-Path -LiteralPath $Path)) { return [pscustomobject]@{ State = 'free'; Detail = ''; Holder = ''; Ends = '' } }
     $age = ([DateTime]::UtcNow - [IO.File]::GetLastWriteTimeUtc($Path)).TotalMinutes
+    $heartbeat = 'a later run takes it over after 5 minutes without a heartbeat'
     $holder = $null
     try { $holder = ConvertTo-ClaudeInstallPlain ([IO.File]::ReadAllText($Path) | ConvertFrom-Json -ErrorAction Stop) } catch { $holder = $null }
     if (-not $holder -or -not $holder.pid -or -not $holder.host) {
-        return [pscustomobject]@{ State = $(if ($age -lt 5) { 'held' } else { 'stale' }); Detail = ("an unreadable lock written {0:N0} minute(s) ago" -f $age) }
+        $unreadable = "its lock is unreadable, written {0:N0} minute(s) ago" -f $age
+        return [pscustomobject]@{ State = $(if ($age -lt 5) { 'held' } else { 'stale' }); Detail = ("an unreadable lock written {0:N0} minute(s) ago" -f $age); Holder = $unreadable; Ends = $heartbeat }
     }
-    $detail = "host $($holder.host), process $($holder.pid) started $($holder.processStart)"
+    $detail = "host $($holder.host), PID $($holder.pid), started $($holder.processStart)"
     if ([string]$holder.host -ne (Get-ClaudeInstallHostName)) {
-        return [pscustomobject]@{ State = $(if ($age -lt 5) { 'held' } else { 'stale' }); Detail = ("{0}, last heartbeat {1:N0} minute(s) ago" -f $detail, $age) }
+        $beat = "{0}, last heartbeat {1:N0} minute(s) ago" -f $detail, $age
+        return [pscustomobject]@{ State = $(if ($age -lt 5) { 'held' } else { 'stale' }); Detail = $beat; Holder = $beat; Ends = $heartbeat }
     }
-    if (-not (Get-Process -Id ([int]$holder.pid) -ErrorAction SilentlyContinue)) { return [pscustomobject]@{ State = 'stale'; Detail = "$detail, which has exited" } }
+    if (-not (Get-Process -Id ([int]$holder.pid) -ErrorAction SilentlyContinue)) { return [pscustomobject]@{ State = 'stale'; Detail = "$detail, which has exited"; Holder = $detail; Ends = '' } }
     $start = Get-ClaudeInstallProcessStart ([int]$holder.pid)
-    if ($start -and $holder.processStart -and $start -ne [string]$holder.processStart) { return [pscustomobject]@{ State = 'stale'; Detail = "$detail; that id now names a process started $start" } }
-    return [pscustomobject]@{ State = 'held'; Detail = $detail }
+    if ($start -and $holder.processStart -and $start -ne [string]$holder.processStart) { return [pscustomobject]@{ State = 'stale'; Detail = "$detail; that id now names a process started $start"; Holder = $detail; Ends = '' } }
+    return [pscustomobject]@{ State = 'held'; Detail = $detail; Holder = $detail; Ends = 'a later run takes it over once that process has exited' }
+}
+
+function Stop-ClaudeInstallLockHeld($Lock, [string]$Path) {
+    Stop-ClaudeInstall "another install run ($($Lock.Holder)) holds the lock $Path; nothing was changed. The lock ends with that run: $($Lock.Ends). Resume: $(Format-ClaudeInstallResume)"
 }
 
 function Enter-ClaudeInstallLock {
@@ -289,8 +418,9 @@ function Enter-ClaudeInstallLock {
         try { $stream = [IO.File]::Open($Path, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None) }
         catch {
             if (-not (Test-Path -LiteralPath $Path)) { throw }
+            Assert-ClaudeInstallStorePath -Path $Path -Kind file
             $lock = Get-ClaudeInstallLockState $Path
-            if ($lock.State -eq 'held') { Stop-ClaudeInstall "another install run holds the lock $Path ($($lock.Detail)). Nothing was changed." }
+            if ($lock.State -eq 'held') { Stop-ClaudeInstallLockHeld $lock $Path }
             Write-Host "    Taking over a stale lock: $($lock.Detail)." -ForegroundColor Yellow
             try { Move-Item -LiteralPath $Path -Destination "$Path.stale-$RunId-$attempt" -Force -ErrorAction Stop } catch { }
             continue
@@ -362,8 +492,9 @@ function Open-ClaudeInstallCheckpoint {
         if (Test-Path -LiteralPath $path) { Write-Host "    An install checkpoint exists at $path; -WhatIf previews a first run and changes nothing." -ForegroundColor DarkGray }
         return @{}
     }
+    Assert-ClaudeInstallStore
     $lock = Get-ClaudeInstallLockState $c.Location.Lock
-    if ($lock.State -eq 'held') { Stop-ClaudeInstall "another install run holds the lock $($c.Location.Lock) ($($lock.Detail)). Nothing was changed." }
+    if ($lock.State -eq 'held') { Stop-ClaudeInstallLockHeld $lock $c.Location.Lock }
     if ($Restart -and (Test-Path -LiteralPath $path)) {
         $aside = $path -replace '\.json$', ('.discarded-' + [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ') + '.json')
         Move-Item -LiteralPath $path -Destination $aside
@@ -502,10 +633,21 @@ function Save-ClaudeInstallCheckpoint {
     $binding = [ordered]@{ tenantId = [string](& $read 'acct').tenantId; subscriptionId = $(if ($subscription) { $subscription } else { [string](& $read 'SubscriptionId') }); resourceGroup = [string](& $read 'ResourceGroup')
         apimName = [string](& $read 'apimName'); namePrefix = [string](& $read 'NamePrefix'); reusedApim = [bool](& $read 'ExistingApim') }
     $now = [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ', [Globalization.CultureInfo]::InvariantCulture)
+    $c.Answers = $answers
     if (-not (Test-Path -LiteralPath $c.Location.Directory)) {
-        New-Item -ItemType Directory -Path $c.Location.Directory -Force | Out-Null
-        Set-ClaudeInstallOwnerOnly $c.Location.Directory -Directory
+        # A state directory that cannot be created leaves the run without a checkpoint (decision 1).
+        try {
+            New-Item -ItemType Directory -Path $c.Location.Directory -Force -ErrorAction Stop | Out-Null
+            if (-not (Test-Path -LiteralPath $c.Location.Directory -PathType Container)) { throw 'no directory was created' }
+            Set-ClaudeInstallOwnerOnly $c.Location.Directory -Directory
+        }
+        catch {
+            Write-Host "    [WARN] The install checkpoint directory $($c.Location.Directory) could not be created ($($_.Exception.Message)); this run keeps no checkpoint." -ForegroundColor Yellow
+            Write-Host "    Resume: $(Format-ClaudeInstallResume -WithAnswers)"
+            return
+        }
     }
+    Assert-ClaudeInstallStorePath -Path $c.Location.Directory -Kind directory
     if ($c.Checkpoint) {
         $c.Checkpoint.answers = [pscustomobject]$answers
     }
@@ -514,7 +656,6 @@ function Save-ClaudeInstallCheckpoint {
             installerFingerprint = $c.Fingerprint; installerCommit = $c.Commit; checkout = $c.Root; createdUtc = $now; updatedUtc = $now
             binding = [pscustomobject]$binding; answers = [pscustomobject]$answers; steps = @() }
     }
-    $c.Answers = $answers
     $c.Checkpoint.installerFingerprint = $c.Fingerprint
     $c.Checkpoint.installerCommit = $c.Commit
     $c.Lock = Enter-ClaudeInstallLock -Path $c.Location.Lock -RunId $c.Checkpoint.runId
