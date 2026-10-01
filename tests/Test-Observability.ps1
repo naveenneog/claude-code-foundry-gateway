@@ -9,7 +9,7 @@
 # "PC" and ClientBrowser was empty - no agent string anywhere.
 #
 # Offline only. The live half ran against the reference gateway and is recorded
-# in docs/STATUS.md.
+# in docs/status/P24-P27.md.
 
 $root = Split-Path $PSScriptRoot -Parent
 $policyPath = Join-Path $root 'infra/policy.xml'

@@ -402,7 +402,7 @@ Assert 'and distinguishes the storage test from active developers' (
 Assert 'and reports current warm-instance cost' ($readmeTop -match '\$91\.56/month at rest')
 Assert 'and includes lease renewal rather than read costs alone' (
     $readmeTop -match '\$538/month' -and $readmeTop -match '365 million writes/month')
-Assert 'and links the dated measurement' ($readmeTop -match 'docs/STATUS\.md#where-p19-stands-2026-09-24')
+Assert 'and links the dated measurement' ($readmeTop -match 'docs/status/P19\.md#where-p19-stands-2026-09-24')
 Assert 'and points at how to check your own'     ($readmeTop -match 'Measure-ClaudeCeiling\.ps1')
 
 # Documentation that nothing links to is documentation nobody reads. Six pages
@@ -427,7 +427,7 @@ Assert 'and the scale guide is in the index'      ($readme -match '\[Scale\]\(do
 Write-Host ''
 Write-Host 'Scale - the status page tells the truth about P19' -ForegroundColor Cyan
 
-$status = Get-Content (Join-Path $root 'docs/STATUS.md') -Raw
+$status = Get-Content (Join-Path $root 'docs/status/P19.md') -Raw
 
 # The failure this guards: a status page that reports a decision as though it
 # were a delivery. P19 has an ADR, a costing, a deployed-and-verified template

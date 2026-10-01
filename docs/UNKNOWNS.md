@@ -32,7 +32,7 @@ fails the release stage while any remain. Detail for each one follows below.
 | U23 | OPEN | Will the reference tenant grant consent for a Claude Desktop public-client app, so Desktop's own Entra sign-in (external-idp, browser or broker) can be proven end to end? Measured 2026-09-26 by P60 on an isolated gateway: an Azure CLI token returned 200 and a wrong-audience token 401, but acquiring a token for the proof Desktop app failed with `AADSTS65001 consent_required`; no tenant-wide consent was attempted, and the owner reports that a tenant-admin grant needs a support ticket. The helper-script default needs no consent | P60, [ADR-0027](adr/0027-claude-desktop-sign-in-choice.md) |
 | U24 | OPEN | Does Microsoft Graph `$search` find directory users by a full email address consistently, for members and guests? Measured 2026-09-26 by P64: in the reference tenant `$search` did not return the signed-in owner for their full email, so `aum developer find` falls back to exact `mail`, `userPrincipalName` and `otherMails` filters for a typed address. Partial-email behaviour in a tenant with many guests is not measured ([advanced queries](https://learn.microsoft.com/graph/aad-advanced-queries)) | P64, [ADR-0029](adr/0029-aum-developer-membership.md) |
 | U25 | OPEN | How does `aum developer add` and `remove` publish on a gateway whose entitlement comes from the Cosmos projection rather than named values? P64 documents that such a gateway publishes through its projection pipeline after the group write ([AUM.md](AUM.md)); a live add-then-remove through a projection-backed gateway (P61) is not measured | P64, P61 |
-| U26 | OPEN | Which checks fail intermittently when the whole suite runs, and why? The "AUM - commands, dashboard and pilot" check (and its predecessor, Terminal FinOps) failed under the full Test-All run on 2026-09-25 (six agents' concurrent load), in the P62 branch gate on 2026-09-26 (~11:41Z), and in the lead's integration gate on `c25d246` (13:06-13:20Z, 141.9 s), each time alone. The same tree then passed directly (320 tests, 134 s), in three concurrent pytest runs (320 each) and in a verbose gate rerun (13:26-13:40Z, 67 of 67). The failing test was not identified, because Test-All's summary does not keep a failing check's output; a rerun that passes is recorded here, not treated as proof. The "Wizard reaches summary on PS 5.1" check behaves the same way: it failed alone in the P61 branch gate (07:14Z) and in the lead's gate on `55b2a17` (13:47-14:00Z, 70.1 s), and passed when run directly (79.6 s). So does "Chargeback report generation": it failed alone after 2.5 s in the lead's gate on 2026-09-26 (17:00-17:14Z) and passed directly (78 assertions, 3.1 s); a P52 gate on 2026-09-25 recorded that check failing once with `Access to the path '...\empty\.building-<id>' is denied` from a directory move. Other workloads were running on the workstation during these gates. On 2026-09-29 P85 split the AUM check into four, "AUM - commands, dashboard and pilot [0/4]" to "[3/4]", after it reached the 600 s per-check timeout ([tests/README.md](../tests/README.md#aum-test-shards)). In P85's gate on 2026-09-29 (18:47-19:17Z) "[3/4]" failed alone without output; pytest's cache named `test_publication_generation.py::test_assistant_context_is_cleared_before_b_request`, which then failed 4 of 12 runs under 16 CPU burners with `NoMatches` for `#main-tabs` raised in `FinOpsApp.switched`, a P71 comparison ([STATUS.md](STATUS.md#delta-council-and-packet-gate-2)). On 2026-09-30 hosted run 36646539868 on main `3b7c192` failed two AUM deadline tests: a zero-millisecond exit check raced asynchronous job termination ([STATUS.md](STATUS.md#p71-follow-up-the-deadline-tests-prove-termination-without-racing-it-2026-09-30)). The p71c packet gate on `edbf6cb` (2026-09-30, 20:03-20:36 IST) failed "Chargeback report generation" alone after 5.2 s, with no output kept; eight concurrent direct runs then passed, and the cause is not established ([STATUS.md](STATUS.md#packet-gate-1-an-unrelated-chargeback-failure)) | P50, P52, P56 |
+| U26 | OPEN | Which checks fail intermittently when the whole suite runs, and why? The "AUM - commands, dashboard and pilot" check (and its predecessor, Terminal FinOps) failed under the full Test-All run on 2026-09-25 (six agents' concurrent load), in the P62 branch gate on 2026-09-26 (~11:41Z), and in the lead's integration gate on `c25d246` (13:06-13:20Z, 141.9 s), each time alone. The same tree then passed directly (320 tests, 134 s), in three concurrent pytest runs (320 each) and in a verbose gate rerun (13:26-13:40Z, 67 of 67). The failing test was not identified, because Test-All's summary does not keep a failing check's output; a rerun that passes is recorded here, not treated as proof. The "Wizard reaches summary on PS 5.1" check behaves the same way: it failed alone in the P61 branch gate (07:14Z) and in the lead's gate on `55b2a17` (13:47-14:00Z, 70.1 s), and passed when run directly (79.6 s). So does "Chargeback report generation": it failed alone after 2.5 s in the lead's gate on 2026-09-26 (17:00-17:14Z) and passed directly (78 assertions, 3.1 s); a P52 gate on 2026-09-25 recorded that check failing once with `Access to the path '...\empty\.building-<id>' is denied` from a directory move. Other workloads were running on the workstation during these gates. On 2026-09-29 P85 split the AUM check into four, "AUM - commands, dashboard and pilot [0/4]" to "[3/4]", after it reached the 600 s per-check timeout ([tests/README.md](../tests/README.md#aum-test-shards)). In P85's gate on 2026-09-29 (18:47-19:17Z) "[3/4]" failed alone without output; pytest's cache named `test_publication_generation.py::test_assistant_context_is_cleared_before_b_request`, which then failed 4 of 12 runs under 16 CPU burners with `NoMatches` for `#main-tabs` raised in `FinOpsApp.switched`, a P71 comparison ([STATUS.md](status/P85.md#delta-council-and-packet-gate-2)). On 2026-09-30 hosted run 36646539868 on main `3b7c192` failed two AUM deadline tests: a zero-millisecond exit check raced asynchronous job termination ([STATUS.md](status/P71.md#p71-follow-up-the-deadline-tests-prove-termination-without-racing-it-2026-09-30)). The p71c packet gate on `edbf6cb` (2026-09-30, 20:03-20:36 IST) failed "Chargeback report generation" alone after 5.2 s, with no output kept; eight concurrent direct runs then passed, and the cause is not established ([STATUS.md](status/P71.md#packet-gate-1-an-unrelated-chargeback-failure)) | P50, P52, P56 |
 | U27 | CLOSED | Which Desktop sign-in keys does an installed Claude Desktop read? Researched and measured 2026-09-27: `inferenceIdpOidc`, `inferenceIdpAuthFlow` and the `external-idp` kind need Desktop 2.7032.0; `interactive` with `inferenceGatewayOidc` (1.6889.0) and `inferenceGatewayOidcAuthFlow` (1.25927.0) is read as `external-idp` by later releases, with no end date. The installed 2.2553.1.0 reads neither new key ([detail](#u27--desktop-sign-in-keys-by-release--closed-2026-09-27)) | P67, [ADR-0031](adr/0031-client-keys-every-release-reads.md) |
 | U28 | CLOSED | Which Claude Code releases work with `claude-opus-5` and `claude-sonnet-5` through Foundry deployments? Measured 2026-09-27: 2.1.101 returns `400 thinking.type.enabled is not supported`; with `ANTHROPIC_DEFAULT_*_MODEL_SUPPORTED_CAPABILITIES` it answers, and so does 2.1.272 at effort `high` and `max`. Sonnet 5 arrived in 2.1.197 and Opus 5 in 2.1.219 ([detail](#u28--claude-code-releases-and-the-5-series-models--closed-2026-09-27)) | P67, [ADR-0031](adr/0031-client-keys-every-release-reads.md) |
 | U29 | OPEN | What made Claude Desktop report `ENOTFOUND` on the owner's workstation on 2026-09-27? Not reproduced here. Its configuration then had no readable credential kind (U27). `Debug-ClaudeWorkstation.ps1` now shows Desktop's own recent `[custom-3p]` warnings and errors from `%LOCALAPPDATA%\Claude-3p\logs\main.log`, which name the failing host | P67 |
@@ -52,7 +52,7 @@ fails the release stage while any remain. Detail for each one follows below.
 | U59 | CLOSED | Inspected and tested offline 2026-09-29: `Engine.catalog_change` refuses a unit with any child department, the default department, or removal of the last unit. It does not query Entra member counts; an otherwise removable unit/team can still have directory members. The catalog-only write does not remove their Entra memberships or delete groups. All 18 Direct/Turnstile catalog pilots passed, including typed-confirmation and unchanged-membership assertions. [Engine](../cli/finops/src/claude_finops/engine.py), [pilots](../cli/finops/tests/test_p85_catalog.py). Native writer behavior beyond these fixture boundaries is not live evidence. | P85 existing catalog rule recorded |
 | U60 | CLOSED | Round 2's cancelled sign-out is reproduced and corrected in application-owned completion handling after registry release. Successful intent survives modal cancellation and other pending mutations; failure stays running with an error, and completed sign-out replaces stale progress. All 18 lifecycle cases pass in the 871-case full run, and owned-completion/release/intent/failure/progress mutations are caught. Measured offline 2026-09-29. [Lifecycle](../cli/finops/src/claude_finops/tui.py), [standard pilots](../cli/finops/tests/test_p85_council_quit.py), [evidence](STATUS.md). | P85 application-owned sign-out completion verified |
 | U61 | OPEN | Round 2's alias gap is corrected: pip/uv children receive fresh explicit environments, and pip also uses isolated mode, null configuration and an explicit confined cache. Real offline pip tests cover ordinary and malformed log names; actual pip/uv child environments and retained Azure context for AUM are verified. All 51 launcher/environment cases pass in the 871-case run, with changed/new isolation mutations caught. The remaining unknown is the owner-only live Cloud Shell/network/persistence check, including the documented storage-source conflict in [ADR-0041](adr/0041-aum-session-safety-and-cloud-shell.md) and [P85 STATUS](STATUS.md). | Owner-only live Cloud Shell and persistence verification |
-| U62 | CLOSED | Reviewed and measured offline 2026-09-30: P85 complies with ADR-0035 through existing protected controls, source guards and application-owned callbacks, without a new boundary or raw output permission. The merge's 91 diagnostics and nine changed contexts are resolved by three reviewed imports, twelve public members, eighteen exact exceptions, six new and nine renewed context digests. All 33 new current/expired-origin, native-log, normalization and source controls pass; all 269 P85 cases pass. Six scratch mutations fail assertions with all 219 baseline identities retained, then restoration passes 219/219. P71's known principal-transition load race remains separately recorded and is not changed. [Review and evidence](STATUS.md#adr-0035-integration-approval-review), [controls](../cli/finops/tests/test_p85_publication_contract.py). | P85 closed-contract integration |
+| U62 | CLOSED | Reviewed and measured offline 2026-09-30: P85 complies with ADR-0035 through existing protected controls, source guards and application-owned callbacks, without a new boundary or raw output permission. The merge's 91 diagnostics and nine changed contexts are resolved by three reviewed imports, twelve public members, eighteen exact exceptions, six new and nine renewed context digests. All 33 new current/expired-origin, native-log, normalization and source controls pass; all 269 P85 cases pass. Six scratch mutations fail assertions with all 219 baseline identities retained, then restoration passes 219/219. P71's known principal-transition load race remains separately recorded and is not changed. [Review and evidence](status/P85.md#adr-0035-integration-approval-review), [controls](../cli/finops/tests/test_p85_publication_contract.py). | P85 closed-contract integration |
 
 ## P80 research before resumed implementation
 
@@ -73,7 +73,7 @@ without being mistaken for an expired principal; actual exit-3 origin failures
 still reject publication. U41's native `scroll_home` defers by default, so
 recovery now uses the protected receiver's origin-checked synchronous reset.
 The RED counterexamples, current/expired controls and seven count-preserving
-removal probes are recorded in [P80 STATUS](STATUS.md#p71-closed-contract-integration-2026-09-30)
+removal probes are recorded in [P80 STATUS](status/P80.md#p71-closed-contract-integration-2026-09-30)
 and [ADR-0038](adr/0038-aum-actions-and-connection.md#p71-integration-authorization-2026-09-30).
 These are offline client-boundary findings, not new live Azure or directory
 claims. U38-U41 remain P80's IDs; the separate P71 timing observations are
@@ -142,7 +142,7 @@ request cases failed before the correction (missing view reads or wrong
 selection); those cases and the real-input control passed afterward.
 The final rule-A proof passed 300 loaded executions and all 1,278 full-suite
 identities. Four request mutations were caught without changing test identities.
-Current evidence is in [STATUS](STATUS.md#council-round-2-request-lookup-follows-rule-a).
+Current evidence is in [STATUS](status/P71.md#council-round-2-request-lookup-follows-rule-a).
 
 Council found that a principal notice can suppress the activation to which the
 initial lookup fix delegated its read. A tab change was therefore not evidence
@@ -157,7 +157,7 @@ Final proof passed 1,980 loaded executions and all 1,269 full-suite cases;
 four mutation probes caught dropped reads, duplicate activation, notice clearing
 and obsolete-focus acceptance. U26 remains OPEN for other observations and the
 listed connection-adoption transition. See the current council correction in
-[STATUS](STATUS.md#council-correction-a-principal-notice-cannot-drop-a-current-lookup).
+[STATUS](status/P71.md#council-correction-a-principal-notice-cannot-drop-a-current-lookup).
 
 [Hosted run 36670519226](https://github.com/naveenneog/claude-code-foundry-gateway/actions/runs/36670519226)
 failed the redacted dashboard lookup case with `WorkerCancelled` after
@@ -168,7 +168,7 @@ redaction assertion then passed; four mutations were caught, the four-burner
 stress passed 930 executions, and the final full suite passed 1,230 cases.
 The first full run's stale snapshot-source witness failure is retained, with
 unchanged grids/SVGs verified after regeneration. The evidence is recorded in
-[STATUS](STATUS.md#p71-follow-up-a-lookup-starts-one-refresh-2026-09-30).
+[STATUS](status/P71.md#p71-follow-up-a-lookup-starts-one-refresh-2026-09-30).
 The scan lists a possible separate duplicate during connection adoption:
 `activate_profile` refreshes after `update_access` can force a permitted tab.
 That engine/authority transition is not changed here. U26 remains OPEN for it
@@ -184,7 +184,7 @@ without worker cancellation. `FinOpsApp.switched` queries `active` while
 real empty running and shut-down default screens. The new contract requires
 ignoring these stale events while preserving live activations; deterministic
 and loaded correction evidence is recorded in
-[STATUS](STATUS.md#stale-tab-activation-without-main-content-2026-09-30).
+[STATUS](status/P71.md#stale-tab-activation-without-main-content-2026-09-30).
 Both deterministic cases failed before the presence check; the corrected
 targeted/contract selection passed all 14 cases. The expanded 16-burner proof
 passed 270 executions over 30 iterations, including both lifecycle cases and
@@ -292,7 +292,7 @@ failed because their child startup markers were absent.
 raised `WorkerCancelled` at the worker wait after the lookup handoff.
 All 115 publication cases, including the B4/B5 replays, passed in that run.
 The original stdout and JUnit report remain in
-`.finops-evidence\p71-r6-resume`; [STATUS](STATUS.md#resumed-round-6-proof-on-36f3088)
+`.finops-evidence\p71-r6-resume`; [STATUS](status/P71.md#resumed-round-6-proof-on-36f3088)
 records the full selection, timings and mutation proof. No second full run,
 deadline change or assertion change replaced those failures. Their cause is
 not established by this run; U26 remains open.
@@ -320,7 +320,7 @@ Each mutation also failed its intended detector case at the full 177-test
 count; the setup failures are excluded from the claimed mutation catches.
 The pin-chart case passed in the restored selector and full suite. Its cause
 is not established; no assertion, deadline or synchronization was changed.
-[STATUS](STATUS.md#final-round-7-proof-on-530a8dd) records the individual
+[STATUS](status/P71.md#final-round-7-proof-on-530a8dd) records the individual
 receipts and timings. U26 remains open.
 
 Round 8 again observed the pin-chart `KeyError: 'ask'` before the stale-origin
@@ -350,7 +350,7 @@ one full AUM/FinOps run on `125f352` passed **770 cases in 283.15 s**
 2026-09-29** (**09:13:39-09:18:25 IST**). All notification and prior
 publication cases were included. No historical failure was reproduced or
 diagnosed by that passing run; U26 remains open. The receipts are in
-`.finops-evidence\p71-r9` and the [round 9 STATUS record](STATUS.md#final-round-9-proof-on-125f352).
+`.finops-evidence\p71-r9` and the [round 9 STATUS record](status/P71.md#final-round-9-proof-on-125f352).
 
 Round 10's first expanded publication selector had **358 passed, 3 failed in
 166.58 s**. The request-action case raised `WorkerCancelled`, then `NoMatches`
@@ -361,7 +361,7 @@ adapter correction separates that paint refusal from write/input rejection.
 The notification failure preceded the current-toast assertion; the positive
 control now waits for visible text instead of assuming one pause completes
 mounting. The original receipts remain in the
-[round 10 record](STATUS.md#council-round-10-corrections). U26 stays open.
+[round 10 record](status/P71.md#council-round-10-corrections). U26 stays open.
 Its second expanded selector had **358 passed, 4 failed in 172.79 s**:
 `test_cached_dialog_handoffs_retain_origin_during_deferred_composition`
 (`pin-chart`, `request-form`), the delayed `people-selector` case and
@@ -381,7 +381,7 @@ All 40 new native/diagnostic cases passed. No timeout or assertion was relaxed,
 and no second full run replaced this result. The cause remains unproven; U26
 stays open. Full output, JUnit and the lock receipt are in
 `.finops-evidence\p71-r10-resume`; see the
-[round 10 full-run record](STATUS.md#final-round-10-full-aum-run-on-70b6919).
+[round 10 full-run record](status/P71.md#final-round-10-full-aum-run-on-70b6919).
 
 The 2026-09-30 builder traced the four reported identities' first failure to
 exclusive refresh cancellation, with `NoMatches` occurring during shutdown.
@@ -396,7 +396,7 @@ cases before another gate interrupted the harness. Loaded GREEN then passed
 failures. The final complete AUM invocation passed all 829 cases in 585.16 s,
 including four 60-second gate pauses between tests, with no errors, skips or
 failed-test retries. Its production source matches the loaded proof; see the
-[startup correction](STATUS.md#startup-and-navigation-cancellation-correction-2026-09-30).
+[startup correction](status/P71.md#startup-and-navigation-cancellation-correction-2026-09-30).
 The first complete corrected-source run had 828 passes and one
 `FooterKey-description` setup failure: Textual removes and asynchronously
 remounts footer keys after a binding change, outside worker completion.

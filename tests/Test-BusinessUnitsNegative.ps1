@@ -1753,7 +1753,7 @@ $mutations = @(
 
     @{ Suite = 'Test-Scale.ps1'
        Name  = 'the status page calls P19 finished'
-       File  = 'docs/STATUS.md'
+       File  = 'docs/status/P19.md'
        From  = 'Not finished'
        To    = 'Delivered' }
 

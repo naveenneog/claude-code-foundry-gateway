@@ -29,7 +29,7 @@ Start with [Setup](docs/SETUP.md) for deployment or
 > Hourly lease renewal at 500,000 members adds about **365 million writes/month**,
 > about **$538/month** at the measured create RU charge and stated list price
 > (derived, not a measured scheduled-sync bill). APIM, Foundry and other usage
-> costs are additional. See the [dated P19 record](docs/STATUS.md#where-p19-stands-2026-09-24),
+> costs are additional. See the [dated P19 record](docs/status/P19.md#where-p19-stands-2026-09-24),
 > [Scale](docs/SCALE.md) and [private deployment](docs/SECURE-PROJECTION.md).
 >
 > `scripts/Measure-ClaudeCeiling.ps1` checks your named-value headroom and fails

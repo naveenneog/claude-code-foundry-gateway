@@ -2,7 +2,7 @@
   "SchemaVersion": 1,
   "ShardCount": 12,
   "DefaultSeconds": 60,
-  "Source": "95 PASS, 0 FAIL, 0 SKIP; hosted run 36457223984 attempt 1, f82981270702f0af5eeceb41a4e8d776524acf28, 2026-09-28. Per-check elapsed seconds seed future whole-check LPT assignment; setup/proof time is separate. P85 (2026-09-29) replaced the unsharded AUM check (130.4 s) with four shards and added 'AUM shards run every test file once' at its local 14 s. P85 final follow-up integration (2026-09-30 IST, 8139c06) refreshes the four planned weights from one serial JUnit run: all 1200 cases passed, 983.3 s summed case time. Planned seconds are 259, 259, 258 and 258; current and earlier integration results remain recorded in docs/STATUS.md.",
+  "Source": "95 PASS, 0 FAIL, 0 SKIP; hosted run 36457223984 attempt 1, f82981270702f0af5eeceb41a4e8d776524acf28, 2026-09-28. Per-check elapsed seconds seed future whole-check LPT assignment; setup/proof time is separate. P85 (2026-09-29) replaced the unsharded AUM check (130.4 s) with four shards and added 'AUM shards run every test file once' at its local 14 s. P85 final follow-up integration (2026-09-30 IST, 8139c06) refreshes the four planned weights from one serial JUnit run: all 1200 cases passed, 983.3 s summed case time. Planned seconds are 259, 259, 258 and 258; current and earlier integration results remain recorded in docs/status/P85.md.",
   "SourceRunUrl": "https://github.com/naveenneog/claude-code-foundry-gateway/actions/runs/36457223984",
   "SourceReceiptSha256": "03dee5e0919ce0a183881b46649d9aca379ea2d49b82994ace882a465ae533e4",
   "Seconds": {

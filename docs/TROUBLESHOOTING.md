@@ -177,7 +177,7 @@ P71 observed the nightly stop at 19:05:18-19:07:19Z and started the database at
 22:23:22Z on 2026-09-27, with `Ready` verified at 22:25:35Z. The database remains
 running for the owner's morning test. The external stop automation remains
 **U32**, not a client setting changed by this packet.
-Sources: [P71 measurements](STATUS.md#p71-aum-answers-fast-and-says-why-it-cannot-2026-09-28),
+Sources: [P71 measurements](status/P71.md#p71-aum-answers-fast-and-says-why-it-cannot-2026-09-28),
 [U32](UNKNOWNS.md#u32--the-turnstile-database-stops-every-evening--open),
 [Azure PostgreSQL start](https://learn.microsoft.com/cli/azure/postgres/flexible-server#az-postgres-flexible-server-start).
 
