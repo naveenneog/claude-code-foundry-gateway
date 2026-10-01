@@ -1,8 +1,13 @@
 import json
+import importlib
+import pkgutil
+import datetime as datetime_module
+from pathlib import Path
 
 import httpx
 import pytest
 
+import claude_finops
 from claude_finops.backend import connect
 from claude_finops.config import Config
 from claude_finops.engine import Engine
@@ -120,6 +125,35 @@ def test_service_engine_forwards_reason_and_uses_synchronous_receipt():
     assert json.loads(calls[-1].content)["reason"] == "Approved capacity"
     with pytest.raises(FinOpsError, match="no separate"):
         engine.apply(apply=True)
+
+
+def test_aum_test_clock_covers_finops_modules_and_current_month_writes():
+    modules = []
+    package_root = Path(claude_finops.__path__[0])
+    for info in pkgutil.walk_packages(claude_finops.__path__, claude_finops.__name__ + "."):
+        relative = info.name.removeprefix(claude_finops.__name__ + ".").split(".")
+        module_path = package_root.joinpath(*relative).with_suffix(".py")
+        try:
+            with open(module_path, encoding="utf-8") as handle:
+                if "datetime.now(" not in handle.read():
+                    continue
+            module = importlib.import_module(info.name)
+        except Exception:
+            continue
+        modules.append(module)
+
+    assert modules
+    observed = {datetime_module.datetime.now().strftime("%Y-%m-%dT%H")}
+    observed.update(module.datetime.now().strftime("%Y-%m-%dT%H")
+                    for module in modules if hasattr(module, "datetime"))
+    assert observed == {"2026-09-24T12"}
+
+    backend, calls = service(lambda request: httpx.Response(200, json={"revision": "revision-2",
+        "audit_id": "audit-1", "result": {"verified": True}}) if request.method == "PUT" else None)
+    backend.read("budgets", month="2026-09")
+    backend.write("budget", dict(token_limit=1000), scope_type="user", scope_id=OID,
+                  month="2026-09", reason="Approved capacity")
+    assert [call.method for call in calls if call.url.path == "/api/v1/budgets/user/" + OID] == ["PUT"]
 
 
 def test_service_request_detail_rechecks_authority_instead_of_serving_cache():
