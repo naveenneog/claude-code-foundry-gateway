@@ -1771,27 +1771,30 @@ elseif (-not $Yes) {
         $buGroup = Read-Default -Prompt 'Entra group' -Default "claude-bu-$buId" `
             -Help 'Who belongs to the unit. Created here if it does not exist.'
 
-        $existing = az ad group show --group $buGroup --query id -o tsv 2>$null
-        if (-not $existing) {
-            $newId = (az ad group create --display-name $buGroup --mail-nickname $buGroup -o json 2>$null | ConvertFrom-Json).id
-            if ($newId) { Write-Ok "$buGroup created" }
-            else {
-                # Set-ClaudeBusinessUnit refuses a unit pointing at a group that
-                # does not exist, because it would sync to nobody and read as
-                # unused rather than broken. Stop here rather than write one.
-                Write-Warn2 "Could not create '$buGroup' - your tenant may restrict group creation."
-                Write-Note 'Ask an admin to create it, then run Set-ClaudeBusinessUnit.ps1.'
-                continue
-            }
+        # By its exact name, through the function the answers path uses (ADR-0046 decision 11): az ad group
+        # show --group would take a single group whose name only starts with this one.
+        $unitGroup = Resolve-ClaudeInstallUnitGroup $buGroup
+        if ($unitGroup.Verdict -eq 'inconclusive') {
+            Write-Warn2 "Entra group '$buGroup' could not be looked up by name ($($unitGroup.Detail)), so business unit $buId is not written."
+            Write-Note $(if ($unitGroup.Detail -match 'groups have a name of that length') { 'Rename or remove one of those groups, or give another group name.' } else { 'Sign in with an account that can read Entra groups in Microsoft Graph, then add the unit with Set-ClaudeBusinessUnit.ps1.' })
+            continue
         }
-        else { Write-Ok "$buGroup exists" }
+        if ($unitGroup.Verdict -eq 'create-failed') {
+            # Set-ClaudeBusinessUnit refuses a unit pointing at a group that
+            # does not exist, because it would sync to nobody and read as
+            # unused rather than broken. Stop here rather than write one.
+            Write-Warn2 "Could not create '$buGroup' - your tenant may restrict group creation."
+            Write-Note 'Ask an admin to create it, then run Set-ClaudeBusinessUnit.ps1.'
+            continue
+        }
+        if ($unitGroup.Verdict -eq 'created') { Write-Ok "$buGroup created" } else { Write-Ok "$buGroup exists" }
 
         $buBudget = Read-Int -Prompt 'Monthly budget, US dollars' -Default 5000 `
             -Help 'Converted to tokens on write. List price, and the counter cannot see cached tokens.'
 
-        & (Join-Path $root 'scripts/Set-ClaudeBusinessUnit.ps1') -Id $buId -Group $buGroup `
+        & (Join-Path $root 'scripts/Set-ClaudeBusinessUnit.ps1') -Id $buId -Group $buGroup -SkipGroupCheck `
             -MonthlyBudgetUsd $buBudget -ApimName $apimName -ResourceGroup $ResourceGroup
-        Add-ClaudeInstallBusinessUnit -Id $buId -GroupId $(if ($existing) { $existing } else { $newId }) -GroupOrigin $(if ($existing) { 'pre-existing' } else { 'created' })
+        Add-ClaudeInstallBusinessUnit -Id $buId -GroupId $unitGroup.Id -GroupOrigin $unitGroup.Origin
     }
     Complete-ClaudeInstallStep 'business-units'
     }

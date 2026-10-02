@@ -1857,9 +1857,9 @@ $mutations = @(
 
     @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'a business unit can point at a group that does not exist'
-       File  = 'Install-ClaudeGateway.ps1'
-       From  = 'az ad group create --display-name $buGroup'
-       To    = 'echo skip #' }
+       File  = 'scripts/ClaudeInstallSteps.ps1'
+       From  = "'ad', 'group', 'create', '--display-name', `$Group"
+       To    = "'ad', 'group', 'show', '--display-name', `$Group" }
 
     @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'the unit identifier stops being validated'

@@ -156,6 +156,22 @@ function Show-ClaudeInstallStepList {
     @($head) + @($steps | ForEach-Object { '{0,-20} {1,-24} {2}' -f $_.id, $_.title, $_.state })
 }
 
+function Resolve-ClaudeInstallUnitGroup {
+    # A business unit's Entra group by the name rule of ADR-0046 decision 11 (Find-ClaudeInstallGroupByName),
+    # for both business-unit paths, the answers file and the installer's prompt (ADR-0047 decision 13):
+    # present, reused; absent, created; inconclusive, neither, and the caller refuses the unit. Azure CLI's
+    # az ad group show --group falls back to a single group whose name starts with the name, so it is not used.
+    param([Parameter(Mandatory = $true)][string]$Group)
+    $found = Find-ClaudeInstallGroupByName $Group
+    if ($found.Verdict -eq 'present') { return [pscustomobject]@{ Verdict = 'present'; Id = [string]$found.Id; Origin = 'pre-existing'; Detail = '' } }
+    if ($found.Verdict -ne 'absent') { return [pscustomobject]@{ Verdict = 'inconclusive'; Id = ''; Origin = ''; Detail = [string]$found.Detail } }
+    $created = Invoke-ClaudeInstallAzRead @('ad', 'group', 'create', '--display-name', $Group, '--mail-nickname', $Group, '-o', 'json')
+    $obj = $null
+    if ($created.Verdict -eq 'present') { try { $obj = $created.Output | ConvertFrom-Json -ErrorAction Stop } catch { $obj = $null } }
+    if (-not $obj -or -not $obj.id) { return [pscustomobject]@{ Verdict = 'create-failed'; Id = ''; Origin = ''; Detail = [string]$created.Detail } }
+    return [pscustomobject]@{ Verdict = 'created'; Id = [string]$obj.id; Origin = 'created'; Detail = '' }
+}
+
 function Invoke-ClaudeInstallBusinessUnits {
     # The answers' business units and teams through scripts/Set-ClaudeBusinessUnit.ps1 (ADR-0047): units
     # before teams; each group found by the name rule of ADR-0046 decision 11, or created, before its
@@ -176,17 +192,11 @@ function Invoke-ClaudeInstallBusinessUnits {
         if ($rec -and [string]$rec.inputHash -eq $hash -and $registry.Verdict -eq 'present' -and $registry.Output -match (',' + [regex]::Escape($id) + '=')) {
             Write-Host "    [OK]   ${id}: applied by this install run, and in bu-registry" -ForegroundColor Green; continue
         }
-        $found = Find-ClaudeInstallGroupByName $group
+        $found = Resolve-ClaudeInstallUnitGroup $group
         if ($found.Verdict -eq 'inconclusive') { Stop-ClaudeInstall "Entra group '$group' of business unit $id could not be looked up by name ($($found.Detail)), so it is neither reused nor created. Nothing was changed by this unit. Resume: $resume" }
-        $groupId = $found.Id; $origin = 'pre-existing'
-        if ($found.Verdict -eq 'absent') {
-            $created = Invoke-ClaudeInstallAzRead @('ad', 'group', 'create', '--display-name', $group, '--mail-nickname', $group, '-o', 'json')
-            $obj = $null
-            if ($created.Verdict -eq 'present') { try { $obj = $created.Output | ConvertFrom-Json -ErrorAction Stop } catch { $obj = $null } }
-            if (-not $obj -or -not $obj.id) { Stop-ClaudeInstall "Entra group '$group' of business unit $id could not be created ($($created.Detail)). Nothing was changed by this unit. Resume: $resume" }
-            $groupId = [string]$obj.id; $origin = 'created'
-            Write-Host "    [OK]   $group created" -ForegroundColor Green
-        }
+        if ($found.Verdict -eq 'create-failed') { Stop-ClaudeInstall "Entra group '$group' of business unit $id could not be created ($($found.Detail)). Nothing was changed by this unit. Resume: $resume" }
+        if ($found.Verdict -eq 'created') { Write-Host "    [OK]   $group created" -ForegroundColor Green }
+        $groupId = $found.Id; $origin = $found.Origin
         $unit = @{ Id = $id; Group = $group; MonthlyBudgetUsd = [decimal](Get-ClaudeAnswersField $u 'monthlyUsdBudget'); Mode = $mode; SkipGroupCheck = $true; ApimName = $ApimName; ResourceGroup = $ResourceGroup }
         if ($parent) { $unit.Parent = $parent }
         if ($mode -eq 'Allowance') { $unit.AllowancePercent = [int](Get-ClaudeAnswersField $u 'percent') }
