@@ -164,6 +164,9 @@ try {
         $envs = @{ AZUREPS_HOST_ENVIRONMENT = 'cloud-shell/1.0'; HOME = $h; CLAUDE_GATEWAY_STATE_DIR = $(if ($n -eq 'untrusted-named') { $place } else { $null }) }
         $untrusted[$n] = [pscustomobject]@{ Scenario = $s; Place = $place; File = $file; Hash = (Get-P91Hash $file); Env = $envs; Run = $null }
     }
+    # A tier group name with a single quote (council round 3): Azure CLI places the name inside an OData
+    # string literal, startswith(displayName,'<name>'), without escaping the quote.
+    $quoteInput = New-P91Scenario -Name 'quote-input' -Scratch $scratch -Template $template -World (New-P91World)
 
     $first = @(
         ($runBase1 = New-P91Run $base -Arguments ($newGateway + $secret + '-Yes'))
@@ -184,6 +187,7 @@ try {
         ($runNameTwins = New-P91Run $nameTwins -Arguments ($newGateway + "-StandardGroup '$nameLower'" + '-Yes'))
         ($runNameAstral = New-P91Run $nameAstral -Arguments ($newGateway + "-StandardGroup '$rocketLower'" + '-Yes'))
         ($runOutside = New-P91Run $outside -Arguments ($newGateway + '-Yes') -Environment @{ CLAUDE_GATEWAY_STATE_DIR = (Join-Path $outsideRoot 'state') })
+        ($runQuoteInput = New-P91Run $quoteInput -Arguments ($newGateway + "-StandardGroup 'O''Brien'" + '-Yes'))
     )
     foreach ($u in $untrusted.Values) { $u.Run = New-P91Run $u.Scenario -Arguments ($newGateway + '-Yes') -Environment $u.Env; $first += $u.Run }
     $r1 = Invoke-P91Runs $first
@@ -303,6 +307,10 @@ try {
     Assert 'R6 CLAUDE_GATEWAY_STATE_DIR naming a place that fails a check refuses at startup on one line naming the variable and the check, with no file of this checkout there; nothing is created' (
         $un.ExitCode -eq 1 -and @(Get-P91ErrLines $un).Count -eq 1 -and $unLine -match '^Refused: .*S-1-5-32-545' -and $unLine -match 'CLAUDE_GATEWAY_STATE_DIR' -and
         $unLine -match 'Nothing was read or changed' -and -not (Get-P91Calls $un 'account set*').Count -and -not (Test-Path -LiteralPath $u.Place)) (Get-P91Tail $un)
+    $qi = Get-P91Result $r1 $runQuoteInput; $qiLine = [string]@(Get-P91ErrLines $qi)[0]
+    Assert 'R5 a tier group name with a single quote is refused at input on one line naming -StandardGroup and the OData string literal; nothing is created' (
+        (Test-Refusal $qi '^Refused: -StandardGroup ''O''Brien'': Entra group names containing a single quote are not supported, because Azure CLI places the name inside an OData string literal') -and
+        -not (Get-P91Calls $qi 'ad group*').Count -and -not (Get-P91Calls $qi 'deployment group create*').Count -and -not (Get-P91CheckpointFile $quoteInput)) $qiLine
     $f1 = Get-P91Result $r1 $runForeign
     Assert 'S4 an unrecorded running claude-gw- deployment is awaited before the new one is created' ($f1.ExitCode -eq 0 -and
         (Get-Order $f1 'deployment group show*claude-gw-20260101000000*' 'deployment group create*')) (Get-P91Tail $f1)
@@ -318,7 +326,7 @@ try {
     $sc = [ordered]@{}
     foreach ($n in 'tenant', 'subscription', 'group', 'gateway', 'reuse', 'installer', 'version', 'changed', 'template', 'rgMissing', 'apimMissing', 'groupMissing', 'graphLag',
         'readDeployment', 'readGroup', 'readRg', 'truncated', 'schema', 'unknownStep', 'unsafe', 'restart', 'liveLock', 'exitedLock', 'reusedPid', 'otherHost', 'staleHost', 'flow', 'flowRefusal',
-        'aclDir', 'aclFile', 'tamperDeployment', 'tamperGroup', 'tamperRole', 'renamed', 'otherGroup', 'otherRole') {
+        'aclDir', 'aclFile', 'tamperDeployment', 'tamperGroup', 'tamperRole', 'renamed', 'otherGroup', 'otherRole', 'quoteAnswer') {
         $sc[$n] = & $copy $n
     }
     $sc['existingName'] = New-P91Scenario -Name 'existingName' -Scratch $scratch -From $identity
@@ -341,6 +349,8 @@ try {
     Edit-Checkpoint $sc.schema { param($cp) $cp.schemaVersion = 99 }
     Edit-Checkpoint $sc.unknownStep { param($cp) $first = @($cp.steps | Where-Object { $_ })[0]; if ($first) { $first.id = 'gateway-deploy' } }
     Edit-Checkpoint $sc.unsafe { param($cp) if ($cp.answers) { $cp.answers | Add-Member -NotePropertyName PublisherEmail -NotePropertyValue '@C:\p91-secret.txt' -Force } }
+    # A tier group answer with a single quote would reach an OData string literal (council round 3).
+    Edit-Checkpoint $sc.quoteAnswer { param($cp) if ($cp.answers) { $cp.answers | Add-Member -NotePropertyName PremiumGroup -NotePropertyValue "claude-code-premium' or displayName ne '" -Force } }
     # Receipt values reach az as arguments on a resume, so a value of another shape is a corrupt checkpoint.
     $stepOf = { param($cp, [string]$id) @($cp.steps | Where-Object { $_ -and $_.id -eq $id })[0] }
     Edit-Checkpoint $sc.tamperDeployment { param($cp) $st = & $stepOf $cp 'gateway-deployment'; if ($st) { @($st.receipt.deployments)[0].name = 'p91-not-a-deployment' } }
@@ -367,7 +377,7 @@ try {
     $bounded = New-P91Scenario -Name 'bounded' -Scratch $scratch -From $running
     Edit-P91World $bounded { param($w) foreach ($p in $w.deployments.'rg-p91'.PSObject.Properties) { $p.Value.polls = @('forever') } }
     $hashes = @{}
-    foreach ($n in 'tenant', 'subscription', 'group', 'gateway', 'reuse', 'installer', 'truncated', 'schema', 'unknownStep', 'unsafe', 'aclDir', 'aclFile', 'tamperDeployment', 'tamperGroup', 'tamperRole', 'existingName') { $file = Get-P91CheckpointFile $sc[$n]; $hashes[$n] = if ($file) { Get-P91Hash $file.FullName } else { '' } }
+    foreach ($n in 'tenant', 'subscription', 'group', 'gateway', 'reuse', 'installer', 'truncated', 'schema', 'unknownStep', 'unsafe', 'aclDir', 'aclFile', 'tamperDeployment', 'tamperGroup', 'tamperRole', 'existingName', 'quoteAnswer') { $file = Get-P91CheckpointFile $sc[$n]; $hashes[$n] = if ($file) { Get-P91Hash $file.FullName } else { '' } }
 
     $flowArgs = "@{ SubscriptionId = '$sub'; FoundryAccount = 'ai-p91'; FoundryResourceGroup = 'rg-ai-p91'; ResourceGroup = 'RG'; Location = 'eastus2'; NamePrefix = 'p91gw'; PublisherEmail = 'ops@contoso.com'; Sku = 'BasicV2'; EntitlementStore = 'named-value'; AuthMode = 'interactive'; DesktopSignInKind = 'helper-script'; AddressMode = 'azure'; SkipFinOpsOffer = `$true; Yes = `$true }"
     $flowCommand = { param($s, [string]$rg) ". '$(Join-Path $s.Repo 'scripts\flow\FlowContract.ps1')'; . '$(Join-Path $s.Repo 'scripts\flow\Foundation.ps1')'; " +
@@ -418,6 +428,7 @@ try {
         ($runRenamed = New-P91Run $sc.renamed -Arguments ($newGateway + "-StandardGroup 'Claude-Code-Standard'" + '-Yes'))
         ($runOtherGroup = New-P91Run $sc.otherGroup -Arguments ($newGateway + '-Yes'))
         ($runOtherRole = New-P91Run $sc.otherRole -Arguments ($newGateway + '-Yes'))
+        ($runQuoteAnswer = New-P91Run $sc.quoteAnswer -Arguments ($newGateway + '-Yes'))
     )
     $r2 = Invoke-P91Runs $second
 
@@ -493,6 +504,10 @@ try {
         $res = Get-P91Result $r2 $case[1]
         Assert "S8 a corrupt checkpoint ($($case[0])) refuses on one line naming the problem and keeps the file byte for byte" ((Test-Refusal $res $case[2]) -and (Test-Kept $sc[$case[0]] $hashes[$case[0]])) (Get-P91Tail $res)
     }
+    $qa = Get-P91Result $r2 $runQuoteAnswer
+    Assert 'R5 a tier group answer with a single quote in the checkpoint refuses as a corrupt checkpoint naming PremiumGroup, before any az call that uses it, and keeps the file' (
+        (Test-Refusal $qa 'holds the answer PremiumGroup, which holds a single quote, which Azure CLI would place inside an OData string literal') -and (Test-Kept $sc.quoteAnswer $hashes.quoteAnswer) -and
+        -not (Get-P91Calls $qa 'ad group*').Count) (Get-P91Tail $qa)
     $rs = Get-P91Result $r2 $runRestart
     Assert 'S8 -Restart sets the corrupt checkpoint aside and runs as a first run' ($rs.ExitCode -eq 0 -and
         @(Get-ChildItem -LiteralPath $sc.restart.State -Filter '*.discarded-*.json').Count -eq 1 -and (Get-P91Calls $rs 'deployment group create*').Count -eq 1) (Get-P91Tail $rs)
@@ -589,6 +604,30 @@ try {
         $desktopRefused.Contains($otherApp)) $desktopRefused
     Assert 'R5 a projection resolver app id from the checkpoint whose live name is not the resolver name is refused on one line; the matching one is used' ($resolverOk -and
         $resolverRefused -match '^Refused: .*claude-projection-resolver-other') $resolverRefused
+
+    # ------------------------------------------------------------------ R5: other values that reach an OData string literal (council round 3)
+    # az ad app list --display-name sends startswith(displayName,'claude-projection-resolver-<prefix>'),
+    # and az ad app show --id sends identifierUris/any(s:s eq '<id>') for an id that is not a GUID.
+    $prefixInput = ''; $prefixAnswer = ''; $prefixPlain = 'unset'; $idAnswers = @(); $desktopQuote = ''; $resolverQuote = ''; $azCalls = -1
+    $quotedId = "$appId' or 'a"
+    if (Test-Path -LiteralPath $library) {
+        . $library
+        $script:azCalls = 0
+        function Invoke-ClaudeInstallAzRead { param([string[]]$Arguments, [string[]]$NotFound = @()) $script:azCalls++; [pscustomobject]@{ Verdict = 'present'; Output = ''; Error = ''; Detail = '' } }
+        $script:ClaudeInstall = [pscustomobject]@{ Root = $scratch; Resuming = $true; Answers = [ordered]@{}; Bound = @(); Location = [pscustomobject]@{ Persistent = $true }; Checkpoint = $null }
+        try { Assert-ClaudeInstallNames ([ordered]@{ StandardGroup = 'claude-code-standard'; PremiumGroup = 'claude-code-premium'; NamePrefix = "p91'gw" }); $prefixInput = 'PASSED' } catch { $prefixInput = $_.Exception.Message }
+        $prefixAnswer = Test-ClaudeInstallAnswer 'NamePrefix' "p91'gw"
+        $prefixPlain = Test-ClaudeInstallAnswer 'NamePrefix' 'p91gw'
+        $idAnswers = @((Test-ClaudeInstallAnswer 'DesktopEntraClientId' $quotedId), (Test-ClaudeInstallAnswer 'ProjectionResolverAppId' $quotedId), (Test-ClaudeInstallAnswer 'DesktopEntraClientId' $appId))
+        try { Assert-ClaudeInstallDesktopApp $quotedId; $desktopQuote = 'PASSED' } catch { $desktopQuote = $_.Exception.Message }
+        try { Assert-ClaudeInstallResolverApp $quotedId 'claude-projection-resolver-p91gw'; $resolverQuote = 'PASSED' } catch { $resolverQuote = $_.Exception.Message }
+        $azCalls = $script:azCalls
+    }
+    Assert 'R5 a name prefix with a single quote, which reaches an OData string literal in the resolver app name, is refused at input naming -NamePrefix and as a checkpoint answer' (
+        $prefixInput -match '^Refused: -NamePrefix ''p91''gw'': .*OData string literal' -and $prefixAnswer -match 'single quote' -and $prefixPlain -eq '') "$prefixInput || $prefixAnswer"
+    Assert 'R5 a Desktop or resolver app id that is not a GUID, which az ad app show --id places in an OData string literal, is a corrupt checkpoint answer and is refused before any az call' (
+        $idAnswers.Count -eq 3 -and $idAnswers[0] -match 'GUID' -and $idAnswers[1] -match 'GUID' -and $idAnswers[2] -eq '' -and
+        $desktopQuote -match '^Refused: .*not an application \(client\) id GUID' -and $resolverQuote -match '^Refused: .*not an application \(client\) id GUID' -and $azCalls -eq 0) "$($idAnswers -join ' | ') || $desktopQuote || $resolverQuote || az calls $azCalls"
 
     $cg = Get-P91Result $r2 $runChanged
     Assert 'R2 the summary''s Checkpoint row names an answer this run changes, before the confirmation' ($cg.ExitCode -eq 0 -and

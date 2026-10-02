@@ -179,6 +179,20 @@ section moves to `docs/status/P91.md` under P87's ADR-0042.
   ([measurement](measurements/p91-mutations-lead-amendment.json)). Where the tests run: the three
   PowerShell checks on Windows, with real access rules; the three bash checks on Windows Git Bash and
   on Linux and macOS, through the probe seam.
+- Council round 3, Coder, 2026-10-02: BLOCK on `49aa345`, OData quoting. The tier group names reach
+  `az ad group list --display-name`, which sends `startswith(displayName,'<name>')` to Microsoft
+  Graph without escaping a quote (azure-cli 2.86.0 `role/custom.py:1898-1905`), and the answer
+  validators allowed `'`: `O'Brien` made Graph answer 400, read as inconclusive, and a crafted answer
+  could add filter logic. In P91's code the resolver app name (`az ad app list --display-name
+  claude-projection-resolver-<prefix>`, `role/custom.py:746-761`) and the Desktop and resolver app
+  ids (`az ad app show --id`, which sends `identifierUris/any(s:s eq '<id>')` for a value that is not
+  a GUID, `role/custom.py:772-789`) reach OData string literals too. RED:
+  `Test-InstallerCheckpoint.ps1` 85 checks, 4 failed (186.4 s); `Test-BashInstallerCheckpoint.ps1`
+  51, 2 failed (464.8 s). Failure lines read: "R5 a tier group name with a single quote is refused at
+  input" (both installers ran on and created the group); "R5 a tier group answer with a single quote
+  in the checkpoint refuses as a corrupt checkpoint" (both resumed and completed); "R5 a name prefix
+  with a single quote" ("The term 'Assert-ClaudeInstallNames' is not recognized"); "R5 a Desktop or
+  resolver app id that is not a GUID" (both ids reached `az ad app show --id`).
 
 Acceptance criteria, for both installers unless one is named:
 

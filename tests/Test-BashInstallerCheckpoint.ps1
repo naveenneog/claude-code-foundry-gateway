@@ -382,6 +382,9 @@ try {
         $envs = @{ AZUREPS_HOST_ENVIRONMENT = 'cloud-shell/1.0'; CLAUDE_GATEWAY_STATE_DIR = $(if ($n -eq 'untrusted-named') { ConvertTo-BashPath $place } else { $null }) }
         $untrusted[$n] = [pscustomobject]@{ Scenario = $s; Place = $place; File = $file; Hash = $(if ($file) { (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash } else { '' }); Env = $envs; Run = $null }
     }
+    # A tier group name with a single quote (council round 3): Azure CLI places the name inside an OData
+    # string literal, startswith(displayName,'<name>'), without escaping the quote.
+    $quoteInput = New-Scenario 'quote-input' (New-World)
     # Group names beyond ASCII (ADR-0046 decision 11): Graph's answer for the name is given, and a
     # returned group is the named one only when it has as many Unicode code points as the name.
     # PowerShell variable names ignore case, so each spelling has its own variable name.
@@ -425,6 +428,7 @@ try {
         ($runNameTwins = New-Run $nameTwins (& $nameArgs $nameLower))
         ($runNameAstral = New-Run $nameAstral (& $nameArgs $rocketLower))
         ($runOutside = New-Run $outside $args0 @{ CLAUDE_GATEWAY_STATE_DIR = $outsideDir })
+        ($runQuoteInput = New-Run $quoteInput (& $nameArgs "O'Brien"))
     )
     foreach ($u in $untrusted.Values) { $u.Run = New-Run $u.Scenario $args0 $u.Env; $first += $u.Run }
     $r1 = Invoke-Runs $first
@@ -506,6 +510,10 @@ try {
     Assert 'R6 bash CLAUDE_GATEWAY_STATE_DIR naming a place that fails a check refuses at startup on one line naming the variable and the check, with no file of this checkout there; nothing is created' (
         $un.ExitCode -eq 1 -and @(Get-ErrLines $un).Count -eq 1 -and $unLine -match '^Refused: .*drwxrwx---' -and $unLine -match 'CLAUDE_GATEWAY_STATE_DIR' -and
         $unLine -match 'Nothing was read or changed' -and -not (Get-Calls $un 'account set*').Count -and -not (Test-Path -LiteralPath $u.Place)) (Get-Tail $un)
+    $qi = $r1[$runQuoteInput.Dir]; $qiLine = [string]@(Get-ErrLines $qi)[0]
+    Assert 'R5 bash a tier group name with a single quote is refused at input on one line naming --standard-group and the OData string literal; nothing is created' (
+        (Test-Refusal $qi '^Refused: --standard-group ''O''Brien'': Entra group names containing a single quote are not supported, because Azure CLI places the name inside an OData string literal') -and
+        -not (Get-Calls $qi 'ad group*').Count -and -not (Get-Calls $qi 'deployment group create*').Count -and -not (Get-CheckpointFile $quoteInput)) $qiLine
 
     # ------------------------------------------------------------------ reruns
     $sleeperOut = & $bash -c 'sleep 900 >/dev/null 2>&1 & echo $!'
@@ -514,13 +522,15 @@ try {
     $hostName = "$(& $bash -c 'uname -n')".Trim().ToLowerInvariant().Split('.')[0]
     $sc = [ordered]@{}
     foreach ($n in 'tenant', 'subscription', 'group', 'prefix', 'installer', 'version', 'changed', 'truncated', 'restart', 'liveLock', 'exitedLock', 'otherHost', 'staleHost',
-        'schemaName', 'schemaVersion', 'unknownStep', 'subscriptionName', 'tamperDeployment', 'tamperGroup', 'permSeam', 'permDirReal', 'permFileReal', 'renamed', 'gitBash', 'otherGroup') { $sc[$n] = New-Scenario $n $null $base }
+        'schemaName', 'schemaVersion', 'unknownStep', 'subscriptionName', 'tamperDeployment', 'tamperGroup', 'permSeam', 'permDirReal', 'permFileReal', 'renamed', 'gitBash', 'otherGroup', 'quoteAnswer') { $sc[$n] = New-Scenario $n $null $base }
     foreach ($s in @($base) + @($sc.Values)) { Edit-World $s { param($w) $w.inject.groupCreateFail = @() } }
     Edit-World $sc.tenant { param($w) $w.tenantId = '00000000-0000-4000-8000-0000000000f9' }
     Edit-Checkpoint $sc.installer { param($c) $c.installer = 'pwsh' }
     Edit-Checkpoint $sc.schemaName { param($c) $c.schema = 'p91-other-schema' }
     Edit-Checkpoint $sc.schemaVersion { param($c) $c.schemaVersion = 99 }
     Edit-Checkpoint $sc.unknownStep { param($c) $firstStep = @($c.steps | Where-Object { $_ })[0]; if ($firstStep) { $firstStep.id = 'gateway-deploy' } }
+    # A tier group answer with a single quote would reach an OData string literal (council round 3).
+    Edit-Checkpoint $sc.quoteAnswer { param($c) if ($c.answers) { $c.answers | Add-Member -NotePropertyName PremiumGroup -NotePropertyValue "claude-code-premium' or displayName ne '" -Force } }
     # A subscription passed by name, which az account set resolves to another id than the checkpoint's.
     Edit-World $sc.subscriptionName { param($w) $w.subscriptionId = '00000000-0000-4000-8000-0000000000a9' }
     # Receipt values reach az as arguments on a resume, so a value of another shape is a corrupt checkpoint.
@@ -547,7 +557,7 @@ try {
     & $lockOf $sc.otherHost @{ pid = 4242; processStart = 'x'; host = 'p91-other-host'; installer = 'bash'; runId = ('c' * 32); acquiredUtc = '2026-10-01T00:00:00Z' } 0
     & $lockOf $sc.staleHost @{ pid = 4242; processStart = 'x'; host = 'p91-other-host'; installer = 'bash'; runId = ('d' * 32); acquiredUtc = '2026-10-01T00:00:00Z' } 10
     $hashes = @{}; foreach ($n in 'tenant', 'subscription', 'group', 'prefix', 'installer', 'truncated', 'schemaName', 'schemaVersion', 'unknownStep', 'subscriptionName', 'tamperDeployment', 'tamperGroup',
-        'permSeam', 'permDirReal', 'permFileReal', 'gitBash') { $hashes[$n] = Get-Hash $sc[$n] }
+        'permSeam', 'permDirReal', 'permFileReal', 'gitBash', 'quoteAnswer') { $hashes[$n] = Get-Hash $sc[$n] }
     $bounded = New-Scenario 'bounded' $null $running
     Edit-World $bounded { param($w) foreach ($p in $w.deployments.'rg-p91'.PSObject.Properties) { $p.Value.polls = @('forever') } }
     $swap = { param([string]$flag, [string]$to) $a = @($args0); $i = [array]::IndexOf($a, $flag); $a[$i + 1] = $to; $a }
@@ -584,6 +594,7 @@ try {
         # Git Bash on Windows: the bash installer keeps no store there (decision 2).
         ($runGitBash = New-Run $sc.gitBash $args0 @{ P91_UNAME_S = 'MINGW64_NT-10.0-26100' })
         ($runOtherGroup = New-Run $sc.otherGroup $args0)
+        ($runQuoteAnswer = New-Run $sc.quoteAnswer $args0)
     )
     $r2 = Invoke-Runs $second
     $b2 = $r2[$runBase2.Dir]
@@ -662,6 +673,10 @@ try {
     Assert 'R5 bash a group receipt that names another group (live name differs) refuses on one line, keeps the checkpoint, and creates and syncs nothing' ((Test-Refusal $og "Entra group 'claude-code-standard' \($otherId\)") -and
         [string]@(Get-ErrLines $og)[0] -match 'not listed by Microsoft Graph under that name' -and $ogText.Contains($otherId) -and -not (Get-Calls $og 'ad group create*').Count -and
         -not @($og.Scripts | Where-Object { $_ -like '*Sync-ClaudeAccess*' }).Count) (Get-Tail $og)
+    $qa = $r2[$runQuoteAnswer.Dir]
+    Assert 'R5 bash a tier group answer with a single quote in the checkpoint refuses as a corrupt checkpoint naming PremiumGroup, before any az call that uses it, and keeps the file' (
+        (Test-Refusal $qa 'holds the answer PremiumGroup, which holds a single quote, which Azure CLI would place inside an OData string literal') -and $hashes.quoteAnswer -and
+        (Get-Hash $sc.quoteAnswer) -eq $hashes.quoteAnswer -and -not (Get-Calls $qa 'ad group*').Count) (Get-Tail $qa)
     $all = @($r1.Values) + @($r2.Values)
     $unexpected = @($all | ForEach-Object { $_.Unexpected } | Where-Object { $_ })
     Assert 'harness: every az call was one the stub knows, and no run timed out' (-not $unexpected.Count -and -not @($all | Where-Object { $_.TimedOut }).Count) (($unexpected | Select-Object -Unique -First 4) -join ' | ')
