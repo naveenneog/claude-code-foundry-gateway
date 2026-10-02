@@ -17,15 +17,15 @@ steps_deps_() {
 steps_selected_() { [ -z "${STEPS:-}" ] && return 0; case " $STEPS " in *" $1 "*) return 0 ;; esac; return 1; }
 steps_resume_line_() { if [ "$CKPT_PERSISTENT" = "1" ] && [ -z "$CKPT_NOSTORE" ]; then ckpt_resume_cmd_; else ckpt_resume_cmd_ with-answers; fi; }
 
-# One event, one line of JSON (NDJSON), appended in one write. A JWT-shaped value in a message is
-# replaced, so no token reaches the stream (ADR-0046 decision 15). Events are written once the file has
+# One event, one line of JSON (NDJSON), appended in one write. Each secret shape in its message or resume
+# command is replaced by [redacted] (redact, ADR-0047 decision 12). Events are written once the file has
 # passed the startup check of steps_start_, as Install-ClaudeGateway.ps1 writes them once -ProgressPath
 # is initialized (scripts/ClaudeInstallSteps.ps1:19-27): a refusal before then, or of the file itself, writes none.
 progress_event_() {
   [ -n "${PROGRESS_FILE:-}" ] && [ "${PROGRESS_READY:-0}" = "1" ] || return 0
   local line
-  line="$(jq -cn --arg t "$(ckpt_now_)" --arg r "$CKPT_RUN_ID" --arg s "$1" --arg e "$2" --arg m "$3" --arg c "${4:-}" '
-    def clean: gsub("\\s*[\\r\\n]+\\s*"; " ") | gsub("eyJ[A-Za-z0-9_-]{4,}\\.[A-Za-z0-9_.-]*"; "[redacted]") | sub("^\\s+"; "") | sub("\\s+$"; "");
+  line="$(jq -cn --argjson R "$CKPT_REDACT_RULES" --arg t "$(ckpt_now_)" --arg r "$CKPT_RUN_ID" --arg s "$1" --arg e "$2" --arg m "$3" --arg c "${4:-}" "$CKPT_REDACT_JQ"'
+    def clean: gsub("\\s*[\\r\\n]+\\s*"; " ") | redact | sub("^\\s+"; "") | sub("\\s+$"; "");
     {schemaVersion: 1, time: $t, runId: $r, stepId: $s, event: $e, message: ($m | clean), resumeCommand: ($c | clean)}' | tr -d '\r')"
   printf '%s\n' "$line" >> "$PROGRESS_FILE"
 }
@@ -62,7 +62,7 @@ steps_select_() {
   [ -n "${STEPS:-}" ] || return 0
   STEPS="$(printf '%s' "$STEPS" | tr ',' ' ')"
   for id in $STEPS; do
-    case " $CKPT_ORDER " in *" $id "*) ;; *) ckpt_refuse_ "--steps '$id' names no step of install-claude-gateway.sh. Its steps are $(printf '%s' "$CKPT_ORDER" | sed 's/ /, /g'). Nothing was changed." ;; esac
+    case " $CKPT_ORDER " in *" $id "*) ;; *) ckpt_refuse_ "--steps '$id' names no step of install-claude-gateway.sh. Its steps are $(printf '%s' "$CKPT_ORDER" | sed 's/ /, /g'). Nothing was changed. ./install-claude-gateway.sh --list-steps lists the steps with their state." ;; esac
   done
 }
 
@@ -139,7 +139,7 @@ steps_start_() {
   if [ "$PREFLIGHT" = "1" ]; then preflight_run_; rc=$?; exit "$rc"; fi
   trap 'ckpt_exit_' EXIT
   steps_select_
-  if [ -n "${PROGRESS_FILE:-}" ]; then ( : >> "$PROGRESS_FILE" ) 2>/dev/null || ckpt_refuse_ "--progress-file $PROGRESS_FILE cannot be written. Nothing was changed."; PROGRESS_READY=1; fi
+  if [ -n "${PROGRESS_FILE:-}" ]; then ( : >> "$PROGRESS_FILE" ) 2>/dev/null || ckpt_refuse_ "--progress-file $PROGRESS_FILE cannot be written. Nothing was changed. Give a writable file path, or run without --progress-file."; PROGRESS_READY=1; fi
   answers_apply_
 }
 

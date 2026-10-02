@@ -404,8 +404,12 @@ function Import-ClaudeInstallerAnswers {
     $problems = @($read.Problems)
     if (-not $problems.Count) { $problems = @(Test-ClaudeInstallerAnswers -Answers $read.Document -Consumer 'Install-ClaudeGateway.ps1') }
     if ($problems.Count) {
-        $more = if ($problems.Count -gt 1) { " (and $($problems.Count - 1) more; Install-ClaudeGateway.ps1 -Preflight -AnswersPath lists every problem)" } else { '' }
-        Stop-ClaudeInstall "the answers file $Path does not match the answers schema: $($problems[0].message)$more. Nothing was changed."
+        # The first problem with its remedy, the number of problems, and the command that lists every one.
+        $count = if ($problems.Count -eq 1) { '1 problem' } else { "$($problems.Count) problems" }
+        $remedy = ([string]$problems[0].remedy).Trim()
+        if ($remedy -and -not $remedy.EndsWith('.')) { $remedy += '.' }
+        $quoted = "'" + $Path.Replace("'", "''") + "'"
+        Stop-ClaudeInstall "the answers file $Path does not match the answers schema ($count). $(([string]$problems[0].message).TrimEnd('.')).$(if ($remedy) { " Remedy: $remedy" }) Nothing was changed. ./Install-ClaudeGateway.ps1 -Preflight -AnswersPath $quoted lists every problem."
     }
     $S = Get-ClaudeAnswersSchema
     $out = [ordered]@{}

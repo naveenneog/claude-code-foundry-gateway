@@ -214,9 +214,12 @@ try {
     Assert 'R3 the unknown-step refusal says that -ListSteps lists the steps with their state' (@(Get-P91ErrLines $uk).Count -eq 1 -and @(Get-P91ErrLines $uk)[0].Contains('./Install-ClaudeGateway.ps1 -ListSteps lists the steps with their state.')) (Get-P91Tail $uk)
     $ab = Get-P91Result $r1 $runAnswersBad
     $abLine = @(Get-P91ErrLines $ab)[0]
-    Assert 'R3 an answers file with problems refuses on one line with the first problem, its remedy, the number of problems and the command that lists every one; nothing is read from Azure' ((Test-Refusal $ab 'does not match the answers schema') -and
+    # Test-ClaudePrerequisites runs before the answers file is read: Azure CLI's version, its account and Bicep, and
+    # whether management.azure.com answers. No Azure resource is read.
+    $probes = @($ab.Az | Where-Object { $_ -notmatch '^(version|account list|account show|bicep version)( |$)' -and $_ -notlike 'WEB *' })
+    Assert 'R3 an answers file with problems refuses on one line with the first problem, its remedy, the number of problems and the command that lists every one; no Azure resource is read' ((Test-Refusal $ab 'does not match the answers schema') -and
         $abLine.Contains('(2 problems)') -and $abLine -match 'Remedy: \S' -and $abLine -match 'Bogus|Gold' -and $abLine.Contains("./Install-ClaudeGateway.ps1 -Preflight -AnswersPath '$answersBadFile' lists every problem.") -and
-        -not $ab.Az.Count -and -not (Get-P91CheckpointFile $answersBad)) "$abLine || az: $($ab.Az -join ' | ')"
+        -not $probes.Count -and -not (Get-P91CheckpointFile $answersBad)) "$abLine || az: $($ab.Az -join ' | ')"
     $unexpected = @(foreach ($r in @($r1.Values) + @($r2.Values)) { @($r.Unexpected) })
     Assert 'harness: every az call was one the stub knows, and no run timed out' (-not $unexpected.Count -and -not @(@($r1.Values) + @($r2.Values) | Where-Object { $_.TimedOut }).Count) (($unexpected | Select-Object -Unique -First 4) -join ' | ')
 }

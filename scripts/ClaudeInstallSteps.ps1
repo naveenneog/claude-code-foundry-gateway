@@ -22,16 +22,16 @@ function Initialize-ClaudeInstallProgress {
     if (-not $Path) { return }
     $full = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
     try { [IO.File]::AppendAllText($full, '', (New-Object Text.UTF8Encoding($false))) }
-    catch { Stop-ClaudeInstall "-ProgressPath $Path cannot be written ($($_.Exception.Message)). Nothing was changed." }
+    catch { Stop-ClaudeInstall "-ProgressPath $Path cannot be written ($($_.Exception.Message)). Nothing was changed. Give a writable file path, or run without -ProgressPath." }
     $script:ClaudeInstallProgressPath = $full
 }
 
 function Write-ClaudeInstallProgress {
-    # One event, one line of JSON (NDJSON), appended in one write. A JWT-shaped value in a message is
-    # replaced, so no token reaches the stream (decision 15 of ADR-0046).
+    # One event, one line of JSON (NDJSON), appended in one write. Each secret shape in its message or resume
+    # command is replaced by [redacted] (Protect-ClaudeInstallText, ADR-0047 decision 12).
     param([string]$StepId, [string]$Event, [string]$Message, [string]$ResumeCommand = '')
     if (-not $script:ClaudeInstallProgressPath) { return }
-    $clean = { param([string]$Text) (($Text -replace '\s*[\r\n]+\s*', ' ') -replace 'eyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_.-]*', '[redacted]').Trim() }
+    $clean = { param([string]$Text) (Protect-ClaudeInstallText ($Text -replace '\s*[\r\n]+\s*', ' ')).Trim() }
     $row = [ordered]@{ schemaVersion = 1; time = [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ', [Globalization.CultureInfo]::InvariantCulture)
         runId = $script:ClaudeInstallRunId; stepId = $StepId; event = $Event; message = (& $clean $Message); resumeCommand = (& $clean $ResumeCommand) }
     [IO.File]::AppendAllText($script:ClaudeInstallProgressPath, (ConvertTo-Json -InputObject ([pscustomobject]$row) -Compress) + "`n", (New-Object Text.UTF8Encoding($false)))
@@ -75,7 +75,7 @@ function Set-ClaudeInstallSelection {
     $ids = @($Steps | ForEach-Object { ([string]$_) -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
     foreach ($id in $ids) {
         if (-not $script:ClaudeInstallSteps.Contains($id)) {
-            Stop-ClaudeInstall "-Steps '$id' names no step of Install-ClaudeGateway.ps1. Its steps are $(@($script:ClaudeInstallSteps.Keys) -join ', '). Nothing was changed."
+            Stop-ClaudeInstall "-Steps '$id' names no step of Install-ClaudeGateway.ps1. Its steps are $(@($script:ClaudeInstallSteps.Keys) -join ', '). Nothing was changed. ./Install-ClaudeGateway.ps1 -ListSteps lists the steps with their state."
         }
     }
     $script:ClaudeInstallSelection = @($ids)

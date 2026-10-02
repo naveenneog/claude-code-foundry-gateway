@@ -40,13 +40,15 @@ EOF
 # one line, before anything is read from Azure or changed.
 answers_apply_() {
   [ -n "${ANSWERS_FILE:-}" ] || return 0
-  local problems count first more="" name var flag kind value
+  local problems count first more="" remedy name var flag kind value
   problems="$(answers_check_file_ "$ANSWERS_FILE" install-claude-gateway.sh)"
   count="$(printf '%s' "$problems" | jq 'length' | tr -d '\r')"
   if [ "$count" != "0" ]; then
-    first="$(printf '%s' "$problems" | jq -r '.[0].message' | tr -d '\r')"
-    [ "$count" -gt 1 ] && more=" (and $((count - 1)) more; --preflight --answers-file lists every problem)"
-    ckpt_refuse_ "the answers file $ANSWERS_FILE does not match the answers schema: $first$more. Nothing was changed."
+    # The first problem with its remedy, the number of problems, and the command that lists every one.
+    first="$(printf '%s' "$problems" | jq -r '.[0].message' | tr -d '\r')"; remedy="$(printf '%s' "$problems" | jq -r '.[0].remedy // ""' | tr -d '\r')"
+    if [ "$count" = "1" ]; then more="1 problem"; else more="$count problems"; fi
+    case "$remedy" in ""|*.) ;; *) remedy="$remedy." ;; esac
+    ckpt_refuse_ "the answers file $ANSWERS_FILE does not match the answers schema ($more). ${first%.}.${remedy:+ Remedy: $remedy} Nothing was changed. ./install-claude-gateway.sh --preflight --answers-file $(ckpt_quote_ "$ANSWERS_FILE") lists every problem."
   fi
   ANSWERS_JSON="$(answers_read_ "$ANSWERS_FILE")"
   while read -r name var flag kind; do
