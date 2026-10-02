@@ -162,7 +162,8 @@ function Assert-ClaudeInstallStorePath {
     $why = ''
     if (Test-ClaudeInstallWindows) {
         if (-not (Test-Path -LiteralPath $Path)) { return }
-        if (Test-ClaudeInstallReparsePoint $Path) { $why = 'is a symbolic link or junction' }
+        # The state directory's own name is checked for a link where its place is resolved.
+        if ($Kind -eq 'file' -and (Test-ClaudeInstallReparsePoint $Path)) { $why = 'is a symbolic link or junction' }
         else {
             $owner = Get-ClaudeInstallWindowsOwner $Path
             if ((Get-ClaudeInstallWindowsTrusted) -notcontains $owner) { $why = "is owned by $(Get-ClaudeInstallSidName $owner) ($owner), not by the current user, SYSTEM or Administrators" }
@@ -183,7 +184,7 @@ function Assert-ClaudeInstallStorePath {
     }
     $s = Get-ClaudeInstallPosixStat $Path
     if (-not $s.Exists) { return }
-    if ($s.Link) { $why = 'is a symbolic link' }
+    if ($Kind -eq 'file' -and $s.Link) { $why = 'is a symbolic link' }
     elseif (-not $s.Mine) { $why = "is owned by $(if ($s.Owner) { $s.Owner } else { 'another user' }), not by the current user" }
     elseif ([string]$s.Mode -match '^.{5}w' -or [string]$s.Mode -match '^.{8}w') { $why = "has mode $($s.Mode) (owner $($s.Owner)), so its group or other users can write it" }
     if ($why) { Stop-ClaudeInstall "the install checkpoint $Kind $Path $why, so it is not trusted; a state directory the installer creates is owner-only. $Tail" }

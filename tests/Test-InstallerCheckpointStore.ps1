@@ -234,11 +234,20 @@ try {
         $looseState = Join-Path $loose 'state'; New-Item -ItemType Directory -Force -Path $looseState | Out-Null; & $protect $looseState @(& $rule $owner 'FullControl' -Inherit)
         $wp = & $real $looseState 'directory'
         Assert 'pwsh Windows: a parent directory that lets Users delete what it holds is refused, naming the parent and the rule' ((& $refused $wp 'S-1-5-32-545') -and $wp.Contains("$loose, which holds")) $wp
-        function Get-ClaudeInstallWindowsOwner([string]$Path) { 'S-1-5-21-1000-1000-1000-1001' }
-        $wo = & $real $kept 'directory'
+        # The owner seam answers for one path; every other path keeps its real owner.
+        $script:foreignOwnerPath = ''
+        function Get-ClaudeInstallWindowsOwner([string]$Path) {
+            if ($Path.TrimEnd('\') -eq $script:foreignOwnerPath) { return 'S-1-5-21-1000-1000-1000-1001' }
+            return [string](Get-Acl -LiteralPath $Path).GetOwner([System.Security.Principal.SecurityIdentifier]).Value
+        }
+        $script:foreignOwnerPath = $kept.TrimEnd('\'); $wo = & $real $kept 'directory'
+        $script:foreignOwnerPath = $scratch.TrimEnd('\'); $wq = & $real $kept 'directory'
         . $psLibrary
         $script:ClaudeInstall = [pscustomobject]@{ Root = (Join-Path $scratch 'checkout'); Location = [pscustomobject]@{ CloudDrive = $false }; Answers = [ordered]@{} }
-        Assert 'pwsh Windows: a store path owned by another account than the user, SYSTEM or Administrators is refused, naming the owner (owner seam)' (& $refused $wo 'owned by .*S-1-5-21-1000-1000-1000-1001') $wo
+        Assert 'pwsh Windows: a store path owned by another account than the user, SYSTEM or Administrators is refused, naming the owner (owner seam)' (
+            (& $refused $wo 'owned by .*S-1-5-21-1000-1000-1000-1001') -and $wo.Contains("directory $kept is owned by")) $wo
+        Assert 'pwsh Windows: a parent directory owned by another account is refused, naming the parent and the owner (owner seam)' (
+            (& $refused $wq 'owned by .*S-1-5-21-1000-1000-1000-1001') -and $wq.Contains("$scratch, which holds")) $wq
         $outside = Join-Path ([IO.Path]::GetPathRoot([Environment]::GetFolderPath('UserProfile'))) ('p91-outside-profile-' + [guid]::NewGuid().ToString('N') + '\state')
         $wu = & $winPlace $outside
         Assert 'pwsh Windows: a state directory outside the user profile is refused, naming the profile' ((& $refused $wu 'not inside the user profile') -and $wu.Contains($outside)) $wu

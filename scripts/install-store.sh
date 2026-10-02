@@ -54,7 +54,8 @@ ckpt_perm_why_() {
   [ "$CKPT_CLOUDDRIVE" = "1" ] && return 0
   { [ -e "$1" ] || [ -L "$1" ]; } || return 0
   ckpt_perm_probe_ "$1"
-  if [ "$PERM_LINK" = "1" ]; then PERM_WHY="is a symbolic link"
+  # The state directory's own name is checked for a link where its place is resolved.
+  if [ "$2" = "file" ] && [ "$PERM_LINK" = "1" ]; then PERM_WHY="is a symbolic link"
   elif [ "$PERM_MINE" != "1" ]; then PERM_WHY="is owned by ${PERM_OWNER:-another user}, not by the current user"
   else
     case "$PERM_MODE" in ?????w*|????????w*) PERM_WHY="has mode $PERM_MODE (owner $PERM_OWNER), so its group or other users can write it" ;; esac

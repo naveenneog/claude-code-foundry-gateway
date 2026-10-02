@@ -530,11 +530,11 @@
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "scripts/ClaudeInstallCheckpoint.ps1": "3d22c60d32dc1a96939c8cf2f00cf5a3f3f1df5de9597ba47e24c6034608f6fc",
         "scripts/ClaudeInstallResume.ps1": "8bf8582044fb348f0f3f4b88756c0f3878fde372afad555519c9c95e62d7e8b0",
-        "scripts/ClaudeInstallStore.ps1": "2d9332b8bf6982884c3c88c881c6e93a07b48f3a6b38a8a6e287da880174a5dc",
+        "scripts/ClaudeInstallStore.ps1": "22b1c8724888268e8cb7fcfb351b854b3114fb1ea5ae463720c684f59fad2705",
         "scripts/flow/Foundation.ps1": "fb0d43ee4fbe00a140410bf3f9594b1a6d43bc4f226748f8231c6f23743c7ed4",
         "scripts/install-checkpoint.sh": "f02c05c5f6de5786f488c065ea94069a689efd680bb58716d8e8f39636005eb2",
         "scripts/install-resume.sh": "9b3e7ffb4c5683ed27778feab8f05a5d834d745acc8278064d27287e0d2f8c21",
-        "scripts/install-store.sh": "ee04088f0d0156632ba598c2196a9fb06d3489b76be11417f324e2d7305cc6c3"
+        "scripts/install-store.sh": "1ed09cc9dd07301081f9fad97d5a01fe6389e05f7e356641ad4705ea96861ad2"
       },
       "outputs": [
         {
