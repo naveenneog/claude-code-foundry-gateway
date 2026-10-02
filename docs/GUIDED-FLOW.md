@@ -175,6 +175,18 @@ used from another PowerShell script, override the file.
 The supplied value must match the printed fingerprint, or at least its first
 eight characters. `-WhatIf` prints the same review and writes nothing.
 
+The flow reads the answers file against the installer answers schema
+([`schemas/claude-gateway.answers.schema.json`](../schemas/claude-gateway.answers.schema.json)), as
+`Start-ClaudeGateway.ps1` applies it: a key that is not an answer, a value of the wrong type or a
+secret stops the flow before any plan, naming it (`Start-ClaudeGateway.ps1:109-130`). A field that a
+step records itself, such as the fingerprint of an approved network review
+(`scripts/flow/Network.ps1:40`), is not an answer. A plan that runs
+`Install-ClaudeGateway.ps1` without a console carries the installer's preflight of its arguments:
+`-PlanOnly` prints the check lines after the review, the fingerprint covers their results, and an
+approved plan with a failing check is not applied (`Start-ClaudeGateway.ps1:134-159`). When the plan
+names no subscription, the checks that read Azure are NOT-RUN, so an empty record reads nothing from
+Azure ([ADR-0047](adr/0047-lean-installer-phase-0.md) decision 9).
+
 The fingerprint is the same on PowerShell 7 and Windows PowerShell 5.1, so a
 plan reviewed on one can be applied on the other. The flow writes the plan's
 canonical text itself: `ConvertTo-Json` escapes `'`, `<`, `>` and `&` on

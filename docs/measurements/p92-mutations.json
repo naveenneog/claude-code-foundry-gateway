@@ -1,0 +1,1327 @@
+{
+  "packet": "P92",
+  "round": "REFACTOR",
+  "dateUtc": "2026-10-02",
+  "measuredCommit": "06ecdac40484f7bf9e2279da7daf8b0efc7e787c",
+  "platform": "Windows, PowerShell 7.6.6, Git Bash 5.3.15, jq 1.8.2",
+  "logicalCpuCount": 16,
+  "rule": "One mutant per check of the lead's acceptance list (1-7), in each installer where it is marked both, and one per check added in GREEN. A mutant counts as caught only when its suite reaches the baseline check count and at least one check fails; a mutant of a bash file also passes bash -n. Each worker runs in its own copy of the files at the measured commit (git archive); a mutant is applied, its suite run, and the file restored and its hash checked before the next. targetFailed says whether the check the mutant was written for is among the failures.",
+  "loadNote": "Two or three workers ran at a time on one machine (PowerShell suites, bash preflight and steps, bash steps); seconds are wall times under that load.",
+  "baselines": [
+    {
+      "suite": "tests/Test-BashInstallerCheckpointShards.ps1",
+      "checks": 5,
+      "failed": 0,
+      "seconds": 2.4
+    },
+    {
+      "suite": "tests/Test-BashInstallerPreflight.ps1",
+      "checks": 17,
+      "failed": 0,
+      "seconds": 61.4
+    },
+    {
+      "suite": "tests/Test-BashInstallerStepSelection.ps1",
+      "checks": 22,
+      "failed": 0,
+      "seconds": 228.9
+    },
+    {
+      "suite": "tests/Test-GuidedFlowAnswersSchema.ps1",
+      "checks": 9,
+      "failed": 0,
+      "seconds": 22.9
+    },
+    {
+      "suite": "tests/Test-InstallerAnswersDrift.ps1",
+      "checks": 13,
+      "failed": 0,
+      "seconds": 8.3
+    },
+    {
+      "suite": "tests/Test-InstallerAnswersSchema.ps1",
+      "checks": 40,
+      "failed": 0,
+      "seconds": 17.8
+    },
+    {
+      "suite": "tests/Test-InstallerBusinessUnitAnswers.ps1",
+      "checks": 9,
+      "failed": 0,
+      "seconds": 38.3
+    },
+    {
+      "suite": "tests/Test-InstallerPreflight.ps1",
+      "checks": 17,
+      "failed": 0,
+      "seconds": 39.7
+    },
+    {
+      "suite": "tests/Test-InstallerStepSelection.ps1",
+      "checks": 21,
+      "failed": 0,
+      "seconds": 56.8
+    }
+  ],
+  "caught": 61,
+  "targetFailed": 61,
+  "total": 63,
+  "caughtAfterTestChanges": 63,
+  "testChanges": "T10 and BT10 escaped the first run: no scenario put a JWT-shaped value where a progress message quotes it. REFACTOR adds such a value to a failing run (PowerShell) and to a refused group read (bash), and each check now also requires the event to carry [redacted]; afterTestChange records the same mutant against the changed check.",
+  "mutants": [
+    {
+      "id": "S1",
+      "item": "1 valid file passes",
+      "suite": "tests/Test-InstallerAnswersSchema.ps1",
+      "target": "valid",
+      "file": "schemas/claude-gateway.answers.schema.json",
+      "mutation": "'\"enum\": [\"BasicV2\", \"StandardV2\", \"PremiumV2\"],' -> '\"enum\": [\"StandardV2\", \"PremiumV2\"],'",
+      "checks": 40,
+      "failed": 25,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 17.9,
+      "failures": [
+        "valid is valid in both validators (Install-ClaudeGateway.ps1) - PowerShell: answers.schema|Sku|Sku 'BasicV2' is not one of: StandardV2, PremiumV2|Use one of: StandardV2, PremiumV2.",
+        "valid-flow is valid in both validators (Start-ClaudeGateway.ps1) - PowerShell: answers.schema|foundation.sku|foundation.sku 'BasicV2' is not one of: StandardV2, PremiumV2|Use one of: StandardV2, PremiumV2.",
+        "unknown-property fails under answers.schema only, with the same problems in both validators (Install-ClaudeGateway.ps1) - PowerShell: answers.schema|Bogus|Bogus is not an answer in the answers schema|Remove it, or use a name from schemas/claude-gateway.answers.schema.json.",
+        "bu-upper-id fails under businessUnits.ids only, with the same problems in both validators (Install-ClaudeGateway.ps1) - PowerShell: answers.schema|Sku|Sku 'BasicV2' is not one of: StandardV2, PremiumV2|Use one of: StandardV2, PremiumV2."
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "S2",
+      "item": "1 unknown property",
+      "suite": "tests/Test-InstallerAnswersSchema.ps1",
+      "target": "unknown",
+      "file": "scripts/ClaudeInstallerAnswers.ps1",
+      "mutation": "'& $problem \"$k is not an answer in the answers schema\"' -> '$null = \"$k is not an answer in the answers schema\",'",
+      "checks": 40,
+      "failed": 1,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 16.4,
+      "failures": [
+        "unknown-property fails under answers.schema only, with the same problems in both validators (Install-ClaudeGateway.ps1) - PowerShell:"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "S3",
+      "item": "1 upper-case BU id",
+      "suite": "tests/Test-InstallerAnswersSchema.ps1",
+      "target": "upper|lower-case|businessUnits\\.ids",
+      "file": "schemas/claude-gateway.answers.schema.json",
+      "mutation": "'\"title\": \"Identifier\", \"type\": \"string\", \"maxLength\": 64, \"pattern\": \"^[a-z0-9][a-z0-9-]*$\",' -> '\"title\": \"Identifier\", \"type\": \"string\", \"maxLength\": 64, \"pattern\": \"^[A-Za-z0-9][A-Za-z0-9-]*$\",'",
+      "checks": 40,
+      "failed": 1,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 15.3,
+      "failures": [
+        "bu-upper-id fails under businessUnits.ids only, with the same problems in both validators (Install-ClaudeGateway.ps1) - PowerShell:"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "S4",
+      "item": "1 group with ' , or :",
+      "suite": "tests/Test-InstallerAnswersSchema.ps1",
+      "target": "quote|comma|colon|group",
+      "file": "schemas/claude-gateway.answers.schema.json",
+      "mutation": "'\"pattern\": \"^[^',:]+$\",' -> '\"pattern\": \"^[^,:]+$\",'",
+      "checks": 40,
+      "failed": 1,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 15.4,
+      "failures": [
+        "bu-group-quote fails under entra.groupNames only, with the same problems in both validators (Install-ClaudeGateway.ps1) - PowerShell:"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "S5",
+      "item": "1 depth 3",
+      "suite": "tests/Test-InstallerAnswersSchema.ps1",
+      "target": "depth",
+      "file": "scripts/ClaudeInstallerAnswers.ps1",
+      "mutation": "'if ($p.parent -is [string] -and $p.parent -ne '') {' -> 'if ($false) {'",
+      "checks": 40,
+      "failed": 1,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 12.4,
+      "failures": [
+        "bu-depth-3 fails under businessUnits.depth only, with the same problems in both validators (Install-ClaudeGateway.ps1) - PowerShell:"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "S6",
+      "item": "1 Allowance percentage 0",
+      "suite": "tests/Test-InstallerAnswersSchema.ps1",
+      "target": "Allowance|percent",
+      "file": "schemas/claude-gateway.answers.schema.json",
+      "mutation": "'\"minimum\": 1, \"maximum\": 100 }' -> '\"minimum\": 0, \"maximum\": 100 }'",
+      "checks": 40,
+      "failed": 1,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 10.5,
+      "failures": [
+        "bu-allowance-0 fails under answers.schema only, with the same problems in both validators (Install-ClaudeGateway.ps1) - PowerShell:"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "S7",
+      "item": "1 negative budget",
+      "suite": "tests/Test-InstallerAnswersSchema.ps1",
+      "target": "negative|budget",
+      "file": "schemas/claude-gateway.answers.schema.json",
+      "mutation": "'\"monthlyUsdBudget\": { \"title\": \"Monthly budget (USD)\", \"type\": \"number\", \"minimum\": 0,' -> '\"monthlyUsdBudget\": { \"title\": \"Monthly budget (USD)\", \"type\": \"number\", \"minimum\": -1000000,'",
+      "checks": 40,
+      "failed": 1,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 10.5,
+      "failures": [
+        "bu-negative-budget fails under answers.schema only, with the same problems in both validators (Install-ClaudeGateway.ps1) - PowerShell:"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "S8",
+      "item": "1 secret property",
+      "suite": "tests/Test-InstallerAnswersSchema.ps1",
+      "target": "secret",
+      "file": "schemas/claude-gateway.answers.schema.json",
+      "mutation": "'\"AddressCertificatePassword\": { \"title\": \"PFX password\", \"reason\":' -> '\"P92NotASecret\": { \"title\": \"PFX password\", \"reason\":'",
+      "checks": 40,
+      "failed": 1,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 13.1,
+      "failures": [
+        "A4 no answer is a secret: AddressCertificatePassword is listed as a secret, and no answer is named like one"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "S9",
+      "item": "1 drift: a parameter with no schema entry",
+      "suite": "tests/Test-InstallerAnswersDrift.ps1",
+      "target": "parameter",
+      "file": "Install-ClaudeGateway.ps1",
+      "mutation": "'[string]$DesktopBearerTokenType = 'id_token',' -> '[string]$DesktopBearerTokenType = 'id_token', [string]$P92DriftProbe = '','",
+      "checks": 13,
+      "failed": 2,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 5.8,
+      "failures": [
+        "A2 A6 every Install-ClaudeGateway.ps1 parameter is an answer, a run option or a secret in the schema, and the schema names no parameter the installer lacks - -P92DriftProbe is in no schema entry",
+        "A3 the six prompt-only answers are parameters, schema answers of Install-ClaudeGateway.ps1, and answers the install checkpoint records"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "P1",
+      "item": "2 not signed in",
+      "suite": "tests/Test-InstallerPreflight.ps1",
+      "target": "not signed in",
+      "file": "scripts/ClaudeInstallerPreflight.ps1",
+      "mutation": "'foreach ($id in $azure) { Set-ClaudePreflightNotRun $checks[$id] 'not-signed-in'' -> 'foreach ($id in $azure) { Set-ClaudePreflightPass $checks[$id]'",
+      "checks": 17,
+      "failed": 1,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 36.5,
+      "failures": [
+        "P2 not signed in: target.tenant and every Azure check report NOT-RUN with a reason, none passes, and the exit code is not 0 - target.tenant=PASS/, target.subscription=PASS/, foundry.account=PASS/, foundry.deployments=PASS/, apim.nameAvailability=PASS/, apim.existingSku=PASS/, apim.existingIdentity=PASS/, entra.groupNames=PASS/ || exit 0:       \"problems\": [] |     } |   ] | }"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "P2",
+      "item": "2 Foundry account missing",
+      "suite": "tests/Test-InstallerPreflight.ps1",
+      "target": "Foundry account that does not exist",
+      "file": "scripts/ClaudeInstallerPreflight.ps1",
+      "mutation": "'elseif ($r.Verdict -eq 'absent') { Add-ClaudePreflightProblem $Checks['foundry.account']' -> 'elseif ($r.Verdict -eq 'absent') { Set-ClaudePreflightPass $Checks['foundry.account']'",
+      "checks": 17,
+      "failed": 2,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 46.6,
+      "failures": [
+        "P2 a Foundry account that does not exist is its own FAIL, and the deployment check that needs it is NOT-RUN - exit 1:       \"problems\": [] |     } |   ] | }",
+        "P2 one run with four distinct problems reports all four (Foundry account, group name, business-unit id, Key Vault URL) - entra.groupNames, businessUnits.ids, address.inputs || exit 1:       ] |     } |   ] | }"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "P3",
+      "item": "2 deployment missing",
+      "suite": "tests/Test-InstallerPreflight.ps1",
+      "target": "named deployment",
+      "file": "scripts/ClaudeInstallerPreflight.ps1",
+      "mutation": "'if ($missing.Count) { Add-ClaudePreflightProblem $Checks['foundry.deployments']' -> 'if ($false) { Add-ClaudePreflightProblem $Checks['foundry.deployments']'",
+      "checks": 17,
+      "failed": 1,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 39.7,
+      "failures": [
+        "P2 a named deployment that the account lacks is a FAIL naming it - exit 0:       \"problems\": [] |     } |   ] | }"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "P4",
+      "item": "2 APIM name taken",
+      "suite": "tests/Test-InstallerPreflight.ps1",
+      "target": "name another instance holds",
+      "file": "scripts/ClaudeInstallerPreflight.ps1",
+      "mutation": "'elseif ($m.Verdict -eq 'absent') { Add-ClaudePreflightProblem $Checks['apim.nameAvailability']' -> 'elseif ($m.Verdict -eq 'absent') { Set-ClaudePreflightPass $Checks['apim.nameAvailability']'",
+      "checks": 17,
+      "failed": 1,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 34.8,
+      "failures": [
+        "P2 an API Management name another instance holds is a FAIL - exit 0:       \"problems\": [] |     } |   ] | }"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "P5",
+      "item": "2 existing APIM without identity",
+      "suite": "tests/Test-InstallerPreflight.ps1",
+      "target": "without a system-assigned identity",
+      "file": "scripts/ClaudeInstallerPreflight.ps1",
+      "mutation": "'if ($type -notmatch 'SystemAssigned') {' -> 'if ($false) {'",
+      "checks": 17,
+      "failed": 3,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 34.2,
+      "failures": [
+        "P2 a reused API Management instance without a system-assigned identity is a FAIL whose remedy is the portal toggle, then -ExistingApimName - exit 0:       \"problems\": [] |     } |   ] | }",
+        "P2 the text report has one line per check, [RESULT] id: message, and each FAIL line ends with its remedy -   [PASS] entra.groupNames: Entra groups: 'claude-code-standard' is created by the run; 'claude-code-premium' is created by the run |   [NOT-RUN] businessUnits.ids: BusinessUnits is not answered (not-answered) |   [NOT-RUN] businessUnits.depth: BusinessUnits is not answered (not-answered) |   [NOT-RUN] address.inputs: AddressMode is azure: the gateway's own address needs no inputs (not-applicable)",
+        "P2 the run reads a reused instance through the preflight's reader: without a system-assigned identity it warns with the apim.existingIdentity message and remedy - preflight: apim-p91reuse has a system-assigned managed identity | run:         ./scripts/New-OnboardingEmail.ps1 -ConfigPath <home>\\AppData\\Local\\p92-preflight-b59053098a264602a916b3b21ed470c0\\scenarios\\run-no-identity\\repo\\onboarding\\claude-gateway.json -To dev@contoso.com |    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets."
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "P6",
+      "item": "2 classic SKU",
+      "suite": "tests/Test-InstallerPreflight.ps1",
+      "target": "classic tier",
+      "file": "scripts/ClaudeInstallerPreflight.ps1",
+      "mutation": "'if ($sku -notmatch 'V2$') {' -> 'if ($false) {'",
+      "checks": 17,
+      "failed": 1,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 35.4,
+      "failures": [
+        "P2 a reused instance on a classic tier is a FAIL naming the tier - exit 0:       \"problems\": [] |     } |   ] | }"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "P7",
+      "item": "2 Graph read error",
+      "suite": "tests/Test-InstallerPreflight.ps1",
+      "target": "Graph read error",
+      "file": "scripts/ClaudeInstallerPreflight.ps1",
+      "mutation": "'else { Add-ClaudePreflightProblem $Checks['entra.groupNames'] \"Entra group '$name' could not be looked up by name' -> 'else { Set-ClaudePreflightPass $Checks['entra.groupNames'] \"Entra group '$name' could not be looked up by name'",
+      "checks": 17,
+      "failed": 1,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 40.8,
+      "failures": [
+        "P2 a Microsoft Graph read error on a group name is a FAIL (inconclusive), never a pass - exit 0:       \"problems\": [] |     } |   ] | }"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "P8",
+      "item": "2 two same-length groups",
+      "suite": "tests/Test-InstallerPreflight.ps1",
+      "target": "two groups with names",
+      "file": "scripts/ClaudeInstallerPreflight.ps1",
+      "mutation": "'{ Add-ClaudePreflightProblem $Checks['entra.groupNames'] \"Entra group '$name' is not one group:' -> '{ Set-ClaudePreflightPass $Checks['entra.groupNames'] \"Entra group '$name' is not one group:'",
+      "checks": 17,
+      "failed": 1,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 38.6,
+      "failures": [
+        "P2 two groups with names of the configured length are a FAIL naming both ids - exit 0:       \"problems\": [] |     } |   ] | }"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "P9",
+      "item": "2 malformed Key Vault URL",
+      "suite": "tests/Test-InstallerPreflight.ps1",
+      "target": "Key Vault certificate URL",
+      "file": "schemas/claude-gateway.answers.schema.json",
+      "mutation": "'\"pattern\": \"^https://([a-zA-Z0-9-]{3,24})\\\\.vault\\\\.azure\\\\.net/(certificates|secrets)/([a-zA-Z0-9-]{1,127})(/([a-zA-Z0-9-]+))?$\",' -> '\"pattern\": \"^.*$\",'",
+      "checks": 17,
+      "failed": 2,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 40.8,
+      "failures": [
+        "P2 a Key Vault certificate URL of the wrong shape is a FAIL of address.inputs - exit 0:       \"problems\": [] |     } |   ] | }",
+        "P2 one run with four distinct problems reports all four (Foundry account, group name, business-unit id, Key Vault URL) - foundry.account, entra.groupNames, businessUnits.ids || exit 1:       \"problems\": [] |     } |   ] | }"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "P10",
+      "item": "2 all at once",
+      "suite": "tests/Test-InstallerPreflight.ps1",
+      "target": "four distinct problems",
+      "file": "scripts/ClaudeInstallerPreflight.ps1",
+      "mutation": "'foreach ($p in @($AnswerProblems)) {' -> 'foreach ($p in @($AnswerProblems | Select-Object -First 1)) {'",
+      "checks": 17,
+      "failed": 1,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 40.4,
+      "failures": [
+        "P2 one run with four distinct problems reports all four (Foundry account, group name, business-unit id, Key Vault URL) - foundry.account, entra.groupNames || exit 1:       \"problems\": [] |     } |   ] | }"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "P11",
+      "item": "2 JSON shape",
+      "suite": "tests/Test-InstallerPreflight.ps1",
+      "target": "-Json prints only JSON",
+      "file": "scripts/ClaudeInstallerPreflight.ps1",
+      "mutation": "'schemaVersion = 1; installer = $Installer;' -> 'schemaVersion = 2; installer = $Installer;'",
+      "checks": 17,
+      "failed": 1,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 44.2,
+      "failures": [
+        "P2 -Json prints only JSON: schemaVersion 1, installer pwsh, the 14 check ids once in order, results PASS, FAIL or NOT-RUN, a reason on every NOT-RUN and a remedy on every FAIL - pass: exit 0:       \"problems\": [] |     } |   ] | } || signed-out: exit 1:       \"problems\": [] |     } |   ] | } || foundry-missing: exit 1:       \"problems\": [] |     } |   ] | } || deployment-missing: exit 1:       \"problems\": [] |     } |   ] | } || name-taken: exit 1:       \"problems\": [] |     } |   ] | } || no-identity: exit 1:       \"problems\": [] |     } |   ] | } || classic-sku: exit 1:       \"problems\": [] |     } |   ] | } || graph-error: exit 1:       \"problems\": [] |     } |   ] | } || same-length: exit 1:       \"problems\": [] |     } |   ] | } || kv-malformed: exit 1:       ] |     } |   ] | } || all-at-once: exit 1:       ] |     } |   ] | }"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "P12",
+      "item": "2 read-only",
+      "suite": "tests/Test-InstallerPreflight.ps1",
+      "target": "read-only",
+      "file": "scripts/ClaudeInstallerPreflight.ps1",
+      "mutation": "'$subId = & $get 'SubscriptionId'' -> '$subId = & $get 'SubscriptionId'; if ($subId) { $null = Invoke-ClaudeInstallAzRead @('account', 'set', '--subscription', $subId) }'",
+      "checks": 17,
+      "failed": 1,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 40.9,
+      "failures": [
+        "P2 read-only: no run made a create, update, set, delete, assign or login call, ran a child script, or wrote a checkpoint, lock or temporary file - writes: account set --subscription 00000000-0000-4000-8000-0000000000a1; files: ; scripts:"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "B1",
+      "item": "2 not signed in",
+      "suite": "tests/Test-BashInstallerPreflight.ps1",
+      "target": "not signed in",
+      "file": "scripts/install-preflight.sh",
+      "mutation": "'pf_notrun_ \"$id\" not-signed-in \"Azure CLI is not signed in' -> 'pf_pass_ \"$id\" \"Azure CLI is not signed in'",
+      "checks": 17,
+      "failed": 1,
+      "bashN": "ok",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 56.9,
+      "failures": [
+        "P2 bash not signed in: target.tenant and every Azure check report NOT-RUN with a reason, none passes, and the exit code is not 0 - target.tenant=PASS/, target.subscription=PASS/, foundry.account=PASS/, foundry.deployments=PASS/, apim.nameAvailability=PASS/, apim.existingSku=PASS/, apim.existingIdentity=PASS/, entra.groupNames=PASS/ || exit 0:     } |   ] | }"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "B2",
+      "item": "2 Foundry account missing",
+      "suite": "tests/Test-BashInstallerPreflight.ps1",
+      "target": "Foundry account that does not exist",
+      "file": "scripts/install-preflight.sh",
+      "mutation": "'absent) pf_fail_ foundry.account' -> 'absent) pf_pass_ foundry.account'",
+      "checks": 17,
+      "failed": 2,
+      "bashN": "ok",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 59.4,
+      "failures": [
+        "P2 bash a Foundry account that does not exist is its own FAIL, and the deployment check that needs it is NOT-RUN - exit 1:     } |   ] | }",
+        "P2 bash one run with four distinct problems reports all four - answers.schema, entra.groupNames, businessUnits.ids, address.inputs || exit 1:     } |   ] | }"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "B3",
+      "item": "2 deployment missing",
+      "suite": "tests/Test-BashInstallerPreflight.ps1",
+      "target": "named deployment",
+      "file": "scripts/install-preflight.sh",
+      "mutation": "'if [ -n \"$missing\" ]; then pf_fail_ foundry.deployments' -> 'if false; then pf_fail_ foundry.deployments'",
+      "checks": 17,
+      "failed": 1,
+      "bashN": "ok",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 55.6,
+      "failures": [
+        "P2 bash a named deployment that the account lacks is a FAIL naming it; StandardModels is reported as an answer only PowerShell applies - exit 1:     } |   ] | }"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "B4",
+      "item": "2 APIM name taken",
+      "suite": "tests/Test-BashInstallerPreflight.ps1",
+      "target": "name another instance holds",
+      "file": "scripts/install-preflight.sh",
+      "mutation": "'absent) pf_fail_ apim.nameAvailability' -> 'absent) pf_pass_ apim.nameAvailability'",
+      "checks": 17,
+      "failed": 1,
+      "bashN": "ok",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 52.3,
+      "failures": [
+        "P2 bash an API Management name another instance holds is a FAIL - exit 0:     } |   ] | }"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "B5",
+      "item": "2 existing APIM without identity",
+      "suite": "tests/Test-BashInstallerPreflight.ps1",
+      "target": "without a system-assigned identity",
+      "file": "scripts/install-preflight.sh",
+      "mutation": "'case \"$identity\" in *SystemAssigned*)' -> 'case \"$identity\" in *)'",
+      "checks": 17,
+      "failed": 1,
+      "bashN": "ok",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 85.2,
+      "failures": [
+        "P2 bash a reused instance without a system-assigned identity is a FAIL with the portal toggle remedy; ExistingApimName is an answer only PowerShell applies - exit 1:     } |   ] | }"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "B6",
+      "item": "2 classic SKU",
+      "suite": "tests/Test-BashInstallerPreflight.ps1",
+      "target": "classic tier",
+      "file": "scripts/install-preflight.sh",
+      "mutation": "'case \"$sku\" in *V2)' -> 'case \"$sku\" in *)'",
+      "checks": 17,
+      "failed": 1,
+      "bashN": "ok",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 87.9,
+      "failures": [
+        "P2 bash a reused instance on a classic tier is a FAIL naming the tier - exit 1:     } |   ] | }"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "B7",
+      "item": "2 Graph read error",
+      "suite": "tests/Test-BashInstallerPreflight.ps1",
+      "target": "Graph read error",
+      "file": "scripts/install-preflight.sh",
+      "mutation": "'*) pf_fail_ entra.groupNames \"Entra group '$name' could not be looked up by name' -> '*) pf_pass_ entra.groupNames \"Entra group '$name' could not be looked up by name'",
+      "checks": 17,
+      "failed": 1,
+      "bashN": "ok",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 93.9,
+      "failures": [
+        "P2 bash a Microsoft Graph read error on a group name is a FAIL (inconclusive), never a pass - exit 0:     } |   ] | }"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "B8",
+      "item": "2 two same-length groups",
+      "suite": "tests/Test-BashInstallerPreflight.ps1",
+      "target": "two groups with names",
+      "file": "scripts/install-preflight.sh",
+      "mutation": "'*\"groups have a name of that length\"*) pf_fail_ entra.groupNames' -> '*\"groups have a name of that length\"*) pf_pass_ entra.groupNames'",
+      "checks": 17,
+      "failed": 2,
+      "bashN": "ok",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 73.6,
+      "failures": [
+        "P2 bash two groups with names of the configured length are a FAIL naming both ids - exit 0:     } |   ] | }",
+        "P2 bash the text report has one line per check, [RESULT] id: message, and each FAIL line ends with its remedy -   [NOT-RUN] businessUnits.ids: BusinessUnits is not answered (not-answered) |   [NOT-RUN] businessUnits.depth: BusinessUnits is not answered (not-answered) |   [NOT-RUN] address.inputs: AddressMode is not answered; the run asks for it, azure by default (not-answered)"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "B9",
+      "item": "2 malformed Key Vault URL",
+      "suite": "tests/Test-BashInstallerPreflight.ps1",
+      "target": "Key Vault certificate URL",
+      "file": "schemas/claude-gateway.answers.schema.json",
+      "mutation": "'\"pattern\": \"^https://([a-zA-Z0-9-]{3,24})\\\\.vault\\\\.azure\\\\.net/(certificates|secrets)/([a-zA-Z0-9-]{1,127})(/([a-zA-Z0-9-]+))?$\",' -> '\"pattern\": \"^.*$\",'",
+      "checks": 17,
+      "failed": 2,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 78.2,
+      "failures": [
+        "P2 bash a Key Vault certificate URL of the wrong shape is a FAIL of address.inputs - exit 1:     } |   ] | }",
+        "P2 bash one run with four distinct problems reports all four - answers.schema, foundry.account, entra.groupNames, businessUnits.ids || exit 1:     } |   ] | }"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "B10",
+      "item": "2 all at once",
+      "suite": "tests/Test-BashInstallerPreflight.ps1",
+      "target": "four distinct problems",
+      "file": "scripts/install-preflight.sh",
+      "mutation": "'[ -n \"$id\" ] && pf_fail_ \"$id\" \"$message\" \"$remedy\"' -> '[ -n \"$id\" ] && pf_fail_ \"$id\" \"$message\" \"$remedy\" && break'",
+      "checks": 17,
+      "failed": 2,
+      "bashN": "ok",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 90.9,
+      "failures": [
+        "P2 bash a Key Vault certificate URL of the wrong shape is a FAIL of address.inputs - exit 1:     } |   ] | }",
+        "P2 bash one run with four distinct problems reports all four - foundry.account, entra.groupNames || exit 1:     } |   ] | }"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "B11",
+      "item": "2 JSON shape",
+      "suite": "tests/Test-BashInstallerPreflight.ps1",
+      "target": "json prints only JSON",
+      "file": "scripts/install-preflight.sh",
+      "mutation": "'{schemaVersion: 1, installer: \"bash\", answersSchemaVersion: 1,' -> '{schemaVersion: 2, installer: \"bash\", answersSchemaVersion: 1,'",
+      "checks": 17,
+      "failed": 1,
+      "bashN": "ok",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 101.0,
+      "failures": [
+        "P2 bash --json prints only JSON: schemaVersion 1, installer bash, the 14 check ids once in order, results PASS, FAIL or NOT-RUN, a reason on every NOT-RUN and a remedy on every FAIL - pass: exit 0:     } |   ] | } || signed-out: exit 1:     } |   ] | } || foundry-missing: exit 1:     } |   ] | } || deployment-missing: exit 1:     } |   ] | } || name-taken: exit 1:     } |   ] | } || no-identity: exit 1:     } |   ] | } || classic-sku: exit 1:     } |   ] | } || graph-error: exit 1:     } |   ] | } || same-length: exit 1:     } |   ] | } || kv-malformed: exit 1:     } |   ] | } || all-at-once: exit 1:     } |   ] | }"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "B12",
+      "item": "2 read-only",
+      "suite": "tests/Test-BashInstallerPreflight.ps1",
+      "target": "read-only",
+      "file": "scripts/install-preflight.sh",
+      "mutation": "'  sub=\"$(pf_get_ SubscriptionId)\"' -> '  sub=\"$(pf_get_ SubscriptionId)\"; [ -z \"$sub\" ] || ckpt_az_read_ '' account set --subscription \"$sub\"'",
+      "checks": 17,
+      "failed": 1,
+      "bashN": "ok",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 82.4,
+      "failures": [
+        "P2 bash read-only: no run made a create, update, set, delete, assign or login call, ran a child script, or wrote a checkpoint, lock or temporary file - writes: account set --subscription 00000000-0000-4000-8000-0000000000a1; files: ; scripts:"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "T1",
+      "item": "3 -ListSteps -Json",
+      "suite": "tests/Test-InstallerStepSelection.ps1",
+      "target": "ListSteps -Json prints only JSON",
+      "file": "scripts/ClaudeInstallSteps.ps1",
+      "mutation": "'dependencies = @($script:ClaudeInstallStepDependencies[$id]);' -> 'dependencies = @();'",
+      "checks": 21,
+      "failed": 1,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 64.8,
+      "failures": [
+        "P3 -ListSteps -Json prints only JSON: the 10 step ids in order, each with its title and dependencies - gateway-deployment: ; company-address: ; sync: ; projection: ; business-units: ; onboarding-package: ; verify:  ||       \"state\": \"completed\" |     } |   ] | }"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "T2",
+      "item": "3 -Steps refuses an incomplete prerequisite",
+      "suite": "tests/Test-InstallerStepSelection.ps1",
+      "target": "Entra groups incomplete refuses",
+      "file": "scripts/ClaudeInstallSteps.ps1",
+      "mutation": "'if ($why.Count) {' -> 'if ($false) {'",
+      "checks": 21,
+      "failed": 3,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 59.4,
+      "failures": [
+        "P3 -Steps sync with Entra groups incomplete refuses on one line naming entra-groups; nothing changes -     Safe to leave running. | ==> Sync entitlement |     -Steps ran sync; the install checkpoint is kept, and a run without -Steps resumes the rest. |     Resume: Set-Location -LiteralPath '<home>\\AppData\\Local\\p92-steps-b55ac5f6adc7453d9401b84ed8ff0092\\scenarios\\refuse-prereq\\repo'; ./Install-ClaudeGateway.ps1",
+        "P3 -Steps sync with no checkpoint refuses naming both prerequisites, gateway-deployment and entra-groups; nothing is created -     Safe to leave running. | ==> Sync entitlement |     -Steps ran sync; the install checkpoint is kept, and a run without -Steps resumes the rest. |     Resume: Set-Location -LiteralPath '<home>\\AppData\\Local\\p92-steps-b55ac5f6adc7453d9401b84ed8ff0092\\scenarios\\steps-none\\repo'; ./Install-ClaudeGateway.ps1",
+        "P3 -Steps sync refuses when the checkpoint says Entra groups completed but Microsoft Graph no longer returns the group (verified live, not from the checkpoint) -     Safe to leave running. | ==> Sync entitlement |     -Steps ran sync; the install checkpoint is kept, and a run without -Steps resumes the rest. |     Resume: Set-Location -LiteralPath '<home>\\AppData\\Local\\p92-steps-b55ac5f6adc7453d9401b84ed8ff0092\\scenarios\\prereq-gone\\repo'; ./Install-ClaudeGateway.ps1"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "T3",
+      "item": "3 only the selected step runs",
+      "suite": "tests/Test-InstallerStepSelection.ps1",
+      "target": "runs the sync and nothing else",
+      "file": "scripts/ClaudeInstallSteps.ps1",
+      "mutation": "'function Test-ClaudeInstallStepSelected([string]$Id) { return (-not $script:ClaudeInstallSelection.Count -or $script:ClaudeInstallSelection -contains $Id) }' -> 'function Test-ClaudeInstallStepSelected([string]$Id) { return $true }'",
+      "checks": 21,
+      "failed": 1,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 64.8,
+      "failures": [
+        "P3 with its prerequisites verified live, -Steps sync runs the sync and nothing else: no Azure write, no other script, no onboarding package -     [OK]   config: <home>\\AppData\\Local\\p92-steps-3e054f9cdd16440fa3ceae302f4be041\\scenarios\\only-sync\\repo\\onboarding\\claude-gateway.json | ==> Verifying the controls |     -Steps ran sync; the install checkpoint is kept, and a run without -Steps resumes the rest. |     Resume: Set-Location -LiteralPath '<home>\\AppData\\Local\\p92-steps-3e054f9cdd16440fa3ceae302f4be041\\scenarios\\only-sync\\repo'; ./Install-ClaudeGateway.ps1 || scripts: sync apim-p91gw claude-code-standard claude-code-premium; governance apim-p91gw || writes:"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "BT1",
+      "item": "3 --list-steps --json",
+      "suite": "tests/Test-BashInstallerStepSelection.ps1",
+      "target": "list-steps --json prints only JSON",
+      "file": "scripts/install-steps.sh",
+      "mutation": "'dependencies: (.[2] | split(\" \") | map(select(length > 0))),' -> 'dependencies: [],'",
+      "checks": 22,
+      "failed": 1,
+      "bashN": "ok",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 318.5,
+      "failures": [
+        "P3 bash --list-steps --json prints only JSON: the five steps this installer runs, in order, each with its title and dependencies - gateway-deployment: ; sync: ; onboarding-package:  ||     } |   ] | }"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "BT2",
+      "item": "3 --steps refuses an incomplete prerequisite",
+      "suite": "tests/Test-BashInstallerStepSelection.ps1",
+      "target": "Entra groups incomplete refuses",
+      "file": "scripts/install-steps.sh",
+      "mutation": "'[ -z \"$why\" ] || ckpt_refuse_ \"step $s needs' -> 'true || ckpt_refuse_ \"step $s needs'",
+      "checks": 22,
+      "failed": 3,
+      "bashN": "ok",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 335.9,
+      "failures": [
+        "P3 bash --steps sync with Entra groups incomplete refuses on one line naming entra-groups; nothing changes - ==> Sync entitlement |     --steps ran sync; the install checkpoint is kept, and a run without --steps resumes the rest. |     Resume: cd '<home>/AppData/Local/Temp/p92-bash-steps-acff0f9eb1ad4ef29aff893b257907e7/scenarios/refuse-prereq/repo' && ./install-claude-gateway.sh",
+        "P3 bash --steps sync with no checkpoint refuses naming gateway-deployment and entra-groups; nothing is created - ==> Sync entitlement |     --steps ran sync; the install checkpoint is kept, and a run without --steps resumes the rest. |     Resume: cd '<home>/AppData/Local/Temp/p92-bash-steps-acff0f9eb1ad4ef29aff893b257907e7/scenarios/steps-none/repo' && ./install-claude-gateway.sh",
+        "P3 bash --steps sync refuses when Microsoft Graph no longer returns a group the checkpoint records (verified live, not from the checkpoint) - ==> Sync entitlement |     --steps ran sync; the install checkpoint is kept, and a run without --steps resumes the rest. |     Resume: cd '<home>/AppData/Local/Temp/p92-bash-steps-acff0f9eb1ad4ef29aff893b257907e7/scenarios/prereq-gone/repo' && ./install-claude-gateway.sh"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "BT3",
+      "item": "3 only the selected step runs",
+      "suite": "tests/Test-BashInstallerStepSelection.ps1",
+      "target": "runs the sync and nothing else",
+      "file": "scripts/install-steps.sh",
+      "mutation": "'steps_selected_() { [ -z \"${STEPS:-}\" ] && return 0;' -> 'steps_selected_() { return 0;'",
+      "checks": 22,
+      "failed": 4,
+      "bashN": "ok",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 295.4,
+      "failures": [
+        "P3 bash --steps sync with Entra groups incomplete refuses on one line naming entra-groups; nothing changes -     [OK]   config: <home>/AppData/Local/Temp/p92-bash-steps-915b02c44fa9492c81e90d43aa2899db/scenarios/refuse-prereq/repo/onboarding/claude-gateway.json |     --steps ran sync; the install checkpoint is kept, and a run without --steps resumes the rest. |     Resume: cd '<home>/AppData/Local/Temp/p92-bash-steps-915b02c44fa9492c81e90d43aa2899db/scenarios/refuse-prereq/repo' && ./install-claude-gateway.sh",
+        "P3 bash --steps sync with no checkpoint refuses naming gateway-deployment and entra-groups; nothing is created -     [OK]   config: <home>/AppData/Local/Temp/p92-bash-steps-915b02c44fa9492c81e90d43aa2899db/scenarios/steps-none/repo/onboarding/claude-gateway.json |     --steps ran sync; the install checkpoint is kept, and a run without --steps resumes the rest. |     Resume: cd '<home>/AppData/Local/Temp/p92-bash-steps-915b02c44fa9492c81e90d43aa2899db/scenarios/steps-none/repo' && ./install-claude-gateway.sh",
+        "P3 bash --steps sync refuses when Microsoft Graph no longer returns a group the checkpoint records (verified live, not from the checkpoint) -     [OK]   Gateway deployment: verified live, skipped (deployment claude-gw-20261002205115) | ==> Entra groups | Refused: Entra group 'claude-code-standard' (095a42e8-0000-4000-8000-0000aa64b4bf), created by this run at 2026-10-02T15:21:37Z, is not returned by Microsoft Graph. A group created moments ago can take time to appear in Microsoft Graph, and a rerun later continues without creating a second group. Nothing was changed. Resume: cd '<home>/AppData/Local/Temp/p92-bash-steps-915b02c44fa9492c81e90d43aa2899db/scenarios/prereq-gone/repo' && ./install-claude-gateway.sh",
+        "P3 bash with its prerequisites verified live, --steps sync runs the sync and nothing else: no Azure write, no onboarding package -     [OK]   config: <home>/AppData/Local/Temp/p92-bash-steps-915b02c44fa9492c81e90d43aa2899db/scenarios/only-sync/repo/onboarding/claude-gateway.json |     --steps ran sync; the install checkpoint is kept, and a run without --steps resumes the rest. |     Resume: cd '<home>/AppData/Local/Temp/p92-bash-steps-915b02c44fa9492c81e90d43aa2899db/scenarios/only-sync/repo' && ./install-claude-gateway.sh ||"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "T4",
+      "item": "4 parameter over answers over checkpoint over default",
+      "suite": "tests/Test-InstallerStepSelection.ps1",
+      "target": "parameter wins",
+      "file": "scripts/ClaudeInstallerAnswers.ps1",
+      "mutation": "'if (-not $S.Properties.ContainsKey($p.Name) -or @($Bound.Keys) -contains $p.Name) { continue }' -> 'if (-not $S.Properties.ContainsKey($p.Name)) { continue }'",
+      "checks": 21,
+      "failed": 1,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 63.9,
+      "failures": [
+        "P4 a parameter wins over the answers file and the checkpoint: -TpmStandard 33333 reaches the deployment - 22222 ||         ./scripts/New-OnboardingEmail.ps1 -ConfigPath <home>\\AppData\\Local\\p92-steps-a58fe83cd86046d7b014acc92db30bb1\\scenarios\\prec-param\\repo\\onboarding\\claude-gateway.json -To dev@contoso.com |    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets."
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "T5",
+      "item": "4 binding mismatch refuses",
+      "suite": "tests/Test-InstallerStepSelection.ps1",
+      "target": "another resource group than the checkpoint",
+      "file": "Install-ClaudeGateway.ps1",
+      "mutation": "'Set-Variable -Name $name -Value $fromAnswers[$name]; $PSBoundParameters[$name] = $fromAnswers[$name] }' -> 'Set-Variable -Name $name -Value $fromAnswers[$name] }'",
+      "checks": 21,
+      "failed": 3,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 66.9,
+      "failures": [
+        "P4 the answers file wins over the checkpoint: TpmStandard 22222 reaches the deployment -  ||         ./scripts/New-OnboardingEmail.ps1 -ConfigPath <home>\\AppData\\Local\\p92-steps-57bb2d96ab894b789a0b1e9f8c220984\\scenarios\\prec-file\\repo\\onboarding\\claude-gateway.json -To dev@contoso.com |    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets.",
+        "P4 an answers file that names another resource group than the checkpoint refuses on one line naming the field; nothing changes -         ./scripts/New-OnboardingEmail.ps1 -ConfigPath <home>\\AppData\\Local\\p92-steps-57bb2d96ab894b789a0b1e9f8c220984\\scenarios\\prec-binding\\repo\\onboarding\\claude-gateway.json -To dev@contoso.com |    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets.",
+        "P5 a refusal emits refused with its reason - [{\"schemaVersion\":1,\"time\":\"2026-10-02T15:07:21Z\",\"runId\":\"dbd059aeeb9f45959bfdf9170bdc5dd4\",\"stepId\":\"resource-group\",\"event\":\"skipped-verified\",\"message\":\"Resource group: verified live, skipped\",\"resumeCommand\":\"\"},{\"schemaVersion\":1,\"time\":\"2026-10-02T15:07:21Z\",\"runId\":\"dbd059aeeb9f45959bfdf9170bdc5dd4\",\"stepId\":\"gateway-deployment\",\"event\":\"skipped-verified\",\"message\":\"Gateway deployment: verified live, skipped\",\"resumeCommand\":\"\"},{\"schemaVersion\":1,\"time\":\"2026-10-02T15:07:21Z\",\"runId\":\"dbd059aeeb9f45959bfdf9170bdc5dd4\",\"stepId\":\"entra-groups\",\"event\":\"started\",\"message\":\"Entra groups: started\",\"resumeCommand\":\"\"},{\"schemaVersion\":1,\"time\":\"2026-10-02T15:07:21Z\",\"runId\":\"dbd059aeeb9f45959bfdf9170bdc5dd4\",\"stepId\":\"entra-groups\",\"event\":\"warning\",\"message\":\"Entra groups: incomplete\",\"resumeCommand\":\"Set-Location -LiteralPath '<home>\\\\AppData\\\\Local\\\\p92-steps-57bb2d96ab894b789a0b1e9f8c220984\\\\scenarios\\\\prec-binding\\\\repo'; ./Install-ClaudeGateway.ps1\"},{\"schemaVersion\":1,\"time\":\"2026-10-02T15:07:22Z\",\"runId\":\"dbd059aeeb9f45959bfdf9170bdc5dd4\",\"stepId\":\"sync\",\"event\":\"started\",\"message\":\"Sync entitlement: started\",\"resumeCommand\":\"\"},{\"schemaVersion\":1,\"time\":\"2026-10-02T15:07:22Z\",\"runId\":\"dbd059aeeb9f45959bfdf9170bdc5dd4\",\"stepId\":\"sync\",\"event\":\"completed\",\"message\":\"Sync entitlement: completed\",\"resumeCommand\":\"\"},{\"schemaVersion\":1,\"time\":\"2026-10-02T15:07:22Z\",\"runId\":\"dbd059aeeb9f45959bfdf9170bdc5dd4\",\"stepId\":\"onboarding-package\",\"event\":\"started\",\"message\":\"Onboarding package: started\",\"resumeCommand\":\"\"},{\"schemaVersion\":1,\"time\":\"2026-10-02T15:07:22Z\",\"runId\":\"dbd059aeeb9f45959bfdf9170bdc5dd4\",\"stepId\":\"onboarding-package\",\"event\":\"completed\",\"message\":\"Onboarding package: completed\",\"resumeCommand\":\"\"},{\"schemaVersion\":1,\"time\":\"2026-10-02T15:07:22Z\",\"runId\":\"dbd059aeeb9f45959bfdf9170bdc5dd4\",\"stepId\":\"verify\",\"event\":\"started\",\"message\":\"Verification: started\",\"resumeCommand\":\"\"},{\"schemaVersion\":1,\"time\":\"2026-10-02T15:07:22Z\",\"runId\":\"dbd059aeeb9f45959bfdf9170bdc5dd4\",\"stepId\":\"verify\",\"event\":\"completed\",\"message\":\"Verification: completed\",\"resumeCommand\":\"\"}]"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "BT4",
+      "item": "4 flag over answers over checkpoint over default",
+      "suite": "tests/Test-BashInstallerStepSelection.ps1",
+      "target": "flag wins",
+      "file": "scripts/install-answers.sh",
+      "mutation": "'    ckpt_passed_ \"$flag\" && continue' -> '    false && continue'",
+      "checks": 22,
+      "failed": 1,
+      "bashN": "ok",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 286.3,
+      "failures": [
+        "P4 bash a flag wins over the answers file and the checkpoint: --tpm-standard 33333 reaches the deployment - 22222 ||    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets."
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "BT5",
+      "item": "4 binding mismatch refuses",
+      "suite": "tests/Test-BashInstallerStepSelection.ps1",
+      "target": "another resource group than the checkpoint",
+      "file": "scripts/install-answers.sh",
+      "mutation": "'    CKPT_SEEN=\"$CKPT_SEEN $flag\"' -> '    :'",
+      "checks": 22,
+      "failed": 3,
+      "bashN": "ok",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 303.9,
+      "failures": [
+        "P4 bash the answers file wins over the checkpoint: TpmStandard 22222 reaches the deployment -  ||    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets.",
+        "P4 bash an answers file that names another resource group than the checkpoint refuses on one line naming the field; nothing changes -    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets.",
+        "P5 bash a refusal emits refused with its reason - [{\"schemaVersion\":1,\"time\":\"2026-10-02T15:33:45Z\",\"runId\":\"1a5ae93a63d3e1e0fe3e3f3d41f09c1c\",\"stepId\":\"resource-group\",\"event\":\"skipped-verified\",\"message\":\"Resource group: verified live, skipped\",\"resumeCommand\":\"\"},{\"schemaVersion\":1,\"time\":\"2026-10-02T15:33:57Z\",\"runId\":\"1a5ae93a63d3e1e0fe3e3f3d41f09c1c\",\"stepId\":\"gateway-deployment\",\"event\":\"skipped-verified\",\"message\":\"Gateway deployment: verified live, skipped\",\"resumeCommand\":\"\"},{\"schemaVersion\":1,\"time\":\"2026-10-02T15:34:07Z\",\"runId\":\"1a5ae93a63d3e1e0fe3e3f3d41f09c1c\",\"stepId\":\"entra-groups\",\"event\":\"started\",\"message\":\"Entra groups: started\",\"resumeCommand\":\"\"},{\"schemaVersion\":1,\"time\":\"2026-10-02T15:34:12Z\",\"runId\":\"1a5ae93a63d3e1e0fe3e3f3d41f09c1c\",\"stepId\":\"entra-groups\",\"event\":\"warning\",\"message\":\"Entra groups: incomplete\",\"resumeCommand\":\"cd '<home>/AppData/Local/Temp/p92-bash-steps-84dd033f74674becbb3cf8dc81b8241f/scenarios/prec-binding/repo' && ./install-claude-gateway.sh\"},{\"schemaVersion\":1,\"time\":\"2026-10-02T15:34:15Z\",\"runId\":\"1a5ae93a63d3e1e0fe3e3f3d41f09c1c\",\"stepId\":\"sync\",\"event\":\"started\",\"message\":\"Sync entitlement: started\",\"resumeCommand\":\"\"},{\"schemaVersion\":1,\"time\":\"2026-10-02T15:34:18Z\",\"runId\":\"1a5ae93a63d3e1e0fe3e3f3d41f09c1c\",\"stepId\":\"sync\",\"event\":\"completed\",\"message\":\"Sync entitlement: completed\",\"resumeCommand\":\"\"},{\"schemaVersion\":1,\"time\":\"2026-10-02T15:34:21Z\",\"runId\":\"1a5ae93a63d3e1e0fe3e3f3d41f09c1c\",\"stepId\":\"onboarding-package\",\"event\":\"started\",\"message\":\"Onboarding package: started\",\"resumeCommand\":\"\"},{\"schemaVersion\":1,\"time\":\"2026-10-02T15:34:25Z\",\"runId\":\"1a5ae93a63d3e1e0fe3e3f3d41f09c1c\",\"stepId\":\"onboarding-package\",\"event\":\"completed\",\"message\":\"Onboarding package: completed\",\"resumeCommand\":\"\"}]"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "T6",
+      "item": "5 started and completed per step",
+      "suite": "tests/Test-InstallerStepSelection.ps1",
+      "target": "started and completed",
+      "file": "scripts/ClaudeInstallSteps.ps1",
+      "mutation": "'    $script:ClaudeInstallProgressSeen[$Id] = $Event' -> '    if ($Event -eq 'completed') { return }; $script:ClaudeInstallProgressSeen[$Id] = $Event'",
+      "checks": 21,
+      "failed": 2,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 66.7,
+      "failures": [
+        "P5 a run emits started and completed for each step it runs, and warning with the resume command for one it leaves incomplete; one runId - resource-group:started gateway-deployment:started entra-groups:started entra-groups:warning sync:started onboarding-package:started verify:started",
+        "P5 a resume emits skipped-verified for each step it verifies live, then runs the rest, under the same runId - resource-group:skipped-verified gateway-deployment:skipped-verified entra-groups:started sync:started onboarding-package:started verify:started"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "T7",
+      "item": "5 resume emits skipped-verified",
+      "suite": "tests/Test-InstallerStepSelection.ps1",
+      "target": "skipped-verified",
+      "file": "scripts/ClaudeInstallSteps.ps1",
+      "mutation": "'    $script:ClaudeInstallProgressSeen[$Id] = $Event' -> '    if ($Event -eq 'skipped-verified') { return }; $script:ClaudeInstallProgressSeen[$Id] = $Event'",
+      "checks": 21,
+      "failed": 1,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 56.4,
+      "failures": [
+        "P5 a resume emits skipped-verified for each step it verifies live, then runs the rest, under the same runId - entra-groups:started entra-groups:completed sync:started sync:completed onboarding-package:started onboarding-package:completed verify:started verify:completed"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "T8",
+      "item": "5 failure emits failed with resumeCommand",
+      "suite": "tests/Test-InstallerStepSelection.ps1",
+      "target": "failure emits failed",
+      "file": "scripts/ClaudeInstallSteps.ps1",
+      "mutation": "'-ResumeCommand $(if ($Event -in 'warning', 'failed') {' -> '-ResumeCommand $(if ($Event -in 'warning') {'",
+      "checks": 21,
+      "failed": 1,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 71.5,
+      "failures": [
+        "P5 a failure emits failed for its step with the resume command - [{\"schemaVersion\":1,\"time\":\"2026-10-02T15:09:51Z\",\"runId\":\"08c319c84b1b4e43ae216e0bb640eaed\",\"stepId\":\"resource-group\",\"event\":\"started\",\"message\":\"Resource group: started\",\"resumeCommand\":\"\"},{\"schemaVersion\":1,\"time\":\"2026-10-02T15:09:51Z\",\"runId\":\"08c319c84b1b4e43ae216e0bb640eaed\",\"stepId\":\"resource-group\",\"event\":\"completed\",\"message\":\"Resource group: completed\",\"resumeCommand\":\"\"},{\"schemaVersion\":1,\"time\":\"2026-10-02T15:09:52Z\",\"runId\":\"08c319c84b1b4e43ae216e0bb640eaed\",\"stepId\":\"gateway-deployment\",\"event\":\"started\",\"message\":\"Gateway deployment: started\",\"resumeCommand\":\"\"},{\"schemaVersion\":1,\"time\":\"2026-10-02T15:09:52Z\",\"runId\":\"08c319c84b1b4e43ae216e0bb640eaed\",\"stepId\":\"gateway-deployment\",\"event\":\"failed\",\"message\":\"Gateway deployment: failed: P91 stub: the client was disconnected while the deployment ran.\",\"resumeCommand\":\"\"}]"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "T9",
+      "item": "5 every line is JSON",
+      "suite": "tests/Test-InstallerStepSelection.ps1",
+      "target": "every progress line is one JSON object",
+      "file": "scripts/ClaudeInstallSteps.ps1",
+      "mutation": "'(ConvertTo-Json -InputObject ([pscustomobject]$row) -Compress)' -> '(ConvertTo-Json -InputObject ([pscustomobject]$row))'",
+      "checks": 21,
+      "failed": 5,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 68.5,
+      "failures": [
+        "P5 every progress line is one JSON object with schemaVersion, UTC time, runId, stepId, event, message and resumeCommand, in that order - [{\"unreadable\":\"{\\r\"},{\"unreadable\":\"  \\\"schemaVersion\\\": 1,\\r\"},{\"unreadable\":\"  \\\"time\\\": \\\"2026-10-02T15:11:08Z\\\",\\r\"}]",
+        "P5 a run emits started and completed for each step it runs, and warning with the resume command for one it leaves incomplete; one runId - : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : :",
+        "P5 a resume emits skipped-verified for each step it verifies live, then runs the rest, under the same runId - : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : :",
+        "P5 a failure emits failed for its step with the resume command - [{\"unreadable\":\"{\\r\"},{\"unreadable\":\"  \\\"schemaVersion\\\": 1,\\r\"},{\"unreadable\":\"  \\\"time\\\": \\\"2026-10-02T15:11:11Z\\\",\\r\"},{\"unreadable\":\"  \\\"runId\\\": \\\"e9d696cf1d8a473ba74047a73588ac55\\\",\\r\"},{\"unreadable\":\"  \\\"stepId\\\": \\\"resource-group\\\",\\r\"},{\"unreadable\":\"  \\\"event\\\": \\\"started\\\",\\r\"},{\"unreadable\":\"  \\\"message\\\": \\\"Resource group: started\\\",\\r\"},{\"unreadable\":\"  \\\"resumeCommand\\\": \\\"\\\"\\r\"},{\"unreadable\":\"}\"},{\"unreadable\":\"{\\r\"},{\"unreadable\":\"  \\\"schemaVersion\\\": 1,\\r\"},{\"unreadable\":\"  \\\"time\\\": \\\"2026-10-02T15:11:11Z\\\",\\r\"},{\"unreadable\":\"  \\\"runId\\\": \\\"e9d696cf1d8a473ba74047a73588ac55\\\",\\r\"},{\"unreadable\":\"  \\\"stepId\\\": \\\"resource-group\\\",\\r\"},{\"unreadable\":\"  \\\"event\\\": \\\"completed\\\",\\r\"},{\"unreadable\":\"  \\\"message\\\": \\\"Resource group: completed\\\",\\r\"},{\"unreadable\":\"  \\\"resumeCommand\\\": \\\"\\\"\\r\"},{\"unreadable\":\"}\"},{\"unreadable\":\"{\\r\"},{\"unreadable\":\"  \\\"schemaVersion\\\": 1,\\r\"},{\"unreadable\":\"  \\\"time\\\": \\\"2026-10-02T15:11:12Z\\\",\\r\"},{\"unreadable\":\"  \\\"runId\\\": \\\"e9d696cf1d8a473ba74047a73588ac55\\\",\\r\"},{\"unreadable\":\"  \\\"stepId\\\": \\\"gateway-deployment\\\",\\r\"},{\"unreadable\":\"  \\\"event\\\": \\\"started\\\",\\r\"},{\"unreadable\":\"  \\\"message\\\": \\\"Gateway deployment: started\\\",\\r\"},{\"unreadable\":\"  \\\"resumeCommand\\\": \\\"\\\"\\r\"},{\"unreadable\":\"}\"},{\"unreadable\":\"{\\r\"},{\"unreadable\":\"  \\\"schemaVersion\\\": 1,\\r\"},{\"unreadable\":\"  \\\"time\\\": \\\"2026-10-02T15:11:12Z\\\",\\r\"},{\"unreadable\":\"  \\\"runId\\\": \\\"e9d696cf1d8a473ba74047a73588ac55\\\",\\r\"},{\"unreadable\":\"  \\\"stepId\\\": \\\"gateway-deployment\\\",\\r\"},{\"unreadable\":\"  \\\"event\\\": \\\"failed\\\",\\r\"},{\"unreadable\":\"  \\\"message\\\": \\\"Gateway deployment: failed: P91 stub: the client was disconnected while the deployment ran.\\\",\\r\"},{\"unreadable\":\"  \\\"resumeCommand\\\": \\\"Set-Location -LiteralPath '<home>\\\\\\\\AppData\\\\\\\\Local\\\\\\\\p92-steps-1b6dbda9b3274ef8a10780d3eabc87ca\\\\\\\\scenarios\\\\\\\\disconnect\\\\\\\\repo'; ./Install-ClaudeGateway.ps1\\\"\\r\"},{\"unreadable\":\"}\"}]"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "T10",
+      "item": "5 secret scan",
+      "suite": "tests/Test-InstallerStepSelection.ps1",
+      "target": "no secret",
+      "file": "scripts/ClaudeInstallSteps.ps1",
+      "mutation": "'-replace 'eyJ[A-Za-z0-9_-]{4,}\\.[A-Za-z0-9_.-]*', '[redacted]'' -> '-replace 'P92NOMATCH', '[redacted]''",
+      "checks": 21,
+      "failed": 0,
+      "bashN": "n/a",
+      "targetFailed": false,
+      "caught": false,
+      "restored": true,
+      "seconds": 68.0,
+      "failures": [],
+      "afterTestChange": {
+        "note": "Not caught at first: no scenario put a JWT-shaped value into a progress message. REFACTOR gives the failing run's error a JWT-shaped value (tests/InstallerCheckpointStubs.ps1 inject.disconnectDetail) and requires the failed event to carry [redacted]; the same mutant then fails that check.",
+        "caught": true,
+        "targetFailed": true,
+        "checks": 21,
+        "failed": 1,
+        "seconds": 62.7,
+        "failures": [
+          "P5 no secret reaches the progress stream, the checkpoint or an answers file: not the PFX password passed to the run, not the token in a failure's error, which the failed event carries as [redacted] - 1 of 8 texts; failed events with [redacted]: 0"
+        ]
+      }
+    },
+    {
+      "id": "BT6",
+      "item": "5 started and completed per step",
+      "suite": "tests/Test-BashInstallerStepSelection.ps1",
+      "target": "started and completed",
+      "file": "scripts/install-steps.sh",
+      "mutation": "'  [ \"$2\" = \"started\" ] && [ \"$last\" = \"started\" ] && return 0' -> '  [ \"$2\" = \"completed\" ] && return 0; [ \"$2\" = \"started\" ] && [ \"$last\" = \"started\" ] && return 0'",
+      "checks": 22,
+      "failed": 3,
+      "bashN": "ok",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 309.8,
+      "failures": [
+        "P5 bash a run emits started and completed per step, and warning with the resume command for a step it leaves incomplete; one runId - resource-group:started gateway-deployment:started entra-groups:started entra-groups:warning sync:started onboarding-package:started",
+        "P5 bash a resume emits skipped-verified for each step it verifies live, then runs the rest, under the same runId - resource-group:skipped-verified gateway-deployment:skipped-verified entra-groups:started sync:started onboarding-package:started",
+        "P5 both installers write the same events, with the same messages, for the steps both run (identical stream contract) - pwsh: resource-group|started|Resource group: started ; resource-group|completed|Resource group: completed ; gateway-deployment|started|Gateway deployment: started ; gateway-deployment|completed|Gateway deployment: completed ; entra-groups|started|Entra groups: started ; entra-groups|warning|Entra groups: incomplete ; sync|started|Sync entitlement: started ; sync|completed|Sync entitlement: completed ; onboarding-package|started|Onboarding package: started ; onboarding-package|completed|Onboarding package: completed || bash: resource-group|started|Resource group: started ; gateway-deployment|started|Gateway deployment: started ; entra-groups|started|Entra groups: started ; entra-groups|warning|Entra groups: incomplete ; sync|started|Sync entitlement: started ; onboarding-package|started|Onboarding package: started"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "BT7",
+      "item": "5 resume emits skipped-verified",
+      "suite": "tests/Test-BashInstallerStepSelection.ps1",
+      "target": "skipped-verified",
+      "file": "scripts/install-steps.sh",
+      "mutation": "'  [ \"$2\" = \"started\" ] && [ \"$last\" = \"started\" ] && return 0' -> '  [ \"$2\" = \"skipped-verified\" ] && return 0; [ \"$2\" = \"started\" ] && [ \"$last\" = \"started\" ] && return 0'",
+      "checks": 22,
+      "failed": 1,
+      "bashN": "ok",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 313.5,
+      "failures": [
+        "P5 bash a resume emits skipped-verified for each step it verifies live, then runs the rest, under the same runId - entra-groups:started entra-groups:completed sync:started sync:completed onboarding-package:started onboarding-package:completed"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "BT8",
+      "item": "5 failure emits failed with resumeCommand",
+      "suite": "tests/Test-BashInstallerStepSelection.ps1",
+      "target": "failure emits failed",
+      "file": "scripts/install-steps.sh",
+      "mutation": "'*) text=\"failed: ${3:-}\"; resume=\"$(steps_resume_line_)\" ;;' -> '*) text=\"failed: ${3:-}\" ;;'",
+      "checks": 22,
+      "failed": 1,
+      "bashN": "ok",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 312.8,
+      "failures": [
+        "P5 bash a failure emits failed for its step with the resume command - [{\"schemaVersion\":1,\"time\":\"2026-10-02T15:16:13Z\",\"runId\":\"a18996740287b929d406840068bb6d91\",\"stepId\":\"resource-group\",\"event\":\"started\",\"message\":\"Resource group: started\",\"resumeCommand\":\"\"},{\"schemaVersion\":1,\"time\":\"2026-10-02T15:16:21Z\",\"runId\":\"a18996740287b929d406840068bb6d91\",\"stepId\":\"resource-group\",\"event\":\"completed\",\"message\":\"Resource group: completed\",\"resumeCommand\":\"\"},{\"schemaVersion\":1,\"time\":\"2026-10-02T15:16:38Z\",\"runId\":\"a18996740287b929d406840068bb6d91\",\"stepId\":\"gateway-deployment\",\"event\":\"started\",\"message\":\"Gateway deployment: started\",\"resumeCommand\":\"\"},{\"schemaVersion\":1,\"time\":\"2026-10-02T15:16:53Z\",\"runId\":\"a18996740287b929d406840068bb6d91\",\"stepId\":\"gateway-deployment\",\"event\":\"failed\",\"message\":\"Gateway deployment: failed: deployment failed - see the error above\",\"resumeCommand\":\"\"}]"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "BT9",
+      "item": "5 every line is JSON",
+      "suite": "tests/Test-BashInstallerStepSelection.ps1",
+      "target": "every progress line is one JSON object",
+      "file": "scripts/install-steps.sh",
+      "mutation": "'line=\"$(jq -cn --arg t' -> 'line=\"$(jq -n --arg t'",
+      "checks": 22,
+      "failed": 6,
+      "bashN": "ok",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 273.8,
+      "failures": [
+        "P5 bash every progress line is one JSON object with schemaVersion, UTC time, runId, stepId, event, message and resumeCommand, in that order - [{\"unreadable\":\"{\"},{\"unreadable\":\"  \\\"schemaVersion\\\": 1,\"},{\"unreadable\":\"  \\\"time\\\": \\\"2026-10-02T15:21:15Z\\\",\"}]",
+        "P5 bash a run emits started and completed per step, and warning with the resume command for a step it leaves incomplete; one runId - : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : :",
+        "P5 bash a resume emits skipped-verified for each step it verifies live, then runs the rest, under the same runId - : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : :",
+        "P5 bash a failure emits failed for its step with the resume command - [{\"unreadable\":\"{\"},{\"unreadable\":\"  \\\"schemaVersion\\\": 1,\"},{\"unreadable\":\"  \\\"time\\\": \\\"2026-10-02T15:21:17Z\\\",\"},{\"unreadable\":\"  \\\"runId\\\": \\\"2a1b5017ef5b5f8a2a83e2b6d55bcd47\\\",\"},{\"unreadable\":\"  \\\"stepId\\\": \\\"resource-group\\\",\"},{\"unreadable\":\"  \\\"event\\\": \\\"started\\\",\"},{\"unreadable\":\"  \\\"message\\\": \\\"Resource group: started\\\",\"},{\"unreadable\":\"  \\\"resumeCommand\\\": \\\"\\\"\"},{\"unreadable\":\"}\"},{\"unreadable\":\"{\"},{\"unreadable\":\"  \\\"schemaVersion\\\": 1,\"},{\"unreadable\":\"  \\\"time\\\": \\\"2026-10-02T15:21:23Z\\\",\"},{\"unreadable\":\"  \\\"runId\\\": \\\"2a1b5017ef5b5f8a2a83e2b6d55bcd47\\\",\"},{\"unreadable\":\"  \\\"stepId\\\": \\\"resource-group\\\",\"},{\"unreadable\":\"  \\\"event\\\": \\\"completed\\\",\"},{\"unreadable\":\"  \\\"message\\\": \\\"Resource group: completed\\\",\"},{\"unreadable\":\"  \\\"resumeCommand\\\": \\\"\\\"\"},{\"unreadable\":\"}\"},{\"unreadable\":\"{\"},{\"unreadable\":\"  \\\"schemaVersion\\\": 1,\"},{\"unreadable\":\"  \\\"time\\\": \\\"2026-10-02T15:21:35Z\\\",\"},{\"unreadable\":\"  \\\"runId\\\": \\\"2a1b5017ef5b5f8a2a83e2b6d55bcd47\\\",\"},{\"unreadable\":\"  \\\"stepId\\\": \\\"gateway-deployment\\\",\"},{\"unreadable\":\"  \\\"event\\\": \\\"started\\\",\"},{\"unreadable\":\"  \\\"message\\\": \\\"Gateway deployment: started\\\",\"},{\"unreadable\":\"  \\\"resumeCommand\\\": \\\"\\\"\"},{\"unreadable\":\"}\"},{\"unreadable\":\"{\"},{\"unreadable\":\"  \\\"schemaVersion\\\": 1,\"},{\"unreadable\":\"  \\\"time\\\": \\\"2026-10-02T15:21:47Z\\\",\"},{\"unreadable\":\"  \\\"runId\\\": \\\"2a1b5017ef5b5f8a2a83e2b6d55bcd47\\\",\"},{\"unreadable\":\"  \\\"stepId\\\": \\\"gateway-deployment\\\",\"},{\"unreadable\":\"  \\\"event\\\": \\\"failed\\\",\"},{\"unreadable\":\"  \\\"message\\\": \\\"Gateway deployment: failed: deployment failed - see the error above\\\",\"},{\"unreadable\":\"  \\\"resumeCommand\\\": \\\"cd '<home>/AppData/Local/Temp/p92-bash-steps-5e35315b316f43208703e96fa7b581c2/scenarios/failing/repo' && ./install-claude-gateway.sh\\\"\"},{\"unreadable\":\"}\"}]"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "BT10",
+      "item": "5 secret scan",
+      "suite": "tests/Test-BashInstallerStepSelection.ps1",
+      "target": "no secret",
+      "file": "scripts/install-steps.sh",
+      "mutation": "'gsub(\"eyJ[A-Za-z0-9_-]{4,}\\\\.[A-Za-z0-9_.-]*\"; \"[redacted]\")' -> 'gsub(\"P92NOMATCH\"; \"[redacted]\")'",
+      "checks": 22,
+      "failed": 0,
+      "bashN": "ok",
+      "targetFailed": false,
+      "caught": false,
+      "restored": true,
+      "seconds": 289.5,
+      "failures": [],
+      "afterTestChange": {
+        "note": "Not caught at first: no bash scenario put a JWT-shaped value where a progress message quotes an error. REFACTOR adds a group read refused with an error that carries one (tests/Test-BashInstallerStepSelection.ps1, token-refusal) and requires the refused event to carry [redacted]; the same mutant then fails that check.",
+        "caught": true,
+        "targetFailed": true,
+        "checks": 22,
+        "failed": 1,
+        "seconds": 293.9,
+        "bashN": "ok",
+        "failures": [
+          "P5 bash no secret reaches the progress stream: a token in an error that a refusal quotes is [redacted] - 5 streams; refused events with [redacted]: 0"
+        ]
+      }
+    },
+    {
+      "id": "U1",
+      "item": "6 units before teams",
+      "suite": "tests/Test-InstallerBusinessUnitAnswers.ps1",
+      "target": "both units before either team",
+      "file": "scripts/ClaudeInstallSteps.ps1",
+      "mutation": "'$ordered = @(@($Units | Where-Object { -not (& $field $_ 'parent') }) + @($Units | Where-Object { & $field $_ 'parent' }))' -> '$ordered = @(@($Units | Where-Object { & $field $_ 'parent' }) + @($Units | Where-Object { -not (& $field $_ 'parent') }))'",
+      "checks": 9,
+      "failed": 3,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 44.0,
+      "failures": [
+        "P6 two units and two teams are applied through Set-ClaudeBusinessUnit.ps1, both units before either team, each once - order: finance-emea, platform, finance, engineering ||         ./scripts/New-OnboardingEmail.ps1 -ConfigPath <home>\\AppData\\Local\\p92-units-24194fc86eb1465ebd7970030054e15b\\scenarios\\apply\\repo\\onboarding\\claude-gateway.json -To dev@contoso.com |    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets.",
+        "setup: a refused unit stops the run, and the checkpoint keeps a receipt for each unit already applied, with its group id -     [OK]   claude-team-finance-emea created |     [OK]   claude-team-platform created | Resume: Set-Location -LiteralPath '<home>\\AppData\\Local\\p92-units-24194fc86eb1465ebd7970030054e15b\\scenarios\\partial\\repo'; ./Install-ClaudeGateway.ps1 | Business unit 'platform' was refused by the stub. || {\"units\":[{\"id\":\"finance-emea\",\"groupId\":\"2f061731-4fd1-4e7e-b9b8-8162a522becc\",\"groupOrigin\":\"created\",\"inputHash\":\"sha256:abbd43e77b5315b40fe174410bf02a5be864b0639eabec922364c55814b432fb\"}]}",
+        "P6 a resume after a unit failed applies only the units its receipts do not show in bu-registry: no duplicate call - platform, finance, engineering ||         ./scripts/New-OnboardingEmail.ps1 -ConfigPath <home>\\AppData\\Local\\p92-units-24194fc86eb1465ebd7970030054e15b\\scenarios\\partial-resume\\repo\\onboarding\\claude-gateway.json -To dev@contoso.com |    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets."
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "U2",
+      "item": "6 a rerun makes no duplicate call",
+      "suite": "tests/Test-InstallerBusinessUnitAnswers.ps1",
+      "target": "no duplicate call",
+      "file": "scripts/ClaudeInstallSteps.ps1",
+      "mutation": "'if ($rec -and [string]$rec.inputHash -eq $hash -and' -> 'if ($false -and $rec -and [string]$rec.inputHash -eq $hash -and'",
+      "checks": 9,
+      "failed": 1,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 37.8,
+      "failures": [
+        "P6 a resume after a unit failed applies only the units its receipts do not show in bu-registry: no duplicate call - finance, engineering, finance-emea, platform ||         ./scripts/New-OnboardingEmail.ps1 -ConfigPath <home>\\AppData\\Local\\p92-units-7617ede41f1347bcabd6196e3bf73135\\scenarios\\partial-resume\\repo\\onboarding\\claude-gateway.json -To dev@contoso.com |    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets."
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "U3",
+      "item": "6 the USD reconcile command",
+      "suite": "tests/Test-InstallerBusinessUnitAnswers.ps1",
+      "target": "reconcile command for this gateway",
+      "file": "scripts/ClaudeInstallSteps.ps1",
+      "mutation": "'if ($items.Count) { Write-Host \"    Dollar budgets are enforced' -> 'if ($false) { Write-Host \"    Dollar budgets are enforced'",
+      "checks": 9,
+      "failed": 1,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 30.3,
+      "failures": [
+        "P6 with dollar budgets enforced (Strict and Allowance units), the run prints the USD reconcile command for this gateway -         ./scripts/New-OnboardingEmail.ps1 -ConfigPath <home>\\AppData\\Local\\p92-units-67038788292e404e95f5f35960d69d40\\scenarios\\apply\\repo\\onboarding\\claude-gateway.json -To dev@contoso.com |    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets."
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "F1",
+      "item": "7 a failing check appears in the plan output",
+      "suite": "tests/Test-GuidedFlowAnswersSchema.ps1",
+      "target": "failing check appears in the plan output",
+      "file": "Start-ClaudeGateway.ps1",
+      "mutation": "'Format-ClaudeGatewayPreflight -Result $result | ForEach-Object { \"  $_\" }' -> 'Format-ClaudeGatewayPreflight -Result $result | Where-Object { -not $_.StartsWith('[FAIL]') } | ForEach-Object { \"  $_\" }'",
+      "checks": 9,
+      "failed": 3,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 22.6,
+      "failures": [
+        "P7 -PlanOnly runs the preflight on the installer arguments of its plan: all 14 checks appear in the plan output - 14 lines ||   [NOT-RUN] businessUnits.ids: BusinessUnits is not answered (not-answered)",
+        "P7 a failing check appears in the plan output: a standard group with a single quote is [FAIL] entra.groupNames - [PASS] answers.schema: the answers match the answers schema, version 1 | [PASS] answers.crossField: the answers that depend on each other agree | [PASS] target.tenant: signed in as admin@contoso.com in tenant 00000000-0000-4000-8000-0000000000f1 | [PASS] target.subscription: subscription p91-subscription (00000000-0000-4000-8000-0000000000a1) | [PASS] operator.adminPrereqs: Test-ClaudePrerequisites -Mode Admin passed | [PASS] foundry.account: Foundry account ai-p91 in resource group rg-ai-p91 | [PASS] foundry.deployments: 2 Claude deployment(s) on ai-p91: claude-opus-5, claude-sonnet-5 | [PASS] apim.nameAvailability: apim-p92flow is available | [NOT-RUN] apim.existingSku: ExistingApimName is not answered: the run creates apim-<NamePrefix> (not-applicable) | [NOT-RUN] apim.existingIdentity: ExistingApimName is not answered, or it has a problem: no instance to read (not-applicable) | [NOT-RUN] businessUnits.ids: BusinessUnits is not answered (not-answered) | [NOT-RUN] businessUnits.depth: BusinessUnits is not answered (not-answered) | [NOT-RUN] address.inputs: AddressMode is not answered; the run asks for it, azure by default (not-answered)",
+        "P7 the fingerprint binds the preflight result: the same answers over an estate where the name is taken give [FAIL] apim.nameAvailability and another fingerprint - d1e271acc430fe6fb8b5f514300c752c75417aa89f033901c7662474290da72b / 809fc88d455f27d49323ec13b5c2dd5a231dc95a21015277bc495d560bf37501 || [PASS] answers.schema: the answers match the answers schema, version 1 | [PASS] answers.crossField: the answers that depend on each other agree | [PASS] target.tenant: signed in as admin@contoso.com in tenant 00000000-0000-4000-8000-0000000000f1 | [PASS] target.subscription: subscription p91-subscription (00000000-0000-4000-8000-0000000000a1) | [PASS] operator.adminPrereqs: Test-ClaudePrerequisites -Mode Admin passed | [PASS] foundry.account: Foundry account ai-p91 in resource group rg-ai-p91 | [PASS] foundry.deployments: 2 Claude deployment(s) on ai-p91: claude-opus-5, claude-sonnet-5 | [NOT-RUN] apim.existingSku: ExistingApimName is not answered: the run creates apim-<NamePrefix> (not-applicable) | [NOT-RUN] apim.existingIdentity: ExistingApimName is not answered, or it has a problem: no instance to read (not-applicable) | [PASS] entra.groupNames: Entra groups: 'claude-code-standard' is created by the run; 'claude-code-premium' is created by the run | [NOT-RUN] businessUnits.ids: BusinessUnits is not answered (not-answered) | [NOT-RUN] businessUnits.depth: BusinessUnits is not answered (not-answered) | [NOT-RUN] address.inputs: AddressMode is not answered; the run asks for it, azure by default (not-answered)"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "F2",
+      "item": "7 an apply refuses while a check fails",
+      "suite": "tests/Test-GuidedFlowAnswersSchema.ps1",
+      "target": "apply of the approved plan refuses",
+      "file": "Start-ClaudeGateway.ps1",
+      "mutation": "'Assert-FlowPreflight -Plans $plans' -> '$null = $plans'",
+      "checks": 9,
+      "failed": 1,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 23.5,
+      "failures": [
+        "entra.groupNames: StandardGroup 'O'Brien' holds a single quote, which Azure CLI places inside an OData string literal (ADR-0046 decision 11) Remedy: Give a group name without a single quote.",
+        "P7 an apply of the approved plan refuses while a preflight check fails, before any step runs"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "G1",
+      "item": "GREEN: keys the guided-flow pages name",
+      "suite": "tests/Test-InstallerAnswersDrift.ps1",
+      "target": "guided-flow pages name",
+      "file": "schemas/claude-gateway.answers.schema.json",
+      "mutation": "'\"models.priceBookPath\": {' -> '\"models.priceBookPathX\": {'",
+      "checks": 13,
+      "failed": 1,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 10.2,
+      "failures": [
+        "A2 every flow answer key the guided-flow pages name, in prose or in a JSON answers example, is a schema answer (docs/GUIDED-FLOW.md, docs/MODELS.md) - named: 29; not in the schema: models.priceBookPath"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "G2",
+      "item": "GREEN: a recorded field is not an answer",
+      "suite": "tests/Test-GuidedFlowAnswersSchema.ps1",
+      "target": "records itself",
+      "file": "Start-ClaudeGateway.ps1",
+      "mutation": "'| Where-Object { $_.checkId -eq 'answers.schema' })' -> '| Where-Object { $false })'",
+      "checks": 9,
+      "failed": 3,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 27.1,
+      "failures": [
+        "entra.groupNames: StandardGroup 'O'Brien' holds a single quote, which Azure CLI places inside an OData string literal (ADR-0046 decision 11) Remedy: Give a group name without a single quote.",
+        "P7 -AnswersPath is checked against the answers schema: an unknown key is refused before any plan, naming it",
+        "P7 a field the flow records itself (network.approvedFingerprint) is refused in an answers file, before any plan",
+        "P7 a secret in the flow's answers file is refused, as in the installers"
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "G3",
+      "item": "GREEN: the run warns as the preflight fails (identity)",
+      "suite": "tests/Test-InstallerPreflight.ps1",
+      "target": "run reads a reused instance",
+      "file": "Install-ClaudeGateway.ps1",
+      "mutation": "'if ($identity) { Write-Warn2' -> 'if ($false) { Write-Warn2'",
+      "checks": 17,
+      "failed": 1,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 46.1,
+      "failures": [
+        "P2 the run reads a reused instance through the preflight's reader: without a system-assigned identity it warns with the apim.existingIdentity message and remedy - preflight: apim-p91reuse has no system-assigned managed identity (identity type None); main.bicep grants that identity Cognitive Services User on the Foundry account (infra/main.bicep:511) | run:         ./scripts/New-OnboardingEmail.ps1 -ConfigPath <home>\\AppData\\Local\\p92-preflight-90ead349d3c44ae2a70b1b68eb28088a\\scenarios\\run-no-identity\\repo\\onboarding\\claude-gateway.json -To dev@contoso.com |    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets."
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "G4",
+      "item": "GREEN: the reuse menu reads through the verdict reader",
+      "suite": "tests/Test-InstallerPreflight.ps1",
+      "target": "reuse menu",
+      "file": "Install-ClaudeGateway.ps1",
+      "mutation": "'if ($candidates.Verdict -ne 'present') { Write-Warn2' -> 'if ($false) { Write-Warn2'",
+      "checks": 17,
+      "failed": 1,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 41.4,
+      "failures": [
+        "P2 the run's reuse menu reads through the verdict reader: a failed az apim list warns that none is offered, naming the error, and the run creates its own instance -         ./scripts/New-OnboardingEmail.ps1 -ConfigPath <home>\\AppData\\Local\\p92-preflight-b853b34447564fa98693e12303e67397\\scenarios\\run-list-error\\repo\\onboarding\\claude-gateway.json -To dev@contoso.com |    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets."
+      ],
+      "afterTestChange": null
+    },
+    {
+      "id": "G5",
+      "item": "GREEN: each shard runs a group",
+      "suite": "tests/Test-BashInstallerCheckpointShards.ps1",
+      "target": "each group of checks to one shard",
+      "file": "tests/Test-BashInstallerCheckpoint.ps1",
+      "mutation": "'$script:ShardGroups = [ordered]@{ static = 1; first = 1; resume = 0; corrupt = 1 }' -> '$script:ShardGroups = [ordered]@{ static = 1; first = 1; resume = 1; corrupt = 1 }'",
+      "checks": 5,
+      "failed": 1,
+      "bashN": "n/a",
+      "targetFailed": true,
+      "caught": true,
+      "restored": true,
+      "seconds": 2.1,
+      "failures": [
+        "A14 the suite declares its shard count and a map from each group of checks to one shard - count 2; static=1, first=1, resume=1, corrupt=1"
+      ],
+      "afterTestChange": null
+    }
+  ]
+}

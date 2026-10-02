@@ -57,7 +57,10 @@ try {
     $precDefault = New-P91Scenario -Name 'prec-default' -Scratch $scratch -Template $template -World (New-P91World)
     $stepsNone = New-P91Scenario -Name 'steps-none' -Scratch $scratch -Template $template -World (New-P91World)
     $unknownStep = New-P91Scenario -Name 'unknown-step' -Scratch $scratch -Template $template -World (New-P91World)
+    # The failure carries a JWT-shaped value, as an error that echoes a token would: the failed event's
+    # message holds the error, so only its redaction keeps the token out of the stream (ADR-0047 decision 12).
     $w = New-P91World; $w.inject.createMode = 'disconnect'; $w.inject.runningPolls = @('forever')
+    $w.inject['disconnectDetail'] = 'Authorization: Bearer ' + 'eyJhbGciOiJSUzI1NiJ9' + '.eyJzdWIiOiJwOTItdGVzdCJ9.c2lnbmF0dXJl'
     $disconnect = New-P91Scenario -Name 'disconnect' -Scratch $scratch -Template $template -World $w
     $progressFail = Join-Path $disconnect.Dir 'progress.ndjson'
     $wave1 = @(
@@ -174,7 +177,8 @@ try {
         @(foreach ($s in $listSrc, $resume, $precParam) { $f = Get-P91CheckpointFile $s; if ($f) { [IO.File]::ReadAllText($f.FullName) } }) +
         @(Get-ChildItem -LiteralPath $scratch -Recurse -Filter 'answers.json' -File | ForEach-Object { [IO.File]::ReadAllText($_.FullName) })
     $leak = @($texts | Where-Object { $_ -match 'P92-PFX-SENTINEL|eyJ[A-Za-z0-9_-]{4,}\.|(?i)password|accesstoken' })
-    Assert 'P5 no secret reaches the progress stream, the checkpoint or an answers file: not the PFX password passed to the run, not the token az returned' ($texts.Count -ge 6 -and -not $leak.Count) "$($leak.Count) of $($texts.Count) texts"
+    $redacted = @(@(Get-Events $progressFail) | Where-Object { $_.event -eq 'failed' -and $_.message -match '\[redacted\]' })
+    Assert 'P5 no secret reaches the progress stream, the checkpoint or an answers file: not the PFX password passed to the run, not the token in a failure''s error, which the failed event carries as [redacted]' ($texts.Count -ge 6 -and -not $leak.Count -and $redacted.Count -eq 1) "$($leak.Count) of $($texts.Count) texts; failed events with [redacted]: $($redacted.Count)"
     $unexpected = @(foreach ($r in @($r1.Values) + @($r2.Values)) { @($r.Unexpected) })
     Assert 'harness: every az call was one the stub knows, and no run timed out' (-not $unexpected.Count -and -not @(@($r1.Values) + @($r2.Values) | Where-Object { $_.TimedOut }).Count) (($unexpected | Select-Object -Unique -First 4) -join ' | ')
 }

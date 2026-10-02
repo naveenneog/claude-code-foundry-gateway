@@ -52,6 +52,12 @@ try {
     $w = New-World; $w.inject.createMode = 'fail'
     $failing = New-Scenario 'failing' $w
     $progressFail = Join-Path $failing.Dir 'progress.ndjson'
+    # A group read refused with an error that carries a JWT-shaped value: the refusal quotes the error, so
+    # only the stream's redaction keeps the token out of it (ADR-0047 decision 12).
+    $jwt = 'eyJhbGciOiJSUzI1NiJ9' + '.eyJzdWIiOiJwOTItdGVzdCJ9.c2lnbmF0dXJl'
+    $w = New-World; $w.inject.readErrors = @([ordered]@{ match = 'ad group list --display-name claude-code-standard*'; text = "ERROR: the request with Authorization: Bearer $jwt was refused (Authorization_RequestDenied)." })
+    $tokenRefusal = New-Scenario 'token-refusal' $w
+    $progressToken = Join-Path $tokenRefusal.Dir 'progress.ndjson'
     $wave1 = @(
         ($runList1 = New-Run $listSrc ($base + $tpm + @('--progress-file', (ConvertTo-BashPath $progress1))))
         ($runSync1 = New-Run $syncFail ($base + $tpm))
@@ -60,6 +66,7 @@ try {
         ($runNone = New-Run $stepsNone ($base + $tpm + @('--steps', 'sync')))
         ($runUnknown = New-Run $unknown ($base + $tpm + @('--steps', 'gateway-deploy')))
         ($runFailing = New-Run $failing ($base + $tpm + @('--progress-file', (ConvertTo-BashPath $progressFail))))
+        ($runToken = New-Run $tokenRefusal ($base + $tpm + @('--progress-file', (ConvertTo-BashPath $progressToken))))
     )
     # The PowerShell installer over the same kind of world, for the parity of progress events. It runs
     # through tests/InstallerCheckpointHarness.ps1, which sets Windows access rules and builds Windows
@@ -176,8 +183,9 @@ try {
     }
     else { Write-Host '  [SKIP] P5 both installers write the same events: runs on Windows (Test-All), where tests/InstallerCheckpointHarness.ps1 runs the PowerShell installer' -ForegroundColor DarkGray }
 
-    $texts = @(@($progress1, $progress2, $progressFail, $progressBind) | Where-Object { Test-Path -LiteralPath $_ } | ForEach-Object { [IO.File]::ReadAllText($_) })
-    Assert 'P5 bash no secret reaches the progress stream (no token az returned)' ($texts.Count -ge 3 -and -not @($texts | Where-Object { $_ -match 'eyJ[A-Za-z0-9_-]{4,}\.|(?i)password|accesstoken' }).Count) "$($texts.Count) streams"
+    $texts = @(@($progress1, $progress2, $progressFail, $progressBind, $progressToken) | Where-Object { Test-Path -LiteralPath $_ } | ForEach-Object { [IO.File]::ReadAllText($_) })
+    $redacted = @(@(Get-Events $progressToken) | Where-Object { $_.event -eq 'refused' -and $_.message -match '\[redacted\]' })
+    Assert 'P5 bash no secret reaches the progress stream: a token in an error that a refusal quotes is [redacted]' ($texts.Count -ge 4 -and -not @($texts | Where-Object { $_ -match 'eyJ[A-Za-z0-9_-]{4,}\.|(?i)password|accesstoken' }).Count -and $redacted.Count -eq 1 -and $r1[$runToken.Dir].ExitCode -ne 0) "$($texts.Count) streams; refused events with [redacted]: $($redacted.Count)"
     $unexpected = @(foreach ($r in @($r1.Values) + @($r2.Values)) { @($r.Unexpected) })
     Assert 'harness: every az call was one the stub knows, and no run timed out' (-not $unexpected.Count -and -not @(@($r1.Values) + @($r2.Values) | Where-Object { $_.TimedOut }).Count) (($unexpected | Select-Object -Unique -First 4) -join ' | ')
 }

@@ -286,6 +286,45 @@ jqlang release assets, checked against their published SHA-256.
 - `Test-BashInstallerStepSelection.ps1` ran for 173 s while `.gate-lock` was held (the p89-p90 gate). Its RED time was 25 s; the GREEN time was not measured before the run.
 - `Test-ProjectionPreflightNegative.ps1` (weight 51.3 s) was still running after 3 minutes under the p87 gate and was stopped; its three baselines had passed. It ran again after the lock cleared.
 
+### REFACTOR (replacement), 2026-10-02
+
+REFACTOR changes no product code. It strengthens two tests, records U91 and the design, and adds the mutation proof:
+
+- [ADR-0047](adr/0047-lean-installer-phase-0.md) is accepted for the `lean-installer` branch, with 14
+  implementation decisions: the schema and its extension keywords, the two validators and the strict
+  scanner, problem ownership, `requires`, the three results and their reasons, the read-only rule, the
+  shared APIM reader (U82), the run's warning, the guided flow, steps and prerequisites, precedence, the
+  progress stream, business units and the two shards.
+- [Setup](SETUP.md#answers-file-preflight-and-selected-steps) describes the answers file, the preflight,
+  `-ListSteps`, `-Steps` and the progress stream, with an answers example that both installers accept and
+  a `BusinessUnits` example; both examples pass the validator.
+- [Guided flow](GUIDED-FLOW.md) states the schema check of `-AnswersPath` and the installer preflight in
+  an unattended plan; the README links the Setup section; the changelog entry replaces the plan entry.
+- [Architecture](ARCHITECTURE.md#lean-installer-phase-0) describes the answers schema, the preflight and
+  the progress stream's keys and events. Diagram 17 changed in GREEN.
+
+#### Mutation proof
+
+63 mutants: 61 caught on their target checks at the first run, and 63 after REFACTOR strengthened two checks. T10 (PowerShell) and BT10 (bash) removed the JWT redaction of the progress stream and were not caught: no scenario put a JWT-shaped value where a progress message quotes an error, so the two secret-scan checks passed without testing redaction. REFACTOR gives a failing PowerShell run an error with such a value (`inject.disconnectDetail` in `tests/InstallerCheckpointStubs.ps1`) and the bash suite a group read refused with one (`token-refusal`); each check now also requires the `failed` or `refused` event to carry `[redacted]`, and the same two mutants fail it (21 checks, 1 failed; 22 checks, 1 failed).
+
+The record, with each mutant's find and replace strings, failing checks and seconds, is
+[`docs/measurements/p92-mutations.json`](measurements/p92-mutations.json). A mutant counts as caught
+only when its suite reaches the baseline check count and at least one check fails; a mutant of a bash
+file also passes `bash -n`. Each worker ran in its own copy of the GREEN commit (`git archive`), and
+each mutated file was restored and its hash checked before the next mutant.
+
+| Item of the acceptance list | Mutants | Caught | On target |
+|---|---|---|---|
+| 1 Schema (both validators) | S1-S9 (9) | 9 | 9 |
+| 2 Preflight, PowerShell | P1-P12 (12) | 12 | 12 |
+| 2 Preflight, bash | B1-B12 (12) | 12 | 12 |
+| 3 Steps, PowerShell / bash | T1-T3, BT1-BT3 (6) | 6 | 6 |
+| 4 Precedence, PowerShell / bash | T4-T5, BT4-BT5 (4) | 4 | 4 |
+| 5 Progress, PowerShell / bash | T6-T10, BT6-BT10 (10) | 8; 10 after the test change | 8 |
+| 6 Business units | U1-U3 (3) | 3 | 3 |
+| 7 Guided flow | F1-F2 (2) | 2 | 2 |
+| Checks added in GREEN | G1-G5 (5) | 5 | 5 |
+
 
 ## P91 installer checkpoint and resume, 2026-10-01
 

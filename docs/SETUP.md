@@ -772,6 +772,63 @@ names the other installer:
 
 The guided flow's resume of the steps after the installer is separate
 ([Guided flow](GUIDED-FLOW.md#resume-after-failure)).
+### Answers file, preflight and selected steps
+
+Both installers read one answers file, check it and the estate before anything changes, run selected
+steps and write a progress stream
+([lean installer design record (ADR-0047)](adr/0047-lean-installer-phase-0.md)).
+
+| Option (PowerShell / bash) | What it does |
+|---|---|
+| `-AnswersPath <file>` / `--answers-file <file>` | Reads the answers from a JSON file that [`schemas/claude-gateway.answers.schema.json`](../schemas/claude-gateway.answers.schema.json) describes. A file with any problem stops the run on one line before anything is read from Azure (`scripts/ClaudeInstallerAnswers.ps1:398-422`, `scripts/install-answers.sh:41-62`). A parameter or flag passed with it wins over the file, and the file wins over the install checkpoint. |
+| `-Preflight` / `--preflight` | Runs 14 read-only checks and stops. Each check is PASS, FAIL or NOT-RUN with a reason, and each FAIL has a remedy; the exit code is 0 only when nothing fails (`Install-ClaudeGateway.ps1:166-172`, `scripts/install-preflight.sh:202-255`). `-Json` / `--json` prints the result as JSON with `schemaVersion` 1. |
+| `-ListSteps` / `--list-steps` | Prints each step with its title, prerequisites and the state the install checkpoint records, without an Azure call (`scripts/ClaudeInstallSteps.ps1:142-157`, `scripts/install-steps.sh:109-128`). `-Json` / `--json` prints JSON. |
+| `-Steps <ids>` / `--steps <ids>` | Runs only the named steps. Each prerequisite outside the list is completed in the checkpoint and verified live, or the run stops on one line naming it (`scripts/ClaudeInstallSteps.ps1:103-131`, `scripts/install-steps.sh:85-106`). |
+| `-ProgressPath <file>` / `--progress-file <file>` | Appends one JSON object per line: `schemaVersion`, `time` (UTC), `runId`, `stepId`, `event`, `message` and `resumeCommand` (`scripts/ClaudeInstallSteps.ps1:29-38`, `scripts/install-steps.sh:22-29`). |
+
+An answers file names each answer by its installer parameter, and both installers read this one:
+
+```json
+{
+  "schemaVersion": 1,
+  "SubscriptionId": "00000000-0000-0000-0000-000000000000",
+  "FoundryAccount": "ai-contoso",
+  "FoundryResourceGroup": "rg-ai-contoso",
+  "ResourceGroup": "rg-claude-gateway",
+  "NamePrefix": "contosogw",
+  "PublisherEmail": "ops@contoso.com",
+  "Sku": "BasicV2"
+}
+```
+
+```powershell
+./Install-ClaudeGateway.ps1 -AnswersPath ./answers.json -Preflight
+./Install-ClaudeGateway.ps1 -AnswersPath ./answers.json -Yes -ProgressPath ./install-progress.ndjson
+./Install-ClaudeGateway.ps1 -ListSteps -Json
+```
+
+```bash
+./install-claude-gateway.sh --answers-file ./answers.json --preflight --json
+```
+
+`Install-ClaudeGateway.ps1` also applies `BusinessUnits`: it writes the units, then the teams, through
+`scripts/Set-ClaudeBusinessUnit.ps1`, and prints the `scripts/Sync-ClaudeUsdBudgets.ps1` command when a
+dollar budget is enforced (`scripts/ClaudeInstallSteps.ps1:159-217`). A team names its unit as
+`parent`, and an `Allowance` unit takes `percent`:
+
+```json
+"BusinessUnits": [
+  { "id": "finance", "group": "claude-bu-finance", "monthlyUsdBudget": 5000, "mode": "Strict" },
+  { "id": "finance-emea", "group": "claude-bu-finance-emea", "parent": "finance", "monthlyUsdBudget": 1000, "mode": "Allowance", "percent": 50 }
+]
+```
+
+`install-claude-gateway.sh` applies no business units, so it refuses an answers file that holds
+`BusinessUnits` (`scripts/install-answers.sh:41-50`).
+No answers file holds a secret: `AddressCertificatePassword` is passed as a parameter when the
+installer runs, or typed at its prompt, and a file that names it is refused
+(`schemas/claude-gateway.answers.schema.json`, `x-secrets`).
+
 ### Option B — non-interactive script
 
 The interactive installer's projection flags are separate from `deploy.ps1`:

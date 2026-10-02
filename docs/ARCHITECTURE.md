@@ -52,17 +52,43 @@ Turnstile, AUM or the reporting jobs; it coordinates their setup and handover.
 
 ## Lean installer phase 0
 
-![Lean installer phase 0: a JSON Schema feeds both installers and the guided flow; preflight produces one read-only check list; selected steps reuse P91 live verification and append a UI progress stream.](images/architecture/lean-installer-phase0.png)
+![Lean installer phase 0: one answers schema feeds both installers and the guided flow; the shared preflight only reads; selected steps reuse P91 live verification and append a progress stream.](images/architecture/lean-installer-phase0.png)
 
 Source: [17-lean-installer-phase0.json](architecture/17-lean-installer-phase0.json);
 [ADR-0047](adr/0047-lean-installer-phase-0.md).
 
-The phase-0 interfaces are operator-side. The answers file validates against one
-schema and never carries the PFX password. `-Preflight` and `--preflight` emit
-one check list with stable ids, and guided-flow `-PlanOnly` uses the same check
-engine before fingerprinting. `-ProgressPath` and `--progress-file` append
-newline-delimited JSON events that the later web UI can tail. Step selection is
-bounded by P91 checkpoint binding and live verification.
+Phase 0 adds operator-side files and streams. Azure writes stay in the installers' steps after the
+confirmed summary; the preflight, `-ListSteps` and the guided flow's plan only read.
+
+**Answers schema.** [`schemas/claude-gateway.answers.schema.json`](../schemas/claude-gateway.answers.schema.json)
+names each answer once, by its installer parameter, with the programs that apply it (`x-appliedBy`),
+its bash flag (`x-bashFlag`), its guided-flow keys (`x-flowKeys`) and the preflight check that reports
+a problem with it (`x-checkId`). `scripts/ClaudeInstallerAnswers.ps1` and `scripts/install-answers.jq`
+read it and report the same problems word for word (ADR-0047 decision 2). The schema lists no secret:
+`x-secrets` names `AddressCertificatePassword`, which an answers file is refused for holding.
+
+**Preflight.** `-Preflight` and `--preflight` report the 14 checks that `x-preflightChecks` lists, as
+text or as JSON with `schemaVersion`, `installer`, `answersSchemaVersion`, `result` and `checks`
+(`scripts/ClaudeInstallerPreflight.ps1:92-144`, `scripts/install-preflight.sh:202-255`). Each check is
+PASS, FAIL or NOT-RUN with a reason. Its reads go through the P91 verdict readers, and the API
+Management reads are the ones the run's reuse path makes (`Get-ClaudeApimReuseState`,
+`scripts/ClaudeInstallerPreflight.ps1:14-35`).
+
+**Progress stream.** `-ProgressPath` and `--progress-file` append one JSON object per line
+(`scripts/ClaudeInstallSteps.ps1:29-61`, `scripts/install-steps.sh:22-43`):
+
+| Key | Value |
+|---|---|
+| `schemaVersion` | `1` |
+| `time` | UTC, `yyyy-MM-ddTHH:mm:ssZ` |
+| `runId` | The install checkpoint's run id, 32 hexadecimal digits |
+| `stepId` | A step id of ADR-0046, or empty for an event of the whole run |
+| `event` | `started`, `completed`, `skipped-verified`, `warning`, `failed` or `refused` |
+| `message` | `<step title>: started`, `completed`, `verified live, skipped`, `incomplete` or `failed: <reason>`; a refusal's line starts with `Refused:` |
+| `resumeCommand` | The command that resumes the run, on `warning` and `failed`; otherwise empty |
+
+Both installers write the same events with the same messages for the steps both run. Each line is one
+write, and a JWT-shaped value in a message is replaced by `[redacted]` (ADR-0047 decision 12).
 
 ## Optional company hostname
 

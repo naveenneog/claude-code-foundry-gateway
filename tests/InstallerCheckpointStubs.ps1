@@ -199,7 +199,8 @@ function global:az {
             if ($mode -eq 'disconnect') {
                 $deployment.polls = @(@($w.inject.runningPolls) | ForEach-Object { [string]$_ })
                 Save-P91World $w
-                throw 'P91 stub: the client was disconnected while the deployment ran.'
+                # inject.disconnectDetail: text the failure carries, such as a token in an error (P92 secret scan).
+                throw ('P91 stub: the client was disconnected while the deployment ran.' + $(if (Get-P91Property $w.inject 'disconnectDetail') { ' ' + [string](Get-P91Property $w.inject 'disconnectDetail') }))
             }
             Complete-P91Deployment $w $deployment
             Save-P91World $w
