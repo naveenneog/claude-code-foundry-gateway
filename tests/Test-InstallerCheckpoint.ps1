@@ -179,7 +179,7 @@ try {
                 $deny.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule([Security.Principal.WindowsIdentity]::GetCurrent().User, 'FullControl', 'Allow')))
                 [System.IO.FileSystemAclExtensions]::SetAccessControl([IO.FileInfo]::new($p), $deny)
             }
-            $listing = (@(Get-ChildItem -LiteralPath $place -Force | Sort-Object Name | ForEach-Object { "$($_.Name)|$($_.Length)|$($_.LastWriteTimeUtc.Ticks)" }) -join ';')
+            $listing = "$((Get-Item -LiteralPath $place -Force).LastWriteTimeUtc.Ticks);" + (@(Get-ChildItem -LiteralPath $place -Force | Sort-Object Name | ForEach-Object { "$($_.Name)|$($_.Length)|$($_.LastWriteTimeUtc.Ticks)" }) -join ';')
         }
         $envs = @{ AZUREPS_HOST_ENVIRONMENT = 'cloud-shell/1.0'; HOME = $h; CLAUDE_GATEWAY_STATE_DIR = $(if ($n -eq 'untrusted-named') { $place } else { $null }) }
         $untrusted[$n] = [pscustomobject]@{ Scenario = $s; Place = $place; File = $file; Hash = (Get-P91Hash $file); Env = $envs; Run = $null; Listing = $listing }
@@ -328,7 +328,8 @@ try {
         $un.ExitCode -eq 1 -and @(Get-P91ErrLines $un).Count -eq 1 -and $unLine -match '^Refused: .*S-1-5-32-545' -and $unLine -match 'CLAUDE_GATEWAY_STATE_DIR' -and
         $unLine -match 'Nothing was read or changed' -and -not (Get-P91Calls $un 'account set*').Count -and -not (Test-Path -LiteralPath $u.Place)) (Get-P91Tail $un)
     $u = $untrusted['untrusted-planted']; $up = Get-P91Result $r1 $u.Run
-    $after = (@(Get-ChildItem -LiteralPath $u.Place -Force -ErrorAction SilentlyContinue | Sort-Object Name | ForEach-Object { "$($_.Name)|$($_.Length)|$($_.LastWriteTimeUtc.Ticks)" }) -join ';')
+    # The place's own last-write time changes when a file is created or removed in it during the run.
+    $after = "$((Get-Item -LiteralPath $u.Place -Force).LastWriteTimeUtc.Ticks);" + (@(Get-ChildItem -LiteralPath $u.Place -Force -ErrorAction SilentlyContinue | Sort-Object Name | ForEach-Object { "$($_.Name)|$($_.Length)|$($_.LastWriteTimeUtc.Ticks)" }) -join ';')
     Assert 'R6 Security ruling: a default place that fails a check and holds only another checkout''s unreadable checkpoint and lock is neither read, written nor locked; the run completes without a store' (
         $up.ExitCode -eq 0 -and $up.Out -match '\[WARN\] .*This run keeps no install checkpoint\.' -and $u.Listing -and $after -eq $u.Listing -and
         (Get-P91Calls $up 'deployment group create*').Count -eq 1) "$(Get-P91Tail $up) || before $($u.Listing) || after $after"
