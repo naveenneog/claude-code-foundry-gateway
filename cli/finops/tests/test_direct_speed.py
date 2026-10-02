@@ -13,10 +13,11 @@ from claude_finops.config import Config
 from claude_finops.direct import DirectBackend
 from claude_finops.engine import Engine
 from claude_finops.errors import FinOpsError
+from aum_clock import PINNED_MONTH
 
 
 SUB = "00000000-0000-0000-0000-000000000071"
-MONTH = datetime.now(timezone.utc).strftime("%Y-%m")
+MONTH = PINNED_MONTH
 
 
 def direct():
