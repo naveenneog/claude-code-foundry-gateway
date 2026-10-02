@@ -78,6 +78,21 @@ try {
     $refused = Get-Thrown { & $start -Action Setup -RecordPath (& $record 'bad-apply') -FlowModulePath $modules -AnswersPath $bad -ApprovedPlanFingerprint $badFp }
     Assert 'P7 an apply of the approved plan refuses while a preflight check fails, before any step runs' ($refused -match 'entra\.groupNames' -and -not (Test-Path -LiteralPath (Join-Path $logs 'applied.log')) -and
         -not (Test-Path -LiteralPath (& $record 'bad-apply'))) $refused
+    # Round 3, the Architect seat's item 2: a preflight that fails with no FAIL check. The installer
+    # arguments name a subscription and Azure CLI is signed out, so the checks that read Azure are NOT-RUN
+    # (not-signed-in), which fails the preflight; the plan's own fingerprint is approved.
+    $saved = [IO.File]::ReadAllText($world)
+    $signedOut = $saved | ConvertFrom-Json; $signedOut | Add-Member -NotePropertyName signedOut -NotePropertyValue $true -Force
+    Write-P91Text $world ($signedOut | ConvertTo-Json -Depth 30)
+    $soPlan = & $start -Action Setup -PlanOnly -RecordPath (& $record 'signed-out') -FlowModulePath $modules -AnswersPath $good *>&1 | Out-String
+    $soFp = Get-Fingerprint $soPlan
+    $soRefused = Get-Thrown { & $start -Action Setup -RecordPath (& $record 'signed-out-apply') -FlowModulePath $modules -AnswersPath $good -ApprovedPlanFingerprint $soFp }
+    Write-P91Text $world $saved
+    $soLines = @(Get-PreflightLines $soPlan)
+    Assert 'R3 an apply refuses a preflight that does not pass with no FAIL check: signed out, the refusal names each blocking NOT-RUN check with its reason (not-signed-in), before any step runs; nothing is written' (
+        $soFp -and -not @($soLines | Where-Object { $_ -match '^\[FAIL\]' }).Count -and @($soLines | Where-Object { $_ -match '^\[NOT-RUN\] target\.tenant: .*\(not-signed-in\)' }).Count -eq 1 -and
+        $soRefused -match 'not-signed-in' -and $soRefused -match 'target\.tenant' -and $soRefused -match 'entra\.groupNames' -and $soRefused -notmatch 'does not match plan fingerprint' -and
+        -not (Test-Path -LiteralPath (Join-Path $logs 'applied.log')) -and -not (Test-Path -LiteralPath (& $record 'signed-out-apply'))) "$soRefused || $(($soLines | Select-Object -First 4) -join ' | ')"
 
     # The same engine: the installer's own preflight over the same world and the same answers.
     $template = New-P91Template $scratch

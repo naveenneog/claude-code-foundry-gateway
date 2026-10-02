@@ -16,6 +16,7 @@ Write-Host ''
 Write-Host 'Installer preflight (bash installer)' -ForegroundColor Cyan
 $watch = [Diagnostics.Stopwatch]::StartNew()
 . (Join-Path $PSScriptRoot 'BashInstallerHarness.ps1')
+. (Join-Path $PSScriptRoot 'InstallerRedactionShapes.ps1')
 $scratch = [IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetTempPath()) ('p92-bash-preflight-' + [guid]::NewGuid().ToString('N'))))
 $made = New-BashTemplate $scratch
 $template = $made.Template; $psTable = $made.PsTable
@@ -95,9 +96,39 @@ try {
     Add-Scenario 'account-not-json' $w (New-Answers)
     $w = New-World; $w.inject['rawOutputs'] = @([ordered]@{ match = 'account show -o json'; text = '{"user": {"name": "admin@contoso.com", "type": "user"}, "name": "p91-subscription"}' })
     Add-Scenario 'account-no-tenant' $w (New-Answers)
+    # Round 3, the Coder seat's item 1: a subscription record without its id, with a null id or without its
+    # tenant, and a current account without an id when SubscriptionId is not answered.
+    $tenant = '00000000-0000-4000-8000-0000000000f1'
+    $user = '"user": {"name": "admin@contoso.com", "type": "user"}'
+    $record = { param([string]$Json) $w = New-World; $w.inject['rawOutputs'] = @([ordered]@{ match = 'account show --subscription*'; text = $Json }); $w }
+    Add-Scenario 'sub-no-id' (& $record ('{"name": "p91-subscription", "state": "Enabled", "tenantId": "' + $tenant + '", ' + $user + '}')) (New-Answers)
+    Add-Scenario 'sub-null-id' (& $record ('{"id": null, "name": "p91-subscription", "state": "Enabled", "tenantId": "' + $tenant + '", ' + $user + '}')) (New-Answers)
+    Add-Scenario 'sub-no-tenant' (& $record ('{"id": "' + $sub + '", "name": "p91-subscription", "state": "Enabled", ' + $user + '}')) (New-Answers)
+    $w = New-World; $w.inject['rawOutputs'] = @([ordered]@{ match = 'account show -o json'; text = ('{"name": "p91-subscription", "tenantId": "' + $tenant + '", ' + $user + '}') })
+    Add-Scenario 'current-no-id' $w (New-Answers { param($a) $a.PSObject.Properties.Remove('SubscriptionId') })
+    # Round 3, the Security seat's item 5: an error that a message quotes carries every secret shape of
+    # tests/InstallerRedactionShapes.ps1, and a remedy lists a deployment named like a secret.
+    $redactWorld = { $w = New-World; $w.inject.readErrors = @([ordered]@{ match = 'ad group list --display-name claude-code-standard*'; text = $P92RedactionSentence })
+        $w.foundry.deployments = @(@($w.foundry.deployments) + @([ordered]@{ name = 'secret=p92RemedySentinel'; properties = [ordered]@{ model = [ordered]@{ format = 'OpenAI'; name = 'gpt-4o'; version = '2024-08-06' } } })); $w }
+    $redactAnswers = { param($a) Set-Answer $a 'StandardModels' @('claude-sonnet-5', 'claude-p92-missing') }
+    Add-Scenario 'redact' (& $redactWorld) (New-Answers $redactAnswers)
+    Add-Scenario 'redact-text' (& $redactWorld) (New-Answers $redactAnswers) -Text
     Add-Scenario 'text' $textWorld (New-Answers) -Text
+    # Round 3, the UX seat's item 9: the bash preflight with every Azure branch left out (pf_azure_ replaced
+    # in a probe that sources the installer's libraries), so that the checks it evaluates stay not-evaluated.
+    $probe = New-Scenario 'not-evaluated' (New-World)
+    Write-Lf (Join-Path $probe.Repo 'p92-not-evaluated.sh') (@(
+            'set -uo pipefail'
+            'HERE="$(cd "$(dirname "$0")" && pwd)"'
+            '. "$HERE/scripts/install-checkpoint.sh"'
+            "pf_answers_() { PF_ANSWERS='{`"SubscriptionId`":`"$sub`"}'; }"
+            'pf_prereqs_() { pf_pass_ operator.adminPrereqs "claude_preflight admin passed"; }'
+            'pf_azure_() { :; }'
+            'WANT_JSON=1'
+            'preflight_run_') -join "`n")
+    $probeRun = New-Run $probe @() -Entry './p92-not-evaluated.sh'
 
-    $results = Invoke-Runs @($scenarios.Values | ForEach-Object { $_.Run })
+    $results = Invoke-Runs (@($scenarios.Values | ForEach-Object { $_.Run }) + @($probeRun))
     foreach ($s in $scenarios.Values) {
         $s.Result = $results[$s.Run.Dir]
         if (-not $s.Text) { try { $s.Json = $s.Result.Out | ConvertFrom-Json -ErrorAction Stop } catch { $s.Json = $null } }
@@ -161,6 +192,42 @@ try {
     $nt = @($scenarios['account-no-tenant'].Json.checks | Where-Object { $_.id -in @($azureChecks | Select-Object -Skip 1) -and ($_.result -ne 'NOT-RUN' -or $_.reason -ne 'prerequisite-failed') })
     Assert 'P2 bash an az account show without a tenantId is an inconclusive FAIL of target.tenant, and every other Azure check is NOT-RUN' ((& $one 'account-no-tenant' 'target.tenant' 'the signed-in account could not be read \(az account show returned no tenantId\)') -and
         $scenarios['account-no-tenant'].Json -and -not $nt.Count) "$(($nt | ForEach-Object { "$($_.id)=$($_.result)/$($_.reason)" }) -join ', ') || $(Show 'account-no-tenant')"
+    # ------------------------------------------------------------------ round 3: the subscription record (item 1)
+    function Get-EmptySubscription($Result) { @($Result.Az | Where-Object { $tk = @($_ -split ' '); $i = [array]::IndexOf($tk, '--subscription'); $i -ge 0 -and ($i + 1 -ge $tk.Count -or $tk[$i + 1] -in '', 'null', "''", '""') }) }
+    $recordCase = { param([string]$Name, [string]$Message)
+        $c = Get-Check $Name 'target.subscription'
+        $notRun = @($scenarios[$Name].Json.checks | Where-Object { $_.id -in $later -and ($_.result -ne 'NOT-RUN' -or $_.reason -ne 'prerequisite-failed') })
+        $empty = @(Get-EmptySubscription $scenarios[$Name].Result)
+        [pscustomobject]@{ Ok = [bool]((& $one $Name 'target.subscription' ('^' + [regex]::Escape($Message) + ' ')) -and $scenarios[$Name].Json -and -not $notRun.Count -and -not $empty.Count)
+            Detail = "$($c.result): $($c.message) || $(($notRun | ForEach-Object { "$($_.id)=$($_.result)/$($_.reason)" }) -join ', ') || empty: $($empty -join ' | ')" } }
+    $rc = & $recordCase 'sub-no-id' "subscription '$sub' is not readable by admin@contoso.com (az account show returned no subscription id)"
+    Assert 'R3 bash a subscription record without an id is an inconclusive FAIL of target.subscription, each later check is NOT-RUN (prerequisite-failed), and no az call names an empty subscription' $rc.Ok $rc.Detail
+    $rc = & $recordCase 'sub-null-id' "subscription '$sub' is not readable by admin@contoso.com (az account show returned no subscription id)"
+    Assert 'R3 bash a subscription record whose id is null is an inconclusive FAIL of target.subscription, each later check is NOT-RUN, and no az call names --subscription null' $rc.Ok $rc.Detail
+    $rc = & $recordCase 'sub-no-tenant' "subscription '$sub' is not readable by admin@contoso.com (az account show returned no tenantId)"
+    Assert 'R3 bash a subscription record without a tenantId is an inconclusive FAIL of target.subscription, and each later check is NOT-RUN' $rc.Ok $rc.Detail
+    $rc = & $recordCase 'current-no-id' 'the current subscription could not be read (az account show returned no subscription id)'
+    Assert 'R3 bash with SubscriptionId not answered, a current account without an id is an inconclusive FAIL of target.subscription, and each later check is NOT-RUN' $rc.Ok $rc.Detail
+    # ------------------------------------------------------------------ round 3: redaction (item 5)
+    $rd = $scenarios['redact']; $eg = Get-Check 'redact' 'entra.groupNames'; $fd = Get-Check 'redact' 'foundry.deployments'
+    $egProblems = @(Get-P92RedactionProblems "$($eg.message)")
+    Assert 'R3 bash the JSON report redacts every secret shape in an error that a message quotes: each becomes its [redacted] form, and no sentinel appears in stdout or stderr' ($eg.result -eq 'FAIL' -and -not $egProblems.Count -and
+        (Test-P92NoSentinel ($rd.Result.Out + $rd.Result.Err))) "$($egProblems -join '; ') || $($eg.message)"
+    Assert 'R3 bash the JSON report redacts a secret in a remedy: a deployment named secret=<value> is listed as secret=[redacted]' ($fd.result -eq 'FAIL' -and "$($fd.remedy)" -match 'secret=\[redacted\]' -and
+        @($fd.problems | Where-Object { "$($_.remedy)" -match 'secret=\[redacted\]' }).Count -eq 1 -and "$($fd.remedy)" -notmatch 'p92RemedySentinel') "$($fd.remedy)"
+    $rt = $scenarios['redact-text'].Result
+    $rtLine = @($rt.Out -split "`n" | Where-Object { $_ -match '\[FAIL\] entra\.groupNames: ' }) -join "`n"
+    $rtProblems = @(Get-P92RedactionProblems $rtLine)
+    Assert 'R3 bash the text report redacts the same: each shape in its [redacted] form, the remedy too, and no sentinel appears in stdout or stderr' ($rtLine -and -not $rtProblems.Count -and $rt.Out -match '\[FAIL\] foundry\.deployments: .*secret=\[redacted\]' -and
+        (Test-P92NoSentinel ($rt.Out + $rt.Err))) "$($rtProblems -join '; ') || $rtLine"
+    # ------------------------------------------------------------------ round 3: a check no branch evaluates (item 9)
+    $pe = $results[$probeRun.Dir]
+    $pj = $null; try { $pj = $pe.Out | ConvertFrom-Json -ErrorAction Stop } catch { }
+    $unevaluated = @(if ($pj) { $pj.checks | Where-Object { $_.reason -eq 'not-evaluated' } })
+    $wrongText = @($unevaluated | Where-Object { $_.result -ne 'NOT-RUN' -or $_.message -cne 'the preflight did not evaluate this check, which is a defect of the preflight' -or
+            $_.remedy -cne 'Run the preflight from the latest checkout; if the check is still not evaluated, report it with this output.' })
+    Assert 'R3 bash a check that no branch evaluates is NOT-RUN (not-evaluated), says the preflight did not evaluate it, which is a defect of the preflight, gives the remedy to run the latest checkout or report it, and fails the preflight' (
+        $pj -and $pj.result -eq 'FAIL' -and $unevaluated.Count -eq 8 -and -not $wrongText.Count) "$(@($unevaluated | ForEach-Object { "$($_.id): $($_.message) / $($_.remedy)" } | Select-Object -First 2) -join ' || ') || $(Get-Tail $pe)"
     # Fail closed by construction: every check starts NOT-RUN (not-evaluated) and passes only through
     # pf_pass_ with a message, so a branch that sets nothing cannot read as a PASS.
     $loose = @(foreach ($s in $scenarios.GetEnumerator()) { $j = $s.Value.Json; if ($j) { foreach ($c in @($j.checks)) { if ($c.reason -eq 'not-evaluated' -or ($c.result -eq 'PASS' -and -not "$($c.message)".Trim())) { "$($s.Key): $($c.id) $($c.result)/$($c.reason)" } } } })

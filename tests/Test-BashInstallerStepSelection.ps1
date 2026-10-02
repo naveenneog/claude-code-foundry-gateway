@@ -31,6 +31,7 @@ Write-Host "Installer step selection, precedence and progress (bash installer)$(
 $watch = [Diagnostics.Stopwatch]::StartNew()
 . (Join-Path $PSScriptRoot 'BashInstallerHarness.ps1')
 . (Join-Path $PSScriptRoot 'InstallerCheckpointHarness.ps1')
+. (Join-Path $PSScriptRoot 'InstallerRedactionShapes.ps1')
 $scratch = [IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetTempPath()) ('p92-bash-steps-' + [guid]::NewGuid().ToString('N'))))
 $made = New-BashTemplate $scratch
 $template = $made.Template; $psTable = $made.PsTable
@@ -84,7 +85,12 @@ try {
         $progressDirScenario = New-Scenario 'progress-dir' (New-World)
         $progressDir = Join-Path $progressDirScenario.Dir 'not-a-file'
         New-Item -ItemType Directory -Force -Path $progressDir | Out-Null
+        # Round 3, the UX seat's item 8: an answers file with two problems, refused before anything is read.
+        $answersBad = New-Scenario 'answers-bad' (New-World)
+        $answersBadFile = Write-Answers $answersBad ([ordered]@{ schemaVersion = 1; Sku = 'Gold'; Bogus = 1 })
+        $noSku = @(for ($i = 0; $i -lt $base.Count; $i++) { if ($base[$i] -eq '--sku') { $i++; continue }; $base[$i] })
         $wave1 += @(
+            ($runAnswersBad = New-Run $answersBad ($noSku + $tpm + @('--answers-file', $answersBadFile)))
             ($runNone = New-Run $stepsNone ($base + $tpm + @('--steps', 'sync')))
             ($runUnknown = New-Run $unknown ($base + $tpm + @('--steps', 'gateway-deploy')))
             ($runProgressDir = New-Run $progressDirScenario ($base + $tpm + @('--progress-file', (ConvertTo-BashPath $progressDir))))
@@ -109,7 +115,17 @@ try {
     $w = New-World; $w.inject.readErrors = @([ordered]@{ match = 'ad group list --display-name claude-code-standard*'; text = "ERROR: the request with Authorization: Bearer $jwt was refused (Authorization_RequestDenied)." })
         $tokenRefusal = New-Scenario 'token-refusal' $w
         $progressToken = Join-Path $tokenRefusal.Dir 'progress.ndjson'
+        # Round 3, the Security seat's item 5: a refusal that quotes an error with every secret shape, and a
+        # failure in a checkout whose path holds one (sig=<value>), which the failed event's resume command names.
+        $w = New-World; $w.inject.readErrors = @([ordered]@{ match = 'ad group list --display-name claude-code-standard*'; text = $P92RedactionSentence })
+        $redactRefusal = New-Scenario 'redact-refusal' $w
+        $progressRedact = Join-Path $redactRefusal.Dir 'progress.ndjson'
+        $w = New-World; $w.inject.createMode = 'fail'
+        $redactPath = New-Scenario 'redact-sig=p92PathSentinel' $w
+        $progressPath = Join-Path $redactPath.Dir 'progress.ndjson'
         $wave1 += @(
+            ($runRedact = New-Run $redactRefusal ($base + $tpm + @('--progress-file', (ConvertTo-BashPath $progressRedact))))
+            ($runRedactPath = New-Run $redactPath ($base + $tpm + @('--progress-file', (ConvertTo-BashPath $progressPath))))
             ($runFailing = New-Run $failing ($base + $tpm + @('--progress-file', (ConvertTo-BashPath $progressFail))))
             ($runToken = New-Run $tokenRefusal ($base + $tpm + @('--progress-file', (ConvertTo-BashPath $progressToken))))
         )
@@ -231,6 +247,15 @@ try {
         $pdir = $r1[$runProgressDir.Dir]
         Assert 'P5 bash an unwritable --progress-file (a directory) refuses at startup on one line naming --progress-file, before any Azure call; nothing is written' ((Test-Refusal $pdir '--progress-file .+ cannot be written') -and
             -not @($pdir.Az | Where-Object { $_ -notlike 'curl *' }).Count -and -not (Get-CheckpointFile $progressDirScenario) -and -not @(Get-ChildItem -LiteralPath $progressDir -Force).Count) (Get-Tail $pdir)
+        # Round 3: refusals name the next step (items 6, 7 and 8).
+        Assert 'R3 bash the --progress-file refusal names the next step: a writable file path, or a run without --progress-file' (@(Get-ErrLines $pdir).Count -eq 1 -and
+            @(Get-ErrLines $pdir)[0].Contains('Give a writable file path, or run without --progress-file.')) (Get-Tail $pdir)
+        Assert 'R3 bash the unknown-step refusal says that --list-steps lists the steps with their state' (@(Get-ErrLines $uk).Count -eq 1 -and @(Get-ErrLines $uk)[0].Contains('./install-claude-gateway.sh --list-steps lists the steps with their state.')) (Get-Tail $uk)
+        $ab = $r1[$runAnswersBad.Dir]
+        $abLine = @(Get-ErrLines $ab)[0]
+        Assert 'R3 bash an answers file with problems refuses on one line with the first problem, its remedy, the number of problems and the command that lists every one; nothing is read from Azure' ((Test-Refusal $ab 'does not match the answers schema') -and
+            $abLine.Contains('(2 problems)') -and $abLine -match 'Remedy: \S' -and $abLine -match 'Bogus|Gold' -and $abLine.Contains("./install-claude-gateway.sh --preflight --answers-file '$answersBadFile' lists every problem.") -and
+            -not @($ab.Az | Where-Object { $_ -notlike 'curl *' }).Count -and -not (Get-CheckpointFile $answersBad)) "$abLine || az: $($ab.Az -join ' | ')"
     }
     if (Test-ShardGroup 'prec') {
         $tpmOf = { param($Result) @($Result.Az | Where-Object { $_ -like 'deployment group create*' } | ForEach-Object { if ($_ -match 'tpmStandard=(\d+)') { $Matches[1] } }) -join ',' }
@@ -256,6 +281,17 @@ try {
             $r1[$runFailing.Dir].ExitCode -ne 0) (($failed | ConvertTo-Json -Compress -Depth 3))
         $texts = @(@($progressFail, $progressToken) | Where-Object { Test-Path -LiteralPath $_ } | ForEach-Object { [IO.File]::ReadAllText($_) })
         $redacted = @(@(Get-Events $progressToken) | Where-Object { $_.event -eq 'refused' -and $_.message -match '\[redacted\]' })
+        # Round 3, the Security seat's item 5: every shape in a refusal's quoted error, and in a resume command.
+        $rx = $r1[$runRedact.Dir]
+        $rxRefused = @(@(Get-Events $progressRedact) | Where-Object { $_.event -eq 'refused' })[0]
+        $rxProblems = @(Get-P92RedactionProblems "$($rxRefused.message)")
+        $rxText = if (Test-Path -LiteralPath $progressRedact) { [IO.File]::ReadAllText($progressRedact) } else { '' }
+        Assert 'R3 bash the refused event redacts every secret shape in the error it quotes: each becomes its [redacted] form, and no sentinel appears in the progress file or in stdout' ($rx.ExitCode -ne 0 -and $rxRefused -and
+            -not $rxProblems.Count -and $rxText -and (Test-P92NoSentinel $rxText) -and (Test-P92NoSentinel $rx.Out)) "$($rxProblems -join '; ') || $($rxRefused.message)"
+        $pathFailed = @(@(Get-Events $progressPath) | Where-Object { $_.event -eq 'failed' -and $_.stepId -eq 'gateway-deployment' })[0]
+        $pathText = if (Test-Path -LiteralPath $progressPath) { [IO.File]::ReadAllText($progressPath) } else { '' }
+        Assert 'R3 bash the failed event redacts a secret shape in its resume command: a checkout path that holds sig=<value> is written as sig=[redacted]' ($pathFailed -and "$($pathFailed.resumeCommand)" -match 'install-claude-gateway\.sh' -and
+            "$($pathFailed.resumeCommand)" -match 'sig=\[redacted\]' -and -not $pathText.Contains('p92PathSentinel')) "$($pathFailed.resumeCommand)"
         Assert 'P5 bash no secret reaches the progress stream: a token in an error that a refusal quotes is [redacted]' ($texts.Count -eq 2 -and -not (Get-Leaks @($progressFail, $progressToken)).Count -and $redacted.Count -eq 1 -and $r1[$runToken.Dir].ExitCode -ne 0) "$($texts.Count) streams; refused events with [redacted]: $($redacted.Count)"
     }
     $unexpected = @(foreach ($r in @($r1.Values) + @($r2.Values)) { @($r.Unexpected) })

@@ -32,6 +32,8 @@ on:
       - tests/Test-InstallerAnswersSchema.ps1
       - tests/Test-BashInstallerPreflight.ps1
       - tests/Test-BashInstallerStepSelection.ps1
+      - tests/Test-InstallerRedaction.ps1
+      - tests/InstallerRedactionShapes.ps1
       - .github/workflows/installer-unix.yml
   workflow_dispatch:
 
@@ -85,6 +87,11 @@ jobs:
         shell: pwsh
         run: |
           pwsh -NoProfile -File tests/Test-InstallerAnswersSchema.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Redaction, one rule set in both engines (PowerShell and jq)
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File tests/Test-InstallerRedaction.ps1
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Installer preflight (bash)
         shell: pwsh

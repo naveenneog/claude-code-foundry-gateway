@@ -225,6 +225,7 @@ try {
     Invoke-Check 'Installer checkpoint store permissions'  'Test-InstallerCheckpointStore.ps1' -SkipReason $bashInstallerSkip
     Invoke-Check 'Installer answers schema, both validators' 'Test-InstallerAnswersSchema.ps1' -SkipReason $bashInstallerSkip
     Invoke-Check 'Installer answers schema matches its sources' 'Test-InstallerAnswersDrift.ps1'
+    Invoke-Check 'Installer redaction, one rule set in both engines' 'Test-InstallerRedaction.ps1' -SkipReason $bashInstallerSkip
     Invoke-Check 'Installer preflight (PowerShell)'        'Test-InstallerPreflight.ps1'
     Invoke-Check 'macOS/Linux installer preflight'         'Test-BashInstallerPreflight.ps1' -SkipReason $bashInstallerSkip
     Invoke-Check 'Installer steps, precedence and progress (PowerShell)' 'Test-InstallerStepSelection.ps1'

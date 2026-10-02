@@ -278,7 +278,8 @@ function Edit-Checkpoint($Scenario, [scriptblock]$Change) {
     $cp = [IO.File]::ReadAllText($f.FullName) | ConvertFrom-Json; & $Change $cp; Write-Lf $f.FullName ($cp | ConvertTo-Json -Depth 20)
 }
 function Get-Hash($Scenario) { $f = Get-CheckpointFile $Scenario; if ($f) { (Get-FileHash -LiteralPath $f.FullName -Algorithm SHA256).Hash } else { '' } }
-function New-Run($Scenario, [string[]]$Arguments, [hashtable]$Environment = @{}) {
+# -Entry: the script bash runs in the checkout, the installer unless a suite runs a probe of its libraries.
+function New-Run($Scenario, [string[]]$Arguments, [hashtable]$Environment = @{}, [string]$Entry = './install-claude-gateway.sh') {
     $Scenario.Runs++
     $dir = Join-Path $Scenario.Dir "run$($Scenario.Runs)"
     $shim = Join-Path $dir 'bin'; $logs = Join-Path $dir 'logs'
@@ -292,7 +293,7 @@ function New-Run($Scenario, [string[]]$Arguments, [hashtable]$Environment = @{})
     foreach ($k in $Environment.Keys) { $envs[$k] = $Environment[$k] }
     $lines = foreach ($k in $envs.Keys) { if ($null -eq $envs[$k]) { "unset $k" } else { "export $k='" + ([string]$envs[$k]).Replace("'", "'\''") + "'" } }
     $quoted = @($Arguments | ForEach-Object { "'" + $_.Replace("'", "'\''") + "'" }) -join ' '
-    $runner = "export PATH=`"$(ConvertTo-BashPath $shim):/usr/bin:/bin`"`nchmod +x `"$(ConvertTo-BashPath $shim)`"/* 2>/dev/null`n$($lines -join "`n")`ncd `"$(ConvertTo-BashPath $Scenario.Repo)`" || exit 90`nexec bash ./install-claude-gateway.sh $quoted < /dev/null"
+    $runner = "export PATH=`"$(ConvertTo-BashPath $shim):/usr/bin:/bin`"`nchmod +x `"$(ConvertTo-BashPath $shim)`"/* 2>/dev/null`n$($lines -join "`n")`ncd `"$(ConvertTo-BashPath $Scenario.Repo)`" || exit 90`nexec bash $Entry $quoted < /dev/null"
     $path = Join-Path $dir 'run.sh'
     Write-Lf $path $runner
     [pscustomobject]@{ Scenario = $Scenario; Dir = $dir; Logs = $logs; Runner = $path }

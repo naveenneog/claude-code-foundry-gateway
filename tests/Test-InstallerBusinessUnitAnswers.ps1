@@ -52,12 +52,28 @@ try {
     # bu-registry cannot be read (not absent): the step stops before any unit is written or skipped.
     $denied = 'ERROR: (AuthorizationFailed) The client does not have authorization to perform action Microsoft.ApiManagement/service/namedValues/read.'
     $unreadable = New-Units 'registry-unreadable' $tree { param($w) $w.inject.readErrors = @([ordered]@{ match = 'apim nv show * --named-value-id bu-registry *'; text = $denied }) }
+    # Round 3, the Security seat's item 4: the installer's business-unit prompt (an attended run over a reused
+    # gateway, its questions answered on standard input as in tests/Test-InstallerCheckpoint.ps1 S3) finds a
+    # unit's group by the name rule of ADR-0046 decision 11. az ad group show --group falls back to a single
+    # prefix match, so a lone claude-bu-platform-admins was taken for claude-bu-platform.
+    $prompted = @("-SubscriptionId '$sub'", "-FoundryAccount 'ai-p91'", "-FoundryResourceGroup 'rg-ai-p91'", "-EntitlementStore 'named-value'", "-AuthMode 'interactive'",
+        "-DesktopSignInKind 'helper-script'", "-AddressMode 'azure'", '-SkipFinOpsOffer', "-ResourceGroup 'rg-p91'", "-ExistingApimName 'apim-p91reuse'", "-StandardModels 'claude-sonnet-5'",
+        "-PremiumModels 'claude-opus-5','claude-sonnet-5'", '-TpmStandard 20000', '-QuotaStandard 500000', '-TpmPremium 80000', '-QuotaPremium 5000000', '-QuotaOrg 100000000', '-CallsPerMinute 120')
+    $adminsId = '00000000-0000-4000-8000-0000000003a1'
+    $w = New-P91World -ReusedGateway; $w.groups[$adminsId] = 'claude-bu-platform-admins'; $w.inject.bu = 'refuse:zzz'
+    $prefixGroup = New-P91Scenario -Name 'prompt-prefix' -Scratch $scratch -Template $template -World $w
+    $w = New-P91World -ReusedGateway
+    $w.inject['groupLists'] = [ordered]@{ 'claude-bu-platform' = @([ordered]@{ id = '00000000-0000-4000-8000-0000000003b1'; displayName = 'claude-bu-platform' }, [ordered]@{ id = '00000000-0000-4000-8000-0000000003b2'; displayName = 'CLAUDE-BU-PLATFORM' }) }
+    $twoGroups = New-P91Scenario -Name 'prompt-two-groups' -Scratch $scratch -Template $template -World $w
     $wave1 = @(
         ($runApply = New-P91Run $apply.Scenario -Arguments ($common + "-AnswersPath '$($apply.Answers)'"))
         ($runNotify = New-P91Run $quiet.Scenario -Arguments ($common + "-AnswersPath '$($quiet.Answers)'"))
         ($runPartial = New-P91Run $partial.Scenario -Arguments ($common + "-AnswersPath '$($partial.Answers)'"))
         ($runLater = New-P91Run $later.Scenario -Arguments ($common + "-AnswersPath '$($later.Answers)'"))
         ($runUnreadable = New-P91Run $unreadable.Scenario -Arguments ($common + "-AnswersPath '$($unreadable.Answers)'"))
+        # platform, then zzz, which the stub refuses, so that the checkpoint keeps platform's receipt.
+        ($runPrefix = New-P91Run $prefixGroup -Arguments $prompted -Attended -Answers @('', '', '', '', '', 'y', 'platform', '', '', 'y', 'zzz', '', '', '', ''))
+        ($runTwoGroups = New-P91Run $twoGroups -Arguments $prompted -Attended -Answers @('', '', '', '', '', 'y', 'platform', '', 'n', '', '', '', ''))
     )
     $r1 = Invoke-P91Runs $wave1
     $a = Get-P91Result $r1 $runApply
@@ -108,6 +124,24 @@ try {
     $urLines = @(Get-P91ErrLines $ur)
     Assert 'P6 an unreadable bu-registry stops the step on one line naming it, with the resume command, and no Set-ClaudeBusinessUnit call is made' ($ur.ExitCode -ne 0 -and -not (Get-Ids $ur).Count -and
         @($urLines | Where-Object { $_ -match 'bu-registry on apim-p91gw could not be read \(ERROR: \(AuthorizationFailed\)' -and $_ -match 'Nothing was changed' -and $_ -match 'Resume: ' }).Count -eq 1) "$($urLines -join ' | ') || $(Get-P91Tail $ur)"
+    # ------------------------------------------------------------------ round 3: the prompt's group (item 4)
+    $px = Get-P91Result $r1 $runPrefix
+    $pxCp = Get-P91CheckpointFile $prefixGroup
+    $pxUnits = if ($pxCp) { @(@(([IO.File]::ReadAllText($pxCp.FullName) | ConvertFrom-Json).steps | Where-Object { $_.id -eq 'business-units' })[0].receipt.units) } else { @() }
+    $pxUnit = @($pxUnits | Where-Object { $_.id -eq 'platform' })[0]
+    $made = @((([IO.File]::ReadAllText($prefixGroup.World) | ConvertFrom-Json).groups.PSObject.Properties | Where-Object { [string]$_.Value -ceq 'claude-bu-platform' }) | ForEach-Object { $_.Name })
+    Assert 'R3 when only claude-bu-platform-admins exists, the business-unit prompt creates claude-bu-platform, records the new group''s id, and never takes the prefix group' (
+        @(Get-P91Calls $px 'ad group create --display-name claude-bu-platform *').Count -eq 1 -and $made.Count -eq 1 -and $pxUnit -and $pxUnit.groupId -eq $made[0] -and $pxUnit.groupOrigin -eq 'created' -and
+        $pxUnit.groupId -ne $adminsId -and -not @(Get-P91Calls $px 'ad group show --group claude-bu-platform*').Count) "unit: $($pxUnit | ConvertTo-Json -Compress) || made: $($made -join ',') || $(Get-P91Tail $px)"
+    Assert 'R3 the prompt then writes the unit through Set-ClaudeBusinessUnit.ps1 -SkipGroupCheck, as the answers path does' (@($px.Scripts | Where-Object { $_ -like 'bu platform claude-bu-platform *skipGroupCheck=True' }).Count -eq 1) (($px.Scripts | Where-Object { $_ -like 'bu *' }) -join ' | ')
+    $tg = Get-P91Result $r1 $runTwoGroups
+    Assert 'R3 when two groups have the name''s length, the prompt refuses that unit with a remedy: no group is created, no unit is written, and the run goes on' ($tg.ExitCode -eq 0 -and
+        $tg.Out -match "Entra group 'claude-bu-platform' could not be looked up by name" -and $tg.Out -match 'Rename or remove one of those groups' -and
+        -not @(Get-P91Calls $tg 'ad group create --display-name claude-bu-platform *').Count -and -not @($tg.Scripts | Where-Object { $_ -like 'bu platform *' }).Count) (Get-P91Tail $tg)
+    $installerText = [IO.File]::ReadAllText((Join-Path $script:P91Root 'Install-ClaudeGateway.ps1'))
+    $answersPath = [regex]::Match([IO.File]::ReadAllText((Join-Path $script:P91Root 'scripts/ClaudeInstallSteps.ps1')), '(?s)function Invoke-ClaudeInstallBusinessUnits \{.*?\r?\n\}').Value
+    Assert 'R3 both business-unit paths, the prompt and the answers file, find or create a unit''s group through one function, Resolve-ClaudeInstallUnitGroup' ($installerText -match 'Resolve-ClaudeInstallUnitGroup \$buGroup' -and
+        $installerText -notmatch 'az ad group show --group \$buGroup' -and $answersPath -match 'Resolve-ClaudeInstallUnitGroup \$group')
     $unexpected = @(foreach ($r in @($r1.Values) + @($r2.Values)) { @($r.Unexpected) })
     Assert 'harness: every az call was one the stub knows, and no run timed out' (-not $unexpected.Count -and -not @(@($r1.Values) + @($r2.Values) | Where-Object { $_.TimedOut }).Count) (($unexpected | Select-Object -Unique -First 4) -join ' | ')
 }

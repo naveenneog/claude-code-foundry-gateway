@@ -233,9 +233,13 @@ Assert 'unattended installs skip it entirely' `
     ($inst -match "(?s)if \(-not \`$Yes\) \{\s*\r?\n\s*Write-Step 'Business units \(optional\)'")
 
 # Set-ClaudeBusinessUnit refuses a unit whose group does not exist, because it
-# syncs to nobody and reads as unused rather than broken. The installer creates
-# the group first, and stops rather than writing a unit it knows will be empty.
-Assert 'it creates the Entra group first'  ($inst -match 'az ad group create --display-name \$buGroup')
+# syncs to nobody and reads as unused rather than broken. The installer finds
+# the group by its exact name or creates it first, through the one function both
+# business-unit paths use (ADR-0046 decision 11, ADR-0047 decision 13), and stops
+# rather than writing a unit it knows will be empty.
+$unitSteps = Get-Content (Join-Path $root 'scripts/ClaudeInstallSteps.ps1') -Raw
+Assert 'it creates the Entra group first'  ($inst -match '(?s)Resolve-ClaudeInstallUnitGroup \$buGroup.*?scripts/Set-ClaudeBusinessUnit\.ps1' -and
+    $unitSteps -match "(?s)function Resolve-ClaudeInstallUnitGroup \{.*?'ad', 'group', 'create', '--display-name', \`$Group")
 Assert 'and refuses to write a unit without one' ($inst -match "(?s)Could not create '\`$buGroup'[\s\S]{0,200}continue")
 
 # The identifier keys the budget counter, the ledger and every report.

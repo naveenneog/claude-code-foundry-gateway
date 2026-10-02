@@ -6,6 +6,7 @@
 # tests/Test-BashInstallerStepSelection.ps1.
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'InstallerCheckpointHarness.ps1')
+. (Join-Path $PSScriptRoot 'InstallerRedactionShapes.ps1')
 $script:fail = 0
 $script:checks = 0
 function Assert($label, $condition, $detail = '') {
@@ -67,6 +68,14 @@ try {
     $progressDirScenario = New-P91Scenario -Name 'progress-dir' -Scratch $scratch -Template $template -World (New-P91World)
     $progressDir = Join-Path $progressDirScenario.Dir 'not-a-file'
     New-Item -ItemType Directory -Force -Path $progressDir | Out-Null
+    # Round 3, the Security seat's item 5: a failure whose error carries every secret shape, in a checkout
+    # whose path holds one too (sig=<value>), so that the failed event's message and resume command quote them.
+    $w = New-P91World; $w.inject.createMode = 'disconnect'; $w.inject.runningPolls = @('forever'); $w.inject['disconnectDetail'] = $P92RedactionSentence
+    $redact = New-P91Scenario -Name 'redact-sig=p92PathSentinel' -Scratch $scratch -Template $template -World $w
+    $progressRedact = Join-Path $redact.Dir 'progress.ndjson'
+    # Round 3, the UX seat's item 8: an answers file with two problems, refused before anything is read.
+    $answersBad = New-P91Scenario -Name 'answers-bad' -Scratch $scratch -Template $template -World (New-P91World)
+    $answersBadFile = Write-Answers $answersBad ([ordered]@{ schemaVersion = 1; Sku = 'Gold'; Bogus = 1 })
     $wave1 = @(
         ($runList1 = New-P91Run $listSrc -Arguments ($common + $tpm + $secret + "-ProgressPath '$progress1'"))
         ($runSync1 = New-P91Run $syncFail -Arguments ($common + $tpm))
@@ -76,6 +85,8 @@ try {
         ($runUnknown = New-P91Run $unknownStep -Arguments ($common + $tpm + "-Steps 'gateway-deploy'"))
         ($runDisconnect = New-P91Run $disconnect -Arguments ($common + $tpm + "-ProgressPath '$progressFail'"))
         ($runProgressDir = New-P91Run $progressDirScenario -Arguments ($common + $tpm + "-ProgressPath '$progressDir'"))
+        ($runRedact = New-P91Run $redact -Arguments ($common + $tpm + "-ProgressPath '$progressRedact'"))
+        ($runAnswersBad = New-P91Run $answersBad -Arguments (@($common | Where-Object { $_ -notlike '-Sku *' }) + $tpm + "-AnswersPath '$answersBadFile'"))
     )
     $r1 = Invoke-P91Runs $wave1
     $l1 = Get-P91Result $r1 $runList1
@@ -187,6 +198,25 @@ try {
     $leak = @($texts | Where-Object { $_ -match 'P92-PFX-SENTINEL|eyJ[A-Za-z0-9_-]{4,}\.|(?i)password|accesstoken' })
     $redacted = @(@(Get-Events $progressFail) | Where-Object { $_.event -eq 'failed' -and $_.message -match '\[redacted\]' })
     Assert 'P5 no secret reaches the progress stream, the checkpoint or an answers file: not the PFX password passed to the run, not the token in a failure''s error, which the failed event carries as [redacted]' ($texts.Count -ge 6 -and -not $leak.Count -and $redacted.Count -eq 1) "$($leak.Count) of $($texts.Count) texts; failed events with [redacted]: $($redacted.Count)"
+    # ------------------------------------------------------------------ round 3: redaction in the stream (item 5)
+    $rx = Get-P91Result $r1 $runRedact
+    $rxEvents = @(Get-Events $progressRedact)
+    $rxFailed = @($rxEvents | Where-Object { $_.event -eq 'failed' -and $_.stepId -eq 'gateway-deployment' })[0]
+    $rxProblems = @(Get-P92RedactionProblems "$($rxFailed.message)")
+    $rxText = if (Test-Path -LiteralPath $progressRedact) { [IO.File]::ReadAllText($progressRedact) } else { '' }
+    Assert 'R3 the failed event redacts every secret shape in the error it quotes: each becomes its [redacted] form, and no sentinel appears in the progress file or in stdout' ($rx.ExitCode -ne 0 -and $rxFailed -and
+        -not $rxProblems.Count -and $rxText -and (Test-P92NoSentinel $rxText) -and (Test-P92NoSentinel $rx.Out)) "$($rxProblems -join '; ') || $($rxFailed.message)"
+    Assert 'R3 the failed event redacts a secret shape in its resume command: a checkout path that holds sig=<value> is written as sig=[redacted]' ($rxFailed -and "$($rxFailed.resumeCommand)" -match 'Install-ClaudeGateway\.ps1' -and
+        "$($rxFailed.resumeCommand)" -match 'sig=\[redacted\]' -and -not $rxText.Contains('p92PathSentinel')) "$($rxFailed.resumeCommand)"
+    # ------------------------------------------------------------------ round 3: refusals name the next step (items 6, 7, 8)
+    Assert 'R3 the -ProgressPath refusal names the next step: a writable file path, or a run without -ProgressPath' (@(Get-P91ErrLines $pd).Count -eq 1 -and
+        @(Get-P91ErrLines $pd)[0].Contains('Give a writable file path, or run without -ProgressPath.')) (Get-P91Tail $pd)
+    Assert 'R3 the unknown-step refusal says that -ListSteps lists the steps with their state' (@(Get-P91ErrLines $uk).Count -eq 1 -and @(Get-P91ErrLines $uk)[0].Contains('./Install-ClaudeGateway.ps1 -ListSteps lists the steps with their state.')) (Get-P91Tail $uk)
+    $ab = Get-P91Result $r1 $runAnswersBad
+    $abLine = @(Get-P91ErrLines $ab)[0]
+    Assert 'R3 an answers file with problems refuses on one line with the first problem, its remedy, the number of problems and the command that lists every one; nothing is read from Azure' ((Test-Refusal $ab 'does not match the answers schema') -and
+        $abLine.Contains('(2 problems)') -and $abLine -match 'Remedy: \S' -and $abLine -match 'Bogus|Gold' -and $abLine.Contains("./Install-ClaudeGateway.ps1 -Preflight -AnswersPath '$answersBadFile' lists every problem.") -and
+        -not $ab.Az.Count -and -not (Get-P91CheckpointFile $answersBad)) "$abLine || az: $($ab.Az -join ' | ')"
     $unexpected = @(foreach ($r in @($r1.Values) + @($r2.Values)) { @($r.Unexpected) })
     Assert 'harness: every az call was one the stub knows, and no run timed out' (-not $unexpected.Count -and -not @(@($r1.Values) + @($r2.Values) | Where-Object { $_.TimedOut }).Count) (($unexpected | Select-Object -Unique -First 4) -join ' | ')
 }
