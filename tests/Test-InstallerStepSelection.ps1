@@ -21,7 +21,9 @@ $ckpt = Get-Content -Raw -LiteralPath (Join-Path $root 'scripts\ClaudeInstallChe
 Assert 'liststeps-json-names-checkpoint-state' ($ckpt -match 'Get-ClaudeInstallStepList')
 Assert 'selected-step-refuses-unverified-prerequisite' ($ckpt -match 'Assert-ClaudeInstallSelectedSteps')
 Assert 'selected-step-reruns-with-p91-live-check' ($ckpt -match 'Test-ClaudeInstallStepSelected')
-Assert 'progress events are emitted' ($ckpt -match 'Write-ClaudeInstallProgress')
+Assert 'progress events are emitted' ($ckpt -match 'function\s+Write-ClaudeInstallProgress\s*\{')
 Assert 'progress events have required schema' ($ckpt -match 'schemaVersion' -and $ckpt -match 'resumeCommand' -and $ckpt -match 'skipped-verified')
 Assert 'precedence-parameter-answers-checkpoint-default' ($installer -match 'Apply-ClaudeInstallerAnswers')
+Assert 'business-units-from-answers-use-existing-script' ($installer -match 'BusinessUnits' -and $installer -match 'Set-ClaudeBusinessUnit.ps1' -and $installer -match '-Parent')
+Assert 'business-units-print-usd-reconcile-command' ($installer -match 'Sync-ClaudeUsdBudgets.ps1')
 Finish 'P92 PowerShell step selection and progress contract'

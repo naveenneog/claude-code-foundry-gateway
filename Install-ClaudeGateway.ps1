@@ -1726,7 +1726,30 @@ if ($EntitlementStore -eq 'projection' -and $DeployProjection -and -not (Test-Cl
 # Skipped by default under -Yes: a business unit is a naming decision about the
 # customer's own organisation, and guessing one unattended leaves a registry
 # entry nobody asked for.
-if (-not $Yes) {
+if ($BusinessUnits) {
+    Write-Step 'Business units'
+    if (-not (Test-ClaudeInstallStepSkip 'business-units' -Verify { Test-ClaudeInstallBusinessUnits $ResourceGroup $apimName $args[0] })) {
+        $orderedUnits = @($BusinessUnits | Where-Object { -not $_.parent }) + @($BusinessUnits | Where-Object { $_.parent })
+        foreach ($unit in $orderedUnits) {
+            $args = @(
+                '-Id', [string]$unit.id,
+                '-Group', [string]$unit.group,
+                '-MonthlyBudgetUsd', [decimal]$unit.monthlyUsdBudget,
+                '-ApimName', $apimName,
+                '-ResourceGroup', $ResourceGroup
+            )
+            if ($unit.parent) { $args += @('-Parent', [string]$unit.parent) }
+            if ($unit.mode) { $args += @('-Mode', [string]$unit.mode) }
+            if ($unit.percent) { $args += @('-AllowancePercent', [int]$unit.percent) }
+            & (Join-Path $root 'scripts/Set-ClaudeBusinessUnit.ps1') @args
+            Add-ClaudeInstallBusinessUnit -Id ([string]$unit.id) -GroupId ([string]$unit.group) -GroupOrigin 'pre-existing'
+        }
+        Complete-ClaudeInstallStep 'business-units'
+        Write-Note "After access sync changes bu-members, reconcile dollar budget state:"
+        Write-Note "  ./scripts/Sync-ClaudeUsdBudgets.ps1 -ResourceGroup $ResourceGroup -ApimName $apimName"
+    }
+}
+elseif (-not $Yes) {
     Write-Step 'Business units (optional)'
     # A resume skips units it finds in bu-registry; the block below is not re-indented (ADR-0046).
     if (-not (Test-ClaudeInstallStepSkip 'business-units' -Verify { Test-ClaudeInstallBusinessUnits $ResourceGroup $apimName $args[0] })) {

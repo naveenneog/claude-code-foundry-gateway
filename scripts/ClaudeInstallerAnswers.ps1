@@ -1,4 +1,4 @@
-# Shared P92 answers, preflight and UI contracts.
+﻿# Shared P92 answers, preflight and UI contracts.
 function Get-ClaudeInstallerSchemaPath { Join-Path (Split-Path $PSScriptRoot -Parent) 'schemas\claude-gateway.answers.schema.json' }
 function Read-ClaudeInstallerAnswers { param([string]$Path) if (-not $Path) { return @{} }; $o = Get-Content -Raw -LiteralPath $Path | ConvertFrom-Json; $h=@{}; foreach($p in $o.PSObject.Properties){$h[$p.Name]=$p.Value}; $h }
 function Get-ClaudeInstallerPreflightCheckIds { @('answers.schema','answers.crossField','target.tenant','target.subscription','operator.adminPrereqs','foundry.account','foundry.deployments','apim.nameAvailability','apim.existingSku','apim.existingIdentity','entra.groupNames','businessUnits.ids','businessUnits.depth','address.inputs') }

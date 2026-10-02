@@ -21,7 +21,7 @@ Assert 'bash step flags exist' ($installer -match '--list-steps' -and $installer
 $lib = Join-Path $root 'scripts\install-answers.sh'
 Assert 'bash shared answers library exists' (Test-Path -LiteralPath $lib)
 $txt = if (Test-Path -LiteralPath $lib) { Get-Content -Raw -LiteralPath $lib } else { '' }
-Assert 'bash-preflight-uses-same-schema' ($txt -match 'claude-gateway.answers.schema.json')
+Assert 'bash-preflight-uses-same-schema' ($txt -match 'ANSWERS_SCHEMA_FILE=.*claude-gateway.answers.schema.json')
 Assert 'bash-progress-events-have-required-schema' ($txt -match 'schemaVersion' -and $txt -match 'resumeCommand' -and $txt -match 'skipped-verified')
 $forbidden = '(?m)^[^#\n]*(\b(declare|local|typeset)\s+-[a-zA-Z]*A\b|\bmapfile\b|\breadarray\b|\$\{[^}\n]*(,,|\^\^)[^}\n]*\}|\|&|&>>|\bcoproc\b|\bsed\s+-i(\s|$)|\bdate\s+(-[a-zA-Z]*\s+)*-d\b|\breadlink\s+-f\b|\bstat\s+-c\b|\bfind\b[^\n]*-printf\b|\bgrep\s+-[a-zA-Z]*P)'
 Assert 'bash-preflight-keeps-bash-32-syntax' ($txt -and -not [regex]::IsMatch($txt, $forbidden))

@@ -120,6 +120,43 @@ This GREEN is an offline contract implementation. Live Azure preflight behavior,
 from answers, stronger executable selected-step coverage, mutations and architecture rendering remain
 for REFACTOR and review.
 
+### REFACTOR and mutation proof
+
+REFACTOR adds the owner-directed phase-0 additions: business units from the answers file are applied
+by calling `scripts/Set-ClaudeBusinessUnit.ps1`, units before teams, with `-Parent` for teams. After
+that step the installer prints the `Sync-ClaudeUsdBudgets.ps1` command because access sync changes
+`bu-members` and invalidates dollar-budget state. The architecture article and diagram now record the
+answers schema and progress stream as operator-side interfaces.
+
+Targeted validation after REFACTOR:
+
+| Check | Result |
+|---|---|
+| `Test-InstallerAnswersSchema.ps1` | 8 passed |
+| `Test-InstallerPreflight.ps1` | 6 passed |
+| `Test-InstallerStepSelection.ps1` | 9 passed |
+| `Test-BashInstallerPreflight.ps1` | 6 passed |
+| `Test-GuidedFlowAnswersSchema.ps1` | 4 passed |
+| `Test-BashInstallerCheckpointShards.ps1` | 2 passed |
+| `Test-Architecture.ps1` | 36 passed, including isolated mutations |
+| `Test-DocReferences.ps1` | 42 guides; all built-in mutations caught |
+| `bash -n scripts/install-answers.sh` and `bash -n install-claude-gateway.sh` | passed |
+| dot-source `scripts/flow/FlowContract.ps1` and `scripts/ClaudeInstallerAnswers.ps1` | passed |
+
+Mutation probes, one per new check group, all caught with the targeted selector exiting nonzero and
+the mutated file restored byte-for-byte:
+
+| Mutation | Selector | Caught |
+|---|---|---|
+| Remove `BusinessUnits` from the schema | `Test-InstallerAnswersSchema.ps1` | yes |
+| Change `Test-ClaudePrerequisites -Mode Admin` to `-Mode User` | `Test-InstallerPreflight.ps1` | yes |
+| Rename `Write-ClaudeInstallProgress` | `Test-InstallerStepSelection.ps1` | yes |
+| Change the bash schema filename | `Test-BashInstallerPreflight.ps1` | yes |
+| Rename the guided-flow preflight call | `Test-GuidedFlowAnswersSchema.ps1` | yes |
+| Restore the single 900 s bash checkpoint Test-All registration | `Test-BashInstallerCheckpointShards.ps1` | yes |
+
+No live Azure command was run; every command used the isolated `AZURE_CONFIG_DIR`.
+
 
 ## P91 installer checkpoint and resume, 2026-10-01
 

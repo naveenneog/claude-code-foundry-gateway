@@ -49,6 +49,21 @@ writes the decision record after each completed step, verifies, and generates
 `onboarding/HOW-TO-USE.md`. It does not replace API Management, Foundry,
 Turnstile, AUM or the reporting jobs; it coordinates their setup and handover.
 
+
+## Lean installer phase 0
+
+![Lean installer phase 0: a JSON Schema feeds both installers and the guided flow; preflight produces one read-only check list; selected steps reuse P91 live verification and append a UI progress stream.](images/architecture/lean-installer-phase0.png)
+
+Source: [17-lean-installer-phase0.json](architecture/17-lean-installer-phase0.json);
+[ADR-0047](adr/0047-lean-installer-phase-0.md).
+
+The phase-0 interfaces are operator-side. The answers file validates against one
+schema and never carries the PFX password. `-Preflight` and `--preflight` emit
+one check list with stable ids, and guided-flow `-PlanOnly` uses the same check
+engine before fingerprinting. `-ProgressPath` and `--progress-file` append
+newline-delimited JSON events that the later web UI can tail. Step selection is
+bounded by P91 checkpoint binding and live verification.
+
 ## Optional company hostname
 
 ![Company address control path: a priced installer or Change review creates DNS first, configures the supplied certificate and preserves APIM hostnames, then publishes the developer URL only after trusted TLS and a gateway HTTP 401.](images/architecture/company-address.png)
