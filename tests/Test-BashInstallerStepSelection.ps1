@@ -58,6 +58,10 @@ try {
     $w = New-World; $w.inject.readErrors = @([ordered]@{ match = 'ad group list --display-name claude-code-standard*'; text = "ERROR: the request with Authorization: Bearer $jwt was refused (Authorization_RequestDenied)." })
     $tokenRefusal = New-Scenario 'token-refusal' $w
     $progressToken = Join-Path $tokenRefusal.Dir 'progress.ndjson'
+    # A --progress-file that cannot be written (a directory): the run refuses before any Azure call.
+    $progressDirScenario = New-Scenario 'progress-dir' (New-World)
+    $progressDir = Join-Path $progressDirScenario.Dir 'not-a-file'
+    New-Item -ItemType Directory -Force -Path $progressDir | Out-Null
     $wave1 = @(
         ($runList1 = New-Run $listSrc ($base + $tpm + @('--progress-file', (ConvertTo-BashPath $progress1))))
         ($runSync1 = New-Run $syncFail ($base + $tpm))
@@ -67,6 +71,7 @@ try {
         ($runUnknown = New-Run $unknown ($base + $tpm + @('--steps', 'gateway-deploy')))
         ($runFailing = New-Run $failing ($base + $tpm + @('--progress-file', (ConvertTo-BashPath $progressFail))))
         ($runToken = New-Run $tokenRefusal ($base + $tpm + @('--progress-file', (ConvertTo-BashPath $progressToken))))
+        ($runProgressDir = New-Run $progressDirScenario ($base + $tpm + @('--progress-file', (ConvertTo-BashPath $progressDir))))
     )
     # The PowerShell installer over the same kind of world, for the parity of progress events. It runs
     # through tests/InstallerCheckpointHarness.ps1, which sets Windows access rules and builds Windows
@@ -174,6 +179,9 @@ try {
         (& $pairs $second 'gateway-deployment') -eq 'skipped-verified' -and (& $pairs $second 'entra-groups') -eq 'started,completed' -and $second.Count -and $second[0].runId -eq $first[0].runId) (($second | ForEach-Object { "$($_.stepId):$($_.event)" }) -join ' ')
     Assert 'P5 bash a failure emits failed for its step with the resume command' (@($failed | Where-Object { $_.event -eq 'failed' -and $_.stepId -eq 'gateway-deployment' -and $_.resumeCommand -match 'install-claude-gateway\.sh' }).Count -eq 1 -and
         $r1[$runFailing.Dir].ExitCode -ne 0) (($failed | ConvertTo-Json -Compress -Depth 3))
+    $pd = $r1[$runProgressDir.Dir]
+    Assert 'P5 bash an unwritable --progress-file (a directory) refuses at startup on one line naming --progress-file, before any Azure call; nothing is written' ((Test-Refusal $pd '--progress-file .+ cannot be written') -and
+        -not @($pd.Az | Where-Object { $_ -notlike 'curl *' }).Count -and -not (Get-CheckpointFile $progressDirScenario) -and -not @(Get-ChildItem -LiteralPath $progressDir -Force).Count) (Get-Tail $pd)
     Assert 'P5 bash a refusal emits refused with its reason' (@($bound | Where-Object { $_.event -eq 'refused' -and $_.message -match 'resource group' }).Count -eq 1) (($bound | ConvertTo-Json -Compress -Depth 3))
     if ($script:windows) {
         $psEvents = @(Get-Events $psProgress)

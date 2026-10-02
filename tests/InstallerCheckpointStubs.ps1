@@ -71,6 +71,10 @@ function global:az {
     foreach ($e in @($w.inject.readErrors)) {
         if ($e -and $joined -like [string]$e.match) { Write-P91Failure ([string]$e.text) 1; return }
     }
+    # inject.rawOutputs: a call that succeeds with this text, such as a page that is not JSON (P92 robustness).
+    foreach ($e in @(Get-P91Property $w.inject 'rawOutputs')) {
+        if ($e -and $joined -like [string]$e.match) { return [string]$e.text }
+    }
     # Signed out: az answers every call that needs an account as az does without one (P92 preflight).
     if ((Get-P91Property $w 'signedOut') -and $joined -notlike 'version*' -and $joined -notlike 'bicep version*') {
         if ($joined -like 'account list*') { return '[]' }
@@ -87,7 +91,10 @@ function global:az {
         'account show*' {
             $named = & $value @('--subscription', '-s', '--name', '-n')
             if ($named -and $named -ne [string]$w.subscriptionId -and $named -ne [string]$w.subscriptionName) { Write-P91Failure "ERROR: Subscription '$named' not found. Check the spelling and casing and try again." 1; return }
-            $account = [pscustomobject]@{ id = $w.subscriptionId; name = $w.subscriptionName; state = 'Enabled'; tenantId = $w.tenantId; user = [pscustomobject]@{ name = 'admin@contoso.com'; type = 'user' } }
+            # A named subscription can be in another tenant than the sign-in (subscriptionTenantId) or not Enabled (subscriptionState).
+            $tenant = if ($named -and (Get-P91Property $w 'subscriptionTenantId')) { [string](Get-P91Property $w 'subscriptionTenantId') } else { [string]$w.tenantId }
+            $state = if ($named -and (Get-P91Property $w 'subscriptionState')) { [string](Get-P91Property $w 'subscriptionState') } else { 'Enabled' }
+            $account = [pscustomobject]@{ id = $w.subscriptionId; name = $w.subscriptionName; state = $state; tenantId = $tenant; user = [pscustomobject]@{ name = 'admin@contoso.com'; type = 'user' } }
             switch ($query) {
                 'name' { return [string]$account.name }
                 'id' { return [string]$account.id }

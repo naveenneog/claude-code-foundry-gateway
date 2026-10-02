@@ -37,10 +37,18 @@ snap_() {
   done
   if [ -n "$f" ]; then cp "$f" "$L/$1.json"; echo "$1 present" >> "$L/snapshots.log"; else echo "$1 none" >> "$L/snapshots.log"; fi
 }
-n="$(jq -r '.inject.readErrors | length' "$W")"; i=0
+# One jq call per az call reads how many read errors and raw outputs the world injects.
+counts="$(jq -r '"\(.inject.readErrors | length) \((.inject.rawOutputs // []) | length)"' "$W")"; n="${counts%% *}"; nr="${counts##* }"; i=0
 while [ "$i" -lt "$n" ]; do
   m="$(jq -r --argjson i "$i" '.inject.readErrors[$i].match' "$W")"
   case "$*" in $m) fail_ "$(jq -r --argjson i "$i" '.inject.readErrors[$i].text' "$W")" 1 ;; esac
+  i=$((i + 1))
+done
+# inject.rawOutputs: a call that succeeds with this text, such as a page that is not JSON (P92 robustness).
+i=0
+while [ "$i" -lt "$nr" ]; do
+  m="$(jq -r --argjson i "$i" '.inject.rawOutputs[$i].match' "$W")"
+  case "$*" in $m) jq -r --argjson i "$i" '.inject.rawOutputs[$i].text' "$W"; exit 0 ;; esac
   i=$((i + 1))
 done
 # Signed out: az answers every call that needs an account as az does without one (P92 preflight).
@@ -71,7 +79,9 @@ case "$*" in
   "account show --query tenantId -o tsv") jq -r '.tenantId' "$W" ;;
   "account show --query name -o tsv") jq -r '.subscriptionName' "$W" ;;
   "account show --query id -o tsv") jq -r '.subscriptionId' "$W" ;;
-  "account show"*) jq -c '{id: .subscriptionId, name: .subscriptionName, tenantId: .tenantId, user: {name: "admin@contoso.com"}}' "$W" ;;
+  # A named subscription can be in another tenant than the sign-in (subscriptionTenantId) or not Enabled (subscriptionState).
+  "account show"*) if [ -n "$sel" ]; then jq -c '{id: .subscriptionId, name: .subscriptionName, state: (.subscriptionState // "Enabled"), tenantId: (.subscriptionTenantId // .tenantId), user: {name: "admin@contoso.com"}}' "$W"
+    else jq -c '{id: .subscriptionId, name: .subscriptionName, state: "Enabled", tenantId: .tenantId, user: {name: "admin@contoso.com"}}' "$W"; fi ;;
   "account set --subscription "*) exit 0 ;;
   "cognitiveservices account deployment list "*) foundry_ "$(argv_ -n "$@")" "$(argv_ -g "$@")"; jq '.foundry.deployments' "$W" ;;
   "cognitiveservices account show "*)
@@ -182,6 +192,8 @@ $curlStub = @'
 #!/usr/bin/env bash
 url=""; for a in "$@"; do case "$a" in http*) url="$a" ;; esac; done
 printf 'curl %s\n' "$url" >> "$P91_LOG/az.log"
+# P91_MANAGEMENT_UNREACHABLE=1: management.azure.com does not answer, as curl exits 7 when it cannot connect.
+[ "${P91_MANAGEMENT_UNREACHABLE:-}" = "1" ] && case "$url" in https://management.azure.com/*) exit 7 ;; esac
 case "$url" in
   https://management.azure.com/*) printf '200' ;;
   https://prices.azure.com/*) printf '{"Items":[],"NextPageLink":null}' ;;

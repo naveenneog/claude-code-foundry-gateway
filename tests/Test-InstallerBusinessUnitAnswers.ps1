@@ -49,11 +49,15 @@ try {
     $quiet = New-Units 'notify' $notify
     $partial = New-Units 'partial' $tree { param($w) $w.inject.bu = 'refuse:platform' }
     $later = New-Units 'later' $tree { param($w) $w.inject.verify = 'fail' }
+    # bu-registry cannot be read (not absent): the step stops before any unit is written or skipped.
+    $denied = 'ERROR: (AuthorizationFailed) The client does not have authorization to perform action Microsoft.ApiManagement/service/namedValues/read.'
+    $unreadable = New-Units 'registry-unreadable' $tree { param($w) $w.inject.readErrors = @([ordered]@{ match = 'apim nv show * --named-value-id bu-registry *'; text = $denied }) }
     $wave1 = @(
         ($runApply = New-P91Run $apply.Scenario -Arguments ($common + "-AnswersPath '$($apply.Answers)'"))
         ($runNotify = New-P91Run $quiet.Scenario -Arguments ($common + "-AnswersPath '$($quiet.Answers)'"))
         ($runPartial = New-P91Run $partial.Scenario -Arguments ($common + "-AnswersPath '$($partial.Answers)'"))
         ($runLater = New-P91Run $later.Scenario -Arguments ($common + "-AnswersPath '$($later.Answers)'"))
+        ($runUnreadable = New-P91Run $unreadable.Scenario -Arguments ($common + "-AnswersPath '$($unreadable.Answers)'"))
     )
     $r1 = Invoke-P91Runs $wave1
     $a = Get-P91Result $r1 $runApply
@@ -76,6 +80,10 @@ try {
     $p1 = Get-P91Result $r1 $runPartial
     $resume = New-P91Scenario -Name 'partial-resume' -Scratch $scratch -From $partial.Scenario
     Edit-P91World $resume { param($w) $w.inject.bu = '' }
+    # The receipts match, and bu-registry has lost one of their units: that unit is written again.
+    $lost = New-P91Scenario -Name 'partial-registry-lost' -Scratch $scratch -From $partial.Scenario
+    Edit-P91World $lost { param($w) $w.inject.bu = ''; $nv = $w.apims.'apim-p91gw'.namedValues
+        $nv.'bu-registry' = ',' + ((@($nv.'bu-registry'.Trim(',') -split ',' | Where-Object { $_ -and $_ -notlike 'finance=*' })) -join ',') + ',' }
     $l1 = Get-P91Result $r1 $runLater
     $verified = New-P91Scenario -Name 'later-resume' -Scratch $scratch -From $later.Scenario
     Edit-P91World $verified { param($w) $w.inject.verify = '' }
@@ -86,6 +94,7 @@ try {
     $wave2 = @(
         ($runResume = New-P91Run $resume -Arguments ($common + "-AnswersPath '$($partial.Answers)'"))
         ($runVerified = New-P91Run $verified -Arguments ($common + "-AnswersPath '$($later.Answers)'"))
+        ($runLost = New-P91Run $lost -Arguments ($common + "-AnswersPath '$($partial.Answers)'"))
     )
     $r2 = Invoke-P91Runs $wave2
     $p2 = Get-P91Result $r2 $runResume
@@ -93,6 +102,12 @@ try {
     $v2 = Get-P91Result $r2 $runVerified
     Assert 'P6 a resume after the business-unit step completed verifies it live and makes no Set-ClaudeBusinessUnit call' ($l1.ExitCode -eq 0 -and $v2.ExitCode -eq 0 -and -not (Get-Ids $v2).Count -and
         $v2.Out -match 'Business units: verified live, skipped') "$(Get-P91Tail $v2)"
+    $lr = Get-P91Result $r2 $runLost
+    Assert 'P6 a rerun writes a unit again when its receipt matches but bu-registry lacks it, and still skips the units bu-registry shows' ($lr.ExitCode -eq 0 -and ((Get-Ids $lr) -join ',') -eq 'finance,platform') "$((Get-Ids $lr) -join ', ') || $(Get-P91Tail $lr)"
+    $ur = Get-P91Result $r1 $runUnreadable
+    $urLines = @(Get-P91ErrLines $ur)
+    Assert 'P6 an unreadable bu-registry stops the step on one line naming it, with the resume command, and no Set-ClaudeBusinessUnit call is made' ($ur.ExitCode -ne 0 -and -not (Get-Ids $ur).Count -and
+        @($urLines | Where-Object { $_ -match 'bu-registry on apim-p91gw could not be read \(ERROR: \(AuthorizationFailed\)' -and $_ -match 'Nothing was changed' -and $_ -match 'Resume: ' }).Count -eq 1) "$($urLines -join ' | ') || $(Get-P91Tail $ur)"
     $unexpected = @(foreach ($r in @($r1.Values) + @($r2.Values)) { @($r.Unexpected) })
     Assert 'harness: every az call was one the stub knows, and no run timed out' (-not $unexpected.Count -and -not @(@($r1.Values) + @($r2.Values) | Where-Object { $_.TimedOut }).Count) (($unexpected | Select-Object -Unique -First 4) -join ' | ')
 }

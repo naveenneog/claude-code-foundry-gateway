@@ -63,6 +63,10 @@ try {
     $w.inject['disconnectDetail'] = 'Authorization: Bearer ' + 'eyJhbGciOiJSUzI1NiJ9' + '.eyJzdWIiOiJwOTItdGVzdCJ9.c2lnbmF0dXJl'
     $disconnect = New-P91Scenario -Name 'disconnect' -Scratch $scratch -Template $template -World $w
     $progressFail = Join-Path $disconnect.Dir 'progress.ndjson'
+    # A -ProgressPath that cannot be written (a directory): the run refuses before any Azure call.
+    $progressDirScenario = New-P91Scenario -Name 'progress-dir' -Scratch $scratch -Template $template -World (New-P91World)
+    $progressDir = Join-Path $progressDirScenario.Dir 'not-a-file'
+    New-Item -ItemType Directory -Force -Path $progressDir | Out-Null
     $wave1 = @(
         ($runList1 = New-P91Run $listSrc -Arguments ($common + $tpm + $secret + "-ProgressPath '$progress1'"))
         ($runSync1 = New-P91Run $syncFail -Arguments ($common + $tpm))
@@ -71,6 +75,7 @@ try {
         ($runStepsNone = New-P91Run $stepsNone -Arguments ($common + $tpm + "-Steps 'sync'"))
         ($runUnknown = New-P91Run $unknownStep -Arguments ($common + $tpm + "-Steps 'gateway-deploy'"))
         ($runDisconnect = New-P91Run $disconnect -Arguments ($common + $tpm + "-ProgressPath '$progressFail'"))
+        ($runProgressDir = New-P91Run $progressDirScenario -Arguments ($common + $tpm + "-ProgressPath '$progressDir'"))
     )
     $r1 = Invoke-P91Runs $wave1
     $l1 = Get-P91Result $r1 $runList1
@@ -172,6 +177,9 @@ try {
         @($second.runId | Select-Object -Unique).Count -eq 1 -and $second[0].runId -eq $first[0].runId) (($second | ForEach-Object { "$($_.stepId):$($_.event)" }) -join ' ')
     Assert 'P5 a failure emits failed for its step with the resume command' (@($failed | Where-Object { $_.event -eq 'failed' -and $_.stepId -eq 'gateway-deployment' -and $_.resumeCommand -match 'Install-ClaudeGateway\.ps1' }).Count -eq 1 -and
         (Get-P91Result $r1 $runDisconnect).ExitCode -ne 0) (($failed | ConvertTo-Json -Compress -Depth 3))
+    $pd = Get-P91Result $r1 $runProgressDir
+    Assert 'P5 an unwritable -ProgressPath (a directory) refuses at startup on one line naming -ProgressPath, before any Azure call; nothing is written' ((Test-Refusal $pd '-ProgressPath .+ cannot be written') -and
+        -not $pd.Az.Count -and -not (Get-P91CheckpointFile $progressDirScenario) -and -not @(Get-ChildItem -LiteralPath $progressDir -Force).Count) (Get-P91Tail $pd)
     Assert 'P5 a refusal emits refused with its reason' (@($bound | Where-Object { $_.event -eq 'refused' -and $_.message -match 'resource group' }).Count -eq 1) (($bound | ConvertTo-Json -Compress -Depth 3))
     $texts = @(@($progress1, $progress2, $progressFail, $progressBind) | Where-Object { Test-Path -LiteralPath $_ } | ForEach-Object { [IO.File]::ReadAllText($_) }) +
         @(foreach ($s in $listSrc, $resume, $precParam) { $f = Get-P91CheckpointFile $s; if ($f) { [IO.File]::ReadAllText($f.FullName) } }) +

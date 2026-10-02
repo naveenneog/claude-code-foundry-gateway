@@ -325,6 +325,43 @@ each mutated file was restored and its hash checked before the next mutant.
 | 7 Guided flow | F1-F2 (2) | 2 | 2 |
 | Checks added in GREEN | G1-G5 (5) | 5 | 5 |
 
+### Lead review of `cb2cd70` (round 2), 2026-10-02
+
+The lead's own mutation harness (26 mutants) caught 11 and missed 15. Every check started as PASS
+(`scripts/ClaudeInstallerPreflight.ps1:100`; the last branch of the jq aggregator,
+`scripts/install-preflight.sh:243`), so a branch that set nothing reported PASS. The missed mutants:
+
+- PowerShell preflight: M02 (the `target.tenant` pass line removed), M03 (a subscription in another tenant), M04 (a disabled subscription), M05 (an unreadable subscription), M06 (an account the subscription's list does not show, without `FoundryResourceGroup`), M07 (no Claude deployment), M13 (failing admin prerequisites), M16 (a PFX path that is not a file).
+- Bash preflight: B02 (another tenant), B06 (the `target.tenant` pass line removed), B07 (failing admin prerequisites).
+- Progress: S08 and BS02 (an unwritable progress path accepted).
+- Business units: U03 (a matching receipt skips a unit that `bu-registry` lacks), U06 (an unreadable `bu-registry` does not stop the step).
+
+Two parses had no `try`: `az account show` (`scripts/ClaudeInstallerPreflight.ps1:123`) and the Foundry
+account list (`:182`).
+
+#### RED (round 2)
+
+The stubs gained three knobs: `inject.rawOutputs` (a matching command prints the given text and exits
+0), the state and tenant of a subscription named with `--subscription` (`subscriptionState`,
+`subscriptionTenantId`), and `P91_MANAGEMENT_UNREACHABLE=1`, under which the bash harness's `curl`
+cannot reach `management.azure.com`. Each missed branch has its own scenario in each engine that has
+the branch; the bash installer applies no business units (ADR-0047 decision 13).
+
+| Suite | RED result | Failure lines |
+|---|---|---|
+| `Test-InstallerPreflight.ps1` | 29 checks, 4 failed | "a Foundry account list that is not JSON is an inconclusive FAIL ..." and "an az account show that is not JSON ...": `exit 1: Conversion from JSON failed with error: Unexpected character encountered while parsing value: <.`; "-Json prints only JSON ..." (the same two scenarios); "an az account show without a tenantId ...": `target.subscription=PASS/, foundry.account=PASS/, ...` |
+| `Test-BashInstallerPreflight.ps1` | 29 checks, 3 failed | the list: `jq: parse error: Invalid numeric literal at line 1, column 20`; both accounts: `target.subscription=PASS/, foundry.account=PASS/, ...` |
+| `Test-BashInstallerStepSelection.ps1` | 23 checks, 1 failed | "an unwritable --progress-file (a directory) refuses at startup on one line ...": `scripts/install-steps.sh: line 28: <scratch>/scenarios/progress-dir/not-a-file: Is a directory`, before the refusal (`scripts/install-checkpoint.sh:75` writes a `refused` event first) |
+| `Test-InstallerStepSelection.ps1` | 22 checks, 0 failed | |
+| `Test-InstallerBusinessUnitAnswers.ps1` | 11 checks, 0 failed | |
+
+The new checks that pass at RED cover branches that already behave as required: the subscription in
+another tenant, disabled or unreadable; the account list with and without the account; no Claude
+deployment; failing admin prerequisites; the PFX path; the unwritable `-ProgressPath`; and both
+business-unit cases. Each one is the check its mutant in the lead's harness must fail. The fail-closed
+contract check (every PASS has a message, and no check is left `not-evaluated`) also passes at RED,
+because no scenario reaches a branch that sets nothing; under M02 or B06 it fails.
+
 
 ## P91 installer checkpoint and resume, 2026-10-01
 
