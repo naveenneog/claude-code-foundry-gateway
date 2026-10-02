@@ -41,17 +41,18 @@ exact streaming cache-creation detail remains **U13**.
   group with as many Unicode code points as the configured name, alike in both
   installers; checks receipt values before they reach `az`, and uses a recorded group,
   role assignment, resolver app or Desktop app only when the live object is the one
-  the run recorded. The state directory is used by its real path and only inside the
-  user's home directory or profile; a junction or symbolic link, another owner,
-  inherited Windows access rules, a parent that lets another account delete what it
-  holds, or a directory up to `$HOME` that another account can write fails the store
-  check before anything is read. Such a store stops the run when
+  the run recorded; refuses a tier group name with a single quote, which Azure CLI
+  would place inside an OData string literal. The state directory is used by its real
+  path and only inside the user's home directory or profile; a junction or symbolic
+  link, another owner, inherited Windows access rules, a parent that lets another
+  account delete what it holds, or a directory up to `$HOME` that another account can
+  write fails the store check before anything is read. Such a store stops the run when
   `CLAUDE_GATEWAY_STATE_DIR` names it or when it holds a file of the checkout;
   otherwise the run keeps no checkpoint, prints the failed check and the resume
   command with the answers, and continues on its live checks. The bash installer
   under Git Bash keeps no checkpoint and names `Install-ClaudeGateway.ps1` as the
-  Windows installer. `-Restart`/`--restart` sets the checkpoint aside. 81
-  PowerShell, 49 bash and 22 store checks
+  Windows installer. `-Restart`/`--restart` sets the checkpoint aside. 85
+  PowerShell, 51 bash and 22 store checks
   ([installer checkpoint design record (ADR-0046)](docs/adr/0046-installer-checkpoint-and-resume.md),
   [Setup](docs/SETUP.md#resume-after-a-failure)). `.github/workflows/installer-unix.yml`
   runs the bash suites and the store suite on `ubuntu-latest` and `macos-latest`

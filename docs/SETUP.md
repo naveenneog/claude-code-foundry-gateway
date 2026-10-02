@@ -753,7 +753,8 @@ and the full resume command is printed.
 **Refusals.** A refusal is one line on standard error that begins `Refused:`,
 says what it left unchanged, and exits 1 ([output](adr/0046-installer-checkpoint-and-resume.md#14-output)). Each refusal
 below ends with the command that resumes the run or discards the checkpoint, except
-the last, which names the other installer:
+the last two: a name with a single quote is refused before the summary, and the last
+names the other installer:
 
 | Cause | What the line names | Source |
 |---|---|---|
@@ -765,6 +766,7 @@ the last, which names the other installer:
 | A recorded deployment still runs after the wait | the deployment and resource group | [deployments](adr/0046-installer-checkpoint-and-resume.md#10-deployments) |
 | An Entra group this run created is not returned by Microsoft Graph | the group, its id and creation time; a group created moments ago can take time to appear in Microsoft Graph, and a rerun later continues without creating a second group | [receipts](adr/0046-installer-checkpoint-and-resume.md#11-receipts), [U74](UNKNOWNS.md#p91-research-before-implementation) |
 | An Entra group cannot be looked up by name, or more than one group has the name | the group name and the error, or the ids of the groups with that name | [receipts](adr/0046-installer-checkpoint-and-resume.md#11-receipts) |
+| A tier group name, or the name prefix of `Install-ClaudeGateway.ps1`, holds a single quote, which Azure CLI would place inside an OData string literal (`startswith(displayName,'<name>')`) | the parameter and its value; a recorded one makes the checkpoint corrupt (second row) | [receipts](adr/0046-installer-checkpoint-and-resume.md#11-receipts) |
 | `install-claude-gateway.sh` would deploy again over an API Management instance this run did not create | `Install-ClaudeGateway.ps1 -ExistingApimName`, which reads the named values back first | [steps of the bash installer](adr/0046-installer-checkpoint-and-resume.md#9-steps-of-install-claude-gatewaysh) |
 
 The guided flow's resume of the steps after the installer is separate

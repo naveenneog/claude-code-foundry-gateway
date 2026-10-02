@@ -218,7 +218,9 @@ recorded answers, which the printed command carries, and the receipts (Consequen
 - **Corrupt checkpoint.** A file that is not JSON, has another `schema` or `schemaVersion`, lacks a
   required field, holds an unknown step id, holds an answer that fails the installer's own
   validation (`ValidateSet`, `ValidatePattern`, `Assert-AzArgumentsSafe` at
-  `Install-ClaudeGateway.ps1:267-281`), or holds a receipt value of another shape than the installer
+  `Install-ClaudeGateway.ps1:267-281`), including a single quote in a name that Azure CLI places
+  inside an OData string literal and a recorded app id that is not a GUID (Decision 11, council
+  round 3), or holds a receipt value of another shape than the installer
   writes is refused on one line naming the field and the path. Receipt values reach `az` as
   arguments on a resume, so each is checked on read: a deployment name against
   `^claude-(gw|gateway)-[A-Za-z0-9-]+$`, group, app and client ids as GUIDs, the role assignment id
@@ -467,6 +469,18 @@ resume finds every object by id:
   Microsoft Graph, a rerun later continues without creating a second group, and the resume command.
   `az ad group create` without `--force` returns an existing group only when Graph's
   display-name and mail-nickname filter already sees it (`role/custom.py:1877-1888`, az 2.86.0).
+- A single quote in a name (council round 3, 2026-10-02). Azure CLI places a name inside an OData
+  string literal without escaping a quote: `az ad group list --display-name` and
+  `az ad app list --display-name` send `startswith(displayName,'<name>')`
+  (`role/custom.py:1898-1905` and `:746-761`, az 2.86.0), and `az ad app show --id` sends
+  `identifierUris/any(s:s eq '<id>')` for a value that is not a GUID (`:772-789`). A plain `O'Brien`
+  makes Graph answer 400, which the lookup reads as inconclusive; a crafted answer could add filter
+  logic. Both installers refuse a tier group name with a single quote after the group questions and
+  before the summary, on one line naming the parameter (`Assert-ClaudeInstallNames`,
+  `ckpt_group_names_`), and a recorded `StandardGroup` or `PremiumGroup` with one is a corrupt
+  checkpoint (Decision 2). `Install-ClaudeGateway.ps1` applies the same rule to `-NamePrefix`, which
+  forms the resolver app name `claude-projection-resolver-<prefix>`, and requires a GUID for a
+  recorded Desktop or resolver app id and for any app id it passes to `az ad app show --id`.
 - Live meaning of a receipt (council round 2, 2026-10-02). A receipt of the right shape can name
   another object: a group id of another group would make the sync publish that group's members as
   entitled. Before a resume uses a receipt it reads what the id names:
@@ -661,6 +675,13 @@ The lead amendment (2026-10-02) added checks, RED first:
 | Finding | Check | Suite |
 |---|---|---|
 | A store place that fails a check stopped every run, every Cloud Shell run when `$HOME` fails (U78) | a default place that fails a check, with no file of the checkout there, keeps no store: one warning naming the place and the check, the resume command with the answers, the Cloud Shell line, a completed run, and nothing written there; the same place holding the checkpoint, the lock or a temporary file of the checkout refuses at startup naming the file, the check and the next step, and keeps the file; `CLAUDE_GATEWAY_STATE_DIR` naming the same place refuses and names the variable. PowerShell: Cloud Shell without `clouddrive` under a `$HOME` that lets Users delete what it holds (real access rules); bash: Cloud Shell with `clouddrive` and a `$HOME` of mode `drwxrwx---` (probe seam) | both installers |
+
+Council round 3 (2026-10-02, Coder) added checks, RED first:
+
+| Finding | Check | Suite |
+|---|---|---|
+| A name reaches an OData string literal unescaped | a tier group name with a single quote is refused at input on one line naming the parameter, and nothing is created; a recorded tier group answer with one is a corrupt checkpoint that names the answer and is kept | both installers |
+| Other values that reach an OData string literal | a name prefix with a single quote is refused at input and as a recorded answer; a Desktop or resolver app id that is not a GUID is a corrupt recorded answer and is refused before `az ad app show --id` runs | PowerShell |
 
 Every new check gets a mutation that breaks what it guards; a mutation counts only when the suite
 loads with its baseline check count and at least one check fails, and a bash mutant also passes
