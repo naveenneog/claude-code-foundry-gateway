@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$GuidePath,
     [string]$SpecPath,
     [string]$CapturePath
