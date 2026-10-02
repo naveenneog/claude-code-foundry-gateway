@@ -662,7 +662,8 @@ completes removes the checkpoint, so the next run asks every question again
 | Completed steps | Skipped only when a live read shows the result (`verified live, skipped`). A missing result runs the step again; an unreadable one refuses, except in the resource group step, which runs again. | [verification before a skip](adr/0046-installer-checkpoint-and-resume.md#7-verification-before-a-skip) |
 | Gateway deployment | The deployment name is recorded before `az deployment group create`. A recorded deployment that is still running is awaited for up to 3,600 s; one that succeeded supplies its outputs; one that failed or was cancelled is shown with its error and deployed again, after the read-backs in `Install-ClaudeGateway.ps1`. A new deployment first waits for any running `claude-gw-` or `claude-gateway-` deployment in the resource group, and the run refuses when that list cannot be read. | [deployments](adr/0046-installer-checkpoint-and-resume.md#10-deployments) |
 | Changed files | A changed `infra/main.bicep`, or a file it references (`infra/foundry-role.bicep`, `infra/policy.xml`), runs the deployment step again; a changed projection template runs the projection step of `Install-ClaudeGateway.ps1` again. A changed installer alone resumes and prints `checkpoint written by <installer> <version>; running <installer> <version>`. | [binding](adr/0046-installer-checkpoint-and-resume.md#5-binding) |
-| Entra groups | Read by the id the checkpoint recorded under the same name. A lookup by name, `az ad group list --display-name`, lists the groups whose names start with the configured name; the one listed group with as many characters (Unicode code points) as the configured name is reused, and a group is created when none has. A failed lookup, or more than one listed group of that length, refuses and creates nothing. | [receipts](adr/0046-installer-checkpoint-and-resume.md#11-receipts) |
+| Entra groups | Read by the id the checkpoint recorded under the same name, and used only when `az ad group list --display-name <name> --filter "id eq '<id>'"` lists that id under the configured name; otherwise the run refuses and keeps the checkpoint. A lookup by name, `az ad group list --display-name`, lists the groups whose names start with the configured name; the one listed group with as many characters (Unicode code points) as the configured name is reused, and a group is created when none has. A failed lookup, or more than one listed group of that length, refuses and creates nothing. | [receipts](adr/0046-installer-checkpoint-and-resume.md#11-receipts) |
+| Other recorded ids | `Install-ClaudeGateway.ps1` reads a recorded role assignment and uses it only when it grants Cognitive Services User on the Foundry account to the gateway's identity; a projection resolver app id from the checkpoint only when its display name is `claude-projection-resolver-<prefix>`; a Desktop client id only when `az ad app show --id` returns that `appId`. Otherwise the run refuses and keeps the checkpoint. | [receipts](adr/0046-installer-checkpoint-and-resume.md#11-receipts) |
 
 `-Restart` (`Install-ClaudeGateway.ps1`) and `--restart` (`install-claude-gateway.sh`)
 rename the checkpoint to `install-<key>.discarded-<UTC time>.json` and run as a
@@ -677,30 +678,47 @@ connection string ([no secrets](adr/0046-installer-checkpoint-and-resume.md#15-n
 
 | Where the installer runs | Directory |
 |---|---|
-| Any platform, `CLAUDE_GATEWAY_STATE_DIR` set | that directory |
+| Any platform, `CLAUDE_GATEWAY_STATE_DIR` set | that directory; one outside the user's home directory (Linux, macOS) or user profile (Windows) is refused |
 | Azure Cloud Shell, storage mounted | `$HOME/clouddrive/.claude-gateway` |
 | Azure Cloud Shell, ephemeral session | `$HOME/.claude-gateway` |
 | Windows, `Install-ClaudeGateway.ps1` | `%LOCALAPPDATA%\claude-gateway` |
-| Linux and macOS, either installer; Git Bash on Windows | `${XDG_STATE_HOME:-$HOME/.local/state}/claude-gateway` |
+| Linux and macOS, either installer | `${XDG_STATE_HOME:-$HOME/.local/state}/claude-gateway` |
+| Windows, `install-claude-gateway.sh` under Git Bash, MSYS2 or Cygwin | none: no checkpoint |
 
-Source: `Get-ClaudeInstallLocation` in `scripts/ClaudeInstallCheckpoint.ps1` and
-`ckpt_location_` in `scripts/install-checkpoint.sh`. A directory the installer
+Source: `Get-ClaudeInstallLocation` in `scripts/ClaudeInstallStore.ps1` and
+`ckpt_location_` in `scripts/install-store.sh`. A directory the installer
 creates is owner-only: a protected access-control list for the current user on
-Windows, mode 0700 with 0600 files on Linux and macOS. Before either installer
-reads, locks or replaces anything in the directory, it refuses a directory,
-checkpoint, lock or temporary file that another account could have written
+Windows, mode 0700 with 0600 files on Linux and macOS, and each missing parent
+directory created with mode 0700. Before either installer reads, locks or
+replaces anything in the directory, it refuses a place or a file that another
+account could have written or replaced
 ([file mechanics](adr/0046-installer-checkpoint-and-resume.md#2-file-mechanics)):
 
+- Any platform: a state directory that is not an absolute path inside the home
+  directory or user profile (in Cloud Shell, inside `clouddrive` when storage is
+  mounted), and a state directory that is itself a symbolic link or junction. The
+  installer then uses the directory's real path only.
 - Linux, macOS and Cloud Shell outside `clouddrive`: a path the current user does
-  not own, a path its group or other users can write, or a checkpoint, lock or
-  temporary file that is a symbolic link. A `CLAUDE_GATEWAY_STATE_DIR` in a shared
-  directory such as `/tmp` is refused.
-- Windows: a path with an access rule that lets an account other than the current
-  user, SYSTEM or Administrators write it, including a rule inherited from the
-  parent directory.
+  not own, a path its group or other users can write, or a path that is a symbolic
+  link; and any directory from the one that holds the state directory up to
+  `$HOME` that is owned by another user than the current user or root, or that its
+  group or other users can write without the sticky bit. A
+  `CLAUDE_GATEWAY_STATE_DIR` in a shared directory such as `/tmp` is refused.
+- Windows: a path that is a junction or symbolic link, a path owned by an account
+  other than the current user, SYSTEM or Administrators, a path with an access rule
+  that lets another account write it, including a rule inherited from the parent
+  directory, a state directory whose access rules are inherited rather than its
+  own, a junction or symbolic link between the state directory and the user
+  profile, and a parent directory that lets another account delete or replace what
+  it holds.
 - `clouddrive` is exempt: its mount sets the modes, and the Cloud Shell storage
-  account's access control applies. Git Bash on Windows reports fixed modes, so the
-  bash installer's check passes there.
+  account's access control applies; only `$HOME` above it is checked.
+- `install-claude-gateway.sh` reads no Windows access rules, so under Git Bash,
+  MSYS2 or Cygwin it keeps no checkpoint: after the confirmed summary it prints
+  `[WARN] on Windows under <uname -s> (Git Bash, MSYS2 or Cygwin) ...`, which names
+  `Install-ClaudeGateway.ps1`, and a `Resume:` line with every recorded answer. A
+  rerun there starts as a first run with those answers. `Install-ClaudeGateway.ps1`
+  is the Windows installer.
 
 **Azure Cloud Shell.** The installers detect Cloud Shell by
 `AZUREPS_HOST_ENVIRONMENT` beginning `cloud-shell/` or a non-empty `ACC_CLOUD`

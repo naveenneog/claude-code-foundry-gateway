@@ -106,9 +106,11 @@ keys or connection strings, and the checkpoint test suites check that
 ([ADR-0030](adr/0030-guided-flow.md)).
 
 - **Components.** `scripts/ClaudeInstallCheckpoint.ps1` and
-  `scripts/install-checkpoint.sh` keep the store, the lock and the answers;
-  `scripts/ClaudeInstallResume.ps1` and `scripts/install-resume.sh` hold the live
-  reads and step actions. Each installer resumes only its own checkpoint
+  `scripts/install-checkpoint.sh` keep the run state, the lock and the answers;
+  `scripts/ClaudeInstallStore.ps1` and `scripts/install-store.sh` place the store
+  and decide whether it is trusted; `scripts/ClaudeInstallResume.ps1` and
+  `scripts/install-resume.sh` hold the live reads and step actions. Each installer
+  resumes only its own checkpoint
   ([resume across installers](adr/0046-installer-checkpoint-and-resume.md#13-resume-across-installers)).
 - **Identities.** The checkpoint adds no Azure resource, identity or role. The live
   reads run under the operator's Azure CLI sign-in, as the installers' other calls do.
@@ -118,14 +120,25 @@ keys or connection strings, and the checkpoint test suites check that
   ([deployments](adr/0046-installer-checkpoint-and-resume.md#10-deployments)). A rerun skips a step only when a live read
   returns present; absent reruns the step, and inconclusive refuses unless the step
   is idempotent ([verification before a skip](adr/0046-installer-checkpoint-and-resume.md#7-verification-before-a-skip)).
-  Receipt values are checked on read, before they reach `az` as arguments.
-- **Store.** Before either installer reads, locks or replaces anything in its state
-  directory, it refuses a directory, checkpoint, lock or temporary file that another
-  account could have written: on Linux and macOS one the current user does not own,
-  one its group or other users can write, or a checkpoint, lock or temporary file that
-  is a symbolic link; on
-  Windows one with an access rule that lets an account other than the current user,
-  SYSTEM or Administrators write it ([file mechanics](adr/0046-installer-checkpoint-and-resume.md#2-file-mechanics)).
+  Receipt values are checked on read, before they reach `az` as arguments, and a
+  receipt is used only when the live object it names is the one the run recorded:
+  the group listed under the configured name, the role assignment of Cognitive
+  Services User on the Foundry account for the gateway's identity, the resolver app
+  by its name, the Desktop app by its `appId`
+  ([receipts](adr/0046-installer-checkpoint-and-resume.md#11-receipts)).
+- **Store.** The state directory is inside the user's home directory or profile (in
+  Cloud Shell, inside `clouddrive` when storage is mounted), is not itself a link,
+  and is used by its real path. Before either installer reads, locks or replaces
+  anything in it, it refuses a directory, checkpoint, lock or temporary file that
+  another account could have written or replaced: on Linux and macOS one the current
+  user does not own, one its group or other users can write, a symbolic link, or a
+  directory between it and `$HOME` that another user owns or that its group or
+  other users can write without the sticky bit; on Windows a junction or symbolic
+  link, one owned by an account other than the current user, SYSTEM or
+  Administrators, one with an access rule that lets another account write it, a
+  state directory whose rules are inherited, and a parent that lets another account
+  delete what it holds. The bash installer under Git Bash keeps no store
+  ([file mechanics](adr/0046-installer-checkpoint-and-resume.md#2-file-mechanics)).
 - **Failures.** A refusal is one line that names the field or reason and, for the
   refusals [Setup](SETUP.md#resume-after-a-failure) lists, the command that resumes
   the run or discards the checkpoint ([output](adr/0046-installer-checkpoint-and-resume.md#14-output)). A corrupt checkpoint

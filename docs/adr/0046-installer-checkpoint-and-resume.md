@@ -88,11 +88,12 @@ One checkpoint per checkout, in a per-user state directory. The file name carrie
 
 | Platform | Directory | Basis |
 |---|---|---|
-| Any, when `CLAUDE_GATEWAY_STATE_DIR` is set | that absolute directory | test and operator override |
+| Any, when `CLAUDE_GATEWAY_STATE_DIR` is set | that absolute directory, inside the user's home or profile (Decision 2) | test and operator override |
 | Azure Cloud Shell with a usable `clouddrive` | `$HOME/clouddrive/.claude-gateway` | the mounted file share persists across sessions (U63, U65) |
 | Azure Cloud Shell without `clouddrive` | `$HOME/.claude-gateway`, plus the warning below | no storage persists (U63) |
 | Windows | `%LOCALAPPDATA%\claude-gateway` | current, non-roaming user's application data (`Environment.SpecialFolder.LocalApplicationData`) |
 | Linux and macOS | `${XDG_STATE_HOME:-$HOME/.local/state}/claude-gateway` | XDG Base Directory 0.8: state that persists between restarts |
+| Git Bash, MSYS2 or Cygwin on Windows (`install-claude-gateway.sh`) | none: no checkpoint and no lock, plus the warning below | the bash installer reads no Windows access rules (Decision 2) |
 
 Cloud Shell is detected by `AZUREPS_HOST_ENVIRONMENT` beginning `cloud-shell/` or a non-empty
 `ACC_CLOUD` (U64). `clouddrive` is usable when `$HOME/clouddrive` is a directory and a probe file
@@ -100,10 +101,10 @@ can be created in it.
 
 Files: `install-<key>.json` (the checkpoint) and `install-<key>.lock`.
 
-When the checkpoint cannot persist (Cloud Shell without `clouddrive`, or a state directory that
-cannot be created), the installer prints one warning line naming the reason and the exact resume
-command (Decision 14) before its first change, continues, and relies on the live checks of
-Decisions 7 and 10.
+When the checkpoint cannot persist (Cloud Shell without `clouddrive`, a state directory that cannot
+be created, or the bash installer under Git Bash), the installer prints one warning line naming the
+reason and the exact resume command (Decision 14) before its first change, continues, and relies on
+the live checks of Decisions 7 and 10.
 
 ### 2. File mechanics
 
@@ -115,12 +116,17 @@ Decisions 7 and 10.
   lock, and before each rename its own temporary file (`Assert-ClaudeInstallStorePath`,
   `ckpt_perm_check_`):
   - Linux, macOS and Cloud Shell outside `clouddrive`: a path the current user does not own
-    (`test -O`), a path its group or other users can write (the mode `ls -ldL` prints), or a
-    checkpoint, lock or temporary file that is a symbolic link is refused. A
-    `CLAUDE_GATEWAY_STATE_DIR` in a shared directory such as `/tmp` is refused.
-  - Windows (`Install-ClaudeGateway.ps1`): a path with an allow rule, inherited or explicit, that lets
-    an account other than the current user, SYSTEM (S-1-5-18) or BUILTIN\Administrators
-    (S-1-5-32-544) write, append, delete, change permissions or take ownership is refused.
+    (`test -O`), a path its group or other users can write (the mode `ls -ldL` prints), or a path that
+    is a symbolic link is refused. A `CLAUDE_GATEWAY_STATE_DIR` in a shared directory such as `/tmp`
+    is refused.
+  - Windows (`Install-ClaudeGateway.ps1`, council round 2): a path that is a junction or symbolic
+    link (`FileAttributes.ReparsePoint`), a path owned by an account other than the current user,
+    SYSTEM (S-1-5-18) or BUILTIN\Administrators (S-1-5-32-544), whose owner could rewrite its rules
+    later, and a path with an allow rule, inherited or explicit, that lets another account write,
+    append, delete, delete what it holds, change permissions or take ownership is refused. The state
+    directory's rules are its own: a directory whose rules are inherited, or not protected, is
+    refused, as the installer creates it protected. Rules marked inherit-only do not apply to the path
+    and are not read.
   - `clouddrive` is exempt: its mount sets the modes, and the Cloud Shell storage account's access
     control applies (U66). Files there are readable by every principal with access to the storage
     account: "users with sufficient access rights in the subscription can access the storage
@@ -130,11 +136,53 @@ Decisions 7 and 10.
   - The refusal is one line: the path, the owner, mode or access rule found, that nothing was read or
     changed, and the resume command; for a temporary file mid-run, that the checkpoint was not
     replaced.
-  - The POSIX probe is a function (`Get-ClaudeInstallPosixStat`, `ckpt_perm_probe_`) that tests
-    replace. Git Bash's default `noacl` mount reports every file as the current user's with fixed
-    modes (measured 2026-10-01), so under Git Bash the check passes; the real-mode checks run on the
-    Linux and macOS jobs of `.github/workflows/installer-unix.yml`. The bash installer reads no
-    Windows access rules.
+  - The POSIX probe (`Get-ClaudeInstallPosixStat`, `ckpt_perm_probe_`) and the Windows owner probe
+    (`Get-ClaudeInstallWindowsOwner`) are functions that tests replace. Git Bash's default `noacl`
+    mount reports every file as the current user's with fixed modes (measured 2026-10-01); the
+    real-mode checks run on the Linux and macOS jobs of `.github/workflows/installer-unix.yml`.
+- **Where the store may be and what holds it (council round 2, 2026-10-02).** The threat: another
+  account writes or swaps the state directory, the checkpoint or the lock, or a directory above them,
+  between the installer's check and its read, so that the installer reads answers or receipts it did
+  not write. The installer's own account, root, SYSTEM and Administrators are trusted. At startup,
+  before anything in the store is read, and again after the state directory is created, both
+  installers resolve the state directory (`Resolve-ClaudeInstallLocation`, `ckpt_location_resolve_`)
+  and then check what holds it (`Assert-ClaudeInstallAncestors`, `ckpt_ancestors_check_`,
+  `Assert-ClaudeInstallWindowsParent`):
+  - The directory is an absolute path without `.` or `..` components, and its own last component is
+    not a symbolic link or junction; the installer does not follow one there.
+  - Its real path is inside the real path of `$HOME` (POSIX) or of the user profile
+    (`Environment.SpecialFolder.UserProfile`, Windows), or inside `clouddrive` in Cloud Shell. This
+    applies to `CLAUDE_GATEWAY_STATE_DIR` and to the defaults (`XDG_STATE_HOME`, `%LOCALAPPDATA%`).
+    POSIX: the real path is `cd -P` and `pwd -P` of the deepest existing directory, then the rest as
+    written. Windows: `Path.GetFullPath`, which also expands 8.3 short names (measured in PowerShell
+    7.6.6 and Windows PowerShell 5.1), and no directory between the state directory and the profile
+    may be a junction or symbolic link.
+  - From then on the installer uses that real path only; a second resolution that gives another path
+    refuses.
+  - POSIX: every directory from the one that holds the state directory up to `$HOME`, inclusive, is
+    owned by the current user or root and is not writable by its group or other users unless its
+    sticky bit is set. That is the walk of OpenSSH's `safe_path()` ("each component of the path ...
+    must be owned by either the owner of the file or root and no directories must be group or world
+    writable", up to the home directory; openssh-portable `misc.c`, read 2026-10-02), with the
+    Security seat's exception for a sticky directory. Missing directories are created under
+    `umask 077`. Inside `clouddrive` only `$HOME` is read: the `clouddrive` entry is in `$HOME`, and
+    the mount sets the modes below it (U66).
+  - Windows: the directory that holds the state directory is owned by the current user, SYSTEM or
+    Administrators and grants no other account `DeleteSubdirectoriesAndFiles`, `ChangePermissions`,
+    `TakeOwnership` or full control, any of which lets that account rename or replace the state
+    directory.
+  - Residual on Windows: the directories above that one are checked for junctions and symbolic links
+    only, not for their access rules, so an account that may rename one of them could move the tree
+    between the check and the read; a file such an account creates is owned by it and is refused when
+    it is checked.
+- **Git Bash (council round 2, the Security seat's option b).** `install-claude-gateway.sh` reads no
+  Windows access rules, so under Git Bash, MSYS2 or Cygwin (`uname -s` beginning `MINGW`, `MSYS` or
+  `CYGWIN`) it keeps no store: it reads and writes no checkpoint and no lock, and after the
+  confirmation prints a warning that names `Install-ClaudeGateway.ps1` as the Windows installer and
+  the resume command with the answers, as in an ephemeral Cloud Shell session. The guard against a
+  second main.bicep deployment (Decision 10) still runs. `tests/Test-BashInstallerCheckpoint.ps1`
+  and `tests/Test-InstallerCheckpointStore.ps1` replace `uname` so that Git Bash takes the Linux path
+  on Windows hosts; the installer has no switch for it.
 - **Atomic writes.** Each write goes to `install-<key>.json.tmp-<random>` in the same directory and
   replaces the checkpoint by rename: `[IO.File]::Replace` when the file exists and `[IO.File]::Move`
   when it does not (PowerShell 5.1 and 7), `mv -f` in bash. A reader sees the old file or the new
@@ -390,6 +438,24 @@ resume finds every object by id:
   Microsoft Graph, a rerun later continues without creating a second group, and the resume command.
   `az ad group create` without `--force` returns an existing group only when Graph's
   display-name and mail-nickname filter already sees it (`role/custom.py:1877-1888`, az 2.86.0).
+- Live meaning of a receipt (council round 2, 2026-10-02). A receipt of the right shape can name
+  another object: a group id of another group would make the sync publish that group's members as
+  entitled. Before a resume uses a receipt it reads what the id names:
+  - Entra group: `az ad group show --group <id>`, then `az ad group list --display-name <name>
+    --filter "id eq '<id>'"`, which az sends as `id eq '<id>' and startswith(displayName,'<name>')`
+    (`role/custom.py:1898-1905`). The receipt stands only when that list holds the one group of that
+    id with as many code points as the configured name, the rule of the name lookup above; anything
+    else refuses on one line and keeps the checkpoint (both installers).
+  - Role assignment: `az rest --method get` on its id; it stands only when its scope is the Foundry
+    account's id, its role definition is Cognitive Services User
+    (`a97b65f3-24c7-4388-baec-2e87135dc908`, `infra/foundry-role.bicep:13`) and its principal is the
+    gateway's identity (`az apim show --query identity.principalId`); otherwise the gateway step is
+    not verified and the run refuses.
+  - Projection resolver app id, from a receipt or a recorded answer this run does not pass again:
+    `az ad app show --id <id>`; its `appId` is that id and its display name is
+    `claude-projection-resolver-<prefix>`.
+  - Desktop client id: `az ad app show --id <id> --query appId`, which also accepts an object id; the
+    `appId` it returns is that id.
 - Role assignment: after a successful deployment, `az role assignment list --assignee-object-id <APIM
   principal> --scope <Foundry id> --role "Cognitive Services User"`, called only with both values
   non-empty; origin `created` when `grantFoundryRole` was true (`Install-ClaudeGateway.ps1:1522-1541`).
@@ -455,10 +521,11 @@ an allowlist of fields; `AddressCertificatePassword` (`securestring`) and the AR
 
 Where the code differs from Decisions 1-16, the code is as follows.
 
-- Files: each installer's logic is in two files, the store and run state
-  (`scripts/ClaudeInstallCheckpoint.ps1`, `scripts/install-checkpoint.sh`) and the live reads and
-  step actions (`scripts/ClaudeInstallResume.ps1`, `scripts/install-resume.sh`), which the first
-  file loads. `installerFingerprint` covers the installer and both files.
+- Files: each installer's logic is in three files, the run state (`scripts/ClaudeInstallCheckpoint.ps1`,
+  `scripts/install-checkpoint.sh`), the store's place and trust (`scripts/ClaudeInstallStore.ps1`,
+  `scripts/install-store.sh`, council round 2) and the live reads and step actions
+  (`scripts/ClaudeInstallResume.ps1`, `scripts/install-resume.sh`), which the first file loads.
+  `installerFingerprint` covers the installer and the three files.
 - Binding (Decision 5): the gateway field compares the APIM name (`-ExistingApimName` with
   `apimName`; `-NamePrefix` or `--name-prefix` with `namePrefix` or `apim-<prefix>` with
   `apimName`), and `reusedApim` is compared when the run names the gateway (`-ExistingApimName` is
@@ -547,6 +614,10 @@ Council round 2 (2026-10-01) added checks, RED first:
 | Finding | Check | Suite |
 |---|---|---|
 | Group names beyond ASCII matched differently | a non-ASCII case variant, the one listed name of the same length, is recorded by its id as pre-existing; longer names, the name in another normalization form among them, are created once; two same-length names refuse naming both ids; an astral-plane name counts code points (stand-in names with the name's UTF-16 units and UTF-8 bytes are not taken); a resume naming a group in another case than its receipt looks the name up | both installers |
+| Windows trust incomplete (Security) | a junction state directory, inherited rules, a Delete rule, a parent that lets Users delete what it holds, an owner other than the user, SYSTEM or Administrators for the state directory and for its parent (owner seam), and a state directory outside the profile are refused | store, PowerShell |
+| Check-to-use races with `CLAUDE_GATEWAY_STATE_DIR` (Security) | a directory between the state directory and `$HOME` that its group can write or another user owns, a linked state directory and one outside `$HOME` are refused, and a sticky directory root owns passes (probe seams; real modes on Linux and macOS); a state directory outside the home or profile refuses at startup | store, both installers |
+| Receipts checked for shape only (Security) | a group receipt for another group and a role assignment receipt for another scope refuse and keep the checkpoint; a Desktop app id and a resolver app id that name another application refuse | both installers (role, apps: PowerShell) |
+| Git Bash reads no Windows access rules (Security) | under `uname -s` `MINGW64_NT` the bash installer warns, names `Install-ClaudeGateway.ps1`, prints the resume command with the answers, and reads and writes no checkpoint | bash |
 
 Every new check gets a mutation that breaks what it guards; a mutation counts only when the suite
 loads with its baseline check count and at least one check fails, and a bash mutant also passes
@@ -565,13 +636,19 @@ A prepared, unpushed workflow runs the bash checks and the POSIX permission and 
 - Each platform gets a state directory that a support case needs to know about; the run prints its
   path.
 - Bash keeps its missing read-back on a first run; P91 refuses only the resume case.
-- New code lives in four library files (Decision 17), so `Install-ClaudeGateway.ps1`, already over
+- New code lives in six library files (Decision 17), so `Install-ClaudeGateway.ps1`, already over
   the 700-line budget, gains only the step hooks, and `install-claude-gateway.sh` stays within it.
 - The checkpoint is a new operator-side data store, so `docs/ARCHITECTURE.md` and a diagram spec
   change in LOG.
 - A store another account can write stops the installer before it reads anything, so a
   `CLAUDE_GATEWAY_STATE_DIR` in a shared directory, or a state directory whose inherited access rules
   let other accounts write, needs another location or owner-only rules before a rerun.
+- A state directory outside the home directory or profile, one whose access rules are inherited (an
+  existing directory named by `CLAUDE_GATEWAY_STATE_DIR`), and one below a directory that its group
+  can write (mode 775, for example) stop the installer with one line that
+  names the directory, its mode or rule, and the resume command.
+- The bash installer under Git Bash keeps no checkpoint; `Install-ClaudeGateway.ps1` is the Windows
+  path, and a bash rerun there starts as a first run with the printed answers.
 
 ## How we'd know this was wrong
 
@@ -588,6 +665,10 @@ A prepared, unpushed workflow runs the bash checks and the POSIX permission and 
   ignoring accents, so a listed name of the same length is another group (U76).
 - The PowerShell installer on Windows reads a non-ASCII display name from az with another number of
   characters than Graph holds (U77), so the group is read as a longer name and created again.
+- The attended Cloud Shell run shows a `$HOME` that its group can write (U78), so every Cloud Shell
+  run refuses at startup.
+- A support case shows a directory above the parent of a Windows state directory renamed between
+  the check and the read (the residual of Decision 2).
 
 ## References
 
