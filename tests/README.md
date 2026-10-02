@@ -111,6 +111,10 @@ pwsh -NoProfile -File .\tests\Update-FinOpsDurations.ps1 -JUnitXml $env:TEMP\aum
 
 The last two lines refresh the weights from one complete serial run.
 
+### AUM pinned test clock
+
+AUM pytest pins product and AUM test/helper `datetime.now(timezone.utc)` calls to `2026-09-24T12:00:00Z` plus real elapsed time. `cli/finops/tests/aum_clock.py` defines the pinned instant, pinned month and pinned class; `cli/finops/tests/conftest.py` applies them per test to `claude_finops`, `test_*` and `p85_fixtures` modules only. The stdlib datetime module and third-party modules are not changed. The fixtures use September 2026, while Direct and AUM service writes intentionally allow only the current UTC month. The pin keeps those test fixtures current without changing product code and still lets durations, deadlines and sleeps advance. Tests that must observe the workstation clock use `@pytest.mark.real_clock`. Collection-time constants use `PINNED_MONTH`; token expiry tests keep using `time.time()` because JWT `exp` checks compare epoch seconds, not the AUM fixture month.
+
 ## Receipts and coverage
 
 A shard writes a versioned receipt with its exact Git commit and tree, coordinates, ordered
