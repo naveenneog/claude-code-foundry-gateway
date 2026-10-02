@@ -28,6 +28,13 @@ CallsPerMinute CALLS_PER_MINUTE --calls-per-minute i
 StandardGroup STANDARD_GROUP --standard-group s
 PremiumGroup PREMIUM_GROUP --premium-group s'
 CKPT_US=$'\x1f'
+# One rule set for the free text both installers write, the progress stream and every preflight message and
+# remedy (ADR-0047 decision 12): a JWT, Bearer <token>, and name=value or name: value for a secret's name. The
+# JSON is the same text as Get-ClaudeInstallRedactionRules in scripts/ClaudeInstallResume.ps1
+# (tests/Test-InstallerRedaction.ps1). redact replaces each match by its group keep and [redacted], ignoring
+# case; a jq program uses it as jq --argjson R "$CKPT_REDACT_RULES" "$CKPT_REDACT_JQ"'<program>'.
+CKPT_REDACT_RULES='[{"name":"jwt","pattern":"eyJ[A-Za-z0-9_-]{4,}\\.[A-Za-z0-9_.-]*"},{"name":"bearer","pattern":"(?<keep>(?<![A-Za-z0-9_])bearer[ \\t]+)[^;&\"\u0027 \\t\\r\\n]+"},{"name":"named","pattern":"(?<keep>(?<![A-Za-z0-9_])(?:sig|signature|accountkey|sharedaccesskey|sharedaccesssignature|client_secret|clientsecret|password|pwd|secret|access_token|refresh_token)[\"\u0027]?[ \\t]*[=:][ \\t]*[\"\u0027]?)[^;&\"\u0027 \\t\\r\\n]+"}]'
+CKPT_REDACT_JQ='def redact: if type == "string" then reduce $R[] as $r (.; gsub($r.pattern; "\(.keep // "")[redacted]"; "i")) else . end;'
 
 CKPT_ROOT=""; CKPT_DIR=""; CKPT_FILE=""; CKPT_LOCK=""; CKPT_KEY=""; CKPT_PERSISTENT=1; CKPT_WARNING=""; CKPT_CLOUDSHELL=""; CKPT_CLOUDDRIVE=0
 CKPT_NOSTORE=""; CKPT_RESOLVED=""; CKPT_HOME_REAL=""; CKPT_EXPLICIT=0; CKPT_UNTRUSTED=""

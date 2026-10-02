@@ -18,6 +18,26 @@ function Invoke-ClaudeInstallAzRead {
 }
 $script:ClaudeInstallGraphNotFound = @('Request_ResourceNotFound', 'does not exist or one of its queried reference-property objects are not present')
 
+function Get-ClaudeInstallRedactionRules {
+    # One rule set for the free text both installers write, the progress stream and every preflight message
+    # and remedy (ADR-0047 decision 12): a JWT, Bearer <token>, and name=value or name: value for a secret's
+    # name. The JSON is the same text as CKPT_REDACT_RULES in scripts/install-checkpoint.sh
+    # (tests/Test-InstallerRedaction.ps1). Each match is replaced by its group keep and [redacted]; case is ignored.
+    $json = '[{"name":"jwt","pattern":"eyJ[A-Za-z0-9_-]{4,}\\.[A-Za-z0-9_.-]*"},{"name":"bearer","pattern":"(?<keep>(?<![A-Za-z0-9_])bearer[ \\t]+)[^;&\"\u0027 \\t\\r\\n]+"},{"name":"named","pattern":"(?<keep>(?<![A-Za-z0-9_])(?:sig|signature|accountkey|sharedaccesskey|sharedaccesssignature|client_secret|clientsecret|password|pwd|secret|access_token|refresh_token)[\"\u0027]?[ \\t]*[=:][ \\t]*[\"\u0027]?)[^;&\"\u0027 \\t\\r\\n]+"}]'
+    $rules = $json | ConvertFrom-Json
+    return $rules
+}
+
+function Protect-ClaudeInstallText([string]$Text) {
+    # The text with each secret shape of Get-ClaudeInstallRedactionRules replaced: a value ends at a semicolon,
+    # an ampersand, white space, a quote or the end.
+    if (-not $Text) { return $Text }
+    $options = [Text.RegularExpressions.RegexOptions]::IgnoreCase -bor [Text.RegularExpressions.RegexOptions]::CultureInvariant
+    $evaluator = [Text.RegularExpressions.MatchEvaluator] { param($m) $m.Groups['keep'].Value + '[redacted]' }
+    foreach ($rule in Get-ClaudeInstallRedactionRules) { $Text = [regex]::Replace($Text, [string]$rule.pattern, $evaluator, $options) }
+    return $Text
+}
+
 function Get-ClaudeInstallSetting([string]$Name, [int]$Default) {
     $v = 0
     if ([int]::TryParse([string][Environment]::GetEnvironmentVariable($Name), [ref]$v) -and $v -ge 0) { return $v }

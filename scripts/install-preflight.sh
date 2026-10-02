@@ -43,6 +43,15 @@ EOF
 }
 
 # operator.adminPrereqs: claude_preflight admin (scripts/preflight.sh), its lines captured.
+# Why a subscription record from az account show cannot be used, or nothing when it can: output that is not
+# JSON, or a record without its id or tenantId (ADR-0047 decision 5).
+pf_record_problem_() {
+  local why
+  [ -n "$1" ] || { printf '%s' "az account show did not return JSON"; return 0; }
+  why="$(printf '%s' "$1" | jq -r 'if type != "object" then "az account show did not return JSON" elif (.id | type) != "string" or .id == "" then "az account show returned no subscription id" elif (.tenantId | type) != "string" or .tenantId == "" then "az account show returned no tenantId" else "" end' 2>/dev/null)" || why="az account show did not return JSON"
+  printf '%s' "$why" | tr -d '\r'
+}
+
 pf_prereqs_() {
   local out rc line fails="" warns=""
   [ "$(type -t claude_preflight 2>/dev/null)" = "function" ] || . "$HERE/scripts/preflight.sh"
@@ -62,15 +71,18 @@ EOF
 # The checks that read Azure, once Azure CLI is signed in. Each read names the answered subscription with
 # --subscription, so the preflight leaves the CLI's own subscription alone (az account set writes it).
 pf_azure_() {
-  local tenant user sub sub_ok=1 so name s_name="" s_state="" s_tenant=""
+  local tenant user sub sub_ok=1 so name s_name="" s_state="" s_tenant="" why=""
   tenant="$(printf '%s' "$1" | jq -r '.tenantId // ""' | tr -d '\r')"; user="$(printf '%s' "$1" | jq -r '.user.name // ""' | tr -d '\r')"
   case "$PF_BAD" in *" SubscriptionId "*) sub_ok=0 ;; esac
   sub="$(pf_get_ SubscriptionId)"
   if [ -n "$sub" ]; then
     ckpt_az_read_ '' account show --subscription "$sub" -o json
-    so="$AZ_OUT"
-    if [ "$AZ_VERDICT" != "present" ] || ! printf '%s' "$so" | jq -e 'type == "object"' >/dev/null 2>&1; then
-      sub_ok=0; pf_fail_ target.subscription "subscription '$sub' is not readable by $user ($AZ_DETAIL)" "Check it with az account list -o table, or sign in to the tenant that holds it."
+    so="$AZ_OUT"; why="$AZ_DETAIL"
+    # A record is used only with its id and tenant: without them each later read would name
+    # --subscription null, or the wrong tenant would go unseen (ADR-0047 decision 5).
+    if [ "$AZ_VERDICT" = "present" ]; then why="$(pf_record_problem_ "$so")"; [ -z "$why" ] || AZ_VERDICT=inconclusive; fi
+    if [ "$AZ_VERDICT" != "present" ]; then
+      sub_ok=0; pf_fail_ target.subscription "subscription '$sub' is not readable by $user ($why)" "Check it with az account list -o table, or sign in to the tenant that holds it."
     else
       PF_SUB="$(printf '%s' "$so" | jq -r '.id' | tr -d '\r')"
       eval "$(printf '%s' "$so" | jq -r '@sh "s_name=\(.name // "") s_state=\(.state // "") s_tenant=\(.tenantId // "")"' | tr -d '\r')"
@@ -78,6 +90,8 @@ pf_azure_() {
       pf_pass_ target.subscription "subscription $s_name ($PF_SUB)"
       if [ -n "$s_tenant" ] && [ "$s_tenant" != "$tenant" ]; then pf_fail_ target.tenant "subscription $s_name is in tenant $s_tenant, and Azure CLI is signed in to tenant $tenant" "Run az login --tenant $s_tenant, then run the preflight again."; fi
     fi
+  elif [ "$sub_ok" = "1" ] && ! printf '%s' "$1" | jq -e '(.id | type) == "string" and .id != ""' >/dev/null 2>&1; then
+    sub_ok=0; pf_fail_ target.subscription "the current subscription could not be read (az account show returned no subscription id)" "Check az account show, or answer SubscriptionId, then run the preflight again."
   elif [ "$sub_ok" = "1" ]; then
     pf_pass_ target.subscription "SubscriptionId is not answered; the run uses the current subscription $(printf '%s' "$1" | jq -r '"\(.name) (\(.id))"' | tr -d '\r')"
   fi
@@ -247,16 +261,17 @@ preflight_run_() {
     azure) pf_notrun_ address.inputs not-applicable "AddressMode is azure: the gateway's own address needs no inputs" ;;
     *) pf_notrun_ address.inputs not-answered "AddressMode is not answered; the run asks for it, azure by default" ;;
   esac
-  result="$(printf '%s' "$PF_LINES" | jq -R -s -c --arg ids "$PF_IDS" '
+  # Each message and remedy with the secrets an error quoted replaced (redact, scripts/install-checkpoint.sh).
+  result="$(printf '%s' "$PF_LINES" | jq -R -s -c --arg ids "$PF_IDS" --argjson R "$CKPT_REDACT_RULES" "$CKPT_REDACT_JQ"'
     def firstseen: reduce .[] as $x ([]; if index([$x]) != null then . else . + [$x] end);
-    [ split("\n")[] | select(length > 0) | split("\u001f") | {kind: .[0], id: .[1], reason: .[2], message: .[3], remedy: .[4]} ] as $l
+    [ split("\n")[] | select(length > 0) | split("\u001f") | {kind: .[0], id: .[1], reason: .[2], message: (.[3] | redact), remedy: (.[4] | redact)} ] as $l
     | [ $ids | split(" ")[] as $id
         | [ $l[] | select(.id == $id) ] as $mine
         | [ $mine[] | select(.kind == "problem") ] as $p
         | if ($p | length) > 0 then {id: $id, result: "FAIL", message: ($p | map(.message) | join("; ")), remedy: ($p | map(.remedy) | firstseen | join(" ")), reason: null, problems: [ $p[] | {message, remedy} ]}
           elif any($mine[]; .kind == "notrun") then ([ $mine[] | select(.kind == "notrun") ] | last) as $n | {id: $id, result: "NOT-RUN", message: $n.message, remedy: $n.remedy, reason: $n.reason, problems: []}
           elif any($mine[]; .kind == "pass" and (.message // "") != "") then ([ $mine[] | select(.kind == "pass" and (.message // "") != "") ] | last) as $s | {id: $id, result: "PASS", message: $s.message, remedy: "", reason: null, problems: []}
-          else {id: $id, result: "NOT-RUN", message: "no branch of the preflight evaluated this check", remedy: "", reason: "not-evaluated", problems: []} end ] as $checks
+          else {id: $id, result: "NOT-RUN", message: "the preflight did not evaluate this check, which is a defect of the preflight", remedy: "Run the preflight from the latest checkout; if the check is still not evaluated, report it with this output.", reason: "not-evaluated", problems: []} end ] as $checks
     | {schemaVersion: 1, installer: "bash", answersSchemaVersion: 1,
        result: (if any($checks[]; .result == "FAIL" or (.result == "NOT-RUN" and ((.reason == "not-signed-in" or .reason == "prerequisite-failed") or .reason == "not-evaluated"))) then "FAIL" else "PASS" end), checks: $checks}' | tr -d '\r')"
   if [ "${WANT_JSON:-0}" = "1" ]; then printf '%s' "$result" | jq . | tr -d '\r'

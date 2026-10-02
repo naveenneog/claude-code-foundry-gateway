@@ -80,6 +80,22 @@ function Get-ClaudePreflightPrerequisites {
     return [pscustomobject]@{ Ok = $ok; Fails = @(& $grab 'FAIL'); Warnings = @(& $grab 'WARN') }
 }
 
+function Get-ClaudePreflightRecordProblem([string]$Output) {
+    # Why a subscription record from az account show cannot be used, or nothing when it can: output that is
+    # not JSON, or a record without its id or tenantId (ADR-0047 decision 5).
+    if (-not $Output) { return 'az account show did not return JSON' }
+    try { $record = $Output | ConvertFrom-Json -ErrorAction Stop } catch { return 'az account show did not return JSON' }
+    if ($record -isnot [pscustomobject]) { return 'az account show did not return JSON' }
+    if ($record.id -isnot [string] -or -not $record.id) { return 'az account show returned no subscription id' }
+    if ($record.tenantId -isnot [string] -or -not $record.tenantId) { return 'az account show returned no tenantId' }
+    return ''
+}
+
+function Get-ClaudePreflightBlocking([object[]]$Checks) {
+    # The checks that fail a preflight: FAIL, or NOT-RUN for a blocking reason (ADR-0047 decision 5).
+    @($Checks | Where-Object { $_.result -eq 'FAIL' -or ($_.result -eq 'NOT-RUN' -and ($_.reason -in $script:ClaudePreflightBlocking -or $_.reason -eq $script:ClaudePreflightUnevaluated)) })
+}
+
 function Add-ClaudePreflightProblem($Check, [string]$Message, [string]$Remedy) { $Check.problems.Add([pscustomobject][ordered]@{ message = $Message; remedy = $Remedy }) }
 function Set-ClaudePreflightPass($Check, [string]$Message) {
     # The only way to PASS: a check with no problem, which no branch has set NOT-RUN, and a message.
@@ -108,7 +124,8 @@ function Invoke-ClaudeGatewayPreflight {
         [ValidateSet('', 'discovery-skipped', 'not-answered')][string]$SkipAzureReason = '', [string]$SkipAzureMessage = '')
     $checks = [ordered]@{}
     foreach ($id in @((Get-ClaudeAnswersSchema).Document.'x-preflightChecks' | ForEach-Object { [string]$_.id })) {
-        $checks[$id] = [pscustomobject][ordered]@{ id = $id; result = 'NOT-RUN'; message = 'no branch of the preflight evaluated this check'; remedy = ''
+        $checks[$id] = [pscustomobject][ordered]@{ id = $id; result = 'NOT-RUN'; message = 'the preflight did not evaluate this check, which is a defect of the preflight'
+            remedy = 'Run the preflight from the latest checkout; if the check is still not evaluated, report it with this output.'
             reason = $script:ClaudePreflightUnevaluated; problems = [System.Collections.Generic.List[object]]::new() }
     }
     $bad = @{}
@@ -157,9 +174,12 @@ function Invoke-ClaudeGatewayPreflight {
     elseif ($mode -eq 'azure') { Set-ClaudePreflightNotRun $checks['address.inputs'] 'not-applicable' "AddressMode is azure: the gateway's own address needs no inputs" }
     else { Set-ClaudePreflightNotRun $checks['address.inputs'] 'not-answered' 'AddressMode is not answered; the run asks for it, azure by default' }
     $list = @(foreach ($c in $checks.Values) {
+            # Each message and remedy with the secrets an error quoted replaced (ADR-0047 decision 12).
+            foreach ($p in $c.problems) { $p.message = Protect-ClaudeInstallText $p.message; $p.remedy = Protect-ClaudeInstallText $p.remedy }
+            $c.message = Protect-ClaudeInstallText $c.message; $c.remedy = Protect-ClaudeInstallText $c.remedy
             if ($c.problems.Count) { $c.result = 'FAIL'; $c.reason = $null; $c.message = (@($c.problems | ForEach-Object { $_.message }) -join '; '); $c.remedy = (@($c.problems | ForEach-Object { $_.remedy } | Select-Object -Unique) -join ' ') }
             $c })
-    $blocking = @($list | Where-Object { $_.result -eq 'FAIL' -or ($_.result -eq 'NOT-RUN' -and ($_.reason -in $script:ClaudePreflightBlocking -or $_.reason -eq $script:ClaudePreflightUnevaluated)) })
+    $blocking = @(Get-ClaudePreflightBlocking $list)
     return [pscustomobject][ordered]@{ schemaVersion = 1; installer = $Installer; answersSchemaVersion = 1; result = $(if ($blocking.Count) { 'FAIL' } else { 'PASS' }); checks = $list }
 }
 function Invoke-ClaudeGatewayPreflightAzure {
@@ -172,15 +192,20 @@ function Invoke-ClaudeGatewayPreflightAzure {
     $subId = & $get 'SubscriptionId'
     if ($subId) {
         $s = Invoke-ClaudeInstallAzRead @('account', 'show', '--subscription', $subId, '-o', 'json')
-        $so = $null
-        if ($s.Verdict -eq 'present') { try { $so = $s.Output | ConvertFrom-Json -ErrorAction Stop } catch { $so = $null } }
-        if (-not $so) { $subOk = $false; Add-ClaudePreflightProblem $Checks['target.subscription'] "subscription '$subId' is not readable by $user ($($s.Detail))" 'Check it with az account list -o table, or sign in to the tenant that holds it.' }
+        # A record is used only with its id and tenant: without them each later read would name an empty
+        # subscription, or the wrong tenant would go unseen (ADR-0047 decision 5).
+        $so = $null; $why = $s.Detail
+        if ($s.Verdict -eq 'present') { $why = Get-ClaudePreflightRecordProblem $s.Output; if (-not $why) { $so = $s.Output | ConvertFrom-Json } }
+        if (-not $so) { $subOk = $false; Add-ClaudePreflightProblem $Checks['target.subscription'] "subscription '$subId' is not readable by $user ($why)" 'Check it with az account list -o table, or sign in to the tenant that holds it.' }
         else {
             $sub = @('--subscription', [string]$so.id)
             if ($so.state -and [string]$so.state -ne 'Enabled') { $subOk = $false; Add-ClaudePreflightProblem $Checks['target.subscription'] "subscription $($so.name) ($($so.id)) is $($so.state)" 'Use an enabled subscription.' }
             Set-ClaudePreflightPass $Checks['target.subscription'] "subscription $($so.name) ($($so.id))"
             if ($so.tenantId -and [string]$so.tenantId -ne $tenant) { Add-ClaudePreflightProblem $Checks['target.tenant'] "subscription $($so.name) is in tenant $($so.tenantId), and Azure CLI is signed in to tenant $tenant" "Run az login --tenant $($so.tenantId), then run the preflight again." }
         }
+    }
+    elseif ($subOk -and ($Account.id -isnot [string] -or -not $Account.id)) {
+        $subOk = $false; Add-ClaudePreflightProblem $Checks['target.subscription'] 'the current subscription could not be read (az account show returned no subscription id)' 'Check az account show, or answer SubscriptionId, then run the preflight again.'
     }
     elseif ($subOk) { Set-ClaudePreflightPass $Checks['target.subscription'] "SubscriptionId is not answered; the run uses the current subscription $($Account.name) ($($Account.id))" }
     Set-ClaudePreflightPass $Checks['target.tenant'] "signed in as $user in tenant $tenant"
