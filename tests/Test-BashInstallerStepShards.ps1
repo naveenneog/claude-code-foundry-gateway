@@ -1,6 +1,6 @@
 # P92 round 3, the lead's item 11 (docs/adr/0047-lean-installer-phase-0.md decision 14):
-# tests/Test-BashInstallerStepSelection.ps1 runs as two Test-All checks within the default per-check timeout,
-# as tests/Test-BashInstallerCheckpoint.ps1 does, and the two shards together run every check of the suite
+# tests/Test-BashInstallerStepSelection.ps1 runs as three Test-All checks within the default per-check timeout,
+# as tests/Test-BashInstallerCheckpoint.ps1 runs as two, and the shards together run every check of the suite
 # exactly once. The checks are those of tests/BashSuiteShards.ps1.
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent

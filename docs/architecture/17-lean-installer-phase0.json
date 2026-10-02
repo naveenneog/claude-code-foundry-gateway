@@ -5,7 +5,7 @@
   "title": "Lean installer phase 0: answers, preflight and selected steps",
   "subtitle": "One answers schema feeds both installers and the guided flow. Preflight only reads; selected steps reuse P91 live checks and append a progress stream.",
   "width": 1280,
-  "height": 1100,
+  "height": 1140,
   "outputs": [
     "docs/images/architecture/lean-installer-phase0.png"
   ],
@@ -109,6 +109,16 @@
       "label": "Sync-ClaudeUsdBudgets.ps1",
       "source": "scripts/Sync-ClaudeUsdBudgets.ps1",
       "match": "param("
+    },
+    "resolver": {
+      "label": "Resolve-ClaudeInstallUnitGroup",
+      "source": "scripts/ClaudeInstallSteps.ps1",
+      "match": "function Resolve-ClaudeInstallUnitGroup"
+    },
+    "redact": {
+      "label": "Protect-ClaudeInstallText",
+      "source": "scripts/ClaudeInstallResume.ps1",
+      "match": "function Protect-ClaudeInstallText"
     }
   },
   "groups": [
@@ -132,7 +142,7 @@
       "x": 0,
       "y": 760,
       "w": 1280,
-      "h": 310,
+      "h": 380,
       "tone": "teal",
       "title": "Selected execution - P91 live checks plus a progress stream"
     }
@@ -174,7 +184,7 @@
       "title": "3 - Guided flow",
       "lines": [
         "[[flow]] refuses a file the schema rejects and binds the installer preflight into the plan fingerprint.",
-        "A plan with a FAIL is not applied."
+        "A plan is applied only when its preflight passes."
       ]
     },
     {
@@ -221,7 +231,7 @@
       "x": 24,
       "y": 840,
       "w": 365,
-      "h": 220,
+      "h": 290,
       "tone": "teal",
       "title": "7 - Step list and selection",
       "lines": [
@@ -234,11 +244,12 @@
       "x": 458,
       "y": 840,
       "w": 365,
-      "h": 220,
+      "h": 290,
       "tone": "teal",
       "title": "8 - Business units from answers",
       "lines": [
         "[[bu]] writes units, then teams, through [[setbu]]; receipts stop duplicate calls.",
+        "[[resolver]] finds each group by its exact name.",
         "With dollar budgets enforced it prints [[syncusd]]."
       ]
     },
@@ -247,12 +258,12 @@
       "x": 892,
       "y": 840,
       "w": 365,
-      "h": 220,
+      "h": 290,
       "tone": "teal",
       "title": "9 - Progress stream",
       "lines": [
         "[[progress]] and [[shprogress]] append one NDJSON line per event with the run id and resume command.",
-        "No secrets; one line per write."
+        "[[redact]] writes a secret in a message as [redacted]; one line per write."
       ]
     }
   ],

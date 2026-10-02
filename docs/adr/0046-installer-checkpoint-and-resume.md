@@ -545,7 +545,10 @@ and 9). `-Restart`/`--restart` of either installer sets it aside.
 
 The checkpoint holds no token, key, password, certificate or connection string. Writers serialise
 an allowlist of fields; `AddressCertificatePassword` (`securestring`) and the ARM token of
-`Install-ClaudeGateway.ps1:1482` are never passed to them; read-back values are not recorded.
+`Install-ClaudeGateway.ps1:1568` are never passed to them; read-back values are not recorded.
+Free text that P92 writes, the progress stream and the preflight's messages and remedies, passes
+through one set of patterns instead: a JWT, `Bearer <token>` and named secrets such as `sig=` or
+`password:` ([ADR-0047](0047-lean-installer-phase-0.md) decision 12).
 
 ### 16. Relation to ADR-0030, ADR-0032 and P79
 
