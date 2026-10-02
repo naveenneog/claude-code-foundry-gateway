@@ -29,6 +29,16 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P86 scheduled projection renewal.** A 30-minute Container Apps renewal job,
+  tenant-admin Graph grant script, Cosmos status evidence, email-backed alerts
+  and evidence-gated switch admission replace P84's unconditional projection
+  refusal. Admission reads Cosmos through the in-VNet runner and separately
+  verifies the pinned no-override job definition; rollback to named values
+  remains available after refresh and comparison.
+- **P86 gate correction.** The deployer, installer and guided flow tests now
+  assert the accepted evidence-gated switch contract: missing or insufficient
+  renewal evidence refuses before backup/write, while good Cosmos evidence and
+  a pinned no-override job definition admit the projection switch.
 - **P90 portal path for the Azure CLI setup guide, round 2.** `docs/AZ-COMMANDS.md`
   now has one `### Part N in the portal` subsection per part 1-12 instead of
   repeated per-step portal/change-later paragraphs. The overview table links to
