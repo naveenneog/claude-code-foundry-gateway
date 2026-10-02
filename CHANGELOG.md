@@ -29,6 +29,7 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P92 lean installer phase-0 plan and contract.** ADR-0047 records the proposed one answers schema, shared preflight, selected-step rules, precedence rules, guided-flow condition metadata and RED test names. The branch treats the P91 bash-checkpoint 900 s timeout as temporary and plans a shard split before merge. No product code is added in this commit.
 - **Installers resume after a failure.** `Install-ClaudeGateway.ps1` and
   `install-claude-gateway.sh` keep one checkpoint per checkout in a per-user state
   directory, from the confirmed summary until the last step completes; in Azure Cloud
