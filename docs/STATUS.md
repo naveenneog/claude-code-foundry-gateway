@@ -218,6 +218,28 @@ section moves to `docs/status/P91.md` under P87's ADR-0042.
   TEMP to LocalApplicationData: the scratch of `Test-InstallerCheckpoint.ps1` and, on Windows,
   `Test-InstallerCheckpointStore.ps1`, and the `CLAUDE_GATEWAY_STATE_DIR` that `Test-CompanyInstaller.ps1`
   and `Test-All.ps1` give each run.
+- Council round 3 Security fix, 2026-10-02: GREEN `d52c078`, the ruling's check strengthened in
+  `7902a3c` (the place's own last-write time, so a checkpoint and lock written and later removed are
+  seen), LOG `41a0381`. `Get-ClaudeInstallWindowsAncestorProblem` replaces the parent check: every
+  directory from the one that holds the state directory up to the user profile, inclusive, is not a
+  junction or symbolic link, has a trusted owner, and grants no other account `Delete`,
+  `DeleteSubdirectoriesAndFiles`, `ChangePermissions`, `TakeOwnership`, `GENERIC_ALL` or
+  `GENERIC_WRITE` (ADR-0046 decision 2; the residual is gone). Results: store 24 checks, PowerShell
+  86, bash 52, all passing (18.0 s; 196.6 s and 502.2 s), and `Test-CompanyInstaller.ps1` 22.
+  Mutations, one per new check: 4 of 4 caught: `Delete` left out of the walk's mask (store), the walk
+  stopping at the parent (store), and in each installer an existing untrusted default place used as
+  the store (the ruling's checks); each at its suite's baseline count with its own check among the
+  failures, and the bash mutant passes `bash -n`
+  ([measurement](measurements/p91-mutations-council3-security.json)). Where the tests run: the two
+  store checks on Windows (real access rules); the ruling's checks in both installer suites, on
+  Windows and, for bash, on Linux and macOS (`chmod 000` for the unreadable files there).
+  Full offline Test-All at `41a0381` (throttle 6, 2,553 s, with other Test-All runs on the same
+  machine): every check passed except four stopped at the 600 s default, the bash checkpoint suite
+  (602.7 s) and "Business unit checks detect breakage" shards 1-3 (600.1-600.2 s). Shard 1 alone took
+  346 s; run side by side with a `0fed315` (main) extract under the same load, main took 349 s and
+  this branch 342 s, 128 of 128 caught in each, so those three time-outs are load, and their 600 s
+  limit is main's. The bash checkpoint check now has a 900 s timeout, as shard 0 of the business-unit
+  check has (`tests/Test-All.ps1:218,250`); its CI duration is U79.
 
 Acceptance criteria, for both installers unless one is named:
 
