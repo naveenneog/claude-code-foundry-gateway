@@ -193,6 +193,17 @@ section moves to `docs/status/P91.md` under P87's ADR-0042.
   in the checkpoint refuses as a corrupt checkpoint" (both resumed and completed); "R5 a name prefix
   with a single quote" ("The term 'Assert-ClaudeInstallNames' is not recognized"); "R5 a Desktop or
   resolver app id that is not a GUID" (both ids reached `az ad app show --id`).
+- Council round 3 fix, 2026-10-02: GREEN `0d86ac2`, LOG `bd6e8bb`. Both installers refuse a tier
+  group name with a single quote after the group questions and before the summary, on one line
+  naming the parameter (`Assert-ClaudeInstallNames`, `ckpt_group_names_`; one hook line in each
+  installer, `install-claude-gateway.sh` at 699 lines), and a recorded `StandardGroup` or
+  `PremiumGroup` with one is a corrupt checkpoint. `Install-ClaudeGateway.ps1` applies the same rule
+  to `-NamePrefix` and requires a GUID for a recorded `DesktopEntraClientId` or
+  `ProjectionResolverAppId` and for any app id it passes to `az ad app show --id` (ADR-0046 decisions 2
+  and 11). Results: PowerShell 85 checks, bash 51 and store 22, all passing (174.7 s and 398.0 s side
+  by side, 12.1 s). Mutations, one per new check: 6 of 6 caught (4 PowerShell, 2 bash), each at its
+  suite's baseline count with its own check among the failures; every bash mutant passes `bash -n`
+  ([measurement](measurements/p91-mutations-council3.json)).
 
 Acceptance criteria, for both installers unless one is named:
 
