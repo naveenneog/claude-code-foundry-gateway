@@ -23,11 +23,11 @@ Assert 'StandardV2 projection selects the private resolver shape' ($installer -m
 Assert 'PremiumV2 projection selects the private resolver shape' ($installer -match "'PremiumV2'\s*\{\s*'private'")
 Assert 'Basic public shape names the Entra-only risk' ($installer -match 'public, Entra-authenticated resolver' -and $installer -match 'APIM v2 outbound IP')
 Assert 'installer persists projection settings into claude-gateway.json' ($installer -match 'entitlementStore\s*=' -and $installer -match 'resolverInboundAccess\s*=' -and $installer -match 'projectionDeployer\s*=')
-Assert 'installer invokes the one-command deployer without enabling switching' ($installer -match 'Deploy-ClaudeProjection\.ps1' -and $installer -match 'Stop-ClaudeProjectionSwitch')
+Assert 'installer invokes the one-command deployer and gates the flip flag' ($installer -match 'Deploy-ClaudeProjection\.ps1' -and $installer -match 'if \(\$FlipProjectionAfterCleanCompare\).*''-FlipAfterCleanCompare''')
 Assert 'non-interactive projection refuses ambiguity' ($installer -match 'Projection requires .* -Yes' -or $installer -match 'Cannot choose projection unattended')
 Assert '-Yes chooses the deterministic entitlement store default' ($installer -match 'selected from the declared developer count under -Yes')
 Assert 'unattended projection always requires the deployer' ($installer.Contains('$Yes -and $EntitlementStore -eq ''projection'' -and -not $DeployProjection'))
-Assert 'flip is unavailable even with the deployer' ($installer -match '(?s)if \(\$FlipProjectionAfterCleanCompare\).*Stop-ClaudeProjectionSwitch')
+Assert 'flip requires P86 renewal admission inputs' ($installer -match 'ProjectionRenewalImageDigest' -and $installer -match 'ProjectionRenewalActionGroupResourceId' -and $installer -match 'P86 admission requires')
 
 Write-Host ''
 Write-Host 'Projection deployer - compare-gated flip' -ForegroundColor Cyan
@@ -47,7 +47,7 @@ if (Test-Path $deployerPath) {
     Assert 'deployer exports gateway decisions' ($deployer -match 'Compare-ClaudeEntitlement\.ps1' -and $deployer -match '-ExportGatewayPath')
     Assert 'deployer runs projection comparison' ($deployer -match 'apply-projection\.mjs' -and $deployer -match '--compare')
     Assert 'deployer refuses drift before flip' ($deployer -match 'Refusing to flip' -and $deployer -match 'drift')
-    Assert 'deployer has no authority-switch write path' ($deployer -notmatch 'Set-ApimNamedValue' -and $deployer -match 'Stop-ClaudeProjectionSwitch')
+    Assert 'deployer switches only after P86 scheduled-renewal admission' ($deployer -match 'Assert-ClaudeProjectionAdmission' -and $deployer -match 'Set-ApimNamedValue' -and $deployer -match 'RenewalActionGroupResourceId')
     Assert 'deployer has bounded retries' ($deployer -match '\[ValidateRange\(1,10\)\]\[int\]\$RetryCount' -and $deployer -match 'Start-Sleep')
 }
 

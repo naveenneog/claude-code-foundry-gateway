@@ -81,7 +81,15 @@ function Run-Preflight([string]$Case = 'healthy', [hashtable]$Extra = @{}) {
 }
 function Guard {
     param([long]$ExpiresAt = ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds() + 7200), [string]$JobId = $FixtureJobId)
-    Stop-ClaudeProjectionSwitch
+    Assert-ClaudeProjectionAdmission -ResourceGroup rg-p84 -RunnerName runner-p84 -CosmosAccount cosmos-p84fixture `
+        -TenantId $FixtureTenant -AccountResourceId $FixtureCosmosId -ReconcilerResourceId $JobId `
+        -ImageDigest ('sha256:' + ('a' * 64)) -EntryPoint 'node /app/sync/src/apply-projection.mjs' `
+        -ActionGroupResourceId "$FixtureRgId/providers/Microsoft.Insights/actionGroups/ag-projection-renewal"
+}
+function Set-GoodRenewalJobFixture {
+    $global:FixtureJob.properties.template.containers[0].image = 'example.invalid/projection@sha256:' + ('a' * 64)
+    $global:FixtureJob.properties.template.containers[0].command = @()
+    $global:FixtureJob.properties.template.containers[0].args = @()
 }
 
 Write-Host 'P84 preflight: every check is offline'
@@ -173,7 +181,7 @@ Assert 'Basic v2 cannot select an unreachable private resolver' ($CapturedError 
 Run-Preflight 'healthy' @{ ResolverAppId = 'not-an-app-id' }
 Assert 'invalid app id never reaches CLI' ($CapturedError -and ($FixtureCalls -join "`n") -notmatch 'ad app show.*not-an-app-id')
 Run-Preflight 'healthy' @{ FlipAfterCleanCompare=$true; ReconcilerResourceId='/subscriptions/00000000-0000-4000-8000-000000000084/resourceGroups/rg-p84/providers/Microsoft.App/jobs/projection-renewal' }
-Assert 'preflight refuses even matching ARM evidence' ($CapturedError -and $CapturedOutput -match 'P86.*ROADMAP' -and $FixtureCalls.Count -eq 0)
+Assert 'preflight with a job id remains read-only and is not admission evidence' (-not $CapturedError -and ($FixtureCalls -join "`n") -notmatch 'az (deployment .*create|ad app (create|update)|apim nv (create|update))') $CapturedError
 Run-Preflight 'healthy' @{ ResourceGroup='RG-P84' }
 Assert 'Bicep storage hash uses the canonical ARM group id, not user casing' (-not $CapturedError -and $FixtureBicepExpression.Contains("uniqueString('$FixtureRgId',")) $CapturedError
 
@@ -203,15 +211,25 @@ Reset-ProjectionFixture 'group-null-nextlink'
 Capture { @(Get-GroupMemberOids -GroupName 'optional' -Token 'offline-token').Count }
 Assert 'a null final group nextLink is not ambiguity' (-not $CapturedError -and $CapturedResult -eq 2) $CapturedError
 
-Write-Host 'P84 switch unavailable (council decision; ARM admission retired)'
-foreach ($case in 'healthy','job-error','execution-error','execution-shape','execution-nextlink','execution-page','foreign-job') {
+Write-Host 'P86 switch admission requires Cosmos evidence and a pinned job'
+Reset-ProjectionFixture
+Expect-Failure 'missing action group is refused before ARM job evidence' {
+    Assert-ClaudeProjectionAdmission -ResourceGroup rg-p84 -RunnerName runner-p84 -CosmosAccount cosmos-p84fixture `
+        -TenantId $FixtureTenant -AccountResourceId $FixtureCosmosId -ReconcilerResourceId $FixtureJobId `
+        -ImageDigest ('sha256:' + ('a' * 64)) -EntryPoint 'node /app/sync/src/apply-projection.mjs' -ActionGroupResourceId ' '
+} 'action group'
+Assert 'missing action group makes no runner or ARM reads' ($FixtureCalls.Count -eq 0)
+foreach ($case in 'job-error') {
     Reset-ProjectionFixture $case
-    Expect-Failure "ARM evidence never admits a switch: $case" { Guard } '2 hours.*every developer.*503.*P86.*ROADMAP'
-    Assert "no ARM request can authorize P84: $case" ($FixtureCalls.Count -eq 0)
+    Set-GoodRenewalJobFixture
+    Expect-Failure "ARM job definition read must match the destination job: $case" { Guard } 'job|ARM|renewal'
 }
-foreach ($id in @('', 'not-an-arm-id', $FixtureJobId)) {
-    Expect-Failure "all ids are refused: $id" { Guard -JobId $id } 'P86.*ROADMAP'
-}
+Reset-ProjectionFixture
+Expect-Failure 'command or args override is refused despite runner evidence' { Guard } 'command or args override'
+Reset-ProjectionFixture
+Set-GoodRenewalJobFixture
+Capture { Guard }
+Assert 'good Cosmos evidence and a pinned no-override job admit the switch' (-not $CapturedError -and $CapturedResult.ok) $CapturedError
 Run-Preflight 'healthy' @{ FlipAfterCleanCompare = $true }
 Assert 'preflight blocks a requested flip without a reconciler before writes' ($CapturedError -and $CapturedOutput -match 'every developer.*503')
 
@@ -250,17 +268,17 @@ $flow = Get-Content (Join-Path $root 'scripts\flow\Entitlement.ps1') -Raw
 $register = Get-Content (Join-Path $root 'tests\Test-All.ps1') -Raw
 Assert 'offline check is registered' ($register -match "'Test-ProjectionPreflight.ps1'")
 Assert 'deployer checks before its first Azure write' ($deploy -match '(?s)Invoke-ClaudeProjectionPreflight.*if \(\$PreflightOnly\).*New-ClaudeProjectionResolverApp')
-Assert 'deployer has no projection-switch write path' ($deploy -notmatch 'Set-ApimNamedValue' -and $deploy -match 'if \(\$FlipAfterCleanCompare\) \{ Stop-ClaudeProjectionSwitch \}')
+Assert 'deployer switches only through P86 admission' ($deploy -match 'Assert-ClaudeProjectionAdmission' -and $deploy -match 'Set-ApimNamedValue' -and $deploy -match 'RenewalActionGroupResourceId')
 Assert 'both runner steps use the checked result parser' ([regex]::Matches($deploy, 'ConvertFrom-ClaudeRunnerResult').Count -eq 2)
 Assert 'projection sync rejects PS 5.1 explicitly' ($sync -match 'Assert-ClaudeProjectionPowerShell|PSVersion.*-lt 7' -and $sync -match 'pwsh|ClaudeProjectionChecks')
-Assert 'installer still forwards a supplied resolver app without job admission' ($installer -match 'ProjectionResolverAppId' -and $installer -match "'-ResolverAppId'" -and $installer -notmatch 'Assert-ClaudeProjectionReconciler')
-Assert 'installer refuses every flip before foundation writes' ($installer -match '(?s)if \(\$FlipProjectionAfterCleanCompare\).*Stop-ClaudeProjectionSwitch.*az group create')
-Assert 'flow refuses instead of forwarding admission claims' ($flow -match 'Stop-ClaudeProjectionSwitch' -and $flow -notmatch '-ReconcilerResourceId')
+Assert 'installer still forwards a supplied resolver app separately from switch admission' ($installer -match 'ProjectionResolverAppId' -and $installer -match "'-ResolverAppId'" -and $installer -match 'ProjectionRenewalActionGroupResourceId')
+Assert 'installer refuses missing renewal evidence before foundation writes' ($installer -match '(?s)if \(\$FlipProjectionAfterCleanCompare\).*Projection switch refused.*az group create')
+Assert 'flow forwards P86 admission claims before writing projection' ($flow -match 'Assert-ClaudeProjectionAdmission' -and $flow -match 'reconcilerResourceId' -and $flow -match '-Value \$Plan\.Data\.Desired')
 Assert 'AUM selected group lookup reuses positive Graph collection semantics' ((Get-Content (Join-Path $root 'scripts\Sync-AumMembership.ps1') -Raw) -match 'Get-ClaudeGraphGroup')
 Assert 'projection sync uses the checked Graph token helper' ($sync -match '\$graphToken = Get-GraphToken')
 Assert 'per-run deploy files are not keyed by PID alone' ($deploy -notmatch '\$NamePrefix-\$PID' -and $deploy -match 'NewGuid')
-Assert 'ARM admission and its locale-sensitive timestamp parsing are removed' ((Get-Content $checksPath -Raw) -notmatch 'function Assert-ClaudeProjectionReconciler|Get-ClaudeProjectionContainerSignature|DateTimeOffset\]::TryParse')
-Assert 'flow retains only the named-value rollback write' ($flow -match "-Value 'named-value'" -and $flow -notmatch "-Value 'projection'")
+Assert 'ARM-only admission and its locale-sensitive timestamp parsing are removed' ((Get-Content $checksPath -Raw) -notmatch 'function Assert-ClaudeProjectionReconciler|Get-ClaudeProjectionContainerSignature|DateTimeOffset\]::TryParse')
+Assert 'flow writes the desired entitlement source only after admission' ($flow -match '-Value \$Plan\.Data\.Desired' -and $flow -match 'Assert-ClaudeProjectionAdmission')
 Assert 'the Entra comparison explicitly fails on drift' ($deploy -match 'Compare-ClaudeEntitlement.ps1[\s\S]+?-ExportGatewayPath \$gateway -FailOnDrift:\$true')
 $parseErrors = $null; $tokens = $null
 $deployAst = [Management.Automation.Language.Parser]::ParseInput($deploy, [ref]$tokens, [ref]$parseErrors)
@@ -275,27 +293,27 @@ Expect-Failure 'failed Cosmos role assignment stops before runner apply' {
 $entRecord = [pscustomobject]@{ schemaVersion=2; decisions=[pscustomobject]@{ entitlementStore=[pscustomobject]@{ target='projection' } }; history=@() }
 $entDiscovery = [pscustomobject]@{ resourceGroup='rg-p84'; apimName='apim-p84'; location='eastus2'; sku='BasicV2'; subscriptionId=$FixtureSubscription; namedValues=@{ 'entitlement-source'='named-value' }; cleanComparison=$true }
 $plan = Get-ClaudeFlowStepPlan -Record $entRecord -Discovery $entDiscovery
-Expect-Failure 'actual Entitlement refuses a clean compare with no reconciler before backup' { Invoke-ClaudeFlowStep -Record $entRecord -Plan $plan } 'every developer.*503'
+Expect-Failure 'actual Entitlement refuses a clean compare with no renewal evidence before backup' { Invoke-ClaudeFlowStep -Record $entRecord -Plan $plan } 'P86 admission needs renewal runner'
 $plan.Data.CleanComparison = $false
-Expect-Failure 'actual Entitlement also refuses a dirty comparison' { Invoke-ClaudeFlowStep -Record $entRecord -Plan $plan } 'P86.*ROADMAP'
+Expect-Failure 'actual Entitlement also refuses a dirty comparison without renewal evidence' { Invoke-ClaudeFlowStep -Record $entRecord -Plan $plan } 'P86 admission needs renewal runner'
 $entRecord.decisions.entitlementStore | Add-Member reconcilerResourceId $FixtureJobId
 $plan = Get-ClaudeFlowStepPlan -Record $entRecord -Discovery $entDiscovery
-Assert 'flow plan explains blocked admission rather than preserving an approving id' (($plan.Implications -join ' ') -match 'refused unconditionally')
+Assert 'flow plan explains evidence-gated admission rather than preserving an approving id' (($plan.Implications -join ' ') -match 'Cosmos evidence')
 $installerAst = [Management.Automation.Language.Parser]::ParseInput($installer, [ref]$tokens, [ref]$parseErrors)
-$installerGuard = $installerAst.Find({ param($node) $node -is [Management.Automation.Language.IfStatementAst] -and $node.Clauses[0].Item1.Extent.Text -eq '$FlipProjectionAfterCleanCompare' -and $node.Extent.Text -match 'Stop-ClaudeProjectionSwitch' }, $true)
+$installerGuard = $installerAst.Find({ param($node) $node -is [Management.Automation.Language.IfStatementAst] -and $node.Clauses[0].Item1.Extent.Text -eq '$FlipProjectionAfterCleanCompare' -and $node.Extent.Text -match 'Projection switch refused' }, $true)
 $gatewayAssignment = $installerAst.Find({ param($node) $node -is [Management.Automation.Language.AssignmentStatementAst] -and $node.Left.Extent.Text -eq '$apimName' }, $true)
-Assert 'installer refusal precedes even gateway-name planning' ($installerGuard -and $gatewayAssignment -and $installerGuard.Extent.StartOffset -lt $gatewayAssignment.Extent.StartOffset)
+Assert 'installer missing-evidence refusal precedes even gateway-name planning' ($installerGuard -and $gatewayAssignment -and $installerGuard.Extent.StartOffset -lt $gatewayAssignment.Extent.StartOffset)
 $FlipProjectionAfterCleanCompare = $true; $ProjectionReconcilerResourceId = ''
 $SubscriptionId = $FixtureSubscription; $ResourceGroup='rg-p84'; $apimName='apim-p84'; $NamePrefix='p84fixture'
 Expect-Failure 'actual installer guard refuses without evidence before foundation writes' {
     if (-not $installerGuard) { throw 'The installer switch guard is missing.' }
     & ([scriptblock]::Create($installerGuard.Extent.Text))
-} 'every developer.*503'
+} 'P86 admission requires'
 
 foreach ($id in @('', $FixtureJobId)) {
     Reset-ProjectionFixture
     Capture { & (Join-Path $root 'scripts\Deploy-ClaudeProjection.ps1') -ResourceGroup rg-p84 -ApimName apim-p84 -NamePrefix p84fixture -FlipAfterCleanCompare -ReconcilerResourceId $id }
-    Assert "real switch entry always refuses before Azure: $id" ($CapturedError -and $CapturedOutput -match 'P86.*ROADMAP' -and $FixtureCalls.Count -eq 0)
+    Assert "real switch entry refuses insufficient evidence before Azure: $id" ($CapturedError -and $CapturedOutput -match 'P86 admission requires' -and $FixtureCalls.Count -eq 0)
 }
 
 Reset-ProjectionFixture

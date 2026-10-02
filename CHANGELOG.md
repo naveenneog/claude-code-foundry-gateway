@@ -29,6 +29,16 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P86 scheduled projection renewal.** A 30-minute Container Apps renewal job,
+  tenant-admin Graph grant script, Cosmos status evidence, email-backed alerts
+  and evidence-gated switch admission replace P84's unconditional projection
+  refusal. Admission reads Cosmos through the in-VNet runner and separately
+  verifies the pinned no-override job definition; rollback to named values
+  remains available after refresh and comparison.
+- **P86 gate correction.** The deployer, installer and guided flow tests now
+  assert the accepted evidence-gated switch contract: missing or insufficient
+  renewal evidence refuses before backup/write, while good Cosmos evidence and
+  a pinned no-override job definition admit the projection switch.
 - **P87 archives merged status sections.** `docs/STATUS.md` keeps the active packet, archive index,
   proof commands and next work; merged packet evidence now lives under `docs/status/` so the gate
   can read the active-packet line and all archived status files.

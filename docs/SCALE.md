@@ -404,12 +404,16 @@ That estimate is **not the operating total for leased reconciliations**.
 The current two-warm-instance profile bills $91.56/month at rest at the same
 published rates. It also refreshes every member's lease on every reconciliation,
 including unchanged members. At 500,000 records, hourly renewal means about
-365 million writes per 730-hour month. Using the measured **create** charge of
-5.9 RU as an illustrative input gives $538.38/month for writes alone at
-$0.25/million RU. **INFERRED, not a renewal quote:** existing-record upserts,
-Graph scanning, runner execution, telemetry and retries were not priced by that
-load. The cost script still models the read path; use `-AlwaysReadyInstances 2`
-and budget reconciliation separately, rather than presenting its total as complete.
+365 million writes per 730-hour month; the P86 default 30-minute schedule is
+about 730 million writes. Using the measured **create** charge of 5.9 RU as an
+illustrative input gives $538.38/month for hourly writes and about
+$1,076.75/month for 30-minute writes at $0.25/million RU. The same basis gives
+about $0.54/hourly or $1.08/30-minute for 500 members, and $5.38/hourly or
+$10.77/30-minute for 5,000 members. **INFERRED, not a renewal quote:**
+existing-record upserts, Graph scanning, runner execution, telemetry and
+retries were not priced by that load. The cost script still models the read
+path; use `-AlwaysReadyInstances 2` and budget reconciliation separately,
+rather than presenting its total as complete.
 
 ---
 
@@ -743,10 +747,11 @@ effective identity before a bulk flip.
 ### 5. Flip one value
 
 **Outage warning:** records expire at most **two hours from scan start**. Without continuing
-renewal, **every developer gets 503 after expiry**. A clean comparison is not renewal. P84's
-deployer, installer and guided flow refuse switching unconditionally; the supported scheduled
-reconciler, tenant-admin grant and lease alerts are proposed P86 work in [ROADMAP](ROADMAP.md).
-ARM cron, environment strings and a successful job execution cannot prove actual renewal.
+renewal, **every developer gets 503 after expiry**. A clean comparison is not renewal. P86's
+deployer, installer and guided flow admit switching only after the supported scheduled
+reconciler, tenant-admin grant, email-backed alerts and destination-bound Cosmos evidence are
+present. ARM cron, environment strings and a successful job execution cannot prove actual
+renewal.
 
 The following low-level manual operation remains documented for independently operated estates,
 after step 4's comparison and the resolver configuration in the
@@ -759,10 +764,12 @@ Set-ApimNamedValue -ResourceGroup <gateway-rg> -ApimName <apim> `
   -SubscriptionId <subscription-id> -Id entitlement-source -Value projection
 ```
 
-[ADR-0040](adr/0040-projection-preflight-and-switch.md) proposes P86 admission from destination-bound
-Cosmos evidence through the runner: oldest expiry has margin, generation advanced twice in two
-hours, and newest renewal is within 60 minutes, with a tested image/entrypoint and dry-run
-overrides rejected. That machinery is not implemented in P84.
+[ADR-0045](adr/0045-scheduled-projection-renewal.md) defines P86 admission from
+destination-bound Cosmos evidence through the runner and a separate ARM job-definition read:
+oldest expiry margin is at least 60 minutes, generation advanced twice in two hours, newest
+renewal is within 45 minutes, the action group exists and the tested image/entrypoint has no
+command, args or dry-run override. P86 proves this offline; a positive live Graph read still
+needs a tenant-admin grant.
 
 **Portal verification:** APIM > Named values shows `entitlement-source`; that stored value and
 the Container Apps Jobs > Executions blade do not prove lease renewal. Rollback conditions remain below.
