@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "steps": [
+    {
+      "id": "p90-company-custom-domains",
+      "output": "docs/guide/p90-company-custom-domains.png",
+      "target": {
+        "discover": "gateway",
+        "selectionKey": "gateway"
+      },
+      "blade": "/overview",
+      "waitFor": {
+        "text": "Gateway URL"
+      },
+      "clicks": [
+        {
+          "text": "Deployment + infrastructure",
+          "exact": true,
+          "waitFor": {
+            "text": "Custom domains"
+          }
+        },
+        {
+          "text": "Custom domains",
+          "exact": true,
+          "waitFor": {
+            "text": "Gateway"
+          }
+        }
+      ],
+      "settle": 1500,
+      "redaction": {
+        "mapEnv": "PORTAL_REDACTIONS_FILE"
+      }
+    }
+  ]
+}

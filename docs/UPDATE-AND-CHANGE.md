@@ -68,9 +68,11 @@ Manual equivalent for an in-place Basic v2 ↔ Standard v2 change:
 
 ```powershell
 .\scripts\Backup-ClaudeGateway.ps1 -ResourceGroup <rg> -ApimName <apim> -Path .\backups\before-tier.json
-az apim update -g <rg> -n <apim> --set sku.name=StandardV2
+az apim update -g <rg> -n <apim> --set sku.name=StandardV2 --enable-managed-identity true
 .\scripts\Test-ClaudeHealth.ps1 -ResourceGroup <rg> -ApimName <apim>
 ```
+
+`--enable-managed-identity true` preserves the gateway identity during the SKU update; Azure CLI `apim_update` clears `instance.identity` when `enable_managed_identity` is false. Source: https://github.com/Azure/azure-cli/blob/dev/src/azure-cli/azure/cli/command_modules/apim/custom.py.
 
 For Premium v2/injection, use the move path: deploy a new gateway with the desired SKU/network
 shape, restore the backup with `-Force`, verify health and a real request, then update clients or

@@ -73,3 +73,5 @@ onboarding/HOW-TO-USE.md
 # Redacted, but they describe this tenant and workstation.
 onboarding/support/
 True.zip
+# Logged-out Azure CLI config used by tests/Test-AzCommandsGuide.ps1 for az --help checks
+/.az-help-cache-p89/
