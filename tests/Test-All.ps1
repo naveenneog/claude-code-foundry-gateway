@@ -232,6 +232,7 @@ try {
     Invoke-Check 'Installer business units from answers'   'Test-InstallerBusinessUnitAnswers.ps1'
     Invoke-Check 'Guided flow runs the installer preflight' 'Test-GuidedFlowAnswersSchema.ps1'
     Invoke-Check 'macOS/Linux checkpoint suite shards'     'Test-BashInstallerCheckpointShards.ps1'
+    Invoke-Check 'macOS/Linux step suite shards'          'Test-BashInstallerStepShards.ps1'
     Invoke-Check 'Preflight on both PowerShell hosts'      'Test-PreflightBothHosts.ps1' -SerialLane
     Invoke-Check 'Guided diagnostics and support bundles'  'Test-Diagnose.ps1' -SerialLane
     Invoke-Check 'Wizard reaches summary on PS 5.1'        'Test-On-PS51.ps1' -SerialLane
