@@ -13,8 +13,8 @@ function Check([string]$Name,[scriptblock]$Test) {
     if($ok){Write-Host "  [OK] $Name"}else{$script:failed++;Write-Host "  [FAIL] $Name $why"}
 }
 try {
-    foreach($dir in 'scripts\flow\lib','onboarding\profiles\standard'){New-Item -ItemType Directory -Path (Join-Path $scratch $dir) -Force|Out-Null}
-    foreach($file in 'Install-ClaudeGateway.ps1','scripts\Show-Banner.ps1','scripts\Test-Prerequisites.ps1','scripts\ClaudeModelDeployment.ps1','scripts\ClaudeDesktopSignIn.ps1','scripts\ClaudeChoice.ps1','scripts\ClaudeGatewayRegion.ps1','scripts\ClaudeInstallCheckpoint.ps1','scripts\ClaudeInstallStore.ps1','scripts\ClaudeInstallResume.ps1','scripts\AzureRetailPrice.ps1','scripts\flow\FlowContract.ps1','scripts\flow\Foundation.ps1','scripts\flow\lib\LifecycleCommon.ps1'){
+    foreach($dir in 'scripts\flow\lib','onboarding\profiles\standard','schemas'){New-Item -ItemType Directory -Path (Join-Path $scratch $dir) -Force|Out-Null}
+    foreach($file in 'Install-ClaudeGateway.ps1','scripts\Show-Banner.ps1','scripts\Test-Prerequisites.ps1','scripts\ClaudeModelDeployment.ps1','scripts\ClaudeDesktopSignIn.ps1','scripts\ClaudeChoice.ps1','scripts\ClaudeGatewayRegion.ps1','scripts\ClaudeInstallCheckpoint.ps1','scripts\ClaudeInstallStore.ps1','scripts\ClaudeInstallResume.ps1','scripts\ClaudeInstallSteps.ps1','scripts\ClaudeInstallerPreflight.ps1','scripts\ClaudeInstallerAnswers.ps1','schemas\claude-gateway.answers.schema.json','scripts\AzureRetailPrice.ps1','scripts\flow\FlowContract.ps1','scripts\flow\Foundation.ps1','scripts\flow\lib\LifecycleCommon.ps1'){
         Copy-Item -LiteralPath (Join-Path $root $file) -Destination (Join-Path $scratch $file)
     }
     $inputs=Join-Path $root 'scripts\ClaudeGatewayAddressInput.ps1'

@@ -112,6 +112,11 @@ function Read-FlowAnswers {
     if ($Path) {
         $resolved = Resolve-FlowPath $Path
         if (-not (Test-Path -LiteralPath $resolved -PathType Leaf)) { throw "AnswersPath not found: $resolved" }
+        # The answers schema both installers read (ADR-0047); a guided-flow file names each answer by its flow key.
+        # A file without the schema's shape is refused here; a problem another check owns (an Entra group name,
+        # a business unit, an address input) is reported by the preflight of the plan, which is then not applied.
+        $problems = @(Test-ClaudeInstallerAnswersFile -Path $resolved -Consumer 'Start-ClaudeGateway.ps1' | Where-Object { $_.checkId -eq 'answers.schema' })
+        if ($problems.Count) { throw "The answers file $resolved does not match the answers schema (schemas/claude-gateway.answers.schema.json): $((@($problems | ForEach-Object { $_.message })) -join '; '). Nothing was planned." }
         $raw = Get-Content -LiteralPath $resolved -Raw | ConvertFrom-Json
         foreach ($p in $raw.PSObject.Properties) { $answers[$p.Name] = $p.Value }
     }
@@ -122,6 +127,35 @@ function Read-FlowAnswers {
         if ($key -match '^(address|foundation)\..*(password|encodedCertificate)$') { throw 'Certificate passwords and bytes cannot be stored in answers. Use the transient -AddressCertificatePassword SecureString parameter.' }
     }
     return $answers
+}
+
+function Test-FlowPlanPreflight($Plan) { [bool]($Plan -and $Plan.Data -and $Plan.Data.runsInstaller -and $Plan.Data.installerArgs -and -not $Plan.Data.asksInConsole) }
+
+function Invoke-FlowPreflight {
+    # A plan that runs Install-ClaudeGateway.ps1 unattended carries the installer's preflight of its
+    # arguments (ADR-0047 A8): the engine of -Preflight, bound into the plan fingerprint with the plan's
+    # data and printed after the review. Azure is read for a plan that names its subscription, while
+    # discovery reads Azure; otherwise those checks are NOT-RUN, so an empty record reads nothing (P68).
+    param([object[]]$Plans)
+    foreach ($plan in @($Plans | Where-Object { Test-FlowPlanPreflight $_ })) {
+        $in = Get-ClaudeInstallerPreflightAnswers -Bound $plan.Data.installerArgs
+        $skip = if ($env:CLAUDE_FLOW_SKIP_AZ_DISCOVERY -eq '1') { 'discovery-skipped', 'CLAUDE_FLOW_SKIP_AZ_DISCOVERY=1 skips the Azure reads' }
+        elseif (-not $in.Answers.Contains('SubscriptionId')) { 'not-answered', 'foundation.subscriptionId is not answered, so the flow reads nothing from Azure before the installer runs' }
+        else { '', '' }
+        $result = Invoke-ClaudeGatewayPreflight -Answers $in.Answers -AnswerProblems $in.Problems -Installer pwsh -SkipAzureReason $skip[0] -SkipAzureMessage $skip[1]
+        $plan.Data['preflight'] = $result
+        "Preflight of Install-ClaudeGateway.ps1 for $($plan.Step):"
+        Format-ClaudeGatewayPreflight -Result $result | ForEach-Object { "  $_" }
+    }
+}
+
+function Assert-FlowPreflight {
+    # An approved plan whose installer preflight fails is not applied: nothing is written (ADR-0047 A8).
+    param([object[]]$Plans)
+    $failed = @(foreach ($plan in @($Plans | Where-Object { $_ -and $_.Data -and $_.Data.preflight })) { @($plan.Data.preflight.checks | Where-Object { $_.result -eq 'FAIL' }) })
+    if ($failed.Count) {
+        throw "The preflight of Install-ClaudeGateway.ps1 fails, so this plan is not applied: $((@($failed | ForEach-Object { "$($_.id): $($_.message)" })) -join '; '). Nothing was written; correct the answers, then review the plan again."
+    }
 }
 
 function Set-FlowAnswersOnRecord {
@@ -475,6 +509,7 @@ if (-not $Action) {
 }
 
 $RecordPath = Resolve-FlowPath $RecordPath
+if ($AnswersPath) { . (Join-Path $root 'scripts\ClaudeInstallerAnswers.ps1') }
 $script:FlowAnswers = Read-FlowAnswers -Path $AnswersPath -InlineAnswers $NonInteractiveAnswers
 if ($Action -notin @('Setup','Change')) { $script:FlowAnswers = @{} }
 $record = Read-ClaudeDecisionRecord -Path $RecordPath
@@ -590,9 +625,13 @@ if ($attended -and -not $afterLead) {
 Set-FlowAnswersOnRecord -Record $record -Answers $script:FlowAnswers -DecisionKeys @($steps | ForEach-Object { $_.Info.DecisionKey })
 Invoke-Questions -Steps @($steps | Where-Object { $_.Info.Name -notin $askedFirst }) -Record $record -Discovery $discovery -CurrentAction $Action
 $plans = foreach ($step in $steps) { & $step.Plan -Record $record -Discovery $discovery }
+# The installer's preflight is part of a plan that runs it unattended, so the fingerprint binds it.
+if (@($plans | Where-Object { Test-FlowPlanPreflight $_ }).Count) { . (Join-Path $root 'scripts\ClaudeInstallerPreflight.ps1') }
+$preflightLines = @(Invoke-FlowPreflight -Plans $plans)
 $review = Format-ClaudeFlowReview -Plans $plans
 $fingerprint = Get-ClaudeFlowFingerprint -Plans $plans
 Write-Host $review
+foreach ($line in $preflightLines) { Write-Host $line }
 Write-Host ''
 Write-Host "Fingerprint: $fingerprint" -ForegroundColor Cyan
 if ($PlanOnly -and (Test-ClaudeInteractive) -and @($plans | Where-Object { $_.Data -and $_.Data.runsInstaller }).Count) {
@@ -601,6 +640,7 @@ if ($PlanOnly -and (Test-ClaudeInteractive) -and @($plans | Where-Object { $_.Da
 
 if ($PlanOnly) { return }
 if ($WhatIfPreference) { Write-Host 'WhatIf: no guided flow changes were written.' -ForegroundColor Yellow; return }
+Assert-FlowPreflight -Plans $plans
 
 if ($ApprovedPlanFingerprint) {
     if ($ApprovedPlanFingerprint.Length -lt 8 -or -not $fingerprint.StartsWith($ApprovedPlanFingerprint, [StringComparison]::OrdinalIgnoreCase)) {

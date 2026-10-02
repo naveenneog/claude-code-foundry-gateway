@@ -21,7 +21,7 @@ $ids = @('answers.schema', 'answers.crossField', 'target.tenant', 'target.subscr
 $consumers = @('Install-ClaudeGateway.ps1', 'install-claude-gateway.sh', 'Start-ClaudeGateway.ps1')
 
 # ------------------------------------------------------------------ the schema document
-$schemaPath = Join-Path $root 'schemas\claude-gateway.answers.schema.json'
+$schemaPath = Join-Path $root 'schemas/claude-gateway.answers.schema.json'
 $schema = $null; $schemaError = ''
 # Read as Windows PowerShell 5.1 reads it: without -AsHashtable, names that differ only in case fail.
 try { $schema = [IO.File]::ReadAllText($schemaPath) | ConvertFrom-Json -ErrorAction Stop } catch { $schemaError = $_.Exception.Message }
@@ -42,7 +42,9 @@ Assert 'A1 conditional answers carry declarative requires: equality (certificate
     $kv.Count -eq 1 -and $kv[0].answer -eq 'AddressCertificateSource' -and $kv[0].equals -eq 'KeyVault' -and $pfx.Count -eq 1 -and $pfx[0].equals -eq 'Pfx' -and
     $zone.Count -eq 1 -and $zone[0].answer -eq 'AddressDnsMode' -and $zone[0].equals -eq 'AzureDns' -and $client.Count -eq 1 -and (@($client[0].in) -join ',') -eq 'external-idp-browser,external-idp-broker') (
     ($kv + $pfx + $zone + $client | ConvertTo-Json -Compress -Depth 4))
-$secretNamed = @($props | Where-Object { $_.Name -match '(?i)password|secret|token' } | ForEach-Object Name)
+# DesktopBearerTokenType names a choice (id_token or access_token), not a token; every other name with
+# Token in it would hold one.
+$secretNamed = @($props | Where-Object { $_.Name -match '(?i)password|secret|(?<!bearer)token' } | ForEach-Object Name)
 $secrets = if ($schema) { @($schema.'x-secrets'.PSObject.Properties.Name) } else { @() }
 Assert 'A4 no answer is a secret: AddressCertificatePassword is listed as a secret, and no answer is named like one' ($secrets -contains 'AddressCertificatePassword' -and -not $secretNamed.Count -and
     -not ($props.Name -contains 'AddressCertificatePassword')) ($secretNamed -join ', ')
@@ -125,7 +127,7 @@ Add-Case 'names-differ-in-case' $pw @('answers.schema') -Text '{"Sku": "BasicV2"
 Add-Case 'not-an-object' $pw @('answers.schema') -Text '["Sku"]'
 
 # PowerShell: the library the installer dot-sources.
-$library = Join-Path $root 'scripts\ClaudeInstallerAnswers.ps1'
+$library = Join-Path $root 'scripts/ClaudeInstallerAnswers.ps1'
 $psResults = @{}
 $psError = ''
 try {

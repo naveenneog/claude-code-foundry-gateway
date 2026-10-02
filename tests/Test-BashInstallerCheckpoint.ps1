@@ -12,24 +12,40 @@ function Assert($label, $condition, $detail = '') {
     if ($condition) { Write-Host "  [OK]   $label" -ForegroundColor Green }
     else { Write-Host "  [FAIL] $label$(if ($detail) { " - $detail" })" -ForegroundColor Red; $script:fail++ }
 }
+# Test-All runs the suite as two checks, -Shard 0/2 and -Shard 1/2, each within the default per-check
+# timeout (docs/adr/0047-lean-installer-phase-0.md A14); without -Shard every group runs. Each group of
+# checks runs in one shard, and tests/Test-BashInstallerCheckpointShards.ps1 checks that every check is in one group.
+# first: the first runs nothing later starts from; resume: base, running, preexisting and the reruns that
+# resume, wait or meet a lock; corrupt: the reruns from base that refuse at startup (shard 1 runs base's
+# first run for them, without its checks).
+$script:ShardGroups = [ordered]@{ static = 1; first = 1; resume = 0; corrupt = 1 }
+$script:ShardCount = 2
+function Test-ShardGroup([string]$Group) {
+    if (-not $Shard) { return $true }
+    if ($Shard -notmatch '^(\d+)/(\d+)$' -or [int]$Matches[2] -ne $script:ShardCount -or [int]$Matches[1] -ge $script:ShardCount) { throw "-Shard is i/$($script:ShardCount) with i from 0 to $($script:ShardCount - 1), not '$Shard'." }
+    return [int]$script:ShardGroups[$Group] -eq [int]$Matches[1]
+}
 Write-Host ''
-Write-Host 'Installer checkpoint and resume (bash installer)' -ForegroundColor Cyan
+Write-Host "Installer checkpoint and resume (bash installer)$(if ($Shard) { ", shard $Shard" })" -ForegroundColor Cyan
 $watch = [Diagnostics.Stopwatch]::StartNew()
 
 . (Join-Path $PSScriptRoot 'BashInstallerHarness.ps1')
 
 $installerPath = Join-Path $root 'install-claude-gateway.sh'
-$libraryPaths = @('scripts/install-checkpoint.sh', 'scripts/install-store.sh', 'scripts/install-resume.sh') | ForEach-Object { Join-Path $root $_ }
+# The libraries the installer sources: P91's checkpoint, store and resume, and P92's steps, answers, preflight and prices.
+$libraryPaths = @('scripts/install-checkpoint.sh', 'scripts/install-store.sh', 'scripts/install-resume.sh', 'scripts/install-steps.sh', 'scripts/install-answers.sh', 'scripts/install-preflight.sh', 'scripts/install-prices.sh') | ForEach-Object { Join-Path $root $_ }
 
 # ------------------------------------------------------------------ static checks
 # macOS ships bash 3.2 (runner image macOS 26: Bash 3.2.57, docs/UNKNOWNS.md U71), and BSD tools.
-$library = if (-not @($libraryPaths | Where-Object { -not (Test-Path -LiteralPath $_) }).Count) { @($libraryPaths | ForEach-Object { [IO.File]::ReadAllText($_) }) -join "`n" } else { '' }
-$syntaxOk = [bool]$library
-foreach ($p in $libraryPaths) { if (-not (Test-Path -LiteralPath $p) -or (& $bash -n (ConvertTo-BashPath $p) 2>&1 | Out-String).Trim() -ne '' -or $LASTEXITCODE -ne 0) { $syntaxOk = $false } }
-Assert 'the checkpoint libraries exist and pass bash -n' $syntaxOk
-$forbidden = '(?m)^[^#\n]*(\b(declare|local|typeset)\s+-[a-zA-Z]*A\b|\bmapfile\b|\breadarray\b|\$\{[^}\n]*(,,|\^\^)[^}\n]*\}|\|&|&>>|\bcoproc\b|\bsed\s+-i(\s|$)|\bdate\s+(-[a-zA-Z]*\s+)*-d\b|\breadlink\s+-f\b|\bstat\s+-c\b|\bfind\b[^\n]*-printf\b|\bgrep\s+-[a-zA-Z]*P)'
-$hits = @([regex]::Matches(([IO.File]::ReadAllText($installerPath) + "`n" + $library), $forbidden) | ForEach-Object { $_.Value.Trim() })
-Assert 'the installer and its library use nothing that needs bash 4 or GNU tools' ($library -and -not $hits.Count) ($hits -join ' | ')
+if (Test-ShardGroup 'static') {
+    $library = if (-not @($libraryPaths | Where-Object { -not (Test-Path -LiteralPath $_) }).Count) { @($libraryPaths | ForEach-Object { [IO.File]::ReadAllText($_) }) -join "`n" } else { '' }
+    $syntaxOk = [bool]$library
+    foreach ($p in $libraryPaths) { if (-not (Test-Path -LiteralPath $p) -or (& $bash -n (ConvertTo-BashPath $p) 2>&1 | Out-String).Trim() -ne '' -or $LASTEXITCODE -ne 0) { $syntaxOk = $false } }
+    Assert 'the checkpoint libraries exist and pass bash -n' $syntaxOk
+    $forbidden = '(?m)^[^#\n]*(\b(declare|local|typeset)\s+-[a-zA-Z]*A\b|\bmapfile\b|\breadarray\b|\$\{[^}\n]*(,,|\^\^)[^}\n]*\}|\|&|&>>|\bcoproc\b|\bsed\s+-i(\s|$)|\bdate\s+(-[a-zA-Z]*\s+)*-d\b|\breadlink\s+-f\b|\bstat\s+-c\b|\bfind\b[^\n]*-printf\b|\bgrep\s+-[a-zA-Z]*P)'
+    $hits = @([regex]::Matches(([IO.File]::ReadAllText($installerPath) + "`n" + $library), $forbidden) | ForEach-Object { $_.Value.Trim() })
+    Assert 'the installer and its library use nothing that needs bash 4 or GNU tools' ($library -and -not $hits.Count) ($hits -join ' | ')
+}
 
 
 $scratch = [IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetTempPath()) ('p91-bash-checkpoint-' + [guid]::NewGuid().ToString('N'))))
@@ -43,17 +59,24 @@ $resumesAt = '(?m)^\s+resumes at: '
 $sleeper = $null
 try {
     # ------------------------------------------------------------------ first runs
-    $w = New-World; $w.inject.groupCreateFail = @('claude-code-premium')
-    $base = New-Scenario 'base' $w
-    $w = New-World; $w.inject.createMode = 'disconnect'; $w.inject.runningPolls = @('Running', 'Running')
-    $running = New-Scenario 'running' $w
-    $w = New-World; $w.inject.createMode = 'fail'; $w.resourceGroups['rg-p91'] = 'eastus2'; $w.apims['apim-p91gw'] = [ordered]@{ rg = 'rg-p91'; sku = 'BasicV2'; location = 'eastus2'; identity = 'SystemAssigned'; apis = @('claude-foundry') }
-    $preexisting = New-Scenario 'preexisting' $w
+    # Only the scenarios of the groups this shard runs are made.
+    $base = $null; $running = $null; $preexisting = $null; $whatIf = $null; $untrusted = [ordered]@{}
+    if ((Test-ShardGroup 'resume') -or (Test-ShardGroup 'corrupt')) {
+        $w = New-World; $w.inject.groupCreateFail = @('claude-code-premium')
+        $base = New-Scenario 'base' $w
+    }
+    if (Test-ShardGroup 'resume') {
+        $w = New-World; $w.inject.createMode = 'disconnect'; $w.inject.runningPolls = @('Running', 'Running')
+        $running = New-Scenario 'running' $w
+        $w = New-World; $w.inject.createMode = 'fail'; $w.resourceGroups['rg-p91'] = 'eastus2'; $w.apims['apim-p91gw'] = [ordered]@{ rg = 'rg-p91'; sku = 'BasicV2'; location = 'eastus2'; identity = 'SystemAssigned'; apis = @('claude-foundry') }
+        $preexisting = New-Scenario 'preexisting' $w
+        $whatIf = New-Scenario 'whatif' (New-World)
+    }
+    if (Test-ShardGroup 'first') {
     $w = New-World; $w.inject.groupCreateFail = @('claude-code-premium')
     $noDrive = New-Scenario 'cloudshell-nodrive' $w
     $drive = New-Scenario 'cloudshell-drive' $w
     New-Item -ItemType Directory -Force -Path (Join-Path $drive.Home 'clouddrive') | Out-Null
-    $whatIf = New-Scenario 'whatif' (New-World)
     # A group read by name: az ad group list --display-name matches a prefix, so only an exact name is
     # the group; a failed read or two groups with the name create nothing.
     $w = New-World; $w.groups['00000000-0000-4000-8000-0000000000e7'] = 'claude-code-standard-old'; $w.groups['00000000-0000-4000-8000-0000000000e2'] = 'claude-code-premium'
@@ -79,7 +102,6 @@ try {
     # the run keeps no store; with its checkpoint, lock or temporary file there it refuses;
     # CLAUDE_GATEWAY_STATE_DIR naming the same place refuses.
     $groupHome = "ckpt_perm_probe_() { PERM_LINK=0; PERM_MINE=1; PERM_ROOT=0; PERM_OWNER='p91-me'; PERM_MODE='drwx------'; [ `"`$1`" = `"`$CKPT_HOME_REAL`" ] && PERM_MODE='drwxrwx---'; return 0; }"
-    $untrusted = [ordered]@{}
     foreach ($n in 'untrusted-free', 'untrusted-checkpoint', 'untrusted-lock', 'untrusted-temp', 'untrusted-named', 'untrusted-planted') {
         $s = New-Scenario $n (New-World)
         $place = Join-Path $s.Home 'clouddrive/.claude-gateway'
@@ -142,280 +164,308 @@ try {
     # rocket has its 6 code points.
     $nameAstral = New-Scenario 'name-astral' (& $unicodeWorld $rocketLower @([ordered]@{ id = (& $gid 5); displayName = $rocketUpper },
         [ordered]@{ id = (& $gid 6); displayName = 'team-ab' }, [ordered]@{ id = (& $gid 7); displayName = 'team-abcd' }) -Keep)
+    }
     $nameArgs = { param([string]$Name) $a = @($args0); $i = [array]::IndexOf($a, '--yes'); @($a[0..($i - 1)]) + @('--standard-group', $Name) + @($a[$i..($a.Count - 1)]) }
     $shellEnv = @{ AZUREPS_HOST_ENVIRONMENT = 'cloud-shell/1.0'; CLAUDE_GATEWAY_STATE_DIR = $null }
-    $first = @(
-        ($runBase1 = New-Run $base $args0)
-        ($runRunning1 = New-Run $running $args0)
-        ($runPre1 = New-Run $preexisting $args0)
-        ($runNoDrive = New-Run $noDrive $args0 $shellEnv)
-        ($runDrive = New-Run $drive $args0 $shellEnv)
-        ($runWhatIf = New-Run $whatIf ($args0 + '--what-if'))
-        ($runGraphPrefix = New-Run $graphPrefix $args0)
-        ($runGraphRead = New-Run $graphRead $args0)
-        ($runGraphTwins = New-Run $graphTwins $args0)
-        ($runUnrecorded = New-Run $unrecorded $args0)
-        ($runNoDir = New-Run $noDir $args0 @{ CLAUDE_GATEWAY_STATE_DIR = ((ConvertTo-BashPath $blocker) + '/state') })
-        ($runNameCase = New-Run $nameCase (& $nameArgs $nameLower))
-        ($runNameLonger = New-Run $nameLonger (& $nameArgs $nameLower))
-        ($runNameTwins = New-Run $nameTwins (& $nameArgs $nameLower))
-        ($runNameAstral = New-Run $nameAstral (& $nameArgs $rocketLower))
-        ($runOutside = New-Run $outside $args0 @{ CLAUDE_GATEWAY_STATE_DIR = $outsideDir })
-        ($runQuoteInput = New-Run $quoteInput (& $nameArgs "O'Brien"))
-    )
-    foreach ($u in $untrusted.Values) { $u.Run = New-Run $u.Scenario $args0 $u.Env; $first += $u.Run }
+    # The runs of the groups this shard runs; the reruns start from base, running and preexisting after run 1.
+    $first = @()
+    if ($base) { $first += ($runBase1 = New-Run $base $args0) }
+    if (Test-ShardGroup 'resume') {
+        $first += @(
+            ($runRunning1 = New-Run $running $args0)
+            ($runPre1 = New-Run $preexisting $args0)
+            ($runWhatIf = New-Run $whatIf ($args0 + '--what-if'))
+        )
+    }
+    if (Test-ShardGroup 'first') {
+        $first += @(
+            ($runNoDrive = New-Run $noDrive $args0 $shellEnv)
+            ($runDrive = New-Run $drive $args0 $shellEnv)
+            ($runGraphPrefix = New-Run $graphPrefix $args0)
+            ($runGraphRead = New-Run $graphRead $args0)
+            ($runGraphTwins = New-Run $graphTwins $args0)
+            ($runUnrecorded = New-Run $unrecorded $args0)
+            ($runNoDir = New-Run $noDir $args0 @{ CLAUDE_GATEWAY_STATE_DIR = ((ConvertTo-BashPath $blocker) + '/state') })
+            ($runNameCase = New-Run $nameCase (& $nameArgs $nameLower))
+            ($runNameLonger = New-Run $nameLonger (& $nameArgs $nameLower))
+            ($runNameTwins = New-Run $nameTwins (& $nameArgs $nameLower))
+            ($runNameAstral = New-Run $nameAstral (& $nameArgs $rocketLower))
+            ($runOutside = New-Run $outside $args0 @{ CLAUDE_GATEWAY_STATE_DIR = $outsideDir })
+            ($runQuoteInput = New-Run $quoteInput (& $nameArgs "O'Brien"))
+        )
+        foreach ($u in $untrusted.Values) { $u.Run = New-Run $u.Scenario $args0 $u.Env; $first += $u.Run }
+    }
     $r1 = Invoke-Runs $first
-    $b1 = $r1[$runBase1.Dir]
-    $cpFile = Get-CheckpointFile $base
-    $cp = if ($cpFile) { try { [IO.File]::ReadAllText($cpFile.FullName) | ConvertFrom-Json } catch { $null } } else { $null }
-    $groups = if ($cp) { @(@($cp.steps | Where-Object { $_.id -eq 'entra-groups' })[0].receipt.groups) } else { @() }
-    $createdId = [string](@($groups | Where-Object { $_.origin -eq 'created' })[0].id)
-    Assert 'S11 run 1 keeps its checkpoint after a group it could not create, with the created group''s id' ($b1.ExitCode -eq 0 -and $cpFile -and $cpFile.BaseName -eq (Get-BashKey $base.Repo) -and
-        $createdId -match '^[0-9a-f-]{36}$' -and @($cp.steps | Where-Object { $_.id -eq 'entra-groups' })[0].state -eq 'incomplete' -and $b1.Out -match '(?m)Resume: ') (Get-Tail $b1)
-    Assert 'S11 the checkpoint exists before the first change, and --what-if writes none' ((@($b1.Snapshots) -contains 'checkpoint-at-group-create present') -and
-        -not (Test-Path -LiteralPath $whatIf.State)) ($b1.Snapshots -join '; ')
-    $text = if ($cpFile) { [IO.File]::ReadAllText($cpFile.FullName) } else { '' }
-    $answers = 'SubscriptionId', 'FoundryAccount', 'FoundryResourceGroup', 'ResourceGroup', 'Location', 'NamePrefix', 'PublisherEmail', 'Sku', 'TpmStandard', 'QuotaStandard', 'TpmPremium', 'QuotaPremium', 'CallsPerMinute', 'StandardGroup', 'PremiumGroup'
-    $extra = if ($cp) { @(@($cp.PSObject.Properties.Name | Where-Object { $_ -notin 'schema', 'schemaVersion', 'runId', 'installer', 'installerFingerprint', 'installerCommit', 'checkout', 'createdUtc', 'updatedUtc', 'binding', 'answers', 'steps' }) +
-        @($cp.answers.PSObject.Properties.Name | Where-Object { $_ -notin $answers })) } else { @('no checkpoint') }
-    Assert 'S10 the bash checkpoint holds the schema''s keys only, written by bash, and no secret' ($cp -and $cp.installer -eq 'bash' -and -not $extra.Count -and
-        $text -notmatch '(?i)eyJ[A-Za-z0-9_-]{4,}\.|accountkey=|sharedaccesssignature|-----begin|password|accesstoken') ($extra -join ', ')
-    $nd = $r1[$runNoDrive.Dir]
-    Assert 'S12 bash in Cloud Shell without clouddrive warns and prints the resume command with the recorded answers on one line' ($nd.Out -match '(?m)\[WARN\].*Cloud Shell.*clouddrive' -and
-        $nd.Out -match "(?m)^\s*Resume: cd '.+' && \./install-claude-gateway\.sh .*--resource-group 'rg-p91'.*--name-prefix 'p91gw'" -and
-        $null -ne (Get-CheckpointFile $noDrive (Join-Path $noDrive.Home '.claude-gateway'))) (Get-Tail $nd)
-    $dr = $r1[$runDrive.Dir]
-    Assert 'S12 bash with clouddrive keeps the checkpoint under it and prints the 20-minute line before the deployment' ($null -ne (Get-CheckpointFile $drive (Join-Path $drive.Home 'clouddrive/.claude-gateway')) -and
-        $dr.Out -notmatch '(?m)\[WARN\].*clouddrive' -and $dr.Out -match '(?m)20 minutes without interactive activity.*Resume: ') (Get-Tail $dr)
-    $gp = $r1[$runGraphPrefix.Dir]
-    Assert 'R5 bash a group name that only longer names start with is absent and created once; an exact name is reused' ($gp.ExitCode -eq 0 -and
-        (Get-Calls $gp 'ad group create --display-name claude-code-standard*').Count -eq 1 -and -not (Get-Calls $gp 'ad group create --display-name claude-code-premium*').Count) (Get-Tail $gp)
-    $gr = $r1[$runGraphRead.Dir]
-    Assert 'R5 bash a failed read of a group by name refuses on one line and creates no group' ((Test-Refusal $gr 'claude-code-standard') -and [string]@(Get-ErrLines $gr)[0] -match 'by name' -and
-        -not (Get-Calls $gr 'ad group create*').Count) (Get-Tail $gr)
-    $gt = $r1[$runGraphTwins.Dir]
-    $gtLine = [string]@(Get-ErrLines $gt)[0]
-    Assert 'R5 bash two groups with the configured name refuse on one line naming both ids, and no third group is created' ((Test-Refusal $gt 'claude-code-standard') -and
-        $gtLine -match '0000000000e8' -and $gtLine -match '0000000000e9' -and -not (Get-Calls $gt 'ad group create*').Count) (Get-Tail $gt)
-    $ur = $r1[$runUnrecorded.Dir]
-    Assert 'S11 S4 a running claude-gw- deployment that no checkpoint records is awaited before the one deployment this run creates' ($ur.ExitCode -eq 0 -and
-        (Get-Order $ur 'deployment group show*claude-gw-20260101000000*' 'deployment group create*') -and (Get-Calls $ur 'deployment group create*').Count -eq 1) (Get-Tail $ur)
-    $nx = $r1[$runNoDir.Dir]
-    Assert 'R6 bash a state directory that cannot be created: the run warns, prints the resume command with the answers and completes' ($nx.ExitCode -eq 0 -and
-        $nx.Out -match '(?m)\[WARN\].*could not be created' -and $nx.Out -match "(?m)^\s*Resume: cd '.+' && \./install-claude-gateway\.sh .*--resource-group 'rg-p91'" -and
-        (Get-Calls $nx 'deployment group create*').Count -eq 1) (Get-Tail $nx)
-    $standardOf = { param($Scenario) $f = Get-CheckpointFile $Scenario; if ($f) { $c = [IO.File]::ReadAllText($f.FullName) | ConvertFrom-Json
-            @(@($c.steps | Where-Object { $_ -and $_.id -eq 'entra-groups' })[0].receipt.groups | Where-Object { $_ -and $_.role -eq 'standard' })[0] } }
-    $uc = $r1[$runNameCase.Dir]
-    $ucGroup = & $standardOf $nameCase
-    Assert 'R5 bash a non-ASCII name whose one same-length candidate differs in case is that group: its id is recorded as pre-existing, nothing is created' ($uc.ExitCode -eq 0 -and
-        $ucGroup.id -eq (& $gid 1) -and $ucGroup.origin -eq 'pre-existing' -and -not (Get-Calls $uc "ad group create --display-name $nameLower *").Count) (Get-Tail $uc)
-    $ul = $r1[$runNameLonger.Dir]
-    Assert 'R5 bash longer names that start with a non-ASCII name, the name in another normalization form among them, are not that group: created once' ($ul.ExitCode -eq 0 -and
-        @($ul.Az | Where-Object { $_ -clike "ad group create --display-name $nameLower *" }).Count -eq 1) (Get-Tail $ul)
-    $ut = $r1[$runNameTwins.Dir]
-    $utLine = [string]@(Get-ErrLines $ut)[0]
-    Assert 'R5 bash two same-length candidates for a non-ASCII name refuse on one line naming both ids, and create nothing' ((Test-Refusal $ut 'by name') -and
-        $utLine -match '0000000001e3' -and $utLine -match '0000000001e4' -and -not (Get-Calls $ut 'ad group create*').Count) (Get-Tail $ut)
-    $ua = $r1[$runNameAstral.Dir]
-    $uaGroup = & $standardOf $nameAstral
-    Assert 'R5 bash an astral-plane name counts code points as PowerShell does: the one candidate with as many code points is recorded, nothing is created' ($ua.ExitCode -eq 0 -and
-        $uaGroup.id -eq (& $gid 5) -and $uaGroup.origin -eq 'pre-existing' -and -not (Get-Calls $ua "ad group create --display-name $rocketLower *").Count) (Get-Tail $ua)
-    $od = $r1[$runOutside.Dir]
-    $odLine = [string]@(Get-ErrLines $od)[0]
-    Assert 'R6 bash a state directory outside $HOME refuses at startup on one line naming $HOME; nothing is read or created' ($od.ExitCode -eq 1 -and @(Get-ErrLines $od).Count -eq 1 -and
-        $odLine -match '^Refused: the install checkpoint directory .+/elsewhere/state .*not inside the home directory .+/home' -and $odLine -match 'Nothing was read or changed' -and
-        -not (Get-Calls $od 'account set*').Count -and -not (Test-Path -LiteralPath (Join-Path $outside.Dir 'elsewhere'))) (Get-Tail $od)
-    $u = $untrusted['untrusted-free']; $uf = $r1[$u.Run.Dir]
-    Assert 'R6 bash a default place that fails a check, with no file of this checkout there, keeps no store: one warning naming the place and the check, the resume command with the answers, and the run completes writing nothing there' (
-        $uf.ExitCode -eq 0 -and @($uf.Out -split "`n" | Where-Object { $_ -match '\[WARN\] .*keeps no install checkpoint' }).Count -eq 1 -and
-        $uf.Out -match '(?m)\[WARN\] .*/clouddrive/\.claude-gateway.*drwxrwx---.*\. This run keeps no install checkpoint\.' -and
-        $uf.Out -match "(?m)^\s*Resume: cd '.+' && \./install-claude-gateway\.sh .*--resource-group 'rg-p91'.*--name-prefix 'p91gw'" -and
-        $uf.Out -match "(?m)20 minutes without interactive activity; the ARM deployment outlives the session, and this run keeps no install checkpoint\. Resume: .*--resource-group 'rg-p91'" -and
-        (Get-Calls $uf 'deployment group create*').Count -eq 1 -and -not (Test-Path -LiteralPath $u.Place)) (Get-Tail $uf)
-    $held = @(foreach ($n in 'untrusted-checkpoint', 'untrusted-lock', 'untrusted-temp') {
-            $u = $untrusted[$n]; $res = $r1[$u.Run.Dir]; $line = [string]@(Get-ErrLines $res)[0]
-            if (-not ($res.ExitCode -eq 1 -and @(Get-ErrLines $res).Count -eq 1 -and $line -match '^Refused: ' -and $line.Contains('/clouddrive/.claude-gateway/' + (Split-Path $u.File -Leaf)) -and
-                    $line -match 'drwxrwx---' -and $line -match 'Nothing was read or changed\. Next step: inspect the file, then remove it or correct the permissions, then rerun: cd .+ && \./install-claude-gateway\.sh' -and
-                    $u.Hash -and (Get-FileHash -LiteralPath $u.File -Algorithm SHA256).Hash -eq $u.Hash -and -not (Get-Calls $res 'account set*').Count)) { "${n}: $(Get-Tail $res)" } })
-    Assert 'R6 bash a default place that fails a check refuses at startup when the checkpoint, lock or a temporary file of this checkout is there: one line naming the file, the check and the next step; the file is kept' (-not $held.Count) ($held -join ' || ')
-    $u = $untrusted['untrusted-named']; $un = $r1[$u.Run.Dir]; $unLine = [string]@(Get-ErrLines $un)[0]
-    Assert 'R6 bash CLAUDE_GATEWAY_STATE_DIR naming a place that fails a check refuses at startup on one line naming the variable and the check, with no file of this checkout there; nothing is created' (
-        $un.ExitCode -eq 1 -and @(Get-ErrLines $un).Count -eq 1 -and $unLine -match '^Refused: .*drwxrwx---' -and $unLine -match 'CLAUDE_GATEWAY_STATE_DIR' -and
-        $unLine -match 'Nothing was read or changed' -and -not (Get-Calls $un 'account set*').Count -and -not (Test-Path -LiteralPath $u.Place)) (Get-Tail $un)
-    $u = $untrusted['untrusted-planted']; $up = $r1[$u.Run.Dir]
-    # The place's own last-write time changes when a file is created or removed in it during the run.
-    $after = "$((Get-Item -LiteralPath $u.Place -Force).LastWriteTimeUtc.Ticks);" + (@(Get-ChildItem -LiteralPath $u.Place -Force -ErrorAction SilentlyContinue | Sort-Object Name | ForEach-Object { "$($_.Name)|$($_.Length)|$($_.LastWriteTimeUtc.Ticks)" }) -join ';')
-    Assert 'R6 bash Security ruling: a default place that fails a check and holds only another checkout''s unreadable checkpoint and lock is neither read, written nor locked; the run completes without a store' (
-        $up.ExitCode -eq 0 -and $up.Out -match '\[WARN\] .*This run keeps no install checkpoint\.' -and $u.Listing -and $after -eq $u.Listing -and
-        (Get-Calls $up 'deployment group create*').Count -eq 1) "$(Get-Tail $up) || before $($u.Listing) || after $after"
-    $qi = $r1[$runQuoteInput.Dir]; $qiLine = [string]@(Get-ErrLines $qi)[0]
-    Assert 'R5 bash a tier group name with a single quote is refused at input on one line naming --standard-group and the OData string literal; nothing is created' (
-        (Test-Refusal $qi '^Refused: --standard-group ''O''Brien'': Entra group names containing a single quote are not supported, because Azure CLI places the name inside an OData string literal') -and
-        -not (Get-Calls $qi 'ad group*').Count -and -not (Get-Calls $qi 'deployment group create*').Count -and -not (Get-CheckpointFile $quoteInput)) $qiLine
+    $r2 = @{}
+    if (Test-ShardGroup 'resume') {
+        $b1 = $r1[$runBase1.Dir]
+        $cpFile = Get-CheckpointFile $base
+        $cp = if ($cpFile) { try { [IO.File]::ReadAllText($cpFile.FullName) | ConvertFrom-Json } catch { $null } } else { $null }
+        $groups = if ($cp) { @(@($cp.steps | Where-Object { $_.id -eq 'entra-groups' })[0].receipt.groups) } else { @() }
+        $createdId = [string](@($groups | Where-Object { $_.origin -eq 'created' })[0].id)
+        Assert 'S11 run 1 keeps its checkpoint after a group it could not create, with the created group''s id' ($b1.ExitCode -eq 0 -and $cpFile -and $cpFile.BaseName -eq (Get-BashKey $base.Repo) -and
+            $createdId -match '^[0-9a-f-]{36}$' -and @($cp.steps | Where-Object { $_.id -eq 'entra-groups' })[0].state -eq 'incomplete' -and $b1.Out -match '(?m)Resume: ') (Get-Tail $b1)
+        Assert 'S11 the checkpoint exists before the first change, and --what-if writes none' ((@($b1.Snapshots) -contains 'checkpoint-at-group-create present') -and
+            -not (Test-Path -LiteralPath $whatIf.State)) ($b1.Snapshots -join '; ')
+        $text = if ($cpFile) { [IO.File]::ReadAllText($cpFile.FullName) } else { '' }
+        $answers = 'SubscriptionId', 'FoundryAccount', 'FoundryResourceGroup', 'ResourceGroup', 'Location', 'NamePrefix', 'PublisherEmail', 'Sku', 'TpmStandard', 'QuotaStandard', 'TpmPremium', 'QuotaPremium', 'CallsPerMinute', 'StandardGroup', 'PremiumGroup'
+        $extra = if ($cp) { @(@($cp.PSObject.Properties.Name | Where-Object { $_ -notin 'schema', 'schemaVersion', 'runId', 'installer', 'installerFingerprint', 'installerCommit', 'checkout', 'createdUtc', 'updatedUtc', 'binding', 'answers', 'steps' }) +
+            @($cp.answers.PSObject.Properties.Name | Where-Object { $_ -notin $answers })) } else { @('no checkpoint') }
+        Assert 'S10 the bash checkpoint holds the schema''s keys only, written by bash, and no secret' ($cp -and $cp.installer -eq 'bash' -and -not $extra.Count -and
+            $text -notmatch '(?i)eyJ[A-Za-z0-9_-]{4,}\.|accountkey=|sharedaccesssignature|-----begin|password|accesstoken') ($extra -join ', ')
+    }
+    if (Test-ShardGroup 'first') {
+        $nd = $r1[$runNoDrive.Dir]
+        Assert 'S12 bash in Cloud Shell without clouddrive warns and prints the resume command with the recorded answers on one line' ($nd.Out -match '(?m)\[WARN\].*Cloud Shell.*clouddrive' -and
+            $nd.Out -match "(?m)^\s*Resume: cd '.+' && \./install-claude-gateway\.sh .*--resource-group 'rg-p91'.*--name-prefix 'p91gw'" -and
+            $null -ne (Get-CheckpointFile $noDrive (Join-Path $noDrive.Home '.claude-gateway'))) (Get-Tail $nd)
+        $dr = $r1[$runDrive.Dir]
+        Assert 'S12 bash with clouddrive keeps the checkpoint under it and prints the 20-minute line before the deployment' ($null -ne (Get-CheckpointFile $drive (Join-Path $drive.Home 'clouddrive/.claude-gateway')) -and
+            $dr.Out -notmatch '(?m)\[WARN\].*clouddrive' -and $dr.Out -match '(?m)20 minutes without interactive activity.*Resume: ') (Get-Tail $dr)
+        $gp = $r1[$runGraphPrefix.Dir]
+        Assert 'R5 bash a group name that only longer names start with is absent and created once; an exact name is reused' ($gp.ExitCode -eq 0 -and
+            (Get-Calls $gp 'ad group create --display-name claude-code-standard*').Count -eq 1 -and -not (Get-Calls $gp 'ad group create --display-name claude-code-premium*').Count) (Get-Tail $gp)
+        $gr = $r1[$runGraphRead.Dir]
+        Assert 'R5 bash a failed read of a group by name refuses on one line and creates no group' ((Test-Refusal $gr 'claude-code-standard') -and [string]@(Get-ErrLines $gr)[0] -match 'by name' -and
+            -not (Get-Calls $gr 'ad group create*').Count) (Get-Tail $gr)
+        $gt = $r1[$runGraphTwins.Dir]
+        $gtLine = [string]@(Get-ErrLines $gt)[0]
+        Assert 'R5 bash two groups with the configured name refuse on one line naming both ids, and no third group is created' ((Test-Refusal $gt 'claude-code-standard') -and
+            $gtLine -match '0000000000e8' -and $gtLine -match '0000000000e9' -and -not (Get-Calls $gt 'ad group create*').Count) (Get-Tail $gt)
+        $ur = $r1[$runUnrecorded.Dir]
+        Assert 'S11 S4 a running claude-gw- deployment that no checkpoint records is awaited before the one deployment this run creates' ($ur.ExitCode -eq 0 -and
+            (Get-Order $ur 'deployment group show*claude-gw-20260101000000*' 'deployment group create*') -and (Get-Calls $ur 'deployment group create*').Count -eq 1) (Get-Tail $ur)
+        $nx = $r1[$runNoDir.Dir]
+        Assert 'R6 bash a state directory that cannot be created: the run warns, prints the resume command with the answers and completes' ($nx.ExitCode -eq 0 -and
+            $nx.Out -match '(?m)\[WARN\].*could not be created' -and $nx.Out -match "(?m)^\s*Resume: cd '.+' && \./install-claude-gateway\.sh .*--resource-group 'rg-p91'" -and
+            (Get-Calls $nx 'deployment group create*').Count -eq 1) (Get-Tail $nx)
+        $standardOf = { param($Scenario) $f = Get-CheckpointFile $Scenario; if ($f) { $c = [IO.File]::ReadAllText($f.FullName) | ConvertFrom-Json
+                @(@($c.steps | Where-Object { $_ -and $_.id -eq 'entra-groups' })[0].receipt.groups | Where-Object { $_ -and $_.role -eq 'standard' })[0] } }
+        $uc = $r1[$runNameCase.Dir]
+        $ucGroup = & $standardOf $nameCase
+        Assert 'R5 bash a non-ASCII name whose one same-length candidate differs in case is that group: its id is recorded as pre-existing, nothing is created' ($uc.ExitCode -eq 0 -and
+            $ucGroup.id -eq (& $gid 1) -and $ucGroup.origin -eq 'pre-existing' -and -not (Get-Calls $uc "ad group create --display-name $nameLower *").Count) (Get-Tail $uc)
+        $ul = $r1[$runNameLonger.Dir]
+        Assert 'R5 bash longer names that start with a non-ASCII name, the name in another normalization form among them, are not that group: created once' ($ul.ExitCode -eq 0 -and
+            @($ul.Az | Where-Object { $_ -clike "ad group create --display-name $nameLower *" }).Count -eq 1) (Get-Tail $ul)
+        $ut = $r1[$runNameTwins.Dir]
+        $utLine = [string]@(Get-ErrLines $ut)[0]
+        Assert 'R5 bash two same-length candidates for a non-ASCII name refuse on one line naming both ids, and create nothing' ((Test-Refusal $ut 'by name') -and
+            $utLine -match '0000000001e3' -and $utLine -match '0000000001e4' -and -not (Get-Calls $ut 'ad group create*').Count) (Get-Tail $ut)
+        $ua = $r1[$runNameAstral.Dir]
+        $uaGroup = & $standardOf $nameAstral
+        Assert 'R5 bash an astral-plane name counts code points as PowerShell does: the one candidate with as many code points is recorded, nothing is created' ($ua.ExitCode -eq 0 -and
+            $uaGroup.id -eq (& $gid 5) -and $uaGroup.origin -eq 'pre-existing' -and -not (Get-Calls $ua "ad group create --display-name $rocketLower *").Count) (Get-Tail $ua)
+        $od = $r1[$runOutside.Dir]
+        $odLine = [string]@(Get-ErrLines $od)[0]
+        Assert 'R6 bash a state directory outside $HOME refuses at startup on one line naming $HOME; nothing is read or created' ($od.ExitCode -eq 1 -and @(Get-ErrLines $od).Count -eq 1 -and
+            $odLine -match '^Refused: the install checkpoint directory .+/elsewhere/state .*not inside the home directory .+/home' -and $odLine -match 'Nothing was read or changed' -and
+            -not (Get-Calls $od 'account set*').Count -and -not (Test-Path -LiteralPath (Join-Path $outside.Dir 'elsewhere'))) (Get-Tail $od)
+        $u = $untrusted['untrusted-free']; $uf = $r1[$u.Run.Dir]
+        Assert 'R6 bash a default place that fails a check, with no file of this checkout there, keeps no store: one warning naming the place and the check, the resume command with the answers, and the run completes writing nothing there' (
+            $uf.ExitCode -eq 0 -and @($uf.Out -split "`n" | Where-Object { $_ -match '\[WARN\] .*keeps no install checkpoint' }).Count -eq 1 -and
+            $uf.Out -match '(?m)\[WARN\] .*/clouddrive/\.claude-gateway.*drwxrwx---.*\. This run keeps no install checkpoint\.' -and
+            $uf.Out -match "(?m)^\s*Resume: cd '.+' && \./install-claude-gateway\.sh .*--resource-group 'rg-p91'.*--name-prefix 'p91gw'" -and
+            $uf.Out -match "(?m)20 minutes without interactive activity; the ARM deployment outlives the session, and this run keeps no install checkpoint\. Resume: .*--resource-group 'rg-p91'" -and
+            (Get-Calls $uf 'deployment group create*').Count -eq 1 -and -not (Test-Path -LiteralPath $u.Place)) (Get-Tail $uf)
+        $held = @(foreach ($n in 'untrusted-checkpoint', 'untrusted-lock', 'untrusted-temp') {
+                $u = $untrusted[$n]; $res = $r1[$u.Run.Dir]; $line = [string]@(Get-ErrLines $res)[0]
+                if (-not ($res.ExitCode -eq 1 -and @(Get-ErrLines $res).Count -eq 1 -and $line -match '^Refused: ' -and $line.Contains('/clouddrive/.claude-gateway/' + (Split-Path $u.File -Leaf)) -and
+                        $line -match 'drwxrwx---' -and $line -match 'Nothing was read or changed\. Next step: inspect the file, then remove it or correct the permissions, then rerun: cd .+ && \./install-claude-gateway\.sh' -and
+                        $u.Hash -and (Get-FileHash -LiteralPath $u.File -Algorithm SHA256).Hash -eq $u.Hash -and -not (Get-Calls $res 'account set*').Count)) { "${n}: $(Get-Tail $res)" } })
+        Assert 'R6 bash a default place that fails a check refuses at startup when the checkpoint, lock or a temporary file of this checkout is there: one line naming the file, the check and the next step; the file is kept' (-not $held.Count) ($held -join ' || ')
+        $u = $untrusted['untrusted-named']; $un = $r1[$u.Run.Dir]; $unLine = [string]@(Get-ErrLines $un)[0]
+        Assert 'R6 bash CLAUDE_GATEWAY_STATE_DIR naming a place that fails a check refuses at startup on one line naming the variable and the check, with no file of this checkout there; nothing is created' (
+            $un.ExitCode -eq 1 -and @(Get-ErrLines $un).Count -eq 1 -and $unLine -match '^Refused: .*drwxrwx---' -and $unLine -match 'CLAUDE_GATEWAY_STATE_DIR' -and
+            $unLine -match 'Nothing was read or changed' -and -not (Get-Calls $un 'account set*').Count -and -not (Test-Path -LiteralPath $u.Place)) (Get-Tail $un)
+        $u = $untrusted['untrusted-planted']; $up = $r1[$u.Run.Dir]
+        # The place's own last-write time changes when a file is created or removed in it during the run.
+        $after = "$((Get-Item -LiteralPath $u.Place -Force).LastWriteTimeUtc.Ticks);" + (@(Get-ChildItem -LiteralPath $u.Place -Force -ErrorAction SilentlyContinue | Sort-Object Name | ForEach-Object { "$($_.Name)|$($_.Length)|$($_.LastWriteTimeUtc.Ticks)" }) -join ';')
+        Assert 'R6 bash Security ruling: a default place that fails a check and holds only another checkout''s unreadable checkpoint and lock is neither read, written nor locked; the run completes without a store' (
+            $up.ExitCode -eq 0 -and $up.Out -match '\[WARN\] .*This run keeps no install checkpoint\.' -and $u.Listing -and $after -eq $u.Listing -and
+            (Get-Calls $up 'deployment group create*').Count -eq 1) "$(Get-Tail $up) || before $($u.Listing) || after $after"
+        $qi = $r1[$runQuoteInput.Dir]; $qiLine = [string]@(Get-ErrLines $qi)[0]
+        Assert 'R5 bash a tier group name with a single quote is refused at input on one line naming --standard-group and the OData string literal; nothing is created' (
+            (Test-Refusal $qi '^Refused: --standard-group ''O''Brien'': Entra group names containing a single quote are not supported, because Azure CLI places the name inside an OData string literal') -and
+            -not (Get-Calls $qi 'ad group*').Count -and -not (Get-Calls $qi 'deployment group create*').Count -and -not (Get-CheckpointFile $quoteInput)) $qiLine
+    }
 
     # ------------------------------------------------------------------ reruns
-    $sleeperOut = & $bash -c 'sleep 900 >/dev/null 2>&1 & echo $!'
-    $sleeper = "$sleeperOut".Trim()
-    Write-Lf $psTable "$sleeper|Thu Oct  1 09:00:00 2026`n"
-    $hostName = "$(& $bash -c 'uname -n')".Trim().ToLowerInvariant().Split('.')[0]
-    $sc = [ordered]@{}
-    foreach ($n in 'tenant', 'subscription', 'group', 'prefix', 'installer', 'version', 'changed', 'truncated', 'restart', 'liveLock', 'exitedLock', 'otherHost', 'staleHost',
-        'schemaName', 'schemaVersion', 'unknownStep', 'subscriptionName', 'tamperDeployment', 'tamperGroup', 'permSeam', 'permDirReal', 'permFileReal', 'renamed', 'gitBash', 'otherGroup', 'quoteAnswer') { $sc[$n] = New-Scenario $n $null $base }
-    foreach ($s in @($base) + @($sc.Values)) { Edit-World $s { param($w) $w.inject.groupCreateFail = @() } }
-    Edit-World $sc.tenant { param($w) $w.tenantId = '00000000-0000-4000-8000-0000000000f9' }
-    Edit-Checkpoint $sc.installer { param($c) $c.installer = 'pwsh' }
-    Edit-Checkpoint $sc.schemaName { param($c) $c.schema = 'p91-other-schema' }
-    Edit-Checkpoint $sc.schemaVersion { param($c) $c.schemaVersion = 99 }
-    Edit-Checkpoint $sc.unknownStep { param($c) $firstStep = @($c.steps | Where-Object { $_ })[0]; if ($firstStep) { $firstStep.id = 'gateway-deploy' } }
-    # A tier group answer with a single quote would reach an OData string literal (council round 3).
-    Edit-Checkpoint $sc.quoteAnswer { param($c) if ($c.answers) { $c.answers | Add-Member -NotePropertyName PremiumGroup -NotePropertyValue "claude-code-premium' or displayName ne '" -Force } }
-    # A subscription passed by name, which az account set resolves to another id than the checkpoint's.
-    Edit-World $sc.subscriptionName { param($w) $w.subscriptionId = '00000000-0000-4000-8000-0000000000a9' }
-    # Receipt values reach az as arguments on a resume, so a value of another shape is a corrupt checkpoint.
-    Edit-Checkpoint $sc.tamperDeployment { param($c) $st = @($c.steps | Where-Object { $_ -and $_.id -eq 'gateway-deployment' })[0]; if ($st) { @($st.receipt.deployments)[0].name = 'p91-not-a-deployment' } }
-    Edit-Checkpoint $sc.tamperGroup { param($c) $st = @($c.steps | Where-Object { $_ -and $_.id -eq 'entra-groups' })[0]; if ($st) { @($st.receipt.groups)[0].id = '@/etc/passwd' } }
-    # A receipt of the right shape that names another group: the live name decides (decision 11).
-    $otherId = '00000000-0000-4000-8000-0000000001f1'
-    Edit-World $sc.otherGroup { param($w) $w.groups | Add-Member -NotePropertyName $otherId -NotePropertyValue 'all-staff' -Force }
-    Edit-Checkpoint $sc.otherGroup { param($c) $st = @($c.steps | Where-Object { $_ -and $_.id -eq 'entra-groups' })[0]; if ($st) { @($st.receipt.groups | Where-Object { $_.role -eq 'standard' })[0].id = $otherId } }
-    # The probe seam: Git Bash reports every file as the current user's with fixed modes, so this
-    # scenario's copy of the library reports a state directory that another user owns.
-    $seamLib = Join-Path $sc.permSeam.Repo 'scripts/install-checkpoint.sh'
-    Write-Lf $seamLib ([IO.File]::ReadAllText($seamLib) + "`nckpt_perm_probe_() { PERM_LINK=0; PERM_MINE=0; PERM_MODE='drwx------'; PERM_OWNER='p91-other-user'; }`n")
-    if (-not $script:windows) {
-        & chmod 0777 $sc.permDirReal.State
-        $realFile = Get-CheckpointFile $sc.permFileReal
-        if ($realFile) { & chmod 0666 $realFile.FullName }
+    if ($base) {
+        # Every rerun starts from base, running or preexisting after its first run.
+        $sleeperOut = & $bash -c 'sleep 900 >/dev/null 2>&1 & echo $!'
+        $sleeper = "$sleeperOut".Trim()
+        Write-Lf $psTable "$sleeper|Thu Oct  1 09:00:00 2026`n"
+        $hostName = "$(& $bash -c 'uname -n')".Trim().ToLowerInvariant().Split('.')[0]
+        $sc = [ordered]@{}
+        foreach ($n in 'tenant', 'subscription', 'group', 'prefix', 'installer', 'version', 'changed', 'truncated', 'restart', 'liveLock', 'exitedLock', 'otherHost', 'staleHost',
+            'schemaName', 'schemaVersion', 'unknownStep', 'subscriptionName', 'tamperDeployment', 'tamperGroup', 'permSeam', 'permDirReal', 'permFileReal', 'renamed', 'gitBash', 'otherGroup', 'quoteAnswer') { $sc[$n] = New-Scenario $n $null $base }
+        foreach ($s in @($base) + @($sc.Values)) { Edit-World $s { param($w) $w.inject.groupCreateFail = @() } }
+        Edit-World $sc.tenant { param($w) $w.tenantId = '00000000-0000-4000-8000-0000000000f9' }
+        Edit-Checkpoint $sc.installer { param($c) $c.installer = 'pwsh' }
+        Edit-Checkpoint $sc.schemaName { param($c) $c.schema = 'p91-other-schema' }
+        Edit-Checkpoint $sc.schemaVersion { param($c) $c.schemaVersion = 99 }
+        Edit-Checkpoint $sc.unknownStep { param($c) $firstStep = @($c.steps | Where-Object { $_ })[0]; if ($firstStep) { $firstStep.id = 'gateway-deploy' } }
+        # A tier group answer with a single quote would reach an OData string literal (council round 3).
+        Edit-Checkpoint $sc.quoteAnswer { param($c) if ($c.answers) { $c.answers | Add-Member -NotePropertyName PremiumGroup -NotePropertyValue "claude-code-premium' or displayName ne '" -Force } }
+        # A subscription passed by name, which az account set resolves to another id than the checkpoint's.
+        Edit-World $sc.subscriptionName { param($w) $w.subscriptionId = '00000000-0000-4000-8000-0000000000a9' }
+        # Receipt values reach az as arguments on a resume, so a value of another shape is a corrupt checkpoint.
+        Edit-Checkpoint $sc.tamperDeployment { param($c) $st = @($c.steps | Where-Object { $_ -and $_.id -eq 'gateway-deployment' })[0]; if ($st) { @($st.receipt.deployments)[0].name = 'p91-not-a-deployment' } }
+        Edit-Checkpoint $sc.tamperGroup { param($c) $st = @($c.steps | Where-Object { $_ -and $_.id -eq 'entra-groups' })[0]; if ($st) { @($st.receipt.groups)[0].id = '@/etc/passwd' } }
+        # A receipt of the right shape that names another group: the live name decides (decision 11).
+        $otherId = '00000000-0000-4000-8000-0000000001f1'
+        Edit-World $sc.otherGroup { param($w) $w.groups | Add-Member -NotePropertyName $otherId -NotePropertyValue 'all-staff' -Force }
+        Edit-Checkpoint $sc.otherGroup { param($c) $st = @($c.steps | Where-Object { $_ -and $_.id -eq 'entra-groups' })[0]; if ($st) { @($st.receipt.groups | Where-Object { $_.role -eq 'standard' })[0].id = $otherId } }
+        # The probe seam: Git Bash reports every file as the current user's with fixed modes, so this
+        # scenario's copy of the library reports a state directory that another user owns.
+        $seamLib = Join-Path $sc.permSeam.Repo 'scripts/install-checkpoint.sh'
+        Write-Lf $seamLib ([IO.File]::ReadAllText($seamLib) + "`nckpt_perm_probe_() { PERM_LINK=0; PERM_MINE=0; PERM_MODE='drwx------'; PERM_OWNER='p91-other-user'; }`n")
+        if (-not $script:windows) {
+            & chmod 0777 $sc.permDirReal.State
+            $realFile = Get-CheckpointFile $sc.permFileReal
+            if ($realFile) { & chmod 0666 $realFile.FullName }
+        }
+        Add-Content -LiteralPath (Join-Path $sc.version.Repo 'install-claude-gateway.sh') -Value '# a later installer'
+        foreach ($n in 'truncated', 'restart') { $f = Get-CheckpointFile $sc[$n]; if ($f) { $t = [IO.File]::ReadAllText($f.FullName); Write-Lf $f.FullName $t.Substring(0, [int]($t.Length / 2)) } }
+        $lockOf = { param($s, [hashtable]$fields, [int]$age) $p = Join-Path $s.State ((Get-BashKey $s.Repo) + '.lock'); Write-Lf $p ($fields | ConvertTo-Json -Compress); if (-not $script:windows) { & chmod 600 $p }; if ($age) { [IO.File]::SetLastWriteTimeUtc($p, [DateTime]::UtcNow.AddMinutes(-$age)) } }
+        & $lockOf $sc.liveLock @{ pid = [int]$sleeper; processStart = 'Thu Oct  1 09:00:00 2026'; host = $hostName; installer = 'bash'; runId = ('a' * 32); acquiredUtc = '2026-10-01T00:00:00Z' } 0
+        & $lockOf $sc.exitedLock @{ pid = 999999; processStart = 'Thu Oct  1 08:00:00 2026'; host = $hostName; installer = 'bash'; runId = ('b' * 32); acquiredUtc = '2026-10-01T00:00:00Z' } 0
+        & $lockOf $sc.otherHost @{ pid = 4242; processStart = 'x'; host = 'p91-other-host'; installer = 'bash'; runId = ('c' * 32); acquiredUtc = '2026-10-01T00:00:00Z' } 0
+        & $lockOf $sc.staleHost @{ pid = 4242; processStart = 'x'; host = 'p91-other-host'; installer = 'bash'; runId = ('d' * 32); acquiredUtc = '2026-10-01T00:00:00Z' } 10
+        $hashes = @{}; foreach ($n in 'tenant', 'subscription', 'group', 'prefix', 'installer', 'truncated', 'schemaName', 'schemaVersion', 'unknownStep', 'subscriptionName', 'tamperDeployment', 'tamperGroup',
+            'permSeam', 'permDirReal', 'permFileReal', 'gitBash', 'quoteAnswer') { $hashes[$n] = Get-Hash $sc[$n] }
+        $swap = { param([string]$flag, [string]$to) $a = @($args0); $i = [array]::IndexOf($a, $flag); $a[$i + 1] = $to; $a }
+        $second = @()
+        if (Test-ShardGroup 'resume') {
+            $bounded = New-Scenario 'bounded' $null $running
+            Edit-World $bounded { param($w) foreach ($p in $w.deployments.'rg-p91'.PSObject.Properties) { $p.Value.polls = @('forever') } }
+            $second += @(
+                # The lock runs first: their locks were written with a last-write time just before this wave.
+                ($runLiveLock = New-Run $sc.liveLock $args0)
+                ($runExitedLock = New-Run $sc.exitedLock $args0)
+                ($runOtherHost = New-Run $sc.otherHost $args0)
+                ($runStaleHost = New-Run $sc.staleHost $args0)
+                ($runBase2 = New-Run $base $args0)
+                ($runRunning2 = New-Run $running $args0)
+                ($runBounded = New-Run $bounded $args0 @{ CLAUDE_GATEWAY_DEPLOY_WAIT_SECONDS = '1' })
+                ($runPre2 = New-Run $preexisting $args0)
+                ($runVersion = New-Run $sc.version $args0)
+                ($runChanged = New-Run $sc.changed ($args0 + @('--tpm-standard', '30000')))
+                ($runRestart = New-Run $sc.restart ($args0 + '--restart'))
+                # A receipt applies to the name it records, compared code point by code point (jq ==).
+                ($runRenamed = New-Run $sc.renamed (& $nameArgs 'Claude-Code-Standard'))
+                # Git Bash on Windows: the bash installer keeps no store there (decision 2).
+                ($runGitBash = New-Run $sc.gitBash $args0 @{ P91_UNAME_S = 'MINGW64_NT-10.0-26100' })
+            )
+        }
+        if (Test-ShardGroup 'corrupt') {
+            $second += @(
+                ($runTenant = New-Run $sc.tenant $args0)
+                ($runSubscription = New-Run $sc.subscription (& $swap '--subscription' '00000000-0000-4000-8000-0000000000a9'))
+                ($runGroup = New-Run $sc.group (& $swap '--resource-group' 'rg-other'))
+                ($runPrefix = New-Run $sc.prefix (& $swap '--name-prefix' 'p91other'))
+                ($runInstaller = New-Run $sc.installer $args0)
+                ($runTruncated = New-Run $sc.truncated $args0)
+                ($runSchemaName = New-Run $sc.schemaName $args0)
+                ($runSchemaVersion = New-Run $sc.schemaVersion $args0)
+                ($runUnknownStep = New-Run $sc.unknownStep $args0)
+                ($runSubscriptionName = New-Run $sc.subscriptionName (& $swap '--subscription' 'p91-other-name'))
+                ($runTamperDeployment = New-Run $sc.tamperDeployment $args0)
+                ($runTamperGroup = New-Run $sc.tamperGroup $args0)
+                ($runPermSeam = New-Run $sc.permSeam $args0)
+                ($runPermDirReal = New-Run $sc.permDirReal $args0)
+                ($runPermFileReal = New-Run $sc.permFileReal $args0)
+                ($runOtherGroup = New-Run $sc.otherGroup $args0)
+                ($runQuoteAnswer = New-Run $sc.quoteAnswer $args0)
+            )
+        }
+        $r2 = Invoke-Runs $second
     }
-    Add-Content -LiteralPath (Join-Path $sc.version.Repo 'install-claude-gateway.sh') -Value '# a later installer'
-    foreach ($n in 'truncated', 'restart') { $f = Get-CheckpointFile $sc[$n]; if ($f) { $t = [IO.File]::ReadAllText($f.FullName); Write-Lf $f.FullName $t.Substring(0, [int]($t.Length / 2)) } }
-    $lockOf = { param($s, [hashtable]$fields, [int]$age) $p = Join-Path $s.State ((Get-BashKey $s.Repo) + '.lock'); Write-Lf $p ($fields | ConvertTo-Json -Compress); if (-not $script:windows) { & chmod 600 $p }; if ($age) { [IO.File]::SetLastWriteTimeUtc($p, [DateTime]::UtcNow.AddMinutes(-$age)) } }
-    & $lockOf $sc.liveLock @{ pid = [int]$sleeper; processStart = 'Thu Oct  1 09:00:00 2026'; host = $hostName; installer = 'bash'; runId = ('a' * 32); acquiredUtc = '2026-10-01T00:00:00Z' } 0
-    & $lockOf $sc.exitedLock @{ pid = 999999; processStart = 'Thu Oct  1 08:00:00 2026'; host = $hostName; installer = 'bash'; runId = ('b' * 32); acquiredUtc = '2026-10-01T00:00:00Z' } 0
-    & $lockOf $sc.otherHost @{ pid = 4242; processStart = 'x'; host = 'p91-other-host'; installer = 'bash'; runId = ('c' * 32); acquiredUtc = '2026-10-01T00:00:00Z' } 0
-    & $lockOf $sc.staleHost @{ pid = 4242; processStart = 'x'; host = 'p91-other-host'; installer = 'bash'; runId = ('d' * 32); acquiredUtc = '2026-10-01T00:00:00Z' } 10
-    $hashes = @{}; foreach ($n in 'tenant', 'subscription', 'group', 'prefix', 'installer', 'truncated', 'schemaName', 'schemaVersion', 'unknownStep', 'subscriptionName', 'tamperDeployment', 'tamperGroup',
-        'permSeam', 'permDirReal', 'permFileReal', 'gitBash', 'quoteAnswer') { $hashes[$n] = Get-Hash $sc[$n] }
-    $bounded = New-Scenario 'bounded' $null $running
-    Edit-World $bounded { param($w) foreach ($p in $w.deployments.'rg-p91'.PSObject.Properties) { $p.Value.polls = @('forever') } }
-    $swap = { param([string]$flag, [string]$to) $a = @($args0); $i = [array]::IndexOf($a, $flag); $a[$i + 1] = $to; $a }
-    $second = @(
-        # The lock runs first: their locks were written with a last-write time just before this wave.
-        ($runLiveLock = New-Run $sc.liveLock $args0)
-        ($runExitedLock = New-Run $sc.exitedLock $args0)
-        ($runOtherHost = New-Run $sc.otherHost $args0)
-        ($runStaleHost = New-Run $sc.staleHost $args0)
-        ($runBase2 = New-Run $base $args0)
-        ($runRunning2 = New-Run $running $args0)
-        ($runBounded = New-Run $bounded $args0 @{ CLAUDE_GATEWAY_DEPLOY_WAIT_SECONDS = '1' })
-        ($runPre2 = New-Run $preexisting $args0)
-        ($runTenant = New-Run $sc.tenant $args0)
-        ($runSubscription = New-Run $sc.subscription (& $swap '--subscription' '00000000-0000-4000-8000-0000000000a9'))
-        ($runGroup = New-Run $sc.group (& $swap '--resource-group' 'rg-other'))
-        ($runPrefix = New-Run $sc.prefix (& $swap '--name-prefix' 'p91other'))
-        ($runInstaller = New-Run $sc.installer $args0)
-        ($runVersion = New-Run $sc.version $args0)
-        ($runChanged = New-Run $sc.changed ($args0 + @('--tpm-standard', '30000')))
-        ($runTruncated = New-Run $sc.truncated $args0)
-        ($runRestart = New-Run $sc.restart ($args0 + '--restart'))
-        ($runSchemaName = New-Run $sc.schemaName $args0)
-        ($runSchemaVersion = New-Run $sc.schemaVersion $args0)
-        ($runUnknownStep = New-Run $sc.unknownStep $args0)
-        ($runSubscriptionName = New-Run $sc.subscriptionName (& $swap '--subscription' 'p91-other-name'))
-        ($runTamperDeployment = New-Run $sc.tamperDeployment $args0)
-        ($runTamperGroup = New-Run $sc.tamperGroup $args0)
-        ($runPermSeam = New-Run $sc.permSeam $args0)
-        ($runPermDirReal = New-Run $sc.permDirReal $args0)
-        ($runPermFileReal = New-Run $sc.permFileReal $args0)
-        # A receipt applies to the name it records, compared code point by code point (jq ==).
-        ($runRenamed = New-Run $sc.renamed (& $nameArgs 'Claude-Code-Standard'))
-        # Git Bash on Windows: the bash installer keeps no store there (decision 2).
-        ($runGitBash = New-Run $sc.gitBash $args0 @{ P91_UNAME_S = 'MINGW64_NT-10.0-26100' })
-        ($runOtherGroup = New-Run $sc.otherGroup $args0)
-        ($runQuoteAnswer = New-Run $sc.quoteAnswer $args0)
-    )
-    $r2 = Invoke-Runs $second
-    $b2 = $r2[$runBase2.Dir]
-    Assert 'S11 S1 the rerun finds the created group by id, creates only the missing one and no deployment' ($b2.ExitCode -eq 0 -and $createdId -and (Get-Calls $b2 "ad group show --group $createdId*").Count -and
-        (Get-Calls $b2 'ad group create --display-name claude-code-premium*').Count -eq 1 -and -not (Get-Calls $b2 'ad group create --display-name claude-code-standard*').Count -and
-        -not (Get-Calls $b2 'deployment group create*').Count) (Get-Tail $b2)
-    Assert 'S11 S1 the rerun prints completed steps with UTC times and the resume step, then removes the checkpoint' ($b2.Out -match ($doneAt + 'Resource group') -and $b2.Out -match ($doneAt + 'Gateway deployment') -and
-        $b2.Out -match ($resumesAt + 'Entra groups') -and $cpFile -and -not (Get-CheckpointFile $base)) (Get-Tail $b2)
-    $g1 = $r1[$runRunning1.Dir]; $g2 = $r2[$runRunning2.Dir]
-    Assert 'S11 S4 after run 1 died while its deployment ran, the rerun waits for it and creates none' ($g1.ExitCode -ne 0 -and $g2.ExitCode -eq 0 -and -not (Get-Calls $g2 'deployment group create*').Count -and
-        (Get-Calls $g2 'deployment group show*').Count -ge 3) (Get-Tail $g2)
-    $bb = $r2[$runBounded.Dir]
-    Assert 'S11 S4 past the bound the rerun refuses on one line with the resume command' ($bb.ExitCode -eq 1 -and @(Get-ErrLines $bb).Count -eq 1 -and @(Get-ErrLines $bb)[0] -match 'still running' -and
-        @(Get-ErrLines $bb)[0] -match 'install-claude-gateway\.sh' -and -not (Get-Calls $bb 'deployment group create*').Count) (Get-Tail $bb)
-    $p2 = $r2[$runPre2.Dir]
-    Assert 'Decision 9 a bash resume does not redeploy over an APIM it did not create, and names the PowerShell path' ((Test-Refusal $p2 'Install-ClaudeGateway\.ps1 -ExistingApimName') -and
-        -not (Get-Calls $p2 'deployment group create*').Count) (Get-Tail $p2)
-    foreach ($case in @(@('tenant', $runTenant, 'tenant'), @('subscription', $runSubscription, 'subscription'), @('group', $runGroup, 'resource group'), @('prefix', $runPrefix, 'gateway'), @('installer', $runInstaller, 'Install-ClaudeGateway\.ps1'))) {
-        $res = $r2[$case[1].Dir]
-        Assert "S11 S5 a different $($case[2] -replace '\\', '') refuses on one line, names it and keeps the checkpoint" ((Test-Refusal $res $case[2]) -and $hashes[$case[0]] -and (Get-Hash $sc[$case[0]]) -eq $hashes[$case[0]]) (Get-Tail $res)
+    if (Test-ShardGroup 'resume') {
+        $b2 = $r2[$runBase2.Dir]
+        Assert 'S11 S1 the rerun finds the created group by id, creates only the missing one and no deployment' ($b2.ExitCode -eq 0 -and $createdId -and (Get-Calls $b2 "ad group show --group $createdId*").Count -and
+            (Get-Calls $b2 'ad group create --display-name claude-code-premium*').Count -eq 1 -and -not (Get-Calls $b2 'ad group create --display-name claude-code-standard*').Count -and
+            -not (Get-Calls $b2 'deployment group create*').Count) (Get-Tail $b2)
+        Assert 'S11 S1 the rerun prints completed steps with UTC times and the resume step, then removes the checkpoint' ($b2.Out -match ($doneAt + 'Resource group') -and $b2.Out -match ($doneAt + 'Gateway deployment') -and
+            $b2.Out -match ($resumesAt + 'Entra groups') -and $cpFile -and -not (Get-CheckpointFile $base)) (Get-Tail $b2)
+        $g1 = $r1[$runRunning1.Dir]; $g2 = $r2[$runRunning2.Dir]
+        Assert 'S11 S4 after run 1 died while its deployment ran, the rerun waits for it and creates none' ($g1.ExitCode -ne 0 -and $g2.ExitCode -eq 0 -and -not (Get-Calls $g2 'deployment group create*').Count -and
+            (Get-Calls $g2 'deployment group show*').Count -ge 3) (Get-Tail $g2)
+        $bb = $r2[$runBounded.Dir]
+        Assert 'S11 S4 past the bound the rerun refuses on one line with the resume command' ($bb.ExitCode -eq 1 -and @(Get-ErrLines $bb).Count -eq 1 -and @(Get-ErrLines $bb)[0] -match 'still running' -and
+            @(Get-ErrLines $bb)[0] -match 'install-claude-gateway\.sh' -and -not (Get-Calls $bb 'deployment group create*').Count) (Get-Tail $bb)
+        $p2 = $r2[$runPre2.Dir]
+        Assert 'Decision 9 a bash resume does not redeploy over an APIM it did not create, and names the PowerShell path' ((Test-Refusal $p2 'Install-ClaudeGateway\.ps1 -ExistingApimName') -and
+            -not (Get-Calls $p2 'deployment group create*').Count) (Get-Tail $p2)
+        $v2 = $r2[$runVersion.Dir]
+        Assert 'S11 S5 a different installer version resumes and says which wrote the checkpoint' ($v2.ExitCode -eq 0 -and $v2.Out -match '(?m)checkpoint written by install-claude-gateway\.sh \S+; running install-claude-gateway\.sh \S+' -and
+            -not (Get-Calls $v2 'deployment group create*').Count) (Get-Tail $v2)
+        $ch = $r2[$runChanged.Dir]
+        Assert 'R2 bash the summary''s Checkpoint row names an answer this run changes, before the confirmation' ($ch.ExitCode -eq 0 -and
+            $ch.Out -match '(?m)^\s+Checkpoint\s+.*changed since the checkpoint: TpmStandard' -and (Get-Calls $ch 'deployment group create*').Count -eq 1) (Get-Tail $ch)
+        $rs = $r2[$runRestart.Dir]
+        Assert 'S11 S8 --restart sets it aside and runs as a first run' ($rs.ExitCode -eq 0 -and @(Get-ChildItem -LiteralPath $sc.restart.State -Filter '*.discarded-*.json').Count -eq 1 -and
+            (Get-Calls $rs 'deployment group create*').Count -eq 1) (Get-Tail $rs)
+        $l1 = $r2[$runLiveLock.Dir]; $l2 = $r2[$runExitedLock.Dir]; $l3 = $r2[$runOtherHost.Dir]; $l4 = $r2[$runStaleHost.Dir]
+        Assert 'S9 bash a live lock refuses naming its PID; an exited holder is stale' ((Test-Refusal $l1 "$sleeper") -and $l2.ExitCode -eq 0 -and $l2.Out -match '(?m)stale lock') ((Get-Tail $l1) + ' || ' + (Get-Tail $l2))
+        Assert 'S9 bash another host''s lock refuses with a heartbeat and is stale without one for 5 minutes' ((Test-Refusal $l3 'p91-other-host') -and $l4.ExitCode -eq 0 -and $l4.Out -match '(?m)stale lock') ((Get-Tail $l3) + ' || ' + (Get-Tail $l4))
+        $l1Line = [string]@(Get-ErrLines $l1)[0]; $l3Line = [string]@(Get-ErrLines $l3)[0]
+        Assert 'S9 bash the held-lock refusal names host, PID and start, says the lock ends with that run, and ends with the resume command' ($l1Line -match (
+            "^Refused: another install run \(host [^,]+, PID $sleeper, started [^)]+\) holds the lock .+; nothing was changed\. The lock ends with that run: a later run takes it over once that process has exited\. Resume: cd .+ && \./install-claude-gateway\.sh")) $l1Line
+        Assert 'S9 bash another host''s held lock says when a later run takes it over, and ends with the resume command' ($l3Line -match (
+            '^Refused: another install run \(host p91-other-host, PID 4242, started [^,]+, last heartbeat under 5 minutes ago\) holds the lock .+; nothing was changed\. The lock ends with that run: a later run takes it over after 5 minutes without a heartbeat\. Resume: cd .+ && \./install-claude-gateway\.sh')) $l3Line
+        $rn = $r2[$runRenamed.Dir]
+        Assert 'R5 bash a resume that names a group in another case than its receipt does not use the receipt: the name is looked up, reused and not created' ($rn.ExitCode -eq 0 -and
+            @($rn.Az | Where-Object { $_ -clike 'ad group list --display-name Claude-Code-Standard *' }).Count -eq 1 -and -not (Get-Calls $rn 'ad group create --display-name claude-code-standard*').Count) (Get-Tail $rn)
+        $gb = $r2[$runGitBash.Dir]
+        Assert 'R6 bash in Git Bash (uname -s MINGW64_NT) keeps no store: it warns, names Install-ClaudeGateway.ps1, prints the resume command with the answers, and neither reads nor writes a checkpoint' (
+            $gb.ExitCode -eq 0 -and $gb.Out -match '(?m)\[WARN\].*Git Bash.*Install-ClaudeGateway\.ps1' -and $gb.Out -match "(?m)^\s*Resume: cd '.+' && \./install-claude-gateway\.sh .*--resource-group 'rg-p91'" -and
+            $gb.Out -notmatch 'Resuming install run' -and $hashes.gitBash -and (Get-Hash $sc.gitBash) -eq $hashes.gitBash -and -not @(Get-ChildItem -LiteralPath $sc.gitBash.State -Filter '*.lock*' -ErrorAction SilentlyContinue).Count -and
+            (Get-Calls $gb 'deployment group create*').Count -eq 1) (Get-Tail $gb)
     }
-    $v2 = $r2[$runVersion.Dir]
-    Assert 'S11 S5 a different installer version resumes and says which wrote the checkpoint' ($v2.ExitCode -eq 0 -and $v2.Out -match '(?m)checkpoint written by install-claude-gateway\.sh \S+; running install-claude-gateway\.sh \S+' -and
-        -not (Get-Calls $v2 'deployment group create*').Count) (Get-Tail $v2)
-    $ch = $r2[$runChanged.Dir]
-    Assert 'R2 bash the summary''s Checkpoint row names an answer this run changes, before the confirmation' ($ch.ExitCode -eq 0 -and
-        $ch.Out -match '(?m)^\s+Checkpoint\s+.*changed since the checkpoint: TpmStandard' -and (Get-Calls $ch 'deployment group create*').Count -eq 1) (Get-Tail $ch)
-    $tr = $r2[$runTruncated.Dir]
-    Assert 'S11 S8 a corrupt checkpoint refuses on one line and keeps the file' ((Test-Refusal $tr 'not valid JSON') -and $hashes.truncated -and (Get-Hash $sc.truncated) -eq $hashes.truncated) (Get-Tail $tr)
-    $rs = $r2[$runRestart.Dir]
-    Assert 'S11 S8 --restart sets it aside and runs as a first run' ($rs.ExitCode -eq 0 -and @(Get-ChildItem -LiteralPath $sc.restart.State -Filter '*.discarded-*.json').Count -eq 1 -and
-        (Get-Calls $rs 'deployment group create*').Count -eq 1) (Get-Tail $rs)
-    $l1 = $r2[$runLiveLock.Dir]; $l2 = $r2[$runExitedLock.Dir]; $l3 = $r2[$runOtherHost.Dir]; $l4 = $r2[$runStaleHost.Dir]
-    Assert 'S9 bash a live lock refuses naming its PID; an exited holder is stale' ((Test-Refusal $l1 "$sleeper") -and $l2.ExitCode -eq 0 -and $l2.Out -match '(?m)stale lock') ((Get-Tail $l1) + ' || ' + (Get-Tail $l2))
-    Assert 'S9 bash another host''s lock refuses with a heartbeat and is stale without one for 5 minutes' ((Test-Refusal $l3 'p91-other-host') -and $l4.ExitCode -eq 0 -and $l4.Out -match '(?m)stale lock') ((Get-Tail $l3) + ' || ' + (Get-Tail $l4))
-    $l1Line = [string]@(Get-ErrLines $l1)[0]; $l3Line = [string]@(Get-ErrLines $l3)[0]
-    Assert 'S9 bash the held-lock refusal names host, PID and start, says the lock ends with that run, and ends with the resume command' ($l1Line -match (
-        "^Refused: another install run \(host [^,]+, PID $sleeper, started [^)]+\) holds the lock .+; nothing was changed\. The lock ends with that run: a later run takes it over once that process has exited\. Resume: cd .+ && \./install-claude-gateway\.sh")) $l1Line
-    Assert 'S9 bash another host''s held lock says when a later run takes it over, and ends with the resume command' ($l3Line -match (
-        '^Refused: another install run \(host p91-other-host, PID 4242, started [^,]+, last heartbeat under 5 minutes ago\) holds the lock .+; nothing was changed\. The lock ends with that run: a later run takes it over after 5 minutes without a heartbeat\. Resume: cd .+ && \./install-claude-gateway\.sh')) $l3Line
-    foreach ($case in @(@('schemaName', $runSchemaName, 'p91-other-schema'), @('schemaVersion', $runSchemaVersion, 'schemaVersion 99'), @('unknownStep', $runUnknownStep, "unknown step id 'gateway-deploy'"))) {
-        $res = $r2[$case[1].Dir]
-        Assert "S11 S8 a corrupt checkpoint ($($case[0])) refuses on one line naming the problem and keeps the file" ((Test-Refusal $res $case[2]) -and $hashes[$case[0]] -and (Get-Hash $sc[$case[0]]) -eq $hashes[$case[0]]) (Get-Tail $res)
+    if (Test-ShardGroup 'corrupt') {
+        foreach ($case in @(@('tenant', $runTenant, 'tenant'), @('subscription', $runSubscription, 'subscription'), @('group', $runGroup, 'resource group'), @('prefix', $runPrefix, 'gateway'), @('installer', $runInstaller, 'Install-ClaudeGateway\.ps1'))) {
+            $res = $r2[$case[1].Dir]
+            Assert "S11 S5 a different $($case[2] -replace '\\', '') refuses on one line, names it and keeps the checkpoint" ((Test-Refusal $res $case[2]) -and $hashes[$case[0]] -and (Get-Hash $sc[$case[0]]) -eq $hashes[$case[0]]) (Get-Tail $res)
+        }
+        $tr = $r2[$runTruncated.Dir]
+        Assert 'S11 S8 a corrupt checkpoint refuses on one line and keeps the file' ((Test-Refusal $tr 'not valid JSON') -and $hashes.truncated -and (Get-Hash $sc.truncated) -eq $hashes.truncated) (Get-Tail $tr)
+        foreach ($case in @(@('schemaName', $runSchemaName, 'p91-other-schema'), @('schemaVersion', $runSchemaVersion, 'schemaVersion 99'), @('unknownStep', $runUnknownStep, "unknown step id 'gateway-deploy'"))) {
+            $res = $r2[$case[1].Dir]
+            Assert "S11 S8 a corrupt checkpoint ($($case[0])) refuses on one line naming the problem and keeps the file" ((Test-Refusal $res $case[2]) -and $hashes[$case[0]] -and (Get-Hash $sc[$case[0]]) -eq $hashes[$case[0]]) (Get-Tail $res)
+        }
+        $sn = $r2[$runSubscriptionName.Dir]
+        Assert 'S11 S5 a subscription passed by name that resolves to another id refuses before any write and names the field' ((Test-Refusal $sn 'subscription') -and
+            [string]@(Get-ErrLines $sn)[0] -match '0000000000a9' -and -not (Get-Calls $sn '*create*').Count -and $hashes.subscriptionName -and (Get-Hash $sc.subscriptionName) -eq $hashes.subscriptionName) (Get-Tail $sn)
+        foreach ($case in @(@('tamperDeployment', $runTamperDeployment, 'receipt of step gateway-deployment that names the deployment'), @('tamperGroup', $runTamperGroup, 'receipt of step entra-groups that holds the group id'))) {
+            $res = $r2[$case[1].Dir]
+            Assert "R5 bash a tampered receipt ($($case[0])) refuses on one line as a corrupt checkpoint and keeps the file" ((Test-Refusal $res $case[2]) -and $hashes[$case[0]] -and (Get-Hash $sc[$case[0]]) -eq $hashes[$case[0]]) (Get-Tail $res)
+        }
+        $pm = $r2[$runPermSeam.Dir]
+        $pmLine = [string]@(Get-ErrLines $pm)[0]
+        Assert 'R6 bash a state directory another user owns (probe seam) refuses at startup on one line naming the owner; nothing is read or changed' ($pm.ExitCode -eq 1 -and @(Get-ErrLines $pm).Count -eq 1 -and
+            $pmLine -match '^Refused: the install checkpoint directory ' -and $pmLine -match 'p91-other-user' -and $pmLine -match 'Nothing was read or changed' -and -not (Get-Calls $pm 'account set*').Count -and
+            $hashes.permSeam -and (Get-Hash $sc.permSeam) -eq $hashes.permSeam -and -not @(Get-ChildItem -LiteralPath $sc.permSeam.State -Filter '*.lock').Count) (Get-Tail $pm)
+        if (-not $script:windows) {
+            $pd = $r2[$runPermDirReal.Dir]; $pf = $r2[$runPermFileReal.Dir]
+            $pdLine = [string]@(Get-ErrLines $pd)[0]; $pfLine = [string]@(Get-ErrLines $pf)[0]
+            Assert 'R6 bash (real modes) a 0777 state directory and a 0666 checkpoint refuse at startup naming the mode; nothing is read or changed' ($pd.ExitCode -eq 1 -and
+                $pdLine -match '^Refused: .*drwxrwxrwx' -and $pdLine -match 'Nothing was read or changed' -and $pf.ExitCode -eq 1 -and $pfLine -match '^Refused: .*-rw-rw-rw-' -and
+                $hashes.permFileReal -and (Get-Hash $sc.permFileReal) -eq $hashes.permFileReal -and -not (Get-Calls $pd 'account set*').Count) ((Get-Tail $pd) + ' || ' + (Get-Tail $pf))
+        }
+        else { Write-Host '  [SKIP] R6 bash (real modes): runs on Linux and macOS (installer-unix.yml); Git Bash reports fixed modes' -ForegroundColor DarkGray }
+        $og = $r2[$runOtherGroup.Dir]
+        $ogKept = Get-CheckpointFile $sc.otherGroup
+        $ogText = if ($ogKept) { [IO.File]::ReadAllText($ogKept.FullName) } else { '' }
+        Assert 'R5 bash a group receipt that names another group (live name differs) refuses on one line, keeps the checkpoint, and creates and syncs nothing' ((Test-Refusal $og "Entra group 'claude-code-standard' \($otherId\)") -and
+            [string]@(Get-ErrLines $og)[0] -match 'not listed by Microsoft Graph under that name' -and $ogText.Contains($otherId) -and -not (Get-Calls $og 'ad group create*').Count -and
+            -not @($og.Scripts | Where-Object { $_ -like '*Sync-ClaudeAccess*' }).Count) (Get-Tail $og)
+        $qa = $r2[$runQuoteAnswer.Dir]
+        Assert 'R5 bash a tier group answer with a single quote in the checkpoint refuses as a corrupt checkpoint naming PremiumGroup, before any az call that uses it, and keeps the file' (
+            (Test-Refusal $qa 'holds the answer PremiumGroup, which holds a single quote, which Azure CLI would place inside an OData string literal') -and $hashes.quoteAnswer -and
+            (Get-Hash $sc.quoteAnswer) -eq $hashes.quoteAnswer -and -not (Get-Calls $qa 'ad group*').Count) (Get-Tail $qa)
     }
-    $sn = $r2[$runSubscriptionName.Dir]
-    Assert 'S11 S5 a subscription passed by name that resolves to another id refuses before any write and names the field' ((Test-Refusal $sn 'subscription') -and
-        [string]@(Get-ErrLines $sn)[0] -match '0000000000a9' -and -not (Get-Calls $sn '*create*').Count -and $hashes.subscriptionName -and (Get-Hash $sc.subscriptionName) -eq $hashes.subscriptionName) (Get-Tail $sn)
-    foreach ($case in @(@('tamperDeployment', $runTamperDeployment, 'receipt of step gateway-deployment that names the deployment'), @('tamperGroup', $runTamperGroup, 'receipt of step entra-groups that holds the group id'))) {
-        $res = $r2[$case[1].Dir]
-        Assert "R5 bash a tampered receipt ($($case[0])) refuses on one line as a corrupt checkpoint and keeps the file" ((Test-Refusal $res $case[2]) -and $hashes[$case[0]] -and (Get-Hash $sc[$case[0]]) -eq $hashes[$case[0]]) (Get-Tail $res)
-    }
-    $pm = $r2[$runPermSeam.Dir]
-    $pmLine = [string]@(Get-ErrLines $pm)[0]
-    Assert 'R6 bash a state directory another user owns (probe seam) refuses at startup on one line naming the owner; nothing is read or changed' ($pm.ExitCode -eq 1 -and @(Get-ErrLines $pm).Count -eq 1 -and
-        $pmLine -match '^Refused: the install checkpoint directory ' -and $pmLine -match 'p91-other-user' -and $pmLine -match 'Nothing was read or changed' -and -not (Get-Calls $pm 'account set*').Count -and
-        $hashes.permSeam -and (Get-Hash $sc.permSeam) -eq $hashes.permSeam -and -not @(Get-ChildItem -LiteralPath $sc.permSeam.State -Filter '*.lock').Count) (Get-Tail $pm)
-    if (-not $script:windows) {
-        $pd = $r2[$runPermDirReal.Dir]; $pf = $r2[$runPermFileReal.Dir]
-        $pdLine = [string]@(Get-ErrLines $pd)[0]; $pfLine = [string]@(Get-ErrLines $pf)[0]
-        Assert 'R6 bash (real modes) a 0777 state directory and a 0666 checkpoint refuse at startup naming the mode; nothing is read or changed' ($pd.ExitCode -eq 1 -and
-            $pdLine -match '^Refused: .*drwxrwxrwx' -and $pdLine -match 'Nothing was read or changed' -and $pf.ExitCode -eq 1 -and $pfLine -match '^Refused: .*-rw-rw-rw-' -and
-            $hashes.permFileReal -and (Get-Hash $sc.permFileReal) -eq $hashes.permFileReal -and -not (Get-Calls $pd 'account set*').Count) ((Get-Tail $pd) + ' || ' + (Get-Tail $pf))
-    }
-    else { Write-Host '  [SKIP] R6 bash (real modes): runs on Linux and macOS (installer-unix.yml); Git Bash reports fixed modes' -ForegroundColor DarkGray }
-    $rn = $r2[$runRenamed.Dir]
-    Assert 'R5 bash a resume that names a group in another case than its receipt does not use the receipt: the name is looked up, reused and not created' ($rn.ExitCode -eq 0 -and
-        @($rn.Az | Where-Object { $_ -clike 'ad group list --display-name Claude-Code-Standard *' }).Count -eq 1 -and -not (Get-Calls $rn 'ad group create --display-name claude-code-standard*').Count) (Get-Tail $rn)
-    $gb = $r2[$runGitBash.Dir]
-    Assert 'R6 bash in Git Bash (uname -s MINGW64_NT) keeps no store: it warns, names Install-ClaudeGateway.ps1, prints the resume command with the answers, and neither reads nor writes a checkpoint' (
-        $gb.ExitCode -eq 0 -and $gb.Out -match '(?m)\[WARN\].*Git Bash.*Install-ClaudeGateway\.ps1' -and $gb.Out -match "(?m)^\s*Resume: cd '.+' && \./install-claude-gateway\.sh .*--resource-group 'rg-p91'" -and
-        $gb.Out -notmatch 'Resuming install run' -and $hashes.gitBash -and (Get-Hash $sc.gitBash) -eq $hashes.gitBash -and -not @(Get-ChildItem -LiteralPath $sc.gitBash.State -Filter '*.lock*' -ErrorAction SilentlyContinue).Count -and
-        (Get-Calls $gb 'deployment group create*').Count -eq 1) (Get-Tail $gb)
-    $og = $r2[$runOtherGroup.Dir]
-    $ogKept = Get-CheckpointFile $sc.otherGroup
-    $ogText = if ($ogKept) { [IO.File]::ReadAllText($ogKept.FullName) } else { '' }
-    Assert 'R5 bash a group receipt that names another group (live name differs) refuses on one line, keeps the checkpoint, and creates and syncs nothing' ((Test-Refusal $og "Entra group 'claude-code-standard' \($otherId\)") -and
-        [string]@(Get-ErrLines $og)[0] -match 'not listed by Microsoft Graph under that name' -and $ogText.Contains($otherId) -and -not (Get-Calls $og 'ad group create*').Count -and
-        -not @($og.Scripts | Where-Object { $_ -like '*Sync-ClaudeAccess*' }).Count) (Get-Tail $og)
-    $qa = $r2[$runQuoteAnswer.Dir]
-    Assert 'R5 bash a tier group answer with a single quote in the checkpoint refuses as a corrupt checkpoint naming PremiumGroup, before any az call that uses it, and keeps the file' (
-        (Test-Refusal $qa 'holds the answer PremiumGroup, which holds a single quote, which Azure CLI would place inside an OData string literal') -and $hashes.quoteAnswer -and
-        (Get-Hash $sc.quoteAnswer) -eq $hashes.quoteAnswer -and -not (Get-Calls $qa 'ad group*').Count) (Get-Tail $qa)
     $all = @($r1.Values) + @($r2.Values)
     $unexpected = @($all | ForEach-Object { $_.Unexpected } | Where-Object { $_ })
     Assert 'harness: every az call was one the stub knows, and no run timed out' (-not $unexpected.Count -and -not @($all | Where-Object { $_.TimedOut }).Count) (($unexpected | Select-Object -Unique -First 4) -join ' | ')

@@ -117,18 +117,23 @@ param(
     # Without it a rerun resumes after the last step whose result Azure still shows.
     [switch]$Restart,
 
+    # An answers file (schemas/claude-gateway.answers.schema.json). A parameter passed wins over it, and it
+    # wins over the install checkpoint's answers (docs/adr/0047-lean-installer-phase-0.md).
     [string]$AnswersPath,
+    # Check the answers and the estate, read-only, print the report and stop; -Json prints it as JSON.
     [switch]$Preflight,
     [switch]$Json,
+    # Print the steps with the state the install checkpoint records, and stop.
     [switch]$ListSteps,
+    # Run these steps only, each after its prerequisites are completed and verified live.
     [string[]]$Steps,
+    # Append one JSON event per line to this file as each step starts, completes, is skipped or fails.
     [string]$ProgressPath,
 
-    [int]$RevocationWindowSeconds,
-    [ValidateSet('report','stop')]
-    [string]$TeamBudgetBehaviour,
-    [ValidateSet('allow','deny')]
-    [string]$UnassignedDevelopers,
+    # Answers the installer otherwise asks for; an answers file passes them to an unattended run.
+    [ValidateRange(3600, 86400)][int]$RevocationWindowSeconds,
+    [ValidateSet('report', 'stop')][string]$TeamBudgetBehaviour,
+    [ValidateSet('allow', 'deny')][string]$UnassignedDevelopers,
     [int]$DeveloperEstimate,
     [object]$PendingClaudeDeployment,
     [object[]]$BusinessUnits,
@@ -144,6 +149,7 @@ $ErrorActionPreference = 'Stop'
 # released either way.
 $script:InstallTopLevel = -not $MyInvocation.PSCommandPath -and $MyInvocation.InvocationName -ne '.' -and $Host.Name -ne 'Default Host'
 trap {
+    if (Get-Command Write-ClaudeInstallTrapEvent -ErrorAction SilentlyContinue) { Write-ClaudeInstallTrapEvent $_.Exception.Message }
     if (Get-Command Exit-ClaudeInstallLock -ErrorAction SilentlyContinue) { Exit-ClaudeInstallLock }
     if (-not $script:InstallTopLevel) { break }
     [Console]::Error.WriteLine((($_.Exception.Message -replace '\s*[\r\n]+\s*', ' ').Trim()))
@@ -155,6 +161,17 @@ if ($FlipProjectionAfterCleanCompare) {
     . (Join-Path $root 'scripts\ClaudeProjectionChecks.ps1')
     Stop-ClaudeProjectionSwitch
 }
+# -Preflight and -ListSteps read only and print only their report: no prompt and no change (ADR-0047).
+. (Join-Path $root 'scripts/ClaudeInstallCheckpoint.ps1')
+if ($Preflight -or $ListSteps) {
+    if ($ListSteps) { Show-ClaudeInstallStepList -Root $root -Json:$Json; return }
+    . (Join-Path $root 'scripts/ClaudeInstallerPreflight.ps1')
+    $preflightResult = Get-ClaudeInstallPreflightResult -Bound $PSBoundParameters
+    Write-ClaudeGatewayPreflight -Result $preflightResult -Json:$Json
+    exit $(if ($preflightResult.result -eq 'PASS') { 0 } else { 1 })
+}
+if ($Steps) { Set-ClaudeInstallSelection -Steps $Steps }
+Initialize-ClaudeInstallProgress -Path $ProgressPath
 $desktopSignInHelper = Join-Path $root 'scripts/ClaudeDesktopSignIn.ps1'
 if (Test-Path $desktopSignInHelper) { . $desktopSignInHelper }
 
@@ -324,34 +341,18 @@ Write-Host ' Nothing is created until you confirm the summary.' -ForegroundColor
 . (Join-Path $root 'scripts/ClaudeModelDeployment.ps1')
 . (Join-Path $root 'scripts/ClaudeChoice.ps1')
 . (Join-Path $root 'scripts/ClaudeGatewayRegion.ps1')
-. (Join-Path $root 'scripts/ClaudeInstallerAnswers.ps1')
-if ($AnswersPath) {
-    Apply-ClaudeInstallerAnswers -Answers (Read-ClaudeInstallerAnswers -Path $AnswersPath) -Bound $PSBoundParameters
-}
 if (-not (Test-ClaudePrerequisites -Mode Admin)) { return }
-# An interrupted run's answers are bound as if passed; a parameter passed now wins (ADR-0046).
-. (Join-Path $root 'scripts/ClaudeInstallCheckpoint.ps1')
-$recordedAnswers = Open-ClaudeInstallCheckpoint -Root $root -Bound $PSBoundParameters -Restart:$Restart -WhatIfRun:$WhatIfPreference
+# The answers file's answers are bound as if passed, then an interrupted run's answers: a parameter passed
+# wins over the answers file, which wins over the checkpoint (ADR-0046, ADR-0047).
+if ($AnswersPath) {
+    . (Join-Path $root 'scripts/ClaudeInstallerAnswers.ps1')
+    $fromAnswers = Import-ClaudeInstallerAnswers -Path $AnswersPath -Bound $PSBoundParameters
+    foreach ($name in @($fromAnswers.Keys)) { Set-Variable -Name $name -Value $fromAnswers[$name]; $PSBoundParameters[$name] = $fromAnswers[$name] }
+}
+$recordedAnswers = Open-ClaudeInstallCheckpoint -Root $root -Bound $PSBoundParameters -Restart:$Restart -WhatIfRun:$WhatIfPreference -AnswersPath $AnswersPath
 foreach ($name in @($recordedAnswers.Keys)) { if (-not $PSBoundParameters.ContainsKey($name)) { Set-Variable -Name $name -Value $recordedAnswers[$name]; $PSBoundParameters[$name] = $recordedAnswers[$name] } }
-if ($null -ne ($recordedEstimate = Get-ClaudeInstallAnswer 'DeveloperEstimate')) { $script:DeveloperEstimate = [int]$recordedEstimate }
-if ($DeveloperEstimate) { $script:DeveloperEstimate = $DeveloperEstimate }
-if ($RevocationWindowSeconds) { $entitlementCacheSeconds = $RevocationWindowSeconds }
-if ($TeamBudgetBehaviour) { $budgetMode = $TeamBudgetBehaviour }
-if ($UnassignedDevelopers) { $unassignedMode = $UnassignedDevelopers }
-if ($PendingClaudeDeployment) { $pendingDeployment = $PendingClaudeDeployment }
-if ($ProgressPath) { Set-ClaudeInstallProgressPath -Path $ProgressPath }
-if ($Steps) { Set-ClaudeInstallSelectedSteps -Steps $Steps }
-if ($ListSteps) {
-    $list = Get-ClaudeInstallStepList
-    if ($Json) { [pscustomobject]@{ schemaVersion = 1; steps = $list } | ConvertTo-Json -Depth 8 } else { $list | ForEach-Object { "{0} {1} [{2}]" -f $_.id, $_.title, $_.state } }
-    return
-}
-if ($Preflight) {
-    $answers = if ($AnswersPath) { Read-ClaudeInstallerAnswers -Path $AnswersPath } else { @{} }
-    Invoke-ClaudeGatewayPreflight -Answers $answers -Json:$Json | Out-Null
-    if ($LASTEXITCODE) { exit $LASTEXITCODE }
-    return
-}
+if (-not $PSBoundParameters.ContainsKey('DeveloperEstimate') -and $null -ne ($recordedEstimate = Get-ClaudeInstallAnswer 'DeveloperEstimate')) { $script:DeveloperEstimate = [int]$recordedEstimate }
+if (-not $BusinessUnits -and ($recordedUnits = Get-ClaudeInstallAnswer 'BusinessUnits')) { $BusinessUnits = @($recordedUnits) }
 
 # The parameters as bound, before the first az call that uses one. A list passed to one of these
 # arrives as text joined by binding, so it is checked here too.
@@ -415,6 +416,7 @@ az account set --subscription $SubscriptionId
 $subName = (az account show --query name -o tsv)
 Write-Ok "subscription: $subName"
 Assert-ClaudeInstallSubscription
+Assert-ClaudeInstallPrerequisites
 
 # ------------------------------------------------------- 1. Foundry account
 
@@ -646,28 +648,21 @@ $useExistingGateway = {
     # workspace every time.
     $NamePrefix = ($instance.name -replace '^apim-', '')
     Write-Ok "reusing $($instance.name) ($($instance.sku.name), $($instance.resourceGroup))"
-    if ($instance.identity.type -and $instance.identity.type -notmatch 'SystemAssigned') {
-        Write-Warn2 "$($instance.name) has identity '$($instance.identity.type)'. Deploying sets SystemAssigned, which the gateway needs to call Foundry."
-    }
+    # The deployment fails without a system-assigned identity, so the remedy is said before it (U86).
+    $identity = (Get-ClaudeApimReuseProblems -Instance $instance).IdentityProblem
+    if ($identity) { Write-Warn2 "$($identity.message). $($identity.remedy)" }
 }
+. (Join-Path $root 'scripts/ClaudeInstallerPreflight.ps1')
 if ($ExistingApimName) {
-    $named = $null
-    if ($ResourceGroup) {
-        $json = Invoke-AzOptional { az apim show -g $ResourceGroup -n $ExistingApimName -o json }
-        if ($json) { $named = ($json | Out-String) | ConvertFrom-Json }
-        if ($named -and -not $named.resourceGroup) { $named | Add-Member -NotePropertyName resourceGroup -NotePropertyValue $ResourceGroup -Force }
+    # Read as the preflight reads it (apim.existingSku, apim.existingIdentity): present, absent or inconclusive.
+    $reuse = Get-ClaudeApimReuseState -Name $ExistingApimName -ResourceGroup $ResourceGroup
+    if ($reuse.Verdict -ne 'present') {
+        Write-Bad "$($reuse.Detail)."
+        throw $(if ($reuse.Verdict -eq 'absent') { 'The gateway to update was not found. Nothing was created.' } else { 'The gateway to update could not be read. Nothing was created.' })
     }
-    else {
-        $listed = az apim list -o json 2>$null | ConvertFrom-Json
-        $named = @($listed | Where-Object { $_.name -eq $ExistingApimName })[0]
-    }
-    if (-not $named) {
-        Write-Bad "API Management '$ExistingApimName' was not found$(if ($ResourceGroup) { " in '$ResourceGroup'" }) in this subscription."
-        throw 'The gateway to update was not found. Nothing was created.'
-    }
-    if ([string]$named.sku.name -notmatch 'V2$') {
-        throw "$ExistingApimName is $($named.sku.name); only v2 tiers meter Anthropic tokens, so budgets would read zero. Nothing was created."
-    }
+    if ($reuse.SkuProblem) { throw "$($reuse.SkuProblem.message). Nothing was created." }
+    $named = $reuse.Instance
+    if (-not $named.resourceGroup) { $named | Add-Member -NotePropertyName resourceGroup -NotePropertyValue $reuse.ResourceGroup -Force }
     . $useExistingGateway $named
 }
 if (-not $Location) { $Location = az cognitiveservices account show -g $FoundryResourceGroup -n $FoundryAccount --query location -o tsv }
@@ -694,8 +689,11 @@ if (-not (Test-ClaudeInstallResuming)) { $Location = if ($ExistingApim) { $Locat
 # zero Anthropic tokens, so every budget silently reads as zero usage.
 
 if (-not $NamePrefix) {
-    $allApim = az apim list -o json 2>$null | ConvertFrom-Json
-    $reusable = @($allApim | Where-Object { $_.sku.name -match 'V2$' })
+    # Read as the reuse path reads (Get-ClaudeApimReuseCandidates): a list that cannot be read offers no
+    # instance and says so, rather than reading as a subscription without one.
+    $candidates = Get-ClaudeApimReuseCandidates
+    if ($candidates.Verdict -ne 'present') { Write-Warn2 "The API Management instances in this subscription could not be listed ($($candidates.Detail)), so none is offered for reuse; -ExistingApimName names one." }
+    $reusable = @($candidates.Instances)
 
     if ($reusable.Count) {
         Write-Host ''
@@ -768,8 +766,8 @@ else {
     #   Standard v2  50M requests/month, up to 10 units, VNet, zones
     #   Premium v2   unlimited,          up to 30 units, VNet injection, zones
     #   - https://learn.microsoft.com/azure/api-management/v2-service-tiers-overview
-    $devs = Read-Default -Prompt 'How many developers will use this gateway' -Default '50' `
-        -Help 'Used to suggest a SKU, and to cost the choices below at your scale. You can override the suggestion.'
+    $devs = if ($DeveloperEstimate) { "$DeveloperEstimate" } else { Read-Default -Prompt 'How many developers will use this gateway' -Default '50' `
+        -Help 'Used to suggest a SKU, and to cost the choices below at your scale. You can override the suggestion.' }
     $n = 0
     if (-not [int]::TryParse($devs, [ref]$n) -or $n -lt 1) { $n = 50 }
     $script:DeveloperEstimate = $n
@@ -1050,7 +1048,9 @@ Write-Host '    Shortening the window moves only the rest.' -ForegroundColor Dar
 $windowTarget = if ($ExistingApim) { $ExistingApim } else { "apim-$NamePrefix" }
 $liveWindow = Invoke-AzOptional { az apim nv show -g $ResourceGroup --service-name $windowTarget --named-value-id entitlement-cache-seconds --query value -o tsv }
 $liveWindowSeconds = 0
-if ($liveWindow -and [int]::TryParse("$liveWindow".Trim(), [ref]$liveWindowSeconds) -and $liveWindowSeconds -gt 0) {
+# An answer given for the window wins over the live one: it is a change the operator asked for.
+if ($RevocationWindowSeconds) { $entitlementCacheSeconds = $RevocationWindowSeconds }
+elseif ($liveWindow -and [int]::TryParse("$liveWindow".Trim(), [ref]$liveWindowSeconds) -and $liveWindowSeconds -gt 0) {
     $entitlementCacheSeconds = $liveWindowSeconds
     Write-Host ''
     Write-Host ("    Keeping this gateway's revocation window: {0} seconds." -f $liveWindowSeconds) -ForegroundColor Green
@@ -1082,7 +1082,7 @@ Write-Host '    Worth knowing before choosing stop: the counter cannot see cache
 Write-Host '    and on measured usage cache was the majority of real cost. A stop set from' -ForegroundColor DarkGray
 Write-Host '    a dollar figure therefore triggers far later than the dollars suggest.' -ForegroundColor DarkGray
 
-$budgetMode = if ($recordedMode = Get-ClaudeInstallAnswer 'TeamBudgetBehaviour') { $recordedMode } else { Read-Default -Prompt 'Team budget behaviour (report/stop)' -Default 'report' `
+$budgetMode = if ($TeamBudgetBehaviour) { $TeamBudgetBehaviour } elseif ($recordedMode = Get-ClaudeInstallAnswer 'TeamBudgetBehaviour') { $recordedMode } else { Read-Default -Prompt 'Team budget behaviour (report/stop)' -Default 'report' `
     -Help 'Either way the spend is attributed. This chooses whether it also refuses.' -Validate {
         param($x)
         if ($x -in @('report','stop')) { return $true }
@@ -1100,7 +1100,7 @@ Write-Host ''
 Write-Host '    Start on allow unless every developer already has a team. deny on day one' -ForegroundColor DarkGray
 Write-Host '    refuses people who have done nothing wrong.' -ForegroundColor DarkGray
 
-$unassignedMode = if ($recordedMode = Get-ClaudeInstallAnswer 'UnassignedDevelopers') { $recordedMode } else { Read-Default -Prompt 'Developers with no team (allow/deny)' -Default 'allow' `
+$unassignedMode = if ($UnassignedDevelopers) { $UnassignedDevelopers } elseif ($recordedMode = Get-ClaudeInstallAnswer 'UnassignedDevelopers') { $recordedMode } else { Read-Default -Prompt 'Developers with no team (allow/deny)' -Default 'allow' `
     -Help 'Get-ClaudeBusinessUnit.ps1 reports how many are unassigned, so you can switch this when it reaches zero.' -Validate {
         param($x)
         if ($x -in @('allow','deny')) { return $true }
@@ -1670,7 +1670,7 @@ if (-not $gatewayUrl) { $gatewayUrl = "https://$apimName.azure-api.net/claude" }
 Complete-ClaudeInstallGatewayStep -ResourceGroup $ResourceGroup -ApimName $apimName -GatewayUrl $gatewayUrl -GrantedRole $grantRole `
     -FoundryResourceGroup $FoundryResourceGroup -FoundryAccount $FoundryAccount -DesktopClientId $DesktopEntraClientId
 }
-if ($addressPlan) {
+if ($addressPlan -and (Test-ClaudeInstallStepSelected 'company-address')) {
     if (Test-ClaudeInstallStepSkip 'company-address' -Verify { Test-ClaudeInstallAddress $ResourceGroup $apimName $AddressHostname $savedAddressPath }) {
         $addressRecord = Read-ClaudeDecisionRecord -Path $savedAddressPath
         $addressResult = [pscustomobject]@{ GatewayUrl = [string]$addressRecord.gatewayUrl; Address = $addressRecord.address }
@@ -1685,14 +1685,18 @@ if ($addressPlan) {
 
 # ---------------------------------------------------------------- 7. groups
 
-Write-Step 'Entra groups'
-Invoke-ClaudeInstallGroups -Groups @([pscustomobject]@{ Role = 'standard'; Name = $StandardGroup }, [pscustomobject]@{ Role = 'premium'; Name = $PremiumGroup })
+if (Test-ClaudeInstallStepSelected 'entra-groups') {
+    Write-Step 'Entra groups'
+    Invoke-ClaudeInstallGroups -Groups @([pscustomobject]@{ Role = 'standard'; Name = $StandardGroup }, [pscustomobject]@{ Role = 'premium'; Name = $PremiumGroup })
+}
 
-Write-Step 'Sync entitlement'
-Start-ClaudeInstallStep 'sync'
-& (Join-Path $root 'scripts/Sync-ClaudeAccess.ps1') -ApimName $apimName -ResourceGroup $ResourceGroup `
-    -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup
-Complete-ClaudeInstallStep 'sync'
+if (Test-ClaudeInstallStepSelected 'sync') {
+    Write-Step 'Sync entitlement'
+    Start-ClaudeInstallStep 'sync'
+    & (Join-Path $root 'scripts/Sync-ClaudeAccess.ps1') -ApimName $apimName -ResourceGroup $ResourceGroup `
+        -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup
+    Complete-ClaudeInstallStep 'sync'
+}
 
 if ($EntitlementStore -eq 'projection' -and $DeployProjection -and -not (Test-ClaudeInstallStepSkip 'projection' -Verify {
         Test-ClaudeInstallDeployments $ResourceGroup @("projection-$NamePrefix", "projection-network-$NamePrefix", "projection-resolver-$NamePrefix") })) {
@@ -1725,29 +1729,17 @@ if ($EntitlementStore -eq 'projection' -and $DeployProjection -and -not (Test-Cl
 #
 # Skipped by default under -Yes: a business unit is a naming decision about the
 # customer's own organisation, and guessing one unattended leaves a registry
-# entry nobody asked for.
-if ($BusinessUnits) {
+# entry nobody asked for. Units given as answers are applied, attended or not (ADR-0047).
+if (-not (Test-ClaudeInstallStepSelected 'business-units')) {
+    # -Steps without business-units: this run neither asks for nor writes a business unit.
+}
+elseif ($BusinessUnits) {
     Write-Step 'Business units'
     if (-not (Test-ClaudeInstallStepSkip 'business-units' -Verify { Test-ClaudeInstallBusinessUnits $ResourceGroup $apimName $args[0] })) {
-        $orderedUnits = @($BusinessUnits | Where-Object { -not $_.parent }) + @($BusinessUnits | Where-Object { $_.parent })
-        foreach ($unit in $orderedUnits) {
-            $args = @(
-                '-Id', [string]$unit.id,
-                '-Group', [string]$unit.group,
-                '-MonthlyBudgetUsd', [decimal]$unit.monthlyUsdBudget,
-                '-ApimName', $apimName,
-                '-ResourceGroup', $ResourceGroup
-            )
-            if ($unit.parent) { $args += @('-Parent', [string]$unit.parent) }
-            if ($unit.mode) { $args += @('-Mode', [string]$unit.mode) }
-            if ($unit.percent) { $args += @('-AllowancePercent', [int]$unit.percent) }
-            & (Join-Path $root 'scripts/Set-ClaudeBusinessUnit.ps1') @args
-            Add-ClaudeInstallBusinessUnit -Id ([string]$unit.id) -GroupId ([string]$unit.group) -GroupOrigin 'pre-existing'
-        }
-        Complete-ClaudeInstallStep 'business-units'
-        Write-Note "After access sync changes bu-members, reconcile dollar budget state:"
-        Write-Note "  ./scripts/Sync-ClaudeUsdBudgets.ps1 -ResourceGroup $ResourceGroup -ApimName $apimName"
+        Invoke-ClaudeInstallBusinessUnits -Root $root -Units @($BusinessUnits) -ResourceGroup $ResourceGroup -ApimName $apimName
     }
+    . (Join-Path $root 'scripts/ClaudeUsdBudgets.ps1'); . (Join-Path $root 'scripts/ClaudeBudgetModes.ps1')
+    Write-ClaudeInstallUsdReconcile -ResourceGroup $ResourceGroup -ApimName $apimName
 }
 elseif (-not $Yes) {
     Write-Step 'Business units (optional)'
@@ -1798,6 +1790,9 @@ elseif (-not $Yes) {
 
 # --------------------------------------------------------------- 8. package
 
+# A run with -Steps writes the package only when it names onboarding-package; the block below is not
+# re-indented, so that this change reads line by line.
+if (Test-ClaudeInstallStepSelected 'onboarding-package') {
 Write-Step 'Onboarding package'
 Start-ClaudeInstallStep 'onboarding-package'
 $pkg = Join-Path $root 'onboarding'
@@ -1872,18 +1867,23 @@ else {
 }
 Write-Ok "config: $configPath"
 Complete-ClaudeInstallStep 'onboarding-package' -Receipt ([pscustomobject]@{ path = $configPath })
+}
 
 # ---------------------------------------------------------------- 9. verify
 
-Write-Step 'Verifying the controls'
-Start-ClaudeInstallStep 'verify'
-$verified = $true
-try {
-    & (Join-Path $root 'scripts/Show-Governance.ps1') -ApimName $apimName -ResourceGroup $ResourceGroup -SkipThrottleTest
+if (Test-ClaudeInstallStepSelected 'verify') {
+    Write-Step 'Verifying the controls'
+    Start-ClaudeInstallStep 'verify'
+    $verified = $true
+    try {
+        & (Join-Path $root 'scripts/Show-Governance.ps1') -ApimName $apimName -ResourceGroup $ResourceGroup -SkipThrottleTest
+    }
+    catch { Write-Warn2 "Verification could not complete: $($_.Exception.Message)"; $verified = $false }
+    Complete-ClaudeInstallStep 'verify' -Incomplete:(-not $verified)
 }
-catch { Write-Warn2 "Verification could not complete: $($_.Exception.Message)"; $verified = $false }
-Complete-ClaudeInstallStep 'verify' -Incomplete:(-not $verified)
 Close-ClaudeInstallCheckpoint
+# A run with -Steps ran what it was asked to; the next steps belong to a whole install.
+if ($Steps) { return }
 
 # ----------------------------------------------------------------- 10. next
 

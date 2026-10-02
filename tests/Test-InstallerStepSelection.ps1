@@ -35,7 +35,11 @@ function Test-Refusal($Result, [string]$Pattern) {
 function Get-Writes($Result) { @($Result.Az | Where-Object { $_ -match '(^| )(create|update|delete|add|remove|assign)( |$)' }) }
 function Get-Events([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path)) { return @() }
-    @([IO.File]::ReadAllText($Path) -split "`n" | Where-Object { $_ } | ForEach-Object { try { $_ | ConvertFrom-Json -ErrorAction Stop } catch { [pscustomobject]@{ unreadable = $_ } } })
+    # time is read as written: PowerShell 7 reads an ISO time in JSON as a DateTime.
+    @([IO.File]::ReadAllText($Path) -split "`n" | Where-Object { $_ } | ForEach-Object {
+            $line = $_
+            try { $e = $line | ConvertFrom-Json -ErrorAction Stop; $m = [regex]::Match($line, '"time"\s*:\s*"([^"]*)"'); if ($m.Success) { $e.time = $m.Groups[1].Value }; $e }
+            catch { [pscustomobject]@{ unreadable = $line } } })
 }
 function Write-Answers($Scenario, $Answers) { $p = Join-Path $Scenario.Dir 'answers.json'; Write-P91Text $p ($Answers | ConvertTo-Json -Depth 8); return $p }
 function New-From($Name, $From, [scriptblock]$World) { $s = New-P91Scenario -Name $Name -Scratch $scratch -From $From; if ($World) { Edit-P91World $s $World }; $s }

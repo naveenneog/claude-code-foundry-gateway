@@ -113,9 +113,14 @@ ckpt_verify_gateway_() {
 ckpt_gateway_plan_() {
   local rg="$1" apim="$2" title="Gateway deployment" hash state stored recorded origin
   CKPT_GW_RUN=1; CKPT_GW_URL=""
+  # Another step selected with --steps: the gateway its prerequisite check verified, as recorded.
+  if ! steps_selected_ gateway-deployment; then
+    CKPT_GW_RUN=0; CKPT_GW_URL="$(ckpt_receipt_field_ gateway-deployment gatewayUrl)"; [ -n "$CKPT_GW_URL" ] || CKPT_GW_URL="https://$apim.azure-api.net/claude"
+    return 0
+  fi
   # Without a checkpoint (Git Bash, a state directory that could not be created, or a default place that
   # failed a check) the guard against a second main.bicep deployment still runs (decision 10).
-  if [ "$CKPT_LOCKED" != "1" ]; then ckpt_wait_main_deployments_ "$rg"; return 0; fi
+  if [ "$CKPT_LOCKED" != "1" ]; then ckpt_wait_main_deployments_ "$rg"; progress_step_ gateway-deployment started; return 0; fi
   hash="$(ckpt_input_hash_ gateway-deployment)"
   state="$(ckpt_step_field_ gateway-deployment state)"; stored="$(ckpt_step_field_ gateway-deployment inputHash)"
   recorded="$(printf '%s' "$CKPT_JSON" | ckpt_jq_ -r '([.steps[]? | select(.id == "gateway-deployment")][0].receipt.deployments // []) | last | .name // empty')"
@@ -139,7 +144,7 @@ ckpt_gateway_plan_() {
       [ "$V_VERDICT" = "inconclusive" ] && ckpt_refuse_ "$title could not be verified ($V_DETAIL). Nothing was changed. Resume: $(ckpt_resume_cmd_)"
       if [ "$V_VERDICT" = "present" ]; then
         CKPT_GW_URL="$DS_URL"; [ -n "$CKPT_GW_URL" ] || CKPT_GW_URL="$(ckpt_receipt_field_ gateway-deployment gatewayUrl)"
-        [ "$state" = "completed" ] || ckpt_complete_gateway_ "$apim" "$CKPT_GW_URL"
+        if [ "$state" = "completed" ]; then progress_step_ gateway-deployment skipped-verified; else ckpt_complete_gateway_ "$apim" "$CKPT_GW_URL"; fi
         printf '    %s[OK]%s   %s: verified live, skipped (deployment %s)\n' "$C_GREEN" "$C_OFF" "$title" "$recorded"
         CKPT_GW_RUN=0; return 0
       fi
@@ -176,7 +181,7 @@ ckpt_register_deployment_() {
   ckpt_cloudshell_line_
 }
 ckpt_complete_gateway_() {
-  [ "$CKPT_LOCKED" = "1" ] || return 0
+  if [ "$CKPT_LOCKED" != "1" ]; then progress_step_ gateway-deployment completed; return 0; fi
   CKPT_JSON="$(printf '%s' "$CKPT_JSON" | ckpt_jq_ -c --arg a "$1" --arg u "$2" '
     .steps |= map(if .id == "gateway-deployment" then
       .receipt = ((.receipt // {}) | .deployments = ((.deployments // []) | if length > 0 then .[:-1] + [(last | .lastState = "Succeeded")] else . end) | .apimName = $a | .gatewayUrl = $u)
@@ -223,9 +228,12 @@ ckpt_group_lookup_() {
 # code point), and its id must be listed under that name; a name finds a group by its length.
 ckpt_groups_() {
   local old made="" complete=1 verified=0 role name rec id origin when resume
+  steps_selected_ entra-groups || return 0
   resume="$(ckpt_resume_cmd_)"
   old="$(ckpt_receipt_ entra-groups)"
-  ckpt_set_step_ entra-groups started "$(ckpt_input_hash_ entra-groups)"
+  # Started in the progress stream only when a group is looked up by name: a resume that verifies every
+  # receipt live skips the step.
+  CKPT_QUIET=1 ckpt_set_step_ entra-groups started "$(ckpt_input_hash_ entra-groups)"
   for role in standard premium; do
     if [ "$role" = "standard" ]; then name="$1"; else name="$2"; fi
     rec="$(printf '%s' "${old:-null}" | ckpt_jq_ -r --arg r "$role" --arg n "$name" '[(.groups // [])[] | select(.role == $r and .displayName == $n)][0] | if . then [.id, .origin, (.createdUtc // "")] | join("\u001f") else empty end')"
@@ -256,6 +264,7 @@ EOF
     # By display name: one such group with an id is reused; none (longer names only) is absent. A
     # failed read, an unreadable list or a name of that length held by no id or by two groups creates
     # nothing (R1, R5).
+    progress_step_ entra-groups started
     ckpt_group_lookup_ "$name"
     case "$G_VERDICT" in
       absent) ;;
@@ -277,9 +286,12 @@ EOF
       complete=0
     fi
   done
-  [ "$verified" = "2" ] && printf '    %s[OK]%s   Entra groups: verified live, skipped\n' "$C_GREEN" "$C_OFF"
   made="$(printf '%s' "$made" | ckpt_jq_ -cs '{groups: .}')"
-  if [ "$complete" = "1" ]; then ckpt_set_step_ entra-groups completed __keep__ "$made"; else ckpt_set_step_ entra-groups incomplete __keep__ "$made"; fi
+  if [ "$verified" = "2" ]; then
+    printf '    %s[OK]%s   Entra groups: verified live, skipped\n' "$C_GREEN" "$C_OFF"
+    progress_step_ entra-groups skipped-verified
+    CKPT_QUIET=1 ckpt_set_step_ entra-groups completed __keep__ "$made"
+  elif [ "$complete" = "1" ]; then ckpt_set_step_ entra-groups completed __keep__ "$made"; else ckpt_set_step_ entra-groups incomplete __keep__ "$made"; fi
 }
 
 # The resource group: verified live on a resume, otherwise created only when absent. A failed create

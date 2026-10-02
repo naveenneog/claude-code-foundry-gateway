@@ -10,69 +10,13 @@ $script:ClaudeInstallSteps = [ordered]@{
     'company-address' = 'Company address'; 'entra-groups' = 'Entra groups'; 'sync' = 'Sync entitlement'; 'projection' = 'Projection deployment'
     'business-units' = 'Business units'; 'onboarding-package' = 'Onboarding package'; 'verify' = 'Verification'
 }
-$script:ClaudeInstallStepDependencies = @{
-    'claude-deployment' = @(); 'resource-group' = @(); 'gateway-deployment' = @('resource-group')
-    'company-address' = @('gateway-deployment'); 'entra-groups' = @('gateway-deployment')
-    'sync' = @('entra-groups'); 'projection' = @('gateway-deployment')
-    'business-units' = @('sync'); 'onboarding-package' = @('sync'); 'verify' = @('onboarding-package')
-}
-$script:ClaudeInstallSelectedSteps = $null
-$script:ClaudeInstallProgressPath = ''
-
-function Set-ClaudeInstallProgressPath { param([string]$Path) $script:ClaudeInstallProgressPath = $Path }
-function Write-ClaudeInstallProgress {
-    param([string]$StepId, [ValidateSet('started','completed','skipped-verified','failed','refused','warning')][string]$Event, [string]$Message, [string]$ResumeCommand)
-    if (-not $script:ClaudeInstallProgressPath) { return }
-    $runId = if ($script:ClaudeInstall -and $script:ClaudeInstall.Checkpoint) { [string]$script:ClaudeInstall.Checkpoint.runId } else { '' }
-    $row = [pscustomobject][ordered]@{
-        schemaVersion = 1
-        time = [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ', [Globalization.CultureInfo]::InvariantCulture)
-        runId = $runId
-        stepId = $StepId
-        event = $Event
-        message = $Message
-        resumeCommand = $ResumeCommand
-    } | ConvertTo-Json -Compress
-    $dir = Split-Path -Parent $script:ClaudeInstallProgressPath
-    if ($dir) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
-    [IO.File]::AppendAllText($script:ClaudeInstallProgressPath, $row + [Environment]::NewLine, [Text.UTF8Encoding]::new($false))
-}
-
-function Set-ClaudeInstallSelectedSteps { param([string[]]$Steps) $script:ClaudeInstallSelectedSteps = @($Steps | Where-Object { $_ }) }
-function Test-ClaudeInstallStepSelected {
-    param([string]$Id)
-    if (-not $script:ClaudeInstallSelectedSteps -or -not $script:ClaudeInstallSelectedSteps.Count) { return $true }
-    return $script:ClaudeInstallSelectedSteps -contains $Id
-}
-function Get-ClaudeInstallStepList {
-    $c = $script:ClaudeInstall
-    foreach ($id in $script:ClaudeInstallSteps.Keys) {
-        $s = if ($c -and $c.Checkpoint) { Get-ClaudeInstallStep $id } else { $null }
-        [pscustomobject][ordered]@{
-            id = $id
-            title = $script:ClaudeInstallSteps[$id]
-            dependencies = @($script:ClaudeInstallStepDependencies[$id])
-            state = $(if ($s) { [string]$s.state } else { 'unknown' })
-        }
-    }
-}
-function Assert-ClaudeInstallSelectedSteps {
-    if (-not $script:ClaudeInstallSelectedSteps -or -not $script:ClaudeInstallSelectedSteps.Count) { return }
-    foreach ($id in $script:ClaudeInstallSelectedSteps) {
-        if (-not $script:ClaudeInstallSteps.Contains($id)) { Stop-ClaudeInstall "Refused: unknown step '$id'. Nothing was changed." }
-        foreach ($dep in @($script:ClaudeInstallStepDependencies[$id])) {
-            $s = Get-ClaudeInstallStep $dep
-            if (-not $s -or $s.state -ne 'completed') { Stop-ClaudeInstall "Refused: selected step '$id' needs prerequisite '$dep' completed and verified live. Nothing was changed." }
-        }
-    }
-}
 $script:ClaudeInstallParameterAnswers = @('SubscriptionId', 'FoundryAccount', 'FoundryResourceGroup', 'ResourceGroup', 'Location', 'NamePrefix', 'PublisherEmail', 'Sku',
     'AddressMode', 'AddressHostname', 'AddressCertificateSource', 'AddressKeyVaultCertificateId', 'AddressPfxPath', 'AddressDnsZoneResourceId', 'AddressDnsMode',
     'AddressReplaceHostname', 'ExistingApimName', 'EntitlementStore', 'ResolverInboundAccess', 'DeployProjection', 'ProjectionReconcilerResourceId', 'ProjectionResolverAppId',
     'TpmStandard', 'QuotaStandard', 'TpmPremium', 'QuotaPremium', 'QuotaOrg', 'CallsPerMinute', 'StandardGroup', 'PremiumGroup', 'StandardModels', 'PremiumModels',
     'AuthMode', 'DesktopSignInKind', 'DesktopBearerTokenType', 'DesktopEntraClientId', 'DesktopEntraIssuer', 'DesktopEntraScopes', 'DesktopEntraAudience',
     'DesktopEntraResource', 'ModelOrganizationName', 'ModelIndustry', 'ModelCountryCode')
-$script:ClaudeInstallPromptAnswers = @('RevocationWindowSeconds', 'TeamBudgetBehaviour', 'UnassignedDevelopers', 'DeveloperEstimate', 'PendingClaudeDeployment')
+$script:ClaudeInstallPromptAnswers = @('RevocationWindowSeconds', 'TeamBudgetBehaviour', 'UnassignedDevelopers', 'DeveloperEstimate', 'PendingClaudeDeployment', 'BusinessUnits')
 $script:ClaudeInstallChoices = @{
     Sku = 'BasicV2', 'StandardV2', 'PremiumV2'; AddressMode = 'azure', 'custom'; AddressCertificateSource = 'KeyVault', 'Pfx'; AddressDnsMode = 'AzureDns', 'External'
     EntitlementStore = 'named-value', 'projection'; ResolverInboundAccess = 'private', 'public'; AuthMode = 'interactive', 'device', 'helper'
@@ -196,6 +140,19 @@ function Test-ClaudeInstallAnswer {
         }
         return ''
     }
+    if ($Name -eq 'BusinessUnits') {
+        # Units reach az as group names and Set-ClaudeBusinessUnit.ps1 arguments (ADR-0047).
+        foreach ($u in @($Value)) {
+            if ($u -isnot [System.Management.Automation.PSCustomObject]) { return 'holds a unit that is not an object' }
+            foreach ($p in $u.PSObject.Properties) {
+                if ($p.Name -cnotin 'id', 'group', 'parent', 'monthlyUsdBudget', 'mode', 'percent') { return "holds a unit with '$($p.Name)'" }
+                if ($p.Name -in 'monthlyUsdBudget', 'percent') { if ("$($p.Value)" -notmatch '^\d{1,9}(\.\d{1,6})?$') { return "holds a unit whose $($p.Name) is not a number" }; continue }
+                $why = Test-ClaudeInstallAnswerText ([string]$p.Value); if ($why) { return $why }
+            }
+            if ([string]$u.id -cnotmatch '^[a-z0-9][a-z0-9-]*$' -or [string]$u.group -match "[',:]" -or [string]$u.mode -cnotin 'Strict', 'Allowance', 'Notify') { return "holds the unit $(ConvertTo-Json -InputObject ([string]$u.id) -Compress) with group $(ConvertTo-Json -InputObject ([string]$u.group) -Compress) and mode $(ConvertTo-Json -InputObject ([string]$u.mode) -Compress)" }
+        }
+        return ''
+    }
     if ($Name -in $script:ClaudeInstallIntegers) { if ("$Value" -notmatch '^\d{1,12}$') { return 'is not a whole number' }; return '' }
     if ($Name -eq 'DeployProjection') { if ($Value -isnot [bool]) { return 'is not true or false' }; return '' }
     if ($Name -eq 'SubscriptionId' -and "$Value" -notmatch '^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$') { return 'is not a subscription id' }
@@ -256,6 +213,7 @@ function Test-ClaudeInstallReceipt {
                 if (& $bad $u.id '^[a-z0-9][a-z0-9-]*$') { return "names the business unit $(& $show $u.id)" }
                 if (& $bad $u.groupId $guid) { return "holds the group id $(& $show $u.groupId)" }
                 if (& $origin $u.groupOrigin) { return "has the group origin $(& $show $u.groupOrigin)" }
+                if ($u.inputHash -and [string]$u.inputHash -cnotmatch '^sha256:[0-9a-f]{64}$') { return "holds the input hash $(& $show $u.inputHash)" }
             }
         }
         'projection' {
@@ -301,12 +259,13 @@ function Read-ClaudeInstallCheckpoint {
 }
 
 function Format-ClaudeInstallResume {
-    # The command that resumes this run. -WithAnswers adds every recorded parameter answer, for a
-    # checkpoint that does not persist (ADR-0046 decision 14).
+    # The command that resumes this run. -WithAnswers adds every recorded parameter answer, and the
+    # answers file the run read, for a checkpoint that does not persist (ADR-0046 decision 14).
     param([switch]$WithAnswers)
     $c = $script:ClaudeInstall
     $quote = { param($v) "'" + ([string]$v).Replace("'", "''") + "'" }
     $line = "Set-Location -LiteralPath $(& $quote $c.Root); ./Install-ClaudeGateway.ps1"
+    if ($WithAnswers -and $c.AnswersPath) { $line += " -AnswersPath $(& $quote $c.AnswersPath)" }
     if ($WithAnswers) {
         foreach ($n in $script:ClaudeInstallParameterAnswers) {
             if (-not $c.Answers.Contains($n)) { continue }
@@ -434,13 +393,20 @@ function Get-ClaudeInstallVersion {
     return $c
 }
 
+function New-ClaudeInstallContext {
+    # The run's install state: where its store is and, once read, its checkpoint and recorded answers.
+    param([Parameter(Mandatory = $true)][string]$Root, [System.Collections.IDictionary]$Bound = @{}, [switch]$WhatIfRun, [string]$AnswersPath)
+    $script:ClaudeInstall = [pscustomobject]@{ Root = $Root; Location = (Get-ClaudeInstallLocation -Root $Root); Commit = ''; Checkpoint = $null; Resuming = $false
+        Fingerprint = ''; Answers = [ordered]@{}; Lock = $null; WhatIf = [bool]$WhatIfRun; CloudShellNoted = $false; SubscriptionId = ''; Bound = @($Bound.Keys | ForEach-Object { [string]$_ })
+        AnswersPath = $AnswersPath }
+    return $script:ClaudeInstall
+}
+
 function Open-ClaudeInstallCheckpoint {
     # At startup, before any question: reads the checkpoint, refuses what it cannot resume, prints
     # where the run resumes and returns the recorded parameter answers (ADR-0046 decisions 5 and 6).
-    param([Parameter(Mandatory = $true)][string]$Root, [System.Collections.IDictionary]$Bound = @{}, [switch]$Restart, [switch]$WhatIfRun)
-    $script:ClaudeInstall = [pscustomobject]@{ Root = $Root; Location = (Get-ClaudeInstallLocation -Root $Root); Commit = ''; Checkpoint = $null; Resuming = $false
-        Fingerprint = ''; Answers = [ordered]@{}; Lock = $null; WhatIf = [bool]$WhatIfRun; CloudShellNoted = $false; SubscriptionId = ''; Bound = @($Bound.Keys | ForEach-Object { [string]$_ }) }
-    $c = $script:ClaudeInstall
+    param([Parameter(Mandatory = $true)][string]$Root, [System.Collections.IDictionary]$Bound = @{}, [switch]$Restart, [switch]$WhatIfRun, [string]$AnswersPath)
+    $c = New-ClaudeInstallContext -Root $Root -Bound $Bound -WhatIfRun:$WhatIfRun -AnswersPath $AnswersPath
     $path = $c.Location.Checkpoint
     if ($WhatIfRun) {
         if (Test-Path -LiteralPath $path) { Write-Host "    An install checkpoint exists at $path; -WhatIf previews a first run and changes nothing." -ForegroundColor DarkGray }
@@ -478,6 +444,7 @@ function Open-ClaudeInstallCheckpoint {
     $reused = if (@($Bound.Keys) -contains 'ExistingApimName') { 'true' } elseif (@($Bound.Keys) -contains 'NamePrefix') { 'false' } else { '' }
     if ($reused -and $reused -ne ([string][bool]$b.reusedApim).ToLowerInvariant()) { Stop-ClaudeInstallBinding 'reusedApim' ([string][bool]$b.reusedApim).ToLowerInvariant() $reused }
     $c.Resuming = $true
+    $script:ClaudeInstallRunId = [string]$cp.runId
     foreach ($p in $cp.answers.PSObject.Properties) { $c.Answers[$p.Name] = $p.Value }
     Write-Host ''
     Write-Host "Install checkpoint: $path" -ForegroundColor Cyan
@@ -553,6 +520,12 @@ function Get-ClaudeInstallAnswers {
     if ($a.Contains('ExistingApimName')) { $a.Remove('NamePrefix') }
     $prompt = @{ RevocationWindowSeconds = (& $read 'entitlementCacheSeconds'); TeamBudgetBehaviour = (& $read 'budgetMode'); UnassignedDevelopers = (& $read 'unassignedMode'); DeveloperEstimate = (& $read 'DeveloperEstimate') }
     foreach ($n in 'RevocationWindowSeconds', 'TeamBudgetBehaviour', 'UnassignedDevelopers', 'DeveloperEstimate') { if ("$($prompt[$n])" -ne '' -and "$($prompt[$n])" -ne '0') { $a[$n] = $(if ($n -in $script:ClaudeInstallIntegers) { [int]$prompt[$n] } else { [string]$prompt[$n] }) } }
+    # Get-Variable -ValueOnly writes a list as one object; assigned first, it is read item by item.
+    $given = & $read 'BusinessUnits'
+    $units = @($given | Where-Object { $_ })
+    if ($units.Count) {
+        $a['BusinessUnits'] = @($units | ForEach-Object { $u = [ordered]@{}; foreach ($p in $_.PSObject.Properties) { if ($null -ne $p.Value) { $u[$p.Name] = $p.Value } }; [pscustomobject]$u })
+    }
     $pending = & $read 'pendingDeployment'
     if ($pending) { $a['PendingClaudeDeployment'] = [pscustomobject][ordered]@{ name = [string]$pending.name; model = [string]$pending.model; version = [string]$pending.version; sku = [string]$pending.sku; capacity = [string]$pending.capacity; account = [string]$pending.account; resourceGroup = [string]$pending.resourceGroup } }
     return $a
@@ -565,6 +538,7 @@ function Get-ClaudeInstallInputHash([string]$Id) {
         'resource-group' { 'ResourceGroup', 'Location' }
         'entra-groups' { 'StandardGroup', 'PremiumGroup' }
         'claude-deployment' { @('PendingClaudeDeployment') }
+        'business-units' { @('BusinessUnits') }
         'company-address' { @($c.Answers.Keys | Where-Object { $_ -like 'Address*' }) }
         'projection' { 'EntitlementStore', 'ResolverInboundAccess', 'NamePrefix', 'Location', 'Sku', 'ProjectionResolverAppId', 'StandardGroup', 'PremiumGroup' }
         'gateway-deployment' { @($c.Answers.Keys | Where-Object { $_ -notin 'StandardGroup', 'PremiumGroup', 'AuthMode', 'TeamBudgetBehaviour', 'DeveloperEstimate', 'DeployProjection', 'ProjectionReconcilerResourceId', 'ProjectionResolverAppId', 'PendingClaudeDeployment', 'ModelOrganizationName', 'ModelIndustry', 'ModelCountryCode' -and $_ -notlike 'Address*' }) }
@@ -608,7 +582,7 @@ function Save-ClaudeInstallCheckpoint {
         $c.Checkpoint.answers = [pscustomobject]$answers
     }
     else {
-        $c.Checkpoint = [pscustomobject][ordered]@{ schema = $script:ClaudeInstallSchema; schemaVersion = 1; runId = [guid]::NewGuid().ToString('N'); installer = 'pwsh'
+        $c.Checkpoint = [pscustomobject][ordered]@{ schema = $script:ClaudeInstallSchema; schemaVersion = 1; runId = $script:ClaudeInstallRunId; installer = 'pwsh'
             installerFingerprint = $c.Fingerprint; installerCommit = $c.Commit; checkout = $c.Root; createdUtc = $now; updatedUtc = $now
             binding = [pscustomobject]$binding; answers = [pscustomobject]$answers; steps = @() }
     }
@@ -640,7 +614,9 @@ function Save-ClaudeInstallState {
 }
 
 function Set-ClaudeInstallStep {
-    param([string]$Id, [string]$State, [string]$InputHash, $Receipt)
+    # The step's state in the checkpoint, and its event in the progress stream, with or without a store.
+    param([string]$Id, [string]$State, [string]$InputHash, $Receipt, [switch]$Quiet)
+    if (-not $Quiet) { Write-ClaudeInstallStepEvent -Id $Id -Event $(if ($State -eq 'started') { 'started' } elseif ($State -eq 'completed') { 'completed' } else { 'warning' }) }
     $c = $script:ClaudeInstall
     if (-not $c -or -not $c.Checkpoint -or -not $c.Lock) { return }
     $now = [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ', [Globalization.CultureInfo]::InvariantCulture)
@@ -655,31 +631,24 @@ function Set-ClaudeInstallStep {
     if ($PSBoundParameters.ContainsKey('Receipt')) { $step.receipt = $Receipt }
     Save-ClaudeInstallState
 }
-function Start-ClaudeInstallStep([string]$Id) {
-    Assert-ClaudeInstallSelectedSteps
-    if (-not (Test-ClaudeInstallStepSelected $Id)) { return }
-    $old = Get-ClaudeInstallStep $Id
-    Set-ClaudeInstallStep -Id $Id -State 'started' -InputHash (Get-ClaudeInstallInputHash $Id) -Receipt $(if ($old) { $old.receipt } else { $null })
-    Write-ClaudeInstallProgress -StepId $Id -Event started -Message "$($script:ClaudeInstallSteps[$Id]) started"
-}
+function Start-ClaudeInstallStep([string]$Id) { $old = Get-ClaudeInstallStep $Id; Set-ClaudeInstallStep -Id $Id -State 'started' -InputHash (Get-ClaudeInstallInputHash $Id) -Receipt $(if ($old) { $old.receipt } else { $null }) }
 function Complete-ClaudeInstallStep {
-    param([string]$Id, $Receipt, [switch]$Incomplete)
+    param([string]$Id, $Receipt, [switch]$Incomplete, [switch]$Quiet)
     $state = if ($Incomplete) { 'incomplete' } else { 'completed' }
-    if ($PSBoundParameters.ContainsKey('Receipt')) { Set-ClaudeInstallStep -Id $Id -State $state -Receipt $Receipt } else { Set-ClaudeInstallStep -Id $Id -State $state }
-    Write-ClaudeInstallProgress -StepId $Id -Event $(if ($Incomplete) { 'warning' } else { 'completed' }) -Message "$($script:ClaudeInstallSteps[$Id]) $state" -ResumeCommand $(if ($Incomplete) { Format-ClaudeInstallResume } else { '' })
+    if ($PSBoundParameters.ContainsKey('Receipt')) { Set-ClaudeInstallStep -Id $Id -State $state -Receipt $Receipt -Quiet:$Quiet } else { Set-ClaudeInstallStep -Id $Id -State $state -Quiet:$Quiet }
 }
 
 function Test-ClaudeInstallStepSkip {
     # $true when the step completed with this input and a live read shows its result (R1). Otherwise
     # the step is marked started and runs; an unreadable result refuses unless the step is idempotent.
     param([string]$Id, [scriptblock]$Verify, [switch]$Idempotent)
-    $title = $script:ClaudeInstallSteps[$Id]
     if (-not (Test-ClaudeInstallStepSelected $Id)) { return $true }
+    $title = $script:ClaudeInstallSteps[$Id]
     $hash = Get-ClaudeInstallInputHash $Id
     $step = Get-ClaudeInstallStep $Id
     if ($step -and $step.state -eq 'completed' -and [string]$step.inputHash -eq $hash -and $Verify) {
         $v = & $Verify $step.receipt
-        if ($v.Verdict -eq 'present') { Write-Host "    [OK]   ${title}: verified live, skipped" -ForegroundColor Green; Write-ClaudeInstallProgress -StepId $Id -Event 'skipped-verified' -Message "$title verified live, skipped"; return $true }
+        if ($v.Verdict -eq 'present') { Write-Host "    [OK]   ${title}: verified live, skipped" -ForegroundColor Green; Write-ClaudeInstallStepEvent -Id $Id -Event 'skipped-verified'; return $true }
         if ($v.Verdict -eq 'inconclusive' -and -not $Idempotent) { Stop-ClaudeInstall "$title could not be verified ($($v.Detail)). Nothing was changed. Resume: $(Format-ClaudeInstallResume)" }
         Write-Host "    ${title}: $($v.Detail); running it again" -ForegroundColor Yellow
     }
@@ -693,7 +662,12 @@ function Close-ClaudeInstallCheckpoint {
     $c = $script:ClaudeInstall
     if (-not $c -or -not $c.Checkpoint -or -not $c.Lock) { return }
     $open = @($c.Checkpoint.steps | Where-Object { $null -ne $_ -and $_.state -ne 'completed' })
-    if ($open.Count) {
+    if ($script:ClaudeInstallSelection.Count) {
+        # -Steps ran part of the install, so the checkpoint is kept for the rest (A11).
+        Write-Host "    -Steps ran $($script:ClaudeInstallSelection -join ', '); the install checkpoint is kept, and a run without -Steps resumes the rest." -ForegroundColor DarkGray
+        Write-Host "    Resume: $(Get-ClaudeInstallResumeLine)"
+    }
+    elseif ($open.Count) {
         Write-Host "    [WARN] The install checkpoint is kept: $((@($open | ForEach-Object { $script:ClaudeInstallSteps[[string]$_.id] })) -join ', ') did not complete." -ForegroundColor Yellow
         Write-Host "    Resume: $(if ($c.Location.Persistent) { Format-ClaudeInstallResume } else { Format-ClaudeInstallResume -WithAnswers })"
     }
@@ -709,6 +683,8 @@ function Write-ClaudeInstallFailureHint {
     Write-Host "Resume: $resume"
 }
 
-# Where the store is and whether it is trusted, then the live reads and step actions.
+# Where the store is and whether it is trusted, the live reads and step actions, then step selection
+# and the progress stream.
 . (Join-Path $PSScriptRoot 'ClaudeInstallStore.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeInstallResume.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeInstallSteps.ps1')

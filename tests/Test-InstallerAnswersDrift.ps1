@@ -131,6 +131,22 @@ $mapDrift = @(if ($map) { foreach ($p in $map.PSObject.Properties) { $want = "fo
 $mapKeys = @(if ($map) { $map.PSObject.Properties | ForEach-Object { "foundation.$($_.Value)" } })
 $strayAlias = @($alias.Keys | Where-Object { $staticKeys -notcontains $_ -and $mapKeys -notcontains $_ })
 Assert 'A2 the flow''s installer map and the schema aliases agree: each foundation.<decision> key aliases its installer parameter, and no alias is unknown to the flow' (-not $mapDrift.Count -and -not $strayAlias.Count) "map: $($mapDrift -join '; '); stray: $($strayAlias -join ', ')"
+# The flow writes any <step>.<field> answer onto the record (Set-FlowAnswersOnRecord in Start-ClaudeGateway.ps1),
+# so a step can read an answer that no question asks, such as models.priceBookPath (scripts/flow/Models.ps1:13-15).
+# The guided-flow pages name such keys in prose and in their JSON answers examples.
+$stepNames = @(@($staticKeys) + @($staticPrefixes) | ForEach-Object { ($_ -split '\.')[0] } | Sort-Object -Unique)
+$docKeys = [System.Collections.Generic.List[string]]::new()
+foreach ($page in 'docs\GUIDED-FLOW.md', 'docs\MODELS.md') {
+    $text = [IO.File]::ReadAllText((Join-Path $root $page))
+    foreach ($m in [regex]::Matches($text, '`([A-Za-z-]+)\.([A-Za-z<][A-Za-z0-9~<>_-]*(?:\.[A-Za-z0-9~<>_-]+)?)`')) { if ($stepNames -ccontains $m.Groups[1].Value) { $docKeys.Add($m.Groups[1].Value + '.' + $m.Groups[2].Value) } }
+    foreach ($block in [regex]::Matches($text, '(?s)```json\r?\n(.*?)```')) {
+        $example = try { $block.Groups[1].Value | ConvertFrom-Json -ErrorAction Stop } catch { $null }
+        if ($example -is [pscustomobject]) { foreach ($n in $example.PSObject.Properties.Name) { if ($stepNames -ccontains ($n -split '\.')[0] -and $n -match '\.') { $docKeys.Add($n) } } }
+    }
+}
+$docUncovered = @($docKeys | Sort-Object -Unique | Where-Object { $k = $_ -replace '<[^>]+>', 'claude-sonnet-5'
+        -not $alias.ContainsKey($k) -and -not ($props.Contains($k) -and (Get-AppliedBy $props[$k]) -contains $fl) -and -not @($patterns | Where-Object { $k -cmatch $_ }).Count })
+Assert 'A2 every flow answer key the guided-flow pages name, in prose or in a JSON answers example, is a schema answer (docs/GUIDED-FLOW.md, docs/MODELS.md)' ($docKeys.Count -ge 10 -and -not $docUncovered.Count) "named: $($docKeys.Count); not in the schema: $($docUncovered -join ', ')"
 
 # ------------------------------------------------------------------ When and requires
 function Test-Requires($Conditions, [hashtable]$Answers) {

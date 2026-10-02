@@ -434,20 +434,3 @@ function Format-ClaudeFlowReview {
     foreach ($u in $total.Unknown) { $lines.Add("  plus $u") }
     return ($lines -join [Environment]::NewLine)
 }
-
-function Test-ClaudeFlowAnswersSchema {
-    param([hashtable]$Answers = @())
-    . (Join-Path (Split-Path $PSScriptRoot -Parent) 'ClaudeInstallerAnswers.ps1')
-    Test-ClaudeInstallerAnswers -Answers $Answers
-}
-
-function Invoke-ClaudeFlowPlanPreflight {
-    param([hashtable]$Answers = @())
-    . (Join-Path (Split-Path $PSScriptRoot -Parent) 'ClaudeInstallerAnswers.ps1')
-    $checks = Invoke-ClaudeGatewayPreflight -Answers $Answers
-    # The preflight records are part of the canonical plan text, so the approved fingerprint binds
-    # the estate and the preflight outcome as well as the planned commands.
-    return [pscustomobject]@{ schema = 'claude-gateway.answers.schema.json'; preflight = $checks; fingerprint = 'preflight-bound' }
-}
-
-# P92 precedence note: NonInteractiveAnswers override AnswersPath values before defaults and prompts.

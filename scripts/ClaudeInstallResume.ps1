@@ -118,8 +118,10 @@ function Resolve-ClaudeInstallGatewayStep {
     # before any new deployment (ADR-0046 decision 10).
     param([string]$ResourceGroup, [string]$ApimName)
     $title = $script:ClaudeInstallSteps['gateway-deployment']
-    $hash = Get-ClaudeInstallInputHash 'gateway-deployment'
     $step = Get-ClaudeInstallStep 'gateway-deployment'
+    # Another step selected with -Steps: the gateway its prerequisite check verified, as recorded.
+    if (-not (Test-ClaudeInstallStepSelected 'gateway-deployment')) { return [pscustomobject]@{ Run = $false; GatewayUrl = $(if ($step -and $step.receipt) { [string]$step.receipt.gatewayUrl } else { "https://$ApimName.azure-api.net/claude" }) } }
+    $hash = Get-ClaudeInstallInputHash 'gateway-deployment'
     $recorded = if ($step -and $step.receipt) { @($step.receipt.deployments | Where-Object { $null -ne $_ }) | Select-Object -Last 1 } else { $null }
     if ($recorded) {
         $name = [string]$recorded.name
@@ -141,6 +143,7 @@ function Resolve-ClaudeInstallGatewayStep {
             if ($live.Verdict -eq 'present') {
                 $url = if ($s.GatewayUrl) { $s.GatewayUrl } else { [string]$step.receipt.gatewayUrl }
                 if ($step.state -ne 'completed') { $recorded.lastState = 'Succeeded'; Set-ClaudeInstallReceiptValue $step.receipt 'gatewayUrl' $url; Complete-ClaudeInstallStep 'gateway-deployment' -Receipt $step.receipt }
+                else { Write-ClaudeInstallStepEvent -Id 'gateway-deployment' -Event 'skipped-verified' }
                 Write-Host "    [OK]   ${title}: verified live, skipped (deployment $name)" -ForegroundColor Green
                 return [pscustomobject]@{ Run = $false; GatewayUrl = $url }
             }
@@ -252,11 +255,14 @@ function Invoke-ClaudeInstallGroups {
     # with the same name (ADR-0046 decision 11). A receipt applies to the name it records, compared
     # code point by code point as jq's == compares, and a name finds a group by its length.
     param([object[]]$Groups)
+    if (-not (Test-ClaudeInstallStepSelected 'entra-groups')) { return }
     $step = Get-ClaudeInstallStep 'entra-groups'
     $old = if ($step -and $step.receipt) { @($step.receipt.groups | Where-Object { $null -ne $_ }) } else { @() }
     $hash = Get-ClaudeInstallInputHash 'entra-groups'
     $resume = Format-ClaudeInstallResume
-    Set-ClaudeInstallStep -Id 'entra-groups' -State 'started' -InputHash $hash -Receipt $(if ($step) { $step.receipt } else { $null })
+    # Started in the progress stream only when a group is looked up by name: a resume that verifies every
+    # receipt live skips the step.
+    Set-ClaudeInstallStep -Id 'entra-groups' -State 'started' -InputHash $hash -Receipt $(if ($step) { $step.receipt } else { $null }) -Quiet
     $made = [System.Collections.Generic.List[object]]::new()
     $complete = $true
     $verified = 0
@@ -279,6 +285,7 @@ function Invoke-ClaudeInstallGroups {
             }
             Write-Host "    $($g.Name) ($($rec.id)) is gone; looking it up by name." -ForegroundColor Yellow
         }
+        Write-ClaudeInstallStepEvent -Id 'entra-groups' -Event 'started'
         $found = Find-ClaudeInstallGroupByName $g.Name
         if ($found.Verdict -eq 'inconclusive') { Stop-ClaudeInstall "Entra group '$($g.Name)' could not be looked up by name ($($found.Detail)), so it is neither reused nor created. Nothing was changed by this step. Resume: $resume" }
         if ($found.Verdict -eq 'present') {
@@ -299,18 +306,21 @@ function Invoke-ClaudeInstallGroups {
             $complete = $false
         }
     }
-    if ($verified -eq @($Groups).Count) { Write-Host "    [OK]   $($script:ClaudeInstallSteps['entra-groups']): verified live, skipped" -ForegroundColor Green }
-    Complete-ClaudeInstallStep 'entra-groups' -Receipt ([pscustomobject]@{ groups = @($made) }) -Incomplete:(-not $complete)
+    $all = $verified -eq @($Groups).Count
+    if ($all) { Write-Host "    [OK]   $($script:ClaudeInstallSteps['entra-groups']): verified live, skipped" -ForegroundColor Green; Write-ClaudeInstallStepEvent -Id 'entra-groups' -Event 'skipped-verified' }
+    Complete-ClaudeInstallStep 'entra-groups' -Receipt ([pscustomobject]@{ groups = @($made) }) -Incomplete:(-not $complete) -Quiet:$all
 }
 
 function Get-ClaudeInstallVerdict([string]$Verdict, [string]$Detail) { return [pscustomobject]@{ Verdict = $Verdict; Detail = $Detail } }
 
-function Add-ClaudeInstallBusinessUnit([string]$Id, [string]$GroupId, [string]$GroupOrigin) {
+function Add-ClaudeInstallBusinessUnit([string]$Id, [string]$GroupId, [string]$GroupOrigin, [string]$InputHash) {
     # Each unit written, so a resume after a later refusal verifies it in bu-registry (S3).
     $step = Get-ClaudeInstallStep 'business-units'
     if (-not $step) { return }
     $units = @(if ($step.receipt) { $step.receipt.units | Where-Object { $null -ne $_ -and $_.id -ne $Id } })
-    $units += [pscustomobject][ordered]@{ id = $Id; groupId = $GroupId; groupOrigin = $GroupOrigin }
+    $unit = [ordered]@{ id = $Id; groupId = $GroupId; groupOrigin = $GroupOrigin }
+    if ($InputHash) { $unit['inputHash'] = $InputHash }
+    $units += [pscustomobject]$unit
     Set-ClaudeInstallStep -Id 'business-units' -State 'started' -Receipt ([pscustomobject]@{ units = @($units) })
 }
 
@@ -401,13 +411,15 @@ function Test-ClaudeInstallModelDeployment([string]$ResourceGroup, [string]$Acco
 function Get-ClaudeInstallPendingDeployment {
     # The Claude deployment an interrupted run recorded and Azure does not show yet, with the
     # provider answers it needs; nothing when none was recorded or it now exists (R1).
-    $recorded = Get-ClaudeInstallAnswer 'PendingClaudeDeployment'
+    $given = Get-Variable -Name 'PendingClaudeDeployment' -Scope Script -ValueOnly -ErrorAction SilentlyContinue
+    $recorded = if ($given) { $given } else { Get-ClaudeInstallAnswer 'PendingClaudeDeployment' }
     if (-not $recorded) { return $null }
     $v = Test-ClaudeInstallModelDeployment ([string]$recorded.resourceGroup) ([string]$recorded.account) ([string]$recorded.name)
     if ($v.Verdict -eq 'present') { return $null }
     if ($v.Verdict -eq 'inconclusive') { Stop-ClaudeInstall "$($v.Detail), so it is neither skipped nor created again. Nothing was changed. Resume: $(Format-ClaudeInstallResume)" }
-    $a = $script:ClaudeInstall.Answers
-    return [pscustomobject]@{ Deployment = $recorded; ProviderData = @{ organizationName = [string]$a['ModelOrganizationName']; industry = [string]$a['ModelIndustry']; countryCode = [string]$a['ModelCountryCode'] } }
+    # The provider answers as passed, from the answers file or recorded (they are parameter answers).
+    $read = { param($n) [string](Get-Variable -Name $n -Scope Script -ValueOnly -ErrorAction SilentlyContinue) }
+    return [pscustomobject]@{ Deployment = $recorded; ProviderData = @{ organizationName = (& $read 'ModelOrganizationName'); industry = (& $read 'ModelIndustry'); countryCode = (& $read 'ModelCountryCode') } }
 }
 
 function Test-ClaudeInstallAddress([string]$ResourceGroup, [string]$ApimName, [string]$Hostname, [string]$RecordPath) {

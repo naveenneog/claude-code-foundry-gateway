@@ -72,15 +72,17 @@ ckpt_process_start_() { LC_ALL=C TZ=UTC ps -o lstart= -p "$1" 2>/dev/null | sed 
 # A refusal is one line on standard error, and changes nothing.
 ckpt_refuse_() {
   CKPT_REFUSED=1
+  progress_event_ "${PROGRESS_CURRENT:-}" refused "Refused: $1"
   printf 'Refused: %s\n' "$(printf '%s' "$1" | tr '\r\n' '  ')" >&2
   exit 1
 }
 
-# The command that resumes this run; with-answers adds every recorded answer, for a checkpoint that
-# does not persist (ADR-0046 decision 14).
+# The command that resumes this run; with-answers adds every recorded answer, and the answers file the
+# run read, for a checkpoint that does not persist (ADR-0046 decision 14).
 ckpt_resume_cmd_() {
   local line name var flag kind value
   line="cd $(ckpt_quote_ "$CKPT_ROOT") && ./install-claude-gateway.sh"
+  if [ "${1:-}" = "with-answers" ] && [ -n "${ANSWERS_FILE:-}" ]; then line="$line --answers-file $(ckpt_quote_ "$ANSWERS_FILE")"; fi
   if [ "${1:-}" = "with-answers" ]; then
     while read -r name var flag kind; do
       [ -n "$name" ] || continue
@@ -217,10 +219,28 @@ ckpt_binding_refuse_() {
   ckpt_refuse_ "the install checkpoint $CKPT_FILE is bound to $1 '$2', and this run names '$3'. Nothing was changed. To discard the checkpoint and start again: $(ckpt_resume_cmd_) --restart"
 }
 
+# The checkpoint file into CKPT_JSON; one the installer cannot read, trust or resume refuses, and is
+# kept as it is (decision 2). 1 when there is no checkpoint.
+ckpt_read_file_() {
+  local reason
+  [ -f "$CKPT_FILE" ] || return 1
+  if ! CKPT_JSON="$(ckpt_jq_ -cs 'if length == 1 then .[0] else error("more than one value") end' "$CKPT_FILE" 2>/dev/null)" || [ -z "$CKPT_JSON" ]; then
+    CKPT_JSON=""
+    ckpt_refuse_ "the install checkpoint $CKPT_FILE is not valid JSON. Nothing was changed. To discard it and start again: $(ckpt_resume_cmd_) --restart"
+  fi
+  reason="$(printf '%s' "$CKPT_JSON" | ckpt_jq_ -r --arg ids "$CKPT_STEP_IDS" "$CKPT_VALIDATE" 2>/dev/null)" || reason="could not be read"
+  if [ "$reason" = "PWSH" ]; then
+    CKPT_JSON=""
+    ckpt_refuse_ "the install checkpoint $CKPT_FILE was written by Install-ClaudeGateway.ps1, whose steps differ; resume it with that installer. Nothing was changed. To discard it and start again: $(ckpt_resume_cmd_) --restart"
+  fi
+  if [ -n "$reason" ]; then CKPT_JSON=""; ckpt_refuse_ "the install checkpoint $CKPT_FILE $reason. Nothing was changed. To discard it and start again: $(ckpt_resume_cmd_) --restart"; fi
+  return 0
+}
+
 # At startup, before any question: reads the checkpoint, refuses what it cannot resume, prints where
 # the run resumes and sets each recorded answer that this run's flags do not name (decisions 5, 6).
 ckpt_open_() {
-  local restart="$2" aside reason fields b_tenant b_sub b_rg b_apim b_prefix created was was_commit now name value line var flag
+  local restart="$2" aside fields b_tenant b_sub b_rg b_apim b_prefix run_id created was was_commit now name value line var flag
   CKPT_ROOT="$1"; CKPT_WHAT_IF="$3"
   ckpt_location_
   trap 'ckpt_exit_' EXIT
@@ -239,19 +259,9 @@ ckpt_open_() {
     printf '    %s--restart: the install checkpoint is set aside as %s.%s\n' "$C_YELLOW" "$aside" "$C_OFF"
     return 0
   fi
-  [ -f "$CKPT_FILE" ] || return 0
-  if ! CKPT_JSON="$(ckpt_jq_ -cs 'if length == 1 then .[0] else error("more than one value") end' "$CKPT_FILE" 2>/dev/null)" || [ -z "$CKPT_JSON" ]; then
-    CKPT_JSON=""
-    ckpt_refuse_ "the install checkpoint $CKPT_FILE is not valid JSON. Nothing was changed. To discard it and start again: $(ckpt_resume_cmd_) --restart"
-  fi
-  reason="$(printf '%s' "$CKPT_JSON" | ckpt_jq_ -r --arg ids "$CKPT_STEP_IDS" "$CKPT_VALIDATE" 2>/dev/null)" || reason="could not be read"
-  if [ "$reason" = "PWSH" ]; then
-    CKPT_JSON=""
-    ckpt_refuse_ "the install checkpoint $CKPT_FILE was written by Install-ClaudeGateway.ps1, whose steps differ; resume it with that installer. Nothing was changed. To discard it and start again: $(ckpt_resume_cmd_) --restart"
-  fi
-  if [ -n "$reason" ]; then CKPT_JSON=""; ckpt_refuse_ "the install checkpoint $CKPT_FILE $reason. Nothing was changed. To discard it and start again: $(ckpt_resume_cmd_) --restart"; fi
+  ckpt_read_file_ || return 0
   fields="$(printf '%s' "$CKPT_JSON" | ckpt_jq_ -r '[.binding.tenantId, .binding.subscriptionId, .binding.resourceGroup, .binding.apimName, (.binding.namePrefix // ""), .runId, (.createdUtc // ""), (.installerFingerprint // ""), (.installerCommit // "")] | join("\u001f")')"
-  IFS="$CKPT_US" read -r b_tenant b_sub b_rg b_apim b_prefix CKPT_RUN_ID created was was_commit <<EOF
+  IFS="$CKPT_US" read -r b_tenant b_sub b_rg b_apim b_prefix run_id created was was_commit <<EOF
 $fields
 EOF
   # A subscription named by name is compared after az account set, by its id.
@@ -259,6 +269,7 @@ EOF
   if ckpt_passed_ --resource-group && ! ckpt_same_ "$RESOURCE_GROUP" "$b_rg"; then ckpt_binding_refuse_ "resource group" "$b_rg" "$RESOURCE_GROUP"; fi
   if ckpt_passed_ --name-prefix && [ "$NAME_PREFIX" != "$b_prefix" ] && [ "apim-$NAME_PREFIX" != "$b_apim" ]; then ckpt_binding_refuse_ gateway "$b_apim" "apim-$NAME_PREFIX"; fi
   CKPT_RESUMING=1
+  CKPT_RUN_ID="$run_id"
   while IFS="$CKPT_US" read -r name value; do
     [ -n "$name" ] || continue
     CKPT_ANSWER_COUNT=$((CKPT_ANSWER_COUNT + 1))
@@ -356,7 +367,7 @@ ckpt_save_() {
   if [ "$CKPT_RESUMING" = "1" ]; then
     CKPT_JSON="$(printf '%s' "$CKPT_JSON" | ckpt_jq_ -c --argjson a "$answers" --arg f "$CKPT_FINGERPRINT" --arg c "$CKPT_COMMIT" '.answers = $a | .installerFingerprint = $f | .installerCommit = $c')"
   else
-    CKPT_RUN_ID="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n\r')"
+    [ -n "$CKPT_RUN_ID" ] || CKPT_RUN_ID="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n\r')"
     CKPT_JSON="$(ckpt_jq_ -cn --arg s "$CKPT_SCHEMA" --arg r "$CKPT_RUN_ID" --arg f "$CKPT_FINGERPRINT" --arg c "$CKPT_COMMIT" --arg k "$CKPT_ROOT" --arg now "$now" \
       --arg t "$TENANT_ID" --arg sub "$sub" --arg rg "$RESOURCE_GROUP" --arg apim "$APIM_NAME" --arg p "$NAME_PREFIX" --argjson a "$answers" \
       '{schema: $s, schemaVersion: 1, runId: $r, installer: "bash", installerFingerprint: $f, installerCommit: $c, checkout: $k, createdUtc: $now, updatedUtc: $now,
@@ -457,6 +468,7 @@ ckpt_release_() {
 # On exit: the lock is released, and after a failure that is not a refusal the resume command is printed.
 ckpt_exit_() {
   local code=$? held="$CKPT_LOCKED"
+  [ "$code" != "0" ] && [ "$CKPT_REFUSED" != "1" ] && progress_failed_ "$code"
   ckpt_release_
   if [ "$held" = "1" ] && [ "$code" != "0" ] && [ "$CKPT_REFUSED" != "1" ] && [ -f "$CKPT_FILE" ]; then
     if [ "$CKPT_PERSISTENT" = "1" ]; then printf 'Resume: %s\n' "$(ckpt_resume_cmd_)"; else printf 'Resume: %s\n' "$(ckpt_resume_cmd_ with-answers)"; fi
@@ -477,6 +489,7 @@ ckpt_input_hash_() {
 }
 # id state [inputHash] [receipt JSON]; __keep__ keeps the recorded value.
 ckpt_set_step_() {
+  progress_state_ "$1" "$2"
   [ "$CKPT_LOCKED" = "1" ] || return 0
   CKPT_JSON="$(printf '%s' "$CKPT_JSON" | ckpt_jq_ -c --arg id "$1" --arg st "$2" --arg h "${3:-__keep__}" --arg r "${4:-__keep__}" --arg now "$(ckpt_now_)" '
     (if any(.steps[]?; .id == $id) then . else .steps = ((.steps // []) + [{id: $id, state: "new", startedUtc: $now, completedUtc: null, inputHash: "", receipt: null}]) end)
@@ -494,11 +507,12 @@ ckpt_set_step_() {
 ckpt_skip_() {
   local id="$1" idempotent="$2" verify="$3" title hash state stored
   shift 3
+  steps_selected_ "$id" || return 0
   title="$(ckpt_title_ "$id")"; hash="$(ckpt_input_hash_ "$id")"
   state="$(ckpt_step_field_ "$id" state)"; stored="$(ckpt_step_field_ "$id" inputHash)"
   if [ "$state" = "completed" ] && [ "$stored" = "$hash" ]; then
     "$verify" "$@"
-    if [ "$V_VERDICT" = "present" ]; then printf '    %s[OK]%s   %s: verified live, skipped\n' "$C_GREEN" "$C_OFF" "$title"; return 0; fi
+    if [ "$V_VERDICT" = "present" ]; then printf '    %s[OK]%s   %s: verified live, skipped\n' "$C_GREEN" "$C_OFF" "$title"; progress_step_ "$id" skipped-verified; return 0; fi
     if [ "$V_VERDICT" = "inconclusive" ] && [ "$idempotent" != "1" ]; then ckpt_refuse_ "$title could not be verified ($V_DETAIL). Nothing was changed. Resume: $(ckpt_resume_cmd_)"; fi
     printf '    %s%s: %s; running it again%s\n' "$C_YELLOW" "$title" "$V_DETAIL" "$C_OFF"
   elif [ "$state" = "completed" ]; then printf '    %s%s: its input changed since the checkpoint; running it again%s\n' "$C_YELLOW" "$title" "$C_OFF"
@@ -524,7 +538,11 @@ ckpt_close_() {
   [ "$CKPT_LOCKED" = "1" ] || return 0
   local open titles="" id
   open="$(printf '%s' "$CKPT_JSON" | ckpt_jq_ -r '[.steps[]? | select(.state != "completed") | .id] | join(" ")')"
-  if [ -n "$open" ]; then
+  if [ -n "${STEPS:-}" ]; then
+    # --steps ran part of the install, so the checkpoint is kept for the rest (A11).
+    note_ "--steps ran $(printf '%s' "$STEPS" | sed 's/ /, /g'); the install checkpoint is kept, and a run without --steps resumes the rest."
+    printf '    Resume: %s\n' "$(steps_resume_line_)"
+  elif [ -n "$open" ]; then
     for id in $open; do titles="${titles:+$titles, }$(ckpt_title_ "$id")"; done
     warn_ "The install checkpoint is kept: $titles did not complete."
     if [ "$CKPT_PERSISTENT" = "1" ]; then printf '    Resume: %s\n' "$(ckpt_resume_cmd_)"; else printf '    Resume: %s\n' "$(ckpt_resume_cmd_ with-answers)"; fi
@@ -535,6 +553,8 @@ ckpt_close_() {
   ckpt_release_
 }
 
-# Where the store is and whether it is trusted, then the live reads and step actions.
+# Where the store is and whether it is trusted, the live reads and step actions, then step selection, the
+# progress stream, the answers file and the preflight (ADR-0047).
 . "$(dirname "${BASH_SOURCE[0]}")/install-store.sh"
 . "$(dirname "${BASH_SOURCE[0]}")/install-resume.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/install-steps.sh"

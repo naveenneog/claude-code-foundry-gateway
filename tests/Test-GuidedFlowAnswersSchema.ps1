@@ -95,6 +95,11 @@ try {
     $unknown = Write-Answers 'unknown' { param($a) $a['foundation.bogus'] = 'x' }
     $unknownMessage = Get-Thrown { & $start -Action Setup -PlanOnly -RecordPath (& $record 'unknown') -FlowModulePath $modules -AnswersPath $unknown }
     Assert 'P7 -AnswersPath is checked against the answers schema: an unknown key is refused before any plan, naming it' ($unknownMessage -match 'foundation\.bogus' -and $unknownMessage -match 'answers schema') $unknownMessage
+    # Set-FlowAnswersOnRecord copies each <step>.<field> answer onto the record, so a key the flow records
+    # itself, such as the approved network review (scripts/flow/Network.ps1:40), is not an answer.
+    $recordedField = Write-Answers 'recorded' { param($a) $a['network.approvedFingerprint'] = ('a' * 64) }
+    $recordedMessage = Get-Thrown { & $start -Action Setup -PlanOnly -RecordPath (& $record 'recorded') -FlowModulePath $modules -AnswersPath $recordedField }
+    Assert 'P7 a field the flow records itself (network.approvedFingerprint) is refused in an answers file, before any plan' ($recordedMessage -match 'network\.approvedFingerprint' -and $recordedMessage -match 'answers schema' -and $recordedMessage -match 'Nothing was planned') $recordedMessage
     $secret = Write-Answers 'secret' { param($a) $a['AddressCertificatePassword'] = 'not-a-real-password' }
     $secretMessage = Get-Thrown { & $start -Action Setup -PlanOnly -RecordPath (& $record 'secret') -FlowModulePath $modules -AnswersPath $secret }
     Assert 'P7 a secret in the flow''s answers file is refused, as in the installers' ($secretMessage -match 'AddressCertificatePassword' -and $secretMessage -match 'secret') $secretMessage

@@ -203,9 +203,12 @@ exit 0
 
 # The files the installer reads, and placeholders for the ones it only names.
 $template = Join-Path $scratch 'template'
-foreach ($d in 'scripts', 'infra') { New-Item -ItemType Directory -Force -Path (Join-Path $template $d) | Out-Null }
+foreach ($d in 'scripts', 'infra', 'schemas') { New-Item -ItemType Directory -Force -Path (Join-Path $template $d) | Out-Null }
 Copy-Item -LiteralPath $installerPath -Destination $template
-foreach ($f in 'scripts\banner.sh', 'scripts\preflight.sh', 'scripts\install-checkpoint.sh', 'scripts\install-store.sh', 'scripts\install-resume.sh') { Copy-Item -LiteralPath (Join-Path $root $f) -Destination (Join-Path $template $f) }
+# Every library the installer sources (scripts/install-*: checkpoint, store, resume, steps, answers, preflight,
+# prices and the answers jq program), and the answers schema the answers and preflight checks read (ADR-0047).
+$libraries = @('scripts\banner.sh', 'scripts\preflight.sh', 'schemas\claude-gateway.answers.schema.json') + @(Get-ChildItem -LiteralPath (Join-Path $root 'scripts') -File -Filter 'install-*' | Where-Object { $_.Name -clike 'install-*' } | ForEach-Object { "scripts\$($_.Name)" })
+foreach ($f in $libraries) { Copy-Item -LiteralPath (Join-Path $root $f) -Destination (Join-Path $template $f) }
 foreach ($f in 'scripts\Sync-ClaudeAccess.ps1', 'scripts\Select-ClaudeFinOpsTooling.ps1', 'infra\main.bicep') { Write-Lf (Join-Path $template $f) '# placeholder' }
 
 function New-InstallerRun {

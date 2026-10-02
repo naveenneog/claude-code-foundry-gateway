@@ -1,41 +1,62 @@
-# P92 shared answers/preflight/progress helpers. Bash 3.2 compatible.
-ANSWERS_SCHEMA_FILE="$HERE/schemas/claude-gateway.answers.schema.json"
+# The answers file of install-claude-gateway.sh (docs/adr/0047-lean-installer-phase-0.md). It is checked
+# with scripts/install-answers.jq against schemas/claude-gateway.answers.schema.json, the rules
+# scripts/ClaudeInstallerAnswers.ps1 applies, then applied under this run's flags: flag, answers file,
+# checkpoint, default (A12). Sourced by the installer after scripts/install-checkpoint.sh, and by
+# tests/Test-InstallerAnswersSchema.ps1 on its own with HERE set. Bash 3.2 and later, with jq.
+
+ANSWERS_SCHEMA="$HERE/schemas/claude-gateway.answers.schema.json"
+ANSWERS_JQ="$HERE/scripts/install-answers.jq"
+ANSWERS_JSON=""
+
+# file program: the problems of an answers file for a program, one JSON list on one line.
+answers_check_file_() {
+  if [ ! -f "$1" ]; then
+    printf '[{"checkId":"answers.schema","path":"","message":"the answers file does not exist","remedy":"Give the path of an answers file."}]\n'
+    return 0
+  fi
+  jq -Rs -c --slurpfile schema "$ANSWERS_SCHEMA" --arg consumer "$2" --arg mode text -f "$ANSWERS_JQ" "$1" | tr -d '\r'
+}
+# json program: the problems of a JSON object of answers for a program.
+answers_check_json_() {
+  printf '%s' "$1" | jq -c --slurpfile schema "$ANSWERS_SCHEMA" --arg consumer "$2" --arg mode object -f "$ANSWERS_JQ" | tr -d '\r'
+}
+# The answers file as one JSON object, its byte order mark dropped as the check drops it.
+answers_read_() { jq -Rs -c 'ltrimstr("\ufeff") | fromjson' "$1" | tr -d '\r'; }
+# The answers this run names by a flag, as a JSON object keyed by installer name (CKPT_ANSWERS).
+answers_flags_json_() {
+  local name var flag kind value
+  while read -r name var flag kind; do
+    [ -n "$name" ] || continue
+    ckpt_passed_ "$flag" || continue
+    eval "value=\${$var:-}"
+    printf '%s\t%s\t%s\n' "$name" "$kind" "$value"
+  done <<EOF | jq -cR -s 'split("\n") | map(select(length > 0) | split("\t") | {(.[0]): (if .[1] == "i" then (.[2] | tonumber? // .[2]) else .[2] end)}) | add // {}' | tr -d '\r'
+$CKPT_ANSWERS
+EOF
+}
+
+# Each answer of the file that this run does not name by a flag is set as if passed, so it wins over
+# the checkpoint's answers and binds the checkpoint (ADR-0046 R3). A file with any problem refuses on
+# one line, before anything is read from Azure or changed.
 answers_apply_() {
-  [ -n "$ANSWERS_FILE" ] || return 0
-  [ -f "$ANSWERS_FILE" ] || { echo "Answers file not found: $ANSWERS_FILE" >&2; return 1; }
-  # schema: claude-gateway.answers.schema.json
-  v_() { jq -r --arg k "$1" 'if has($k) then .[$k] else empty end' "$ANSWERS_FILE"; }
-  [ -n "$SUBSCRIPTION" ] || SUBSCRIPTION="$(v_ SubscriptionId)"
-  [ -n "$FOUNDRY_ACCOUNT" ] || FOUNDRY_ACCOUNT="$(v_ FoundryAccount)"
-  [ -n "$FOUNDRY_RG" ] || FOUNDRY_RG="$(v_ FoundryResourceGroup)"
-  [ -n "$RESOURCE_GROUP" ] || RESOURCE_GROUP="$(v_ ResourceGroup)"
-  [ -n "$LOCATION" ] || LOCATION="$(v_ Location)"
-  [ -n "$NAME_PREFIX" ] || NAME_PREFIX="$(v_ NamePrefix)"
-  [ -n "$PUBLISHER_EMAIL" ] || PUBLISHER_EMAIL="$(v_ PublisherEmail)"
-  [ -n "$SKU" ] || SKU="$(v_ Sku)"
-  [ -n "$TPM_STANDARD" ] || TPM_STANDARD="$(v_ TpmStandard)"
-  [ -n "$QUOTA_STANDARD" ] || QUOTA_STANDARD="$(v_ QuotaStandard)"
-  [ -n "$TPM_PREMIUM" ] || TPM_PREMIUM="$(v_ TpmPremium)"
-  [ -n "$QUOTA_PREMIUM" ] || QUOTA_PREMIUM="$(v_ QuotaPremium)"
-  [ -n "$CALLS_PER_MINUTE" ] || CALLS_PER_MINUTE="$(v_ CallsPerMinute)"
-  [ -n "$STANDARD_GROUP" ] || STANDARD_GROUP="$(v_ StandardGroup)"
-  [ -n "$PREMIUM_GROUP" ] || PREMIUM_GROUP="$(v_ PremiumGroup)"
+  [ -n "${ANSWERS_FILE:-}" ] || return 0
+  local problems count first more="" name var flag kind value
+  problems="$(answers_check_file_ "$ANSWERS_FILE" install-claude-gateway.sh)"
+  count="$(printf '%s' "$problems" | jq 'length' | tr -d '\r')"
+  if [ "$count" != "0" ]; then
+    first="$(printf '%s' "$problems" | jq -r '.[0].message' | tr -d '\r')"
+    [ "$count" -gt 1 ] && more=" (and $((count - 1)) more; --preflight --answers-file lists every problem)"
+    ckpt_refuse_ "the answers file $ANSWERS_FILE does not match the answers schema: $first$more. Nothing was changed."
+  fi
+  ANSWERS_JSON="$(answers_read_ "$ANSWERS_FILE")"
+  while read -r name var flag kind; do
+    [ -n "$name" ] || continue
+    ckpt_passed_ "$flag" && continue
+    value="$(printf '%s' "$ANSWERS_JSON" | jq -r --arg n "$name" 'if has($n) then (.[$n] | if type == "number" then floor else . end | tostring) else empty end' | tr -d '\r')"
+    [ -n "$value" ] || continue
+    printf -v "$var" '%s' "$value"
+    CKPT_SEEN="$CKPT_SEEN $flag"
+  done <<EOF
+$CKPT_ANSWERS
+EOF
 }
-preflight_ids_() { printf '%s\n' answers.schema answers.crossField target.tenant target.subscription operator.adminPrereqs foundry.account foundry.deployments apim.nameAvailability apim.existingSku apim.existingIdentity entra.groupNames businessUnits.ids businessUnits.depth address.inputs; }
-preflight_run_() {
-  fail=0; rows="[]"
-  add_(){ rows="$(printf '%s' "$rows" | jq --arg id "$1" --arg result "$2" --arg message "$3" --arg remedy "$4" '. + [{id:$id,result:$result,message:$message,remedy:$remedy}]')"; [ "$2" = FAIL ] && fail=1; }
-  [ -f "$ANSWERS_SCHEMA_FILE" ] && add_ answers.schema PASS 'Answers schema is present.' '' || add_ answers.schema FAIL 'Answers schema is missing.' 'Restore schemas/claude-gateway.answers.schema.json.'
-  for id in $(preflight_ids_ | grep -v '^answers.schema$'); do add_ "$id" PASS 'Not evaluated in offline-safe contract path.' 'Run full preflight with Azure read access for live verification.'; done
-  if [ "$PREFLIGHT_JSON" = 1 ]; then jq -n --argjson checks "$rows" '{schemaVersion:1,checks:$checks}'; else printf '%s' "$rows" | jq -r '.[] | "\(.id) \(.result) \(.message) Remedy: \(.remedy)"'; fi
-  return "$fail"
-}
-progress_write_() {
-  [ -n "$PROGRESS_FILE" ] || return 0
-  event="$1"; step="$2"; msg="$3"; resume="$4"
-  line="$(jq -nc --arg time "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg runId "${CKPT_RUN_ID:-}" --arg stepId "$step" --arg event "$event" --arg message "$msg" --arg resumeCommand "$resume" '{schemaVersion:1,time:$time,runId:$runId,stepId:$stepId,event:$event,message:$message,resumeCommand:$resumeCommand}')"
-  tmp="$PROGRESS_FILE.$$"
-  printf '%s\n' "$line" > "$tmp" && cat "$tmp" >> "$PROGRESS_FILE" && rm -f "$tmp"
-}
-# event vocabulary: started completed skipped-verified failed refused warning; resumeCommand; schemaVersion
-steps_json_() { jq -n '{schemaVersion:1,steps:[{id:"resource-group",title:"Resource group",dependencies:[],state:"unknown"},{id:"gateway-deployment",title:"Gateway deployment",dependencies:["resource-group"],state:"unknown"},{id:"entra-groups",title:"Entra groups",dependencies:["gateway-deployment"],state:"unknown"},{id:"sync",title:"Sync entitlement",dependencies:["entra-groups"],state:"unknown"},{id:"onboarding-package",title:"Onboarding package",dependencies:["sync"],state:"unknown"}]}'; }

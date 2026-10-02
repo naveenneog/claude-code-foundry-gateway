@@ -3,7 +3,7 @@
   "id": "lean-installer-phase0",
   "kind": "flow",
   "title": "Lean installer phase 0: answers, preflight and selected steps",
-  "subtitle": "One answers schema feeds both installers, guided flow and the later UI. Preflight is read-only; selected steps reuse P91 live checks and checkpoint binding.",
+  "subtitle": "One answers schema feeds both installers and the guided flow. Preflight only reads; selected steps reuse P91 live checks and append a progress stream.",
   "width": 1280,
   "height": 1100,
   "outputs": [
@@ -13,10 +13,14 @@
     "schemas/claude-gateway.answers.schema.json",
     "Install-ClaudeGateway.ps1",
     "install-claude-gateway.sh",
+    "Start-ClaudeGateway.ps1",
     "scripts/ClaudeInstallerAnswers.ps1",
-    "scripts/install-answers.sh",
-    "scripts/ClaudeInstallCheckpoint.ps1",
-    "scripts/flow/FlowContract.ps1",
+    "scripts/install-answers.jq",
+    "scripts/ClaudeInstallerPreflight.ps1",
+    "scripts/install-preflight.sh",
+    "scripts/ClaudeInstallResume.ps1",
+    "scripts/ClaudeInstallSteps.ps1",
+    "scripts/install-steps.sh",
     "scripts/Set-ClaudeBusinessUnit.ps1",
     "scripts/Sync-ClaudeUsdBudgets.ps1"
   ],
@@ -24,7 +28,7 @@
     "schema": {
       "label": "claude-gateway.answers.schema.json",
       "source": "schemas/claude-gateway.answers.schema.json",
-      "match": "Claude Gateway installer answers"
+      "match": "Claude gateway answers"
     },
     "ps": {
       "label": "Install-ClaudeGateway.ps1",
@@ -39,27 +43,62 @@
     "pslib": {
       "label": "ClaudeInstallerAnswers.ps1",
       "source": "scripts/ClaudeInstallerAnswers.ps1",
-      "match": "Invoke-ClaudeGatewayPreflight"
+      "match": "function Test-ClaudeInstallerAnswers"
     },
-    "shlib": {
-      "label": "install-answers.sh",
-      "source": "scripts/install-answers.sh",
-      "match": "preflight_run_"
-    },
-    "steps": {
-      "label": "P91 step ids",
-      "source": "scripts/ClaudeInstallCheckpoint.ps1",
-      "match": "Get-ClaudeInstallStepList"
-    },
-    "progress": {
-      "label": "progress JSONL",
-      "source": "scripts/ClaudeInstallCheckpoint.ps1",
-      "match": "Write-ClaudeInstallProgress"
+    "jqlib": {
+      "label": "install-answers.jq",
+      "source": "scripts/install-answers.jq",
+      "match": "def validate"
     },
     "flow": {
-      "label": "guided flow preflight",
-      "source": "scripts/flow/FlowContract.ps1",
-      "match": "Invoke-ClaudeFlowPlanPreflight"
+      "label": "Start-ClaudeGateway.ps1",
+      "source": "Start-ClaudeGateway.ps1",
+      "match": "function Invoke-FlowPreflight"
+    },
+    "pspre": {
+      "label": "ClaudeInstallerPreflight.ps1",
+      "source": "scripts/ClaudeInstallerPreflight.ps1",
+      "match": "function Invoke-ClaudeGatewayPreflight"
+    },
+    "shpre": {
+      "label": "install-preflight.sh",
+      "source": "scripts/install-preflight.sh",
+      "match": "preflight_run_()"
+    },
+    "reuse": {
+      "label": "Get-ClaudeApimReuseState",
+      "source": "scripts/ClaudeInstallerPreflight.ps1",
+      "match": "function Get-ClaudeApimReuseState"
+    },
+    "reader": {
+      "label": "Invoke-ClaudeInstallAzRead",
+      "source": "scripts/ClaudeInstallResume.ps1",
+      "match": "function Invoke-ClaudeInstallAzRead"
+    },
+    "steps": {
+      "label": "ClaudeInstallSteps.ps1",
+      "source": "scripts/ClaudeInstallSteps.ps1",
+      "match": "function Assert-ClaudeInstallPrerequisites"
+    },
+    "shsteps": {
+      "label": "install-steps.sh",
+      "source": "scripts/install-steps.sh",
+      "match": "steps_prereqs_()"
+    },
+    "progress": {
+      "label": "Write-ClaudeInstallProgress",
+      "source": "scripts/ClaudeInstallSteps.ps1",
+      "match": "function Write-ClaudeInstallProgress"
+    },
+    "shprogress": {
+      "label": "progress_event_",
+      "source": "scripts/install-steps.sh",
+      "match": "progress_event_()"
+    },
+    "bu": {
+      "label": "Invoke-ClaudeInstallBusinessUnits",
+      "source": "scripts/ClaudeInstallSteps.ps1",
+      "match": "function Invoke-ClaudeInstallBusinessUnits"
     },
     "setbu": {
       "label": "Set-ClaudeBusinessUnit.ps1",
@@ -79,7 +118,7 @@
       "w": 1280,
       "h": 310,
       "tone": "purple",
-      "title": "Answers contract - one source for scripts and UI"
+      "title": "Answers contract - one source for both installers and the guided flow"
     },
     {
       "x": 0,
@@ -87,7 +126,7 @@
       "w": 1280,
       "h": 310,
       "tone": "blue",
-      "title": "Preflight - read-only checks before a plan or install"
+      "title": "Preflight - read-only checks before a plan or an install"
     },
     {
       "x": 0,
@@ -95,7 +134,7 @@
       "w": 1280,
       "h": 310,
       "tone": "teal",
-      "title": "Selected execution - P91 live checks plus UI progress"
+      "title": "Selected execution - P91 live checks plus a progress stream"
     }
   ],
   "nodes": [
@@ -108,8 +147,8 @@
       "tone": "purple",
       "title": "1 - Answers schema",
       "lines": [
-        "[[schema]] is hand-authored and versioned.",
-        "It contains installer parameters, bash flags, flow keys and prompt-only answers."
+        "[[schema]] names each answer once: installer name, bash flag, flow keys, check id and remedy.",
+        "A secret is refused, never stored."
       ]
     },
     {
@@ -119,10 +158,10 @@
       "w": 365,
       "h": 220,
       "tone": "purple",
-      "title": "2 - Both installers read it",
+      "title": "2 - Two validators, one verdict",
       "lines": [
-        "[[ps]] uses -AnswersPath.",
-        "[[sh]] uses --answers-file."
+        "[[pslib]] and [[jqlib]] apply the same rules, word for word.",
+        "-AnswersPath feeds [[ps]]; --answers-file feeds [[sh]]."
       ]
     },
     {
@@ -132,10 +171,10 @@
       "w": 365,
       "h": 220,
       "tone": "purple",
-      "title": "3 - Guided flow reads it",
+      "title": "3 - Guided flow",
       "lines": [
-        "[[flow]] validates answers before plan review.",
-        "Declarative requires metadata mirrors conditional questions for the later UI."
+        "[[flow]] refuses a file the schema rejects and binds the installer preflight into the plan fingerprint.",
+        "A plan with a FAIL is not applied."
       ]
     },
     {
@@ -147,34 +186,34 @@
       "tone": "blue",
       "title": "4 - Shared preflight",
       "lines": [
-        "[[pslib]] and [[shlib]] produce stable check ids.",
-        "JSON output has schemaVersion and one record per check."
+        "[[pspre]] and [[shpre]] report 14 check ids: PASS, FAIL or NOT-RUN with a reason.",
+        "A check that cannot run never passes; nothing is written."
       ]
     },
     {
-      "id": "planonly",
+      "id": "apim",
       "x": 458,
       "y": 460,
       "w": 365,
       "h": 220,
       "tone": "blue",
-      "title": "5 - PlanOnly relationship",
+      "title": "5 - Existing APIM admission",
       "lines": [
-        "-Preflight reports checks only.",
-        "-PlanOnly includes the same checks before its fingerprint."
+        "[[reuse]] reads the instance once through [[reader]]: present, absent or inconclusive.",
+        "The preflight and the run share it."
       ]
     },
     {
-      "id": "apim",
+      "id": "output",
       "x": 892,
       "y": 460,
       "w": 365,
       "h": 220,
       "tone": "blue",
-      "title": "6 - Existing APIM admission",
+      "title": "6 - Text or JSON",
       "lines": [
-        "Reuse checks call P91 verdict readers.",
-        "SKU and system-assigned identity are read once through shared logic."
+        "-Preflight and --preflight print the same lines, or JSON with schemaVersion 1.",
+        "Not signed in: the Azure checks are NOT-RUN and the run exits non-zero."
       ]
     },
     {
@@ -186,8 +225,8 @@
       "tone": "teal",
       "title": "7 - Step list and selection",
       "lines": [
-        "[[steps]] lists ids, titles, dependencies and checkpoint state.",
-        "A selected step refuses until prerequisites are completed and verified live."
+        "[[steps]] and [[shsteps]] list ids, titles, dependencies and states.",
+        "-Steps refuses until each prerequisite is completed and verified live."
       ]
     },
     {
@@ -199,8 +238,8 @@
       "tone": "teal",
       "title": "8 - Business units from answers",
       "lines": [
-        "Units before teams through [[setbu]].",
-        "After access sync it prints [[syncusd]]."
+        "[[bu]] writes units, then teams, through [[setbu]]; receipts stop duplicate calls.",
+        "With dollar budgets enforced it prints [[syncusd]]."
       ]
     },
     {
@@ -210,10 +249,10 @@
       "w": 365,
       "h": 220,
       "tone": "teal",
-      "title": "9 - UI progress stream",
+      "title": "9 - Progress stream",
       "lines": [
-        "[[progress]] appends JSON lines for started, completed, skipped, failed, refused and warning.",
-        "The stream carries no secrets and can be tailed by the phase-1 web UI."
+        "[[progress]] and [[shprogress]] append one NDJSON line per event with the run id and resume command.",
+        "No secrets; one line per write."
       ]
     }
   ],
@@ -225,26 +264,26 @@
       "points": [
         [
           389,
-          154
+          190
         ],
         [
           458,
-          154
+          190
         ]
       ]
     },
     {
-      "from": "schema",
+      "from": "installers",
       "to": "flow",
       "kind": "data",
       "points": [
         [
-          389,
-          120
+          823,
+          190
         ],
         [
           892,
-          120
+          190
         ]
       ]
     },
@@ -255,80 +294,95 @@
       "points": [
         [
           640,
-          234
+          300
         ],
         [
           640,
-          344
+          432
         ],
         [
           206,
-          344
+          432
         ],
         [
           206,
-          384
+          460
         ]
       ]
     },
     {
       "from": "flow",
-      "to": "planonly",
+      "to": "preflight",
       "kind": "control",
       "points": [
         [
           1074,
-          234
+          300
         ],
         [
           1074,
-          344
+          432
         ],
         [
-          640,
-          344
+          206,
+          432
         ],
         [
-          640,
-          384
+          206,
+          460
         ]
       ]
     },
     {
       "from": "preflight",
       "to": "apim",
-      "kind": "data",
+      "kind": "control",
       "points": [
         [
           389,
-          464
+          570
         ],
         [
-          892,
-          464
+          458,
+          570
         ]
       ]
     },
     {
-      "from": "planonly",
+      "from": "apim",
+      "to": "output",
+      "kind": "data",
+      "points": [
+        [
+          823,
+          570
+        ],
+        [
+          892,
+          570
+        ]
+      ]
+    },
+    {
+      "from": "apim",
       "to": "steps",
       "kind": "control",
       "points": [
         [
           640,
-          544
+          680
         ],
         [
           640,
-          634
+          812
         ],
         [
           206,
-          634
+          812
         ],
         [
           206,
-          694
+          840
         ]
       ]
     },
@@ -339,11 +393,11 @@
       "points": [
         [
           389,
-          774
+          950
         ],
         [
           458,
-          774
+          950
         ]
       ]
     },
@@ -354,14 +408,14 @@
       "points": [
         [
           823,
-          774
+          950
         ],
         [
           892,
-          774
+          950
         ]
       ]
     }
   ],
-  "notice": "Phase 0 adds operator-side files and streams only. Azure writes still occur through the existing installers and P91 step functions after confirmation."
+  "notice": "Phase 0 adds operator-side files and streams. Preflight, -ListSteps and the flow plan only read Azure; writes stay in the installers' steps after confirmation."
 }

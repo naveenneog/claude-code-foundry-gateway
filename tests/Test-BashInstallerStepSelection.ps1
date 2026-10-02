@@ -28,7 +28,11 @@ $tpm = @('--tpm-standard', '20000')
 function Get-Writes($Result) { @($Result.Az | Where-Object { $_ -match '(^| )(create|update|delete|add|remove|assign)( |$)' }) }
 function Get-Events([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path)) { return @() }
-    @([IO.File]::ReadAllText($Path) -split "`n" | Where-Object { $_ } | ForEach-Object { try { $_ | ConvertFrom-Json -ErrorAction Stop } catch { [pscustomobject]@{ unreadable = $_ } } })
+    # time is read as written: PowerShell 7 reads an ISO time in JSON as a DateTime.
+    @([IO.File]::ReadAllText($Path) -split "`n" | Where-Object { $_ } | ForEach-Object {
+            $line = $_
+            try { $e = $line | ConvertFrom-Json -ErrorAction Stop; $m = [regex]::Match($line, '"time"\s*:\s*"([^"]*)"'); if ($m.Success) { $e.time = $m.Groups[1].Value }; $e }
+            catch { [pscustomobject]@{ unreadable = $line } } })
 }
 function Write-Answers($Scenario, $Answers) { $p = Join-Path $Scenario.Dir 'answers.json'; Write-Lf $p ($Answers | ConvertTo-Json -Depth 8); return (ConvertTo-BashPath $p) }
 function Copy-Scenario($Name, $Source, [scriptblock]$Change) { $s = New-Scenario $Name $null $Source; if ($Change) { Edit-World $s $Change }; $s }
@@ -57,18 +61,24 @@ try {
         ($runUnknown = New-Run $unknown ($base + $tpm + @('--steps', 'gateway-deploy')))
         ($runFailing = New-Run $failing ($base + $tpm + @('--progress-file', (ConvertTo-BashPath $progressFail))))
     )
-    # The PowerShell installer over the same kind of world, for the parity of progress events.
-    $psScratch = [IO.Path]::GetFullPath((Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) ('p92-parity-' + [guid]::NewGuid().ToString('N'))))
-    New-Item -ItemType Directory -Force -Path $psScratch | Out-Null
-    $psTemplate = New-P91Template $psScratch
-    $pw = New-P91World; $pw.inject.groupCreateFail = @('claude-code-premium')
-    $psScenario = New-P91Scenario -Name 'parity' -Scratch $psScratch -Template $psTemplate -World $pw
-    $psProgress = Join-Path $psScenario.Dir 'progress.ndjson'
-    $psRun = New-P91Run $psScenario -Arguments @("-SubscriptionId '$sub'", "-FoundryAccount 'ai-p91'", "-FoundryResourceGroup 'rg-ai-p91'", "-EntitlementStore 'named-value'", "-AuthMode 'interactive'",
-        "-DesktopSignInKind 'helper-script'", "-AddressMode 'azure'", '-SkipFinOpsOffer', "-ResourceGroup 'rg-p91'", "-Location 'eastus2'", "-NamePrefix 'p91gw'", "-PublisherEmail 'ops@contoso.com'",
-        "-Sku 'BasicV2'", "-StandardModels 'claude-sonnet-5'", "-PremiumModels 'claude-sonnet-5'", '-TpmStandard 20000', '-QuotaStandard 500000', '-TpmPremium 80000', '-QuotaPremium 5000000',
-        '-QuotaOrg 100000000', '-CallsPerMinute 120', '-Yes', "-ProgressPath '$psProgress'")
-    $psResults = Invoke-P91Runs @($psRun)
+    # The PowerShell installer over the same kind of world, for the parity of progress events. It runs
+    # through tests/InstallerCheckpointHarness.ps1, which sets Windows access rules and builds Windows
+    # paths, so the parity is checked on Windows (Test-All); Linux and macOS run the bash checks.
+    $psScratch = $null
+    if ($script:windows) {
+        $psScratch = [IO.Path]::GetFullPath((Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) ('p92-parity-' + [guid]::NewGuid().ToString('N'))))
+        New-Item -ItemType Directory -Force -Path $psScratch | Out-Null
+        $psTemplate = New-P91Template $psScratch
+        $pw = New-P91World; $pw.inject.groupCreateFail = @('claude-code-premium')
+        $psScenario = New-P91Scenario -Name 'parity' -Scratch $psScratch -Template $psTemplate -World $pw
+        $psProgress = Join-Path $psScenario.Dir 'progress.ndjson'
+        $psRun = New-P91Run $psScenario -Arguments @("-SubscriptionId '$sub'", "-FoundryAccount 'ai-p91'", "-FoundryResourceGroup 'rg-ai-p91'", "-EntitlementStore 'named-value'", "-AuthMode 'interactive'",
+            "-DesktopSignInKind 'helper-script'", "-AddressMode 'azure'", '-SkipFinOpsOffer', "-ResourceGroup 'rg-p91'", "-Location 'eastus2'", "-NamePrefix 'p91gw'", "-PublisherEmail 'ops@contoso.com'",
+            "-Sku 'BasicV2'", "-StandardModels 'claude-sonnet-5'", "-PremiumModels 'claude-sonnet-5'", '-TpmStandard 20000', '-QuotaStandard 500000', '-TpmPremium 80000', '-QuotaPremium 5000000',
+            '-QuotaOrg 100000000', '-CallsPerMinute 120', '-Yes', "-ProgressPath '$psProgress'")
+        $psResults = Invoke-P91Runs @($psRun)
+    }
+
     $r1 = Invoke-Runs $wave1
     $l1 = $r1[$runList1.Dir]
     Assert 'setup: the first run keeps its checkpoint with Entra groups incomplete, and the run whose sync fails keeps one with sync incomplete' ($l1.ExitCode -eq 0 -and (Get-CheckpointFile $listSrc) -and
@@ -77,6 +87,8 @@ try {
     $list = Copy-Scenario 'list' $listSrc; $listText = Copy-Scenario 'list-text' $listSrc; $refuse = Copy-Scenario 'refuse-prereq' $listSrc
     $listHash = Get-Hash $list; $refuseHash = Get-Hash $refuse
     $onlySync = Copy-Scenario 'only-sync' $syncFail { param($w) $w.inject.sync = '' }
+    # A failed sync is a warning in this installer, so run 1 went on to write the package; the copy starts without it.
+    Remove-Item -LiteralPath (Join-Path $onlySync.Repo 'onboarding/claude-gateway.json') -Force -ErrorAction SilentlyContinue
     $gone = Copy-Scenario 'prereq-gone' $syncFail { param($w) $w.inject.sync = ''; foreach ($p in @($w.groups.PSObject.Properties | Where-Object { $_.Value -eq 'claude-code-standard' })) { $w.groups.PSObject.Properties.Remove($p.Name) } }
     $goneHash = Get-Hash $gone
     $resume = Copy-Scenario 'resume-progress' $listSrc { param($w) $w.inject.groupCreateFail = @() }
@@ -156,10 +168,14 @@ try {
     Assert 'P5 bash a failure emits failed for its step with the resume command' (@($failed | Where-Object { $_.event -eq 'failed' -and $_.stepId -eq 'gateway-deployment' -and $_.resumeCommand -match 'install-claude-gateway\.sh' }).Count -eq 1 -and
         $r1[$runFailing.Dir].ExitCode -ne 0) (($failed | ConvertTo-Json -Compress -Depth 3))
     Assert 'P5 bash a refusal emits refused with its reason' (@($bound | Where-Object { $_.event -eq 'refused' -and $_.message -match 'resource group' }).Count -eq 1) (($bound | ConvertTo-Json -Compress -Depth 3))
-    $psEvents = @(Get-Events $psProgress)
-    $shape = { param($Events) @($Events | Where-Object { $_.stepId -in $bashIds } | ForEach-Object { "$($_.stepId)|$($_.event)|$($_.message)" }) -join "`n" }
-    $psOut = Get-P91Result $psResults $psRun
-    Assert 'P5 both installers write the same events, with the same messages, for the steps both run (identical stream contract)' ($psOut.ExitCode -eq 0 -and $psEvents.Count -and (& $shape $psEvents) -eq (& $shape $first)) "pwsh: $((& $shape $psEvents) -replace "`n", ' ; ') || bash: $((& $shape $first) -replace "`n", ' ; ')"
+    if ($script:windows) {
+        $psEvents = @(Get-Events $psProgress)
+        $shape = { param($Events) @($Events | Where-Object { $_.stepId -in $bashIds } | ForEach-Object { "$($_.stepId)|$($_.event)|$($_.message)" }) -join "`n" }
+        $psOut = Get-P91Result $psResults $psRun
+        Assert 'P5 both installers write the same events, with the same messages, for the steps both run (identical stream contract)' ($psOut.ExitCode -eq 0 -and $psEvents.Count -and (& $shape $psEvents) -eq (& $shape $first)) "pwsh: $((& $shape $psEvents) -replace "`n", ' ; ') || bash: $((& $shape $first) -replace "`n", ' ; ')"
+    }
+    else { Write-Host '  [SKIP] P5 both installers write the same events: runs on Windows (Test-All), where tests/InstallerCheckpointHarness.ps1 runs the PowerShell installer' -ForegroundColor DarkGray }
+
     $texts = @(@($progress1, $progress2, $progressFail, $progressBind) | Where-Object { Test-Path -LiteralPath $_ } | ForEach-Object { [IO.File]::ReadAllText($_) })
     Assert 'P5 bash no secret reaches the progress stream (no token az returned)' ($texts.Count -ge 3 -and -not @($texts | Where-Object { $_ -match 'eyJ[A-Za-z0-9_-]{4,}\.|(?i)password|accesstoken' }).Count) "$($texts.Count) streams"
     $unexpected = @(foreach ($r in @($r1.Values) + @($r2.Values)) { @($r.Unexpected) })

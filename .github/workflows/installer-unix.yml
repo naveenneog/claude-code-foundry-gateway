@@ -1,6 +1,7 @@
 name: Installer checkpoint on macOS and Linux
 
-# The bash installer and its install checkpoint (docs/adr/0046-installer-checkpoint-and-resume.md)
+# The bash installer and its install checkpoint (docs/adr/0046-installer-checkpoint-and-resume.md), and its
+# answers file, preflight, steps and progress stream (docs/adr/0047-lean-installer-phase-0.md),
 # on bash 5 (ubuntu-latest) and on the macOS system bash 3.2 (macos-latest); tool versions in
 # docs/UNKNOWNS.md U71. Test-All (test-all.yml) runs the same checks on Windows with Git Bash. The
 # store suite's real POSIX mode checks, for both installers' libraries, run only here.
@@ -16,10 +17,21 @@ on:
       - scripts/ClaudeInstallResume.ps1
       - scripts/preflight.sh
       - scripts/banner.sh
+      - scripts/install-answers.sh
+      - scripts/install-answers.jq
+      - scripts/install-steps.sh
+      - scripts/install-preflight.sh
+      - scripts/install-prices.sh
+      - scripts/ClaudeInstallerAnswers.ps1
+      - schemas/claude-gateway.answers.schema.json
       - infra/main.bicep
       - tests/Test-BashInstaller.ps1
       - tests/Test-BashInstallerCheckpoint.ps1
       - tests/Test-InstallerCheckpointStore.ps1
+      - tests/BashInstallerHarness.ps1
+      - tests/Test-InstallerAnswersSchema.ps1
+      - tests/Test-BashInstallerPreflight.ps1
+      - tests/Test-BashInstallerStepSelection.ps1
       - .github/workflows/installer-unix.yml
   workflow_dispatch:
 
@@ -68,4 +80,19 @@ jobs:
         shell: pwsh
         run: |
           pwsh -NoProfile -File tests/Test-BashInstaller.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Answers schema, both validators (PowerShell and jq)
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File tests/Test-InstallerAnswersSchema.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Installer preflight (bash)
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File tests/Test-BashInstallerPreflight.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Installer steps, precedence and progress stream (bash)
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File tests/Test-BashInstallerStepSelection.ps1
           if ($LASTEXITCODE) { exit $LASTEXITCODE }

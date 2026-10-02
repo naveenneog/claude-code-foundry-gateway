@@ -100,7 +100,7 @@ Observed failure lines on the accepted plan before implementation:
 - Guided-flow schema and preflight checks failed because the flow did not call the shared schema/preflight path.
 - `bash-checkpoint-shards-cover-every-case-once` failed because Test-All still registered one bash checkpoint check.
 
-### GREEN
+### GREEN (first builder, rejected: `3b07bbd`)
 
 GREEN implements the first P92 contract surface: `schemas/claude-gateway.answers.schema.json`,
 `scripts/ClaudeInstallerAnswers.ps1`, `scripts/install-answers.sh`, installer flags and parameters,
@@ -120,7 +120,7 @@ This GREEN is an offline contract implementation. Live Azure preflight behavior,
 from answers, stronger executable selected-step coverage, mutations and architecture rendering remain
 for REFACTOR and review.
 
-### REFACTOR and mutation proof
+### REFACTOR and mutation proof (first builder, rejected: `79d22c4`)
 
 REFACTOR adds the owner-directed phase-0 additions: business units from the answers file are applied
 by calling `scripts/Set-ClaudeBusinessUnit.ps1`, units before teams, with `-Parent` for teams. After
@@ -195,6 +195,96 @@ Checks that pass at RED are detector self-tests (the drift detectors find a para
 added in a sandbox; the static and dynamic flow-key inventories agree, U80) and guards on behaviour
 that already holds (a parameter and the checkpoint win over a default; `-NonInteractiveAnswers` win
 over `-AnswersPath`).
+
+### GREEN (replacement), 2026-10-02
+
+GREEN replaces `3b07bbd` and `79d22c4`. `Install-ClaudeGateway.ps1`, `install-claude-gateway.sh`,
+`scripts/ClaudeInstallCheckpoint.ps1` and `scripts/flow/FlowContract.ps1` restart from `9daaebe`; the
+schema, both validators and the preflight engines are new. `Get-ClaudeFlowAnswersPreflightText` and the
+facade validators no longer exist.
+
+| Part | Where |
+|---|---|
+| Answers schema: 56 properties (7 flow-only), 2 pattern properties, 3 definitions, the 14 check ids, the secret list and the run controls | `schemas/claude-gateway.answers.schema.json` |
+| Two validators with one strict JSON scanner; the same problems, word for word | `scripts/ClaudeInstallerAnswers.ps1`, `scripts/install-answers.jq`, `scripts/install-answers.sh` |
+| Preflight: 14 checks, each PASS, FAIL or NOT-RUN with a reason; nothing is written | `scripts/ClaudeInstallerPreflight.ps1`, `scripts/install-preflight.sh` |
+| APIM reads through the P91 verdict reader, shared by the preflight and the run (U82) | `Get-ClaudeApimReuseState`, `Get-ClaudeApimReuseProblems`, `Get-ClaudeApimReuseCandidates`; `Install-ClaudeGateway.ps1:652-698` |
+| Step list, selection, prerequisites verified live, progress stream | `scripts/ClaudeInstallSteps.ps1`, `scripts/install-steps.sh` |
+| Business units from answers, units before teams, receipts, the USD command | `Invoke-ClaudeInstallBusinessUnits`; `Install-ClaudeGateway.ps1:1733-1745` |
+| Guided flow: schema check of `-AnswersPath`, the preflight in the plan and its fingerprint, no apply on FAIL | `Start-ClaudeGateway.ps1:109-159`, `:630`, `:643` |
+| Bash checkpoint suite in two shards | `tests/Test-BashInstallerCheckpoint.ps1` (`Test-ShardGroup`), `tests/test-all-durations.json` |
+
+#### Checks
+
+Each suite was run on its own on the working tree of the GREEN commit (Windows, PowerShell 7.6.6, Git
+Bash with jq 1.8.2); seconds are wall times.
+
+| Suite | Checks | Seconds | Note |
+|---|---|---|---|
+| `Test-InstallerAnswersSchema.ps1` | 40 of 40 | 12 | also under jq 1.6 |
+| `Test-InstallerAnswersDrift.ps1` | 13 of 13 | 5 | 12 at RED, and the guided-flow pages check |
+| `Test-InstallerPreflight.ps1` | 17 of 17 | 24 | 15 at RED, and the two run-path checks |
+| `Test-BashInstallerPreflight.ps1` | 17 of 17 | 50 | also under jq 1.6 |
+| `Test-InstallerStepSelection.ps1` | 21 of 21 | 39 | |
+| `Test-BashInstallerStepSelection.ps1` | 22 of 22 | 207 | Linux and macOS skip the stream parity check, which needs the Windows harness |
+| `Test-InstallerBusinessUnitAnswers.ps1` | 9 of 9 | 31 | |
+| `Test-GuidedFlowAnswersSchema.ps1` | 9 of 9 | 15 | 8 at RED, and the recorded-field check |
+| `Test-BashInstallerCheckpointShards.ps1` | 5 of 5 | 3 | |
+| P91 `Test-InstallerCheckpoint.ps1` | 86 of 86 | 104 | |
+| P91 `Test-BashInstallerCheckpoint.ps1 -Shard 0/2` | 18 of 18 | 226 | |
+| P91 `Test-BashInstallerCheckpoint.ps1 -Shard 1/2` | 35 of 35 | 263 | the harness check runs in both shards |
+| P91 `Test-InstallerCheckpointStore.ps1` | 24 of 24 | 12 | |
+
+Also run, all passing: `Test-BashInstaller.ps1`, `Test-CompanyInstaller.ps1` (22),
+`Test-CompanyFlow.ps1` (34), `Test-CompanyAddressNegative.ps1` (105 of 105 mutations caught),
+`Test-FlowStart.ps1`, `Test-FlowPermutations.ps1`, `Test-FlowOrdinalOrder.ps1`,
+`Test-FlowAppliedState.ps1` (20), `Test-GuidedFlow.ps1`, `Test-ModelLifecycle.ps1` (138),
+`Test-ModelLifecycleNegative.ps1 -ValidateOnly` (62 sites), `Test-AdminSurface.ps1`, `Test-On-PS51.ps1`,
+`Test-InstallerPermutations.ps1`, `Test-PreflightBothHosts.ps1`, `Test-ShellScripts.ps1`,
+`Test-Architecture.ps1` (36), `Test-DocReferences.ps1`, `Test-TestAllSharding.ps1`,
+`Test-ReleaseLog.ps1`, `Test-Ledger.ps1 -SkipLive` and `Repair-ScriptEncoding.ps1 -Check` (327
+scripts). `Test-ProjectionPreflightNegative.ps1` is not a Test-All check: its three baselines pass in
+its copy, and `-ValidateAnchors` stops at "bounded raw output", whose anchor `Select-Object -Last 40`
+is already absent at `main` (`f39524d` changed it to `-Last 39`).
+
+#### Test corrections
+
+Each was a fault in a RED test, not a weaker check:
+
+- `Test-InstallerAnswersSchema.ps1`: the secret-name pattern is `(?i)password|secret|(?<!bearer)token`. `DesktopBearerTokenType` is a non-secret choice, `id_token` or `access_token` (`Install-ClaudeGateway.ps1:91`).
+- `Test-InstallerStepSelection.ps1` and `Test-BashInstallerStepSelection.ps1`: `Get-Events` keeps `time` as written. PowerShell 7 `ConvertFrom-Json` turns an ISO 8601 string into a `DateTime`, so the format check read a converted value.
+- `Test-BashInstallerStepSelection.ps1`: the only-sync copy removes `onboarding/claude-gateway.json`. A failed bash sync is a warning, so run 1 had already written the package.
+- `tests/InstallerCheckpointHarness.ps1`: the template carries `schemas/`.
+
+Existing suites that copy a fixed file set now copy the three new PowerShell libraries, every
+`scripts/install-*` file and the schema: `Test-BashInstaller.ps1`, `Test-CompanyInstaller.ps1`,
+`Test-CompanyAddressNegative.ps1`, `Test-FlowStart.ps1`, `Test-FlowPermutations.ps1` and
+`Test-ModelLifecycleNegative.ps1`. `Test-FlowStart.ps1` loads `scripts/ClaudeInstallerPreflight.ps1`
+where it runs the extracted `$useExistingGateway` block, which calls `Get-ClaudeApimReuseProblems`, and
+lists the answers-driven `Business units` section (`Install-ClaudeGateway.ps1:1737`) among the sections
+that ask nothing. No assertion was removed or relaxed.
+
+#### Found during GREEN
+
+- The business-unit branch first read `elseif (-not $Yes -and (Test-ClaudeInstallStepSelected 'business-units'))`. That broke `tests/Test-AdminSurface.ps1:233` (the `-Yes` guard) and removed the find-string of the mutation "an unattended install starts inventing business units" (`tests/Test-BusinessUnitsNegative.ps1:1852`). The selection test is now its own leading branch (`Install-ClaudeGateway.ps1:1733`). A static scan of every mutation in `tests/` that targets a file this packet changes finds all 43 find-strings.
+- `models.priceBookPath` is a documented flow answer (`docs/GUIDED-FLOW.md:388`, `docs/MODELS.md:170`) that no question asks, so the question inventory missed it and the schema refused `Test-ModelLifecycle.ps1`'s answers file. A new drift check covers every key the guided-flow pages name. RED: "not in the schema: models.priceBookPath"; it passes with the property added.
+- `Set-FlowAnswersOnRecord` (`Start-ClaudeGateway.ps1:161-169`) copied every `<step>.<field>` answer onto the record, so before P92 an answers file could set a field a step records itself, such as the approved network review (`scripts/flow/Network.ps1:40`). The schema check now refuses it; `Test-GuidedFlowAnswersSchema.ps1` asserts this for `network.approvedFingerprint`.
+- The reuse menu read `az apim list` with `2>$null`, so a failed read offered nothing and said nothing. It now reads through `Get-ClaudeApimReuseCandidates` and warns. RED, with the old two lines in place: "[FAIL] P2 the run's reuse menu reads through the verdict reader ...".
+- Architecture spec 17 (from `79d22c4`) named functions that this implementation does not have, and `Test-Architecture.ps1` failed with `IDENTIFIER_MISSING`. The spec names this implementation's functions, its edges connect the nodes they name, and the image is re-rendered.
+
+#### jq versions
+
+The bash preflight accepts jq 1.5 and later (`scripts/preflight.sh:80-86`). `scripts/install-answers.jq`
+gives byte-identical output under jq 1.6, 1.7.1 and 1.8.2 for 13 probe files (valid, unknown key,
+upper-case unit id, single quote, depth 3, Allowance 0, secret, comment, trailing comma, duplicate key,
+BOM, `2.0e4`, astral character). `Test-InstallerAnswersSchema.ps1` (40 checks) and
+`Test-BashInstallerPreflight.ps1` (17 checks) pass under jq 1.6. The jq 1.6 and 1.7.1 binaries are the
+jqlang release assets, checked against their published SHA-256.
+
+#### Load rule
+
+- `Test-BashInstallerStepSelection.ps1` ran for 173 s while `.gate-lock` was held (the p89-p90 gate). Its RED time was 25 s; the GREEN time was not measured before the run.
+- `Test-ProjectionPreflightNegative.ps1` (weight 51.3 s) was still running after 3 minutes under the p87 gate and was stopped; its three baselines had passed. It ran again after the lock cleared.
 
 
 ## P91 installer checkpoint and resume, 2026-10-01

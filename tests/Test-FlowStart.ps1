@@ -121,9 +121,11 @@ try {
     # ------------------------------------------------------------------ a shadow repository
     # Real orchestrator, discovery and Foundation step; a stub installer and a fake FinOps step.
     $shadow = Join-Path $scratch 'shadow'
-    foreach ($d in 'scripts\flow\lib', 'onboarding') { New-Item -ItemType Directory -Force -Path (Join-Path $shadow $d) | Out-Null }
+    foreach ($d in 'scripts\flow\lib', 'onboarding', 'schemas') { New-Item -ItemType Directory -Force -Path (Join-Path $shadow $d) | Out-Null }
     Copy-Item -LiteralPath (Join-Path $root 'Start-ClaudeGateway.ps1') -Destination $shadow
-    foreach ($f in 'scripts\ClaudeChoice.ps1', 'scripts\ClaudeGatewayAddressInput.ps1', 'scripts\AzureRetailPrice.ps1', 'scripts\ClaudeGatewayRegion.ps1', 'scripts\flow\FlowContract.ps1', 'scripts\flow\Discovery.ps1', 'scripts\flow\Foundation.ps1', 'scripts\flow\lib\LifecycleCommon.ps1') {
+    foreach ($f in 'scripts\ClaudeChoice.ps1', 'scripts\ClaudeGatewayAddressInput.ps1', 'scripts\AzureRetailPrice.ps1', 'scripts\ClaudeGatewayRegion.ps1', 'scripts\flow\FlowContract.ps1', 'scripts\flow\Discovery.ps1', 'scripts\flow\Foundation.ps1', 'scripts\flow\lib\LifecycleCommon.ps1',
+        # The installer's answers schema and preflight, which the flow runs for a plan that runs the installer unattended (ADR-0047).
+        'scripts\ClaudeInstallerAnswers.ps1', 'scripts\ClaudeInstallerPreflight.ps1', 'scripts\ClaudeInstallResume.ps1', 'scripts\Test-Prerequisites.ps1', 'schemas\claude-gateway.answers.schema.json') {
         if (Test-Path -LiteralPath (Join-Path $root $f)) { Copy-Item -LiteralPath (Join-Path $root $f) -Destination (Join-Path $shadow $f) }
     }
     # Offline and deterministic: the shadow prices API Management from fixed rates, not the Retail Prices API.
@@ -478,7 +480,8 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'Budgets
 
     # Every installer section that asks something is named in the attended Foundation review.
     $installerText = [IO.File]::ReadAllText((Join-Path $root 'Install-ClaudeGateway.ps1'))
-    $asksNothing = @('Summary', 'Deploying', 'Claude deployment', 'Resource group', 'Entra groups', 'Sync entitlement', 'Projection deployment', 'Onboarding package', 'Verifying the controls', 'Done')
+    # 'Business units' applies the units given as answers (ADR-0047); 'Business units (optional)' is the section that asks.
+    $asksNothing = @('Summary', 'Deploying', 'Claude deployment', 'Resource group', 'Entra groups', 'Sync entitlement', 'Projection deployment', 'Business units', 'Onboarding package', 'Verifying the controls', 'Done')
     $named = [ordered]@{
         'Azure sign-in' = 'subscription'; 'Foundry account' = 'Foundry account'; 'Which models each tier may call' = 'models each tier may call'
         'Where to put the gateway' = 'region'; 'Choices' = 'entitlement store'; 'Budgets' = 'token budgets'; 'Standard tier' = 'token budgets for each tier'
@@ -708,6 +711,7 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'Budgets
         $adopt = & ([scriptblock]::Create($adoptAssign[0].Right.Extent.Text))
         $adopted = & {
             . (Join-Path $root 'scripts\ClaudeGatewayRegion.ps1')
+            . (Join-Path $root 'scripts\ClaudeInstallerPreflight.ps1')
             function Write-Note { param($t) }; function Write-Ok { param($t) }; function Write-Warn2 { param($t) }
             $ResourceGroup = 'rg-typed'; $ExistingApim = ''; $Location = 'westus'; $Sku = ''; $PublisherEmail = ''; $NamePrefix = ''
             . $adopt ([pscustomobject]@{ name = 'contoso-gateway'; resourceGroup = 'rg-live'; location = 'East US 2'; sku = [pscustomobject]@{ name = 'StandardV2' }; publisherEmail = 'ops@contoso.com'; identity = [pscustomobject]@{ type = 'SystemAssigned' } })

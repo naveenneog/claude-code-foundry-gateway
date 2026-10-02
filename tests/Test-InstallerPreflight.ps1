@@ -59,8 +59,16 @@ try {
     Add-Scenario 'all-at-once' (New-P91World) (New-Answers { param($a) $a.FoundryAccount = 'ai-missing'; Set-Answer $a 'StandardGroup' "O'Brien"
             Set-Answer $a 'BusinessUnits' @([ordered]@{ id = 'Finance'; group = 'claude-bu-finance'; monthlyUsdBudget = 5000; mode = 'Strict' }); & $kvBad $a })
     Add-Scenario 'text' (New-P91World -ReusedGateway -IdentityType 'None') (New-Answers $reuse) -Text
+    # Two runs, kept apart from the read-only preflight scenarios: the run reads a reused instance, and
+    # the instances its menu offers, through the same functions as the preflight (U82).
+    $runArgs = @("-SubscriptionId '$sub'", "-FoundryAccount 'ai-p91'", "-FoundryResourceGroup 'rg-ai-p91'", "-EntitlementStore 'named-value'", "-AuthMode 'interactive'",
+        "-DesktopSignInKind 'helper-script'", "-AddressMode 'azure'", '-SkipFinOpsOffer', "-ResourceGroup 'rg-p91'", "-StandardModels 'claude-sonnet-5'",
+        "-PremiumModels 'claude-opus-5','claude-sonnet-5'", '-TpmStandard 20000', '-QuotaStandard 500000', '-TpmPremium 80000', '-QuotaPremium 5000000', '-QuotaOrg 100000000', '-CallsPerMinute 120', '-Yes')
+    $runIdentity = New-P91Run (New-P91Scenario -Name 'run-no-identity' -Scratch $scratch -Template $template -World (New-P91World -ReusedGateway -IdentityType 'None')) -Arguments ($runArgs + "-ExistingApimName 'apim-p91reuse'")
+    $w = New-P91World; $w.inject.readErrors = @([ordered]@{ match = 'apim list*'; text = 'ERROR: (AuthorizationFailed) The client does not have authorization to perform action Microsoft.ApiManagement/service/read.' })
+    $runList = New-P91Run (New-P91Scenario -Name 'run-list-error' -Scratch $scratch -Template $template -World $w) -Arguments ($runArgs + @("-Location 'eastus2'", "-PublisherEmail 'ops@contoso.com'", "-Sku 'BasicV2'"))
 
-    $results = Invoke-P91Runs @($scenarios.Values | ForEach-Object { $_.Run })
+    $results = Invoke-P91Runs (@($scenarios.Values | ForEach-Object { $_.Run }) + @($runIdentity, $runList))
     foreach ($s in $scenarios.Values) {
         $s.Result = Get-P91Result $results $s.Run
         if (-not $s.Text) { try { $s.Json = $s.Result.Out | ConvertFrom-Json -ErrorAction Stop } catch { $s.Json = $null } }
@@ -107,6 +115,15 @@ try {
     $lineIds = @($lines | ForEach-Object { [regex]::Match($_, '\] ([A-Za-z.]+):').Groups[1].Value } | Select-Object -Unique)
     Assert 'P2 the text report has one line per check, [RESULT] id: message, and each FAIL line ends with its remedy' ($tx.ExitCode -ne 0 -and ($lineIds -join ',') -eq ($ids -join ',') -and
         @($lines | Where-Object { $_ -match '\[FAIL\] apim\.existingIdentity: .*Remedy: .*System assigned' }).Count -eq 1 -and $tx.Out -match '(?m)^\s*Preflight: 14 checks; \d+ PASS, \d+ FAIL, \d+ NOT-RUN\.') (Get-P91Tail $tx)
+
+    # ------------------------------------------------------------------ the run reads as the preflight reads
+    $ri = Get-P91Result $results $runIdentity
+    Assert 'P2 the run reads a reused instance through the preflight''s reader: without a system-assigned identity it warns with the apim.existingIdentity message and remedy' (
+        $ni -and $ni.message -and $ri.Out.Contains("[WARN] $($ni.message). $($ni.remedy)")) "preflight: $($ni.message) | run: $(Get-P91Tail $ri)"
+    $rl = Get-P91Result $results $runList
+    Assert 'P2 the run''s reuse menu reads through the verdict reader: a failed az apim list warns that none is offered, naming the error, and the run creates its own instance' (
+        $rl.ExitCode -eq 0 -and $rl.Out -match '\[WARN\] The API Management instances in this subscription could not be listed \(.*AuthorizationFailed.*\), so none is offered for reuse' -and
+        (Get-P91Calls $rl 'deployment group create*').Count -eq 1) (Get-P91Tail $rl)
 
     # ------------------------------------------------------------------ read-only
     $writes = @(foreach ($s in $scenarios.Values) { @($s.Result.Az | Where-Object { $_ -match '(^| )(create|update|delete|set|add|remove|login|purge|assign|start|stop)( |$)' }) })
