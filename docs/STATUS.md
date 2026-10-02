@@ -4,6 +4,14 @@
 
 ## P91 installer checkpoint and resume, 2026-10-01
 
+**Council: all five seats passed at `bf8c4a7`** (Architect in round 1; UX and QA in round 2;
+Security and Coder in round 4, after the store amendment, the single-quote refusal and the Windows
+ancestor walk). On 2026-10-02 the owner directed that the installer work stays on one branch,
+`lean-installer`, unmerged: P91 is its base, followed by the phases of the form-installer spike
+([spike](spikes/architecture-install-form-ui-spike.md)). The 900 s Test-All timeout for the bash
+checkpoint suite (`b016b8d`) is a budget change that needs an ADR or a shard split before this
+branch merges.
+
 **Builder work in progress on `p91-installer-checkpoint`, based on main `0fed315`; nothing is pushed,
 and the merge waits for the owner's approval.** The owner asked on 2026-10-01 for script
 checkpointing that works on Windows, Linux, macOS and Azure Cloud Shell. When P87 merges first, this
