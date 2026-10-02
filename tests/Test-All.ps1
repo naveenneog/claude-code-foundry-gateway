@@ -214,7 +214,8 @@ try {
     $installerBash = if ($IsWindows -or $env:OS -eq 'Windows_NT') { @(@('C:\Program Files\Git\bin\bash.exe', 'C:\Program Files\Git\usr\bin\bash.exe', (Join-Path "$env:LOCALAPPDATA" 'Programs\Git\bin\bash.exe')) | Where-Object { Test-Path -LiteralPath $_ }) | Select-Object -First 1 } else { (Get-Command bash -ErrorAction SilentlyContinue | Select-Object -First 1).Source }
     $bashInstallerSkip = if (-not $installerBash) { 'macOS/Linux installer: no Git Bash (Windows) or bash on this machine.' } elseif (-not (& $installerBash -c 'command -v jq' 2>$null)) { 'macOS/Linux installer: jq is not on the bash PATH; the installer needs it.' } else { '' }
     Invoke-Check 'macOS/Linux installer prices and record'  'Test-BashInstaller.ps1' -SkipReason $bashInstallerSkip
-    Invoke-Check 'macOS/Linux installer checkpoint and resume' 'Test-BashInstallerCheckpoint.ps1' -SkipReason $bashInstallerSkip
+    # Its 52 checks drive the bash installer through Git Bash: 502 s alone, 603 s in a loaded full run.
+    Invoke-Check 'macOS/Linux installer checkpoint and resume' 'Test-BashInstallerCheckpoint.ps1' -SkipReason $bashInstallerSkip -TimeoutSeconds 900
     Invoke-Check 'Installer checkpoint store permissions'  'Test-InstallerCheckpointStore.ps1' -SkipReason $bashInstallerSkip
     Invoke-Check 'Preflight on both PowerShell hosts'      'Test-PreflightBothHosts.ps1' -SerialLane
     Invoke-Check 'Guided diagnostics and support bundles'  'Test-Diagnose.ps1' -SerialLane
