@@ -102,6 +102,15 @@ section moves to `docs/status/P91.md` under P87's ADR-0042.
   and a combining accent, and reused that group); "R5 a resume that names a group in another case
   than its receipt does not use the receipt" (PowerShell matched the receipt's name ignoring case,
   where jq's `==` compares code points).
+- Council round 2 fix, 2026-10-01: GREEN `9e85194`, LOG `a19a1ed`. Both installers take a listed
+  group as the configured name when it has as many Unicode code points (jq `length`; PowerShell
+  counts UTF-16 units with a surrogate pair as one) and compare a receipt's name code point by code
+  point; neither compares names otherwise (ADR-0046 decision 11, U76, U77). Run side by side:
+  `Test-InstallerCheckpoint.ps1` 73 checks, 0 failed (136.5 s); `Test-BashInstallerCheckpoint.ps1`
+  43, 0 failed (283.1 s; 44 on Linux and macOS). The store, company, permutation, bash installer and
+  architecture suites pass. Mutations, one per new check: 10 of 10 caught (5 PowerShell, 5 bash),
+  each at its suite's baseline count with its own check among the failures; every bash mutant passes
+  `bash -n` ([measurement](measurements/p91-mutations-council2.json)).
 
 Acceptance criteria, for both installers unless one is named:
 
