@@ -360,6 +360,28 @@ try {
     # A state directory outside the scenario's home: refused before anything is read (decision 2).
     $outside = New-Scenario 'outside' (New-World)
     $outsideDir = (ConvertTo-BashPath $outside.Dir) + '/elsewhere/state'
+    # A default place that fails a check (ADR-0046 decisions 1 and 2): Cloud Shell with clouddrive and a
+    # $HOME its group can write (U78), which the probe seam reports. With no file of this checkout there
+    # the run keeps no store; with its checkpoint, lock or temporary file there it refuses;
+    # CLAUDE_GATEWAY_STATE_DIR naming the same place refuses.
+    $groupHome = "ckpt_perm_probe_() { PERM_LINK=0; PERM_MINE=1; PERM_ROOT=0; PERM_OWNER='p91-me'; PERM_MODE='drwx------'; [ `"`$1`" = `"`$CKPT_HOME_REAL`" ] && PERM_MODE='drwxrwx---'; return 0; }"
+    $untrusted = [ordered]@{}
+    foreach ($n in 'untrusted-free', 'untrusted-checkpoint', 'untrusted-lock', 'untrusted-temp', 'untrusted-named') {
+        $s = New-Scenario $n (New-World)
+        $place = Join-Path $s.Home 'clouddrive/.claude-gateway'
+        New-Item -ItemType Directory -Force -Path (Join-Path $s.Home 'clouddrive') | Out-Null
+        $lib = Join-Path $s.Repo 'scripts/install-checkpoint.sh'
+        Write-Lf $lib ([IO.File]::ReadAllText($lib) + "`n$groupHome`n")
+        $key = Get-BashKey $s.Repo
+        $file = @{ 'untrusted-checkpoint' = "$key.json"; 'untrusted-lock' = "$key.lock"; 'untrusted-temp' = "$key.json.tmp-4242-17" }[$n]
+        if ($file) {
+            New-Item -ItemType Directory -Force -Path $place | Out-Null
+            $file = Join-Path $place $file
+            Write-Lf $file '{"schema":"claude-gateway-install-checkpoint","note":"placed by the test"}'
+        }
+        $envs = @{ AZUREPS_HOST_ENVIRONMENT = 'cloud-shell/1.0'; CLAUDE_GATEWAY_STATE_DIR = $(if ($n -eq 'untrusted-named') { ConvertTo-BashPath $place } else { $null }) }
+        $untrusted[$n] = [pscustomobject]@{ Scenario = $s; Place = $place; File = $file; Hash = $(if ($file) { (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash } else { '' }); Env = $envs; Run = $null }
+    }
     # Group names beyond ASCII (ADR-0046 decision 11): Graph's answer for the name is given, and a
     # returned group is the named one only when it has as many Unicode code points as the name.
     # PowerShell variable names ignore case, so each spelling has its own variable name.
@@ -404,6 +426,7 @@ try {
         ($runNameAstral = New-Run $nameAstral (& $nameArgs $rocketLower))
         ($runOutside = New-Run $outside $args0 @{ CLAUDE_GATEWAY_STATE_DIR = $outsideDir })
     )
+    foreach ($u in $untrusted.Values) { $u.Run = New-Run $u.Scenario $args0 $u.Env; $first += $u.Run }
     $r1 = Invoke-Runs $first
     $b1 = $r1[$runBase1.Dir]
     $cpFile = Get-CheckpointFile $base
@@ -466,6 +489,23 @@ try {
     Assert 'R6 bash a state directory outside $HOME refuses at startup on one line naming $HOME; nothing is read or created' ($od.ExitCode -eq 1 -and @(Get-ErrLines $od).Count -eq 1 -and
         $odLine -match '^Refused: the install checkpoint directory .+/elsewhere/state .*not inside the home directory .+/home' -and $odLine -match 'Nothing was read or changed' -and
         -not (Get-Calls $od 'account set*').Count -and -not (Test-Path -LiteralPath (Join-Path $outside.Dir 'elsewhere'))) (Get-Tail $od)
+    $u = $untrusted['untrusted-free']; $uf = $r1[$u.Run.Dir]
+    Assert 'R6 bash a default place that fails a check, with no file of this checkout there, keeps no store: one warning naming the place and the check, the resume command with the answers, and the run completes writing nothing there' (
+        $uf.ExitCode -eq 0 -and @($uf.Out -split "`n" | Where-Object { $_ -match '\[WARN\] .*keeps no install checkpoint' }).Count -eq 1 -and
+        $uf.Out -match '(?m)\[WARN\] .*/clouddrive/\.claude-gateway.*drwxrwx---.*\. This run keeps no install checkpoint\.' -and
+        $uf.Out -match "(?m)^\s*Resume: cd '.+' && \./install-claude-gateway\.sh .*--resource-group 'rg-p91'.*--name-prefix 'p91gw'" -and
+        $uf.Out -match "(?m)20 minutes without interactive activity; the ARM deployment outlives the session, and this run keeps no install checkpoint\. Resume: .*--resource-group 'rg-p91'" -and
+        (Get-Calls $uf 'deployment group create*').Count -eq 1 -and -not (Test-Path -LiteralPath $u.Place)) (Get-Tail $uf)
+    $held = @(foreach ($n in 'untrusted-checkpoint', 'untrusted-lock', 'untrusted-temp') {
+            $u = $untrusted[$n]; $res = $r1[$u.Run.Dir]; $line = [string]@(Get-ErrLines $res)[0]
+            if (-not ($res.ExitCode -eq 1 -and @(Get-ErrLines $res).Count -eq 1 -and $line -match '^Refused: ' -and $line.Contains('/clouddrive/.claude-gateway/' + (Split-Path $u.File -Leaf)) -and
+                    $line -match 'drwxrwx---' -and $line -match 'Nothing was read or changed\. Next step: inspect the file, then remove it or correct the permissions, then rerun: cd .+ && \./install-claude-gateway\.sh' -and
+                    $u.Hash -and (Get-FileHash -LiteralPath $u.File -Algorithm SHA256).Hash -eq $u.Hash -and -not (Get-Calls $res 'account set*').Count)) { "${n}: $(Get-Tail $res)" } })
+    Assert 'R6 bash a default place that fails a check refuses at startup when the checkpoint, lock or a temporary file of this checkout is there: one line naming the file, the check and the next step; the file is kept' (-not $held.Count) ($held -join ' || ')
+    $u = $untrusted['untrusted-named']; $un = $r1[$u.Run.Dir]; $unLine = [string]@(Get-ErrLines $un)[0]
+    Assert 'R6 bash CLAUDE_GATEWAY_STATE_DIR naming a place that fails a check refuses at startup on one line naming the variable and the check, with no file of this checkout there; nothing is created' (
+        $un.ExitCode -eq 1 -and @(Get-ErrLines $un).Count -eq 1 -and $unLine -match '^Refused: .*drwxrwx---' -and $unLine -match 'CLAUDE_GATEWAY_STATE_DIR' -and
+        $unLine -match 'Nothing was read or changed' -and -not (Get-Calls $un 'account set*').Count -and -not (Test-Path -LiteralPath $u.Place)) (Get-Tail $un)
 
     # ------------------------------------------------------------------ reruns
     $sleeperOut = & $bash -c 'sleep 900 >/dev/null 2>&1 & echo $!'

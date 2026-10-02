@@ -152,6 +152,18 @@ section moves to `docs/status/P91.md` under P87's ADR-0042.
   weights the three suites at local elapsed seconds at `9d13981` (`a2d6152`): 94.5 for the
   PowerShell suite run alone, 384.6 for the bash suite and 14.6 for the store suite, each run beside
   the PowerShell suite.
+- Lead amendment, 2026-10-02 (U78): a store place that fails a trust check no longer stops the
+  install. A default place that holds no checkpoint, lock or temporary file of the checkout leaves the
+  run without a store; a default place that holds one refuses with the next step; a
+  `CLAUDE_GATEWAY_STATE_DIR` that fails refuses. RED: `Test-InstallerCheckpoint.ps1` 81 checks, 3
+  failed (171.4 s); `Test-BashInstallerCheckpoint.ps1` 49, 3 failed (383.7 s). Failure lines read: "R6
+  a default place that fails a check, with no file of this checkout there, keeps no store" (PowerShell
+  refused after the summary, once it had created the state directory, naming the rule for Users on
+  `$HOME`; bash refused at startup naming `$HOME` and its mode `drwxrwx---`); "R6 a default place that
+  fails a check refuses at startup when the checkpoint, lock or a temporary file of this checkout is
+  there" (each refusal named neither the file nor a next step); "R6 CLAUDE_GATEWAY_STATE_DIR naming a
+  place that fails a check refuses at startup" (neither refusal named the variable, and PowerShell
+  refused after the summary with the directory created).
 
 Acceptance criteria, for both installers unless one is named:
 

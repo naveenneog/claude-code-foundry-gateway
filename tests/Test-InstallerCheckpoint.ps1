@@ -139,6 +139,31 @@ try {
     $nameAstral = New-P91Scenario -Name 'name-astral' -Scratch $scratch -Template $template -World (& $unicodeWorld $rocketLower @([ordered]@{ id = (& $gid 5); displayName = $rocketUpper },
         [ordered]@{ id = (& $gid 6); displayName = 'team-ab' }, [ordered]@{ id = (& $gid 7); displayName = 'team-abcd' }) -Keep)
     $outside = New-P91Scenario -Name 'outside' -Scratch $scratch -Template $template -World (New-P91World)
+    # A default place that fails a check (ADR-0046 decisions 1 and 2): Cloud Shell without clouddrive,
+    # so the place is $HOME\.claude-gateway, under a $HOME that lets Users delete what it holds. With no
+    # file of this checkout there the run keeps no store; with its checkpoint, lock or temporary file
+    # there it refuses; CLAUDE_GATEWAY_STATE_DIR naming the same place refuses.
+    $untrusted = [ordered]@{}
+    foreach ($n in 'untrusted-free', 'untrusted-checkpoint', 'untrusted-lock', 'untrusted-temp', 'untrusted-named') {
+        $s = New-P91Scenario -Name $n -Scratch $scratch -Template $template -World (New-P91World)
+        $h = Join-Path $s.Dir 'home'; New-Item -ItemType Directory -Force -Path $h | Out-Null
+        $acl = New-Object System.Security.AccessControl.DirectorySecurity
+        $acl.SetAccessRuleProtection($true, $false)
+        $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule([Security.Principal.WindowsIdentity]::GetCurrent().User, 'FullControl', 'ContainerInherit, ObjectInherit', 'None', 'Allow')))
+        $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule((New-Object Security.Principal.SecurityIdentifier('S-1-5-32-545')), 'DeleteSubdirectoriesAndFiles', 'None', 'None', 'Allow')))
+        [System.IO.FileSystemAclExtensions]::SetAccessControl([IO.DirectoryInfo]::new($h), $acl)
+        $place = Join-Path $h '.claude-gateway'
+        $key = Get-P91Key $s.Repo
+        $file = @{ 'untrusted-checkpoint' = "$key.json"; 'untrusted-lock' = "$key.lock"; 'untrusted-temp' = "$key.json.tmp-$([guid]::NewGuid().ToString('N'))" }[$n]
+        if ($file) {
+            New-Item -ItemType Directory -Force -Path $place | Out-Null
+            Protect-P91Directory $place
+            $file = Join-Path $place $file
+            Write-P91Text $file '{"schema":"claude-gateway-install-checkpoint","note":"placed by the test"}'
+        }
+        $envs = @{ AZUREPS_HOST_ENVIRONMENT = 'cloud-shell/1.0'; HOME = $h; CLAUDE_GATEWAY_STATE_DIR = $(if ($n -eq 'untrusted-named') { $place } else { $null }) }
+        $untrusted[$n] = [pscustomobject]@{ Scenario = $s; Place = $place; File = $file; Hash = (Get-P91Hash $file); Env = $envs; Run = $null }
+    }
 
     $first = @(
         ($runBase1 = New-P91Run $base -Arguments ($newGateway + $secret + '-Yes'))
@@ -160,6 +185,7 @@ try {
         ($runNameAstral = New-P91Run $nameAstral -Arguments ($newGateway + "-StandardGroup '$rocketLower'" + '-Yes'))
         ($runOutside = New-P91Run $outside -Arguments ($newGateway + '-Yes') -Environment @{ CLAUDE_GATEWAY_STATE_DIR = (Join-Path $outsideRoot 'state') })
     )
+    foreach ($u in $untrusted.Values) { $u.Run = New-P91Run $u.Scenario -Arguments ($newGateway + '-Yes') -Environment $u.Env; $first += $u.Run }
     $r1 = Invoke-P91Runs $first
     $b1 = Get-P91Result $r1 $runBase1
     $baseCheckpoint = Get-Checkpoint $base
@@ -260,6 +286,23 @@ try {
     Assert 'R6 a state directory outside the user profile refuses at startup on one line naming the profile; nothing is read or created' ($od.ExitCode -eq 1 -and @(Get-P91ErrLines $od).Count -eq 1 -and
         $odLine -match '^Refused: the install checkpoint directory .*p91-outside-profile-.* not inside the user profile ' -and $odLine -match 'Nothing was read or changed' -and
         -not (Get-P91Calls $od 'account set*').Count -and -not (Test-Path -LiteralPath $outsideRoot)) (Get-P91Tail $od)
+    $u = $untrusted['untrusted-free']; $uf = Get-P91Result $r1 $u.Run
+    Assert 'R6 a default place that fails a check, with no file of this checkout there, keeps no store: one warning naming the place and the check, the resume command with the answers, and the run completes writing nothing there' (
+        $uf.ExitCode -eq 0 -and @($uf.Out -split "`n" | Where-Object { $_ -match '\[WARN\] .*keeps no install checkpoint' }).Count -eq 1 -and
+        $uf.Out -match '(?m)\[WARN\] .*\\\.claude-gateway.*S-1-5-32-545.*\. This run keeps no install checkpoint\.' -and $uf.Out -notmatch 'Cloud Shell without clouddrive' -and
+        $uf.Out -match "(?m)^\s*Resume: .*Install-ClaudeGateway\.ps1 .*-ResourceGroup 'rg-p91'.*-NamePrefix 'p91gw'" -and
+        $uf.Out -match "(?m)20 minutes without interactive activity; the ARM deployment outlives the session, and this run keeps no install checkpoint\. Resume: .*-ResourceGroup 'rg-p91'" -and
+        (Get-P91Calls $uf 'deployment group create*').Count -eq 1 -and -not (Test-Path -LiteralPath $u.Place)) (Get-P91Tail $uf)
+    $held = @(foreach ($n in 'untrusted-checkpoint', 'untrusted-lock', 'untrusted-temp') {
+            $u = $untrusted[$n]; $res = Get-P91Result $r1 $u.Run; $line = [string]@(Get-P91ErrLines $res)[0]
+            if (-not ($res.ExitCode -eq 1 -and @(Get-P91ErrLines $res).Count -eq 1 -and $line -match '^Refused: ' -and $line.Contains((Split-Path $u.File -Leaf)) -and $line -match 'S-1-5-32-545' -and
+                    $line -match 'Nothing was read or changed\. Next step: inspect the file, then remove it or correct the permissions, then rerun: .*Install-ClaudeGateway\.ps1' -and
+                    $u.Hash -and (Get-P91Hash $u.File) -eq $u.Hash -and -not (Get-P91Calls $res 'account set*').Count)) { "${n}: $(Get-P91Tail $res)" } })
+    Assert 'R6 a default place that fails a check refuses at startup when the checkpoint, lock or a temporary file of this checkout is there: one line naming the file, the check and the next step; the file is kept' (-not $held.Count) ($held -join ' || ')
+    $u = $untrusted['untrusted-named']; $un = Get-P91Result $r1 $u.Run; $unLine = [string]@(Get-P91ErrLines $un)[0]
+    Assert 'R6 CLAUDE_GATEWAY_STATE_DIR naming a place that fails a check refuses at startup on one line naming the variable and the check, with no file of this checkout there; nothing is created' (
+        $un.ExitCode -eq 1 -and @(Get-P91ErrLines $un).Count -eq 1 -and $unLine -match '^Refused: .*S-1-5-32-545' -and $unLine -match 'CLAUDE_GATEWAY_STATE_DIR' -and
+        $unLine -match 'Nothing was read or changed' -and -not (Get-P91Calls $un 'account set*').Count -and -not (Test-Path -LiteralPath $u.Place)) (Get-P91Tail $un)
     $f1 = Get-P91Result $r1 $runForeign
     Assert 'S4 an unrecorded running claude-gw- deployment is awaited before the new one is created' ($f1.ExitCode -eq 0 -and
         (Get-Order $f1 'deployment group show*claude-gw-20260101000000*' 'deployment group create*')) (Get-P91Tail $f1)
