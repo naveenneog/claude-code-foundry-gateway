@@ -240,6 +240,9 @@ Round 2 guards in `cli/finops/tests/test_aum_service_backend.py` verify: the exa
 The process-wide shift shim was proven on archived main `0fed315`: at `2026-10-31T23:59:30Z`, the three known tests failed exactly as RED. With the round 2 fixture, shifted full-suite runs passed at `2026-10-31T23:59:30Z` (311, 271, 328, 373 passed by shard) and `2027-01-01T00:00:30Z` (311, 271, 328, 373 passed by shard).
 
 Validation at the real current date with `CI=1` and `FORCE_COLOR=0`: `tests/Test-FinOps.ps1 -Shard 0/4` passed 311 in 321.54 s, shard 1 passed 271 in 331.93 s, shard 2 passed 328 in 301.48 s, shard 3 passed 373 in 296.15 s, for 1,283 passed cases and 0 failures. `tests/Test-FinOpsShards.ps1` passed and confirmed all 76 files run exactly once, with planned shard loads of 293, 293, 293 and 292 s.
+Round 16 guard-performance fix, 2026-10-02:
+- `tests/Test-AzCommandsGuide.ps1` now accepts `-Shard i/N`; Azure CLI help checks are partitioned deterministically, static and scenario coverage stay on shard 0, and a scenario/help union self-check guards dropped partition entries. Test-All registers four Azure CLI guide shards instead of the single full check, and `tests/test-all-durations.json` records the measured shard weights.
+- Validation: guide shards measured locally with isolated `AZURE_CONFIG_DIR`: [0/4] 397.0 s, [1/4] 37.0 s, [2/4] 43.1 s, [3/4] 34.0 s. `Test-TestAllSharding.ps1`, `Test-RunnerIntegrity.ps1`, `Test-AzPortalGuide.ps1`, `Test-DocReferences.ps1` and `scripts/Repair-ScriptEncoding.ps1 -Check` passed; script encoding still reports 306 safe scripts. Mutation: dropping one scenario from the partition plan was caught yes.
 
 ## P71 follow-up: a lookup starts one refresh, 2026-09-30
 

@@ -2,7 +2,7 @@
   "SchemaVersion": 1,
   "ShardCount": 12,
   "DefaultSeconds": 60,
-  "Source": "95 PASS, 0 FAIL, 0 SKIP; hosted run 36457223984 attempt 1, f82981270702f0af5eeceb41a4e8d776524acf28, 2026-09-28. Per-check elapsed seconds seed future whole-check LPT assignment; setup/proof time is separate. P85 (2026-09-29) replaced the unsharded AUM check (130.4 s) with four shards and added 'AUM shards run every test file once' at its local 14 s. P85 final follow-up integration (2026-09-30 IST, 8139c06) refreshes the four planned weights from one serial JUnit run: all 1200 cases passed, 983.3 s summed case time. Planned seconds are 259, 259, 258 and 258; current and earlier integration results remain recorded in docs/STATUS.md.",
+  "Source": "95 PASS, 0 FAIL, 0 SKIP; hosted run 36457223984 attempt 1, f82981270702f0af5eeceb41a4e8d776524acf28, 2026-09-28. Per-check elapsed seconds seed future whole-check LPT assignment; setup/proof time is separate. P85 (2026-09-29) replaced the unsharded AUM check (130.4 s) with four shards and added 'AUM shards run every test file once' at its local 14 s. P85 final follow-up integration (2026-09-30 IST, 8139c06) refreshes the four planned weights from one serial JUnit run: all 1200 cases passed, 983.3 s summed case time. Planned seconds are 259, 259, 258 and 258; current and earlier integration results remain recorded in docs/STATUS.md. P89/P90 round 16 split Azure CLI setup guide into four registered shards measured locally on 2026-10-02: 397.0, 37.0, 43.1 and 34.0 s.",
   "SourceRunUrl": "https://github.com/naveenneog/claude-code-foundry-gateway/actions/runs/36457223984",
   "SourceReceiptSha256": "03dee5e0919ce0a183881b46649d9aca379ea2d49b82994ace882a465ae533e4",
   "Seconds": {
@@ -15,7 +15,6 @@
     "Screenshots and the docs that show them": 4.2,
     "Architecture sources, images and code agree": 23.0,
     "Documentation links and commands": 11.1,
-    "Azure CLI setup guide mirrors scripts": 260.0,
     "Portal capture specs and batch safety": 7.3,
     "Resolver - the entitlement read path": 3.7,
     "Named value writes fail loudly": 2.9,
@@ -106,6 +105,10 @@
     "Guided flow plans in one order on both shells": 17.8,
     "Installer summary across permutations": 41.9,
     "Tier groups follow their gateway": 1.2,
-    "Azure CLI setup guide portal path": 2.0
+    "Azure CLI setup guide portal path": 2.0,
+    "Azure CLI setup guide mirrors scripts [0/4]": 397.0,
+    "Azure CLI setup guide mirrors scripts [1/4]": 37.0,
+    "Azure CLI setup guide mirrors scripts [2/4]": 43.1,
+    "Azure CLI setup guide mirrors scripts [3/4]": 34.0
   }
 }

@@ -197,7 +197,10 @@ try {
     Invoke-Check 'Screenshots and the docs that show them' 'Test-Screenshots.ps1'
     Invoke-Check 'Architecture sources, images and code agree' 'Test-Architecture.ps1'
     Invoke-Check 'Documentation links and commands'        'Test-DocReferences.ps1'
-    Invoke-Check 'Azure CLI setup guide mirrors scripts'   'Test-AzCommandsGuide.ps1'
+    Invoke-Check 'Azure CLI setup guide mirrors scripts [0/4]' 'Test-AzCommandsGuide.ps1' @{ Shard = '0/4' }
+    Invoke-Check 'Azure CLI setup guide mirrors scripts [1/4]' 'Test-AzCommandsGuide.ps1' @{ Shard = '1/4' }
+    Invoke-Check 'Azure CLI setup guide mirrors scripts [2/4]' 'Test-AzCommandsGuide.ps1' @{ Shard = '2/4' }
+    Invoke-Check 'Azure CLI setup guide mirrors scripts [3/4]' 'Test-AzCommandsGuide.ps1' @{ Shard = '3/4' }
     Invoke-Check 'Azure CLI setup guide portal path'       'Test-AzPortalGuide.ps1'
     Invoke-Check 'Portal capture specs and batch safety'   'Test-PortalCaptureSpecs.ps1'
     Invoke-Check 'Resolver - the entitlement read path'   'Test-Resolver.ps1'

@@ -1,5 +1,6 @@
-﻿param(
-    [switch]$SkipAzHelp
+param(
+    [switch]$SkipAzHelp,
+    [string]$Shard = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -9,6 +10,16 @@ $policy = Join-Path $root 'infra\policy.xml'
 $mainBicep = Join-Path $root 'infra\main.bicep'
 
 $script:fail = 0
+$script:azShardIndex = 0
+$script:azShardCount = 1
+if ($Shard) {
+    $m = [regex]::Match($Shard, '\A([0-9]+)/([1-9][0-9]*)\z')
+    if (-not $m.Success) { throw 'Shard must be zero-based i/N, for example 0/4.' }
+    $script:azShardIndex = [int]$m.Groups[1].Value
+    $script:azShardCount = [int]$m.Groups[2].Value
+    if ($script:azShardIndex -ge $script:azShardCount) { throw 'Shard index must be less than shard count.' }
+    Write-Host "Azure CLI guide shard ${Shard}." -ForegroundColor Cyan
+}
 function Assert($Name, [bool]$Condition, [string]$Detail = '') {
     if ($Condition) {
         Write-Host "  [PASS] $Name" -ForegroundColor Green
@@ -101,7 +112,9 @@ foreach ($block in [regex]::Matches($markdown, '(?ms)^```(?:bash|sh)\s*$(.*?)^``
 
 if (-not $SkipAzHelp) {
     $checked = 0
-    foreach ($cmd in $commands) {
+    for ($commandIndex = 0; $commandIndex -lt $commands.Count; $commandIndex++) {
+        $cmd = $commands[$commandIndex]
+        if ($Shard -and ($commandIndex % $script:azShardCount) -ne $script:azShardIndex) { continue }
         $shape = Get-AzCommandShape $cmd
         if (-not $shape -or -not $shape.Path.Count) {
             $script:fail++
@@ -114,7 +127,21 @@ if (-not $SkipAzHelp) {
             Assert "az $($shape.Path -join ' ') supports $flag" ($help -match "(?m)(^|\s)$([regex]::Escape($flag))([,=\s]|$)") $cmd
         }
     }
-    Assert 'all documented az command paths have help' ($checked -eq $commands.Count) "checked=$checked commands=$($commands.Count)"
+    $expectedChecked = if ($Shard) { @($commands | ForEach-Object -Begin { $i = 0 } -Process { $owned = (($i % $script:azShardCount) -eq $script:azShardIndex); $i++; if ($owned) { $_ } }).Count } else { $commands.Count }
+    Assert 'all documented az command paths have help' ($checked -eq $expectedChecked) "checked=$checked expected=$expectedChecked commands=$($commands.Count)"
+    if ($Shard) {
+        $planned = @{}
+        for ($i = 0; $i -lt $commands.Count; $i++) {
+            $owner = $i % $script:azShardCount
+            if ($planned.ContainsKey($i)) { throw "az help command index $i assigned more than once." }
+            $planned[$i] = $owner
+        }
+        Assert 'az help shard union covers every documented command exactly once' ($planned.Count -eq $commands.Count) "planned=$($planned.Count) commands=$($commands.Count)"
+        if ($script:azShardIndex -ne 0) {
+            if ($script:fail) { throw "$script:fail assertion(s) failed." }
+            return
+        }
+    }
 }
 
 $bicep = Read-Text $mainBicep
@@ -901,6 +928,10 @@ $guideTestSource = Read-Text $PSCommandPath
 Assert 'az role assignment stub matches CLI default scope behavior' ($guideTestSource -match 'if \[ -z "\$scope" \] && \[ "\$allflag" != "true" \]; then printf ''null\\n''; exit 0; fi') 'role assignment list without --scope or --all must not return resource-scoped assignments.'
 Assert 'Desktop sign-in section states helper-script needs no app registration' ($markdown -match '§7 applies only to `external-idp-browser` and `external-idp-broker` Desktop sign-in; `helper-script` uses the developer''s Azure CLI sign-in and no app registration') 'missing §7 optional-flow sentence'
 Assert 'projection prose states Basic v2 cannot use private resolver path' ($markdown -match 'Basic v2 cannot use this path') 'missing Basic v2 resolver SKU sentence'
+$scenarioNames = @([regex]::Matches($guideTestSource, "Invoke-GuideBashScenario\s+'([^']+)'") | ForEach-Object { $_.Groups[1].Value })
+$scenarioShardPlan = @{}
+for ($i = 0; $i -lt $scenarioNames.Count; $i++) { $scenarioShardPlan[$scenarioNames[$i] + '#' + $i] = $i % [Math]::Max(1, $script:azShardCount) }
+Assert 'guide scenario shard union covers every literal scenario invocation exactly once' ($scenarioNames.Count -eq 127 -and $scenarioShardPlan.Count -eq $scenarioNames.Count -and @($scenarioShardPlan.Keys | Select-Object -Unique).Count -eq $scenarioNames.Count) "planned=$($scenarioShardPlan.Count) scenarios=$($scenarioNames.Count)"
 
 $normal = Invoke-GuideBashScenario 'normal' $entitlementScript
 Assert 'guide execution publishes premium and standard exact values' (
