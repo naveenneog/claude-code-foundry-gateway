@@ -126,6 +126,25 @@ section moves to `docs/status/P91.md` under P87's ADR-0042.
   group receipt that names another group ... refuses" (the run used it); "a role assignment receipt
   for another scope refuses" (the run skipped the deployment as verified); "bash in Git Bash ...
   keeps no store" (the run resumed from the checkpoint).
+- Council round 2 Security fixes, 2026-10-02: GREEN `a14e585`, REFACTOR `1ce49ad`, LOG after them.
+  The store's place and trust moved to `scripts/ClaudeInstallStore.ps1` and `scripts/install-store.sh`
+  (ADR-0046 decisions 2 and 17). The state directory is an absolute path inside `$HOME` or the user
+  profile, or inside `clouddrive`, is not itself a link or junction, and is used by its real path.
+  POSIX: each directory up to `$HOME` is owned by the user or root and not group- or other-writable
+  unless sticky. Windows: no junction below the profile, trusted owners, the state directory's own
+  rules, and a parent that grants no other account delete-child, change-permissions,
+  take-ownership or full control. A receipt stands only when the live object is the recorded one:
+  the group listed under its name by id, the role assignment of Cognitive Services User on the
+  Foundry account for the gateway's identity, the resolver app by its name, the Desktop app by its
+  `appId`. The bash installer under Git Bash keeps no store (the Security seat's option b) and still
+  guards against a second main.bicep deployment. Results: store 22 checks, PowerShell 78, bash 46,
+  all passing; the store suite run against the code before this round has 12 failures, the
+  parent-owner check added in REFACTOR among them. Mutations, one per new check: 21 of 21 caught (13
+  store, 5 PowerShell, 3 bash), each at its suite's baseline count with its own check among the
+  failures ([measurement](measurements/p91-mutations-council2-security.json)). Where the tests run:
+  store 22 on Windows and 17 on Linux and macOS, with the real-mode place checks there
+  (`installer-unix.yml`); bash 46 on Windows Git Bash, whose `uname` the harness stubs (test only),
+  and 47 on Linux and macOS; PowerShell 78 on Windows.
 
 Acceptance criteria, for both installers unless one is named:
 
@@ -162,9 +181,9 @@ first-run gap has its own ROADMAP row.
 Owner-attended Cloud Shell procedure. The lead runs it after the owner approves, in a throwaway
 resource group:
 
-1. Storage-backed Bash session: `echo "$AZUREPS_HOST_ENVIRONMENT" "$ACC_CLOUD"`, `ls -ld ~/clouddrive`,
-   `mount | grep clouddrive`, and probes of `chmod 600`, `mv -f` over a file, a `set -C` exclusive
-   create and `touch` in `~/clouddrive` (U64, U66).
+1. Storage-backed Bash session: `echo "$AZUREPS_HOST_ENVIRONMENT" "$ACC_CLOUD"`, `ls -ld ~`,
+   `ls -ld ~/clouddrive`, `mount | grep clouddrive`, and probes of `chmod 600`, `mv -f` over a file,
+   a `set -C` exclusive create and `touch` in `~/clouddrive` (U64, U66, U78).
 2. The branch cloned into `~/claude-code-foundry-gateway`; `./install-claude-gateway.sh` stopped
    with Ctrl+C during the gateway deployment; `ls -l ~/clouddrive/.claude-gateway` (A4, A6).
 3. The tab left without input for more than 20 minutes and reopened; whether the checkout survived
