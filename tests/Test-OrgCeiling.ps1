@@ -3,7 +3,7 @@
 # RED first: written before the policy change, and fails for the right reason.
 #
 # The design is measured, not assumed. Two throwaway APIs on the live gateway
-# established both halves (see docs/UNKNOWNS.md U1 and docs/STATUS.md):
+# established both halves (see docs/UNKNOWNS.md U1 and docs/status/P19.md):
 #
 #   1. A constant counter-key is a single counter shared by every caller.
 #   2. <on-error> fires when llm-token-limit refuses, carrying

@@ -66,3 +66,197 @@ test('migration comparison refuses an expired record rather than approving the f
   const r = plan.compareWithGateway({ standard: [oid] }, [{ ...doc, expiresAt: now.getTime() / 1000 }], { tenantId, now });
   assert.equal(r.differences[0]?.kind, 'would-lose-access');
 });
+
+test('status records use a non-guid partition and retain six hours of history', () => {
+  const status = plan.toStatusDocument({
+    tenantId,
+    accountResourceId: '/subscriptions/sub/resourceGroups/rg/providers/Microsoft.DocumentDB/databaseAccounts/cosmos',
+    databaseName: 'claude',
+    containerName: 'entitlement',
+    runId: 'run-1',
+    imageDigest: 'sha256:' + 'a'.repeat(64),
+    entrypoint: '/app/reconcile.mjs',
+    command: ['node', '/app/reconcile.mjs'],
+    memberCounts: { standard: 1 },
+    writeCounts: { written: 1 },
+    oldestExpiresAt: lease.expiresAt,
+    reconciliation: lease,
+    startedAt: '2026-09-24T11:00:00.000Z',
+    finishedAt: '2026-09-24T11:01:00.000Z',
+  });
+  assert.equal(status.id, `projection-status::${tenantId}::${lease.reconciliationGeneration}`);
+  assert.equal(status.oid, `projection-status::${tenantId}`);
+  assert.equal(status.type, 'projection-reconciliation-status');
+  assert.equal(status.ttl, 21600);
+  assert.equal(plan.isStatusRecord(status), true);
+  assert.equal(plan.isStatusPartitionKey(status.oid), true);
+  assert.equal(plan.isStatusPartitionKey(lease.reconciliationGeneration), false);
+});
+
+test('status records cannot be returned as entitlements by point read or comparison query paths', () => {
+  const status = {
+    id: `projection-status::${tenantId}::${lease.reconciliationGeneration}`,
+    oid: `projection-status::${tenantId}`,
+    type: 'projection-reconciliation-status',
+    tenantId,
+    tier: 'standard',
+    ...lease,
+  };
+  const point = toEntitlement(status, { tenantId, now });
+  assert.equal(point.ok, false);
+  assert.equal(point.status, 404);
+  const r = plan.compareWithGateway({ standard: [] }, [{ ...status }], { tenantId, now });
+  assert.equal(r.compared, 0);
+  assert.deepEqual(r.differences, []);
+});
+
+test('status records are never deleted as orphaned entitlement records', () => {
+  const statusPk = `projection-status::${tenantId}`;
+  const r = plan.planChanges([{ oid, tier: 'standard' }], new Map([
+    [oid, { tier: 'standard' }],
+    [statusPk, { type: 'projection-reconciliation-status' }],
+    ['33333333-3333-4333-8333-333333333333', { tier: 'premium' }],
+  ]), { refresh: true });
+  assert.deepEqual(r.toDelete, ['33333333-3333-4333-8333-333333333333']);
+});
+
+test('admission requires fresh destination evidence, two advances, tested image and no overrides', () => {
+  const baseStatus = {
+    type: 'projection-reconciliation-status',
+    tenantId,
+    accountResourceId: '/subscriptions/sub/resourceGroups/rg/providers/Microsoft.DocumentDB/databaseAccounts/cosmos',
+    databaseName: 'claude',
+    containerName: 'entitlement',
+    finishedAt: '2026-09-24T11:40:00.000Z',
+    oldestExpiresAt: Date.parse('2026-09-24T13:00:00Z') / 1000,
+    imageDigest: 'sha256:' + 'a'.repeat(64),
+    entrypoint: '/app/reconcile.mjs',
+    dryRun: false,
+    commandOverride: false,
+  };
+  const statuses = [
+    { ...baseStatus, memberCounts: { standard: 1 }, reconciliationGeneration: '33333333-3333-4333-8333-333333333331', finishedAt: '2026-09-24T11:00:00.000Z' },
+    { ...baseStatus, memberCounts: { standard: 1 }, reconciliationGeneration: '33333333-3333-4333-8333-333333333332', finishedAt: '2026-09-24T11:30:00.000Z' },
+    { ...baseStatus, memberCounts: { standard: 1 }, reconciliationGeneration: '33333333-3333-4333-8333-333333333333' },
+  ];
+  const expected = {
+    tenantId,
+    accountResourceId: baseStatus.accountResourceId,
+    databaseName: 'claude',
+    containerName: 'entitlement',
+    imageDigest: baseStatus.imageDigest,
+    entrypoint: baseStatus.entrypoint,
+  };
+  const job = { image: baseStatus.imageDigest, command: [], args: [] };
+  const entitlementEvidence = {
+    total: 1,
+    oldestExpiresAt: baseStatus.oldestExpiresAt,
+    latestGeneration: '33333333-3333-4333-8333-333333333333',
+    olderActiveCount: 0,
+    memberCounts: { standard: 1 },
+  };
+  assert.equal(plan.evaluateProjectionAdmission({ statuses, entitlementEvidence, expected, job, now }).ok, true);
+  assert.match(plan.evaluateProjectionAdmission({ statuses: statuses.slice(2), entitlementEvidence, expected, job, now }).reason, /advanced at least twice/);
+  const lowExpiry = Date.parse('2026-09-24T12:50:00Z') / 1000;
+  assert.match(plan.evaluateProjectionAdmission({ statuses: statuses.map(s => ({ ...s, oldestExpiresAt: lowExpiry })), entitlementEvidence: { ...entitlementEvidence, oldestExpiresAt: lowExpiry }, expected, job, now }).reason, /60 minute/);
+  assert.match(plan.evaluateProjectionAdmission({ statuses: statuses.map(s => ({ ...s, finishedAt: '2026-09-24T11:00:00.000Z' })), entitlementEvidence, expected, job, now }).reason, /45 minute/);
+  assert.match(plan.evaluateProjectionAdmission({ statuses: statuses.map(s => ({ ...s, accountResourceId: '/wrong' })), entitlementEvidence, expected, job, now }).reason, /destination/);
+  assert.match(plan.evaluateProjectionAdmission({ statuses, entitlementEvidence, expected, job: { ...job, args: ['--whatif'] }, now }).reason, /override|dry-run/);
+  assert.match(plan.evaluateProjectionAdmission({ statuses, entitlementEvidence, expected: { ...expected, actionGroupResourceId: '' }, job, now }).reason, /action group/);
+  assert.match(plan.evaluateProjectionAdmission({ statuses, expected, job, now }).reason, /entitlement records/);
+  assert.match(plan.evaluateProjectionAdmission({ statuses, entitlementEvidence: { ...entitlementEvidence, oldestExpiresAt: baseStatus.oldestExpiresAt - 60 }, expected, job, now }).reason, /mismatch/);
+  assert.match(plan.evaluateProjectionAdmission({ statuses, entitlementEvidence: { ...entitlementEvidence, olderActiveCount: 1 }, expected, job, now }).reason, /older generation/);
+  assert.match(plan.evaluateProjectionAdmission({ statuses, entitlementEvidence: { ...entitlementEvidence, memberCounts: { standard: 2 } }, expected, job, now }).reason, /member count/);
+});
+
+test('admission computes freshness from resolver-served entitlement records, not status claims', () => {
+  const latest = '33333333-3333-4333-8333-333333333333';
+  const older = '33333333-3333-4333-8333-333333333332';
+  const baseStatus = {
+    type: 'projection-reconciliation-status',
+    tenantId,
+    accountResourceId: '/subscriptions/sub/resourceGroups/rg/providers/Microsoft.DocumentDB/databaseAccounts/cosmos',
+    databaseName: 'claude',
+    containerName: 'entitlement',
+    imageDigest: 'sha256:' + 'a'.repeat(64),
+    entrypoint: '/app/reconcile.mjs',
+    dryRun: false,
+    commandOverride: false,
+    memberCounts: { standard: 1 },
+    oldestExpiresAt: Date.parse('2026-09-24T13:00:00Z') / 1000,
+  };
+  const statuses = [
+    { ...baseStatus, reconciliationGeneration: '33333333-3333-4333-8333-333333333331', finishedAt: '2026-09-24T11:00:00.000Z' },
+    { ...baseStatus, reconciliationGeneration: older, finishedAt: '2026-09-24T11:30:00.000Z' },
+    { ...baseStatus, reconciliationGeneration: latest, finishedAt: '2026-09-24T11:40:00.000Z' },
+  ];
+  const expected = {
+    tenantId,
+    accountResourceId: baseStatus.accountResourceId,
+    databaseName: 'claude',
+    containerName: 'entitlement',
+    imageDigest: baseStatus.imageDigest,
+    entrypoint: baseStatus.entrypoint,
+    actionGroupResourceId: '/subscriptions/sub/resourceGroups/rg/providers/Microsoft.Insights/actionGroups/ag',
+  };
+  const job = { image: baseStatus.imageDigest, command: [], args: [] };
+  const staleRecords = [{ oid, tenantId, tier: 'standard', lastVerifiedAt: lease.lastVerifiedAt, reconciliationGeneration: older, expiresAt: Date.parse('2026-09-24T13:00:00Z') / 1000 }];
+  assert.match(plan.evaluateProjectionAdmission({ statuses, entitlementRecords: staleRecords, expected, job, now }).reason, /older generation/);
+  const mismatchExpiry = [{ ...staleRecords[0], reconciliationGeneration: latest, expiresAt: Date.parse('2026-09-24T12:59:00Z') / 1000 }];
+  assert.match(plan.evaluateProjectionAdmission({ statuses, entitlementRecords: mismatchExpiry, expected, job, now }).reason, /oldest expiry mismatch/);
+  const mismatchCount = [
+    { ...staleRecords[0], reconciliationGeneration: latest },
+    { oid: '44444444-4444-4444-8444-444444444444', tenantId, tier: 'standard', lastVerifiedAt: lease.lastVerifiedAt, reconciliationGeneration: latest, expiresAt: staleRecords[0].expiresAt },
+  ];
+  assert.match(plan.evaluateProjectionAdmission({ statuses, entitlementRecords: mismatchCount, expected, job, now }).reason, /member count/);
+});
+
+test('admission live-record verdicts match resolver verdicts for each record shape', () => {
+  const latest = '33333333-3333-4333-8333-333333333333';
+  const statusBase = {
+    type: 'projection-reconciliation-status',
+    tenantId,
+    accountResourceId: '/subscriptions/sub/resourceGroups/rg/providers/Microsoft.DocumentDB/databaseAccounts/cosmos',
+    databaseName: 'claude',
+    containerName: 'entitlement',
+    imageDigest: 'sha256:' + 'a'.repeat(64),
+    entrypoint: '/app/reconcile.mjs',
+    dryRun: false,
+    commandOverride: false,
+    oldestExpiresAt: Date.parse('2026-09-24T13:00:00Z') / 1000,
+  };
+  const expected = {
+    tenantId,
+    accountResourceId: statusBase.accountResourceId,
+    databaseName: 'claude',
+    containerName: 'entitlement',
+    imageDigest: statusBase.imageDigest,
+    entrypoint: statusBase.entrypoint,
+    actionGroupResourceId: '/subscriptions/sub/resourceGroups/rg/providers/Microsoft.Insights/actionGroups/ag',
+  };
+  const job = { image: statusBase.imageDigest, command: [], args: [] };
+  const baseRecord = { oid, tenantId, tier: 'standard', lastVerifiedAt: lease.lastVerifiedAt, reconciliationGeneration: latest, expiresAt: statusBase.oldestExpiresAt };
+  const cases = [
+    { name: 'valid standard', record: baseRecord, resolverOk: true },
+    { name: 'valid premium', record: { ...baseRecord, tier: 'premium' }, resolverOk: true },
+    { name: 'unknown tier', record: { ...baseRecord, tier: 'platinum' }, resolverOk: false },
+    { name: 'missing tenant', record: { ...baseRecord, tenantId: undefined }, resolverOk: false },
+    { name: 'malformed expiry', record: { ...baseRecord, expiresAt: 'tomorrow' }, resolverOk: false },
+    { name: 'wrong tenant', record: { ...baseRecord, tenantId: '00000000-0000-4000-8000-000000000000' }, resolverOk: false },
+    { name: 'older generation', record: { ...baseRecord, reconciliationGeneration: '33333333-3333-4333-8333-333333333332' }, resolverOk: true, admissionOlder: true },
+  ];
+  for (const c of cases) {
+    const resolverVerdict = toEntitlement(c.record, { tenantId, now }).ok;
+    assert.equal(resolverVerdict, c.resolverOk, c.name);
+    const status = { ...statusBase, memberCounts: { [c.record.tier]: 1 }, reconciliationGeneration: latest, finishedAt: '2026-09-24T11:40:00.000Z' };
+    const statuses = [
+      { ...status, reconciliationGeneration: '33333333-3333-4333-8333-333333333331', finishedAt: '2026-09-24T11:00:00.000Z' },
+      { ...status, reconciliationGeneration: '33333333-3333-4333-8333-333333333332', finishedAt: '2026-09-24T11:30:00.000Z' },
+      status,
+    ];
+    const admission = plan.evaluateProjectionAdmission({ statuses, entitlementRecords: [c.record], expected, job, now });
+    if (!resolverVerdict) assert.match(admission.reason, /would be refused by the resolver/, c.name);
+    else if (c.admissionOlder) assert.match(admission.reason, /older generation/, c.name);
+    else assert.equal(admission.ok, true, c.name);
+  }
+});

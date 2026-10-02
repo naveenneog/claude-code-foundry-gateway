@@ -84,7 +84,7 @@ Read-path cost is computed by `./scripts/Measure-ClaudeProjectionCost.ps1
 complete operating bill. Current at-rest cost is $91.56/month; hourly lease
 renewal at this size adds about 365 million writes/month, approximately
 $538/month at the measured create charge (derived). See the
-[2026-09-24 P19 record](STATUS.md#where-p19-stands-2026-09-24).
+[2026-09-24 P19 record](status/P19.md#where-p19-stands-2026-09-24).
 
 **Portal:** APIM > Named values > `entitlement-cache-seconds`; the sync owner
 sets the scan schedule and lease. Cosmos > Data Explorer, from an authorised

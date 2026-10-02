@@ -31,8 +31,10 @@ param(
     [string]$StandardGroup = 'claude-code-standard',
     [string]$PremiumGroup = 'claude-code-premium',
     [switch]$FlipAfterCleanCompare,
-    # Compatibility input only; ARM job evidence cannot admit a P84 switch.
     [string]$ReconcilerResourceId,
+    [string]$RenewalImageDigest,
+    [string]$RenewalEntryPoint = 'node /app/sync/src/apply-projection.mjs',
+    [string]$RenewalActionGroupResourceId,
     [switch]$PreflightOnly,
     [ValidateRange(1,10)][int]$RetryCount = 3,
     [ValidateRange(5,120)][int]$RetryDelaySeconds = 15
@@ -43,7 +45,9 @@ $root = Split-Path $PSScriptRoot -Parent
 . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeRunner.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeProjectionChecks.ps1')
-if ($FlipAfterCleanCompare) { Stop-ClaudeProjectionSwitch }
+if ($FlipAfterCleanCompare -and (-not $ReconcilerResourceId -or -not $RenewalImageDigest -or -not $RenewalActionGroupResourceId)) {
+    throw 'Projection switch refused: P86 admission requires -ReconcilerResourceId, -RenewalImageDigest and -RenewalActionGroupResourceId. Expected wait after deployment is about 60-90 minutes for two generation advances on the 30-minute schedule.'
+}
 
 function Step($m) { Write-Host "`n==> $m" -ForegroundColor Cyan }
 function Note($m) { Write-Host "    $m" -ForegroundColor DarkGray }
@@ -222,7 +226,19 @@ try {
         $compare = ConvertFrom-ClaudeRunnerResult -RawOutput $compareRaw -Step 'Refusing to flip because projection drift remains'
         Ok "clean comparison: $($compare.compared) identities"
     } else { throw 'Projection comparison was declined; no further steps run.' }
-    Note 'Clean comparison complete; named values remain authoritative. Projection switching is unavailable until the scheduled reconciler in P86 (docs/ROADMAP.md).'
+    if ($FlipAfterCleanCompare) {
+        Step 'Check scheduled renewal evidence before switch'
+        $null = Assert-ClaudeProjectionAdmission -ResourceGroup $ResourceGroup -RunnerName $($network.runnerName) `
+            -CosmosAccount $cosmosAccount -TenantId $($apim.identity.tenantId) -AccountResourceId $preflight.AccountResourceId `
+            -ReconcilerResourceId $ReconcilerResourceId -ImageDigest $RenewalImageDigest -EntryPoint $RenewalEntryPoint `
+            -ActionGroupResourceId $RenewalActionGroupResourceId
+        if ($PSCmdlet.ShouldProcess($ApimName, 'set entitlement-source to projection after evidence-gated admission')) {
+            Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-source' -Value 'projection'
+            Ok 'entitlement-source switched to projection after scheduled-renewal admission'
+        } else { throw 'Projection switch was declined after admission; named values remain authoritative.' }
+    } else {
+        Note 'Clean comparison complete; named values remain authoritative. To switch, rerun after the P86 scheduled reconciler has about 60-90 minutes of good evidence and pass -FlipAfterCleanCompare with the renewal job, digest and action group.'
+    }
 }
 finally {
     Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue

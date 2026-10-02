@@ -70,22 +70,57 @@ resolver therefore cannot change who is entitled.
 | Region capacity | Cosmos regional capacity cannot be checked in advance or reserved by preflight. Measured: Canada Central and Canada East both refused with `ServiceUnavailable ... high demand ... To request region access for your subscription, please follow this link https://aka.ms/cosmosdbquota`. A private endpoint can point at an account in another region, so a Cosmos DB account elsewhere still stays private in the VNet. |
 | Subnets | See the next table. In most enterprises the network team creates them and hands over the resource IDs. |
 | Tools | PowerShell **7 or later** for `Deploy-ClaudeProjection.ps1` and `Sync-ClaudeProjection.ps1`; Azure CLI/Bicep, Node/npm and a ZIP-capable `tar`. Bicep `build-params` with `using none` evaluates the existing storage name locally. Shared Graph membership callers that manage named values still support Windows PowerShell 5.1. |
-| Rollout approval | P84 refuses switching unconditionally. A supported scheduled reconciler, renewal evidence and lease alerts are proposed P86 work; no ARM job id is an admission override. |
+| Rollout approval | P86 admits automated switching only after destination-bound Cosmos evidence from the in-VNet runner and a pinned no-override Container Apps job definition both pass. Owner approval is still required before merge. |
 
 | Subnet | Size | Delegation | Notes |
 |---|---|---|---|
 | Gateway integration | /27 minimum, /24 recommended | `Microsoft.Web/serverFarms` | Needs a network security group. Only for Standard v2 and Premium v2. |
 | Private endpoints | Reserve capacity for five projection endpoints plus any Foundry endpoint | None | Cosmos, resolver and resolver storage ×3; Foundry is separate |
 | Resolver integration | /27 minimum (/26 used) | `Microsoft.App/environments` | Flex Consumption's own delegation, not `Microsoft.Web/serverFarms`. No private endpoints in it, and no underscore in its name. [Learn: subnet sizing and requirements](https://learn.microsoft.com/azure/azure-functions/flex-consumption-how-to#subnet-sizing-and-requirements) |
-| Runner (optional) | /27 | `Microsoft.ContainerInstance/containerGroups` | The container that writes and tests the projection from inside the network. |
+| Runner (optional) | /27 | `Microsoft.ContainerInstance/containerGroups` | The container that writes, compares and runs the read-only admission checker from inside the network. |
+| Renewal job | /27 minimum | `Microsoft.App/environments` | Internal workload-profiles Container Apps environment, separate from the resolver subnet. Default address plan uses another subnet inside `10.10.0.0/16`. |
+
+
+### Scheduled renewal job and admission (P86)
+
+The supported unattended path deploys `infra/projection-renewal.bicep` after the projection network. It creates an internal Container Apps workload-profiles environment on a dedicated `Microsoft.App/environments` subnet, an ACR registry, a user-assigned managed identity, a 30-minute scheduled Container Apps Job, Log Analytics alerts and an action group with email receivers. ACR Basic is the default for standing cost and is reached over the public ACR endpoint with Entra authentication; ACR Premium is required for a private registry endpoint.
+
+The job image comes from `sync/Dockerfile`, is used by digest and carries the tested entrypoint. ARM command and args overrides are refused by admission. Build with log streaming disabled on Windows:
+
+```powershell
+az acr build --registry <acr-name> --image claude-projection-sync:<tag> --file sync/Dockerfile --no-logs sync
+# Then fetch the run log with the ACR runs/<id>/listLogSasUrl REST API if needed.
+```
+
+A tenant administrator grants the job identity Graph membership read once:
+
+```powershell
+./scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1 -PrincipalId <managed-identity-principal-id>
+```
+
+Plain `az rest` equivalent:
+
+```powershell
+$graphAppId = '00000003-0000-0000-c000-000000000000'
+$graph = az ad sp show --id $graphAppId --query "{id:id, role:appRoles[?value=='GroupMember.Read.All'].id | [0]}" -o json | ConvertFrom-Json
+$body = @{ principalId = '<managed-identity-principal-id>'; resourceId = $graph.id; appRoleId = $graph.role } | ConvertTo-Json
+$file = New-TemporaryFile; Set-Content -Path $file -Value $body -Encoding utf8
+az rest --method post --url "https://graph.microsoft.com/v1.0/servicePrincipals/<managed-identity-principal-id>/appRoleAssignments" --headers 'Content-Type=application/json' --body "@$file"
+```
+
+Outbound firewall or forced-tunnel rules must allow `login.microsoftonline.com`, `graph.microsoft.com`, the ACR login server and data endpoint, and the Cosmos private endpoint through `privatelink.documents.azure.com`. The job writes status records into `claude/entitlement` with partition key `projection-status::<tenantId>`, `type=projection-reconciliation-status` and `ttl=21600`; resolver point reads by developer object id cannot return them.
+
+Deployment order: deploy the projection and renewal job; the tenant admin grants `GroupMember.Read.All`; runs succeed; evidence accumulates for about 60-90 minutes on the 30-minute schedule; switch; rollback by refreshing and comparing named values, then setting `entitlement-source` back to `named-value`.
+
+Admission runs fixed repository code through `scripts/ClaudeRunner.ps1`, reads Cosmos status history and computes the oldest expiry from the live entitlement records the resolver can serve, then separately reads the ARM job definition. It applies the resolver's own validation to every unexpired entitlement record before counting it. Invalid live records refuse admission with a count and up to three hashed object-id samples. It requires at least 60 minutes of live-record expiry margin, two generation advances within two hours, newest success within 45 minutes, matching status/member counts, no unexpired entitlement records on an older generation, the tested image digest, no command/args override and an email-backed action group. The live-record aggregate is a one-time cross-partition scan during switching, acceptable at 500,000 records; it is not on the request path. Refusals name the reason and remedy.
 
 ### One-command deployment
 
-**Projection switching is unavailable in P84.** Records expire at most **two hours after scan
-start**; without renewal, **every developer gets 503 after expiry**. Switching needs the
-supported scheduled reconciler proposed as **P86** in [ROADMAP](ROADMAP.md). A clean comparison,
-digest-pinned job, successful ARM execution or `-ReconcilerResourceId` does not change this
-refusal ([ADR-0040](adr/0040-projection-preflight-and-switch.md)).
+**Projection switching is evidence-gated in P86.** Records expire at most **two hours after scan
+start**; without renewal, **every developer gets 503 after expiry**. A clean comparison,
+digest-pinned job or successful ARM execution does not admit a switch by itself. The deployer
+reads Cosmos renewal evidence through the runner and validates the ARM job definition before
+writing `entitlement-source=projection` ([ADR-0045](adr/0045-scheduled-projection-renewal.md)).
 
 `-PreflightOnly` runs the same checks as a normal deployment, with no Azure writes, and exits
 nonzero on any FAIL. The normal estimate is **30-90 seconds**, including **25 seconds**

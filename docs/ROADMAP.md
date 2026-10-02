@@ -86,9 +86,12 @@ premise does not carry over.
 |---|---|---|
 | P84 | Merged (`3e4430b`) with the owner's approval on 2026-09-29, after council round 3 and the packet gate at `5612c94` | Projection deployment checks everything before it writes and never switches into an outage. Read-only preflight, fail-closed Graph, sanitized runner/app failures and unconditional switch refusal until P86, across deployer/installer/flow. ADR-0040 rejects ARM-only admission; 197 preflight assertions, 86 council assertions and 95 current mutations pass. |
 | P85 | Merged (`171b248`) with the owner's approval on 2026-09-30, after council round 5 and the packet gate at `86798f6` | AUM TUI manages people, units, teams and budgets with full tests. |
-| P86 | Proposed; owner decision pending | Scheduled projection reconciler and tenant-admin pack: managed identity with Graph `GroupMember.Read.All` granted by a tenant admin, an hourly job and lease alerts. Proposed admission reads destination-bound Cosmos oldest expiry and generation advances through the runner, with a tested image/entrypoint and dry-run overrides rejected. P84 refuses switching and creates no schedule. |
-| P91 | Builder active; owner requested 2026-10-01; merges only with the owner's approval | Installer checkpoint and resume on Windows, Linux, macOS and Azure Cloud Shell: a rerun of `Install-ClaudeGateway.ps1` or `install-claude-gateway.sh` resumes after the last step whose result Azure still shows, with recorded answers, a binding check, one main.bicep deployment at a time, receipts read by id and a PID-and-start-time lock. [ADR-0046](adr/0046-installer-checkpoint-and-resume.md), proposed. |
-| P92 | PLAN/CONTRACT on `lean-installer`; owner requested 2026-10-02; merges only with the owner's approval | Lean installer phase 0: one answers schema for the installers, guided flow and later UI; one read-only preflight with JSON; selected P91 steps; precedence rules; bash parity. [ADR-0047](adr/0047-lean-installer-phase-0.md), proposed. |
+| P86 | Merged (`9c5022b`) with the owner's approval on 2026-10-02, after council round 3 and the packet gate at `22dc8f0` | Scheduled projection reconciler and tenant-admin pack: user-assigned managed identity with Graph `GroupMember.Read.All` granted by a tenant admin, a 30-minute Container Apps job, email-backed action-group alerts, destination-bound Cosmos status evidence and runner-based admission. The switch requires Cosmos evidence plus the ARM job definition; dry-run, command/args overrides, missing action group and stale/single-generation evidence are rejected. |
+| P87 | Merged (`59be868`) with the owner's approval on 2026-10-02, after council and the packet gate at `4a54f7b` | Archive merged `docs/STATUS.md` sections into `docs/status/<ID>.md`, keep `docs/STATUS.md` below the gate read limit, update links and tests, and add a durable documentation guard. |
+| P88 | Merged (`558fb7e`) with the owner's approval on 2026-10-02, after council and the packet gate at `d3d28d8` | AUM pytest results do not depend on the date they run. Tests pin the AUM UTC clock to the September fixture month with advancing elapsed time, cover all `claude_finops` `datetime.now(` readers and keep current-month write tests deterministic without product changes. |
+| P89 | Merged (`152b4a3`) with the owner's approval on 2026-10-02, together with P90, after council and the packet gate at `1284388` | Azure CLI command guide for every customer setup step the installer and in-scope administration scripts perform, with a guard that checks `az --help`, named-value parity, Bicep parameters and relative links. |
+| P91 | Council passed on all five seats at `bf8c4a7`; on branch `lean-installer`, which merges only with the owner's approval | Installer checkpoint and resume on Windows, Linux, macOS and Azure Cloud Shell: a rerun of `Install-ClaudeGateway.ps1` or `install-claude-gateway.sh` resumes after the last step whose result Azure still shows, with recorded answers, a binding check, one main.bicep deployment at a time, receipts read by id and a PID-and-start-time lock. [ADR-0046](adr/0046-installer-checkpoint-and-resume.md), proposed. |
+| P92 | GREEN and REFACTOR on `lean-installer` (round 2 at `f9ee3af`), council next; merges only with the owner's approval | Lean installer phase 0: one answers schema for the installers, guided flow and later UI; one read-only preflight with JSON; selected P91 steps; precedence rules; bash parity. [ADR-0047](adr/0047-lean-installer-phase-0.md), proposed. |
 | Unassigned | Proposed by P91, 2026-10-01; owner decision pending | The bash installer reads nothing back before its deployment: `install-claude-gateway.sh:559-575` passes none of the `*Existing` parameters of `infra/main.bicep:169-207`, so a first run against a gateway that already holds entitlement, business units, overrides or USD budgets resets them to the template defaults. `Install-ClaudeGateway.ps1:1401-1512` reads them back. P91 refuses only the resume case (ADR-0046 decision 9). |
 
 M0 is shipped. The table below is the queue; the checklist under it is what the gate tracks.
@@ -435,9 +438,9 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       (update, tier, projection, network, Desktop sign-in), diagnostics and the FinOps steps
       (tool, token and dollar budgets with a scheduled reconciler, workbooks, reports), each
       proven live on an isolated gateway; an integrated run on 2026-09-27 found and fixed nine
-      defects ([STATUS](STATUS.md#p66-guided-flow-2026-09-27)). Open: the 403 message names the
+      defects ([STATUS](status/P66.md#p66-guided-flow-2026-09-27)). Open: the 403 message names the
       default tier groups; the FinOps steps have not yet run on the same estate as the others
-- [x] P67 developer workstation fixes from the owner's test, merged 2026-09-27 (`ea31a5f`, `4327563`, `25bda4d`; [STATUS](STATUS.md#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)) — acceptance: Claude Desktop Entra
+- [x] P67 developer workstation fixes from the owner's test, merged 2026-09-27 (`ea31a5f`, `4327563`, `25bda4d`; [STATUS](status/P67.md#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)) — acceptance: Claude Desktop Entra
       sign-in uses the key spelling the Desktop release that reads it knows, including a running
       build older than the installed one; Claude Code declares capabilities by model family for
       the recorded models, pins each alias to the newest model in its family, and is compared
@@ -445,7 +448,7 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       and end with a real Claude Code reply; diagnostics never wait for input and read the real
       Desktop configuration and logs.
       [ADR-0031](adr/0031-client-keys-every-release-reads.md), **U27**, **U28**, **U29**
-- [x] P68 guided flow redesign from the owner's test, merged 2026-09-28 (`fc9c86c`, [STATUS](STATUS.md#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)) — acceptance: `Start-ClaudeGateway.ps1`
+- [x] P68 guided flow redesign from the owner's test, merged 2026-09-28 (`fc9c86c`, [STATUS](status/P68.md#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)) — acceptance: `Start-ClaudeGateway.ps1`
       shows its first question within seconds and names each slow step while it runs; Setup
       hands every installer decision (tiers, sections, defaults) back to the installer's own
       prompts instead of passing `-Yes`, and a projection choice no longer stops the installer;
@@ -479,6 +482,7 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       each panel as its data arrives, with an estimate while it waits; Direct reuses one token per
       process and batches its gateway reads, and time-to-first-data for `whoami`, `budget list`,
       `usage show` and `status` is measured before and after on the reference estate (**U32**)
+- [ ] P88 AUM tests do not depend on the date they run - acceptance: every AUM pytest file runs with an advancing pinned UTC clock inside the September fixture month, tests that need the real clock can opt out, and a guard fails if a `claude_finops` `datetime.now(` reader or a month-sensitive service write escapes the pin
 - [ ] P85 AUM's terminal UI manages people, units, teams and budgets end to end, with tests -
       acceptance: owners can preview and confirm removing a person from the People action bar,
       key and palette through the existing developer engine; complete offline Textual pilots
@@ -491,6 +495,12 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       a HOME-local Cloud Shell launcher has offline proofs and researched
       networking/storage/idle guidance. Live Cloud Shell verification is
       owner-only and remains recorded separately.
+- [ ] P89 Every setup step as Azure CLI commands — acceptance: `docs/AZ-COMMANDS.md`
+      gives Cloud Shell bash commands for installer order setup, administration,
+      optional address, optional projection, verification and teardown; each step
+      names what it does, the commands, verification, expected result and source
+      script lines; the guard validates documented `az` commands and flags against
+      help, named-value parity, Bicep parameters and relative links.
 - [x] P72 permutation tests of the guided flow and the installer — acceptance: every combination of
       action (Setup, Change foundation, Guide, Status), record state (none, recorded and matching,
       recorded with another gateway URL, recorded but missing, not readable), mode (attended,

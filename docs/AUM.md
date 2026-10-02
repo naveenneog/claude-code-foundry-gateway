@@ -1054,7 +1054,7 @@ Fatal data failures are observed while identity or capabilities are still
 pending; the denial is displayed immediately rather than waiting for metadata.
 
 The P71 live measurements and their method are in
-[STATUS](STATUS.md#p71-aum-answers-fast-and-says-why-it-cannot-2026-09-28).
+[STATUS](status/P71.md#p71-aum-answers-fast-and-says-why-it-cannot-2026-09-28).
 These captures use live read-only sources with display redaction, not examples:
 [provenance and hashes](guide/aum-p71-captures.json).
 Direct captures 61/62 were refreshed after the council's principal-binding fix.

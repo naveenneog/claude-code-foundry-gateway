@@ -39,7 +39,7 @@ replacement proves unconditional refusal under the lead's explicit contract chan
 
 On the owner's shared workstation a single long invocation owns `<workspace>\.gate-lock`;
 creation is atomic, contention retries every 60 seconds, and only that invocation removes its
-own lock in `finally`. [P84 STATUS](../docs/STATUS.md) records the actual receipts and times.
+own lock in `finally`. [P84 STATUS](../docs/status/P84.md) records the actual receipts and times.
 
 ## Deterministic shards
 
@@ -73,15 +73,15 @@ when it is nonempty. `-IncludeAzure` cannot be combined with sharding or local-o
 The AUM pytest suite runs as four registered checks, `AUM - commands, dashboard and pilot [0/4]`
 to `[3/4]` (`tests/Test-All.ps1:295`). On 2026-09-30 IST its 1,200 cases took 985.41 s serially,
 beyond the 600 s per-check timeout (`tests/Test-All.ps1:9`). All 1,200 cases passed after
-P85 integrated P71's deadline-test follow-up; [P85's integration evidence](../docs/STATUS.md#final-p71-follow-up-integration-and-builder-validation-2026-09-30)
+P85 integrated P71's deadline-test follow-up; [P85's integration evidence](../docs/status/P85.md#final-p71-follow-up-integration-and-builder-validation-2026-09-30)
 records that single full run and the earlier results. `Test-FinOps.ps1 -Shard i/n` passes one
 share of the top-level `cli/finops/tests` files to pytest; without `-Shard` it runs the whole
 directory as before (`tests/Test-FinOps.ps1:4`).
-The [lookup-refresh follow-up](../docs/STATUS.md#p71-follow-up-a-lookup-starts-one-refresh-2026-09-30)
+The [lookup-refresh follow-up](../docs/status/P71.md#p71-follow-up-a-lookup-starts-one-refresh-2026-09-30)
 then passed all 1,230 cases serially in 1,012.62 s, including its 30 new compound-action cases.
-Its [council correction](../docs/STATUS.md#council-correction-a-principal-notice-cannot-drop-a-current-lookup)
+Its [council correction](../docs/status/P71.md#council-correction-a-principal-notice-cannot-drop-a-current-lookup)
 passed all 1,269 cases in 1,062.92 s, including notice-present navigation and delayed-focus controls.
-The [request-kind correction](../docs/STATUS.md#council-round-2-request-lookup-follows-rule-a)
+The [request-kind correction](../docs/status/P71.md#council-round-2-request-lookup-follows-rule-a)
 then passed all 1,278 cases in 1,122.80 s, including paging-preserving request refresh/detail controls.
 
 Files are assigned longest first to the least-loaded shard, by whole-second weights in
@@ -110,6 +110,10 @@ pwsh -NoProfile -File .\tests\Update-FinOpsDurations.ps1 -JUnitXml $env:TEMP\aum
 ```
 
 The last two lines refresh the weights from one complete serial run.
+
+### AUM pinned test clock
+
+AUM pytest pins product and AUM test/helper `datetime.now(timezone.utc)` calls to `2026-09-24T12:00:00Z` plus real elapsed time. `cli/finops/tests/aum_clock.py` defines the pinned instant, pinned month and pinned class; `cli/finops/tests/conftest.py` applies them per test to `claude_finops`, `test_*` and `p85_fixtures` modules only. The stdlib datetime module and third-party modules are not changed. The fixtures use September 2026, while Direct and AUM service writes intentionally allow only the current UTC month. The pin keeps those test fixtures current without changing product code and still lets durations, deadlines and sleeps advance. Tests that must observe the workstation clock use `@pytest.mark.real_clock`. Collection-time constants use `PINNED_MONTH`; token expiry tests keep using `time.time()` because JWT `exp` checks compare epoch seconds, not the AUM fixture month.
 
 ## Receipts and coverage
 
@@ -176,6 +180,7 @@ source identity, queue-to-merge wall time and individual job times. Artifact ret
 pwsh -NoProfile -File .\tests\Test-TestAllSharding.ps1
 pwsh -NoProfile -File .\tests\Test-RemoteTestAll.ps1
 pwsh -NoProfile -File .\tests\Test-RunnerIntegrity.ps1
+pwsh -NoProfile -File .\tests\Test-AzCommandsGuide.ps1
 ```
 
 The fast suites use synthetic invalid receipts and workflow records. RunnerIntegrity uses
@@ -199,6 +204,11 @@ pwsh -NoProfile -File .\.github\scripts\Test-InfrastructureProof.ps1 -Mode Runne
 Full local proof runs acquire the sibling `.gate-lock`, retry every 60 seconds and remove only
 their own lock in `finally`. Isolated GitHub-hosted VMs do not use the workstation lock.
 
+`Test-AzCommandsGuide.ps1` uses Azure CLI `--help` only, plus Git Bash with `jq`
+for the execution harness around `docs/AZ-COMMANDS.md` entitlement publishing
+blocks. The harness puts a stub `az` first on `PATH`; it does not use the
+operator's Azure session or write Azure resources.
+
 The first complete P79-integrated hosted proof was
 [run 36457223984](https://github.com/naveenneog/claude-code-foundry-gateway/actions/runs/36457223984),
 accessed 2026-09-28: exact commit `f829812`, 95/95 registered checks, 0 FAIL and 0 SKIP,
@@ -208,7 +218,7 @@ caught 74/74, 12/12 and 9/9 mutations with full baseline counts and restored gre
 The approximately 44-minute loaded-workstation reference is not a controlled comparison.
 The committed timing table uses that run's 95 passing check durations, not job/setup durations.
 
-[STATUS](../docs/STATUS.md) records measured runs and negative-proof counts.
+[P78 STATUS](../docs/status/P78.md) records measured runs and negative-proof counts.
 [ADR-0039](../docs/adr/0039-test-suite-hosted-runners.md) remains a draft proposal.
 P78 does not change the charter test command or timeout, claim a packet gate, or fix the existing
 local gate shell's process-tree timeout limitation. Council, gate and adoption belong to the lead

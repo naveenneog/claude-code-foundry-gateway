@@ -36,7 +36,7 @@ For shards 0 through 11, entire-job seconds were
 Test-All receipt seconds were
 `232.4, 199.9, 226.8, 224.5, 191.2, 139.6, 240.1, 193.6, 211.0, 55.5, 232.4, 287.4`.
 Setup excluding proofs took 87-212 s; Core, Runner and Wizard proofs took 96, 282 and 60 s.
-The [P78 STATUS section](../STATUS.md) holds the per-shard table and failed-attempt history.
+The [P78 STATUS section](../status/P78.md#p78-the-test-suite-runs-in-parallel-on-github-hosted-runners-2026-09-28) holds the per-shard table and failed-attempt history.
 The committed timing table now uses all 95 measured passing check durations
 (`tests/test-all-durations.json:1`); a new check still receives the positive 60-second default.
 

@@ -547,6 +547,14 @@ Every retained member is refreshed, even if its tier and unit are unchanged. Kep
 failed-to-delete orphans do not receive a new lease. A partial write can leave mixed
 generations, each with its own expiry, and exits nonzero.
 
+P86 adds the scheduled renewal path in `infra/projection-renewal.bicep`. It declares an
+ACR registry, an internal Container Apps environment, a scheduled Container Apps job, a
+user-assigned identity, a container-scoped Cosmos SQL data-plane writer role, an email-backed
+action group and scheduled-query alerts. The job writes destination-bound status records in
+the entitlement container. Switch admission reads those records through
+`sync/src/check-admission.mjs` and also checks that the ARM job uses the tested pinned image
+without command or args overrides.
+
 Before a resolver call, APIM limits `entitlement-misses` to 200 per second and 100
 concurrent. Excess returns retryable 429. These approximate distributed controls bound
 the admitted burst; they are not a 500,000-user throughput guarantee.
