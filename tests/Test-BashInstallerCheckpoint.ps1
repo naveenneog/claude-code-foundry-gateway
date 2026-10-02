@@ -35,7 +35,7 @@ function Get-BashKey([string]$Checkout) {
 }
 
 $installerPath = Join-Path $root 'install-claude-gateway.sh'
-$libraryPaths = @('scripts/install-checkpoint.sh', 'scripts/install-resume.sh') | ForEach-Object { Join-Path $root $_ }
+$libraryPaths = @('scripts/install-checkpoint.sh', 'scripts/install-store.sh', 'scripts/install-resume.sh') | ForEach-Object { Join-Path $root $_ }
 
 # ------------------------------------------------------------------ static checks
 # macOS ships bash 3.2 (runner image macOS 26: Bash 3.2.57, docs/UNKNOWNS.md U71), and BSD tools.
@@ -138,13 +138,15 @@ case "$*" in
     nm="$(argv_ -n "$@")"; rg="$(argv_ -g "$@")"
     jq -c --arg r "$rg" --arg n "$nm" '[.deployments[$r][$n] | select(.error != null) | {properties: {provisioningState: "Failed", statusMessage: {error: .error}}}]' "$W" ;;
   "ad group list "*)
-    # --display-name is a prefix ("Object's display name or its prefix", az ad group list --help).
+    # --display-name is a prefix ("Object's display name or its prefix", az ad group list --help), and
+    # --filter "id eq '<id>'" keeps that id only (az joins both with and, role/custom.py:1898-1905).
     # inject.groupLists holds Graph's answer for a name, as a scenario states it; the name reaches jq
     # on standard input, so no command-line encoding touches it.
     g="$(argv_ --display-name "$@")"
+    fid="$(argv_ --filter "$@" | sed -n "s/^id eq '\([0-9a-fA-F-]*\)'\$/\1/p")"
     given="$( { printf '%s' "$g" | jq -Rs .; cat "$W"; } | jq -s -c '.[0] as $g | (.[1].inject.groupLists // {})[$g] // empty')"
-    if [ -n "$given" ]; then printf '%s\n' "$given"
-    else jq -c --arg g "$g" '[.groups | to_entries[] | select((.value | ascii_downcase) | startswith($g | ascii_downcase)) | {id: .key, displayName: .value}]' "$W"; fi ;;
+    if [ -z "$given" ]; then given="$(jq -c --arg g "$g" '[.groups | to_entries[] | select((.value | ascii_downcase) | startswith($g | ascii_downcase)) | {id: .key, displayName: .value}]' "$W")"; fi
+    if [ -n "$fid" ]; then printf '%s' "$given" | jq -c --arg i "$fid" '[.[] | select(.id == $i)]'; else printf '%s\n' "$given"; fi ;;
   "ad group show "*)
     g="$(argv_ --group "$@")"
     case "$g" in
@@ -193,13 +195,21 @@ line="$(grep "^$pid|" "$P91_PS_TABLE" 2>/dev/null | head -n 1)"
 [ -n "$line" ] || exit 1
 printf '%s\n' "${line#*|}"
 '@
+# Test only: uname -s prints P91_UNAME_S when the harness sets it, so that Git Bash takes the Linux
+# path (on Windows hosts) and a scenario can be Git Bash on any host. The installer has no switch.
+$unameStub = @'
+#!/usr/bin/env bash
+if [ "${1:-}" = "-s" ] && [ -n "${P91_UNAME_S:-}" ]; then printf '%s\n' "$P91_UNAME_S"; exit 0; fi
+for u in /usr/bin/uname /bin/uname; do [ -x "$u" ] && exec "$u" "$@"; done
+exit 127
+'@
 
 # ------------------------------------------------------------------ harness
-$scratch = Join-Path ([IO.Path]::GetTempPath()) ('p91-bash-checkpoint-' + [guid]::NewGuid().ToString('N'))
+$scratch = [IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetTempPath()) ('p91-bash-checkpoint-' + [guid]::NewGuid().ToString('N'))))
 $template = Join-Path $scratch 'template'
 foreach ($d in 'scripts', 'infra') { New-Item -ItemType Directory -Force -Path (Join-Path $template $d) | Out-Null }
 Copy-Item -LiteralPath $installerPath -Destination $template
-foreach ($f in 'scripts/banner.sh', 'scripts/preflight.sh', 'scripts/install-checkpoint.sh', 'scripts/install-resume.sh', 'infra/main.bicep', 'infra/foundry-role.bicep', 'infra/policy.xml') {
+foreach ($f in 'scripts/banner.sh', 'scripts/preflight.sh', 'scripts/install-checkpoint.sh', 'scripts/install-store.sh', 'scripts/install-resume.sh', 'infra/main.bicep', 'infra/foundry-role.bicep', 'infra/policy.xml') {
     if (Test-Path -LiteralPath (Join-Path $root $f)) { Copy-Item -LiteralPath (Join-Path $root $f) -Destination (Join-Path $template $f) }
 }
 foreach ($f in 'scripts/Sync-ClaudeAccess.ps1', 'scripts/Select-ClaudeFinOpsTooling.ps1') { Write-Lf (Join-Path $template $f) '# placeholder' }
@@ -218,7 +228,8 @@ function New-World {
 function New-Scenario([string]$Name, $World, $From) {
     $dir = Join-Path $scratch "scenarios/$Name"
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
-    $s = [pscustomobject]@{ Name = $Name; Dir = $dir; Repo = (Join-Path $dir 'repo'); State = (Join-Path $dir 'state'); World = (Join-Path $dir 'world.json'); Home = (Join-Path $dir 'home'); Runs = 0 }
+    # The state directory is inside the scenario's home: the installer refuses one outside $HOME.
+    $s = [pscustomobject]@{ Name = $Name; Dir = $dir; Repo = (Join-Path $dir 'repo'); State = (Join-Path $dir 'home/state'); World = (Join-Path $dir 'world.json'); Home = (Join-Path $dir 'home'); Runs = 0 }
     New-Item -ItemType Directory -Force -Path $s.Home | Out-Null
     if ($From) {
         Copy-Item -LiteralPath $From.Repo -Destination $s.Repo -Recurse
@@ -251,9 +262,11 @@ function New-Run($Scenario, [string[]]$Arguments, [hashtable]$Environment = @{})
     $shim = Join-Path $dir 'bin'; $logs = Join-Path $dir 'logs'
     foreach ($d in $shim, $logs) { New-Item -ItemType Directory -Force -Path $d | Out-Null }
     Write-Lf (Join-Path $shim 'az') $azStub; Write-Lf (Join-Path $shim 'curl') $curlStub; Write-Lf (Join-Path $shim 'pwsh') $pwshStub; Write-Lf (Join-Path $shim 'ps') $psStub
+    Write-Lf (Join-Path $shim 'uname') $unameStub
     Write-Lf (Join-Path $shim 'jq') ("#!/usr/bin/env bash`nexec '" + $jqPath.Replace("'", "'\''") + "' `"`$@`"`n")
     $envs = [ordered]@{ P91_WORLD = (ConvertTo-BashPath $Scenario.World); P91_LOG = (ConvertTo-BashPath $logs); P91_PS_TABLE = (ConvertTo-BashPath $psTable); HOME = (ConvertTo-BashPath $Scenario.Home)
-        CLAUDE_GATEWAY_STATE_DIR = (ConvertTo-BashPath $Scenario.State); CLAUDE_GATEWAY_DEPLOY_POLL_SECONDS = '0'; CLAUDE_GATEWAY_DEPLOY_WAIT_SECONDS = '30' }
+        CLAUDE_GATEWAY_STATE_DIR = (ConvertTo-BashPath $Scenario.State); CLAUDE_GATEWAY_DEPLOY_POLL_SECONDS = '0'; CLAUDE_GATEWAY_DEPLOY_WAIT_SECONDS = '30'
+        P91_UNAME_S = $(if ($script:windows) { 'Linux' } else { $null }) }
     foreach ($k in $Environment.Keys) { $envs[$k] = $Environment[$k] }
     $lines = foreach ($k in $envs.Keys) { if ($null -eq $envs[$k]) { "unset $k" } else { "export $k='" + ([string]$envs[$k]).Replace("'", "'\''") + "'" } }
     $quoted = @($Arguments | ForEach-Object { "'" + $_.Replace("'", "'\''") + "'" }) -join ' '
@@ -342,8 +355,11 @@ try {
     $w.deployments['rg-p91'] = [ordered]@{ 'claude-gw-20260101000000' = [ordered]@{ apim = 'apim-p91gw'; state = 'Running'; polls = @('Running'); error = $null } }
     $unrecorded = New-Scenario 'unrecorded' $w
     $noDir = New-Scenario 'nodir' (New-World)
-    $blocker = Join-Path $noDir.Dir 'blocker'
+    $blocker = Join-Path $noDir.Home 'blocker'
     Write-Lf $blocker 'a file where the state directory would be'
+    # A state directory outside the scenario's home: refused before anything is read (decision 2).
+    $outside = New-Scenario 'outside' (New-World)
+    $outsideDir = (ConvertTo-BashPath $outside.Dir) + '/elsewhere/state'
     # Group names beyond ASCII (ADR-0046 decision 11): Graph's answer for the name is given, and a
     # returned group is the named one only when it has as many Unicode code points as the name.
     # PowerShell variable names ignore case, so each spelling has its own variable name.
@@ -386,6 +402,7 @@ try {
         ($runNameLonger = New-Run $nameLonger (& $nameArgs $nameLower))
         ($runNameTwins = New-Run $nameTwins (& $nameArgs $nameLower))
         ($runNameAstral = New-Run $nameAstral (& $nameArgs $rocketLower))
+        ($runOutside = New-Run $outside $args0 @{ CLAUDE_GATEWAY_STATE_DIR = $outsideDir })
     )
     $r1 = Invoke-Runs $first
     $b1 = $r1[$runBase1.Dir]
@@ -444,6 +461,11 @@ try {
     $uaGroup = & $standardOf $nameAstral
     Assert 'R5 bash an astral-plane name counts code points as PowerShell does: the one candidate with as many code points is recorded, nothing is created' ($ua.ExitCode -eq 0 -and
         $uaGroup.id -eq (& $gid 5) -and $uaGroup.origin -eq 'pre-existing' -and -not (Get-Calls $ua "ad group create --display-name $rocketLower *").Count) (Get-Tail $ua)
+    $od = $r1[$runOutside.Dir]
+    $odLine = [string]@(Get-ErrLines $od)[0]
+    Assert 'R6 bash a state directory outside $HOME refuses at startup on one line naming $HOME; nothing is read or created' ($od.ExitCode -eq 1 -and @(Get-ErrLines $od).Count -eq 1 -and
+        $odLine -match '^Refused: the install checkpoint directory .+/elsewhere/state .*not inside the home directory .+/home' -and $odLine -match 'Nothing was read or changed' -and
+        -not (Get-Calls $od 'account set*').Count -and -not (Test-Path -LiteralPath (Join-Path $outside.Dir 'elsewhere'))) (Get-Tail $od)
 
     # ------------------------------------------------------------------ reruns
     $sleeperOut = & $bash -c 'sleep 900 >/dev/null 2>&1 & echo $!'
@@ -452,7 +474,7 @@ try {
     $hostName = "$(& $bash -c 'uname -n')".Trim().ToLowerInvariant().Split('.')[0]
     $sc = [ordered]@{}
     foreach ($n in 'tenant', 'subscription', 'group', 'prefix', 'installer', 'version', 'changed', 'truncated', 'restart', 'liveLock', 'exitedLock', 'otherHost', 'staleHost',
-        'schemaName', 'schemaVersion', 'unknownStep', 'subscriptionName', 'tamperDeployment', 'tamperGroup', 'permSeam', 'permDirReal', 'permFileReal', 'renamed') { $sc[$n] = New-Scenario $n $null $base }
+        'schemaName', 'schemaVersion', 'unknownStep', 'subscriptionName', 'tamperDeployment', 'tamperGroup', 'permSeam', 'permDirReal', 'permFileReal', 'renamed', 'gitBash', 'otherGroup') { $sc[$n] = New-Scenario $n $null $base }
     foreach ($s in @($base) + @($sc.Values)) { Edit-World $s { param($w) $w.inject.groupCreateFail = @() } }
     Edit-World $sc.tenant { param($w) $w.tenantId = '00000000-0000-4000-8000-0000000000f9' }
     Edit-Checkpoint $sc.installer { param($c) $c.installer = 'pwsh' }
@@ -464,6 +486,10 @@ try {
     # Receipt values reach az as arguments on a resume, so a value of another shape is a corrupt checkpoint.
     Edit-Checkpoint $sc.tamperDeployment { param($c) $st = @($c.steps | Where-Object { $_ -and $_.id -eq 'gateway-deployment' })[0]; if ($st) { @($st.receipt.deployments)[0].name = 'p91-not-a-deployment' } }
     Edit-Checkpoint $sc.tamperGroup { param($c) $st = @($c.steps | Where-Object { $_ -and $_.id -eq 'entra-groups' })[0]; if ($st) { @($st.receipt.groups)[0].id = '@/etc/passwd' } }
+    # A receipt of the right shape that names another group: the live name decides (decision 11).
+    $otherId = '00000000-0000-4000-8000-0000000001f1'
+    Edit-World $sc.otherGroup { param($w) $w.groups | Add-Member -NotePropertyName $otherId -NotePropertyValue 'all-staff' -Force }
+    Edit-Checkpoint $sc.otherGroup { param($c) $st = @($c.steps | Where-Object { $_ -and $_.id -eq 'entra-groups' })[0]; if ($st) { @($st.receipt.groups | Where-Object { $_.role -eq 'standard' })[0].id = $otherId } }
     # The probe seam: Git Bash reports every file as the current user's with fixed modes, so this
     # scenario's copy of the library reports a state directory that another user owns.
     $seamLib = Join-Path $sc.permSeam.Repo 'scripts/install-checkpoint.sh'
@@ -481,7 +507,7 @@ try {
     & $lockOf $sc.otherHost @{ pid = 4242; processStart = 'x'; host = 'p91-other-host'; installer = 'bash'; runId = ('c' * 32); acquiredUtc = '2026-10-01T00:00:00Z' } 0
     & $lockOf $sc.staleHost @{ pid = 4242; processStart = 'x'; host = 'p91-other-host'; installer = 'bash'; runId = ('d' * 32); acquiredUtc = '2026-10-01T00:00:00Z' } 10
     $hashes = @{}; foreach ($n in 'tenant', 'subscription', 'group', 'prefix', 'installer', 'truncated', 'schemaName', 'schemaVersion', 'unknownStep', 'subscriptionName', 'tamperDeployment', 'tamperGroup',
-        'permSeam', 'permDirReal', 'permFileReal') { $hashes[$n] = Get-Hash $sc[$n] }
+        'permSeam', 'permDirReal', 'permFileReal', 'gitBash') { $hashes[$n] = Get-Hash $sc[$n] }
     $bounded = New-Scenario 'bounded' $null $running
     Edit-World $bounded { param($w) foreach ($p in $w.deployments.'rg-p91'.PSObject.Properties) { $p.Value.polls = @('forever') } }
     $swap = { param([string]$flag, [string]$to) $a = @($args0); $i = [array]::IndexOf($a, $flag); $a[$i + 1] = $to; $a }
@@ -515,6 +541,9 @@ try {
         ($runPermFileReal = New-Run $sc.permFileReal $args0)
         # A receipt applies to the name it records, compared code point by code point (jq ==).
         ($runRenamed = New-Run $sc.renamed (& $nameArgs 'Claude-Code-Standard'))
+        # Git Bash on Windows: the bash installer keeps no store there (decision 2).
+        ($runGitBash = New-Run $sc.gitBash $args0 @{ P91_UNAME_S = 'MINGW64_NT-10.0-26100' })
+        ($runOtherGroup = New-Run $sc.otherGroup $args0)
     )
     $r2 = Invoke-Runs $second
     $b2 = $r2[$runBase2.Dir]
@@ -582,6 +611,17 @@ try {
     $rn = $r2[$runRenamed.Dir]
     Assert 'R5 bash a resume that names a group in another case than its receipt does not use the receipt: the name is looked up, reused and not created' ($rn.ExitCode -eq 0 -and
         @($rn.Az | Where-Object { $_ -clike 'ad group list --display-name Claude-Code-Standard *' }).Count -eq 1 -and -not (Get-Calls $rn 'ad group create --display-name claude-code-standard*').Count) (Get-Tail $rn)
+    $gb = $r2[$runGitBash.Dir]
+    Assert 'R6 bash in Git Bash (uname -s MINGW64_NT) keeps no store: it warns, names Install-ClaudeGateway.ps1, prints the resume command with the answers, and neither reads nor writes a checkpoint' (
+        $gb.ExitCode -eq 0 -and $gb.Out -match '(?m)\[WARN\].*Git Bash.*Install-ClaudeGateway\.ps1' -and $gb.Out -match "(?m)^\s*Resume: cd '.+' && \./install-claude-gateway\.sh .*--resource-group 'rg-p91'" -and
+        $gb.Out -notmatch 'Resuming install run' -and $hashes.gitBash -and (Get-Hash $sc.gitBash) -eq $hashes.gitBash -and -not @(Get-ChildItem -LiteralPath $sc.gitBash.State -Filter '*.lock*' -ErrorAction SilentlyContinue).Count -and
+        (Get-Calls $gb 'deployment group create*').Count -eq 1) (Get-Tail $gb)
+    $og = $r2[$runOtherGroup.Dir]
+    $ogKept = Get-CheckpointFile $sc.otherGroup
+    $ogText = if ($ogKept) { [IO.File]::ReadAllText($ogKept.FullName) } else { '' }
+    Assert 'R5 bash a group receipt that names another group (live name differs) refuses on one line, keeps the checkpoint, and creates and syncs nothing' ((Test-Refusal $og "Entra group 'claude-code-standard' \($otherId\)") -and
+        [string]@(Get-ErrLines $og)[0] -match 'not listed by Microsoft Graph under that name' -and $ogText.Contains($otherId) -and -not (Get-Calls $og 'ad group create*').Count -and
+        -not @($og.Scripts | Where-Object { $_ -like '*Sync-ClaudeAccess*' }).Count) (Get-Tail $og)
     $all = @($r1.Values) + @($r2.Values)
     $unexpected = @($all | ForEach-Object { $_.Unexpected } | Where-Object { $_ })
     Assert 'harness: every az call was one the stub knows, and no run timed out' (-not $unexpected.Count -and -not @($all | Where-Object { $_.TimedOut }).Count) (($unexpected | Select-Object -Unique -First 4) -join ' | ')

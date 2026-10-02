@@ -16,9 +16,11 @@ function Assert($label, $condition, $detail = '') {
 Write-Host ''
 Write-Host 'Installer checkpoint and resume (PowerShell installer)' -ForegroundColor Cyan
 $watch = [Diagnostics.Stopwatch]::StartNew()
-$scratch = Join-Path ([IO.Path]::GetTempPath()) ('p91-checkpoint-' + [guid]::NewGuid().ToString('N'))
+$scratch = [IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetTempPath()) ('p91-checkpoint-' + [guid]::NewGuid().ToString('N'))))
 New-Item -ItemType Directory -Force -Path $scratch | Out-Null
 $sleeper = $null
+# A state directory outside the user profile, which the installer refuses before it creates anything.
+$outsideRoot = Join-Path ([IO.Path]::GetPathRoot([Environment]::GetFolderPath('UserProfile'))) ('p91-outside-profile-' + [guid]::NewGuid().ToString('N'))
 
 $sub = $script:P91Subscription
 $common = @("-SubscriptionId '$sub'", "-FoundryAccount 'ai-p91'", "-FoundryResourceGroup 'rg-ai-p91'", "-EntitlementStore 'named-value'",
@@ -136,6 +138,7 @@ try {
     # rocket has its 6 code points.
     $nameAstral = New-P91Scenario -Name 'name-astral' -Scratch $scratch -Template $template -World (& $unicodeWorld $rocketLower @([ordered]@{ id = (& $gid 5); displayName = $rocketUpper },
         [ordered]@{ id = (& $gid 6); displayName = 'team-ab' }, [ordered]@{ id = (& $gid 7); displayName = 'team-abcd' }) -Keep)
+    $outside = New-P91Scenario -Name 'outside' -Scratch $scratch -Template $template -World (New-P91World)
 
     $first = @(
         ($runBase1 = New-P91Run $base -Arguments ($newGateway + $secret + '-Yes'))
@@ -155,6 +158,7 @@ try {
         ($runNameLonger = New-P91Run $nameLonger -Arguments ($newGateway + "-StandardGroup '$nameLower'" + '-Yes'))
         ($runNameTwins = New-P91Run $nameTwins -Arguments ($newGateway + "-StandardGroup '$nameLower'" + '-Yes'))
         ($runNameAstral = New-P91Run $nameAstral -Arguments ($newGateway + "-StandardGroup '$rocketLower'" + '-Yes'))
+        ($runOutside = New-P91Run $outside -Arguments ($newGateway + '-Yes') -Environment @{ CLAUDE_GATEWAY_STATE_DIR = (Join-Path $outsideRoot 'state') })
     )
     $r1 = Invoke-P91Runs $first
     $b1 = Get-P91Result $r1 $runBase1
@@ -251,6 +255,11 @@ try {
     $uaGroup = & $standardOf $nameAstral
     Assert 'R5 an astral-plane name counts code points as jq does: the one candidate with as many code points is recorded, nothing is created' (
         $uaGroup.id -eq (& $gid 5) -and $uaGroup.origin -eq 'pre-existing' -and -not (Get-P91Calls $ua "ad group create --display-name $rocketLower *").Count) (Get-P91Tail $ua)
+    $od = Get-P91Result $r1 $runOutside
+    $odLine = [string]@(Get-P91ErrLines $od)[0]
+    Assert 'R6 a state directory outside the user profile refuses at startup on one line naming the profile; nothing is read or created' ($od.ExitCode -eq 1 -and @(Get-P91ErrLines $od).Count -eq 1 -and
+        $odLine -match '^Refused: the install checkpoint directory .*p91-outside-profile-.* not inside the user profile ' -and $odLine -match 'Nothing was read or changed' -and
+        -not (Get-P91Calls $od 'account set*').Count -and -not (Test-Path -LiteralPath $outsideRoot)) (Get-P91Tail $od)
     $f1 = Get-P91Result $r1 $runForeign
     Assert 'S4 an unrecorded running claude-gw- deployment is awaited before the new one is created' ($f1.ExitCode -eq 0 -and
         (Get-Order $f1 'deployment group show*claude-gw-20260101000000*' 'deployment group create*')) (Get-P91Tail $f1)
@@ -266,7 +275,7 @@ try {
     $sc = [ordered]@{}
     foreach ($n in 'tenant', 'subscription', 'group', 'gateway', 'reuse', 'installer', 'version', 'changed', 'template', 'rgMissing', 'apimMissing', 'groupMissing', 'graphLag',
         'readDeployment', 'readGroup', 'readRg', 'truncated', 'schema', 'unknownStep', 'unsafe', 'restart', 'liveLock', 'exitedLock', 'reusedPid', 'otherHost', 'staleHost', 'flow', 'flowRefusal',
-        'aclDir', 'aclFile', 'tamperDeployment', 'tamperGroup', 'tamperRole', 'renamed') {
+        'aclDir', 'aclFile', 'tamperDeployment', 'tamperGroup', 'tamperRole', 'renamed', 'otherGroup', 'otherRole') {
         $sc[$n] = & $copy $n
     }
     $sc['existingName'] = New-P91Scenario -Name 'existingName' -Scratch $scratch -From $identity
@@ -294,6 +303,11 @@ try {
     Edit-Checkpoint $sc.tamperDeployment { param($cp) $st = & $stepOf $cp 'gateway-deployment'; if ($st) { @($st.receipt.deployments)[0].name = 'p91-not-a-deployment' } }
     Edit-Checkpoint $sc.tamperGroup { param($cp) $st = & $stepOf $cp 'entra-groups'; if ($st) { @($st.receipt.groups)[0].id = '@C:\p91-secret.txt' } }
     Edit-Checkpoint $sc.tamperRole { param($cp) $st = & $stepOf $cp 'gateway-deployment'; if ($st) { $st.receipt | Add-Member -NotePropertyName roleAssignmentId -NotePropertyValue 'https://p91.invalid/collect?id=' -Force } }
+    # Receipts of the right shape that name other objects: the live object decides (decision 11).
+    Edit-Checkpoint $sc.otherGroup { param($cp) $st = & $stepOf $cp 'entra-groups'; if ($st) { @($st.receipt.groups | Where-Object { $_.role -eq 'standard' })[0].id = $premiumId } }
+    $foreignRole = "/subscriptions/$sub/resourceGroups/rg-other/providers/Microsoft.Authorization/roleAssignments/00000000-0000-4000-8000-0000000002a1"
+    Edit-P91World $sc.otherRole { param($w) $w.roleAssignments | Add-Member -NotePropertyName $foreignRole -NotePropertyValue ([pscustomobject]@{ principalId = '00000000-0000-4000-8000-0000000000c1'; scope = "/subscriptions/$sub/resourceGroups/rg-other"; role = 'Cognitive Services User' }) -Force }
+    Edit-Checkpoint $sc.otherRole { param($cp) $st = & $stepOf $cp 'gateway-deployment'; if ($st) { $st.receipt | Add-Member -NotePropertyName roleAssignmentId -NotePropertyValue $foreignRole -Force; $st.receipt | Add-Member -NotePropertyName roleOrigin -NotePropertyValue 'created' -Force } }
     if ($env:OS -eq 'Windows_NT') {
         # Real access rules: Everyone may modify the state directory; Users may write the checkpoint.
         Protect-P91Directory $sc.aclDir.State -AlsoWritableBy 'S-1-1-0'
@@ -359,6 +373,8 @@ try {
         ($runExistingName = New-P91Run $sc.existingName -Arguments ($common + @("-ResourceGroup 'rg-p91'", "-ExistingApimName 'apim-other'", '-Yes')))
         # A receipt applies to the name it records, compared code point by code point as jq's == does.
         ($runRenamed = New-P91Run $sc.renamed -Arguments ($newGateway + "-StandardGroup 'Claude-Code-Standard'" + '-Yes'))
+        ($runOtherGroup = New-P91Run $sc.otherGroup -Arguments ($newGateway + '-Yes'))
+        ($runOtherRole = New-P91Run $sc.otherRole -Arguments ($newGateway + '-Yes'))
     )
     $r2 = Invoke-P91Runs $second
 
@@ -472,6 +488,15 @@ try {
     $rn = Get-P91Result $r2 $runRenamed
     Assert 'R5 a resume that names a group in another case than its receipt does not use the receipt: the name is looked up, reused and not created' ($rn.ExitCode -eq 0 -and
         @($rn.Az | Where-Object { $_ -clike 'ad group list --display-name Claude-Code-Standard *' }).Count -eq 1 -and -not (Get-P91Calls $rn 'ad group create*').Count) (Get-P91Tail $rn)
+    $og = Get-P91Result $r2 $runOtherGroup
+    $ogKept = Get-Checkpoint $sc.otherGroup
+    Assert 'R5 a group receipt that names another group (live name differs) refuses on one line, keeps the checkpoint, and creates and syncs nothing' (
+        (Test-Refusal $og "Entra group 'claude-code-standard' \($premiumId\)") -and [string]@(Get-P91ErrLines $og)[0] -match 'not listed by Microsoft Graph under that name' -and
+        @((Get-Step $ogKept 'entra-groups').receipt.groups | Where-Object { $_.role -eq 'standard' -and $_.id -eq $premiumId }).Count -eq 1 -and -not (Get-P91Calls $og 'ad group create*').Count -and
+        -not @($og.Scripts | Where-Object { $_ -like 'sync *' }).Count) (Get-P91Tail $og)
+    $orr = Get-P91Result $r2 $runOtherRole
+    Assert 'R5 a role assignment receipt for another scope refuses on one line, keeps the checkpoint, and deploys nothing' ((Test-Refusal $orr 'role assignment') -and
+        [string]@(Get-P91ErrLines $orr)[0] -match 'rg-other' -and $null -ne (Get-Checkpoint $sc.otherRole) -and -not (Get-P91Calls $orr 'deployment group create*').Count) (Get-P91Tail $orr)
 
     $fl = Get-P91Result $r2 $runFlow; $fr = Get-P91Result $r2 $runFlowRefusal
     Assert 'Flow the guided flow''s foundation step resumes the installer from its checkpoint' ($fl.ExitCode -eq 0 -and $fl.Out -match 'FLOW-STEP-DONE' -and $fl.Out -match $resumesAt -and
@@ -498,6 +523,30 @@ try {
     }
     Assert 'R6 a write interrupted before its rename keeps the previous checkpoint and leaves no temporary file' ($kept -and $noTemp)
 
+    # ------------------------------------------------------------------ R5: an id from the checkpoint names the object it was written for
+    $desktopOk = $false; $desktopRefused = ''; $resolverOk = $false; $resolverRefused = ''
+    $appId = '00000000-0000-4000-8000-0000000003a1'; $otherApp = '00000000-0000-4000-8000-0000000003a2'
+    if (Test-Path -LiteralPath $library) {
+        . $library
+        $script:azAnswer = $null
+        function Invoke-ClaudeInstallAzRead { param([string[]]$Arguments, [string[]]$NotFound = @()) $script:azAnswer }
+        $script:ClaudeInstall = [pscustomobject]@{ Root = $scratch; Resuming = $true; Answers = [ordered]@{}; Bound = @(); Location = [pscustomobject]@{ Persistent = $true }
+            Checkpoint = [pscustomobject]@{ steps = @([pscustomobject]@{ id = 'projection'; state = 'completed'; receipt = [pscustomobject]@{ resolverAppId = $appId; resolverOrigin = 'created' } }) } }
+        $present = { param([string]$Output) [pscustomobject]@{ Verdict = 'present'; Output = $Output; Error = ''; Detail = '' } }
+        $script:azAnswer = & $present $appId
+        try { Assert-ClaudeInstallDesktopApp $appId; $desktopOk = $true } catch { $desktopOk = $false }
+        $script:azAnswer = & $present $otherApp
+        try { Assert-ClaudeInstallDesktopApp $appId; $desktopRefused = 'PASSED' } catch { $desktopRefused = $_.Exception.Message }
+        $script:azAnswer = & $present ('{"appId":"' + $appId + '","displayName":"claude-projection-resolver-p91gw"}')
+        try { $resolverOk = ([string](Get-ClaudeInstallResolverApp -NamePrefix 'p91gw' -Supplied '').Id -eq $appId) } catch { $resolverOk = $false }
+        $script:azAnswer = & $present ('{"appId":"' + $appId + '","displayName":"claude-projection-resolver-other"}')
+        try { $null = Get-ClaudeInstallResolverApp -NamePrefix 'p91gw' -Supplied ''; $resolverRefused = 'PASSED' } catch { $resolverRefused = $_.Exception.Message }
+    }
+    Assert 'R5 a Desktop client id whose live appId is another application is refused on one line; the matching one passes' ($desktopOk -and $desktopRefused -match '^Refused: ' -and
+        $desktopRefused.Contains($otherApp)) $desktopRefused
+    Assert 'R5 a projection resolver app id from the checkpoint whose live name is not the resolver name is refused on one line; the matching one is used' ($resolverOk -and
+        $resolverRefused -match '^Refused: .*claude-projection-resolver-other') $resolverRefused
+
     $cg = Get-P91Result $r2 $runChanged
     Assert 'R2 the summary''s Checkpoint row names an answer this run changes, before the confirmation' ($cg.ExitCode -eq 0 -and
         $cg.Out -match '(?m)^\s+Checkpoint\s+.*changed since the checkpoint: TpmStandard' -and (Get-P91Calls $cg 'deployment group create*').Count -eq 1) (Get-P91Tail $cg)
@@ -511,6 +560,7 @@ try {
 }
 finally {
     if ($sleeper -and -not $sleeper.HasExited) { try { $sleeper.Kill() } catch { } }
+    if ($outsideRoot -and (Test-Path -LiteralPath $outsideRoot)) { Remove-Item -LiteralPath $outsideRoot -Recurse -Force -ErrorAction SilentlyContinue }
     if ($env:P91_KEEP_SCRATCH -ne '1') { Remove-Item -LiteralPath $scratch -Recurse -Force -ErrorAction SilentlyContinue }
 }
 

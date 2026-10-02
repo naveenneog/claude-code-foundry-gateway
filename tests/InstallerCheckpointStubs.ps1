@@ -220,17 +220,22 @@ function global:az {
             $id = ($url -replace '^https://management\.azure\.com', '') -replace '\?.*$', ''
             $assignment = Get-P91Property $w.roleAssignments $id
             if (-not $assignment) { Write-P91Failure "ERROR: Not Found({`"error`":{`"code`":`"RoleAssignmentNotFound`",`"message`":`"The role assignment '$id' is not found.`"}})" 3; return }
-            return ([pscustomobject]@{ id = $id; properties = [pscustomobject]@{ principalId = $assignment.principalId; scope = $assignment.scope } } | ConvertTo-Json -Depth 4 -Compress)
+            # Cognitive Services User is a97b65f3-24c7-4388-baec-2e87135dc908 (infra/foundry-role.bicep:13).
+            $roleId = if ([string]$assignment.role -eq 'Cognitive Services User') { 'a97b65f3-24c7-4388-baec-2e87135dc908' } else { '00000000-0000-4000-8000-000000000e1e' }
+            $definition = "/subscriptions/$($w.subscriptionId)/providers/Microsoft.Authorization/roleDefinitions/$roleId"
+            return ([pscustomobject]@{ id = $id; properties = [pscustomobject]@{ principalId = $assignment.principalId; scope = $assignment.scope; roleDefinitionId = $definition } } | ConvertTo-Json -Depth 4 -Compress)
         }
         'ad group list*' {
-            # --display-name is a prefix ("Object's display name or its prefix", az ad group list --help).
+            # --display-name is a prefix ("Object's display name or its prefix", az ad group list --help),
+            # and --filter "id eq '<id>'" keeps that id only (az joins both with and, role/custom.py:1898-1905).
             # inject.groupLists holds Graph's answer for a name, as a scenario states it.
             $prefix = [string](& $value @('--display-name'))
+            $onlyId = if ([string](& $value @('--filter')) -match "^id eq '([0-9a-fA-F-]+)'$") { $Matches[1] } else { '' }
             $lists = Get-P91Property $w.inject 'groupLists'
             $given = if ($lists) { Get-P91Property $lists $prefix } else { $null }
-            if ($null -ne $given) { return (ConvertTo-Json -InputObject @($given) -Depth 4 -Compress) }
-            $list = @(foreach ($p in $w.groups.PSObject.Properties) { if ([string]$p.Value -like "$prefix*") { [pscustomobject]@{ id = $p.Name; displayName = [string]$p.Value } } })
-            return (ConvertTo-Json -InputObject $list -Depth 4 -Compress)
+            $list = if ($null -ne $given) { @($given) } else { @(foreach ($p in $w.groups.PSObject.Properties) { if ([string]$p.Value -like "$prefix*") { [pscustomobject]@{ id = $p.Name; displayName = [string]$p.Value } } }) }
+            if ($onlyId) { $list = @($list | Where-Object { [string]$_.id -eq $onlyId }) }
+            return (ConvertTo-Json -InputObject @($list) -Depth 4 -Compress)
         }
         'ad group show*' {
             $group = & $value @('--group', '-g')

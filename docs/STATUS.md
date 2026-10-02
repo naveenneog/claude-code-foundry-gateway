@@ -111,6 +111,21 @@ section moves to `docs/status/P91.md` under P87's ADR-0042.
   architecture suites pass. Mutations, one per new check: 10 of 10 caught (5 PowerShell, 5 bash),
   each at its suite's baseline count with its own check among the failures; every bash mutant passes
   `bash -n` ([measurement](measurements/p91-mutations-council2.json)).
+- Council round 2, Security addendum, 2026-10-02: Security BLOCK on `132d358`, four items: Windows
+  trust (owner, junctions and symbolic links, inherited rules, the parent's delete rights);
+  check-to-use races with `CLAUDE_GATEWAY_STATE_DIR` (real path, inside the home or profile, no link
+  in the last component, POSIX directories up to `$HOME`); receipts checked for shape only (a group,
+  role assignment, resolver app or Desktop app id of the right shape for another object); Git Bash,
+  which reads no Windows access rules. RED: `Test-InstallerCheckpointStore.ps1` 21 checks, 11 failed;
+  `Test-InstallerCheckpoint.ps1` 78, 5 failed; `Test-BashInstallerCheckpoint.ps1` 46, 5 failed, two
+  of them the static checks of the new `scripts/install-store.sh`, which did not exist yet. Failure
+  lines read: "a directory between the state directory and $HOME that its group can write ... is
+  refused" (PASSED, both installers); "a state directory that is a junction is refused" (refused for
+  an inherited rule instead); "a parent directory that lets Users delete what it holds is refused"
+  (PASSED); "a state directory outside the user profile refuses at startup" (the run completed); "a
+  group receipt that names another group ... refuses" (the run used it); "a role assignment receipt
+  for another scope refuses" (the run skipped the deployment as verified); "bash in Git Bash ...
+  keeps no store" (the run resumed from the checkpoint).
 
 Acceptance criteria, for both installers unless one is named:
 

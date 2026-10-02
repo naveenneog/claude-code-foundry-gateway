@@ -26,7 +26,7 @@ if (-not $bash) { Write-Host '  [FAIL] no Git Bash (Windows) or bash (macOS, Lin
 function ConvertTo-BashPath([string]$Path) { if ($windows) { '/' + ($Path.Replace('\', '/') -replace '^([A-Za-z]):', '$1') } else { $Path } }
 function Write-Lf([string]$Path, [string]$Text) { [IO.File]::WriteAllText($Path, $Text.Replace("`r`n", "`n"), [Text.UTF8Encoding]::new($false)) }
 
-$scratch = Join-Path ([IO.Path]::GetTempPath()) ('p91-store-' + [guid]::NewGuid().ToString('N'))
+$scratch = [IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetTempPath()) ('p91-store-' + [guid]::NewGuid().ToString('N'))))
 New-Item -ItemType Directory -Force -Path $scratch | Out-Null
 $psLibrary = Join-Path $root 'scripts/ClaudeInstallCheckpoint.ps1'
 $shLibrary = Join-Path $root 'scripts/install-checkpoint.sh'
@@ -53,6 +53,27 @@ function Invoke-BashCheck([string]$Path, [string]$Kind, [string]$Fake, [switch]$
 function Test-Refused($Result, [string]$Pattern) {
     $lines = @($Result.Text -split "`n" | Where-Object { $_ -match '^Refused: ' })
     $Result.Code -eq 1 -and $lines.Count -eq 1 -and $lines[0] -match $Pattern -and $lines[0] -match 'Nothing was read or changed' -and $lines[0] -match 'Resume: '
+}
+# The bash library's whole store check for a state directory and a home. uname is replaced here, and
+# only here, so that Git Bash takes the Linux path (test only; the installer has no such switch).
+$placeDriver = Join-Path $scratch 'place.sh'
+Write-Lf $placeDriver @'
+C_YELLOW=""; C_OFF=""; C_GREEN=""; C_CYAN=""; C_GREY=""; C_RED=""
+warn_() { printf '[WARN] %s\n' "$1"; }; note_() { :; }; ok_() { :; }; bad_() { :; }
+. "$1"
+uname() { if [ "${1:-}" = "-s" ]; then printf '%s\n' "${P91_UNAME_S:-Linux}"; else command uname "$@"; fi; }
+CKPT_ROOT="/p91/checkout"
+if [ -n "${P91_FAKE:-}" ]; then ckpt_perm_probe_() { eval "$P91_FAKE"; }; fi
+ckpt_location_
+ckpt_store_check_
+echo "PASSED $CKPT_DIR"
+'@
+function Invoke-BashPlace([string]$StateDir, [string]$HomeDir, [string]$Fake) {
+    $saved = @{ HOME = $env:HOME; CLAUDE_GATEWAY_STATE_DIR = $env:CLAUDE_GATEWAY_STATE_DIR }
+    $env:P91_FAKE = $Fake; $env:HOME = $HomeDir; $env:CLAUDE_GATEWAY_STATE_DIR = $StateDir
+    try { $out = @(& $bash (ConvertTo-BashPath $placeDriver) (ConvertTo-BashPath $shLibrary) 2>&1 | ForEach-Object { "$_" }); $code = $LASTEXITCODE }
+    finally { Remove-Item Env:P91_FAKE -ErrorAction SilentlyContinue; $env:HOME = $saved.HOME; $env:CLAUDE_GATEWAY_STATE_DIR = $saved.CLAUDE_GATEWAY_STATE_DIR }
+    [pscustomobject]@{ Code = $code; Text = ($out -join "`n"); Passed = ($code -eq 0 -and @($out | Where-Object { $_ -like 'PASSED *' }).Count -eq 1) }
 }
 
 try {
@@ -81,7 +102,7 @@ try {
     function Get-ClaudeInstallPosixStat([string]$Path) { $script:fakeStat }
     $decide = {
         param([string]$Path, [string]$Kind, [bool]$Link, [bool]$Mine, [string]$Mode, [string]$Owner)
-        $script:fakeStat = [pscustomobject]@{ Link = $Link; Mine = $Mine; Mode = $Mode; Owner = $Owner }
+        $script:fakeStat = [pscustomobject]@{ Exists = $true; Link = $Link; Mine = $Mine; Root = $false; Mode = $Mode; Owner = $Owner }
         try { Assert-ClaudeInstallStorePath -Path $Path -Kind $Kind; 'PASSED' } catch { $_.Exception.Message }
     }
     $refused = { param([string]$Message, [string]$Pattern) $Message -match '^Refused: ' -and $Message -match $Pattern -and $Message -match 'Nothing was read or changed' -and $Message -match 'Resume: ' }
@@ -97,6 +118,38 @@ try {
     $g = & $decide $seam 'directory' $false $false 'drwxrwxrwx' 'root'
     $script:ClaudeInstall.Location.CloudDrive = $false
     Assert 'pwsh POSIX: a checkpoint that is a symbolic link is refused; owner-only paths and the clouddrive store pass' ((& $refused $d 'symbolic link') -and $e -eq 'PASSED' -and $f -eq 'PASSED' -and $g -eq 'PASSED') "$d || $e || $f || $g"
+
+    # ------------------------------------------------------------------ PowerShell: where the store is, through the seams
+    # A POSIX tree written out: the probe answers for each path, and each path is its own real path.
+    function Get-ClaudeInstallPosixRealPath([string]$Path) { $Path }
+    $node = { param([string]$Mode = 'drwx------', [bool]$Mine = $true, [bool]$Root = $false, [string]$Owner = 'p91-me', [bool]$Link = $false)
+        [pscustomobject]@{ Exists = $true; Link = $Link; Mine = $Mine; Root = $Root; Owner = $Owner; Mode = $Mode } }
+    $tree = { param([hashtable]$Changes = @{})
+        $t = @{ '/home/p91' = (& $node 'drwxr-x---'); '/home/p91/work' = (& $node 'drwxr-xr-x'); '/home/p91/work/state' = (& $node) }
+        foreach ($k in $Changes.Keys) { $t[$k] = $Changes[$k] }
+        $script:posixTree = $t }
+    function Get-ClaudeInstallPosixStat([string]$Path) {
+        if ($script:posixTree.ContainsKey($Path)) { return $script:posixTree[$Path] }
+        [pscustomobject]@{ Exists = $false; Link = $false; Mine = $false; Root = $false; Owner = ''; Mode = '' }
+    }
+    $savedHome = $env:HOME; $savedState = $env:CLAUDE_GATEWAY_STATE_DIR
+    $place = { param([string]$StateDir)
+        $env:HOME = '/home/p91'; $env:CLAUDE_GATEWAY_STATE_DIR = $StateDir
+        try { $script:ClaudeInstall = [pscustomobject]@{ Root = '/p91/checkout'; Location = (Get-ClaudeInstallLocation -Root '/p91/checkout'); Answers = [ordered]@{} }; Assert-ClaudeInstallStore; 'PASSED' }
+        catch { $_.Exception.Message } }
+    & $tree @{ '/home/p91/work' = (& $node 'drwxrwxr-x') }; $la = & $place '/home/p91/work/state'
+    & $tree @{ '/home/p91/work' = (& $node 'drwxr-xr-x' $false $false 'p91-other') }; $lb = & $place '/home/p91/work/state'
+    & $tree @{ '/home/p91/work' = (& $node 'drwxrwxrwt' $false $true 'root') }; $lc = & $place '/home/p91/work/state'
+    Assert 'pwsh POSIX: a directory between the state directory and $HOME that its group can write or another user owns is refused, naming it; a sticky one root owns passes' (
+        (& $refused $la '/home/p91/work, which holds') -and $la -match 'drwxrwxr-x' -and (& $refused $lb 'owned by p91-other') -and $lc -eq 'PASSED') "$la || $lb || $lc"
+    & $tree @{ '/home/p91/work/state' = (& $node 'drwx------' $true $false 'p91-me' $true) }; $ld = & $place '/home/p91/work/state'
+    Assert 'pwsh POSIX: a state directory that is a symbolic link is refused' (& $refused $ld 'symbolic link') $ld
+    & $tree; $le = & $place '/srv/p91/state'
+    Assert 'pwsh POSIX: a state directory outside $HOME is refused, naming $HOME' ((& $refused $le 'not inside the home directory /home/p91') -and $le.Contains('/srv/p91/state')) $le
+    $env:HOME = $savedHome; $env:CLAUDE_GATEWAY_STATE_DIR = $savedState
+    Remove-Item function:Get-ClaudeInstallPosixRealPath -ErrorAction SilentlyContinue
+    . $psLibrary
+    $script:ClaudeInstall = [pscustomobject]@{ Root = (Join-Path $scratch 'checkout'); Location = [pscustomobject]@{ CloudDrive = $false }; Answers = [ordered]@{} }
     Set-Item -Path function:Test-ClaudeInstallWindows -Value $realWindows
     if ($realStat) { Set-Item -Path function:Get-ClaudeInstallPosixStat -Value $realStat }
 
@@ -111,6 +164,23 @@ try {
     $sf = Invoke-BashCheck $seamFile 'file' "PERM_LINK=0; PERM_MINE=1; PERM_MODE='-rw-------'; PERM_OWNER='p91-me'"
     $sg = Invoke-BashCheck $seam 'directory' "PERM_LINK=0; PERM_MINE=0; PERM_MODE='drwxrwxrwx'; PERM_OWNER='root'" -CloudDrive
     Assert 'bash: a checkpoint that is a symbolic link is refused; owner-only paths and the clouddrive store pass' ((Test-Refused $sd 'symbolic link') -and $se.Passed -and $sf.Passed -and $sg.Passed) "$($sd.Text) || $($se.Text) || $($sf.Text) || $($sg.Text)"
+
+    # ------------------------------------------------------------------ bash: where the store is, through the probe seam
+    # Real directories under a home of their own; the probe answers for each path.
+    $bhome = Join-Path $scratch 'bhome'; $bwork = Join-Path $bhome 'work'; $bstate = Join-Path $bwork 'state'
+    foreach ($p in $bhome, $bwork, $bstate) { New-Item -ItemType Directory -Force -Path $p | Out-Null }
+    $bfake = { param([string]$WorkMode = 'drwxr-xr-x', [int]$WorkMine = 1, [int]$WorkRoot = 0, [string]$WorkOwner = 'p91-me', [int]$StateLink = 0)
+        "PERM_LINK=0; PERM_MINE=1; PERM_ROOT=0; PERM_OWNER='p91-me'; PERM_MODE='drwx------'; case `"`$1`" in */bhome/work) PERM_MODE='$WorkMode'; PERM_MINE=$WorkMine; PERM_ROOT=$WorkRoot; PERM_OWNER='$WorkOwner' ;; */bhome/work/state) PERM_LINK=$StateLink ;; esac" }
+    $ba = Invoke-BashPlace (ConvertTo-BashPath $bstate) (ConvertTo-BashPath $bhome) (& $bfake 'drwxrwxr-x')
+    $bb = Invoke-BashPlace (ConvertTo-BashPath $bstate) (ConvertTo-BashPath $bhome) (& $bfake 'drwxr-xr-x' 0 0 'p91-other')
+    $bc = Invoke-BashPlace (ConvertTo-BashPath $bstate) (ConvertTo-BashPath $bhome) (& $bfake 'drwxrwxrwt' 0 1 'root')
+    Assert 'bash: a directory between the state directory and $HOME that its group can write or another user owns is refused, naming it; a sticky one root owns passes' (
+        (Test-Refused $ba '/bhome/work, which holds') -and $ba.Text -match 'drwxrwxr-x' -and (Test-Refused $bb 'owned by p91-other') -and $bc.Passed) "$($ba.Text) || $($bb.Text) || $($bc.Text)"
+    $bd = Invoke-BashPlace (ConvertTo-BashPath $bstate) (ConvertTo-BashPath $bhome) (& $bfake 'drwxr-xr-x' 1 0 'p91-me' 1)
+    Assert 'bash: a state directory that is a symbolic link is refused' (Test-Refused $bd 'symbolic link') $bd.Text
+    $elsewhere = Join-Path $scratch 'elsewhere'; New-Item -ItemType Directory -Force -Path $elsewhere | Out-Null
+    $be = Invoke-BashPlace ((ConvertTo-BashPath $elsewhere) + '/state') (ConvertTo-BashPath $bhome) (& $bfake)
+    Assert 'bash: a state directory outside $HOME is refused, naming $HOME' ((Test-Refused $be 'not inside the home directory') -and $be.Text -match '/bhome' -and $be.Text -match '/elsewhere/state') $be.Text
 
     if ($windows) {
         # ------------------------------------------------------------------ Windows: real access rules
@@ -138,6 +208,41 @@ try {
         Assert 'pwsh Windows: an allow rule that lets Everyone modify a directory or Users write a file is refused, naming the rule' ((& $refused $wa 'S-1-1-0') -and (& $refused $wb 'S-1-5-32-545')) "$wa || $wb"
         $wc = & $real $kept 'directory'; $wd = & $real $readOnly 'file'
         Assert 'pwsh Windows: rules for the current user, SYSTEM and Administrators, and a read-only rule for Users, pass' ($wc -eq 'PASSED' -and $wd -eq 'PASSED') "$wc || $wd"
+
+        # Where the store is, and what holds it (decision 2): real junctions and access rules.
+        $users = New-Object Security.Principal.SecurityIdentifier('S-1-5-32-545')
+        $trustedRules = { @((& $rule $owner 'FullControl' -Inherit), (& $rule (New-Object Security.Principal.SecurityIdentifier('S-1-5-18')) 'FullControl' -Inherit),
+            (& $rule (New-Object Security.Principal.SecurityIdentifier('S-1-5-32-544')) 'FullControl' -Inherit)) }
+        $savedState = $env:CLAUDE_GATEWAY_STATE_DIR
+        $winPlace = { param([string]$StateDir) $env:CLAUDE_GATEWAY_STATE_DIR = $StateDir
+            try { $script:ClaudeInstall = [pscustomobject]@{ Root = (Join-Path $scratch 'checkout'); Location = (Get-ClaudeInstallLocation -Root (Join-Path $scratch 'checkout')); Answers = [ordered]@{} }; Assert-ClaudeInstallStore; 'PASSED' }
+            catch { $_.Exception.Message } }
+        $target = Join-Path $scratch 'win-target'; New-Item -ItemType Directory -Force -Path $target | Out-Null; & $protect $target (& $trustedRules)
+        $reparse = Join-Path $scratch 'win-reparse'; New-Item -ItemType Junction -Path $reparse -Target $target | Out-Null
+        $wj = & $winPlace $reparse
+        Assert 'pwsh Windows: a state directory that is a junction is refused' ((& $refused $wj 'symbolic link or junction') -and $wj.Contains($reparse)) $wj
+        $clean = Join-Path $scratch 'win-clean'; New-Item -ItemType Directory -Force -Path $clean | Out-Null; & $protect $clean (& $trustedRules)
+        $inherits = Join-Path $clean 'inherits'; New-Item -ItemType Directory -Force -Path $inherits | Out-Null
+        $wi = & $real $inherits 'directory'
+        Assert 'pwsh Windows: a state directory whose access rules are inherited, not its own, is refused' (& $refused $wi 'inherits its access rules') $wi
+        $deletable = Join-Path $clean 'deletable'; New-Item -ItemType Directory -Force -Path $deletable | Out-Null
+        & $protect $deletable @((& $rule $owner 'FullControl' -Inherit), (& $rule $users 'Delete'))
+        $wx = & $real $deletable 'directory'
+        Assert 'pwsh Windows: a rule that lets Users delete the state directory is refused, naming the rule' (& $refused $wx 'S-1-5-32-545') $wx
+        $loose = Join-Path $scratch 'win-loose-parent'; New-Item -ItemType Directory -Force -Path $loose | Out-Null
+        & $protect $loose (@(& $trustedRules) + @(& $rule $users 'DeleteSubdirectoriesAndFiles'))
+        $looseState = Join-Path $loose 'state'; New-Item -ItemType Directory -Force -Path $looseState | Out-Null; & $protect $looseState @(& $rule $owner 'FullControl' -Inherit)
+        $wp = & $real $looseState 'directory'
+        Assert 'pwsh Windows: a parent directory that lets Users delete what it holds is refused, naming the parent and the rule' ((& $refused $wp 'S-1-5-32-545') -and $wp.Contains("$loose, which holds")) $wp
+        function Get-ClaudeInstallWindowsOwner([string]$Path) { 'S-1-5-21-1000-1000-1000-1001' }
+        $wo = & $real $kept 'directory'
+        . $psLibrary
+        $script:ClaudeInstall = [pscustomobject]@{ Root = (Join-Path $scratch 'checkout'); Location = [pscustomobject]@{ CloudDrive = $false }; Answers = [ordered]@{} }
+        Assert 'pwsh Windows: a store path owned by another account than the user, SYSTEM or Administrators is refused, naming the owner (owner seam)' (& $refused $wo 'owned by .*S-1-5-21-1000-1000-1000-1001') $wo
+        $outside = Join-Path ([IO.Path]::GetPathRoot([Environment]::GetFolderPath('UserProfile'))) ('p91-outside-profile-' + [guid]::NewGuid().ToString('N') + '\state')
+        $wu = & $winPlace $outside
+        Assert 'pwsh Windows: a state directory outside the user profile is refused, naming the profile' ((& $refused $wu 'not inside the user profile') -and $wu.Contains($outside)) $wu
+        $env:CLAUDE_GATEWAY_STATE_DIR = $savedState
     }
     else {
         # ------------------------------------------------------------------ Linux and macOS: real modes
@@ -155,6 +260,25 @@ try {
         $bt = Invoke-BashCheck $tight 'directory' ''; $bo = Invoke-BashCheck $own 'file' ''
         Assert 'bash POSIX (real modes): 0777 and 0770 directories, a 0666 file and a symbolic link are refused; 0700 and 0600 pass' ((Test-Refused $bw 'drwxrwxrwx') -and
             (Test-Refused $bg 'drwxrwx---') -and (Test-Refused $bl '-rw-rw-rw-') -and (Test-Refused $bk 'symbolic link') -and $bt.Passed -and $bo.Passed) (@($bw, $bg, $bl, $bk, $bt, $bo | ForEach-Object { $_.Text }) -join ' || ')
+
+        # Where the store is (decision 2), with real modes and links under a home of the test's own.
+        $rhome = Join-Path $scratch 'rhome'; $rwork = Join-Path $rhome 'work'; $rstate = Join-Path $rwork 'state'; $rlink = Join-Path $rhome 'link-state'
+        foreach ($p in $rhome, $rwork, $rstate) { New-Item -ItemType Directory -Force -Path $p | Out-Null }
+        & chmod 0700 $rhome; & chmod 0775 $rwork; & chmod 0700 $rstate
+        New-Item -ItemType SymbolicLink -Path $rlink -Target $rstate | Out-Null
+        $savedHome = $env:HOME; $savedState = $env:CLAUDE_GATEWAY_STATE_DIR
+        $realPlace = { param([string]$StateDir) $env:HOME = $rhome; $env:CLAUDE_GATEWAY_STATE_DIR = $StateDir
+            try { $script:ClaudeInstall = [pscustomobject]@{ Root = (Join-Path $scratch 'checkout'); Location = (Get-ClaudeInstallLocation -Root (Join-Path $scratch 'checkout')); Answers = [ordered]@{} }; Assert-ClaudeInstallStore; 'PASSED' }
+            catch { $_.Exception.Message } }
+        $pa = & $realPlace $rstate; $pb = & $realPlace $rlink; $pc = & $realPlace (Join-Path $scratch 'elsewhere/state')
+        $ba = Invoke-BashPlace $rstate $rhome ''; $bb = Invoke-BashPlace $rlink $rhome ''; $bc = Invoke-BashPlace (Join-Path $scratch 'elsewhere/state') $rhome ''
+        & chmod 0755 $rwork
+        $pd = & $realPlace $rstate; $bd = Invoke-BashPlace $rstate $rhome ''
+        $env:HOME = $savedHome; $env:CLAUDE_GATEWAY_STATE_DIR = $savedState
+        Assert 'pwsh POSIX (real modes): a 0775 directory above the state directory, a linked state directory and one outside $HOME are refused; 0755 passes' ((& $refused $pa 'drwxrwxr-x') -and
+            (& $refused $pb 'symbolic link') -and (& $refused $pc 'not inside the home directory') -and $pd -eq 'PASSED') "$pa || $pb || $pc || $pd"
+        Assert 'bash POSIX (real modes): a 0775 directory above the state directory, a linked state directory and one outside $HOME are refused; 0755 passes' ((Test-Refused $ba 'drwxrwxr-x') -and
+            (Test-Refused $bb 'symbolic link') -and (Test-Refused $bc 'not inside the home directory') -and $bd.Passed) (@($ba, $bb, $bc, $bd | ForEach-Object { $_.Text }) -join ' || ')
     }
 }
 finally {
