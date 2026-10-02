@@ -86,7 +86,8 @@ premise does not carry over.
 |---|---|---|
 | P84 | Merged (`3e4430b`) with the owner's approval on 2026-09-29, after council round 3 and the packet gate at `5612c94` | Projection deployment checks everything before it writes and never switches into an outage. Read-only preflight, fail-closed Graph, sanitized runner/app failures and unconditional switch refusal until P86, across deployer/installer/flow. ADR-0040 rejects ARM-only admission; 197 preflight assertions, 86 council assertions and 95 current mutations pass. |
 | P85 | Merged (`171b248`) with the owner's approval on 2026-09-30, after council round 5 and the packet gate at `86798f6` | AUM TUI manages people, units, teams and budgets with full tests. |
-| P86 | In progress on `p86-projection-renewal`; owner approval still required before merge | Scheduled projection reconciler and tenant-admin pack: user-assigned managed identity with Graph `GroupMember.Read.All` granted by a tenant admin, a 30-minute Container Apps job, email-backed action-group alerts, destination-bound Cosmos status evidence and runner-based admission. The switch requires Cosmos evidence plus the ARM job definition; dry-run, command/args overrides, missing action group and stale/single-generation evidence are rejected. |
+| P86 | Council round 3 passed on all five seats at `68b81fd`; merges after its packet gate with the owner's approval | Scheduled projection reconciler and tenant-admin pack: user-assigned managed identity with Graph `GroupMember.Read.All` granted by a tenant admin, a 30-minute Container Apps job, email-backed action-group alerts, destination-bound Cosmos status evidence and runner-based admission. The switch requires Cosmos evidence plus the ARM job definition; dry-run, command/args overrides, missing action group and stale/single-generation evidence are rejected. |
+| P88 | Merged (`558fb7e`) with the owner's approval on 2026-10-02, after council and the packet gate at `d3d28d8` | AUM pytest results do not depend on the date they run. Tests pin the AUM UTC clock to the September fixture month with advancing elapsed time, cover all `claude_finops` `datetime.now(` readers and keep current-month write tests deterministic without product changes. |
 
 M0 is shipped. The table below is the queue; the checklist under it is what the gate tracks.
 
@@ -476,6 +477,7 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       each panel as its data arrives, with an estimate while it waits; Direct reuses one token per
       process and batches its gateway reads, and time-to-first-data for `whoami`, `budget list`,
       `usage show` and `status` is measured before and after on the reference estate (**U32**)
+- [ ] P88 AUM tests do not depend on the date they run - acceptance: every AUM pytest file runs with an advancing pinned UTC clock inside the September fixture month, tests that need the real clock can opt out, and a guard fails if a `claude_finops` `datetime.now(` reader or a month-sensitive service write escapes the pin
 - [ ] P85 AUM's terminal UI manages people, units, teams and budgets end to end, with tests -
       acceptance: owners can preview and confirm removing a person from the People action bar,
       key and palette through the existing developer engine; complete offline Textual pilots
