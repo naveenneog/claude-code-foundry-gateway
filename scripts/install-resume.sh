@@ -32,7 +32,9 @@ ckpt_verify_rg_() {
 ckpt_cloudshell_line_() {
   [ -n "$CKPT_CLOUDSHELL" ] && [ "$CKPT_NOTED" != "1" ] || return 0
   CKPT_NOTED=1
-  if [ "$CKPT_PERSISTENT" = "1" ]; then
+  if [ -n "$CKPT_NOSTORE" ]; then
+    printf '    %sCloud Shell ends a session after 20 minutes without interactive activity; the ARM deployment outlives the session, and this run keeps no install checkpoint. Resume: %s%s\n' "$C_YELLOW" "$(ckpt_resume_cmd_ with-answers)" "$C_OFF"
+  elif [ "$CKPT_PERSISTENT" = "1" ]; then
     printf '    %sCloud Shell ends a session after 20 minutes without interactive activity; the install checkpoint and the ARM deployment outlive the session. Resume: %s%s\n' "$C_YELLOW" "$(ckpt_resume_cmd_)" "$C_OFF"
   else
     printf '    %sCloud Shell ends a session after 20 minutes without interactive activity; the ARM deployment outlives the session and this install checkpoint does not. Resume: %s%s\n' "$C_YELLOW" "$(ckpt_resume_cmd_ with-answers)" "$C_OFF"
@@ -97,8 +99,8 @@ ckpt_verify_gateway_() {
 ckpt_gateway_plan_() {
   local rg="$1" apim="$2" title="Gateway deployment" hash state stored recorded origin
   CKPT_GW_RUN=1; CKPT_GW_URL=""
-  # Without a checkpoint (Git Bash, or a state directory that could not be created) the guard against a
-  # second main.bicep deployment still runs (decision 10).
+  # Without a checkpoint (Git Bash, a state directory that could not be created, or a default place that
+  # failed a check) the guard against a second main.bicep deployment still runs (decision 10).
   if [ "$CKPT_LOCKED" != "1" ]; then ckpt_wait_main_deployments_ "$rg"; return 0; fi
   hash="$(ckpt_input_hash_ gateway-deployment)"
   state="$(ckpt_step_field_ gateway-deployment state)"; stored="$(ckpt_step_field_ gateway-deployment inputHash)"
@@ -141,20 +143,22 @@ ckpt_gateway_plan_() {
   ckpt_set_step_ gateway-deployment started "$hash"
 }
 # Recorded before az deployment group create, so a resume finds the deployment by name (R4). The
-# APIM's origin is read with the first deployment.
+# APIM's origin is read with the first deployment. The Cloud Shell line is printed with or without a
+# checkpoint.
 ckpt_register_deployment_() {
   local origin
-  [ "$CKPT_LOCKED" = "1" ] || return 0
-  origin="$(ckpt_receipt_field_ gateway-deployment origin)"
-  if [ -z "$origin" ]; then
-    ckpt_az_read_ 'ResourceNotFound' apim show -g "$2" -n "$3" --query name -o tsv
-    if [ "$AZ_VERDICT" = "absent" ]; then origin=created; else origin=pre-existing; fi
+  if [ "$CKPT_LOCKED" = "1" ]; then
+    origin="$(ckpt_receipt_field_ gateway-deployment origin)"
+    if [ -z "$origin" ]; then
+      ckpt_az_read_ 'ResourceNotFound' apim show -g "$2" -n "$3" --query name -o tsv
+      if [ "$AZ_VERDICT" = "absent" ]; then origin=created; else origin=pre-existing; fi
+    fi
+    CKPT_JSON="$(printf '%s' "$CKPT_JSON" | ckpt_jq_ -c --arg n "$1" --arg o "$origin" --arg now "$(ckpt_now_)" '
+      .steps |= map(if .id == "gateway-deployment" then
+        .receipt = ((.receipt // {}) | .deployments = ((.deployments // []) + [{name: $n, recordedUtc: $now, lastState: "started"}]) | .origin = (.origin // $o))
+        else . end)')"
+    ckpt_write_
   fi
-  CKPT_JSON="$(printf '%s' "$CKPT_JSON" | ckpt_jq_ -c --arg n "$1" --arg o "$origin" --arg now "$(ckpt_now_)" '
-    .steps |= map(if .id == "gateway-deployment" then
-      .receipt = ((.receipt // {}) | .deployments = ((.deployments // []) + [{name: $n, recordedUtc: $now, lastState: "started"}]) | .origin = (.origin // $o))
-      else . end)')"
-  ckpt_write_
   ckpt_cloudshell_line_
 }
 ckpt_complete_gateway_() {

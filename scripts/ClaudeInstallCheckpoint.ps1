@@ -382,6 +382,8 @@ function Open-ClaudeInstallCheckpoint {
         return @{}
     }
     Assert-ClaudeInstallStore
+    # A default place that failed a check: no store, so nothing is resumed (decision 2).
+    if ($c.Location.NoStore) { return @{} }
     $lock = Get-ClaudeInstallLockState $c.Location.Lock
     if ($lock.State -eq 'held') { Stop-ClaudeInstallLockHeld $lock $c.Location.Lock }
     if ($Restart -and (Test-Path -LiteralPath $path)) {
@@ -523,16 +525,20 @@ function Save-ClaudeInstallCheckpoint {
         apimName = [string](& $read 'apimName'); namePrefix = [string](& $read 'NamePrefix'); reusedApim = [bool](& $read 'ExistingApim') }
     $now = [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ', [Globalization.CultureInfo]::InvariantCulture)
     $c.Answers = $answers
+    # Without a store: one warning and the resume command with the answers (decision 1).
+    if ($c.Location.NoStore) { Write-ClaudeInstallNoStore; return }
     if (-not (Test-Path -LiteralPath $c.Location.Directory)) {
         # A state directory that cannot be created leaves the run without a checkpoint (decision 1).
         try { New-ClaudeInstallStateDirectory $c.Location.Directory }
         catch {
-            Write-Host "    [WARN] The install checkpoint directory $($c.Location.Directory) could not be created ($($_.Exception.Message)); this run keeps no checkpoint." -ForegroundColor Yellow
-            Write-Host "    Resume: $(Format-ClaudeInstallResume -WithAnswers)"
+            $c.Location.Persistent = $false
+            $c.Location.NoStore = "The install checkpoint directory $($c.Location.Directory) could not be created ($($_.Exception.Message)); this run keeps no checkpoint."
+            Write-ClaudeInstallNoStore
             return
         }
     }
     Assert-ClaudeInstallStore
+    if ($c.Location.NoStore) { Write-ClaudeInstallNoStore; return }
     if ($c.Checkpoint) {
         $c.Checkpoint.answers = [pscustomobject]$answers
     }
@@ -551,6 +557,14 @@ function Save-ClaudeInstallCheckpoint {
         $asked = @($script:ClaudeInstallPromptAnswers | Where-Object { $answers.Contains($_) })
         if ($asked.Count) { Write-Host "    A new session asks again for: $($asked -join ', ')." -ForegroundColor DarkGray }
     }
+}
+
+function Write-ClaudeInstallNoStore {
+    # The run keeps no store: one warning line, then the resume command with every recorded answer, as
+    # in an ephemeral Cloud Shell session (ADR-0046 decision 1).
+    $c = $script:ClaudeInstall
+    Write-Host "    [WARN] $($c.Location.NoStore)" -ForegroundColor Yellow
+    Write-Host "    Resume: $(Format-ClaudeInstallResume -WithAnswers)"
 }
 
 function Save-ClaudeInstallState {

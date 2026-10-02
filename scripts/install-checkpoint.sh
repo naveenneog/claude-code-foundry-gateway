@@ -30,7 +30,7 @@ PremiumGroup PREMIUM_GROUP --premium-group s'
 CKPT_US=$'\x1f'
 
 CKPT_ROOT=""; CKPT_DIR=""; CKPT_FILE=""; CKPT_LOCK=""; CKPT_KEY=""; CKPT_PERSISTENT=1; CKPT_WARNING=""; CKPT_CLOUDSHELL=""; CKPT_CLOUDDRIVE=0
-CKPT_NOSTORE=""; CKPT_RESOLVED=""; CKPT_HOME_REAL=""
+CKPT_NOSTORE=""; CKPT_RESOLVED=""; CKPT_HOME_REAL=""; CKPT_EXPLICIT=0; CKPT_UNTRUSTED=""
 CKPT_RESUMING=0; CKPT_JSON=""; CKPT_RUN_ID=""; CKPT_LOCKED=0; CKPT_HEARTBEAT=""; CKPT_REFUSED=0; CKPT_WHAT_IF=0
 CKPT_FINGERPRINT=""; CKPT_COMMIT=""; CKPT_TEMPLATES=""; CKPT_NOTED=0; CKPT_SUB_ID=""; CKPT_ANSWER_COUNT=0; CKPT_WRITE_WARNED=0
 CKPT_GW_RUN=1; CKPT_GW_URL=""
@@ -228,7 +228,8 @@ ckpt_open_() {
     return 0
   fi
   [ -n "$CKPT_NOSTORE" ] && return 0
-  ckpt_store_check_
+  # A default place that failed a check: no store, so nothing is resumed (decision 2).
+  ckpt_store_check_ || return 0
   ckpt_lock_state_ "$CKPT_LOCK"
   [ "$LOCK_STATE" = "held" ] && ckpt_lock_held_
   if [ "$restart" = "1" ] && [ -f "$CKPT_FILE" ]; then
@@ -339,21 +340,18 @@ ckpt_save_() {
   sub="$(ckpt_subscription_id_)"; [ -n "$sub" ] || sub="$SUBSCRIPTION"
   answers="$(ckpt_answers_json_ "$sub")"
   now="$(ckpt_now_)"
-  # Git Bash on Windows keeps no store: the warning and the resume command, as in an ephemeral session.
-  if [ -n "$CKPT_NOSTORE" ]; then
-    warn_ "on Windows under $CKPT_NOSTORE (Git Bash, MSYS2 or Cygwin), install-claude-gateway.sh reads no Windows access rules, so it keeps no install checkpoint; Install-ClaudeGateway.ps1 is the Windows installer"
-    printf '    Resume: %s\n' "$(ckpt_resume_cmd_ with-answers)"
-    return 0
-  fi
+  # Without a store (Git Bash, or a default place that failed a check at startup): one warning and the
+  # resume command with the answers, as in an ephemeral Cloud Shell session (decision 1).
+  if [ -n "$CKPT_NOSTORE" ]; then ckpt_nostore_warn_; return 0; fi
   # A state directory that cannot be created leaves the run without a checkpoint (decision 1). Each
   # missing directory is created owner-only (decision 2).
   if ! ( umask 077; mkdir -p "$CKPT_DIR" ) 2>/dev/null; then
-    warn_ "the install checkpoint directory $CKPT_DIR could not be created; this run keeps no checkpoint"
-    printf '    Resume: %s\n' "$(ckpt_resume_cmd_ with-answers)"
+    CKPT_NOSTORE="the install checkpoint directory $CKPT_DIR could not be created; this run keeps no checkpoint"
+    ckpt_nostore_warn_
     return 0
   fi
   chmod 700 "$CKPT_DIR" 2>/dev/null
-  ckpt_store_check_
+  if ! ckpt_store_check_; then ckpt_nostore_warn_; return 0; fi
   if [ "$CKPT_RESUMING" = "1" ]; then
     CKPT_JSON="$(printf '%s' "$CKPT_JSON" | ckpt_jq_ -c --argjson a "$answers" --arg f "$CKPT_FINGERPRINT" --arg c "$CKPT_COMMIT" '.answers = $a | .installerFingerprint = $f | .installerCommit = $c')"
   else
@@ -369,6 +367,13 @@ ckpt_save_() {
     warn_ "$CKPT_WARNING"
     printf '    Resume: %s\n' "$(ckpt_resume_cmd_ with-answers)"
   fi
+}
+
+# The run keeps no store: one warning line, then the resume command with every recorded answer.
+ckpt_nostore_warn_() {
+  CKPT_PERSISTENT=0
+  warn_ "$CKPT_NOSTORE"
+  printf '    Resume: %s\n' "$(ckpt_resume_cmd_ with-answers)"
 }
 
 # A temporary file renamed over the checkpoint, so an interrupted write leaves the previous one.

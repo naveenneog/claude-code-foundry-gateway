@@ -36,7 +36,8 @@ function Get-ClaudeInstallLocation {
     elseif ($windows) { $dir = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'claude-gateway' }
     else { $base = if ($env:XDG_STATE_HOME) { $env:XDG_STATE_HOME } else { & $join (& $join $homeDir '.local') 'state' }; $dir = & $join $base 'claude-gateway' }
     [pscustomobject]@{ Directory = $dir; Checkpoint = (& $join $dir "$key.json"); Lock = (& $join $dir "$key.lock"); Key = $key; HomeDirectory = $homeDir
-        Persistent = $persistent; Warning = $warning; CloudShell = $cloudShell; CloudDrive = $cloudDrive; Resolved = '' }
+        Persistent = $persistent; Warning = $warning; CloudShell = $cloudShell; CloudDrive = $cloudDrive; Resolved = ''
+        Explicit = [bool]$env:CLAUDE_GATEWAY_STATE_DIR; NoStore = '' }
 }
 
 function Set-ClaudeInstallOwnerOnly {
@@ -137,31 +138,32 @@ function Get-ClaudeInstallStoreTail {
     return ('Nothing was read or changed.' + $(if ($c -and $c.Root) { " Resume: $(Format-ClaudeInstallResume)" } else { '' }))
 }
 
-function Assert-ClaudeInstallWindowsParent([string]$Directory, [string]$Tail) {
+function Get-ClaudeInstallWindowsParentProblem([string]$Directory) {
     # An account that may delete what the parent holds, or change its rules, could replace the state
-    # directory between a check and a read (decision 2).
+    # directory between a check and a read (decision 2). '' when the parent is trusted.
     $parent = [IO.Path]::GetDirectoryName($Directory.TrimEnd('\'))
-    if (-not $parent -or -not (Test-Path -LiteralPath $parent)) { return }
+    if (-not $parent -or -not (Test-Path -LiteralPath $parent)) { return '' }
     $owner = Get-ClaudeInstallWindowsOwner $parent
     if ((Get-ClaudeInstallWindowsTrusted) -notcontains $owner) {
-        Stop-ClaudeInstall "the directory $parent, which holds the install checkpoint directory $Directory, is owned by $(Get-ClaudeInstallSidName $owner) ($owner), not by the current user, SYSTEM or Administrators, so the store is not trusted. $Tail"
+        return "the directory $parent, which holds the install checkpoint directory $Directory, is owned by $(Get-ClaudeInstallSidName $owner) ($owner), not by the current user, SYSTEM or Administrators, so the store is not trusted."
     }
     # DeleteSubdirectoriesAndFiles, ChangePermissions, TakeOwnership and GENERIC_ALL; FullControl holds them.
     $rule = @(Get-ClaudeInstallWindowsWriters -Path $parent -Mask (0x40 -bor 0x40000 -bor 0x80000 -bor 0x10000000))[0]
-    if ($rule) { Stop-ClaudeInstall "the directory $parent, which holds the install checkpoint directory $Directory, lets $($rule.Name) ($($rule.Sid)) delete or replace what it holds ($($rule.Rights)), so the store is not trusted. $Tail" }
+    if ($rule) { return "the directory $parent, which holds the install checkpoint directory $Directory, lets $($rule.Name) ($($rule.Sid)) delete or replace what it holds ($($rule.Rights)), so the store is not trusted." }
+    return ''
 }
 
-function Assert-ClaudeInstallStorePath {
-    # Refuses a store path that another account could have written or replaced, before the installer
-    # reads, parses, locks, renames or replaces anything (ADR-0046 decision 2). clouddrive is exempt: its
-    # mount sets the modes, and the Cloud Shell storage account's access control applies (U66).
-    param([Parameter(Mandatory = $true)][string]$Path, [ValidateSet('directory', 'file')][string]$Kind = 'file', [string]$Tail)
+function Get-ClaudeInstallStorePathProblem {
+    # Why another account could have written or replaced a store path, or '' (ADR-0046 decision 2).
+    # clouddrive is exempt: its mount sets the modes, and the Cloud Shell storage account's access
+    # control applies (U66).
+    param([Parameter(Mandatory = $true)][string]$Path, [ValidateSet('directory', 'file')][string]$Kind = 'file')
     $c = $script:ClaudeInstall
-    if ($c -and $c.Location -and $c.Location.CloudDrive) { return }
-    if (-not $Tail) { $Tail = Get-ClaudeInstallStoreTail }
+    if ($c -and $c.Location -and $c.Location.CloudDrive) { return '' }
     $why = ''
     if (Test-ClaudeInstallWindows) {
-        if (-not (Test-Path -LiteralPath $Path)) { return }
+        # A state directory still to be created is judged by the directory that will hold it.
+        if (-not (Test-Path -LiteralPath $Path)) { if ($Kind -eq 'directory') { return (Get-ClaudeInstallWindowsParentProblem $Path) }; return '' }
         # The state directory's own name is checked for a link where its place is resolved.
         if ($Kind -eq 'file' -and (Test-ClaudeInstallReparsePoint $Path)) { $why = 'is a symbolic link or junction' }
         else {
@@ -171,101 +173,136 @@ function Assert-ClaudeInstallStorePath {
         if (-not $why) {
             $writer = @(Get-ClaudeInstallWindowsWriters -Path $Path)[0]
             if ($writer) {
-                Stop-ClaudeInstall "the install checkpoint $Kind $Path has an access rule that lets $($writer.Name) ($($writer.Sid)) write it ($($writer.Rights)), so it is not trusted; only the current user, SYSTEM and Administrators may write the store, and a state directory the installer creates is owner-only. $Tail"
+                return "the install checkpoint $Kind $Path has an access rule that lets $($writer.Name) ($($writer.Sid)) write it ($($writer.Rights)), so it is not trusted; only the current user, SYSTEM and Administrators may write the store, and a state directory the installer creates is owner-only."
             }
         }
         if (-not $why -and $Kind -eq 'directory') {
             $acl = Get-Acl -LiteralPath $Path
             if (-not $acl.AreAccessRulesProtected -or @($acl.Access | Where-Object { $_.IsInherited }).Count) { $why = 'inherits its access rules from the directory that holds it, where one the installer creates has only its own' }
         }
-        if ($why) { Stop-ClaudeInstall "the install checkpoint $Kind $Path $why, so it is not trusted; a state directory the installer creates is owner-only. $Tail" }
-        if ($Kind -eq 'directory') { Assert-ClaudeInstallWindowsParent $Path $Tail }
-        return
+        if ($why) { return "the install checkpoint $Kind $Path $why, so it is not trusted; a state directory the installer creates is owner-only." }
+        if ($Kind -eq 'directory') { return (Get-ClaudeInstallWindowsParentProblem $Path) }
+        return ''
     }
     $s = Get-ClaudeInstallPosixStat $Path
-    if (-not $s.Exists) { return }
+    if (-not $s.Exists) { return '' }
     if ($Kind -eq 'file' -and $s.Link) { $why = 'is a symbolic link' }
     elseif (-not $s.Mine) { $why = "is owned by $(if ($s.Owner) { $s.Owner } else { 'another user' }), not by the current user" }
     elseif ([string]$s.Mode -match '^.{5}w' -or [string]$s.Mode -match '^.{8}w') { $why = "has mode $($s.Mode) (owner $($s.Owner)), so its group or other users can write it" }
-    if ($why) { Stop-ClaudeInstall "the install checkpoint $Kind $Path $why, so it is not trusted; a state directory the installer creates is owner-only. $Tail" }
+    if ($why) { return "the install checkpoint $Kind $Path $why, so it is not trusted; a state directory the installer creates is owner-only." }
+    return ''
+}
+
+function Assert-ClaudeInstallStorePath {
+    # Refuses a store path that another account could have written or replaced, before the installer
+    # reads, parses, locks, renames or replaces anything (ADR-0046 decision 2).
+    param([Parameter(Mandatory = $true)][string]$Path, [ValidateSet('directory', 'file')][string]$Kind = 'file', [string]$Tail)
+    $why = Get-ClaudeInstallStorePathProblem -Path $Path -Kind $Kind
+    if (-not $why) { return }
+    if (-not $Tail) { $Tail = Get-ClaudeInstallStoreTail }
+    Stop-ClaudeInstall "$why $Tail"
 }
 
 function Resolve-ClaudeInstallLocation {
     # Where the state directory is (decision 2): an absolute path inside the user profile (Windows) or
     # $HOME (POSIX), or inside clouddrive in Cloud Shell, and not itself a link or junction. From here on
     # the directory is used by its real path only, and a second resolution must give the same path.
+    # Returns '' when the place is trusted, or why it is not.
     $c = $script:ClaudeInstall; $l = $c.Location
-    $tail = Get-ClaudeInstallStoreTail
     $dir = [string]$l.Directory
     if (Test-ClaudeInstallWindows) {
-        if (-not [IO.Path]::IsPathRooted($dir)) { Stop-ClaudeInstall "the install checkpoint directory $dir is not an absolute path, so it is not used. $tail" }
+        if (-not [IO.Path]::IsPathRooted($dir)) { return "the install checkpoint directory $dir is not an absolute path, so it is not used." }
         $real = [IO.Path]::GetFullPath($dir).TrimEnd('\')
-        if (Test-ClaudeInstallReparsePoint $real) { Stop-ClaudeInstall "the install checkpoint directory $dir is a symbolic link or junction, so it is not trusted; the installer does not follow a link in the state directory's own name. $tail" }
+        if (Test-ClaudeInstallReparsePoint $real) { return "the install checkpoint directory $dir is a symbolic link or junction, so it is not trusted; the installer does not follow a link in the state directory's own name." }
         $where = 'the user profile'; $within = [IO.Path]::GetFullPath([Environment]::GetFolderPath('UserProfile')).TrimEnd('\')
         if ($l.CloudDrive) { $where = 'clouddrive'; $within = [IO.Path]::GetFullPath((Join-Path $l.HomeDirectory 'clouddrive')).TrimEnd('\') }
-        if (-not $real.StartsWith($within + '\', [StringComparison]::OrdinalIgnoreCase)) { Stop-ClaudeInstall "the install checkpoint directory $dir resolves to $real, which is not inside $where $within, so it is not used. $tail" }
+        if (-not $real.StartsWith($within + '\', [StringComparison]::OrdinalIgnoreCase)) { return "the install checkpoint directory $dir resolves to $real, which is not inside $where $within, so it is not used." }
         # Every directory between the state directory and the profile is itself, so the path is its real path.
         $a = [IO.Path]::GetDirectoryName($real)
         while ($a -and $a.StartsWith($within + '\', [StringComparison]::OrdinalIgnoreCase)) {
-            if (Test-ClaudeInstallReparsePoint $a) { Stop-ClaudeInstall "the directory $a, which holds the install checkpoint directory $real, is a symbolic link or junction, so the store is not trusted. $tail" }
+            if (Test-ClaudeInstallReparsePoint $a) { return "the directory $a, which holds the install checkpoint directory $real, is a symbolic link or junction, so the store is not trusted." }
             $a = [IO.Path]::GetDirectoryName($a)
         }
         $sep = '\'
     }
     else {
-        if (-not $dir.StartsWith('/')) { Stop-ClaudeInstall "the install checkpoint directory $dir is not an absolute path, so it is not used. $tail" }
-        if ("$dir/" -match '/\.\.?/') { Stop-ClaudeInstall "the install checkpoint directory $dir has a . or .. component, so it is not used. $tail" }
+        if (-not $dir.StartsWith('/')) { return "the install checkpoint directory $dir is not an absolute path, so it is not used." }
+        if ("$dir/" -match '/\.\.?/') { return "the install checkpoint directory $dir has a . or .. component, so it is not used." }
         $dir = $dir.TrimEnd('/'); if (-not $dir) { $dir = '/' }
         $s = Get-ClaudeInstallPosixStat $dir
-        if ($s.Exists -and $s.Link) { Stop-ClaudeInstall "the install checkpoint directory $dir is a symbolic link or junction, so it is not trusted; the installer does not follow a link in the state directory's own name. $tail" }
+        if ($s.Exists -and $s.Link) { return "the install checkpoint directory $dir is a symbolic link or junction, so it is not trusted; the installer does not follow a link in the state directory's own name." }
         $homeReal = if ($l.HomeDirectory) { Get-ClaudeInstallPosixRealPath ([string]$l.HomeDirectory) } else { '' }
-        if (-not $homeReal) { Stop-ClaudeInstall "the home directory $($l.HomeDirectory) could not be resolved, so the install checkpoint directory $dir cannot be placed inside it. $tail" }
+        if (-not $homeReal) { return "the home directory $($l.HomeDirectory) could not be resolved, so the install checkpoint directory $dir cannot be placed inside it." }
         $where = 'the home directory'; $within = $homeReal
         if ($l.CloudDrive) { $where = 'clouddrive'; $within = Get-ClaudeInstallPosixRealPath (([string]$l.HomeDirectory).TrimEnd('/') + '/clouddrive') }
         $real = Get-ClaudeInstallPosixRealPath $dir
         if (-not $real -or -not $within -or -not $real.StartsWith($within.TrimEnd('/') + '/', [StringComparison]::Ordinal)) {
-            Stop-ClaudeInstall "the install checkpoint directory $dir resolves to $(if ($real) { $real } else { 'no real path' }), which is not inside $where $within, so it is not used. $tail"
+            return "the install checkpoint directory $dir resolves to $(if ($real) { $real } else { 'no real path' }), which is not inside $where $within, so it is not used."
         }
         $l | Add-Member -NotePropertyName HomeReal -NotePropertyValue $homeReal -Force
         $sep = '/'
     }
-    if ($l.Resolved -and $l.Resolved -ne $real) { Stop-ClaudeInstall "the install checkpoint directory resolved to $($l.Resolved) at startup and to $real now, so it is not used. $tail" }
+    if ($l.Resolved -and $l.Resolved -ne $real) { return "the install checkpoint directory resolved to $($l.Resolved) at startup and to $real now, so it is not used." }
     $l.Resolved = $real; $l.Directory = $real
     $l.Checkpoint = $real + $sep + "$($l.Key).json"; $l.Lock = $real + $sep + "$($l.Key).lock"
+    return ''
 }
 
-function Assert-ClaudeInstallAncestors {
+function Get-ClaudeInstallAncestorProblem {
     # POSIX: every directory from the one that holds the state directory up to $HOME is owned by the
     # current user or root and is not writable by its group or other users unless its sticky bit is set
     # (OpenSSH's StrictModes rule), so no other account can rename an entry between a check and a read.
-    # Inside clouddrive the mount sets the modes (U66), so only $HOME is read there.
-    if (Test-ClaudeInstallWindows) { return }
+    # Inside clouddrive the mount sets the modes (U66), so only $HOME is read there. '' when they are.
+    if (Test-ClaudeInstallWindows) { return '' }
     $l = $script:ClaudeInstall.Location
-    $tail = Get-ClaudeInstallStoreTail
     $dir = [string]$l.Directory; $homeReal = [string]$l.HomeReal
     $a = if ($l.CloudDrive) { $homeReal } else { $dir.Substring(0, [math]::Max(1, $dir.LastIndexOf('/'))) }
     while ($true) {
         $s = Get-ClaudeInstallPosixStat $a
         if ($s.Exists) {
-            if (-not $s.Mine -and -not $s.Root) { Stop-ClaudeInstall "the directory $a, which holds the install checkpoint directory $dir, is owned by $(if ($s.Owner) { $s.Owner } else { 'another user' }), not by the current user or root, so the store is not trusted. $tail" }
+            if (-not $s.Mine -and -not $s.Root) { return "the directory $a, which holds the install checkpoint directory $dir, is owned by $(if ($s.Owner) { $s.Owner } else { 'another user' }), not by the current user or root, so the store is not trusted." }
             $mode = [string]$s.Mode
             $sticky = $mode.Length -ge 10 -and 'tT'.Contains([string]$mode[9])
             if ($mode.Length -ge 10 -and ($mode[5] -eq 'w' -or $mode[8] -eq 'w') -and -not $sticky) {
-                Stop-ClaudeInstall "the directory $a, which holds the install checkpoint directory $dir, has mode $mode (owner $($s.Owner)), so its group or other users can rename what it holds, and the store is not trusted. $tail"
+                return "the directory $a, which holds the install checkpoint directory $dir, has mode $mode (owner $($s.Owner)), so its group or other users can rename what it holds, and the store is not trusted."
             }
         }
-        if ($a -eq $homeReal -or $a -eq '/') { break }
+        if ($a -eq $homeReal -or $a -eq '/') { return '' }
         $a = $a.Substring(0, [math]::Max(1, $a.LastIndexOf('/')))
     }
 }
 
+function Get-ClaudeInstallStoreFiles {
+    # This checkout's checkpoint, lock and temporary files in the state directory, found by name; none
+    # of them is read.
+    $l = $script:ClaudeInstall.Location
+    $found = @(foreach ($p in @([string]$l.Checkpoint, [string]$l.Lock)) { if (Test-Path -LiteralPath $p) { $p } })
+    if (Test-Path -LiteralPath $l.Directory -PathType Container) {
+        $found += @(Get-ChildItem -LiteralPath $l.Directory -Filter "$($l.Key).json.tmp-*" -Force -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+    }
+    return $found
+}
+
 function Assert-ClaudeInstallStore {
     # Before anything in the store is read: where it is, the state directory, what holds it, and then
-    # the checkpoint and the lock.
-    Resolve-ClaudeInstallLocation
+    # the checkpoint and the lock (decision 2). A store that fails a check refuses when
+    # CLAUDE_GATEWAY_STATE_DIR names it, or when its default place holds this checkout's checkpoint,
+    # lock or a temporary file, so that such a file is shown and a run that was to resume does not start
+    # over unnoticed. Otherwise the run keeps no store (Location.NoStore) and relies on its live checks
+    # (decision 1).
     $l = $script:ClaudeInstall.Location
-    Assert-ClaudeInstallStorePath -Path $l.Directory -Kind directory
-    Assert-ClaudeInstallAncestors
-    Assert-ClaudeInstallStorePath -Path $l.Checkpoint -Kind file
-    Assert-ClaudeInstallStorePath -Path $l.Lock -Kind file
+    $why = Resolve-ClaudeInstallLocation
+    if (-not $why) { $why = Get-ClaudeInstallStorePathProblem -Path $l.Directory -Kind directory }
+    if (-not $why) { $why = Get-ClaudeInstallAncestorProblem }
+    if (-not $why) { $why = Get-ClaudeInstallStorePathProblem -Path $l.Checkpoint -Kind file }
+    if (-not $why) { $why = Get-ClaudeInstallStorePathProblem -Path $l.Lock -Kind file }
+    if (-not $why) { return }
+    if ($l.Explicit) { Stop-ClaudeInstall "$why The directory is named by CLAUDE_GATEWAY_STATE_DIR. $(Get-ClaudeInstallStoreTail)" }
+    $found = @(Get-ClaudeInstallStoreFiles)
+    if ($found.Count) {
+        $what = if ($found.Count -eq 1) { "This checkout's install file $($found[0]) is there" } else { "This checkout's install files $($found -join ', ') are there" }
+        Stop-ClaudeInstall "$why $what, so the run stops instead of starting over. Nothing was read or changed. Next step: inspect the file, then remove it or correct the permissions, then rerun: $(Format-ClaudeInstallResume)"
+    }
+    $l.Persistent = $false
+    $l.NoStore = "$why This run keeps no install checkpoint."
 }

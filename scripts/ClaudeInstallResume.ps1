@@ -31,7 +31,8 @@ function Write-ClaudeInstallCloudShellLine([int]$Seconds = [int]::MaxValue) {
     if (-not $c -or -not $c.Location.CloudShell -or $c.CloudShellNoted -or $Seconds -le 60) { return }
     $c.CloudShellNoted = $true
     $resume = if ($c.Location.Persistent) { Format-ClaudeInstallResume } else { Format-ClaudeInstallResume -WithAnswers }
-    $outlive = if ($c.Location.Persistent) { 'the install checkpoint and the ARM deployment outlive the session' } else { 'the ARM deployment outlives the session and this install checkpoint does not' }
+    $outlive = if ($c.Location.NoStore) { 'the ARM deployment outlives the session, and this run keeps no install checkpoint' }
+    elseif ($c.Location.Persistent) { 'the install checkpoint and the ARM deployment outlive the session' } else { 'the ARM deployment outlives the session and this install checkpoint does not' }
     Write-Host "    Cloud Shell ends a session after 20 minutes without interactive activity; $outlive. Resume: $resume" -ForegroundColor Yellow
 }
 
