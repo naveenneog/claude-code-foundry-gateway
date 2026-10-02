@@ -1092,6 +1092,7 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Fixed
 
+- **P88 AUM test clock independence.** AUM pytest now pins `datetime.now(timezone.utc)` for `claude_finops` modules and AUM test helpers to an advancing instant inside the September fixture month without changing the stdlib datetime module. A real-clock opt-out, clock-reader coverage guard and September service budget write guard keep the seam reversible.
 - **AUM lookups could cancel their own view refresh (P71 follow-up).** A changed
   tab and its caller both started exclusive refresh workers. Lookup, breadcrumb,
   saved-view, comparison, usage-basis, ranking and dashboard navigation now
