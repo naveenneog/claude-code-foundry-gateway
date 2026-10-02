@@ -391,6 +391,48 @@ run the installer and the guided flow over the changed engine. `tests/test-all-d
 the five new weights. Each suite ran only while `.gate-lock` was absent: the runner checked it before
 each suite and every 5 s during it, and no run overlapped a gate.
 
+#### Mutation proof (round 2)
+
+The lead's harness ran unchanged on `b564ad6` (`pwsh -NoProfile -File p92-lead-mutations.ps1`):
+"caught 26 of 26; target hit 26; missed: ; tree clean: True", in 2793 s. At `cb2cd70` it caught 11.
+A watchdog checked `.gate-lock` every 10 s during the run; the lock did not appear.
+
+| Suite | Lead mutants | Caught | Target hit |
+|---|---|---|---|
+| `Test-InstallerPreflight.ps1` | M01-M07, M13, M16 (9) | 9 | 9 |
+| `Test-BashInstallerPreflight.ps1` | B01, B02, B06, B07 (4) | 4 | 4 |
+| `Test-InstallerStepSelection.ps1` | S05-S08 (4) | 4 | 4 |
+| `Test-BashInstallerStepSelection.ps1` | BS02, BS05, BS07 (3) | 3 | 3 |
+| `Test-InstallerBusinessUnitAnswers.ps1` | U03, U05, U06 (3) | 3 | 3 |
+| `Test-InstallerAnswersSchema.ps1` | V01-V03 (3) | 3 | 3 |
+
+The builder's 12 mutants cover the round-2 branches that the lead's set does not reach. Two workers ran
+in their own copies of `b564ad6` (`git archive`), each suite only while `.gate-lock` was absent.
+
+| Mutant | Mutation | Caught | On target |
+|---|---|---|---|
+| R01 | PowerShell: the `entra.groupNames` pass line removed, a branch that sets nothing | yes | yes |
+| R03 | PowerShell: `az account show` parsed without `try` | yes | yes |
+| R04 | PowerShell: an account without `tenantId` accepted | yes | yes |
+| R05 | PowerShell: an unread account goes on to the Azure checks | yes | yes |
+| R06 | PowerShell: a Foundry account list that is not JSON read as "not found" | yes | yes |
+| R07 | PowerShell: a stop of `Test-ClaudePrerequisites` thrown again | yes | yes |
+| R09 | bash: the JSON check of the Foundry account list removed | yes | yes |
+| R10 | bash: `az account show` output that is not JSON accepted | yes | yes |
+| R11 | bash: the `entra.groupNames` pass line removed | yes | yes |
+| R12 | bash: an account without `tenantId` accepted | yes | yes |
+| R14 | bash: an event written before the progress file passes its startup check | yes | yes |
+| R15 | bash: the progress stream never marked ready after its startup check | yes | yes |
+
+Both rounds are in [`docs/measurements/p92-mutations.json`](measurements/p92-mutations.json) under
+`laterRounds`, with the lead's earlier result on `cb2cd70`, each mutant's failing checks and seconds.
+
+#### Open after round 2
+
+- The pre-deployment read-backs read each named value with `2>$null` (`Install-ClaudeGateway.ps1:1500-1522`). A read that fails becomes an empty value (`:1523-1528`), and the deployment receives it as the existing value, for example `buRegistryExisting` (`:1642`). This predates P92 and is outside round 2: P91 R1 runs these read-backs before every deployment but does not stop on an unreadable value.
+- U91: the P92 bash suites ran on Windows under Git Bash only. `.github/workflows/installer-unix.yml` runs them on Linux and macOS, and it has not run for this branch.
+- `Test-ProjectionPreflightNegative.ps1 -ValidateAnchors` stops at an anchor that is absent at `main` since `f39524d` (GREEN, above).
+
 
 ## P91 installer checkpoint and resume, 2026-10-01
 

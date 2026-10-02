@@ -1323,5 +1323,765 @@
       ],
       "afterTestChange": null
     }
+  ],
+  "laterRounds": [
+    {
+      "round": "Lead round 2",
+      "by": "lead",
+      "dateUtc": "2026-10-02",
+      "measuredCommit": "b564ad6",
+      "harness": "The lead's p92-lead-mutations.ps1 (26 mutants), run unchanged on the working tree of the measured commit: each mutant applied in place, its suite run, the file restored with git checkout and its hash compared.",
+      "rule": "caught = baseline check count and >= 1 failed check; targetHit = a failing check matches the target pattern",
+      "ruleNote": "The counting rule of this record: a mutant is caught only when its suite reaches the baseline check count and at least one check fails. targetHit is targetFailed: a failing check matches the target pattern.",
+      "previousRun": {
+        "commit": "cb2cd70",
+        "caught": 11,
+        "total": 26,
+        "missed": "M02, M03, M04, M05, M06, M07, M13, M16, B02, B06, B07, S08, BS02, U03, U06"
+      },
+      "baselines": [
+        {
+          "suite": "Test-BashInstallerStepSelection",
+          "checks": 23,
+          "seconds": 204.0
+        },
+        {
+          "suite": "Test-InstallerAnswersSchema",
+          "checks": 40,
+          "seconds": 9.9
+        },
+        {
+          "suite": "Test-BashInstallerPreflight",
+          "checks": 29,
+          "seconds": 104.5
+        },
+        {
+          "suite": "Test-InstallerPreflight",
+          "checks": 29,
+          "seconds": 36.5
+        },
+        {
+          "suite": "Test-InstallerBusinessUnitAnswers",
+          "checks": 11,
+          "seconds": 26.4
+        },
+        {
+          "suite": "Test-InstallerStepSelection",
+          "checks": 22,
+          "seconds": 38.4
+        }
+      ],
+      "caught": 26,
+      "targetHit": 26,
+      "total": 26,
+      "cleanTree": true,
+      "results": [
+        {
+          "id": "M01",
+          "file": "scripts/ClaudeInstallerPreflight.ps1",
+          "suite": "Test-InstallerPreflight",
+          "why": "not-signed-in no longer blocks: checks stay NOT-RUN, exit code becomes 0",
+          "verdict": "CAUGHT",
+          "targetHit": true,
+          "checks": 29,
+          "baseline": 29,
+          "failed": 1,
+          "parse": true,
+          "restored": true,
+          "seconds": 34.5,
+          "fails": [
+            "[FAIL] P2 not signed in: target.tenant and every Azure check report NOT-RUN with a reason, none passes, and the exit code is not 0 - target.tenant=NOT-RUN/not-signed-in, target.subscription=NOT-RUN/not-signed-in, foundry.account=NOT-RUN/not-signed-in, foundry.deployments=NOT-RUN/not-signed-in, apim.nameAvailability=NOT-RUN/not-signed-in, apim.existingSku=NOT-RUN/not-signed-in, apim.existingIdentity=NOT-RUN/not-signed-in, entra.groupNames=NOT-RUN/not-signed-in || exit 0:       \"problems\": [] |     } |   ] | }"
+          ]
+        },
+        {
+          "id": "M02",
+          "file": "scripts/ClaudeInstallerPreflight.ps1",
+          "suite": "Test-InstallerPreflight",
+          "why": "target.tenant never set on the success path (default-PASS probe)",
+          "verdict": "CAUGHT",
+          "targetHit": true,
+          "checks": 29,
+          "baseline": 29,
+          "failed": 2,
+          "parse": true,
+          "restored": true,
+          "seconds": 36.1,
+          "fails": [
+            "[FAIL] P2 complete answers over a matching estate pass: exit 0, and every check that applies passes (tenant, subscription, prerequisites, Foundry account and deployments, name, groups) - target.tenant NOT-RUN not-evaluated || passed: answers.schema, answers.crossField, target.subscription, operator.adminPrereqs, foundry.account, foundry.deployments, apim.nameAvailability, entra.groupNames || exit 1:       \"problems\": [] |     } |   ] | }",
+            "[FAIL] P2 fail closed: in every scenario each PASS carries its message, and no check is left NOT-RUN not-evaluated (ADR-0047 decision 5) - pass: target.tenant NOT-RUN/not-evaluated || foundry-missing: target.tenant NOT-RUN/not-evaluated || deployment-missing: target.tenant NOT-RUN/not-evaluated || name-taken: target.tenant NOT-RUN/not-evaluated || no-identity: target.tenant NOT-RUN/not-evaluated || classic-sku: target.tenant NOT-RUN/not-evaluated || graph-error: target.tenant NOT-RUN/not-evaluated || same-length: target.tenant NOT-RUN/not-evaluated || kv-malformed: target.tenant NOT-RUN/not-evaluated || all-at-once: target.tenant NOT-RUN/not-evaluated || disabled: target.tenant NOT-RUN/not-evaluated || sub-unreadable: target.tenant NOT-RUN/not-evaluated || list-found: target.tenant NOT-RUN/not-evaluated || list-missing: target.tenant NOT-RUN/not-evaluated || no-claude: target.tenant NOT-RUN/not-evaluated || prereq-fail: target.tenant NOT-RUN/not-evaluated || pfx-missing: target.tenant NOT-RUN/not-evaluated || list-not-json: target.tenant NOT-RUN/not-evaluated"
+          ]
+        },
+        {
+          "id": "M03",
+          "file": "scripts/ClaudeInstallerPreflight.ps1",
+          "suite": "Test-InstallerPreflight",
+          "why": "subscription in another tenant accepted",
+          "verdict": "CAUGHT",
+          "targetHit": true,
+          "checks": 29,
+          "baseline": 29,
+          "failed": 1,
+          "parse": true,
+          "restored": true,
+          "seconds": 38.4,
+          "fails": [
+            "[FAIL] P2 a subscription in another tenant than the Azure CLI sign-in is a FAIL of target.tenant naming both tenants, with az login --tenant as the remedy - exit 0:       \"problems\": [] |     } |   ] | }"
+          ]
+        },
+        {
+          "id": "M04",
+          "file": "scripts/ClaudeInstallerPreflight.ps1",
+          "suite": "Test-InstallerPreflight",
+          "why": "disabled subscription accepted",
+          "verdict": "CAUGHT",
+          "targetHit": true,
+          "checks": 29,
+          "baseline": 29,
+          "failed": 1,
+          "parse": true,
+          "restored": true,
+          "seconds": 37.0,
+          "fails": [
+            "[FAIL] P2 a disabled subscription is a FAIL of target.subscription naming its state - exit 0:       \"problems\": [] |     } |   ] | }"
+          ]
+        },
+        {
+          "id": "M05",
+          "file": "scripts/ClaudeInstallerPreflight.ps1",
+          "suite": "Test-InstallerPreflight",
+          "why": "unreadable subscription accepted",
+          "verdict": "CAUGHT",
+          "targetHit": true,
+          "checks": 29,
+          "baseline": 29,
+          "failed": 1,
+          "parse": true,
+          "restored": true,
+          "seconds": 36.4,
+          "fails": [
+            "[FAIL] P2 a subscription Azure CLI cannot read is a FAIL of target.subscription, and each check that reads in it is NOT-RUN (prerequisite-failed) - foundry.account=PASS/, foundry.deployments=PASS/, apim.nameAvailability=PASS/, apim.existingSku=NOT-RUN/not-applicable, apim.existingIdentity=NOT-RUN/not-applicable || exit 0:       \"problems\": [] |     } |   ] | }"
+          ]
+        },
+        {
+          "id": "M06",
+          "file": "scripts/ClaudeInstallerPreflight.ps1",
+          "suite": "Test-InstallerPreflight",
+          "why": "Foundry account absent from the subscription list (no FoundryResourceGroup) treated as present",
+          "verdict": "CAUGHT",
+          "targetHit": true,
+          "checks": 29,
+          "baseline": 29,
+          "failed": 1,
+          "parse": true,
+          "restored": true,
+          "seconds": 36.7,
+          "fails": [
+            "[FAIL] P2 without FoundryResourceGroup, a Foundry account the subscription does not list is a FAIL of foundry.account, and its deployments are NOT-RUN - exit 1:       \"problems\": [] |     } |   ] | }"
+          ]
+        },
+        {
+          "id": "M07",
+          "file": "scripts/ClaudeInstallerPreflight.ps1",
+          "suite": "Test-InstallerPreflight",
+          "why": "account with no Claude deployment passes",
+          "verdict": "CAUGHT",
+          "targetHit": true,
+          "checks": 29,
+          "baseline": 29,
+          "failed": 1,
+          "parse": true,
+          "restored": true,
+          "seconds": 36.3,
+          "fails": [
+            "[FAIL] P2 a Foundry account with no Claude deployment and no PendingClaudeDeployment is a FAIL of foundry.deployments - exit 0:       \"problems\": [] |     } |   ] | }"
+          ]
+        },
+        {
+          "id": "M13",
+          "file": "scripts/ClaudeInstallerPreflight.ps1",
+          "suite": "Test-InstallerPreflight",
+          "why": "failed admin prerequisites pass",
+          "verdict": "CAUGHT",
+          "targetHit": true,
+          "checks": 29,
+          "baseline": 29,
+          "failed": 1,
+          "parse": true,
+          "restored": true,
+          "seconds": 46.0,
+          "fails": [
+            "[FAIL] P2 failing admin prerequisites are a FAIL of operator.adminPrereqs naming the failed check (the harness fails the argument canary) - exit 0:       \"problems\": [] |     } |   ] | }"
+          ]
+        },
+        {
+          "id": "M16",
+          "file": "scripts/ClaudeInstallerPreflight.ps1",
+          "suite": "Test-InstallerPreflight",
+          "why": "missing PFX file accepted",
+          "verdict": "CAUGHT",
+          "targetHit": true,
+          "checks": 29,
+          "baseline": 29,
+          "failed": 1,
+          "parse": true,
+          "restored": true,
+          "seconds": 41.6,
+          "fails": [
+            "[FAIL] P2 an AddressPfxPath that is not a file is a FAIL of address.inputs naming the path - exit 0:       \"problems\": [] |     } |   ] | }"
+          ]
+        },
+        {
+          "id": "B01",
+          "file": "scripts/install-preflight.sh",
+          "suite": "Test-BashInstallerPreflight",
+          "why": "bash: not-signed-in no longer blocks",
+          "verdict": "CAUGHT",
+          "targetHit": true,
+          "checks": 29,
+          "baseline": 29,
+          "failed": 1,
+          "parse": true,
+          "restored": true,
+          "seconds": 113.5,
+          "fails": [
+            "[FAIL] P2 bash not signed in: target.tenant and every Azure check report NOT-RUN with a reason, none passes, and the exit code is not 0 - target.tenant=NOT-RUN/not-signed-in, target.subscription=NOT-RUN/not-signed-in, foundry.account=NOT-RUN/not-signed-in, foundry.deployments=NOT-RUN/not-signed-in, apim.nameAvailability=NOT-RUN/not-signed-in, apim.existingSku=NOT-RUN/not-signed-in, apim.existingIdentity=NOT-RUN/not-signed-in, entra.groupNames=NOT-RUN/not-signed-in || exit 0:     } |   ] | }"
+          ]
+        },
+        {
+          "id": "B02",
+          "file": "scripts/install-preflight.sh",
+          "suite": "Test-BashInstallerPreflight",
+          "why": "bash: subscription in another tenant accepted",
+          "verdict": "CAUGHT",
+          "targetHit": true,
+          "checks": 29,
+          "baseline": 29,
+          "failed": 1,
+          "parse": true,
+          "restored": true,
+          "seconds": 111.1,
+          "fails": [
+            "[FAIL] P2 bash a subscription in another tenant than the Azure CLI sign-in is a FAIL of target.tenant naming both tenants, with az login --tenant as the remedy - exit 0:     } |   ] | }"
+          ]
+        },
+        {
+          "id": "B06",
+          "file": "scripts/install-preflight.sh",
+          "suite": "Test-BashInstallerPreflight",
+          "why": "bash: target.tenant never set on the success path (default-PASS probe)",
+          "verdict": "CAUGHT",
+          "targetHit": true,
+          "checks": 29,
+          "baseline": 29,
+          "failed": 2,
+          "parse": true,
+          "restored": true,
+          "seconds": 146.2,
+          "fails": [
+            "[FAIL] P2 bash complete answers over a matching estate pass: exit 0, and every check that applies passes - target.tenant NOT-RUN not-evaluated || passed: answers.schema, answers.crossField, target.subscription, operator.adminPrereqs, foundry.account, foundry.deployments, apim.nameAvailability, entra.groupNames || exit 1:     } |   ] | }",
+            "[FAIL] P2 bash fail closed: in every scenario each PASS carries its message, and no check is left NOT-RUN not-evaluated (ADR-0047 decision 5) - pass: target.tenant NOT-RUN/not-evaluated || foundry-missing: target.tenant NOT-RUN/not-evaluated || deployment-missing: target.tenant NOT-RUN/not-evaluated || name-taken: target.tenant NOT-RUN/not-evaluated || no-identity: target.tenant NOT-RUN/not-evaluated || classic-sku: target.tenant NOT-RUN/not-evaluated || graph-error: target.tenant NOT-RUN/not-evaluated || same-length: target.tenant NOT-RUN/not-evaluated || kv-malformed: target.tenant NOT-RUN/not-evaluated || all-at-once: target.tenant NOT-RUN/not-evaluated || disabled: target.tenant NOT-RUN/not-evaluated || sub-unreadable: target.tenant NOT-RUN/not-evaluated || list-found: target.tenant NOT-RUN/not-evaluated || list-missing: target.tenant NOT-RUN/not-evaluated || no-claude: target.tenant NOT-RUN/not-evaluated || prereq-fail: target.tenant NOT-RUN/not-evaluated || pfx-missing: target.tenant NOT-RUN/not-evaluated || list-not-json: target.tenant NOT-RUN/not-evaluated"
+          ]
+        },
+        {
+          "id": "B07",
+          "file": "scripts/install-preflight.sh",
+          "suite": "Test-BashInstallerPreflight",
+          "why": "bash: failed admin prerequisites pass",
+          "verdict": "CAUGHT",
+          "targetHit": true,
+          "checks": 29,
+          "baseline": 29,
+          "failed": 1,
+          "parse": true,
+          "restored": true,
+          "seconds": 193.8,
+          "fails": [
+            "[FAIL] P2 bash failing admin prerequisites are a FAIL of operator.adminPrereqs naming the failed check (the harness cannot reach management.azure.com) - exit 0:     } |   ] | }"
+          ]
+        },
+        {
+          "id": "S05",
+          "file": "scripts/ClaudeInstallSteps.ps1",
+          "suite": "Test-InstallerStepSelection",
+          "why": "unknown -Steps id accepted",
+          "verdict": "CAUGHT",
+          "targetHit": true,
+          "checks": 22,
+          "baseline": 22,
+          "failed": 1,
+          "parse": true,
+          "restored": true,
+          "seconds": 46.7,
+          "fails": [
+            "[FAIL] P3 -Steps with an unknown id refuses on one line naming it and the known ids - ==> API Management and Application Insights (a few minutes) |     Safe to leave running. |     -Steps ran gateway-deploy; the install checkpoint is kept, and a run without -Steps resumes the rest. |     Resume: Set-Location -LiteralPath '<home>\\AppData\\Local\\p92-steps-b6c92c3fa2b4466c8d6fa97fb1539cb6\\scenarios\\unknown-step\\repo'; ./Install-ClaudeGateway.ps1"
+          ]
+        },
+        {
+          "id": "S06",
+          "file": "scripts/ClaudeInstallSteps.ps1",
+          "suite": "Test-InstallerStepSelection",
+          "why": "business-units loses its gateway-deployment prerequisite",
+          "verdict": "CAUGHT",
+          "targetHit": true,
+          "checks": 22,
+          "baseline": 22,
+          "failed": 1,
+          "parse": true,
+          "restored": true,
+          "seconds": 39.6,
+          "fails": [
+            "[FAIL] P3 -ListSteps -Json prints only JSON: the 10 step ids in order, each with its title and dependencies - business-units:  ||       \"state\": \"completed\" |     } |   ] | }"
+          ]
+        },
+        {
+          "id": "S07",
+          "file": "scripts/ClaudeInstallSteps.ps1",
+          "suite": "Test-InstallerStepSelection",
+          "why": "a refusal is written as failed",
+          "verdict": "CAUGHT",
+          "targetHit": true,
+          "checks": 22,
+          "baseline": 22,
+          "failed": 1,
+          "parse": true,
+          "restored": true,
+          "seconds": 38.8,
+          "fails": [
+            "[FAIL] P5 a refusal emits refused with its reason - {\"schemaVersion\":1,\"time\":\"2026-10-02T17:46:47Z\",\"runId\":\"930cd9879f134d08b507d57ace95d53c\",\"stepId\":\"\",\"event\":\"failed\",\"message\":\"Refused: the install checkpoint <home>\\\\AppData\\\\Local\\\\p92-steps-5478fa7b259c4120a2c9decaf87f3991\\\\scenarios\\\\prec-binding\\\\state\\\\install-a92c4964fbef0d0e.json is bound to resource group 'rg-p91', and this run names 'rg-other'. Nothing was changed. To discard the checkpoint and start again: Set-Location -LiteralPath '<home>\\\\AppData\\\\Local\\\\p92-steps-5478fa7b259c4120a2c9decaf87f3991\\\\scenarios\\\\prec-binding\\\\repo'; ./Install-ClaudeGateway.ps1 -Restart\",\"resumeCommand\":\"\"}"
+          ]
+        },
+        {
+          "id": "S08",
+          "file": "scripts/ClaudeInstallSteps.ps1",
+          "suite": "Test-InstallerStepSelection",
+          "why": "unwritable -ProgressPath accepted",
+          "verdict": "CAUGHT",
+          "targetHit": true,
+          "checks": 22,
+          "baseline": 22,
+          "failed": 1,
+          "parse": true,
+          "restored": true,
+          "seconds": 39.7,
+          "fails": [
+            "[FAIL] P5 an unwritable -ProgressPath (a directory) refuses at startup on one line naming -ProgressPath, before any Azure call; nothing is written -  Deploying | ======================================================================== | ==> Resource group | Install-ClaudeGateway.ps1: Exception calling \"AppendAllText\" with \"3\" argument(s): \"Access to the path '<home>\\AppData\\Local\\p92-steps-072cb6c25d4444a6b4952d64edee3296\\scenarios\\progress-dir\\not-a-file' is denied.\""
+          ]
+        },
+        {
+          "id": "BS02",
+          "file": "scripts/install-steps.sh",
+          "suite": "Test-BashInstallerStepSelection",
+          "why": "bash: unwritable --progress-file accepted",
+          "verdict": "CAUGHT",
+          "targetHit": true,
+          "checks": 23,
+          "baseline": 23,
+          "failed": 1,
+          "parse": true,
+          "restored": true,
+          "seconds": 411.2,
+          "fails": [
+            "[FAIL] P5 bash an unwritable --progress-file (a directory) refuses at startup on one line naming --progress-file, before any Azure call; nothing is written - <home>/AppData/Local/Temp/p92-bash-steps-72b52afdcbcb466ba5e146f2f552b121/scenarios/progress-dir/repo/scripts/install-steps.sh: line 30: <home>/AppData/Local/Temp/p92-bash-steps-72b52afdcbcb466ba5e146f2f552b121/scenarios/progress-dir/not-a-file: Is a directory | <home>/AppData/Local/Temp/p92-bash-steps-72b52afdcbcb466ba5e146f2f552b121/scenarios/progress-dir/repo/scripts/install-steps.sh: line 30: <home>/AppData/Local/Temp/p92-bash-steps-72b52afdcbcb466ba5e146f2f552b121/scenarios/progress-dir/not-a-file: Is a directory | <home>/AppData/Local/Temp/p92-bash-steps-72b52afdcbcb466ba5e146f2f552b121/scenarios/progress-dir/repo/scripts/install-steps.sh: line 30: <home>/AppData/Local/Temp/p92-bash-steps-72b52afdcbcb466ba5e146f2f552b121/scenarios/progress-dir/not-a-file: Is a directory"
+          ]
+        },
+        {
+          "id": "BS05",
+          "file": "scripts/install-steps.sh",
+          "suite": "Test-BashInstallerStepSelection",
+          "why": "bash: unknown --steps id accepted",
+          "verdict": "CAUGHT",
+          "targetHit": true,
+          "checks": 23,
+          "baseline": 23,
+          "failed": 1,
+          "parse": true,
+          "restored": true,
+          "seconds": 377.9,
+          "fails": [
+            "[FAIL] P3 bash --steps with an unknown id refuses on one line naming it and the known ids - ==> Entra groups |     --steps ran gateway-deploy; the install checkpoint is kept, and a run without --steps resumes the rest. |     Resume: cd '<home>/AppData/Local/Temp/p92-bash-steps-9584c589d63643dd83fcb7f45e11a1f8/scenarios/unknown-step/repo' && ./install-claude-gateway.sh"
+          ]
+        },
+        {
+          "id": "BS07",
+          "file": "scripts/install-checkpoint.sh",
+          "suite": "Test-BashInstallerStepSelection",
+          "why": "bash: a refusal is written as failed",
+          "verdict": "CAUGHT",
+          "targetHit": true,
+          "checks": 23,
+          "baseline": 23,
+          "failed": 2,
+          "parse": true,
+          "restored": true,
+          "seconds": 385.2,
+          "fails": [
+            "[FAIL] P5 bash a refusal emits refused with its reason - {\"schemaVersion\":1,\"time\":\"2026-10-02T18:05:05Z\",\"runId\":\"b5be8f80662f991ab4b981c6408f559c\",\"stepId\":\"\",\"event\":\"failed\",\"message\":\"Refused: the install checkpoint <home>/AppData/Local/Temp/p92-bash-steps-d8a989e67a8e4b079f7228289eb932ed/scenarios/prec-binding/home/state/install-6bae8eb5a2bfdd53.json is bound to resource group 'rg-p91', and this run names 'rg-other'. Nothing was changed. To discard the checkpoint and start again: cd '<home>/AppData/Local/Temp/p92-bash-steps-d8a989e67a8e4b079f7228289eb932ed/scenarios/prec-binding/repo' && ./install-claude-gateway.sh --restart\",\"resumeCommand\":\"\"}",
+            "[FAIL] P5 bash no secret reaches the progress stream: a token in an error that a refusal quotes is [redacted] - 5 streams; refused events with [redacted]: 0"
+          ]
+        },
+        {
+          "id": "U03",
+          "file": "scripts/ClaudeInstallSteps.ps1",
+          "suite": "Test-InstallerBusinessUnitAnswers",
+          "why": "a unit with a matching receipt is skipped even when bu-registry lacks it",
+          "verdict": "CAUGHT",
+          "targetHit": true,
+          "checks": 11,
+          "baseline": 11,
+          "failed": 1,
+          "parse": true,
+          "restored": true,
+          "seconds": 28.0,
+          "fails": [
+            "[FAIL] P6 a rerun writes a unit again when its receipt matches but bu-registry lacks it, and still skips the units bu-registry shows - platform ||         ./scripts/New-OnboardingEmail.ps1 -ConfigPath <home>\\AppData\\Local\\p92-units-00b082cca8e7456ea205fd546df20cef\\scenarios\\partial-registry-lost\\repo\\onboarding\\claude-gateway.json -To dev@contoso.com |    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets."
+          ]
+        },
+        {
+          "id": "U05",
+          "file": "scripts/ClaudeInstallSteps.ps1",
+          "suite": "Test-InstallerBusinessUnitAnswers",
+          "why": "notify-mode units count as enforced dollar budgets",
+          "verdict": "CAUGHT",
+          "targetHit": true,
+          "checks": 11,
+          "baseline": 11,
+          "failed": 1,
+          "parse": true,
+          "restored": true,
+          "seconds": 27.2,
+          "fails": [
+            "[FAIL] P6 with every unit on Notify no dollar budget is enforced, and the reconcile command is not printed -         ./scripts/New-OnboardingEmail.ps1 -ConfigPath <home>\\AppData\\Local\\p92-units-2af98672354645b09a5adbfbcec11730\\scenarios\\notify\\repo\\onboarding\\claude-gateway.json -To dev@contoso.com |    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets."
+          ]
+        },
+        {
+          "id": "U06",
+          "file": "scripts/ClaudeInstallSteps.ps1",
+          "suite": "Test-InstallerBusinessUnitAnswers",
+          "why": "unreadable bu-registry no longer stops the step",
+          "verdict": "CAUGHT",
+          "targetHit": true,
+          "checks": 11,
+          "baseline": 11,
+          "failed": 1,
+          "parse": true,
+          "restored": true,
+          "seconds": 27.4,
+          "fails": [
+            "[FAIL] P6 an unreadable bu-registry stops the step on one line naming it, with the resume command, and no Set-ClaudeBusinessUnit call is made -  ||         ./scripts/New-OnboardingEmail.ps1 -ConfigPath <home>\\AppData\\Local\\p92-units-2740106fbd4042399d01cd77dd560453\\scenarios\\registry-unreadable\\repo\\onboarding\\claude-gateway.json -To dev@contoso.com |    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets."
+          ]
+        },
+        {
+          "id": "V01",
+          "file": "scripts/ClaudeInstallerAnswers.ps1",
+          "suite": "Test-InstallerAnswersSchema",
+          "why": "PowerShell validator: top-level x-crossField rules not applied",
+          "verdict": "CAUGHT",
+          "targetHit": true,
+          "checks": 40,
+          "baseline": 40,
+          "failed": 2,
+          "parse": true,
+          "restored": true,
+          "seconds": 12.1,
+          "fails": [
+            "[FAIL] custom-address-no-hostname fails under address.inputs only, with the same problems in both validators (Install-ClaudeGateway.ps1) - PowerShell:",
+            "[FAIL] desktop-without-client fails under answers.crossField only, with the same problems in both validators (Install-ClaudeGateway.ps1) - PowerShell:"
+          ]
+        },
+        {
+          "id": "V02",
+          "file": "scripts/install-answers.jq",
+          "suite": "Test-InstallerAnswersSchema",
+          "why": "jq validator: top-level x-crossField rules not applied",
+          "verdict": "CAUGHT",
+          "targetHit": true,
+          "checks": 40,
+          "baseline": 40,
+          "failed": 2,
+          "parse": true,
+          "restored": true,
+          "seconds": 11.0,
+          "fails": [
+            "[FAIL] custom-address-no-hostname fails under address.inputs only, with the same problems in both validators (Install-ClaudeGateway.ps1) - PowerShell: address.inputs|AddressHostname|AddressHostname is required when AddressMode is custom|Give the company DNS hostname, for example claude.contoso.com. || bash:",
+            "[FAIL] desktop-without-client fails under answers.crossField only, with the same problems in both validators (Install-ClaudeGateway.ps1) - PowerShell: answers.crossField|DesktopEntraClientId|DesktopEntraClientId is required when DesktopSignInKind is external-idp-browser or external-idp-broker|Give the Desktop public-client app id; scripts/New-ClaudeDesktopEntraApp.ps1 creates the app. || bash:"
+          ]
+        },
+        {
+          "id": "V03",
+          "file": "scripts/ClaudeInstallerAnswers.ps1",
+          "suite": "Test-InstallerAnswersSchema",
+          "why": "PowerShell validator: item-level x-crossField rules not applied",
+          "verdict": "CAUGHT",
+          "targetHit": true,
+          "checks": 40,
+          "baseline": 40,
+          "failed": 2,
+          "parse": true,
+          "restored": true,
+          "seconds": 10.7,
+          "fails": [
+            "[FAIL] bu-allowance-no-percent fails under answers.crossField only, with the same problems in both validators (Install-ClaudeGateway.ps1) - PowerShell:",
+            "[FAIL] bu-percent-not-allowance fails under answers.crossField only, with the same problems in both validators (Install-ClaudeGateway.ps1) - PowerShell:"
+          ]
+        }
+      ]
+    },
+    {
+      "round": "Builder round 2",
+      "by": "builder",
+      "dateUtc": "2026-10-02",
+      "measuredCommit": "b564ad6751dd24b64fdf1220cff5490a03d96cbf",
+      "rule": "One mutant per branch added in round 2 that the lead's 26 mutants do not reach, in each engine that has the branch; R01 and R11 remove a pass line of a check other than target.tenant, as M02 and B06 do for target.tenant. Counting, copies and restore as in the first round of this record.",
+      "loadNote": "The PowerShell and bash workers ran at the same time, each in its own copy; no other suite ran, and each suite ran only while the gate lock was absent.",
+      "baselines": [
+        {
+          "suite": "tests/Test-InstallerPreflight.ps1",
+          "checks": 29,
+          "failed": 0,
+          "seconds": 55.2
+        },
+        {
+          "suite": "tests/Test-BashInstallerPreflight.ps1",
+          "checks": 29,
+          "failed": 0,
+          "seconds": 215.5
+        },
+        {
+          "suite": "tests/Test-BashInstallerStepSelection.ps1",
+          "checks": 23,
+          "failed": 0,
+          "seconds": 335.6
+        }
+      ],
+      "caught": 12,
+      "targetFailed": 12,
+      "total": 12,
+      "mutants": [
+        {
+          "id": "R01",
+          "item": "F1 fail closed: a branch that sets nothing (entra.groupNames)",
+          "suite": "tests/Test-InstallerPreflight.ps1",
+          "target": "fail closed|not-evaluated",
+          "file": "scripts/ClaudeInstallerPreflight.ps1",
+          "mutation": "'    Set-ClaudePreflightPass $Checks['entra.groupNames'] \"Entra groups: $($notes -join '; ')\"' -> '    $null = 'r01''",
+          "checks": 29,
+          "failed": 2,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 50.3,
+          "failures": [
+            "P2 complete answers over a matching estate pass: exit 0, and every check that applies passes (tenant, subscription, prerequisites, Foundry account and deployments, name, groups) - entra.groupNames NOT-RUN not-evaluated || passed: answers.schema, answers.crossField, target.tenant, target.subscription, operator.adminPrereqs, foundry.account, foundry.deployments, apim.nameAvailability || exit 1:       \"problems\": [] |     } |   ] | }",
+            "P2 fail closed: in every scenario each PASS carries its message, and no check is left NOT-RUN not-evaluated (ADR-0047 decision 5) - pass: entra.groupNames NOT-RUN/not-evaluated || foundry-missing: entra.groupNames NOT-RUN/not-evaluated || deployment-missing: entra.groupNames NOT-RUN/not-evaluated || name-taken: entra.groupNames NOT-RUN/not-evaluated || no-identity: entra.groupNames NOT-RUN/not-evaluated || classic-sku: entra.groupNames NOT-RUN/not-evaluated || kv-malformed: entra.groupNames NOT-RUN/not-evaluated || cross-tenant: entra.groupNames NOT-RUN/not-evaluated || disabled: entra.groupNames NOT-RUN/not-evaluated || sub-unreadable: entra.groupNames NOT-RUN/not-evaluated || list-found: entra.groupNames NOT-RUN/not-evaluated || list-missing: entra.groupNames NOT-RUN/not-evaluated || no-claude: entra.groupNames NOT-RUN/not-evaluated || prereq-fail: entra.groupNames NOT-RUN/not-evaluated || pfx-missing: entra.groupNames NOT-RUN/not-evaluated || list-not-json: entra.groupNames NOT-RUN/not-evaluated"
+          ]
+        },
+        {
+          "id": "R03",
+          "item": "az account show that is not JSON",
+          "suite": "tests/Test-InstallerPreflight.ps1",
+          "target": "not JSON",
+          "file": "scripts/ClaudeInstallerPreflight.ps1",
+          "mutation": "'try { if (-not $acct.Output) { throw 'empty' }; $account = $acct.Output | ConvertFrom-Json -ErrorAction Stop } catch { $parsed = $false }' -> '$account = $acct.Output | ConvertFrom-Json -ErrorAction Stop'",
+          "checks": 29,
+          "failed": 2,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 60.4,
+          "failures": [
+            "P2 -Json prints only JSON: schemaVersion 1, installer pwsh, the 14 check ids once in order, results PASS, FAIL or NOT-RUN, a reason on every NOT-RUN and a remedy on every FAIL - account-not-json: exit 1: Conversion from JSON failed with error: Unexpected character encountered while parsing value: <. Path '', line 0, position 0.",
+            "P2 an az account show that is not JSON is an inconclusive FAIL of target.tenant, not a crash, and every other Azure check is NOT-RUN -  || exit 1: Conversion from JSON failed with error: Unexpected character encountered while parsing value: <. Path '', line 0, position 0."
+          ]
+        },
+        {
+          "id": "R04",
+          "item": "an account without a tenantId",
+          "suite": "tests/Test-InstallerPreflight.ps1",
+          "target": "tenantId",
+          "file": "scripts/ClaudeInstallerPreflight.ps1",
+          "mutation": "'elseif (-not [string]$account.tenantId) { 'az account show returned no tenantId' }' -> 'elseif ($false) { 'az account show returned no tenantId' }'",
+          "checks": 29,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 50.1,
+          "failures": [
+            "P2 an az account show without a tenantId is an inconclusive FAIL of target.tenant, and every other Azure check is NOT-RUN - target.subscription=PASS/, foundry.account=PASS/, foundry.deployments=PASS/, apim.nameAvailability=PASS/, apim.existingSku=NOT-RUN/not-applicable, apim.existingIdentity=NOT-RUN/not-applicable, entra.groupNames=PASS/ || exit 1:       \"problems\": [] |     } |   ] | }"
+          ]
+        },
+        {
+          "id": "R05",
+          "item": "an unread account stops the Azure checks",
+          "suite": "tests/Test-InstallerPreflight.ps1",
+          "target": "not JSON|tenantId",
+          "file": "scripts/ClaudeInstallerPreflight.ps1",
+          "mutation": "'elseif ($acct.Verdict -ne 'present' -or $unread) {' -> 'elseif ($acct.Verdict -ne 'present') {'",
+          "checks": 29,
+          "failed": 2,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 45.1,
+          "failures": [
+            "P2 an az account show that is not JSON is an inconclusive FAIL of target.tenant, not a crash, and every other Azure check is NOT-RUN - target.subscription=PASS/, foundry.account=PASS/, foundry.deployments=PASS/, apim.nameAvailability=PASS/, apim.existingSku=NOT-RUN/not-applicable, apim.existingIdentity=NOT-RUN/not-applicable, entra.groupNames=PASS/ || exit 1:       \"problems\": [] |     } |   ] | }",
+            "P2 an az account show without a tenantId is an inconclusive FAIL of target.tenant, and every other Azure check is NOT-RUN - target.subscription=PASS/, foundry.account=PASS/, foundry.deployments=PASS/, apim.nameAvailability=PASS/, apim.existingSku=NOT-RUN/not-applicable, apim.existingIdentity=NOT-RUN/not-applicable, entra.groupNames=PASS/ || exit 1:       \"problems\": [] |     } |   ] | }"
+          ]
+        },
+        {
+          "id": "R06",
+          "item": "a Foundry account list that is not JSON is inconclusive",
+          "suite": "tests/Test-InstallerPreflight.ps1",
+          "target": "not JSON",
+          "file": "scripts/ClaudeInstallerPreflight.ps1",
+          "mutation": "'catch { $r = [pscustomobject]@{ Verdict = 'inconclusive'; Detail = 'az cognitiveservices account list did not return JSON' } }' -> 'catch { $r = [pscustomobject]@{ Verdict = 'absent'; Detail = '' } }'",
+          "checks": 29,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 50.2,
+          "failures": [
+            "P2 a Foundry account list that is not JSON is an inconclusive FAIL of foundry.account, not a crash, and its deployments are NOT-RUN - exit 1:       \"problems\": [] |     } |   ] | }"
+          ]
+        },
+        {
+          "id": "R07",
+          "item": "a stop of Test-ClaudePrerequisites is a FAIL, not a crash",
+          "suite": "tests/Test-InstallerPreflight.ps1",
+          "target": "not JSON|JSON",
+          "file": "scripts/ClaudeInstallerPreflight.ps1",
+          "mutation": "'catch { return [pscustomobject]@{ Ok = $false; Fails = @(\"Test-ClaudePrerequisites -Mode Admin stopped ($($_.Exception.Message))\"); Warnings = @() } }' -> 'catch { throw }'",
+          "checks": 29,
+          "failed": 2,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 50.1,
+          "failures": [
+            "P2 -Json prints only JSON: schemaVersion 1, installer pwsh, the 14 check ids once in order, results PASS, FAIL or NOT-RUN, a reason on every NOT-RUN and a remedy on every FAIL - account-not-json: exit 1: Conversion from JSON failed with error: Unexpected character encountered while parsing value: <. Path '', line 0, position 0.",
+            "P2 an az account show that is not JSON is an inconclusive FAIL of target.tenant, not a crash, and every other Azure check is NOT-RUN -  || exit 1: Conversion from JSON failed with error: Unexpected character encountered while parsing value: <. Path '', line 0, position 0."
+          ]
+        },
+        {
+          "id": "R09",
+          "item": "bash: a Foundry account list that is not JSON is inconclusive",
+          "suite": "tests/Test-BashInstallerPreflight.ps1",
+          "target": "not JSON",
+          "file": "scripts/install-preflight.sh",
+          "mutation": "'if [ \"$AZ_VERDICT\" = \"present\" ] && { [ -z \"$AZ_OUT\" ] || ! printf '%s' \"$AZ_OUT\" | jq empty >/dev/null 2>&1; }; then' -> 'if false; then'",
+          "checks": 29,
+          "failed": 1,
+          "bashN": "ok",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 175.3,
+          "failures": [
+            "P2 bash a Foundry account list that is not JSON is an inconclusive FAIL of foundry.account, and its deployments are NOT-RUN - exit 1:   ] | } | jq: parse error: Invalid numeric literal at line 1, column 20"
+          ]
+        },
+        {
+          "id": "R10",
+          "item": "bash: az account show that is not JSON",
+          "suite": "tests/Test-BashInstallerPreflight.ps1",
+          "target": "not JSON",
+          "file": "scripts/install-preflight.sh",
+          "mutation": "'then unread=\"az account show did not return JSON\"' -> 'then unread=\"\"'",
+          "checks": 29,
+          "failed": 1,
+          "bashN": "ok",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 160.3,
+          "failures": [
+            "P2 bash an az account show that is not JSON is an inconclusive FAIL of target.tenant, and every other Azure check is NOT-RUN - target.subscription=PASS/, foundry.account=PASS/, foundry.deployments=PASS/, apim.nameAvailability=PASS/, apim.existingSku=NOT-RUN/not-applicable, apim.existingIdentity=NOT-RUN/not-applicable, entra.groupNames=PASS/ || exit 1: } | jq: parse error: Invalid numeric literal at line 1, column 17 | jq: parse error: Invalid numeric literal at line 1, column 17"
+          ]
+        },
+        {
+          "id": "R11",
+          "item": "bash F1 fail closed: a branch that sets nothing (entra.groupNames)",
+          "suite": "tests/Test-BashInstallerPreflight.ps1",
+          "target": "fail closed|not-evaluated",
+          "file": "scripts/install-preflight.sh",
+          "mutation": "'  [ \"$any\" = \"1\" ] && pf_pass_ entra.groupNames \"Entra groups: $notes\"' -> '  [ \"$any\" = \"1\" ] && : entra.groupNames'",
+          "checks": 29,
+          "failed": 2,
+          "bashN": "ok",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 165.3,
+          "failures": [
+            "P2 bash complete answers over a matching estate pass: exit 0, and every check that applies passes - entra.groupNames NOT-RUN not-evaluated || passed: answers.schema, answers.crossField, target.tenant, target.subscription, operator.adminPrereqs, foundry.account, foundry.deployments, apim.nameAvailability || exit 1:     } |   ] | }",
+            "P2 bash fail closed: in every scenario each PASS carries its message, and no check is left NOT-RUN not-evaluated (ADR-0047 decision 5) - pass: entra.groupNames NOT-RUN/not-evaluated || foundry-missing: entra.groupNames NOT-RUN/not-evaluated || deployment-missing: entra.groupNames NOT-RUN/not-evaluated || name-taken: entra.groupNames NOT-RUN/not-evaluated || no-identity: entra.groupNames NOT-RUN/not-evaluated || classic-sku: entra.groupNames NOT-RUN/not-evaluated || kv-malformed: entra.groupNames NOT-RUN/not-evaluated || cross-tenant: entra.groupNames NOT-RUN/not-evaluated || disabled: entra.groupNames NOT-RUN/not-evaluated || sub-unreadable: entra.groupNames NOT-RUN/not-evaluated || list-found: entra.groupNames NOT-RUN/not-evaluated || list-missing: entra.groupNames NOT-RUN/not-evaluated || no-claude: entra.groupNames NOT-RUN/not-evaluated || prereq-fail: entra.groupNames NOT-RUN/not-evaluated || pfx-missing: entra.groupNames NOT-RUN/not-evaluated || list-not-json: entra.groupNames NOT-RUN/not-evaluated"
+          ]
+        },
+        {
+          "id": "R12",
+          "item": "bash: an account without a tenantId",
+          "suite": "tests/Test-BashInstallerPreflight.ps1",
+          "target": "tenantId",
+          "file": "scripts/install-preflight.sh",
+          "mutation": "'elif ! printf '%s' \"$acct\" | jq -e '(.tenantId // \"\") != \"\"' >/dev/null 2>&1; then unread=\"az account show returned no tenantId\"; fi' -> 'elif false; then unread=\"az account show returned no tenantId\"; fi'",
+          "checks": 29,
+          "failed": 1,
+          "bashN": "ok",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 170.3,
+          "failures": [
+            "P2 bash an az account show without a tenantId is an inconclusive FAIL of target.tenant, and every other Azure check is NOT-RUN - target.subscription=PASS/, foundry.account=PASS/, foundry.deployments=PASS/, apim.nameAvailability=PASS/, apim.existingSku=NOT-RUN/not-applicable, apim.existingIdentity=NOT-RUN/not-applicable, entra.groupNames=PASS/ || exit 1:     } |   ] | }"
+          ]
+        },
+        {
+          "id": "R14",
+          "item": "bash: no event before the progress file passes its startup check",
+          "suite": "tests/Test-BashInstallerStepSelection.ps1",
+          "target": "progress",
+          "file": "scripts/install-steps.sh",
+          "mutation": "'[ -n \"${PROGRESS_FILE:-}\" ] && [ \"${PROGRESS_READY:-0}\" = \"1\" ] || return 0' -> '[ -n \"${PROGRESS_FILE:-}\" ] || return 0'",
+          "checks": 23,
+          "failed": 1,
+          "bashN": "ok",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 335.7,
+          "failures": [
+            "P5 bash an unwritable --progress-file (a directory) refuses at startup on one line naming --progress-file, before any Azure call; nothing is written - <home>/AppData/Local/Temp/p92-bash-steps-c71f8374ed2a4221a0806d13406196ea/scenarios/progress-dir/repo/scripts/install-steps.sh: line 30: <home>/AppData/Local/Temp/p92-bash-steps-c71f8374ed2a4221a0806d13406196ea/scenarios/progress-dir/not-a-file: Is a directory | Refused: --progress-file <home>/AppData/Local/Temp/p92-bash-steps-c71f8374ed2a4221a0806d13406196ea/scenarios/progress-dir/not-a-file cannot be written. Nothing was changed."
+          ]
+        },
+        {
+          "id": "R15",
+          "item": "bash: events are written once the progress file passed its check",
+          "suite": "tests/Test-BashInstallerStepSelection.ps1",
+          "target": "P5",
+          "file": "scripts/install-steps.sh",
+          "mutation": "'cannot be written. Nothing was changed.\"; PROGRESS_READY=1; fi' -> 'cannot be written. Nothing was changed.\"; fi'",
+          "checks": 23,
+          "failed": 7,
+          "bashN": "ok",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 335.6,
+          "failures": [
+            "P5 bash every progress line is one JSON object with schemaVersion, UTC time, runId, stepId, event, message and resumeCommand, in that order",
+            "P5 bash a run emits started and completed per step, and warning with the resume command for a step it leaves incomplete; one runId",
+            "P5 bash a resume emits skipped-verified for each step it verifies live, then runs the rest, under the same runId",
+            "P5 bash a failure emits failed for its step with the resume command"
+          ]
+        }
+      ]
+    }
   ]
 }
