@@ -145,6 +145,13 @@ section moves to `docs/status/P91.md` under P87's ADR-0042.
   store 22 on Windows and 17 on Linux and macOS, with the real-mode place checks there
   (`installer-unix.yml`); bash 46 on Windows Git Bash, whose `uname` the harness stubs (test only),
   and 47 on Linux and macOS; PowerShell 78 on Windows.
+- Council round 2, final result, 2026-10-02: QA PASS on `132d358`, with 11 independent mutations,
+  all caught (C05, C12, C13, C14, the group verdicts, exact against prefix match, the POSIX and
+  Windows probes, the receipt shape check and the schema drift check), and no QA items added; UX
+  PASS. The Coder and Security seats re-review the fixes above. `tests/test-all-durations.json`
+  weights the three suites at local elapsed seconds at `9d13981` (`a2d6152`): 94.5 for the
+  PowerShell suite run alone, 384.6 for the bash suite and 14.6 for the store suite, each run beside
+  the PowerShell suite.
 
 Acceptance criteria, for both installers unless one is named:
 
