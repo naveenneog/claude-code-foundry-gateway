@@ -22,6 +22,20 @@ ckpt_az_read_() {
 }
 CKPT_GRAPH_NOT_FOUND='Request_ResourceNotFound|does not exist or one of its queried reference-property objects are not present'
 
+# At input, before the summary: az ad group list --display-name places a tier group name inside an
+# OData string literal, startswith(displayName,'<name>'), without escaping a quote (azure-cli 2.86.0
+# role/custom.py:1904), so a name with a single quote is refused on one line (ADR-0046 decision 11).
+ckpt_group_names_() {
+  local flag value
+  for flag in --standard-group --premium-group; do
+    if [ "$flag" = "--standard-group" ]; then value="$STANDARD_GROUP"; else value="$PREMIUM_GROUP"; fi
+    case "$value" in
+      *"'"*) ckpt_refuse_ "$flag '$value': Entra group names containing a single quote are not supported, because Azure CLI places the name inside an OData string literal (startswith(displayName,'<name>')). Nothing was changed." ;;
+    esac
+  done
+  return 0
+}
+
 ckpt_verify_rg_() {
   ckpt_az_read_ 'ResourceGroupNotFound' group show -n "$1" --query location -o tsv
   V_VERDICT="$AZ_VERDICT"

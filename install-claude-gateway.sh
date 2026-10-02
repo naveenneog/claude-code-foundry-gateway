@@ -516,6 +516,7 @@ step_ "Entitlement groups"
 note_ "Membership of these Entra groups is what grants access."
 [ "$CKPT_RESUMING" = "1" ] || STANDARD_GROUP="$(ask_ "Standard tier group" "$STANDARD_GROUP")"
 [ "$CKPT_RESUMING" = "1" ] || PREMIUM_GROUP="$(ask_ "Premium tier group" "$PREMIUM_GROUP")"
+ckpt_group_names_
 
 # ------------------------------------------------------------------ summary
 

@@ -147,6 +147,7 @@ def problem($n; $v):
   elif ($v | type) != "string" then "is not text"
   elif ($v | explode | map(select(. < 32)) | length) > 0 then "holds a control character"
   elif ($v | startswith("@")) then "begins with @, which az reads as a file name"
+  elif ($n == "StandardGroup" or $n == "PremiumGroup") and ($v | contains("\u0027")) then "holds a single quote, which Azure CLI would place inside an OData string literal"
   elif $n == "Sku" and (["BasicV2", "StandardV2", "PremiumV2"] | index([$v])) == null then "is not one of BasicV2, StandardV2, PremiumV2"
   elif $n == "SubscriptionId" and ($v | guid | not) then "is not a subscription id"
   else empty end;

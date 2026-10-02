@@ -199,6 +199,19 @@ function Get-ClaudeInstallCodePointLength([string]$Text) {
     return $count
 }
 
+function Assert-ClaudeInstallNames {
+    # At input, before the summary: a name that Azure CLI places inside an OData string literal holds no
+    # single quote (ADR-0046 decision 11). A refusal is one line naming the parameter.
+    param([System.Collections.IDictionary]$Values)
+    foreach ($n in @($Values.Keys)) {
+        $v = [string]$Values[$n]
+        if ($n -notin $script:ClaudeInstallODataAnswers -or -not $v.Contains("'")) { continue }
+        $what = if ($n -eq 'NamePrefix') { "name prefixes containing a single quote are not supported, because Azure CLI places the projection resolver app name claude-projection-resolver-$v inside an OData string literal" }
+        else { 'Entra group names containing a single quote are not supported, because Azure CLI places the name inside an OData string literal' }
+        Stop-ClaudeInstall "-$n '$v': $what (startswith(displayName,'<name>')). Nothing was changed."
+    }
+}
+
 function Find-ClaudeInstallGroupByName([string]$Name, [string]$Id) {
     # A group by display name (ADR-0046 decision 11), and with -Id the group of that id only. az ad
     # group list --display-name sends startswith(displayName,'<name>') to Microsoft Graph, and --filter
@@ -325,7 +338,11 @@ function Get-ClaudeInstallResolverApp([string]$NamePrefix, [string]$Supplied) {
 }
 
 function Assert-ClaudeInstallResolverApp([string]$AppId, [string]$Expected) {
-    # The app an id names: it exists, its appId is that id, and its display name is the resolver's.
+    # The app an id names: it exists, its appId is that id, and its display name is the resolver's. An id
+    # that is not a GUID is not read: az ad app show --id would place it inside an OData string literal.
+    if ($AppId -notmatch '^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$') {
+        Stop-ClaudeInstall "the projection resolver app id '$AppId' in the install checkpoint is not an application (client) id GUID; az ad app show --id places any other value inside an OData string literal, so it is not read. Nothing was changed. Resume: $(Format-ClaudeInstallResume)"
+    }
     $r = Invoke-ClaudeInstallAzRead @('ad', 'app', 'show', '--id', $AppId, '-o', 'json') $script:ClaudeInstallGraphNotFound
     $why = ''
     if ($r.Verdict -ne 'present') { $why = "is not returned by Microsoft Graph ($($r.Detail))" }
@@ -406,6 +423,11 @@ function Assert-ClaudeInstallDesktopApp([string]$ClientId) {
     # A supplied Desktop app is pre-existing by definition; a resume reads it by id and takes it only
     # when its appId is that id: az ad app show --id also accepts an object id (decision 8, R5).
     if (-not (Test-ClaudeInstallResuming) -or -not $ClientId) { return }
+    # az ad app show --id places a value that is not a GUID inside an OData string literal,
+    # identifierUris/any(s:s eq '<id>') (azure-cli 2.86.0 role/custom.py:784), so it is not read.
+    if ($ClientId -notmatch '^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$') {
+        Stop-ClaudeInstall "the Claude Desktop app id '$ClientId' is not an application (client) id GUID; az ad app show --id places any other value inside an OData string literal, so it is not read. Nothing was changed."
+    }
     $r = Invoke-ClaudeInstallAzRead @('ad', 'app', 'show', '--id', $ClientId, '--query', 'appId', '-o', 'tsv') $script:ClaudeInstallGraphNotFound
     if ($r.Verdict -ne 'present') { Stop-ClaudeInstall "the Claude Desktop app $ClientId is gone or unreadable ($($r.Detail)); scripts/New-ClaudeDesktopEntraApp.ps1 creates one. Nothing was changed." }
     $appId = ([string]$r.Output).Trim()

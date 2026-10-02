@@ -24,6 +24,11 @@ $script:ClaudeInstallChoices = @{
     TeamBudgetBehaviour = 'report', 'stop'; UnassignedDevelopers = 'allow', 'deny'
 }
 $script:ClaudeInstallIntegers = @('TpmStandard', 'QuotaStandard', 'TpmPremium', 'QuotaPremium', 'QuotaOrg', 'CallsPerMinute', 'RevocationWindowSeconds', 'DeveloperEstimate')
+# Answers that Azure CLI places inside an OData string literal without escaping a quote: az ad group
+# list --display-name sends startswith(displayName,'<name>') for the tier groups, and az ad app list
+# --display-name sends it for claude-projection-resolver-<NamePrefix> (azure-cli 2.86.0
+# role/custom.py:757,1904).
+$script:ClaudeInstallODataAnswers = @('StandardGroup', 'PremiumGroup', 'NamePrefix')
 $script:ClaudeInstallTerminal = @('Succeeded', 'Failed', 'Canceled')
 # The files whose hash is the installer version a checkpoint records (shown, not refused: amendment 1).
 $script:ClaudeInstallFiles = @('Install-ClaudeGateway.ps1', 'scripts/ClaudeInstallCheckpoint.ps1', 'scripts/ClaudeInstallStore.ps1', 'scripts/ClaudeInstallResume.ps1')
@@ -138,9 +143,13 @@ function Test-ClaudeInstallAnswer {
     if ($Name -in $script:ClaudeInstallIntegers) { if ("$Value" -notmatch '^\d{1,12}$') { return 'is not a whole number' }; return '' }
     if ($Name -eq 'DeployProjection') { if ($Value -isnot [bool]) { return 'is not true or false' }; return '' }
     if ($Name -eq 'SubscriptionId' -and "$Value" -notmatch '^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$') { return 'is not a subscription id' }
+    # An app id reaches az ad app show --id, which places a value that is not a GUID inside an OData
+    # string literal, identifierUris/any(s:s eq '<id>') (azure-cli 2.86.0 role/custom.py:784).
+    if ($Name -in 'DesktopEntraClientId', 'ProjectionResolverAppId' -and "$Value" -notmatch '^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$') { return 'is not an application (client) id GUID' }
     foreach ($item in @($Value)) {
         if ($item -isnot [string]) { return 'is not text' }
         $why = Test-ClaudeInstallAnswerText $item; if ($why) { return $why }
+        if ($Name -in $script:ClaudeInstallODataAnswers -and $item.Contains("'")) { return 'holds a single quote, which Azure CLI would place inside an OData string literal' }
         if ($script:ClaudeInstallChoices.ContainsKey($Name) -and $item -notin $script:ClaudeInstallChoices[$Name]) { return "is not one of $($script:ClaudeInstallChoices[$Name] -join ', ')" }
     }
     return ''

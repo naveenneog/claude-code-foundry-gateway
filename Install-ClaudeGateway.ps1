@@ -1302,6 +1302,7 @@ if (-not (Test-ClaudeInstallResuming)) {
     $StandardGroup = Read-Default -Prompt 'Standard tier group' -Default $StandardGroup
     $PremiumGroup  = Read-Default -Prompt 'Premium tier group'  -Default $PremiumGroup
 }
+Assert-ClaudeInstallNames ([ordered]@{ StandardGroup = $StandardGroup; PremiumGroup = $PremiumGroup; NamePrefix = $NamePrefix })
 
 # Every value below reaches az. Checked before the summary, so a refusal creates nothing (ADR-0032).
 Assert-AzArgumentsSafe -Values ([ordered]@{
