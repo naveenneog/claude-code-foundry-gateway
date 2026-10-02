@@ -164,6 +164,21 @@ section moves to `docs/status/P91.md` under P87's ADR-0042.
   there" (each refusal named neither the file nor a next step); "R6 CLAUDE_GATEWAY_STATE_DIR naming a
   place that fails a check refuses at startup" (neither refusal named the variable, and PowerShell
   refused after the summary with the directory created).
+- Lead amendment fixes, 2026-10-02: GREEN `a40103c`, LOG `f897a7d`. The store checks name the first
+  check that fails, and `Assert-ClaudeInstallStore` and `ckpt_untrusted_store_` decide:
+  `CLAUDE_GATEWAY_STATE_DIR` refuses and names the variable; a default place that holds the
+  checkout's checkpoint, lock or a temporary file, found by name and not read, refuses with the next
+  step and keeps the file; otherwise the run keeps no store, prints the failed check and the resume
+  command with the answers after the confirmation, and continues on its live checks and the
+  deployment guard (ADR-0046 decisions 1 and 2, U78). On Windows a state directory still to be
+  created is judged at startup by the directory that will hold it. The Cloud Shell line says when the
+  run keeps no checkpoint, and the bash installer prints it before the deployment without one.
+  Results: PowerShell 81 checks, bash 49 and store 22, all passing (162.9 s and 378.1 s side by
+  side, 12.3 s). Mutations, one per new check: 6 of 6 caught (3 PowerShell, 3 bash), each at its
+  suite's baseline count with its own check among the failures; every bash mutant passes `bash -n`
+  ([measurement](measurements/p91-mutations-lead-amendment.json)). Where the tests run: the three
+  PowerShell checks on Windows, with real access rules; the three bash checks on Windows Git Bash and
+  on Linux and macOS, through the probe seam.
 
 Acceptance criteria, for both installers unless one is named:
 
