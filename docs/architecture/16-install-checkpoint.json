@@ -49,7 +49,7 @@
     ]},
     {"id": "store", "x": 876, "y": 76, "w": 385, "h": 248, "tone": "purple", "title": "3 - Per-user state directory", "lines": [
       "[[location]]: [[statedir]] when set, [[clouddrive]] in Cloud Shell, else LOCALAPPDATA or XDG state.",
-      "[[storecheck]] refuses a store outside the home or one another account can alter."
+      "[[storecheck]] skips a store another account can alter; a named or occupied one refuses."
     ]},
     {"id": "save", "x": 18, "y": 456, "w": 385, "h": 248, "tone": "blue", "title": "4 - Commit point", "lines": [
       "[[save]] and [[shsave]] record the binding, the answers and the lock.",

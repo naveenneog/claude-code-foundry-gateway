@@ -2,7 +2,8 @@
 
 - **Status:** Proposed. P91 contract, 2026-10-01, amended the same day after the lead's review (the
   installer version is shown, not refused; templates are bound per step; `clouddrive` access; the
-  Graph refusal text; the Cloud Shell wait line). The lead reviews it before the council, and the
+  Graph refusal text; the Cloud Shell wait line) and on 2026-10-02 (a default store place that fails a
+  trust check leaves the run without a store). The lead reviews it before the council, and the
   owner approves the merge.
 - **Date:** 2026-10-01
 - **Packet:** P91
@@ -102,9 +103,34 @@ can be created in it.
 Files: `install-<key>.json` (the checkpoint) and `install-<key>.lock`.
 
 When the checkpoint cannot persist (Cloud Shell without `clouddrive`, a state directory that cannot
-be created, or the bash installer under Git Bash), the installer prints one warning line naming the
-reason and the exact resume command (Decision 14) before its first change, continues, and relies on
-the live checks of Decisions 7 and 10.
+be created, a default place that fails a check of Decision 2, or the bash installer under Git Bash),
+the installer prints one warning line naming the reason and the exact resume command (Decision 14)
+before its first change, continues, and relies on the live checks of Decisions 7 and 10. In all but
+the first case the run keeps no store: it reads and writes no checkpoint, lock or temporary file.
+
+**A place that fails a check (lead amendment, 2026-10-02).** The store fails closed and the install
+proceeds. When a check of Decision 2 fails, at startup or at the commit point
+(`Assert-ClaudeInstallStore`; `ckpt_store_check_` and `ckpt_untrusted_store_`):
+
+1. A default place (no `CLAUDE_GATEWAY_STATE_DIR`; `XDG_STATE_HOME` is part of the default) that
+   holds none of this checkout's files, `install-<key>.json`, `install-<key>.lock` and
+   `install-<key>.json.tmp-*`, found by name and not read: the run keeps no store. After the
+   confirmation it prints one warning line, the failed check (which names the place) followed by
+   `This run keeps no install checkpoint.`, then the resume command with every recorded answer, as in
+   an ephemeral Cloud Shell session.
+2. A default place that holds one of those files: the run refuses on one line naming the file, the
+   failed check, that nothing was read or changed, and the next step (inspect the file, then remove
+   it or correct the permissions, then rerun). Another account may have placed the file, and a run
+   expected to resume would otherwise start over without the operator noticing.
+3. A `CLAUDE_GATEWAY_STATE_DIR` that fails: the run refuses, as before, and the line names the
+   variable, which states the operator's choice of place.
+
+The install does not depend on the store. The checkpoint only says where a rerun resumes, and a step
+it marks complete is skipped only after a live read shows the result (Decision 7). Without a
+checkpoint every step runs with its own live reads: the resource group, the guard against a second
+main.bicep deployment (Decision 10), the group lookup by name (Decision 11) and the read-backs of
+`Install-ClaudeGateway.ps1` (Decision 8). A run without a store loses the resume position, the
+recorded answers, which the printed command carries, and the receipts (Consequences).
 
 ### 2. File mechanics
 
@@ -133,9 +159,10 @@ the live checks of Decisions 7 and 10.
     accounts and file shares"
     ([Persist files](https://learn.microsoft.com/azure/cloud-shell/persisting-shell-storage#securing-storage-access)).
     The no-secrets rule (Decision 15) is what makes that acceptable.
-  - The refusal is one line: the path, the owner, mode or access rule found, that nothing was read or
-    changed, and the resume command; for a temporary file mid-run, that the checkpoint was not
-    replaced.
+  - A failed check at startup or at the commit point is decided by the three cases of Decision 1. A
+    refusal is one line: the path, the owner, mode or access rule found, that nothing was read or
+    changed, and the resume command, or for a file of the checkout the next step; for a temporary
+    file mid-run, that the checkpoint was not replaced.
   - The POSIX probe (`Get-ClaudeInstallPosixStat`, `ckpt_perm_probe_`) and the Windows owner probe
     (`Get-ClaudeInstallWindowsOwner`) are functions that tests replace. Git Bash's default `noacl`
     mount reports every file as the current user's with fixed modes (measured 2026-10-01); the
@@ -146,8 +173,8 @@ the live checks of Decisions 7 and 10.
   not write. The installer's own account, root, SYSTEM and Administrators are trusted. At startup,
   before anything in the store is read, and again after the state directory is created, both
   installers resolve the state directory (`Resolve-ClaudeInstallLocation`, `ckpt_location_resolve_`)
-  and then check what holds it (`Assert-ClaudeInstallAncestors`, `ckpt_ancestors_check_`,
-  `Assert-ClaudeInstallWindowsParent`):
+  and then check what holds it (`Get-ClaudeInstallAncestorProblem`, `ckpt_ancestors_check_`,
+  `Get-ClaudeInstallWindowsParentProblem`):
   - The directory is an absolute path without `.` or `..` components, and its own last component is
     not a symbolic link or junction; the installer does not follow one there.
   - Its real path is inside the real path of `$HOME` (POSIX) or of the user profile
@@ -170,7 +197,8 @@ the live checks of Decisions 7 and 10.
   - Windows: the directory that holds the state directory is owned by the current user, SYSTEM or
     Administrators and grants no other account `DeleteSubdirectoriesAndFiles`, `ChangePermissions`,
     `TakeOwnership` or full control, any of which lets that account rename or replace the state
-    directory.
+    directory. A state directory still to be created is judged at startup by that directory (lead
+    amendment), as the POSIX walk reads the existing directories above it.
   - Residual on Windows: the directories above that one are checked for junctions and symbolic links
     only, not for their access rules, so an account that may rename one of them could move the tree
     between the check and the read; a file such an account creates is owned by it and is refused when
@@ -403,8 +431,9 @@ and the bound for tests. Cloud Shell ends a session after 20 minutes without int
 (U63, U73), which a wait of up to 3,600 s exceeds. In Cloud Shell, before any wait that can last
 longer than 60 s (this wait and `az deployment group create` itself), the installer prints one line:
 that fact; that the checkpoint and the ARM deployment outlive the session, or, without `clouddrive`,
-that the ARM deployment outlives it and this checkpoint does not; and the resume command, with the
-answers when the checkpoint does not persist.
+that the ARM deployment outlives it and this checkpoint does not, or, without a store (Decision 1),
+that the ARM deployment outlives it and this run keeps no install checkpoint; and the resume command,
+with the answers when the checkpoint does not persist.
 
 ### 11. Receipts
 
@@ -495,8 +524,8 @@ and 9). `-Restart`/`--restart` of either installer sets it aside.
 - Resume command with a persistent checkpoint: `Set-Location -LiteralPath '<checkout>';
   ./Install-ClaudeGateway.ps1` or `cd '<checkout>' && ./install-claude-gateway.sh`, plus the commit
   when git reports one. Without one (Decision 1): the same command with every recorded
-  parameter-backed answer as a parameter, followed by one line naming the PowerShell prompt-only
-  answers that are asked again.
+  parameter-backed answer as a parameter; in an ephemeral Cloud Shell session it is followed by one
+  line naming the PowerShell prompt-only answers that a new session asks again.
 
 ### 15. No secrets
 
@@ -566,6 +595,14 @@ Where the code differs from Decisions 1-16, the code is as follows.
   real mode checks on Linux and macOS; `tests/Test-All.ps1` gives each check its own
   `CLAUDE_GATEWAY_STATE_DIR`; `.github/workflows/installer-unix.yml` (not pushed) runs the two bash
   suites and the store suite on `ubuntu-latest` and `macos-latest`.
+- A place that fails a check (lead amendment, 2026-10-02): the checks name the first one that fails
+  as a sentence (`Resolve-ClaudeInstallLocation`, `Get-ClaudeInstallStorePathProblem`,
+  `Get-ClaudeInstallAncestorProblem`, `Get-ClaudeInstallWindowsParentProblem`; `ckpt_location_resolve_`,
+  `ckpt_store_path_`, `ckpt_ancestors_check_`), and `Assert-ClaudeInstallStore` and
+  `ckpt_untrusted_store_` apply the three cases of Decision 1. `Assert-ClaudeInstallStorePath` and
+  `ckpt_perm_check_` still refuse for a lock taken over and for each temporary file mid-run, after
+  the store was trusted. The bash installer prints the Cloud Shell line of Decision 10 before the
+  deployment with or without a checkpoint.
 
 ## Tests (RED, mapped to the owner's scenarios)
 
@@ -619,6 +656,12 @@ Council round 2 (2026-10-01) added checks, RED first:
 | Receipts checked for shape only (Security) | a group receipt for another group and a role assignment receipt for another scope refuse and keep the checkpoint; a Desktop app id and a resolver app id that name another application refuse | both installers (role, apps: PowerShell) |
 | Git Bash reads no Windows access rules (Security) | under `uname -s` `MINGW64_NT` the bash installer warns, names `Install-ClaudeGateway.ps1`, prints the resume command with the answers, and reads and writes no checkpoint | bash |
 
+The lead amendment (2026-10-02) added checks, RED first:
+
+| Finding | Check | Suite |
+|---|---|---|
+| A store place that fails a check stopped every run, every Cloud Shell run when `$HOME` fails (U78) | a default place that fails a check, with no file of the checkout there, keeps no store: one warning naming the place and the check, the resume command with the answers, the Cloud Shell line, a completed run, and nothing written there; the same place holding the checkpoint, the lock or a temporary file of the checkout refuses at startup naming the file, the check and the next step, and keeps the file; `CLAUDE_GATEWAY_STATE_DIR` naming the same place refuses and names the variable. PowerShell: Cloud Shell without `clouddrive` under a `$HOME` that lets Users delete what it holds (real access rules); bash: Cloud Shell with `clouddrive` and a `$HOME` of mode `drwxrwx---` (probe seam) | both installers |
+
 Every new check gets a mutation that breaks what it guards; a mutation counts only when the suite
 loads with its baseline check count and at least one check fails, and a bash mutant also passes
 `bash -n`.
@@ -640,13 +683,20 @@ A prepared, unpushed workflow runs the bash checks and the POSIX permission and 
   the 700-line budget, gains only the step hooks, and `install-claude-gateway.sh` stays within it.
 - The checkpoint is a new operator-side data store, so `docs/ARCHITECTURE.md` and a diagram spec
   change in LOG.
-- A store another account can write stops the installer before it reads anything, so a
-  `CLAUDE_GATEWAY_STATE_DIR` in a shared directory, or a state directory whose inherited access rules
-  let other accounts write, needs another location or owner-only rules before a rerun.
+- A store place that fails a check stops the installer only when `CLAUDE_GATEWAY_STATE_DIR` names
+  it or when it holds this checkout's checkpoint, lock or temporary file; such a place needs another
+  location, owner-only rules or a removed file before a rerun. A default place that fails a check
+  otherwise leaves the run without a store (Decision 1).
+- A run without a store repeats completed steps on a rerun, and their live reads keep the rerun from
+  starting a main.bicep deployment while another runs or creating a group whose name Microsoft Graph
+  lists. A group created moments before can be missed while Graph replicates it (U74); a later run
+  then lists two groups with the name and refuses (Decision 11). A rerun of
+  `install-claude-gateway.sh` without a store is a first run, so the refusal of Decision 9 does not
+  apply, and its missing first-run read-back is a row of `docs/ROADMAP.md`.
 - A state directory outside the home directory or profile, one whose access rules are inherited (an
   existing directory named by `CLAUDE_GATEWAY_STATE_DIR`), and one below a directory that its group
-  can write (mode 775, for example) stop the installer with one line that
-  names the directory, its mode or rule, and the resume command.
+  can write (mode 775, for example) stop the installer, under the same two conditions, with one line
+  that names the directory, its mode or rule, and the resume command or the next step.
 - The bash installer under Git Bash keeps no checkpoint; `Install-ClaudeGateway.ps1` is the Windows
   path, and a bash rerun there starts as a first run with the printed answers.
 
@@ -665,8 +715,9 @@ A prepared, unpushed workflow runs the bash checks and the POSIX permission and 
   ignoring accents, so a listed name of the same length is another group (U76).
 - The PowerShell installer on Windows reads a non-ASCII display name from az with another number of
   characters than Graph holds (U77), so the group is read as a longer name and created again.
-- The attended Cloud Shell run shows a `$HOME` that its group can write (U78), so every Cloud Shell
-  run refuses at startup.
+- The attended Cloud Shell run shows a `$HOME` that its group can write (U78): every Cloud Shell run
+  then keeps no store, so a rerun there never resumes, and the trust rule for `$HOME` in Cloud Shell
+  needs another basis.
 - A support case shows a directory above the parent of a Windows state directory renamed between
   the check and the read (the residual of Decision 2).
 

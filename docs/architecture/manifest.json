@@ -521,25 +521,25 @@
       "source": "docs/architecture/16-install-checkpoint.json",
       "inputs": {
         "Install-ClaudeGateway.ps1": "2696e922bab06afe12866dc175e25b151c0b9340a3280eef18ca34cd1f4ed856",
-        "docs/architecture/16-install-checkpoint.json": "d34187c8b40f6e804f9ce508fdfaa5b9f128d3e4e21df89969afb9f362aa9f41",
+        "docs/architecture/16-install-checkpoint.json": "5fa66b3f03fd6a19828e5533b8e3f557700062c7cb97d6a18e7066f3a1110c64",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
         "infra/main.bicep": "c449423ad43d86c9c15b56c19d18ece9d7681cd627efb7110b38d06b6b0ba82b",
         "install-claude-gateway.sh": "c3d63b3c210273fcb692d7e24e3fef4d26fe98536f89e7456f86995aca88e80b",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
-        "scripts/ClaudeInstallCheckpoint.ps1": "3d22c60d32dc1a96939c8cf2f00cf5a3f3f1df5de9597ba47e24c6034608f6fc",
-        "scripts/ClaudeInstallResume.ps1": "8bf8582044fb348f0f3f4b88756c0f3878fde372afad555519c9c95e62d7e8b0",
-        "scripts/ClaudeInstallStore.ps1": "22b1c8724888268e8cb7fcfb351b854b3114fb1ea5ae463720c684f59fad2705",
+        "scripts/ClaudeInstallCheckpoint.ps1": "9b91db6d17978668c23613f12d076c6c5218028945f475b5aeaea950d072e2e7",
+        "scripts/ClaudeInstallResume.ps1": "67b03e42f7843621524ecde53fec0422d16fc7ba981d361e37d530056db7d5e6",
+        "scripts/ClaudeInstallStore.ps1": "98e13dc46418780010a232f8584e368c36a44dccce349ea745d2519e9b9cfe9a",
         "scripts/flow/Foundation.ps1": "fb0d43ee4fbe00a140410bf3f9594b1a6d43bc4f226748f8231c6f23743c7ed4",
-        "scripts/install-checkpoint.sh": "f02c05c5f6de5786f488c065ea94069a689efd680bb58716d8e8f39636005eb2",
-        "scripts/install-resume.sh": "9b3e7ffb4c5683ed27778feab8f05a5d834d745acc8278064d27287e0d2f8c21",
-        "scripts/install-store.sh": "1ed09cc9dd07301081f9fad97d5a01fe6389e05f7e356641ad4705ea96861ad2"
+        "scripts/install-checkpoint.sh": "7f2ccabcb8e86f95177ef5b5643d3785360982fa3c2f72ba060cbc62e8ba92bd",
+        "scripts/install-resume.sh": "23c99b1fd3e10ff2a454518bcfafac25d9d0399f932140302deed2c965404e30",
+        "scripts/install-store.sh": "025765d841de25acd19346a72c41bfe4fc58a48a262c2d7ab2e5ecc8d019d629"
       },
       "outputs": [
         {
           "path": "docs/images/architecture/install-checkpoint.png",
-          "sha256": "0d76118815b6a3974b73c3e121168aeb7719ef3f38e0df2c5255117b12c3a689"
+          "sha256": "5d915b60d87c475e6453ce3854340b2a24704c86e7d70e6063a790846c2491a6"
         }
       ]
     }

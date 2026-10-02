@@ -129,7 +129,7 @@ keys or connection strings, and the checkpoint test suites check that
 - **Store.** The state directory is inside the user's home directory or profile (in
   Cloud Shell, inside `clouddrive` when storage is mounted), is not itself a link,
   and is used by its real path. Before either installer reads, locks or replaces
-  anything in it, it refuses a directory, checkpoint, lock or temporary file that
+  anything in it, it checks for a directory, checkpoint, lock or temporary file that
   another account could have written or replaced: on Linux and macOS one the current
   user does not own, one its group or other users can write, a symbolic link, or a
   directory between it and `$HOME` that another user owns or that its group or
@@ -137,8 +137,10 @@ keys or connection strings, and the checkpoint test suites check that
   link, one owned by an account other than the current user, SYSTEM or
   Administrators, one with an access rule that lets another account write it, a
   state directory whose rules are inherited, and a parent that lets another account
-  delete what it holds. The bash installer under Git Bash keeps no store
-  ([file mechanics](adr/0046-installer-checkpoint-and-resume.md#2-file-mechanics)).
+  delete what it holds. Such a store refuses when `CLAUDE_GATEWAY_STATE_DIR` names it
+  or when it holds a file of the checkout; otherwise the run keeps no store and
+  continues on its live checks. The bash installer under Git Bash keeps no store
+  ([store and location](adr/0046-installer-checkpoint-and-resume.md#1-store-and-location), [file mechanics](adr/0046-installer-checkpoint-and-resume.md#2-file-mechanics)).
 - **Failures.** A refusal is one line that names the field or reason and, for the
   refusals [Setup](SETUP.md#resume-after-a-failure) lists, the command that resumes
   the run or discards the checkpoint ([output](adr/0046-installer-checkpoint-and-resume.md#14-output)). A corrupt checkpoint

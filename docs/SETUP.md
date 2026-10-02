@@ -690,7 +690,7 @@ Source: `Get-ClaudeInstallLocation` in `scripts/ClaudeInstallStore.ps1` and
 creates is owner-only: a protected access-control list for the current user on
 Windows, mode 0700 with 0600 files on Linux and macOS, and each missing parent
 directory created with mode 0700. Before either installer reads, locks or
-replaces anything in the directory, it refuses a place or a file that another
+replaces anything in the directory, it checks for a place or a file that another
 account could have written or replaced
 ([file mechanics](adr/0046-installer-checkpoint-and-resume.md#2-file-mechanics)):
 
@@ -720,6 +720,13 @@ account could have written or replaced
   rerun there starts as a first run with those answers. `Install-ClaudeGateway.ps1`
   is the Windows installer.
 
+A place that fails these checks stops the run when `CLAUDE_GATEWAY_STATE_DIR` names
+it, or when it holds this checkout's checkpoint, lock or temporary file, which the
+line names with the next step; otherwise the run keeps no checkpoint, prints
+`[WARN] <the failed check> This run keeps no install checkpoint.` and a `Resume:`
+line with every recorded answer, and continues on its live checks
+([store and location](adr/0046-installer-checkpoint-and-resume.md#1-store-and-location)).
+
 **Azure Cloud Shell.** The installers detect Cloud Shell by
 `AZUREPS_HOST_ENVIRONMENT` beginning `cloud-shell/` or a non-empty `ACC_CLOUD`
 ([U64](UNKNOWNS.md#p91-research-before-implementation)). The checkpoint is in
@@ -740,7 +747,8 @@ and the full resume command is printed.
   Before the gateway deployment, and before any wait longer than 60 s, the run
   prints one line: that fact; that the checkpoint and the ARM deployment outlive the
   session, or, without `clouddrive`, that the ARM deployment outlives it and this
-  checkpoint does not; and the resume command ([deployments](adr/0046-installer-checkpoint-and-resume.md#10-deployments)).
+  checkpoint does not, or, without a checkpoint, that this run keeps none; and the
+  resume command ([deployments](adr/0046-installer-checkpoint-and-resume.md#10-deployments)).
 
 **Refusals.** A refusal is one line on standard error that begins `Refused:`,
 says what it left unchanged, and exits 1 ([output](adr/0046-installer-checkpoint-and-resume.md#14-output)). Each refusal
@@ -751,7 +759,7 @@ the last, which names the other installer:
 |---|---|---|
 | The checkpoint is bound to another tenant, subscription, resource group, gateway or `reusedApim`, or was written by the other installer | the field, the recorded value and this run's value | [binding](adr/0046-installer-checkpoint-and-resume.md#5-binding), [resume across installers](adr/0046-installer-checkpoint-and-resume.md#13-resume-across-installers) |
 | The checkpoint cannot be read: not JSON, another `schema` or `schemaVersion`, an unknown step id, an unsafe answer, or a receipt value of another shape | the reason; the file is kept unchanged | [file mechanics](adr/0046-installer-checkpoint-and-resume.md#2-file-mechanics) |
-| The state directory, checkpoint or lock could have been written by another account | the path and the owner, mode or access rule; nothing was read or changed | [file mechanics](adr/0046-installer-checkpoint-and-resume.md#2-file-mechanics) |
+| The state directory, checkpoint or lock could have been written by another account, and `CLAUDE_GATEWAY_STATE_DIR` names the directory or a file of this checkout is there | the path and the owner, mode or access rule; nothing was read or changed; for a file of this checkout, the file and the next step | [store and location](adr/0046-installer-checkpoint-and-resume.md#1-store-and-location), [file mechanics](adr/0046-installer-checkpoint-and-resume.md#2-file-mechanics) |
 | Another run holds the lock | its host, process id and start time, and when a later run takes the lock over | [lock](adr/0046-installer-checkpoint-and-resume.md#3-lock) |
 | A live read fails for a step that is not idempotent | the step and the first sentence of the error | [verification before a skip](adr/0046-installer-checkpoint-and-resume.md#7-verification-before-a-skip) |
 | A recorded deployment still runs after the wait | the deployment and resource group | [deployments](adr/0046-installer-checkpoint-and-resume.md#10-deployments) |
