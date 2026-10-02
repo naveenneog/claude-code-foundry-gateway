@@ -157,6 +157,45 @@ the mutated file restored byte-for-byte:
 
 No live Azure command was run; every command used the isolated `AZURE_CONFIG_DIR`.
 
+### Lead review of the first GREEN, 2026-10-02
+
+The lead rejected `3b07bbd` and `79d22c4` as a facade, and the replacement builder found more at RED:
+
+- `Invoke-ClaudeGatewayPreflight` reported 9 of the 14 checks as PASS with "Not evaluated in offline-safe contract path", and `answers.crossField` was PASS without a rule.
+- The P92 tests matched source text or checked that a function exists; none ran an installer.
+- `Get-ClaudeFlowAnswersPreflightText` returned a constant, and `Get-ClaudeApimReuseState` called `Invoke-ClaudeInstallAzRead` with `-AbsentCodes` and `-Command`, which it does not take (`scripts/ClaudeInstallResume.ps1:5-8`).
+- The two `Test-BashInstallerCheckpoint.ps1` registrations each ran the whole suite: the new `-Shard` parameter was read nowhere.
+- At `79d22c4` the bash installer stops at startup, after its banner, with `scripts/install-answers.sh: line 4: ANSWERS_FILE: unbound variable` (`set -u`, `install-claude-gateway.sh:15`), in every checkout that has `scripts/install-answers.sh`. The P91 suite did not see it: its template did not copy that file.
+- At `79d22c4` every `-ExistingApimName` run of `Install-ClaudeGateway.ps1` stops with `Cannot convert value "System.String" to type "System.Management.Automation.SwitchParameter"`: the new `-Json` switch shares its name with the installer's `$json` variable, which the reuse path assigns (PowerShell names ignore case). P91 S2, S3 and S5 fail on it.
+
+### RED (replacement), 2026-10-02
+
+Every test drives an installer, the guided flow or a validator through the P91 stub harnesses; a
+source-text check remains only as an extra assertion (bash 3.2 syntax). The bash harness moved to
+`tests/BashInstallerHarness.ps1`, shared with the P91 bash suite, and copies every `scripts/install-*`
+file. Both `az` stubs gained a signed-out world, `account show --subscription`, a missing Foundry
+account, `apim check-name` and `apim list`; `tests/InstallerBusinessUnitStub.ps1` stands in for
+`Set-ClaudeBusinessUnit.ps1` and writes `bu-registry`, `bu-parents`, `bu-modes` and `usd-budgets`.
+
+| Suite (new or rewritten) | RED result | First failure lines |
+|---|---|---|
+| `Test-InstallerAnswersSchema.ps1` | 40 checks, 39 failed | "the schema is JSON that both PowerShell hosts read" (keys that differ only in case); "the PowerShell validator runs over the corpus" (`Test-ClaudeInstallerAnswersFile` does not exist); every corpus case |
+| `Test-InstallerAnswersDrift.ps1` | 12 checks, 8 failed | every installer parameter and bash flag "is in no schema entry"; flow keys without an alias; `When` without `requires` |
+| `Test-InstallerPreflight.ps1` | 15 checks, 13 failed | "-Json prints only JSON ..."; "complete answers over a matching estate pass"; each FAIL case |
+| `Test-BashInstallerPreflight.ps1` | 17 checks, 16 failed | "the P92 bash libraries exist" (`scripts/install-preflight.sh` and `scripts/install-steps.sh` missing); each case (the installer stops at startup) |
+| `Test-InstallerStepSelection.ps1` | 21 checks, 15 failed | "-ListSteps -Json prints only JSON ..."; "-Steps sync ... refuses ... naming entra-groups"; the answers-file precedence; every progress check |
+| `Test-BashInstallerStepSelection.ps1` | 22 checks, 21 failed | "setup: the first run keeps its checkpoint ..." (the installer stops at startup); every step, precedence and progress check |
+| `Test-InstallerBusinessUnitAnswers.ps1` | 9 checks, 8 failed | "two units and two teams are applied ..., both units before either team" (no call: the stub refuses `-Parent`); the receipts; the USD command |
+| `Test-GuidedFlowAnswersSchema.ps1` | 8 checks, 7 failed | "-PlanOnly runs the preflight on the installer arguments of its plan" (0 lines); "a failing check appears in the plan output" |
+| `Test-BashInstallerCheckpointShards.ps1` | 5 checks, 5 failed | "the suite declares its shard count and a map ..." (count 0); no measured shard weight |
+| P91 `Test-InstallerCheckpoint.ps1` | 86 checks, 5 failed | S2, S3, S5: the `$json` switch conversion above |
+| P91 `Test-BashInstallerCheckpoint.ps1` | 52 checks, 49 failed | S11 and every scenario: `ANSWERS_FILE: unbound variable` |
+
+Checks that pass at RED are detector self-tests (the drift detectors find a parameter and a flag
+added in a sandbox; the static and dynamic flow-key inventories agree, U80) and guards on behaviour
+that already holds (a parameter and the checkpoint win over a default; `-NonInteractiveAnswers` win
+over `-AnswersPath`).
+
 
 ## P91 installer checkpoint and resume, 2026-10-01
 

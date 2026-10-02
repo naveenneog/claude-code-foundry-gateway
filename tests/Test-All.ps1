@@ -214,16 +214,19 @@ try {
     $installerBash = if ($IsWindows -or $env:OS -eq 'Windows_NT') { @(@('C:\Program Files\Git\bin\bash.exe', 'C:\Program Files\Git\usr\bin\bash.exe', (Join-Path "$env:LOCALAPPDATA" 'Programs\Git\bin\bash.exe')) | Where-Object { Test-Path -LiteralPath $_ }) | Select-Object -First 1 } else { (Get-Command bash -ErrorAction SilentlyContinue | Select-Object -First 1).Source }
     $bashInstallerSkip = if (-not $installerBash) { 'macOS/Linux installer: no Git Bash (Windows) or bash on this machine.' } elseif (-not (& $installerBash -c 'command -v jq' 2>$null)) { 'macOS/Linux installer: jq is not on the bash PATH; the installer needs it.' } else { '' }
     Invoke-Check 'macOS/Linux installer prices and record'  'Test-BashInstaller.ps1' -SkipReason $bashInstallerSkip
-    # Its 52 checks drive the bash installer through Git Bash: 502 s alone, 603 s in a loaded full run.
+    # Its checks drive the bash installer through Git Bash; two groups of scenarios run as two checks (ADR-0047).
     Invoke-Check 'macOS/Linux installer checkpoint and resume [0/2]' 'Test-BashInstallerCheckpoint.ps1' @{ Shard = '0/2' } -SkipReason $bashInstallerSkip
     Invoke-Check 'macOS/Linux installer checkpoint and resume [1/2]' 'Test-BashInstallerCheckpoint.ps1' @{ Shard = '1/2' } -SkipReason $bashInstallerSkip
     Invoke-Check 'Installer checkpoint store permissions'  'Test-InstallerCheckpointStore.ps1' -SkipReason $bashInstallerSkip
-    Invoke-Check 'P92 answers schema contract'             'Test-InstallerAnswersSchema.ps1'
-    Invoke-Check 'P92 installer preflight contract'        'Test-InstallerPreflight.ps1'
-    Invoke-Check 'P92 installer step selection contract'   'Test-InstallerStepSelection.ps1'
-    Invoke-Check 'P92 bash installer preflight contract'   'Test-BashInstallerPreflight.ps1' -SkipReason $bashInstallerSkip
-    Invoke-Check 'P92 guided-flow answers contract'        'Test-GuidedFlowAnswersSchema.ps1'
-    Invoke-Check 'P92 bash checkpoint sharding contract'   'Test-BashInstallerCheckpointShards.ps1'
+    Invoke-Check 'Installer answers schema, both validators' 'Test-InstallerAnswersSchema.ps1' -SkipReason $bashInstallerSkip
+    Invoke-Check 'Installer answers schema matches its sources' 'Test-InstallerAnswersDrift.ps1'
+    Invoke-Check 'Installer preflight (PowerShell)'        'Test-InstallerPreflight.ps1'
+    Invoke-Check 'macOS/Linux installer preflight'         'Test-BashInstallerPreflight.ps1' -SkipReason $bashInstallerSkip
+    Invoke-Check 'Installer steps, precedence and progress (PowerShell)' 'Test-InstallerStepSelection.ps1'
+    Invoke-Check 'macOS/Linux installer steps, precedence and progress' 'Test-BashInstallerStepSelection.ps1' -SkipReason $bashInstallerSkip
+    Invoke-Check 'Installer business units from answers'   'Test-InstallerBusinessUnitAnswers.ps1'
+    Invoke-Check 'Guided flow runs the installer preflight' 'Test-GuidedFlowAnswersSchema.ps1'
+    Invoke-Check 'macOS/Linux checkpoint suite shards'     'Test-BashInstallerCheckpointShards.ps1'
     Invoke-Check 'Preflight on both PowerShell hosts'      'Test-PreflightBothHosts.ps1' -SerialLane
     Invoke-Check 'Guided diagnostics and support bundles'  'Test-Diagnose.ps1' -SerialLane
     Invoke-Check 'Wizard reaches summary on PS 5.1'        'Test-On-PS51.ps1' -SerialLane

@@ -1,0 +1,104 @@
+# P92 acceptance test 6 (docs/adr/0047-lean-installer-phase-0.md): business units and teams from the
+# answers file are applied through scripts/Set-ClaudeBusinessUnit.ps1, units before teams, once each:
+# the install checkpoint records each unit applied, and a resume verifies them in bu-registry instead
+# of applying them again. When the gateway enforces a dollar budget afterwards, the installer prints
+# the command that reconciles USD state. Each run is a child PowerShell over the stubs of
+# tests/InstallerCheckpointStubs.ps1 and tests/InstallerBusinessUnitStub.ps1; nothing reaches Azure.
+$ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'InstallerCheckpointHarness.ps1')
+$script:fail = 0
+$script:checks = 0
+function Assert($label, $condition, $detail = '') {
+    $script:checks++
+    if ($condition) { Write-Host "  [OK]   $label" -ForegroundColor Green }
+    else { Write-Host "  [FAIL] $label$(if ($detail) { " - $detail" })" -ForegroundColor Red; $script:fail++ }
+}
+Write-Host ''
+Write-Host 'Installer business units from answers (PowerShell installer)' -ForegroundColor Cyan
+$watch = [Diagnostics.Stopwatch]::StartNew()
+$scratch = [IO.Path]::GetFullPath((Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) ('p92-units-' + [guid]::NewGuid().ToString('N'))))
+New-Item -ItemType Directory -Force -Path $scratch | Out-Null
+$sub = $script:P91Subscription
+$common = @("-SubscriptionId '$sub'", "-FoundryAccount 'ai-p91'", "-FoundryResourceGroup 'rg-ai-p91'", "-EntitlementStore 'named-value'", "-AuthMode 'interactive'",
+    "-DesktopSignInKind 'helper-script'", "-AddressMode 'azure'", '-SkipFinOpsOffer', "-ResourceGroup 'rg-p91'", "-Location 'eastus2'", "-NamePrefix 'p91gw'",
+    "-PublisherEmail 'ops@contoso.com'", "-Sku 'BasicV2'", "-StandardModels 'claude-sonnet-5'", "-PremiumModels 'claude-opus-5','claude-sonnet-5'", '-TpmStandard 20000',
+    '-QuotaStandard 500000', '-TpmPremium 80000', '-QuotaPremium 5000000', '-QuotaOrg 100000000', '-CallsPerMinute 120', '-Yes')
+# Answer order puts a team first: the installer orders units before teams itself.
+$tree = @(
+    [ordered]@{ id = 'finance-emea'; group = 'claude-team-finance-emea'; parent = 'finance'; monthlyUsdBudget = 1000; mode = 'Notify' }
+    [ordered]@{ id = 'finance'; group = 'claude-bu-finance'; monthlyUsdBudget = 5000; mode = 'Strict' }
+    [ordered]@{ id = 'platform'; group = 'claude-team-platform'; parent = 'engineering'; monthlyUsdBudget = 2000; mode = 'Strict' }
+    [ordered]@{ id = 'engineering'; group = 'claude-bu-engineering'; monthlyUsdBudget = 8000; mode = 'Allowance'; percent = 20 }
+)
+$notify = @($tree | ForEach-Object { $u = [ordered]@{}; foreach ($k in $_.Keys) { $u[$k] = $_[$k] }; $u.mode = 'Notify'; $u.Remove('percent'); $u })
+function New-Units([string]$Name, $Units, [scriptblock]$World) {
+    $w = New-P91World
+    if ($World) { & $World $w }
+    $s = New-P91Scenario -Name $Name -Scratch $scratch -Template $template -World $w
+    $file = Join-Path $s.Dir 'answers.json'
+    Write-P91Text $file ([ordered]@{ schemaVersion = 1; BusinessUnits = @($Units) } | ConvertTo-Json -Depth 8)
+    return [pscustomobject]@{ Scenario = $s; Answers = $file }
+}
+function Get-Units($Result) { @($Result.Scripts | Where-Object { $_ -like 'bu *' }) }
+function Get-Ids($Result) { @(Get-Units $Result | ForEach-Object { ($_ -split ' ')[1] }) }
+$reconcile = '(?m)Sync-ClaudeUsdBudgets\.ps1 -ResourceGroup rg-p91 -ApimName apim-p91gw'
+
+try {
+    $template = New-P91Template $scratch
+    $apply = New-Units 'apply' $tree
+    $quiet = New-Units 'notify' $notify
+    $partial = New-Units 'partial' $tree { param($w) $w.inject.bu = 'refuse:platform' }
+    $later = New-Units 'later' $tree { param($w) $w.inject.verify = 'fail' }
+    $wave1 = @(
+        ($runApply = New-P91Run $apply.Scenario -Arguments ($common + "-AnswersPath '$($apply.Answers)'"))
+        ($runNotify = New-P91Run $quiet.Scenario -Arguments ($common + "-AnswersPath '$($quiet.Answers)'"))
+        ($runPartial = New-P91Run $partial.Scenario -Arguments ($common + "-AnswersPath '$($partial.Answers)'"))
+        ($runLater = New-P91Run $later.Scenario -Arguments ($common + "-AnswersPath '$($later.Answers)'"))
+    )
+    $r1 = Invoke-P91Runs $wave1
+    $a = Get-P91Result $r1 $runApply
+    $ids = @(Get-Ids $a)
+    $firstTeam = [Math]::Min([array]::IndexOf($ids, 'finance-emea'), [array]::IndexOf($ids, 'platform'))
+    $lastUnit = [Math]::Max([array]::IndexOf($ids, 'finance'), [array]::IndexOf($ids, 'engineering'))
+    Assert 'P6 two units and two teams are applied through Set-ClaudeBusinessUnit.ps1, both units before either team, each once' ($a.ExitCode -eq 0 -and $ids.Count -eq 4 -and
+        @($ids | Select-Object -Unique).Count -eq 4 -and $lastUnit -ge 0 -and $firstTeam -gt $lastUnit) "order: $($ids -join ', ') || $(Get-P91Tail $a)"
+    $lines = @(Get-Units $a)
+    $line = { param([string]$Id) @($lines | Where-Object { ($_ -split ' ')[1] -eq $Id })[0] }
+    Assert 'P6 each call passes the group, the parent of a team, the mode, the allowance percentage and the dollar budget' ((& $line 'platform') -match 'claude-team-platform parent=engineering mode=Strict percent= usd=2000' -and
+        (& $line 'engineering') -match 'claude-bu-engineering parent= mode=Allowance percent=20 usd=8000' -and (& $line 'finance-emea') -match 'parent=finance mode=Notify') ($lines -join ' | ')
+    $groupsMade = @(Get-P91Calls $a 'ad group create --display-name claude-bu-*') + @(Get-P91Calls $a 'ad group create --display-name claude-team-*')
+    Assert 'P6 each unit''s group is found or created by the P91 group rule before its unit is written, and the call skips Set-ClaudeBusinessUnit''s own group read' ($groupsMade.Count -eq 4 -and
+        @($lines | Where-Object { $_ -match 'skipGroupCheck=True' }).Count -eq 4) ($groupsMade -join ' | ')
+    Assert 'P6 with dollar budgets enforced (Strict and Allowance units), the run prints the USD reconcile command for this gateway' ($a.Out -match $reconcile) (Get-P91Tail $a)
+    $n = Get-P91Result $r1 $runNotify
+    Assert 'P6 with every unit on Notify no dollar budget is enforced, and the reconcile command is not printed' ($n.ExitCode -eq 0 -and (Get-Ids $n).Count -eq 4 -and $n.Out -notmatch 'Sync-ClaudeUsdBudgets') (Get-P91Tail $n)
+
+    $p1 = Get-P91Result $r1 $runPartial
+    $resume = New-P91Scenario -Name 'partial-resume' -Scratch $scratch -From $partial.Scenario
+    Edit-P91World $resume { param($w) $w.inject.bu = '' }
+    $l1 = Get-P91Result $r1 $runLater
+    $verified = New-P91Scenario -Name 'later-resume' -Scratch $scratch -From $later.Scenario
+    Edit-P91World $verified { param($w) $w.inject.verify = '' }
+    $cp = Get-P91CheckpointFile $partial.Scenario
+    $receipt = if ($cp) { @(([IO.File]::ReadAllText($cp.FullName) | ConvertFrom-Json).steps | Where-Object { $_.id -eq 'business-units' })[0].receipt } else { $null }
+    Assert 'setup: a refused unit stops the run, and the checkpoint keeps a receipt for each unit already applied, with its group id' ($p1.ExitCode -ne 0 -and $receipt -and
+        ((@($receipt.units | ForEach-Object id) | Sort-Object) -join ',') -eq 'engineering,finance,finance-emea' -and -not @($receipt.units | Where-Object { $_.groupId -notmatch '^[0-9a-f-]{36}$' }).Count) "$(Get-P91Tail $p1) || $($receipt | ConvertTo-Json -Compress -Depth 5)"
+    $wave2 = @(
+        ($runResume = New-P91Run $resume -Arguments ($common + "-AnswersPath '$($partial.Answers)'"))
+        ($runVerified = New-P91Run $verified -Arguments ($common + "-AnswersPath '$($later.Answers)'"))
+    )
+    $r2 = Invoke-P91Runs $wave2
+    $p2 = Get-P91Result $r2 $runResume
+    Assert 'P6 a resume after a unit failed applies only the units its receipts do not show in bu-registry: no duplicate call' ($p2.ExitCode -eq 0 -and ((Get-Ids $p2) -join ',') -eq 'platform') "$((Get-Ids $p2) -join ', ') || $(Get-P91Tail $p2)"
+    $v2 = Get-P91Result $r2 $runVerified
+    Assert 'P6 a resume after the business-unit step completed verifies it live and makes no Set-ClaudeBusinessUnit call' ($l1.ExitCode -eq 0 -and $v2.ExitCode -eq 0 -and -not (Get-Ids $v2).Count -and
+        $v2.Out -match 'Business units: verified live, skipped') "$(Get-P91Tail $v2)"
+    $unexpected = @(foreach ($r in @($r1.Values) + @($r2.Values)) { @($r.Unexpected) })
+    Assert 'harness: every az call was one the stub knows, and no run timed out' (-not $unexpected.Count -and -not @(@($r1.Values) + @($r2.Values) | Where-Object { $_.TimedOut }).Count) (($unexpected | Select-Object -Unique -First 4) -join ' | ')
+}
+finally {
+    if ($env:P91_KEEP_SCRATCH -ne '1') { Remove-Item -LiteralPath $scratch -Recurse -Force -ErrorAction SilentlyContinue }
+}
+Write-Host ''
+Write-Host ("{0} checks, {1} failed, {2:N1} s" -f $script:checks, $script:fail, $watch.Elapsed.TotalSeconds)
+if ($script:fail) { exit 1 }

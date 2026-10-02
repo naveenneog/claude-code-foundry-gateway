@@ -44,6 +44,8 @@ function global:Complete-P91Deployment($World, $Deployment) {
         if (-not (Get-P91Property $apim.namedValues $nv)) { Set-P91Property $apim.namedValues $nv ',,' }
     }
     if (-not (Get-P91Property $apim.namedValues 'entitlement-cache-seconds')) { Set-P91Property $apim.namedValues 'entitlement-cache-seconds' '3600' }
+    # main.bicep:385-386 deploys both, empty ('e30=' is base64 for {}).
+    foreach ($nv in 'usd-budgets', 'usd-budget-state') { if (-not (Get-P91Property $apim.namedValues $nv)) { Set-P91Property $apim.namedValues $nv 'e30=' } }
     if ([string]$Deployment.grantRole -eq 'true') {
         $id = "$($World.foundry.id)/providers/Microsoft.Authorization/roleAssignments/" + [guid]::NewGuid().ToString()
         Set-P91Property $World.roleAssignments $id ([pscustomobject]@{ principalId = $apim.principalId; scope = $World.foundry.id; role = 'Cognitive Services User' })
@@ -69,12 +71,22 @@ function global:az {
     foreach ($e in @($w.inject.readErrors)) {
         if ($e -and $joined -like [string]$e.match) { Write-P91Failure ([string]$e.text) 1; return }
     }
+    # Signed out: az answers every call that needs an account as az does without one (P92 preflight).
+    if ((Get-P91Property $w 'signedOut') -and $joined -notlike 'version*' -and $joined -notlike 'bicep version*') {
+        if ($joined -like 'account list*') { return '[]' }
+        Write-P91Failure "ERROR: Please run 'az login' to setup account." 1
+        return
+    }
+    $foundryName = [string](Get-P91Property $w.foundry 'name'); $foundryRg = [string](Get-P91Property $w.foundry 'rg')
+    $foundryMissing = { $n = & $value @('-n', '--name'); $g = & $value @('-g', '--resource-group'); [bool]($n -and ($n -ne $foundryName -or ($g -and $g -ne $foundryRg))) }
     switch -Wildcard ($joined) {
         'version*' { return "2.86.0`t2.86.0`t1.1.0`t" }
         'bicep version*' { return 'Bicep CLI version 0.47.16 (p91stub)' }
         'account list-locations*' { return '[{"name":"eastus2","displayName":"East US 2","metadata":{"regionType":"Physical","geographyGroup":"US"}}]' }
         'account list --query*' { return [string]$w.subscriptionId }
         'account show*' {
+            $named = & $value @('--subscription', '-s', '--name', '-n')
+            if ($named -and $named -ne [string]$w.subscriptionId -and $named -ne [string]$w.subscriptionName) { Write-P91Failure "ERROR: Subscription '$named' not found. Check the spelling and casing and try again." 1; return }
             $account = [pscustomobject]@{ id = $w.subscriptionId; name = $w.subscriptionName; state = 'Enabled'; tenantId = $w.tenantId; user = [pscustomobject]@{ name = 'admin@contoso.com'; type = 'user' } }
             switch ($query) {
                 'name' { return [string]$account.name }
@@ -86,9 +98,16 @@ function global:az {
         }
         'account set --subscription*' { return }
         'account get-access-token*' { return [string]$w.token }
-        'cognitiveservices account deployment list*' { return ($w.foundry.deployments | ConvertTo-Json -Depth 8) }
+        'cognitiveservices account deployment list*' {
+            if (& $foundryMissing) { Write-P91Failure "ERROR: (ResourceNotFound) The Resource 'Microsoft.CognitiveServices/accounts/$(& $value @('-n', '--name'))' under resource group '$(& $value @('-g', '--resource-group'))' was not found.`nCode: ResourceNotFound" 3; return }
+            return ($w.foundry.deployments | ConvertTo-Json -Depth 8)
+        }
         'cognitiveservices account deployment show*' { return '{"properties":{"provisioningState":"Succeeded"}}' }
+        'cognitiveservices account list*' {
+            return (ConvertTo-Json -Compress -InputObject @([pscustomobject]@{ name = $foundryName; n = $foundryName; resourceGroup = $foundryRg; rg = $foundryRg; location = [string]$w.foundry.location; loc = [string]$w.foundry.location; kind = 'AIServices' }))
+        }
         'cognitiveservices account show*' {
+            if (& $foundryMissing) { Write-P91Failure "ERROR: (ResourceNotFound) The Resource 'Microsoft.CognitiveServices/accounts/$(& $value @('-n', '--name'))' under resource group '$(& $value @('-g', '--resource-group'))' was not found.`nCode: ResourceNotFound" 3; return }
             if ($query -eq 'id') { return [string]$w.foundry.id }
             if ($query -eq 'location') { return [string]$w.foundry.location }
             return ([pscustomobject]@{ id = $w.foundry.id; location = $w.foundry.location } | ConvertTo-Json -Compress)
@@ -124,7 +143,19 @@ function global:az {
                 default { return ($full | ConvertTo-Json -Depth 5 -Compress) }
             }
         }
-        'apim list*' { return '[]' }
+        'apim list*' {
+            # Every instance in the world, as az apim list returns them (P92 reuse path and preflight).
+            return (ConvertTo-Json -Depth 5 -Compress -InputObject @(foreach ($p in $w.apims.PSObject.Properties) {
+                        $identity = if ($p.Value.identity -eq 'None') { [pscustomobject]@{ type = 'None' } } else { [pscustomobject]@{ type = $p.Value.identity; principalId = $p.Value.principalId } }
+                        [pscustomobject]@{ name = $p.Name; resourceGroup = $p.Value.rg; location = $p.Value.location; publisherEmail = $p.Value.publisherEmail; sku = [pscustomobject]@{ name = $p.Value.sku; capacity = 1 }; identity = $identity } }))
+        }
+        'apim check-name*' {
+            # The service name is a global DNS label (Learn: Api Management Service - Check Name Availability).
+            $name = [string](& $value @('-n', '--name'))
+            $taken = [bool](Get-P91Property $w.apims $name) -or @(Get-P91Property $w 'apimNamesTaken') -contains $name
+            if ($taken) { return ([pscustomobject]@{ message = "$name is already in use. Please select a different name."; nameAvailable = $false; reason = 'AlreadyExists' } | ConvertTo-Json -Compress) }
+            return ([pscustomobject]@{ message = ''; nameAvailable = $true; reason = 'Valid' } | ConvertTo-Json -Compress)
+        }
         'apim api show*' {
             $name = & $value @('--service-name')
             $apim = Get-P91Property $w.apims $name

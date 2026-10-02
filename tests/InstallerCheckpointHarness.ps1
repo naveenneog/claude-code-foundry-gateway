@@ -34,13 +34,10 @@ function New-P91Template([string]$Scratch) {
     Write-P91Text (Join-Path $template 'scripts\Sync-ClaudeAccess.ps1') ("param([string]`$ApimName, [string]`$ResourceGroup, [string]`$StandardGroup, [string]`$PremiumGroup)`n" + $prelude +
         "[IO.File]::AppendAllText((Join-Path `$env:P91_LOG 'scripts.log'), `"sync `$ApimName `$StandardGroup `$PremiumGroup``n`")`n" +
         "if (`$w.inject.sync -eq 'graph404') { throw 'Graph read failed: Response status code does not indicate success: 404 (Not Found).' }`n")
-    Write-P91Text (Join-Path $template 'scripts\Set-ClaudeBusinessUnit.ps1') ("param([string]`$Id, [string]`$Group, [int]`$MonthlyBudgetUsd, [string]`$ApimName, [string]`$ResourceGroup)`n" + $prelude +
-        "[IO.File]::AppendAllText((Join-Path `$env:P91_LOG 'scripts.log'), `"bu `$Id `$Group``n`")`n" +
-        "if (`$w.inject.bu -eq 'refuse') { throw `"Business unit '`$Id' was refused by the stub.`" }`n" +
-        "`$apim = `$w.apims.`$ApimName; `$apim.namedValues.'bu-registry' = (`$apim.namedValues.'bu-registry'.TrimEnd(',') + `",`$Id=`$Group:1000,`")`n" +
-        "[IO.File]::WriteAllText(`$env:P91_WORLD, (`$w | ConvertTo-Json -Depth 30))`n")
-    Write-P91Text (Join-Path $template 'scripts\Show-Governance.ps1') ("param([string]`$ApimName, [string]`$ResourceGroup, [switch]`$SkipThrottleTest)`n" +
-        "[IO.File]::AppendAllText((Join-Path `$env:P91_LOG 'scripts.log'), `"governance `$ApimName``n`")`n")
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'InstallerBusinessUnitStub.ps1') -Destination (Join-Path $template 'scripts\Set-ClaudeBusinessUnit.ps1') -Force
+    Write-P91Text (Join-Path $template 'scripts\Show-Governance.ps1') ("param([string]`$ApimName, [string]`$ResourceGroup, [switch]`$SkipThrottleTest)`n" + $prelude +
+        "[IO.File]::AppendAllText((Join-Path `$env:P91_LOG 'scripts.log'), `"governance `$ApimName``n`")`n" +
+        "if (`$w.inject.verify -eq 'fail') { throw 'The governance check was failed by the stub.' }`n")
     Write-P91Text (Join-Path $template 'scripts\Deploy-ClaudeProjection.ps1') ("[IO.File]::AppendAllText((Join-Path `$env:P91_LOG 'scripts.log'), `"projection``n`")`n")
     return $template
 }
