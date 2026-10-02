@@ -39,7 +39,7 @@ replacement proves unconditional refusal under the lead's explicit contract chan
 
 On the owner's shared workstation a single long invocation owns `<workspace>\.gate-lock`;
 creation is atomic, contention retries every 60 seconds, and only that invocation removes its
-own lock in `finally`. [P84 STATUS](../docs/STATUS.md) records the actual receipts and times.
+own lock in `finally`. [P84 STATUS](../docs/status/P84.md) records the actual receipts and times.
 
 ## Deterministic shards
 
@@ -73,15 +73,15 @@ when it is nonempty. `-IncludeAzure` cannot be combined with sharding or local-o
 The AUM pytest suite runs as four registered checks, `AUM - commands, dashboard and pilot [0/4]`
 to `[3/4]` (`tests/Test-All.ps1:295`). On 2026-09-30 IST its 1,200 cases took 985.41 s serially,
 beyond the 600 s per-check timeout (`tests/Test-All.ps1:9`). All 1,200 cases passed after
-P85 integrated P71's deadline-test follow-up; [P85's integration evidence](../docs/STATUS.md#final-p71-follow-up-integration-and-builder-validation-2026-09-30)
+P85 integrated P71's deadline-test follow-up; [P85's integration evidence](../docs/status/P85.md#final-p71-follow-up-integration-and-builder-validation-2026-09-30)
 records that single full run and the earlier results. `Test-FinOps.ps1 -Shard i/n` passes one
 share of the top-level `cli/finops/tests` files to pytest; without `-Shard` it runs the whole
 directory as before (`tests/Test-FinOps.ps1:4`).
-The [lookup-refresh follow-up](../docs/STATUS.md#p71-follow-up-a-lookup-starts-one-refresh-2026-09-30)
+The [lookup-refresh follow-up](../docs/status/P71.md#p71-follow-up-a-lookup-starts-one-refresh-2026-09-30)
 then passed all 1,230 cases serially in 1,012.62 s, including its 30 new compound-action cases.
-Its [council correction](../docs/STATUS.md#council-correction-a-principal-notice-cannot-drop-a-current-lookup)
+Its [council correction](../docs/status/P71.md#council-correction-a-principal-notice-cannot-drop-a-current-lookup)
 passed all 1,269 cases in 1,062.92 s, including notice-present navigation and delayed-focus controls.
-The [request-kind correction](../docs/STATUS.md#council-round-2-request-lookup-follows-rule-a)
+The [request-kind correction](../docs/status/P71.md#council-round-2-request-lookup-follows-rule-a)
 then passed all 1,278 cases in 1,122.80 s, including paging-preserving request refresh/detail controls.
 
 Files are assigned longest first to the least-loaded shard, by whole-second weights in
@@ -218,7 +218,7 @@ caught 74/74, 12/12 and 9/9 mutations with full baseline counts and restored gre
 The approximately 44-minute loaded-workstation reference is not a controlled comparison.
 The committed timing table uses that run's 95 passing check durations, not job/setup durations.
 
-[STATUS](../docs/STATUS.md) records measured runs and negative-proof counts.
+[P78 STATUS](../docs/status/P78.md) records measured runs and negative-proof counts.
 [ADR-0039](../docs/adr/0039-test-suite-hosted-runners.md) remains a draft proposal.
 P78 does not change the charter test command or timeout, claim a packet gate, or fix the existing
 local gate shell's process-tree timeout limitation. Council, gate and adoption belong to the lead

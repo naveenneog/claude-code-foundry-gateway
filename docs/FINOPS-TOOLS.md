@@ -209,7 +209,7 @@ names pending sources with estimates. A Turnstile-backed profile reports a
 verified stopped PostgreSQL server with exit 9 and a manual paid start command;
 the client never starts it or switches authority automatically.
 [AUM latency and readiness](AUM.md#read-latency-and-progress) documents the
-behavior; [STATUS](STATUS.md#p71-aum-answers-fast-and-says-why-it-cannot-2026-09-28)
+behavior; [STATUS](status/P71.md#p71-aum-answers-fast-and-says-why-it-cannot-2026-09-28)
 records before/after measurements.
 
 Measured on the reference gateway on 2026-09-25, read-only: `whoami` returned role `owner`,

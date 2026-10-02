@@ -10,7 +10,7 @@ The owner reported repeated Escape closing AUM and requested a Cloud Shell
 launch path. Escape currently clears navigation or dismisses a modal; a
 refresh exception can independently enter Textual's fatal worker handling.
 The reproduction and measured correction belong to
-[P85 STATUS](../STATUS.md); this decision does not infer a live crash cause.
+[P85 STATUS](../status/P85.md#p85-follow-up-the-cloud-shell-tests-name-paths-without-git-bashs-tmp-mount-2026-09-30); this decision does not infer a live crash cause.
 
 Cloud Shell documentation lists Python 3.9, while this package requires
 Python 3.12 or newer. An unqualified `python3 -m venv` therefore cannot be

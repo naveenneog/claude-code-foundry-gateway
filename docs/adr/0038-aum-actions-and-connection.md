@@ -99,7 +99,7 @@ dynamic value exemption or publication-boundary relaxation is added.
 - Publication and responsiveness: [ADR-0035](0035-aum-bounded-readiness-and-progressive-reads.md).
 - Local contracts and investigation: [U38-U41](../UNKNOWNS.md#p80-research-before-resumed-implementation).
 - Measured tests, reversion probes, captures and handoff state:
-  [P80 STATUS](../STATUS.md#p80-aum-shows-every-action-it-has-connects-in-one-step-and-its-guide-starts-with-installation-2026-09-28).
+  [P80 STATUS](../status/P80.md#p80-aum-shows-every-action-it-has-connects-in-one-step-and-its-guide-starts-with-installation-2026-09-28).
 
 ## Builder validation, 2026-09-28
 

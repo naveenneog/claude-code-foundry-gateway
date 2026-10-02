@@ -6,7 +6,7 @@
 
 ## Read this first, every session
 
-1. `docs/STATUS.md` — the ONE active packet and its acceptance criteria
+1. `docs/STATUS.md` — the ONE active packet; merged packet evidence lives under `docs/status/`
 2. `docs/ROADMAP.md` — what's planned, what's explicitly out of scope
 3. `docs/UNKNOWNS.md` — what we know we don't know
 4. `docs/CHARTER.md` — goals, non-goals, constraints, quality bar
@@ -44,7 +44,7 @@ PLAN → CONTRACT → RED → GREEN → REFACTOR → COUNCIL → GATE → LOG
 - **Never** skip, `.only`, delete or weaken a test, type, or constraint to get green.
 - **Commit at every green.** Small, focused, conventional-commit subject, a body saying *why*.
 - **Council:** Architect · Coder · QA · UX · Security — five explicit verdicts, recorded in
-  `docs/STATUS.md`. Any BLOCK is fixed, and the fix gets a test.
+  the packet's `docs/status/<ID>.md` file. Any BLOCK is fixed, and the fix gets a test.
 - **Gate:** `node .ironclad/gate.mjs --stage packet` must exit 0. That is what "done" means.
 
 ## Non-negotiables
@@ -55,7 +55,8 @@ PLAN → CONTRACT → RED → GREEN → REFACTOR → COUNCIL → GATE → LOG
 - Research rather than recall any version, limit, API shape, price or standard.
 - No secrets in source, logs or error messages. `.env` is never committed.
 - Validate every external input at the boundary; check authorisation per object, not just per user.
-- Update the ledger in the same packet as the code: STATUS, CHANGELOG, README, ADR.
+- Update the ledger in the same packet as the code: `docs/STATUS.md` for the active line and
+  index row, `docs/status/<ID>.md` for verdicts and evidence, plus CHANGELOG, README and ADR.
 - Reuse what exists (modules, helpers, skills) before writing a parallel implementation.
 - Never rewrite published git history.
 - **Never disable the detector.** Loosening a budget, adding an allowlist entry or removing a check

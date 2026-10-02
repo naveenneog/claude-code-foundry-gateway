@@ -592,7 +592,7 @@ DNS became ready. The company SNI request failed TLS; it is not a successful
 company-address proof. The isolated Azure endpoint returned its governed 401.
 No public domain was available or purchased. All proof resources were deleted
 and the soft-deleted APIM instance was purged
-([STATUS](STATUS.md#p69-the-company-address-in-the-flow-2026-09-28)).
+([STATUS](status/P69.md#p69-the-company-address-in-the-flow-2026-09-28)).
 The lead accepted the positive company-hostname proof as a scope deferral to
 P74, not a completed acceptance criterion
 ([ADR-0033](adr/0033-company-address.md#accepted-scope-deferral-2026-09-28)).

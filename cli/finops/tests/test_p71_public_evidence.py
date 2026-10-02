@@ -19,7 +19,7 @@ def deployment_names(text):
 
 def test_p71_and_u32_public_text_use_the_inspected_capture_aliases():
     # The full heading: other sections, such as a follow-up, may also start with "P71".
-    status = section((ROOT / "docs" / "STATUS.md").read_text(encoding="utf-8"),
+    status = section((ROOT / "docs" / "status" / "P71.md").read_text(encoding="utf-8"),
                      "P71 AUM answers fast and says why it cannot")
     unknowns = (ROOT / "docs" / "UNKNOWNS.md").read_text(encoding="utf-8")
     row = next(line for line in unknowns.splitlines() if line.startswith("| U32 |"))

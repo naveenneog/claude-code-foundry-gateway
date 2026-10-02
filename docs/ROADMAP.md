@@ -87,6 +87,7 @@ premise does not carry over.
 | P84 | Merged (`3e4430b`) with the owner's approval on 2026-09-29, after council round 3 and the packet gate at `5612c94` | Projection deployment checks everything before it writes and never switches into an outage. Read-only preflight, fail-closed Graph, sanitized runner/app failures and unconditional switch refusal until P86, across deployer/installer/flow. ADR-0040 rejects ARM-only admission; 197 preflight assertions, 86 council assertions and 95 current mutations pass. |
 | P85 | Merged (`171b248`) with the owner's approval on 2026-09-30, after council round 5 and the packet gate at `86798f6` | AUM TUI manages people, units, teams and budgets with full tests. |
 | P86 | Merged (`9c5022b`) with the owner's approval on 2026-10-02, after council round 3 and the packet gate at `22dc8f0` | Scheduled projection reconciler and tenant-admin pack: user-assigned managed identity with Graph `GroupMember.Read.All` granted by a tenant admin, a 30-minute Container Apps job, email-backed action-group alerts, destination-bound Cosmos status evidence and runner-based admission. The switch requires Cosmos evidence plus the ARM job definition; dry-run, command/args overrides, missing action group and stale/single-generation evidence are rejected. |
+| P87 | Council passed on all five seats at `1d16972`; merges after its packet gate with the owner's approval | Archive merged `docs/STATUS.md` sections into `docs/status/<ID>.md`, keep `docs/STATUS.md` below the gate read limit, update links and tests, and add a durable documentation guard. |
 | P88 | Merged (`558fb7e`) with the owner's approval on 2026-10-02, after council and the packet gate at `d3d28d8` | AUM pytest results do not depend on the date they run. Tests pin the AUM UTC clock to the September fixture month with advancing elapsed time, cover all `claude_finops` `datetime.now(` readers and keep current-month write tests deterministic without product changes. |
 | P89 | Merged (`152b4a3`) with the owner's approval on 2026-10-02, together with P90, after council and the packet gate at `1284388` | Azure CLI command guide for every customer setup step the installer and in-scope administration scripts perform, with a guard that checks `az --help`, named-value parity, Bicep parameters and relative links. |
 
@@ -434,9 +435,9 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       (update, tier, projection, network, Desktop sign-in), diagnostics and the FinOps steps
       (tool, token and dollar budgets with a scheduled reconciler, workbooks, reports), each
       proven live on an isolated gateway; an integrated run on 2026-09-27 found and fixed nine
-      defects ([STATUS](STATUS.md#p66-guided-flow-2026-09-27)). Open: the 403 message names the
+      defects ([STATUS](status/P66.md#p66-guided-flow-2026-09-27)). Open: the 403 message names the
       default tier groups; the FinOps steps have not yet run on the same estate as the others
-- [x] P67 developer workstation fixes from the owner's test, merged 2026-09-27 (`ea31a5f`, `4327563`, `25bda4d`; [STATUS](STATUS.md#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)) — acceptance: Claude Desktop Entra
+- [x] P67 developer workstation fixes from the owner's test, merged 2026-09-27 (`ea31a5f`, `4327563`, `25bda4d`; [STATUS](status/P67.md#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)) — acceptance: Claude Desktop Entra
       sign-in uses the key spelling the Desktop release that reads it knows, including a running
       build older than the installed one; Claude Code declares capabilities by model family for
       the recorded models, pins each alias to the newest model in its family, and is compared
@@ -444,7 +445,7 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       and end with a real Claude Code reply; diagnostics never wait for input and read the real
       Desktop configuration and logs.
       [ADR-0031](adr/0031-client-keys-every-release-reads.md), **U27**, **U28**, **U29**
-- [x] P68 guided flow redesign from the owner's test, merged 2026-09-28 (`fc9c86c`, [STATUS](STATUS.md#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)) — acceptance: `Start-ClaudeGateway.ps1`
+- [x] P68 guided flow redesign from the owner's test, merged 2026-09-28 (`fc9c86c`, [STATUS](status/P68.md#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)) — acceptance: `Start-ClaudeGateway.ps1`
       shows its first question within seconds and names each slow step while it runs; Setup
       hands every installer decision (tiers, sections, defaults) back to the installer's own
       prompts instead of passing `-Yes`, and a projection choice no longer stops the installer;
