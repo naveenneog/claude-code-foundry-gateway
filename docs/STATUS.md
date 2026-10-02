@@ -204,6 +204,20 @@ section moves to `docs/status/P91.md` under P87's ADR-0042.
   by side, 12.1 s). Mutations, one per new check: 6 of 6 caught (4 PowerShell, 2 bash), each at its
   suite's baseline count with its own check among the failures; every bash mutant passes `bash -n`
   ([measurement](measurements/p91-mutations-council3.json)).
+- Council round 3, Security, 2026-10-02: BLOCK on `49aa345`. On Windows the state directory's parent
+  was checked without the `Delete` right on the parent itself, and the directories above it only for
+  junctions, so another account that may delete, rename or re-permission one of them could swap the
+  tree between `Assert-ClaudeInstallStore` and the read or rename. Ruling: the lead amendment stands as
+  stated, with a check that case 1 reads, writes and locks nothing in the place. RED:
+  `Test-InstallerCheckpointStore.ps1` 24 checks, 2 failed: "a parent directory that lets Users delete
+  it is refused" (PASSED) and "a directory between the parent and the user profile that lets Everyone
+  delete it or Users modify it is refused" (PASSED, PASSED). The ruling's checks pass before any change:
+  `Test-InstallerCheckpoint.ps1` 86, 0 failed; `Test-BashInstallerCheckpoint.ps1` 52, 0 failed. This
+  machine's TEMP grants Modify to two other accounts (a local group and an unresolved SID), which the
+  new rule refuses as a directory above a state directory, so state directories in tests move from
+  TEMP to LocalApplicationData: the scratch of `Test-InstallerCheckpoint.ps1` and, on Windows,
+  `Test-InstallerCheckpointStore.ps1`, and the `CLAUDE_GATEWAY_STATE_DIR` that `Test-CompanyInstaller.ps1`
+  and `Test-All.ps1` give each run.
 
 Acceptance criteria, for both installers unless one is named:
 

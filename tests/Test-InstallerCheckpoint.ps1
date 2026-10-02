@@ -16,7 +16,10 @@ function Assert($label, $condition, $detail = '') {
 Write-Host ''
 Write-Host 'Installer checkpoint and resume (PowerShell installer)' -ForegroundColor Cyan
 $watch = [Diagnostics.Stopwatch]::StartNew()
-$scratch = [IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetTempPath()) ('p91-checkpoint-' + [guid]::NewGuid().ToString('N'))))
+# On Windows a state directory is trusted only when no other account may delete, rename or re-permission
+# a directory above it up to the user profile (ADR-0046 decision 2). A TEMP that grants another account
+# Modify, as on some machines, fails that, so the scratch is in LocalApplicationData.
+$scratch = [IO.Path]::GetFullPath((Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) ('p91-checkpoint-' + [guid]::NewGuid().ToString('N'))))
 New-Item -ItemType Directory -Force -Path $scratch | Out-Null
 $sleeper = $null
 # A state directory outside the user profile, which the installer refuses before it creates anything.
@@ -144,7 +147,7 @@ try {
     # file of this checkout there the run keeps no store; with its checkpoint, lock or temporary file
     # there it refuses; CLAUDE_GATEWAY_STATE_DIR naming the same place refuses.
     $untrusted = [ordered]@{}
-    foreach ($n in 'untrusted-free', 'untrusted-checkpoint', 'untrusted-lock', 'untrusted-temp', 'untrusted-named') {
+    foreach ($n in 'untrusted-free', 'untrusted-checkpoint', 'untrusted-lock', 'untrusted-temp', 'untrusted-named', 'untrusted-planted') {
         $s = New-P91Scenario -Name $n -Scratch $scratch -Template $template -World (New-P91World)
         $h = Join-Path $s.Dir 'home'; New-Item -ItemType Directory -Force -Path $h | Out-Null
         $acl = New-Object System.Security.AccessControl.DirectorySecurity
@@ -161,8 +164,25 @@ try {
             $file = Join-Path $place $file
             Write-P91Text $file '{"schema":"claude-gateway-install-checkpoint","note":"placed by the test"}'
         }
+        $listing = ''
+        if ($n -eq 'untrusted-planted') {
+            # The Security seat's ruling: the place exists and holds another checkout's checkpoint and
+            # lock, which the current user may not read, so any read of them fails the run.
+            New-Item -ItemType Directory -Force -Path $place | Out-Null
+            Protect-P91Directory $place
+            foreach ($other in 'install-0000000000000000.json', 'install-0000000000000000.lock') {
+                $p = Join-Path $place $other
+                Write-P91Text $p '{"note":"another checkout, placed by the test"}'
+                $deny = New-Object System.Security.AccessControl.FileSecurity
+                $deny.SetAccessRuleProtection($true, $false)
+                $deny.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule([Security.Principal.WindowsIdentity]::GetCurrent().User, 'ReadData', 'Deny')))
+                $deny.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule([Security.Principal.WindowsIdentity]::GetCurrent().User, 'FullControl', 'Allow')))
+                [System.IO.FileSystemAclExtensions]::SetAccessControl([IO.FileInfo]::new($p), $deny)
+            }
+            $listing = (@(Get-ChildItem -LiteralPath $place -Force | Sort-Object Name | ForEach-Object { "$($_.Name)|$($_.Length)|$($_.LastWriteTimeUtc.Ticks)" }) -join ';')
+        }
         $envs = @{ AZUREPS_HOST_ENVIRONMENT = 'cloud-shell/1.0'; HOME = $h; CLAUDE_GATEWAY_STATE_DIR = $(if ($n -eq 'untrusted-named') { $place } else { $null }) }
-        $untrusted[$n] = [pscustomobject]@{ Scenario = $s; Place = $place; File = $file; Hash = (Get-P91Hash $file); Env = $envs; Run = $null }
+        $untrusted[$n] = [pscustomobject]@{ Scenario = $s; Place = $place; File = $file; Hash = (Get-P91Hash $file); Env = $envs; Run = $null; Listing = $listing }
     }
     # A tier group name with a single quote (council round 3): Azure CLI places the name inside an OData
     # string literal, startswith(displayName,'<name>'), without escaping the quote.
@@ -307,6 +327,11 @@ try {
     Assert 'R6 CLAUDE_GATEWAY_STATE_DIR naming a place that fails a check refuses at startup on one line naming the variable and the check, with no file of this checkout there; nothing is created' (
         $un.ExitCode -eq 1 -and @(Get-P91ErrLines $un).Count -eq 1 -and $unLine -match '^Refused: .*S-1-5-32-545' -and $unLine -match 'CLAUDE_GATEWAY_STATE_DIR' -and
         $unLine -match 'Nothing was read or changed' -and -not (Get-P91Calls $un 'account set*').Count -and -not (Test-Path -LiteralPath $u.Place)) (Get-P91Tail $un)
+    $u = $untrusted['untrusted-planted']; $up = Get-P91Result $r1 $u.Run
+    $after = (@(Get-ChildItem -LiteralPath $u.Place -Force -ErrorAction SilentlyContinue | Sort-Object Name | ForEach-Object { "$($_.Name)|$($_.Length)|$($_.LastWriteTimeUtc.Ticks)" }) -join ';')
+    Assert 'R6 Security ruling: a default place that fails a check and holds only another checkout''s unreadable checkpoint and lock is neither read, written nor locked; the run completes without a store' (
+        $up.ExitCode -eq 0 -and $up.Out -match '\[WARN\] .*This run keeps no install checkpoint\.' -and $u.Listing -and $after -eq $u.Listing -and
+        (Get-P91Calls $up 'deployment group create*').Count -eq 1) "$(Get-P91Tail $up) || before $($u.Listing) || after $after"
     $qi = Get-P91Result $r1 $runQuoteInput; $qiLine = [string]@(Get-P91ErrLines $qi)[0]
     Assert 'R5 a tier group name with a single quote is refused at input on one line naming -StandardGroup and the OData string literal; nothing is created' (
         (Test-Refusal $qi '^Refused: -StandardGroup ''O''Brien'': Entra group names containing a single quote are not supported, because Azure CLI places the name inside an OData string literal') -and

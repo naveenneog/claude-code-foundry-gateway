@@ -40,6 +40,10 @@ $checks = [Collections.Generic.List[object]]::new()
 $active = [Collections.Generic.List[object]]::new()
 $results = @()
 $runDirectory = Join-Path ([IO.Path]::GetTempPath()) ('test-all-' + [guid]::NewGuid().ToString('N'))
+# Each check's install checkpoint directory is in LocalApplicationData: on Windows a state directory is
+# trusted only when no other account may delete, rename or re-permission a directory above it up to the
+# user profile, which a TEMP that grants another account Modify fails (ADR-0046 decision 2).
+$stateDirectory = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) ('claude-gateway-test-all-' + [guid]::NewGuid().ToString('N'))
 $suiteClock = [Diagnostics.Stopwatch]::StartNew()
 $startedAt = [datetime]::UtcNow.ToString('o')
 $configuration = $null
@@ -133,7 +137,7 @@ function Start-Check($check) {
     $startInfo.StandardErrorEncoding = [Text.Encoding]::UTF8
     foreach ($key in 'TEMP', 'TMP', 'TMPDIR') { $startInfo.Environment[$key] = $scratch }
     # An installer run past its summary keeps its checkpoint here, not in the user's state directory (ADR-0046).
-    $startInfo.Environment['CLAUDE_GATEWAY_STATE_DIR'] = Join-Path $scratch 'claude-gateway-state'
+    $startInfo.Environment['CLAUDE_GATEWAY_STATE_DIR'] = Join-Path $stateDirectory ([string]$check.Id)
     foreach ($arg in @('-NoProfile', '-NonInteractive', '-File', $path)) { $startInfo.ArgumentList.Add($arg) }
     foreach ($key in $check.Params.Keys) {
         $value = $check.Params[$key]
@@ -381,6 +385,7 @@ finally {
         try { Stop-CheckProcess $check } catch { Write-Warning $_.Exception.Message }
     }
     Remove-Item -LiteralPath $runDirectory -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $stateDirectory -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 Write-Host ''

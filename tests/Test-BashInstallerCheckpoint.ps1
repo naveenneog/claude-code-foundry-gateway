@@ -366,7 +366,7 @@ try {
     # CLAUDE_GATEWAY_STATE_DIR naming the same place refuses.
     $groupHome = "ckpt_perm_probe_() { PERM_LINK=0; PERM_MINE=1; PERM_ROOT=0; PERM_OWNER='p91-me'; PERM_MODE='drwx------'; [ `"`$1`" = `"`$CKPT_HOME_REAL`" ] && PERM_MODE='drwxrwx---'; return 0; }"
     $untrusted = [ordered]@{}
-    foreach ($n in 'untrusted-free', 'untrusted-checkpoint', 'untrusted-lock', 'untrusted-temp', 'untrusted-named') {
+    foreach ($n in 'untrusted-free', 'untrusted-checkpoint', 'untrusted-lock', 'untrusted-temp', 'untrusted-named', 'untrusted-planted') {
         $s = New-Scenario $n (New-World)
         $place = Join-Path $s.Home 'clouddrive/.claude-gateway'
         New-Item -ItemType Directory -Force -Path (Join-Path $s.Home 'clouddrive') | Out-Null
@@ -379,8 +379,27 @@ try {
             $file = Join-Path $place $file
             Write-Lf $file '{"schema":"claude-gateway-install-checkpoint","note":"placed by the test"}'
         }
+        $listing = ''
+        if ($n -eq 'untrusted-planted') {
+            # The Security seat's ruling: the place exists and holds another checkout's checkpoint and
+            # lock, which the current user may not read, so any read of them fails.
+            New-Item -ItemType Directory -Force -Path $place | Out-Null
+            foreach ($other in 'install-0000000000000000.json', 'install-0000000000000000.lock') {
+                $p = Join-Path $place $other
+                Write-Lf $p '{"note":"another checkout, placed by the test"}'
+                if ($script:windows) {
+                    $deny = New-Object System.Security.AccessControl.FileSecurity
+                    $deny.SetAccessRuleProtection($true, $false)
+                    $deny.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule([Security.Principal.WindowsIdentity]::GetCurrent().User, 'ReadData', 'Deny')))
+                    $deny.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule([Security.Principal.WindowsIdentity]::GetCurrent().User, 'FullControl', 'Allow')))
+                    [System.IO.FileSystemAclExtensions]::SetAccessControl([IO.FileInfo]::new($p), $deny)
+                }
+                else { & chmod 000 $p }
+            }
+            $listing = (@(Get-ChildItem -LiteralPath $place -Force | Sort-Object Name | ForEach-Object { "$($_.Name)|$($_.Length)|$($_.LastWriteTimeUtc.Ticks)" }) -join ';')
+        }
         $envs = @{ AZUREPS_HOST_ENVIRONMENT = 'cloud-shell/1.0'; CLAUDE_GATEWAY_STATE_DIR = $(if ($n -eq 'untrusted-named') { ConvertTo-BashPath $place } else { $null }) }
-        $untrusted[$n] = [pscustomobject]@{ Scenario = $s; Place = $place; File = $file; Hash = $(if ($file) { (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash } else { '' }); Env = $envs; Run = $null }
+        $untrusted[$n] = [pscustomobject]@{ Scenario = $s; Place = $place; File = $file; Hash = $(if ($file) { (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash } else { '' }); Env = $envs; Run = $null; Listing = $listing }
     }
     # A tier group name with a single quote (council round 3): Azure CLI places the name inside an OData
     # string literal, startswith(displayName,'<name>'), without escaping the quote.
@@ -510,6 +529,11 @@ try {
     Assert 'R6 bash CLAUDE_GATEWAY_STATE_DIR naming a place that fails a check refuses at startup on one line naming the variable and the check, with no file of this checkout there; nothing is created' (
         $un.ExitCode -eq 1 -and @(Get-ErrLines $un).Count -eq 1 -and $unLine -match '^Refused: .*drwxrwx---' -and $unLine -match 'CLAUDE_GATEWAY_STATE_DIR' -and
         $unLine -match 'Nothing was read or changed' -and -not (Get-Calls $un 'account set*').Count -and -not (Test-Path -LiteralPath $u.Place)) (Get-Tail $un)
+    $u = $untrusted['untrusted-planted']; $up = $r1[$u.Run.Dir]
+    $after = (@(Get-ChildItem -LiteralPath $u.Place -Force -ErrorAction SilentlyContinue | Sort-Object Name | ForEach-Object { "$($_.Name)|$($_.Length)|$($_.LastWriteTimeUtc.Ticks)" }) -join ';')
+    Assert 'R6 bash Security ruling: a default place that fails a check and holds only another checkout''s unreadable checkpoint and lock is neither read, written nor locked; the run completes without a store' (
+        $up.ExitCode -eq 0 -and $up.Out -match '\[WARN\] .*This run keeps no install checkpoint\.' -and $u.Listing -and $after -eq $u.Listing -and
+        (Get-Calls $up 'deployment group create*').Count -eq 1) "$(Get-Tail $up) || before $($u.Listing) || after $after"
     $qi = $r1[$runQuoteInput.Dir]; $qiLine = [string]@(Get-ErrLines $qi)[0]
     Assert 'R5 bash a tier group name with a single quote is refused at input on one line naming --standard-group and the OData string literal; nothing is created' (
         (Test-Refusal $qi '^Refused: --standard-group ''O''Brien'': Entra group names containing a single quote are not supported, because Azure CLI places the name inside an OData string literal') -and

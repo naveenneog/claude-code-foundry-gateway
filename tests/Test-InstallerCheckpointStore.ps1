@@ -26,7 +26,14 @@ if (-not $bash) { Write-Host '  [FAIL] no Git Bash (Windows) or bash (macOS, Lin
 function ConvertTo-BashPath([string]$Path) { if ($windows) { '/' + ($Path.Replace('\', '/') -replace '^([A-Za-z]):', '$1') } else { $Path } }
 function Write-Lf([string]$Path, [string]$Text) { [IO.File]::WriteAllText($Path, $Text.Replace("`r`n", "`n"), [Text.UTF8Encoding]::new($false)) }
 
-$scratch = [IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetTempPath()) ('p91-store-' + [guid]::NewGuid().ToString('N'))))
+$scratchRoot = if ($windows) {
+    # On Windows a state directory is trusted only when no other account may delete, rename or
+    # re-permission a directory above it up to the user profile (ADR-0046 decision 2). A TEMP that
+    # grants another account Modify, as on some machines, fails that, so the scratch is in
+    # LocalApplicationData there.
+    [Environment]::GetFolderPath('LocalApplicationData')
+} else { [IO.Path]::GetTempPath() }
+$scratch = [IO.Path]::GetFullPath((Join-Path $scratchRoot ('p91-store-' + [guid]::NewGuid().ToString('N'))))
 New-Item -ItemType Directory -Force -Path $scratch | Out-Null
 $psLibrary = Join-Path $root 'scripts/ClaudeInstallCheckpoint.ps1'
 $shLibrary = Join-Path $root 'scripts/install-checkpoint.sh'
@@ -234,6 +241,22 @@ try {
         $looseState = Join-Path $loose 'state'; New-Item -ItemType Directory -Force -Path $looseState | Out-Null; & $protect $looseState @(& $rule $owner 'FullControl' -Inherit)
         $wp = & $real $looseState 'directory'
         Assert 'pwsh Windows: a parent directory that lets Users delete what it holds is refused, naming the parent and the rule' ((& $refused $wp 'S-1-5-32-545') -and $wp.Contains("$loose, which holds")) $wp
+        # Every directory from the parent up to the user profile, inclusive (council round 3): no other
+        # account may delete, rename, re-permission or take one over, which would let it swap the tree
+        # between a check and a read.
+        $parentDelete = Join-Path $scratch 'win-parent-delete'; New-Item -ItemType Directory -Force -Path $parentDelete | Out-Null
+        & $protect $parentDelete (@(& $trustedRules) + @(& $rule $users 'Delete'))
+        $pdState = Join-Path $parentDelete 'state'; New-Item -ItemType Directory -Force -Path $pdState | Out-Null; & $protect $pdState @(& $rule $owner 'FullControl' -Inherit)
+        $wpd = & $real $pdState 'directory'
+        Assert 'pwsh Windows: a parent directory that lets Users delete it is refused, naming the parent and the rule' ((& $refused $wpd 'S-1-5-32-545') -and $wpd.Contains("$parentDelete, which holds")) $wpd
+        $ancestors = @(foreach ($case in @(@('win-anc-everyone-delete', 'S-1-1-0', 'Delete'), @('win-anc-users-modify', 'S-1-5-32-545', 'Modify'))) {
+                $top = Join-Path $scratch $case[0]; New-Item -ItemType Directory -Force -Path $top | Out-Null
+                & $protect $top (@(& $trustedRules) + @(& $rule (New-Object Security.Principal.SecurityIdentifier($case[1])) $case[2]))
+                $mid = Join-Path $top 'mid'; New-Item -ItemType Directory -Force -Path $mid | Out-Null; & $protect $mid (& $trustedRules)
+                $st = Join-Path $mid 'state'; New-Item -ItemType Directory -Force -Path $st | Out-Null; & $protect $st @(& $rule $owner 'FullControl' -Inherit)
+                [pscustomobject]@{ Top = $top; Sid = $case[1]; Result = (& $real $st 'directory') } })
+        Assert 'pwsh Windows: a directory between the parent and the user profile that lets Everyone delete it or Users modify it is refused, naming it and the rule' (
+            @($ancestors | Where-Object { (& $refused $_.Result $_.Sid) -and $_.Result.Contains("$($_.Top), which holds") }).Count -eq 2) (@($ancestors | ForEach-Object { $_.Result }) -join ' || ')
         # The owner seam answers for one path; every other path keeps its real owner.
         $script:foreignOwnerPath = ''
         function Get-ClaudeInstallWindowsOwner([string]$Path) {

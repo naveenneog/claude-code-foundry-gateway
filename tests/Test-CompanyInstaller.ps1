@@ -2,6 +2,10 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $scratch = Join-Path ([IO.Path]::GetTempPath()) ('company-installer-' + [guid]::NewGuid().ToString('N'))
+# The install checkpoint's state directory is in LocalApplicationData: on Windows a state directory is
+# trusted only when no other account may delete, rename or re-permission a directory above it up to the
+# user profile, which a TEMP that grants another account Modify fails (ADR-0046 decision 2).
+$stateRoot = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) ('company-installer-state-' + [guid]::NewGuid().ToString('N'))
 $failed = 0; $count = 0
 function Check([string]$Name,[scriptblock]$Test) {
     $script:count++
@@ -100,7 +104,7 @@ catch {$failure=$_.Exception.Message}
         [IO.File]::WriteAllText($recordPath,($SavedRecord|ConvertTo-Json -Depth 15))
         [IO.File]::WriteAllText((Join-Path $scratch 'onboarding\profiles\standard\managed-settings.json'),'{"gatewayUrl":"https://old.contoso.test/claude"}')
         # Each call is a first run: an earlier call's install checkpoint (ADR-0046) would make it a resume.
-        $env:CLAUDE_GATEWAY_STATE_DIR=Join-Path $scratch ('install-state-'+[guid]::NewGuid().ToString('N'))
+        $env:CLAUDE_GATEWAY_STATE_DIR=Join-Path $stateRoot ('install-state-'+[guid]::NewGuid().ToString('N'))
         $values=@{SubscriptionId=$sub;FoundryAccount='ai-contoso';FoundryResourceGroup='rg-contoso';ResourceGroup='rg-contoso';ExistingApimName='apim-contoso';Location='eastus2';Sku='BasicV2';AuthMode='interactive';EntitlementStore='named-value';SkipFinOpsOffer=$true;Yes=$true}
         foreach($k in $Overrides.Keys){$values[$k]=$Overrides[$k]}
         $ps=[powershell]::Create()
@@ -266,6 +270,6 @@ function Invoke-ClaudeAddressHttps {param($Hostname,$Thumbprint,$ConnectAddress,
             (Get-ClaudeAddressRecovery -Record $saved -Gateway $firstSetup.Gateway).Allowed
     }
 }
-finally {if(Test-Path $scratch){Remove-Item -LiteralPath $scratch -Recurse -Force}}
+finally {if(Test-Path $scratch){Remove-Item -LiteralPath $scratch -Recurse -Force}; if(Test-Path $stateRoot){Remove-Item -LiteralPath $stateRoot -Recurse -Force}}
 Write-Host "Company installer: $count assertions, $($count-$failed) passed, $failed failed."
 if($failed){exit 1}
