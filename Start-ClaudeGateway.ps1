@@ -150,11 +150,18 @@ function Invoke-FlowPreflight {
 }
 
 function Assert-FlowPreflight {
-    # An approved plan whose installer preflight fails is not applied: nothing is written (ADR-0047 A8).
+    # An approved plan is applied only when its installer preflight passes: a FAIL check, or a NOT-RUN check
+    # for a blocking reason (not-signed-in, prerequisite-failed, not-evaluated), fails the preflight, and
+    # the refusal names each such check with its message or reason. Nothing is written (ADR-0047 A8 and
+    # decision 9).
     param([object[]]$Plans)
-    $failed = @(foreach ($plan in @($Plans | Where-Object { $_ -and $_.Data -and $_.Data.preflight })) { @($plan.Data.preflight.checks | Where-Object { $_.result -eq 'FAIL' }) })
-    if ($failed.Count) {
-        throw "The preflight of Install-ClaudeGateway.ps1 fails, so this plan is not applied: $((@($failed | ForEach-Object { "$($_.id): $($_.message)" })) -join '; '). Nothing was written; correct the answers, then review the plan again."
+    foreach ($plan in @($Plans | Where-Object { $_ -and $_.Data -and $_.Data.preflight })) {
+        $result = $plan.Data.preflight
+        if ([string]$result.result -eq 'PASS') { continue }
+        $blocking = @(Get-ClaudePreflightBlocking @($result.checks))
+        $named = @($blocking | ForEach-Object { if ($_.result -eq 'FAIL') { "$($_.id): $($_.message)" } else { "$($_.id) is NOT-RUN ($($_.reason))" } })
+        $remedies = @($blocking | ForEach-Object { ([string]$_.remedy).Trim() } | Where-Object { $_ } | Select-Object -Unique)
+        throw "The preflight of Install-ClaudeGateway.ps1 does not pass, so this plan is not applied: $(if ($named.Count) { $named -join '; ' } else { "its result is '$($result.result)'" }).$(if ($remedies.Count) { " Remedy: $($remedies -join ' ')" }) Nothing was written; correct them, then review the plan again."
     }
 }
 
