@@ -138,18 +138,28 @@ function Get-ClaudeInstallStoreTail {
     return ('Nothing was read or changed.' + $(if ($c -and $c.Root) { " Resume: $(Format-ClaudeInstallResume)" } else { '' }))
 }
 
-function Get-ClaudeInstallWindowsParentProblem([string]$Directory) {
-    # An account that may delete what the parent holds, or change its rules, could replace the state
-    # directory between a check and a read (decision 2). '' when the parent is trusted.
-    $parent = [IO.Path]::GetDirectoryName($Directory.TrimEnd('\'))
-    if (-not $parent -or -not (Test-Path -LiteralPath $parent)) { return '' }
-    $owner = Get-ClaudeInstallWindowsOwner $parent
-    if ((Get-ClaudeInstallWindowsTrusted) -notcontains $owner) {
-        return "the directory $parent, which holds the install checkpoint directory $Directory, is owned by $(Get-ClaudeInstallSidName $owner) ($owner), not by the current user, SYSTEM or Administrators, so the store is not trusted."
+function Get-ClaudeInstallWindowsAncestorProblem([string]$Directory) {
+    # Every directory from the one that holds the state directory up to the user profile, inclusive, is
+    # not a junction or symbolic link, is owned by the current user, SYSTEM or Administrators, and grants
+    # no other account Delete, DeleteSubdirectoriesAndFiles, ChangePermissions, TakeOwnership,
+    # GENERIC_ALL or GENERIC_WRITE, any of which lets that account rename, replace or re-permission the
+    # tree between a check and a read (decision 2): the Windows form of the POSIX walk. '' when they are.
+    $top = [IO.Path]::GetFullPath([Environment]::GetFolderPath('UserProfile')).TrimEnd('\')
+    $a = [IO.Path]::GetDirectoryName($Directory.TrimEnd('\'))
+    while ($a) {
+        if (Test-Path -LiteralPath $a) {
+            $held = "the directory $a, which holds the install checkpoint directory $Directory,"
+            if (Test-ClaudeInstallReparsePoint $a) { return "$held is a symbolic link or junction, so the store is not trusted." }
+            $owner = Get-ClaudeInstallWindowsOwner $a
+            if ((Get-ClaudeInstallWindowsTrusted) -notcontains $owner) {
+                return "$held is owned by $(Get-ClaudeInstallSidName $owner) ($owner), not by the current user, SYSTEM or Administrators, so the store is not trusted."
+            }
+            $rule = @(Get-ClaudeInstallWindowsWriters -Path $a -Mask (0x10000 -bor 0x40 -bor 0x40000 -bor 0x80000 -bor 0x10000000 -bor 0x40000000))[0]
+            if ($rule) { return "$held lets $($rule.Name) ($($rule.Sid)) delete, rename or re-permission it or what it holds ($($rule.Rights)), so the store is not trusted." }
+        }
+        if ([string]::Equals($a.TrimEnd('\'), $top, [StringComparison]::OrdinalIgnoreCase)) { return '' }
+        $a = [IO.Path]::GetDirectoryName($a)
     }
-    # DeleteSubdirectoriesAndFiles, ChangePermissions, TakeOwnership and GENERIC_ALL; FullControl holds them.
-    $rule = @(Get-ClaudeInstallWindowsWriters -Path $parent -Mask (0x40 -bor 0x40000 -bor 0x80000 -bor 0x10000000))[0]
-    if ($rule) { return "the directory $parent, which holds the install checkpoint directory $Directory, lets $($rule.Name) ($($rule.Sid)) delete or replace what it holds ($($rule.Rights)), so the store is not trusted." }
     return ''
 }
 
@@ -162,8 +172,8 @@ function Get-ClaudeInstallStorePathProblem {
     if ($c -and $c.Location -and $c.Location.CloudDrive) { return '' }
     $why = ''
     if (Test-ClaudeInstallWindows) {
-        # A state directory still to be created is judged by the directory that will hold it.
-        if (-not (Test-Path -LiteralPath $Path)) { if ($Kind -eq 'directory') { return (Get-ClaudeInstallWindowsParentProblem $Path) }; return '' }
+        # A state directory still to be created is judged by the directories that will hold it.
+        if (-not (Test-Path -LiteralPath $Path)) { if ($Kind -eq 'directory') { return (Get-ClaudeInstallWindowsAncestorProblem $Path) }; return '' }
         # The state directory's own name is checked for a link where its place is resolved.
         if ($Kind -eq 'file' -and (Test-ClaudeInstallReparsePoint $Path)) { $why = 'is a symbolic link or junction' }
         else {
@@ -181,7 +191,7 @@ function Get-ClaudeInstallStorePathProblem {
             if (-not $acl.AreAccessRulesProtected -or @($acl.Access | Where-Object { $_.IsInherited }).Count) { $why = 'inherits its access rules from the directory that holds it, where one the installer creates has only its own' }
         }
         if ($why) { return "the install checkpoint $Kind $Path $why, so it is not trusted; a state directory the installer creates is owner-only." }
-        if ($Kind -eq 'directory') { return (Get-ClaudeInstallWindowsParentProblem $Path) }
+        if ($Kind -eq 'directory') { return (Get-ClaudeInstallWindowsAncestorProblem $Path) }
         return ''
     }
     $s = Get-ClaudeInstallPosixStat $Path

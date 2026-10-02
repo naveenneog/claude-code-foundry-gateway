@@ -530,7 +530,7 @@
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "scripts/ClaudeInstallCheckpoint.ps1": "7da1cb349d73af3856628c155519a57fde6f0aa398d556420ece1c63f574616a",
         "scripts/ClaudeInstallResume.ps1": "ef684ae9d4ecf1eca5756c78eee2ce99dbea2680e937752f65fc35373b37bf99",
-        "scripts/ClaudeInstallStore.ps1": "98e13dc46418780010a232f8584e368c36a44dccce349ea745d2519e9b9cfe9a",
+        "scripts/ClaudeInstallStore.ps1": "37624fb3c330fa346a3ed131ef422380eebe8e54c8f04823b6a1aaa34fdd10f3",
         "scripts/flow/Foundation.ps1": "fb0d43ee4fbe00a140410bf3f9594b1a6d43bc4f226748f8231c6f23743c7ed4",
         "scripts/install-checkpoint.sh": "f1395df33a2283245fa3cf94cd5016b4dfc5cf55d2720f48cd413e48c9441a53",
         "scripts/install-resume.sh": "16cd05e98a1a9dfdc729b4174b2ab7fb708e39f278542a5cf725a9972a4d10e5",
