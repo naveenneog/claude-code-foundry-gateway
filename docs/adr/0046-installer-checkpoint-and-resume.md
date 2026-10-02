@@ -174,7 +174,7 @@ recorded answers, which the printed command carries, and the receipts (Consequen
   before anything in the store is read, and again after the state directory is created, both
   installers resolve the state directory (`Resolve-ClaudeInstallLocation`, `ckpt_location_resolve_`)
   and then check what holds it (`Get-ClaudeInstallAncestorProblem`, `ckpt_ancestors_check_`,
-  `Get-ClaudeInstallWindowsParentProblem`):
+  `Get-ClaudeInstallWindowsAncestorProblem`):
   - The directory is an absolute path without `.` or `..` components, and its own last component is
     not a symbolic link or junction; the installer does not follow one there.
   - Its real path is inside the real path of `$HOME` (POSIX) or of the user profile
@@ -194,15 +194,15 @@ recorded answers, which the printed command carries, and the receipts (Consequen
     Security seat's exception for a sticky directory. Missing directories are created under
     `umask 077`. Inside `clouddrive` only `$HOME` is read: the `clouddrive` entry is in `$HOME`, and
     the mount sets the modes below it (U66).
-  - Windows: the directory that holds the state directory is owned by the current user, SYSTEM or
-    Administrators and grants no other account `DeleteSubdirectoriesAndFiles`, `ChangePermissions`,
-    `TakeOwnership` or full control, any of which lets that account rename or replace the state
-    directory. A state directory still to be created is judged at startup by that directory (lead
-    amendment), as the POSIX walk reads the existing directories above it.
-  - Residual on Windows: the directories above that one are checked for junctions and symbolic links
-    only, not for their access rules, so an account that may rename one of them could move the tree
-    between the check and the read; a file such an account creates is owned by it and is refused when
-    it is checked.
+  - Windows (council round 3): every directory from the one that holds the state directory up to the
+    user profile, inclusive, is not a junction or symbolic link, is owned by the current user, SYSTEM
+    or Administrators, and grants no other account `Delete`, `DeleteSubdirectoriesAndFiles`,
+    `ChangePermissions`, `TakeOwnership`, `GENERIC_ALL` or `GENERIC_WRITE`. Each of these lets that
+    account rename, replace or re-permission the tree between a check and a read, so this is the
+    Windows form of the POSIX walk above; `Modify` and full control hold `Delete`. A state directory
+    still to be created is judged at startup by the same walk. A TEMP that grants another account
+    `Modify` fails it (the build machine's TEMP does, read with `Get-Acl` on 2026-10-02), so the test
+    suites keep their state directories in `%LOCALAPPDATA%`.
 - **Git Bash (council round 2, the Security seat's option b).** `install-claude-gateway.sh` reads no
   Windows access rules, so under Git Bash, MSYS2 or Cygwin (`uname -s` beginning `MINGW`, `MSYS` or
   `CYGWIN`) it keeps no store: it reads and writes no checkpoint and no lock, and after the
@@ -611,7 +611,7 @@ Where the code differs from Decisions 1-16, the code is as follows.
   suites and the store suite on `ubuntu-latest` and `macos-latest`.
 - A place that fails a check (lead amendment, 2026-10-02): the checks name the first one that fails
   as a sentence (`Resolve-ClaudeInstallLocation`, `Get-ClaudeInstallStorePathProblem`,
-  `Get-ClaudeInstallAncestorProblem`, `Get-ClaudeInstallWindowsParentProblem`; `ckpt_location_resolve_`,
+  `Get-ClaudeInstallAncestorProblem`, `Get-ClaudeInstallWindowsAncestorProblem`; `ckpt_location_resolve_`,
   `ckpt_store_path_`, `ckpt_ancestors_check_`), and `Assert-ClaudeInstallStore` and
   `ckpt_untrusted_store_` apply the three cases of Decision 1. `Assert-ClaudeInstallStorePath` and
   `ckpt_perm_check_` still refuse for a lock taken over and for each temporary file mid-run, after
@@ -676,12 +676,14 @@ The lead amendment (2026-10-02) added checks, RED first:
 |---|---|---|
 | A store place that fails a check stopped every run, every Cloud Shell run when `$HOME` fails (U78) | a default place that fails a check, with no file of the checkout there, keeps no store: one warning naming the place and the check, the resume command with the answers, the Cloud Shell line, a completed run, and nothing written there; the same place holding the checkpoint, the lock or a temporary file of the checkout refuses at startup naming the file, the check and the next step, and keeps the file; `CLAUDE_GATEWAY_STATE_DIR` naming the same place refuses and names the variable. PowerShell: Cloud Shell without `clouddrive` under a `$HOME` that lets Users delete what it holds (real access rules); bash: Cloud Shell with `clouddrive` and a `$HOME` of mode `drwxrwx---` (probe seam) | both installers |
 
-Council round 3 (2026-10-02, Coder) added checks, RED first:
+Council round 3 (2026-10-02) added checks, RED first for each behaviour change:
 
 | Finding | Check | Suite |
 |---|---|---|
 | A name reaches an OData string literal unescaped | a tier group name with a single quote is refused at input on one line naming the parameter, and nothing is created; a recorded tier group answer with one is a corrupt checkpoint that names the answer and is kept | both installers |
 | Other values that reach an OData string literal | a name prefix with a single quote is refused at input and as a recorded answer; a Desktop or resolver app id that is not a GUID is a corrupt recorded answer and is refused before `az ad app show --id` runs | PowerShell |
+| Windows directories above the parent checked for junctions only, and the parent without `Delete` (Security) | a parent that lets Users delete it is refused, and a directory between the parent and the profile that lets Everyone delete it or Users modify it is refused (real access rules) | store |
+| The lead amendment, ruled acceptable as stated (Security) | a default place that fails a check and holds only another checkout's checkpoint and lock, which the current user may not read, is neither read, written nor locked: the run completes without a store, and the place's entries and last-write time are unchanged | both installers |
 
 Every new check gets a mutation that breaks what it guards; a mutation counts only when the suite
 loads with its baseline check count and at least one check fails, and a bash mutant also passes
@@ -715,9 +717,11 @@ A prepared, unpushed workflow runs the bash checks and the POSIX permission and 
   `install-claude-gateway.sh` without a store is a first run, so the refusal of Decision 9 does not
   apply, and its missing first-run read-back is a row of `docs/ROADMAP.md`.
 - A state directory outside the home directory or profile, one whose access rules are inherited (an
-  existing directory named by `CLAUDE_GATEWAY_STATE_DIR`), and one below a directory that its group
-  can write (mode 775, for example) stop the installer, under the same two conditions, with one line
-  that names the directory, its mode or rule, and the resume command or the next step.
+  existing directory named by `CLAUDE_GATEWAY_STATE_DIR`), one below a directory that its group can
+  write (mode 775, for example), and on Windows one below a directory up to the profile that another
+  account may delete, rename or re-permission (a TEMP that grants another account `Modify`, for
+  example) stop the installer, under the same two conditions, with one line that names the
+  directory, its mode or rule, and the resume command or the next step.
 - The bash installer under Git Bash keeps no checkpoint; `Install-ClaudeGateway.ps1` is the Windows
   path, and a bash rerun there starts as a first run with the printed answers.
 
@@ -739,8 +743,9 @@ A prepared, unpushed workflow runs the bash checks and the POSIX permission and 
 - The attended Cloud Shell run shows a `$HOME` that its group can write (U78): every Cloud Shell run
   then keeps no store, so a rerun there never resumes, and the trust rule for `$HOME` in Cloud Shell
   needs another basis.
-- A support case shows a directory above the parent of a Windows state directory renamed between
-  the check and the read (the residual of Decision 2).
+- A support case shows the default Windows state directory left without a store because a directory
+  up to the profile grants another account `Delete`, for example a group added to the profile's
+  access rules, so that the Windows walk of Decision 2 fails on ordinary machines.
 
 ## References
 

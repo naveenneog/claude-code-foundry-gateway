@@ -708,9 +708,10 @@ account could have written or replaced
   other than the current user, SYSTEM or Administrators, a path with an access rule
   that lets another account write it, including a rule inherited from the parent
   directory, a state directory whose access rules are inherited rather than its
-  own, a junction or symbolic link between the state directory and the user
-  profile, and a parent directory that lets another account delete or replace what
-  it holds.
+  own, and any directory from the one that holds the state directory up to the user
+  profile that is a junction or symbolic link, that another account owns, or that
+  lets another account delete, rename or re-permission it or what it holds. A TEMP
+  that grants another account `Modify` is such a directory.
 - `clouddrive` is exempt: its mount sets the modes, and the Cloud Shell storage
   account's access control applies; only `$HOME` above it is checked.
 - `install-claude-gateway.sh` reads no Windows access rules, so under Git Bash,

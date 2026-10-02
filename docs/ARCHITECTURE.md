@@ -136,10 +136,11 @@ keys or connection strings, and the checkpoint test suites check that
   other users can write without the sticky bit; on Windows a junction or symbolic
   link, one owned by an account other than the current user, SYSTEM or
   Administrators, one with an access rule that lets another account write it, a
-  state directory whose rules are inherited, and a parent that lets another account
-  delete what it holds. Such a store refuses when `CLAUDE_GATEWAY_STATE_DIR` names it
-  or when it holds a file of the checkout; otherwise the run keeps no store and
-  continues on its live checks. The bash installer under Git Bash keeps no store
+  state directory whose rules are inherited, and a directory up to the user profile
+  that another account may delete, rename or re-permission. Such a store refuses
+  when `CLAUDE_GATEWAY_STATE_DIR` names it or when it holds a file of the checkout;
+  otherwise the run keeps no store and continues on its live checks. The bash
+  installer under Git Bash keeps no store
   ([store and location](adr/0046-installer-checkpoint-and-resume.md#1-store-and-location), [file mechanics](adr/0046-installer-checkpoint-and-resume.md#2-file-mechanics)).
 - **Failures.** A refusal is one line that names the field or reason and, for the
   refusals [Setup](SETUP.md#resume-after-a-failure) lists, the command that resumes
