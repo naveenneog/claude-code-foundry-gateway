@@ -73,6 +73,34 @@ Planned RED files and scenario names are recorded in ADR-0047. The packet starts
 `Test-BashInstallerStepSelection.ps1`, `Test-GuidedFlowAnswersSchema.ps1` and
 `Test-BashInstallerCheckpointShards.ps1`. No product code is included in this PLAN/CONTRACT commit.
 
+
+### RED
+
+RED tests were added before product code. The targeted RED command was:
+
+```powershell
+pwsh -NoProfile -File .\tests\Test-InstallerAnswersSchema.ps1
+pwsh -NoProfile -File .\tests\Test-InstallerPreflight.ps1
+pwsh -NoProfile -File .\tests\Test-InstallerStepSelection.ps1
+pwsh -NoProfile -File .\tests\Test-BashInstallerPreflight.ps1
+pwsh -NoProfile -File .\tests\Test-GuidedFlowAnswersSchema.ps1
+pwsh -NoProfile -File .\tests\Test-BashInstallerCheckpointShards.ps1
+```
+
+Observed failure lines on the accepted plan before implementation:
+
+- `schema file exists` failed because `schemas/claude-gateway.answers.schema.json` did not exist.
+- `schema-covers-powershell-parameters` failed, naming every installer parameter from `SubscriptionId` through `ModelCountryCode`.
+- `schema-covers-bash-flags` failed, naming the 15 bash flags.
+- `schema-covers-flow-keys` failed, naming guided-flow keys from `address.hostname` through `reports.enabled`.
+- `schema-covers-prompt-only-answers` failed for `RevocationWindowSeconds`, `TeamBudgetBehaviour`, `UnassignedDevelopers`, `DeveloperEstimate`, `PendingClaudeDeployment` and `BusinessUnits`.
+- `preflight parameters exist`, `shared answers/preflight library exists` and `preflight-json-shape has stable check ids` failed.
+- `step selection parameters exist`, `liststeps-json-names-checkpoint-state`, `selected-step-refuses-unverified-prerequisite`, `selected-step-reruns-with-p91-live-check`, `progress events are emitted`, `progress events have required schema` and `precedence-parameter-answers-checkpoint-default` failed.
+- Bash preflight, step and progress checks failed because the flags and `scripts/install-answers.sh` did not exist.
+- Guided-flow schema and preflight checks failed because the flow did not call the shared schema/preflight path.
+- `bash-checkpoint-shards-cover-every-case-once` failed because Test-All still registered one bash checkpoint check.
+
+
 ## P91 installer checkpoint and resume, 2026-10-01
 
 **Council: all five seats passed at `bf8c4a7`** (Architect in round 1; UX and QA in round 2;
