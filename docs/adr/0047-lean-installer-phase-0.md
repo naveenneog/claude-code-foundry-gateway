@@ -177,23 +177,40 @@ The RED phase adds these tests before product code:
    is given and contradicts it (`Test-ClaudeAnswersHolds`, `scripts/ClaudeInstallerAnswers.ps1:170`);
    an answer the run asks for later is not assumed. `x-crossField` holds the rules between answers that
    `answers.crossField` reports (`Get-ClaudeAnswersCrossField`, `scripts/ClaudeInstallerAnswers.ps1:182`).
-5. **PASS, FAIL or NOT-RUN.** A NOT-RUN check carries a reason. `not-signed-in` and
-   `prerequisite-failed` fail the preflight; `not-applicable`, `not-answered` and `discovery-skipped`
+5. **PASS, FAIL or NOT-RUN.** A NOT-RUN check carries a reason. `not-signed-in`, `prerequisite-failed`
+   and `not-evaluated` fail the preflight; `not-applicable`, `not-answered` and `discovery-skipped`
    do not. A check that did not run never passes (P91 R1). The preflight exits 0 only when no check
    fails and none is NOT-RUN for a failing reason (`Invoke-ClaudeGatewayPreflight`,
-   `scripts/ClaudeInstallerPreflight.ps1:92-144`; `preflight_run_`, `scripts/install-preflight.sh:202-255`).
+   `scripts/ClaudeInstallerPreflight.ps1:103-164`; `preflight_run_`, `scripts/install-preflight.sh:208-271`).
+   - **Fail closed by construction (lead review of `cb2cd70`).** Every check starts NOT-RUN with reason
+     `not-evaluated` (`scripts/ClaudeInstallerPreflight.ps1:111`). Only `Set-ClaudePreflightPass`
+     (`:84-89`) makes it PASS, and only for a check with no problem, not set NOT-RUN by a branch, and with
+     a message. The bash aggregator reports a check with no problem, no NOT-RUN line and no `pf_pass_` line
+     that has a message as NOT-RUN `not-evaluated` (`scripts/install-preflight.sh:258-259`). A branch that
+     sets nothing therefore fails the preflight. At `cb2cd70` every check started as PASS, so the lead's
+     mutants M02 and B06, which remove the `target.tenant` pass line, left it PASS with an empty message
+     (`docs/STATUS.md`, P92 round 2). In every scenario of `tests/Test-InstallerPreflight.ps1` and
+     `tests/Test-BashInstallerPreflight.ps1`, each PASS has a message and no check is `not-evaluated`.
+   - **Output that is not JSON is an inconclusive read.** `az account show` output that is not JSON, or
+     has no `tenantId`, is a FAIL of `target.tenant` ("did not return JSON", "returned no tenantId"), and
+     the other Azure checks are NOT-RUN `prerequisite-failed` (`scripts/ClaudeInstallerPreflight.ps1:127-143`;
+     `scripts/install-preflight.sh:217-234`). A Foundry account list that is not JSON is a FAIL of
+     `foundry.account` (`scripts/ClaudeInstallerPreflight.ps1:201-210`; `scripts/install-preflight.sh:107-114`).
+     A stop of `Test-ClaudePrerequisites`, which parses `az account show` itself
+     (`scripts/Test-Prerequisites.ps1:166`), is a FAIL of `operator.adminPrereqs`
+     (`scripts/ClaudeInstallerPreflight.ps1:71-81`).
 6. **The preflight only reads.** Each read names the subscription with `--subscription`; the preflight
    runs no `az account set` (U87), no create, update, set, delete or assign call and no child script,
    and writes no checkpoint, lock or temporary file. `tests/Test-InstallerPreflight.ps1` and
    `tests/Test-BashInstallerPreflight.ps1` check the stub log of every scenario for such calls.
 7. **One APIM reader for the preflight and the run (U82).** `Get-ClaudeApimReuseState`
-   (`scripts/ClaudeInstallerPreflight.ps1:14-35`) reads the instance once through the P91 verdict reader
+   (`scripts/ClaudeInstallerPreflight.ps1:18-39`) reads the instance once through the P91 verdict reader
    `Invoke-ClaudeInstallAzRead` (`scripts/ClaudeInstallResume.ps1:5-18`): present, absent or
-   inconclusive. `Get-ClaudeApimReuseProblems` (`scripts/ClaudeInstallerPreflight.ps1:37-53`) names a classic tier and a missing
-   system-assigned identity with their remedies, and `Get-ClaudeApimReuseCandidates` (`scripts/ClaudeInstallerPreflight.ps1:55-65`) lists
+   inconclusive. `Get-ClaudeApimReuseProblems` (`scripts/ClaudeInstallerPreflight.ps1:41-57`) names a classic tier and a missing
+   system-assigned identity with their remedies, and `Get-ClaudeApimReuseCandidates` (`scripts/ClaudeInstallerPreflight.ps1:59-69`) lists
    the instances the run's menu offers. The run's `-ExistingApimName` path and menu
    (`Install-ClaudeGateway.ps1:652-698`) call the same functions; `pf_apim_`
-   (`scripts/install-preflight.sh:131-174`) is the bash twin through `ckpt_az_read_`. A list that cannot
+   (`scripts/install-preflight.sh:137-180`) is the bash twin through `ckpt_az_read_`. A list that cannot
    be read offers no instance and says so.
 8. **The run warns where the preflight fails.** A reused instance without a system-assigned identity
    is a FAIL of `apim.existingIdentity`, with the portal toggle as its remedy (U86). The run prints the
@@ -218,7 +235,7 @@ The RED phase adds these tests before product code:
     (`scripts/ClaudeInstallSteps.ps1:8-12`; `steps_deps_`, `scripts/install-steps.sh:10-16`, for the
     five bash steps). `-Steps` and `--steps` refuse on one line unless each prerequisite outside the
     selection is completed in the checkpoint and verified live (`Assert-ClaudeInstallPrerequisites`,
-    `scripts/ClaudeInstallSteps.ps1:103-131`; `steps_prereqs_`, `scripts/install-steps.sh:85-106`).
+    `scripts/ClaudeInstallSteps.ps1:103-131`; `steps_prereqs_`, `scripts/install-steps.sh:87-108`).
     With a selection the checkpoint is kept, and the run stops after the selected steps
     (`Install-ClaudeGateway.ps1:1886`; `install-claude-gateway.sh:457`).
 11. **Precedence.** A parameter or flag wins over the answers file, which wins over the checkpoint,
@@ -232,14 +249,21 @@ The RED phase adds these tests before product code:
     `warning` and `failed`. A step is `started` once per run, and both installers write the same
     messages (`Write-ClaudeInstallProgress` and `Write-ClaudeInstallStepEvent`,
     `scripts/ClaudeInstallSteps.ps1:29-61`; `progress_event_` and `progress_step_`,
-    `scripts/install-steps.sh:22-43`). Each line is one write (U90), and a JWT-shaped value in a message
+    `scripts/install-steps.sh:24-45`). Each line is one write (U90), and a JWT-shaped value in a message
     is replaced by `[redacted]` (ADR-0046 decision 15). No secret is written to the stream, the
-    checkpoint or an answers file.
+    checkpoint or an answers file. A file that cannot be written, such as a directory, refuses the run
+    at startup on one line, before any Azure call (`Initialize-ClaudeInstallProgress`,
+    `scripts/ClaudeInstallSteps.ps1:19-27`; `steps_start_`, `scripts/install-steps.sh:134-144`). Neither
+    installer writes an event before that check passes, so a refusal before it, or of the file itself,
+    writes none (`scripts/install-steps.sh:24-31`); at `cb2cd70` the bash refusal first tried to write its
+    `refused` event to the file it refused.
 13. **Business units from answers.** `Invoke-ClaudeInstallBusinessUnits`
     (`scripts/ClaudeInstallSteps.ps1:159-197`) writes units, then teams, through
     `scripts/Set-ClaudeBusinessUnit.ps1`. Each group is found by the name rule of ADR-0046 decision 11,
     or created, before its unit is written. A unit whose receipt records its input hash and which
-    `bu-registry` shows is not written again. When a `usd-budgets` item's scope is not in notify mode, a
+    `bu-registry` shows is not written again; a unit whose receipt matches while `bu-registry` lacks it is
+    written again (`scripts/ClaudeInstallSteps.ps1:176`). A `bu-registry` that cannot be read stops the
+    step on one line with the resume command, before any unit is written or skipped (`:169`). When a `usd-budgets` item's scope is not in notify mode, a
     dollar budget is enforced (`infra/policy.xml:533-570`, U88), and the run prints the
     `scripts/Sync-ClaudeUsdBudgets.ps1` command for the gateway (`Write-ClaudeInstallUsdReconcile`,
     `scripts/ClaudeInstallSteps.ps1:199-217`). `install-claude-gateway.sh` applies no business units.

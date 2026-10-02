@@ -69,13 +69,14 @@ read it and report the same problems word for word (ADR-0047 decision 2). The sc
 
 **Preflight.** `-Preflight` and `--preflight` report the 14 checks that `x-preflightChecks` lists, as
 text or as JSON with `schemaVersion`, `installer`, `answersSchemaVersion`, `result` and `checks`
-(`scripts/ClaudeInstallerPreflight.ps1:92-144`, `scripts/install-preflight.sh:202-255`). Each check is
-PASS, FAIL or NOT-RUN with a reason. Its reads go through the P91 verdict readers, and the API
-Management reads are the ones the run's reuse path makes (`Get-ClaudeApimReuseState`,
-`scripts/ClaudeInstallerPreflight.ps1:14-35`).
+(`scripts/ClaudeInstallerPreflight.ps1:103-164`, `scripts/install-preflight.sh:208-271`). Each check is
+PASS, FAIL or NOT-RUN with a reason. A check starts NOT-RUN with reason `not-evaluated`, which fails the
+preflight, and is PASS only where a branch passes it with a message (ADR-0047 decision 5). Its reads go
+through the P91 verdict readers, and the API Management reads are the ones the run's reuse path makes
+(`Get-ClaudeApimReuseState`, `scripts/ClaudeInstallerPreflight.ps1:18-39`).
 
 **Progress stream.** `-ProgressPath` and `--progress-file` append one JSON object per line
-(`scripts/ClaudeInstallSteps.ps1:29-61`, `scripts/install-steps.sh:22-43`):
+(`scripts/ClaudeInstallSteps.ps1:29-61`, `scripts/install-steps.sh:24-45`):
 
 | Key | Value |
 |---|---|
@@ -88,7 +89,9 @@ Management reads are the ones the run's reuse path makes (`Get-ClaudeApimReuseSt
 | `resumeCommand` | The command that resumes the run, on `warning` and `failed`; otherwise empty |
 
 Both installers write the same events with the same messages for the steps both run. Each line is one
-write, and a JWT-shaped value in a message is replaced by `[redacted]` (ADR-0047 decision 12).
+write, and a JWT-shaped value in a message is replaced by `[redacted]` (ADR-0047 decision 12). A file
+that cannot be written refuses the run at startup, before any Azure call, and no event is written before
+that check passes (`scripts/ClaudeInstallSteps.ps1:19-27`, `scripts/install-steps.sh:134-144`).
 
 ## Optional company hostname
 

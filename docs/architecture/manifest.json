@@ -559,12 +559,12 @@
         "scripts/ClaudeInstallResume.ps1": "651de59a42096c8c105b0a9ae203d3a3264abe67bf2b29eebafd6b7a0697bdc1",
         "scripts/ClaudeInstallSteps.ps1": "4b7a49f55a78092464b8af2976a3e43f1fd229888aa86b5b63a2d2cabfbe560c",
         "scripts/ClaudeInstallerAnswers.ps1": "156cc3883d9d70ee9c96a5449bbc40cea40ac554bf394e163c0ae98913ef62d0",
-        "scripts/ClaudeInstallerPreflight.ps1": "75f29bd5d7e1e492dd953ac295a5688d496f324f911b35925835c00d73a4f8e8",
+        "scripts/ClaudeInstallerPreflight.ps1": "04ba0f4cb0606d1df8d7eed12432d1416cbceae3951e4dac3d2b5b6f1229ee5b",
         "scripts/Set-ClaudeBusinessUnit.ps1": "c6f2cc8a385365a5b709ec4c58b109dc3de06a84bace5934d51ed0f309098f49",
         "scripts/Sync-ClaudeUsdBudgets.ps1": "f0d5c3d6d0fb2da6b06b75c38cfecad9773bdadb97803027645910696a1d3d5c",
         "scripts/install-answers.jq": "eccf3fa077f88106fb90f9af4f0e99cd5a65fee972a3b634cb5d9def689ff35e",
-        "scripts/install-preflight.sh": "177f00149791b2a6ef0cc0803d04caa6932c87b3a274564000130a85c6841151",
-        "scripts/install-steps.sh": "b510f51a5481b57bb8c8e6ad4184bae7ecf665e522e3026a882c7a58cf30c119"
+        "scripts/install-preflight.sh": "b0c39e8adab88e9a9135ec82c7cc71291a441a11ad581b1235987e5e22a0b3ab",
+        "scripts/install-steps.sh": "0f6b6b07c6901c838739c88f030b31556df2d075adf8b4600d1c4de887c84cda"
       },
       "outputs": [
         {

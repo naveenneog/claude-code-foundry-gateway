@@ -35,16 +35,19 @@ exact streaming cache-creation detail remains **U13**.
   `Start-ClaudeGateway.ps1 -AnswersPath`. PowerShell and jq check it with the same rules and messages,
   and a file with any problem, or with a secret, is refused before anything is read from Azure.
   `-Preflight`/`--preflight` runs 14 read-only checks, each PASS, FAIL or NOT-RUN with a reason, as
-  text or JSON; a check that cannot run never passes. `-ListSteps`/`--list-steps` prints the steps and
+  text or JSON; a check that cannot run never passes, and a check starts NOT-RUN until a branch evaluates
+  it, so one that no branch reaches fails the preflight. `az` output that is not JSON is an inconclusive
+  FAIL, not a stop. `-ListSteps`/`--list-steps` prints the steps and
   the checkpoint's state; `-Steps`/`--steps` runs the named steps once their prerequisites are
-  verified live; `-ProgressPath`/`--progress-file` appends one JSON event per line.
+  verified live; `-ProgressPath`/`--progress-file` appends one JSON event per line, and a file that
+  cannot be written stops the run before any Azure call.
   `Install-ClaudeGateway.ps1` applies business units from the answers file, units before teams, through
   `scripts/Set-ClaudeBusinessUnit.ps1`, and prints the `scripts/Sync-ClaudeUsdBudgets.ps1` command when
   a dollar budget is enforced. The run's reuse path and the preflight read an existing API Management
   instance through one function. The guided flow runs the installer's preflight for an unattended plan,
   binds the result into the plan fingerprint and applies no plan with a failing check. The bash
   checkpoint suite runs as two Test-All checks within the default timeout, and
-  `.github/workflows/installer-unix.yml` runs the P92 bash suites on Linux and macOS. 40 schema, 13 drift, 17 PowerShell and 17 bash preflight, 21 PowerShell and 22 bash step, 9 business-unit, 9 guided-flow and 5 shard checks
+  `.github/workflows/installer-unix.yml` runs the P92 bash suites on Linux and macOS. 40 schema, 13 drift, 29 PowerShell and 29 bash preflight, 22 PowerShell and 23 bash step, 11 business-unit, 9 guided-flow and 5 shard checks
   ([lean installer design record (ADR-0047)](docs/adr/0047-lean-installer-phase-0.md),
   [Setup](docs/SETUP.md#answers-file-preflight-and-selected-steps)).
 - **Installers resume after a failure.** `Install-ClaudeGateway.ps1` and

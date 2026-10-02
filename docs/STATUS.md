@@ -328,7 +328,7 @@ each mutated file was restored and its hash checked before the next mutant.
 ### Lead review of `cb2cd70` (round 2), 2026-10-02
 
 The lead's own mutation harness (26 mutants) caught 11 and missed 15. Every check started as PASS
-(`scripts/ClaudeInstallerPreflight.ps1:100`; the last branch of the jq aggregator,
+(at `cb2cd70`: `scripts/ClaudeInstallerPreflight.ps1:100`; the last branch of the jq aggregator,
 `scripts/install-preflight.sh:243`), so a branch that set nothing reported PASS. The missed mutants:
 
 - PowerShell preflight: M02 (the `target.tenant` pass line removed), M03 (a subscription in another tenant), M04 (a disabled subscription), M05 (an unreadable subscription), M06 (an account the subscription's list does not show, without `FoundryResourceGroup`), M07 (no Claude deployment), M13 (failing admin prerequisites), M16 (a PFX path that is not a file).
@@ -336,8 +336,8 @@ The lead's own mutation harness (26 mutants) caught 11 and missed 15. Every chec
 - Progress: S08 and BS02 (an unwritable progress path accepted).
 - Business units: U03 (a matching receipt skips a unit that `bu-registry` lacks), U06 (an unreadable `bu-registry` does not stop the step).
 
-Two parses had no `try`: `az account show` (`scripts/ClaudeInstallerPreflight.ps1:123`) and the Foundry
-account list (`:182`).
+Two parses had no `try` at `cb2cd70`: `az account show` (`scripts/ClaudeInstallerPreflight.ps1:123`) and
+the Foundry account list (`:182`).
 
 #### RED (round 2)
 
@@ -361,6 +361,35 @@ deployment; failing admin prerequisites; the PFX path; the unwritable `-Progress
 business-unit cases. Each one is the check its mutant in the lead's harness must fail. The fail-closed
 contract check (every PASS has a message, and no check is left `not-evaluated`) also passes at RED,
 because no scenario reaches a branch that sets nothing; under M02 or B06 it fails.
+
+#### GREEN (round 2)
+
+| Change | Where |
+|---|---|
+| Every check starts NOT-RUN with reason `not-evaluated`, which fails the preflight. Only `Set-ClaudePreflightPass` with a message, or a `pf_pass_` line with a message, makes a check PASS. | `scripts/ClaudeInstallerPreflight.ps1:16`, `:84-89`, `:111`, `:162`; `scripts/install-preflight.sh:258-261` |
+| `az account show` output that is not JSON, or has no `tenantId`, is a FAIL of `target.tenant`, and the other Azure checks are NOT-RUN. A Foundry account list that is not JSON is a FAIL of `foundry.account`. | `scripts/ClaudeInstallerPreflight.ps1:127-143`, `:201-210`; `scripts/install-preflight.sh:107-114`, `:217-234` |
+| A stop of `Test-ClaudePrerequisites`, which parses `az account show` itself, is a FAIL of `operator.adminPrereqs`. | `scripts/ClaudeInstallerPreflight.ps1:71-81`; `scripts/Test-Prerequisites.ps1:166` |
+| The bash stream writes no event before the file passes its startup check, as the PowerShell stream does; an unwritable `--progress-file` refuses on one line. | `scripts/install-steps.sh:24-31`, `:142`; `scripts/ClaudeInstallSteps.ps1:19-27` |
+
+The two business-unit branches (U03, U06) and the PowerShell progress refusal (S08) already behaved as
+required, so their code is unchanged. [ADR-0047](adr/0047-lean-installer-phase-0.md) decision 5 records
+the `not-evaluated` start state and the inconclusive reads, decision 12 the progress refusal, and
+decision 13 the two business-unit rules.
+
+| Suite | Checks | Seconds |
+|---|---|---|
+| `Test-InstallerPreflight.ps1` | 29 of 29 | 37.5 |
+| `Test-BashInstallerPreflight.ps1` | 29 of 29 | 111.1 |
+| `Test-InstallerStepSelection.ps1` | 22 of 22 | 39.6 |
+| `Test-BashInstallerStepSelection.ps1` | 23 of 23 | 181.5 |
+| `Test-InstallerBusinessUnitAnswers.ps1` | 11 of 11 | 26.6 |
+| `Test-GuidedFlowAnswersSchema.ps1` | 9 of 9 | 13.7 |
+| `Test-InstallerAnswersSchema.ps1` | 40 of 40 | 10.6 |
+
+Also run, all passing: `Test-FlowStart.ps1`, `Test-On-PS51.ps1` and `Test-FlowPermutations.ps1`, which
+run the installer and the guided flow over the changed engine. `tests/test-all-durations.json` carries
+the five new weights. Each suite ran only while `.gate-lock` was absent: the runner checked it before
+each suite and every 5 s during it, and no run overlapped a gate.
 
 
 ## P91 installer checkpoint and resume, 2026-10-01

@@ -1,7 +1,8 @@
 # The installer preflight (docs/adr/0047-lean-installer-phase-0.md): the 14 checks that
 # schemas/claude-gateway.answers.schema.json lists in x-preflightChecks, from the answers and from
 # read-only Azure CLI reads, for Install-ClaudeGateway.ps1 -Preflight and Start-ClaudeGateway.ps1
-# -PlanOnly. A check that cannot run is NOT-RUN with its reason and never passes (P91 R1). Nothing is
+# -PlanOnly. A check that cannot run is NOT-RUN with its reason and never passes (P91 R1). Every check starts
+# NOT-RUN (not-evaluated), so a check passes only where a branch passes it with a message. Nothing is
 # written: no create, update, set or delete call, no az account set, no checkpoint. scripts/install-preflight.sh
 # is the bash engine. Runs on Windows PowerShell 5.1 and PowerShell 7.
 
@@ -10,6 +11,9 @@ if (-not (Get-Command Test-ClaudePrerequisites -ErrorAction SilentlyContinue)) {
 # A NOT-RUN with one of these reasons fails the preflight; not-applicable, not-answered and
 # discovery-skipped do not.
 $script:ClaudePreflightBlocking = @('not-signed-in', 'prerequisite-failed')
+# The reason every check starts with. It also fails the preflight: a check that no branch evaluated is a
+# defect of the preflight, not a pass (ADR-0047 decision 5).
+$script:ClaudePreflightUnevaluated = 'not-evaluated'
 
 function Get-ClaudeApimReuseState {
     # The API Management instance to reuse, read once for the preflight and for the run's reuse path:
@@ -66,8 +70,10 @@ function Get-ClaudeApimReuseCandidates {
 
 function Get-ClaudePreflightPrerequisites {
     # operator.adminPrereqs: Test-ClaudePrerequisites -Mode Admin (scripts/Test-Prerequisites.ps1:27),
-    # its console lines captured so that -Json prints JSON only.
-    $out = @(Test-ClaudePrerequisites -Mode Admin 6>&1)
+    # its console lines captured so that -Json prints JSON only. A stop of the check itself, for example on
+    # az output that is not JSON (scripts/Test-Prerequisites.ps1:166), is a failure of the check.
+    try { $out = @(Test-ClaudePrerequisites -Mode Admin 6>&1) }
+    catch { return [pscustomobject]@{ Ok = $false; Fails = @("Test-ClaudePrerequisites -Mode Admin stopped ($($_.Exception.Message))"); Warnings = @() } }
     $ok = [bool]@($out | Where-Object { $_ -is [bool] })[-1]
     $lines = @($out | Where-Object { $_ -is [System.Management.Automation.InformationRecord] } | ForEach-Object { [string]$_.MessageData })
     $grab = { param([string]$Tag) @($lines | Where-Object { $_ -match "^\s*\[$Tag\]\s+(.+)$" } | ForEach-Object { ($_ -replace "^\s*\[$Tag\]\s+", '').Trim() }) }
@@ -75,7 +81,12 @@ function Get-ClaudePreflightPrerequisites {
 }
 
 function Add-ClaudePreflightProblem($Check, [string]$Message, [string]$Remedy) { $Check.problems.Add([pscustomobject][ordered]@{ message = $Message; remedy = $Remedy }) }
-function Set-ClaudePreflightPass($Check, [string]$Message) { if ($Check.result -eq 'PASS' -and -not $Check.problems.Count) { $Check.message = $Message } }
+function Set-ClaudePreflightPass($Check, [string]$Message) {
+    # The only way to PASS: a check with no problem, which no branch has set NOT-RUN, and a message.
+    if ($Check.problems.Count -or -not $Message.Trim()) { return }
+    if ($Check.result -eq 'NOT-RUN' -and $Check.reason -ne $script:ClaudePreflightUnevaluated) { return }
+    $Check.result = 'PASS'; $Check.reason = $null; $Check.message = $Message; $Check.remedy = ''
+}
 function Set-ClaudePreflightNotRun($Check, [string]$Reason, [string]$Message, [string]$Remedy = '') {
     # A check with a problem from the answers fails on it; one that cannot run otherwise never passes.
     if (-not $Check.problems.Count) { $Check.result = 'NOT-RUN'; $Check.reason = $Reason; $Check.message = $Message; $Check.remedy = $Remedy }
@@ -97,7 +108,8 @@ function Invoke-ClaudeGatewayPreflight {
         [ValidateSet('', 'discovery-skipped', 'not-answered')][string]$SkipAzureReason = '', [string]$SkipAzureMessage = '')
     $checks = [ordered]@{}
     foreach ($id in @((Get-ClaudeAnswersSchema).Document.'x-preflightChecks' | ForEach-Object { [string]$_.id })) {
-        $checks[$id] = [pscustomobject][ordered]@{ id = $id; result = 'PASS'; message = ''; remedy = ''; reason = $null; problems = [System.Collections.Generic.List[object]]::new() }
+        $checks[$id] = [pscustomobject][ordered]@{ id = $id; result = 'NOT-RUN'; message = 'no branch of the preflight evaluated this check'; remedy = ''
+            reason = $script:ClaudePreflightUnevaluated; problems = [System.Collections.Generic.List[object]]::new() }
     }
     $bad = @{}
     foreach ($p in @($AnswerProblems)) { Add-ClaudePreflightProblem $checks[$p.checkId] $p.message $p.remedy; $bad[(([string]$p.path) -split '[.\[]')[0]] = $true }
@@ -113,14 +125,22 @@ function Invoke-ClaudeGatewayPreflight {
         if ($pre.Ok -and -not $pre.Fails.Count) { Set-ClaudePreflightPass $checks['operator.adminPrereqs'] ('Test-ClaudePrerequisites -Mode Admin passed' + $(if ($pre.Warnings.Count) { "; warnings: $($pre.Warnings -join '; ')" })) }
         else { foreach ($f in @(if ($pre.Fails.Count) { $pre.Fails } else { 'Test-ClaudePrerequisites -Mode Admin failed' })) { Add-ClaudePreflightProblem $checks['operator.adminPrereqs'] $f 'Test-ClaudePrerequisites -Mode Admin (scripts/Test-Prerequisites.ps1) prints the remedy under each [FAIL] line.' } }
         $acct = Invoke-ClaudeInstallAzRead @('account', 'show', '-o', 'json')
+        # The signed-in account as JSON with its tenant; output that is not JSON, or has no tenantId, is
+        # inconclusive, as an unreadable account is.
+        $account = $null; $unread = ''
+        if ($acct.Verdict -eq 'present') {
+            $parsed = $true
+            try { if (-not $acct.Output) { throw 'empty' }; $account = $acct.Output | ConvertFrom-Json -ErrorAction Stop } catch { $parsed = $false }
+            $unread = if (-not $parsed) { 'az account show did not return JSON' } elseif (-not [string]$account.tenantId) { 'az account show returned no tenantId' } else { '' }
+        }
         if ($acct.Verdict -ne 'present' -and $acct.Error -match 'az login') {
             foreach ($id in $azure) { Set-ClaudePreflightNotRun $checks[$id] 'not-signed-in' 'Azure CLI is not signed in, so this was not read' 'Run az login (az login --tenant <tenant-id> as a guest), then run the preflight again.' }
         }
-        elseif ($acct.Verdict -ne 'present') {
-            Add-ClaudePreflightProblem $checks['target.tenant'] "the signed-in account could not be read ($($acct.Detail))" 'Check az account show, then run the preflight again.'
+        elseif ($acct.Verdict -ne 'present' -or $unread) {
+            Add-ClaudePreflightProblem $checks['target.tenant'] "the signed-in account could not be read ($(if ($unread) { $unread } else { $acct.Detail }))" 'Check az account show, then run the preflight again.'
             foreach ($id in $azure | Select-Object -Skip 1) { Set-ClaudePreflightNotRun $checks[$id] 'prerequisite-failed' 'target.tenant failed, so this was not read' 'Correct target.tenant first.' }
         }
-        else { Invoke-ClaudeGatewayPreflightAzure -Checks $checks -Answers $Answers -Bad $bad -Account ($acct.Output | ConvertFrom-Json) -Installer $Installer }
+        else { Invoke-ClaudeGatewayPreflightAzure -Checks $checks -Answers $Answers -Bad $bad -Account $account -Installer $Installer }
     }
     if (-not $Answers.Contains('BusinessUnits')) { foreach ($id in 'businessUnits.ids', 'businessUnits.depth') { Set-ClaudePreflightNotRun $checks[$id] 'not-answered' 'BusinessUnits is not answered' } }
     else {
@@ -139,7 +159,7 @@ function Invoke-ClaudeGatewayPreflight {
     $list = @(foreach ($c in $checks.Values) {
             if ($c.problems.Count) { $c.result = 'FAIL'; $c.reason = $null; $c.message = (@($c.problems | ForEach-Object { $_.message }) -join '; '); $c.remedy = (@($c.problems | ForEach-Object { $_.remedy } | Select-Object -Unique) -join ' ') }
             $c })
-    $blocking = @($list | Where-Object { $_.result -eq 'FAIL' -or ($_.result -eq 'NOT-RUN' -and $_.reason -in $script:ClaudePreflightBlocking) })
+    $blocking = @($list | Where-Object { $_.result -eq 'FAIL' -or ($_.result -eq 'NOT-RUN' -and ($_.reason -in $script:ClaudePreflightBlocking -or $_.reason -eq $script:ClaudePreflightUnevaluated)) })
     return [pscustomobject][ordered]@{ schemaVersion = 1; installer = $Installer; answersSchemaVersion = 1; result = $(if ($blocking.Count) { 'FAIL' } else { 'PASS' }); checks = $list }
 }
 function Invoke-ClaudeGatewayPreflightAzure {
@@ -179,7 +199,12 @@ function Invoke-ClaudeGatewayPreflightAzure {
             else {
                 $r = Invoke-ClaudeInstallAzRead (@('cognitiveservices', 'account', 'list', '-o', 'json') + $sub)
                 if ($r.Verdict -eq 'present') {
-                    $parsed = $r.Output | ConvertFrom-Json
+                    # A list that is not JSON is inconclusive, as an unreadable list is.
+                    $parsed = $null
+                    try { if (-not $r.Output) { throw 'empty' }; $parsed = $r.Output | ConvertFrom-Json -ErrorAction Stop }
+                    catch { $r = [pscustomobject]@{ Verdict = 'inconclusive'; Detail = 'az cognitiveservices account list did not return JSON' } }
+                }
+                if ($r.Verdict -eq 'present') {
                     $hit = @(@($parsed) | Where-Object { $_ -and [string]$_.name -eq $fa })[0]
                     if ($hit) { $frg = [string]$hit.resourceGroup } else { $r = [pscustomobject]@{ Verdict = 'absent'; Detail = '' } }
                 }

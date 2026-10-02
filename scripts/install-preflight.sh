@@ -1,7 +1,9 @@
 # The installer preflight of install-claude-gateway.sh (docs/adr/0047-lean-installer-phase-0.md): the 14
 # checks of Install-ClaudeGateway.ps1 -Preflight (scripts/ClaudeInstallerPreflight.ps1), with the same
 # ids, results, reasons and report. A check that cannot run is NOT-RUN with its reason and never passes
-# (P91 R1). Read-only: no create, update, set or delete call, no az account set, no checkpoint.
+# (P91 R1). A check without a pf_pass_ line that has a message is NOT-RUN (not-evaluated), which fails the
+# preflight, so a check passes only where a branch passes it (ADR-0047 decision 5). Read-only: no create,
+# update, set or delete call, no az account set, no checkpoint.
 # Sourced by scripts/install-steps.sh. Bash 3.2 and later, with jq.
 
 PF_LINES=""; PF_ANSWERS="{}"; PF_BAD=" "; PF_SUB=""
@@ -102,6 +104,10 @@ pf_foundry_() {
   if [ -n "$frg" ]; then where=" in resource group $frg"; ckpt_az_read_ 'ResourceNotFound' cognitiveservices account show -g "$frg" -n "$fa" -o json "$@"
   else
     where=" in the subscription"; ckpt_az_read_ '' cognitiveservices account list -o json "$@"
+    # A list that is not JSON is inconclusive, as an unreadable list is.
+    if [ "$AZ_VERDICT" = "present" ] && { [ -z "$AZ_OUT" ] || ! printf '%s' "$AZ_OUT" | jq empty >/dev/null 2>&1; }; then
+      AZ_VERDICT=inconclusive; AZ_DETAIL="az cognitiveservices account list did not return JSON"
+    fi
     if [ "$AZ_VERDICT" = "present" ]; then
       frg="$(printf '%s' "$AZ_OUT" | jq -r --arg n "$fa" '[.[]? | select(.name == $n)][0].resourceGroup // empty' | tr -d '\r')"
       [ -n "$frg" ] || AZ_VERDICT=absent
@@ -200,7 +206,7 @@ pf_groups_() {
 # --preflight: prints the report, as JSON with --json, and returns 0 only when no check fails and none
 # is NOT-RUN for a blocking reason.
 preflight_run_() {
-  local id acct result mode n
+  local id acct result mode n unread=""
   PF_LINES=""; PF_BAD=" "; PF_SUB=""; PF_FIRST_GROUP=""
   pf_answers_
   pf_pass_ answers.schema "the answers match the answers schema, version 1"
@@ -208,8 +214,17 @@ preflight_run_() {
   pf_prereqs_
   ckpt_az_read_ '' account show -o json
   acct="$AZ_OUT"
-  if [ "$AZ_VERDICT" != "present" ]; then
-    case "$AZ_ERR" in
+  # The signed-in account as JSON with its tenant; output that is not JSON, or has no tenantId, is
+  # inconclusive, as an unreadable account is.
+  if [ "$AZ_VERDICT" = "present" ]; then
+    if [ -z "$acct" ] || ! printf '%s' "$acct" | jq empty >/dev/null 2>&1; then unread="az account show did not return JSON"
+    elif ! printf '%s' "$acct" | jq -e '(.tenantId // "") != ""' >/dev/null 2>&1; then unread="az account show returned no tenantId"; fi
+  fi
+  if [ "$AZ_VERDICT" != "present" ] || [ -n "$unread" ]; then
+    case "$AZ_VERDICT:$AZ_ERR" in
+      present:*) pf_fail_ target.tenant "the signed-in account could not be read ($unread)" "Check az account show, then run the preflight again."
+         for id in target.subscription foundry.account foundry.deployments apim.nameAvailability apim.existingSku apim.existingIdentity entra.groupNames; do
+           pf_notrun_ "$id" prerequisite-failed "target.tenant failed, so this was not read" "Correct target.tenant first."; done ;;
       *"az login"*) for id in target.tenant target.subscription foundry.account foundry.deployments apim.nameAvailability apim.existingSku apim.existingIdentity entra.groupNames; do
           pf_notrun_ "$id" not-signed-in "Azure CLI is not signed in, so this was not read" "Run az login (az login --tenant <tenant-id> as a guest), then run the preflight again."; done ;;
       *) pf_fail_ target.tenant "the signed-in account could not be read ($AZ_DETAIL)" "Check az account show, then run the preflight again."
@@ -240,9 +255,10 @@ preflight_run_() {
         | [ $mine[] | select(.kind == "problem") ] as $p
         | if ($p | length) > 0 then {id: $id, result: "FAIL", message: ($p | map(.message) | join("; ")), remedy: ($p | map(.remedy) | firstseen | join(" ")), reason: null, problems: [ $p[] | {message, remedy} ]}
           elif any($mine[]; .kind == "notrun") then ([ $mine[] | select(.kind == "notrun") ] | last) as $n | {id: $id, result: "NOT-RUN", message: $n.message, remedy: $n.remedy, reason: $n.reason, problems: []}
-          else ([ $mine[] | select(.kind == "pass") ] | last) as $s | {id: $id, result: "PASS", message: ($s.message // ""), remedy: "", reason: null, problems: []} end ] as $checks
+          elif any($mine[]; .kind == "pass" and (.message // "") != "") then ([ $mine[] | select(.kind == "pass" and (.message // "") != "") ] | last) as $s | {id: $id, result: "PASS", message: $s.message, remedy: "", reason: null, problems: []}
+          else {id: $id, result: "NOT-RUN", message: "no branch of the preflight evaluated this check", remedy: "", reason: "not-evaluated", problems: []} end ] as $checks
     | {schemaVersion: 1, installer: "bash", answersSchemaVersion: 1,
-       result: (if any($checks[]; .result == "FAIL" or (.result == "NOT-RUN" and (.reason == "not-signed-in" or .reason == "prerequisite-failed"))) then "FAIL" else "PASS" end), checks: $checks}' | tr -d '\r')"
+       result: (if any($checks[]; .result == "FAIL" or (.result == "NOT-RUN" and ((.reason == "not-signed-in" or .reason == "prerequisite-failed") or .reason == "not-evaluated"))) then "FAIL" else "PASS" end), checks: $checks}' | tr -d '\r')"
   if [ "${WANT_JSON:-0}" = "1" ]; then printf '%s' "$result" | jq . | tr -d '\r'
   else
     printf '%s' "$result" | jq -r '
