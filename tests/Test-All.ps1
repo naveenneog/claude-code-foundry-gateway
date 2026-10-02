@@ -229,8 +229,9 @@ try {
     Invoke-Check 'Installer preflight (PowerShell)'        'Test-InstallerPreflight.ps1'
     Invoke-Check 'macOS/Linux installer preflight'         'Test-BashInstallerPreflight.ps1' -SkipReason $bashInstallerSkip
     Invoke-Check 'Installer steps, precedence and progress (PowerShell)' 'Test-InstallerStepSelection.ps1'
-    Invoke-Check 'macOS/Linux installer steps, precedence and progress [0/2]' 'Test-BashInstallerStepSelection.ps1' @{ Shard = '0/2' } -SkipReason $bashInstallerSkip
-    Invoke-Check 'macOS/Linux installer steps, precedence and progress [1/2]' 'Test-BashInstallerStepSelection.ps1' @{ Shard = '1/2' } -SkipReason $bashInstallerSkip
+    Invoke-Check 'macOS/Linux installer steps, precedence and progress [0/3]' 'Test-BashInstallerStepSelection.ps1' @{ Shard = '0/3' } -SkipReason $bashInstallerSkip
+    Invoke-Check 'macOS/Linux installer steps, precedence and progress [1/3]' 'Test-BashInstallerStepSelection.ps1' @{ Shard = '1/3' } -SkipReason $bashInstallerSkip
+    Invoke-Check 'macOS/Linux installer steps, precedence and progress [2/3]' 'Test-BashInstallerStepSelection.ps1' @{ Shard = '2/3' } -SkipReason $bashInstallerSkip
     Invoke-Check 'Installer business units from answers'   'Test-InstallerBusinessUnitAnswers.ps1'
     Invoke-Check 'Guided flow runs the installer preflight' 'Test-GuidedFlowAnswersSchema.ps1'
     Invoke-Check 'macOS/Linux checkpoint suite shards'     'Test-BashInstallerCheckpointShards.ps1'

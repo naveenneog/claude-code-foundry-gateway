@@ -13,14 +13,14 @@ function Assert($label, $condition, $detail = '') {
     if ($condition) { Write-Host "  [OK]   $label" -ForegroundColor Green }
     else { Write-Host "  [FAIL] $label$(if ($detail) { " - $detail" })" -ForegroundColor Red; $script:fail++ }
 }
-# Test-All runs the suite as two checks, -Shard 0/2 and -Shard 1/2, each within the default per-check
+# Test-All runs the suite as three checks, -Shard 0/3, 1/3 and 2/3, each within the default per-check
 # timeout (docs/adr/0047-lean-installer-phase-0.md decision 14); without -Shard every group runs. Each group of
 # checks runs in one shard, and tests/Test-BashInstallerStepShards.ps1 checks that every check is in one group.
 # list: the first run that --list-steps and --steps read, its resume and the PowerShell run of the same world;
 # sync: the run whose sync fails and its --steps sync reruns; start: the refusals at startup; prec: the
-# precedence runs; stream: the failure and the refusal that the progress stream records.
-$script:ShardGroups = [ordered]@{ list = 0; sync = 0; start = 0; prec = 1; stream = 1 }
-$script:ShardCount = 2
+# precedence runs; stream: the failure and the refusals that the progress stream records.
+$script:ShardGroups = [ordered]@{ list = 0; sync = 0; start = 1; stream = 1; prec = 2 }
+$script:ShardCount = 3
 function Test-ShardGroup([string]$Group) {
     if (-not $Shard) { return $true }
     if ($Shard -notmatch '^(\d+)/(\d+)$' -or [int]$Matches[2] -ne $script:ShardCount -or [int]$Matches[1] -ge $script:ShardCount) { throw "-Shard is i/$($script:ShardCount) with i from 0 to $($script:ShardCount - 1), not '$Shard'." }
