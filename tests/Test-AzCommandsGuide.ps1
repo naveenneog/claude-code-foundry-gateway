@@ -137,10 +137,6 @@ if (-not $SkipAzHelp) {
             $planned[$i] = $owner
         }
         Assert 'az help shard union covers every documented command exactly once' ($planned.Count -eq $commands.Count) "planned=$($planned.Count) commands=$($commands.Count)"
-        if ($script:azShardIndex -ne 0) {
-            if ($script:fail) { throw "$script:fail assertion(s) failed." }
-            return
-        }
     }
 }
 
@@ -933,6 +929,7 @@ $scenarioShardPlan = @{}
 for ($i = 0; $i -lt $scenarioNames.Count; $i++) { $scenarioShardPlan[$scenarioNames[$i] + '#' + $i] = $i % [Math]::Max(1, $script:azShardCount) }
 Assert 'guide scenario shard union covers every literal scenario invocation exactly once' ($scenarioNames.Count -eq 127 -and $scenarioShardPlan.Count -eq $scenarioNames.Count -and @($scenarioShardPlan.Keys | Select-Object -Unique).Count -eq $scenarioNames.Count) "planned=$($scenarioShardPlan.Count) scenarios=$($scenarioNames.Count)"
 
+if (-not $Shard -or $script:azShardIndex -eq 0) {
 $normal = Invoke-GuideBashScenario 'normal' $entitlementScript
 Assert 'guide execution publishes premium and standard exact values' (
     $normal.Exit -eq 0 -and
@@ -1214,6 +1211,8 @@ Assert 'failing role create refuses and leaves no receipt' (
     -not (Read-ScenarioFile $roleCreateFail '.p89-receipts/foundry-role.json')
 ) $roleCreateFail.Output
 
+}
+if (-not $Shard -or $script:azShardIndex -eq 1) {
 $desktopAppCreated = Invoke-GuideBashScenario 'app-new' $desktopAppBlock
 Assert 'desktop app block records created app receipt' (
     $desktopAppCreated.Exit -eq 0 -and
@@ -1398,6 +1397,8 @@ Assert 'access-policy Key Vault refuses and writes nothing' (
     -not ((Read-ScenarioFile $kvPolicy 'writes.log') -match 'kv-created-role-id')
 ) $kvPolicy.Output
 
+}
+if (-not $Shard -or $script:azShardIndex -eq 2) {
 $hostnamePremium = Invoke-GuideBashScenario 'hostname-premium' $bindHostnameBlock
 $hostnamePremiumBody = Read-ScenarioFile $hostnamePremium 'hostname-patch.json'
 Assert 'Premium hostname patch preserves existing hostnames and appends new binding' (
@@ -1674,6 +1675,8 @@ Assert 'chunk error-text guard mutation reaches apply and is caught' (
     $chunkErrorMutationRun.Exit -eq 0 -and (Read-ScenarioFile $chunkErrorMutationRun 'writes.log') -match 'apply-projection\.mjs'
 ) $chunkErrorMutationRun.Output
 
+}
+if (-not $Shard -or $script:azShardIndex -eq 3) {
 $modelReadFail = Invoke-GuideBashScenario 'model-read-fail' $modelRefusalBlock
 Assert 'model refusal failed read refuses with no write' (
     $modelReadFail.Exit -ne 0 -and
@@ -1841,4 +1844,5 @@ Assert 'teardown read with empty Foundry id refuses before role list' (
     -not ((Read-ScenarioFile $teardownReadEmpty 'calls.log') -match 'role assignment list')
 ) $teardownReadEmpty.Output
 
+}
 if ($script:fail) { throw "$script:fail assertion(s) failed." }
