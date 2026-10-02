@@ -39,6 +39,67 @@ exact streaming cache-creation detail remains **U13**.
   assert the accepted evidence-gated switch contract: missing or insufficient
   renewal evidence refuses before backup/write, while good Cosmos evidence and
   a pinned no-override job definition admit the projection switch.
+- **P90 portal path for the Azure CLI setup guide, round 2.** `docs/AZ-COMMANDS.md`
+  now has one `### Part N in the portal` subsection per part 1-12 instead of
+  repeated per-step portal/change-later paragraphs. The overview table links to
+  those subsections; each subsection contains matching portal steps, no-portal
+  reasons for command-only work and one change-later paragraph. The guide embeds
+  26 verified existing capture references, prunes P90 pending captures to
+  `p90-company-custom-domains`, references the four existing P60 Desktop capture
+  specs, and records tooling gaps for create wizards, tenant-wide Entra creation
+  entry points and resource-group delete discovery. `Test-AzPortalGuide.ps1`
+  now guards all parts, portal subsection shape, duplicate long prose, image
+  provenance, pending-table/spec-file parity and overview portal anchors.
+- **P90 portal path for the Azure CLI setup guide, rounds 3-4.** The portal
+  guide now cross-checks az lead sentences and portal steps both ways, validates
+  portal variables including braced `${VAR}` syntax, verifies Desktop redirect
+  URI and audience parity, checks pending-capture tables in both directions and
+  rejects editorial wording in portal/change-later text. The §2 custom-template
+  route, §7 Desktop consent review and §9 Key Vault/custom-domain labels now
+  cite the matching Microsoft Learn pages fetched for the round.
+- **P90 portal path for the Azure CLI setup guide, round 5.** P90 now merges
+  P89 round 10 while keeping all P89 bash fences byte-identical, adds portal
+  parity for live gateway URL/SKU resolution, custom hostname receipts,
+  model-refusal restore checks and receipt-gated resource-group teardown, and
+  guards the new mappings plus imperative Change-later wording.
+- **P90 portal path for the Azure CLI setup guide, round 6.** P90 now merges
+  P89 rounds 11-12, preserves all P89 bash fences byte-identical, documents the
+  immediate missing-`dig` refusal, the 600-second CNAME wait, the 2,700-second
+  hostname wait, and the reused-APIM `appinsights` logger portal view, with
+  guard mutations for each new assertion.
+- **P90 portal path for the Azure CLI setup guide, round 7.** The council fixes
+  split Part 2 named-value and diagnostic screenshots, mark Part 7 as only for
+  external-IdP Desktop sign-in modes, remove internal P89 marker names from
+  reader prose, convert §10 Change later into a table, and document how portal
+  teardown identifies objects that have no CLI receipt.
+- **P90 portal path for the Azure CLI setup guide, round 8.** P90 now merges
+  P89 rounds 13-14, preserves all P89 bash fences byte-identical, verifies
+  unmasked Bearer authorization headers, keeps the §7 external-IdP applicability
+  sentence aligned with P89, and documents receipt-tag and live-object checks for
+  portal teardown parity.
+- **P89 Azure CLI setup guide.** `docs/AZ-COMMANDS.md` mirrors the installer and
+  in-scope administration scripts with Cloud Shell bash commands, verification
+  commands, expected results and source references; `Test-AzCommandsGuide.ps1`
+  checks the documented `az` command paths and flags, named-value parity, Bicep
+  parameters and relative links. Round 2 makes entitlement publishing fail
+  closed on Graph errors, missing files, empty groups, incomplete pages and
+  oversize APIM named values, with a Git Bash execution harness around the
+  guide's bash blocks. Round 3 aligns projection deployment order, resolver
+  caller ids, runner transfer, handover JSON shape and teardown receipts with
+  the installer and projection scripts. Round 4 makes runner file transfer
+  fail-closed with SHA-256 verification, requires teardown receipts for external
+  deletes, records group/app creation receipts and documents the Microsoft Graph
+  advanced-query eventual-consistency retry. Round 5 wraps refusal blocks in
+  functions so Cloud Shell stays open, makes group/app discovery fail closed,
+  tightens Graph 404 parsing, checks runner error text, and verifies teardown
+  receipts before deleting anything. Round 6 refuses existing APIM instances
+  without SystemAssigned managed identity, adds an optional PATCH-only identity
+  enablement block, and prevents empty-assignee Foundry role checks or empty
+  receipts after failed role creation. Round 7 makes Key Vault grants exact-scope
+  and receipt-backed, preserves live APIM hostnames during company-address PATCH,
+  and refuses empty-scope bypass/teardown reads. Round 8 adds first-deployment
+  APIM absence and safe reuse blocks, warns against destructive reruns, and
+  merges Desktop redirect URIs instead of replacing live lists.
 - **P87 archives merged status sections.** `docs/STATUS.md` keeps the active packet, archive index,
   proof commands and next work; merged packet evidence now lives under `docs/status/` so the gate
   can read the active-packet line and all archived status files.

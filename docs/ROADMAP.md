@@ -89,6 +89,7 @@ premise does not carry over.
 | P86 | Merged (`9c5022b`) with the owner's approval on 2026-10-02, after council round 3 and the packet gate at `22dc8f0` | Scheduled projection reconciler and tenant-admin pack: user-assigned managed identity with Graph `GroupMember.Read.All` granted by a tenant admin, a 30-minute Container Apps job, email-backed action-group alerts, destination-bound Cosmos status evidence and runner-based admission. The switch requires Cosmos evidence plus the ARM job definition; dry-run, command/args overrides, missing action group and stale/single-generation evidence are rejected. |
 | P87 | Council passed on all five seats at `1d16972`; merges after its packet gate with the owner's approval | Archive merged `docs/STATUS.md` sections into `docs/status/<ID>.md`, keep `docs/STATUS.md` below the gate read limit, update links and tests, and add a durable documentation guard. |
 | P88 | Merged (`558fb7e`) with the owner's approval on 2026-10-02, after council and the packet gate at `d3d28d8` | AUM pytest results do not depend on the date they run. Tests pin the AUM UTC clock to the September fixture month with advancing elapsed time, cover all `claude_finops` `datetime.now(` readers and keep current-month write tests deterministic without product changes. |
+| P89 | Merged (`152b4a3`) with the owner's approval on 2026-10-02, together with P90, after council and the packet gate at `1284388` | Azure CLI command guide for every customer setup step the installer and in-scope administration scripts perform, with a guard that checks `az --help`, named-value parity, Bicep parameters and relative links. |
 
 M0 is shipped. The table below is the queue; the checklist under it is what the gate tracks.
 
@@ -491,6 +492,12 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       a HOME-local Cloud Shell launcher has offline proofs and researched
       networking/storage/idle guidance. Live Cloud Shell verification is
       owner-only and remains recorded separately.
+- [ ] P89 Every setup step as Azure CLI commands — acceptance: `docs/AZ-COMMANDS.md`
+      gives Cloud Shell bash commands for installer order setup, administration,
+      optional address, optional projection, verification and teardown; each step
+      names what it does, the commands, verification, expected result and source
+      script lines; the guard validates documented `az` commands and flags against
+      help, named-value parity, Bicep parameters and relative links.
 - [x] P72 permutation tests of the guided flow and the installer — acceptance: every combination of
       action (Setup, Change foundation, Guide, Status), record state (none, recorded and matching,
       recorded with another gateway URL, recorded but missing, not readable), mode (attended,
