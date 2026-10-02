@@ -122,6 +122,18 @@ Add-Case 'flow-key-in-installer-file' $pw @('answers.schema') $valid { param($d)
 Add-Case 'bash-unsupported-answer' $sh @('answers.schema') $bashValid { param($d) Set-Answer $d 'AddressMode' 'azure' }
 Add-Case 'flow-installer-name' $fl @('answers.schema') $flowValid { param($d) Set-Answer $d 'Sku' 'BasicV2' }
 Add-Case 'flow-bad-choice' $fl @('answers.schema') $flowValid { param($d) $d.'budgets.currency' = 'euros' }
+# The three P86 renewal inputs the main merge brought (cfb9dd7) are answers, as ProjectionReconcilerResourceId,
+# the fourth input P86 admission requires, is. An action group's id reads Microsoft.Insights/actionGroups in a
+# request and microsoft.insights/actionGroups in a response (Learn, Action Groups - Get).
+$renewal = [ordered]@{ ProjectionReconcilerResourceId = '/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-p92/providers/Microsoft.App/jobs/p92gw-reconciler'
+    ProjectionRenewalImageDigest = 'sha256:' + ('a' * 64); ProjectionRenewalEntryPoint = 'node /app/sync/src/apply-projection.mjs'
+    ProjectionRenewalActionGroupResourceId = '/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-p92/providers/Microsoft.Insights/actionGroups/ag-projection-renewal' }
+Add-Case 'projection-renewal' $pw @() $valid { param($d) foreach ($k in $renewal.Keys) { Set-Answer $d $k $renewal[$k] } }
+Add-Case 'projection-renewal-response-casing' $pw @() $valid { param($d) foreach ($k in $renewal.Keys) { Set-Answer $d $k $renewal[$k] }
+    $d.ProjectionRenewalActionGroupResourceId = '/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-p92/providers/microsoft.insights/actionGroups/ag-projection-renewal' }
+Add-Case 'projection-digest-malformed' $pw @('answers.schema') $valid { param($d) Set-Answer $d 'ProjectionRenewalImageDigest' 'sha256:ABC' }
+Add-Case 'projection-action-group-not-id' $pw @('answers.schema') $valid { param($d) Set-Answer $d 'ProjectionRenewalActionGroupResourceId' 'ag-projection-renewal' }
+Add-Case 'projection-entry-point-empty' $pw @('answers.schema') $valid { param($d) Set-Answer $d 'ProjectionRenewalEntryPoint' '' }
 Add-Case 'not-json' $pw @('answers.schema') -Text '{"Sku": "BasicV2", '
 Add-Case 'names-differ-in-case' $pw @('answers.schema') -Text '{"Sku": "BasicV2", "sku": "BasicV2"}'
 Add-Case 'not-an-object' $pw @('answers.schema') -Text '["Sku"]'
@@ -182,6 +194,12 @@ foreach ($c in $cases) {
     $detail = if (($got -join ',') -ne ($want -join ',')) { "PowerShell: $psText" } else { "PowerShell: $psText || bash: $shText" }
     Assert $label ((($got -join ',') -eq ($want -join ',')) -and $psText -eq $shText -and ($want.Count -eq 0 -or @($ps | Where-Object { $_.message -and $_.remedy }).Count -eq $ps.Count)) $detail
 }
+# Each malformed renewal input is refused by its own form, not as an answer the schema lacks.
+$forms = [ordered]@{ 'projection-digest-malformed' = "ProjectionRenewalImageDigest 'sha256:ABC' is not a sha256 image digest"
+    'projection-action-group-not-id' = "ProjectionRenewalActionGroupResourceId 'ag-projection-renewal' is not an action group resource ID"
+    'projection-entry-point-empty' = 'ProjectionRenewalEntryPoint is empty' }
+$formBad = @(foreach ($k in $forms.Keys) { $m = @($psResults[$k] | Where-Object { $null -ne $_ } | ForEach-Object { [string]$_.message }) -join ' | '; if (-not $m.StartsWith($forms[$k])) { "${k}: $m" } })
+Assert 'the three P86 renewal inputs are answers of Install-ClaudeGateway.ps1, each refused by its own form' (-not $formBad.Count) ($formBad -join '; ')
 Remove-Item -LiteralPath $scratch -Recurse -Force -ErrorAction SilentlyContinue
 Write-Host ''
 Write-Host ("{0} checks, {1} failed, {2:N1} s" -f $script:checks, $script:fail, $watch.Elapsed.TotalSeconds)
