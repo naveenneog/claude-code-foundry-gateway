@@ -75,6 +75,14 @@ function az {
         $sku = if ($FixtureCase -eq 'wrong-sku') { 'PremiumV2' } else { 'BasicV2' }
         return (@{ id = $id; identity = $identity; sku = @{ name = $sku } } | ConvertTo-Json -Depth 5 -Compress)
     }
+    if ($line -like 'apim nv show*') {
+        if ($line -match '--query name') { return 'entitlement-source' }
+        if ($line -match '--query value') { return 'named-value' }
+        return (@{ name='entitlement-source'; value='named-value'; secret=$false } | ConvertTo-Json -Compress)
+    }
+    if ($line -like 'apim nv update*' -or $line -like 'apim nv create*') {
+        return ''
+    }
     if ($line -like 'ad sp show*') {
         if ($FixtureCase -eq 'sp-error') { $global:LASTEXITCODE = 1; return }
         if ($line -match '--query appId') { return $FixtureApp }

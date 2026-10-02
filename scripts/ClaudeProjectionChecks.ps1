@@ -67,6 +67,72 @@ function Stop-ClaudeProjectionSwitch {
     throw 'Projection switching is unavailable in P84. Records expire at most 2 hours after scan start; every developer gets 503 after expiry without renewal. Switching needs the scheduled reconciler in P86 (docs/ROADMAP.md). No override is available.'
 }
 
+function ConvertFrom-ClaudeProjectionAdmissionResult {
+    param([Parameter(Mandatory)][string]$RawOutput)
+    $last = @($RawOutput -split '\r?\n' | Where-Object { $_.Trim().StartsWith('{') } | Select-Object -Last 1)
+    if (-not $last) { throw 'Projection admission returned no JSON. Remedy: run the read-only admission check through the in-VNet runner and inspect its logs.' }
+    try { $obj = $last | ConvertFrom-Json -ErrorAction Stop }
+    catch { throw 'Projection admission returned malformed JSON. Remedy: rerun the fixed repository checker through the runner.' }
+    if (-not $obj.ok) {
+        $reason = if ($obj.reason) { [string]$obj.reason } elseif ($obj.error) { [string]$obj.error } else { 'admission evidence was not accepted' }
+        throw "Projection switch refused: $reason Remedy: wait for two successful 30-minute renewals, fix the scheduled job or alerts, then rerun."
+    }
+    return $obj
+}
+
+function Assert-ClaudeProjectionJobDefinition {
+    param(
+        [Parameter(Mandatory)]$Job,
+        [Parameter(Mandatory)][string]$ImageDigest
+    )
+    $containers = @($Job.properties.template.containers)
+    if ($containers.Count -ne 1) { throw 'Projection switch refused: the renewal job must have exactly one container. Remedy: redeploy the tested P86 job.' }
+    $container = $containers[0]
+    if ([string]$container.image -notmatch "@$([regex]::Escape($ImageDigest))$") {
+        throw 'Projection switch refused: the renewal job image is not the tested pinned digest. Remedy: deploy the tested image digest.'
+    }
+    if (@($container.command).Count -gt 0 -or @($container.args).Count -gt 0) {
+        throw 'Projection switch refused: the renewal job has a command or args override. Remedy: redeploy the tested image entrypoint with no ARM command/args override.'
+    }
+    $env = @{}
+    foreach ($e in @($container.env)) { if ($e.name) { $env[$e.name] = [string]$e.value } }
+    foreach ($name in 'DRY_RUN','WHATIF','PROJECTION_COMMAND_OVERRIDE') {
+        if ($env.ContainsKey($name) -and $env[$name]) {
+            throw "Projection switch refused: the renewal job has dry-run or command override environment '$name'. Remedy: remove the override and wait for fresh evidence."
+        }
+    }
+    return $true
+}
+
+function Assert-ClaudeProjectionAdmission {
+    param(
+        [Parameter(Mandatory)][string]$ResourceGroup,
+        [Parameter(Mandatory)][string]$RunnerName,
+        [Parameter(Mandatory)][string]$CosmosAccount,
+        [Parameter(Mandatory)][string]$TenantId,
+        [Parameter(Mandatory)][string]$AccountResourceId,
+        [Parameter(Mandatory)][string]$ReconcilerResourceId,
+        [Parameter(Mandatory)][string]$ImageDigest,
+        [Parameter(Mandatory)][string]$EntryPoint,
+        [Parameter(Mandatory)][string]$ActionGroupResourceId,
+        [string]$Database = 'claude',
+        [string]$Container = 'entitlement'
+    )
+    if ([string]::IsNullOrWhiteSpace($ActionGroupResourceId)) {
+        throw 'Projection switch refused: renewal alerts have no action group with email receivers. Remedy: deploy the P86 action group and alerts, then wait for fresh evidence.'
+    }
+    Write-Host '    Checking scheduled renewal evidence from Cosmos through the in-VNet runner (expected wait: about 60-90 minutes after the first successful 30-minute run).' -ForegroundColor DarkGray
+    $command = "node /work/sync/src/check-admission.mjs --cosmos https://$CosmosAccount.documents.azure.com:443/ --tenant $TenantId --account-resource-id $AccountResourceId --database $Database --container $Container --image-digest $ImageDigest --entrypoint `"$EntryPoint`" --action-group-resource-id $ActionGroupResourceId"
+    $raw = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $RunnerName -Command $command
+    $admission = ConvertFrom-ClaudeProjectionAdmissionResult -RawOutput $raw
+
+    $token = Invoke-ClaudeNetworkAz @('account','get-access-token','--resource','https://management.azure.com')
+    if (-not $token.accessToken) { throw 'Projection switch refused: could not get a management-plane token to read the renewal job definition.' }
+    $job = Invoke-RestMethod -Method Get -Headers @{ Authorization = "Bearer $($token.accessToken)" } -Uri "https://management.azure.com${ReconcilerResourceId}?api-version=2024-03-01" -ErrorAction Stop
+    $null = Assert-ClaudeProjectionJobDefinition -Job $job -ImageDigest $ImageDigest
+    return $admission
+}
+
 function Invoke-ClaudeProjectionPreflight {
     param(
         [string]$ResourceGroup, [string]$ApimName, [string]$NamePrefix, [string]$SubscriptionId,
@@ -75,7 +141,7 @@ function Invoke-ClaudeProjectionPreflight {
         [string]$PremiumGroup = 'claude-code-premium', [switch]$FlipAfterCleanCompare,
         [string]$ReconcilerResourceId
     )
-    if ($FlipAfterCleanCompare) { Stop-ClaudeProjectionSwitch }
+    if ($FlipAfterCleanCompare -and -not $ReconcilerResourceId) { Stop-ClaudeProjectionSwitch }
     Write-Host 'Projection preflight (about 30-90 s, including a 25 s Graph pause). No Azure writes.'
     $checks = [Collections.Generic.List[object]]::new()
     $context = @{ Location = $Location; ResolverAppId = $ResolverAppId }

@@ -110,12 +110,12 @@ foreach($confirm in @($false,$true)) {
     $FixtureJob.properties.template.containers[0].args=@('--whatif')
     $FixtureExecution.properties.template.containers[0].args=@('--whatif')
     Capture { & (Join-Path $root 'scripts\Deploy-ClaudeProjection.ps1') -ResourceGroup rg-p84 -ApimName apim-p84 -NamePrefix p84fixture -FlipAfterCleanCompare -ReconcilerResourceId $FixtureJobId -Confirm:$confirm }
-    Assert "deployer always refuses, including matching dry-run evidence: confirm=$confirm" ($Failure -and $Output -match '2 hours' -and $Output -match 'every developer.*503' -and $Output -match 'P86.*ROADMAP')
+    Assert "deployer refuses missing P86 admission inputs before Azure calls: confirm=$confirm" ($Failure -and $Output -match 'P86 admission requires' -and $Output -match '60-90 minutes')
     Assert "deployer refusal precedes every Azure call: confirm=$confirm" ($FixtureCalls.Count -eq 0)
 }
 Reset-ProjectionFixture
 Capture { & (Join-Path $root 'Install-ClaudeGateway.ps1') -FlipProjectionAfterCleanCompare -DeployProjection -ProjectionReconcilerResourceId $FixtureJobId -Yes }
-Assert 'real installer refuses before discovery, prompts or writes' ($Failure -and $Output -match 'P86.*ROADMAP' -and $Output -match 'every developer.*503' -and $FixtureCalls.Count -eq 0)
+Assert 'real installer refuses missing renewal digest/action group before discovery, prompts or writes' ($Failure -and $Output -match 'P86 admission requires' -and $Output -match '60-90 minutes' -and $FixtureCalls.Count -eq 0)
 
 . (Join-Path $root 'scripts\flow\Entitlement.ps1')
 $record=[pscustomobject]@{schemaVersion=2;decisions=[pscustomobject]@{entitlementStore=[pscustomobject]@{target='projection';reconcilerResourceId=$FixtureJobId}};history=@()}
@@ -123,7 +123,39 @@ $discovery=[pscustomobject]@{resourceGroup='rg-p84';apimName='apim-p84';sku='Bas
 $plan=Get-ClaudeFlowStepPlan -Record $record -Discovery $discovery
 Reset-ProjectionFixture
 Capture { Invoke-ClaudeFlowStep -Record $record -Plan $plan }
-Assert 'real Entitlement always refuses a clean comparison and job id' ($Failure -and $Output -match 'P86.*ROADMAP' -and $Output -match 'every developer.*503' -and $FixtureCalls.Count -eq 0)
+Assert 'real Entitlement refuses missing P86 evidence with expected wait' ($Failure -and $Output -match 'P86 admission needs' -and $Output -match '60-90 minutes' -and $FixtureCalls.Count -eq 0)
+
+$discoveryGood=[pscustomobject]@{
+    resourceGroup='rg-p84';apimName='apim-p84';sku='BasicV2';namedValues=@{'entitlement-source'='named-value'};cleanComparison=$true
+    renewal=[pscustomobject]@{
+        runnerName='aci-projtest-p84fixture'; cosmosAccount='cosmos-p84fixture'; tenantId=$FixtureTenant; accountResourceId=$FixtureCosmosId
+        reconcilerResourceId=$FixtureJobId; imageDigest=('sha256:' + ('a' * 64)); actionGroupResourceId="$FixtureRgId/providers/Microsoft.Insights/actionGroups/ag-projection-renewal"
+        entryPoint='node /app/sync/src/apply-projection.mjs'
+    }
+}
+$planGood=Get-ClaudeFlowStepPlan -Record $record -Discovery $discoveryGood
+$planGood.Data.SnapshotPath = Join-Path ([IO.Path]::GetTempPath()) 'p86-flow-good-snapshot.json'
+$planGood.Data.SnapshotTaken = $true
+Reset-ProjectionFixture
+$FixtureJob.properties.template.containers[0].image='example.invalid/projection@sha256:' + ('a' * 64)
+$FixtureJob.properties.template.containers[0].command=@()
+$FixtureJob.properties.template.containers[0].args=@()
+Capture { Invoke-ClaudeFlowStep -Record $record -Plan $planGood }
+Assert 'real Entitlement good evidence reaches admission with the plan target resource group' (($FixtureCalls -join "`n") -match 'az container exec -g rg-p84 -n aci-projtest-p84fixture')
+Assert 'real Entitlement good evidence writes only the plan gateway named value' (-not $Failure -and ($FixtureCalls -join "`n") -match 'az apim nv update -g rg-p84 --service-name apim-p84 --named-value-id entitlement-source --value projection')
+
+$goodJob = $FixtureJob | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+$goodJob.properties.template.containers[0].image = 'example.invalid/projection@sha256:' + ('a' * 64)
+$goodJob.properties.template.containers[0].command = @()
+$goodJob.properties.template.containers[0].args = @()
+Assert 'job definition accepts pinned digest with no command or args override' (Assert-ClaudeProjectionJobDefinition -Job $goodJob -ImageDigest ('sha256:' + ('a' * 64)))
+$badJob = $goodJob | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+$badJob.properties.template.containers[0].args = @('--whatif')
+Capture { Assert-ClaudeProjectionJobDefinition -Job $badJob -ImageDigest ('sha256:' + ('a' * 64)) }
+Assert 'job definition rejects args override even when evidence could be good' ($Failure -and $Output -match 'command or args override')
+
+Capture { ConvertFrom-ClaudeProjectionAdmissionResult -RawOutput '{"ok":false,"reason":"missing action group"}' }
+Assert 'admission JSON names missing action group as a switch refusal' ($Failure -and $Output -match 'missing action group')
 
 $oid='11111111-2222-4333-8444-555555555555'
 $private='secret-finance-unit'
@@ -167,9 +199,9 @@ $steps=@($ast.FindAll({param($node) $node -is [Management.Automation.Language.If
 foreach($step in $steps) {
     $testBlock=[scriptblock]::Create($step.Extent.Text.Replace($step.Clauses[0].Item1.Extent.Text,'$false'))
     Capture { & $testBlock }
-    Assert "declined prerequisite aborts: $($step.Clauses[0].Item1.Extent.Text)" ($Failure -and $Output -match 'declined.*abort|declined.*stopp|declined.*no further') $Failure
+    Assert "declined prerequisite aborts: $($step.Clauses[0].Item1.Extent.Text)" ($Failure -and $Output -match 'declined.*abort|declined.*stopp|declined.*no further|declined after admission') $Failure
 }
-Assert 'all seven prerequisite decisions are exercised' ($steps.Count -eq 7)
+Assert 'all eight prerequisite decisions are exercised' ($steps.Count -eq 8)
 Assert 'deployer binds the comparison Boolean rather than an absent switch value' ($source -match '-FailOnDrift:\$true')
 }
 
