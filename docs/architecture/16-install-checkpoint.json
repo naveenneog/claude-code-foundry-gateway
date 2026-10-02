@@ -7,7 +7,7 @@
   "width": 1280,
   "height": 1100,
   "outputs": ["docs/images/architecture/install-checkpoint.png"],
-  "sources": ["Install-ClaudeGateway.ps1", "install-claude-gateway.sh", "scripts/ClaudeInstallCheckpoint.ps1", "scripts/ClaudeInstallResume.ps1", "scripts/install-checkpoint.sh", "scripts/install-resume.sh", "scripts/flow/Foundation.ps1", "infra/main.bicep"],
+  "sources": ["Install-ClaudeGateway.ps1", "install-claude-gateway.sh", "scripts/ClaudeInstallCheckpoint.ps1", "scripts/ClaudeInstallStore.ps1", "scripts/ClaudeInstallResume.ps1", "scripts/install-checkpoint.sh", "scripts/install-store.sh", "scripts/install-resume.sh", "scripts/flow/Foundation.ps1", "infra/main.bicep"],
   "identifiers": {
     "flowcall": {"label": "Invoke-ClaudeFlowStep", "source": "scripts/flow/Foundation.ps1", "match": "function Invoke-ClaudeFlowStep"},
     "record": {"label": "claude-gateway.json", "source": "scripts/flow/Foundation.ps1", "match": "onboarding\\claude-gateway.json"},
@@ -15,9 +15,9 @@
     "open": {"label": "Open-ClaudeInstallCheckpoint", "source": "scripts/ClaudeInstallCheckpoint.ps1", "match": "function Open-ClaudeInstallCheckpoint"},
     "sh": {"label": "install-claude-gateway.sh", "source": "install-claude-gateway.sh", "match": "ckpt_open_ \"$HERE\""},
     "shopen": {"label": "ckpt_open_", "source": "scripts/install-checkpoint.sh", "match": "ckpt_open_() {"},
-    "location": {"label": "Get-ClaudeInstallLocation", "source": "scripts/ClaudeInstallCheckpoint.ps1", "match": "function Get-ClaudeInstallLocation"},
-    "statedir": {"label": "CLAUDE_GATEWAY_STATE_DIR", "source": "scripts/ClaudeInstallCheckpoint.ps1", "match": "$env:CLAUDE_GATEWAY_STATE_DIR"},
-    "clouddrive": {"label": "clouddrive", "source": "scripts/ClaudeInstallCheckpoint.ps1", "match": "Join-Path $homeDir 'clouddrive'"},
+    "location": {"label": "Get-ClaudeInstallLocation", "source": "scripts/ClaudeInstallStore.ps1", "match": "function Get-ClaudeInstallLocation"},
+    "statedir": {"label": "CLAUDE_GATEWAY_STATE_DIR", "source": "scripts/ClaudeInstallStore.ps1", "match": "$env:CLAUDE_GATEWAY_STATE_DIR"},
+    "clouddrive": {"label": "clouddrive", "source": "scripts/ClaudeInstallStore.ps1", "match": "& $join $homeDir 'clouddrive'"},
     "save": {"label": "Save-ClaudeInstallCheckpoint", "source": "scripts/ClaudeInstallCheckpoint.ps1", "match": "function Save-ClaudeInstallCheckpoint"},
     "shsave": {"label": "ckpt_save_", "source": "scripts/install-checkpoint.sh", "match": "ckpt_save_() {"},
     "register": {"label": "Register-ClaudeInstallDeployment", "source": "scripts/ClaudeInstallResume.ps1", "match": "function Register-ClaudeInstallDeployment"},
@@ -29,7 +29,7 @@
     "azread": {"label": "Invoke-ClaudeInstallAzRead", "source": "scripts/ClaudeInstallResume.ps1", "match": "function Invoke-ClaudeInstallAzRead"},
     "gateway": {"label": "Resolve-ClaudeInstallGatewayStep", "source": "scripts/ClaudeInstallResume.ps1", "match": "function Resolve-ClaudeInstallGatewayStep"},
     "cloudline": {"label": "Write-ClaudeInstallCloudShellLine", "source": "scripts/ClaudeInstallResume.ps1", "match": "function Write-ClaudeInstallCloudShellLine"},
-    "storecheck": {"label": "Assert-ClaudeInstallStorePath", "source": "scripts/ClaudeInstallCheckpoint.ps1", "match": "function Assert-ClaudeInstallStorePath"}
+    "storecheck": {"label": "Assert-ClaudeInstallStore", "source": "scripts/ClaudeInstallStore.ps1", "match": "function Assert-ClaudeInstallStore {"}
   },
   "groups": [
     {"x": 0, "y": 0, "w": 1280, "h": 340, "tone": "purple", "title": "Operator side - one checkpoint per checkout, with no tokens, keys or connection strings"},
@@ -49,7 +49,7 @@
     ]},
     {"id": "store", "x": 876, "y": 76, "w": 385, "h": 248, "tone": "purple", "title": "3 - Per-user state directory", "lines": [
       "[[location]]: [[statedir]] when set, [[clouddrive]] in Cloud Shell, else LOCALAPPDATA or XDG state.",
-      "[[storecheck]] refuses a store another account can write, before it is read."
+      "[[storecheck]] refuses a store outside the home or one another account can alter."
     ]},
     {"id": "save", "x": 18, "y": 456, "w": 385, "h": 248, "tone": "blue", "title": "4 - Commit point", "lines": [
       "[[save]] and [[shsave]] record the binding, the answers and the lock.",

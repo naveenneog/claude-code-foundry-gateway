@@ -9,8 +9,10 @@ on:
     paths:
       - install-claude-gateway.sh
       - scripts/install-checkpoint.sh
+      - scripts/install-store.sh
       - scripts/install-resume.sh
       - scripts/ClaudeInstallCheckpoint.ps1
+      - scripts/ClaudeInstallStore.ps1
       - scripts/ClaudeInstallResume.ps1
       - scripts/preflight.sh
       - scripts/banner.sh

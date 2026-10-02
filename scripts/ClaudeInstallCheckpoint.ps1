@@ -26,7 +26,7 @@ $script:ClaudeInstallChoices = @{
 $script:ClaudeInstallIntegers = @('TpmStandard', 'QuotaStandard', 'TpmPremium', 'QuotaPremium', 'QuotaOrg', 'CallsPerMinute', 'RevocationWindowSeconds', 'DeveloperEstimate')
 $script:ClaudeInstallTerminal = @('Succeeded', 'Failed', 'Canceled')
 # The files whose hash is the installer version a checkpoint records (shown, not refused: amendment 1).
-$script:ClaudeInstallFiles = @('Install-ClaudeGateway.ps1', 'scripts/ClaudeInstallCheckpoint.ps1', 'scripts/ClaudeInstallResume.ps1')
+$script:ClaudeInstallFiles = @('Install-ClaudeGateway.ps1', 'scripts/ClaudeInstallCheckpoint.ps1', 'scripts/ClaudeInstallStore.ps1', 'scripts/ClaudeInstallResume.ps1')
 $script:ClaudeInstall = $null
 
 function Test-ClaudeInstallWindows { return ($env:OS -eq 'Windows_NT') }
@@ -78,117 +78,6 @@ function Get-ClaudeInstallTemplateFiles {
         }
     }
     return @($found)
-}
-
-function Get-ClaudeInstallCloudShell {
-    # The Cloud Shell image sets AZUREPS_HOST_ENVIRONMENT; the Azure CLI reads ACC_CLOUD (U64).
-    if ("$env:AZUREPS_HOST_ENVIRONMENT" -like 'cloud-shell/*') { return 'AZUREPS_HOST_ENVIRONMENT' }
-    if ("$env:ACC_CLOUD") { return 'ACC_CLOUD' }
-    return ''
-}
-
-function Test-ClaudeInstallWritable([string]$Path) {
-    if (-not (Test-Path -LiteralPath $Path -PathType Container)) { return $false }
-    $probe = Join-Path $Path ('.claude-gateway-probe-' + [guid]::NewGuid().ToString('N'))
-    try { [IO.File]::WriteAllText($probe, 'probe'); Remove-Item -LiteralPath $probe -Force; return $true } catch { return $false }
-}
-
-function Get-ClaudeInstallLocation {
-    param([Parameter(Mandatory = $true)][string]$Root)
-    $keyText = if (Test-ClaudeInstallWindows) { $Root.ToLowerInvariant() } else { $Root }
-    $key = 'install-' + (Get-ClaudeInstallSha256 ([Text.Encoding]::UTF8.GetBytes($keyText))).Substring(0, 16)
-    $homeDir = if ($env:HOME) { $env:HOME } else { $HOME }
-    $cloudShell = Get-ClaudeInstallCloudShell
-    $persistent = $true; $warning = ''; $cloudDrive = $false
-    if ($env:CLAUDE_GATEWAY_STATE_DIR) { $dir = $env:CLAUDE_GATEWAY_STATE_DIR }
-    elseif ($cloudShell) {
-        $drive = Join-Path $homeDir 'clouddrive'
-        if (Test-ClaudeInstallWritable $drive) { $dir = Join-Path $drive '.claude-gateway'; $cloudDrive = $true }
-        else {
-            $dir = Join-Path $homeDir '.claude-gateway'; $persistent = $false
-            $warning = "Cloud Shell without clouddrive ($cloudShell is set and $drive is not a writable directory): the install checkpoint is kept in $dir, which does not persist when the session ends."
-        }
-    }
-    elseif (Test-ClaudeInstallWindows) { $dir = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'claude-gateway' }
-    else { $base = if ($env:XDG_STATE_HOME) { $env:XDG_STATE_HOME } else { Join-Path (Join-Path $homeDir '.local') 'state' }; $dir = Join-Path $base 'claude-gateway' }
-    [pscustomobject]@{ Directory = $dir; Checkpoint = (Join-Path $dir "$key.json"); Lock = (Join-Path $dir "$key.lock"); Key = $key
-        Persistent = $persistent; Warning = $warning; CloudShell = $cloudShell; CloudDrive = $cloudDrive }
-}
-
-function Set-ClaudeInstallOwnerOnly {
-    param([string]$Path, [switch]$Directory)
-    if (Test-ClaudeInstallWindows) {
-        $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
-        $acl = if ($Directory) { New-Object System.Security.AccessControl.DirectorySecurity } else { New-Object System.Security.AccessControl.FileSecurity }
-        $acl.SetAccessRuleProtection($true, $false)
-        $inherit = if ($Directory) { 'ContainerInherit, ObjectInherit' } else { 'None' }
-        $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($sid, 'FullControl', $inherit, 'None', 'Allow')))
-        Set-Acl -LiteralPath $Path -AclObject $acl
-    }
-    else { & chmod $(if ($Directory) { '700' } else { '600' }) $Path 2>$null }
-}
-
-function Get-ClaudeInstallPosixStat([string]$Path) {
-    # The probe of the POSIX store check: whether the path is a symbolic link, whether the current user
-    # owns it (test -O), and its owner and mode as ls -ldL prints them. Tests replace it, because Git Bash
-    # and Windows have no POSIX modes.
-    $link = $false
-    try { $link = [bool](Get-Item -LiteralPath $Path -Force -ErrorAction Stop).LinkType } catch { $link = $false }
-    $global:LASTEXITCODE = 1
-    try { & /bin/sh -c 'test -O "$1"' sh $Path 2>$null } catch { }
-    $mine = ($LASTEXITCODE -eq 0)
-    $line = ''
-    try { $line = [string](@(& env LC_ALL=C ls -ldL -- $Path 2>$null) | Select-Object -First 1) } catch { $line = '' }
-    $fields = @($line.Trim() -split '\s+')
-    [pscustomobject]@{ Link = $link; Mine = $mine; Owner = $(if ($fields.Count -gt 2) { $fields[2] } else { '' }); Mode = $(if ($line.Length -ge 10) { $line.Substring(0, 10) } else { '' }) }
-}
-
-function Get-ClaudeInstallWindowsWriters([string]$Path) {
-    # The allow rules on a path that let an account other than the current user, SYSTEM (S-1-5-18) or
-    # BUILTIN\Administrators (S-1-5-32-544) write, modify, delete or take control of it.
-    $trusted = @([System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value, 'S-1-5-18', 'S-1-5-32-544')
-    # WriteData, AppendData, WriteExtendedAttributes, DeleteSubdirectoriesAndFiles, WriteAttributes,
-    # Delete, ChangePermissions, TakeOwnership, GENERIC_ALL and GENERIC_WRITE.
-    $write = 0x2 -bor 0x4 -bor 0x10 -bor 0x40 -bor 0x100 -bor 0x10000 -bor 0x40000 -bor 0x80000 -bor 0x10000000 -bor 0x40000000
-    foreach ($rule in @((Get-Acl -LiteralPath $Path).GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]))) {
-        if ([string]$rule.AccessControlType -ne 'Allow' -or $trusted -contains [string]$rule.IdentityReference.Value) { continue }
-        if (([int64][int]$rule.FileSystemRights -band $write) -eq 0) { continue }
-        $name = [string]$rule.IdentityReference.Value
-        try { $name = $rule.IdentityReference.Translate([System.Security.Principal.NTAccount]).Value } catch { }
-        [pscustomobject]@{ Sid = [string]$rule.IdentityReference.Value; Name = $name; Rights = [string]$rule.FileSystemRights }
-    }
-}
-
-function Assert-ClaudeInstallStorePath {
-    # Refuses a store path that another account could have written, before the installer reads, parses,
-    # locks, renames or replaces anything (ADR-0046 decision 2). clouddrive is exempt: its mount sets the
-    # modes, and the Cloud Shell storage account's access control applies (U66).
-    param([Parameter(Mandatory = $true)][string]$Path, [ValidateSet('directory', 'file')][string]$Kind = 'file', [string]$Tail)
-    $c = $script:ClaudeInstall
-    if ($c -and $c.Location -and $c.Location.CloudDrive) { return }
-    if (-not (Test-Path -LiteralPath $Path)) { return }
-    if (-not $Tail) { $Tail = 'Nothing was read or changed.' + $(if ($c -and $c.Root) { " Resume: $(Format-ClaudeInstallResume)" } else { '' }) }
-    if (Test-ClaudeInstallWindows) {
-        $writer = @(Get-ClaudeInstallWindowsWriters $Path)[0]
-        if ($writer) {
-            Stop-ClaudeInstall "the install checkpoint $Kind $Path has an access rule that lets $($writer.Name) ($($writer.Sid)) write it ($($writer.Rights)), so it is not trusted; only the current user, SYSTEM and Administrators may write the store, and a state directory the installer creates is owner-only. $Tail"
-        }
-        return
-    }
-    $s = Get-ClaudeInstallPosixStat $Path
-    $why = ''
-    if ($Kind -eq 'file' -and $s.Link) { $why = 'is a symbolic link' }
-    elseif (-not $s.Mine) { $why = "is owned by $(if ($s.Owner) { $s.Owner } else { 'another user' }), not by the current user" }
-    elseif ([string]$s.Mode -match '^.{5}w' -or [string]$s.Mode -match '^.{8}w') { $why = "has mode $($s.Mode) (owner $($s.Owner)), so its group or other users can write it" }
-    if ($why) { Stop-ClaudeInstall "the install checkpoint $Kind $Path $why, so it is not trusted; a state directory the installer creates is owner-only. $Tail" }
-}
-
-function Assert-ClaudeInstallStore {
-    # The state directory, the checkpoint and the lock, before any of them is read.
-    $l = $script:ClaudeInstall.Location
-    Assert-ClaudeInstallStorePath -Path $l.Directory -Kind directory
-    Assert-ClaudeInstallStorePath -Path $l.Checkpoint -Kind file
-    Assert-ClaudeInstallStorePath -Path $l.Lock -Kind file
 }
 
 function Move-ClaudeInstallCheckpointFile {
@@ -485,7 +374,7 @@ function Open-ClaudeInstallCheckpoint {
     # where the run resumes and returns the recorded parameter answers (ADR-0046 decisions 5 and 6).
     param([Parameter(Mandatory = $true)][string]$Root, [System.Collections.IDictionary]$Bound = @{}, [switch]$Restart, [switch]$WhatIfRun)
     $script:ClaudeInstall = [pscustomobject]@{ Root = $Root; Location = (Get-ClaudeInstallLocation -Root $Root); Commit = ''; Checkpoint = $null; Resuming = $false
-        Fingerprint = ''; Answers = [ordered]@{}; Lock = $null; WhatIf = [bool]$WhatIfRun; CloudShellNoted = $false; SubscriptionId = '' }
+        Fingerprint = ''; Answers = [ordered]@{}; Lock = $null; WhatIf = [bool]$WhatIfRun; CloudShellNoted = $false; SubscriptionId = ''; Bound = @($Bound.Keys | ForEach-Object { [string]$_ }) }
     $c = $script:ClaudeInstall
     $path = $c.Location.Checkpoint
     if ($WhatIfRun) {
@@ -636,18 +525,14 @@ function Save-ClaudeInstallCheckpoint {
     $c.Answers = $answers
     if (-not (Test-Path -LiteralPath $c.Location.Directory)) {
         # A state directory that cannot be created leaves the run without a checkpoint (decision 1).
-        try {
-            New-Item -ItemType Directory -Path $c.Location.Directory -Force -ErrorAction Stop | Out-Null
-            if (-not (Test-Path -LiteralPath $c.Location.Directory -PathType Container)) { throw 'no directory was created' }
-            Set-ClaudeInstallOwnerOnly $c.Location.Directory -Directory
-        }
+        try { New-ClaudeInstallStateDirectory $c.Location.Directory }
         catch {
             Write-Host "    [WARN] The install checkpoint directory $($c.Location.Directory) could not be created ($($_.Exception.Message)); this run keeps no checkpoint." -ForegroundColor Yellow
             Write-Host "    Resume: $(Format-ClaudeInstallResume -WithAnswers)"
             return
         }
     }
-    Assert-ClaudeInstallStorePath -Path $c.Location.Directory -Kind directory
+    Assert-ClaudeInstallStore
     if ($c.Checkpoint) {
         $c.Checkpoint.answers = [pscustomobject]$answers
     }
@@ -737,5 +622,6 @@ function Write-ClaudeInstallFailureHint {
     Write-Host "Resume: $resume"
 }
 
-# The live reads and step actions.
+# Where the store is and whether it is trusted, then the live reads and step actions.
+. (Join-Path $PSScriptRoot 'ClaudeInstallStore.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeInstallResume.ps1')

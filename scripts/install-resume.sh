@@ -8,7 +8,7 @@ ckpt_az_read_() {
   local notfound="$1" errf code saved pattern
   shift
   errf="$CKPT_DIR/.az-stderr-$$"
-  { [ -d "$CKPT_DIR" ] && [ -w "$CKPT_DIR" ]; } || errf="$HOME/.claude-gateway-az-stderr-$$"
+  { [ -z "$CKPT_NOSTORE" ] && [ -d "$CKPT_DIR" ] && [ -w "$CKPT_DIR" ]; } || errf="$HOME/.claude-gateway-az-stderr-$$"
   AZ_OUT="$(az "$@" 2>"$errf" < /dev/null | tr -d '\r')"; code=$?
   AZ_ERR="$(tr '\r\n' '  ' < "$errf" 2>/dev/null)"; rm -f "$errf"
   AZ_VERDICT=inconclusive
@@ -97,7 +97,9 @@ ckpt_verify_gateway_() {
 ckpt_gateway_plan_() {
   local rg="$1" apim="$2" title="Gateway deployment" hash state stored recorded origin
   CKPT_GW_RUN=1; CKPT_GW_URL=""
-  [ "$CKPT_LOCKED" = "1" ] || return 0
+  # Without a checkpoint (Git Bash, or a state directory that could not be created) the guard against a
+  # second main.bicep deployment still runs (decision 10).
+  if [ "$CKPT_LOCKED" != "1" ]; then ckpt_wait_main_deployments_ "$rg"; return 0; fi
   hash="$(ckpt_input_hash_ gateway-deployment)"
   state="$(ckpt_step_field_ gateway-deployment state)"; stored="$(ckpt_step_field_ gateway-deployment inputHash)"
   recorded="$(printf '%s' "$CKPT_JSON" | ckpt_jq_ -r '([.steps[]? | select(.id == "gateway-deployment")][0].receipt.deployments // []) | last | .name // empty')"
@@ -164,11 +166,45 @@ ckpt_complete_gateway_() {
   ckpt_set_step_ gateway-deployment completed
 }
 
+# A group by display name (ADR-0046 decision 11), and with an id the group of that id only: az ad group
+# list --display-name sends startswith(displayName,'<name>') to Microsoft Graph, and --filter adds
+# "id eq '<id>'" (az joins both with and, role/custom.py:1898-1905), so each listed name starts with
+# the name under Graph's own comparison, and a listed name with as many code points (jq length) is the
+# name. No name is compared here, as in ClaudeInstallResume.ps1. G_VERDICT: present (G_ID) for one
+# such group with an id; absent for none (longer names only); inconclusive (G_DETAIL) for a failed
+# read, output that is not a JSON list of groups, a name that is not text, or a group of that length
+# without an id, or more than one.
+ckpt_group_lookup_() {
+  local name="$1" id="${2:-}" obj
+  G_VERDICT=inconclusive; G_ID=""; G_DETAIL=""
+  if [ -n "$id" ]; then ckpt_az_read_ '' ad group list --display-name "$name" --filter "id eq '$id'" -o json
+  else ckpt_az_read_ '' ad group list --display-name "$name" -o json; fi
+  if [ "$AZ_VERDICT" != "present" ]; then G_DETAIL="$AZ_DETAIL"; return 0; fi
+  if ! obj="$(printf '%s' "$AZ_OUT" | ckpt_jq_ -s -r --arg n "$name" '
+      if length != 1 or (.[0] | type) != "array" then error("not a list") else .[0] end
+      | if any(.[]; . != null and type != "object") then error("not a list of groups") else . end
+      | if any(.[]; . != null and .displayName != null and (.displayName | type) != "string") then error("a name is not text") else . end
+      | [.[] | select(. != null and (.displayName | type) == "string" and (.displayName | length) == ($n | length))]
+      | [.[] | if (.id | type) == "string" and .id != "" then .id else "?" end] as $ids
+      | if length > 1 then "inconclusive \(length) groups have a name of that length: \($ids | join(", "))"
+        elif length == 1 and $ids[0] == "?" then "inconclusive the group with a name of that length has no id"
+        elif length == 1 then "present \($ids[0])"
+        else "absent" end' 2>/dev/null)" || [ -z "$obj" ]; then
+    G_DETAIL="the group list is not a JSON list of groups"; return 0
+  fi
+  case "$obj" in
+    absent) G_VERDICT=absent ;;
+    "present "*) G_VERDICT=present; G_ID="${obj#present }" ;;
+    *) G_DETAIL="${obj#inconclusive }" ;;
+  esac
+  return 0
+}
+
 # The tier groups, with receipts: a resume reads each by id and never creates a second group with the
 # same name (ADR-0046 decision 11). A receipt applies to the name it records (jq ==, code point by
-# code point), and a name finds a group by its length.
+# code point), and its id must be listed under that name; a name finds a group by its length.
 ckpt_groups_() {
-  local old made="" complete=1 verified=0 role name rec id origin when obj resume
+  local old made="" complete=1 verified=0 role name rec id origin when resume
   resume="$(ckpt_resume_cmd_)"
   old="$(ckpt_receipt_ entra-groups)"
   ckpt_set_step_ entra-groups started "$(ckpt_input_hash_ entra-groups)"
@@ -182,6 +218,12 @@ EOF
     if [ -n "$id" ]; then
       ckpt_az_read_ "$CKPT_GRAPH_NOT_FOUND" ad group show --group "$id" --query id -o tsv
       if [ "$AZ_VERDICT" = "present" ]; then
+        # The receipt's id must be the configured group: listed under its name, by the name rule.
+        ckpt_group_lookup_ "$name" "$id"
+        if [ "$G_VERDICT" != "present" ] || ! ckpt_same_ "$G_ID" "$id"; then
+          case "$G_VERDICT" in absent) G_DETAIL="the group with that id has another name" ;; present) G_DETAIL="Microsoft Graph listed $G_ID" ;; esac
+          ckpt_refuse_ "Entra group '$name' ($id) in the install checkpoint is not listed by Microsoft Graph under that name ($G_DETAIL), so it is neither used nor created again. Nothing was changed. Resume: $resume"
+        fi
         ok_ "$name exists ($id)"; verified=$((verified + 1))
         made="$made$(ckpt_jq_ -cn --arg r "$role" --arg n "$name" --arg i "$id" --arg o "$origin" --arg w "$when" '{role: $r, displayName: $n, id: $i, origin: $o, createdUtc: (if $w == "" then null else $w end)}')
 "
@@ -193,35 +235,18 @@ EOF
       fi
       note_ "$name ($id) is gone; looking it up by name."
     fi
-    # By display name (ADR-0046 decision 11): az ad group list --display-name sends
-    # startswith(displayName,'<name>') to Microsoft Graph, so each listed name starts with the name
-    # under Graph's own comparison, and a listed name with as many code points (jq length) is the
-    # name. No name is compared here, as in ClaudeInstallResume.ps1. One such group with an id is
-    # reused; none (longer names only) is absent. A failed read, output that is not a JSON list of
-    # groups, a name that is not text, or a group of that length without an id, or more than one,
-    # creates nothing (R1, R5).
-    ckpt_az_read_ '' ad group list --display-name "$name" -o json
-    [ "$AZ_VERDICT" = "present" ] || ckpt_refuse_ "Entra group '$name' could not be looked up by name ($AZ_DETAIL), so it is neither reused nor created. Nothing was changed by this step. Resume: $resume"
-    if ! obj="$(printf '%s' "$AZ_OUT" | ckpt_jq_ -s -r --arg n "$name" '
-        if length != 1 or (.[0] | type) != "array" then error("not a list") else .[0] end
-        | if any(.[]; . != null and type != "object") then error("not a list of groups") else . end
-        | if any(.[]; . != null and .displayName != null and (.displayName | type) != "string") then error("a name is not text") else . end
-        | [.[] | select(. != null and (.displayName | type) == "string" and (.displayName | length) == ($n | length))]
-        | [.[] | if (.id | type) == "string" and .id != "" then .id else "?" end] as $ids
-        | if length > 1 then "inconclusive \(length) groups have a name of that length: \($ids | join(", "))"
-          elif length == 1 and $ids[0] == "?" then "inconclusive the group with a name of that length has no id"
-          elif length == 1 then "present \($ids[0])"
-          else "absent" end' 2>/dev/null)" || [ -z "$obj" ]; then
-      ckpt_refuse_ "Entra group '$name' could not be looked up by name (the group list is not a JSON list of groups), so it is neither reused nor created. Nothing was changed by this step. Resume: $resume"
-    fi
-    case "$obj" in
+    # By display name: one such group with an id is reused; none (longer names only) is absent. A
+    # failed read, an unreadable list or a name of that length held by no id or by two groups creates
+    # nothing (R1, R5).
+    ckpt_group_lookup_ "$name"
+    case "$G_VERDICT" in
       absent) ;;
-      "present "*)
+      present)
         ok_ "$name exists"
-        made="$made$(ckpt_jq_ -cn --arg r "$role" --arg n "$name" --arg i "${obj#present }" '{role: $r, displayName: $n, id: $i, origin: "pre-existing", createdUtc: null}')
+        made="$made$(ckpt_jq_ -cn --arg r "$role" --arg n "$name" --arg i "$G_ID" '{role: $r, displayName: $n, id: $i, origin: "pre-existing", createdUtc: null}')
 "
         continue ;;
-      *) ckpt_refuse_ "Entra group '$name' could not be looked up by name (${obj#inconclusive }), so it is neither reused nor created. Nothing was changed by this step. Resume: $resume" ;;
+      *) ckpt_refuse_ "Entra group '$name' could not be looked up by name ($G_DETAIL), so it is neither reused nor created. Nothing was changed by this step. Resume: $resume" ;;
     esac
     ckpt_az_read_ '' ad group create --display-name "$name" --mail-nickname "$name" --query id -o tsv
     if [ "$AZ_VERDICT" = "present" ] && [ -n "$AZ_OUT" ]; then

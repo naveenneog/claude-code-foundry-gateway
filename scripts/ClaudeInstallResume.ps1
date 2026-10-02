@@ -85,10 +85,30 @@ function Test-ClaudeInstallGateway([string]$ResourceGroup, [string]$ApimName, $R
     $api = Invoke-ClaudeInstallAzRead @('apim', 'api', 'show', '-g', $ResourceGroup, '--service-name', $ApimName, '--api-id', 'claude-foundry', '-o', 'none') @('ResourceNotFound')
     if ($api.Verdict -ne 'present') { return [pscustomobject]@{ Verdict = $api.Verdict; Detail = "the Claude API on $ApimName is not readable or gone ($($api.Detail))" } }
     if ($Receipt -and $Receipt.roleOrigin -eq 'created' -and $Receipt.roleAssignmentId) {
-        $role = Invoke-ClaudeInstallAzRead @('rest', '--method', 'get', '--url', "https://management.azure.com$($Receipt.roleAssignmentId)?api-version=2022-04-01", '-o', 'none') @('RoleAssignmentNotFound')
+        $role = Invoke-ClaudeInstallAzRead @('rest', '--method', 'get', '--url', "https://management.azure.com$($Receipt.roleAssignmentId)?api-version=2022-04-01", '-o', 'json') @('RoleAssignmentNotFound')
         if ($role.Verdict -ne 'present') { return [pscustomobject]@{ Verdict = $role.Verdict; Detail = "the gateway's Foundry role assignment is not readable or gone ($($role.Detail))" } }
+        $why = Test-ClaudeInstallRoleAssignment -Output $role.Output -Id ([string]$Receipt.roleAssignmentId) -ResourceGroup $ResourceGroup -ApimName $ApimName
+        if ($why) { return [pscustomobject]@{ Verdict = 'inconclusive'; Detail = $why } }
     }
     return [pscustomobject]@{ Verdict = 'present'; Detail = '' }
+}
+
+function Test-ClaudeInstallRoleAssignment {
+    # '' when the role assignment a receipt names is what the deployment grants: Cognitive Services User
+    # (a97b65f3-24c7-4388-baec-2e87135dc908, infra/foundry-role.bicep:13) on the Foundry account, to the
+    # gateway's identity. Otherwise why not, so a resume does not take another assignment for it (R5).
+    param([string]$Output, [string]$Id, [string]$ResourceGroup, [string]$ApimName)
+    $read = { param($n) [string](Get-Variable -Name $n -Scope Script -ValueOnly -ErrorAction SilentlyContinue) }
+    $p = $null
+    try { $p = ($Output | ConvertFrom-Json -ErrorAction Stop).properties } catch { $p = $null }
+    if (-not $p) { return "the role assignment $Id could not be read as JSON" }
+    $foundry = Invoke-ClaudeInstallAzRead @('cognitiveservices', 'account', 'show', '-g', (& $read 'FoundryResourceGroup'), '-n', (& $read 'FoundryAccount'), '--query', 'id', '-o', 'tsv')
+    $principal = Invoke-ClaudeInstallAzRead @('apim', 'show', '-g', $ResourceGroup, '-n', $ApimName, '--query', 'identity.principalId', '-o', 'tsv')
+    if ($foundry.Verdict -ne 'present' -or -not $foundry.Output -or $principal.Verdict -ne 'present' -or -not $principal.Output) { return "the Foundry account or the gateway's identity could not be read to check the role assignment $Id" }
+    $role = @(([string]$p.roleDefinitionId) -split '/')[-1]
+    $same = { param([string]$A, [string]$B) [string]::Equals($A, $B, [StringComparison]::OrdinalIgnoreCase) }
+    if ((& $same $p.scope $foundry.Output) -and (& $same $role 'a97b65f3-24c7-4388-baec-2e87135dc908') -and (& $same $p.principalId $principal.Output)) { return '' }
+    return "the role assignment $Id in the install checkpoint grants role $role at $($p.scope) to $($p.principalId), not Cognitive Services User at $($foundry.Output) to the gateway's identity $($principal.Output)"
 }
 
 function Resolve-ClaudeInstallGatewayStep {
@@ -178,14 +198,17 @@ function Get-ClaudeInstallCodePointLength([string]$Text) {
     return $count
 }
 
-function Find-ClaudeInstallGroupByName([string]$Name) {
-    # A group by display name (ADR-0046 decision 11). az ad group list --display-name sends
-    # startswith(displayName,'<name>') to Microsoft Graph, so each listed name starts with the name
-    # under Graph's own comparison, and a listed name with as many code points is the name. No name
-    # is compared here, as in install-resume.sh. present: one such group with an id; absent: none
-    # (longer names only); inconclusive: a failed read, output that is not a JSON list of groups, a
+function Find-ClaudeInstallGroupByName([string]$Name, [string]$Id) {
+    # A group by display name (ADR-0046 decision 11), and with -Id the group of that id only. az ad
+    # group list --display-name sends startswith(displayName,'<name>') to Microsoft Graph, and --filter
+    # adds "id eq '<id>'" (az joins both with and, role/custom.py:1898-1905), so each listed name starts
+    # with the name under Graph's own comparison, and a listed name with as many code points is the name.
+    # No name is compared here, as in install-resume.sh. present: one such group with an id; absent:
+    # none (longer names only); inconclusive: a failed read, output that is not a JSON list of groups, a
     # name that is not text, or a group of that length without an id, or more than one.
-    $r = Invoke-ClaudeInstallAzRead @('ad', 'group', 'list', '--display-name', $Name, '-o', 'json')
+    $query = @('ad', 'group', 'list', '--display-name', $Name)
+    if ($Id) { $query += @('--filter', "id eq '$Id'") }
+    $r = Invoke-ClaudeInstallAzRead ($query + @('-o', 'json'))
     $result = { param([string]$Verdict, [string]$Id, [string]$Detail) [pscustomobject]@{ Verdict = $Verdict; Id = $Id; Detail = $Detail } }
     if ($r.Verdict -ne 'present') { return (& $result 'inconclusive' '' $r.Detail) }
     $unreadable = 'the group list is not a JSON list of groups'
@@ -227,7 +250,15 @@ function Invoke-ClaudeInstallGroups {
         $rec = @($old | Where-Object { $_.role -eq $g.Role -and [string]::Equals([string]$_.displayName, [string]$g.Name, [StringComparison]::Ordinal) }) | Select-Object -First 1
         if ($rec -and $rec.id) {
             $r = Invoke-ClaudeInstallAzRead @('ad', 'group', 'show', '--group', [string]$rec.id, '--query', 'id', '-o', 'tsv') $script:ClaudeInstallGraphNotFound
-            if ($r.Verdict -eq 'present') { Write-Host "    [OK]   $($g.Name) exists ($($rec.id))" -ForegroundColor Green; $made.Add($rec); $verified++; continue }
+            if ($r.Verdict -eq 'present') {
+                # The receipt's id must be the configured group: listed under its name, by the name rule.
+                $named = Find-ClaudeInstallGroupByName $g.Name ([string]$rec.id)
+                if ($named.Verdict -ne 'present' -or -not [string]::Equals($named.Id, [string]$rec.id, [StringComparison]::OrdinalIgnoreCase)) {
+                    $why = if ($named.Verdict -eq 'absent') { 'the group with that id has another name' } elseif ($named.Verdict -eq 'present') { "Microsoft Graph listed $($named.Id)" } else { $named.Detail }
+                    Stop-ClaudeInstall "Entra group '$($g.Name)' ($($rec.id)) in the install checkpoint is not listed by Microsoft Graph under that name ($why), so it is neither used nor created again. Nothing was changed. Resume: $resume"
+                }
+                Write-Host "    [OK]   $($g.Name) exists ($($rec.id))" -ForegroundColor Green; $made.Add($rec); $verified++; continue
+            }
             if ($r.Verdict -eq 'inconclusive') { Stop-ClaudeInstall "Entra group '$($g.Name)' ($($rec.id)) could not be read ($($r.Detail)), so it is neither skipped nor created again. Nothing was changed. Resume: $resume" }
             if ($rec.origin -eq 'created') {
                 Stop-ClaudeInstall "Entra group '$($g.Name)' ($($rec.id)), created by this run at $($rec.createdUtc), is not returned by Microsoft Graph. A group created moments ago can take time to appear in Microsoft Graph, and a rerun later continues without creating a second group. Nothing was changed. Resume: $resume"
@@ -272,13 +303,39 @@ function Add-ClaudeInstallBusinessUnit([string]$Id, [string]$GroupId, [string]$G
 function Get-ClaudeInstallResolverApp([string]$NamePrefix, [string]$Supplied) {
     # The projection's resolver app by id when known: supplied, recorded by an earlier attempt, or the
     # one app with the display name Deploy-ClaudeProjection.ps1 gives it (ClaudeProjectionChecks.ps1:167).
-    if ($Supplied) { return [pscustomobject]@{ Id = $Supplied; Origin = 'pre-existing' } }
+    # An id from the checkpoint, as a receipt or as a recorded answer this run does not pass again, is
+    # checked live before it is used (R5).
+    $c = $script:ClaudeInstall
+    $expected = "claude-projection-resolver-$NamePrefix"
+    $fromCheckpoint = (Test-ClaudeInstallResuming) -and @($c.Bound) -notcontains 'ProjectionResolverAppId'
+    if ($Supplied) {
+        if ($fromCheckpoint) { Assert-ClaudeInstallResolverApp $Supplied $expected }
+        return [pscustomobject]@{ Id = $Supplied; Origin = 'pre-existing' }
+    }
     $step = Get-ClaudeInstallStep 'projection'
-    if ($step -and $step.receipt -and $step.receipt.resolverAppId) { return [pscustomobject]@{ Id = [string]$step.receipt.resolverAppId; Origin = [string]$step.receipt.resolverOrigin } }
-    $r = Invoke-ClaudeInstallAzRead @('ad', 'app', 'list', '--display-name', "claude-projection-resolver-$NamePrefix", '--query', '[].appId', '-o', 'tsv')
+    if ($step -and $step.receipt -and $step.receipt.resolverAppId) {
+        Assert-ClaudeInstallResolverApp ([string]$step.receipt.resolverAppId) $expected
+        return [pscustomobject]@{ Id = [string]$step.receipt.resolverAppId; Origin = [string]$step.receipt.resolverOrigin }
+    }
+    $r = Invoke-ClaudeInstallAzRead @('ad', 'app', 'list', '--display-name', $expected, '--query', '[].appId', '-o', 'tsv')
     $ids = @(if ($r.Verdict -eq 'present') { $r.Output -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ } })
     if ($ids.Count -eq 1) { return [pscustomobject]@{ Id = $ids[0]; Origin = 'pre-existing' } }
     return [pscustomobject]@{ Id = ''; Origin = 'created' }
+}
+
+function Assert-ClaudeInstallResolverApp([string]$AppId, [string]$Expected) {
+    # The app an id names: it exists, its appId is that id, and its display name is the resolver's.
+    $r = Invoke-ClaudeInstallAzRead @('ad', 'app', 'show', '--id', $AppId, '-o', 'json') $script:ClaudeInstallGraphNotFound
+    $why = ''
+    if ($r.Verdict -ne 'present') { $why = "is not returned by Microsoft Graph ($($r.Detail))" }
+    else {
+        $app = $null
+        try { $app = $r.Output | ConvertFrom-Json -ErrorAction Stop } catch { $app = $null }
+        if (-not $app) { $why = 'could not be read as JSON' }
+        elseif (-not [string]::Equals([string]$app.appId, $AppId, [StringComparison]::OrdinalIgnoreCase)) { $why = "names the application whose appId is $($app.appId)" }
+        elseif (-not [string]::Equals([string]$app.displayName, $Expected, [StringComparison]::Ordinal)) { $why = "is named '$($app.displayName)', not '$Expected'" }
+    }
+    if ($why) { Stop-ClaudeInstall "the projection resolver app $AppId in the install checkpoint $why, so it is not used. Nothing was changed. Resume: $(Format-ClaudeInstallResume)" }
 }
 
 function Complete-ClaudeInstallProjection([string]$ResourceGroup, [string]$NamePrefix, $App) {
@@ -345,8 +402,13 @@ function Test-ClaudeInstallAddress([string]$ResourceGroup, [string]$ApimName, [s
 }
 
 function Assert-ClaudeInstallDesktopApp([string]$ClientId) {
-    # A supplied Desktop app is pre-existing by definition; a resume reads it by id (decision 8).
+    # A supplied Desktop app is pre-existing by definition; a resume reads it by id and takes it only
+    # when its appId is that id: az ad app show --id also accepts an object id (decision 8, R5).
     if (-not (Test-ClaudeInstallResuming) -or -not $ClientId) { return }
     $r = Invoke-ClaudeInstallAzRead @('ad', 'app', 'show', '--id', $ClientId, '--query', 'appId', '-o', 'tsv') $script:ClaudeInstallGraphNotFound
     if ($r.Verdict -ne 'present') { Stop-ClaudeInstall "the Claude Desktop app $ClientId is gone or unreadable ($($r.Detail)); scripts/New-ClaudeDesktopEntraApp.ps1 creates one. Nothing was changed." }
+    $appId = ([string]$r.Output).Trim()
+    if (-not [string]::Equals($appId, $ClientId, [StringComparison]::OrdinalIgnoreCase)) {
+        Stop-ClaudeInstall "the Claude Desktop app id $ClientId names the application whose appId is $(if ($appId) { $appId } else { 'empty' }), so it is not used. Nothing was changed. Resume: $(Format-ClaudeInstallResume)"
+    }
 }

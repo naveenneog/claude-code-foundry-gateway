@@ -9,7 +9,7 @@ CKPT_SCHEMA="claude-gateway-install-checkpoint"
 CKPT_STEP_IDS="claude-deployment resource-group gateway-deployment company-address entra-groups sync projection business-units onboarding-package verify"
 CKPT_ORDER="resource-group gateway-deployment entra-groups sync onboarding-package"
 # The files whose hash is the installer version a checkpoint records (shown, not refused: amendment 1).
-CKPT_FILES="install-claude-gateway.sh scripts/install-checkpoint.sh scripts/install-resume.sh"
+CKPT_FILES="install-claude-gateway.sh scripts/install-checkpoint.sh scripts/install-store.sh scripts/install-resume.sh"
 # The answers recorded, by the PowerShell installer's parameter names: name, variable, flag, and i
 # for a whole number.
 CKPT_ANSWERS='SubscriptionId SUBSCRIPTION --subscription s
@@ -29,12 +29,14 @@ StandardGroup STANDARD_GROUP --standard-group s
 PremiumGroup PREMIUM_GROUP --premium-group s'
 CKPT_US=$'\x1f'
 
-CKPT_ROOT=""; CKPT_DIR=""; CKPT_FILE=""; CKPT_LOCK=""; CKPT_PERSISTENT=1; CKPT_WARNING=""; CKPT_CLOUDSHELL=""; CKPT_CLOUDDRIVE=0
+CKPT_ROOT=""; CKPT_DIR=""; CKPT_FILE=""; CKPT_LOCK=""; CKPT_KEY=""; CKPT_PERSISTENT=1; CKPT_WARNING=""; CKPT_CLOUDSHELL=""; CKPT_CLOUDDRIVE=0
+CKPT_NOSTORE=""; CKPT_RESOLVED=""; CKPT_HOME_REAL=""
 CKPT_RESUMING=0; CKPT_JSON=""; CKPT_RUN_ID=""; CKPT_LOCKED=0; CKPT_HEARTBEAT=""; CKPT_REFUSED=0; CKPT_WHAT_IF=0
 CKPT_FINGERPRINT=""; CKPT_COMMIT=""; CKPT_TEMPLATES=""; CKPT_NOTED=0; CKPT_SUB_ID=""; CKPT_ANSWER_COUNT=0; CKPT_WRITE_WARNED=0
 CKPT_GW_RUN=1; CKPT_GW_URL=""
 AZ_VERDICT=""; AZ_OUT=""; AZ_ERR=""; AZ_DETAIL=""; V_VERDICT=""; V_DETAIL=""; LOCK_STATE=""; LOCK_DETAIL=""; LOCK_HOLDER=""; LOCK_ENDS=""
-DS_VERDICT=""; DS_STATE=""; DS_URL=""; DS_ERROR=""; DS_DETAIL=""; PERM_LINK=0; PERM_MINE=0; PERM_MODE=""; PERM_OWNER=""; PERM_WHY=""
+DS_VERDICT=""; DS_STATE=""; DS_URL=""; DS_ERROR=""; DS_DETAIL=""; PERM_LINK=0; PERM_MINE=0; PERM_ROOT=0; PERM_MODE=""; PERM_OWNER=""; PERM_WHY=""
+G_VERDICT=""; G_ID=""; G_DETAIL=""
 
 ckpt_title_() {
   case "$1" in
@@ -90,69 +92,6 @@ $CKPT_ANSWERS
 EOF
   fi
   printf '%s' "$line"
-}
-
-# Cloud Shell sets AZUREPS_HOST_ENVIRONMENT; the Azure CLI reads ACC_CLOUD (U64).
-ckpt_cloudshell_() {
-  case "${AZUREPS_HOST_ENVIRONMENT:-}" in cloud-shell/*) printf 'AZUREPS_HOST_ENVIRONMENT'; return 0 ;; esac
-  if [ -n "${ACC_CLOUD:-}" ]; then printf 'ACC_CLOUD'; fi
-}
-ckpt_writable_() {
-  [ -d "$1" ] || return 1
-  local probe="$1/.claude-gateway-probe-$$"
-  ( : > "$probe" ) 2>/dev/null || return 1
-  rm -f "$probe"
-}
-ckpt_location_() {
-  local key drive
-  key="install-$(printf '%s' "$CKPT_ROOT" | ckpt_sha256_ | cut -c1-16)"
-  CKPT_CLOUDSHELL="$(ckpt_cloudshell_)"
-  if [ -n "${CLAUDE_GATEWAY_STATE_DIR:-}" ]; then CKPT_DIR="$CLAUDE_GATEWAY_STATE_DIR"
-  elif [ -n "$CKPT_CLOUDSHELL" ]; then
-    drive="$HOME/clouddrive"
-    if ckpt_writable_ "$drive"; then CKPT_DIR="$drive/.claude-gateway"; CKPT_CLOUDDRIVE=1
-    else
-      CKPT_DIR="$HOME/.claude-gateway"; CKPT_PERSISTENT=0
-      CKPT_WARNING="Cloud Shell without clouddrive ($CKPT_CLOUDSHELL is set and $drive is not a writable directory): the install checkpoint is kept in $CKPT_DIR, which does not persist when the session ends."
-    fi
-  else CKPT_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/claude-gateway"; fi
-  CKPT_FILE="$CKPT_DIR/$key.json"; CKPT_LOCK="$CKPT_DIR/$key.lock"
-}
-
-# The probe of the store check: whether the path is a symbolic link, whether the current user owns it
-# (test -O), and its owner and mode as ls -ldL prints them. Tests replace it, because Git Bash's noacl
-# mount reports every file as the current user's with fixed modes.
-ckpt_perm_probe_() {
-  local line
-  PERM_LINK=0; PERM_MINE=0
-  [ -L "$1" ] && PERM_LINK=1
-  [ -O "$1" ] && PERM_MINE=1
-  line="$(LC_ALL=C ls -ldL "$1" 2>/dev/null | head -n 1 | tr -d '\r')"
-  PERM_MODE="$(printf '%s' "$line" | cut -c1-10)"
-  PERM_OWNER="$(printf '%s' "$line" | awk '{ print $3 }')"
-}
-# path kind: PERM_WHY says why another account could have written the path, or is empty. clouddrive is
-# exempt: its mount sets the modes, and the Cloud Shell storage account's access control applies (U66).
-ckpt_perm_why_() {
-  PERM_WHY=""
-  [ "$CKPT_CLOUDDRIVE" = "1" ] && return 0
-  { [ -e "$1" ] || [ -L "$1" ]; } || return 0
-  ckpt_perm_probe_ "$1"
-  if [ "$2" = "file" ] && [ "$PERM_LINK" = "1" ]; then PERM_WHY="is a symbolic link"
-  elif [ "$PERM_MINE" != "1" ]; then PERM_WHY="is owned by ${PERM_OWNER:-another user}, not by the current user"
-  else
-    case "$PERM_MODE" in ?????w*|????????w*) PERM_WHY="has mode $PERM_MODE (owner $PERM_OWNER), so its group or other users can write it" ;; esac
-  fi
-  return 0
-}
-# path kind [tail]: refuses a store path another account could have written, before the installer
-# reads, parses, locks, renames or replaces anything (ADR-0046 decision 2).
-ckpt_perm_check_() {
-  local tail="${3:-}"
-  ckpt_perm_why_ "$1" "$2"
-  [ -n "$PERM_WHY" ] || return 0
-  [ -n "$tail" ] || tail="Nothing was read or changed. Resume: $(ckpt_resume_cmd_)"
-  ckpt_refuse_ "the install checkpoint $2 $1 $PERM_WHY, so it is not trusted; a state directory the installer creates is owner-only. $tail"
 }
 
 # Each file hashed with carriage returns removed, so a Windows and a Linux checkout of one commit agree.
@@ -288,9 +227,8 @@ ckpt_open_() {
     if [ -f "$CKPT_FILE" ]; then note_ "An install checkpoint exists at $CKPT_FILE; --what-if previews a first run and changes nothing."; fi
     return 0
   fi
-  ckpt_perm_check_ "$CKPT_DIR" directory
-  ckpt_perm_check_ "$CKPT_FILE" file
-  ckpt_perm_check_ "$CKPT_LOCK" file
+  [ -n "$CKPT_NOSTORE" ] && return 0
+  ckpt_store_check_
   ckpt_lock_state_ "$CKPT_LOCK"
   [ "$LOCK_STATE" = "held" ] && ckpt_lock_held_
   if [ "$restart" = "1" ] && [ -f "$CKPT_FILE" ]; then
@@ -401,14 +339,21 @@ ckpt_save_() {
   sub="$(ckpt_subscription_id_)"; [ -n "$sub" ] || sub="$SUBSCRIPTION"
   answers="$(ckpt_answers_json_ "$sub")"
   now="$(ckpt_now_)"
-  # A state directory that cannot be created leaves the run without a checkpoint (decision 1).
-  if ! mkdir -p "$CKPT_DIR" 2>/dev/null; then
+  # Git Bash on Windows keeps no store: the warning and the resume command, as in an ephemeral session.
+  if [ -n "$CKPT_NOSTORE" ]; then
+    warn_ "on Windows under $CKPT_NOSTORE (Git Bash, MSYS2 or Cygwin), install-claude-gateway.sh reads no Windows access rules, so it keeps no install checkpoint; Install-ClaudeGateway.ps1 is the Windows installer"
+    printf '    Resume: %s\n' "$(ckpt_resume_cmd_ with-answers)"
+    return 0
+  fi
+  # A state directory that cannot be created leaves the run without a checkpoint (decision 1). Each
+  # missing directory is created owner-only (decision 2).
+  if ! ( umask 077; mkdir -p "$CKPT_DIR" ) 2>/dev/null; then
     warn_ "the install checkpoint directory $CKPT_DIR could not be created; this run keeps no checkpoint"
     printf '    Resume: %s\n' "$(ckpt_resume_cmd_ with-answers)"
     return 0
   fi
   chmod 700 "$CKPT_DIR" 2>/dev/null
-  ckpt_perm_check_ "$CKPT_DIR" directory
+  ckpt_store_check_
   if [ "$CKPT_RESUMING" = "1" ]; then
     CKPT_JSON="$(printf '%s' "$CKPT_JSON" | ckpt_jq_ -c --argjson a "$answers" --arg f "$CKPT_FINGERPRINT" --arg c "$CKPT_COMMIT" '.answers = $a | .installerFingerprint = $f | .installerCommit = $c')"
   else
@@ -584,5 +529,6 @@ ckpt_close_() {
   ckpt_release_
 }
 
-# The live reads and step actions.
+# Where the store is and whether it is trusted, then the live reads and step actions.
+. "$(dirname "${BASH_SOURCE[0]}")/install-store.sh"
 . "$(dirname "${BASH_SOURCE[0]}")/install-resume.sh"
