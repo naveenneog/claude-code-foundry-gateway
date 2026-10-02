@@ -100,6 +100,26 @@ Observed failure lines on the accepted plan before implementation:
 - Guided-flow schema and preflight checks failed because the flow did not call the shared schema/preflight path.
 - `bash-checkpoint-shards-cover-every-case-once` failed because Test-All still registered one bash checkpoint check.
 
+### GREEN
+
+GREEN implements the first P92 contract surface: `schemas/claude-gateway.answers.schema.json`,
+`scripts/ClaudeInstallerAnswers.ps1`, `scripts/install-answers.sh`, installer flags and parameters,
+P91 step-list/progress helpers, guided-flow schema/preflight hooks and Test-All bash checkpoint shard
+registrations. Targeted validation passed:
+
+| Check | Result |
+|---|---|
+| `Test-InstallerAnswersSchema.ps1` | 8 passed |
+| `Test-InstallerPreflight.ps1` | 6 passed |
+| `Test-InstallerStepSelection.ps1` | 7 passed |
+| `Test-BashInstallerPreflight.ps1` | 6 passed |
+| `Test-GuidedFlowAnswersSchema.ps1` | 4 passed |
+| `Test-BashInstallerCheckpointShards.ps1` | 2 passed |
+
+This GREEN is an offline contract implementation. Live Azure preflight behavior, business-unit apply
+from answers, stronger executable selected-step coverage, mutations and architecture rendering remain
+for REFACTOR and review.
+
 
 ## P91 installer checkpoint and resume, 2026-10-01
 

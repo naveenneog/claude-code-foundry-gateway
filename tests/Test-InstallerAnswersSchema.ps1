@@ -17,10 +17,10 @@ Write-Host ''
 Write-Host 'P92 answers schema contract' -ForegroundColor Cyan
 $schemaPath = Join-Path $root 'schemas\claude-gateway.answers.schema.json'
 $schema = $null
-if (Test-Path -LiteralPath $schemaPath) { $schema = Get-Content -Raw -LiteralPath $schemaPath | ConvertFrom-Json }
+if (Test-Path -LiteralPath $schemaPath) { $schema = Get-Content -Raw -LiteralPath $schemaPath | ConvertFrom-Json -AsHashtable }
 Assert 'schema file exists' (Test-Path -LiteralPath $schemaPath)
 $props = @{}
-if ($schema -and $schema.properties) { foreach($p in $schema.properties.PSObject.Properties){ $props[$p.Name] = $p.Value } }
+if ($schema -and $schema['properties']) { foreach($p in ($schema['properties'].GetEnumerator())){ $props[$p.Key] = $p.Value } }
 $installText = Get-Content -Raw -LiteralPath (Join-Path $root 'Install-ClaudeGateway.ps1')
 $paramText = [regex]::Match($installText, '(?s)param\((.*?)\)\s*\$ErrorActionPreference').Groups[1].Value
 $paramNames = @([regex]::Matches($paramText, '(?m)^\s*(?:\[[^\]]+\]\s*)*\$([A-Za-z][A-Za-z0-9_]*)') | ForEach-Object { $_.Groups[1].Value })
@@ -40,7 +40,7 @@ $missingPrompt = @($promptOnly | Where-Object { -not $props.ContainsKey($_) })
 Assert 'schema-covers-prompt-only-answers' ($missingPrompt.Count -eq 0) ($missingPrompt -join ', ')
 Assert 'schema-rejects-secret-answers' (-not $props.ContainsKey('AddressCertificatePassword'))
 $bu = $props['BusinessUnits']
-Assert 'schema-validates-business-unit-tree' ($bu -and $bu.items -and $bu.items.properties.id.pattern -eq '^[a-z0-9-]+$' -and $bu.items.properties.group.pattern -match "\^\[\^,:'" -and $bu.items.properties.mode)
-$whenMissing = @($flowFiles | ForEach-Object { $t = Get-Content -Raw -LiteralPath $_.FullName; if ($t -match 'When\s*=') { [regex]::Matches($t, "Key\s*=\s*'([^']+)'") | ForEach-Object { $_.Groups[1].Value } } } | Where-Object { $props.ContainsKey($_) -and -not $props[$_].requires })
+Assert 'schema-validates-business-unit-tree' ($bu -and $bu.items -and $bu['items']['properties']['id']['pattern'] -eq '^[a-z0-9-]+$' -and $bu['items']['properties']['group']['pattern'] -match "\^\[\^,:'" -and $bu['items']['properties']['mode'])
+$whenMissing = @($flowFiles | ForEach-Object { $t = Get-Content -Raw -LiteralPath $_.FullName; if ($t -match 'When\s*=') { [regex]::Matches($t, "Key\s*=\s*'([^']+)'") | ForEach-Object { $_.Groups[1].Value } } } | Where-Object { $props.ContainsKey($_) -and -not $props[$_]['requires'] })
 Assert 'schema-requires-declarative-conditions' ($whenMissing.Count -eq 0) ($whenMissing -join ', ')
 Finish 'P92 answers schema contract'

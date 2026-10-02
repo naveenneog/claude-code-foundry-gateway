@@ -2,6 +2,7 @@
 # rerun resumes after the last step whose result Azure still shows (docs/adr/0046-installer-checkpoint-and-resume.md).
 # Each run is bash from a copy of the files the installer reads, with stub az, curl, pwsh and ps first
 # on a PATH; the az stub keeps its state in a JSON world file through jq, so nothing reaches Azure.
+param([string]$Shard = '')
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $script:fail = 0

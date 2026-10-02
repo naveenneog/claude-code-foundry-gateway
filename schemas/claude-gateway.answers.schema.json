@@ -1,0 +1,829 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/naveenneog/claude-code-foundry-gateway/schemas/claude-gateway.answers.schema.json",
+  "schemaVersion": 1,
+  "title": "Claude Gateway installer answers",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "AddressCertificateSource": {
+      "type": "string",
+      "enum": [
+        "KeyVault",
+        "Pfx"
+      ],
+      "title": "AddressCertificateSource"
+    },
+    "AddressDnsMode": {
+      "type": "string",
+      "enum": [
+        "AzureDns",
+        "External"
+      ],
+      "title": "AddressDnsMode"
+    },
+    "AddressDnsZoneResourceId": {
+      "type": [
+        "string",
+        "number",
+        "boolean",
+        "array",
+        "object",
+        "null"
+      ],
+      "title": "AddressDnsZoneResourceId"
+    },
+    "AddressHostname": {
+      "type": [
+        "string",
+        "number",
+        "boolean",
+        "array",
+        "object",
+        "null"
+      ],
+      "title": "AddressHostname"
+    },
+    "AddressKeyVaultCertificateId": {
+      "type": [
+        "string",
+        "number",
+        "boolean",
+        "array",
+        "object",
+        "null"
+      ],
+      "title": "AddressKeyVaultCertificateId"
+    },
+    "AddressMode": {
+      "type": "string",
+      "enum": [
+        "azure",
+        "custom"
+      ],
+      "title": "AddressMode"
+    },
+    "AddressPfxPath": {
+      "type": [
+        "string",
+        "number",
+        "boolean",
+        "array",
+        "object",
+        "null"
+      ],
+      "title": "AddressPfxPath"
+    },
+    "AddressReplaceHostname": {
+      "type": [
+        "string",
+        "number",
+        "boolean",
+        "array",
+        "object",
+        "null"
+      ],
+      "title": "AddressReplaceHostname"
+    },
+    "AuthMode": {
+      "type": "string",
+      "enum": [
+        "interactive",
+        "device",
+        "helper"
+      ],
+      "title": "AuthMode"
+    },
+    "BusinessUnits": {
+      "type": "array",
+      "title": "Business units with teams",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "group",
+          "monthlyUsdBudget",
+          "mode"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]+$"
+          },
+          "group": {
+            "type": "string",
+            "pattern": "^[^,:'\u2019]+$"
+          },
+          "parent": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]+$"
+          },
+          "monthlyUsdBudget": {
+            "type": "number",
+            "minimum": 0
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "Strict",
+              "Allowance",
+              "Notify"
+            ]
+          },
+          "percent": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        }
+      }
+    },
+    "CallsPerMinute": {
+      "type": "integer",
+      "minimum": 0,
+      "title": "CallsPerMinute"
+    },
+    "DeployProjection": {
+      "type": [
+        "string",
+        "number",
+        "boolean",
+        "array",
+        "object",
+        "null"
+      ],
+      "title": "DeployProjection"
+    },
+    "DesktopBearerTokenType": {
+      "type": "string",
+      "enum": [
+        "id_token",
+        "access_token"
+      ],
+      "title": "DesktopBearerTokenType"
+    },
+    "DesktopEntraAudience": {
+      "type": [
+        "string",
+        "number",
+        "boolean",
+        "array",
+        "object",
+        "null"
+      ],
+      "title": "DesktopEntraAudience"
+    },
+    "DesktopEntraClientId": {
+      "type": [
+        "string",
+        "number",
+        "boolean",
+        "array",
+        "object",
+        "null"
+      ],
+      "title": "DesktopEntraClientId"
+    },
+    "DesktopEntraIssuer": {
+      "type": [
+        "string",
+        "number",
+        "boolean",
+        "array",
+        "object",
+        "null"
+      ],
+      "title": "DesktopEntraIssuer"
+    },
+    "DesktopEntraResource": {
+      "type": [
+        "string",
+        "number",
+        "boolean",
+        "array",
+        "object",
+        "null"
+      ],
+      "title": "DesktopEntraResource"
+    },
+    "DesktopEntraScopes": {
+      "type": [
+        "string",
+        "number",
+        "boolean",
+        "array",
+        "object",
+        "null"
+      ],
+      "title": "DesktopEntraScopes"
+    },
+    "DesktopSignInKind": {
+      "type": "string",
+      "enum": [
+        "helper-script",
+        "external-idp-browser",
+        "external-idp-broker"
+      ],
+      "title": "DesktopSignInKind"
+    },
+    "DeveloperEstimate": {
+      "type": "integer",
+      "minimum": 0,
+      "title": "DeveloperEstimate"
+    },
+    "EntitlementStore": {
+      "type": "string",
+      "enum": [
+        "named-value",
+        "projection"
+      ],
+      "title": "EntitlementStore"
+    },
+    "ExistingApimName": {
+      "type": [
+        "string",
+        "number",
+        "boolean",
+        "array",
+        "object",
+        "null"
+      ],
+      "title": "ExistingApimName"
+    },
+    "FoundryAccount": {
+      "type": [
+        "string",
+        "number",
+        "boolean",
+        "array",
+        "object",
+        "null"
+      ],
+      "title": "FoundryAccount"
+    },
+    "FoundryResourceGroup": {
+      "type": [
+        "string",
+        "number",
+        "boolean",
+        "array",
+        "object",
+        "null"
+      ],
+      "title": "FoundryResourceGroup"
+    },
+    "Location": {
+      "type": [
+        "string",
+        "number",
+        "boolean",
+        "array",
+        "object",
+        "null"
+      ],
+      "title": "Location"
+    },
+    "ModelCountryCode": {
+      "type": [
+        "string",
+        "number",
+        "boolean",
+        "array",
+        "object",
+        "null"
+      ],
+      "title": "ModelCountryCode"
+    },
+    "ModelIndustry": {
+      "type": [
+        "string",
+        "number",
+        "boolean",
+        "array",
+        "object",
+        "null"
+      ],
+      "title": "ModelIndustry"
+    },
+    "ModelOrganizationName": {
+      "type": [
+        "string",
+        "number",
+        "boolean",
+        "array",
+        "object",
+        "null"
+      ],
+      "title": "ModelOrganizationName"
+    },
+    "NamePrefix": {
+      "type": [
+        "string",
+        "number",
+        "boolean",
+        "array",
+        "object",
+        "null"
+      ],
+      "title": "NamePrefix"
+    },
+    "PendingClaudeDeployment": {
+      "type": "object",
+      "additionalProperties": true,
+      "title": "Pending Claude deployment"
+    },
+    "PremiumGroup": {
+      "type": [
+        "string",
+        "number",
+        "boolean",
+        "array",
+        "object",
+        "null"
+      ],
+      "title": "PremiumGroup"
+    },
+    "PremiumModels": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "title": "PremiumModels"
+    },
+    "ProjectionReconcilerResourceId": {
+      "type": [
+        "string",
+        "number",
+        "boolean",
+        "array",
+        "object",
+        "null"
+      ],
+      "title": "ProjectionReconcilerResourceId"
+    },
+    "ProjectionResolverAppId": {
+      "type": [
+        "string",
+        "number",
+        "boolean",
+        "array",
+        "object",
+        "null"
+      ],
+      "title": "ProjectionResolverAppId"
+    },
+    "PublisherEmail": {
+      "type": [
+        "string",
+        "number",
+        "boolean",
+        "array",
+        "object",
+        "null"
+      ],
+      "title": "PublisherEmail"
+    },
+    "QuotaOrg": {
+      "type": "integer",
+      "minimum": 0,
+      "title": "QuotaOrg"
+    },
+    "QuotaPremium": {
+      "type": "integer",
+      "minimum": 0,
+      "title": "QuotaPremium"
+    },
+    "QuotaStandard": {
+      "type": "integer",
+      "minimum": 0,
+      "title": "QuotaStandard"
+    },
+    "ResolverInboundAccess": {
+      "type": "string",
+      "enum": [
+        "private",
+        "public"
+      ],
+      "title": "ResolverInboundAccess"
+    },
+    "ResourceGroup": {
+      "type": [
+        "string",
+        "number",
+        "boolean",
+        "array",
+        "object",
+        "null"
+      ],
+      "title": "ResourceGroup"
+    },
+    "RevocationWindowSeconds": {
+      "type": "integer",
+      "minimum": 0,
+      "title": "RevocationWindowSeconds"
+    },
+    "Sku": {
+      "type": "string",
+      "enum": [
+        "BasicV2",
+        "StandardV2",
+        "PremiumV2"
+      ],
+      "title": "Sku"
+    },
+    "StandardGroup": {
+      "type": [
+        "string",
+        "number",
+        "boolean",
+        "array",
+        "object",
+        "null"
+      ],
+      "title": "StandardGroup"
+    },
+    "StandardModels": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "title": "StandardModels"
+    },
+    "SubscriptionId": {
+      "type": [
+        "string",
+        "number",
+        "boolean",
+        "array",
+        "object",
+        "null"
+      ],
+      "title": "SubscriptionId"
+    },
+    "TeamBudgetBehaviour": {
+      "type": "string",
+      "enum": [
+        "report",
+        "stop"
+      ],
+      "title": "Team budget behaviour"
+    },
+    "TpmPremium": {
+      "type": "integer",
+      "minimum": 0,
+      "title": "TpmPremium"
+    },
+    "TpmStandard": {
+      "type": "integer",
+      "minimum": 0,
+      "title": "TpmStandard"
+    },
+    "UnassignedDevelopers": {
+      "type": "string",
+      "enum": [
+        "allow",
+        "deny"
+      ],
+      "title": "Developers with no team"
+    },
+    "address": {
+      "type": [
+        "string",
+        "boolean",
+        "object",
+        "null"
+      ],
+      "title": "address",
+      "requires": {
+        "present": "address"
+      }
+    },
+    "address.certificateSource": {
+      "type": [
+        "string",
+        "boolean",
+        "object",
+        "null"
+      ],
+      "title": "address.certificateSource",
+      "requires": {
+        "present": "address"
+      }
+    },
+    "address.dnsMode": {
+      "type": [
+        "string",
+        "boolean",
+        "object",
+        "null"
+      ],
+      "title": "address.dnsMode",
+      "requires": {
+        "present": "address"
+      }
+    },
+    "address.dnsZoneResourceId": {
+      "type": [
+        "string",
+        "boolean",
+        "object",
+        "null"
+      ],
+      "title": "address.dnsZoneResourceId",
+      "requires": {
+        "path": "address.dnsMode",
+        "equals": "AzureDns"
+      }
+    },
+    "address.hostname": {
+      "type": [
+        "string",
+        "boolean",
+        "object",
+        "null"
+      ],
+      "title": "address.hostname",
+      "requires": {
+        "present": "address"
+      }
+    },
+    "address.keyVaultCertificateId": {
+      "type": [
+        "string",
+        "boolean",
+        "object",
+        "null"
+      ],
+      "title": "address.keyVaultCertificateId",
+      "requires": {
+        "path": "address.certificateSource",
+        "equals": "KeyVault"
+      }
+    },
+    "address.pfxPath": {
+      "type": [
+        "string",
+        "boolean",
+        "object",
+        "null"
+      ],
+      "title": "address.pfxPath",
+      "requires": {
+        "path": "address.certificateSource",
+        "equals": "Pfx"
+      }
+    },
+    "address.replaceHostname": {
+      "type": [
+        "string",
+        "boolean",
+        "object",
+        "null"
+      ],
+      "title": "address.replaceHostname",
+      "requires": {
+        "present": "address"
+      }
+    },
+    "budgets": {
+      "type": [
+        "string",
+        "boolean",
+        "object",
+        "null"
+      ],
+      "title": "budgets"
+    },
+    "budgets.currency": {
+      "type": [
+        "string",
+        "boolean",
+        "object",
+        "null"
+      ],
+      "title": "budgets.currency"
+    },
+    "desktopSignIn": {
+      "type": [
+        "string",
+        "boolean",
+        "object",
+        "null"
+      ],
+      "title": "desktopSignIn"
+    },
+    "deviceProfiles": {
+      "type": [
+        "string",
+        "boolean",
+        "object",
+        "null"
+      ],
+      "title": "deviceProfiles"
+    },
+    "deviceProfiles.conversationStorage": {
+      "type": [
+        "string",
+        "boolean",
+        "object",
+        "null"
+      ],
+      "title": "deviceProfiles.conversationStorage"
+    },
+    "diagnostics": {
+      "type": [
+        "string",
+        "boolean",
+        "object",
+        "null"
+      ],
+      "title": "diagnostics"
+    },
+    "entitlementStore": {
+      "type": [
+        "string",
+        "boolean",
+        "object",
+        "null"
+      ],
+      "title": "entitlementStore"
+    },
+    "finops": {
+      "type": [
+        "string",
+        "boolean",
+        "object",
+        "null"
+      ],
+      "title": "finops"
+    },
+    "finops.tool": {
+      "type": [
+        "string",
+        "boolean",
+        "object",
+        "null"
+      ],
+      "title": "finops.tool"
+    },
+    "foundation": {
+      "type": [
+        "string",
+        "boolean",
+        "object",
+        "null"
+      ],
+      "title": "foundation"
+    },
+    "foundation.authMode": {
+      "type": [
+        "string",
+        "boolean",
+        "object",
+        "null"
+      ],
+      "title": "foundation.authMode"
+    },
+    "foundation.desktopSignInKind": {
+      "type": [
+        "string",
+        "boolean",
+        "object",
+        "null"
+      ],
+      "title": "foundation.desktopSignInKind"
+    },
+    "foundation.entitlementStore": {
+      "type": [
+        "string",
+        "boolean",
+        "object",
+        "null"
+      ],
+      "title": "foundation.entitlementStore"
+    },
+    "foundation.sku": {
+      "type": [
+        "string",
+        "boolean",
+        "object",
+        "null"
+      ],
+      "title": "foundation.sku"
+    },
+    "guide": {
+      "type": [
+        "string",
+        "boolean",
+        "object",
+        "null"
+      ],
+      "title": "guide"
+    },
+    "models": {
+      "type": [
+        "string",
+        "boolean",
+        "object",
+        "null"
+      ],
+      "title": "models"
+    },
+    "monitoring": {
+      "type": [
+        "string",
+        "boolean",
+        "object",
+        "null"
+      ],
+      "title": "monitoring"
+    },
+    "monitoring.enabled": {
+      "type": [
+        "string",
+        "boolean",
+        "object",
+        "null"
+      ],
+      "title": "monitoring.enabled"
+    },
+    "named-value": {
+      "type": [
+        "string",
+        "boolean",
+        "object",
+        "null"
+      ],
+      "title": "named-value"
+    },
+    "network": {
+      "type": [
+        "string",
+        "boolean",
+        "object",
+        "null"
+      ],
+      "title": "network"
+    },
+    "network.reviewPath": {
+      "type": [
+        "string",
+        "boolean",
+        "object",
+        "null"
+      ],
+      "title": "network.reviewPath"
+    },
+    "projection": {
+      "type": [
+        "string",
+        "boolean",
+        "object",
+        "null"
+      ],
+      "title": "projection"
+    },
+    "reports": {
+      "type": [
+        "string",
+        "boolean",
+        "object",
+        "null"
+      ],
+      "title": "reports"
+    },
+    "reports.enabled": {
+      "type": [
+        "string",
+        "boolean",
+        "object",
+        "null"
+      ],
+      "title": "reports.enabled"
+    },
+    "sku": {
+      "type": [
+        "string",
+        "boolean",
+        "object",
+        "null"
+      ],
+      "title": "sku"
+    },
+    "verify": {
+      "type": [
+        "string",
+        "boolean",
+        "object",
+        "null"
+      ],
+      "title": "verify"
+    }
+  },
+  "$defs": {
+    "requires": {
+      "description": "UI-readable condition metadata for guided-flow questions."
+    }
+  }
+}

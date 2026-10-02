@@ -323,6 +323,12 @@ while [ $# -gt 0 ]; do
     --calls-per-minute) CALLS_PER_MINUTE="${2:-}"; shift 2 ;;
     --standard-group)   STANDARD_GROUP="${2:-}"; shift 2 ;;
     --premium-group)    PREMIUM_GROUP="${2:-}"; shift 2 ;;
+    --answers-file)     ANSWERS_FILE="${2:-}"; shift 2 ;;
+    --preflight)        PREFLIGHT=1; shift ;;
+    --json)             PREFLIGHT_JSON=1; LIST_STEPS_JSON=1; shift ;;
+    --list-steps)       LIST_STEPS=1; shift ;;
+    --steps)            STEPS="${2:-}"; shift 2 ;;
+    --progress-file)    PROGRESS_FILE="${2:-}"; shift 2 ;;
     -y|--yes)           ASSUME_YES=1; shift ;;
     --what-if)          WHAT_IF=1; shift ;;
     --choose-finops)    CHOOSE_FINOPS=1; shift ;;
@@ -339,6 +345,13 @@ if [ -f "$HERE/scripts/banner.sh" ]; then
 else
   head_ "Claude on Microsoft Foundry - governed gateway setup"
   printf '\n'
+fi
+
+if [ -f "$HERE/scripts/install-answers.sh" ]; then
+  . "$HERE/scripts/install-answers.sh"
+  answers_apply_ || exit 1
+  if [ "$LIST_STEPS" = "1" ]; then steps_json_; exit 0; fi
+  if [ "$PREFLIGHT" = "1" ]; then preflight_run_; exit $?; fi
 fi
 printf ' %sEvery prompt has a default. Press Enter to accept it.%s\n' "$C_GREY" "$C_OFF"
 printf ' %sNothing is created until you confirm the summary.%s\n' "$C_GREY" "$C_OFF"
@@ -696,4 +709,3 @@ if [ "$CHOOSE_FINOPS" = "1" ] || { [ "$OFFER_FINOPS" = "1" ] && ask_yn_ "Set up 
 elif [ "$OFFER_FINOPS" = "1" ]; then
   note_ "Later: $FINOPS_LATER"
 fi
-

@@ -117,6 +117,22 @@ param(
     # Without it a rerun resumes after the last step whose result Azure still shows.
     [switch]$Restart,
 
+    [string]$AnswersPath,
+    [switch]$Preflight,
+    [switch]$Json,
+    [switch]$ListSteps,
+    [string[]]$Steps,
+    [string]$ProgressPath,
+
+    [int]$RevocationWindowSeconds,
+    [ValidateSet('report','stop')]
+    [string]$TeamBudgetBehaviour,
+    [ValidateSet('allow','deny')]
+    [string]$UnassignedDevelopers,
+    [int]$DeveloperEstimate,
+    [object]$PendingClaudeDeployment,
+    [object[]]$BusinessUnits,
+
     # Accept every default without prompting.
     [switch]$Yes
 )
@@ -308,12 +324,34 @@ Write-Host ' Nothing is created until you confirm the summary.' -ForegroundColor
 . (Join-Path $root 'scripts/ClaudeModelDeployment.ps1')
 . (Join-Path $root 'scripts/ClaudeChoice.ps1')
 . (Join-Path $root 'scripts/ClaudeGatewayRegion.ps1')
+. (Join-Path $root 'scripts/ClaudeInstallerAnswers.ps1')
+if ($AnswersPath) {
+    Apply-ClaudeInstallerAnswers -Answers (Read-ClaudeInstallerAnswers -Path $AnswersPath) -Bound $PSBoundParameters
+}
 if (-not (Test-ClaudePrerequisites -Mode Admin)) { return }
 # An interrupted run's answers are bound as if passed; a parameter passed now wins (ADR-0046).
 . (Join-Path $root 'scripts/ClaudeInstallCheckpoint.ps1')
 $recordedAnswers = Open-ClaudeInstallCheckpoint -Root $root -Bound $PSBoundParameters -Restart:$Restart -WhatIfRun:$WhatIfPreference
 foreach ($name in @($recordedAnswers.Keys)) { if (-not $PSBoundParameters.ContainsKey($name)) { Set-Variable -Name $name -Value $recordedAnswers[$name]; $PSBoundParameters[$name] = $recordedAnswers[$name] } }
 if ($null -ne ($recordedEstimate = Get-ClaudeInstallAnswer 'DeveloperEstimate')) { $script:DeveloperEstimate = [int]$recordedEstimate }
+if ($DeveloperEstimate) { $script:DeveloperEstimate = $DeveloperEstimate }
+if ($RevocationWindowSeconds) { $entitlementCacheSeconds = $RevocationWindowSeconds }
+if ($TeamBudgetBehaviour) { $budgetMode = $TeamBudgetBehaviour }
+if ($UnassignedDevelopers) { $unassignedMode = $UnassignedDevelopers }
+if ($PendingClaudeDeployment) { $pendingDeployment = $PendingClaudeDeployment }
+if ($ProgressPath) { Set-ClaudeInstallProgressPath -Path $ProgressPath }
+if ($Steps) { Set-ClaudeInstallSelectedSteps -Steps $Steps }
+if ($ListSteps) {
+    $list = Get-ClaudeInstallStepList
+    if ($Json) { [pscustomobject]@{ schemaVersion = 1; steps = $list } | ConvertTo-Json -Depth 8 } else { $list | ForEach-Object { "{0} {1} [{2}]" -f $_.id, $_.title, $_.state } }
+    return
+}
+if ($Preflight) {
+    $answers = if ($AnswersPath) { Read-ClaudeInstallerAnswers -Path $AnswersPath } else { @{} }
+    Invoke-ClaudeGatewayPreflight -Answers $answers -Json:$Json | Out-Null
+    if ($LASTEXITCODE) { exit $LASTEXITCODE }
+    return
+}
 
 # The parameters as bound, before the first az call that uses one. A list passed to one of these
 # arrives as text joined by binding, so it is checked here too.
