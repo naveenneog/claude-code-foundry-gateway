@@ -35,6 +35,10 @@ exact streaming cache-creation detail remains **U13**.
   refusal. Admission reads Cosmos through the in-VNet runner and separately
   verifies the pinned no-override job definition; rollback to named values
   remains available after refresh and comparison.
+- **P86 gate correction.** The deployer, installer and guided flow tests now
+  assert the accepted evidence-gated switch contract: missing or insufficient
+  renewal evidence refuses before backup/write, while good Cosmos evidence and
+  a pinned no-override job definition admit the projection switch.
 - **Final P85 follow-up integration.** P71's owned-process deadline probes and
   precise public-evidence section lookup are merged without production changes.
   The single full AUM run passes all 1,200 cases; refreshed file and whole-check

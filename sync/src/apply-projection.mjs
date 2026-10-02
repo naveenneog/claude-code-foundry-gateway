@@ -174,4 +174,5 @@ if (summary.ok) {
   summary.ok = statusWrite.failed === 0;
 }
 console.log(JSON.stringify(summary));
-process.exit(summary.ok ? 0 : 3);
+if (!summary.ok) process.exit(3);
+process.exit(writes.failed || deletes.failed || expired ? 3 : 0);

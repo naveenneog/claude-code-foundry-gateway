@@ -27,7 +27,7 @@ function Get-ClaudeFlowStepQuestions {
         Key = 'entitlementStore'
         Question = 'Move entitlement storage?'
         Options = @(
-            [pscustomobject]@{ Key = 'projection'; Label = 'Cosmos projection'; Detail = "Switching is unavailable in P84; the scheduled reconciler is proposed as P86. $($target.Sku): Basic v2 uses a public Entra-authenticated resolver; Standard/Premium v2 use a private resolver." },
+            [pscustomobject]@{ Key = 'projection'; Label = 'Cosmos projection'; Detail = "Switching uses P86 scheduled-renewal admission: Cosmos evidence, pinned job definition and email-backed alerts. $($target.Sku): Basic v2 uses a public Entra-authenticated resolver; Standard/Premium v2 use a private resolver." },
             [pscustomobject]@{ Key = 'named-value'; Label = 'APIM named values'; Detail = 'Restore allow-standard and allow-premium lists from the backup/record; limited to roughly 100 developers.' }
         )
         WhereToFind = @('API Management > Named values > entitlement-source', 'docs/SECURE-PROJECTION.md')
