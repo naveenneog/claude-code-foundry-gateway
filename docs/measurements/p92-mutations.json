@@ -2082,6 +2082,764 @@
           ]
         }
       ]
+    },
+    {
+      "round": "Builder round 3",
+      "by": "builder",
+      "dateUtc": "2026-10-02",
+      "measuredCommit": "e00ee9f31dcb57c1a050475ad898cd7d7135b9c9",
+      "council": "Council round 1 on cfb9dd7: Architect, Coder, Security and UX BLOCK, QA PASS (docs/status/P92.md, round 3).",
+      "rule": "One mutant per new behaviour of council round 1 items 1, 2, 4, 5, 6, 8 and 11, in each engine that has it, and of items 7 and 9 and the schema entries of the three P86 renewal inputs that the merge brought. S08n and BS02n are the lead's S08 and BS02 with the refusal text that item 6 extended. Args are passed to the suite. Counting, copies and restore as in the first round of this record.",
+      "leadHarnessDryRun": "p92-lead-mutations.ps1 -DryRun on the measured commit: 24 of the 26 find-strings match once; S08 and BS02 match nothing, because item 6 appended the next step to both refusals after \"Nothing was changed.\" (7a24f9c).",
+      "loadNote": "The PowerShell and bash workers ran at the same time, each in its own copy (git archive); each suite ran only while the gate lock was absent.",
+      "baselines": [
+        {
+          "suite": "tests/Test-BashInstallerStepShards.ps1",
+          "checks": 5,
+          "failed": 0,
+          "seconds": 5.2
+        },
+        {
+          "suite": "tests/Test-GuidedFlowAnswersSchema.ps1",
+          "checks": 10,
+          "failed": 0,
+          "seconds": 30.2
+        },
+        {
+          "suite": "tests/Test-InstallerAnswersSchema.ps1",
+          "checks": 46,
+          "failed": 0,
+          "seconds": 40.1
+        },
+        {
+          "suite": "tests/Test-InstallerBusinessUnitAnswers.ps1",
+          "checks": 15,
+          "failed": 0,
+          "seconds": 50.3
+        },
+        {
+          "suite": "tests/Test-InstallerPreflight.ps1",
+          "checks": 37,
+          "failed": 0,
+          "seconds": 65.7
+        },
+        {
+          "suite": "tests/Test-InstallerRedaction.ps1",
+          "checks": 6,
+          "failed": 0,
+          "seconds": 5.0
+        },
+        {
+          "suite": "tests/Test-InstallerStepSelection.ps1",
+          "checks": 27,
+          "failed": 0,
+          "seconds": 60.6
+        },
+        {
+          "suite": "tests/Test-BashInstallerPreflight.ps1",
+          "checks": 37,
+          "failed": 0,
+          "seconds": 315.7
+        },
+        {
+          "suite": "tests/Test-BashInstallerStepSelection.ps1 -Shard 1/3",
+          "checks": 12,
+          "failed": 0,
+          "seconds": 100.2
+        }
+      ],
+      "caught": 37,
+      "targetFailed": 37,
+      "total": 37,
+      "mutants": [
+        {
+          "id": "T01",
+          "item": "1 a record without an id fails target.subscription",
+          "suite": "tests/Test-InstallerPreflight.ps1",
+          "target": "record without an id|record whose id is null",
+          "file": "scripts/ClaudeInstallerPreflight.ps1",
+          "mutation": "'if ($record.id -isnot [string] -or -not $record.id) {' -> 'if ($false) {'",
+          "checks": 37,
+          "failed": 2,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 55.3,
+          "failures": [
+            "R3 a subscription record without an id is an inconclusive FAIL of target.subscription, each later check is NOT-RUN (prerequisite-failed), and no az call names an empty subscription - PASS: subscription p91-subscription () || foundry.account=PASS/, foundry.deployments=PASS/, apim.nameAvailability=PASS/, apim.existingSku=NOT-RUN/not-applicable, apim.existingIdentity=NOT-RUN/not-applicable || empty: cognitiveservices account show -g rg-ai-p91 -n ai-p91 -o json --subscription  | cognitiveservices account deployment list -g rg-ai-p91 -n ai-p91 -o json --subscription  | apim check-name -n apim-p92gw -o json --subscription",
+            "R3 a subscription record whose id is null is an inconclusive FAIL of target.subscription, each later check is NOT-RUN, and no az call names an empty or null subscription - PASS: subscription p91-subscription () || foundry.account=PASS/, foundry.deployments=PASS/, apim.nameAvailability=PASS/, apim.existingSku=NOT-RUN/not-applicable, apim.existingIdentity=NOT-RUN/not-applicable || empty: cognitiveservices account show -g rg-ai-p91 -n ai-p91 -o json --subscription  | cognitiveservices account deployment list -g rg-ai-p91 -n ai-p91 -o json --subscription  | apim check-name -n apim-p92gw -o json --subscription"
+          ]
+        },
+        {
+          "id": "T02",
+          "item": "1 a record without a tenantId fails target.subscription",
+          "suite": "tests/Test-InstallerPreflight.ps1",
+          "target": "record without a tenantId",
+          "file": "scripts/ClaudeInstallerPreflight.ps1",
+          "mutation": "'if ($record.tenantId -isnot [string] -or -not $record.tenantId) {' -> 'if ($false) {'",
+          "checks": 37,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 55.1,
+          "failures": [
+            "R3 a subscription record without a tenantId is an inconclusive FAIL of target.subscription, and each later check is NOT-RUN - PASS: subscription p91-subscription (00000000-0000-4000-8000-0000000000a1) || foundry.account=PASS/, foundry.deployments=PASS/, apim.nameAvailability=PASS/, apim.existingSku=NOT-RUN/not-applicable, apim.existingIdentity=NOT-RUN/not-applicable || empty:"
+          ]
+        },
+        {
+          "id": "T03",
+          "item": "1 a current account without an id fails target.subscription",
+          "suite": "tests/Test-InstallerPreflight.ps1",
+          "target": "current account without an id",
+          "file": "scripts/ClaudeInstallerPreflight.ps1",
+          "mutation": "'elseif ($subOk -and ($Account.id -isnot [string] -or -not $Account.id)) {' -> 'elseif ($false) {'",
+          "checks": 37,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 55.1,
+          "failures": [
+            "R3 with SubscriptionId not answered, a current account without an id is an inconclusive FAIL of target.subscription, and each later check is NOT-RUN - PASS: SubscriptionId is not answered; the run uses the current subscription p91-subscription () || foundry.account=PASS/, foundry.deployments=PASS/, apim.nameAvailability=PASS/, apim.existingSku=NOT-RUN/not-applicable, apim.existingIdentity=NOT-RUN/not-applicable || empty:"
+          ]
+        },
+        {
+          "id": "BT01",
+          "item": "1 bash: a record without an id fails target.subscription",
+          "suite": "tests/Test-BashInstallerPreflight.ps1",
+          "target": "record without an id|record whose id is null",
+          "file": "scripts/install-preflight.sh",
+          "mutation": "'elif (.id | type) != \"string\" or .id == \"\" then \"az account show returned no subscription id\"' -> 'elif false then \"az account show returned no subscription id\"'",
+          "checks": 37,
+          "failed": 2,
+          "bashN": "ok",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 275.5,
+          "failures": [
+            "R3 bash a subscription record without an id is an inconclusive FAIL of target.subscription, each later check is NOT-RUN (prerequisite-failed), and no az call names an empty subscription - PASS: subscription p91-subscription (null) || foundry.account=FAIL/, apim.nameAvailability=FAIL/, apim.existingSku=NOT-RUN/not-applicable, apim.existingIdentity=NOT-RUN/not-applicable || empty: cognitiveservices account show -g rg-ai-p91 -n ai-p91 -o json --subscription null | apim check-name -n apim-p92gw -o json --subscription null",
+            "R3 bash a subscription record whose id is null is an inconclusive FAIL of target.subscription, each later check is NOT-RUN, and no az call names --subscription null - PASS: subscription p91-subscription (null) || foundry.account=FAIL/, apim.nameAvailability=FAIL/, apim.existingSku=NOT-RUN/not-applicable, apim.existingIdentity=NOT-RUN/not-applicable || empty: cognitiveservices account show -g rg-ai-p91 -n ai-p91 -o json --subscription null | apim check-name -n apim-p92gw -o json --subscription null"
+          ]
+        },
+        {
+          "id": "BT02",
+          "item": "1 bash: a record without a tenantId fails target.subscription",
+          "suite": "tests/Test-BashInstallerPreflight.ps1",
+          "target": "record without a tenantId",
+          "file": "scripts/install-preflight.sh",
+          "mutation": "'elif (.tenantId | type) != \"string\" or .tenantId == \"\" then \"az account show returned no tenantId\"' -> 'elif false then \"az account show returned no tenantId\"'",
+          "checks": 37,
+          "failed": 1,
+          "bashN": "ok",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 255.5,
+          "failures": [
+            "R3 bash a subscription record without a tenantId is an inconclusive FAIL of target.subscription, and each later check is NOT-RUN - PASS: subscription p91-subscription (00000000-0000-4000-8000-0000000000a1) || foundry.account=PASS/, foundry.deployments=PASS/, apim.nameAvailability=PASS/, apim.existingSku=NOT-RUN/not-applicable, apim.existingIdentity=NOT-RUN/not-applicable || empty:"
+          ]
+        },
+        {
+          "id": "BT03",
+          "item": "1 bash: a current account without an id fails target.subscription",
+          "suite": "tests/Test-BashInstallerPreflight.ps1",
+          "target": "current account without an id",
+          "file": "scripts/install-preflight.sh",
+          "mutation": "'elif [ \"$sub_ok\" = \"1\" ] && ! printf '%s' \"$1\" | jq -e '(.id | type) == \"string\" and .id != \"\"' >/dev/null 2>&1; then' -> 'elif false; then'",
+          "checks": 37,
+          "failed": 1,
+          "bashN": "ok",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 295.5,
+          "failures": [
+            "R3 bash with SubscriptionId not answered, a current account without an id is an inconclusive FAIL of target.subscription, and each later check is NOT-RUN - PASS: SubscriptionId is not answered; the run uses the current subscription p91-subscription (null) || foundry.account=PASS/, foundry.deployments=PASS/, apim.nameAvailability=PASS/, apim.existingSku=NOT-RUN/not-applicable, apim.existingIdentity=NOT-RUN/not-applicable || empty:"
+          ]
+        },
+        {
+          "id": "F01",
+          "item": "2 the flow applies a plan only when its preflight passes",
+          "suite": "tests/Test-GuidedFlowAnswersSchema.ps1",
+          "target": "does not pass with no FAIL check",
+          "file": "Start-ClaudeGateway.ps1",
+          "mutation": "'if ([string]$result.result -eq 'PASS') { continue }' -> 'if (-not @($result.checks | Where-Object { $_.result -eq 'FAIL' }).Count) { continue }'",
+          "checks": 10,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 25.3,
+          "failures": [
+            "entra.groupNames: StandardGroup 'O'Brien' holds a single quote, which Azure CLI places inside an OData string literal (ADR-0046 decision 11) Remedy: Give a group name without a single quote.",
+            "R3 an apply refuses a preflight that does not pass with no FAIL check: signed out, the refusal names each blocking NOT-RUN check with its reason (not-signed-in), before any step runs; nothing is written -  || [PASS] answers.schema: the answers match the answers schema, version 1 | [PASS] answers.crossField: the answers that depend on each other agree | [NOT-RUN] target.tenant: Azure CLI is not signed in, so this was not read (not-signed-in) Remedy: Run az login (az login --tenant <tenant-id> as a guest), then run the preflight again. | [NOT-RUN] target.subscription: Azure CLI is not signed in, so this was not read (not-signed-in) Remedy: Run az login (az login --tenant <tenant-id> as a guest), then run the preflight again."
+          ]
+        },
+        {
+          "id": "G01",
+          "item": "4 two groups of the name leave the group neither reused nor created",
+          "suite": "tests/Test-InstallerBusinessUnitAnswers.ps1",
+          "target": "two groups",
+          "file": "scripts/ClaudeInstallSteps.ps1",
+          "mutation": "'if ($found.Verdict -ne 'absent') { return' -> 'if ($found.Verdict -eq 'never') { return'",
+          "checks": 15,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 45.3,
+          "failures": [
+            "R3 when two groups have the name's length, the prompt refuses that unit with a remedy: no group is created, no unit is written, and the run goes on -         ./scripts/New-OnboardingEmail.ps1 -ConfigPath <home>\\AppData\\Local\\p92-units-89ffebac2eda4590bb81a84c04dee48d\\scenarios\\prompt-two-groups\\repo\\onboarding\\claude-gateway.json -To dev@contoso.com |    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets."
+          ]
+        },
+        {
+          "id": "G02",
+          "item": "4 the prompt calls Set-ClaudeBusinessUnit.ps1 -SkipGroupCheck",
+          "suite": "tests/Test-InstallerBusinessUnitAnswers.ps1",
+          "target": "SkipGroupCheck",
+          "file": "Install-ClaudeGateway.ps1",
+          "mutation": "'-Group $buGroup -SkipGroupCheck `' -> '-Group $buGroup `'",
+          "checks": 15,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 45.1,
+          "failures": [
+            "R3 the prompt then writes the unit through Set-ClaudeBusinessUnit.ps1 -SkipGroupCheck, as the answers path does - bu platform claude-bu-platform parent= mode= percent= usd=5000 skipGroupCheck=False | bu zzz claude-bu-zzz parent= mode= percent= usd=5000 skipGroupCheck=False"
+          ]
+        },
+        {
+          "id": "G03",
+          "item": "4 the prompt reads the group by its exact name, not az ad group show --group",
+          "suite": "tests/Test-InstallerBusinessUnitAnswers.ps1",
+          "target": "only claude-bu-platform-admins exists",
+          "file": "Install-ClaudeGateway.ps1",
+          "mutation": "'$unitGroup = Resolve-ClaudeInstallUnitGroup $buGroup' -> '$unitGroup = [pscustomobject]@{ Verdict = 'present'; Id = [string](az ad group show --group $buGroup --query id -o tsv 2>$null); Origin = 'pre-existing'; Detail = '' }'",
+          "checks": 15,
+          "failed": 3,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 45.3,
+          "failures": [
+            "R3 when only claude-bu-platform-admins exists, the business-unit prompt creates claude-bu-platform, records the new group's id, and never takes the prefix group - unit: {\"id\":\"platform\",\"groupId\":\"00000000-0000-4000-8000-0000000003a1\",\"groupOrigin\":\"pre-existing\"} || made:  ||     Converted to tokens on write. List price, and the counter cannot see cached tokens. |     Monthly budget, US dollars [5000]:  | Resume: Set-Location -LiteralPath '<home>\\AppData\\Local\\p92-units-50b91b19dc8246d7aa0f620059c25728\\scenarios\\prompt-prefix\\repo'; ./Install-ClaudeGateway.ps1 | Business unit 'zzz' was refused by the stub.",
+            "R3 when two groups have the name's length, the prompt refuses that unit with a remedy: no group is created, no unit is written, and the run goes on -         ./scripts/New-OnboardingEmail.ps1 -ConfigPath <home>\\AppData\\Local\\p92-units-50b91b19dc8246d7aa0f620059c25728\\scenarios\\prompt-two-groups\\repo\\onboarding\\claude-gateway.json -To dev@contoso.com |    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets.",
+            "R3 both business-unit paths, the prompt and the answers file, find or create a unit's group through one function, Resolve-ClaudeInstallUnitGroup"
+          ]
+        },
+        {
+          "id": "X01",
+          "item": "5 preflight messages are redacted",
+          "suite": "tests/Test-InstallerPreflight.ps1",
+          "target": "error that a message quotes|text report redacts",
+          "file": "scripts/ClaudeInstallerPreflight.ps1",
+          "mutation": "'foreach ($p in $c.problems) { $p.message = Protect-ClaudeInstallText $p.message; $p.remedy = Protect-ClaudeInstallText $p.remedy }' -> 'foreach ($p in $c.problems) { $p.remedy = Protect-ClaudeInstallText $p.remedy }'",
+          "checks": 37,
+          "failed": 2,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 60.1,
+          "failures": [
+            "R3 the JSON report redacts every secret shape in an error that a message quotes: each becomes its [redacted] form, and no sentinel appears in stdout or stderr - sentinel p92JwtSentinel; sentinel p92BearerSentinel; sentinel p92SigSentinel; sentinel p92SignatureSentinel; sentinel p92AccountKeySentinel; sentinel p92SharedAccessKeySentinel; sentinel p92SharedAccessSignatureSentinel; sentinel p92ClientSecretSentinel; sentinel p92ClientSecretCamelSentinel; sentinel p92PasswordSentinel; sentinel p92PwdSentinel; sentinel p92SecretSentinel; sentinel p92AccessTokenSentinel; sentinel p92RefreshTokenSentinel; no 'jwt [redacted]'; no 'Authorization: Bearer [redacted]'; no 'https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026'; no 'signature=[redacted]'; no 'AccountName=p92;AccountKey=[redacted];EndpointSuffix=core'; no 'SharedAccessKey=[redacted];'; no 'SharedAccessSignature: [redacted]'; no 'client_secret=[redacted]&grant_type=client_credentials'; no '{\"clientSecret\": \"[redacted]\"}'; no 'PASSWORD=[redacted]'; no 'pwd: [redacted]'; no 'secret=[redacted]'; no 'access_token=[redacted]'; no 'refresh_token: '[redacted]'' || Entra group 'claude-code-standard' could not be looked up by name (ERROR: the request was refused (jwt eyJhbGciOiJSUzI1NiJ9.eyJwOTIiOiJyZWRhY3QifQ.p92JwtSentinel Authorization: Bearer p92BearerSentinel0123 https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=p92SigSentinel&se=2026 signature=p92SignatureSentinel AccountName=p92;AccountKey=p92AccountKeySentinel==;EndpointSuffix=core SharedAccessKey=p92SharedAccessKeySentinel; SharedAccessSignature: p92SharedAccessSignatureSentinel client_secret=p92ClientSecretSentinel&grant_type=client_credentials {\"clientSecret\": \"p92ClientSecretCamelSentinel\"} PASSWORD=p92PasswordSentinel pwd: p92PwdSentinel secret=p92SecretSentinel access_token=p92AccessTokenSentinel refresh_token: 'p92RefreshTokenSentinel') (Authorization_RequestDenied).)",
+            "R3 the text report redacts the same: each shape in its [redacted] form, the remedy too, and no sentinel appears in stdout or stderr - sentinel p92JwtSentinel; sentinel p92BearerSentinel; sentinel p92SigSentinel; sentinel p92SignatureSentinel; sentinel p92AccountKeySentinel; sentinel p92SharedAccessKeySentinel; sentinel p92SharedAccessSignatureSentinel; sentinel p92ClientSecretSentinel; sentinel p92ClientSecretCamelSentinel; sentinel p92PasswordSentinel; sentinel p92PwdSentinel; sentinel p92SecretSentinel; sentinel p92AccessTokenSentinel; sentinel p92RefreshTokenSentinel; no 'jwt [redacted]'; no 'Authorization: Bearer [redacted]'; no 'https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026'; no 'signature=[redacted]'; no 'AccountName=p92;AccountKey=[redacted];EndpointSuffix=core'; no 'SharedAccessKey=[redacted];'; no 'SharedAccessSignature: [redacted]'; no 'client_secret=[redacted]&grant_type=client_credentials'; no '{\"clientSecret\": \"[redacted]\"}'; no 'PASSWORD=[redacted]'; no 'pwd: [redacted]'; no 'secret=[redacted]'; no 'access_token=[redacted]'; no 'refresh_token: '[redacted]'' ||   [FAIL] entra.groupNames: Entra group 'claude-code-standard' could not be looked up by name (ERROR: the request was refused (jwt eyJhbGciOiJSUzI1NiJ9.eyJwOTIiOiJyZWRhY3QifQ.p92JwtSentinel Authorization: Bearer p92BearerSentinel0123 https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=p92SigSentinel&se=2026 signature=p92SignatureSentinel AccountName=p92;AccountKey=p92AccountKeySentinel==;EndpointSuffix=core SharedAccessKey=p92SharedAccessKeySentinel; SharedAccessSignature: p92SharedAccessSignatureSentinel client_secret=p92ClientSecretSentinel&grant_type=client_credentials {\"clientSecret\": \"p92ClientSecretCamelSentinel\"} PASSWORD=p92PasswordSentinel pwd: p92PwdSentinel secret=p92SecretSentinel access_token=p92AccessTokenSentinel refresh_token: 'p92RefreshTokenSentinel') (Authorization_RequestDenied).) Remedy: Sign in with an account that can read Entra groups in Microsoft Graph, for example one with the Directory Readers role, then run the preflight again."
+          ]
+        },
+        {
+          "id": "X02",
+          "item": "5 preflight remedies are redacted",
+          "suite": "tests/Test-InstallerPreflight.ps1",
+          "target": "secret in a remedy",
+          "file": "scripts/ClaudeInstallerPreflight.ps1",
+          "mutation": "'foreach ($p in $c.problems) { $p.message = Protect-ClaudeInstallText $p.message; $p.remedy = Protect-ClaudeInstallText $p.remedy }' -> 'foreach ($p in $c.problems) { $p.message = Protect-ClaudeInstallText $p.message }'",
+          "checks": 37,
+          "failed": 3,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 55.1,
+          "failures": [
+            "R3 the JSON report redacts every secret shape in an error that a message quotes: each becomes its [redacted] form, and no sentinel appears in stdout or stderr -  || Entra group 'claude-code-standard' could not be looked up by name (ERROR: the request was refused (jwt [redacted] Authorization: Bearer [redacted] https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026 signature=[redacted] AccountName=p92;AccountKey=[redacted];EndpointSuffix=core SharedAccessKey=[redacted]; SharedAccessSignature: [redacted] client_secret=[redacted]&grant_type=client_credentials {\"clientSecret\": \"[redacted]\"} PASSWORD=[redacted] pwd: [redacted] secret=[redacted] access_token=[redacted] refresh_token: '[redacted]') (Authorization_RequestDenied).)",
+            "R3 the JSON report redacts a secret in a remedy: a deployment named secret=<value> is listed as secret=[redacted] - Deploy it in Microsoft Foundry, or answer StandardModels and PremiumModels with deployed names: claude-opus-5, claude-sonnet-5, secret=p92RemedySentinel.",
+            "R3 the text report redacts the same: each shape in its [redacted] form, the remedy too, and no sentinel appears in stdout or stderr -  ||   [FAIL] entra.groupNames: Entra group 'claude-code-standard' could not be looked up by name (ERROR: the request was refused (jwt [redacted] Authorization: Bearer [redacted] https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026 signature=[redacted] AccountName=p92;AccountKey=[redacted];EndpointSuffix=core SharedAccessKey=[redacted]; SharedAccessSignature: [redacted] client_secret=[redacted]&grant_type=client_credentials {\"clientSecret\": \"[redacted]\"} PASSWORD=[redacted] pwd: [redacted] secret=[redacted] access_token=[redacted] refresh_token: '[redacted]') (Authorization_RequestDenied).) Remedy: Sign in with an account that can read Entra groups in Microsoft Graph, for example one with the Directory Readers role, then run the preflight again."
+          ]
+        },
+        {
+          "id": "X03",
+          "item": "5 progress messages are redacted",
+          "suite": "tests/Test-InstallerStepSelection.ps1",
+          "target": "failed event redacts every secret shape",
+          "file": "scripts/ClaudeInstallSteps.ps1",
+          "mutation": "'message = (& $clean $Message); resumeCommand = (& $clean $ResumeCommand)' -> 'message = $Message; resumeCommand = (& $clean $ResumeCommand)'",
+          "checks": 27,
+          "failed": 2,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 60.2,
+          "failures": [
+            "P5 no secret reaches the progress stream, the checkpoint or an answers file: not the PFX password passed to the run, not the token in a failure's error, which the failed event carries as [redacted] - 1 of 9 texts; failed events with [redacted]: 0",
+            "R3 the failed event redacts every secret shape in the error it quotes: each becomes its [redacted] form, and no sentinel appears in the progress file or in stdout - sentinel p92JwtSentinel; sentinel p92BearerSentinel; sentinel p92SigSentinel; sentinel p92SignatureSentinel; sentinel p92AccountKeySentinel; sentinel p92SharedAccessKeySentinel; sentinel p92SharedAccessSignatureSentinel; sentinel p92ClientSecretSentinel; sentinel p92ClientSecretCamelSentinel; sentinel p92PasswordSentinel; sentinel p92PwdSentinel; sentinel p92SecretSentinel; sentinel p92AccessTokenSentinel; sentinel p92RefreshTokenSentinel; no 'jwt [redacted]'; no 'Authorization: Bearer [redacted]'; no 'https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026'; no 'signature=[redacted]'; no 'AccountName=p92;AccountKey=[redacted];EndpointSuffix=core'; no 'SharedAccessKey=[redacted];'; no 'SharedAccessSignature: [redacted]'; no 'client_secret=[redacted]&grant_type=client_credentials'; no '{\"clientSecret\": \"[redacted]\"}'; no 'PASSWORD=[redacted]'; no 'pwd: [redacted]'; no 'secret=[redacted]'; no 'access_token=[redacted]'; no 'refresh_token: '[redacted]'' || Gateway deployment: failed: P91 stub: the client was disconnected while the deployment ran. ERROR: the request was refused (jwt eyJhbGciOiJSUzI1NiJ9.eyJwOTIiOiJyZWRhY3QifQ.p92JwtSentinel Authorization: Bearer p92BearerSentinel0123 https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=p92SigSentinel&se=2026 signature=p92SignatureSentinel AccountName=p92;AccountKey=p92AccountKeySentinel==;EndpointSuffix=core SharedAccessKey=p92SharedAccessKeySentinel; SharedAccessSignature: p92SharedAccessSignatureSentinel client_secret=p92ClientSecretSentinel&grant_type=client_credentials {\"clientSecret\": \"p92ClientSecretCamelSentinel\"} PASSWORD=p92PasswordSentinel pwd: p92PwdSentinel secret=p92SecretSentinel access_token=p92AccessTokenSentinel refresh_token: 'p92RefreshTokenSentinel') (Authorization_RequestDenied)."
+          ]
+        },
+        {
+          "id": "X04",
+          "item": "5 progress resume commands are redacted",
+          "suite": "tests/Test-InstallerStepSelection.ps1",
+          "target": "resume command",
+          "file": "scripts/ClaudeInstallSteps.ps1",
+          "mutation": "'message = (& $clean $Message); resumeCommand = (& $clean $ResumeCommand)' -> 'message = (& $clean $Message); resumeCommand = $ResumeCommand'",
+          "checks": 27,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 55.3,
+          "failures": [
+            "R3 the failed event redacts a secret shape in its resume command: a checkout path that holds sig=<value> is written as sig=[redacted] - Set-Location -LiteralPath '<home>\\AppData\\Local\\p92-steps-2657189775c44b95abca5a3a086abeef\\scenarios\\redact-sig=p92PathSentinel\\repo'; ./Install-ClaudeGateway.ps1"
+          ]
+        },
+        {
+          "id": "X05",
+          "item": "5 the PowerShell rule table drifts from the bash one (refresh_token dropped)",
+          "suite": "tests/Test-InstallerRedaction.ps1",
+          "target": "same JSON text",
+          "file": "scripts/ClaudeInstallResume.ps1",
+          "mutation": "'secret|access_token|refresh_token)' -> 'secret|access_token)'",
+          "checks": 6,
+          "failed": 4,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 5.1,
+          "failures": [
+            "R3 the PowerShell and bash rule sets are the same JSON text: JWT, Bearer and the named secrets, in that order - PowerShell: [{\"name\":\"jwt\",\"pattern\":\"eyJ[A-Za-z0-9_-]{4,}\\\\.[A-Za-z0-9_.-]*\"},{\"name\":\"bearer\",\"pattern\":\"(?<keep>(?<![A-Za-z0-9_])bearer[ \\\\t]+)[^;&\\\"\\u0027 \\\\t\\\\r\\\\n]+\"},{\"name\":\"named\",\"pattern\":\"(?<keep>(?<![A-Za-z0-9_])(?:sig|signature|accountkey|sharedaccesskey|sharedaccesssignature|client_secret|clientsecret|password|pwd|secret|access_token)[\\\"\\u0027]?[ \\\\t]*[=:][ \\\\t]*[\\\"\\u0027]?)[^;&\\\"\\u0027 \\\\t\\\\r\\\\n]+\"}] || bash: [{\"name\":\"jwt\",\"pattern\":\"eyJ[A-Za-z0-9_-]{4,}\\\\.[A-Za-z0-9_.-]*\"},{\"name\":\"bearer\",\"pattern\":\"(?<keep>(?<![A-Za-z0-9_])bearer[ \\\\t]+)[^;&\\\"\\u0027 \\\\t\\\\r\\\\n]+\"},{\"name\":\"named\",\"pattern\":\"(?<keep>(?<![A-Za-z0-9_])(?:sig|signature|accountkey|sharedaccesskey|sharedaccesssignature|client_secret|clientsecret|password|pwd|secret|access_token|refresh_token)[\\\"\\u0027]?[ \\\\t]*[=:][ \\\\t]*[\\\"\\u0027]?)[^;&\\\"\\u0027 \\\\t\\\\r\\\\n]+\"}]",
+            "R3 PowerShell (Protect-ClaudeInstallText) turns each shape into its [redacted] form: JWT, Bearer, sig, signature, AccountKey, SharedAccessKey, SharedAccessSignature, client_secret, clientSecret, password, pwd, secret, access_token, refresh_token -  refresh_token: refresh_token: 'p92RefreshTokenSentinel'",
+            "R3 PowerShell redacts every shape in one sentence, a value ends at a semicolon, an ampersand, white space, a quote or the end, and a second pass changes nothing - sentinel p92RefreshTokenSentinel; no 'refresh_token: '[redacted]'' || ERROR: the request was refused (jwt [redacted] Authorization: Bearer [redacted] https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026 signature=[redacted] AccountName=p92;AccountKey=[redacted];EndpointSuffix=core SharedAccessKey=[redacted]; SharedAccessSignature: [redacted] client_secret=[redacted]&grant_type=client_credentials {\"clientSecret\": \"[redacted]\"} PASSWORD=[redacted] pwd: [redacted] secret=[redacted] access_token=[redacted] refresh_token: 'p92RefreshTokenSentinel') (Authorization_RequestDenied).",
+            "R3 both engines give the same text for the whole corpus, character for character - #13 PowerShell: refresh_token: 'p92RefreshTokenSentinel' || bash: refresh_token: '[redacted]' ## #29 PowerShell: ERROR: the request was refused (jwt [redacted] Authorization: Bearer [redacted] https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026 signature=[redacted] AccountName=p92;AccountKey=[redacted];EndpointSuffix=core SharedAccessKey=[redacted]; SharedAccessSignature: [redacted] client_secret=[redacted]&grant_type=client_credentials {\"clientSecret\": \"[redacted]\"} PASSWORD=[redacted] pwd: [redacted] secret=[redacted] access_token=[redacted] refresh_token: 'p92RefreshTokenSentinel') (Authorization_RequestDenied). || bash: ERROR: the request was refused (jwt [redacted] Authorization: Bearer [redacted] https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026 signature=[redacted] AccountName=p92;AccountKey=[redacted];EndpointSuffix=core SharedAccessKey=[redacted]; SharedAccessSignature: [redacted] client_secret=[redacted]&grant_type=client_credentials {\"clientSecret\": \"[redacted]\"} PASSWORD=[redacted] pwd: [redacted] secret=[redacted] access_token=[redacted] refresh_token: '[redacted]') (Authorization_RequestDenied)."
+          ]
+        },
+        {
+          "id": "X06",
+          "item": "5 bash: preflight messages are redacted",
+          "suite": "tests/Test-BashInstallerPreflight.ps1",
+          "target": "error that a message quotes|text report redacts",
+          "file": "scripts/install-preflight.sh",
+          "mutation": "'message: (.[3] | redact), remedy: (.[4] | redact)' -> 'message: .[3], remedy: (.[4] | redact)'",
+          "checks": 37,
+          "failed": 2,
+          "bashN": "ok",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 215.4,
+          "failures": [
+            "R3 bash the JSON report redacts every secret shape in an error that a message quotes: each becomes its [redacted] form, and no sentinel appears in stdout or stderr - sentinel p92JwtSentinel; sentinel p92BearerSentinel; sentinel p92SigSentinel; sentinel p92SignatureSentinel; sentinel p92AccountKeySentinel; sentinel p92SharedAccessKeySentinel; sentinel p92SharedAccessSignatureSentinel; sentinel p92ClientSecretSentinel; sentinel p92ClientSecretCamelSentinel; sentinel p92PasswordSentinel; sentinel p92PwdSentinel; sentinel p92SecretSentinel; sentinel p92AccessTokenSentinel; sentinel p92RefreshTokenSentinel; no 'jwt [redacted]'; no 'Authorization: Bearer [redacted]'; no 'https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026'; no 'signature=[redacted]'; no 'AccountName=p92;AccountKey=[redacted];EndpointSuffix=core'; no 'SharedAccessKey=[redacted];'; no 'SharedAccessSignature: [redacted]'; no 'client_secret=[redacted]&grant_type=client_credentials'; no '{\"clientSecret\": \"[redacted]\"}'; no 'PASSWORD=[redacted]'; no 'pwd: [redacted]'; no 'secret=[redacted]'; no 'access_token=[redacted]'; no 'refresh_token: '[redacted]'' || Entra group 'claude-code-standard' could not be looked up by name (ERROR: the request was refused (jwt eyJhbGciOiJSUzI1NiJ9.eyJwOTIiOiJyZWRhY3QifQ.p92JwtSentinel Authorization: Bearer p92BearerSentinel0123 https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=p92SigSentinel&se=2026 signature=p92SignatureSentinel AccountName=p92;AccountKey=p92AccountKeySentinel==;EndpointSuffix=core SharedAccessKey=p92SharedAccessKeySentinel; SharedAccessSignature: p92SharedAccessSignatureSentinel client_secret=p92ClientSecretSentinel&grant_type=client_credentials {\"clientSecret\": \"p92ClientSecretCamelSentinel\"} PASSWORD=p92PasswordSentinel pwd: p92PwdSentinel secret=p92SecretSentinel access_token=p92AccessTokenSentinel refresh_token: 'p92RefreshTokenSentinel') (Authorization_RequestDenied).)",
+            "R3 bash the text report redacts the same: each shape in its [redacted] form, the remedy too, and no sentinel appears in stdout or stderr - sentinel p92JwtSentinel; sentinel p92BearerSentinel; sentinel p92SigSentinel; sentinel p92SignatureSentinel; sentinel p92AccountKeySentinel; sentinel p92SharedAccessKeySentinel; sentinel p92SharedAccessSignatureSentinel; sentinel p92ClientSecretSentinel; sentinel p92ClientSecretCamelSentinel; sentinel p92PasswordSentinel; sentinel p92PwdSentinel; sentinel p92SecretSentinel; sentinel p92AccessTokenSentinel; sentinel p92RefreshTokenSentinel; no 'jwt [redacted]'; no 'Authorization: Bearer [redacted]'; no 'https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026'; no 'signature=[redacted]'; no 'AccountName=p92;AccountKey=[redacted];EndpointSuffix=core'; no 'SharedAccessKey=[redacted];'; no 'SharedAccessSignature: [redacted]'; no 'client_secret=[redacted]&grant_type=client_credentials'; no '{\"clientSecret\": \"[redacted]\"}'; no 'PASSWORD=[redacted]'; no 'pwd: [redacted]'; no 'secret=[redacted]'; no 'access_token=[redacted]'; no 'refresh_token: '[redacted]'' ||   [FAIL] entra.groupNames: Entra group 'claude-code-standard' could not be looked up by name (ERROR: the request was refused (jwt eyJhbGciOiJSUzI1NiJ9.eyJwOTIiOiJyZWRhY3QifQ.p92JwtSentinel Authorization: Bearer p92BearerSentinel0123 https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=p92SigSentinel&se=2026 signature=p92SignatureSentinel AccountName=p92;AccountKey=p92AccountKeySentinel==;EndpointSuffix=core SharedAccessKey=p92SharedAccessKeySentinel; SharedAccessSignature: p92SharedAccessSignatureSentinel client_secret=p92ClientSecretSentinel&grant_type=client_credentials {\"clientSecret\": \"p92ClientSecretCamelSentinel\"} PASSWORD=p92PasswordSentinel pwd: p92PwdSentinel secret=p92SecretSentinel access_token=p92AccessTokenSentinel refresh_token: 'p92RefreshTokenSentinel') (Authorization_RequestDenied).) Remedy: Sign in with an account that can read Entra groups in Microsoft Graph, for example one with the Directory Readers role, then run the preflight again."
+          ]
+        },
+        {
+          "id": "X07",
+          "item": "5 bash: preflight remedies are redacted",
+          "suite": "tests/Test-BashInstallerPreflight.ps1",
+          "target": "secret in a remedy",
+          "file": "scripts/install-preflight.sh",
+          "mutation": "'message: (.[3] | redact), remedy: (.[4] | redact)' -> 'message: (.[3] | redact), remedy: .[4]'",
+          "checks": 37,
+          "failed": 3,
+          "bashN": "ok",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 250.5,
+          "failures": [
+            "R3 bash the JSON report redacts every secret shape in an error that a message quotes: each becomes its [redacted] form, and no sentinel appears in stdout or stderr -  || Entra group 'claude-code-standard' could not be looked up by name (ERROR: the request was refused (jwt [redacted] Authorization: Bearer [redacted] https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026 signature=[redacted] AccountName=p92;AccountKey=[redacted];EndpointSuffix=core SharedAccessKey=[redacted]; SharedAccessSignature: [redacted] client_secret=[redacted]&grant_type=client_credentials {\"clientSecret\": \"[redacted]\"} PASSWORD=[redacted] pwd: [redacted] secret=[redacted] access_token=[redacted] refresh_token: '[redacted]') (Authorization_RequestDenied).)",
+            "R3 bash the JSON report redacts a secret in a remedy: a deployment named secret=<value> is listed as secret=[redacted] - Deploy it in Microsoft Foundry, or answer StandardModels and PremiumModels with deployed names: claude-sonnet-5, secret=p92RemedySentinel.",
+            "R3 bash the text report redacts the same: each shape in its [redacted] form, the remedy too, and no sentinel appears in stdout or stderr -  ||   [FAIL] entra.groupNames: Entra group 'claude-code-standard' could not be looked up by name (ERROR: the request was refused (jwt [redacted] Authorization: Bearer [redacted] https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026 signature=[redacted] AccountName=p92;AccountKey=[redacted];EndpointSuffix=core SharedAccessKey=[redacted]; SharedAccessSignature: [redacted] client_secret=[redacted]&grant_type=client_credentials {\"clientSecret\": \"[redacted]\"} PASSWORD=[redacted] pwd: [redacted] secret=[redacted] access_token=[redacted] refresh_token: '[redacted]') (Authorization_RequestDenied).) Remedy: Sign in with an account that can read Entra groups in Microsoft Graph, for example one with the Directory Readers role, then run the preflight again."
+          ]
+        },
+        {
+          "id": "X08",
+          "item": "5 bash: progress messages are redacted",
+          "suite": "tests/Test-BashInstallerStepSelection.ps1 -Shard 1/3",
+          "target": "refused event redacts",
+          "file": "scripts/install-steps.sh",
+          "mutation": "'message: ($m | clean), resumeCommand: ($c | clean)' -> 'message: $m, resumeCommand: ($c | clean)'",
+          "checks": 12,
+          "failed": 2,
+          "bashN": "ok",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 100.2,
+          "failures": [
+            "R3 bash the refused event redacts every secret shape in the error it quotes: each becomes its [redacted] form, and no sentinel appears in the progress file or in stdout - sentinel p92JwtSentinel; sentinel p92BearerSentinel; sentinel p92SigSentinel; sentinel p92SignatureSentinel; sentinel p92AccountKeySentinel; sentinel p92SharedAccessKeySentinel; sentinel p92SharedAccessSignatureSentinel; sentinel p92ClientSecretSentinel; sentinel p92ClientSecretCamelSentinel; sentinel p92PasswordSentinel; sentinel p92PwdSentinel; sentinel p92SecretSentinel; sentinel p92AccessTokenSentinel; sentinel p92RefreshTokenSentinel; no 'jwt [redacted]'; no 'Authorization: Bearer [redacted]'; no 'https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026'; no 'signature=[redacted]'; no 'AccountName=p92;AccountKey=[redacted];EndpointSuffix=core'; no 'SharedAccessKey=[redacted];'; no 'SharedAccessSignature: [redacted]'; no 'client_secret=[redacted]&grant_type=client_credentials'; no '{\"clientSecret\": \"[redacted]\"}'; no 'PASSWORD=[redacted]'; no 'pwd: [redacted]'; no 'secret=[redacted]'; no 'access_token=[redacted]'; no 'refresh_token: '[redacted]'' || Refused: Entra group 'claude-code-standard' could not be looked up by name (ERROR: the request was refused (jwt eyJhbGciOiJSUzI1NiJ9.eyJwOTIiOiJyZWRhY3QifQ.p92JwtSentinel Authorization: Bearer p92BearerSentinel0123 https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=p92SigSentinel&se=2026 signature=p92SignatureSentinel AccountName=p92;AccountKey=p92AccountKeySentinel==;EndpointSuffix=core SharedAccessKey=p92SharedAccessKeySentinel; SharedAccessSignature: p92SharedAccessSignatureSentinel client_secret=p92ClientSecretSentinel&grant_type=client_credentials {\"clientSecret\": \"p92ClientSecretCamelSentinel\"} PASSWORD=p92PasswordSentinel pwd: p92PwdSentinel secret=p92SecretSentinel access_token=p92AccessTokenSentinel refresh_token: 'p92RefreshTokenSentinel') (Authorization_RequestDenied).), so it is neither reused nor created. Nothing was changed by this step. Resume: cd '<home>/AppData/Local/Temp/p92-bash-steps-efa90dfc022444b1bfe70ee0e409f6a2/scenarios/redact-refusal/repo' && ./install-claude-gateway.sh",
+            "P5 bash no secret reaches the progress stream: a token in an error that a refusal quotes is [redacted] - 2 streams; refused events with [redacted]: 0"
+          ]
+        },
+        {
+          "id": "X09",
+          "item": "5 bash: progress resume commands are redacted",
+          "suite": "tests/Test-BashInstallerStepSelection.ps1 -Shard 1/3",
+          "target": "resume command",
+          "file": "scripts/install-steps.sh",
+          "mutation": "'message: ($m | clean), resumeCommand: ($c | clean)' -> 'message: ($m | clean), resumeCommand: $c'",
+          "checks": 12,
+          "failed": 1,
+          "bashN": "ok",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 115.2,
+          "failures": [
+            "R3 bash the failed event redacts a secret shape in its resume command: a checkout path that holds sig=<value> is written as sig=[redacted] - cd '<home>/AppData/Local/Temp/p92-bash-steps-e1d999f20963460d9cd5da1e435cf59e/scenarios/redact-sig=p92PathSentinel/repo' && ./install-claude-gateway.sh"
+          ]
+        },
+        {
+          "id": "X10",
+          "item": "5 the bash rule table drifts from the PowerShell one (refresh_token dropped)",
+          "suite": "tests/Test-InstallerRedaction.ps1",
+          "target": "same JSON text",
+          "file": "scripts/install-checkpoint.sh",
+          "mutation": "'secret|access_token|refresh_token)' -> 'secret|access_token)'",
+          "checks": 6,
+          "failed": 3,
+          "bashN": "ok",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 5.2,
+          "failures": [
+            "R3 the PowerShell and bash rule sets are the same JSON text: JWT, Bearer and the named secrets, in that order - PowerShell: [{\"name\":\"jwt\",\"pattern\":\"eyJ[A-Za-z0-9_-]{4,}\\\\.[A-Za-z0-9_.-]*\"},{\"name\":\"bearer\",\"pattern\":\"(?<keep>(?<![A-Za-z0-9_])bearer[ \\\\t]+)[^;&\\\"\\u0027 \\\\t\\\\r\\\\n]+\"},{\"name\":\"named\",\"pattern\":\"(?<keep>(?<![A-Za-z0-9_])(?:sig|signature|accountkey|sharedaccesskey|sharedaccesssignature|client_secret|clientsecret|password|pwd|secret|access_token|refresh_token)[\\\"\\u0027]?[ \\\\t]*[=:][ \\\\t]*[\\\"\\u0027]?)[^;&\\\"\\u0027 \\\\t\\\\r\\\\n]+\"}] || bash: [{\"name\":\"jwt\",\"pattern\":\"eyJ[A-Za-z0-9_-]{4,}\\\\.[A-Za-z0-9_.-]*\"},{\"name\":\"bearer\",\"pattern\":\"(?<keep>(?<![A-Za-z0-9_])bearer[ \\\\t]+)[^;&\\\"\\u0027 \\\\t\\\\r\\\\n]+\"},{\"name\":\"named\",\"pattern\":\"(?<keep>(?<![A-Za-z0-9_])(?:sig|signature|accountkey|sharedaccesskey|sharedaccesssignature|client_secret|clientsecret|password|pwd|secret|access_token)[\\\"\\u0027]?[ \\\\t]*[=:][ \\\\t]*[\\\"\\u0027]?)[^;&\\\"\\u0027 \\\\t\\\\r\\\\n]+\"}]",
+            "R3 bash (the redact rule of CKPT_REDACT_JQ, in jq) turns each shape into its [redacted] form -  refresh_token: refresh_token: 'p92RefreshTokenSentinel'",
+            "R3 both engines give the same text for the whole corpus, character for character - #13 PowerShell: refresh_token: '[redacted]' || bash: refresh_token: 'p92RefreshTokenSentinel' ## #29 PowerShell: ERROR: the request was refused (jwt [redacted] Authorization: Bearer [redacted] https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026 signature=[redacted] AccountName=p92;AccountKey=[redacted];EndpointSuffix=core SharedAccessKey=[redacted]; SharedAccessSignature: [redacted] client_secret=[redacted]&grant_type=client_credentials {\"clientSecret\": \"[redacted]\"} PASSWORD=[redacted] pwd: [redacted] secret=[redacted] access_token=[redacted] refresh_token: '[redacted]') (Authorization_RequestDenied). || bash: ERROR: the request was refused (jwt [redacted] Authorization: Bearer [redacted] https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026 signature=[redacted] AccountName=p92;AccountKey=[redacted];EndpointSuffix=core SharedAccessKey=[redacted]; SharedAccessSignature: [redacted] client_secret=[redacted]&grant_type=client_credentials {\"clientSecret\": \"[redacted]\"} PASSWORD=[redacted] pwd: [redacted] secret=[redacted] access_token=[redacted] refresh_token: 'p92RefreshTokenSentinel') (Authorization_RequestDenied)."
+          ]
+        },
+        {
+          "id": "P01",
+          "item": "6 the -ProgressPath refusal names the next step",
+          "suite": "tests/Test-InstallerStepSelection.ps1",
+          "target": "ProgressPath refusal names the next step",
+          "file": "scripts/ClaudeInstallSteps.ps1",
+          "mutation": "' Nothing was changed. Give a writable file path, or run without -ProgressPath.\"' -> ' Nothing was changed.\"'",
+          "checks": 27,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 60.2,
+          "failures": [
+            "R3 the -ProgressPath refusal names the next step: a writable file path, or a run without -ProgressPath - Refused: -ProgressPath <home>\\AppData\\Local\\p92-steps-c25ed25fe0c844cab9782f2e8e2a7883\\scenarios\\progress-dir\\not-a-file cannot be written (Exception calling \"AppendAllText\" with \"3\" argument(s): \"Access to the path '<home>\\AppData\\Local\\p92-steps-c25ed25fe0c844cab9782f2e8e2a7883\\scenarios\\progress-dir\\not-a-file' is denied.\"). Nothing was changed."
+          ]
+        },
+        {
+          "id": "P02",
+          "item": "6 bash: the --progress-file refusal names the next step",
+          "suite": "tests/Test-BashInstallerStepSelection.ps1 -Shard 1/3",
+          "target": "progress-file refusal names the next step",
+          "file": "scripts/install-steps.sh",
+          "mutation": "' Nothing was changed. Give a writable file path, or run without --progress-file.\"' -> ' Nothing was changed.\"'",
+          "checks": 12,
+          "failed": 1,
+          "bashN": "ok",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 105.5,
+          "failures": [
+            "R3 bash the --progress-file refusal names the next step: a writable file path, or a run without --progress-file - Refused: --progress-file <home>/AppData/Local/Temp/p92-bash-steps-7b1386207c114b889b6f641f696f8d0d/scenarios/progress-dir/not-a-file cannot be written. Nothing was changed."
+          ]
+        },
+        {
+          "id": "L01",
+          "item": "7 the unknown-step refusal names -ListSteps",
+          "suite": "tests/Test-InstallerStepSelection.ps1",
+          "target": "unknown-step refusal",
+          "file": "scripts/ClaudeInstallSteps.ps1",
+          "mutation": "' Nothing was changed. ./Install-ClaudeGateway.ps1 -ListSteps lists the steps with their state.\"' -> ' Nothing was changed.\"'",
+          "checks": 27,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 55.2,
+          "failures": [
+            "R3 the unknown-step refusal says that -ListSteps lists the steps with their state - Refused: -Steps 'gateway-deploy' names no step of Install-ClaudeGateway.ps1. Its steps are claude-deployment, resource-group, gateway-deployment, company-address, entra-groups, sync, projection, business-units, onboarding-package, verify. Nothing was changed."
+          ]
+        },
+        {
+          "id": "L02",
+          "item": "7 bash: the unknown-step refusal names --list-steps",
+          "suite": "tests/Test-BashInstallerStepSelection.ps1 -Shard 1/3",
+          "target": "unknown-step refusal",
+          "file": "scripts/install-steps.sh",
+          "mutation": "' Nothing was changed. ./install-claude-gateway.sh --list-steps lists the steps with their state.\"' -> ' Nothing was changed.\"'",
+          "checks": 12,
+          "failed": 1,
+          "bashN": "ok",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 95.1,
+          "failures": [
+            "R3 bash the unknown-step refusal says that --list-steps lists the steps with their state - Refused: --steps 'gateway-deploy' names no step of install-claude-gateway.sh. Its steps are resource-group, gateway-deployment, entra-groups, sync, onboarding-package. Nothing was changed."
+          ]
+        },
+        {
+          "id": "A01",
+          "item": "8 the answers refusal gives the first remedy",
+          "suite": "tests/Test-InstallerStepSelection.ps1",
+          "target": "answers file with problems",
+          "file": "scripts/ClaudeInstallerAnswers.ps1",
+          "mutation": "'$(if ($remedy) { \" Remedy: $remedy\" }) Nothing was changed.' -> ' Nothing was changed.'",
+          "checks": 27,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 55.1,
+          "failures": [
+            "R3 an answers file with problems refuses on one line with the first problem, its remedy, the number of problems and the command that lists every one; no Azure resource is read - Refused: the answers file <home>\\AppData\\Local\\p92-steps-1c5cd6b4c8a449b0ba05829346ab38bb\\scenarios\\answers-bad\\answers.json does not match the answers schema (2 problems). Sku 'Gold' is not one of: BasicV2, StandardV2, PremiumV2. Nothing was changed. ./Install-ClaudeGateway.ps1 -Preflight -AnswersPath '<home>\\AppData\\Local\\p92-steps-1c5cd6b4c8a449b0ba05829346ab38bb\\scenarios\\answers-bad\\answers.json' lists every problem. || az: version --output tsv | account list --query [].{id: id} -o tsv | account show -o json | bicep version | WEB https://management.azure.com/"
+          ]
+        },
+        {
+          "id": "A02",
+          "item": "8 the answers refusal names the command that lists every problem",
+          "suite": "tests/Test-InstallerStepSelection.ps1",
+          "target": "answers file with problems",
+          "file": "scripts/ClaudeInstallerAnswers.ps1",
+          "mutation": "' Nothing was changed. ./Install-ClaudeGateway.ps1 -Preflight -AnswersPath $quoted lists every problem.\"' -> ' Nothing was changed.\"'",
+          "checks": 27,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 60.3,
+          "failures": [
+            "R3 an answers file with problems refuses on one line with the first problem, its remedy, the number of problems and the command that lists every one; no Azure resource is read - Refused: the answers file <home>\\AppData\\Local\\p92-steps-41995977f4d14cbaaa115662327c485e\\scenarios\\answers-bad\\answers.json does not match the answers schema (2 problems). Sku 'Gold' is not one of: BasicV2, StandardV2, PremiumV2. Remedy: Use one of: BasicV2, StandardV2, PremiumV2. Nothing was changed. || az: version --output tsv | account list --query [].{id: id} -o tsv | account show -o json | bicep version | WEB https://management.azure.com/"
+          ]
+        },
+        {
+          "id": "A03",
+          "item": "8 bash: the answers refusal gives the first remedy",
+          "suite": "tests/Test-BashInstallerStepSelection.ps1 -Shard 1/3",
+          "target": "answers file with problems",
+          "file": "scripts/install-answers.sh",
+          "mutation": "'${remedy:+ Remedy: $remedy} Nothing was changed.' -> ' Nothing was changed.'",
+          "checks": 12,
+          "failed": 1,
+          "bashN": "ok",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 95.2,
+          "failures": [
+            "R3 bash an answers file with problems refuses on one line with the first problem, its remedy, the number of problems and the command that lists every one; nothing is read from Azure - Refused: the answers file <home>/AppData/Local/Temp/p92-bash-steps-22bd1dad314348cfb46520eee54f91cf/scenarios/answers-bad/answers.json does not match the answers schema (2 problems). Sku 'Gold' is not one of: BasicV2, StandardV2, PremiumV2. Nothing was changed. ./install-claude-gateway.sh --preflight --answers-file '<home>/AppData/Local/Temp/p92-bash-steps-22bd1dad314348cfb46520eee54f91cf/scenarios/answers-bad/answers.json' lists every problem. || az:"
+          ]
+        },
+        {
+          "id": "A04",
+          "item": "8 bash: the answers refusal names the command that lists every problem",
+          "suite": "tests/Test-BashInstallerStepSelection.ps1 -Shard 1/3",
+          "target": "answers file with problems",
+          "file": "scripts/install-answers.sh",
+          "mutation": "' Nothing was changed. ./install-claude-gateway.sh --preflight --answers-file $(ckpt_quote_ \"$ANSWERS_FILE\") lists every problem.\"' -> ' Nothing was changed.\"'",
+          "checks": 12,
+          "failed": 1,
+          "bashN": "ok",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 100.2,
+          "failures": [
+            "R3 bash an answers file with problems refuses on one line with the first problem, its remedy, the number of problems and the command that lists every one; nothing is read from Azure - Refused: the answers file <home>/AppData/Local/Temp/p92-bash-steps-03f2d6d62041410f873612f4fe9b9bc1/scenarios/answers-bad/answers.json does not match the answers schema (2 problems). Sku 'Gold' is not one of: BasicV2, StandardV2, PremiumV2. Remedy: Use one of: BasicV2, StandardV2, PremiumV2. Nothing was changed. || az:"
+          ]
+        },
+        {
+          "id": "N01",
+          "item": "9 the not-evaluated message",
+          "suite": "tests/Test-InstallerPreflight.ps1",
+          "target": "no branch evaluates",
+          "file": "scripts/ClaudeInstallerPreflight.ps1",
+          "mutation": "'message = 'the preflight did not evaluate this check, which is a defect of the preflight'' -> 'message = 'no branch of the preflight evaluated this check''",
+          "checks": 37,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 60.2,
+          "failures": [
+            "R3 a check that no branch evaluates is NOT-RUN (not-evaluated), says the preflight did not evaluate it, which is a defect of the preflight, gives the remedy to run the latest checkout or report it, and fails the preflight - target.tenant: no branch of the preflight evaluated this check / Run the preflight from the latest checkout; if the check is still not evaluated, report it with this output. || target.subscription: no branch of the preflight evaluated this check / Run the preflight from the latest checkout; if the check is still not evaluated, report it with this output. ||       \"problems\": [] |     } |   ] | }"
+          ]
+        },
+        {
+          "id": "N02",
+          "item": "9 bash: the not-evaluated message",
+          "suite": "tests/Test-BashInstallerPreflight.ps1",
+          "target": "no branch evaluates",
+          "file": "scripts/install-preflight.sh",
+          "mutation": "'message: \"the preflight did not evaluate this check, which is a defect of the preflight\"' -> 'message: \"no branch of the preflight evaluated this check\"'",
+          "checks": 37,
+          "failed": 1,
+          "bashN": "ok",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 260.5,
+          "failures": [
+            "R3 bash a check that no branch evaluates is NOT-RUN (not-evaluated), says the preflight did not evaluate it, which is a defect of the preflight, gives the remedy to run the latest checkout or report it, and fails the preflight - target.tenant: no branch of the preflight evaluated this check / Run the preflight from the latest checkout; if the check is still not evaluated, report it with this output. || target.subscription: no branch of the preflight evaluated this check / Run the preflight from the latest checkout; if the check is still not evaluated, report it with this output. ||     } |   ] | }"
+          ]
+        },
+        {
+          "id": "H01",
+          "item": "11 every group of the step suite runs in one shard",
+          "suite": "tests/Test-BashInstallerStepShards.ps1",
+          "target": "cover-every-case-once",
+          "file": "tests/Test-BashInstallerStepSelection.ps1",
+          "mutation": "'start = 1; stream = 1; prec = 2 }' -> 'start = 1; prec = 2 }'",
+          "checks": 5,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 5.1,
+          "failures": [
+            "A14 bash-steps-shards-cover-every-case-once: every check sits in exactly one group, and each group runs in exactly one shard - outside a group: ; ambiguous: line 279: stream; line 280: stream; line 289: stream; line 293: stream; line 295: stream; per group: list=10, prec=8, sync=3, start=6"
+          ]
+        },
+        {
+          "id": "H02",
+          "item": "11 Test-All registers each shard once",
+          "suite": "tests/Test-BashInstallerStepShards.ps1",
+          "target": "registers one check per shard",
+          "file": "tests/Test-All.ps1",
+          "mutation": "'progress [2/3]' 'Test-BashInstallerStepSelection.ps1' @{ Shard = '2/3' }' -> 'progress [2/3]' 'Test-BashInstallerStepSelection.ps1' @{ Shard = '1/3' }'",
+          "checks": 5,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 5.0,
+          "failures": [
+            "A14 Test-All registers one check per shard, at the default per-check timeout (no -TimeoutSeconds) - macOS/Linux installer steps, precedence and progress [0/3] @{ Shard = '0/3' } -SkipReason $bashInstallerSkip || macOS/Linux installer steps, precedence and progress [1/3] @{ Shard = '1/3' } -SkipReason $bashInstallerSkip || macOS/Linux installer steps, precedence and progress [2/3] @{ Shard = '1/3' } -SkipReason $bashInstallerSkip"
+          ]
+        },
+        {
+          "id": "H03",
+          "item": "11 each shard weight is at most half the default timeout",
+          "suite": "tests/Test-BashInstallerStepShards.ps1",
+          "target": "shard-loads-under-default-timeout",
+          "file": "tests/test-all-durations.json",
+          "mutation": "'\"macOS/Linux installer steps, precedence and progress [2/3]\": 205.1' -> '\"macOS/Linux installer steps, precedence and progress [2/3]\": 400.0'",
+          "checks": 5,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 5.0,
+          "failures": [
+            "A14 bash-steps-shard-loads-under-default-timeout: each shard's measured weight is at most half the default per-check timeout - macOS/Linux installer steps, precedence and progress [0/3]=179.8, macOS/Linux installer steps, precedence and progress [1/3]=84.7, macOS/Linux installer steps, precedence and progress [2/3]=400"
+          ]
+        },
+        {
+          "id": "D01",
+          "item": "merge: a renewal image digest is sha256 and 64 lower-case hexadecimal digits",
+          "suite": "tests/Test-InstallerAnswersSchema.ps1",
+          "target": "projection-digest-malformed|P86 renewal inputs",
+          "file": "schemas/claude-gateway.answers.schema.json",
+          "mutation": "'\"pattern\": \"^sha256:[0-9a-f]{64}$\"' -> '\"pattern\": \"^sha256:.+$\"'",
+          "checks": 46,
+          "failed": 2,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 35.1,
+          "failures": [
+            "projection-digest-malformed fails under answers.schema only, with the same problems in both validators (Install-ClaudeGateway.ps1) - PowerShell:",
+            "the three P86 renewal inputs are answers of Install-ClaudeGateway.ps1, each refused by its own form - projection-digest-malformed:"
+          ]
+        },
+        {
+          "id": "D02",
+          "item": "merge: an action group id in its response casing is accepted",
+          "suite": "tests/Test-InstallerAnswersSchema.ps1",
+          "target": "response-casing",
+          "file": "schemas/claude-gateway.answers.schema.json",
+          "mutation": "'[Mm]icrosoft\\\\.[Ii]nsights/[Aa]ction[Gg]roups' -> 'Microsoft\\\\.Insights/actionGroups'",
+          "checks": 46,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 35.3,
+          "failures": [
+            "projection-renewal-response-casing is valid in both validators (Install-ClaudeGateway.ps1) - PowerShell: answers.schema|ProjectionRenewalActionGroupResourceId|ProjectionRenewalActionGroupResourceId '/subscriptions/00000000-0000-4000-8000-0000000000a1/resourcegroups/rg-p92/providers/microsoft.insights/actionGroups/ag-projection-renewal' is not an action group resource ID|Give the action group's full resource ID, as az monitor action-group show --query id reports it."
+          ]
+        },
+        {
+          "id": "S08n",
+          "item": "lead S08, item 6 text: an unwritable -ProgressPath accepted",
+          "suite": "tests/Test-InstallerStepSelection.ps1",
+          "target": "ProgressPath|progress",
+          "file": "scripts/ClaudeInstallSteps.ps1",
+          "mutation": "'catch { Stop-ClaudeInstall \"-ProgressPath $Path cannot be written ($($_.Exception.Message)). Nothing was changed. Give a writable file path, or run without -ProgressPath.\" }' -> 'catch { }'",
+          "checks": 27,
+          "failed": 2,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 55.5,
+          "failures": [
+            "P5 an unwritable -ProgressPath (a directory) refuses at startup on one line naming -ProgressPath, before any Azure call; nothing is written -  Deploying | ======================================================================== | ==> Resource group | Install-ClaudeGateway.ps1: Exception calling \"AppendAllText\" with \"3\" argument(s): \"Access to the path '<home>\\AppData\\Local\\p92-steps-7d59ebfa6cab442fa93a5e2c03e5c106\\scenarios\\progress-dir\\not-a-file' is denied.\"",
+            "R3 the -ProgressPath refusal names the next step: a writable file path, or a run without -ProgressPath -  Deploying | ======================================================================== | ==> Resource group | Install-ClaudeGateway.ps1: Exception calling \"AppendAllText\" with \"3\" argument(s): \"Access to the path '<home>\\AppData\\Local\\p92-steps-7d59ebfa6cab442fa93a5e2c03e5c106\\scenarios\\progress-dir\\not-a-file' is denied.\""
+          ]
+        },
+        {
+          "id": "BS02n",
+          "item": "lead BS02, item 6 text: bash: an unwritable --progress-file accepted",
+          "suite": "tests/Test-BashInstallerStepSelection.ps1 -Shard 1/3",
+          "target": "progress",
+          "file": "scripts/install-steps.sh",
+          "mutation": "'( : >> \"$PROGRESS_FILE\" ) 2>/dev/null || ckpt_refuse_ \"--progress-file $PROGRESS_FILE cannot be written. Nothing was changed. Give a writable file path, or run without --progress-file.\"' -> '( : >> \"$PROGRESS_FILE\" ) 2>/dev/null || true'",
+          "checks": 12,
+          "failed": 2,
+          "bashN": "ok",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 125.2,
+          "failures": [
+            "P5 bash an unwritable --progress-file (a directory) refuses at startup on one line naming --progress-file, before any Azure call; nothing is written - <home>/AppData/Local/Temp/p92-bash-steps-3acbb69e87224a63b289212cea6931c6/scenarios/progress-dir/repo/scripts/install-steps.sh: line 30: <home>/AppData/Local/Temp/p92-bash-steps-3acbb69e87224a63b289212cea6931c6/scenarios/progress-dir/not-a-file: Is a directory | <home>/AppData/Local/Temp/p92-bash-steps-3acbb69e87224a63b289212cea6931c6/scenarios/progress-dir/repo/scripts/install-steps.sh: line 30: <home>/AppData/Local/Temp/p92-bash-steps-3acbb69e87224a63b289212cea6931c6/scenarios/progress-dir/not-a-file: Is a directory | <home>/AppData/Local/Temp/p92-bash-steps-3acbb69e87224a63b289212cea6931c6/scenarios/progress-dir/repo/scripts/install-steps.sh: line 30: <home>/AppData/Local/Temp/p92-bash-steps-3acbb69e87224a63b289212cea6931c6/scenarios/progress-dir/not-a-file: Is a directory",
+            "R3 bash the --progress-file refusal names the next step: a writable file path, or a run without --progress-file - <home>/AppData/Local/Temp/p92-bash-steps-3acbb69e87224a63b289212cea6931c6/scenarios/progress-dir/repo/scripts/install-steps.sh: line 30: <home>/AppData/Local/Temp/p92-bash-steps-3acbb69e87224a63b289212cea6931c6/scenarios/progress-dir/not-a-file: Is a directory | <home>/AppData/Local/Temp/p92-bash-steps-3acbb69e87224a63b289212cea6931c6/scenarios/progress-dir/repo/scripts/install-steps.sh: line 30: <home>/AppData/Local/Temp/p92-bash-steps-3acbb69e87224a63b289212cea6931c6/scenarios/progress-dir/not-a-file: Is a directory | <home>/AppData/Local/Temp/p92-bash-steps-3acbb69e87224a63b289212cea6931c6/scenarios/progress-dir/repo/scripts/install-steps.sh: line 30: <home>/AppData/Local/Temp/p92-bash-steps-3acbb69e87224a63b289212cea6931c6/scenarios/progress-dir/not-a-file: Is a directory"
+          ]
+        }
+      ]
     }
   ]
 }
