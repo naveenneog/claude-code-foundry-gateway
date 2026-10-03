@@ -271,6 +271,19 @@ function renderBusinessUnitValidation() {
   return problems;
 }
 
+function refreshTeamParentOptions() {
+  const parentSelect = byId('team-parent');
+  const current = parentSelect.value;
+  clearChildren(parentSelect);
+  for (const unit of businessUnits.filter((u) => !u.parent && u.id)) {
+    const option = document.createElement('option');
+    option.value = unit.id;
+    option.textContent = unit.id;
+    option.selected = unit.id === current;
+    parentSelect.append(option);
+  }
+}
+
 function businessUnitField(row, label, field, value, type = 'text') {
   const wrapper = document.createElement('label');
   appendText(wrapper, label);
@@ -286,15 +299,8 @@ function businessUnitField(row, label, field, value, type = 'text') {
 function renderBusinessUnitEditor() {
   const tree = byId('business-unit-tree');
   clearChildren(tree);
-  const parentSelect = byId('team-parent');
-  clearChildren(parentSelect);
-  for (const unit of businessUnits.filter((u) => !u.parent)) {
-    const option = document.createElement('option');
-    option.value = unit.id;
-    option.textContent = unit.id || '(unit without id)';
-    parentSelect.append(option);
-  }
   businessUnits = orderedBusinessUnits();
+  refreshTeamParentOptions();
   businessUnits.forEach((unit, index) => {
     const row = document.createElement('fieldset');
     row.dataset.buIndex = String(index);
@@ -328,6 +334,7 @@ function renderBusinessUnitEditor() {
     tree.append(row);
   });
   byId('business-units').value = businessUnits.length ? JSON.stringify(businessUnits, null, 2) : '';
+  refreshTeamParentOptions();
   renderBusinessUnitValidation();
 }
 
@@ -403,10 +410,25 @@ async function main() {
     URL.revokeObjectURL(a.href);
   };
   byId('add-unit').onclick = () => { syncBusinessUnitsFromEditor(); businessUnits.push(defaultBusinessUnit()); renderBusinessUnitEditor(); };
-  byId('add-team').onclick = () => { syncBusinessUnitsFromEditor(); const parent = byId('team-parent').value; if (parent) businessUnits.push(defaultBusinessUnit(parent)); renderBusinessUnitEditor(); };
+  byId('add-team').onclick = () => {
+    syncBusinessUnitsFromEditor();
+    refreshTeamParentOptions();
+    const parent = byId('team-parent').value;
+    if (!parent) {
+      byId('business-unit-problems').textContent = 'Give a business unit an id before adding a team.';
+      return;
+    }
+    businessUnits.push(defaultBusinessUnit(parent));
+    renderBusinessUnitEditor();
+  };
   byId('business-units').addEventListener('input', () => {
     const text = byId('business-units').value.trim();
-    businessUnits = text ? JSON.parse(text) : [];
+    try {
+      businessUnits = text ? JSON.parse(text) : [];
+    } catch (error) {
+      byId('business-unit-problems').textContent = `JSON parse error: ${error.message}`;
+      return;
+    }
     renderBusinessUnitEditor();
   });
   renderBusinessUnitEditor();

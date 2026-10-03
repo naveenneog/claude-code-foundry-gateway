@@ -170,8 +170,20 @@ test('the static fallback renders fields in a real browser from file', async () 
     await page.getByRole('button', { name: 'Add unit' }).click();
     await page.locator('[data-bu-field="id"]').first().fill('finance');
     await page.locator('[data-bu-field="group"]').first().fill('claude-bu-finance');
+    await page.locator('[data-bu-field="monthlyUsdBudget"]').first().fill('5000');
     await page.getByRole('button', { name: 'Add team' }).click();
+    await expectText(page, 'Team under finance');
+    assert.equal(await page.locator('fieldset').count(), 2);
     assert.match(await page.locator('#business-units').inputValue(), /"id": "finance"/);
+    assert.match(await page.locator('#business-units').inputValue(), /"parent": "finance"/);
+    assert.ok((await page.locator('#business-units').inputValue()).indexOf('"id": "finance"') < (await page.locator('#business-units').inputValue()).indexOf('"parent": "finance"'));
+    await page.getByText('JSON view').click();
+    await page.locator('#business-units').fill('[{"id":');
+    assert.match(await page.locator('#business-unit-problems').textContent(), /JSON/i);
+    assert.equal(await page.locator('fieldset').count(), 2);
+    await page.locator('#business-units').fill('[{"id":"sales","group":"claude-bu-sales","monthlyUsdBudget":100,"mode":"Strict"}]');
+    assert.equal(await page.locator('fieldset').count(), 1);
+    assert.match(await page.locator('#business-units').inputValue(), /"id": "sales"/);
     await page.locator('[data-bu-field="id"]').first().fill('Finance');
     assert.match(await page.locator('#business-unit-problems').textContent(), /lower-case/);
   } finally {
