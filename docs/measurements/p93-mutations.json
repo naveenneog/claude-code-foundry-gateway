@@ -33,7 +33,9 @@
     { "name": "prefill error redaction disabled", "file": "tools/installer-ui/server.mjs", "caught": true, "checks": 17 },
     { "name": "identity tenant id blank", "file": "scripts/Get-ClaudeInstallerUiIdentity.ps1", "caught": true, "checks": 17 },
     { "name": "business-unit add-team stale parent select", "file": "tools/installer-ui/installer-ui.js", "caught": true, "checks": 17 },
-    { "name": "business-unit JSON parse throws on partial input", "file": "tools/installer-ui/installer-ui.js", "caught": true, "checks": 17 }
+    { "name": "business-unit JSON parse throws on partial input", "file": "tools/installer-ui/installer-ui.js", "caught": true, "checks": 17 },
+    { "name": "prefill validation throws raw exception", "file": "scripts/Get-ClaudeInstallerUiPrefill.ps1", "caught": true, "checks": 19 },
+    { "name": "deployments missing resource group reaches az", "file": "scripts/Get-ClaudeInstallerUiPrefill.ps1", "caught": true, "checks": 19 }
   ],
   "browserChannelEvidence": {
     "msedge": "available locally and used by the file:// fallback test when present",

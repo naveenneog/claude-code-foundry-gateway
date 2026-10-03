@@ -207,7 +207,7 @@ async function runInstaller(kind, args, options) {
     cwd: root,
     shell: false,
     windowsHide: true,
-    env: { ...process.env, ...(options.env || {}) },
+    env: { ...process.env, NO_COLOR: '1', PSSTYLE_OUTPUT_RENDERING: 'PlainText', ...(options.env || {}) },
   });
   let stdout = '';
   let stderr = '';
@@ -225,7 +225,7 @@ async function runPowerShell(script, args, options, runOptions = {}) {
     cwd: root,
     shell: false,
     windowsHide: true,
-    env: { ...process.env, ...(options.env || {}) },
+    env: { ...process.env, NO_COLOR: '1', PSSTYLE_OUTPUT_RENDERING: 'PlainText', ...(options.env || {}) },
   });
   let stdout = '';
   let stderr = '';
@@ -252,7 +252,7 @@ async function runInstallerStreaming(kind, args, options, onEvent, progressPath)
     cwd: root,
     shell: false,
     windowsHide: true,
-    env: { ...process.env, ...(options.env || {}) },
+    env: { ...process.env, NO_COLOR: '1', PSSTYLE_OUTPUT_RENDERING: 'PlainText', ...(options.env || {}) },
   });
   let progressOffset = 0;
   let progressCarry = '';

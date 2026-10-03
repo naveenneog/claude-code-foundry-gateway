@@ -40,6 +40,7 @@ console.error('unexpected az ' + joined); process.exit(2);
 `, 'utf8');
     env.PATH = `${scratch};${process.env.PATH}`;
     env.P93_AZ_LOG = join(scratch, 'az.log');
+    env.P93_AZ_ENV_LOG = join(scratch, 'az-env.log');
   }
   const server = await createInstallerUiServer({
     token: 'test-token-with-at-least-32-bytes-0000',
@@ -359,10 +360,26 @@ test('prefill validates parameters before invoking az.cmd', async () => {
   try {
     const marker = '&echo.P93_PREFILL_MARKER&rem';
     const result = await (await app.fetch('/api/prefill', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind: 'foundryAccounts', subscriptionId: marker }) })).json();
-    assert.match(result.error, /SubscriptionId is not valid/);
+    assert.equal(result.field, 'SubscriptionId');
+    assert.match(result.error, /is not valid for installer UI prefill/);
+    assert.match(result.patternMessage, /GUID/);
+    assert.match(result.remedy, /subscription id/i);
+    assert.doesNotMatch(JSON.stringify(result), /\u001b\[[0-9;]*m|Users[\\/]|Get-ClaudeInstallerUiPrefill\.ps1/);
     const logPath = join(app.scratch, 'az.log');
     const log = existsSync(logPath) ? await readFile(logPath, 'utf8') : '';
     assert.doesNotMatch(log, /P93_PREFILL_MARKER/);
+    const missing = await (await app.fetch('/api/prefill', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind: 'deployments', foundryAccount: 'ai-p93' }) })).json();
+    assert.equal(missing.field, 'FoundryResourceGroup');
+    assert.match(missing.error, /required/);
+    const logAfterMissing = existsSync(logPath) ? await readFile(logPath, 'utf8') : '';
+    assert.equal(logAfterMissing, log);
+    const envLogPath = join(app.scratch, 'az-env.log');
+    const envLog = existsSync(envLogPath) ? await readFile(envLogPath, 'utf8') : '';
+    for (const line of envLog.trim().split(/\r?\n/).filter(Boolean)) {
+      const entry = JSON.parse(line);
+      assert.equal(entry.NO_COLOR, '1');
+      assert.equal(entry.PSStyle, 'PlainText');
+    }
   } finally {
     await app.close();
   }
