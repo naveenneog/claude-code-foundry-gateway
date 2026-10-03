@@ -297,8 +297,9 @@ try {
     $rerun = @(foreach ($k in $changed.Keys) {
             $res = Get-P91Result $r3 $projRuns[$k]; $calls = @(Get-ProjectionCalls $projRuns[$k])
             $values = [ordered]@{}; foreach ($n in $renewal.Keys) { $values[$n] = $(if ($n -eq $k) { $changed[$n] } else { $renewal[$n] }) }
-            if (-not ($res.ExitCode -eq 0 -and $res.Out -match 'Projection deployment: its input changed since the checkpoint; running it again' -and $calls.Count -eq 1 -and (Test-ProjectionCall $calls[0] (& $want $values)))) { "${k}: $($calls -join ' ') || $(Get-P91Tail $res)" } })
-    Assert 'R4 changing any one of the three renewal inputs, or the reconciler, runs the projection step again with the new value and the recorded others' (-not $rerun.Count) ($rerun -join ' || ')
+            if (-not ($res.ExitCode -eq 0 -and $res.Out -match 'Projection deployment: its input changed since the checkpoint; running it again' -and $calls.Count -eq 1 -and (Test-ProjectionCall $calls[0] (& $want $values)) -and
+                    $res.Out -match 'Gateway deployment: verified live, skipped' -and -not @($res.Az | Where-Object { $_ -like 'deployment group create*' }).Count)) { "${k}: $($calls -join ' ') || $(Get-P91Tail $res)" } })
+    Assert 'R4 changing any one of the three renewal inputs, or the reconciler, runs the projection step again with the new value and the recorded others, and leaves the gateway deployment, which receives none of them, verified live and not deployed again' (-not $rerun.Count) ($rerun -join ' || ')
     $flip = Get-P91Result $r3 $projRuns['flip']
     $flipCalls = @(Get-ProjectionCalls $projRuns['flip'])
     Assert 'R4 a rerun with -FlipProjectionAfterCleanCompare and unchanged P86 inputs runs the projection step again with the switch, although the checkpoint shows it completed and a live read finds its deployments' (
