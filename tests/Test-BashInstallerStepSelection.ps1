@@ -17,9 +17,10 @@ function Assert($label, $condition, $detail = '') {
 # timeout (docs/adr/0047-lean-installer-phase-0.md decision 14); without -Shard every group runs. Each group of
 # checks runs in one shard, and tests/Test-BashInstallerStepShards.ps1 checks that every check is in one group.
 # list: the first run that --list-steps and --steps read, its resume and the PowerShell run of the same world;
-# sync: the run whose sync fails and its --steps sync reruns; start: the refusals at startup; prec: the
-# precedence runs; stream: the failure and the refusals that the progress stream records.
-$script:ShardGroups = [ordered]@{ list = 0; sync = 0; start = 1; stream = 1; prec = 2 }
+# sync: the run whose sync fails, its --steps sync reruns and the resume whose live reads quote secrets; start:
+# the refusals at startup; prec: the precedence runs; stream: the failure and the refusals that the progress
+# stream records. Round 4 moved sync to shard 1, after its console-resume run took shard 0 to 249.8 s alone.
+$script:ShardGroups = [ordered]@{ list = 0; sync = 1; start = 1; stream = 1; prec = 2 }
 $script:ShardCount = 3
 function Test-ShardGroup([string]$Group) {
     if (-not $Shard) { return $true }
