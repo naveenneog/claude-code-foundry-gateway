@@ -137,6 +137,12 @@ try {
     $precBind = New-From 'prec-binding' $precSrc
     $bindHash = Get-P91Hash (Get-P91CheckpointFile $precBind).FullName
     $progressBind = Join-Path $precBind.Dir 'progress.ndjson'
+    # Round 4, item 4: a resume whose live reads quote every secret shape. The resource group cannot be read
+    # (the step is idempotent, so it runs again and prints the read's detail), and the recorded deployment failed
+    # with such an error, which the run prints with its failed operation before it deploys again.
+    $consoleResume = New-From 'console-resume' $syncFail { param($w) $w.inject.sync = ''
+        $w.inject.readErrors = @([pscustomobject]@{ match = 'group show -n rg-p91*'; text = $P92RedactionSentence })
+        foreach ($d in @($w.deployments.'rg-p91'.PSObject.Properties)) { $d.Value.state = 'Failed'; $d.Value | Add-Member -NotePropertyName error -NotePropertyValue ([pscustomobject]@{ code = 'DeploymentFailed'; message = $P92RedactionSentence }) -Force } }
     # Round 4, item 3: the checkpoint run 1 left, and the resume command it printed, run as printed; -Yes answers
     # the summary's question, as an unattended rerun does, and adds no answer. Verification then fails, so the
     # checkpoint is kept with the projection step completed (Close-ClaudeInstallCheckpoint).
@@ -157,6 +163,7 @@ try {
         ($runPrecCkpt = New-P91Run $precCkpt -Arguments $common)
         ($runPrecBind = New-P91Run $precBind -Arguments (@($common | Where-Object { $_ -notlike '-ResourceGroup *' }) + "-AnswersPath '$(Write-Answers $precBind ([ordered]@{ schemaVersion = 1; ResourceGroup = 'rg-other' }))'" + "-ProgressPath '$progressBind'"))
         ($runProjection2 = New-P91Run $projection -Command $(if ($projectionResume) { "$projectionResume -Yes" } else { "throw 'run 1 printed no resume command'" }))
+        ($runConsoleResume = New-P91Run $consoleResume -Arguments ($common + $tpm))
     )
     $r2 = Invoke-P91Runs $wave2
 
@@ -307,6 +314,17 @@ try {
     $cfProblems = @(Get-P92RedactionProblems $cf.Err)
     Assert 'R4 a failure whose Azure CLI error quotes every secret shape prints that error with each in its [redacted] form, then the failure and the resume command, and no sentinel appears in stdout or stderr' (
         $cf.ExitCode -ne 0 -and -not $cfProblems.Count -and $cf.Err -match 'Deployment failed' -and $cf.Out -match '(?m)^Resume: ' -and (Test-P92NoSentinel ($cf.Out + $cf.Err))) "$($cfProblems -join '; ') || $(Get-P91Tail $cf)"
+    # R3's redact run on the console: the failure ends at the top-level trap, which prints the error on standard
+    # error, and the failure hint prints the resume command of a checkout path that holds sig=<value>.
+    $rxTrap = [string](@(Get-P91ErrLines $rx | Where-Object { $_ -match 'disconnected' })[0])
+    $rxTrapProblems = @(Get-P92RedactionProblems $rxTrap)
+    Assert 'R4 a failure that ends at the top-level trap prints its error with each secret shape in its [redacted] form, then a Resume line with sig=[redacted], and no sentinel in stdout or stderr' ($rx.ExitCode -ne 0 -and $rxTrap -and
+        -not $rxTrapProblems.Count -and $rx.Out -match '(?m)^Resume: .*sig=\[redacted\]' -and (Test-P92NoSentinel ($rx.Out + $rx.Err)) -and -not "$($rx.Out)$($rx.Err)".Contains('p92PathSentinel')) "$($rxTrapProblems -join '; ') || $rxTrap || $(Get-P91Tail $rx)"
+    $cv = Get-P91Result $r2 $runConsoleResume
+    $cvLines = @($cv.Out -split "`n" | Where-Object { $_ -match '(Resource group: .*running it again|Gateway deployment: deployment \S+ Failed: |failed operation: )' })
+    $cvProblems = @(foreach ($l in $cvLines) { Get-P92RedactionProblems $l })
+    Assert 'R4 a resume whose live reads quote every secret shape prints the resource group''s read detail, the failed deployment''s error and its failed operation, each shape in its [redacted] form, and no sentinel in stdout or stderr' (
+        $cv.ExitCode -eq 0 -and $cvLines.Count -eq 3 -and -not $cvProblems.Count -and (Test-P92NoSentinel ($cv.Out + $cv.Err))) "$($cvProblems -join '; ') || $($cvLines -join ' || ') || $(Get-P91Tail $cv)"
     $unexpected = @(foreach ($r in @($r1.Values) + @($r2.Values) + @($r3.Values)) { @($r.Unexpected) })
     Assert 'harness: every az call was one the stub knows, and no run timed out' (-not $unexpected.Count -and -not @(@($r1.Values) + @($r2.Values) + @($r3.Values) | Where-Object { $_.TimedOut }).Count) (($unexpected | Select-Object -Unique -First 4) -join ' | ')
 }

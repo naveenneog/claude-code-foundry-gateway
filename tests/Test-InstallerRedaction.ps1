@@ -4,7 +4,8 @@
 # scripts/ClaudeInstallResume.ps1) and the bash rules (CKPT_REDACT_RULES, scripts/install-checkpoint.sh) are the
 # same JSON text, and both engines turn one corpus into the same text: each shape of
 # tests/InstallerRedactionShapes.ps1 into its [redacted] form, and text without a secret unchanged. The
-# installers' own use of the rules is tested in the preflight and step suites.
+# installers' own use of the rules is tested in the preflight and step suites; the round-4 checks below call
+# each console site alone.
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $script:fail = 0
@@ -83,6 +84,71 @@ jq -c --argjson R "`$CKPT_REDACT_RULES" "`$CKPT_REDACT_JQ"' map(redact)' '$(Conv
     Assert 'R3 bash (the redact rule of CKPT_REDACT_JQ, in jq) turns each shape into its [redacted] form' (-not $shError -and -not $shShapes.Count) "$shError $($shShapes -join ' || ')"
     $diff = @(for ($i = 0; $i -lt $corpus.Count; $i++) { if ($psOut.Count -le $i -or $shOut.Count -le $i -or $psOut[$i] -cne $shOut[$i]) { "#$i PowerShell: $(if ($psOut.Count -gt $i) { $psOut[$i] }) || bash: $(if ($shOut.Count -gt $i) { $shOut[$i] })" } })
     Assert 'R3 both engines give the same text for the whole corpus, character for character' (-not $psError -and -not $shError -and $psOut.Count -eq $corpus.Count -and $shOut.Count -eq $corpus.Count -and -not $diff.Count) (($diff | Select-Object -First 3) -join ' ## ')
+
+    # ------------------------------------------------------------------ round 4: each console site on its own (item 4)
+    # Each function that prints a line from an error or a refusal, or hands one to its host, given an error
+    # that quotes every shape. The step suites check those lines on the console; these checks call each site
+    # alone, because a refusal passes two of them (Stop-ClaudeInstall, then the top-level trap).
+    $siteText = "an error that quotes ($P92RedactionSentence)"
+    # Stop-ClaudeInstall: the message a host that runs the installer in its own runspace receives (U36).
+    $stopMessage = ''
+    try { . (Join-Path $root 'scripts/ClaudeInstallCheckpoint.ps1'); Stop-ClaudeInstall $siteText } catch { $stopMessage = $_.Exception.Message }
+    $stopProblems = @(Get-P92RedactionProblems $stopMessage)
+    Assert 'R4 Stop-ClaudeInstall hands its host a refusal with each secret shape in its [redacted] form and no sentinel' ($stopMessage -like 'Refused: *' -and -not $stopProblems.Count) "$($stopProblems -join '; ') || $stopMessage"
+    # Write-Warn2 and Write-Bad, as Install-ClaudeGateway.ps1 defines them, with its libraries loaded.
+    $installerAst = [Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'Install-ClaudeGateway.ps1'), [ref]$null, [ref]$null)
+    $helperText = @{}
+    foreach ($fn in $installerAst.FindAll({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] }, $false)) { $helperText[$fn.Name] = $fn.Extent.Text }
+    $helperProblems = @(foreach ($name in 'Write-Warn2', 'Write-Bad') {
+            if (-not $helperText.ContainsKey($name)) { "${name}: not defined"; continue }
+            . ([scriptblock]::Create($helperText[$name]))
+            $printed = (@(& $name $siteText 6>&1) | ForEach-Object { [string]$_ }) -join "`n"
+            foreach ($p in @(Get-P92RedactionProblems $printed)) { "${name}: $p" } })
+    Assert 'R4 Write-Warn2 and Write-Bad, the installer''s warning and failure lines, print each secret shape in its [redacted] form and no sentinel' (-not $helperProblems.Count) ($helperProblems -join '; ')
+    # Invoke-ClaudeInstallAzShown: an Azure CLI call whose standard error the run shows.
+    $shownErr = [IO.StringWriter]::new(); $savedErr = [Console]::Error; $shownOut = @(); $shownCode = $null; $shownError = ''
+    try {
+        [Console]::SetError($shownErr)
+        $shownOut = @(Invoke-ClaudeInstallAzShown { Write-Output 'p92-stdout'; Write-Error -Message $P92RedactionSentence -ErrorAction Continue; $global:LASTEXITCODE = 3 })
+        $shownCode = $LASTEXITCODE
+    }
+    catch { $shownError = $_.Exception.Message }
+    finally { [Console]::SetError($savedErr) }
+    $shownProblems = @(Get-P92RedactionProblems $shownErr.ToString())
+    Assert 'R4 Invoke-ClaudeInstallAzShown returns the call''s standard output, writes its standard error with each secret shape in its [redacted] form and no sentinel, and keeps its exit code' (
+        -not $shownError -and ($shownOut -join ',') -eq 'p92-stdout' -and -not $shownProblems.Count -and $shownCode -eq 3) "$shownError $($shownProblems -join '; ') || out: $($shownOut -join ',') || exit: $shownCode"
+    # bash: warn_ and bad_ as install-claude-gateway.sh defines them, and ckpt_shown_, with the library loaded.
+    $siteOut = ''; $siteErr = ''; $siteShown = ''
+    if ($bash) {
+        $sentenceFile = Join-Path $scratch 'sentence.txt'; Write-Lf $sentenceFile $P92RedactionSentence
+        $probe = Join-Path $scratch 'sites.sh'; $probeOut = Join-Path $scratch 'sites.out'; $probeErr = Join-Path $scratch 'sites.err'; $shownErrFile = Join-Path $scratch 'shown.err'
+        Write-Lf $probe (@"
+exec >'$(ConvertTo-BashPath $probeOut)' 2>'$(ConvertTo-BashPath $probeErr)'
+set -o pipefail
+HERE='$(ConvertTo-BashPath $root)'
+C_GREEN=''; C_YELLOW=''; C_RED=''; C_GREY=''; C_OFF=''
+eval "`$(sed -n '/^ok_() /,/^note_() /p' "`$HERE/install-claude-gateway.sh")"
+. "`$HERE/scripts/install-checkpoint.sh" || exit 90
+sentence="`$(cat '$(ConvertTo-BashPath $sentenceFile)')"
+warn_ "an error that quotes (`$sentence)"
+bad_ "an error that quotes (`$sentence)"
+call_() { printf 'p92-stdout\n'; printf '%s\n' "`$sentence" >&2; return 3; }
+shown="`$(ckpt_shown_ call_ 2>'$(ConvertTo-BashPath $shownErrFile)')"; rc=`$?
+printf 'shown=%s rc=%s\n' "`$shown" "`$rc"
+"@)
+        & $bash (ConvertTo-BashPath $probe) 2>&1 | Out-Null
+        $siteOut = if (Test-Path -LiteralPath $probeOut) { [IO.File]::ReadAllText($probeOut, [Text.Encoding]::UTF8) } else { '' }
+        $siteErr = if (Test-Path -LiteralPath $probeErr) { [IO.File]::ReadAllText($probeErr, [Text.Encoding]::UTF8) } else { '' }
+        $siteShown = if (Test-Path -LiteralPath $shownErrFile) { [IO.File]::ReadAllText($shownErrFile, [Text.Encoding]::UTF8) } else { '' }
+    }
+    $warnLine = @($siteOut -split "`n" | Where-Object { $_ -match '\[WARN\] an error that quotes' }) -join "`n"
+    $badLine = @($siteOut -split "`n" | Where-Object { $_ -match '\[FAIL\] an error that quotes' }) -join "`n"
+    $siteProblems = @(@(Get-P92RedactionProblems $warnLine | ForEach-Object { "warn_: $_" }) + @(Get-P92RedactionProblems $badLine | ForEach-Object { "bad_: $_" }))
+    Assert 'R4 bash warn_ and bad_, the installer''s warning and failure lines, print each secret shape in its [redacted] form and no sentinel' ($bash -and $warnLine -and $badLine -and -not $siteProblems.Count -and
+        (Test-P92NoSentinel ($siteOut + $siteErr))) "$($siteProblems -join '; ') || $siteOut || $siteErr"
+    $shownLineProblems = @(Get-P92RedactionProblems $siteShown)
+    Assert 'R4 bash ckpt_shown_ passes the call''s standard output, prints its standard error with each secret shape in its [redacted] form and no sentinel, and returns its status' ($bash -and
+        $siteOut -match '(?m)^shown=p92-stdout rc=3\r?$' -and -not $shownLineProblems.Count) "$($shownLineProblems -join '; ') || $siteOut || $siteShown"
 }
 finally {
     if ($env:P91_KEEP_SCRATCH -ne '1') { Remove-Item -LiteralPath $scratch -Recurse -Force -ErrorAction SilentlyContinue }

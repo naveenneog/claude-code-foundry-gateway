@@ -177,9 +177,14 @@ try {
         Remove-Item -LiteralPath (Join-Path $onlySync.Repo 'onboarding/claude-gateway.json') -Force -ErrorAction SilentlyContinue
         $gone = Copy-Scenario 'prereq-gone' $syncFail { param($w) $w.inject.sync = ''; foreach ($p in @($w.groups.PSObject.Properties | Where-Object { $_.Value -eq 'claude-code-standard' })) { $w.groups.PSObject.Properties.Remove($p.Name) } }
         $goneHash = Get-Hash $gone
+        # Round 4, item 4: a resume whose live reads quote every secret shape, as in tests/Test-InstallerStepSelection.ps1.
+        $consoleResume = Copy-Scenario 'console-resume' $syncFail { param($w) $w.inject.sync = ''
+            $w.inject.readErrors = @([pscustomobject]@{ match = 'group show -n rg-p91*'; text = $P92RedactionSentence })
+            foreach ($d in @($w.deployments.'rg-p91'.PSObject.Properties)) { $d.Value.state = 'Failed'; $d.Value | Add-Member -NotePropertyName error -NotePropertyValue ([pscustomobject]@{ code = 'DeploymentFailed'; message = $P92RedactionSentence }) -Force } }
         $wave2 += @(
             ($runOnlySync = New-Run $onlySync ($base + $tpm + @('--steps', 'sync')))
             ($runGone = New-Run $gone ($base + $tpm + @('--steps', 'sync')))
+            ($runConsoleResume = New-Run $consoleResume ($base + $tpm))
         )
     }
     if (Test-ShardGroup 'prec') {
@@ -242,6 +247,11 @@ try {
         $os = $r2[$runOnlySync.Dir]
         Assert 'P3 bash with its prerequisites verified live, --steps sync runs the sync and nothing else: no Azure write, no onboarding package' ($os.ExitCode -eq 0 -and
             @($os.Scripts | Where-Object { $_ -like '*Sync-ClaudeAccess*' }).Count -eq 1 -and -not (Get-Writes $os).Count -and -not (Test-Path -LiteralPath (Join-Path $onlySync.Repo 'onboarding/claude-gateway.json'))) "$(Get-Tail $os) || $((Get-Writes $os) -join '; ')"
+        $cv = $r2[$runConsoleResume.Dir]
+        $cvLines = @($cv.Out -split "`n" | Where-Object { $_ -match '(Resource group: .*running it again|Gateway deployment: deployment \S+ Failed: |failed operation: )' })
+        $cvProblems = @(foreach ($l in $cvLines) { Get-P92RedactionProblems $l })
+        Assert 'R4 bash a resume whose live reads quote every secret shape prints the resource group''s read detail, the failed deployment''s error and its failed operation, each shape in its [redacted] form, and no sentinel in stdout or stderr' (
+            $cv.ExitCode -eq 0 -and $cvLines.Count -eq 3 -and -not $cvProblems.Count -and (Test-P92NoSentinel ($cv.Out + $cv.Err))) "$($cvProblems -join '; ') || $($cvLines -join ' || ') || $(Get-Tail $cv)"
     }
     if (Test-ShardGroup 'start') {
         $sn = $r1[$runNone.Dir]
@@ -307,6 +317,10 @@ try {
         $cfProblems = @(Get-P92RedactionProblems $cf.Err)
         Assert 'R4 bash a failure whose Azure CLI error quotes every secret shape prints that error with each in its [redacted] form, then the failure line and the resume command, and no sentinel appears in stdout or stderr' (
             $cf.ExitCode -ne 0 -and -not $cfProblems.Count -and $cf.Out -match '\[FAIL\] deployment failed' -and $cf.Out -match '(?m)^Resume: ' -and (Test-P92NoSentinel ($cf.Out + $cf.Err))) "$($cfProblems -join '; ') || $(Get-Tail $cf)"
+        # R3's run in a checkout whose path holds sig=<value>, on the console: the Resume line after the failure.
+        $rpc = $r1[$runRedactPath.Dir]
+        Assert 'R4 bash the failed run''s Resume line on the console holds sig=[redacted] for a checkout path that holds sig=<value>, and that value appears in neither stdout nor stderr' ($rpc.ExitCode -ne 0 -and
+            $rpc.Out -match '(?m)^Resume: .*sig=\[redacted\]' -and -not "$($rpc.Out)$($rpc.Err)".Contains('p92PathSentinel')) (Get-Tail $rpc)
     }
     $unexpected = @(foreach ($r in @($r1.Values) + @($r2.Values)) { @($r.Unexpected) })
     Assert 'harness: every az call was one the stub knows, and no run timed out' (-not $unexpected.Count -and -not @(@($r1.Values) + @($r2.Values) | Where-Object { $_.TimedOut }).Count) (($unexpected | Select-Object -Unique -First 4) -join ' | ')
