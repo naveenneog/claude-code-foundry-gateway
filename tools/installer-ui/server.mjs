@@ -17,6 +17,7 @@ const identityScript = join(root, 'scripts', 'Get-ClaudeInstallerUiIdentity.ps1'
 const prefillScript = join(root, 'scripts', 'Get-ClaudeInstallerUiPrefill.ps1');
 const planScript = join(root, 'scripts', 'Get-ClaudeInstallerUiPlan.ps1');
 const uiScript = join(here, 'installer-ui.js');
+const uiModelScript = join(here, 'ui-model.js');
 const uiCss = join(here, 'installer-ui.css');
 const defaultIdleMs = 30 * 60 * 1000;
 const maxBodyBytes = 256 * 1024;
@@ -195,7 +196,7 @@ async function runInstaller(kind, args, options) {
   return { code, stdout: await redactText(stdout), stderr: await redactText(stderr) };
 }
 
-async function runPowerShell(script, args, options) {
+async function runPowerShell(script, args, options, runOptions = {}) {
   const child = spawn('pwsh', ['-NoProfile', '-NonInteractive', '-File', script, ...args], {
     cwd: root,
     shell: false,
@@ -210,7 +211,11 @@ async function runPowerShell(script, args, options) {
     child.on('error', reject);
     child.on('close', resolveCode);
   });
-  return { code, stdout: await redactText(stdout), stderr: await redactText(stderr) };
+  return {
+    code,
+    stdout: runOptions.redactStdout === false ? stdout : await redactText(stdout),
+    stderr: await redactText(stderr),
+  };
 }
 
 function writeNdjson(res, payload) {
@@ -322,6 +327,7 @@ async function renderHtml() {
   <title>Claude gateway installer</title>
   <link rel="stylesheet" href="./installer-ui.css">
   <script type="application/json" id="schema-json">${schema.replaceAll('<', '\\u003c')}</script>
+  <script defer src="./ui-model.js"></script>
   <script defer src="./installer-ui.js"></script>
 </head>
 <body>
@@ -398,7 +404,7 @@ export async function createInstallerUiServer(options = {}) {
 
       if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) return send(res, 200, await renderHtml(), setCookie);
       if (req.method === 'GET' && url.pathname === '/installer-ui.js') return sendText(res, 200, await readFile(uiScript, 'utf8'), 'text/javascript; charset=utf-8', setCookie);
-      if (req.method === 'GET' && url.pathname === '/ui-model.mjs') return sendText(res, 200, await readFile(join(here, 'ui-model.mjs'), 'utf8'), 'text/javascript; charset=utf-8', setCookie);
+      if (req.method === 'GET' && url.pathname === '/ui-model.js') return sendText(res, 200, await readFile(uiModelScript, 'utf8'), 'text/javascript; charset=utf-8', setCookie);
       if (req.method === 'GET' && url.pathname === '/installer-ui.css') return sendText(res, 200, await readFile(uiCss, 'utf8'), 'text/css; charset=utf-8', setCookie);
       if (req.method === 'GET' && url.pathname === '/api/schema') return send(res, 200, await loadSchema(), setCookie);
       if (req.method === 'GET' && url.pathname === '/api/steps') return send(res, 200, await listSteps(options), setCookie);
@@ -412,7 +418,7 @@ export async function createInstallerUiServer(options = {}) {
           const value = url.searchParams.get(query);
           if (value) args.push(param, value);
         }
-        const result = await runPowerShell(prefillScript, args, options);
+        const result = await runPowerShell(prefillScript, args, options, { redactStdout: false });
         const parsed = JSON.parse(result.stdout);
         if (parsed.error) parsed.error = await redactText(parsed.error);
         return send(res, 200, parsed, setCookie);

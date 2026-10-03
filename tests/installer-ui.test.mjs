@@ -8,11 +8,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { createContext, runInContext } from 'node:vm';
 import { createInstallerUiServer } from '../tools/installer-ui/server.mjs';
-import { collectAnswersFromEntries, validateBusinessUnits } from '../tools/installer-ui/ui-model.mjs';
 
 const stub = fileURLToPath(new URL('./installer-ui-stub.mjs', import.meta.url));
 const serverCli = fileURLToPath(new URL('../tools/installer-ui/server.mjs', import.meta.url));
+const modelContext = createContext({ globalThis: {} });
+runInContext(await readFile(new URL('../tools/installer-ui/ui-model.js', import.meta.url), 'utf8'), modelContext);
+const { collectAnswersFromEntries, validateBusinessUnits } = modelContext.globalThis.ClaudeInstallerUiModel;
 
 async function start(extra = {}) {
   const scratch = join(tmpdir(), `p93-ui-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`);
@@ -137,11 +140,16 @@ test('the form uses fixed script routes and no string-built DOM insertion sinks'
   const app = await start();
   try {
     const html = await (await app.fetch('/')).text();
-    assert.match(html, /<script defer src="\.\/installer-ui\.js"><\/script>/);
+    assert.match(html, /<script defer src="\.\/ui-model\.js"><\/script>\s*<script defer src="\.\/installer-ui\.js"><\/script>/);
     assert.doesNotMatch(html, /type="module"|import\s+|export\s+/);
     assert.doesNotMatch(html, /<script>\s*\(/);
     const js = await (await app.fetch('/installer-ui.js')).text();
     assert.doesNotMatch(js, /innerHTML|insertAdjacentHTML|import\s+|export\s+/);
+    for (const name of ['buildPortableCommands', 'coerceAnswerValue', 'collectAnswersFromEntries', 'fieldsByCheckId', 'quoteBash', 'quotePowerShell', 'validateBusinessUnits']) {
+      assert.doesNotMatch(js, new RegExp(`function\\s+${name}\\b|const\\s+${name}\\b`), `${name} must live only in ui-model.js`);
+    }
+    const model = await (await app.fetch('/ui-model.js')).text();
+    assert.match(model, /ClaudeInstallerUiModel/);
   } finally {
     await app.close();
   }
@@ -154,6 +162,7 @@ test('the static fallback carries a schema copy equal to the canonical schema', 
   const canonical = JSON.parse(await readFile(new URL('../schemas/claude-gateway.answers.schema.json', import.meta.url), 'utf8'));
   assert.deepEqual(JSON.parse(carried[1]), canonical);
   assert.doesNotMatch(staticHtml, /type="module"|import\s+|export\s+/);
+  assert.match(staticHtml, /ui-model\.js/);
 });
 
 test('the static fallback renders fields in a real browser from file', async () => {
@@ -218,20 +227,32 @@ test('the form renders from the answers schema and exposes portable commands', a
 
 test('untouched controls are not collected as answers and business units enforce installer rules', async () => {
   const schema = JSON.parse(await readFile(new URL('../schemas/claude-gateway.answers.schema.json', import.meta.url), 'utf8'));
-  assert.deepEqual(collectAnswersFromEntries(schema, new Map([
+  assert.deepEqual(JSON.parse(JSON.stringify(collectAnswersFromEntries(schema, new Map([
     ['Sku', ''],
     ['AddressMode', ''],
     ['DeployProjection', ''],
     ['ResourceGroup', 'rg-p93'],
     ['StandardModels', 'claude-sonnet-5, claude-opus-5'],
-  ])), { schemaVersion: 1, ResourceGroup: 'rg-p93', StandardModels: ['claude-sonnet-5', 'claude-opus-5'] });
-  assert.deepEqual(validateBusinessUnits([
+  ])))), { schemaVersion: 1, ResourceGroup: 'rg-p93', StandardModels: ['claude-sonnet-5', 'claude-opus-5'] });
+  assert.deepEqual(JSON.parse(JSON.stringify(validateBusinessUnits([
     { id: 'finance', group: 'claude-bu-finance', monthlyUsdBudget: 100, mode: 'Strict' },
     { id: 'finance-emea', group: 'claude-team-finance-emea', parent: 'finance', monthlyUsdBudget: 50, mode: 'Allowance', percent: 50 },
-  ]), []);
+  ]))), []);
   assert.match(validateBusinessUnits([
     { id: 'Finance', group: 'bad,group', parent: 'missing', monthlyUsdBudget: -1, mode: 'Allowance' },
   ]).join(' | '), /lower-case|group name|parent|monthly budget|percent/);
+  assert.match(validateBusinessUnits([
+    { id: 'finance', group: 'claude-bu-finance', monthlyUsdBudget: 100, mode: 'Strict' },
+    { id: 'finance', group: 'claude-bu-finance-2', monthlyUsdBudget: 100, mode: 'Strict' },
+  ]).join(' | '), /duplicates/);
+  assert.match(validateBusinessUnits([
+    { id: 'finance', group: 'claude-bu-finance', monthlyUsdBudget: 100, mode: 'Strict' },
+    { id: 'finance-emea', group: 'claude-team-finance-emea', parent: 'finance', monthlyUsdBudget: 50, mode: 'Strict' },
+    { id: 'finance-emea-1', group: 'claude-team-finance-emea-1', parent: 'finance-emea', monthlyUsdBudget: 20, mode: 'Strict' },
+  ]).join(' | '), /deeper than two levels/);
+  assert.match(validateBusinessUnits([
+    { id: 'engineering', group: 'claude-bu-engineering', monthlyUsdBudget: 100, mode: 'Allowance' },
+  ]).join(' | '), /percent is required/);
 });
 
 test('identity, prefill and plan routes go through repository PowerShell seams', async () => {
@@ -239,7 +260,22 @@ test('identity, prefill and plan routes go through repository PowerShell seams',
   try {
     const identity = await (await app.fetch('/api/identity')).json();
     assert.equal(identity.user, 'operator@example.com');
+    assert.equal(identity.tenantId, 'tenant-1');
     assert.equal(identity.subscriptionName, 'Sub One');
+    assert.equal(identity.subscriptionId, 'sub-1');
+    const { chromium } = await import('playwright');
+    const browser = await chromium.launch({ headless: true });
+    try {
+      const page = await browser.newPage();
+      await page.goto(`${app.base}/?token=${encodeURIComponent(app.token)}`);
+      await page.getByText('operator@example.com').waitFor();
+      const banner = await page.locator('#identity').textContent();
+      assert.match(banner, /tenant-1/);
+      assert.match(banner, /Sub One/);
+      assert.match(banner, /sub-1/);
+    } finally {
+      await browser.close();
+    }
     const prefill = await (await app.fetch('/api/prefill?kind=subscriptions')).json();
     assert.equal(prefill.subscriptions[0].id, 'sub-1');
     const foundry = await (await app.fetch('/api/prefill?kind=foundryAccounts&subscriptionId=sub-1')).json();
@@ -250,11 +286,15 @@ test('identity, prefill and plan routes go through repository PowerShell seams',
 });
 
 test('az errors in prefill are returned as redacted errors', async () => {
-  const app = await start({ az: true });
+  const secretSentence = `jwt ******.eyJwOTIiOiJyZWRhY3QifQ.p92JwtSentinel Authorization: ****** https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=p92SigSentinel&se=2026 signature=p92SignatureSentinel AccountName=p92;AccountKey=p92AccountKeySentinel==;EndpointSuffix=core SharedAccessKey=p92SharedAccessKeySentinel; SharedAccessSignature: p92SharedAccessSignatureSentinel client_secret=p92ClientSecretSentinel&grant_type=client_credentials {"clientSecret": "p92ClientSecretCamelSentinel"} ****** pwd: p92PwdSentinel secret=p92SecretSentinel access_token=p92AccessTokenSentinel refresh_token: 'p92RefreshTokenSentinel'`;
+  const app = await start({ az: true, env: { P93_AZ_SECRET_ERROR: secretSentence } });
   try {
     const result = await (await app.fetch('/api/prefill?kind=deployments&foundryAccount=fail-secret&foundryResourceGroup=rg')).json();
     assert.match(result.error, /\[redacted\]/);
-    assert.doesNotMatch(result.error, /super-secret/);
+    for (const sentinel of ['p92JwtSentinel', 'p92SigSentinel', 'p92SignatureSentinel', 'p92AccountKeySentinel', 'p92SharedAccessKeySentinel', 'p92SharedAccessSignatureSentinel', 'p92ClientSecretSentinel', 'p92ClientSecretCamelSentinel', 'p92PwdSentinel', 'p92SecretSentinel', 'p92AccessTokenSentinel', 'p92RefreshTokenSentinel']) {
+      assert.doesNotMatch(result.error, new RegExp(sentinel));
+    }
+    assert.doesNotMatch(result.error, /p92[A-Za-z]+Sentinel/);
   } finally {
     await app.close();
   }

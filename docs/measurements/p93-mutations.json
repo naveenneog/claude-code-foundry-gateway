@@ -5,6 +5,12 @@
   "selector": "pwsh -NoProfile -File .\\tests\\Test-InstallerUi.ps1",
   "baselineChecks": 17,
   "rule": "A mutant counts as caught only when the suite loads with 17 checks, exits nonzero and reports at least one failed check.",
+  "supersededEvidence": [
+    {
+      "name": "pre-0b0940d unset-state collection and business-unit rule probes",
+      "reason": "They mutated ui-model.mjs, but the shipped page then ran a generated copy inside installer-ui.js. They measured the wrong copy and are superseded by the ui-model.js single-copy probes below."
+    }
+  ],
   "mutations": [
     { "name": "token check", "file": "tools/installer-ui/server.mjs", "caught": true, "checks": 17 },
     { "name": "Host allowlist", "file": "tools/installer-ui/server.mjs", "caught": true, "checks": 17 },
@@ -15,13 +21,17 @@
     { "name": "step id validation", "file": "tools/installer-ui/server.mjs", "caught": true, "checks": 17 },
     { "name": "streamed-line redaction", "file": "tools/installer-ui/server.mjs", "caught": true, "checks": 17 },
     { "name": "temporary-directory removal", "file": "tools/installer-ui/server.mjs", "caught": true, "checks": 17 },
-    { "name": "unset-state collection", "file": "tools/installer-ui/ui-model.mjs", "caught": true, "checks": 17 },
+    { "name": "unset-state collection", "file": "tools/installer-ui/ui-model.js", "caught": true, "checks": 17 },
     { "name": "empty-selection refusal", "file": "tools/installer-ui/server.mjs", "caught": true, "checks": 17 },
     { "name": "full-run confirmation", "file": "tools/installer-ui/installer-ui.js", "caught": true, "checks": 17 },
     { "name": "file structural classic script", "file": "tools/installer-ui/index.html", "caught": true, "checks": 17 },
     { "name": "static schema drift", "file": "tools/installer-ui/index.html", "caught": true, "checks": 17 },
-    { "name": "business-unit id rule", "file": "tools/installer-ui/installer-ui.js", "caught": true, "checks": 17 }
-    ,
+    { "name": "business-unit id rule", "file": "tools/installer-ui/ui-model.js", "caught": true, "checks": 17 },
+    { "name": "business-unit duplicate ids", "file": "tools/installer-ui/ui-model.js", "caught": true, "checks": 17 },
+    { "name": "business-unit three-level tree", "file": "tools/installer-ui/ui-model.js", "caught": true, "checks": 17 },
+    { "name": "business-unit Allowance without percent", "file": "tools/installer-ui/ui-model.js", "caught": true, "checks": 17 },
+    { "name": "prefill error redaction disabled", "file": "tools/installer-ui/server.mjs", "caught": true, "checks": 17 },
+    { "name": "identity tenant id blank", "file": "scripts/Get-ClaudeInstallerUiIdentity.ps1", "caught": true, "checks": 17 },
     { "name": "business-unit add-team stale parent select", "file": "tools/installer-ui/installer-ui.js", "caught": true, "checks": 17 },
     { "name": "business-unit JSON parse throws on partial input", "file": "tools/installer-ui/installer-ui.js", "caught": true, "checks": 17 }
   ],

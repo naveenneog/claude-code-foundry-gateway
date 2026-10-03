@@ -1,10 +1,12 @@
-export const fieldGroups = {
+(function(){
+'use strict';
+const fieldGroups = {
   foundation: ['SubscriptionId', 'FoundryAccount', 'FoundryResourceGroup', 'ResourceGroup', 'Location', 'NamePrefix', 'PublisherEmail', 'Sku'],
   access: ['StandardGroup', 'PremiumGroup', 'TpmStandard', 'QuotaStandard', 'TpmPremium', 'QuotaPremium', 'QuotaOrg', 'CallsPerMinute', 'StandardModels', 'PremiumModels'],
   optional: ['AddressMode', 'AddressHostname', 'AddressCertificateSource', 'AddressKeyVaultCertificateId', 'AddressPfxPath', 'AddressDnsMode', 'DesktopSignInKind', 'DesktopEntraClientId', 'DeployProjection', 'EntitlementStore', 'monitoring.enabled', 'reports.enabled'],
 };
 
-export function coerceAnswerValue(property, raw) {
+function coerceAnswerValue(property, raw) {
   if (raw === undefined || raw === null || raw === '') return undefined;
   if (property.type === 'integer') return Number.parseInt(String(raw), 10);
   if (property.type === 'number') return Number(raw);
@@ -20,7 +22,7 @@ export function coerceAnswerValue(property, raw) {
   return String(raw);
 }
 
-export function collectAnswersFromEntries(schema, entries, businessUnitsText = '') {
+function collectAnswersFromEntries(schema, entries, businessUnitsText = '') {
   const out = { schemaVersion: 1 };
   for (const [name, property] of Object.entries(schema.properties || {})) {
     if (!entries.has(name)) continue;
@@ -32,7 +34,7 @@ export function collectAnswersFromEntries(schema, entries, businessUnitsText = '
   return out;
 }
 
-export function fieldsByCheckId(schema) {
+function fieldsByCheckId(schema) {
   const map = {};
   for (const [name, property] of Object.entries(schema.properties || {})) {
     const id = property['x-checkId'];
@@ -50,7 +52,7 @@ export function fieldsByCheckId(schema) {
   return map;
 }
 
-export function validateBusinessUnits(units) {
+function validateBusinessUnits(units) {
   const problems = [];
   if (!Array.isArray(units)) return ['BusinessUnits is not a list'];
   const ids = new Set();
@@ -83,7 +85,7 @@ function quoteBash(value) {
   return `'${String(value).replaceAll("'", "'\"'\"'")}'`;
 }
 
-export function buildPortableCommands(schema, answersPath = './answers.json') {
+function buildPortableCommands(schema, answersPath = './answers.json') {
   const psPath = answersPath.replaceAll('/', '\\');
   const bashPath = answersPath.replaceAll('\\', '/');
   const bashDoesNotApply = [];
@@ -99,3 +101,5 @@ export function buildPortableCommands(schema, answersPath = './answers.json') {
     cloudShell: 'Manage files > Upload answers.json, then paste the PowerShell or bash command above.',
   };
 }
+globalThis.ClaudeInstallerUiModel = { buildPortableCommands, coerceAnswerValue, collectAnswersFromEntries, fieldGroups, fieldsByCheckId, validateBusinessUnits };
+})();

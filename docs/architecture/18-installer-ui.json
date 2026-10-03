@@ -12,7 +12,7 @@
   "sources": [
     "tools/installer-ui/server.mjs",
     "tools/installer-ui/installer-ui.js",
-    "tools/installer-ui/ui-model.mjs",
+    "tools/installer-ui/ui-model.js",
     "tools/installer-ui/index.html",
     "schemas/claude-gateway.answers.schema.json",
     "scripts/Get-ClaudeInstallerUiIdentity.ps1",
@@ -25,7 +25,7 @@
   "identifiers": {
     "server": { "label": "server.mjs", "source": "tools/installer-ui/server.mjs", "match": "createInstallerUiServer" },
     "browser": { "label": "installer-ui.js", "source": "tools/installer-ui/installer-ui.js", "match": "streamRun" },
-    "model": { "label": "ui-model.mjs", "source": "tools/installer-ui/ui-model.mjs", "match": "collectAnswersFromEntries" },
+    "model": { "label": "ui-model.js", "source": "tools/installer-ui/ui-model.js", "match": "collectAnswersFromEntries" },
     "static": { "label": "index.html", "source": "tools/installer-ui/index.html", "match": "schema-json" },
     "schema": { "label": "answers schema", "source": "schemas/claude-gateway.answers.schema.json", "match": "Claude gateway answers" },
     "identity": { "label": "Get-ClaudeInstallerUiIdentity.ps1", "source": "scripts/Get-ClaudeInstallerUiIdentity.ps1", "match": "az account show" },
@@ -62,3 +62,4 @@
     { "from": "redaction", "to": "cleanup", "kind": "data", "points": [[823,850],[892,850]] }
   ]
 }
+
