@@ -40,7 +40,23 @@ function New-P91Template([string]$Scratch) {
     Write-P91Text (Join-Path $template 'scripts\Show-Governance.ps1') ("param([string]`$ApimName, [string]`$ResourceGroup, [switch]`$SkipThrottleTest)`n" + $prelude +
         "[IO.File]::AppendAllText((Join-Path `$env:P91_LOG 'scripts.log'), `"governance `$ApimName``n`")`n" +
         "if (`$w.inject.verify -eq 'fail') { throw 'The governance check was failed by the stub.' }`n")
-    Write-P91Text (Join-Path $template 'scripts\Deploy-ClaudeProjection.ps1') ("[IO.File]::AppendAllText((Join-Path `$env:P91_LOG 'scripts.log'), `"projection``n`")`n")
+    # The projection deployment: each call's arguments as one JSON line in projection.log, and the three
+    # deployments and the resolver app it leaves behind, which a rerun's live check reads (P92 round 4).
+    Write-P91Text (Join-Path $template 'scripts\Deploy-ClaudeProjection.ps1') @'
+$a = @($args | ForEach-Object { [string]$_ })
+[IO.File]::AppendAllText((Join-Path $env:P91_LOG 'scripts.log'), "projection`n")
+[IO.File]::AppendAllText((Join-Path $env:P91_LOG 'projection.log'), (ConvertTo-Json -InputObject $a -Compress) + "`n")
+$at = { param([string]$Name) $i = [array]::IndexOf($a, $Name); if ($i -ge 0 -and $i + 1 -lt $a.Count) { $a[$i + 1] } else { '' } }
+$rg = & $at '-ResourceGroup'; $prefix = & $at '-NamePrefix'; $app = '00000000-0000-4000-8000-0000000005a1'
+$w = Read-P91World
+if (-not (Get-P91Property $w.deployments $rg)) { Set-P91Property $w.deployments $rg ([pscustomobject]@{}) }
+foreach ($n in "projection-$prefix", "projection-network-$prefix", "projection-resolver-$prefix") {
+    Set-P91Property (Get-P91Property $w.deployments $rg) $n ([pscustomobject]@{ rg = $rg; apim = ''; state = 'Succeeded'; polls = @(); error = $null; parameters = [pscustomobject]@{ resolverAppId = [pscustomobject]@{ value = $app } } })
+}
+if (-not (Get-P91Property $w 'apps')) { Set-P91Property $w 'apps' ([pscustomobject]@{}) }
+Set-P91Property $w.apps $app "claude-projection-resolver-$prefix"
+Save-P91World $w
+'@
     return $template
 }
 

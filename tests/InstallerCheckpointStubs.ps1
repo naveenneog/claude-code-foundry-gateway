@@ -228,6 +228,8 @@ function global:az {
             switch ($query) {
                 'properties.provisioningState' { return [string]$deployment.state }
                 'properties.outputs.gatewayUrl.value' { $o = Get-P91Property $deployment 'outputs'; if ($o) { return [string]$o.gatewayUrl.value } else { return } }
+                # The projection's resolver app id, which Complete-ClaudeInstallProjection reads (P92 round 4).
+                'properties.parameters.resolverAppId.value' { $p = Get-P91Property $deployment 'parameters'; if ($p -and (Get-P91Property $p 'resolverAppId')) { return [string]$p.resolverAppId.value } else { return } }
                 default { return ($full | ConvertTo-Json -Depth 8 -Compress) }
             }
         }
@@ -263,6 +265,21 @@ function global:az {
             $roleId = if ([string]$assignment.role -eq 'Cognitive Services User') { 'a97b65f3-24c7-4388-baec-2e87135dc908' } else { '00000000-0000-4000-8000-000000000e1e' }
             $definition = "/subscriptions/$($w.subscriptionId)/providers/Microsoft.Authorization/roleDefinitions/$roleId"
             return ([pscustomobject]@{ id = $id; properties = [pscustomobject]@{ principalId = $assignment.principalId; scope = $assignment.scope; roleDefinitionId = $definition } } | ConvertTo-Json -Depth 4 -Compress)
+        }
+        'ad app list*' {
+            # The projection's resolver app by display name, a prefix as for groups (P92 round 4).
+            $prefix = [string](& $value @('--display-name'))
+            $apps = Get-P91Property $w 'apps'
+            $ids = @(if ($apps) { foreach ($p in $apps.PSObject.Properties) { if ([string]$p.Value -like "$prefix*") { $p.Name } } })
+            if ($query -eq '[].appId') { return ($ids -join "`n") }
+            return (ConvertTo-Json -Compress -InputObject @($ids | ForEach-Object { [pscustomobject]@{ appId = $_; displayName = [string](Get-P91Property $apps $_) } }))
+        }
+        'ad app show*' {
+            $id = [string](& $value @('--id'))
+            $apps = Get-P91Property $w 'apps'
+            $name = if ($apps) { Get-P91Property $apps $id } else { $null }
+            if (-not $name) { Write-P91Failure "ERROR: Resource '$id' does not exist or one of its queried reference-property objects are not present." 3; return }
+            return ([pscustomobject]@{ appId = $id; displayName = [string]$name } | ConvertTo-Json -Compress)
         }
         'ad group list*' {
             # --display-name is a prefix ("Object's display name or its prefix", az ad group list --help),

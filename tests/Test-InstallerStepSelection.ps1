@@ -44,6 +44,14 @@ function Get-Events([string]$Path) {
 }
 function Write-Answers($Scenario, $Answers) { $p = Join-Path $Scenario.Dir 'answers.json'; Write-P91Text $p ($Answers | ConvertTo-Json -Depth 8); return $p }
 function New-From($Name, $From, [scriptblock]$World) { $s = New-P91Scenario -Name $Name -Scratch $scratch -From $From; if ($World) { Edit-P91World $s $World }; $s }
+# Each call of the projection deployment's stub: its arguments as one JSON array (tests/InstallerCheckpointHarness.ps1).
+function Get-ProjectionCalls($Run) { $f = Join-Path $Run.Logs 'projection.log'; if (Test-Path -LiteralPath $f) { @(Get-Content -LiteralPath $f | Where-Object { $_ }) } else { @() } }
+function Test-ProjectionCall([string]$Json, [System.Collections.IDictionary]$Want, [string[]]$Switches = @()) {
+    $a = @($Json | ConvertFrom-Json | ForEach-Object { [string]$_ })
+    foreach ($k in $Want.Keys) { $i = [array]::IndexOf($a, [string]$k); if ($i -lt 0 -or $i + 1 -ge $a.Count -or $a[$i + 1] -cne [string]$Want[$k]) { return $false } }
+    foreach ($s in $Switches) { if ($a -notcontains $s) { return $false } }
+    return $true
+}
 
 try {
     $template = New-P91Template $scratch
@@ -76,6 +84,22 @@ try {
     # Round 3, the UX seat's item 8: an answers file with two problems, refused before anything is read.
     $answersBad = New-P91Scenario -Name 'answers-bad' -Scratch $scratch -Template $template -World (New-P91World)
     $answersBadFile = Write-Answers $answersBad ([ordered]@{ schemaVersion = 1; Sku = 'Gold'; Bogus = 1 })
+    # Round 4, the Architect seat's item 3: the P86 renewal inputs come from an answers file; the run stops at
+    # sync, before the projection step, and keeps a persistent install checkpoint for its resume.
+    $renewal = [ordered]@{ ProjectionReconcilerResourceId = "/subscriptions/$sub/resourceGroups/rg-p91/providers/Microsoft.App/jobs/p91gw-reconciler"
+        ProjectionRenewalImageDigest = 'sha256:' + ('a' * 64); ProjectionRenewalEntryPoint = 'node /app/sync/src/p92-renewal.mjs'
+        ProjectionRenewalActionGroupResourceId = "/subscriptions/$sub/resourceGroups/rg-p91/providers/Microsoft.Insights/actionGroups/ag-p91-renewal" }
+    $w = New-P91World; $w.inject.sync = 'graph404'
+    $projection = New-P91Scenario -Name 'projection' -Scratch $scratch -Template $template -World $w
+    $projectionAnswers = [ordered]@{ schemaVersion = 1; EntitlementStore = 'projection'; DeployProjection = $true }
+    foreach ($k in $renewal.Keys) { $projectionAnswers[$k] = $renewal[$k] }
+    $projectionFile = Write-Answers $projection $projectionAnswers
+    # Round 4, the Security seat's item 4: a refusal and a failure whose errors quote every secret shape, as an
+    # Azure CLI error would, printed on the console.
+    $w = New-P91World; $w.inject.readErrors = @([ordered]@{ match = 'ad group list --display-name claude-code-standard*'; text = $P92RedactionSentence })
+    $consoleRefusal = New-P91Scenario -Name 'console-refusal' -Scratch $scratch -Template $template -World $w
+    $w = New-P91World; $w.inject.readErrors = @([ordered]@{ match = 'deployment group create*'; text = $P92RedactionSentence })
+    $consoleFailure = New-P91Scenario -Name 'console-failure' -Scratch $scratch -Template $template -World $w
     $wave1 = @(
         ($runList1 = New-P91Run $listSrc -Arguments ($common + $tpm + $secret + "-ProgressPath '$progress1'"))
         ($runSync1 = New-P91Run $syncFail -Arguments ($common + $tpm))
@@ -87,6 +111,9 @@ try {
         ($runProgressDir = New-P91Run $progressDirScenario -Arguments ($common + $tpm + "-ProgressPath '$progressDir'"))
         ($runRedact = New-P91Run $redact -Arguments ($common + $tpm + "-ProgressPath '$progressRedact'"))
         ($runAnswersBad = New-P91Run $answersBad -Arguments (@($common | Where-Object { $_ -notlike '-Sku *' }) + $tpm + "-AnswersPath '$answersBadFile'"))
+        ($runProjection1 = New-P91Run $projection -Arguments (@($common | Where-Object { $_ -notlike '-EntitlementStore *' }) + $tpm + "-AnswersPath '$projectionFile'"))
+        ($runConsoleRefusal = New-P91Run $consoleRefusal -Arguments ($common + $tpm))
+        ($runConsoleFailure = New-P91Run $consoleFailure -Arguments ($common + $tpm))
     )
     $r1 = Invoke-P91Runs $wave1
     $l1 = Get-P91Result $r1 $runList1
@@ -110,6 +137,14 @@ try {
     $precBind = New-From 'prec-binding' $precSrc
     $bindHash = Get-P91Hash (Get-P91CheckpointFile $precBind).FullName
     $progressBind = Join-Path $precBind.Dir 'progress.ndjson'
+    # Round 4, item 3: the checkpoint run 1 left, and the resume command it printed, run as printed; -Yes answers
+    # the summary's question, as an unattended rerun does, and adds no answer. Verification then fails, so the
+    # checkpoint is kept with the projection step completed (Close-ClaudeInstallCheckpoint).
+    $pj1 = Get-P91Result $r1 $runProjection1
+    $pj1Cp = Get-P91CheckpointFile $projection
+    $pj1Answers = if ($pj1Cp) { ([IO.File]::ReadAllText($pj1Cp.FullName) | ConvertFrom-Json).answers } else { $null }
+    $projectionResume = [string](@($pj1.Out -split "`n" | Where-Object { $_ -match '^Resume: ' } | ForEach-Object { ($_ -replace '^Resume: ', '').Trim() }) | Select-Object -First 1)
+    Edit-P91World $projection { param($w) $w.inject.sync = ''; $w.inject | Add-Member -NotePropertyName verify -NotePropertyValue 'fail' -Force }
     $wave2 = @(
         ($runList = New-P91Run $list -Arguments @('-ListSteps', '-Json'))
         ($runListText = New-P91Run $listText -Arguments @('-ListSteps'))
@@ -121,8 +156,23 @@ try {
         ($runPrecFile = New-P91Run $precFile -Arguments ($common + "-AnswersPath '$(Write-Answers $precFile ([ordered]@{ schemaVersion = 1; TpmStandard = 22222 }))'"))
         ($runPrecCkpt = New-P91Run $precCkpt -Arguments $common)
         ($runPrecBind = New-P91Run $precBind -Arguments (@($common | Where-Object { $_ -notlike '-ResourceGroup *' }) + "-AnswersPath '$(Write-Answers $precBind ([ordered]@{ schemaVersion = 1; ResourceGroup = 'rg-other' }))'" + "-ProgressPath '$progressBind'"))
+        ($runProjection2 = New-P91Run $projection -Command $(if ($projectionResume) { "$projectionResume -Yes" } else { "throw 'run 1 printed no resume command'" }))
     )
     $r2 = Invoke-P91Runs $wave2
+
+    # ------------------------------------------------------------------ wave 3: the projection step's inputs (round 4, item 3)
+    # From the checkpoint the resume left, a rerun with the same inputs, one with each input changed, and one
+    # with -FlipProjectionAfterCleanCompare, which needs the four P86 inputs and finds them recorded.
+    $changed = [ordered]@{ ProjectionRenewalImageDigest = 'sha256:' + ('b' * 64); ProjectionRenewalEntryPoint = 'node /app/sync/src/p92-other.mjs'
+        ProjectionRenewalActionGroupResourceId = "/subscriptions/$sub/resourceGroups/rg-p91/providers/Microsoft.Insights/actionGroups/ag-p91-other"
+        ProjectionReconcilerResourceId = "/subscriptions/$sub/resourceGroups/rg-p91/providers/Microsoft.App/jobs/p91gw-other" }
+    $projRuns = [ordered]@{}
+    foreach ($n in @('same') + @($changed.Keys) + @('flip')) {
+        $s = New-From "projection-$($n.ToLowerInvariant())" $projection { param($w) $w.inject.verify = '' }
+        $extra = if ($n -eq 'same') { @() } elseif ($n -eq 'flip') { @('-FlipProjectionAfterCleanCompare') } else { @("-$n '$($changed[$n])'") }
+        $projRuns[$n] = New-P91Run $s -Arguments (@('-Yes') + $extra)
+    }
+    $r3 = Invoke-P91Runs @($projRuns.Values)
 
     # ------------------------------------------------------------------ -ListSteps
     $ls = Get-P91Result $r2 $runList
@@ -220,8 +270,43 @@ try {
     Assert 'R3 an answers file with problems refuses on one line with the first problem, its remedy, the number of problems and the command that lists every one; no Azure resource is read' ((Test-Refusal $ab 'does not match the answers schema') -and
         $abLine.Contains('(2 problems)') -and $abLine -match 'Remedy: \S' -and $abLine -match 'Bogus|Gold' -and $abLine.Contains("./Install-ClaudeGateway.ps1 -Preflight -AnswersPath '$answersBadFile' lists every problem.") -and
         -not $probes.Count -and -not (Get-P91CheckpointFile $answersBad)) "$abLine || az: $($ab.Az -join ' | ')"
-    $unexpected = @(foreach ($r in @($r1.Values) + @($r2.Values)) { @($r.Unexpected) })
-    Assert 'harness: every az call was one the stub knows, and no run timed out' (-not $unexpected.Count -and -not @(@($r1.Values) + @($r2.Values) | Where-Object { $_.TimedOut }).Count) (($unexpected | Select-Object -Unique -First 4) -join ' | ')
+    # ------------------------------------------------------------------ round 4: the P86 renewal inputs (item 3)
+    # The installer's parameter names and the names Deploy-ClaudeProjection.ps1 takes them as.
+    $as = [ordered]@{ ProjectionReconcilerResourceId = '-ReconcilerResourceId'; ProjectionRenewalImageDigest = '-RenewalImageDigest'
+        ProjectionRenewalEntryPoint = '-RenewalEntryPoint'; ProjectionRenewalActionGroupResourceId = '-RenewalActionGroupResourceId' }
+    $want = { param($Values) $h = [ordered]@{}; foreach ($k in $as.Keys) { $h[$as[$k]] = $Values[$k] }; $h }
+    $notRecorded = @($renewal.Keys | Where-Object { -not $pj1Answers -or [string]$pj1Answers.$_ -cne $renewal[$_] })
+    Assert 'R4 a run whose answers file holds the P86 renewal inputs and that fails before the projection step keeps a persistent install checkpoint recording them and the reconciler, and prints a resume command that holds none of them' (
+        $pj1.ExitCode -ne 0 -and $pj1Cp -and -not $notRecorded.Count -and -not @(Get-ProjectionCalls $runProjection1).Count -and $projectionResume -and $projectionResume -cnotmatch ' -Projection') "not recorded: $($notRecorded -join ', ') || resume: $projectionResume || $(Get-P91Tail $pj1)"
+    $pj2 = Get-P91Result $r2 $runProjection2
+    $pj2Calls = @(Get-ProjectionCalls $runProjection2)
+    Assert 'R4 a rerun with the printed resume command passes the recorded reconciler and all three renewal inputs to the projection deployment' ($pj2Calls.Count -eq 1 -and
+        (Test-ProjectionCall $pj2Calls[0] (& $want $renewal)) -and $pj2.Out -match 'Resuming install run') "$($pj2Calls -join ' || ') || $(Get-P91Tail $pj2)"
+    $same = Get-P91Result $r3 $projRuns['same']
+    Assert 'R4 a rerun with the same inputs verifies the projection step live and skips it' ($same.ExitCode -eq 0 -and $same.Out -match 'Projection deployment: verified live, skipped' -and
+        -not @(Get-ProjectionCalls $projRuns['same']).Count) (Get-P91Tail $same)
+    $rerun = @(foreach ($k in $changed.Keys) {
+            $res = Get-P91Result $r3 $projRuns[$k]; $calls = @(Get-ProjectionCalls $projRuns[$k])
+            $values = [ordered]@{}; foreach ($n in $renewal.Keys) { $values[$n] = $(if ($n -eq $k) { $changed[$n] } else { $renewal[$n] }) }
+            if (-not ($res.ExitCode -eq 0 -and $res.Out -match 'Projection deployment: its input changed since the checkpoint; running it again' -and $calls.Count -eq 1 -and (Test-ProjectionCall $calls[0] (& $want $values)))) { "${k}: $($calls -join ' ') || $(Get-P91Tail $res)" } })
+    Assert 'R4 changing any one of the three renewal inputs, or the reconciler, runs the projection step again with the new value and the recorded others' (-not $rerun.Count) ($rerun -join ' || ')
+    $flip = Get-P91Result $r3 $projRuns['flip']
+    $flipCalls = @(Get-ProjectionCalls $projRuns['flip'])
+    Assert 'R4 a resume with -FlipProjectionAfterCleanCompare takes the four P86 inputs from the checkpoint and runs the projection step again with the switch, although the checkpoint shows it completed' (
+        $flip.ExitCode -eq 0 -and "$($flip.Out)$($flip.Err)" -notmatch 'P86 admission requires' -and $flip.Out -match 'Projection deployment: the switch to the projection is asked for; running it again' -and
+        $flipCalls.Count -eq 1 -and (Test-ProjectionCall $flipCalls[0] (& $want $renewal) @('-FlipAfterCleanCompare'))) "$($flipCalls -join ' ') || $(Get-P91Tail $flip)"
+    # ------------------------------------------------------------------ round 4: the console (item 4)
+    $cr = Get-P91Result $r1 $runConsoleRefusal
+    $crLine = [string](@(Get-P91ErrLines $cr | Where-Object { $_ -match '^Refused: ' })[0])
+    $crProblems = @(Get-P92RedactionProblems $crLine)
+    Assert 'R4 a refusal whose error quotes every secret shape prints each in its [redacted] form on standard error, and no sentinel appears in stdout or stderr' ((Test-Refusal $cr 'claude-code-standard') -and
+        -not $crProblems.Count -and (Test-P92NoSentinel ($cr.Out + $cr.Err))) "$($crProblems -join '; ') || $crLine"
+    $cf = Get-P91Result $r1 $runConsoleFailure
+    $cfProblems = @(Get-P92RedactionProblems $cf.Err)
+    Assert 'R4 a failure whose Azure CLI error quotes every secret shape prints that error with each in its [redacted] form, then the failure and the resume command, and no sentinel appears in stdout or stderr' (
+        $cf.ExitCode -ne 0 -and -not $cfProblems.Count -and $cf.Err -match 'Deployment failed' -and $cf.Out -match '(?m)^Resume: ' -and (Test-P92NoSentinel ($cf.Out + $cf.Err))) "$($cfProblems -join '; ') || $(Get-P91Tail $cf)"
+    $unexpected = @(foreach ($r in @($r1.Values) + @($r2.Values) + @($r3.Values)) { @($r.Unexpected) })
+    Assert 'harness: every az call was one the stub knows, and no run timed out' (-not $unexpected.Count -and -not @(@($r1.Values) + @($r2.Values) + @($r3.Values) | Where-Object { $_.TimedOut }).Count) (($unexpected | Select-Object -Unique -First 4) -join ' | ')
 }
 finally {
     if ($env:P91_KEEP_SCRATCH -ne '1') { Remove-Item -LiteralPath $scratch -Recurse -Force -ErrorAction SilentlyContinue }

@@ -60,6 +60,27 @@ $probe = Join-Path $sandbox $pw
 [IO.File]::WriteAllText($probe, ([IO.File]::ReadAllText($installer) -replace '(?m)^(\s*)\[switch\]\$Yes\r?$', "`$1[string]`$P92DriftProbe,`n`$1[switch]`$Yes"))
 $probeDrift = @(Get-ParameterDrift $probe)
 Assert 'A6 a parameter added without a schema entry is reported by name (the detector itself)' (($probeDrift -join ';') -match '-P92DriftProbe is in no schema entry') ($probeDrift -join '; ')
+# Round 4, the Architect seat's item 3: every answer Install-ClaudeGateway.ps1 applies is one its install
+# checkpoint records, as a parameter answer or a prompt answer (scripts/ClaudeInstallCheckpoint.ps1), so that a
+# resume keeps it; the installer's other parameters are run options or secrets (A2 A6 above).
+function Get-UnrecordedAnswers([string]$InstallerPath, [string]$CheckpointText, [System.Collections.IDictionary]$Properties) {
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile($InstallerPath, [ref]$null, [ref]$null)
+    $names = @($ast.ParamBlock.Parameters | ForEach-Object { $_.Name.VariablePath.UserPath })
+    $kept = @()
+    foreach ($list in 'ClaudeInstallParameterAnswers', 'ClaudeInstallPromptAnswers') {
+        if ($CheckpointText -match ('(?s)\$script:' + $list + ' = @\((.*?)\)')) { $kept += @([regex]::Matches($Matches[1], "'([A-Za-z]+)'") | ForEach-Object { $_.Groups[1].Value }) }
+    }
+    return @($names | Where-Object { $Properties.Contains($_) -and (Get-AppliedBy $Properties[$_]) -contains $pw -and $kept -notcontains $_ })
+}
+$unrecorded = @(Get-UnrecordedAnswers $installer $ckptText $props)
+Assert 'R4 every answer of Install-ClaudeGateway.ps1 in the schema is one its install checkpoint records, as a parameter or prompt answer; its other parameters are run options or secrets' (
+    -not $unrecorded.Count -and -not $paramDrift.Count) "not recorded: $($unrecorded -join ', ')"
+$probeProps = [ordered]@{}
+foreach ($k in $props.Keys) { $probeProps[$k] = $props[$k] }
+$probeProps['P92DriftProbe'] = [pscustomobject]@{ title = 'probe'; type = 'string'; 'x-appliedBy' = @($pw) }
+$probeUnrecorded = @(Get-UnrecordedAnswers $probe $ckptText $probeProps)
+$probeAdds = @($probeUnrecorded | Where-Object { $unrecorded -notcontains $_ })
+Assert 'R4 an answer that the schema and the installer gain while the checkpoint does not record it is reported by name (the detector itself)' (($probeAdds -join ',') -eq 'P92DriftProbe') ($probeUnrecorded -join ', ')
 
 # ------------------------------------------------------------------ bash flags
 function Get-FlagDrift([string]$InstallerPath) {

@@ -123,11 +123,16 @@ try {
         $w = New-World; $w.inject.createMode = 'fail'
         $redactPath = New-Scenario 'redact-sig=p92PathSentinel' $w
         $progressPath = Join-Path $redactPath.Dir 'progress.ndjson'
+        # Round 4, the Security seat's item 4: a failure whose Azure CLI error quotes every secret shape, printed
+        # on the console with the failure line and the resume command.
+        $w = New-World; $w.inject.readErrors = @([ordered]@{ match = 'deployment group create*'; text = $P92RedactionSentence })
+        $consoleFailure = New-Scenario 'console-failure' $w
         $wave1 += @(
             ($runRedact = New-Run $redactRefusal ($base + $tpm + @('--progress-file', (ConvertTo-BashPath $progressRedact))))
             ($runRedactPath = New-Run $redactPath ($base + $tpm + @('--progress-file', (ConvertTo-BashPath $progressPath))))
             ($runFailing = New-Run $failing ($base + $tpm + @('--progress-file', (ConvertTo-BashPath $progressFail))))
             ($runToken = New-Run $tokenRefusal ($base + $tpm + @('--progress-file', (ConvertTo-BashPath $progressToken))))
+            ($runConsoleFailure = New-Run $consoleFailure ($base + $tpm))
         )
     }
     # The PowerShell installer over the same kind of world, for the parity of progress events. It runs
@@ -293,6 +298,15 @@ try {
         Assert 'R3 bash the failed event redacts a secret shape in its resume command: a checkout path that holds sig=<value> is written as sig=[redacted]' ($pathFailed -and "$($pathFailed.resumeCommand)" -match 'install-claude-gateway\.sh' -and
             "$($pathFailed.resumeCommand)" -match 'sig=\[redacted\]' -and -not $pathText.Contains('p92PathSentinel')) "$($pathFailed.resumeCommand)"
         Assert 'P5 bash no secret reaches the progress stream: a token in an error that a refusal quotes is [redacted]' ($texts.Count -eq 2 -and -not (Get-Leaks @($progressFail, $progressToken)).Count -and $redacted.Count -eq 1 -and $r1[$runToken.Dir].ExitCode -ne 0) "$($texts.Count) streams; refused events with [redacted]: $($redacted.Count)"
+        # Round 4, the Security seat's item 4: the same refusal and a failure, on the console.
+        $rxLine = [string](@(Get-ErrLines $rx | Where-Object { $_ -match '^Refused: ' })[0])
+        $rxLineProblems = @(Get-P92RedactionProblems $rxLine)
+        Assert 'R4 bash a refusal whose error quotes every secret shape prints each in its [redacted] form on standard error, and no sentinel appears in stdout or stderr' ($rx.ExitCode -eq 1 -and $rxLine -and
+            -not $rxLineProblems.Count -and (Test-P92NoSentinel ($rx.Out + $rx.Err))) "$($rxLineProblems -join '; ') || $rxLine"
+        $cf = $r1[$runConsoleFailure.Dir]
+        $cfProblems = @(Get-P92RedactionProblems $cf.Err)
+        Assert 'R4 bash a failure whose Azure CLI error quotes every secret shape prints that error with each in its [redacted] form, then the failure line and the resume command, and no sentinel appears in stdout or stderr' (
+            $cf.ExitCode -ne 0 -and -not $cfProblems.Count -and $cf.Out -match '\[FAIL\] deployment failed' -and $cf.Out -match '(?m)^Resume: ' -and (Test-P92NoSentinel ($cf.Out + $cf.Err))) "$($cfProblems -join '; ') || $(Get-Tail $cf)"
     }
     $unexpected = @(foreach ($r in @($r1.Values) + @($r2.Values)) { @($r.Unexpected) })
     Assert 'harness: every az call was one the stub knows, and no run timed out' (-not $unexpected.Count -and -not @(@($r1.Values) + @($r2.Values) | Where-Object { $_.TimedOut }).Count) (($unexpected | Select-Object -Unique -First 4) -join ' | ')

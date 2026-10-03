@@ -65,6 +65,9 @@ try {
     $w = New-P91World -ReusedGateway
     $w.inject['groupLists'] = [ordered]@{ 'claude-bu-platform' = @([ordered]@{ id = '00000000-0000-4000-8000-0000000003b1'; displayName = 'claude-bu-platform' }, [ordered]@{ id = '00000000-0000-4000-8000-0000000003b2'; displayName = 'CLAUDE-BU-PLATFORM' }) }
     $twoGroups = New-P91Scenario -Name 'prompt-two-groups' -Scratch $scratch -Template $template -World $w
+    # Round 4, the Coder seat's item 5: a group name the schema refuses (a single quote, a comma or a colon)
+    # typed at the prompt is refused there, before any Azure CLI call reads Graph for it.
+    $quoteGroup = New-P91Scenario -Name 'prompt-quote' -Scratch $scratch -Template $template -World (New-P91World -ReusedGateway)
     $wave1 = @(
         ($runApply = New-P91Run $apply.Scenario -Arguments ($common + "-AnswersPath '$($apply.Answers)'"))
         ($runNotify = New-P91Run $quiet.Scenario -Arguments ($common + "-AnswersPath '$($quiet.Answers)'"))
@@ -74,6 +77,7 @@ try {
         # platform, then zzz, which the stub refuses, so that the checkpoint keeps platform's receipt.
         ($runPrefix = New-P91Run $prefixGroup -Arguments $prompted -Attended -Answers @('', '', '', '', '', 'y', 'platform', '', '', 'y', 'zzz', '', '', '', ''))
         ($runTwoGroups = New-P91Run $twoGroups -Arguments $prompted -Attended -Answers @('', '', '', '', '', 'y', 'platform', '', 'n', '', '', '', ''))
+        ($runQuote = New-P91Run $quoteGroup -Arguments $prompted -Attended -Answers @('', '', '', '', '', 'y', 'platform', "O'Brien", 'n', '', '', '', ''))
     )
     $r1 = Invoke-P91Runs $wave1
     $a = Get-P91Result $r1 $runApply
@@ -142,6 +146,11 @@ try {
     $answersPath = [regex]::Match([IO.File]::ReadAllText((Join-Path $script:P91Root 'scripts/ClaudeInstallSteps.ps1')), '(?s)function Invoke-ClaudeInstallBusinessUnits \{.*?\r?\n\}').Value
     Assert 'R3 both business-unit paths, the prompt and the answers file, find or create a unit''s group through one function, Resolve-ClaudeInstallUnitGroup' ($installerText -match 'Resolve-ClaudeInstallUnitGroup \$buGroup' -and
         $installerText -notmatch 'az ad group show --group \$buGroup' -and $answersPath -match 'Resolve-ClaudeInstallUnitGroup \$group')
+    # ------------------------------------------------------------------ round 4: a group name the schema refuses (item 5)
+    $tq = Get-P91Result $r1 $runQuote
+    Assert 'R4 a group name with a single quote at the prompt is refused there with the schema''s message and remedy, before any Azure CLI call names it; no unit is written and the run goes on' ($tq.ExitCode -eq 0 -and
+        $tq.Out.Contains("Entra group 'O'Brien' holds a single quote, comma or colon: Azure CLI places a group name inside an OData string literal, and bu-registry separates entries with commas and colons") -and
+        $tq.Out.Contains("Give a group name without ' , or :.") -and -not @($tq.Az | Where-Object { $_.Contains("O'Brien") }).Count -and -not @($tq.Scripts | Where-Object { $_ -like 'bu platform *' }).Count) (Get-P91Tail $tq)
     $unexpected = @(foreach ($r in @($r1.Values) + @($r2.Values)) { @($r.Unexpected) })
     Assert 'harness: every az call was one the stub knows, and no run timed out' (-not $unexpected.Count -and -not @(@($r1.Values) + @($r2.Values) | Where-Object { $_.TimedOut }).Count) (($unexpected | Select-Object -Unique -First 4) -join ' | ')
 }
