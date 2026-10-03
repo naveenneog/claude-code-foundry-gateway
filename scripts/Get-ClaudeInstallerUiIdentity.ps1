@@ -1,6 +1,5 @@
 param([switch]$StartSignIn)
 $ErrorActionPreference = 'Stop'
-if ($env:P93_INSTALLER_UI_IDENTITY_JSON) { $env:P93_INSTALLER_UI_IDENTITY_JSON; exit 0 }
 if ($StartSignIn) {
     [pscustomobject]@{ schemaVersion = 1; signInCommand = 'az login --use-device-code' } | ConvertTo-Json -Compress
     exit 0

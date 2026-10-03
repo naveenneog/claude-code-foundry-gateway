@@ -3,27 +3,27 @@
   "packet": "P93",
   "date": "2026-10-03",
   "selector": "pwsh -NoProfile -File .\\tests\\Test-InstallerUi.ps1",
+  "baselineChecks": 17,
+  "rule": "A mutant counts as caught only when the suite loads with 17 checks, exits nonzero and reports at least one failed check.",
   "mutations": [
-    {
-      "name": "allow inline script in CSP",
-      "file": "tools/installer-ui/server.mjs",
-      "change": "script-src 'self' -> script-src 'self' 'unsafe-inline'",
-      "caught": true,
-      "reason": "The CSP assertion in the token and Host security subtest failed."
-    },
-    {
-      "name": "allow empty selected run",
-      "file": "tools/installer-ui/server.mjs",
-      "change": "Disabled the empty-step refusal unless fullRun and confirmFullRun are set.",
-      "caught": true,
-      "reason": "The selected-run subtest expected HTTP 400 and the refusal text."
-    },
-    {
-      "name": "drop static carried schema",
-      "file": "tools/installer-ui/index.html",
-      "change": "Renamed the schema-json script id.",
-      "caught": true,
-      "reason": "The static fallback drift subtest failed before parsing the carried schema."
-    }
-  ]
+    { "name": "token check", "file": "tools/installer-ui/server.mjs", "caught": true, "checks": 17 },
+    { "name": "Host allowlist", "file": "tools/installer-ui/server.mjs", "caught": true, "checks": 17 },
+    { "name": "OPTIONS refusal", "file": "tools/installer-ui/server.mjs", "caught": true, "checks": 17 },
+    { "name": "CSP unsafe inline", "file": "tools/installer-ui/server.mjs", "caught": true, "checks": 17 },
+    { "name": "body limit", "file": "tools/installer-ui/server.mjs", "caught": true, "checks": 17 },
+    { "name": "second run 409", "file": "tools/installer-ui/server.mjs", "caught": true, "checks": 17 },
+    { "name": "step id validation", "file": "tools/installer-ui/server.mjs", "caught": true, "checks": 17 },
+    { "name": "streamed-line redaction", "file": "tools/installer-ui/server.mjs", "caught": true, "checks": 17 },
+    { "name": "temporary-directory removal", "file": "tools/installer-ui/server.mjs", "caught": true, "checks": 17 },
+    { "name": "unset-state collection", "file": "tools/installer-ui/ui-model.mjs", "caught": true, "checks": 17 },
+    { "name": "empty-selection refusal", "file": "tools/installer-ui/server.mjs", "caught": true, "checks": 17 },
+    { "name": "full-run confirmation", "file": "tools/installer-ui/installer-ui.js", "caught": true, "checks": 17 },
+    { "name": "file structural classic script", "file": "tools/installer-ui/index.html", "caught": true, "checks": 17 },
+    { "name": "static schema drift", "file": "tools/installer-ui/index.html", "caught": true, "checks": 17 },
+    { "name": "business-unit id rule", "file": "tools/installer-ui/installer-ui.js", "caught": true, "checks": 17 }
+  ],
+  "browserChannelEvidence": {
+    "msedge": "available locally and used by the file:// fallback test when present",
+    "chrome": "not installed locally at the standard Playwright channel path"
+  }
 }

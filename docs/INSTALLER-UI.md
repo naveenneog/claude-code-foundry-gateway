@@ -22,10 +22,11 @@ long waits.
 
 ## Static fallback
 
-`tools/installer-ui/index.html` opens from disk. It carries the same schema as
-`schemas/claude-gateway.answers.schema.json`; `tests/installer-ui.test.mjs` compares the two copies.
-Static mode validates formats, creates `answers.json` and shows the PowerShell and bash commands.
-It does not read Azure and does not run the installer. The Cloud Shell path is **Manage files >
+`tools/installer-ui/index.html` opens from disk. It uses a classic deferred script so Chromium can run
+it from `file://`, and it carries the same schema as `schemas/claude-gateway.answers.schema.json`;
+`tests/installer-ui.test.mjs` compares the two copies and opens the file page in a real browser.
+Static mode validates formats, creates `answers.json` and shows readable PowerShell and bash command
+blocks. It does not read Azure and does not run the installer. The Cloud Shell path is **Manage files >
 Upload** for `answers.json`, then one pasted command.
 
 ## Security model
@@ -52,7 +53,7 @@ redaction rules before it leaves the server.
 | Foundation | Renders subscription, Foundry, region, SKU and name fields from the schema. Select fields start as `not set (the installer default)`. |
 | Access | Renders groups, tier limits and model deployment fields from the schema. |
 | Optional parts | Renders company address, Desktop sign-in, projection and monitoring answers from the schema. Projection answers are schema answers only; no projection switch is exposed. |
-| Business units | Accepts the schema's business-unit tree. Ids are lower-case letters, digits and hyphens, max 64; ids are unique; group names exclude `'`, `,` and `:`; `Allowance` requires percent 1-100; teams name one parent unit. |
+| Business units | Provides a two-level editor: add a unit, add a team under a unit, remove either, then serialize units before teams. Fields are id, Entra group, monthly USD budget, mode and percent only for `Allowance`. Ids are lower-case letters, digits and hyphens, max 64; ids are unique; group names exclude `'`, `,` and `:`; `Allowance` requires percent 1-100; teams name one parent unit. The JSON view round-trips through the same validation. |
 | Review | Runs installer preflight and shows check, result, message and remedy. Failing checks mark fields through `x-checkId`. The plan route calls `Start-ClaudeGateway.ps1 -Action Setup -PlanOnly -AnswersPath`. |
 | Run | Lists installer step ids, streams selected-step output as it arrives, shows a failed step with a rerun action and resume command, and keeps a full run as a separate confirmed action. |
 

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { spawn } from 'node:child_process';
 import { request } from 'node:http';
-import { readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -18,12 +18,28 @@ async function start(extra = {}) {
   const scratch = join(tmpdir(), `p93-ui-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`);
   const log = join(scratch, 'stub.ndjson');
   await rm(scratch, { recursive: true, force: true });
-  await import('node:fs/promises').then((fs) => fs.mkdir(scratch, { recursive: true }));
+  await mkdir(scratch, { recursive: true });
+  const env = { P93_INSTALLER_UI_STUB_LOG: log, ...(extra.env || {}) };
+  if (extra.az) {
+    const stub = join(scratch, 'az.cmd');
+    await writeFile(stub, `@echo off\r\nnode "${stub.replace(/\\/g, '\\\\')}.mjs" %*\r\n`, 'utf8');
+    await writeFile(`${stub}.mjs`, `
+const args = process.argv.slice(2);
+const joined = args.join(' ');
+if (joined.includes('fail-secret')) { console.error('password=super-secret failed'); process.exit(9); }
+if (joined.startsWith('account show')) { console.log(JSON.stringify({ id: 'sub-1', name: 'Sub One', tenantId: 'tenant-1', user: { name: 'operator@example.com' } })); process.exit(0); }
+if (joined.startsWith('account list')) { console.log(JSON.stringify([{ id: 'sub-1', name: 'Sub One', tenantId: 'tenant-1' }])); process.exit(0); }
+if (joined.startsWith('cognitiveservices account list')) { console.log(JSON.stringify([{ name: 'ai-p93', resourceGroup: 'rg-ai-p93', location: 'eastus2' }])); process.exit(0); }
+if (joined.startsWith('cognitiveservices account deployment list')) { console.log(JSON.stringify([{ name: 'claude-sonnet-5', properties: { model: { name: 'claude', version: '5' } } }])); process.exit(0); }
+console.error('unexpected az ' + joined); process.exit(2);
+`, 'utf8');
+    env.PATH = `${scratch};${process.env.PATH}`;
+  }
   const server = await createInstallerUiServer({
     token: 'test-token-with-at-least-32-bytes-0000',
     stubInstaller: extra.stubInstaller || stub,
     idleMs: 60_000,
-    env: { P93_INSTALLER_UI_STUB_LOG: log, ...(extra.env || {}) },
+    env,
   });
   const address = await server.listenAsync('127.0.0.1');
   const base = `http://127.0.0.1:${address.port}`;
@@ -121,10 +137,11 @@ test('the form uses fixed script routes and no string-built DOM insertion sinks'
   const app = await start();
   try {
     const html = await (await app.fetch('/')).text();
-    assert.match(html, /<script type="module" src="\.\/installer-ui\.js"><\/script>/);
+    assert.match(html, /<script defer src="\.\/installer-ui\.js"><\/script>/);
+    assert.doesNotMatch(html, /type="module"|import\s+|export\s+/);
     assert.doesNotMatch(html, /<script>\s*\(/);
     const js = await (await app.fetch('/installer-ui.js')).text();
-    assert.doesNotMatch(js, /innerHTML|insertAdjacentHTML/);
+    assert.doesNotMatch(js, /innerHTML|insertAdjacentHTML|import\s+|export\s+/);
   } finally {
     await app.close();
   }
@@ -136,7 +153,35 @@ test('the static fallback carries a schema copy equal to the canonical schema', 
   assert.ok(carried, 'static HTML carries schema JSON');
   const canonical = JSON.parse(await readFile(new URL('../schemas/claude-gateway.answers.schema.json', import.meta.url), 'utf8'));
   assert.deepEqual(JSON.parse(carried[1]), canonical);
+  assert.doesNotMatch(staticHtml, /type="module"|import\s+|export\s+/);
 });
+
+test('the static fallback renders fields in a real browser from file', async () => {
+  const { chromium } = await import('playwright');
+  let browser;
+  try { browser = await chromium.launch({ channel: 'msedge', headless: true }); }
+  catch { browser = await chromium.launch({ headless: true }); }
+  try {
+    const page = await browser.newPage();
+    await page.goto(new URL('../tools/installer-ui/index.html', import.meta.url).href);
+    await page.waitForSelector('[name="SubscriptionId"]');
+    assert.equal(await page.locator('#foundation label').count(), 8);
+    await expectText(page, 'PowerShell preflight');
+    await page.getByRole('button', { name: 'Add unit' }).click();
+    await page.locator('[data-bu-field="id"]').first().fill('finance');
+    await page.locator('[data-bu-field="group"]').first().fill('claude-bu-finance');
+    await page.getByRole('button', { name: 'Add team' }).click();
+    assert.match(await page.locator('#business-units').inputValue(), /"id": "finance"/);
+    await page.locator('[data-bu-field="id"]').first().fill('Finance');
+    assert.match(await page.locator('#business-unit-problems').textContent(), /lower-case/);
+  } finally {
+    await browser.close();
+  }
+});
+
+async function expectText(page, text) {
+  await page.getByText(text).first().waitFor();
+}
 
 test('the form renders from the answers schema and exposes portable commands', async () => {
   const app = await start();
@@ -178,23 +223,26 @@ test('untouched controls are not collected as answers and business units enforce
 });
 
 test('identity, prefill and plan routes go through repository PowerShell seams', async () => {
-  const app = await start({ env: {
-    P93_INSTALLER_UI_IDENTITY_JSON: JSON.stringify({ schemaVersion: 1, signedIn: true, user: 'operator@example.com', tenantId: 'tenant-1', subscriptionName: 'Sub One', subscriptionId: 'sub-1' }),
-    P93_INSTALLER_UI_PREFILL_JSON: JSON.stringify({ schemaVersion: 1, subscriptions: [{ id: 'sub-1', name: 'Sub One' }], foundryAccounts: [{ name: 'ai-p93' }], deployments: [{ name: 'claude-sonnet-5' }] }),
-    P93_INSTALLER_UI_PLAN_JSON: JSON.stringify({ schemaVersion: 1, fingerprint: 'sha256:p93', text: 'plan ok' }),
-  } });
+  const app = await start({ az: true });
   try {
     const identity = await (await app.fetch('/api/identity')).json();
     assert.equal(identity.user, 'operator@example.com');
     assert.equal(identity.subscriptionName, 'Sub One');
     const prefill = await (await app.fetch('/api/prefill?kind=subscriptions')).json();
     assert.equal(prefill.subscriptions[0].id, 'sub-1');
-    const plan = await (await app.fetch('/api/plan', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ answers: { schemaVersion: 1, ResourceGroup: 'rg-p93' } }),
-    })).json();
-    assert.equal(plan.fingerprint, 'sha256:p93');
+    const foundry = await (await app.fetch('/api/prefill?kind=foundryAccounts&subscriptionId=sub-1')).json();
+    assert.equal(foundry.foundryAccounts[0].name, 'ai-p93');
+  } finally {
+    await app.close();
+  }
+});
+
+test('az errors in prefill are returned as redacted errors', async () => {
+  const app = await start({ az: true });
+  try {
+    const result = await (await app.fetch('/api/prefill?kind=deployments&foundryAccount=fail-secret&foundryResourceGroup=rg')).json();
+    assert.match(result.error, /\[redacted\]/);
+    assert.doesNotMatch(result.error, /super-secret/);
   } finally {
     await app.close();
   }
@@ -229,6 +277,7 @@ test('selected runs stream progress, refuse empty selections, support explicit f
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ answers: {}, steps: ['resource-group;Remove-Item'] }),
     });
+
     assert.equal(injected.status, 400);
     assert.match((await injected.json()).error, /unknown step id/);
     const empty = await app.fetch('/api/run', {
@@ -275,20 +324,6 @@ setTimeout(() => { console.log('done'); process.exit(0); }, 500);
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ answers: {}, steps: ['resource-group'] }),
     });
-
-    test('idle shutdown exits the CLI process, closes connections and says why', async () => {
-      const child = spawn(process.execPath, [serverCli, '--idle-ms', '100'], { cwd: new URL('..', import.meta.url), stdio: ['ignore', 'pipe', 'pipe'] });
-      const outputOf = captureOutput(child);
-      try {
-        const output = await waitForOutput(child, /One-time token:/);
-        assert.match(output, /Claude gateway installer UI:/);
-        const [code] = await once(child, 'exit');
-        assert.equal(code, 0);
-        assert.match(outputOf(), /Installer UI stopped: idle timeout/);
-      } finally {
-        if (!child.killed && child.exitCode === null) child.kill('SIGINT');
-      }
-    });
     await new Promise((resolve) => setTimeout(resolve, 50));
     const second = await slow.fetch('/api/run', {
       method: 'POST',
@@ -300,5 +335,38 @@ setTimeout(() => { console.log('done'); process.exit(0); }, 500);
   } finally {
     await slow.close();
     await rm(slowStub, { force: true });
+  }
+});
+
+test('full run requires browser confirmation before invoking the installer', async () => {
+  const app = await start();
+  const { chromium } = await import('playwright');
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.goto(`${app.base}/?token=${encodeURIComponent(app.token)}`);
+    await page.waitForSelector('[name="ResourceGroup"]');
+    await page.locator('[name="ResourceGroup"]').fill('rg-p93');
+    await page.evaluate(() => { globalThis.confirm = () => false; });
+    await page.getByRole('button', { name: 'Full run' }).click();
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    assert.equal(existsSync(app.log), false);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
+test('idle shutdown exits the CLI process, closes connections and says why', async () => {
+  const child = spawn(process.execPath, [serverCli, '--idle-ms', '100'], { cwd: new URL('..', import.meta.url), stdio: ['ignore', 'pipe', 'pipe'] });
+  const outputOf = captureOutput(child);
+  try {
+    const output = await waitForOutput(child, /One-time token:/);
+    assert.match(output, /Claude gateway installer UI:/);
+    const [code] = await once(child, 'exit');
+    assert.equal(code, 0);
+    assert.match(outputOf(), /Installer UI stopped: idle timeout/);
+  } finally {
+    if (!child.killed && child.exitCode === null) child.kill('SIGINT');
   }
 });

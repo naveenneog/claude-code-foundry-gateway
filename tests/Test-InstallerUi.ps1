@@ -14,8 +14,12 @@ $watch = [Diagnostics.Stopwatch]::StartNew()
 $out = & node --test --test-reporter=tap (Join-Path $PSScriptRoot 'installer-ui.test.mjs') 2>&1 | Out-String
 $code = $LASTEXITCODE
 $summary = [regex]::Match($out, '(?m)^# tests\s+(\d+)\s*$')
-$tapCount = if ($summary.Success) { [int]$summary.Groups[1].Value } else { @([regex]::Matches($out, '(?m)^\s*(?:not )?ok\s+\d+\s+-\s+')).Count }
+$reported = @([regex]::Matches($out, '(?m)^\s*(?:not )?ok\s+\d+\s+-\s+'))
+$tapCount = if ($summary.Success) { [int]$summary.Groups[1].Value } else { $reported.Count }
 Assert 'node:test loaded and reported individual subtests' ($tapCount -ge 10) $out
+Assert 'node:test process exited 0' ($code -eq 0) $out
+Assert 'node:test reports zero failed tests' ($out -match '(?m)^# fail\s+0\s*$') $out
+Assert 'node:test reported result count equals its # tests summary' ($summary.Success -and $reported.Count -eq [int]$summary.Groups[1].Value) "reported=$($reported.Count) summary=$($summary.Groups[1].Value)"
 foreach ($match in [regex]::Matches($out, '(?m)^ok\s+\d+\s+-\s+(.+)$')) {
     Assert ("node:test: " + $match.Groups[1].Value.Trim()) $true
 }

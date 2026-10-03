@@ -322,7 +322,7 @@ async function renderHtml() {
   <title>Claude gateway installer</title>
   <link rel="stylesheet" href="./installer-ui.css">
   <script type="application/json" id="schema-json">${schema.replaceAll('<', '\\u003c')}</script>
-  <script type="module" src="./installer-ui.js"></script>
+  <script defer src="./installer-ui.js"></script>
 </head>
 <body>
   <header>
@@ -338,7 +338,7 @@ async function renderHtml() {
     <section><h2>Foundation</h2><div id="foundation" class="grid"></div></section>
     <section><h2>Access</h2><div id="access" class="grid"></div></section>
     <section><h2>Optional parts</h2><div id="optional" class="grid"></div></section>
-    <section><h2>Business units and teams</h2><textarea id="business-units" rows="8" cols="80" placeholder='[{"id":"finance","group":"claude-bu-finance","monthlyUsdBudget":5000,"mode":"Strict"}]'></textarea><pre id="business-unit-problems"></pre></section>
+    <section><h2>Business units and teams</h2><div id="business-unit-tree"></div><button id="add-unit" type="button">Add unit</button><label>Add team under <select id="team-parent"></select></label><button id="add-team" type="button">Add team</button><details><summary>JSON view</summary><textarea id="business-units" rows="8" cols="80"></textarea></details><pre id="business-unit-problems"></pre></section>
     <section><h2>Review</h2><button id="download" type="button">Download answers.json</button><button id="plan" type="button">Plan fingerprint</button><pre id="commands"></pre><pre id="plan-output"></pre></section>
     <section><h2>Run</h2><button id="steps" type="button">List steps</button><div id="step-list"></div><button id="run" type="button">Run selected steps</button><button id="full-run" type="button">Full run</button><button id="rerun" type="button" disabled>Re-run failed step</button><pre id="run-output"></pre></section>
     <pre id="errors"></pre>
@@ -413,7 +413,9 @@ export async function createInstallerUiServer(options = {}) {
           if (value) args.push(param, value);
         }
         const result = await runPowerShell(prefillScript, args, options);
-        return send(res, 200, JSON.parse(result.stdout), setCookie);
+        const parsed = JSON.parse(result.stdout);
+        if (parsed.error) parsed.error = await redactText(parsed.error);
+        return send(res, 200, parsed, setCookie);
       }
       if (req.method === 'POST' && url.pathname === '/api/commands') {
         const body = await readJsonBody(req);
