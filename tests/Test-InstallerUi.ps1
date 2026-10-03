@@ -13,8 +13,9 @@ Write-Host 'Installer UI server' -ForegroundColor Cyan
 $watch = [Diagnostics.Stopwatch]::StartNew()
 $out = & node --test --test-reporter=tap (Join-Path $PSScriptRoot 'installer-ui.test.mjs') 2>&1 | Out-String
 $code = $LASTEXITCODE
-$tapCount = @([regex]::Matches($out, '(?m)^(?:not )?ok\s+\d+\s+-\s+')).Count
-Assert 'node:test loaded and reported individual subtests' ($tapCount -gt 10) $out
+$summary = [regex]::Match($out, '(?m)^# tests\s+(\d+)\s*$')
+$tapCount = if ($summary.Success) { [int]$summary.Groups[1].Value } else { @([regex]::Matches($out, '(?m)^\s*(?:not )?ok\s+\d+\s+-\s+')).Count }
+Assert 'node:test loaded and reported individual subtests' ($tapCount -ge 10) $out
 foreach ($match in [regex]::Matches($out, '(?m)^ok\s+\d+\s+-\s+(.+)$')) {
     Assert ("node:test: " + $match.Groups[1].Value.Trim()) $true
 }
