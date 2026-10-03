@@ -1,8 +1,8 @@
-# P92 A14 (docs/adr/0047-lean-installer-phase-0.md): tests/Test-BashInstallerCheckpoint.ps1 runs as two
-# Test-All checks within the default per-check timeout, and the two shards together run every check of the
-# suite exactly once. The partition is read from the suite's syntax tree: every Assert sits inside one
-# Test-ShardGroup block, and each group belongs to one shard. The weights are the measured durations in
-# tests/test-all-durations.json. The checks are those of tests/BashSuiteShards.ps1.
+# P92 A14 (docs/adr/0047-lean-installer-phase-0.md decision 14): tests/Test-BashInstallerCheckpoint.ps1 runs as
+# seven Test-All checks, each measured alone at most half of the default per-check timeout, and the seven shards
+# together run every check of the suite exactly once. The partition is read from the suite's syntax tree: every
+# Assert sits inside one Test-ShardGroup block, and each group belongs to one shard. The weights are the measured
+# durations in tests/test-all-durations.json. The checks are those of tests/BashSuiteShards.ps1.
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $script:fail = 0

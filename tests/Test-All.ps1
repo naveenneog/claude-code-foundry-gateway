@@ -220,14 +220,20 @@ try {
     $bashInstallerSkip = if (-not $installerBash) { 'macOS/Linux installer: no Git Bash (Windows) or bash on this machine.' } elseif (-not (& $installerBash -c 'command -v jq' 2>$null)) { 'macOS/Linux installer: jq is not on the bash PATH; the installer needs it.' } else { '' }
     Invoke-Check 'macOS/Linux installer prices and record'  'Test-BashInstaller.ps1' -SkipReason $bashInstallerSkip
     # Its checks drive the bash installer through Git Bash; two groups of scenarios run as two checks (ADR-0047).
-    Invoke-Check 'macOS/Linux installer checkpoint and resume [0/2]' 'Test-BashInstallerCheckpoint.ps1' @{ Shard = '0/2' } -SkipReason $bashInstallerSkip
-    Invoke-Check 'macOS/Linux installer checkpoint and resume [1/2]' 'Test-BashInstallerCheckpoint.ps1' @{ Shard = '1/2' } -SkipReason $bashInstallerSkip
+    Invoke-Check 'macOS/Linux installer checkpoint and resume [0/7]' 'Test-BashInstallerCheckpoint.ps1' @{ Shard = '0/7' } -SkipReason $bashInstallerSkip
+    Invoke-Check 'macOS/Linux installer checkpoint and resume [1/7]' 'Test-BashInstallerCheckpoint.ps1' @{ Shard = '1/7' } -SkipReason $bashInstallerSkip
+    Invoke-Check 'macOS/Linux installer checkpoint and resume [2/7]' 'Test-BashInstallerCheckpoint.ps1' @{ Shard = '2/7' } -SkipReason $bashInstallerSkip
+    Invoke-Check 'macOS/Linux installer checkpoint and resume [3/7]' 'Test-BashInstallerCheckpoint.ps1' @{ Shard = '3/7' } -SkipReason $bashInstallerSkip
+    Invoke-Check 'macOS/Linux installer checkpoint and resume [4/7]' 'Test-BashInstallerCheckpoint.ps1' @{ Shard = '4/7' } -SkipReason $bashInstallerSkip
+    Invoke-Check 'macOS/Linux installer checkpoint and resume [5/7]' 'Test-BashInstallerCheckpoint.ps1' @{ Shard = '5/7' } -SkipReason $bashInstallerSkip
+    Invoke-Check 'macOS/Linux installer checkpoint and resume [6/7]' 'Test-BashInstallerCheckpoint.ps1' @{ Shard = '6/7' } -SkipReason $bashInstallerSkip
     Invoke-Check 'Installer checkpoint store permissions'  'Test-InstallerCheckpointStore.ps1' -SkipReason $bashInstallerSkip
     Invoke-Check 'Installer answers schema, both validators' 'Test-InstallerAnswersSchema.ps1' -SkipReason $bashInstallerSkip
     Invoke-Check 'Installer answers schema matches its sources' 'Test-InstallerAnswersDrift.ps1'
     Invoke-Check 'Installer redaction, one rule set in both engines' 'Test-InstallerRedaction.ps1' -SkipReason $bashInstallerSkip
     Invoke-Check 'Installer preflight (PowerShell)'        'Test-InstallerPreflight.ps1'
-    Invoke-Check 'macOS/Linux installer preflight'         'Test-BashInstallerPreflight.ps1' -SkipReason $bashInstallerSkip
+    Invoke-Check 'macOS/Linux installer preflight [0/2]'   'Test-BashInstallerPreflight.ps1' @{ Shard = '0/2' } -SkipReason $bashInstallerSkip
+    Invoke-Check 'macOS/Linux installer preflight [1/2]'   'Test-BashInstallerPreflight.ps1' @{ Shard = '1/2' } -SkipReason $bashInstallerSkip
     Invoke-Check 'Installer steps, precedence and progress (PowerShell)' 'Test-InstallerStepSelection.ps1'
     Invoke-Check 'macOS/Linux installer steps, precedence and progress [0/3]' 'Test-BashInstallerStepSelection.ps1' @{ Shard = '0/3' } -SkipReason $bashInstallerSkip
     Invoke-Check 'macOS/Linux installer steps, precedence and progress [1/3]' 'Test-BashInstallerStepSelection.ps1' @{ Shard = '1/3' } -SkipReason $bashInstallerSkip
