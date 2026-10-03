@@ -242,7 +242,7 @@ exec bash ./install-claude-gateway.sh $quoted 2>&1
     Write-Lf $runnerPath $runner
     [pscustomobject]@{ Id = $Id; Dir = $dir; Repo = $shadow; Logs = $logs; Runner = $runnerPath; Answers = $Answers }
 }
-function Invoke-InstallerRuns([object[]]$Runs, [int]$TimeoutSeconds = 150) {
+function Invoke-InstallerRuns([object[]]$Runs, [int]$TimeoutSeconds = 300) {
     $started = foreach ($r in $Runs) {
         $psi = [Diagnostics.ProcessStartInfo]::new($bash)
         $psi.ArgumentList.Add((ConvertTo-BashPath $r.Runner))
