@@ -39,7 +39,9 @@ if (args.includes('-Yes')) {
   const steps = stepsArg ? stepsArg.split(',') : ['resource-group', 'gateway-deployment'];
   const progressPath = argValue('-ProgressPath');
   const shouldFail = process.env.P93_INSTALLER_UI_STUB_FAIL_STEP || '';
+  const delay = Number(process.env.P93_INSTALLER_UI_STUB_DELAY_MS || 0);
   for (const step of steps) {
+    if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
     const event = step === shouldFail ? 'failed' : 'completed';
     if (progressPath) appendFileSync(progressPath, JSON.stringify({
       schemaVersion: 1,

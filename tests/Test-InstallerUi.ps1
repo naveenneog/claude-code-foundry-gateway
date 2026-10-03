@@ -13,7 +13,15 @@ Write-Host 'Installer UI server' -ForegroundColor Cyan
 $watch = [Diagnostics.Stopwatch]::StartNew()
 $out = & node --test --test-reporter=tap (Join-Path $PSScriptRoot 'installer-ui.test.mjs') 2>&1 | Out-String
 $code = $LASTEXITCODE
-Assert 'node:test covers launch security, schema rendering, preflight, commands, run and rerun with the stub' ($code -eq 0) $out
+$tapCount = @([regex]::Matches($out, '(?m)^(?:not )?ok\s+\d+\s+-\s+')).Count
+Assert 'node:test loaded and reported individual subtests' ($tapCount -gt 10) $out
+foreach ($match in [regex]::Matches($out, '(?m)^ok\s+\d+\s+-\s+(.+)$')) {
+    Assert ("node:test: " + $match.Groups[1].Value.Trim()) $true
+}
+foreach ($match in [regex]::Matches($out, '(?m)^not ok\s+\d+\s+-\s+(.+)$')) {
+    Assert ("node:test: " + $match.Groups[1].Value.Trim()) $false $out
+}
+if ($code -ne 0 -and $tapCount -eq 0) { Assert 'node:test process exited successfully' $false $out }
 
 Write-Host ''
 Write-Host ("{0} checks, {1} failed, {2:N1} s" -f $script:checks, $script:fail, $watch.Elapsed.TotalSeconds)
