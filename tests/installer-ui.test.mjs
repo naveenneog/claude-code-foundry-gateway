@@ -122,6 +122,43 @@ test('the documented one-command launch prints the URL and token', async () => {
   }
 });
 
+test('non-loopback binding requires allow-host and logs refused host diagnostics to terminal only', async () => {
+  const refused = spawn(process.execPath, [serverCli, '--host', '0.0.0.0', '--idle-ms', '5000'], { cwd: new URL('..', import.meta.url), stdio: ['ignore', 'pipe', 'pipe'] });
+  const refusedOutput = captureOutput(refused);
+  try {
+    const [code] = await once(refused, 'exit');
+    assert.notEqual(code, 0);
+    assert.match(refusedOutput(), /--allow-host/);
+  } finally {
+    if (refused.exitCode === null) refused.kill('SIGINT');
+  }
+
+  const logs = [];
+  const server = await createInstallerUiServer({ token: 'allow-host-token-with-32-bytes-0000', allowedHosts: ['preview.example.test'], log: (line) => logs.push(line) });
+  const address = await server.listenAsync('127.0.0.1');
+  try {
+    assert.equal(await rawRequest(`http://127.0.0.1:${address.port}`, '/api/schema', {
+      host: 'preview.example.test',
+      cookie: `installer_token=${server.token}`,
+    }), 200);
+    const badStatus = await rawRequest(`http://127.0.0.1:${address.port}`, '/api/schema', {
+      host: 'wrong.example.test',
+      cookie: `installer_token=${server.token}`,
+      'x-forwarded-host': 'cloudshell.example.test',
+      'x-forwarded-proto': 'https',
+      'x-forwarded-prefix': '/preview',
+    });
+    assert.equal(badStatus, 403);
+    assert.match(logs.join('\n'), /wrong\.example\.test/);
+    assert.match(logs.join('\n'), /cloudshell\.example\.test/);
+    assert.match(logs.join('\n'), /x-forwarded-prefix=\/preview/);
+  } finally {
+    await server.cleanup();
+    server.close();
+    await once(server, 'close').catch(() => {});
+  }
+});
+
 test('token, host, fixed routes and headers protect the local server', async () => {
   const app = await start();
   try {

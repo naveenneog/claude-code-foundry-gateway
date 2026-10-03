@@ -126,13 +126,21 @@ function sendText(res, status, text, contentType, headers = {}) {
 
 function isAllowedHost(host, port, extraHosts = []) {
   const value = String(host || '').toLowerCase();
+  const withPort = value.includes(':') ? value : `${value}:${port}`;
   const allowed = new Set([
     `127.0.0.1:${port}`,
     `localhost:${port}`,
     `[::1]:${port}`,
-    ...extraHosts.map((h) => h.toLowerCase()),
+    ...extraHosts.map((h) => {
+      const lower = h.toLowerCase();
+      return lower.includes(':') ? lower : `${lower}:${port}`;
+    }),
   ]);
-  return allowed.has(value);
+  return allowed.has(value) || allowed.has(withPort);
+}
+
+function isLoopbackBind(host) {
+  return host === '127.0.0.1' || host === 'localhost' || host === '::1' || host === '[::1]';
 }
 
 function assertSameOrigin(req) {
@@ -409,7 +417,10 @@ export async function createInstallerUiServer(options = {}) {
 
   const server = createHttpServer(async (req, res) => {
     try {
-      if (!isAllowedHost(req.headers.host, port, extraHosts)) return send(res, 403, { error: 'host header is not allowed' });
+      if (!isAllowedHost(req.headers.host, port, extraHosts)) {
+        log(`Refused Host: host=${req.headers.host || ''}; x-forwarded-host=${req.headers['x-forwarded-host'] || ''}; x-forwarded-proto=${req.headers['x-forwarded-proto'] || ''}; x-forwarded-prefix=${req.headers['x-forwarded-prefix'] || ''}`);
+        return send(res, 403, { error: 'host header is not allowed' });
+      }
       if (req.method === 'OPTIONS') return send(res, 405, { error: 'OPTIONS is not allowed' });
       const url = new URL(req.url, `http://${req.headers.host}`);
       const queryToken = url.searchParams.get('token');
@@ -574,17 +585,24 @@ export async function main(argv = process.argv.slice(2)) {
   const hostIndex = argv.indexOf('--host');
   const portIndex = argv.indexOf('--port');
   const idleIndex = argv.indexOf('--idle-ms');
+  const allowHostIndex = argv.indexOf('--allow-host');
   const host = hostIndex >= 0 ? argv[hostIndex + 1] : '127.0.0.1';
+  const allowHost = allowHostIndex >= 0 ? argv[allowHostIndex + 1] : '';
+  if (!isLoopbackBind(host) && !allowHost) {
+    throw new Error('A non-loopback --host requires --allow-host <host[:port]>; this exposes the local installer server to that host.');
+  }
   const bindWarning = host === '127.0.0.1' ? '' : ' Binding to a non-loopback address exposes this local installer server to the network.';
   const server = await createInstallerUiServer({
     host,
     port: portIndex >= 0 ? Number(argv[portIndex + 1]) : 0,
     idleMs: idleIndex >= 0 ? Number(argv[idleIndex + 1]) : defaultIdleMs,
+    allowedHosts: allowHost ? [allowHost] : [],
     log: (line) => console.log(line),
     exitOnStop: true,
   });
   const address = await server.listenAsync(host);
-  const url = `http://${host}:${address.port}/?token=${encodeURIComponent(server.token)}`;
+  const displayedHost = allowHost || host;
+  const url = `http://${displayedHost.includes(':') ? displayedHost : `${displayedHost}:${address.port}`}/?token=${encodeURIComponent(server.token)}`;
   console.log(`Claude gateway installer UI: ${url}`);
   console.log(`One-time token: ${server.token}`);
   if (bindWarning) console.log(bindWarning);
