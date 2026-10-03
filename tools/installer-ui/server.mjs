@@ -415,6 +415,17 @@ export async function createInstallerUiServer(options = {}) {
     idleTimer.unref?.();
   };
 
+  const claimRun = () => {
+    if (activeRun) return null;
+    const owner = randomBytes(16).toString('hex');
+    activeRun = owner;
+    return owner;
+  };
+
+  const releaseRun = (owner) => {
+    if (activeRun === owner) activeRun = null;
+  };
+
   const server = createHttpServer(async (req, res) => {
     try {
       if (!isAllowedHost(req.headers.host, port, extraHosts)) {
@@ -499,16 +510,9 @@ export async function createInstallerUiServer(options = {}) {
       }
       if (req.method === 'POST' && url.pathname === '/api/run/stream') {
         assertSameOrigin(req);
-        if (activeRun) return send(res, 409, { error: 'an installer run is already active' }, setCookie);
+        const owner = claimRun();
+        if (!owner) return send(res, 409, { error: 'an installer run is already active' }, setCookie);
         const body = await readJsonBody(req);
-        activeRun = {};
-        res.writeHead(200, {
-          'content-type': 'application/x-ndjson; charset=utf-8',
-          'cache-control': 'no-store',
-          'content-security-policy': contentSecurityPolicy(),
-          'x-content-type-options': 'nosniff',
-          ...setCookie,
-        });
         try {
           await withRunDirectory(async (dir) => {
             const steps = await validateRunRequest(body, options);
@@ -516,6 +520,13 @@ export async function createInstallerUiServer(options = {}) {
             const progress = join(dir, 'progress.ndjson');
             const args = ['-AnswersPath', answers, '-Yes', '-ProgressPath', progress];
             if (steps.length) args.push('-Steps', steps.join(','));
+            res.writeHead(200, {
+              'content-type': 'application/x-ndjson; charset=utf-8',
+              'cache-control': 'no-store',
+              'content-security-policy': contentSecurityPolicy(),
+              'x-content-type-options': 'nosniff',
+              ...setCookie,
+            });
             let failedStepId = '';
             let resumeCommand = '';
             const code = await runInstallerStreaming('powershell', args, options, async (event) => {
@@ -529,17 +540,21 @@ export async function createInstallerUiServer(options = {}) {
             writeNdjson(res, { type: 'summary', exitCode: code, failedStepId, resumeCommand });
           }, tempDirs);
         } finally {
-          activeRun = null;
-          res.end();
+          releaseRun(owner);
+          if (!res.headersSent) {
+            // Validation failed before the stream began; the catch block below sends JSON.
+          } else {
+            res.end();
+          }
           armIdle();
         }
         return;
       }
       if (req.method === 'POST' && url.pathname === '/api/run') {
         assertSameOrigin(req);
-        if (activeRun) return send(res, 409, { error: 'an installer run is already active' }, setCookie);
+        const owner = claimRun();
+        if (!owner) return send(res, 409, { error: 'an installer run is already active' }, setCookie);
         const body = await readJsonBody(req);
-        activeRun = {};
         try {
           const result = await withRunDirectory(async (dir) => {
             const steps = await validateRunRequest(body, options);
@@ -556,7 +571,7 @@ export async function createInstallerUiServer(options = {}) {
           }, tempDirs);
           return send(res, 200, result, setCookie);
         } finally {
-          activeRun = null;
+          releaseRun(owner);
         }
       }
       return send(res, 404, { error: 'route not found' }, setCookie);

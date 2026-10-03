@@ -407,6 +407,20 @@ test('selected runs stream progress, refuse empty selections, support explicit f
     });
     assert.equal(empty.status, 400);
     assert.match((await empty.json()).error, /select at least one step/i);
+    const streamEmpty = await app.fetch('/api/run/stream', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ answers: {}, steps: [] }),
+    });
+    assert.equal(streamEmpty.status, 400);
+    assert.match((await streamEmpty.json()).error, /select at least one step/i);
+    const streamInjected = await app.fetch('/api/run/stream', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ answers: {}, steps: ['not-a-step'] }),
+    });
+    assert.equal(streamInjected.status, 400);
+    assert.match((await streamInjected.json()).error, /unknown step id/);
 
     const run = await (await app.fetch('/api/run/stream', {
       method: 'POST',
@@ -431,6 +445,8 @@ test('selected runs stream progress, refuse empty selections, support explicit f
 
   const slowStub = join(tmpdir(), `p93-slow-stub-${process.pid}.mjs`);
   await writeFile(slowStub, `
+import { appendFileSync } from 'node:fs';
+if (process.env.P93_INSTALLER_UI_STUB_LOG) appendFileSync(process.env.P93_INSTALLER_UI_STUB_LOG, JSON.stringify({ mode: process.argv[2], args: process.argv.slice(3) }) + '\\n');
 if (process.argv.includes('-ListSteps')) {
   console.log(JSON.stringify({ schemaVersion: 1, steps: [{ id: 'resource-group', title: 'Resource group' }] }));
   process.exit(0);
@@ -439,19 +455,20 @@ setTimeout(() => { console.log('done'); process.exit(0); }, 500);
 `, 'utf8');
   const slow = await start({ stubInstaller: slowStub });
   try {
-    const first = slow.fetch('/api/run', {
+    const first = slow.fetch('/api/run/stream', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ answers: {}, steps: ['resource-group'] }),
     });
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    const second = await slow.fetch('/api/run', {
+    const second = slow.fetch('/api/run/stream', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ answers: {}, steps: ['resource-group'] }),
     });
-    assert.equal(second.status, 409);
-    assert.equal((await first).status, 200);
+    const responses = await Promise.all([first, second]);
+    assert.deepEqual(responses.map((response) => response.status).sort(), [200, 409]);
+    const log = (await readFile(slow.log, 'utf8')).trim().split(/\r?\n/).filter(Boolean).map(JSON.parse);
+    assert.equal(log.filter((entry) => entry.args.includes('-Yes')).length, 1);
   } finally {
     await slow.close();
     await rm(slowStub, { force: true });
