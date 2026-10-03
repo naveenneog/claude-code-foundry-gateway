@@ -2840,6 +2840,649 @@
           ]
         }
       ]
+    },
+    {
+      "round": "Builder round 4",
+      "by": "builder",
+      "dateUtc": "2026-10-03",
+      "measuredCommit": "1bd2a34",
+      "council": "Council round 2 on c1ed585: UX PASS, Coder PASS; QA, Architect and Security BLOCK (docs/status/P92.md, round 4).",
+      "rule": "One mutant per new behaviour of council round 2 items 3, 4 and 5, in each engine that has it: for item 4, one per site that prints a line from an error or a refusal and that a check reaches; and of the shard contracts of items 1 and 2: the shard map, the group of a check, the Test-All registration and the weight. Args are passed to the suite. Counting, copies and restore as in the first round of this record.",
+      "leadHarnessDryRun": "p92-lead-mutations.ps1 -DryRun on the measured commit: all 34 find-strings match once.",
+      "loadNote": "The PowerShell and bash workers ran at the same time, each in its own copy (git archive), beside other work on the shared machine; each suite ran only while the gate lock was absent.",
+      "baselines": [
+        {
+          "suite": "tests/Test-BashInstallerCheckpointShards.ps1",
+          "checks": 5,
+          "failed": 0,
+          "seconds": 5.1
+        },
+        {
+          "suite": "tests/Test-BashInstallerPreflightShards.ps1",
+          "checks": 5,
+          "failed": 0,
+          "seconds": 5.1
+        },
+        {
+          "suite": "tests/Test-InstallerAnswersDrift.ps1",
+          "checks": 15,
+          "failed": 0,
+          "seconds": 10.2
+        },
+        {
+          "suite": "tests/Test-InstallerBusinessUnitAnswers.ps1",
+          "checks": 16,
+          "failed": 0,
+          "seconds": 55.1
+        },
+        {
+          "suite": "tests/Test-InstallerRedaction.ps1",
+          "checks": 11,
+          "failed": 0,
+          "seconds": 10.2
+        },
+        {
+          "suite": "tests/Test-InstallerStepSelection.ps1",
+          "checks": 36,
+          "failed": 0,
+          "seconds": 80.2
+        },
+        {
+          "suite": "tests/Test-BashInstallerStepSelection.ps1 -Shard 1/3",
+          "checks": 19,
+          "failed": 0,
+          "seconds": 195.5
+        }
+      ],
+      "caught": 32,
+      "targetFailed": 32,
+      "total": 32,
+      "mutants": [
+        {
+          "id": "P01",
+          "item": "3 the checkpoint records the three renewal inputs, so a resume passes them",
+          "suite": "tests/Test-InstallerStepSelection.ps1",
+          "target": "passes the recorded reconciler and all three renewal inputs",
+          "file": "scripts/ClaudeInstallCheckpoint.ps1",
+          "mutation": "''ProjectionReconcilerResourceId', 'ProjectionRenewalImageDigest',\n    'ProjectionRenewalEntryPoint', 'ProjectionRenewalActionGroupResourceId', 'ProjectionResolverAppId',' -> ''ProjectionReconcilerResourceId',\n    'ProjectionResolverAppId','",
+          "checks": 36,
+          "failed": 3,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 75.2,
+          "failures": [
+            "R4 a run whose answers file holds the P86 renewal inputs and that fails before the projection step keeps a persistent install checkpoint recording them and the reconciler, and prints a resume command that holds none of them - not recorded: ProjectionRenewalImageDigest, ProjectionRenewalEntryPoint, ProjectionRenewalActionGroupResourceId || resume: Set-Location -LiteralPath '<home>\\AppData\\Local\\p92-steps-c499e0ad3314403da3e3fcdae5427ac2\\scenarios\\projection\\repo'; ./Install-ClaudeGateway.ps1 ||     [OK]   claude-code-premium created | ==> Sync entitlement | Resume: Set-Location -LiteralPath '<home>\\AppData\\Local\\p92-steps-c499e0ad3314403da3e3fcdae5427ac2\\scenarios\\projection\\repo'; ./Install-ClaudeGateway.ps1 | Graph read failed: Response status code does not indicate success: 404 (Not Found).",
+            "R4 a rerun with the printed resume command passes the recorded reconciler and all three renewal inputs to the projection deployment - [\"-ResourceGroup\",\"rg-p91\",\"-ApimName\",\"apim-p91gw\",\"-NamePrefix\",\"p91gw\",\"-Location\",\"eastus2\",\"-Sku\",\"BasicV2\",\"-ResolverInboundAccess\",\"public\",\"-StandardGroup\",\"claude-code-standard\",\"-PremiumGroup\",\"claude-code-premium\",\"-SubscriptionId\",\"00000000-0000-4000-8000-0000000000a1\",\"-ReconcilerResourceId\",\"/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-p91/providers/Microsoft.App/jobs/p91gw-reconciler\",\"-RenewalEntryPoint\",\"node /app/sync/src/apply-projection.mjs\"] ||    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets. |    4. Choose optional FinOps tooling: .\\scripts\\Select-ClaudeFinOpsTooling.ps1 -Region eastus2",
+            "R4 changing any one of the three renewal inputs, or the reconciler, runs the projection step again with the new value and the recorded others, and leaves the gateway deployment, which receives none of them, verified live and not deployed again - ProjectionRenewalImageDigest:  ||    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets. |    4. Choose optional FinOps tooling: .\\scripts\\Select-ClaudeFinOpsTooling.ps1 -Region eastus2 || ProjectionRenewalEntryPoint:  ||    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets. |    4. Choose optional FinOps tooling: .\\scripts\\Select-ClaudeFinOpsTooling.ps1 -Region eastus2 || ProjectionRenewalActionGroupResourceId:  ||    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets. |    4. Choose optional FinOps tooling: .\\scripts\\Select-ClaudeFinOpsTooling.ps1 -Region eastus2 || ProjectionReconcilerResourceId: [\"-ResourceGroup\",\"rg-p91\",\"-ApimName\",\"apim-p91gw\",\"-NamePrefix\",\"p91gw\",\"-Location\",\"eastus2\",\"-Sku\",\"BasicV2\",\"-ResolverInboundAccess\",\"public\",\"-StandardGroup\",\"claude-code-standard\",\"-PremiumGroup\",\"claude-code-premium\",\"-ResolverAppId\",\"00000000-0000-4000-8000-0000000005a1\",\"-SubscriptionId\",\"00000000-0000-4000-8000-0000000000a1\",\"-ReconcilerResourceId\",\"/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-p91/providers/Microsoft.App/jobs/p91gw-other\",\"-RenewalEntryPoint\",\"node /app/sync/src/apply-projection.mjs\"] ||    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets. |    4. Choose optional FinOps tooling: .\\scripts\\Select-ClaudeFinOpsTooling.ps1 -Region eastus2"
+          ]
+        },
+        {
+          "id": "P02",
+          "item": "3 the drift check: every schema answer of the installer is recorded",
+          "suite": "tests/Test-InstallerAnswersDrift.ps1",
+          "target": "every answer of Install-ClaudeGateway.ps1 in the schema is one its install checkpoint records",
+          "file": "scripts/ClaudeInstallCheckpoint.ps1",
+          "mutation": "''ProjectionReconcilerResourceId', 'ProjectionRenewalImageDigest',\n    'ProjectionRenewalEntryPoint', 'ProjectionRenewalActionGroupResourceId', 'ProjectionResolverAppId',' -> ''ProjectionReconcilerResourceId', 'ProjectionRenewalImageDigest',\n    'ProjectionRenewalEntryPoint', 'ProjectionResolverAppId','",
+          "checks": 15,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 5.1,
+          "failures": [
+            "R4 every answer of Install-ClaudeGateway.ps1 in the schema is one its install checkpoint records, as a parameter or prompt answer; its other parameters are run options or secrets - not recorded: ProjectionRenewalActionGroupResourceId"
+          ]
+        },
+        {
+          "id": "P03",
+          "item": "3 the projection hash holds the three renewal inputs",
+          "suite": "tests/Test-InstallerStepSelection.ps1",
+          "target": "changing any one of the three renewal inputs",
+          "file": "scripts/ClaudeInstallCheckpoint.ps1",
+          "mutation": "''ProjectionReconcilerResourceId', 'ProjectionRenewalImageDigest', 'ProjectionRenewalEntryPoint', 'ProjectionRenewalActionGroupResourceId' }' -> ''ProjectionReconcilerResourceId' }'",
+          "checks": 36,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 80.3,
+          "failures": [
+            "R4 changing any one of the three renewal inputs, or the reconciler, runs the projection step again with the new value and the recorded others, and leaves the gateway deployment, which receives none of them, verified live and not deployed again - ProjectionRenewalImageDigest:  ||    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets. |    4. Choose optional FinOps tooling: .\\scripts\\Select-ClaudeFinOpsTooling.ps1 -Region eastus2 || ProjectionRenewalEntryPoint:  ||    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets. |    4. Choose optional FinOps tooling: .\\scripts\\Select-ClaudeFinOpsTooling.ps1 -Region eastus2 || ProjectionRenewalActionGroupResourceId:  ||    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets. |    4. Choose optional FinOps tooling: .\\scripts\\Select-ClaudeFinOpsTooling.ps1 -Region eastus2"
+          ]
+        },
+        {
+          "id": "P04",
+          "item": "3 the projection hash holds the reconciler",
+          "suite": "tests/Test-InstallerStepSelection.ps1",
+          "target": "changing any one of the three renewal inputs, or the reconciler",
+          "file": "scripts/ClaudeInstallCheckpoint.ps1",
+          "mutation": "''ProjectionReconcilerResourceId', 'ProjectionRenewalImageDigest', 'ProjectionRenewalEntryPoint', 'ProjectionRenewalActionGroupResourceId' }' -> ''ProjectionRenewalImageDigest', 'ProjectionRenewalEntryPoint', 'ProjectionRenewalActionGroupResourceId' }'",
+          "checks": 36,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 90.2,
+          "failures": [
+            "R4 changing any one of the three renewal inputs, or the reconciler, runs the projection step again with the new value and the recorded others, and leaves the gateway deployment, which receives none of them, verified live and not deployed again - ProjectionReconcilerResourceId:  ||    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets. |    4. Choose optional FinOps tooling: .\\scripts\\Select-ClaudeFinOpsTooling.ps1 -Region eastus2"
+          ]
+        },
+        {
+          "id": "P05",
+          "item": "3 the gateway hash leaves the renewal inputs out",
+          "suite": "tests/Test-InstallerStepSelection.ps1",
+          "target": "leaves the gateway deployment",
+          "file": "scripts/ClaudeInstallCheckpoint.ps1",
+          "mutation": "''ProjectionResolverAppId', 'ProjectionRenewalImageDigest', 'ProjectionRenewalEntryPoint', 'ProjectionRenewalActionGroupResourceId', 'PendingClaudeDeployment'' -> ''ProjectionResolverAppId', 'PendingClaudeDeployment''",
+          "checks": 36,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 105.2,
+          "failures": [
+            "R4 changing any one of the three renewal inputs, or the reconciler, runs the projection step again with the new value and the recorded others, and leaves the gateway deployment, which receives none of them, verified live and not deployed again - ProjectionRenewalImageDigest: [\"-ResourceGroup\",\"rg-p91\",\"-ApimName\",\"apim-p91gw\",\"-NamePrefix\",\"p91gw\",\"-Location\",\"eastus2\",\"-Sku\",\"BasicV2\",\"-ResolverInboundAccess\",\"public\",\"-StandardGroup\",\"claude-code-standard\",\"-PremiumGroup\",\"claude-code-premium\",\"-ResolverAppId\",\"00000000-0000-4000-8000-0000000005a1\",\"-SubscriptionId\",\"00000000-0000-4000-8000-0000000000a1\",\"-ReconcilerResourceId\",\"/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-p91/providers/Microsoft.App/jobs/p91gw-reconciler\",\"-RenewalImageDigest\",\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"-RenewalEntryPoint\",\"node /app/sync/src/p92-renewal.mjs\",\"-RenewalActionGroupResourceId\",\"/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-p91/providers/Microsoft.Insights/actionGroups/ag-p91-renewal\"] ||    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets. |    4. Choose optional FinOps tooling: .\\scripts\\Select-ClaudeFinOpsTooling.ps1 -Region eastus2 || ProjectionRenewalEntryPoint: [\"-ResourceGroup\",\"rg-p91\",\"-ApimName\",\"apim-p91gw\",\"-NamePrefix\",\"p91gw\",\"-Location\",\"eastus2\",\"-Sku\",\"BasicV2\",\"-ResolverInboundAccess\",\"public\",\"-StandardGroup\",\"claude-code-standard\",\"-PremiumGroup\",\"claude-code-premium\",\"-ResolverAppId\",\"00000000-0000-4000-8000-0000000005a1\",\"-SubscriptionId\",\"00000000-0000-4000-8000-0000000000a1\",\"-ReconcilerResourceId\",\"/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-p91/providers/Microsoft.App/jobs/p91gw-reconciler\",\"-RenewalImageDigest\",\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"-RenewalEntryPoint\",\"node /app/sync/src/p92-other.mjs\",\"-RenewalActionGroupResourceId\",\"/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-p91/providers/Microsoft.Insights/actionGroups/ag-p91-renewal\"] ||    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets. |    4. Choose optional FinOps tooling: .\\scripts\\Select-ClaudeFinOpsTooling.ps1 -Region eastus2 || ProjectionRenewalActionGroupResourceId: [\"-ResourceGroup\",\"rg-p91\",\"-ApimName\",\"apim-p91gw\",\"-NamePrefix\",\"p91gw\",\"-Location\",\"eastus2\",\"-Sku\",\"BasicV2\",\"-ResolverInboundAccess\",\"public\",\"-StandardGroup\",\"claude-code-standard\",\"-PremiumGroup\",\"claude-code-premium\",\"-ResolverAppId\",\"00000000-0000-4000-8000-0000000005a1\",\"-SubscriptionId\",\"00000000-0000-4000-8000-0000000000a1\",\"-ReconcilerResourceId\",\"/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-p91/providers/Microsoft.App/jobs/p91gw-reconciler\",\"-RenewalImageDigest\",\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"-RenewalEntryPoint\",\"node /app/sync/src/p92-renewal.mjs\",\"-RenewalActionGroupResourceId\",\"/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-p91/providers/Microsoft.Insights/actionGroups/ag-p91-other\"] ||    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets. |    4. Choose optional FinOps tooling: .\\scripts\\Select-ClaudeFinOpsTooling.ps1 -Region eastus2"
+          ]
+        },
+        {
+          "id": "P06",
+          "item": "3 a run that asks for the switch runs the projection step again",
+          "suite": "tests/Test-InstallerStepSelection.ps1",
+          "target": "FlipProjectionAfterCleanCompare and unchanged P86 inputs",
+          "file": "Install-ClaudeGateway.ps1",
+          "mutation": "'if ($FlipProjectionAfterCleanCompare) { Get-ClaudeInstallVerdict 'absent' 'the switch to the projection is asked for' }' -> 'if ($false) { Get-ClaudeInstallVerdict 'absent' 'the switch to the projection is asked for' }'",
+          "checks": 36,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 105.4,
+          "failures": [
+            "R4 a rerun with -FlipProjectionAfterCleanCompare and unchanged P86 inputs runs the projection step again with the switch, although the checkpoint shows it completed and a live read finds its deployments -  ||    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets. |    4. Choose optional FinOps tooling: .\\scripts\\Select-ClaudeFinOpsTooling.ps1 -Region eastus2"
+          ]
+        },
+        {
+          "id": "C01",
+          "item": "4 Stop-ClaudeInstall redacts the refusal it throws",
+          "suite": "tests/Test-InstallerRedaction.ps1",
+          "target": "Stop-ClaudeInstall hands its host",
+          "file": "scripts/ClaudeInstallCheckpoint.ps1",
+          "mutation": "'if (Get-Command Protect-ClaudeInstallText -ErrorAction SilentlyContinue) { $text = Protect-ClaudeInstallText $text }' -> ''",
+          "checks": 11,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 5.0,
+          "failures": [
+            "R4 Stop-ClaudeInstall hands its host a refusal with each secret shape in its [redacted] form and no sentinel - sentinel p92JwtSentinel; sentinel p92BearerSentinel; sentinel p92SigSentinel; sentinel p92SignatureSentinel; sentinel p92AccountKeySentinel; sentinel p92SharedAccessKeySentinel; sentinel p92SharedAccessSignatureSentinel; sentinel p92ClientSecretSentinel; sentinel p92ClientSecretCamelSentinel; sentinel p92PasswordSentinel; sentinel p92PwdSentinel; sentinel p92SecretSentinel; sentinel p92AccessTokenSentinel; sentinel p92RefreshTokenSentinel; no 'jwt [redacted]'; no 'Authorization: Bearer [redacted]'; no 'https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026'; no 'signature=[redacted]'; no 'AccountName=p92;AccountKey=[redacted];EndpointSuffix=core'; no 'SharedAccessKey=[redacted];'; no 'SharedAccessSignature: [redacted]'; no 'client_secret=[redacted]&grant_type=client_credentials'; no '{\"clientSecret\": \"[redacted]\"}'; no 'PASSWORD=[redacted]'; no 'pwd: [redacted]'; no 'secret=[redacted]'; no 'access_token=[redacted]'; no 'refresh_token: '[redacted]'' || Refused: an error that quotes (ERROR: the request was refused (jwt eyJhbGciOiJSUzI1NiJ9.eyJwOTIiOiJyZWRhY3QifQ.p92JwtSentinel Authorization: Bearer p92BearerSentinel0123 https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=p92SigSentinel&se=2026 signature=p92SignatureSentinel AccountName=p92;AccountKey=p92AccountKeySentinel==;EndpointSuffix=core SharedAccessKey=p92SharedAccessKeySentinel; SharedAccessSignature: p92SharedAccessSignatureSentinel client_secret=p92ClientSecretSentinel&grant_type=client_credentials {\"clientSecret\": \"p92ClientSecretCamelSentinel\"} PASSWORD=p92PasswordSentinel pwd: p92PwdSentinel secret=p92SecretSentinel access_token=p92AccessTokenSentinel refresh_token: 'p92RefreshTokenSentinel') (Authorization_RequestDenied).)"
+          ]
+        },
+        {
+          "id": "C02",
+          "item": "4 the top-level trap redacts the line it prints",
+          "suite": "tests/Test-InstallerStepSelection.ps1",
+          "target": "ends at the top-level trap",
+          "file": "Install-ClaudeGateway.ps1",
+          "mutation": "'if (Get-Command Protect-ClaudeInstallText -ErrorAction SilentlyContinue) { $line = Protect-ClaudeInstallText $line }' -> ''",
+          "checks": 36,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 90.2,
+          "failures": [
+            "R4 a failure that ends at the top-level trap prints its error with each secret shape in its [redacted] form, then a Resume line with sig=[redacted], and no sentinel in stdout or stderr - sentinel p92JwtSentinel; sentinel p92BearerSentinel; sentinel p92SigSentinel; sentinel p92SignatureSentinel; sentinel p92AccountKeySentinel; sentinel p92SharedAccessKeySentinel; sentinel p92SharedAccessSignatureSentinel; sentinel p92ClientSecretSentinel; sentinel p92ClientSecretCamelSentinel; sentinel p92PasswordSentinel; sentinel p92PwdSentinel; sentinel p92SecretSentinel; sentinel p92AccessTokenSentinel; sentinel p92RefreshTokenSentinel; no 'jwt [redacted]'; no 'Authorization: Bearer [redacted]'; no 'https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026'; no 'signature=[redacted]'; no 'AccountName=p92;AccountKey=[redacted];EndpointSuffix=core'; no 'SharedAccessKey=[redacted];'; no 'SharedAccessSignature: [redacted]'; no 'client_secret=[redacted]&grant_type=client_credentials'; no '{\"clientSecret\": \"[redacted]\"}'; no 'PASSWORD=[redacted]'; no 'pwd: [redacted]'; no 'secret=[redacted]'; no 'access_token=[redacted]'; no 'refresh_token: '[redacted]'' || P91 stub: the client was disconnected while the deployment ran. ERROR: the request was refused (jwt eyJhbGciOiJSUzI1NiJ9.eyJwOTIiOiJyZWRhY3QifQ.p92JwtSentinel Authorization: Bearer p92BearerSentinel0123 https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=p92SigSentinel&se=2026 signature=p92SignatureSentinel AccountName=p92;AccountKey=p92AccountKeySentinel==;EndpointSuffix=core SharedAccessKey=p92SharedAccessKeySentinel; SharedAccessSignature: p92SharedAccessSignatureSentinel client_secret=p92ClientSecretSentinel&grant_type=client_credentials {\"clientSecret\": \"p92ClientSecretCamelSentinel\"} PASSWORD=p92PasswordSentinel pwd: p92PwdSentinel secret=p92SecretSentinel access_token=p92AccessTokenSentinel refresh_token: 'p92RefreshTokenSentinel') (Authorization_RequestDenied). || ==> API Management and Application Insights (a few minutes) |     Safe to leave running. | Resume: Set-Location -LiteralPath '<home>\\AppData\\Local\\p92-steps-10b95f08f2724a45ac351af977de9efa\\scenarios\\redact-sig=[redacted]'; ./Install-ClaudeGateway.ps1 | P91 stub: the client was disconnected while the deployment ran. ERROR: the request was refused (jwt eyJhbGciOiJSUzI1NiJ9.eyJwOTIiOiJyZWRhY3QifQ.p92JwtSentinel Authorization: Bearer p92BearerSentinel0123 https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=p92SigSentinel&se=2026 signature=p92SignatureSentinel AccountName=p92;AccountKey=p92AccountKeySentinel==;EndpointSuffix=core SharedAccessKey=p92SharedAccessKeySentinel; SharedAccessSignature: p92SharedAccessSignatureSentinel client_secret=p92ClientSecretSentinel&grant_type=client_credentials {\"clientSecret\": \"p92ClientSecretCamelSentinel\"} PASSWORD=p92PasswordSentinel pwd: p92PwdSentinel secret=p92SecretSentinel access_token=p92AccessTokenSentinel refresh_token: 'p92RefreshTokenSentinel') (Authorization_RequestDenied)."
+          ]
+        },
+        {
+          "id": "C03",
+          "item": "4 Write-Warn2 redacts",
+          "suite": "tests/Test-InstallerRedaction.ps1",
+          "target": "Write-Warn2 and Write-Bad",
+          "file": "Install-ClaudeGateway.ps1",
+          "mutation": "'function Write-Warn2($t){ if (Get-Command Protect-ClaudeInstallText -ErrorAction SilentlyContinue) { $t = Protect-ClaudeInstallText ([string]$t) }; ' -> 'function Write-Warn2($t){ '",
+          "checks": 11,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 10.0,
+          "failures": [
+            "R4 Write-Warn2 and Write-Bad, the installer's warning and failure lines, print each secret shape in its [redacted] form and no sentinel - Write-Warn2: sentinel p92JwtSentinel; Write-Warn2: sentinel p92BearerSentinel; Write-Warn2: sentinel p92SigSentinel; Write-Warn2: sentinel p92SignatureSentinel; Write-Warn2: sentinel p92AccountKeySentinel; Write-Warn2: sentinel p92SharedAccessKeySentinel; Write-Warn2: sentinel p92SharedAccessSignatureSentinel; Write-Warn2: sentinel p92ClientSecretSentinel; Write-Warn2: sentinel p92ClientSecretCamelSentinel; Write-Warn2: sentinel p92PasswordSentinel; Write-Warn2: sentinel p92PwdSentinel; Write-Warn2: sentinel p92SecretSentinel; Write-Warn2: sentinel p92AccessTokenSentinel; Write-Warn2: sentinel p92RefreshTokenSentinel; Write-Warn2: no 'jwt [redacted]'; Write-Warn2: no 'Authorization: Bearer [redacted]'; Write-Warn2: no 'https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026'; Write-Warn2: no 'signature=[redacted]'; Write-Warn2: no 'AccountName=p92;AccountKey=[redacted];EndpointSuffix=core'; Write-Warn2: no 'SharedAccessKey=[redacted];'; Write-Warn2: no 'SharedAccessSignature: [redacted]'; Write-Warn2: no 'client_secret=[redacted]&grant_type=client_credentials'; Write-Warn2: no '{\"clientSecret\": \"[redacted]\"}'; Write-Warn2: no 'PASSWORD=[redacted]'; Write-Warn2: no 'pwd: [redacted]'; Write-Warn2: no 'secret=[redacted]'; Write-Warn2: no 'access_token=[redacted]'; Write-Warn2: no 'refresh_token: '[redacted]''"
+          ]
+        },
+        {
+          "id": "C04",
+          "item": "4 Write-Bad redacts",
+          "suite": "tests/Test-InstallerRedaction.ps1",
+          "target": "Write-Warn2 and Write-Bad",
+          "file": "Install-ClaudeGateway.ps1",
+          "mutation": "'function Write-Bad($t)  { if (Get-Command Protect-ClaudeInstallText -ErrorAction SilentlyContinue) { $t = Protect-ClaudeInstallText ([string]$t) }; ' -> 'function Write-Bad($t)  { '",
+          "checks": 11,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 10.3,
+          "failures": [
+            "R4 Write-Warn2 and Write-Bad, the installer's warning and failure lines, print each secret shape in its [redacted] form and no sentinel - Write-Bad: sentinel p92JwtSentinel; Write-Bad: sentinel p92BearerSentinel; Write-Bad: sentinel p92SigSentinel; Write-Bad: sentinel p92SignatureSentinel; Write-Bad: sentinel p92AccountKeySentinel; Write-Bad: sentinel p92SharedAccessKeySentinel; Write-Bad: sentinel p92SharedAccessSignatureSentinel; Write-Bad: sentinel p92ClientSecretSentinel; Write-Bad: sentinel p92ClientSecretCamelSentinel; Write-Bad: sentinel p92PasswordSentinel; Write-Bad: sentinel p92PwdSentinel; Write-Bad: sentinel p92SecretSentinel; Write-Bad: sentinel p92AccessTokenSentinel; Write-Bad: sentinel p92RefreshTokenSentinel; Write-Bad: no 'jwt [redacted]'; Write-Bad: no 'Authorization: Bearer [redacted]'; Write-Bad: no 'https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026'; Write-Bad: no 'signature=[redacted]'; Write-Bad: no 'AccountName=p92;AccountKey=[redacted];EndpointSuffix=core'; Write-Bad: no 'SharedAccessKey=[redacted];'; Write-Bad: no 'SharedAccessSignature: [redacted]'; Write-Bad: no 'client_secret=[redacted]&grant_type=client_credentials'; Write-Bad: no '{\"clientSecret\": \"[redacted]\"}'; Write-Bad: no 'PASSWORD=[redacted]'; Write-Bad: no 'pwd: [redacted]'; Write-Bad: no 'secret=[redacted]'; Write-Bad: no 'access_token=[redacted]'; Write-Bad: no 'refresh_token: '[redacted]''"
+          ]
+        },
+        {
+          "id": "C05",
+          "item": "4 an Azure CLI error the run shows is redacted (Invoke-ClaudeInstallAzShown)",
+          "suite": "tests/Test-InstallerStepSelection.ps1",
+          "target": "a failure whose Azure CLI error quotes every secret shape",
+          "file": "scripts/ClaudeInstallResume.ps1",
+          "mutation": "'[Console]::Error.WriteLine((Protect-ClaudeInstallText $item.ToString()))' -> '[Console]::Error.WriteLine($item.ToString())'",
+          "checks": 36,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 85.2,
+          "failures": [
+            "R4 a failure whose Azure CLI error quotes every secret shape prints that error with each in its [redacted] form, then the failure and the resume command, and no sentinel appears in stdout or stderr - sentinel p92JwtSentinel; sentinel p92BearerSentinel; sentinel p92SigSentinel; sentinel p92SignatureSentinel; sentinel p92AccountKeySentinel; sentinel p92SharedAccessKeySentinel; sentinel p92SharedAccessSignatureSentinel; sentinel p92ClientSecretSentinel; sentinel p92ClientSecretCamelSentinel; sentinel p92PasswordSentinel; sentinel p92PwdSentinel; sentinel p92SecretSentinel; sentinel p92AccessTokenSentinel; sentinel p92RefreshTokenSentinel; no 'jwt [redacted]'; no 'Authorization: Bearer [redacted]'; no 'https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026'; no 'signature=[redacted]'; no 'AccountName=p92;AccountKey=[redacted];EndpointSuffix=core'; no 'SharedAccessKey=[redacted];'; no 'SharedAccessSignature: [redacted]'; no 'client_secret=[redacted]&grant_type=client_credentials'; no '{\"clientSecret\": \"[redacted]\"}'; no 'PASSWORD=[redacted]'; no 'pwd: [redacted]'; no 'secret=[redacted]'; no 'access_token=[redacted]'; no 'refresh_token: '[redacted]'' ||     Safe to leave running. | Resume: Set-Location -LiteralPath '<home>\\AppData\\Local\\p92-steps-44349d4ef5df4abfa62aa64cd9bb5638\\scenarios\\console-failure\\repo'; ./Install-ClaudeGateway.ps1 | ERROR: the request was refused (jwt eyJhbGciOiJSUzI1NiJ9.eyJwOTIiOiJyZWRhY3QifQ.p92JwtSentinel Authorization: Bearer p92BearerSentinel0123 https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=p92SigSentinel&se=2026 signature=p92SignatureSentinel AccountName=p92;AccountKey=p92AccountKeySentinel==;EndpointSuffix=core SharedAccessKey=p92SharedAccessKeySentinel; SharedAccessSignature: p92SharedAccessSignatureSentinel client_secret=p92ClientSecretSentinel&grant_type=client_credentials {\"clientSecret\": \"p92ClientSecretCamelSentinel\"} PASSWORD=p92PasswordSentinel pwd: p92PwdSentinel secret=p92SecretSentinel access_token=p92AccessTokenSentinel refresh_token: 'p92RefreshTokenSentinel') (Authorization_RequestDenied). | Deployment failed. See the error above."
+          ]
+        },
+        {
+          "id": "C06",
+          "item": "4 a live read's detail before \"running it again\" is redacted",
+          "suite": "tests/Test-InstallerStepSelection.ps1",
+          "target": "a resume whose live reads quote every secret shape",
+          "file": "scripts/ClaudeInstallCheckpoint.ps1",
+          "mutation": "'Write-Host \"    ${title}: $(Protect-ClaudeInstallText $v.Detail); running it again\"' -> 'Write-Host \"    ${title}: $($v.Detail); running it again\"'",
+          "checks": 36,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 80.2,
+          "failures": [
+            "R4 a resume whose live reads quote every secret shape prints the resource group's read detail, the failed deployment's error and its failed operation, each shape in its [redacted] form, and no sentinel in stdout or stderr - sentinel p92JwtSentinel; sentinel p92BearerSentinel; sentinel p92SigSentinel; sentinel p92SignatureSentinel; sentinel p92AccountKeySentinel; sentinel p92SharedAccessKeySentinel; sentinel p92SharedAccessSignatureSentinel; sentinel p92ClientSecretSentinel; sentinel p92ClientSecretCamelSentinel; sentinel p92PasswordSentinel; sentinel p92PwdSentinel; sentinel p92SecretSentinel; sentinel p92AccessTokenSentinel; sentinel p92RefreshTokenSentinel; no 'jwt [redacted]'; no 'Authorization: Bearer [redacted]'; no 'https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026'; no 'signature=[redacted]'; no 'AccountName=p92;AccountKey=[redacted];EndpointSuffix=core'; no 'SharedAccessKey=[redacted];'; no 'SharedAccessSignature: [redacted]'; no 'client_secret=[redacted]&grant_type=client_credentials'; no '{\"clientSecret\": \"[redacted]\"}'; no 'PASSWORD=[redacted]'; no 'pwd: [redacted]'; no 'secret=[redacted]'; no 'access_token=[redacted]'; no 'refresh_token: '[redacted]'' ||     Resource group: resource group rg-p91 could not be read (ERROR: the request was refused (jwt eyJhbGciOiJSUzI1NiJ9.eyJwOTIiOiJyZWRhY3QifQ.p92JwtSentinel Authorization: Bearer p92BearerSentinel0123 https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=p92SigSentinel&se=2026 signature=p92SignatureSentinel AccountName=p92;AccountKey=p92AccountKeySentinel==;EndpointSuffix=core SharedAccessKey=p92SharedAccessKeySentinel; SharedAccessSignature: p92SharedAccessSignatureSentinel client_secret=p92ClientSecretSentinel&grant_type=client_credentials {\"clientSecret\": \"p92ClientSecretCamelSentinel\"} PASSWORD=p92PasswordSentinel pwd: p92PwdSentinel secret=p92SecretSentinel access_token=p92AccessTokenSentinel refresh_token: 'p92RefreshTokenSentinel') (Authorization_RequestDenied).); running it again ||     Gateway deployment: deployment claude-gw-20261003083824 Failed: DeploymentFailed: ERROR: the request was refused (jwt [redacted] Authorization: Bearer [redacted] https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026 signature=[redacted] AccountName=p92;AccountKey=[redacted];EndpointSuffix=core SharedAccessKey=[redacted]; SharedAccessSignature: [redacted] client_secret=[redacted]&grant_type=client_credentials {\"clientSecret\": \"[redacted]\"} PASSWORD=[redacted] pwd: [redacted] secret=[redacted] access_token=[redacted] refresh_token: '[redacted]') (Authorization_RequestDenied). ||       failed operation: grant-apim-cognitive-services-user: ERROR: the request was refused (jwt [redacted] Authorization: Bearer [redacted] https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026 signature=[redacted] AccountName=p92;AccountKey=[redacted];EndpointSuffix=core SharedAccessKey=[redacted]; SharedAccessSignature: [redacted] client_secret=[redacted]&grant_type=client_credentials {\"clientSecret\": \"[redacted]\"} PASSWORD=[redacted] pwd: [redacted] secret=[redacted] access_token=[redacted] refresh_token: '[redacted]') (Authorization_RequestDenied). ||         ./scripts/New-OnboardingEmail.ps1 -ConfigPath <home>\\AppData\\Local\\p92-steps-07a9b5d88d5b453d86333f18b95465e1\\scenarios\\console-resume\\repo\\onboarding\\claude-gateway.json -To dev@contoso.com |    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets."
+          ]
+        },
+        {
+          "id": "C07",
+          "item": "4 a recorded deployment's error is redacted",
+          "suite": "tests/Test-InstallerStepSelection.ps1",
+          "target": "a resume whose live reads quote every secret shape",
+          "file": "scripts/ClaudeInstallResume.ps1",
+          "mutation": "'$($s.State): $(Protect-ClaudeInstallText $s.Error)' -> '$($s.State): $($s.Error)'",
+          "checks": 36,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 80.3,
+          "failures": [
+            "R4 a resume whose live reads quote every secret shape prints the resource group's read detail, the failed deployment's error and its failed operation, each shape in its [redacted] form, and no sentinel in stdout or stderr - sentinel p92JwtSentinel; sentinel p92BearerSentinel; sentinel p92SigSentinel; sentinel p92SignatureSentinel; sentinel p92AccountKeySentinel; sentinel p92SharedAccessKeySentinel; sentinel p92SharedAccessSignatureSentinel; sentinel p92ClientSecretSentinel; sentinel p92ClientSecretCamelSentinel; sentinel p92PasswordSentinel; sentinel p92PwdSentinel; sentinel p92SecretSentinel; sentinel p92AccessTokenSentinel; sentinel p92RefreshTokenSentinel; no 'jwt [redacted]'; no 'Authorization: Bearer [redacted]'; no 'https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026'; no 'signature=[redacted]'; no 'AccountName=p92;AccountKey=[redacted];EndpointSuffix=core'; no 'SharedAccessKey=[redacted];'; no 'SharedAccessSignature: [redacted]'; no 'client_secret=[redacted]&grant_type=client_credentials'; no '{\"clientSecret\": \"[redacted]\"}'; no 'PASSWORD=[redacted]'; no 'pwd: [redacted]'; no 'secret=[redacted]'; no 'access_token=[redacted]'; no 'refresh_token: '[redacted]'' ||     Resource group: resource group rg-p91 could not be read (ERROR: the request was refused (jwt [redacted] Authorization: Bearer [redacted] https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026 signature=[redacted] AccountName=p92;AccountKey=[redacted];EndpointSuffix=core SharedAccessKey=[redacted]; SharedAccessSignature: [redacted] client_secret=[redacted]&grant_type=client_credentials {\"clientSecret\": \"[redacted]\"} PASSWORD=[redacted] pwd: [redacted] secret=[redacted] access_token=[redacted] refresh_token: '[redacted]') (Authorization_RequestDenied).); running it again ||     Gateway deployment: deployment claude-gw-20261003083946 Failed: DeploymentFailed: ERROR: the request was refused (jwt eyJhbGciOiJSUzI1NiJ9.eyJwOTIiOiJyZWRhY3QifQ.p92JwtSentinel Authorization: Bearer p92BearerSentinel0123 https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=p92SigSentinel&se=2026 signature=p92SignatureSentinel AccountName=p92;AccountKey=p92AccountKeySentinel==;EndpointSuffix=core SharedAccessKey=p92SharedAccessKeySentinel; SharedAccessSignature: p92SharedAccessSignatureSentinel client_secret=p92ClientSecretSentinel&grant_type=client_credentials {\"clientSecret\": \"p92ClientSecretCamelSentinel\"} PASSWORD=p92PasswordSentinel pwd: p92PwdSentinel secret=p92SecretSentinel access_token=p92AccessTokenSentinel refresh_token: 'p92RefreshTokenSentinel') (Authorization_RequestDenied). ||       failed operation: grant-apim-cognitive-services-user: ERROR: the request was refused (jwt [redacted] Authorization: Bearer [redacted] https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026 signature=[redacted] AccountName=p92;AccountKey=[redacted];EndpointSuffix=core SharedAccessKey=[redacted]; SharedAccessSignature: [redacted] client_secret=[redacted]&grant_type=client_credentials {\"clientSecret\": \"[redacted]\"} PASSWORD=[redacted] pwd: [redacted] secret=[redacted] access_token=[redacted] refresh_token: '[redacted]') (Authorization_RequestDenied). ||         ./scripts/New-OnboardingEmail.ps1 -ConfigPath <home>\\AppData\\Local\\p92-steps-e498c68a62cf41a7a7e34b7fe7076243\\scenarios\\console-resume\\repo\\onboarding\\claude-gateway.json -To dev@contoso.com |    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets."
+          ]
+        },
+        {
+          "id": "C08",
+          "item": "4 a failed operation's error is redacted",
+          "suite": "tests/Test-InstallerStepSelection.ps1",
+          "target": "a resume whose live reads quote every secret shape",
+          "file": "scripts/ClaudeInstallResume.ps1",
+          "mutation": "'$(Protect-ClaudeInstallText ([string]$o.properties.statusMessage.error.message))' -> '$($o.properties.statusMessage.error.message)'",
+          "checks": 36,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 100.2,
+          "failures": [
+            "R4 a resume whose live reads quote every secret shape prints the resource group's read detail, the failed deployment's error and its failed operation, each shape in its [redacted] form, and no sentinel in stdout or stderr - sentinel p92JwtSentinel; sentinel p92BearerSentinel; sentinel p92SigSentinel; sentinel p92SignatureSentinel; sentinel p92AccountKeySentinel; sentinel p92SharedAccessKeySentinel; sentinel p92SharedAccessSignatureSentinel; sentinel p92ClientSecretSentinel; sentinel p92ClientSecretCamelSentinel; sentinel p92PasswordSentinel; sentinel p92PwdSentinel; sentinel p92SecretSentinel; sentinel p92AccessTokenSentinel; sentinel p92RefreshTokenSentinel; no 'jwt [redacted]'; no 'Authorization: Bearer [redacted]'; no 'https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026'; no 'signature=[redacted]'; no 'AccountName=p92;AccountKey=[redacted];EndpointSuffix=core'; no 'SharedAccessKey=[redacted];'; no 'SharedAccessSignature: [redacted]'; no 'client_secret=[redacted]&grant_type=client_credentials'; no '{\"clientSecret\": \"[redacted]\"}'; no 'PASSWORD=[redacted]'; no 'pwd: [redacted]'; no 'secret=[redacted]'; no 'access_token=[redacted]'; no 'refresh_token: '[redacted]'' ||     Resource group: resource group rg-p91 could not be read (ERROR: the request was refused (jwt [redacted] Authorization: Bearer [redacted] https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026 signature=[redacted] AccountName=p92;AccountKey=[redacted];EndpointSuffix=core SharedAccessKey=[redacted]; SharedAccessSignature: [redacted] client_secret=[redacted]&grant_type=client_credentials {\"clientSecret\": \"[redacted]\"} PASSWORD=[redacted] pwd: [redacted] secret=[redacted] access_token=[redacted] refresh_token: '[redacted]') (Authorization_RequestDenied).); running it again ||     Gateway deployment: deployment claude-gw-20261003084105 Failed: DeploymentFailed: ERROR: the request was refused (jwt [redacted] Authorization: Bearer [redacted] https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026 signature=[redacted] AccountName=p92;AccountKey=[redacted];EndpointSuffix=core SharedAccessKey=[redacted]; SharedAccessSignature: [redacted] client_secret=[redacted]&grant_type=client_credentials {\"clientSecret\": \"[redacted]\"} PASSWORD=[redacted] pwd: [redacted] secret=[redacted] access_token=[redacted] refresh_token: '[redacted]') (Authorization_RequestDenied). ||       failed operation: grant-apim-cognitive-services-user: ERROR: the request was refused (jwt eyJhbGciOiJSUzI1NiJ9.eyJwOTIiOiJyZWRhY3QifQ.p92JwtSentinel Authorization: Bearer p92BearerSentinel0123 https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=p92SigSentinel&se=2026 signature=p92SignatureSentinel AccountName=p92;AccountKey=p92AccountKeySentinel==;EndpointSuffix=core SharedAccessKey=p92SharedAccessKeySentinel; SharedAccessSignature: p92SharedAccessSignatureSentinel client_secret=p92ClientSecretSentinel&grant_type=client_credentials {\"clientSecret\": \"p92ClientSecretCamelSentinel\"} PASSWORD=p92PasswordSentinel pwd: p92PwdSentinel secret=p92SecretSentinel access_token=p92AccessTokenSentinel refresh_token: 'p92RefreshTokenSentinel') (Authorization_RequestDenied). ||         ./scripts/New-OnboardingEmail.ps1 -ConfigPath <home>\\AppData\\Local\\p92-steps-115aad369f5146e485a4bbdffa8110f2\\scenarios\\console-resume\\repo\\onboarding\\claude-gateway.json -To dev@contoso.com |    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets."
+          ]
+        },
+        {
+          "id": "C09",
+          "item": "4 the failure hint's Resume line is redacted",
+          "suite": "tests/Test-InstallerStepSelection.ps1",
+          "target": "ends at the top-level trap",
+          "file": "scripts/ClaudeInstallCheckpoint.ps1",
+          "mutation": "'Write-Host \"Resume: $(Protect-ClaudeInstallText $resume)\"' -> 'Write-Host \"Resume: $resume\"'",
+          "checks": 36,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 85.2,
+          "failures": [
+            "R4 a failure that ends at the top-level trap prints its error with each secret shape in its [redacted] form, then a Resume line with sig=[redacted], and no sentinel in stdout or stderr -  || P91 stub: the client was disconnected while the deployment ran. ERROR: the request was refused (jwt [redacted] Authorization: Bearer [redacted] https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026 signature=[redacted] AccountName=p92;AccountKey=[redacted];EndpointSuffix=core SharedAccessKey=[redacted]; SharedAccessSignature: [redacted] client_secret=[redacted]&grant_type=client_credentials {\"clientSecret\": \"[redacted]\"} PASSWORD=[redacted] pwd: [redacted] secret=[redacted] access_token=[redacted] refresh_token: '[redacted]') (Authorization_RequestDenied). || ==> API Management and Application Insights (a few minutes) |     Safe to leave running. | Resume: Set-Location -LiteralPath '<home>\\AppData\\Local\\p92-steps-834144526e1242b0b81fac488f24e45c\\scenarios\\redact-sig=p92PathSentinel\\repo'; ./Install-ClaudeGateway.ps1 | P91 stub: the client was disconnected while the deployment ran. ERROR: the request was refused (jwt [redacted] Authorization: Bearer [redacted] https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026 signature=[redacted] AccountName=p92;AccountKey=[redacted];EndpointSuffix=core SharedAccessKey=[redacted]; SharedAccessSignature: [redacted] client_secret=[redacted]&grant_type=client_credentials {\"clientSecret\": \"[redacted]\"} PASSWORD=[redacted] pwd: [redacted] secret=[redacted] access_token=[redacted] refresh_token: '[redacted]') (Authorization_RequestDenied)."
+          ]
+        },
+        {
+          "id": "B01",
+          "item": "4 bash: ckpt_refuse_ redacts the refusal",
+          "suite": "tests/Test-BashInstallerStepSelection.ps1 -Shard 1/3",
+          "target": "bash a refusal whose error quotes every secret shape",
+          "file": "scripts/install-checkpoint.sh",
+          "mutation": "'printf 'Refused: %s\\n' \"$(ckpt_redact_ \"$(printf '%s' \"$1\" | tr '\\r\\n' '  ')\")\" >&2' -> 'printf 'Refused: %s\\n' \"$(printf '%s' \"$1\" | tr '\\r\\n' '  ')\" >&2'",
+          "checks": 19,
+          "failed": 1,
+          "bashN": "ok",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 205.5,
+          "failures": [
+            "R4 bash a refusal whose error quotes every secret shape prints each in its [redacted] form on standard error, and no sentinel appears in stdout or stderr - sentinel p92JwtSentinel; sentinel p92BearerSentinel; sentinel p92SigSentinel; sentinel p92SignatureSentinel; sentinel p92AccountKeySentinel; sentinel p92SharedAccessKeySentinel; sentinel p92SharedAccessSignatureSentinel; sentinel p92ClientSecretSentinel; sentinel p92ClientSecretCamelSentinel; sentinel p92PasswordSentinel; sentinel p92PwdSentinel; sentinel p92SecretSentinel; sentinel p92AccessTokenSentinel; sentinel p92RefreshTokenSentinel; no 'jwt [redacted]'; no 'Authorization: Bearer [redacted]'; no 'https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026'; no 'signature=[redacted]'; no 'AccountName=p92;AccountKey=[redacted];EndpointSuffix=core'; no 'SharedAccessKey=[redacted];'; no 'SharedAccessSignature: [redacted]'; no 'client_secret=[redacted]&grant_type=client_credentials'; no '{\"clientSecret\": \"[redacted]\"}'; no 'PASSWORD=[redacted]'; no 'pwd: [redacted]'; no 'secret=[redacted]'; no 'access_token=[redacted]'; no 'refresh_token: '[redacted]'' || Refused: Entra group 'claude-code-standard' could not be looked up by name (ERROR: the request was refused (jwt eyJhbGciOiJSUzI1NiJ9.eyJwOTIiOiJyZWRhY3QifQ.p92JwtSentinel Authorization: Bearer p92BearerSentinel0123 https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=p92SigSentinel&se=2026 signature=p92SignatureSentinel AccountName=p92;AccountKey=p92AccountKeySentinel==;EndpointSuffix=core SharedAccessKey=p92SharedAccessKeySentinel; SharedAccessSignature: p92SharedAccessSignatureSentinel client_secret=p92ClientSecretSentinel&grant_type=client_credentials {\"clientSecret\": \"p92ClientSecretCamelSentinel\"} PASSWORD=p92PasswordSentinel pwd: p92PwdSentinel secret=p92SecretSentinel access_token=p92AccessTokenSentinel refresh_token: 'p92RefreshTokenSentinel') (Authorization_RequestDenied).), so it is neither reused nor created. Nothing was changed by this step. Resume: cd '<home>/AppData/Local/Temp/p92-bash-steps-d33f0779666a4051937953b726972a42/scenarios/redact-refusal/repo' && ./install-claude-gateway.sh"
+          ]
+        },
+        {
+          "id": "B02",
+          "item": "4 bash: an Azure CLI error the run shows is redacted (ckpt_shown_)",
+          "suite": "tests/Test-BashInstallerStepSelection.ps1 -Shard 1/3",
+          "target": "bash a failure whose Azure CLI error quotes every secret shape",
+          "file": "scripts/install-checkpoint.sh",
+          "mutation": "'[ -z \"$err\" ] || printf '%s\\n' \"$(ckpt_redact_ \"$err\")\" >&2' -> '[ -z \"$err\" ] || printf '%s\\n' \"$err\" >&2'",
+          "checks": 19,
+          "failed": 1,
+          "bashN": "ok",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 255.5,
+          "failures": [
+            "R4 bash a failure whose Azure CLI error quotes every secret shape prints that error with each in its [redacted] form, then the failure line and the resume command, and no sentinel appears in stdout or stderr - sentinel p92JwtSentinel; sentinel p92BearerSentinel; sentinel p92SigSentinel; sentinel p92SignatureSentinel; sentinel p92AccountKeySentinel; sentinel p92SharedAccessKeySentinel; sentinel p92SharedAccessSignatureSentinel; sentinel p92ClientSecretSentinel; sentinel p92ClientSecretCamelSentinel; sentinel p92PasswordSentinel; sentinel p92PwdSentinel; sentinel p92SecretSentinel; sentinel p92AccessTokenSentinel; sentinel p92RefreshTokenSentinel; no 'jwt [redacted]'; no 'Authorization: Bearer [redacted]'; no 'https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026'; no 'signature=[redacted]'; no 'AccountName=p92;AccountKey=[redacted];EndpointSuffix=core'; no 'SharedAccessKey=[redacted];'; no 'SharedAccessSignature: [redacted]'; no 'client_secret=[redacted]&grant_type=client_credentials'; no '{\"clientSecret\": \"[redacted]\"}'; no 'PASSWORD=[redacted]'; no 'pwd: [redacted]'; no 'secret=[redacted]'; no 'access_token=[redacted]'; no 'refresh_token: '[redacted]'' ||     [FAIL] deployment failed - see the error above | Resume: cd '<home>/AppData/Local/Temp/p92-bash-steps-a3640935cab54b13a0b58a20c5ef070e/scenarios/console-failure/repo' && ./install-claude-gateway.sh | ERROR: the request was refused (jwt eyJhbGciOiJSUzI1NiJ9.eyJwOTIiOiJyZWRhY3QifQ.p92JwtSentinel Authorization: Bearer p92BearerSentinel0123 https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=p92SigSentinel&se=2026 signature=p92SignatureSentinel AccountName=p92;AccountKey=p92AccountKeySentinel==;EndpointSuffix=core SharedAccessKey=p92SharedAccessKeySentinel; SharedAccessSignature: p92SharedAccessSignatureSentinel client_secret=p92ClientSecretSentinel&grant_type=client_credentials {\"clientSecret\": \"p92ClientSecretCamelSentinel\"} PASSWORD=p92PasswordSentinel pwd: p92PwdSentinel secret=p92SecretSentinel access_token=p92AccessTokenSentinel refresh_token: 'p92RefreshTokenSentinel') (Authorization_RequestDenied)."
+          ]
+        },
+        {
+          "id": "B03",
+          "item": "4 bash: bad_ redacts",
+          "suite": "tests/Test-InstallerRedaction.ps1",
+          "target": "bash warn_ and bad_",
+          "file": "install-claude-gateway.sh",
+          "mutation": "'bad_()  { LAST_BAD=\"$1\"; printf '    %s[FAIL]%s %s\\n' \"$C_RED\" \"$C_OFF\" \"$(redact_ \"$1\")\"; }' -> 'bad_()  { LAST_BAD=\"$1\"; printf '    %s[FAIL]%s %s\\n' \"$C_RED\" \"$C_OFF\" \"$1\"; }'",
+          "checks": 11,
+          "failed": 1,
+          "bashN": "ok",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 5.0,
+          "failures": [
+            "R4 bash warn_ and bad_, the installer's warning and failure lines, print each secret shape in its [redacted] form and no sentinel - bad_: sentinel p92JwtSentinel; bad_: sentinel p92BearerSentinel; bad_: sentinel p92SigSentinel; bad_: sentinel p92SignatureSentinel; bad_: sentinel p92AccountKeySentinel; bad_: sentinel p92SharedAccessKeySentinel; bad_: sentinel p92SharedAccessSignatureSentinel; bad_: sentinel p92ClientSecretSentinel; bad_: sentinel p92ClientSecretCamelSentinel; bad_: sentinel p92PasswordSentinel; bad_: sentinel p92PwdSentinel; bad_: sentinel p92SecretSentinel; bad_: sentinel p92AccessTokenSentinel; bad_: sentinel p92RefreshTokenSentinel; bad_: no 'jwt [redacted]'; bad_: no 'Authorization: Bearer [redacted]'; bad_: no 'https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026'; bad_: no 'signature=[redacted]'; bad_: no 'AccountName=p92;AccountKey=[redacted];EndpointSuffix=core'; bad_: no 'SharedAccessKey=[redacted];'; bad_: no 'SharedAccessSignature: [redacted]'; bad_: no 'client_secret=[redacted]&grant_type=client_credentials'; bad_: no '{\"clientSecret\": \"[redacted]\"}'; bad_: no 'PASSWORD=[redacted]'; bad_: no 'pwd: [redacted]'; bad_: no 'secret=[redacted]'; bad_: no 'access_token=[redacted]'; bad_: no 'refresh_token: '[redacted]'' ||     [WARN] an error that quotes (ERROR: the request was refused (jwt [redacted] Authorization: Bearer [redacted] https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026 signature=[redacted] AccountName=p92;AccountKey=[redacted];EndpointSuffix=core SharedAccessKey=[redacted]; SharedAccessSignature: [redacted] client_secret=[redacted]&grant_type=client_credentials {\"clientSecret\": \"[redacted]\"} PASSWORD=[redacted] pwd: [redacted] secret=[redacted] access_token=[redacted] refresh_token: '[redacted]') (Authorization_RequestDenied).)",
+            "an error that quotes (ERROR: the request was refused (jwt eyJhbGciOiJSUzI1NiJ9.eyJwOTIiOiJyZWRhY3QifQ.p92JwtSentinel Authorization: Bearer p92BearerSentinel0123 https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=p92SigSentinel&se=2026 signature=p92SignatureSentinel AccountName=p92;AccountKey=p92AccountKeySentinel==;EndpointSuffix=core SharedAccessKey=p92SharedAccessKeySentinel; SharedAccessSignature: p92SharedAccessSignatureSentinel client_secret=p92ClientSecretSentinel&grant_type=client_credentials {\"clientSecret\": \"p92ClientSecretCamelSentinel\"} PASSWORD=p92PasswordSentinel pwd: p92PwdSentinel secret=p92SecretSentinel access_token=p92AccessTokenSentinel refresh_token: 'p92RefreshTokenSentinel') (Authorization_RequestDenied).)"
+          ]
+        },
+        {
+          "id": "B04",
+          "item": "4 bash: warn_ redacts",
+          "suite": "tests/Test-InstallerRedaction.ps1",
+          "target": "bash warn_ and bad_",
+          "file": "install-claude-gateway.sh",
+          "mutation": "'warn_() { printf '    %s[WARN]%s %s\\n' \"$C_YELLOW\" \"$C_OFF\" \"$(redact_ \"$1\")\"; }' -> 'warn_() { printf '    %s[WARN]%s %s\\n' \"$C_YELLOW\" \"$C_OFF\" \"$1\"; }'",
+          "checks": 11,
+          "failed": 1,
+          "bashN": "ok",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 5.1,
+          "failures": [
+            "R4 bash warn_ and bad_, the installer's warning and failure lines, print each secret shape in its [redacted] form and no sentinel - warn_: sentinel p92JwtSentinel; warn_: sentinel p92BearerSentinel; warn_: sentinel p92SigSentinel; warn_: sentinel p92SignatureSentinel; warn_: sentinel p92AccountKeySentinel; warn_: sentinel p92SharedAccessKeySentinel; warn_: sentinel p92SharedAccessSignatureSentinel; warn_: sentinel p92ClientSecretSentinel; warn_: sentinel p92ClientSecretCamelSentinel; warn_: sentinel p92PasswordSentinel; warn_: sentinel p92PwdSentinel; warn_: sentinel p92SecretSentinel; warn_: sentinel p92AccessTokenSentinel; warn_: sentinel p92RefreshTokenSentinel; warn_: no 'jwt [redacted]'; warn_: no 'Authorization: Bearer [redacted]'; warn_: no 'https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026'; warn_: no 'signature=[redacted]'; warn_: no 'AccountName=p92;AccountKey=[redacted];EndpointSuffix=core'; warn_: no 'SharedAccessKey=[redacted];'; warn_: no 'SharedAccessSignature: [redacted]'; warn_: no 'client_secret=[redacted]&grant_type=client_credentials'; warn_: no '{\"clientSecret\": \"[redacted]\"}'; warn_: no 'PASSWORD=[redacted]'; warn_: no 'pwd: [redacted]'; warn_: no 'secret=[redacted]'; warn_: no 'access_token=[redacted]'; warn_: no 'refresh_token: '[redacted]'' ||     [WARN] an error that quotes (ERROR: the request was refused (jwt eyJhbGciOiJSUzI1NiJ9.eyJwOTIiOiJyZWRhY3QifQ.p92JwtSentinel Authorization: Bearer p92BearerSentinel0123 https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=p92SigSentinel&se=2026 signature=p92SignatureSentinel AccountName=p92;AccountKey=p92AccountKeySentinel==;EndpointSuffix=core SharedAccessKey=p92SharedAccessKeySentinel; SharedAccessSignature: p92SharedAccessSignatureSentinel client_secret=p92ClientSecretSentinel&grant_type=client_credentials {\"clientSecret\": \"p92ClientSecretCamelSentinel\"} PASSWORD=p92PasswordSentinel pwd: p92PwdSentinel secret=p92SecretSentinel access_token=p92AccessTokenSentinel refresh_token: 'p92RefreshTokenSentinel') (Authorization_RequestDenied).)",
+            "an error that quotes (ERROR: the request was refused (jwt [redacted] Authorization: Bearer [redacted] https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026 signature=[redacted] AccountName=p92;AccountKey=[redacted];EndpointSuffix=core SharedAccessKey=[redacted]; SharedAccessSignature: [redacted] client_secret=[redacted]&grant_type=client_credentials {\"clientSecret\": \"[redacted]\"} PASSWORD=[redacted] pwd: [redacted] secret=[redacted] access_token=[redacted] refresh_token: '[redacted]') (Authorization_RequestDenied).)"
+          ]
+        },
+        {
+          "id": "B05",
+          "item": "4 bash: a live read's detail before \"running it again\" is redacted",
+          "suite": "tests/Test-BashInstallerStepSelection.ps1 -Shard 1/3",
+          "target": "bash a resume whose live reads quote every secret shape",
+          "file": "scripts/install-checkpoint.sh",
+          "mutation": "'\"$title\" \"$(ckpt_redact_ \"$V_DETAIL\")\" \"$C_OFF\"' -> '\"$title\" \"$V_DETAIL\" \"$C_OFF\"'",
+          "checks": 19,
+          "failed": 1,
+          "bashN": "ok",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 220.5,
+          "failures": [
+            "R4 bash a resume whose live reads quote every secret shape prints the resource group's read detail, the failed deployment's error and its failed operation, each shape in its [redacted] form, and no sentinel in stdout or stderr - sentinel p92JwtSentinel; sentinel p92BearerSentinel; sentinel p92SigSentinel; sentinel p92SignatureSentinel; sentinel p92AccountKeySentinel; sentinel p92SharedAccessKeySentinel; sentinel p92SharedAccessSignatureSentinel; sentinel p92ClientSecretSentinel; sentinel p92ClientSecretCamelSentinel; sentinel p92PasswordSentinel; sentinel p92PwdSentinel; sentinel p92SecretSentinel; sentinel p92AccessTokenSentinel; sentinel p92RefreshTokenSentinel; no 'jwt [redacted]'; no 'Authorization: Bearer [redacted]'; no 'https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026'; no 'signature=[redacted]'; no 'AccountName=p92;AccountKey=[redacted];EndpointSuffix=core'; no 'SharedAccessKey=[redacted];'; no 'SharedAccessSignature: [redacted]'; no 'client_secret=[redacted]&grant_type=client_credentials'; no '{\"clientSecret\": \"[redacted]\"}'; no 'PASSWORD=[redacted]'; no 'pwd: [redacted]'; no 'secret=[redacted]'; no 'access_token=[redacted]'; no 'refresh_token: '[redacted]'' ||     Resource group: resource group rg-p91 could not be read (ERROR: the request was refused (jwt eyJhbGciOiJSUzI1NiJ9.eyJwOTIiOiJyZWRhY3QifQ.p92JwtSentinel Authorization: Bearer p92BearerSentinel0123 https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=p92SigSentinel&se=2026 signature=p92SignatureSentinel AccountName=p92;AccountKey=p92AccountKeySentinel==;EndpointSuffix=core SharedAccessKey=p92SharedAccessKeySentinel; SharedAccessSignature: p92SharedAccessSignatureSentinel client_secret=p92ClientSecretSentinel&grant_type=client_credentials {\"clientSecret\": \"p92ClientSecretCamelSentinel\"} PASSWORD=p92PasswordSentinel pwd: p92PwdSentinel secret=p92SecretSentinel access_token=p92AccessTokenSentinel refresh_token: 'p92RefreshTokenSentinel') (Authorization_RequestDenied).); running it again ||     Gateway deployment: deployment claude-gw-20261003083631 Failed: DeploymentFailed: ERROR: the request was refused (jwt [redacted] Authorization: Bearer [redacted] https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026 signature=[redacted] AccountName=p92;AccountKey=[redacted];EndpointSuffix=core SharedAccessKey=[redacted]; SharedAccessSignature: [redacted] client_secret=[redacted]&grant_type=client_credentials {\"clientSecret\": \"[redacted]\"} PASSWORD=[redacted] pwd: [redacted] secret=[redacted] access_token=[redacted] refresh_token: '[redacted]') (Authorization_RequestDenied). ||       failed operation: -: ERROR: the request was refused (jwt [redacted] Authorization: Bearer [redacted] https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026 signature=[redacted] AccountName=p92;AccountKey=[redacted];EndpointSuffix=core SharedAccessKey=[redacted]; SharedAccessSignature: [redacted] client_secret=[redacted]&grant_type=client_credentials {\"clientSecret\": \"[redacted]\"} PASSWORD=[redacted] pwd: [redacted] secret=[redacted] access_token=[redacted] refresh_token: '[redacted]') (Authorization_RequestDenied). ||    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets."
+          ]
+        },
+        {
+          "id": "B06",
+          "item": "4 bash: a recorded deployment's error is redacted",
+          "suite": "tests/Test-BashInstallerStepSelection.ps1 -Shard 1/3",
+          "target": "bash a resume whose live reads quote every secret shape",
+          "file": "scripts/install-resume.sh",
+          "mutation": "'\"$DS_STATE\" \"$(ckpt_redact_ \"$DS_ERROR\")\" \"$C_OFF\"' -> '\"$DS_STATE\" \"$DS_ERROR\" \"$C_OFF\"'",
+          "checks": 19,
+          "failed": 1,
+          "bashN": "ok",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 250.5,
+          "failures": [
+            "R4 bash a resume whose live reads quote every secret shape prints the resource group's read detail, the failed deployment's error and its failed operation, each shape in its [redacted] form, and no sentinel in stdout or stderr - sentinel p92JwtSentinel; sentinel p92BearerSentinel; sentinel p92SigSentinel; sentinel p92SignatureSentinel; sentinel p92AccountKeySentinel; sentinel p92SharedAccessKeySentinel; sentinel p92SharedAccessSignatureSentinel; sentinel p92ClientSecretSentinel; sentinel p92ClientSecretCamelSentinel; sentinel p92PasswordSentinel; sentinel p92PwdSentinel; sentinel p92SecretSentinel; sentinel p92AccessTokenSentinel; sentinel p92RefreshTokenSentinel; no 'jwt [redacted]'; no 'Authorization: Bearer [redacted]'; no 'https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026'; no 'signature=[redacted]'; no 'AccountName=p92;AccountKey=[redacted];EndpointSuffix=core'; no 'SharedAccessKey=[redacted];'; no 'SharedAccessSignature: [redacted]'; no 'client_secret=[redacted]&grant_type=client_credentials'; no '{\"clientSecret\": \"[redacted]\"}'; no 'PASSWORD=[redacted]'; no 'pwd: [redacted]'; no 'secret=[redacted]'; no 'access_token=[redacted]'; no 'refresh_token: '[redacted]'' ||     Resource group: resource group rg-p91 could not be read (ERROR: the request was refused (jwt [redacted] Authorization: Bearer [redacted] https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026 signature=[redacted] AccountName=p92;AccountKey=[redacted];EndpointSuffix=core SharedAccessKey=[redacted]; SharedAccessSignature: [redacted] client_secret=[redacted]&grant_type=client_credentials {\"clientSecret\": \"[redacted]\"} PASSWORD=[redacted] pwd: [redacted] secret=[redacted] access_token=[redacted] refresh_token: '[redacted]') (Authorization_RequestDenied).); running it again ||     Gateway deployment: deployment claude-gw-20261003083955 Failed: DeploymentFailed: ERROR: the request was refused (jwt eyJhbGciOiJSUzI1NiJ9.eyJwOTIiOiJyZWRhY3QifQ.p92JwtSentinel Authorization: Bearer p92BearerSentinel0123 https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=p92SigSentinel&se=2026 signature=p92SignatureSentinel AccountName=p92;AccountKey=p92AccountKeySentinel==;EndpointSuffix=core SharedAccessKey=p92SharedAccessKeySentinel; SharedAccessSignature: p92SharedAccessSignatureSentinel client_secret=p92ClientSecretSentinel&grant_type=client_credentials {\"clientSecret\": \"p92ClientSecretCamelSentinel\"} PASSWORD=p92PasswordSentinel pwd: p92PwdSentinel secret=p92SecretSentinel access_token=p92AccessTokenSentinel refresh_token: 'p92RefreshTokenSentinel') (Authorization_RequestDenied). ||       failed operation: -: ERROR: the request was refused (jwt [redacted] Authorization: Bearer [redacted] https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026 signature=[redacted] AccountName=p92;AccountKey=[redacted];EndpointSuffix=core SharedAccessKey=[redacted]; SharedAccessSignature: [redacted] client_secret=[redacted]&grant_type=client_credentials {\"clientSecret\": \"[redacted]\"} PASSWORD=[redacted] pwd: [redacted] secret=[redacted] access_token=[redacted] refresh_token: '[redacted]') (Authorization_RequestDenied). ||    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets."
+          ]
+        },
+        {
+          "id": "B07",
+          "item": "4 bash: a failed operation's error is redacted",
+          "suite": "tests/Test-BashInstallerStepSelection.ps1 -Shard 1/3",
+          "target": "bash a resume whose live reads quote every secret shape",
+          "file": "scripts/install-resume.sh",
+          "mutation": "'[ -z \"$ops\" ] || printf '%s\\n' \"$(ckpt_redact_ \"$ops\")\"' -> '[ -z \"$ops\" ] || printf '%s\\n' \"$ops\"'",
+          "checks": 19,
+          "failed": 1,
+          "bashN": "ok",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 165.3,
+          "failures": [
+            "R4 bash a resume whose live reads quote every secret shape prints the resource group's read detail, the failed deployment's error and its failed operation, each shape in its [redacted] form, and no sentinel in stdout or stderr - sentinel p92JwtSentinel; sentinel p92BearerSentinel; sentinel p92SigSentinel; sentinel p92SignatureSentinel; sentinel p92AccountKeySentinel; sentinel p92SharedAccessKeySentinel; sentinel p92SharedAccessSignatureSentinel; sentinel p92ClientSecretSentinel; sentinel p92ClientSecretCamelSentinel; sentinel p92PasswordSentinel; sentinel p92PwdSentinel; sentinel p92SecretSentinel; sentinel p92AccessTokenSentinel; sentinel p92RefreshTokenSentinel; no 'jwt [redacted]'; no 'Authorization: Bearer [redacted]'; no 'https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026'; no 'signature=[redacted]'; no 'AccountName=p92;AccountKey=[redacted];EndpointSuffix=core'; no 'SharedAccessKey=[redacted];'; no 'SharedAccessSignature: [redacted]'; no 'client_secret=[redacted]&grant_type=client_credentials'; no '{\"clientSecret\": \"[redacted]\"}'; no 'PASSWORD=[redacted]'; no 'pwd: [redacted]'; no 'secret=[redacted]'; no 'access_token=[redacted]'; no 'refresh_token: '[redacted]'' ||     Resource group: resource group rg-p91 could not be read (ERROR: the request was refused (jwt [redacted] Authorization: Bearer [redacted] https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026 signature=[redacted] AccountName=p92;AccountKey=[redacted];EndpointSuffix=core SharedAccessKey=[redacted]; SharedAccessSignature: [redacted] client_secret=[redacted]&grant_type=client_credentials {\"clientSecret\": \"[redacted]\"} PASSWORD=[redacted] pwd: [redacted] secret=[redacted] access_token=[redacted] refresh_token: '[redacted]') (Authorization_RequestDenied).); running it again ||     Gateway deployment: deployment claude-gw-20261003084354 Failed: DeploymentFailed: ERROR: the request was refused (jwt [redacted] Authorization: Bearer [redacted] https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=[redacted]&se=2026 signature=[redacted] AccountName=p92;AccountKey=[redacted];EndpointSuffix=core SharedAccessKey=[redacted]; SharedAccessSignature: [redacted] client_secret=[redacted]&grant_type=client_credentials {\"clientSecret\": \"[redacted]\"} PASSWORD=[redacted] pwd: [redacted] secret=[redacted] access_token=[redacted] refresh_token: '[redacted]') (Authorization_RequestDenied). ||       failed operation: -: ERROR: the request was refused (jwt eyJhbGciOiJSUzI1NiJ9.eyJwOTIiOiJyZWRhY3QifQ.p92JwtSentinel Authorization: Bearer p92BearerSentinel0123 https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=p92SigSentinel&se=2026 signature=p92SignatureSentinel AccountName=p92;AccountKey=p92AccountKeySentinel==;EndpointSuffix=core SharedAccessKey=p92SharedAccessKeySentinel; SharedAccessSignature: p92SharedAccessSignatureSentinel client_secret=p92ClientSecretSentinel&grant_type=client_credentials {\"clientSecret\": \"p92ClientSecretCamelSentinel\"} PASSWORD=p92PasswordSentinel pwd: p92PwdSentinel secret=p92SecretSentinel access_token=p92AccessTokenSentinel refresh_token: 'p92RefreshTokenSentinel') (Authorization_RequestDenied). ||    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets."
+          ]
+        },
+        {
+          "id": "B08",
+          "item": "4 bash: the Resume line after a failure is redacted",
+          "suite": "tests/Test-BashInstallerStepSelection.ps1 -Shard 1/3",
+          "target": "Resume line on the console holds sig=\\[redacted\\]",
+          "file": "scripts/install-checkpoint.sh",
+          "mutation": "'if [ \"$CKPT_PERSISTENT\" = \"1\" ]; then printf 'Resume: %s\\n' \"$(ckpt_redact_ \"$(ckpt_resume_cmd_)\")\"; else' -> 'if [ \"$CKPT_PERSISTENT\" = \"1\" ]; then printf 'Resume: %s\\n' \"$(ckpt_resume_cmd_)\"; else'",
+          "checks": 19,
+          "failed": 1,
+          "bashN": "ok",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 145.3,
+          "failures": [
+            "R4 bash the failed run's Resume line on the console holds sig=[redacted] for a checkout path that holds sig=<value>, and that value appears in neither stdout nor stderr -     [FAIL] deployment failed - see the error above | Resume: cd '<home>/AppData/Local/Temp/p92-bash-steps-807c25cc72f74bbd80d468f9422cabd4/scenarios/redact-sig=p92PathSentinel/repo' && ./install-claude-gateway.sh | ERROR: {\"code\": \"Conflict\", \"message\": \"The P91 stub failed this deployment.\"}"
+          ]
+        },
+        {
+          "id": "Q01",
+          "item": "5 the prompt refuses a group name with a single quote, comma or colon",
+          "suite": "tests/Test-InstallerBusinessUnitAnswers.ps1",
+          "target": "single quote at the prompt",
+          "file": "Install-ClaudeGateway.ps1",
+          "mutation": "'if ($buGroup -cnotmatch [string]$groupRule.pattern) {' -> 'if ($false) {'",
+          "checks": 16,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 45.1,
+          "failures": [
+            "R4 a group name with a single quote at the prompt is refused there with the schema's message and remedy, before any Azure CLI call names it; no unit is written and the run goes on -         ./scripts/New-OnboardingEmail.ps1 -ConfigPath <home>\\AppData\\Local\\p92-units-4de4d062eea947448c9dc43a20937eb8\\scenarios\\prompt-quote\\repo\\onboarding\\claude-gateway.json -To dev@contoso.com |    3. Close the direct-access bypass - see docs/SETUP.md section 4.1 |       Anyone holding Cognitive Services User on the Foundry account |       can skip the gateway entirely and ignore these budgets."
+          ]
+        },
+        {
+          "id": "H01",
+          "item": "1 the checkpoint suite declares seven shards for its map",
+          "suite": "tests/Test-BashInstallerCheckpointShards.ps1",
+          "target": "declares its shard count",
+          "file": "tests/Test-BashInstallerCheckpoint.ps1",
+          "mutation": "'$script:ShardCount = 7' -> '$script:ShardCount = 6'",
+          "checks": 5,
+          "failed": 3,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 5.0,
+          "failures": [
+            "A14 the suite declares its shard count and a map from each group of checks to one shard - count 6; static=0, shell=0, graph=1, untrusted=1, names=2, preexisting=2, resume=3, locks=4, receipts=4, gitbash=4, changes=5, corrupt=6",
+            "A14 Test-All registers one check per shard, at the default per-check timeout (no -TimeoutSeconds) - macOS/Linux installer checkpoint and resume [0/7] @{ Shard = '0/7' } -SkipReason $bashInstallerSkip || macOS/Linux installer checkpoint and resume [1/7] @{ Shard = '1/7' } -SkipReason $bashInstallerSkip || macOS/Linux installer checkpoint and resume [2/7] @{ Shard = '2/7' } -SkipReason $bashInstallerSkip || macOS/Linux installer checkpoint and resume [3/7] @{ Shard = '3/7' } -SkipReason $bashInstallerSkip || macOS/Linux installer checkpoint and resume [4/7] @{ Shard = '4/7' } -SkipReason $bashInstallerSkip || macOS/Linux installer checkpoint and resume [5/7] @{ Shard = '5/7' } -SkipReason $bashInstallerSkip || macOS/Linux installer checkpoint and resume [6/7] @{ Shard = '6/7' } -SkipReason $bashInstallerSkip",
+            "A14 bash-checkpoint-shard-loads-under-default-timeout: each shard's measured weight is at most half the default per-check timeout - macOS/Linux installer checkpoint and resume [0/7]=80.1, macOS/Linux installer checkpoint and resume [1/7]=77.1, macOS/Linux installer checkpoint and resume [2/7]=114.9, macOS/Linux installer checkpoint and resume [3/7]=124.8, macOS/Linux installer checkpoint and resume [4/7]=126.9, macOS/Linux installer checkpoint and resume [5/7]=120.7, macOS/Linux installer checkpoint and resume [6/7]=124.6"
+          ]
+        },
+        {
+          "id": "H02",
+          "item": "1 each group of checks of the checkpoint suite sits in one shard",
+          "suite": "tests/Test-BashInstallerCheckpointShards.ps1",
+          "target": "bash-checkpoint-shards-cover-every-case-once",
+          "file": "tests/Test-BashInstallerCheckpoint.ps1",
+          "mutation": "'    if (Test-ShardGroup 'gitbash') {\n        $gb = ' -> '    if ($true) {\n        $gb = '",
+          "checks": 5,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 5.0,
+          "failures": [
+            "A14 bash-checkpoint-shards-cover-every-case-once: every check sits in exactly one group, and each group runs in exactly one shard - outside a group: line 481; ambiguous: ; per group: resume=7, untrusted=4, graph=3, corrupt=9, changes=3, receipts=1, names=4, static=2, locks=4, preexisting=1, shell=6"
+          ]
+        },
+        {
+          "id": "H03",
+          "item": "1 Test-All registers each checkpoint shard",
+          "suite": "tests/Test-BashInstallerCheckpointShards.ps1",
+          "target": "registers one check per shard",
+          "file": "tests/Test-All.ps1",
+          "mutation": "'    Invoke-Check 'macOS/Linux installer checkpoint and resume [6/7]' 'Test-BashInstallerCheckpoint.ps1' @{ Shard = '6/7' } -SkipReason $bashInstallerSkip\n' -> ''",
+          "checks": 5,
+          "failed": 2,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 5.1,
+          "failures": [
+            "A14 Test-All registers one check per shard, at the default per-check timeout (no -TimeoutSeconds) - macOS/Linux installer checkpoint and resume [0/7] @{ Shard = '0/7' } -SkipReason $bashInstallerSkip || macOS/Linux installer checkpoint and resume [1/7] @{ Shard = '1/7' } -SkipReason $bashInstallerSkip || macOS/Linux installer checkpoint and resume [2/7] @{ Shard = '2/7' } -SkipReason $bashInstallerSkip || macOS/Linux installer checkpoint and resume [3/7] @{ Shard = '3/7' } -SkipReason $bashInstallerSkip || macOS/Linux installer checkpoint and resume [4/7] @{ Shard = '4/7' } -SkipReason $bashInstallerSkip || macOS/Linux installer checkpoint and resume [5/7] @{ Shard = '5/7' } -SkipReason $bashInstallerSkip",
+            "A14 bash-checkpoint-shard-loads-under-default-timeout: each shard's measured weight is at most half the default per-check timeout - macOS/Linux installer checkpoint and resume [0/7]=80.1, macOS/Linux installer checkpoint and resume [1/7]=77.1, macOS/Linux installer checkpoint and resume [2/7]=114.9, macOS/Linux installer checkpoint and resume [3/7]=124.8, macOS/Linux installer checkpoint and resume [4/7]=126.9, macOS/Linux installer checkpoint and resume [5/7]=120.7"
+          ]
+        },
+        {
+          "id": "H04",
+          "item": "1 each checkpoint shard weighs at most 300 s",
+          "suite": "tests/Test-BashInstallerCheckpointShards.ps1",
+          "target": "bash-checkpoint-shard-loads-under-default-timeout",
+          "file": "tests/test-all-durations.json",
+          "mutation": "'\"macOS/Linux installer checkpoint and resume [4/7]\": 126.9,' -> '\"macOS/Linux installer checkpoint and resume [4/7]\": 408.4,'",
+          "checks": 5,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 5.2,
+          "failures": [
+            "A14 bash-checkpoint-shard-loads-under-default-timeout: each shard's measured weight is at most half the default per-check timeout - macOS/Linux installer checkpoint and resume [0/7]=80.1, macOS/Linux installer checkpoint and resume [1/7]=77.1, macOS/Linux installer checkpoint and resume [2/7]=114.9, macOS/Linux installer checkpoint and resume [3/7]=124.8, macOS/Linux installer checkpoint and resume [4/7]=408.4, macOS/Linux installer checkpoint and resume [5/7]=120.7, macOS/Linux installer checkpoint and resume [6/7]=124.6"
+          ]
+        },
+        {
+          "id": "H05",
+          "item": "2 the preflight suite maps its two groups to two shards",
+          "suite": "tests/Test-BashInstallerPreflightShards.ps1",
+          "target": "declares its shard count",
+          "file": "tests/Test-BashInstallerPreflight.ps1",
+          "mutation": "'$script:ShardGroups = [ordered]@{ core = 0; branches = 1 }' -> '$script:ShardGroups = [ordered]@{ core = 0; branches = 0 }'",
+          "checks": 5,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 5.0,
+          "failures": [
+            "A14 the suite declares its shard count and a map from each group of checks to one shard - count 2; core=0, branches=0"
+          ]
+        },
+        {
+          "id": "H06",
+          "item": "2 each check of the preflight suite sits in one group",
+          "suite": "tests/Test-BashInstallerPreflightShards.ps1",
+          "target": "bash-preflight-shards-cover-every-case-once",
+          "file": "tests/Test-BashInstallerPreflight.ps1",
+          "mutation": "'    if (Test-ShardGroup 'branches') {\n        $shape = ' -> '    if ($true) {\n        $shape = '",
+          "checks": 5,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 5.0,
+          "failures": [
+            "A14 bash-preflight-shards-cover-every-case-once: every check sits in exactly one group, and each group runs in exactly one shard - outside a group: line 240, line 243, line 245, line 248, line 251, line 253, line 255, line 256, line 257, line 258, line 261, line 264, line 275, line 277, line 279, line 281, line 283, line 285; ambiguous: ; per group: core=21"
+          ]
+        },
+        {
+          "id": "H07",
+          "item": "2 Test-All registers each preflight shard",
+          "suite": "tests/Test-BashInstallerPreflightShards.ps1",
+          "target": "registers one check per shard",
+          "file": "tests/Test-All.ps1",
+          "mutation": "'    Invoke-Check 'macOS/Linux installer preflight [1/2]'   'Test-BashInstallerPreflight.ps1' @{ Shard = '1/2' } -SkipReason $bashInstallerSkip\n' -> ''",
+          "checks": 5,
+          "failed": 2,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 5.0,
+          "failures": [
+            "A14 Test-All registers one check per shard, at the default per-check timeout (no -TimeoutSeconds) - macOS/Linux installer preflight [0/2] @{ Shard = '0/2' } -SkipReason $bashInstallerSkip",
+            "A14 bash-preflight-shard-loads-under-default-timeout: each shard's measured weight is at most half the default per-check timeout - macOS/Linux installer preflight [0/2]=93.1"
+          ]
+        },
+        {
+          "id": "H08",
+          "item": "2 each preflight shard weighs at most 300 s",
+          "suite": "tests/Test-BashInstallerPreflightShards.ps1",
+          "target": "bash-preflight-shard-loads-under-default-timeout",
+          "file": "tests/test-all-durations.json",
+          "mutation": "'\"macOS/Linux installer preflight [0/2]\": 93.1,' -> '\"macOS/Linux installer preflight [0/2]\": 300.1,'",
+          "checks": 5,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 5.0,
+          "failures": [
+            "A14 bash-preflight-shard-loads-under-default-timeout: each shard's measured weight is at most half the default per-check timeout - macOS/Linux installer preflight [0/2]=300.1, macOS/Linux installer preflight [1/2]=78.2"
+          ]
+        }
+      ]
     }
   ]
 }
