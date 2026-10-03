@@ -69,36 +69,43 @@ jobs:
           for t in sha256sum shasum openssl; do echo "$t: $(command -v "$t" || echo absent)"; done
           echo "ps lstart: $(LC_ALL=C TZ=UTC ps -o lstart= -p $$)"
       - name: Installer checkpoint and resume (bash)
+        if: ${{ !cancelled() }}
         shell: pwsh
         run: |
           pwsh -NoProfile -File tests/Test-BashInstallerCheckpoint.ps1
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Installer checkpoint store permissions (both libraries, real modes)
+        if: ${{ !cancelled() }}
         shell: pwsh
         run: |
           pwsh -NoProfile -File tests/Test-InstallerCheckpointStore.ps1
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Installer prices, record and FinOps offer (bash)
+        if: ${{ !cancelled() }}
         shell: pwsh
         run: |
           pwsh -NoProfile -File tests/Test-BashInstaller.ps1
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Answers schema, both validators (PowerShell and jq)
+        if: ${{ !cancelled() }}
         shell: pwsh
         run: |
           pwsh -NoProfile -File tests/Test-InstallerAnswersSchema.ps1
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Redaction, one rule set in both engines (PowerShell and jq)
+        if: ${{ !cancelled() }}
         shell: pwsh
         run: |
           pwsh -NoProfile -File tests/Test-InstallerRedaction.ps1
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Installer preflight (bash)
+        if: ${{ !cancelled() }}
         shell: pwsh
         run: |
           pwsh -NoProfile -File tests/Test-BashInstallerPreflight.ps1
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Installer steps, precedence and progress stream (bash)
+        if: ${{ !cancelled() }}
         shell: pwsh
         run: |
           pwsh -NoProfile -File tests/Test-BashInstallerStepSelection.ps1

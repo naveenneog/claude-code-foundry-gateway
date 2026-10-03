@@ -48,6 +48,7 @@ if (Test-ShardGroup 'static') {
     $forbidden = '(?m)^[^#\n]*(\b(declare|local|typeset)\s+-[a-zA-Z]*A\b|\bmapfile\b|\breadarray\b|\$\{[^}\n]*(,,|\^\^)[^}\n]*\}|\|&|&>>|\bcoproc\b|\bsed\s+-i(\s|$)|\bdate\s+(-[a-zA-Z]*\s+)*-d\b|\breadlink\s+-f\b|\bstat\s+-c\b|\bfind\b[^\n]*-printf\b|\bgrep\s+-[a-zA-Z]*P)'
     $hits = @([regex]::Matches(([IO.File]::ReadAllText($installerPath) + "`n" + $library), $forbidden) | ForEach-Object { $_.Value.Trim() })
     Assert 'the installer and its library use nothing that needs bash 4 or GNU tools' ($library -and -not $hits.Count) ($hits -join ' | ')
+    Assert 'the checkpoint heartbeat is removed from the bash job table before release can kill it' ($library -match 'CKPT_HEARTBEAT=\$!\s+disown "\$CKPT_HEARTBEAT" 2>/dev/null \|\| true') 'missing disown after CKPT_HEARTBEAT=$!'
 }
 
 

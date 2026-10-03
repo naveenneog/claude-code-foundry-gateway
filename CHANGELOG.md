@@ -58,7 +58,7 @@ exact streaming cache-creation detail remains **U13**.
   binds the result into the plan fingerprint and applies a plan only when that preflight passes. The bash
   checkpoint suite runs as seven Test-All checks, the bash step-selection suite as three and the bash
   preflight suite as two, each within the default timeout, and
-  `.github/workflows/installer-unix.yml` runs the P92 bash suites on Linux and macOS. 46 schema, 15 drift, 11 redaction, 37 PowerShell and 40 bash preflight, 36 PowerShell and 37 bash step, 16 business-unit, 10 guided-flow and 15 shard checks
+  `.github/workflows/installer-unix.yml` runs the P92 bash suites on Linux and macOS and continues the later suite steps after an earlier suite failure. The bash admin preflight warns on the jq 1.7.0 number-conversion behavior, not on a distribution version string. 46 schema, 15 drift, 11 redaction, 37 PowerShell and 40 bash preflight, 36 PowerShell and 37 bash step, 16 business-unit, 10 guided-flow and 15 shard checks
   ([lean installer design record (ADR-0047)](docs/adr/0047-lean-installer-phase-0.md),
   [Setup](docs/SETUP.md#answers-file-preflight-and-selected-steps)).
 - **Installers resume after a failure.** `Install-ClaudeGateway.ps1` and
@@ -84,7 +84,7 @@ exact streaming cache-creation detail remains **U13**.
   failed check and the resume command with the answers, and continues on its live
   checks. The bash installer under Git Bash keeps no checkpoint and names
   `Install-ClaudeGateway.ps1` as the Windows installer. `-Restart`/`--restart` sets
-  the checkpoint aside. 86 PowerShell, 52 bash and 24 store checks
+  the checkpoint aside. The bash checkpoint lock heartbeat is removed from the shell job table before release kills it, so bash 3.2 prints no job-termination notice beside a refusal. 86 PowerShell, 53 bash and 24 store checks
   ([installer checkpoint design record (ADR-0046)](docs/adr/0046-installer-checkpoint-and-resume.md),
   [Setup](docs/SETUP.md#resume-after-a-failure)). `.github/workflows/installer-unix.yml`
   runs the bash suites and the store suite on `ubuntu-latest` and `macos-latest`

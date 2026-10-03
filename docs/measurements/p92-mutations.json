@@ -3483,6 +3483,70 @@
           ]
         }
       ]
+    },
+    {
+      "round": "Builder round 5",
+      "by": "builder",
+      "dateUtc": "2026-10-03",
+      "measuredCommit": "working tree before commit",
+      "trigger": "Draft PR #2 run 37107451127 failed on macos-latest from a bash 3.2 heartbeat job notice and on ubuntu-latest from a jq-1.7 version-string warning against a jq 1.7.1 package.",
+      "rule": "A mutant counts as caught only when its suite reaches the baseline check count and at least one check fails. The targeted check must be among the failures.",
+      "baselines": [
+        {
+          "suite": "tests/Test-BashInstallerCheckpoint.ps1 -Shard 0/7",
+          "checks": 10,
+          "failed": 0,
+          "seconds": 73.8
+        },
+        {
+          "suite": "tests/Test-BashInstaller.ps1",
+          "checks": 65,
+          "failed": 0,
+          "seconds": 71.2
+        }
+      ],
+      "caught": 2,
+      "targetFailed": 2,
+      "total": 2,
+      "mutants": [
+        {
+          "id": "R5-HB01",
+          "item": "macOS bash 3.2 prints a Terminated job notice when release kills the checkpoint heartbeat unless it is removed from the job table",
+          "suite": "tests/Test-BashInstallerCheckpoint.ps1 -Shard 0/7",
+          "target": "the checkpoint heartbeat is removed from the bash job table before release can kill it",
+          "file": "scripts/install-checkpoint.sh",
+          "mutation": "'disown \"$CKPT_HEARTBEAT\" 2>/dev/null || true' -> ': \"$CKPT_HEARTBEAT\"'",
+          "checks": 10,
+          "failed": 1,
+          "bashN": "ok",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 76.7,
+          "failures": [
+            "the checkpoint heartbeat is removed from the bash job table before release can kill it - missing disown after CKPT_HEARTBEAT=$!"
+          ]
+        },
+        {
+          "id": "R5-JQ01",
+          "item": "the jq warning is based on the 1.7.0 arithmetic behavior, not the jq --version string",
+          "suite": "tests/Test-BashInstaller.ps1",
+          "target": "jq 1.7.0 warns; jq 1.7.1 behavior with a jq-1.7 version string, jq 1.8 and the runner jq do not warn",
+          "file": "scripts/preflight.sh",
+          "mutation": "'= \"0.007499999999999994\"' -> '= \"0.0074999999999999945\"'",
+          "checks": 65,
+          "failed": 2,
+          "bashN": "ok",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 59.0,
+          "failures": [
+            "jq 1.7.0: the preflight says a price written with 17 significant digits can be a cent off and names jq 1.7.1, and the install goes on",
+            "jq 1.7.1 behavior with a jq-1.7 version string, jq 1.8, and the jq on this machine: no such warning - jq-1.7.1, jq-1.8, yes"
+          ]
+        }
+      ]
     }
   ]
 }
