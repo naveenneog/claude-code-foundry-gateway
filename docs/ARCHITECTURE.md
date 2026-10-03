@@ -49,6 +49,57 @@ writes the decision record after each completed step, verifies, and generates
 `onboarding/HOW-TO-USE.md`. It does not replace API Management, Foundry,
 Turnstile, AUM or the reporting jobs; it coordinates their setup and handover.
 
+
+## Lean installer phase 0
+
+![Lean installer phase 0: one answers schema feeds both installers and the guided flow; the shared preflight only reads; selected steps reuse P91 live verification and append a progress stream.](images/architecture/lean-installer-phase0.png)
+
+Source: [17-lean-installer-phase0.json](architecture/17-lean-installer-phase0.json);
+[ADR-0047](adr/0047-lean-installer-phase-0.md).
+
+Phase 0 adds operator-side files and streams. Azure writes stay in the installers' steps after the
+confirmed summary; the preflight, `-ListSteps` and the guided flow's plan only read.
+
+**Answers schema.** [`schemas/claude-gateway.answers.schema.json`](../schemas/claude-gateway.answers.schema.json)
+names each answer once, by its installer parameter, with the programs that apply it (`x-appliedBy`),
+its bash flag (`x-bashFlag`), its guided-flow keys (`x-flowKeys`) and the preflight check that reports
+a problem with it (`x-checkId`). `scripts/ClaudeInstallerAnswers.ps1` and `scripts/install-answers.jq`
+read it and report the same problems word for word (ADR-0047 decision 2). The schema lists no secret:
+`x-secrets` names `AddressCertificatePassword`, which an answers file is refused for holding.
+
+**Preflight.** `-Preflight` and `--preflight` report the 14 checks that `x-preflightChecks` lists, as
+text or as JSON with `schemaVersion`, `installer`, `answersSchemaVersion`, `result` and `checks`
+(`scripts/ClaudeInstallerPreflight.ps1:119-184`, `scripts/install-preflight.sh:222-286`). Each check is
+PASS, FAIL or NOT-RUN with a reason. A check starts NOT-RUN with reason `not-evaluated`, which fails the
+preflight, and is PASS only where a branch passes it with a message (ADR-0047 decision 5). Its reads go
+through the P91 verdict readers, and the API Management reads are the ones the run's reuse path makes
+(`Get-ClaudeApimReuseState`, `scripts/ClaudeInstallerPreflight.ps1:18-39`). The guided flow applies an
+approved plan only when this result is PASS (ADR-0047 decision 9).
+
+**Progress stream.** `-ProgressPath` and `--progress-file` append one JSON object per line
+(`scripts/ClaudeInstallSteps.ps1:29-61`, `scripts/install-steps.sh:24-45`):
+
+| Key | Value |
+|---|---|
+| `schemaVersion` | `1` |
+| `time` | UTC, `yyyy-MM-ddTHH:mm:ssZ` |
+| `runId` | The install checkpoint's run id, 32 hexadecimal digits |
+| `stepId` | A step id of ADR-0046, or empty for an event of the whole run |
+| `event` | `started`, `completed`, `skipped-verified`, `warning`, `failed` or `refused` |
+| `message` | `<step title>: started`, `completed`, `verified live, skipped`, `incomplete` or `failed: <reason>`; a refusal's line starts with `Refused:` |
+| `resumeCommand` | The command that resumes the run, on `warning` and `failed`; otherwise empty |
+
+Both installers write the same events with the same messages for the steps both run. Each line is one
+write. A JWT, `Bearer <token>` or a named secret such as `sig=` or `password:` in a message or resume
+command is written as `[redacted]`, and the preflight's messages and remedies pass the same rules: both
+installers hold one rule table (`Protect-ClaudeInstallText`, `scripts/ClaudeInstallResume.ps1:46-54`;
+`redact`, `scripts/install-checkpoint.sh:36-37`; ADR-0047 decision 12). The same rules apply to each line
+either installer prints from an error or a refusal, and to the error output of the Azure CLI calls whose
+output the run shows (`Invoke-ClaudeInstallAzShown`, `scripts/ClaudeInstallResume.ps1:20-33`; `ckpt_shown_`,
+`scripts/install-checkpoint.sh:47-52`). A file
+that cannot be written refuses the run at startup, before any Azure call, and no event is written before
+that check passes (`scripts/ClaudeInstallSteps.ps1:19-27`, `scripts/install-steps.sh:134-144`).
+
 ## Optional company hostname
 
 ![Company address control path: a priced installer or Change review creates DNS first, configures the supplied certificate and preserves APIM hostnames, then publishes the developer URL only after trusted TLS and a gateway HTTP 401.](images/architecture/company-address.png)
@@ -86,6 +137,76 @@ not just the top-level generator. The installer persists the same per-tier
 lists that later model changes use, and both workstation setup implementations
 remove aliases for families that are no longer selected.
 
+## Install checkpoint and resume
+
+![Install checkpoint: the guided flow and both installers keep one checkpoint per checkout in a per-user state directory; the first write follows the confirmed summary; a rerun skips a step only when a live Azure read shows its result.](images/architecture/install-checkpoint.png)
+
+Source: [16-install-checkpoint.json](architecture/16-install-checkpoint.json);
+[installer checkpoint design record (ADR-0046)](adr/0046-installer-checkpoint-and-resume.md); [Setup](SETUP.md#resume-after-a-failure).
+
+The install checkpoint is an operator-side data store: one JSON file per checkout in
+a per-user state directory on the machine or Cloud Shell session that runs the
+installer ([store and location](adr/0046-installer-checkpoint-and-resume.md#1-store-and-location)). It holds the binding
+(tenant, subscription, resource group, gateway), the non-secret answers, each step's
+state and input hash, and receipts: deployment names, Entra group ids, the role
+assignment id, the Desktop client id and the projection resolver app id
+([schema](adr/0046-installer-checkpoint-and-resume.md#4-schema-version-1), [receipts](adr/0046-installer-checkpoint-and-resume.md#11-receipts)). It holds no tokens,
+keys or connection strings, and the checkpoint test suites check that
+([no secrets](adr/0046-installer-checkpoint-and-resume.md#15-no-secrets)). The decision record
+`onboarding/claude-gateway.json` still holds applied values only
+([ADR-0030](adr/0030-guided-flow.md)).
+
+- **Components.** `scripts/ClaudeInstallCheckpoint.ps1` and
+  `scripts/install-checkpoint.sh` keep the run state, the lock and the answers;
+  `scripts/ClaudeInstallStore.ps1` and `scripts/install-store.sh` place the store
+  and decide whether it is trusted; `scripts/ClaudeInstallResume.ps1` and
+  `scripts/install-resume.sh` hold the live reads and step actions. Each installer
+  resumes only its own checkpoint
+  ([resume across installers](adr/0046-installer-checkpoint-and-resume.md#13-resume-across-installers)).
+- **Identities.** The checkpoint adds no Azure resource, identity or role. The live
+  reads run under the operator's Azure CLI sign-in, as the installers' other calls do.
+- **Data flow.** The first write follows the confirmed summary
+  ([ADR-0032](adr/0032-guided-flow-starts-at-once.md)), and each step records its
+  state. The deployment name is recorded before `az deployment group create`
+  ([deployments](adr/0046-installer-checkpoint-and-resume.md#10-deployments)). A rerun skips a step only when a live read
+  returns present; absent reruns the step, and inconclusive refuses unless the step
+  is idempotent ([verification before a skip](adr/0046-installer-checkpoint-and-resume.md#7-verification-before-a-skip)).
+  Receipt values are checked on read, before they reach `az` as arguments, and a
+  receipt is used only when the live object it names is the one the run recorded:
+  the group listed under the configured name, the role assignment of Cognitive
+  Services User on the Foundry account for the gateway's identity, the resolver app
+  by its name, the Desktop app by its `appId`
+  ([receipts](adr/0046-installer-checkpoint-and-resume.md#11-receipts)).
+- **Store.** The state directory is inside the user's home directory or profile (in
+  Cloud Shell, inside `clouddrive` when storage is mounted), is not itself a link,
+  and is used by its real path. Before either installer reads, locks or replaces
+  anything in it, it checks for a directory, checkpoint, lock or temporary file that
+  another account could have written or replaced: on Linux and macOS one the current
+  user does not own, one its group or other users can write, a symbolic link, or a
+  directory between it and `$HOME` that another user owns or that its group or
+  other users can write without the sticky bit; on Windows a junction or symbolic
+  link, one owned by an account other than the current user, SYSTEM or
+  Administrators, one with an access rule that lets another account write it, a
+  state directory whose rules are inherited, and a directory up to the user profile
+  that another account may delete, rename or re-permission. Such a store refuses
+  when `CLAUDE_GATEWAY_STATE_DIR` names it or when it holds a file of the checkout;
+  otherwise the run keeps no store and continues on its live checks. The bash
+  installer under Git Bash keeps no store
+  ([store and location](adr/0046-installer-checkpoint-and-resume.md#1-store-and-location), [file mechanics](adr/0046-installer-checkpoint-and-resume.md#2-file-mechanics)).
+- **Failures.** A refusal is one line that names the field or reason and, for the
+  refusals [Setup](SETUP.md#resume-after-a-failure) lists, the command that resumes
+  the run or discards the checkpoint ([output](adr/0046-installer-checkpoint-and-resume.md#14-output)). A corrupt checkpoint
+  is refused and kept. A lock held by a live process refuses and names when a later
+  run takes it over, and a stale lock is renamed ([lock](adr/0046-installer-checkpoint-and-resume.md#3-lock)). A deployment
+  that is still running is waited on for up to 3,600 s; the run then stops with the
+  resume command.
+- **Cloud Shell.** The checkpoint is in `clouddrive` when storage is mounted;
+  otherwise it is in the session's `$HOME`, with the full resume command printed.
+  Files in `clouddrive` are readable by principals with access to the Cloud Shell
+  storage account ([Persist files](https://learn.microsoft.com/azure/cloud-shell/persisting-shell-storage#securing-storage-access)),
+  and the store check does not apply there. Before a wait longer than 60 s the
+  installer prints the 20-minute idle limit
+  ([Cloud Shell FAQ](https://learn.microsoft.com/azure/cloud-shell/faq-troubleshooting)).
 ## Request path
 
 ![Six request hops: sign in, admit, serve, meter, attribute and observe. Four budget layers and projection admission, absence and expiry outcomes are shown, followed by the components each optional profile adds.](images/architecture/request-path.png)

@@ -1,0 +1,356 @@
+# P92 acceptance tests 3, 4 and 5, bash half (docs/adr/0047-lean-installer-phase-0.md): --list-steps,
+# --steps, answer precedence and --progress-file in install-claude-gateway.sh, with the same contracts as
+# Install-ClaudeGateway.ps1 (tests/Test-InstallerStepSelection.ps1). One PowerShell run over the same
+# kind of world checks that both installers write the same progress events. Runs through the stubs of
+# tests/BashInstallerHarness.ps1 and tests/InstallerCheckpointHarness.ps1; nothing reaches Azure.
+param([string]$Shard = '')
+$ErrorActionPreference = 'Stop'
+$root = Split-Path $PSScriptRoot -Parent
+$script:fail = 0
+$script:checks = 0
+function Assert($label, $condition, $detail = '') {
+    $script:checks++
+    if ($condition) { Write-Host "  [OK]   $label" -ForegroundColor Green }
+    else { Write-Host "  [FAIL] $label$(if ($detail) { " - $detail" })" -ForegroundColor Red; $script:fail++ }
+}
+# Test-All runs the suite as three checks, -Shard 0/3, 1/3 and 2/3, each within the default per-check
+# timeout (docs/adr/0047-lean-installer-phase-0.md decision 14); without -Shard every group runs. Each group of
+# checks runs in one shard, and tests/Test-BashInstallerStepShards.ps1 checks that every check is in one group.
+# list: the first run that --list-steps and --steps read, its resume and the PowerShell run of the same world;
+# sync: the run whose sync fails, its --steps sync reruns and the resume whose live reads quote secrets; start:
+# the refusals at startup; prec: the precedence runs; stream: the failure and the refusals that the progress
+# stream records. Round 4 moved sync to shard 1, after its console-resume run took shard 0 to 249.8 s alone.
+$script:ShardGroups = [ordered]@{ list = 0; sync = 1; start = 1; stream = 1; prec = 2 }
+$script:ShardCount = 3
+function Test-ShardGroup([string]$Group) {
+    if (-not $Shard) { return $true }
+    if ($Shard -notmatch '^(\d+)/(\d+)$' -or [int]$Matches[2] -ne $script:ShardCount -or [int]$Matches[1] -ge $script:ShardCount) { throw "-Shard is i/$($script:ShardCount) with i from 0 to $($script:ShardCount - 1), not '$Shard'." }
+    return [int]$script:ShardGroups[$Group] -eq [int]$Matches[1]
+}
+Write-Host ''
+Write-Host "Installer step selection, precedence and progress (bash installer)$(if ($Shard) { ", shard $Shard" })" -ForegroundColor Cyan
+$watch = [Diagnostics.Stopwatch]::StartNew()
+. (Join-Path $PSScriptRoot 'BashInstallerHarness.ps1')
+. (Join-Path $PSScriptRoot 'InstallerCheckpointHarness.ps1')
+. (Join-Path $PSScriptRoot 'InstallerRedactionShapes.ps1')
+$scratch = [IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetTempPath()) ('p92-bash-steps-' + [guid]::NewGuid().ToString('N'))))
+$made = New-BashTemplate $scratch
+$template = $made.Template; $psTable = $made.PsTable
+$bashIds = @('resource-group', 'gateway-deployment', 'entra-groups', 'sync', 'onboarding-package')
+$deps = [ordered]@{ 'resource-group' = ''; 'gateway-deployment' = 'resource-group'; 'entra-groups' = ''; 'sync' = 'gateway-deployment,entra-groups'; 'onboarding-package' = 'gateway-deployment' }
+$base = @('--subscription', $sub, '--foundry-account', 'ai-p91', '--foundry-rg', 'rg-ai-p91', '--resource-group', 'rg-p91', '--location', 'eastus2', '--name-prefix', 'p91gw',
+    '--publisher-email', 'ops@contoso.com', '--sku', 'BasicV2', '--quota-standard', '500000', '--tpm-premium', '80000', '--quota-premium', '5000000', '--calls-per-minute', '120', '--yes', '--skip-finops-offer')
+$tpm = @('--tpm-standard', '20000')
+function Get-Writes($Result) { @($Result.Az | Where-Object { $_ -match '(^| )(create|update|delete|add|remove|assign)( |$)' }) }
+function Get-Events([string]$Path) {
+    if (-not (Test-Path -LiteralPath $Path)) { return @() }
+    # time is read as written: PowerShell 7 reads an ISO time in JSON as a DateTime.
+    @([IO.File]::ReadAllText($Path) -split "`n" | Where-Object { $_ } | ForEach-Object {
+            $line = $_
+            try { $e = $line | ConvertFrom-Json -ErrorAction Stop; $m = [regex]::Match($line, '"time"\s*:\s*"([^"]*)"'); if ($m.Success) { $e.time = $m.Groups[1].Value }; $e }
+            catch { [pscustomobject]@{ unreadable = $line } } })
+}
+function Write-Answers($Scenario, $Answers) { $p = Join-Path $Scenario.Dir 'answers.json'; Write-Lf $p ($Answers | ConvertTo-Json -Depth 8); return (ConvertTo-BashPath $p) }
+function Copy-Scenario($Name, $Source, [scriptblock]$Change) { $s = New-Scenario $Name $null $Source; if ($Change) { Edit-World $s $Change }; $s }
+function Test-Refused($Result, [string]$Pattern) { (Test-Refusal $Result $Pattern) }
+$fields = 'schemaVersion,time,runId,stepId,event,message,resumeCommand'
+# The lines of a stream that are not one JSON object with the stream's keys, in order, and valid values.
+function Get-Malformed($Events) {
+    @($Events | Where-Object { $_.PSObject.Properties.Name -contains 'unreadable' -or (@($_.PSObject.Properties.Name) -join ',') -ne $fields -or $_.schemaVersion -ne 1 -or
+            [string]$_.time -notmatch '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$' -or [string]$_.runId -notmatch '^[0-9a-f]{32}$' -or $_.event -cnotin 'started', 'completed', 'skipped-verified', 'failed', 'refused', 'warning' -or
+            ($_.stepId -and $_.stepId -notin $bashIds) -or -not $_.message })
+}
+# The streams among these files that hold a JWT-shaped value or a password or access token by name.
+function Get-Leaks([string[]]$Paths) { @($Paths | Where-Object { $_ -and (Test-Path -LiteralPath $_) -and [IO.File]::ReadAllText($_) -match 'eyJ[A-Za-z0-9_-]{4,}\.|(?i)password|accesstoken' }) }
+$pairs = { param($Events, [string]$Step) (@($Events | Where-Object { $_.stepId -eq $Step } | ForEach-Object { $_.event })) -join ',' }
+
+try {
+    # ------------------------------------------------------------------ first runs
+    # Only the scenarios of the groups this shard runs are made.
+    $wave1 = @()
+    if (Test-ShardGroup 'list') {
+        $w = New-World; $w.inject.groupCreateFail = @('claude-code-premium')
+        $listSrc = New-Scenario 'list-src' $w
+        $progress1 = Join-Path $listSrc.Dir 'progress.ndjson'
+        $wave1 += ($runList1 = New-Run $listSrc ($base + $tpm + @('--progress-file', (ConvertTo-BashPath $progress1))))
+    }
+    if (Test-ShardGroup 'sync') {
+        $w = New-World; $w.inject.sync = 'fail'
+        $syncFail = New-Scenario 'sync-fail' $w
+        $wave1 += ($runSync1 = New-Run $syncFail ($base + $tpm))
+    }
+    if (Test-ShardGroup 'start') {
+        $stepsNone = New-Scenario 'steps-none' (New-World)
+        $unknown = New-Scenario 'unknown-step' (New-World)
+        # A --progress-file that cannot be written (a directory): the run refuses before any Azure call.
+        $progressDirScenario = New-Scenario 'progress-dir' (New-World)
+        $progressDir = Join-Path $progressDirScenario.Dir 'not-a-file'
+        New-Item -ItemType Directory -Force -Path $progressDir | Out-Null
+        # Round 3, the UX seat's item 8: an answers file with two problems, refused before anything is read.
+        $answersBad = New-Scenario 'answers-bad' (New-World)
+        $answersBadFile = Write-Answers $answersBad ([ordered]@{ schemaVersion = 1; Sku = 'Gold'; Bogus = 1 })
+        $noSku = @(for ($i = 0; $i -lt $base.Count; $i++) { if ($base[$i] -eq '--sku') { $i++; continue }; $base[$i] })
+        $wave1 += @(
+            ($runAnswersBad = New-Run $answersBad ($noSku + $tpm + @('--answers-file', $answersBadFile)))
+            ($runNone = New-Run $stepsNone ($base + $tpm + @('--steps', 'sync')))
+            ($runUnknown = New-Run $unknown ($base + $tpm + @('--steps', 'gateway-deploy')))
+            ($runProgressDir = New-Run $progressDirScenario ($base + $tpm + @('--progress-file', (ConvertTo-BashPath $progressDir))))
+        )
+    }
+    if (Test-ShardGroup 'prec') {
+        $w = New-World; $w.inject.groupCreateFail = @('claude-code-premium')
+        $precSrc = New-Scenario 'prec-src' $w
+        $precDefault = New-Scenario 'prec-default' (New-World)
+        $wave1 += @(
+            ($runPrec1 = New-Run $precSrc ($base + @('--tpm-standard', '11111')))
+            ($runDefault = New-Run $precDefault $base)
+        )
+    }
+    if (Test-ShardGroup 'stream') {
+        $w = New-World; $w.inject.createMode = 'fail'
+        $failing = New-Scenario 'failing' $w
+        $progressFail = Join-Path $failing.Dir 'progress.ndjson'
+        # A group read refused with an error that carries a JWT-shaped value: the refusal quotes the error, so
+        # only the stream's redaction keeps the token out of it (ADR-0047 decision 12).
+    $jwt = 'eyJhbGciOiJSUzI1NiJ9' + '.eyJzdWIiOiJwOTItdGVzdCJ9.c2lnbmF0dXJl'
+    $w = New-World; $w.inject.readErrors = @([ordered]@{ match = 'ad group list --display-name claude-code-standard*'; text = "ERROR: the request with Authorization: Bearer $jwt was refused (Authorization_RequestDenied)." })
+        $tokenRefusal = New-Scenario 'token-refusal' $w
+        $progressToken = Join-Path $tokenRefusal.Dir 'progress.ndjson'
+        # Round 3, the Security seat's item 5: a refusal that quotes an error with every secret shape, and a
+        # failure in a checkout whose path holds one (sig=<value>), which the failed event's resume command names.
+        $w = New-World; $w.inject.readErrors = @([ordered]@{ match = 'ad group list --display-name claude-code-standard*'; text = $P92RedactionSentence })
+        $redactRefusal = New-Scenario 'redact-refusal' $w
+        $progressRedact = Join-Path $redactRefusal.Dir 'progress.ndjson'
+        $w = New-World; $w.inject.createMode = 'fail'
+        $redactPath = New-Scenario 'redact-sig=p92PathSentinel' $w
+        $progressPath = Join-Path $redactPath.Dir 'progress.ndjson'
+        # Round 4, the Security seat's item 4: a failure whose Azure CLI error quotes every secret shape, printed
+        # on the console with the failure line and the resume command.
+        $w = New-World; $w.inject.readErrors = @([ordered]@{ match = 'deployment group create*'; text = $P92RedactionSentence })
+        $consoleFailure = New-Scenario 'console-failure' $w
+        $wave1 += @(
+            ($runRedact = New-Run $redactRefusal ($base + $tpm + @('--progress-file', (ConvertTo-BashPath $progressRedact))))
+            ($runRedactPath = New-Run $redactPath ($base + $tpm + @('--progress-file', (ConvertTo-BashPath $progressPath))))
+            ($runFailing = New-Run $failing ($base + $tpm + @('--progress-file', (ConvertTo-BashPath $progressFail))))
+            ($runToken = New-Run $tokenRefusal ($base + $tpm + @('--progress-file', (ConvertTo-BashPath $progressToken))))
+            ($runConsoleFailure = New-Run $consoleFailure ($base + $tpm))
+        )
+    }
+    # The PowerShell installer over the same kind of world, for the parity of progress events. It runs
+    # through tests/InstallerCheckpointHarness.ps1, which sets Windows access rules and builds Windows
+    # paths, so the parity is checked on Windows (Test-All); Linux and macOS run the bash checks.
+    $psScratch = $null
+    if ((Test-ShardGroup 'list') -and $script:windows) {
+        $psScratch = [IO.Path]::GetFullPath((Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) ('p92-parity-' + [guid]::NewGuid().ToString('N'))))
+        New-Item -ItemType Directory -Force -Path $psScratch | Out-Null
+        $psTemplate = New-P91Template $psScratch
+        $pw = New-P91World; $pw.inject.groupCreateFail = @('claude-code-premium')
+        $psScenario = New-P91Scenario -Name 'parity' -Scratch $psScratch -Template $psTemplate -World $pw
+        $psProgress = Join-Path $psScenario.Dir 'progress.ndjson'
+        $psRun = New-P91Run $psScenario -Arguments @("-SubscriptionId '$sub'", "-FoundryAccount 'ai-p91'", "-FoundryResourceGroup 'rg-ai-p91'", "-EntitlementStore 'named-value'", "-AuthMode 'interactive'",
+            "-DesktopSignInKind 'helper-script'", "-AddressMode 'azure'", '-SkipFinOpsOffer', "-ResourceGroup 'rg-p91'", "-Location 'eastus2'", "-NamePrefix 'p91gw'", "-PublisherEmail 'ops@contoso.com'",
+            "-Sku 'BasicV2'", "-StandardModels 'claude-sonnet-5'", "-PremiumModels 'claude-sonnet-5'", '-TpmStandard 20000', '-QuotaStandard 500000', '-TpmPremium 80000', '-QuotaPremium 5000000',
+            '-QuotaOrg 100000000', '-CallsPerMinute 120', '-Yes', "-ProgressPath '$psProgress'")
+        $psResults = Invoke-P91Runs @($psRun)
+    }
+    $r1 = Invoke-Runs $wave1
+
+    # ------------------------------------------------------------------ reruns from the first runs' checkpoints
+    $wave2 = @()
+    if (Test-ShardGroup 'list') {
+        $l1 = $r1[$runList1.Dir]
+        Assert 'setup: the first run keeps its checkpoint with Entra groups incomplete' ($l1.ExitCode -eq 0 -and (Get-CheckpointFile $listSrc)) (Get-Tail $l1)
+        $list = Copy-Scenario 'list' $listSrc; $listText = Copy-Scenario 'list-text' $listSrc; $refuse = Copy-Scenario 'refuse-prereq' $listSrc
+        $listHash = Get-Hash $list; $refuseHash = Get-Hash $refuse
+        $resume = Copy-Scenario 'resume-progress' $listSrc { param($w) $w.inject.groupCreateFail = @() }
+        $progress2 = Join-Path $resume.Dir 'progress.ndjson'
+        $wave2 += @(
+            ($runList = New-Run $list @('--list-steps', '--json'))
+            ($runListText = New-Run $listText @('--list-steps'))
+            ($runRefuse = New-Run $refuse ($base + $tpm + @('--steps', 'sync')))
+            ($runResume = New-Run $resume ($base + $tpm + @('--progress-file', (ConvertTo-BashPath $progress2))))
+        )
+    }
+    if (Test-ShardGroup 'sync') {
+        Assert 'setup: the run whose sync fails keeps its checkpoint with sync incomplete' ([bool](Get-CheckpointFile $syncFail)) (Get-Tail $r1[$runSync1.Dir])
+        $onlySync = Copy-Scenario 'only-sync' $syncFail { param($w) $w.inject.sync = '' }
+        # A failed sync is a warning in this installer, so run 1 went on to write the package; the copy starts without it.
+        Remove-Item -LiteralPath (Join-Path $onlySync.Repo 'onboarding/claude-gateway.json') -Force -ErrorAction SilentlyContinue
+        $gone = Copy-Scenario 'prereq-gone' $syncFail { param($w) $w.inject.sync = ''; foreach ($p in @($w.groups.PSObject.Properties | Where-Object { $_.Value -eq 'claude-code-standard' })) { $w.groups.PSObject.Properties.Remove($p.Name) } }
+        $goneHash = Get-Hash $gone
+        # Round 4, item 4: a resume whose live reads quote every secret shape, as in tests/Test-InstallerStepSelection.ps1.
+        $consoleResume = Copy-Scenario 'console-resume' $syncFail { param($w) $w.inject.sync = ''
+            $w.inject.readErrors = @([pscustomobject]@{ match = 'group show -n rg-p91*'; text = $P92RedactionSentence })
+            foreach ($d in @($w.deployments.'rg-p91'.PSObject.Properties)) { $d.Value.state = 'Failed'; $d.Value | Add-Member -NotePropertyName error -NotePropertyValue ([pscustomobject]@{ code = 'DeploymentFailed'; message = $P92RedactionSentence }) -Force } }
+        $wave2 += @(
+            ($runOnlySync = New-Run $onlySync ($base + $tpm + @('--steps', 'sync')))
+            ($runGone = New-Run $gone ($base + $tpm + @('--steps', 'sync')))
+            ($runConsoleResume = New-Run $consoleResume ($base + $tpm))
+        )
+    }
+    if (Test-ShardGroup 'prec') {
+        Assert 'setup: the run with --tpm-standard 11111 keeps its checkpoint with Entra groups incomplete' ([bool](Get-CheckpointFile $precSrc)) (Get-Tail $r1[$runPrec1.Dir])
+        $precParam = Copy-Scenario 'prec-param' $precSrc { param($w) $w.inject.groupCreateFail = @() }
+        $precFile = Copy-Scenario 'prec-file' $precSrc { param($w) $w.inject.groupCreateFail = @() }
+        $precCkpt = Copy-Scenario 'prec-checkpoint' $precSrc { param($w) $w.inject.groupCreateFail = @() }
+        $precBind = Copy-Scenario 'prec-binding' $precSrc
+        $bindHash = Get-Hash $precBind
+        $progressBind = Join-Path $precBind.Dir 'progress.ndjson'
+        $noRg = @(for ($i = 0; $i -lt $base.Count; $i++) { if ($base[$i] -eq '--resource-group') { $i++; continue }; $base[$i] })
+        $wave2 += @(
+            ($runPrecParam = New-Run $precParam ($base + @('--tpm-standard', '33333', '--answers-file', (Write-Answers $precParam ([ordered]@{ schemaVersion = 1; TpmStandard = 22222 })))))
+            ($runPrecFile = New-Run $precFile ($base + @('--answers-file', (Write-Answers $precFile ([ordered]@{ schemaVersion = 1; TpmStandard = 22222 })))))
+            ($runPrecCkpt = New-Run $precCkpt $base)
+            ($runPrecBind = New-Run $precBind ($noRg + @('--answers-file', (Write-Answers $precBind ([ordered]@{ schemaVersion = 1; ResourceGroup = 'rg-other' })), '--progress-file', (ConvertTo-BashPath $progressBind))))
+        )
+    }
+    $r2 = Invoke-Runs $wave2
+
+    # ------------------------------------------------------------------ checks, by group
+    if (Test-ShardGroup 'list') {
+        $ls = $r2[$runList.Dir]
+        $json = $null; try { $json = $ls.Out | ConvertFrom-Json -ErrorAction Stop } catch { }
+        $state = @{}; foreach ($s in @(if ($json) { $json.steps })) { $state[[string]$s.id] = [string]$s.state }
+        $depDrift = @(foreach ($s in @(if ($json) { $json.steps })) { if ((@($s.dependencies) -join ',') -ne $deps[[string]$s.id] -or -not $s.title) { "$($s.id): $(@($s.dependencies) -join ',')" } })
+        Assert 'P3 bash --list-steps --json prints only JSON: the five steps this installer runs, in order, each with its title and dependencies' ($ls.ExitCode -eq 0 -and $json -and $json.schemaVersion -eq 1 -and $json.installer -eq 'bash' -and
+            ((@($json.steps | ForEach-Object id)) -join ',') -eq ($bashIds -join ',') -and -not $depDrift.Count) "$($depDrift -join '; ') || $(Get-Tail $ls)"
+        Assert 'P3 bash --list-steps --json gives each step the state the install checkpoint records, and names the checkpoint and its run' ($state['resource-group'] -eq 'completed' -and $state['gateway-deployment'] -eq 'completed' -and
+            $state['entra-groups'] -eq 'incomplete' -and $state['sync'] -eq 'completed' -and [string]$json.checkpoint -like '*install-*.json' -and [string]$json.runId -match '^[0-9a-f]{32}$') (($state.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ', ')
+        $lt = $r2[$runListText.Dir]
+        Assert 'P3 bash --list-steps reads only the checkpoint: no Azure CLI call, the checkpoint unchanged, and the text names each id with its title and state' (-not $ls.Az.Count -and -not $lt.Az.Count -and
+            (Get-Hash $list) -eq $listHash -and $lt.Out -match '(?m)^\s*entra-groups\s+Entra groups\s+incomplete') (Get-Tail $lt)
+        $rf = $r2[$runRefuse.Dir]
+        Assert 'P3 bash --steps sync with Entra groups incomplete refuses on one line naming entra-groups; nothing changes' ((Test-Refused $rf '\bsync\b.*\bentra-groups\b') -and -not (Get-Writes $rf).Count -and
+            -not @($rf.Scripts | Where-Object { $_ -like '*Sync-ClaudeAccess*' }).Count -and (Get-Hash $refuse) -eq $refuseHash) (Get-Tail $rf)
+        $first = @(Get-Events $progress1); $second = @(Get-Events $progress2)
+        $malformed = @(Get-Malformed @($first + $second))
+        Assert 'P5 bash every progress line of a run and its resume is one JSON object with schemaVersion, UTC time, runId, stepId, event, message and resumeCommand, in that order' (@($first + $second).Count -ge 10 -and -not $malformed.Count) (($malformed | Select-Object -First 3 | ConvertTo-Json -Compress -Depth 4))
+        Assert 'P5 bash a run emits started and completed per step, and warning with the resume command for a step it leaves incomplete; one runId' ((& $pairs $first 'resource-group') -eq 'started,completed' -and
+            (& $pairs $first 'gateway-deployment') -eq 'started,completed' -and (& $pairs $first 'entra-groups') -eq 'started,warning' -and (& $pairs $first 'sync') -eq 'started,completed' -and
+            (& $pairs $first 'onboarding-package') -eq 'started,completed' -and @($first | Where-Object { $_.event -eq 'warning' -and $_.resumeCommand -match 'install-claude-gateway\.sh' }).Count -ge 1 -and
+            @($first.runId | Select-Object -Unique).Count -eq 1) (($first | ForEach-Object { "$($_.stepId):$($_.event)" }) -join ' ')
+        Assert 'P5 bash a resume emits skipped-verified for each step it verifies live, then runs the rest, under the same runId' ((& $pairs $second 'resource-group') -eq 'skipped-verified' -and
+            (& $pairs $second 'gateway-deployment') -eq 'skipped-verified' -and (& $pairs $second 'entra-groups') -eq 'started,completed' -and $second.Count -and $second[0].runId -eq $first[0].runId) (($second | ForEach-Object { "$($_.stepId):$($_.event)" }) -join ' ')
+        $listLeaks = @(Get-Leaks @($progress1, $progress2))
+        Assert 'P5 bash the progress streams of a run and its resume hold no JWT-shaped value, password or access token' (-not $listLeaks.Count -and (Test-Path -LiteralPath $progress1) -and (Test-Path -LiteralPath $progress2)) ($listLeaks -join ', ')
+        if ($script:windows) {
+            $psEvents = @(Get-Events $psProgress)
+            $shape = { param($Events) @($Events | Where-Object { $_.stepId -in $bashIds } | ForEach-Object { "$($_.stepId)|$($_.event)|$($_.message)" }) -join "`n" }
+            $psOut = Get-P91Result $psResults $psRun
+            Assert 'P5 both installers write the same events, with the same messages, for the steps both run (identical stream contract)' ($psOut.ExitCode -eq 0 -and $psEvents.Count -and (& $shape $psEvents) -eq (& $shape $first)) "pwsh: $((& $shape $psEvents) -replace "`n", ' ; ') || bash: $((& $shape $first) -replace "`n", ' ; ')"
+        }
+        else { Write-Host '  [SKIP] P5 both installers write the same events: runs on Windows (Test-All), where tests/InstallerCheckpointHarness.ps1 runs the PowerShell installer' -ForegroundColor DarkGray }
+    }
+    if (Test-ShardGroup 'sync') {
+        $gn = $r2[$runGone.Dir]
+        Assert 'P3 bash --steps sync refuses when Microsoft Graph no longer returns a group the checkpoint records (verified live, not from the checkpoint)' ((Test-Refused $gn 'entra-groups') -and
+            -not @($gn.Scripts | Where-Object { $_ -like '*Sync-ClaudeAccess*' }).Count -and -not (Get-Writes $gn).Count -and (Get-Hash $gone) -eq $goneHash) (Get-Tail $gn)
+        $os = $r2[$runOnlySync.Dir]
+        Assert 'P3 bash with its prerequisites verified live, --steps sync runs the sync and nothing else: no Azure write, no onboarding package' ($os.ExitCode -eq 0 -and
+            @($os.Scripts | Where-Object { $_ -like '*Sync-ClaudeAccess*' }).Count -eq 1 -and -not (Get-Writes $os).Count -and -not (Test-Path -LiteralPath (Join-Path $onlySync.Repo 'onboarding/claude-gateway.json'))) "$(Get-Tail $os) || $((Get-Writes $os) -join '; ')"
+        $cv = $r2[$runConsoleResume.Dir]
+        $cvLines = @($cv.Out -split "`n" | Where-Object { $_ -match '(Resource group: .*running it again|Gateway deployment: deployment \S+ Failed: |failed operation: )' })
+        $cvProblems = @(foreach ($l in $cvLines) { Get-P92RedactionProblems $l })
+        Assert 'R4 bash a resume whose live reads quote every secret shape prints the resource group''s read detail, the failed deployment''s error and its failed operation, each shape in its [redacted] form, and no sentinel in stdout or stderr' (
+            $cv.ExitCode -eq 0 -and $cvLines.Count -eq 3 -and -not $cvProblems.Count -and (Test-P92NoSentinel ($cv.Out + $cv.Err))) "$($cvProblems -join '; ') || $($cvLines -join ' || ') || $(Get-Tail $cv)"
+    }
+    if (Test-ShardGroup 'start') {
+        $sn = $r1[$runNone.Dir]
+        Assert 'P3 bash --steps sync with no checkpoint refuses naming gateway-deployment and entra-groups; nothing is created' ((Test-Refused $sn 'gateway-deployment') -and @(Get-ErrLines $sn)[0] -match 'entra-groups' -and
+            -not (Get-Writes $sn).Count -and -not (Get-CheckpointFile $stepsNone)) (Get-Tail $sn)
+        $uk = $r1[$runUnknown.Dir]
+        Assert 'P3 bash --steps with an unknown id refuses on one line naming it and the known ids' ((Test-Refused $uk "gateway-deploy'") -and @(Get-ErrLines $uk)[0] -match 'gateway-deployment' -and -not (Get-Writes $uk).Count) (Get-Tail $uk)
+        $pdir = $r1[$runProgressDir.Dir]
+        Assert 'P5 bash an unwritable --progress-file (a directory) refuses at startup on one line naming --progress-file, before any Azure call; nothing is written' ((Test-Refusal $pdir '--progress-file .+ cannot be written') -and
+            -not @($pdir.Az | Where-Object { $_ -notlike 'curl *' }).Count -and -not (Get-CheckpointFile $progressDirScenario) -and -not @(Get-ChildItem -LiteralPath $progressDir -Force).Count) (Get-Tail $pdir)
+        # Round 3: refusals name the next step (items 6, 7 and 8).
+        Assert 'R3 bash the --progress-file refusal names the next step: a writable file path, or a run without --progress-file' (@(Get-ErrLines $pdir).Count -eq 1 -and
+            @(Get-ErrLines $pdir)[0].Contains('Give a writable file path, or run without --progress-file.')) (Get-Tail $pdir)
+        Assert 'R3 bash the unknown-step refusal says that --list-steps lists the steps with their state' (@(Get-ErrLines $uk).Count -eq 1 -and @(Get-ErrLines $uk)[0].Contains('./install-claude-gateway.sh --list-steps lists the steps with their state.')) (Get-Tail $uk)
+        $ab = $r1[$runAnswersBad.Dir]
+        $abLine = @(Get-ErrLines $ab)[0]
+        Assert 'R3 bash an answers file with problems refuses on one line with the first problem, its remedy, the number of problems and the command that lists every one; nothing is read from Azure' ((Test-Refusal $ab 'does not match the answers schema') -and
+            $abLine.Contains('(2 problems)') -and $abLine -match 'Remedy: \S' -and $abLine -match 'Bogus|Gold' -and $abLine.Contains("./install-claude-gateway.sh --preflight --answers-file '$answersBadFile' lists every problem.") -and
+            -not @($ab.Az | Where-Object { $_ -notlike 'curl *' }).Count -and -not (Get-CheckpointFile $answersBad)) "$abLine || az: $($ab.Az -join ' | ')"
+    }
+    if (Test-ShardGroup 'prec') {
+        $tpmOf = { param($Result) @($Result.Az | Where-Object { $_ -like 'deployment group create*' } | ForEach-Object { if ($_ -match 'tpmStandard=(\d+)') { $Matches[1] } }) -join ',' }
+        $summaryOf = { param($Result) if ($Result.Out -match '(?m)^\s+Standard tier\s+([\d,.]+) tokens/min') { $Matches[1] -replace '[,.]', '' } else { '' } }
+        $pp = $r2[$runPrecParam.Dir]; $pf = $r2[$runPrecFile.Dir]; $pc = $r2[$runPrecCkpt.Dir]; $pd = $r1[$runDefault.Dir]
+        Assert 'P4 bash a flag wins over the answers file and the checkpoint: --tpm-standard 33333 reaches the deployment' ($pp.ExitCode -eq 0 -and (& $tpmOf $pp) -eq '33333' -and (& $summaryOf $pp) -eq '33333') "$(& $tpmOf $pp) || $(Get-Tail $pp)"
+        Assert 'P4 bash the answers file wins over the checkpoint: TpmStandard 22222 reaches the deployment' ($pf.ExitCode -eq 0 -and (& $tpmOf $pf) -eq '22222' -and (& $summaryOf $pf) -eq '22222') "$(& $tpmOf $pf) || $(Get-Tail $pf)"
+        Assert 'P4 bash the checkpoint wins over the default: the recorded 11111 is used, and the deployment is verified live, not repeated' ($pc.ExitCode -eq 0 -and (& $summaryOf $pc) -eq '11111' -and -not (& $tpmOf $pc)) (Get-Tail $pc)
+        Assert 'P4 bash with no flag, answers file or checkpoint the default applies: 20000' ($pd.ExitCode -eq 0 -and (& $tpmOf $pd) -eq '20000') "$(& $tpmOf $pd) || $(Get-Tail $pd)"
+        $pb = $r2[$runPrecBind.Dir]
+        Assert 'P4 bash an answers file that names another resource group than the checkpoint refuses on one line naming the field; nothing changes' ((Test-Refused $pb 'resource group') -and @(Get-ErrLines $pb)[0] -match 'rg-other' -and
+            -not (Get-Writes $pb).Count -and (Get-Hash $precBind) -eq $bindHash) (Get-Tail $pb)
+        $bound = @(Get-Events $progressBind)
+        $malformed = @(Get-Malformed $bound)
+        Assert 'P5 bash every progress line of the refused run is one JSON object with the stream''s keys, in order, and no line holds a JWT-shaped value, password or access token' ($bound.Count -ge 1 -and -not $malformed.Count -and -not (Get-Leaks @($progressBind)).Count) (($malformed | Select-Object -First 3 | ConvertTo-Json -Compress -Depth 4))
+        Assert 'P5 bash a refusal emits refused with its reason' (@($bound | Where-Object { $_.event -eq 'refused' -and $_.message -match 'resource group' }).Count -eq 1) (($bound | ConvertTo-Json -Compress -Depth 3))
+    }
+    if (Test-ShardGroup 'stream') {
+        $failed = @(Get-Events $progressFail)
+        $malformed = @(Get-Malformed @($failed + @(Get-Events $progressToken)))
+        Assert 'P5 bash every progress line of the failed and the refused run is one JSON object with schemaVersion, UTC time, runId, stepId, event, message and resumeCommand, in that order' ($failed.Count -ge 3 -and -not $malformed.Count) (($malformed | Select-Object -First 3 | ConvertTo-Json -Compress -Depth 4))
+        Assert 'P5 bash a failure emits failed for its step with the resume command' (@($failed | Where-Object { $_.event -eq 'failed' -and $_.stepId -eq 'gateway-deployment' -and $_.resumeCommand -match 'install-claude-gateway\.sh' }).Count -eq 1 -and
+            $r1[$runFailing.Dir].ExitCode -ne 0) (($failed | ConvertTo-Json -Compress -Depth 3))
+        $texts = @(@($progressFail, $progressToken) | Where-Object { Test-Path -LiteralPath $_ } | ForEach-Object { [IO.File]::ReadAllText($_) })
+        $redacted = @(@(Get-Events $progressToken) | Where-Object { $_.event -eq 'refused' -and $_.message -match '\[redacted\]' })
+        # Round 3, the Security seat's item 5: every shape in a refusal's quoted error, and in a resume command.
+        $rx = $r1[$runRedact.Dir]
+        $rxRefused = @(@(Get-Events $progressRedact) | Where-Object { $_.event -eq 'refused' })[0]
+        $rxProblems = @(Get-P92RedactionProblems "$($rxRefused.message)")
+        $rxText = if (Test-Path -LiteralPath $progressRedact) { [IO.File]::ReadAllText($progressRedact) } else { '' }
+        Assert 'R3 bash the refused event redacts every secret shape in the error it quotes: each becomes its [redacted] form, and no sentinel appears in the progress file or in stdout' ($rx.ExitCode -ne 0 -and $rxRefused -and
+            -not $rxProblems.Count -and $rxText -and (Test-P92NoSentinel $rxText) -and (Test-P92NoSentinel $rx.Out)) "$($rxProblems -join '; ') || $($rxRefused.message)"
+        $pathFailed = @(@(Get-Events $progressPath) | Where-Object { $_.event -eq 'failed' -and $_.stepId -eq 'gateway-deployment' })[0]
+        $pathText = if (Test-Path -LiteralPath $progressPath) { [IO.File]::ReadAllText($progressPath) } else { '' }
+        Assert 'R3 bash the failed event redacts a secret shape in its resume command: a checkout path that holds sig=<value> is written as sig=[redacted]' ($pathFailed -and "$($pathFailed.resumeCommand)" -match 'install-claude-gateway\.sh' -and
+            "$($pathFailed.resumeCommand)" -match 'sig=\[redacted\]' -and -not $pathText.Contains('p92PathSentinel')) "$($pathFailed.resumeCommand)"
+        Assert 'P5 bash no secret reaches the progress stream: a token in an error that a refusal quotes is [redacted]' ($texts.Count -eq 2 -and -not (Get-Leaks @($progressFail, $progressToken)).Count -and $redacted.Count -eq 1 -and $r1[$runToken.Dir].ExitCode -ne 0) "$($texts.Count) streams; refused events with [redacted]: $($redacted.Count)"
+        # Round 4, the Security seat's item 4: the same refusal and a failure, on the console.
+        $rxLine = [string](@(Get-ErrLines $rx | Where-Object { $_ -match '^Refused: ' })[0])
+        $rxLineProblems = @(Get-P92RedactionProblems $rxLine)
+        Assert 'R4 bash a refusal whose error quotes every secret shape prints each in its [redacted] form on standard error, and no sentinel appears in stdout or stderr' ($rx.ExitCode -eq 1 -and $rxLine -and
+            -not $rxLineProblems.Count -and (Test-P92NoSentinel ($rx.Out + $rx.Err))) "$($rxLineProblems -join '; ') || $rxLine"
+        $cf = $r1[$runConsoleFailure.Dir]
+        $cfProblems = @(Get-P92RedactionProblems $cf.Err)
+        Assert 'R4 bash a failure whose Azure CLI error quotes every secret shape prints that error with each in its [redacted] form, then the failure line and the resume command, and no sentinel appears in stdout or stderr' (
+            $cf.ExitCode -ne 0 -and -not $cfProblems.Count -and $cf.Out -match '\[FAIL\] deployment failed' -and $cf.Out -match '(?m)^Resume: ' -and (Test-P92NoSentinel ($cf.Out + $cf.Err))) "$($cfProblems -join '; ') || $(Get-Tail $cf)"
+        $sentenceFile = Join-Path $scratch 'console-sentence.txt'
+        Write-Lf $sentenceFile $P92RedactionSentence
+        $probe = Join-Path $scratch 'console-sites.sh'
+        $probeOut = Join-Path $scratch 'console-sites.out'
+        $probeErr = Join-Path $scratch 'console-sites.err'
+        Write-Lf $probe (@"
+exec >'$(ConvertTo-BashPath $probeOut)' 2>'$(ConvertTo-BashPath $probeErr)'
+HERE='$(ConvertTo-BashPath $root)'
+C_GREEN=''; C_YELLOW=''; C_RED=''; C_GREY=''; C_WHITE=''; C_OFF=''
+eval "`$(sed -n '/^ok_() /,/^note_() /p' "`$HERE/install-claude-gateway.sh")"
+. "`$HERE/scripts/install-checkpoint.sh" || exit 90
+sentence="`$(cat '$(ConvertTo-BashPath $sentenceFile)')"
+warn_ "an error that quotes (`$sentence)"
+bad_ "an error that quotes (`$sentence)"
+"@)
+        & $bash (ConvertTo-BashPath $probe) 2>&1 | Out-Null
+        $siteOut = if (Test-Path -LiteralPath $probeOut) { [IO.File]::ReadAllText($probeOut, [Text.Encoding]::UTF8) } else { '' }
+        $siteErr = if (Test-Path -LiteralPath $probeErr) { [IO.File]::ReadAllText($probeErr, [Text.Encoding]::UTF8) } else { '' }
+        $warnLine = @($siteOut -split "`n" | Where-Object { $_ -match '\[WARN\] an error that quotes' }) -join "`n"
+        $badLine = @($siteOut -split "`n" | Where-Object { $_ -match '\[FAIL\] an error that quotes' }) -join "`n"
+        $siteProblems = @(@(Get-P92RedactionProblems $warnLine | ForEach-Object { "warn_: $_" }) + @(Get-P92RedactionProblems $badLine | ForEach-Object { "bad_: $_" }))
+        Assert 'R5 bash warn_ and bad_ warning and failure lines quote every secret shape only in its [redacted] form, with no sentinel' ($warnLine -and $badLine -and -not $siteProblems.Count) "$($siteProblems -join '; ') || $siteOut || $siteErr"
+        # R3's run in a checkout whose path holds sig=<value>, on the console: the Resume line after the failure.
+        $rpc = $r1[$runRedactPath.Dir]
+        Assert 'R4 bash the failed run''s Resume line on the console holds sig=[redacted] for a checkout path that holds sig=<value>, and that value appears in neither stdout nor stderr' ($rpc.ExitCode -ne 0 -and
+            $rpc.Out -match '(?m)^Resume: .*sig=\[redacted\]' -and -not "$($rpc.Out)$($rpc.Err)".Contains('p92PathSentinel')) (Get-Tail $rpc)
+    }
+    $unexpected = @(foreach ($r in @($r1.Values) + @($r2.Values)) { @($r.Unexpected) })
+    Assert 'harness: every az call was one the stub knows, and no run timed out' (-not $unexpected.Count -and -not @(@($r1.Values) + @($r2.Values) | Where-Object { $_.TimedOut }).Count) (($unexpected | Select-Object -Unique -First 4) -join ' | ')
+}
+finally {
+    if ($env:P91_KEEP_SCRATCH -ne '1') { foreach ($d in $scratch, $psScratch) { if ($d) { Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue } } }
+}
+Write-Host ''
+Write-Host ("{0} checks, {1} failed, {2:N1} s" -f $script:checks, $script:fail, $watch.Elapsed.TotalSeconds)
+if ($script:fail) { exit 1 }

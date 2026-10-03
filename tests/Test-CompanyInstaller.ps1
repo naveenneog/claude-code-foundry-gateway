@@ -2,6 +2,10 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $scratch = Join-Path ([IO.Path]::GetTempPath()) ('company-installer-' + [guid]::NewGuid().ToString('N'))
+# The install checkpoint's state directory is in LocalApplicationData: on Windows a state directory is
+# trusted only when no other account may delete, rename or re-permission a directory above it up to the
+# user profile, which a TEMP that grants another account Modify fails (ADR-0046 decision 2).
+$stateRoot = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) ('company-installer-state-' + [guid]::NewGuid().ToString('N'))
 $failed = 0; $count = 0
 function Check([string]$Name,[scriptblock]$Test) {
     $script:count++
@@ -9,8 +13,8 @@ function Check([string]$Name,[scriptblock]$Test) {
     if($ok){Write-Host "  [OK] $Name"}else{$script:failed++;Write-Host "  [FAIL] $Name $why"}
 }
 try {
-    foreach($dir in 'scripts\flow\lib','onboarding\profiles\standard'){New-Item -ItemType Directory -Path (Join-Path $scratch $dir) -Force|Out-Null}
-    foreach($file in 'Install-ClaudeGateway.ps1','scripts\Show-Banner.ps1','scripts\Test-Prerequisites.ps1','scripts\ClaudeModelDeployment.ps1','scripts\ClaudeDesktopSignIn.ps1','scripts\ClaudeChoice.ps1','scripts\ClaudeGatewayRegion.ps1','scripts\AzureRetailPrice.ps1','scripts\flow\FlowContract.ps1','scripts\flow\Foundation.ps1','scripts\flow\lib\LifecycleCommon.ps1'){
+    foreach($dir in 'scripts\flow\lib','onboarding\profiles\standard','schemas'){New-Item -ItemType Directory -Path (Join-Path $scratch $dir) -Force|Out-Null}
+    foreach($file in 'Install-ClaudeGateway.ps1','scripts\Show-Banner.ps1','scripts\Test-Prerequisites.ps1','scripts\ClaudeModelDeployment.ps1','scripts\ClaudeDesktopSignIn.ps1','scripts\ClaudeChoice.ps1','scripts\ClaudeGatewayRegion.ps1','scripts\ClaudeInstallCheckpoint.ps1','scripts\ClaudeInstallStore.ps1','scripts\ClaudeInstallResume.ps1','scripts\ClaudeInstallSteps.ps1','scripts\ClaudeInstallerPreflight.ps1','scripts\ClaudeInstallerAnswers.ps1','schemas\claude-gateway.answers.schema.json','scripts\AzureRetailPrice.ps1','scripts\flow\FlowContract.ps1','scripts\flow\Foundation.ps1','scripts\flow\lib\LifecycleCommon.ps1'){
         Copy-Item -LiteralPath (Join-Path $root $file) -Destination (Join-Path $scratch $file)
     }
     $inputs=Join-Path $root 'scripts\ClaudeGatewayAddressInput.ps1'
@@ -73,7 +77,11 @@ function az {
     if($s -like 'group show*'){return 'eastus2'}
     if($s -like 'deployment group create*'){$global:P69InstallWrites.Add('deployment');return}
     if($s -like 'deployment group show*'){return 'https://apim-contoso.azure-api.net/claude'}
-    if($s -like 'ad group show*'){return '00000000-0000-0000-0000-000000000002'}
+    if($s -like 'deployment group list*'){return '[]'}
+    if($s -like 'cognitiveservices account show*'){return '/subscriptions/00000000-0000-0000-0000-000000000001/resourceGroups/rg-contoso/providers/Microsoft.CognitiveServices/accounts/ai-contoso'}
+    if($s -like 'role assignment list*'){return '[]'}
+    if($s -like 'ad group list*'){return (ConvertTo-Json -InputObject @(@{id='00000000-0000-0000-0000-000000000002';displayName=$args[4]}) -Compress)}
+    if($s -like 'ad group show*'){if($s -like '*-o json*'){return (@{id='00000000-0000-0000-0000-000000000002';displayName=$args[4]}|ConvertTo-Json -Compress)};return '00000000-0000-0000-0000-000000000002'}
     $global:P69InstallUnexpected.Add($s); throw "Unexpected az call: $s"
 }
 function Invoke-WebRequest {param($Uri,$Method,$TimeoutSec,$ErrorAction,[switch]$UseBasicParsing);[pscustomobject]@{StatusCode=200}}
@@ -95,6 +103,8 @@ catch {$failure=$_.Exception.Message}
     function Invoke-Installer([hashtable]$Overrides=@{},[bool]$Decline=$false,$SavedRecord=$initial,[string]$ArchiveAnswer=''){
         [IO.File]::WriteAllText($recordPath,($SavedRecord|ConvertTo-Json -Depth 15))
         [IO.File]::WriteAllText((Join-Path $scratch 'onboarding\profiles\standard\managed-settings.json'),'{"gatewayUrl":"https://old.contoso.test/claude"}')
+        # Each call is a first run: an earlier call's install checkpoint (ADR-0046) would make it a resume.
+        $env:CLAUDE_GATEWAY_STATE_DIR=Join-Path $stateRoot ('install-state-'+[guid]::NewGuid().ToString('N'))
         $values=@{SubscriptionId=$sub;FoundryAccount='ai-contoso';FoundryResourceGroup='rg-contoso';ResourceGroup='rg-contoso';ExistingApimName='apim-contoso';Location='eastus2';Sku='BasicV2';AuthMode='interactive';EntitlementStore='named-value';SkipFinOpsOffer=$true;Yes=$true}
         foreach($k in $Overrides.Keys){$values[$k]=$Overrides[$k]}
         $ps=[powershell]::Create()
@@ -260,6 +270,6 @@ function Invoke-ClaudeAddressHttps {param($Hostname,$Thumbprint,$ConnectAddress,
             (Get-ClaudeAddressRecovery -Record $saved -Gateway $firstSetup.Gateway).Allowed
     }
 }
-finally {if(Test-Path $scratch){Remove-Item -LiteralPath $scratch -Recurse -Force}}
+finally {if(Test-Path $scratch){Remove-Item -LiteralPath $scratch -Recurse -Force}; if(Test-Path $stateRoot){Remove-Item -LiteralPath $stateRoot -Recurse -Force}}
 Write-Host "Company installer: $count assertions, $($count-$failed) passed, $failed failed."
 if($failed){exit 1}

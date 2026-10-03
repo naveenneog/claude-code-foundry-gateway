@@ -87,7 +87,7 @@ function Get-ClaudeFlowDiscovery {
 
     if (-not ($recordApim -and $recordGroup)) {
         $where = if ($RecordPath) { $RecordPath } else { 'the decision record' }
-        Write-Host "No gateway is recorded in $where, so nothing is read from Azure." -ForegroundColor DarkGray
+        Write-Host "No gateway is recorded in $where, so nothing is read from Azure to discover one." -ForegroundColor DarkGray
         $status = 'nothing-recorded'
     }
     else {

@@ -1,0 +1,432 @@
+{
+  "version": 1,
+  "id": "lean-installer-phase0",
+  "kind": "flow",
+  "title": "Lean installer phase 0: answers, preflight and selected steps",
+  "subtitle": "One answers schema feeds both installers and the guided flow. Preflight only reads; selected steps reuse P91 live checks and append a progress stream.",
+  "width": 1280,
+  "height": 1140,
+  "outputs": [
+    "docs/images/architecture/lean-installer-phase0.png"
+  ],
+  "sources": [
+    "schemas/claude-gateway.answers.schema.json",
+    "Install-ClaudeGateway.ps1",
+    "install-claude-gateway.sh",
+    "Start-ClaudeGateway.ps1",
+    "scripts/ClaudeInstallerAnswers.ps1",
+    "scripts/install-answers.jq",
+    "scripts/ClaudeInstallerPreflight.ps1",
+    "scripts/install-preflight.sh",
+    "scripts/ClaudeInstallResume.ps1",
+    "scripts/ClaudeInstallSteps.ps1",
+    "scripts/install-steps.sh",
+    "scripts/Set-ClaudeBusinessUnit.ps1",
+    "scripts/Sync-ClaudeUsdBudgets.ps1"
+  ],
+  "identifiers": {
+    "schema": {
+      "label": "claude-gateway.answers.schema.json",
+      "source": "schemas/claude-gateway.answers.schema.json",
+      "match": "Claude gateway answers"
+    },
+    "ps": {
+      "label": "Install-ClaudeGateway.ps1",
+      "source": "Install-ClaudeGateway.ps1",
+      "match": "$AnswersPath"
+    },
+    "sh": {
+      "label": "install-claude-gateway.sh",
+      "source": "install-claude-gateway.sh",
+      "match": "--answers-file"
+    },
+    "pslib": {
+      "label": "ClaudeInstallerAnswers.ps1",
+      "source": "scripts/ClaudeInstallerAnswers.ps1",
+      "match": "function Test-ClaudeInstallerAnswers"
+    },
+    "jqlib": {
+      "label": "install-answers.jq",
+      "source": "scripts/install-answers.jq",
+      "match": "def validate"
+    },
+    "flow": {
+      "label": "Start-ClaudeGateway.ps1",
+      "source": "Start-ClaudeGateway.ps1",
+      "match": "function Invoke-FlowPreflight"
+    },
+    "pspre": {
+      "label": "ClaudeInstallerPreflight.ps1",
+      "source": "scripts/ClaudeInstallerPreflight.ps1",
+      "match": "function Invoke-ClaudeGatewayPreflight"
+    },
+    "shpre": {
+      "label": "install-preflight.sh",
+      "source": "scripts/install-preflight.sh",
+      "match": "preflight_run_()"
+    },
+    "reuse": {
+      "label": "Get-ClaudeApimReuseState",
+      "source": "scripts/ClaudeInstallerPreflight.ps1",
+      "match": "function Get-ClaudeApimReuseState"
+    },
+    "reader": {
+      "label": "Invoke-ClaudeInstallAzRead",
+      "source": "scripts/ClaudeInstallResume.ps1",
+      "match": "function Invoke-ClaudeInstallAzRead"
+    },
+    "steps": {
+      "label": "ClaudeInstallSteps.ps1",
+      "source": "scripts/ClaudeInstallSteps.ps1",
+      "match": "function Assert-ClaudeInstallPrerequisites"
+    },
+    "shsteps": {
+      "label": "install-steps.sh",
+      "source": "scripts/install-steps.sh",
+      "match": "steps_prereqs_()"
+    },
+    "progress": {
+      "label": "Write-ClaudeInstallProgress",
+      "source": "scripts/ClaudeInstallSteps.ps1",
+      "match": "function Write-ClaudeInstallProgress"
+    },
+    "shprogress": {
+      "label": "progress_event_",
+      "source": "scripts/install-steps.sh",
+      "match": "progress_event_()"
+    },
+    "bu": {
+      "label": "Invoke-ClaudeInstallBusinessUnits",
+      "source": "scripts/ClaudeInstallSteps.ps1",
+      "match": "function Invoke-ClaudeInstallBusinessUnits"
+    },
+    "setbu": {
+      "label": "Set-ClaudeBusinessUnit.ps1",
+      "source": "scripts/Set-ClaudeBusinessUnit.ps1",
+      "match": "param("
+    },
+    "syncusd": {
+      "label": "Sync-ClaudeUsdBudgets.ps1",
+      "source": "scripts/Sync-ClaudeUsdBudgets.ps1",
+      "match": "param("
+    },
+    "resolver": {
+      "label": "Resolve-ClaudeInstallUnitGroup",
+      "source": "scripts/ClaudeInstallSteps.ps1",
+      "match": "function Resolve-ClaudeInstallUnitGroup"
+    },
+    "redact": {
+      "label": "Protect-ClaudeInstallText",
+      "source": "scripts/ClaudeInstallResume.ps1",
+      "match": "function Protect-ClaudeInstallText"
+    }
+  },
+  "groups": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 1280,
+      "h": 310,
+      "tone": "purple",
+      "title": "Answers contract - one source for both installers and the guided flow"
+    },
+    {
+      "x": 0,
+      "y": 380,
+      "w": 1280,
+      "h": 310,
+      "tone": "blue",
+      "title": "Preflight - read-only checks before a plan or an install"
+    },
+    {
+      "x": 0,
+      "y": 760,
+      "w": 1280,
+      "h": 380,
+      "tone": "teal",
+      "title": "Selected execution - P91 live checks plus a progress stream"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "schema",
+      "x": 24,
+      "y": 80,
+      "w": 365,
+      "h": 220,
+      "tone": "purple",
+      "title": "1 - Answers schema",
+      "lines": [
+        "[[schema]] names each answer once: installer name, bash flag, flow keys, check id and remedy.",
+        "A secret is refused, never stored."
+      ]
+    },
+    {
+      "id": "installers",
+      "x": 458,
+      "y": 80,
+      "w": 365,
+      "h": 220,
+      "tone": "purple",
+      "title": "2 - Two validators, one verdict",
+      "lines": [
+        "[[pslib]] and [[jqlib]] apply the same rules, word for word.",
+        "-AnswersPath feeds [[ps]]; --answers-file feeds [[sh]]."
+      ]
+    },
+    {
+      "id": "flow",
+      "x": 892,
+      "y": 80,
+      "w": 365,
+      "h": 220,
+      "tone": "purple",
+      "title": "3 - Guided flow",
+      "lines": [
+        "[[flow]] refuses a file the schema rejects and binds the installer preflight into the plan fingerprint.",
+        "A plan is applied only when its preflight passes."
+      ]
+    },
+    {
+      "id": "preflight",
+      "x": 24,
+      "y": 460,
+      "w": 365,
+      "h": 220,
+      "tone": "blue",
+      "title": "4 - Shared preflight",
+      "lines": [
+        "[[pspre]] and [[shpre]] report 14 check ids: PASS, FAIL or NOT-RUN with a reason.",
+        "A check that cannot run never passes; nothing is written."
+      ]
+    },
+    {
+      "id": "apim",
+      "x": 458,
+      "y": 460,
+      "w": 365,
+      "h": 220,
+      "tone": "blue",
+      "title": "5 - Existing APIM admission",
+      "lines": [
+        "[[reuse]] reads the instance once through [[reader]]: present, absent or inconclusive.",
+        "The preflight and the run share it."
+      ]
+    },
+    {
+      "id": "output",
+      "x": 892,
+      "y": 460,
+      "w": 365,
+      "h": 220,
+      "tone": "blue",
+      "title": "6 - Text or JSON",
+      "lines": [
+        "-Preflight and --preflight print the same lines, or JSON with schemaVersion 1.",
+        "Not signed in: the Azure checks are NOT-RUN and the run exits non-zero."
+      ]
+    },
+    {
+      "id": "steps",
+      "x": 24,
+      "y": 840,
+      "w": 365,
+      "h": 290,
+      "tone": "teal",
+      "title": "7 - Step list and selection",
+      "lines": [
+        "[[steps]] and [[shsteps]] list ids, titles, dependencies and states.",
+        "-Steps refuses until each prerequisite is completed and verified live."
+      ]
+    },
+    {
+      "id": "business",
+      "x": 458,
+      "y": 840,
+      "w": 365,
+      "h": 290,
+      "tone": "teal",
+      "title": "8 - Business units from answers",
+      "lines": [
+        "[[bu]] writes units, then teams, through [[setbu]]; receipts stop duplicate calls.",
+        "[[resolver]] finds each group by its exact name.",
+        "With dollar budgets enforced it prints [[syncusd]]."
+      ]
+    },
+    {
+      "id": "progress",
+      "x": 892,
+      "y": 840,
+      "w": 365,
+      "h": 290,
+      "tone": "teal",
+      "title": "9 - Progress stream",
+      "lines": [
+        "[[progress]] and [[shprogress]] append one NDJSON line per event with the run id and resume command.",
+        "[[redact]] writes a secret in a message as [redacted]; one line per write."
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "schema",
+      "to": "installers",
+      "kind": "data",
+      "points": [
+        [
+          389,
+          190
+        ],
+        [
+          458,
+          190
+        ]
+      ]
+    },
+    {
+      "from": "installers",
+      "to": "flow",
+      "kind": "data",
+      "points": [
+        [
+          823,
+          190
+        ],
+        [
+          892,
+          190
+        ]
+      ]
+    },
+    {
+      "from": "installers",
+      "to": "preflight",
+      "kind": "control",
+      "points": [
+        [
+          640,
+          300
+        ],
+        [
+          640,
+          432
+        ],
+        [
+          206,
+          432
+        ],
+        [
+          206,
+          460
+        ]
+      ]
+    },
+    {
+      "from": "flow",
+      "to": "preflight",
+      "kind": "control",
+      "points": [
+        [
+          1074,
+          300
+        ],
+        [
+          1074,
+          432
+        ],
+        [
+          206,
+          432
+        ],
+        [
+          206,
+          460
+        ]
+      ]
+    },
+    {
+      "from": "preflight",
+      "to": "apim",
+      "kind": "control",
+      "points": [
+        [
+          389,
+          570
+        ],
+        [
+          458,
+          570
+        ]
+      ]
+    },
+    {
+      "from": "apim",
+      "to": "output",
+      "kind": "data",
+      "points": [
+        [
+          823,
+          570
+        ],
+        [
+          892,
+          570
+        ]
+      ]
+    },
+    {
+      "from": "apim",
+      "to": "steps",
+      "kind": "control",
+      "points": [
+        [
+          640,
+          680
+        ],
+        [
+          640,
+          812
+        ],
+        [
+          206,
+          812
+        ],
+        [
+          206,
+          840
+        ]
+      ]
+    },
+    {
+      "from": "steps",
+      "to": "business",
+      "kind": "control",
+      "points": [
+        [
+          389,
+          950
+        ],
+        [
+          458,
+          950
+        ]
+      ]
+    },
+    {
+      "from": "business",
+      "to": "progress",
+      "kind": "data",
+      "points": [
+        [
+          823,
+          950
+        ],
+        [
+          892,
+          950
+        ]
+      ]
+    }
+  ],
+  "notice": "Phase 0 adds operator-side files and streams. Preflight, -ListSteps and the flow plan only read Azure; writes stay in the installers' steps after confirmation."
+}

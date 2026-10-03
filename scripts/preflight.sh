@@ -78,14 +78,13 @@ claude_preflight() {
         fi
     fi
     # jq 1.7.0 converts a number to binary through a 16-digit decimal, so a price written with 17
-    # significant digits can be a cent off the PowerShell installer's; jq 1.5, 1.6 and 1.7.1 or
-    # later match it (measured 2026-09-28). The admin installer prices its choices with jq.
+    # significant digits can be a cent off the PowerShell installer's; jq 1.7.1 changed that path
+    # to binary64. The admin installer prices its choices with jq, so this probes the behavior.
     if [ "$mode" = "admin" ] && command -v jq >/dev/null 2>&1; then
-        case "$(jq --version 2>/dev/null)" in
-            jq-1.7|jq-1.7[!.0-9]*)
-                _p_warn 'jq 1.7.0: a price written with 17 significant digits can be a cent off; jq 1.7.1 or later matches the PowerShell installer'
-                _p_note 'macOS: brew upgrade jq     Linux: your package manager, or https://github.com/jqlang/jq/releases' ;;
-        esac
+        if [ "$(jq -n '0.0074999999999999945 + 0' 2>/dev/null | tr -d '\r\n')" = "0.007499999999999994" ]; then
+            _p_warn 'jq 1.7.0: a price written with 17 significant digits can be a cent off; jq 1.7.1 or later matches the PowerShell installer'
+            _p_note 'macOS: brew upgrade jq     Linux: your package manager, or https://github.com/jqlang/jq/releases'
+        fi
     fi
 
     # ----------------------------------------------------------------- by mode

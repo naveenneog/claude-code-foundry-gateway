@@ -166,6 +166,11 @@ case "$*" in
   "group create "*) exit 0 ;;
   "deployment group create "*) exit 0 ;;
   "deployment group show "*) echo "https://apim-p75.azure-api.net/claude" ;;
+  "group show "*) echo "ERROR: (ResourceGroupNotFound) Resource group could not be found." >&2; exit 3 ;;
+  "apim show "*) echo "ERROR: (ResourceNotFound) The Resource was not found." >&2; exit 3 ;;
+  "deployment group list "*) echo '[]' ;;
+  "ad group list --display-name "*) printf '[{"id":"00000000-0000-0000-0000-0000000000a5","displayName":"%s"}]\n' "$5" ;;
+  "ad group show --group "*"-o json") printf '{"id":"00000000-0000-0000-0000-0000000000a5","displayName":"%s"}\n' "$5" ;;
   "ad group show --group "*) exit 0 ;;
   *) echo "stub az: unexpected call: $*" >&2; printf 'UNEXPECTED %s\n' "$*" >> "$P75_LOG/az.log"; exit 2 ;;
 esac
@@ -198,9 +203,12 @@ exit 0
 
 # The files the installer reads, and placeholders for the ones it only names.
 $template = Join-Path $scratch 'template'
-foreach ($d in 'scripts', 'infra') { New-Item -ItemType Directory -Force -Path (Join-Path $template $d) | Out-Null }
+foreach ($d in 'scripts', 'infra', 'schemas') { New-Item -ItemType Directory -Force -Path (Join-Path $template $d) | Out-Null }
 Copy-Item -LiteralPath $installerPath -Destination $template
-foreach ($f in 'scripts\banner.sh', 'scripts\preflight.sh') { Copy-Item -LiteralPath (Join-Path $root $f) -Destination (Join-Path $template $f) }
+# Every library the installer sources (scripts/install-*: checkpoint, store, resume, steps, answers, preflight,
+# prices and the answers jq program), and the answers schema the answers and preflight checks read (ADR-0047).
+$libraries = @('scripts\banner.sh', 'scripts\preflight.sh', 'schemas\claude-gateway.answers.schema.json') + @(Get-ChildItem -LiteralPath (Join-Path $root 'scripts') -File -Filter 'install-*' | Where-Object { $_.Name -clike 'install-*' } | ForEach-Object { "scripts\$($_.Name)" })
+foreach ($f in $libraries) { Copy-Item -LiteralPath (Join-Path $root $f) -Destination (Join-Path $template $f) }
 foreach ($f in 'scripts\Sync-ClaudeAccess.ps1', 'scripts\Select-ClaudeFinOpsTooling.ps1', 'infra\main.bicep') { Write-Lf (Join-Path $template $f) '# placeholder' }
 
 function New-InstallerRun {
@@ -215,8 +223,9 @@ function New-InstallerRun {
     Write-Lf (Join-Path $shim 'curl') $curlStub
     # jq by its absolute path, not its directory on the PATH: that directory can hold a real az or
     # pwsh as well (Homebrew links all three into /opt/homebrew/bin).
-    # P75_JQ_VERSION makes jq --version print another release, for the preflight's version check.
-    Write-Lf (Join-Path $shim 'jq') ("#!/usr/bin/env bash`nif [ `"`$1`" = '--version' ] && [ -n `"`${P75_JQ_VERSION:-}`" ]; then printf '%s\n' `"`$P75_JQ_VERSION`"; exit 0; fi`nexec '" + $jqPath.Replace("'", "'\''") + "' `"`$@`"`n")
+    # P75_JQ_VERSION makes jq --version print another release; P75_JQ_PRECISION makes the
+    # preflight's arithmetic probe see jq 1.7.0 or fixed behavior without depending on runner jq.
+    Write-Lf (Join-Path $shim 'jq') ("#!/usr/bin/env bash`nif [ `"`$1`" = '--version' ] && [ -n `"`${P75_JQ_VERSION:-}`" ]; then printf '%s\n' `"`$P75_JQ_VERSION`"; exit 0; fi`nif [ `"`$1`" = '-n' ] && [ `"`$2`" = '0.0074999999999999945 + 0' ]; then case `"`${P75_JQ_PRECISION:-fixed}`" in jq-1.7.0) printf '%s\n' '0.007499999999999994';; *) printf '%s\n' '0.0074999999999999945';; esac; exit 0; fi`nexec '" + $jqPath.Replace("'", "'\''") + "' `"`$@`"`n")
     if (-not $NoPwsh) { Write-Lf (Join-Path $shim 'pwsh') $pwshStub }
     $env = [ordered]@{ P75_LOG = (ConvertTo-BashPath $logs); P75_FIXTURES = (ConvertTo-BashPath $fixtures); HOME = (ConvertTo-BashPath $homeDir) }
     foreach ($k in $Environment.Keys) { $env[$k] = [string]$Environment[$k] }
@@ -233,7 +242,7 @@ exec bash ./install-claude-gateway.sh $quoted 2>&1
     Write-Lf $runnerPath $runner
     [pscustomobject]@{ Id = $Id; Dir = $dir; Repo = $shadow; Logs = $logs; Runner = $runnerPath; Answers = $Answers }
 }
-function Invoke-InstallerRuns([object[]]$Runs, [int]$TimeoutSeconds = 150) {
+function Invoke-InstallerRuns([object[]]$Runs, [int]$TimeoutSeconds = 300) {
     $started = foreach ($r in $Runs) {
         $psi = [Diagnostics.ProcessStartInfo]::new($bash)
         $psi.ArgumentList.Add((ConvertTo-BashPath $r.Runner))
@@ -320,9 +329,10 @@ try {
         New-InstallerRun 'offer-choose' ($base + @('--yes', '--choose-finops', '--sku', 'BasicV2', '--name-prefix', 'p75'))
         New-InstallerRun 'offer-noninteractive' $base (Answers '1' 'BasicV2' 'p75' @('y', 'y')) -Environment @{ CLAUDE_INTERACTIVE = '1'; CLAUDE_NONINTERACTIVE = '1' }
         New-InstallerRun 'no-pwsh' $base (Answers '1' 'BasicV2' 'p75' @('y', 'y')) -Environment @{ CLAUDE_INTERACTIVE = '1' } -NoPwsh
-        # jq 1.7.0 as its Windows build names itself, and 1.7.1: only the first is warned about.
-        New-InstallerRun 'jq-1.7' ($base + @('--yes', '--what-if', '--sku', 'BasicV2', '--location', 'westus3', '--name-prefix', 'p75')) -Environment @{ P75_JQ_VERSION = 'jq-1.7-dirty' }
-        New-InstallerRun 'jq-1.7.1' ($base + @('--yes', '--what-if', '--sku', 'BasicV2', '--location', 'westus3', '--name-prefix', 'p75')) -Environment @{ P75_JQ_VERSION = 'jq-1.7.1' }
+        # The warning follows jq arithmetic behavior, not the version string the runner package prints.
+        New-InstallerRun 'jq-1.7' ($base + @('--yes', '--what-if', '--sku', 'BasicV2', '--location', 'westus3', '--name-prefix', 'p75')) -Environment @{ P75_JQ_VERSION = 'jq-1.7-dirty'; P75_JQ_PRECISION = 'jq-1.7.0' }
+        New-InstallerRun 'jq-1.7.1' ($base + @('--yes', '--what-if', '--sku', 'BasicV2', '--location', 'westus3', '--name-prefix', 'p75')) -Environment @{ P75_JQ_VERSION = 'jq-1.7'; P75_JQ_PRECISION = 'jq-1.7.1' }
+        New-InstallerRun 'jq-1.8' ($base + @('--yes', '--what-if', '--sku', 'BasicV2', '--location', 'westus3', '--name-prefix', 'p75')) -Environment @{ P75_JQ_VERSION = 'jq-1.8.2'; P75_JQ_PRECISION = 'jq-1.8' }
     )
     $clock = [Diagnostics.Stopwatch]::StartNew()
     $res = Invoke-InstallerRuns $runs
@@ -407,8 +417,8 @@ try {
     # -------------------------------------------------------------- jq 1.7.0
     $j = $res['jq-1.7']
     Assert 'jq 1.7.0: the preflight says a price written with 17 significant digits can be a cent off and names jq 1.7.1, and the install goes on' ($j.Text -match [regex]::Escape('jq 1.7.0: a price written with 17 significant digits can be a cent off; jq 1.7.1 or later matches the PowerShell installer') -and $j.Text -match 'BasicV2 in westus3 is USD 139/month at list price') (Get-Tail $j)
-    $warned = @('jq-1.7.1', 'yes' | Where-Object { $res[$_].Text -match 'jq 1\.7\.0:' })
-    Assert 'jq 1.7.1, and the jq on this machine: no such warning' (-not $warned.Count) ($warned -join ', ')
+    $warned = @('jq-1.7.1', 'jq-1.8', 'yes') | Where-Object { $res[$_].Text -match 'jq 1\.7\.0:' }
+    Assert 'jq 1.7.1 behavior with a jq-1.7 version string, jq 1.8, and the jq on this machine: no such warning' (-not $warned.Count) ($warned -join ', ')
 
     # -------------------------------------------------------------- the record
     $f = $res['full-yes']

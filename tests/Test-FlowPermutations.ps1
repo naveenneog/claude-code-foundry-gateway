@@ -106,9 +106,11 @@ function Get-AzureRetailPrice {
 function Get-AzureRetailPriceUnavailableReason { '' }
 function ConvertTo-MonthlyPrice { param([decimal]$HourlyPrice, [int]$Units = 1) [math]::Round($HourlyPrice * 730 * $Units, 2) }
 '@
-$shadowFiles = @('Start-ClaudeGateway.ps1', 'scripts\ClaudeChoice.ps1', 'scripts\ClaudeGatewayRegion.ps1', 'scripts\ClaudeGatewayAddressInput.ps1', 'scripts\Update-ClaudeGateway.ps1', 'scripts\flow\FlowContract.ps1', 'scripts\flow\Discovery.ps1', 'scripts\flow\Foundation.ps1', 'scripts\flow\lib\LifecycleCommon.ps1')
+$shadowFiles = @('Start-ClaudeGateway.ps1', 'scripts\ClaudeChoice.ps1', 'scripts\ClaudeGatewayRegion.ps1', 'scripts\ClaudeGatewayAddressInput.ps1', 'scripts\Update-ClaudeGateway.ps1', 'scripts\flow\FlowContract.ps1', 'scripts\flow\Discovery.ps1', 'scripts\flow\Foundation.ps1', 'scripts\flow\lib\LifecycleCommon.ps1',
+    # The installer's answers schema and preflight, which the flow runs for a plan that runs the installer unattended (ADR-0047).
+    'scripts\ClaudeInstallerAnswers.ps1', 'scripts\ClaudeInstallerPreflight.ps1', 'scripts\ClaudeInstallResume.ps1', 'scripts\Test-Prerequisites.ps1', 'schemas\claude-gateway.answers.schema.json')
 function New-Shadow([string]$Dir) {
-    foreach ($d in 'scripts\flow\lib', 'onboarding') { New-Item -ItemType Directory -Force -Path (Join-Path $Dir $d) | Out-Null }
+    foreach ($d in 'scripts\flow\lib', 'onboarding', 'schemas') { New-Item -ItemType Directory -Force -Path (Join-Path $Dir $d) | Out-Null }
     foreach ($f in $shadowFiles) { if (Test-Path -LiteralPath (Join-Path $root $f)) { Copy-Item -LiteralPath (Join-Path $root $f) -Destination (Join-Path $Dir $f) } }
     Set-Content -LiteralPath (Join-Path $Dir 'scripts\AzureRetailPrice.ps1') -Encoding UTF8 -Value $priceStub
     Set-Content -LiteralPath (Join-Path $Dir 'Install-ClaudeGateway.ps1') -Encoding UTF8 -Value $stubInstaller

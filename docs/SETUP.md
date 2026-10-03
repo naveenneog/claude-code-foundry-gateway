@@ -649,6 +649,198 @@ without PowerShell 7, the command is a numbered next step instead. Its record,
 `onboarding/claude-gateway.json`, holds the tier, the region and the Foundry
 account and resource group, as the PowerShell installer's record does.
 
+### Resume after a failure
+
+Both installers keep an install checkpoint for each checkout, from the confirmed
+summary until the last step completes
+([installer checkpoint design record (ADR-0046)](adr/0046-installer-checkpoint-and-resume.md)). A rerun after a failure
+resumes after the last step whose result a live Azure read still shows. A run that
+completes removes the checkpoint, so the next run asks every question again
+(`Close-ClaudeInstallCheckpoint` in `scripts/ClaudeInstallCheckpoint.ps1`,
+`ckpt_close_` in `scripts/install-checkpoint.sh`).
+
+| On a rerun | Behaviour | Source |
+|---|---|---|
+| Start | The checkpoint path, the run id, each completed step as `done <UTC time>  <step>`, and `resumes at: <step>`. | [output](adr/0046-installer-checkpoint-and-resume.md#14-output) |
+| Questions | Recorded non-secret answers are reused without asking. A parameter or flag passed again wins, and the summary's `Checkpoint` row names each answer that changed. Attended, the confirmation reads `Resume from <step>?`; under `-Yes` or `--yes` the run resumes without a question. | [answers and defaults](adr/0046-installer-checkpoint-and-resume.md#6-answers-and-defaults) |
+| Completed steps | Skipped only when a live read shows the result (`verified live, skipped`). A missing result runs the step again; an unreadable one refuses, except in the resource group step, which runs again. | [verification before a skip](adr/0046-installer-checkpoint-and-resume.md#7-verification-before-a-skip) |
+| Gateway deployment | The deployment name is recorded before `az deployment group create`. A recorded deployment that is still running is awaited for up to 3,600 s; one that succeeded supplies its outputs; one that failed or was cancelled is shown with its error and deployed again, after the read-backs in `Install-ClaudeGateway.ps1`. A new deployment first waits for any running `claude-gw-` or `claude-gateway-` deployment in the resource group, and the run refuses when that list cannot be read. | [deployments](adr/0046-installer-checkpoint-and-resume.md#10-deployments) |
+| Changed files | A changed `infra/main.bicep`, or a file it references (`infra/foundry-role.bicep`, `infra/policy.xml`), runs the deployment step again; a changed projection template runs the projection step of `Install-ClaudeGateway.ps1` again. A changed installer alone resumes and prints `checkpoint written by <installer> <version>; running <installer> <version>`. | [binding](adr/0046-installer-checkpoint-and-resume.md#5-binding) |
+| Entra groups | Read by the id the checkpoint recorded under the same name, and used only when `az ad group list --display-name <name> --filter "id eq '<id>'"` lists that id under the configured name; otherwise the run refuses and keeps the checkpoint. A lookup by name, `az ad group list --display-name`, lists the groups whose names start with the configured name; the one listed group with as many characters (Unicode code points) as the configured name is reused, and a group is created when none has. A failed lookup, or more than one listed group of that length, refuses and creates nothing. | [receipts](adr/0046-installer-checkpoint-and-resume.md#11-receipts) |
+| Other recorded ids | `Install-ClaudeGateway.ps1` reads a recorded role assignment and uses it only when it grants Cognitive Services User on the Foundry account to the gateway's identity; a projection resolver app id from the checkpoint only when its display name is `claude-projection-resolver-<prefix>`; a Desktop client id only when `az ad app show --id` returns that `appId`. Otherwise the run refuses and keeps the checkpoint. | [receipts](adr/0046-installer-checkpoint-and-resume.md#11-receipts) |
+
+`-Restart` (`Install-ClaudeGateway.ps1`) and `--restart` (`install-claude-gateway.sh`)
+rename the checkpoint to `install-<key>.discarded-<UTC time>.json` and run as a
+first run ([answers and defaults](adr/0046-installer-checkpoint-and-resume.md#6-answers-and-defaults)). `-WhatIf` and
+`--what-if` preview a first run and write nothing.
+
+The checkpoint is `install-<key>.json` beside a lock file `install-<key>.lock`;
+the key is the first 16 hexadecimal digits of the SHA-256 of the checkout path
+([store and location](adr/0046-installer-checkpoint-and-resume.md#1-store-and-location)). It holds answers, step states
+and the ids of what the run created or found, and no token, key, password or
+connection string ([no secrets](adr/0046-installer-checkpoint-and-resume.md#15-no-secrets)).
+
+| Where the installer runs | Directory |
+|---|---|
+| Any platform, `CLAUDE_GATEWAY_STATE_DIR` set | that directory; one outside the user's home directory (Linux, macOS) or user profile (Windows) is refused |
+| Azure Cloud Shell, storage mounted | `$HOME/clouddrive/.claude-gateway` |
+| Azure Cloud Shell, ephemeral session | `$HOME/.claude-gateway` |
+| Windows, `Install-ClaudeGateway.ps1` | `%LOCALAPPDATA%\claude-gateway` |
+| Linux and macOS, either installer | `${XDG_STATE_HOME:-$HOME/.local/state}/claude-gateway` |
+| Windows, `install-claude-gateway.sh` under Git Bash, MSYS2 or Cygwin | none: no checkpoint |
+
+Source: `Get-ClaudeInstallLocation` in `scripts/ClaudeInstallStore.ps1` and
+`ckpt_location_` in `scripts/install-store.sh`. A directory the installer
+creates is owner-only: a protected access-control list for the current user on
+Windows, mode 0700 with 0600 files on Linux and macOS, and each missing parent
+directory created with mode 0700. Before either installer reads, locks or
+replaces anything in the directory, it checks for a place or a file that another
+account could have written or replaced
+([file mechanics](adr/0046-installer-checkpoint-and-resume.md#2-file-mechanics)):
+
+- Any platform: a state directory that is not an absolute path inside the home
+  directory or user profile (in Cloud Shell, inside `clouddrive` when storage is
+  mounted), and a state directory that is itself a symbolic link or junction. The
+  installer then uses the directory's real path only.
+- Linux, macOS and Cloud Shell outside `clouddrive`: a path the current user does
+  not own, a path its group or other users can write, or a path that is a symbolic
+  link; and any directory from the one that holds the state directory up to
+  `$HOME` that is owned by another user than the current user or root, or that its
+  group or other users can write without the sticky bit. A
+  `CLAUDE_GATEWAY_STATE_DIR` in a shared directory such as `/tmp` is refused.
+- Windows: a path that is a junction or symbolic link, a path owned by an account
+  other than the current user, SYSTEM or Administrators, a path with an access rule
+  that lets another account write it, including a rule inherited from the parent
+  directory, a state directory whose access rules are inherited rather than its
+  own, and any directory from the one that holds the state directory up to the user
+  profile that is a junction or symbolic link, that another account owns, or that
+  lets another account delete, rename or re-permission it or what it holds. A TEMP
+  that grants another account `Modify` is such a directory.
+- `clouddrive` is exempt: its mount sets the modes, and the Cloud Shell storage
+  account's access control applies; only `$HOME` above it is checked.
+- `install-claude-gateway.sh` reads no Windows access rules, so under Git Bash,
+  MSYS2 or Cygwin it keeps no checkpoint: after the confirmed summary it prints
+  `[WARN] on Windows under <uname -s> (Git Bash, MSYS2 or Cygwin) ...`, which names
+  `Install-ClaudeGateway.ps1`, and a `Resume:` line with every recorded answer. A
+  rerun there starts as a first run with those answers. `Install-ClaudeGateway.ps1`
+  is the Windows installer.
+
+A place that fails these checks stops the run when `CLAUDE_GATEWAY_STATE_DIR` names
+it, or when it holds this checkout's checkpoint, lock or temporary file, which the
+line names with the next step; otherwise the run keeps no checkpoint, prints
+`[WARN] <the failed check> This run keeps no install checkpoint.` and a `Resume:`
+line with every recorded answer, and continues on its live checks
+([store and location](adr/0046-installer-checkpoint-and-resume.md#1-store-and-location)).
+
+**Azure Cloud Shell.** The installers detect Cloud Shell by
+`AZUREPS_HOST_ENVIRONMENT` beginning `cloud-shell/` or a non-empty `ACC_CLOUD`
+([U64](UNKNOWNS.md#p91-research-before-implementation)). The checkpoint is in
+`clouddrive` when storage is mounted; otherwise it is in the session's `$HOME`,
+and the full resume command is printed.
+
+- `clouddrive` persists across sessions. Principals with sufficient access rights
+  in the subscription can read the file share
+  ([Persist files in Cloud Shell](https://learn.microsoft.com/azure/cloud-shell/persisting-shell-storage#securing-storage-access)).
+- In an ephemeral session, `$HOME` is deleted when the session ends
+  ([Cloud Shell FAQ](https://learn.microsoft.com/azure/cloud-shell/faq-troubleshooting)).
+  At the confirmed summary the run prints `[WARN] Cloud Shell without clouddrive
+  (...)` and a `Resume:` line that passes every recorded parameter answer;
+  the PowerShell installer also names the prompt-only answers that a new session
+  asks again ([output](adr/0046-installer-checkpoint-and-resume.md#14-output)).
+- Cloud Shell ends a session after 20 minutes without interactive activity
+  ([Cloud Shell FAQ](https://learn.microsoft.com/azure/cloud-shell/faq-troubleshooting)).
+  Before the gateway deployment, and before any wait longer than 60 s, the run
+  prints one line: that fact; that the checkpoint and the ARM deployment outlive the
+  session, or, without `clouddrive`, that the ARM deployment outlives it and this
+  checkpoint does not, or, without a checkpoint, that this run keeps none; and the
+  resume command ([deployments](adr/0046-installer-checkpoint-and-resume.md#10-deployments)).
+
+**Refusals.** A refusal is one line on standard error that begins `Refused:`,
+says what it left unchanged, and exits 1 ([output](adr/0046-installer-checkpoint-and-resume.md#14-output)). A secret
+that a refusal or failure line quotes, such as one in an Azure CLI error, is printed as `[redacted]` by the
+rules of `-Preflight`; Azure CLI draws no progress indicator while the run reads its error output, so the
+gateway deployment shows no spinner ([ADR-0047](adr/0047-lean-installer-phase-0.md) decision 12). Each refusal
+below ends with the command that resumes the run or discards the checkpoint, except
+the last two: a name with a single quote is refused before the summary, and the last
+names the other installer:
+
+| Cause | What the line names | Source |
+|---|---|---|
+| The checkpoint is bound to another tenant, subscription, resource group, gateway or `reusedApim`, or was written by the other installer | the field, the recorded value and this run's value | [binding](adr/0046-installer-checkpoint-and-resume.md#5-binding), [resume across installers](adr/0046-installer-checkpoint-and-resume.md#13-resume-across-installers) |
+| The checkpoint cannot be read: not JSON, another `schema` or `schemaVersion`, an unknown step id, an unsafe answer, or a receipt value of another shape | the reason; the file is kept unchanged | [file mechanics](adr/0046-installer-checkpoint-and-resume.md#2-file-mechanics) |
+| The state directory, checkpoint or lock could have been written by another account, and `CLAUDE_GATEWAY_STATE_DIR` names the directory or a file of this checkout is there | the path and the owner, mode or access rule; nothing was read or changed; for a file of this checkout, the file and the next step | [store and location](adr/0046-installer-checkpoint-and-resume.md#1-store-and-location), [file mechanics](adr/0046-installer-checkpoint-and-resume.md#2-file-mechanics) |
+| Another run holds the lock | its host, process id and start time, and when a later run takes the lock over | [lock](adr/0046-installer-checkpoint-and-resume.md#3-lock) |
+| A live read fails for a step that is not idempotent | the step and the first sentence of the error | [verification before a skip](adr/0046-installer-checkpoint-and-resume.md#7-verification-before-a-skip) |
+| A recorded deployment still runs after the wait | the deployment and resource group | [deployments](adr/0046-installer-checkpoint-and-resume.md#10-deployments) |
+| An Entra group this run created is not returned by Microsoft Graph | the group, its id and creation time; a group created moments ago can take time to appear in Microsoft Graph, and a rerun later continues without creating a second group | [receipts](adr/0046-installer-checkpoint-and-resume.md#11-receipts), [U74](UNKNOWNS.md#p91-research-before-implementation) |
+| An Entra group cannot be looked up by name, or more than one group has the name | the group name and the error, or the ids of the groups with that name | [receipts](adr/0046-installer-checkpoint-and-resume.md#11-receipts) |
+| A tier group name, or the name prefix of `Install-ClaudeGateway.ps1`, holds a single quote, which Azure CLI would place inside an OData string literal (`startswith(displayName,'<name>')`) | the parameter and its value; a recorded one makes the checkpoint corrupt (second row) | [receipts](adr/0046-installer-checkpoint-and-resume.md#11-receipts) |
+| `install-claude-gateway.sh` would deploy again over an API Management instance this run did not create | `Install-ClaudeGateway.ps1 -ExistingApimName`, which reads the named values back first | [steps of the bash installer](adr/0046-installer-checkpoint-and-resume.md#9-steps-of-install-claude-gatewaysh) |
+
+The guided flow's resume of the steps after the installer is separate
+([Guided flow](GUIDED-FLOW.md#resume-after-failure)).
+### Answers file, preflight and selected steps
+
+Both installers read one answers file, check it and the estate before anything changes, run selected
+steps and write a progress stream
+([lean installer design record (ADR-0047)](adr/0047-lean-installer-phase-0.md)).
+
+| Option (PowerShell / bash) | What it does |
+|---|---|
+| `-AnswersPath <file>` / `--answers-file <file>` | Reads the answers from a JSON file that [`schemas/claude-gateway.answers.schema.json`](../schemas/claude-gateway.answers.schema.json) describes. A file with any problem stops the run on one line before any Azure resource is read: the number of problems, the first problem with its remedy, and the command that lists every problem, `./Install-ClaudeGateway.ps1 -Preflight -AnswersPath '<file>'` or `./install-claude-gateway.sh --preflight --answers-file '<file>'` (`scripts/ClaudeInstallerAnswers.ps1:398-426`, `scripts/install-answers.sh:41-64`). A parameter or flag passed with it wins over the file, and the file wins over the install checkpoint. |
+| `-Preflight` / `--preflight` | Runs 14 read-only checks and stops. Each check is PASS, FAIL or NOT-RUN with a reason, and each FAIL has a remedy; the exit code is 0 only when nothing fails and no check is NOT-RUN for `not-signed-in`, `prerequisite-failed` or `not-evaluated`, the reason a check starts with until a branch evaluates it (`Install-ClaudeGateway.ps1:174-180`, `scripts/install-preflight.sh:222-286`, [ADR-0047](adr/0047-lean-installer-phase-0.md) decision 5). A JWT, `Bearer <token>` or a named secret such as `sig=` or `password:` that a message or remedy quotes is printed as `[redacted]` (ADR-0047 decision 12). `-Json` / `--json` prints the result as JSON with `schemaVersion` 1. |
+| `-ListSteps` / `--list-steps` | Prints each step with its title, prerequisites and the state the install checkpoint records, without an Azure call (`scripts/ClaudeInstallSteps.ps1:142-157`, `scripts/install-steps.sh:111-130`). `-Json` / `--json` prints JSON. |
+| `-Steps <ids>` / `--steps <ids>` | Runs only the named steps. Each prerequisite outside the list is completed in the checkpoint and verified live, or the run stops on one line naming it (`scripts/ClaudeInstallSteps.ps1:103-131`, `scripts/install-steps.sh:87-108`). An id that names no step stops the run on one line that lists the steps and names `-ListSteps` / `--list-steps` (`scripts/ClaudeInstallSteps.ps1:72-82`, `scripts/install-steps.sh:60-67`). |
+| `-ProgressPath <file>` / `--progress-file <file>` | Appends one JSON object per line: `schemaVersion`, `time` (UTC), `runId`, `stepId`, `event`, `message` and `resumeCommand` (`scripts/ClaudeInstallSteps.ps1:29-38`, `scripts/install-steps.sh:24-31`). A secret in a message or resume command is written as `[redacted]`, by the rules of `-Preflight`. A file that cannot be written, such as a directory, stops the run on one line before any Azure call, and the line ends "Give a writable file path, or run without -ProgressPath." (`scripts/ClaudeInstallSteps.ps1:19-27`, `scripts/install-steps.sh:142`). |
+
+An answers file names each answer by its installer parameter, and both installers read this one:
+
+```json
+{
+  "schemaVersion": 1,
+  "SubscriptionId": "00000000-0000-0000-0000-000000000000",
+  "FoundryAccount": "ai-contoso",
+  "FoundryResourceGroup": "rg-ai-contoso",
+  "ResourceGroup": "rg-claude-gateway",
+  "NamePrefix": "contosogw",
+  "PublisherEmail": "ops@contoso.com",
+  "Sku": "BasicV2"
+}
+```
+
+```powershell
+./Install-ClaudeGateway.ps1 -AnswersPath ./answers.json -Preflight
+./Install-ClaudeGateway.ps1 -AnswersPath ./answers.json -Yes -ProgressPath ./install-progress.ndjson
+./Install-ClaudeGateway.ps1 -ListSteps -Json
+```
+
+```bash
+./install-claude-gateway.sh --answers-file ./answers.json --preflight --json
+```
+
+`Install-ClaudeGateway.ps1` also applies `BusinessUnits`: it writes the units, then the teams, through
+`scripts/Set-ClaudeBusinessUnit.ps1`, and prints the `scripts/Sync-ClaudeUsdBudgets.ps1` command when a
+dollar budget is enforced (`scripts/ClaudeInstallSteps.ps1:175-227`). Each unit's Entra group is found by
+its exact name, from the answers file or at the prompt: one group of that name is reused, none is created,
+and two of that name or a failed read stop the answers' step with the resume command, or at the prompt skip
+that unit with a remedy (`scripts/ClaudeInstallSteps.ps1:159-173`, `:195-197`; `Install-ClaudeGateway.ps1:1795-1800`).
+At the prompt, a group name with a single quote, a comma or a colon is refused with the schema's message and
+remedy before any Azure CLI call, and the prompt asks for the next unit (`Install-ClaudeGateway.ps1:1783-1791`).
+A team names its unit as `parent`, and an `Allowance` unit takes `percent`:
+
+```json
+"BusinessUnits": [
+  { "id": "finance", "group": "claude-bu-finance", "monthlyUsdBudget": 5000, "mode": "Strict" },
+  { "id": "finance-emea", "group": "claude-bu-finance-emea", "parent": "finance", "monthlyUsdBudget": 1000, "mode": "Allowance", "percent": 50 }
+]
+```
+
+`install-claude-gateway.sh` applies no business units, so it refuses an answers file that holds
+`BusinessUnits` (`scripts/install-answers.sh:44-52`).
+No answers file holds a secret: `AddressCertificatePassword` is passed as a parameter when the
+installer runs, or typed at its prompt, and a file that names it is refused
+(`schemas/claude-gateway.answers.schema.json`, `x-secrets`).
+
 ### Option B — non-interactive script
 
 The interactive installer's projection flags are separate from `deploy.ps1`:
