@@ -162,14 +162,16 @@ try {
 
     # ------------------------------------------------------------------ wave 3: the projection step's inputs (round 4, item 3)
     # From the checkpoint the resume left, a rerun with the same inputs, one with each input changed, and one
-    # with -FlipProjectionAfterCleanCompare, which needs the four P86 inputs and finds them recorded.
+    # with -FlipProjectionAfterCleanCompare and the same inputs. The switch's own check
+    # (Install-ClaudeGateway.ps1:163-167) runs before the answers file and the checkpoint are read, so the
+    # four P86 inputs are passed with it.
     $changed = [ordered]@{ ProjectionRenewalImageDigest = 'sha256:' + ('b' * 64); ProjectionRenewalEntryPoint = 'node /app/sync/src/p92-other.mjs'
         ProjectionRenewalActionGroupResourceId = "/subscriptions/$sub/resourceGroups/rg-p91/providers/Microsoft.Insights/actionGroups/ag-p91-other"
         ProjectionReconcilerResourceId = "/subscriptions/$sub/resourceGroups/rg-p91/providers/Microsoft.App/jobs/p91gw-other" }
     $projRuns = [ordered]@{}
     foreach ($n in @('same') + @($changed.Keys) + @('flip')) {
         $s = New-From "projection-$($n.ToLowerInvariant())" $projection { param($w) $w.inject.verify = '' }
-        $extra = if ($n -eq 'same') { @() } elseif ($n -eq 'flip') { @('-FlipProjectionAfterCleanCompare') } else { @("-$n '$($changed[$n])'") }
+        $extra = if ($n -eq 'same') { @() } elseif ($n -eq 'flip') { @('-FlipProjectionAfterCleanCompare') + @($renewal.Keys | ForEach-Object { "-$_ '$($renewal[$_])'" }) } else { @("-$n '$($changed[$n])'") }
         $projRuns[$n] = New-P91Run $s -Arguments (@('-Yes') + $extra)
     }
     $r3 = Invoke-P91Runs @($projRuns.Values)
@@ -292,7 +294,7 @@ try {
     Assert 'R4 changing any one of the three renewal inputs, or the reconciler, runs the projection step again with the new value and the recorded others' (-not $rerun.Count) ($rerun -join ' || ')
     $flip = Get-P91Result $r3 $projRuns['flip']
     $flipCalls = @(Get-ProjectionCalls $projRuns['flip'])
-    Assert 'R4 a resume with -FlipProjectionAfterCleanCompare takes the four P86 inputs from the checkpoint and runs the projection step again with the switch, although the checkpoint shows it completed' (
+    Assert 'R4 a rerun with -FlipProjectionAfterCleanCompare and unchanged P86 inputs runs the projection step again with the switch, although the checkpoint shows it completed and a live read finds its deployments' (
         $flip.ExitCode -eq 0 -and "$($flip.Out)$($flip.Err)" -notmatch 'P86 admission requires' -and $flip.Out -match 'Projection deployment: the switch to the projection is asked for; running it again' -and
         $flipCalls.Count -eq 1 -and (Test-ProjectionCall $flipCalls[0] (& $want $renewal) @('-FlipAfterCleanCompare'))) "$($flipCalls -join ' ') || $(Get-P91Tail $flip)"
     # ------------------------------------------------------------------ round 4: the console (item 4)

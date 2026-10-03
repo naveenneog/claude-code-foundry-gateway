@@ -1703,7 +1703,10 @@ if (Test-ClaudeInstallStepSelected 'sync') {
 }
 
 if ($EntitlementStore -eq 'projection' -and $DeployProjection -and -not (Test-ClaudeInstallStepSkip 'projection' -Verify {
-        Test-ClaudeInstallDeployments $ResourceGroup @("projection-$NamePrefix", "projection-network-$NamePrefix", "projection-resolver-$NamePrefix") })) {
+        # The live check reads the three deployments, which do not show a switch to the projection, so a run
+        # that asks for the switch runs the step again (ADR-0047 decision 13).
+        if ($FlipProjectionAfterCleanCompare) { Get-ClaudeInstallVerdict 'absent' 'the switch to the projection is asked for' }
+        else { Test-ClaudeInstallDeployments $ResourceGroup @("projection-$NamePrefix", "projection-network-$NamePrefix", "projection-resolver-$NamePrefix") } })) {
     Write-Step 'Projection deployment'
     $resolverApp = Get-ClaudeInstallResolverApp -NamePrefix $NamePrefix -Supplied $ProjectionResolverAppId
     $projectionArgs = @(

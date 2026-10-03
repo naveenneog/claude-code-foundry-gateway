@@ -12,7 +12,8 @@ $script:ClaudeInstallSteps = [ordered]@{
 }
 $script:ClaudeInstallParameterAnswers = @('SubscriptionId', 'FoundryAccount', 'FoundryResourceGroup', 'ResourceGroup', 'Location', 'NamePrefix', 'PublisherEmail', 'Sku',
     'AddressMode', 'AddressHostname', 'AddressCertificateSource', 'AddressKeyVaultCertificateId', 'AddressPfxPath', 'AddressDnsZoneResourceId', 'AddressDnsMode',
-    'AddressReplaceHostname', 'ExistingApimName', 'EntitlementStore', 'ResolverInboundAccess', 'DeployProjection', 'ProjectionReconcilerResourceId', 'ProjectionResolverAppId',
+    'AddressReplaceHostname', 'ExistingApimName', 'EntitlementStore', 'ResolverInboundAccess', 'DeployProjection', 'ProjectionReconcilerResourceId', 'ProjectionRenewalImageDigest',
+    'ProjectionRenewalEntryPoint', 'ProjectionRenewalActionGroupResourceId', 'ProjectionResolverAppId',
     'TpmStandard', 'QuotaStandard', 'TpmPremium', 'QuotaPremium', 'QuotaOrg', 'CallsPerMinute', 'StandardGroup', 'PremiumGroup', 'StandardModels', 'PremiumModels',
     'AuthMode', 'DesktopSignInKind', 'DesktopBearerTokenType', 'DesktopEntraClientId', 'DesktopEntraIssuer', 'DesktopEntraScopes', 'DesktopEntraAudience',
     'DesktopEntraResource', 'ModelOrganizationName', 'ModelIndustry', 'ModelCountryCode')
@@ -540,8 +541,11 @@ function Get-ClaudeInstallInputHash([string]$Id) {
         'claude-deployment' { @('PendingClaudeDeployment') }
         'business-units' { @('BusinessUnits') }
         'company-address' { @($c.Answers.Keys | Where-Object { $_ -like 'Address*' }) }
-        'projection' { 'EntitlementStore', 'ResolverInboundAccess', 'NamePrefix', 'Location', 'Sku', 'ProjectionResolverAppId', 'StandardGroup', 'PremiumGroup' }
-        'gateway-deployment' { @($c.Answers.Keys | Where-Object { $_ -notin 'StandardGroup', 'PremiumGroup', 'AuthMode', 'TeamBudgetBehaviour', 'DeveloperEstimate', 'DeployProjection', 'ProjectionReconcilerResourceId', 'ProjectionResolverAppId', 'PendingClaudeDeployment', 'ModelOrganizationName', 'ModelIndustry', 'ModelCountryCode' -and $_ -notlike 'Address*' }) }
+        # Every answer the step passes to scripts/Deploy-ClaudeProjection.ps1; the binding fields (resource
+        # group, subscription, gateway) are compared by the binding itself (ADR-0046 decision 5, ADR-0047 decision 13).
+        'projection' { 'EntitlementStore', 'ResolverInboundAccess', 'NamePrefix', 'Location', 'Sku', 'ProjectionResolverAppId', 'StandardGroup', 'PremiumGroup',
+            'ProjectionReconcilerResourceId', 'ProjectionRenewalImageDigest', 'ProjectionRenewalEntryPoint', 'ProjectionRenewalActionGroupResourceId' }
+        'gateway-deployment' { @($c.Answers.Keys | Where-Object { $_ -notin 'StandardGroup', 'PremiumGroup', 'AuthMode', 'TeamBudgetBehaviour', 'DeveloperEstimate', 'DeployProjection', 'ProjectionReconcilerResourceId', 'ProjectionResolverAppId', 'ProjectionRenewalImageDigest', 'ProjectionRenewalEntryPoint', 'ProjectionRenewalActionGroupResourceId', 'PendingClaudeDeployment', 'ModelOrganizationName', 'ModelIndustry', 'ModelCountryCode' -and $_ -notlike 'Address*' }) }
         default { @() }
     }
     $inputs = [ordered]@{}
