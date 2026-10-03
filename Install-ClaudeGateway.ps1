@@ -1780,6 +1780,16 @@ elseif (-not $Yes) {
         $buGroup = Read-Default -Prompt 'Entra group' -Default "claude-bu-$buId" `
             -Help 'Who belongs to the unit. Created here if it does not exist.'
 
+        # The answers schema's rule for a unit's group: a name with a single quote, comma or colon is refused
+        # here, with the schema's message, before any az call reads Graph for it (ADR-0047 decision 13).
+        if (-not (Get-Command Get-ClaudeAnswersSchema -ErrorAction SilentlyContinue)) { . (Join-Path $root 'scripts/ClaudeInstallerAnswers.ps1') }
+        $groupRule = (Get-ClaudeAnswersSchema).Defs['BusinessUnit'].properties.group
+        if ($buGroup -cnotmatch [string]$groupRule.pattern) {
+            Write-Warn2 "Entra group '$buGroup' $($groupRule.'x-patternMessage'), so business unit $buId is not written."
+            Write-Note ([string]$groupRule.'x-remedy')
+            continue
+        }
+
         # By its exact name, through the function the answers path uses (ADR-0046 decision 11): az ad group
         # show --group would take a single group whose name only starts with this one.
         $unitGroup = Resolve-ClaudeInstallUnitGroup $buGroup
