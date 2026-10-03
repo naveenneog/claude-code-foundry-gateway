@@ -315,6 +315,20 @@ try {
     $cfProblems = @(Get-P92RedactionProblems $cf.Err)
     Assert 'R4 a failure whose Azure CLI error quotes every secret shape prints that error with each in its [redacted] form, then the failure and the resume command, and no sentinel appears in stdout or stderr' (
         $cf.ExitCode -ne 0 -and -not $cfProblems.Count -and $cf.Err -match 'Deployment failed' -and $cf.Out -match '(?m)^Resume: ' -and (Test-P92NoSentinel ($cf.Out + $cf.Err))) "$($cfProblems -join '; ') || $(Get-P91Tail $cf)"
+    $installerAst = [Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot '..\Install-ClaudeGateway.ps1'), [ref]$null, [ref]$null)
+    $helperText = @{}
+    foreach ($fn in $installerAst.FindAll({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] }, $false)) { $helperText[$fn.Name] = $fn.Extent.Text }
+    . (Join-Path $PSScriptRoot '..\scripts\ClaudeInstallResume.ps1')
+    $siteProblems = @()
+    foreach ($name in 'Write-Warn2', 'Write-Bad') {
+        if (-not $helperText.ContainsKey($name)) { $siteProblems += "${name}: not defined"; continue }
+        . ([scriptblock]::Create($helperText[$name]))
+        $line = (@(& $name "an error that quotes ($P92RedactionSentence)" 6>&1) | ForEach-Object { [string]$_ }) -join "`n"
+        $kind = if ($name -eq 'Write-Warn2') { '\[WARN\]' } else { '\[FAIL\]' }
+        if ($line -notmatch $kind) { $siteProblems += "${name}: no $kind line" }
+        foreach ($p in @(Get-P92RedactionProblems $line)) { $siteProblems += "${name}: $p" }
+    }
+    Assert 'R5 Write-Warn2 and Write-Bad warning and failure lines quote every secret shape only in its [redacted] form, with no sentinel' (-not $siteProblems.Count) ($siteProblems -join '; ')
     # R3's redact run on the console: the failure ends at the top-level trap, which prints the error on standard
     # error, and the failure hint prints the resume command of a checkout path that holds sig=<value>.
     $rxTrap = [string](@(Get-P91ErrLines $rx | Where-Object { $_ -match 'disconnected' })[0])

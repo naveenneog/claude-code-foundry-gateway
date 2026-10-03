@@ -3503,11 +3503,23 @@
           "checks": 65,
           "failed": 0,
           "seconds": 71.2
+        },
+        {
+          "suite": "tests/Test-InstallerStepSelection.ps1",
+          "checks": 37,
+          "failed": 0,
+          "seconds": 73.2
+        },
+        {
+          "suite": "tests/Test-BashInstallerStepSelection.ps1 -Shard 1/3",
+          "checks": 20,
+          "failed": 0,
+          "seconds": 185.8
         }
       ],
-      "caught": 2,
-      "targetFailed": 2,
-      "total": 2,
+      "caught": 4,
+      "targetFailed": 4,
+      "total": 4,
       "mutants": [
         {
           "id": "R5-HB01",
@@ -3544,6 +3556,52 @@
           "failures": [
             "jq 1.7.0: the preflight says a price written with 17 significant digits can be a cent off and names jq 1.7.1, and the install goes on",
             "jq 1.7.1 behavior with a jq-1.7 version string, jq 1.8, and the jq on this machine: no such warning - jq-1.7.1, jq-1.8, yes"
+          ]
+        },
+        {
+          "id": "R12",
+          "item": "Lead round-4 missed mutant: PowerShell Write-Bad failure lines not redacted",
+          "suite": "tests/Test-InstallerStepSelection.ps1",
+          "target": "R5 Write-Warn2 and Write-Bad warning and failure lines quote every secret shape only in its [redacted] form, with no sentinel",
+          "file": "Install-ClaudeGateway.ps1",
+          "mutation": "Write-Bad replaced by plain Write-Host \"    [FAIL] $t\"",
+          "checks": 37,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 75.5,
+          "before": {
+            "checks": 36,
+            "failed": 0,
+            "verdict": "MISSED"
+          },
+          "failures": [
+            "R5 Write-Warn2 and Write-Bad warning and failure lines quote every secret shape only in its [redacted] form, with no sentinel - Write-Bad: sentinel p92JwtSentinel; ..."
+          ]
+        },
+        {
+          "id": "R16",
+          "item": "Lead round-4 missed mutant: bash bad_ failure lines not redacted",
+          "suite": "tests/Test-BashInstallerStepSelection.ps1 -Shard 1/3",
+          "target": "R5 bash warn_ and bad_ warning and failure lines quote every secret shape only in its [redacted] form, with no sentinel",
+          "file": "install-claude-gateway.sh",
+          "mutation": "bad_ printed \"$1\" instead of \"$(redact_ \"$1\")\"",
+          "checks": 20,
+          "failed": 1,
+          "bashN": "ok",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 208.8,
+          "before": {
+            "checks": 19,
+            "failed": 0,
+            "verdict": "MISSED"
+          },
+          "failures": [
+            "R5 bash warn_ and bad_ warning and failure lines quote every secret shape only in its [redacted] form, with no sentinel - bad_: sentinel p92JwtSentinel; ..."
           ]
         }
       ]
