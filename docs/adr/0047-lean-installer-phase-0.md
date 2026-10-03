@@ -365,6 +365,18 @@ The RED phase adds these tests before product code:
       comma or a colon prints the schema's message and remedy, writes no unit, and the prompt asks for the
       next unit, before any Azure CLI call names the group (`Install-ClaudeGateway.ps1:1783-1791`). At
       `c1ed585` the prompt sent such a name to `az ad group list`.
+    - **Windows native-command metacharacters are refused before preflight reads Azure (round 5,
+      Security).** Windows `cmd.exe` treats `&`, `|`, `<`, `>`, parentheses and `^` as special characters,
+      and Microsoft documents that these must be escaped or quoted when passed as arguments
+      (cmd reference, ms.date 2025-05-23, fetched 2026-10-03:
+      https://learn.microsoft.com/windows-server/administration/windows-commands/cmd). Azure CLI on
+      Windows is commonly an `az.cmd` shim, so the answers schema refuses cmd-sensitive characters before a
+      read-only preflight can pass answers to `az`: `SubscriptionId`, `StandardGroup`, `PremiumGroup` and
+      `BusinessUnits[].group` reject `& | < > ^ " % ( )`, and the business-unit group also keeps the comma,
+      colon and single-quote rule. `tests/Test-InstallerPreflight.ps1` places a marker-writing `az.cmd` on
+      `PATH` and proves answers with `&echo.P93_PREFILL_MARKER&rem` are refused and create no marker file
+      before any answer-bearing Azure CLI call can run. `tests/Test-InstallerAnswersSchema.ps1` checks the
+      same values through the PowerShell and jq validators.
 14. **The bash checkpoint suite runs as seven Test-All checks.** `tests/Test-BashInstallerCheckpoint.ps1`
     takes `-Shard i/7`; its checks sit in twelve groups, each run by one shard (`Test-ShardGroup`):
     `static` and `shell` (shard 0), `graph` and `untrusted` (1), `names` and `preexisting` (2), `resume`

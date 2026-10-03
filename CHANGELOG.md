@@ -58,7 +58,7 @@ exact streaming cache-creation detail remains **U13**.
   binds the result into the plan fingerprint and applies a plan only when that preflight passes. The bash
   checkpoint suite runs as seven Test-All checks, the bash step-selection suite as three and the bash
   preflight suite as two, each within the default timeout, and
-  `.github/workflows/installer-unix.yml` runs the P92 bash suites on Linux and macOS and continues the later suite steps after an earlier suite failure. The bash admin preflight warns on the jq 1.7.0 number-conversion behavior, not on a distribution version string. 46 schema, 15 drift, 11 redaction, 37 PowerShell and 40 bash preflight, 37 PowerShell and 38 bash step, 16 business-unit, 10 guided-flow and 15 shard checks
+  `.github/workflows/installer-unix.yml` runs the P92 bash suites on Linux and macOS and continues the later suite steps after an earlier suite failure. The bash admin preflight warns on the jq 1.7.0 number-conversion behavior, not on a distribution version string. Windows preflight refuses cmd.exe metacharacters in Azure CLI-bound answers before any `az.cmd` invocation can re-parse them. 50 schema, 15 drift, 11 redaction, 38 PowerShell and 40 bash preflight, 37 PowerShell and 38 bash step, 16 business-unit, 10 guided-flow and 15 shard checks
   ([lean installer design record (ADR-0047)](docs/adr/0047-lean-installer-phase-0.md),
   [Setup](docs/SETUP.md#answers-file-preflight-and-selected-steps)).
 - **Installers resume after a failure.** `Install-ClaudeGateway.ps1` and

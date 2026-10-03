@@ -17,6 +17,7 @@ Write-Host 'Installer preflight (PowerShell installer)' -ForegroundColor Cyan
 $watch = [Diagnostics.Stopwatch]::StartNew()
 $scratch = [IO.Path]::GetFullPath((Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) ('p92-preflight-' + [guid]::NewGuid().ToString('N'))))
 New-Item -ItemType Directory -Force -Path $scratch | Out-Null
+$script:windows = [bool]($IsWindows -or $env:OS -eq 'Windows_NT')
 $ids = @('answers.schema', 'answers.crossField', 'target.tenant', 'target.subscription', 'operator.adminPrereqs', 'foundry.account', 'foundry.deployments',
     'apim.nameAvailability', 'apim.existingSku', 'apim.existingIdentity', 'entra.groupNames', 'businessUnits.ids', 'businessUnits.depth', 'address.inputs')
 $azureChecks = @('target.tenant', 'target.subscription', 'foundry.account', 'foundry.deployments', 'apim.nameAvailability', 'apim.existingSku', 'apim.existingIdentity', 'entra.groupNames')
@@ -37,9 +38,61 @@ function Add-Scenario([string]$Name, $World, $Answers, [switch]$Text) {
 }
 function Get-Check($Name, [string]$Id) { $j = $scenarios[$Name].Json; if ($j) { @($j.checks | Where-Object { $_.id -eq $Id })[0] } }
 function Show($Name) { $r = $scenarios[$Name].Result; if ($r) { "exit $($r.ExitCode): " + (Get-P91Tail $r) } else { 'no result' } }
+function Invoke-CmdMarkerPreflight {
+    param([string]$Name, [scriptblock]$Change)
+    $dir = Join-Path $scratch "cmd-marker\$Name"
+    $repo = Join-Path $dir 'repo'
+    $bin = Join-Path $dir 'bin'
+    New-Item -ItemType Directory -Force -Path $bin | Out-Null
+    Copy-Item -LiteralPath $template -Destination $repo -Recurse
+    $marker = Join-Path $dir 'marker.txt'
+    $doc = New-Answers
+    & $Change $doc $marker
+    $answersPath = Join-Path $dir 'answers.json'
+    Write-P91Text $answersPath ($doc | ConvertTo-Json -Depth 10)
+    $az = @'
+@echo off
+if "%1"=="version" echo {"azure-cli":"2.90.0"}& exit /b 0
+if "%1"=="bicep" echo Bicep CLI version 0.46.1& exit /b 0
+if "%1"=="account" if "%2"=="show" echo {"id":"00000000-0000-4000-8000-0000000000a1","tenantId":"00000000-0000-4000-8000-0000000000f1","name":"p91-subscription","state":"Enabled","user":{"name":"admin@contoso.com"}}& exit /b 0
+if "%1"=="account" if "%2"=="list" echo [{"id":"00000000-0000-4000-8000-0000000000a1","tenantId":"00000000-0000-4000-8000-0000000000f1","name":"p91-subscription","state":"Enabled"}]& exit /b 0
+echo []
+exit /b 0
+'@
+    Write-P91Text (Join-Path $bin 'az.cmd') $az
+    $psi = [Diagnostics.ProcessStartInfo]::new($script:P91Pwsh)
+    foreach ($arg in @('-NoProfile', '-NonInteractive', '-File', (Join-Path $repo 'Install-ClaudeGateway.ps1'), '-Preflight', '-Json', '-AnswersPath', $answersPath)) { $psi.ArgumentList.Add($arg) }
+    $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+    $psi.StandardOutputEncoding = [Text.Encoding]::UTF8; $psi.StandardErrorEncoding = [Text.Encoding]::UTF8
+    $psi.WorkingDirectory = $repo
+    $psi.Environment['PATH'] = "$bin;$($psi.Environment['PATH'])"
+    $psi.Environment['AZURE_CONFIG_DIR'] = Join-Path $dir 'az'
+    $p = [Diagnostics.Process]::Start($psi)
+    $out = $p.StandardOutput.ReadToEnd()
+    $err = $p.StandardError.ReadToEnd()
+    $p.WaitForExit(30000) | Out-Null
+    [pscustomobject]@{ Name = $Name; ExitCode = $p.ExitCode; Out = $out; Err = $err; Marker = $marker }
+}
 
 try {
     $template = New-P91Template $scratch
+    if ($script:windows) {
+        $markerPayload = { param([string]$Marker) "p93&echo.P93_PREFILL_MARKER>$Marker&rem" }
+        $markerRuns = @(
+            (Invoke-CmdMarkerPreflight 'SubscriptionId' { param($a, $m) $a.SubscriptionId = (& $markerPayload $m) })
+            (Invoke-CmdMarkerPreflight 'StandardGroup' { param($a, $m) Set-Answer $a 'StandardGroup' (& $markerPayload $m) })
+            (Invoke-CmdMarkerPreflight 'PremiumGroup' { param($a, $m) Set-Answer $a 'PremiumGroup' (& $markerPayload $m) })
+            (Invoke-CmdMarkerPreflight 'BusinessUnits.group' { param($a, $m) Set-Answer $a 'BusinessUnits' @([ordered]@{ id = 'finance'; group = (& $markerPayload $m); monthlyUsdBudget = 100; mode = 'Strict' }) })
+            (Invoke-CmdMarkerPreflight 'FoundryAccount' { param($a, $m) $a.FoundryAccount = (& $markerPayload $m) })
+        )
+        $markerLeaks = @($markerRuns | Where-Object { Test-Path -LiteralPath $_.Marker })
+        $markerMisses = @($markerRuns | Where-Object { $_.ExitCode -eq 0 -or "$($_.Out)$($_.Err)" -notmatch "$([regex]::Escape($_.Name))|cmd\.exe metacharacter|expected form|Foundry account name" })
+        Assert 'P93 Windows preflight refuses cmd.exe marker answers before any az.cmd argument can execute them: SubscriptionId, StandardGroup, PremiumGroup, BusinessUnits.group and another az-bound answer' (-not $markerLeaks.Count -and -not $markerMisses.Count) (
+            'leaks: ' + (($markerLeaks | ForEach-Object { $_.Name }) -join ', ') + '; misses: ' + (($markerMisses | ForEach-Object { "$($_.Name) exit=$($_.ExitCode)" }) -join ', '))
+    }
+    else {
+        Assert 'P93 Windows cmd.exe marker preflight cases are Windows-only' $true
+    }
     Add-Scenario 'pass' (New-P91World) (New-Answers)
     $w = New-P91World; $w['signedOut'] = $true
     Add-Scenario 'signed-out' $w (New-Answers)

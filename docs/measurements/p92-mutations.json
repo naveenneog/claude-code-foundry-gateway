@@ -3515,11 +3515,23 @@
           "checks": 20,
           "failed": 0,
           "seconds": 185.8
+        },
+        {
+          "suite": "tests/Test-InstallerPreflight.ps1",
+          "checks": 38,
+          "failed": 0,
+          "seconds": 62.2
+        },
+        {
+          "suite": "tests/Test-InstallerAnswersSchema.ps1",
+          "checks": 50,
+          "failed": 0,
+          "seconds": 18.1
         }
       ],
-      "caught": 4,
-      "targetFailed": 4,
-      "total": 4,
+      "caught": 5,
+      "targetFailed": 5,
+      "total": 5,
       "mutants": [
         {
           "id": "R5-HB01",
@@ -3602,6 +3614,24 @@
           },
           "failures": [
             "R5 bash warn_ and bad_ warning and failure lines quote every secret shape only in its [redacted] form, with no sentinel - bad_: sentinel p92JwtSentinel; ..."
+          ]
+        },
+        {
+          "id": "P93-CMD01",
+          "item": "Windows preflight refuses cmd.exe marker answers before they reach az.cmd",
+          "suite": "tests/Test-InstallerPreflight.ps1",
+          "target": "P93 Windows preflight refuses cmd.exe marker answers before any az.cmd argument can execute them",
+          "file": "schemas/claude-gateway.answers.schema.json",
+          "mutation": "SubscriptionId, StandardGroup, PremiumGroup and BusinessUnits.group patterns loosened to allow cmd.exe metacharacters",
+          "checks": 38,
+          "failed": 1,
+          "bashN": "n/a",
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 61.8,
+          "failures": [
+            "P93 Windows preflight refuses cmd.exe marker answers before any az.cmd argument can execute them: SubscriptionId, StandardGroup, PremiumGroup, BusinessUnits.group and another az-bound answer - leaks: StandardGroup, PremiumGroup"
           ]
         }
       ]
