@@ -35,8 +35,11 @@ head_() { printf '\n%s==========================================================
           printf '%s========================================================================%s\n' "$C_CYAN" "$C_OFF"; }
 step_() { printf '\n%s==> %s%s\n' "$C_CYAN" "$1" "$C_OFF"; }
 ok_()   { printf '    %s[OK]%s   %s\n' "$C_GREEN" "$C_OFF" "$1"; }
-warn_() { printf '    %s[WARN]%s %s\n' "$C_YELLOW" "$C_OFF" "$1"; }
-bad_()  { LAST_BAD="$1"; printf '    %s[FAIL]%s %s\n' "$C_RED" "$C_OFF" "$1"; }
+# A warning or a failure line can quote an error, so a secret in it is replaced once the checkpoint library
+# is loaded (ckpt_redact_, docs/adr/0047-lean-installer-phase-0.md decision 12).
+redact_() { if declare -F ckpt_redact_ >/dev/null 2>&1; then ckpt_redact_ "$1"; else printf '%s' "$1"; fi; }
+warn_() { printf '    %s[WARN]%s %s\n' "$C_YELLOW" "$C_OFF" "$(redact_ "$1")"; }
+bad_()  { LAST_BAD="$1"; printf '    %s[FAIL]%s %s\n' "$C_RED" "$C_OFF" "$(redact_ "$1")"; }
 note_() { printf '    %s%s%s\n' "$C_GREY" "$1" "$C_OFF"; }
 
 usage_() { sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 0; }
@@ -161,8 +164,8 @@ if ! az account show >/dev/null 2>&1; then
   warn_ "not signed in - launching az login"
   az login -o none || { bad_ "sign-in failed"; exit 1; }
 fi
-USER_NAME="$(az account show --query user.name -o tsv)"
-TENANT_ID="$(az account show --query tenantId -o tsv)"
+USER_NAME="$(ckpt_shown_ az account show --query user.name -o tsv)"
+TENANT_ID="$(ckpt_shown_ az account show --query tenantId -o tsv)"
 ok_ "$USER_NAME"
 note_ "tenant $TENANT_ID"
 ckpt_assert_tenant_ "$TENANT_ID"
@@ -170,11 +173,11 @@ ckpt_assert_tenant_ "$TENANT_ID"
 if [ -z "$SUBSCRIPTION" ]; then
   # Listing every subscription is unusable on a large tenant - some accounts
   # can see dozens. Offer the current one first, then filter if it is wrong.
-  CURRENT_NAME="$(az account show --query name -o tsv)"
+  CURRENT_NAME="$(ckpt_shown_ az account show --query name -o tsv)"
   if [ "$ASSUME_YES" = "1" ] || ask_yn_ "Use subscription '$CURRENT_NAME'?" "y"; then
-    SUBSCRIPTION="$(az account show --query id -o tsv)"
+    SUBSCRIPTION="$(ckpt_shown_ az account show --query id -o tsv)"
   else
-    subs_json="$(az account list --query "[?state=='Enabled'].{name:name,id:id}" -o json)"
+    subs_json="$(ckpt_shown_ az account list --query "[?state=='Enabled'].{name:name,id:id}" -o json)"
     total="$(printf '%s' "$subs_json" | jq 'length')"
     echo
     filter="$(ask_ "Filter by name (blank for all)" "" "$total subscriptions available.")"
@@ -202,8 +205,8 @@ if [ -z "$SUBSCRIPTION" ]; then
     SUBSCRIPTION="$(printf '%s' "$shown" | jq -r --argjson i "$((pick-1))" '.[$i].id')"
   fi
 fi
-az account set --subscription "$SUBSCRIPTION"
-SUB_NAME="$(az account show --query name -o tsv)"
+ckpt_shown_ az account set --subscription "$SUBSCRIPTION"
+SUB_NAME="$(ckpt_shown_ az account show --query name -o tsv)"
 ok_ "subscription: $SUB_NAME"
 ckpt_assert_subscription_
 steps_prereqs_
@@ -218,7 +221,7 @@ if [ -z "$FOUNDRY_ACCOUNT" ]; then
   # filter server-side first. Without this the loop below queries every
   # Cognitive Services account in the subscription - 40+ on a large one - which
   # is slow and floods the console.
-  accounts="$(az cognitiveservices account list --query "[?kind=='AIServices' || kind=='OpenAI'].{name:name,rg:resourceGroup,loc:location}" -o json)"
+  accounts="$(ckpt_shown_ az cognitiveservices account list --query "[?kind=='AIServices' || kind=='OpenAI'].{name:name,rg:resourceGroup,loc:location}" -o json)"
   cand="$(printf '%s' "$accounts" | jq 'length')"
   if [ "$cand" -eq 0 ]; then
     bad_ "no AIServices or OpenAI accounts found in this subscription"
@@ -251,7 +254,7 @@ if [ -z "$FOUNDRY_ACCOUNT" ]; then
   FOUNDRY_LOCATION="$(printf '%s' "$matches" | jq -r --argjson i "$idx" '.[$i].loc')"
   [ -z "$LOCATION" ] && LOCATION="$FOUNDRY_LOCATION"
 fi
-[ -z "$FOUNDRY_RG" ] && FOUNDRY_RG="$(az cognitiveservices account list --query "[?name=='$FOUNDRY_ACCOUNT'].resourceGroup | [0]" -o tsv)"
+[ -z "$FOUNDRY_RG" ] && FOUNDRY_RG="$(ckpt_shown_ az cognitiveservices account list --query "[?name=='$FOUNDRY_ACCOUNT'].resourceGroup | [0]" -o tsv)"
 if [ -z "$FOUNDRY_RG" ]; then
   bad_ "could not resolve the resource group for '$FOUNDRY_ACCOUNT'"
   note_ "check the name, and that you can see it: az cognitiveservices account list -o table"
@@ -264,7 +267,7 @@ ok_ "$FOUNDRY_ACCOUNT (rg $FOUNDRY_RG)"
 
 step_ "Where to put the gateway"
 if [ -z "$LOCATION" ]; then
-  FOUNDRY_LOCATION="$(az cognitiveservices account show -g "$FOUNDRY_RG" -n "$FOUNDRY_ACCOUNT" --query location -o tsv)"
+  FOUNDRY_LOCATION="$(ckpt_shown_ az cognitiveservices account show -g "$FOUNDRY_RG" -n "$FOUNDRY_ACCOUNT" --query location -o tsv)"
   LOCATION="$FOUNDRY_LOCATION"
 fi
 if [ -z "$LOCATION" ]; then
@@ -369,7 +372,7 @@ GATEWAY_URL="$CKPT_GW_URL"
 if [ "$CKPT_GW_RUN" = "1" ]; then
 DEPLOY_NAME="claude-gw-$(date +%Y%m%d%H%M%S)"
 ckpt_register_deployment_ "$DEPLOY_NAME" "$RESOURCE_GROUP" "$APIM_NAME"
-if ! az deployment group create \
+if ! ckpt_shown_ az deployment group create \
       --name "$DEPLOY_NAME" \
       -g "$RESOURCE_GROUP" \
       --template-file "$HERE/infra/main.bicep" \

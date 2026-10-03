@@ -222,6 +222,6 @@ function Write-ClaudeInstallUsdReconcile {
         $scopes = @(if ($doc.items) { $doc.items.PSObject.Properties.Name })
         $items = @($scopes | Where-Object { $_ -like 'user:*' -or [string]$map[($_ -replace '^[a-z]+:', '')] -ne 'notify' })
     }
-    catch { Write-Host "    [WARN] usd-budgets or bu-modes could not be read ($($_.Exception.Message)). To reconcile dollar budgets: $command" -ForegroundColor Yellow; return }
+    catch { Write-Host "    [WARN] usd-budgets or bu-modes could not be read ($(Protect-ClaudeInstallText $_.Exception.Message)). To reconcile dollar budgets: $command" -ForegroundColor Yellow; return }
     if ($items.Count) { Write-Host "    Dollar budgets are enforced for $($items.Count) scope(s); after access sync changes bu-members, reconcile their state: $command" -ForegroundColor Yellow }
 }

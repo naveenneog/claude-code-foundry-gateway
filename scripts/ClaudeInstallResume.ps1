@@ -16,6 +16,21 @@ function Invoke-ClaudeInstallAzRead {
     $detail = if ($err) { ($err -split '(?<=\.)\s')[0] } else { "az exited $code" }
     return [pscustomobject]@{ Verdict = $verdict; Output = $out; Error = $err; Detail = $detail }
 }
+
+function Invoke-ClaudeInstallAzShown([scriptblock]$Command) {
+    # An Azure CLI call whose error output the run shows: what it writes to standard output is returned, and
+    # each line it writes to standard error is written there after the call, with each secret shape replaced
+    # (Protect-ClaudeInstallText, ADR-0047 decision 12). $LASTEXITCODE is the call's.
+    $saved = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $global:LASTEXITCODE = 0
+    try { $all = @(& $Command 2>&1); $code = $LASTEXITCODE } finally { $ErrorActionPreference = $saved }
+    foreach ($item in $all) {
+        if ($item -is [System.Management.Automation.ErrorRecord]) { [Console]::Error.WriteLine((Protect-ClaudeInstallText $item.ToString())) }
+        else { $item }
+    }
+    $global:LASTEXITCODE = $code
+}
 $script:ClaudeInstallGraphNotFound = @('Request_ResourceNotFound', 'does not exist or one of its queried reference-property objects are not present')
 
 function Get-ClaudeInstallRedactionRules {
@@ -150,10 +165,10 @@ function Resolve-ClaudeInstallGatewayStep {
         if ($s.Verdict -eq 'inconclusive') { Stop-ClaudeInstall "deployment $name in resource group $ResourceGroup could not be read ($($s.Detail)), so it is neither skipped nor repeated. Nothing was changed. Resume: $(Format-ClaudeInstallResume)" }
         if ($s.Verdict -eq 'absent') { Write-Host "    ${title}: deployment $name is not in the resource group's history; deploying again" -ForegroundColor Yellow }
         elseif ($s.State -ne 'Succeeded') {
-            Write-Host "    ${title}: deployment $name $($s.State): $($s.Error)" -ForegroundColor Yellow
+            Write-Host "    ${title}: deployment $name $($s.State): $(Protect-ClaudeInstallText $s.Error)" -ForegroundColor Yellow
             $ops = Invoke-ClaudeInstallAzRead @('deployment', 'operation', 'group', 'list', '-g', $ResourceGroup, '-n', $name, '-o', 'json') @()
             if ($ops.Verdict -eq 'present' -and $ops.Output) {
-                foreach ($o in @($ops.Output | ConvertFrom-Json)) { if ($o.properties.provisioningState -eq 'Failed') { Write-Host "      failed operation: $($o.properties.targetResource.resourceName): $($o.properties.statusMessage.error.message)" -ForegroundColor DarkGray } }
+                foreach ($o in @($ops.Output | ConvertFrom-Json)) { if ($o.properties.provisioningState -eq 'Failed') { Write-Host "      failed operation: $($o.properties.targetResource.resourceName): $(Protect-ClaudeInstallText ([string]$o.properties.statusMessage.error.message))" -ForegroundColor DarkGray } }
             }
         }
         elseif ([string]$step.inputHash -ne $hash) { Write-Host "    ${title}: the templates or answers changed since deployment $name; deploying again" -ForegroundColor Yellow }
@@ -167,7 +182,7 @@ function Resolve-ClaudeInstallGatewayStep {
                 Write-Host "    [OK]   ${title}: verified live, skipped (deployment $name)" -ForegroundColor Green
                 return [pscustomobject]@{ Run = $false; GatewayUrl = $url }
             }
-            Write-Host "    ${title}: $($live.Detail); deploying again" -ForegroundColor Yellow
+            Write-Host "    ${title}: $(Protect-ClaudeInstallText $live.Detail); deploying again" -ForegroundColor Yellow
         }
     }
     Wait-ClaudeInstallMainDeployments $ResourceGroup

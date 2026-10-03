@@ -35,6 +35,21 @@ CKPT_US=$'\x1f'
 # case; a jq program uses it as jq --argjson R "$CKPT_REDACT_RULES" "$CKPT_REDACT_JQ"'<program>'.
 CKPT_REDACT_RULES='[{"name":"jwt","pattern":"eyJ[A-Za-z0-9_-]{4,}\\.[A-Za-z0-9_.-]*"},{"name":"bearer","pattern":"(?<keep>(?<![A-Za-z0-9_])bearer[ \\t]+)[^;&\"\u0027 \\t\\r\\n]+"},{"name":"named","pattern":"(?<keep>(?<![A-Za-z0-9_])(?:sig|signature|accountkey|sharedaccesskey|sharedaccesssignature|client_secret|clientsecret|password|pwd|secret|access_token|refresh_token)[\"\u0027]?[ \\t]*[=:][ \\t]*[\"\u0027]?)[^;&\"\u0027 \\t\\r\\n]+"}]'
 CKPT_REDACT_JQ='def redact: if type == "string" then reduce $R[] as $r (.; gsub($r.pattern; "\(.keep // "")[redacted]"; "i")) else . end;'
+# A line printed from an error or a refusal, with each secret shape of CKPT_REDACT_RULES replaced (ADR-0047
+# decision 12). Without jq the text is printed as given; the lines printed before the installer's jq check
+# (install-claude-gateway.sh, claude_preflight admin) quote no Azure CLI output.
+ckpt_redact_() {
+  local out
+  if out="$(printf '%s' "$1" | jq -Rrs --argjson R "$CKPT_REDACT_RULES" "$CKPT_REDACT_JQ"' redact' 2>/dev/null | tr -d '\r')" && [ -n "$out" ]; then printf '%s' "$out"; else printf '%s' "$1"; fi
+}
+# An Azure CLI call whose error output the run shows: its standard output passes through, and its standard
+# error is printed after the call, with each secret shape replaced. Returns the call's status.
+ckpt_shown_() {
+  local err rc
+  { err="$("$@" 2>&1 1>&3 3>&-)"; rc=$?; } 3>&1
+  [ -z "$err" ] || printf '%s\n' "$(ckpt_redact_ "$err")" >&2
+  return "$rc"
+}
 
 CKPT_ROOT=""; CKPT_DIR=""; CKPT_FILE=""; CKPT_LOCK=""; CKPT_KEY=""; CKPT_PERSISTENT=1; CKPT_WARNING=""; CKPT_CLOUDSHELL=""; CKPT_CLOUDDRIVE=0
 CKPT_NOSTORE=""; CKPT_RESOLVED=""; CKPT_HOME_REAL=""; CKPT_EXPLICIT=0; CKPT_UNTRUSTED=""
@@ -80,7 +95,7 @@ ckpt_process_start_() { LC_ALL=C TZ=UTC ps -o lstart= -p "$1" 2>/dev/null | sed 
 ckpt_refuse_() {
   CKPT_REFUSED=1
   progress_event_ "${PROGRESS_CURRENT:-}" refused "Refused: $1"
-  printf 'Refused: %s\n' "$(printf '%s' "$1" | tr '\r\n' '  ')" >&2
+  printf 'Refused: %s\n' "$(ckpt_redact_ "$(printf '%s' "$1" | tr '\r\n' '  ')")" >&2
   exit 1
 }
 
@@ -384,7 +399,7 @@ ckpt_save_() {
   ckpt_write_
   if [ "$CKPT_PERSISTENT" != "1" ]; then
     warn_ "$CKPT_WARNING"
-    printf '    Resume: %s\n' "$(ckpt_resume_cmd_ with-answers)"
+    printf '    Resume: %s\n' "$(ckpt_redact_ "$(ckpt_resume_cmd_ with-answers)")"
   fi
 }
 
@@ -392,7 +407,7 @@ ckpt_save_() {
 ckpt_nostore_warn_() {
   CKPT_PERSISTENT=0
   warn_ "$CKPT_NOSTORE"
-  printf '    Resume: %s\n' "$(ckpt_resume_cmd_ with-answers)"
+  printf '    Resume: %s\n' "$(ckpt_redact_ "$(ckpt_resume_cmd_ with-answers)")"
 }
 
 # A temporary file renamed over the checkpoint, so an interrupted write leaves the previous one.
@@ -478,7 +493,7 @@ ckpt_exit_() {
   [ "$code" != "0" ] && [ "$CKPT_REFUSED" != "1" ] && progress_failed_ "$code"
   ckpt_release_
   if [ "$held" = "1" ] && [ "$code" != "0" ] && [ "$CKPT_REFUSED" != "1" ] && [ -f "$CKPT_FILE" ]; then
-    if [ "$CKPT_PERSISTENT" = "1" ]; then printf 'Resume: %s\n' "$(ckpt_resume_cmd_)"; else printf 'Resume: %s\n' "$(ckpt_resume_cmd_ with-answers)"; fi
+    if [ "$CKPT_PERSISTENT" = "1" ]; then printf 'Resume: %s\n' "$(ckpt_redact_ "$(ckpt_resume_cmd_)")"; else printf 'Resume: %s\n' "$(ckpt_redact_ "$(ckpt_resume_cmd_ with-answers)")"; fi
   fi
 }
 
@@ -521,7 +536,7 @@ ckpt_skip_() {
     "$verify" "$@"
     if [ "$V_VERDICT" = "present" ]; then printf '    %s[OK]%s   %s: verified live, skipped\n' "$C_GREEN" "$C_OFF" "$title"; progress_step_ "$id" skipped-verified; return 0; fi
     if [ "$V_VERDICT" = "inconclusive" ] && [ "$idempotent" != "1" ]; then ckpt_refuse_ "$title could not be verified ($V_DETAIL). Nothing was changed. Resume: $(ckpt_resume_cmd_)"; fi
-    printf '    %s%s: %s; running it again%s\n' "$C_YELLOW" "$title" "$V_DETAIL" "$C_OFF"
+    printf '    %s%s: %s; running it again%s\n' "$C_YELLOW" "$title" "$(ckpt_redact_ "$V_DETAIL")" "$C_OFF"
   elif [ "$state" = "completed" ]; then printf '    %s%s: its input changed since the checkpoint; running it again%s\n' "$C_YELLOW" "$title" "$C_OFF"
   fi
   ckpt_set_step_ "$id" started "$hash"
@@ -548,11 +563,11 @@ ckpt_close_() {
   if [ -n "${STEPS:-}" ]; then
     # --steps ran part of the install, so the checkpoint is kept for the rest (A11).
     note_ "--steps ran $(printf '%s' "$STEPS" | sed 's/ /, /g'); the install checkpoint is kept, and a run without --steps resumes the rest."
-    printf '    Resume: %s\n' "$(steps_resume_line_)"
+    printf '    Resume: %s\n' "$(ckpt_redact_ "$(steps_resume_line_)")"
   elif [ -n "$open" ]; then
     for id in $open; do titles="${titles:+$titles, }$(ckpt_title_ "$id")"; done
     warn_ "The install checkpoint is kept: $titles did not complete."
-    if [ "$CKPT_PERSISTENT" = "1" ]; then printf '    Resume: %s\n' "$(ckpt_resume_cmd_)"; else printf '    Resume: %s\n' "$(ckpt_resume_cmd_ with-answers)"; fi
+    if [ "$CKPT_PERSISTENT" = "1" ]; then printf '    Resume: %s\n' "$(ckpt_redact_ "$(ckpt_resume_cmd_)")"; else printf '    Resume: %s\n' "$(ckpt_redact_ "$(ckpt_resume_cmd_ with-answers)")"; fi
   else
     rm -f "$CKPT_FILE"
     note_ "Install complete; the install checkpoint is removed."

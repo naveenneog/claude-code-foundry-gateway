@@ -38,9 +38,12 @@ $script:ClaudeInstall = $null
 function Test-ClaudeInstallWindows { return ($env:OS -eq 'Windows_NT') }
 
 function Stop-ClaudeInstall {
-    # A refusal is one line: PowerShell's error view would wrap a long one at the console width.
+    # A refusal is one line: PowerShell's error view would wrap a long one at the console width. A secret that
+    # an error it quotes holds is replaced (Protect-ClaudeInstallText, ADR-0047 decision 12).
     param([Parameter(Mandatory = $true)][string]$Message)
-    throw ('Refused: ' + (($Message -replace '\s*[\r\n]+\s*', ' ').Trim()))
+    $text = ($Message -replace '\s*[\r\n]+\s*', ' ').Trim()
+    if (Get-Command Protect-ClaudeInstallText -ErrorAction SilentlyContinue) { $text = Protect-ClaudeInstallText $text }
+    throw ('Refused: ' + $text)
 }
 
 function Get-ClaudeInstallSha256([byte[]]$Bytes) {
@@ -606,8 +609,8 @@ function Write-ClaudeInstallNoStore {
     # The run keeps no store: one warning line, then the resume command with every recorded answer, as
     # in an ephemeral Cloud Shell session (ADR-0046 decision 1).
     $c = $script:ClaudeInstall
-    Write-Host "    [WARN] $($c.Location.NoStore)" -ForegroundColor Yellow
-    Write-Host "    Resume: $(Format-ClaudeInstallResume -WithAnswers)"
+    Write-Host "    [WARN] $(Protect-ClaudeInstallText $c.Location.NoStore)" -ForegroundColor Yellow
+    Write-Host "    Resume: $(Protect-ClaudeInstallText (Format-ClaudeInstallResume -WithAnswers))"
 }
 
 function Save-ClaudeInstallState {
@@ -654,7 +657,7 @@ function Test-ClaudeInstallStepSkip {
         $v = & $Verify $step.receipt
         if ($v.Verdict -eq 'present') { Write-Host "    [OK]   ${title}: verified live, skipped" -ForegroundColor Green; Write-ClaudeInstallStepEvent -Id $Id -Event 'skipped-verified'; return $true }
         if ($v.Verdict -eq 'inconclusive' -and -not $Idempotent) { Stop-ClaudeInstall "$title could not be verified ($($v.Detail)). Nothing was changed. Resume: $(Format-ClaudeInstallResume)" }
-        Write-Host "    ${title}: $($v.Detail); running it again" -ForegroundColor Yellow
+        Write-Host "    ${title}: $(Protect-ClaudeInstallText $v.Detail); running it again" -ForegroundColor Yellow
     }
     elseif ($step -and $step.state -eq 'completed') { Write-Host "    ${title}: its input changed since the checkpoint; running it again" -ForegroundColor Yellow }
     Set-ClaudeInstallStep -Id $Id -State 'started' -InputHash $hash -Receipt $(if ($step) { $step.receipt } else { $null })
@@ -669,11 +672,11 @@ function Close-ClaudeInstallCheckpoint {
     if ($script:ClaudeInstallSelection.Count) {
         # -Steps ran part of the install, so the checkpoint is kept for the rest (A11).
         Write-Host "    -Steps ran $($script:ClaudeInstallSelection -join ', '); the install checkpoint is kept, and a run without -Steps resumes the rest." -ForegroundColor DarkGray
-        Write-Host "    Resume: $(Get-ClaudeInstallResumeLine)"
+        Write-Host "    Resume: $(Protect-ClaudeInstallText (Get-ClaudeInstallResumeLine))"
     }
     elseif ($open.Count) {
         Write-Host "    [WARN] The install checkpoint is kept: $((@($open | ForEach-Object { $script:ClaudeInstallSteps[[string]$_.id] })) -join ', ') did not complete." -ForegroundColor Yellow
-        Write-Host "    Resume: $(if ($c.Location.Persistent) { Format-ClaudeInstallResume } else { Format-ClaudeInstallResume -WithAnswers })"
+        Write-Host "    Resume: $(Protect-ClaudeInstallText $(if ($c.Location.Persistent) { Format-ClaudeInstallResume } else { Format-ClaudeInstallResume -WithAnswers }))"
     }
     else { Remove-Item -LiteralPath $c.Location.Checkpoint -Force -ErrorAction SilentlyContinue; Write-Host '    Install complete; the install checkpoint is removed.' -ForegroundColor DarkGray }
     Exit-ClaudeInstallLock
@@ -684,7 +687,7 @@ function Write-ClaudeInstallFailureHint {
     $c = $script:ClaudeInstall
     if (-not $c -or -not $c.Checkpoint) { return }
     $resume = if ($c.Location.Persistent) { Format-ClaudeInstallResume } else { Format-ClaudeInstallResume -WithAnswers }
-    Write-Host "Resume: $resume"
+    Write-Host "Resume: $(Protect-ClaudeInstallText $resume)"
 }
 
 # Where the store is and whether it is trusted, the live reads and step actions, then step selection

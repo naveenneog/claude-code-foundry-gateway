@@ -155,7 +155,11 @@ trap {
     if (Get-Command Write-ClaudeInstallTrapEvent -ErrorAction SilentlyContinue) { Write-ClaudeInstallTrapEvent $_.Exception.Message }
     if (Get-Command Exit-ClaudeInstallLock -ErrorAction SilentlyContinue) { Exit-ClaudeInstallLock }
     if (-not $script:InstallTopLevel) { break }
-    [Console]::Error.WriteLine((($_.Exception.Message -replace '\s*[\r\n]+\s*', ' ').Trim()))
+    # A secret that the error quotes is replaced (ADR-0047 decision 12); before the libraries load, no Azure CLI
+    # call has run, so no error can quote one.
+    $line = ($_.Exception.Message -replace '\s*[\r\n]+\s*', ' ').Trim()
+    if (Get-Command Protect-ClaudeInstallText -ErrorAction SilentlyContinue) { $line = Protect-ClaudeInstallText $line }
+    [Console]::Error.WriteLine($line)
     if ($_.Exception.Message -notlike 'Refused: *' -and (Get-Command Write-ClaudeInstallFailureHint -ErrorAction SilentlyContinue)) { Write-ClaudeInstallFailureHint }
     exit 1
 }
@@ -206,8 +210,10 @@ function Write-Head($t) {
 }
 function Write-Step($t) { Write-Host ''; Write-Host "==> $t" -ForegroundColor Cyan }
 function Write-Ok($t)   { Write-Host "    [OK]   $t" -ForegroundColor Green }
-function Write-Warn2($t){ Write-Host "    [WARN] $t" -ForegroundColor Yellow }
-function Write-Bad($t)  { Write-Host "    [FAIL] $t" -ForegroundColor Red }
+# A warning or a failure line can quote an error, so a secret in it is replaced once the checkpoint library is
+# loaded (ADR-0047 decision 12). Each helper stands alone: tests/Test-FlowStart.ps1 runs it outside the installer.
+function Write-Warn2($t){ if (Get-Command Protect-ClaudeInstallText -ErrorAction SilentlyContinue) { $t = Protect-ClaudeInstallText ([string]$t) }; Write-Host "    [WARN] $t" -ForegroundColor Yellow }
+function Write-Bad($t)  { if (Get-Command Protect-ClaudeInstallText -ErrorAction SilentlyContinue) { $t = Protect-ClaudeInstallText ([string]$t) }; Write-Host "    [FAIL] $t" -ForegroundColor Red }
 function Write-Note($t) { Write-Host "    $t" -ForegroundColor DarkGray }
 
 # Prompt with a default already in place. Enter accepts it.
@@ -388,7 +394,7 @@ if (-not $SubscriptionId) {
         $SubscriptionId = $acct.id
     }
     else {
-        $subs = az account list --query "[].{name:name, id:id, state:state}" -o json |
+        $subs = Invoke-ClaudeInstallAzShown { az account list --query "[].{name:name, id:id, state:state}" -o json } |
             ConvertFrom-Json |
             Where-Object { $_.state -eq 'Enabled' }
         $subs = @($subs)
@@ -416,8 +422,8 @@ if (-not $SubscriptionId) {
         $SubscriptionId = $shown[[int]$pick - 1].id
     }
 }
-az account set --subscription $SubscriptionId
-$subName = (az account show --query name -o tsv)
+Invoke-ClaudeInstallAzShown { az account set --subscription $SubscriptionId }
+$subName = (Invoke-ClaudeInstallAzShown { az account show --query name -o tsv })
 Write-Ok "subscription: $subName"
 Assert-ClaudeInstallSubscription
 Assert-ClaudeInstallPrerequisites
@@ -440,7 +446,7 @@ if (-not $FoundryAccount) {
     #
     # Keep JMESPath here free of ( ) | & < > ^ and filter in PowerShell instead.
     # Brackets and braces alone are fine.
-    $accounts = az cognitiveservices account list --query "[].{name:name, rg:resourceGroup, loc:location, kind:kind}" -o json |
+    $accounts = Invoke-ClaudeInstallAzShown { az cognitiveservices account list --query "[].{name:name, rg:resourceGroup, loc:location, kind:kind}" -o json } |
         ConvertFrom-Json
     $accounts = @($accounts | Where-Object { $_.kind -eq 'AIServices' -or $_.kind -eq 'OpenAI' })
 
@@ -560,7 +566,7 @@ if (-not $FoundryResourceGroup) {
     # these empty and the deployment then fails with something far less
     # obvious than "I could not find your account".
     $FoundryResourceGroup = @(
-        az cognitiveservices account list --query "[].{n:name, rg:resourceGroup}" -o json |
+        Invoke-ClaudeInstallAzShown { az cognitiveservices account list --query "[].{n:name, rg:resourceGroup}" -o json } |
             ConvertFrom-Json |
             Where-Object { $_.n -eq $FoundryAccount }
     )[0].rg
@@ -669,7 +675,7 @@ if ($ExistingApimName) {
     if (-not $named.resourceGroup) { $named | Add-Member -NotePropertyName resourceGroup -NotePropertyValue $reuse.ResourceGroup -Force }
     . $useExistingGateway $named
 }
-if (-not $Location) { $Location = az cognitiveservices account show -g $FoundryResourceGroup -n $FoundryAccount --query location -o tsv }
+if (-not $Location) { $Location = Invoke-ClaudeInstallAzShown { az cognitiveservices account show -g $FoundryResourceGroup -n $FoundryAccount --query location -o tsv } }
 if (-not $Location) {
     Write-Bad "Could not resolve the location of '$FoundryAccount'."
     Write-Note 'Pass -Location explicitly.'
@@ -1467,7 +1473,7 @@ if (-not (Test-ClaudeInstallStepSkip 'resource-group' -Idempotent -Verify { Test
         }
     }
     else {
-        az group create -n $ResourceGroup -l $Location -o none
+        Invoke-ClaudeInstallAzShown { az group create -n $ResourceGroup -l $Location -o none }
         if ($LASTEXITCODE -ne 0) {
             throw "Could not create resource group '$ResourceGroup' in '$Location'. See the error above."
         }
@@ -1627,7 +1633,7 @@ if ($ExistingApim) {
 }
 
 Register-ClaudeInstallDeployment $deployName -CreatedApim (-not $ExistingApim -and -not $liveId)
-az deployment group create `
+Invoke-ClaudeInstallAzShown { az deployment group create `
     --name $deployName `
     -g $ResourceGroup `
     --template-file (Join-Path $root 'infra/main.bicep') `
@@ -1664,7 +1670,7 @@ az deployment group create `
         entitlementCacheSeconds=$(if ($entitlementCacheSeconds) { $entitlementCacheSeconds } elseif ($entTtl) { $entTtl } else { 3600 }) `
         buUnassigned=$(if ($unassignedMode) { $unassignedMode } else { 'allow' }) `
     @preserveArgs `
-    -o none
+    -o none }
 
 if ($LASTEXITCODE -ne 0) { throw 'Deployment failed. See the error above.' }
 Write-Ok 'deployed'

@@ -111,7 +111,7 @@ ckpt_verify_gateway_() {
 # recorded deployment still running is awaited, one that succeeded is verified live, one that failed
 # is shown (ADR-0046 decision 10). A resume deploys again only over an APIM this run created (decision 9).
 ckpt_gateway_plan_() {
-  local rg="$1" apim="$2" title="Gateway deployment" hash state stored recorded origin
+  local rg="$1" apim="$2" title="Gateway deployment" hash state stored recorded origin ops
   CKPT_GW_RUN=1; CKPT_GW_URL=""
   # Another step selected with --steps: the gateway its prerequisite check verified, as recorded.
   if ! steps_selected_ gateway-deployment; then
@@ -132,10 +132,11 @@ ckpt_gateway_plan_() {
     elif [ "$DS_VERDICT" = "absent" ]; then
       printf '    %s%s: deployment %s is not in the resource group'"'"'s history; deploying again%s\n' "$C_YELLOW" "$title" "$recorded" "$C_OFF"
     elif [ "$DS_STATE" != "Succeeded" ]; then
-      printf '    %s%s: deployment %s %s: %s%s\n' "$C_YELLOW" "$title" "$recorded" "$DS_STATE" "$DS_ERROR" "$C_OFF"
+      printf '    %s%s: deployment %s %s: %s%s\n' "$C_YELLOW" "$title" "$recorded" "$DS_STATE" "$(ckpt_redact_ "$DS_ERROR")" "$C_OFF"
       ckpt_az_read_ '' deployment operation group list -g "$rg" -n "$recorded" -o json
       if [ "$AZ_VERDICT" = "present" ]; then
-        printf '%s' "$AZ_OUT" | ckpt_jq_ -r '.[]? | select(.properties.provisioningState == "Failed") | "      failed operation: \(.properties.targetResource.resourceName // "-"): \(.properties.statusMessage.error.message // "")"' 2>/dev/null
+        ops="$(printf '%s' "$AZ_OUT" | ckpt_jq_ -r '.[]? | select(.properties.provisioningState == "Failed") | "      failed operation: \(.properties.targetResource.resourceName // "-"): \(.properties.statusMessage.error.message // "")"' 2>/dev/null)"
+        [ -z "$ops" ] || printf '%s\n' "$(ckpt_redact_ "$ops")"
       fi
     elif [ "$stored" != "$hash" ]; then
       printf '    %s%s: the templates or answers changed since deployment %s; deploying again%s\n' "$C_YELLOW" "$title" "$recorded" "$C_OFF"
@@ -148,7 +149,7 @@ ckpt_gateway_plan_() {
         printf '    %s[OK]%s   %s: verified live, skipped (deployment %s)\n' "$C_GREEN" "$C_OFF" "$title" "$recorded"
         CKPT_GW_RUN=0; return 0
       fi
-      printf '    %s%s: %s; deploying again%s\n' "$C_YELLOW" "$title" "$V_DETAIL" "$C_OFF"
+      printf '    %s%s: %s; deploying again%s\n' "$C_YELLOW" "$title" "$(ckpt_redact_ "$V_DETAIL")" "$C_OFF"
     fi
   fi
   if [ "$CKPT_RESUMING" = "1" ] && [ "$(ckpt_receipt_field_ gateway-deployment origin)" != "created" ]; then
@@ -305,7 +306,7 @@ ckpt_resource_group_() {
     ckpt_set_step_ resource-group completed __keep__ "$(ckpt_jq_ -cn --arg n "$1" --arg l "$location" '{name: $n, location: $l, origin: "pre-existing"}')"
     return 0
   fi
-  if ! az group create -n "$1" -l "$2" -o none; then
+  if ! ckpt_shown_ az group create -n "$1" -l "$2" -o none; then
     bad_ "could not create resource group '$1' in '$2' - see the error above"
     exit 1
   fi
