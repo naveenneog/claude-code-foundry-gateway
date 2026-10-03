@@ -27,16 +27,19 @@ async function start(extra = {}) {
     const stub = join(scratch, 'az.cmd');
     await writeFile(stub, `@echo off\r\nnode "${stub.replace(/\\/g, '\\\\')}.mjs" %*\r\n`, 'utf8');
     await writeFile(`${stub}.mjs`, `
+import { appendFileSync } from 'node:fs';
 const args = process.argv.slice(2);
 const joined = args.join(' ');
+if (process.env.P93_AZ_LOG) appendFileSync(process.env.P93_AZ_LOG, joined + '\\n');
 if (joined.includes('fail-secret')) { console.error('password=super-secret failed'); process.exit(9); }
-if (joined.startsWith('account show')) { console.log(JSON.stringify({ id: 'sub-1', name: 'Sub One', tenantId: 'tenant-1', user: { name: 'operator@example.com' } })); process.exit(0); }
-if (joined.startsWith('account list')) { console.log(JSON.stringify([{ id: 'sub-1', name: 'Sub One', tenantId: 'tenant-1' }])); process.exit(0); }
+if (joined.startsWith('account show')) { console.log(JSON.stringify({ id: '00000000-0000-4000-8000-000000000093', name: 'Sub One', tenantId: 'tenant-1', user: { name: 'operator@example.com' } })); process.exit(0); }
+if (joined.startsWith('account list')) { console.log(JSON.stringify([{ id: '00000000-0000-4000-8000-000000000093', name: 'Sub One', tenantId: 'tenant-1' }])); process.exit(0); }
 if (joined.startsWith('cognitiveservices account list')) { console.log(JSON.stringify([{ name: 'ai-p93', resourceGroup: 'rg-ai-p93', location: 'eastus2' }])); process.exit(0); }
 if (joined.startsWith('cognitiveservices account deployment list')) { console.log(JSON.stringify([{ name: 'claude-sonnet-5', properties: { model: { name: 'claude', version: '5' } } }])); process.exit(0); }
 console.error('unexpected az ' + joined); process.exit(2);
 `, 'utf8');
     env.PATH = `${scratch};${process.env.PATH}`;
+    env.P93_AZ_LOG = join(scratch, 'az.log');
   }
   const server = await createInstallerUiServer({
     token: 'test-token-with-at-least-32-bytes-0000',
@@ -46,13 +49,20 @@ console.error('unexpected az ' + joined); process.exit(2);
   });
   const address = await server.listenAsync('127.0.0.1');
   const base = `http://127.0.0.1:${address.port}`;
+  const boot = await fetch(`${base}/?token=${encodeURIComponent(server.token)}`, { redirect: 'manual' });
+  const cookie = boot.headers.get('set-cookie').split(';')[0];
+  const session = await (await fetch(`${base}/api/session`, { headers: { cookie } })).json();
   return {
     base,
     log,
     scratch,
     token: server.token,
+    cookie,
+    csrfToken: session.csrfToken,
     async fetch(path, options = {}) {
-      return fetch(`${base}${path}`, { ...options, headers: { 'x-installer-token': server.token, ...(options.headers || {}) } });
+      const headers = { cookie, ...(options.headers || {}) };
+      if (options.method === 'POST') headers['x-csrf-token'] ??= session.csrfToken;
+      return fetch(`${base}${path}`, { ...options, headers });
     },
     async close() {
       await server.cleanup();
@@ -116,21 +126,27 @@ test('token, host, fixed routes and headers protect the local server', async () 
   const app = await start();
   try {
     assert.equal((await fetch(`${app.base}/api/schema`)).status, 401);
-    assert.equal((await fetch(`${app.base}/api/schema`, { headers: { 'x-installer-token': 'wrong' } })).status, 401);
-    assert.equal(await rawRequest(app.base, '/api/schema', { host: 'evil.example', 'x-installer-token': app.token }), 403);
+    assert.equal((await fetch(`${app.base}/api/commands?token=${encodeURIComponent(app.token)}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).status, 401);
+    assert.equal((await fetch(`${app.base}/?token=${encodeURIComponent(app.token)}`, { redirect: 'manual' })).status, 401);
+    assert.equal(await rawRequest(app.base, '/api/schema', { host: 'evil.example', cookie: app.cookie }), 403);
     const options = await app.fetch('/api/schema', { method: 'OPTIONS' });
     assert.equal(options.status, 405);
     assert.equal(options.headers.get('access-control-allow-origin'), null);
     const unknown = await app.fetch('/nope');
     assert.equal(unknown.status, 404);
-    const large = await app.fetch('/api/commands', { method: 'POST', body: JSON.stringify({ x: 'x'.repeat(300_000) }) });
+    const large = await app.fetch('/api/commands', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ x: 'x'.repeat(300_000) }) });
     assert.equal(large.status, 413);
-    const bad = await app.fetch('/api/commands', { method: 'POST', body: '{' });
+    const badContent = await app.fetch('/api/commands', { method: 'POST', headers: { 'content-type': 'text/plain' }, body: '{}' });
+    assert.equal(badContent.status, 415);
+    const bad = await app.fetch('/api/commands', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{' });
     assert.equal(bad.status, 400);
-    const ok = await app.fetch('/?token=test-token-with-at-least-32-bytes-0000');
-    assert.match(ok.headers.get('set-cookie'), /HttpOnly/);
+    const ok = await app.fetch('/');
     assert.match(ok.headers.get('content-security-policy'), /default-src 'self'/);
     assert.doesNotMatch(ok.headers.get('content-security-policy'), /unsafe-inline/);
+    const noCsrf = await fetch(`${app.base}/api/commands`, { method: 'POST', headers: { cookie: app.cookie, 'content-type': 'application/json' }, body: '{}' });
+    assert.equal(noCsrf.status, 403);
+    const cross = await fetch(`${app.base}/api/preflight`, { method: 'POST', headers: { cookie: app.cookie, 'content-type': 'application/json', 'x-csrf-token': app.csrfToken, origin: 'http://127.0.0.1:1' }, body: '{}' });
+    assert.equal(cross.status, 403);
   } finally {
     await app.close();
   }
@@ -262,23 +278,24 @@ test('identity, prefill and plan routes go through repository PowerShell seams',
     assert.equal(identity.user, 'operator@example.com');
     assert.equal(identity.tenantId, 'tenant-1');
     assert.equal(identity.subscriptionName, 'Sub One');
-    assert.equal(identity.subscriptionId, 'sub-1');
+    assert.equal(identity.subscriptionId, '00000000-0000-4000-8000-000000000093');
     const { chromium } = await import('playwright');
     const browser = await chromium.launch({ headless: true });
     try {
       const page = await browser.newPage();
-      await page.goto(`${app.base}/?token=${encodeURIComponent(app.token)}`);
+      await page.context().addCookies([{ name: 'installer_token', value: app.token, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Strict' }]);
+      await page.goto(`${app.base}/`);
       await page.getByText('operator@example.com').waitFor();
       const banner = await page.locator('#identity').textContent();
       assert.match(banner, /tenant-1/);
       assert.match(banner, /Sub One/);
-      assert.match(banner, /sub-1/);
+      assert.match(banner, /00000000-0000-4000-8000-000000000093/);
     } finally {
       await browser.close();
     }
-    const prefill = await (await app.fetch('/api/prefill?kind=subscriptions')).json();
-    assert.equal(prefill.subscriptions[0].id, 'sub-1');
-    const foundry = await (await app.fetch('/api/prefill?kind=foundryAccounts&subscriptionId=sub-1')).json();
+    const prefill = await (await app.fetch('/api/prefill', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind: 'subscriptions' }) })).json();
+    assert.equal(prefill.subscriptions[0].id, '00000000-0000-4000-8000-000000000093');
+    const foundry = await (await app.fetch('/api/prefill', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind: 'foundryAccounts', subscriptionId: '00000000-0000-4000-8000-000000000093' }) })).json();
     assert.equal(foundry.foundryAccounts[0].name, 'ai-p93');
   } finally {
     await app.close();
@@ -289,12 +306,26 @@ test('az errors in prefill are returned as redacted errors', async () => {
   const secretSentence = `jwt ******.eyJwOTIiOiJyZWRhY3QifQ.p92JwtSentinel Authorization: ****** https://p92.blob.core.windows.net/c?sv=2024-01-01&sig=p92SigSentinel&se=2026 signature=p92SignatureSentinel AccountName=p92;AccountKey=p92AccountKeySentinel==;EndpointSuffix=core SharedAccessKey=p92SharedAccessKeySentinel; SharedAccessSignature: p92SharedAccessSignatureSentinel client_secret=p92ClientSecretSentinel&grant_type=client_credentials {"clientSecret": "p92ClientSecretCamelSentinel"} ****** pwd: p92PwdSentinel secret=p92SecretSentinel access_token=p92AccessTokenSentinel refresh_token: 'p92RefreshTokenSentinel'`;
   const app = await start({ az: true, env: { P93_AZ_SECRET_ERROR: secretSentence } });
   try {
-    const result = await (await app.fetch('/api/prefill?kind=deployments&foundryAccount=fail-secret&foundryResourceGroup=rg')).json();
+    const result = await (await app.fetch('/api/prefill', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind: 'deployments', foundryAccount: 'fail-secret', foundryResourceGroup: 'rg' }) })).json();
     assert.match(result.error, /\[redacted\]/);
     for (const sentinel of ['p92JwtSentinel', 'p92SigSentinel', 'p92SignatureSentinel', 'p92AccountKeySentinel', 'p92SharedAccessKeySentinel', 'p92SharedAccessSignatureSentinel', 'p92ClientSecretSentinel', 'p92ClientSecretCamelSentinel', 'p92PwdSentinel', 'p92SecretSentinel', 'p92AccessTokenSentinel', 'p92RefreshTokenSentinel']) {
       assert.doesNotMatch(result.error, new RegExp(sentinel));
     }
     assert.doesNotMatch(result.error, /p92[A-Za-z]+Sentinel/);
+  } finally {
+    await app.close();
+  }
+});
+
+test('prefill validates parameters before invoking az.cmd', async () => {
+  const app = await start({ az: true });
+  try {
+    const marker = '&echo.P93_PREFILL_MARKER&rem';
+    const result = await (await app.fetch('/api/prefill', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind: 'foundryAccounts', subscriptionId: marker }) })).json();
+    assert.match(result.error, /SubscriptionId is not valid/);
+    const logPath = join(app.scratch, 'az.log');
+    const log = existsSync(logPath) ? await readFile(logPath, 'utf8') : '';
+    assert.doesNotMatch(log, /P93_PREFILL_MARKER/);
   } finally {
     await app.close();
   }
@@ -396,7 +427,8 @@ test('full run requires browser confirmation before invoking the installer', asy
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage();
-    await page.goto(`${app.base}/?token=${encodeURIComponent(app.token)}`);
+    await page.context().addCookies([{ name: 'installer_token', value: app.token, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Strict' }]);
+    await page.goto(`${app.base}/`);
     await page.waitForSelector('[name="ResourceGroup"]');
     await page.locator('[name="ResourceGroup"]').fill('rg-p93');
     await page.evaluate(() => { globalThis.confirm = () => false; });

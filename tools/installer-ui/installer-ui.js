@@ -6,6 +6,7 @@ let schema;
 let identity = {};
 let lastFailedStep = '';
 let businessUnits = [];
+let csrfToken = '';
 
 function byId(id) {
   return document.getElementById(id);
@@ -21,7 +22,7 @@ function appendText(parent, text, tag = 'span', className = '') {
 
 async function postJson(path, body) {
   if (location.protocol === 'file:') throw new Error('Server mode is not running. Use the generated commands.');
-  const res = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const res = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json', 'x-csrf-token': csrfToken }, body: JSON.stringify(body) });
   const text = await res.text();
   let data;
   try { data = JSON.parse(text); } catch { data = { text }; }
@@ -239,7 +240,7 @@ function renderBusinessUnitEditor() {
 }
 
 async function streamRun(body) {
-  const res = await fetch('./api/run/stream', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const res = await fetch('./api/run/stream', { method: 'POST', headers: { 'content-type': 'application/json', 'x-csrf-token': csrfToken }, body: JSON.stringify(body) });
   if (!res.ok) throw new Error((await res.json()).error || 'run failed');
   const output = byId('run-output');
   output.textContent = '';
@@ -280,6 +281,9 @@ async function refreshIdentity() {
 
 async function main() {
   schema = await loadSchema();
+  if (location.protocol !== 'file:') {
+    csrfToken = (await (await fetch('./api/session')).json()).csrfToken;
+  }
   for (const [section, names] of Object.entries(fieldGroups)) {
     const parent = byId(section);
     for (const name of names) if (schema.properties[name]) renderField(parent, name, schema.properties[name]);

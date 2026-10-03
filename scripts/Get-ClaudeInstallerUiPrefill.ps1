@@ -1,5 +1,11 @@
 param([ValidateSet('subscriptions','foundryAccounts','deployments')][string]$Kind = 'subscriptions', [string]$SubscriptionId, [string]$FoundryAccount, [string]$FoundryResourceGroup)
 $ErrorActionPreference = 'Stop'
+function Assert-Match([string]$Name, [string]$Value, [string]$Pattern) {
+    if ($Value -and $Value -notmatch $Pattern) { throw "$Name is not valid for installer UI prefill." }
+}
+Assert-Match SubscriptionId $SubscriptionId '^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$'
+Assert-Match FoundryAccount $FoundryAccount '^[A-Za-z0-9][A-Za-z0-9-]{1,63}$'
+Assert-Match FoundryResourceGroup $FoundryResourceGroup '^[A-Za-z0-9._()-]{1,90}$'
 $result = [ordered]@{ schemaVersion = 1; subscriptions = @(); foundryAccounts = @(); deployments = @() }
 try {
     if ($Kind -eq 'subscriptions') {

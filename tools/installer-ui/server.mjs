@@ -135,6 +135,22 @@ function isAllowedHost(host, port, extraHosts = []) {
   return allowed.has(value);
 }
 
+function assertSameOrigin(req) {
+  const expected = `http://${req.headers.host}`;
+  const origin = req.headers.origin;
+  if (origin && origin !== expected) {
+    const error = new Error('same-origin request required');
+    error.status = 403;
+    throw error;
+  }
+  const fetchSite = req.headers['sec-fetch-site'];
+  if (fetchSite && fetchSite !== 'same-origin' && fetchSite !== 'none') {
+    const error = new Error('same-origin request required');
+    error.status = 403;
+    throw error;
+  }
+}
+
 async function readJsonBody(req) {
   let total = 0;
   const chunks = [];
@@ -356,8 +372,10 @@ async function renderHtml() {
 export async function createInstallerUiServer(options = {}) {
   const token = options.token || randomBytes(32).toString('base64url');
   const tokenDigest = tokenHash(token);
+  const csrfToken = options.csrfToken || randomBytes(32).toString('base64url');
   const tempDirs = new Set();
   let port = Number(options.port || 0);
+  let tokenConsumed = false;
   let activeRun = null;
   let idleTimer = null;
   let stopping = false;
@@ -396,11 +414,29 @@ export async function createInstallerUiServer(options = {}) {
       const url = new URL(req.url, `http://${req.headers.host}`);
       const queryToken = url.searchParams.get('token');
       const cookies = parseCookies(req.headers.cookie);
-      const supplied = req.headers['x-installer-token'] || cookies.get('installer_token') || queryToken;
-      if (!constantTimeTokenEquals(String(supplied || ''), tokenDigest)) return send(res, 401, { error: 'installer token is required' });
-      const setCookie = queryToken && constantTimeTokenEquals(queryToken, tokenDigest)
-        ? { 'set-cookie': `installer_token=${encodeURIComponent(queryToken)}; HttpOnly; SameSite=Strict; Path=/` }
-        : {};
+      const cookieToken = cookies.get('installer_token');
+      if (queryToken) {
+        if (!(req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) || tokenConsumed || !constantTimeTokenEquals(queryToken, tokenDigest)) {
+          return send(res, 401, { error: 'installer token is required' });
+        }
+        tokenConsumed = true;
+        res.writeHead(303, {
+          location: './',
+          'set-cookie': `installer_token=${encodeURIComponent(queryToken)}; HttpOnly; SameSite=Strict; Path=/`,
+          'content-security-policy': contentSecurityPolicy(),
+          'x-content-type-options': 'nosniff',
+          'referrer-policy': 'no-referrer',
+        });
+        res.end();
+        return;
+      }
+      if (!constantTimeTokenEquals(String(cookieToken || ''), tokenDigest)) return send(res, 401, { error: 'installer token is required' });
+      const setCookie = {};
+      if (req.method === 'GET' && url.pathname === '/api/session') return send(res, 200, { schemaVersion: 1, csrfToken }, setCookie);
+      if (req.method === 'POST') {
+        if (!String(req.headers['content-type'] || '').toLowerCase().startsWith('application/json')) return send(res, 415, { error: 'Content-Type application/json is required' }, setCookie);
+        if (!constantTimeTokenEquals(String(req.headers['x-csrf-token'] || ''), tokenHash(csrfToken))) return send(res, 403, { error: 'CSRF token is required' }, setCookie);
+      }
 
       if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) return send(res, 200, await renderHtml(), setCookie);
       if (req.method === 'GET' && url.pathname === '/installer-ui.js') return sendText(res, 200, await readFile(uiScript, 'utf8'), 'text/javascript; charset=utf-8', setCookie);
@@ -412,13 +448,16 @@ export async function createInstallerUiServer(options = {}) {
         const result = await runPowerShell(identityScript, [], options);
         return send(res, 200, JSON.parse(result.stdout), setCookie);
       }
-      if (req.method === 'GET' && url.pathname === '/api/prefill') {
-        const args = ['-Kind', url.searchParams.get('kind') || 'subscriptions'];
+      if (req.method === 'POST' && url.pathname === '/api/prefill') {
+        assertSameOrigin(req);
+        const body = await readJsonBody(req);
+        const args = ['-Kind', body.kind || 'subscriptions'];
         for (const [param, query] of [['-SubscriptionId', 'subscriptionId'], ['-FoundryAccount', 'foundryAccount'], ['-FoundryResourceGroup', 'foundryResourceGroup']]) {
-          const value = url.searchParams.get(query);
+          const value = body[query];
           if (value) args.push(param, value);
         }
         const result = await runPowerShell(prefillScript, args, options, { redactStdout: false });
+        if (!result.stdout.trim()) return send(res, 400, { schemaVersion: 1, error: result.stderr || 'prefill failed' }, setCookie);
         const parsed = JSON.parse(result.stdout);
         if (parsed.error) parsed.error = await redactText(parsed.error);
         return send(res, 200, parsed, setCookie);
@@ -428,6 +467,7 @@ export async function createInstallerUiServer(options = {}) {
         return send(res, 200, buildCommands(body.answersPath || './answers.json', await loadSchema()), setCookie);
       }
       if (req.method === 'POST' && url.pathname === '/api/plan') {
+        assertSameOrigin(req);
         const body = await readJsonBody(req);
         return send(res, 200, await withRunDirectory(async (dir) => {
           const answers = await writeAnswers(dir, body.answers || {});
@@ -436,6 +476,7 @@ export async function createInstallerUiServer(options = {}) {
         }, tempDirs), setCookie);
       }
       if (req.method === 'POST' && url.pathname === '/api/preflight') {
+        assertSameOrigin(req);
         const body = await readJsonBody(req);
         return send(res, 200, await withRunDirectory(async (dir) => {
           const answers = await writeAnswers(dir, body.answers || {});
@@ -446,6 +487,7 @@ export async function createInstallerUiServer(options = {}) {
         }, tempDirs), setCookie);
       }
       if (req.method === 'POST' && url.pathname === '/api/run/stream') {
+        assertSameOrigin(req);
         if (activeRun) return send(res, 409, { error: 'an installer run is already active' }, setCookie);
         const body = await readJsonBody(req);
         activeRun = {};
@@ -483,6 +525,7 @@ export async function createInstallerUiServer(options = {}) {
         return;
       }
       if (req.method === 'POST' && url.pathname === '/api/run') {
+        assertSameOrigin(req);
         if (activeRun) return send(res, 409, { error: 'an installer run is already active' }, setCookie);
         const body = await readJsonBody(req);
         activeRun = {};
@@ -516,6 +559,7 @@ export async function createInstallerUiServer(options = {}) {
   server.cleanup = cleanup;
   server.stopServer = stopServer;
   server.token = token;
+  server.csrfToken = csrfToken;
   server.listenAsync = (host = options.host || '127.0.0.1') => new Promise((resolveListen) => {
     server.listen(options.port || 0, host, () => {
       port = server.address().port;
