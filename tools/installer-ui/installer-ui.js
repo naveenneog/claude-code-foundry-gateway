@@ -172,9 +172,6 @@ async function main() {
     const parent = byId(section);
     for (const name of names) if (schema.properties[name]) renderField(parent, name, schema.properties[name]);
   }
-  try { renderCommands(await postJson('./api/commands', { answersPath: './answers.json' })); }
-  catch { renderCommands(buildPortableCommands(schema, './answers.json')); }
-  await refreshIdentity().catch((error) => { byId('identity').textContent = error.message; });
   byId('refresh-identity').onclick = () => refreshIdentity();
   byId('signin').onclick = () => { byId('signin-command').textContent = identity.signInCommand || 'az login --use-device-code'; };
   byId('preflight').onclick = async () => renderPreflight(await postJson('./api/preflight', { answers: collectAnswers() }));
@@ -204,6 +201,9 @@ async function main() {
     const text = byId('business-units').value.trim();
     byId('business-unit-problems').textContent = text ? validateBusinessUnits(JSON.parse(text)).join('\n') : '';
   });
+  try { renderCommands(await postJson('./api/commands', { answersPath: './answers.json' })); }
+  catch { renderCommands(buildPortableCommands(schema, './answers.json')); }
+  void refreshIdentity().catch((error) => { byId('identity').textContent = error.message; });
 }
 
 main().catch((error) => { byId('errors').textContent = error.message; });

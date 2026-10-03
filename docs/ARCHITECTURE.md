@@ -60,6 +60,21 @@ Source: [17-lean-installer-phase0.json](architecture/17-lean-installer-phase0.js
 Phase 0 adds operator-side files and streams. Azure writes stay in the installers' steps after the
 confirmed summary; the preflight, `-ListSteps` and the guided flow's plan only read.
 
+## Installer UI
+
+![Installer UI: a local Node server renders the answers schema, reads Azure through repository PowerShell, runs installer preflight and selected steps, streams redacted output and keeps a static fallback.](images/architecture/installer-ui.png)
+
+Source: [18-installer-ui.json](architecture/18-installer-ui.json);
+[Installer UI](INSTALLER-UI.md); [ADR-0048](adr/0048-installer-ui-local-server.md).
+
+The installer UI adds an operator-side local server and static page. It adds no Azure resource and no
+hosted control plane. The browser form, static fallback and server all read
+`schemas/claude-gateway.answers.schema.json`; the static page carries a checked copy and a drift test
+compares it with the schema. Azure context and prefill reads go through repository PowerShell scripts,
+not Node-to-`az` calls. Installer execution stays in `Install-ClaudeGateway.ps1`, with selected steps,
+`-ProgressPath` and the existing redaction table. The server writes per-run temporary answer files and
+removes them after the request.
+
 **Answers schema.** [`schemas/claude-gateway.answers.schema.json`](../schemas/claude-gateway.answers.schema.json)
 names each answer once, by its installer parameter, with the programs that apply it (`x-appliedBy`),
 its bash flag (`x-bashFlag`), its guided-flow keys (`x-flowKeys`) and the preflight check that reports

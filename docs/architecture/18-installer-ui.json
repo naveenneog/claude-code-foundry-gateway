@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "id": "installer-ui",
+  "kind": "flow",
+  "title": "Installer UI: local form over the shared installer contract",
+  "subtitle": "A local Node http server renders the answers schema, calls repository PowerShell scripts, streams redacted installer progress and keeps a static fallback.",
+  "width": 1280,
+  "height": 980,
+  "outputs": [
+    "docs/images/architecture/installer-ui.png"
+  ],
+  "sources": [
+    "tools/installer-ui/server.mjs",
+    "tools/installer-ui/installer-ui.js",
+    "tools/installer-ui/ui-model.mjs",
+    "tools/installer-ui/index.html",
+    "schemas/claude-gateway.answers.schema.json",
+    "scripts/Get-ClaudeInstallerUiIdentity.ps1",
+    "scripts/Get-ClaudeInstallerUiPrefill.ps1",
+    "scripts/Get-ClaudeInstallerUiPlan.ps1",
+    "Install-ClaudeGateway.ps1",
+    "Start-ClaudeGateway.ps1",
+    "scripts/ClaudeInstallResume.ps1"
+  ],
+  "identifiers": {
+    "server": { "label": "server.mjs", "source": "tools/installer-ui/server.mjs", "match": "createInstallerUiServer" },
+    "browser": { "label": "installer-ui.js", "source": "tools/installer-ui/installer-ui.js", "match": "streamRun" },
+    "model": { "label": "ui-model.mjs", "source": "tools/installer-ui/ui-model.mjs", "match": "collectAnswersFromEntries" },
+    "static": { "label": "index.html", "source": "tools/installer-ui/index.html", "match": "schema-json" },
+    "schema": { "label": "answers schema", "source": "schemas/claude-gateway.answers.schema.json", "match": "Claude gateway answers" },
+    "identity": { "label": "Get-ClaudeInstallerUiIdentity.ps1", "source": "scripts/Get-ClaudeInstallerUiIdentity.ps1", "match": "az account show" },
+    "prefill": { "label": "Get-ClaudeInstallerUiPrefill.ps1", "source": "scripts/Get-ClaudeInstallerUiPrefill.ps1", "match": "cognitiveservices" },
+    "plan": { "label": "Get-ClaudeInstallerUiPlan.ps1", "source": "scripts/Get-ClaudeInstallerUiPlan.ps1", "match": "Start-ClaudeGateway.ps1" },
+    "installer": { "label": "Install-ClaudeGateway.ps1", "source": "Install-ClaudeGateway.ps1", "match": "$ProgressPath" },
+    "flow": { "label": "Start-ClaudeGateway.ps1", "source": "Start-ClaudeGateway.ps1", "match": "PlanOnly" },
+    "redact": { "label": "Protect-ClaudeInstallText", "source": "scripts/ClaudeInstallResume.ps1", "match": "function Protect-ClaudeInstallText" }
+  },
+  "groups": [
+    { "x": 0, "y": 0, "w": 1280, "h": 290, "tone": "purple", "title": "Launch and form" },
+    { "x": 0, "y": 340, "w": 1280, "h": 290, "tone": "blue", "title": "Read-only Azure context and review" },
+    { "x": 0, "y": 690, "w": 1280, "h": 290, "tone": "teal", "title": "Installer execution and fallback" }
+  ],
+  "nodes": [
+    { "id": "launch", "x": 24, "y": 80, "w": 365, "h": 185, "tone": "purple", "title": "1 - Local server", "lines": ["[[server]] uses Node http and loopback by default.", "Host, token, CSP and fixed routes guard it."] },
+    { "id": "form", "x": 458, "y": 80, "w": 365, "h": 185, "tone": "purple", "title": "2 - Schema form", "lines": ["[[browser]] and [[model]] render [[schema]].", "Unset controls are omitted."] },
+    { "id": "static", "x": 892, "y": 80, "w": 365, "h": 185, "tone": "purple", "title": "3 - Static fallback", "lines": ["[[static]] carries the schema for file://.", "It writes answers.json and commands."] },
+    { "id": "identity", "x": 24, "y": 420, "w": 365, "h": 185, "tone": "blue", "title": "4 - Account", "lines": ["[[identity]] reads Azure CLI through PowerShell.", "The account is shown before a run."] },
+    { "id": "prefill", "x": 458, "y": 420, "w": 365, "h": 185, "tone": "blue", "title": "5 - Prefill and plan", "lines": ["[[prefill]] lists subscriptions and Foundry.", "[[plan]] calls [[flow]] -PlanOnly."] },
+    { "id": "preflight", "x": 892, "y": 420, "w": 365, "h": 185, "tone": "blue", "title": "6 - Preflight", "lines": ["The UI runs [[installer]] -Preflight -Json.", "Failing checks mark x-checkId fields."] },
+    { "id": "run", "x": 24, "y": 765, "w": 365, "h": 170, "tone": "teal", "title": "7 - Streamed run", "lines": ["Selected steps stream progress NDJSON.", "Full run needs confirmation."] },
+    { "id": "redaction", "x": 458, "y": 765, "w": 365, "h": 170, "tone": "teal", "title": "8 - Redaction", "lines": ["Each line passes [[redact]].", "Failed steps expose rerun and resume."] },
+    { "id": "cleanup", "x": 892, "y": 765, "w": 365, "h": 170, "tone": "teal", "title": "9 - Cleanup", "lines": ["Temporary answers are removed.", "Idle shutdown waits for runs."] }
+  ],
+  "edges": [
+    { "from": "launch", "to": "form", "kind": "data", "points": [[389,160],[458,160]] },
+    { "from": "form", "to": "static", "kind": "data", "points": [[823,160],[892,160]] },
+    { "from": "form", "to": "identity", "kind": "control", "points": [[640,265],[640,390],[206,390],[206,420]] },
+    { "from": "identity", "to": "prefill", "kind": "data", "points": [[389,512],[458,512]] },
+    { "from": "prefill", "to": "preflight", "kind": "control", "points": [[823,512],[892,512]] },
+    { "from": "preflight", "to": "run", "kind": "control", "points": [[1074,605],[1074,720],[206,720],[206,765]] },
+    { "from": "run", "to": "redaction", "kind": "data", "points": [[389,850],[458,850]] },
+    { "from": "redaction", "to": "cleanup", "kind": "data", "points": [[823,850],[892,850]] }
+  ]
+}

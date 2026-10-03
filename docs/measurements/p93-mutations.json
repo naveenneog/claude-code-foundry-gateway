@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "packet": "P93",
+  "date": "2026-10-03",
+  "selector": "pwsh -NoProfile -File .\\tests\\Test-InstallerUi.ps1",
+  "mutations": [
+    {
+      "name": "allow inline script in CSP",
+      "file": "tools/installer-ui/server.mjs",
+      "change": "script-src 'self' -> script-src 'self' 'unsafe-inline'",
+      "caught": true,
+      "reason": "The CSP assertion in the token and Host security subtest failed."
+    },
+    {
+      "name": "allow empty selected run",
+      "file": "tools/installer-ui/server.mjs",
+      "change": "Disabled the empty-step refusal unless fullRun and confirmFullRun are set.",
+      "caught": true,
+      "reason": "The selected-run subtest expected HTTP 400 and the refusal text."
+    },
+    {
+      "name": "drop static carried schema",
+      "file": "tools/installer-ui/index.html",
+      "change": "Renamed the schema-json script id.",
+      "caught": true,
+      "reason": "The static fallback drift subtest failed before parsing the carried schema."
+    }
+  ]
+}

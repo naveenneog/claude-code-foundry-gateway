@@ -576,6 +576,34 @@
           "sha256": "e3ff76a5e78f9c02649b513950ba0b1d71c7ad7a12f0f46f6eb38cd08a53bb62"
         }
       ]
+    },
+    {
+      "id": "installer-ui",
+      "source": "docs/architecture/18-installer-ui.json",
+      "inputs": {
+        "Install-ClaudeGateway.ps1": "e32b16a71584e8782229dd9b0c575a73abf677f1564e258b4c06699ff3fe647c",
+        "Start-ClaudeGateway.ps1": "22acc30a8feed7b0101dd98bb90fac93abb605aef77bf800f585e881939d8479",
+        "docs/architecture/18-installer-ui.json": "d8b0ac5c5dc5715be30ea32724bed1020f460e7d98d3de639ca25ac0a7884f51",
+        "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
+        "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
+        "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
+        "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
+        "schemas/claude-gateway.answers.schema.json": "197507a7f053d8647ed61349e280a7d5f449ca26d64fe723d12cee433f3a50ad",
+        "scripts/ClaudeInstallResume.ps1": "fb6eb9155e8fecaaca2c2afb5c4c681871a989708ed2f205c132ecd8972b2cf6",
+        "scripts/Get-ClaudeInstallerUiIdentity.ps1": "4af83f8eb4a345e52426ab57333e59455a6b722e54d44068d3c7161874b4d054",
+        "scripts/Get-ClaudeInstallerUiPlan.ps1": "bc8777f31f9a274f7e75afc28490a092f72332771c42dba43a50c5f10dd1aadb",
+        "scripts/Get-ClaudeInstallerUiPrefill.ps1": "a66f2a6904e84ce8c90219d88251674805c0cbfa1bbb34754a3e7472d3a992eb",
+        "tools/installer-ui/index.html": "98f5b151f5a8a25d947b5a1590936b53b25abef0f559edbc6f336dbe4d3acac5",
+        "tools/installer-ui/installer-ui.js": "53611bb64e35e78afa7661e01427e024f7d34790fc66cba15a33cb4be18e62b9",
+        "tools/installer-ui/server.mjs": "766abe0203d8b00ea14bf577d44d929eb9b9fb1cc2226beb950137237548c044",
+        "tools/installer-ui/ui-model.mjs": "566bb88c4e3aa99c13369ed3cf9594b8044dd63bab6d742c2899088ed4b486ae"
+      },
+      "outputs": [
+        {
+          "path": "docs/images/architecture/installer-ui.png",
+          "sha256": "b2623eafb7ca214abd0b94d714a4682e0fe290334bd9a04a0decc56bd22b13b7"
+        }
+      ]
     }
   ]
 }

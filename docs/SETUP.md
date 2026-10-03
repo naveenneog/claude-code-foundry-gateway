@@ -785,6 +785,11 @@ Both installers read one answers file, check it and the estate before anything c
 steps and write a progress stream
 ([lean installer design record (ADR-0047)](adr/0047-lean-installer-phase-0.md)).
 
+The form-based installer UI uses the same schema and installer interfaces. It starts with
+`node .\tools\installer-ui\server.mjs`, opens locally or through Cloud Shell Web preview, and has a
+static `file://` fallback that writes `answers.json` and commands
+([Installer UI](INSTALLER-UI.md)).
+
 | Option (PowerShell / bash) | What it does |
 |---|---|
 | `-AnswersPath <file>` / `--answers-file <file>` | Reads the answers from a JSON file that [`schemas/claude-gateway.answers.schema.json`](../schemas/claude-gateway.answers.schema.json) describes. A file with any problem stops the run on one line before any Azure resource is read: the number of problems, the first problem with its remedy, and the command that lists every problem, `./Install-ClaudeGateway.ps1 -Preflight -AnswersPath '<file>'` or `./install-claude-gateway.sh --preflight --answers-file '<file>'` (`scripts/ClaudeInstallerAnswers.ps1:398-426`, `scripts/install-answers.sh:41-64`). A parameter or flag passed with it wins over the file, and the file wins over the install checkpoint. |
