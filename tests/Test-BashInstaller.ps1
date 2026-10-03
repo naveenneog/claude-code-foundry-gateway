@@ -225,7 +225,7 @@ function New-InstallerRun {
     # pwsh as well (Homebrew links all three into /opt/homebrew/bin).
     # P75_JQ_VERSION makes jq --version print another release; P75_JQ_PRECISION makes the
     # preflight's arithmetic probe see jq 1.7.0 or fixed behavior without depending on runner jq.
-    Write-Lf (Join-Path $shim 'jq') ("#!/usr/bin/env bash`nif [ `"`$1`" = '--version' ] && [ -n `"`${P75_JQ_VERSION:-}`" ]; then printf '%s\n' `"`$P75_JQ_VERSION`"; exit 0; fi`nif [ `"`$1`" = '-n' ] && [ `"`$2`" = '0.0074999999999999945 + 0' ] && [ -n `"`${P75_JQ_PRECISION:-}`" ]; then case `"`$P75_JQ_PRECISION`" in jq-1.7.0) printf '%s\n' '0.007499999999999994';; *) printf '%s\n' '0.0074999999999999945';; esac; exit 0; fi`nexec '" + $jqPath.Replace("'", "'\''") + "' `"`$@`"`n")
+    Write-Lf (Join-Path $shim 'jq') ("#!/usr/bin/env bash`nif [ `"`$1`" = '--version' ] && [ -n `"`${P75_JQ_VERSION:-}`" ]; then printf '%s\n' `"`$P75_JQ_VERSION`"; exit 0; fi`nif [ `"`$1`" = '-n' ] && [ `"`$2`" = '0.0074999999999999945 + 0' ]; then case `"`${P75_JQ_PRECISION:-fixed}`" in jq-1.7.0) printf '%s\n' '0.007499999999999994';; *) printf '%s\n' '0.0074999999999999945';; esac; exit 0; fi`nexec '" + $jqPath.Replace("'", "'\''") + "' `"`$@`"`n")
     if (-not $NoPwsh) { Write-Lf (Join-Path $shim 'pwsh') $pwshStub }
     $env = [ordered]@{ P75_LOG = (ConvertTo-BashPath $logs); P75_FIXTURES = (ConvertTo-BashPath $fixtures); HOME = (ConvertTo-BashPath $homeDir) }
     foreach ($k in $Environment.Keys) { $env[$k] = [string]$Environment[$k] }

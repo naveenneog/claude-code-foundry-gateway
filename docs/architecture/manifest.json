@@ -536,7 +536,7 @@
         "scripts/ClaudeInstallResume.ps1": "fb6eb9155e8fecaaca2c2afb5c4c681871a989708ed2f205c132ecd8972b2cf6",
         "scripts/ClaudeInstallStore.ps1": "37624fb3c330fa346a3ed131ef422380eebe8e54c8f04823b6a1aaa34fdd10f3",
         "scripts/flow/Foundation.ps1": "fb0d43ee4fbe00a140410bf3f9594b1a6d43bc4f226748f8231c6f23743c7ed4",
-        "scripts/install-checkpoint.sh": "ce676e94284ea22cfdfc771240fb047c4450890a6a822e04f6a74fcd8090ebd8",
+        "scripts/install-checkpoint.sh": "8d080e3b53de94b1a123fbf9f591feaeae1526b6686623e066fc8d09a7e5859e",
         "scripts/install-resume.sh": "19f52d8c00cb23ebe5237185e9589d3a053099aa2bd61613d1c88f13e9d95fc8",
         "scripts/install-store.sh": "025765d841de25acd19346a72c41bfe4fc58a48a262c2d7ab2e5ecc8d019d629"
       },
