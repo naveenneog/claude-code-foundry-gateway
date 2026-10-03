@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
+import { spawn } from 'node:child_process';
 import { request } from 'node:http';
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -9,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { createInstallerUiServer } from '../tools/installer-ui/server.mjs';
 
 const stub = fileURLToPath(new URL('./installer-ui-stub.mjs', import.meta.url));
+const serverCli = fileURLToPath(new URL('../tools/installer-ui/server.mjs', import.meta.url));
 
 async function start(extra = {}) {
   const scratch = join(tmpdir(), `p93-ui-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`);
@@ -57,6 +59,30 @@ function rawRequest(base, path, headers = {}) {
     req.end();
   });
 }
+
+async function waitForOutput(child, pattern) {
+  let text = '';
+  child.stdout.on('data', (chunk) => { text += chunk.toString('utf8'); });
+  child.stderr.on('data', (chunk) => { text += chunk.toString('utf8'); });
+  const deadline = Date.now() + 5000;
+  while (Date.now() < deadline) {
+    if (pattern.test(text)) return text;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`timed out waiting for ${pattern}; output: ${text}`);
+}
+
+test('the documented one-command launch prints the URL and token', async () => {
+  const child = spawn(process.execPath, [serverCli], { cwd: new URL('..', import.meta.url), stdio: ['ignore', 'pipe', 'pipe'] });
+  try {
+    const output = await waitForOutput(child, /One-time token:/);
+    assert.match(output, /Claude gateway installer UI: http:\/\/127\.0\.0\.1:\d+\/\?token=/);
+    assert.match(output, /Cloud Shell ends a session after 20 minutes without interactive activity/);
+  } finally {
+    child.kill('SIGINT');
+    await once(child, 'exit').catch(() => {});
+  }
+});
 
 test('token, host, fixed routes and headers protect the local server', async () => {
   const app = await start();
