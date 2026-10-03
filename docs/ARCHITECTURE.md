@@ -92,8 +92,11 @@ approved plan only when this result is PASS (ADR-0047 decision 9).
 Both installers write the same events with the same messages for the steps both run. Each line is one
 write. A JWT, `Bearer <token>` or a named secret such as `sig=` or `password:` in a message or resume
 command is written as `[redacted]`, and the preflight's messages and remedies pass the same rules: both
-installers hold one rule table (`Protect-ClaudeInstallText`, `scripts/ClaudeInstallResume.ps1:31-39`;
-`redact`, `scripts/install-checkpoint.sh:36-37`; ADR-0047 decision 12). A file
+installers hold one rule table (`Protect-ClaudeInstallText`, `scripts/ClaudeInstallResume.ps1:46-54`;
+`redact`, `scripts/install-checkpoint.sh:36-37`; ADR-0047 decision 12). The same rules apply to each line
+either installer prints from an error or a refusal, and to the error output of the Azure CLI calls whose
+output the run shows (`Invoke-ClaudeInstallAzShown`, `scripts/ClaudeInstallResume.ps1:20-33`; `ckpt_shown_`,
+`scripts/install-checkpoint.sh:47-52`). A file
 that cannot be written refuses the run at startup, before any Azure call, and no event is written before
 that check passes (`scripts/ClaudeInstallSteps.ps1:19-27`, `scripts/install-steps.sh:134-144`).
 

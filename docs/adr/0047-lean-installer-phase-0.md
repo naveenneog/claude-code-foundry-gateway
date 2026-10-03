@@ -8,7 +8,7 @@
 ## Context
 
 `Install-ClaudeGateway.ps1` exposes installer parameters at `Install-ClaudeGateway.ps1:31-146`.
-`install-claude-gateway.sh` exposes its flag-backed inputs at `install-claude-gateway.sh:98-112`.
+`install-claude-gateway.sh` exposes its flag-backed inputs at `install-claude-gateway.sh:101-115`.
 The guided flow accepts `-AnswersPath`, `-PlanOnly` and `-ApprovedPlanFingerprint` for a reviewed
 plan and answer file (`docs/GUIDED-FLOW.md:122-172`). P91 supplies stable checkpoint step ids and
 live verification before a skip (`scripts/ClaudeInstallCheckpoint.ps1:7-11`).
@@ -68,7 +68,7 @@ A1. The answers file validates against one JSON Schema. The schema has `$id`, `v
 `properties`, `$defs`, `required`, `additionalProperties: false`, `requires` metadata and UI labels.
 
 A2. The schema covers every non-secret installer input from `Install-ClaudeGateway.ps1:31-146`, the
-15 bash flags at `install-claude-gateway.sh:98-112`, and the guided-flow question keys declared
+15 bash flags at `install-claude-gateway.sh:101-115`, and the guided-flow question keys declared
 under `scripts/flow/*.ps1`.
 
 A3. Prompt-only installer answers become named schema entries and installer parameters:
@@ -91,7 +91,7 @@ rules, run read-only Azure checks, print every result and exit nonzero if any re
 Each line has `id`, `PASS` or `FAIL`, message and remedy. `-Json` emits the same records as JSON.
 
 A8. Preflight checks reuse existing functions where they exist, including `Test-ClaudePrerequisites
--Mode Admin` (`Install-ClaudeGateway.ps1:348`, `scripts/Test-Prerequisites.ps1:27`).
+-Mode Admin` (`Install-ClaudeGateway.ps1:354`, `scripts/Test-Prerequisites.ps1:27`).
 
 A9. Preflight check ids are stable:
 
@@ -161,7 +161,7 @@ The RED phase adds these tests before product code:
    `-ProjectionRenewalEntryPoint` and `-ProjectionRenewalActionGroupResourceId`
    (`Install-ClaudeGateway.ps1:65-67`), which the drift test reported by name. They are answers, as
    `ProjectionReconcilerResourceId`, the fourth input that P86 admission requires
-   (`Install-ClaudeGateway.ps1:163-167`), is: a digest of `sha256:` and 64 lower-case hexadecimal digits,
+   (`Install-ClaudeGateway.ps1:167-171`), is: a digest of `sha256:` and 64 lower-case hexadecimal digits,
    a non-empty entry point, and an action group's resource ID in its request or response casing
    (`schemas/claude-gateway.answers.schema.json`; `docs/status/P92.md`, round 3).
 2. **Two validators, one result.** `Test-ClaudeInstallerAnswers`
@@ -233,7 +233,7 @@ The RED phase adds these tests before product code:
    inconclusive. `Get-ClaudeApimReuseProblems` (`scripts/ClaudeInstallerPreflight.ps1:41-57`) names a classic tier and a missing
    system-assigned identity with their remedies, and `Get-ClaudeApimReuseCandidates` (`scripts/ClaudeInstallerPreflight.ps1:59-69`) lists
    the instances the run's menu offers. The run's `-ExistingApimName` path and menu
-   (`Install-ClaudeGateway.ps1:655-698`) call the same functions; `pf_apim_`
+   (`Install-ClaudeGateway.ps1:661-704`) call the same functions; `pf_apim_`
    (`scripts/install-preflight.sh:151-194`) is the bash twin through `ckpt_az_read_`. A list that cannot
    be read offers no instance and says so.
 8. **The run warns where the preflight fails.** A reused instance without a system-assigned identity
@@ -265,7 +265,7 @@ The RED phase adds these tests before product code:
     selection is completed in the checkpoint and verified live (`Assert-ClaudeInstallPrerequisites`,
     `scripts/ClaudeInstallSteps.ps1:103-131`; `steps_prereqs_`, `scripts/install-steps.sh:87-108`).
     With a selection the checkpoint is kept, and the run stops after the selected steps
-    (`Install-ClaudeGateway.ps1:1897-1898`; `install-claude-gateway.sh:456-457`). A step id that names no
+    (`Install-ClaudeGateway.ps1:1916-1917`; `install-claude-gateway.sh:459-460`). A step id that names no
     step refuses on one line that lists the installer's steps and ends with the command that lists them
     with their state, `./Install-ClaudeGateway.ps1 -ListSteps` or `./install-claude-gateway.sh --list-steps`
     (`Set-ClaudeInstallSelection`, `scripts/ClaudeInstallSteps.ps1:72-82`; `steps_select_`,
@@ -273,7 +273,7 @@ The RED phase adds these tests before product code:
 11. **Precedence.** A parameter or flag wins over the answers file, which wins over the checkpoint,
     which wins over the default (A12). The answers file's answers are bound as if passed, so the P91
     binding compares them with the checkpoint and refuses a mismatch, naming the field
-    (`Install-ClaudeGateway.ps1:349-357`; `answers_apply_`, `scripts/install-answers.sh:41-64`). A file
+    (`Install-ClaudeGateway.ps1:355-363`; `answers_apply_`, `scripts/install-answers.sh:41-64`). A file
     with a problem refuses the run on one line, before any Azure resource is read: the number of problems,
     the first problem with its remedy, "Nothing was changed.", and the command that lists every problem,
     `./Install-ClaudeGateway.ps1 -Preflight -AnswersPath '<file>'` or
@@ -294,8 +294,8 @@ The RED phase adds these tests before product code:
       `password`, `pwd`, `secret`, `access_token` and `refresh_token`, where the value ends at `;`, `&`,
       white space, a quote or the end of the text. The value becomes `[redacted]`, and the name stays.
       Both engines hold the rules as the same JSON text (`Get-ClaudeInstallRedactionRules`,
-      `scripts/ClaudeInstallResume.ps1:21-29`; `CKPT_REDACT_RULES`, `scripts/install-checkpoint.sh:36`)
-      and apply them through `Protect-ClaudeInstallText` (`scripts/ClaudeInstallResume.ps1:31-39`) and the
+      `scripts/ClaudeInstallResume.ps1:36-44`; `CKPT_REDACT_RULES`, `scripts/install-checkpoint.sh:36`)
+      and apply them through `Protect-ClaudeInstallText` (`scripts/ClaudeInstallResume.ps1:46-54`) and the
       jq function `redact` (`CKPT_REDACT_JQ`, `scripts/install-checkpoint.sh:37`): to each progress event's
       `message` and `resumeCommand` (`scripts/ClaudeInstallSteps.ps1:34-36`; `scripts/install-steps.sh:27-29`),
       and to every preflight check's `message` and `remedy`, before the text or JSON report is printed
@@ -304,6 +304,28 @@ The RED phase adds these tests before product code:
       serialise an allowlist of fields, and the rules cover free text, such as an error that a message
       quotes. `tests/Test-InstallerRedaction.ps1` checks that both engines hold the same rules and give
       the same text, character for character, over a corpus of the 14 shapes.
+    - **The console (council round 2, Security).** The same rules apply to every line either installer
+      prints on standard output or standard error from an error or a refusal: the top-level trap
+      (`Install-ClaudeGateway.ps1:154-165`), `Stop-ClaudeInstall` (`scripts/ClaudeInstallCheckpoint.ps1:40-48`)
+      and `ckpt_refuse_` (`scripts/install-checkpoint.sh:95-100`); the warning and failure lines,
+      `Write-Warn2` and `Write-Bad` (`Install-ClaudeGateway.ps1:213-216`), `warn_` and `bad_`
+      (`install-claude-gateway.sh:38-42`); and the lines that quote a live read's detail or a deployment's
+      error, and the resume lines (`scripts/ClaudeInstallCheckpoint.ps1:612-613`, `:660`, `:675`, `:679`,
+      `:690`; `scripts/ClaudeInstallResume.ps1:168`, `:171`, `:185`; `scripts/install-checkpoint.sh:402`,
+      `:410`, `:496`, `:539`, `:566`, `:570`; `scripts/install-resume.sh:135`, `:139`, `:152`). An Azure
+      CLI call whose error output the run shows goes through `Invoke-ClaudeInstallAzShown`
+      (`scripts/ClaudeInstallResume.ps1:20-33`) or `ckpt_shown_` (`scripts/install-checkpoint.sh:47-52`):
+      its standard output passes through, and its standard error is printed after the call with the rules
+      applied. `ckpt_redact_` (`:41-44`) prints the text as given where jq is missing; the lines printed
+      before the installer's jq check (`install-claude-gateway.sh:149-155`) quote no Azure CLI output.
+      `az login` is not wrapped, because it writes its sign-in prompt to standard error while it waits
+      (azure-cli `src/azure-cli-core/azure/cli/core/auth/identity.py`, `login_with_device_code`). While a
+      call's standard error is read, the Azure CLI draws no progress indicator: azure-cli draws it with a
+      humanfriendly `Spinner` on `sys.stderr` (`src/azure-cli-core/azure/cli/core/commands/progress.py`,
+      `IndeterminateProgressBar`), and the spinner draws only when its stream is a terminal (humanfriendly
+      `humanfriendly/terminal/spinners.py`, `Spinner`; both dev and master branches read 2026-10-03). The
+      gateway deployment therefore shows the installer's lines before and after it and no spinner while it
+      runs. At `c1ed585` these lines printed the error as given.
     - A file that cannot be written, such as a directory, refuses the run at startup on one line that
       ends "Give a writable file path, or run without -ProgressPath." (`--progress-file` in bash), before
       any Azure call (`Initialize-ClaudeInstallProgress`,
@@ -323,36 +345,79 @@ The RED phase adds these tests before product code:
     `install-claude-gateway.sh` applies no business units.
     - **One group rule for both business-unit paths (council round 1, Security).**
       `Resolve-ClaudeInstallUnitGroup` (`scripts/ClaudeInstallSteps.ps1:159-173`) finds a unit's group by
-      its exact name through `Find-ClaudeInstallGroupByName` (`scripts/ClaudeInstallResume.ps1:238-271`,
+      its exact name through `Find-ClaudeInstallGroupByName` (`scripts/ClaudeInstallResume.ps1:253-286`,
       the rule of ADR-0046 decision 11). One group of that name is reused; with none, the group is created;
       two groups of that name, or a read that fails, leave the group neither reused nor created. The
       answers path stops the step on one line with the resume command (`scripts/ClaudeInstallSteps.ps1:195-197`);
       the installer's attended prompt warns, names a remedy and asks for the next unit
-      (`Install-ClaudeGateway.ps1:1776-1781`). Both then call `Set-ClaudeBusinessUnit.ps1` with
+      (`Install-ClaudeGateway.ps1:1795-1800`). Both then call `Set-ClaudeBusinessUnit.ps1` with
       `-SkipGroupCheck`, because the group is already resolved (`scripts/ClaudeInstallSteps.ps1:200`;
-      `Install-ClaudeGateway.ps1:1795-1796`). At `cfb9dd7` the prompt read the group with
+      `Install-ClaudeGateway.ps1:1814-1815`). At `cfb9dd7` the prompt read the group with
       `az ad group show --group <name>`. Azure CLI resolves that name with `displayName eq '<name>'` and,
       when no group matches, accepts a single `startswith(displayName,'<name>')` match (azure-cli
       `src/azure-cli/azure/cli/command_modules/role/_validators.py`, `validate_group`, dev branch, read
       2026-10-03), so `claude-bu-platform` could bind to a lone `claude-bu-platform-admins`. Main's scripts
       that use the same call, such as `scripts/Set-ClaudeDeveloper.ps1` and `scripts/Set-ClaudeBusinessUnit.ps1`,
       are outside P92; the lead logged them for the owner (`docs/status/P92.md`, round 3).
-14. **The bash checkpoint suite runs as two Test-All checks.** `tests/Test-BashInstallerCheckpoint.ps1`
-    takes `-Shard i/2`; its checks sit in four groups (`static`, `first`, `resume`, `corrupt`), each run
-    by one shard (`Test-ShardGroup`). Each shard's measured weight is at most half of the 600 s
-    per-check timeout (`tests/test-all-durations.json`), so the 900 s registration of `b016b8d` is gone
-    (A14, A16). `tests/Test-BashInstallerCheckpointShards.ps1` checks the partition and the weights.
+    - **A group name the schema refuses, at the prompt (council round 2, Coder).** Before the group
+      lookup, the prompt checks the typed name against the answers schema's rule for a unit's group,
+      `^[^',:]+$` (`schemas/claude-gateway.answers.schema.json:219-220`): a name with a single quote, a
+      comma or a colon prints the schema's message and remedy, writes no unit, and the prompt asks for the
+      next unit, before any Azure CLI call names the group (`Install-ClaudeGateway.ps1:1783-1791`). At
+      `c1ed585` the prompt sent such a name to `az ad group list`.
+14. **The bash checkpoint suite runs as seven Test-All checks.** `tests/Test-BashInstallerCheckpoint.ps1`
+    takes `-Shard i/7`; its checks sit in twelve groups, each run by one shard (`Test-ShardGroup`):
+    `static` and `shell` (shard 0), `graph` and `untrusted` (1), `names` and `preexisting` (2), `resume`
+    (3), `locks`, `receipts` and `gitbash` (4), `changes` (5) and `corrupt` (6). A shard whose groups rerun
+    from the base scenario runs the base's first run itself, and each group copies only its own scenarios.
+    Each shard's measured weight is at most half of the 600 s per-check timeout
+    (`tests/test-all-durations.json`), so the 900 s registration of `b016b8d` is gone (A14, A16).
+    `tests/Test-BashInstallerCheckpointShards.ps1` checks the partition and the weights.
+    - **Seven shards, not two (council round 2, QA).** At `c1ed585` the suite ran as two shards, which
+      took 408.4 s and 528.7 s alone on the builder's machine against weights of 225.8 s and 262.5 s,
+      while Test-All runs up to four checks at once (`tests/Test-All.ps1:26`) with a 600 s limit per
+      check. Alone, under the gate lock that the builder took for the measurement on 2026-10-03, the seven
+      shards took 80.1, 77.1, 114.9, 124.8, 126.9, 120.7 and 124.6 s (`docs/status/P92.md`, round 4). On
+      Windows the two real-mode cases, whose check is skipped there, are not run.
     - **The bash step-selection suite runs as three Test-All checks (council round 1, lead).** On
       `cfb9dd7` it took 363-411 s per run on the lead's machine, against the 600 s per-check timeout,
       while checks run in parallel during the gate. `tests/Test-BashInstallerStepSelection.ps1` takes
       `-Shard i/3`; its checks sit in five groups, and shard 0 runs `list` and `sync`, shard 1 `start` and
       `stream`, and shard 2 `prec`. Alone on the builder's machine the shards took 179.8, 84.7 and
-      205.1 s, and the whole suite 349.7 s (`docs/status/P92.md`, round 3). `tests/BashSuiteShards.ps1`
-      holds the shard contract that both sharded suites share: each check sits in exactly one group,
+      205.1 s, and the whole suite 349.7 s (`docs/status/P92.md`, round 3). Round 4 added a resume whose
+      live reads quote every secret shape to `sync`, which took shard 0 to 249.8 s alone, and moved `sync`
+      to shard 1; alone under the gate lock the three shards then took 133.3, 171.6 and 186.1 s
+      (`docs/status/P92.md`, round 4). `tests/BashSuiteShards.ps1`
+      holds the shard contract that the sharded suites share: each check sits in exactly one group,
       Test-All registers one check per shard at the default timeout, and each shard's weight is at most
-      half of that timeout. `tests/Test-BashInstallerCheckpointShards.ps1` and
-      `tests/Test-BashInstallerStepShards.ps1` apply it. The bash preflight suite took 217-223 s alone,
-      under the 300 s at which the lead asked for a split, and runs as one check.
+      half of that timeout. `tests/Test-BashInstallerCheckpointShards.ps1`,
+      `tests/Test-BashInstallerStepShards.ps1` and `tests/Test-BashInstallerPreflightShards.ps1` apply it.
+    - **The bash preflight suite runs as two Test-All checks (council round 2, lead).** It took 244, 280
+      and 289 s alone in the lead's runs. `tests/Test-BashInstallerPreflight.ps1` takes `-Shard i/2`:
+      `core` holds the static checks, acceptance test 2, redaction, the text report and the not-evaluated
+      probe, and `branches` holds the round-2 branches and the subscription records of round 3. The JSON
+      shape, fail-closed and read-only checks run once per group. Alone under the gate lock the two
+      shards took 93.1 and 78.2 s.
+15. **The projection step's inputs (council round 2, Architect).** The install checkpoint records every
+    answer the projection step passes to `scripts/Deploy-ClaudeProjection.ps1`. P86's
+    `ProjectionRenewalImageDigest`, `ProjectionRenewalEntryPoint` and
+    `ProjectionRenewalActionGroupResourceId` join `ProjectionReconcilerResourceId` among the recorded
+    parameters (`scripts/ClaudeInstallCheckpoint.ps1:13-18`), as ADR-0046 decision 6 states for every
+    parameter that is neither a run mode nor a secret. The step passes all four
+    (`Install-ClaudeGateway.ps1:1732-1735`), so its input hash holds them, with the other answers it
+    passes and its three templates (`Get-ClaudeInstallInputHash`, `scripts/ClaudeInstallCheckpoint.ps1:547-550`,
+    `:557`); the binding compares the resource group, subscription and gateway (ADR-0046 decision 5). The
+    gateway step's hash leaves the four out, because `infra/main.bicep` receives none of them (`:551`). A
+    resume therefore passes the recorded values to the projection deployment, and a changed value runs the
+    step again. `-FlipProjectionAfterCleanCompare` is a run mode and is not recorded; the step's live check
+    reads the three deployments, which do not show a switch, so a run that asks for the switch runs the step
+    again (`Install-ClaudeGateway.ps1:1712-1716`). P86's check of the switch's inputs runs before the
+    answers file and the checkpoint are read (`Install-ClaudeGateway.ps1:167-171`), so a run with the switch
+    passes them as parameters; `tests/Test-ProjectionCouncil.ps1:117-118` requires that refusal before any
+    Azure CLI call. `tests/Test-InstallerAnswersDrift.ps1` checks that each parameter the answers schema
+    lists for `Install-ClaudeGateway.ps1` is recorded by the checkpoint, as a parameter or prompt answer, or
+    is a run option or a secret. At `c1ed585` the checkpoint recorded none of the three renewal inputs, and
+    the projection step's hash held none of the four.
 
 ## Consequences
 

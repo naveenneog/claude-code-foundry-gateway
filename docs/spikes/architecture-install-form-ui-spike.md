@@ -16,7 +16,7 @@ tags: ["technical-spike", "architecture", "research", "installer", "cloud-shell"
 
 **Spike objective.** Choose the install experience that collects every prerequisite value and selection in one form, validates the whole set before any write, runs the selected steps, and re-runs one failed step. Azure Cloud Shell is the preferred launch point (owner, 2026-10-01).
 
-**Why this matters.** In the 2026-10-01 customer session, `Install-ClaudeGateway.ps1` asked its questions one at a time and stopped at each error. Each stop needed a new run through the same questions. Field errors this week included a Graph 404 right after group creation, a reused APIM without a managed identity, and an upper-case business-unit id refused at `Install-ClaudeGateway.ps1:1652`.
+**Why this matters.** In the 2026-10-01 customer session, `Install-ClaudeGateway.ps1` asked its questions one at a time and stopped at each error. Each stop needed a new run through the same questions. Field errors this week included a Graph 404 right after group creation, a reused APIM without a managed identity, and an upper-case business-unit id refused at `Install-ClaudeGateway.ps1:1658`.
 
 **Timebox.** One day of research on 2026-10-01. No implementation.
 
@@ -60,9 +60,9 @@ tags: ["technical-spike", "architecture", "research", "installer", "cloud-shell"
 
 | Component | Fact | Source |
 |---|---|---|
-| `Install-ClaudeGateway.ps1` | 50 parameters and about 37 interactive prompts. These prompts have no parameter: revocation window, team budget behaviour, developers with no team, developer estimate, business-unit id and group | `Install-ClaudeGateway.ps1:31-118`, `:708`, `:997`, `:1021`, `:1039`, `:1647`, `:1657` |
+| `Install-ClaudeGateway.ps1` | 50 parameters and about 37 interactive prompts. These prompts have no parameter: revocation window, team budget behaviour, developers with no team, developer estimate, business-unit id and group | `Install-ClaudeGateway.ps1:31-118`, `:714`, `:1003`, `:1027`, `:1045`, `:1653`, `:1663` |
 | `-Yes` unattended run | Refuses when a required value is missing, before its summary | `docs/SETUP.md:620-632` |
-| `install-claude-gateway.sh` | 15 flag-backed answers | `install-claude-gateway.sh:310-324` |
+| `install-claude-gateway.sh` | 15 flag-backed answers | `install-claude-gateway.sh:313-327` |
 | Guided flow | `-AnswersPath` JSON keyed by question, `-PlanOnly` prints every installer input and the exact installer arguments with a SHA-256 fingerprint, `-ApprovedPlanFingerprint` applies unattended, and `-Change address\|foundation\|models\|sku` re-runs one part | `docs/GUIDED-FLOW.md:126-200`, `Start-ClaudeGateway.ps1:6-17` |
 | Flow questions | 17 keys declared in code with `Type`, `Options` and `When` conditions. A `When` condition is a PowerShell scriptblock, so it cannot be read as data | `scripts/flow/Address.ps1`, `Foundation.ps1` and other flow modules |
 | Installer checkpoint (P91, not merged) | Stable step ids, a resume after the last verified step, live checks before a skip | `docs/adr/0046-installer-checkpoint-and-resume.md` on branch `p91-installer-checkpoint` |

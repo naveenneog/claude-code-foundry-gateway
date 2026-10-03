@@ -59,7 +59,7 @@ pwsh -NoProfile -File .\tests\Test-All.ps1 -ShardIndex 0 -ShardCount 12
 
 Shard coordinates are zero-based and supplied together. A shard requires a clean committed
 checkout, preserves complete registered checks rather than partitioning their internals, and
-retains the existing process scheduler and deadlines (`tests/Test-All.ps1:5`, `:316`).
+retains the existing process scheduler and deadlines (`tests/Test-All.ps1:5`, `:323`).
 The machine-exclusive lane remains exclusive within each runner; each hosted shard has a
 separate Windows VM. It is not a distributed lock against an operator's local test run.
 
@@ -71,7 +71,7 @@ when it is nonempty. `-IncludeAzure` cannot be combined with sharding or local-o
 ## AUM test shards
 
 The AUM pytest suite runs as four registered checks, `AUM - commands, dashboard and pilot [0/4]`
-to `[3/4]` (`tests/Test-All.ps1:295`). On 2026-09-30 IST its 1,200 cases took 985.41 s serially,
+to `[3/4]` (`tests/Test-All.ps1:302`). On 2026-09-30 IST its 1,200 cases took 985.41 s serially,
 beyond the 600 s per-check timeout (`tests/Test-All.ps1:9`). All 1,200 cases passed after
 P85 integrated P71's deadline-test follow-up; [P85's integration evidence](../docs/status/P85.md#final-p71-follow-up-integration-and-builder-validation-2026-09-30)
 records that single full run and the earlier results. `Test-FinOps.ps1 -Shard i/n` passes one
@@ -120,7 +120,7 @@ AUM pytest pins product and AUM test/helper `datetime.now(timezone.utc)` calls t
 A shard writes a versioned receipt with its exact Git commit and tree, coordinates, ordered
 ownership, results, completion state, workflow run/attempt and timings. A source change during
 execution invalidates completion. The legacy timing array remains available
-(`tests/Test-All.ps1:390`).
+(`tests/Test-All.ps1:397`).
 
 `Merge-TestAllReceipts.ps1` reads the registration and assignment from a clean matching checkout.
 It rejects missing or duplicate shards/results, unknown checks, foreign commits/trees, mixed

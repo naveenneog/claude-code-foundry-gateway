@@ -545,7 +545,7 @@ function Get-ClaudeInstallInputHash([string]$Id) {
         'business-units' { @('BusinessUnits') }
         'company-address' { @($c.Answers.Keys | Where-Object { $_ -like 'Address*' }) }
         # Every answer the step passes to scripts/Deploy-ClaudeProjection.ps1; the binding fields (resource
-        # group, subscription, gateway) are compared by the binding itself (ADR-0046 decision 5, ADR-0047 decision 13).
+        # group, subscription, gateway) are compared by the binding itself (ADR-0046 decision 5, ADR-0047 decision 15).
         'projection' { 'EntitlementStore', 'ResolverInboundAccess', 'NamePrefix', 'Location', 'Sku', 'ProjectionResolverAppId', 'StandardGroup', 'PremiumGroup',
             'ProjectionReconcilerResourceId', 'ProjectionRenewalImageDigest', 'ProjectionRenewalEntryPoint', 'ProjectionRenewalActionGroupResourceId' }
         'gateway-deployment' { @($c.Answers.Keys | Where-Object { $_ -notin 'StandardGroup', 'PremiumGroup', 'AuthMode', 'TeamBudgetBehaviour', 'DeveloperEstimate', 'DeployProjection', 'ProjectionReconcilerResourceId', 'ProjectionResolverAppId', 'ProjectionRenewalImageDigest', 'ProjectionRenewalEntryPoint', 'ProjectionRenewalActionGroupResourceId', 'PendingClaudeDeployment', 'ModelOrganizationName', 'ModelIndustry', 'ModelCountryCode' -and $_ -notlike 'Address*' }) }

@@ -35,13 +35,15 @@ exact streaming cache-creation detail remains **U13**.
   `Start-ClaudeGateway.ps1 -AnswersPath`. PowerShell and jq check it with the same rules and messages,
   and a file with any problem, or with a secret, is refused before any Azure resource is read; the
   refusal gives the first problem with its remedy, the number of problems and the `-Preflight` command
-  that lists them all. The schema also holds P86's three projection renewal inputs.
+  that lists them all. The schema also holds P86's three projection renewal inputs; the install checkpoint
+  records them, and a changed one runs the projection step again.
   `-Preflight`/`--preflight` runs 14 read-only checks, each PASS, FAIL or NOT-RUN with a reason, as
   text or JSON; a check that cannot run never passes, and a check starts NOT-RUN until a branch evaluates
   it, so one that no branch reaches fails the preflight. `az` output that is not JSON, or a subscription
   record without its id or tenant, is an inconclusive FAIL, not a stop. A JWT, `Bearer <token>` or a
-  named secret such as `sig=` or `password:` in a preflight message or remedy, or in the progress
-  stream, is written as `[redacted]`, by one rule table that both installers hold.
+  named secret such as `sig=` or `password:` in a preflight message or remedy, in the progress
+  stream, or in a refusal, warning or failure line and the Azure CLI error output either installer prints,
+  is written as `[redacted]`, by one rule table that both installers hold.
   `-ListSteps`/`--list-steps` prints the steps and
   the checkpoint's state; `-Steps`/`--steps` runs the named steps once their prerequisites are
   verified live, and an unknown step id is refused with the command that lists them;
@@ -50,12 +52,13 @@ exact streaming cache-creation detail remains **U13**.
   `Install-ClaudeGateway.ps1` applies business units from the answers file, units before teams, through
   `scripts/Set-ClaudeBusinessUnit.ps1`, and prints the `scripts/Sync-ClaudeUsdBudgets.ps1` command when
   a dollar budget is enforced; the answers and the installer's prompt find each unit's Entra group by its
-  exact name. The run's reuse path and the preflight read an existing API Management
+  exact name, and the prompt refuses a group name with `'`, `,` or `:` before any Azure CLI call. The
+  run's reuse path and the preflight read an existing API Management
   instance through one function. The guided flow runs the installer's preflight for an unattended plan,
   binds the result into the plan fingerprint and applies a plan only when that preflight passes. The bash
-  checkpoint suite runs as two Test-All checks and the bash step-selection suite as three, each within
-  the default timeout, and
-  `.github/workflows/installer-unix.yml` runs the P92 bash suites on Linux and macOS. 46 schema, 13 drift, 6 redaction, 37 PowerShell and 37 bash preflight, 27 PowerShell and 33 bash step, 15 business-unit, 10 guided-flow and 10 shard checks
+  checkpoint suite runs as seven Test-All checks, the bash step-selection suite as three and the bash
+  preflight suite as two, each within the default timeout, and
+  `.github/workflows/installer-unix.yml` runs the P92 bash suites on Linux and macOS. 46 schema, 15 drift, 11 redaction, 37 PowerShell and 40 bash preflight, 36 PowerShell and 37 bash step, 16 business-unit, 10 guided-flow and 15 shard checks
   ([lean installer design record (ADR-0047)](docs/adr/0047-lean-installer-phase-0.md),
   [Setup](docs/SETUP.md#answers-file-preflight-and-selected-steps)).
 - **Installers resume after a failure.** `Install-ClaudeGateway.ps1` and

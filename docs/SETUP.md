@@ -756,7 +756,10 @@ and the full resume command is printed.
   resume command ([deployments](adr/0046-installer-checkpoint-and-resume.md#10-deployments)).
 
 **Refusals.** A refusal is one line on standard error that begins `Refused:`,
-says what it left unchanged, and exits 1 ([output](adr/0046-installer-checkpoint-and-resume.md#14-output)). Each refusal
+says what it left unchanged, and exits 1 ([output](adr/0046-installer-checkpoint-and-resume.md#14-output)). A secret
+that a refusal or failure line quotes, such as one in an Azure CLI error, is printed as `[redacted]` by the
+rules of `-Preflight`; Azure CLI draws no progress indicator while the run reads its error output, so the
+gateway deployment shows no spinner ([ADR-0047](adr/0047-lean-installer-phase-0.md) decision 12). Each refusal
 below ends with the command that resumes the run or discards the checkpoint, except
 the last two: a name with a single quote is refused before the summary, and the last
 names the other installer:
@@ -785,7 +788,7 @@ steps and write a progress stream
 | Option (PowerShell / bash) | What it does |
 |---|---|
 | `-AnswersPath <file>` / `--answers-file <file>` | Reads the answers from a JSON file that [`schemas/claude-gateway.answers.schema.json`](../schemas/claude-gateway.answers.schema.json) describes. A file with any problem stops the run on one line before any Azure resource is read: the number of problems, the first problem with its remedy, and the command that lists every problem, `./Install-ClaudeGateway.ps1 -Preflight -AnswersPath '<file>'` or `./install-claude-gateway.sh --preflight --answers-file '<file>'` (`scripts/ClaudeInstallerAnswers.ps1:398-426`, `scripts/install-answers.sh:41-64`). A parameter or flag passed with it wins over the file, and the file wins over the install checkpoint. |
-| `-Preflight` / `--preflight` | Runs 14 read-only checks and stops. Each check is PASS, FAIL or NOT-RUN with a reason, and each FAIL has a remedy; the exit code is 0 only when nothing fails and no check is NOT-RUN for `not-signed-in`, `prerequisite-failed` or `not-evaluated`, the reason a check starts with until a branch evaluates it (`Install-ClaudeGateway.ps1:170-176`, `scripts/install-preflight.sh:222-286`, [ADR-0047](adr/0047-lean-installer-phase-0.md) decision 5). A JWT, `Bearer <token>` or a named secret such as `sig=` or `password:` that a message or remedy quotes is printed as `[redacted]` (ADR-0047 decision 12). `-Json` / `--json` prints the result as JSON with `schemaVersion` 1. |
+| `-Preflight` / `--preflight` | Runs 14 read-only checks and stops. Each check is PASS, FAIL or NOT-RUN with a reason, and each FAIL has a remedy; the exit code is 0 only when nothing fails and no check is NOT-RUN for `not-signed-in`, `prerequisite-failed` or `not-evaluated`, the reason a check starts with until a branch evaluates it (`Install-ClaudeGateway.ps1:174-180`, `scripts/install-preflight.sh:222-286`, [ADR-0047](adr/0047-lean-installer-phase-0.md) decision 5). A JWT, `Bearer <token>` or a named secret such as `sig=` or `password:` that a message or remedy quotes is printed as `[redacted]` (ADR-0047 decision 12). `-Json` / `--json` prints the result as JSON with `schemaVersion` 1. |
 | `-ListSteps` / `--list-steps` | Prints each step with its title, prerequisites and the state the install checkpoint records, without an Azure call (`scripts/ClaudeInstallSteps.ps1:142-157`, `scripts/install-steps.sh:111-130`). `-Json` / `--json` prints JSON. |
 | `-Steps <ids>` / `--steps <ids>` | Runs only the named steps. Each prerequisite outside the list is completed in the checkpoint and verified live, or the run stops on one line naming it (`scripts/ClaudeInstallSteps.ps1:103-131`, `scripts/install-steps.sh:87-108`). An id that names no step stops the run on one line that lists the steps and names `-ListSteps` / `--list-steps` (`scripts/ClaudeInstallSteps.ps1:72-82`, `scripts/install-steps.sh:60-67`). |
 | `-ProgressPath <file>` / `--progress-file <file>` | Appends one JSON object per line: `schemaVersion`, `time` (UTC), `runId`, `stepId`, `event`, `message` and `resumeCommand` (`scripts/ClaudeInstallSteps.ps1:29-38`, `scripts/install-steps.sh:24-31`). A secret in a message or resume command is written as `[redacted]`, by the rules of `-Preflight`. A file that cannot be written, such as a directory, stops the run on one line before any Azure call, and the line ends "Give a writable file path, or run without -ProgressPath." (`scripts/ClaudeInstallSteps.ps1:19-27`, `scripts/install-steps.sh:142`). |
@@ -820,7 +823,9 @@ An answers file names each answer by its installer parameter, and both installer
 dollar budget is enforced (`scripts/ClaudeInstallSteps.ps1:175-227`). Each unit's Entra group is found by
 its exact name, from the answers file or at the prompt: one group of that name is reused, none is created,
 and two of that name or a failed read stop the answers' step with the resume command, or at the prompt skip
-that unit with a remedy (`scripts/ClaudeInstallSteps.ps1:159-173`, `:195-197`; `Install-ClaudeGateway.ps1:1776-1781`).
+that unit with a remedy (`scripts/ClaudeInstallSteps.ps1:159-173`, `:195-197`; `Install-ClaudeGateway.ps1:1795-1800`).
+At the prompt, a group name with a single quote, a comma or a colon is refused with the schema's message and
+remedy before any Azure CLI call, and the prompt asks for the next unit (`Install-ClaudeGateway.ps1:1783-1791`).
 A team names its unit as `parent`, and an `Allowance` unit takes `percent`:
 
 ```json
