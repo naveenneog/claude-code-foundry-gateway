@@ -29,6 +29,13 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **Installer UI milestone 1 (P93).** `node tools/installer-ui/server.mjs` starts a local Node
+  `http` server with no packages. It binds to loopback by default, prints a one-time token, checks the
+  token on every request, rejects foreign Host headers and OPTIONS, sends no CORS headers, renders the
+  form from the P92 answers schema, runs the PowerShell installer preflight with a per-run temporary
+  answers file, offers `answers.json` commands for PowerShell and bash, validates selected step ids
+  against `-ListSteps -Json`, runs selected steps through the existing installer, redacts streamed
+  output with the installer redaction rules and refuses a second concurrent run.
 - **Installers read an answers file, check it before any change, run selected steps and write a progress stream (P92, phase 0).**
   One answers file, described by `schemas/claude-gateway.answers.schema.json`, feeds
   `Install-ClaudeGateway.ps1 -AnswersPath`, `install-claude-gateway.sh --answers-file` and

@@ -240,6 +240,7 @@ try {
     Invoke-Check 'macOS/Linux installer steps, precedence and progress [2/3]' 'Test-BashInstallerStepSelection.ps1' @{ Shard = '2/3' } -SkipReason $bashInstallerSkip
     Invoke-Check 'Installer business units from answers'   'Test-InstallerBusinessUnitAnswers.ps1'
     Invoke-Check 'Guided flow runs the installer preflight' 'Test-GuidedFlowAnswersSchema.ps1'
+    Invoke-Check 'Installer UI server'                     'Test-InstallerUi.ps1'
     Invoke-Check 'macOS/Linux checkpoint suite shards'     'Test-BashInstallerCheckpointShards.ps1'
     Invoke-Check 'macOS/Linux step suite shards'          'Test-BashInstallerStepShards.ps1'
     Invoke-Check 'macOS/Linux preflight suite shards'     'Test-BashInstallerPreflightShards.ps1'
