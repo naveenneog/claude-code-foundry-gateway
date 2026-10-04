@@ -99,7 +99,9 @@ if (-not $ImageTag) { $ImageTag = 'sync-' + [DateTime]::UtcNow.ToString('yyyyMMd
 if ($ImageTag -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$') { $problems.Add("-ImageTag '$ImageTag' is not an image tag.") }
 if ($ImageDigest -and $ImageDigest -cnotmatch '^sha256:[0-9a-f]{64}$') { $problems.Add('-ImageDigest is not sha256: followed by 64 lowercase hex digits.') }
 if ($WorkspaceResourceId -and $WorkspaceResourceId -notmatch '^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\.OperationalInsights/workspaces/[^/]+$') { $problems.Add('-WorkspaceResourceId is not a Log Analytics workspace resource id.') }
-if ($RenewalSubnetId -and $RenewalSubnetId -notmatch '^/subscriptions/[0-9a-fA-F-]{36}/resourceGroups/[A-Za-z0-9._-]{1,90}/providers/Microsoft\.Network/virtualNetworks/[A-Za-z0-9._-]{2,64}/subnets/[A-Za-z0-9._-]{1,80}$') { $problems.Add("-RenewalSubnetId is not a subnet resource id whose names hold only letters, digits, '.', '_' or '-'; other characters are refused before an az call.") }
+$subnetPattern = '^/subscriptions/[0-9a-fA-F-]{36}/resourceGroups/[A-Za-z0-9._-]{1,90}/providers/Microsoft\.Network/virtualNetworks/[A-Za-z0-9._-]{2,64}/subnets/[A-Za-z0-9._-]{1,80}$'
+$bashAlternative = "On Windows az.cmd hands other characters to cmd.exe; the guide's renewal block (docs/AZ-COMMANDS.md, section 10) runs in Bash without that limit."
+if ($RenewalSubnetId -and $RenewalSubnetId -notmatch $subnetPattern) { $problems.Add("-RenewalSubnetId is not a subnet resource id whose names hold only letters, digits, '.', '_' or '-'. $bashAlternative") }
 if ($problems.Count) { throw ("Projection renewal refused before any Azure call:`n  - " + ($problems -join "`n  - ")) }
 if (-not $ReceiptPath) { $ReceiptPath = Join-Path $root "onboarding/projection-renewal-$NamePrefix.json" }
 
@@ -166,7 +168,12 @@ $tenantId = [string]$account.tenantId
 $projection = Get-DeploymentOutput "projection-$NamePrefix"
 $cosmosAccount = if ($projection.accountName) { [string]$projection.accountName } else { "cosmos-$NamePrefix" }
 $network = Get-DeploymentOutput "projection-network-$NamePrefix"
-if (-not $RenewalSubnetId) { $RenewalSubnetId = [string]$network.renewalSubnetId }
+if (-not $RenewalSubnetId) {
+    $RenewalSubnetId = [string]$network.renewalSubnetId
+    if ($RenewalSubnetId -and $RenewalSubnetId -notmatch $subnetPattern) {
+        throw "The projection network returned renewal subnet '$RenewalSubnetId', whose names hold characters other than letters, digits, '.', '_' or '-'. $bashAlternative Nothing was deployed."
+    }
+}
 if (-not $RenewalSubnetId) {
     throw 'The projection network has no renewal subnet. Rerun scripts/Deploy-ClaudeProjection.ps1, which redeploys infra/projection-network.bicep with it, or pass -RenewalSubnetId with a /27 delegated to Microsoft.App/environments.'
 }
@@ -183,17 +190,18 @@ if (-not $WorkspaceResourceId) {
 }
 # P94 renamed the job, its environment and the failure alert (U118). P86's registry, identity, action
 # group and other alerts keep their names and update in place; these three would stay beside the job.
-$p86Delete = [ordered]@{
-    "caj-projection-renewal-$NamePrefix" = "az resource delete -g $ResourceGroup -n caj-projection-renewal-$NamePrefix --resource-type Microsoft.App/jobs"
-    "cae-projection-$NamePrefix" = "az resource delete -g $ResourceGroup -n cae-projection-$NamePrefix --resource-type Microsoft.App/managedEnvironments"
-    "sqr-projection-$NamePrefix-graph-read-failed" = "az resource delete -g $ResourceGroup -n sqr-projection-$NamePrefix-graph-read-failed --resource-type Microsoft.Insights/scheduledQueryRules"
+# Names are unique per resource type only, so each is matched with its type.
+$p86Types = [ordered]@{
+    "caj-projection-renewal-$NamePrefix" = 'Microsoft.App/jobs'
+    "cae-projection-$NamePrefix" = 'Microsoft.App/managedEnvironments'
+    "sqr-projection-$NamePrefix-graph-read-failed" = 'Microsoft.Insights/scheduledQueryRules'
 }
-$present = @(Invoke-ClaudeNetworkAz @('resource', 'list', '-g', $ResourceGroup, '--query', '[].name'))
-$p86Left = @($p86Delete.Keys | Where-Object { $present -contains $_ })
+$present = @(Invoke-ClaudeNetworkAz @('resource', 'list', '-g', $ResourceGroup))
+$p86Left = @($p86Types.Keys | Where-Object { $name = $_; @($present | Where-Object { $_.name -eq $name -and $_.type -eq $p86Types[$name] }).Count })
 if ($p86Left.Count) {
     throw ("P86 renewal resources are in ${ResourceGroup}: $($p86Left -join ', '). P94 names its job, environment and failure alert differently, so these would stay beside the new job, " +
         "and P86's job cannot run (its image lacks resolver/src/entitlement.mjs and it sets no AZURE_CLIENT_ID). Delete them in this order, then rerun:`n  " +
-        (($p86Left | ForEach-Object { $p86Delete[$_] }) -join "`n  ") + "`nNothing was deployed.")
+        (($p86Left | ForEach-Object { "az resource delete -g $ResourceGroup -n $_ --resource-type $($p86Types[$_])" }) -join "`n  ") + "`nNothing was deployed.")
 }
 $script:graphToken = if (($StandardGroup -notmatch $guid) -or ($PremiumGroup -ne 'none' -and $PremiumGroup -notmatch $guid)) { Get-GraphToken } else { $null }
 $standardGroupId = Resolve-TierGroup $StandardGroup 'standard'

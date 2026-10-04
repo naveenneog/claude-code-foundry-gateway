@@ -1587,11 +1587,11 @@ p94_projection_renewal() {
     echo "Refused: could not read the projection Cosmos account output; nothing was deployed." >&2
     return 1
   fi
-  if ! RG_NAMES="$(az resource list -g "$GATEWAY_RG" --query "[].name" -o tsv)"; then
+  if ! RG_RESOURCES="$(az resource list -g "$GATEWAY_RG" --query "[].[name,type]" -o tsv)"; then
     echo "Refused: could not list the resources in $GATEWAY_RG; nothing was deployed." >&2
     return 1
   fi
-  P86_LEFT="$(printf '%s\n' "$RG_NAMES" | grep -F -x -e "caj-projection-renewal-${NAME_PREFIX}" -e "cae-projection-${NAME_PREFIX}" -e "sqr-projection-${NAME_PREFIX}-graph-read-failed" | tr '\n' ' ')"
+  P86_LEFT="$(printf '%s\n' "$RG_RESOURCES" | grep -i -F -x -e "caj-projection-renewal-${NAME_PREFIX}"$'\t'"Microsoft.App/jobs" -e "cae-projection-${NAME_PREFIX}"$'\t'"Microsoft.App/managedEnvironments" -e "sqr-projection-${NAME_PREFIX}-graph-read-failed"$'\t'"Microsoft.Insights/scheduledQueryRules" | cut -f1 | tr '\n' ' ')"
   if [ -n "$P86_LEFT" ]; then
     echo "Refused: P86 renewal resources are in $GATEWAY_RG (${P86_LEFT% }), and the new job would run beside them; docs/SECURE-PROJECTION.md lists the delete commands. Nothing was deployed." >&2
     return 1
@@ -1600,14 +1600,14 @@ p94_projection_renewal() {
     echo "Refused: set WORKSPACE_ID to the gateway's Log Analytics workspace resource id; nothing was deployed." >&2
     return 1
   fi
-  if ! STANDARD_GROUP_ID="$(jq -r '.group.id // ""' .p89-receipts/group-standard.json)" || [ -z "$STANDARD_GROUP_ID" ]; then
-    echo "Refused: could not read the standard group receipt that the group block in section 5 records; nothing was deployed." >&2
+  if ! STANDARD_GROUP_ID="$(jq -r --arg name "$STANDARD_GROUP" 'if .group.displayName == $name then .group.id // "" else "" end' .p89-receipts/group-standard.json)" || ! [[ "$STANDARD_GROUP_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+    echo "Refused: the standard group receipt from section 5 records no object id for STANDARD_GROUP '$STANDARD_GROUP'; nothing was deployed." >&2
     return 1
   fi
   if [ "$PREMIUM_GROUP" = "none" ]; then
     PREMIUM_GROUP_ID="none"
-  elif ! PREMIUM_GROUP_ID="$(jq -r '.group.id // ""' .p89-receipts/group-premium.json)" || [ -z "$PREMIUM_GROUP_ID" ]; then
-    echo "Refused: could not read the premium group receipt that the group block in section 5 records; set PREMIUM_GROUP=none when the gateway has no premium tier. Nothing was deployed." >&2
+  elif ! PREMIUM_GROUP_ID="$(jq -r --arg name "$PREMIUM_GROUP" 'if .group.displayName == $name then .group.id // "" else "" end' .p89-receipts/group-premium.json)" || ! [[ "$PREMIUM_GROUP_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+    echo "Refused: the premium group receipt from section 5 records no object id for PREMIUM_GROUP '$PREMIUM_GROUP'; set PREMIUM_GROUP=none when the gateway has no premium tier. Nothing was deployed." >&2
     return 1
   fi
   if [ "$PREMIUM_GROUP_ID" = "$STANDARD_GROUP_ID" ]; then
@@ -1647,7 +1647,7 @@ p94_projection_renewal
 # P89-PROJECTION-RENEWAL-END
 ```
 
-Expected result: the registry and the job identity deploy first, the image builds from the sync package (`sync/` and `resolver/src/entitlement.mjs`), and the job is pinned to the digest the registry reports; it runs every 30 minutes on the renewal subnet. The tier group ids come from the group receipts that section 5 records, and one group for both tiers is refused. A resource group that still holds P86's renewal job, environment or `graph-read-failed` alert is refused before any deployment; [the projection runbook](SECURE-PROJECTION.md#scheduled-renewal-job-and-admission-p86-p94) lists the delete commands. The block prints the job and action group ids and the tenant administrator's Graph grant. Each alert address receives a confirmation email from Azure Monitor and receives no alerts until it is confirmed ([U116](UNKNOWNS.md#p94-research-before-implementation)). Admission needs three successful runs, about 60-90 minutes after the grant takes effect. ACR task runs are paused for subscriptions on Azure free credits ([U114](UNKNOWNS.md#p94-research-before-implementation)); there, `docker build` and `docker push` from the package directory replace `az acr build`. This mirrors `scripts/Deploy-ClaudeProjectionRenewal.ps1:161-254`, `infra/projection-registry.bicep` and `infra/projection-renewal.bicep` ([ADR-0049](adr/0049-projection-renewal-deployment.md)).
+Expected result: the registry and the job identity deploy first, the image builds from the sync package (`sync/` and `resolver/src/entitlement.mjs`), and the job is pinned to the digest the registry reports; it runs every 30 minutes on the renewal subnet. The tier group ids come from the group receipts that section 5 records for the current `STANDARD_GROUP` and `PREMIUM_GROUP`, and one group for both tiers is refused. A resource group that still holds P86's renewal job, environment or `graph-read-failed` alert, matched by name and resource type, is refused before any deployment; [the projection runbook](SECURE-PROJECTION.md#scheduled-renewal-job-and-admission-p86-p94) lists the delete commands. The block prints the job and action group ids and the tenant administrator's Graph grant. Each alert address receives a confirmation email from Azure Monitor and receives no alerts until it is confirmed ([U116](UNKNOWNS.md#p94-research-before-implementation)). Admission needs three successful runs, about 60-90 minutes after the grant takes effect. ACR task runs are paused for subscriptions on Azure free credits ([U114](UNKNOWNS.md#p94-research-before-implementation)); there, `docker build` and `docker push` from the package directory replace `az acr build`. This mirrors `scripts/Deploy-ClaudeProjectionRenewal.ps1:163-262`, `infra/projection-registry.bicep` and `infra/projection-renewal.bicep` ([ADR-0049](adr/0049-projection-renewal-deployment.md)).
 
 Projection switch status.
 

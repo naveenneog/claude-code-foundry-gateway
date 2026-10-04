@@ -40,8 +40,9 @@ case "$args" in
     if [ "${P94_SCENARIO:-}" = "no-subnet" ]; then printf '\n'; else printf '/subscriptions/sub/resourceGroups/rg/providers/Microsoft.Network/virtualNetworks/vnet-prefix/subnets/renewal\n'; fi ;;
   "deployment group show -g rg -n projection-prefix "*) printf 'cosmos-prefix\n' ;;
   "resource list -g rg "*)
-    printf 'cosmos-prefix\nacrprefix\nid-projection-renewal-prefix\nag-projection-renewal-prefix\nsqr-projection-prefix-no-success-45m\n'
-    if [ "${P94_SCENARIO:-}" = "p86-leftovers" ]; then printf 'caj-projection-renewal-prefix\ncae-projection-prefix\n'; fi ;;
+    printf 'cosmos-prefix\tMicrosoft.DocumentDB/databaseAccounts\nacrprefix\tMicrosoft.ContainerRegistry/registries\nid-projection-renewal-prefix\tMicrosoft.ManagedIdentity/userAssignedIdentities\nag-projection-renewal-prefix\tmicrosoft.insights/actiongroups\nsqr-projection-prefix-no-success-45m\tmicrosoft.insights/scheduledqueryrules\n'
+    if [ "${P94_SCENARIO:-}" = "p86-leftovers" ]; then printf 'caj-projection-renewal-prefix\tMicrosoft.App/jobs\ncae-projection-prefix\tmicrosoft.app/managedenvironments\n'; fi
+    if [ "${P94_SCENARIO:-}" = "p86-name-other-type" ]; then printf 'cae-projection-prefix\tMicrosoft.Network/networkSecurityGroups\n'; fi ;;
   "monitor log-analytics workspace list "*)
     printf '/subscriptions/sub/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/law\n'
     if [ "${P94_SCENARIO:-}" = "two-workspaces" ]; then printf '/subscriptions/sub/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/law2\n'; fi ;;
@@ -76,8 +77,10 @@ function Invoke-RenewalBlock([string]$Scenario, [hashtable]$Environment = @{}) {
     # The group block in section 5 records the tier groups; the renewal block reads those receipts.
     if ($Scenario -ne 'no-group-receipts') {
         New-Item -ItemType Directory -Force -Path (Join-Path $dir '.p89-receipts') | Out-Null
+        $standardId = if ($Scenario -eq 'bad-receipt-id') { 'not-a-guid' } else { '10000000-0000-4000-8000-000000000001' }
         $premiumId = if ($Scenario -eq 'same-groups') { '10000000-0000-4000-8000-000000000001' } else { '10000000-0000-4000-8000-000000000002' }
-        foreach ($group in @(@('standard', '10000000-0000-4000-8000-000000000001', 'claude-code-standard'), @('premium', $premiumId, 'claude-code-premium'))) {
+        $premiumName = if ($Scenario -eq 'stale-receipt') { 'claude-code-premium-2025' } else { 'claude-code-premium' }
+        foreach ($group in @(@('standard', $standardId, 'claude-code-standard'), @('premium', $premiumId, $premiumName))) {
             [IO.File]::WriteAllText((Join-Path $dir ".p89-receipts\group-$($group[0]).json"), (@{ group = @{ created = $false; id = $group[1]; displayName = $group[2]; createdAt = '' } } | ConvertTo-Json -Compress))
         }
     }
@@ -144,6 +147,8 @@ foreach ($case in @(
         @{ Name = 'P86 renewal resources that the new names would leave behind'; Scenario = 'p86-leftovers'; Environment = @{}; Expect = 'caj-projection-renewal-prefix cae-projection-prefix' }
         @{ Name = 'no group receipts from section 5'; Scenario = 'no-group-receipts'; Environment = @{}; Expect = 'group receipt' }
         @{ Name = 'one group for both tiers'; Scenario = 'same-groups'; Environment = @{}; Expect = 'same group' }
+        @{ Name = 'a group receipt recorded for another group name'; Scenario = 'stale-receipt'; Environment = @{}; Expect = "premium group receipt from section 5 records no object id for PREMIUM_GROUP 'claude-code-premium'" }
+        @{ Name = 'a group receipt whose id is not an object id'; Scenario = 'bad-receipt-id'; Environment = @{}; Expect = "standard group receipt from section 5 records no object id for STANDARD_GROUP 'claude-code-standard'" }
     )) {
     $refused = Invoke-RenewalBlock $case.Scenario $case.Environment
     Assert "refused before any deployment: $($case.Name)" ($refused.Exit -ne 0 -and $refused.Output -match "Refused: .*$([regex]::Escape($case.Expect))" -and -not $refused.Writes.Trim()) "$($refused.Output.Trim()) | writes: $($refused.Writes.Trim())"
@@ -154,6 +159,8 @@ $buildFails = Invoke-RenewalBlock 'build-fails'
 Assert 'a refused build stops before the job and removes the package directory' ($buildFails.Exit -ne 0 -and $buildFails.Writes -match '(?m)^build ' -and $buildFails.Writes -notmatch 'projection-renewal-prefix' -and $buildFails.PackageDir -and -not $buildFails.PackageLeft) "$($buildFails.Output.Trim()) | left: $($buildFails.PackageLeft)"
 $noPremium = Invoke-RenewalBlock 'healthy' @{ PREMIUM_GROUP = 'none' }
 Assert 'PREMIUM_GROUP=none deploys without the premium receipt' ($noPremium.Exit -eq 0 -and $noPremium.Params.parameters.premiumGroupId.value -eq 'none') $noPremium.Output.Trim()
+$otherType = Invoke-RenewalBlock 'p86-name-other-type'
+Assert 'a resource with a P86 name but another type does not stop the block' ($otherType.Exit -eq 0 -and $otherType.Writes -match 'projection-renewal-prefix') $otherType.Output.Trim()
 
 Write-Host ''
 if ($fail) { Write-Host "$fail assertion(s) failed." -ForegroundColor Red; exit 1 }

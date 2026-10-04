@@ -142,7 +142,7 @@
         "resolver/src/entitlement.mjs": "6dc82d9372ddb81b199ae5c6ce099f3a0da315d075524f57e2582caff363e1bf",
         "resolver/src/index.mjs": "b6b755fbbc56ef62e7b535a4bde2756111c2b5fc9913c16a893b45cb6dce33a3",
         "resolver/src/lookup.mjs": "d04392c5eb24a8a084d72f1e5dc72a61fd385992039118aba510c266c3027c3b",
-        "scripts/Deploy-ClaudeProjectionRenewal.ps1": "e86f01642b02012cc7569d92535f3fe14f4e5e9d194c272ccac195b9f44dcfdd",
+        "scripts/Deploy-ClaudeProjectionRenewal.ps1": "7ed4535d5463c25696e5add082d776ff0bc93a4b6e32169b252455af772bf3e5",
         "scripts/Sync-ClaudeProjection.ps1": "0a30b7b4178700d9eb4879d4cb78c01bacf932e21b0856f0f532e38a06a24ca7",
         "sync/Dockerfile": "80ab80a331c8b97f903c30cf714cedfcc9969b8d8c24be0c58777ac7c7f3b382",
         "sync/src/apply-projection.mjs": "7d017ff632b47c4205aef6f9d3dab8e1653b86cac53ada32f49c216170c8fe3b",

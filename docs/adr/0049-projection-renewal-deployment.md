@@ -92,8 +92,9 @@ projection. The merged P86 code cannot be deployed as written. Read on `main` `1
 8. The job and environment are named `caj-renew-` and `cae-renew-` followed by
    `uniqueString(resourceGroup().id, namePrefix)` (U118), and the failure alert is
    `renewal-failed`. The registry, identity, action group and other alerts keep P86's names and
-   update in place. A resource group that holds P86's `caj-projection-renewal-<prefix>`,
-   `cae-projection-<prefix>` or `sqr-projection-<prefix>-graph-read-failed` is refused before any
+   update in place. A resource group that holds P86's `caj-projection-renewal-<prefix>` job,
+   `cae-projection-<prefix>` environment or `sqr-projection-<prefix>-graph-read-failed` alert,
+   matched by name and resource type because names are unique per type only, is refused before any
    write, with `az resource delete` commands for them in a working order (job before environment).
 9. (P95) Admission binds the job's tier group ids, gateway and identity to the evidence it accepts
    and to the compared gateway, so a redeploy with other settings needs fresh runs.

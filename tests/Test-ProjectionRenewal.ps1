@@ -246,7 +246,8 @@ try {
             '^account get-access-token' { return (@{ accessToken = 'graph-token' } | ConvertTo-Json) }
             '^deployment group show .*-n projection-p94fixture ' { return (& $outputs @{ accountName = 'cosmos-p94fixture' }) }
             '^deployment group show .*-n projection-network-p94fixture ' {
-                return (& $outputs @{ renewalSubnetId = $(if ($state.Case -eq 'no-renewal-subnet') { '' } else { $subnet }); runnerName = 'aci-projtest-p94fixture' })
+                $renewalOutput = switch ($state.Case) { 'no-renewal-subnet' { '' } 'odd-subnet-output' { "/subscriptions/$sub/resourceGroups/rg(net)/providers/Microsoft.Network/virtualNetworks/vnet-p94fixture/subnets/renewal" } default { $subnet } }
+                return (& $outputs @{ renewalSubnetId = $renewalOutput; runnerName = 'aci-projtest-p94fixture' })
             }
             '^deployment group show .*-n projection-registry-p94fixture ' {
                 return (& $outputs @{ acrName = $(if ($state.Case -eq 'bad-acr-name') { 'acr(p94)' } else { 'acrp94fixture' }); acrLoginServer = 'acrp94fixture.azurecr.io'; identityName = 'id-projection-renewal-p94fixture'; identityClientId = '40000000-0000-4000-8000-000000000001'; identityPrincipalId = '40000000-0000-4000-8000-000000000002' })
@@ -256,10 +257,18 @@ try {
             }
             '^network vnet show' { return (@{ location = 'eastus2' } | ConvertTo-Json) }
             '^resource list -g rg-p94 ' {
-                # Names P94 shares with P86 are updated in place; the three P94 renamed are refused.
-                $names = @('cosmos-p94fixture', 'acrp94fixture', 'id-projection-renewal-p94fixture', 'ag-projection-renewal-p94fixture', 'sqr-projection-p94fixture-no-success-45m')
-                if ($state.Case -eq 'p86-leftovers') { $names += @('caj-projection-renewal-p94fixture', 'cae-projection-p94fixture', 'sqr-projection-p94fixture-graph-read-failed') }
-                return (ConvertTo-Json @($names))
+                # Names P94 shares with P86 are updated in place; the three P94 renamed are refused,
+                # by name and type: resource names are unique per type only.
+                $items = @(
+                    @{ name = 'cosmos-p94fixture'; type = 'Microsoft.DocumentDB/databaseAccounts' }, @{ name = 'acrp94fixture'; type = 'Microsoft.ContainerRegistry/registries' }
+                    @{ name = 'id-projection-renewal-p94fixture'; type = 'Microsoft.ManagedIdentity/userAssignedIdentities' }, @{ name = 'ag-projection-renewal-p94fixture'; type = 'microsoft.insights/actiongroups' }
+                    @{ name = 'sqr-projection-p94fixture-no-success-45m'; type = 'microsoft.insights/scheduledqueryrules' }
+                )
+                if ($state.Case -eq 'p86-leftovers') {
+                    $items += @(@{ name = 'caj-projection-renewal-p94fixture'; type = 'Microsoft.App/jobs' }, @{ name = 'cae-projection-p94fixture'; type = 'Microsoft.App/managedEnvironments' }, @{ name = 'sqr-projection-p94fixture-graph-read-failed'; type = 'microsoft.insights/scheduledqueryrules' })
+                }
+                if ($state.Case -eq 'p86-name-other-type') { $items += @{ name = 'cae-projection-p94fixture'; type = 'Microsoft.Network/networkSecurityGroups' } }
+                return (ConvertTo-Json @($items))
             }
             '^apim show' { return (@{ id = "$rgId/providers/Microsoft.ApiManagement/service/apim-p94" } | ConvertTo-Json) }
             '^acr build' { if ($state.Case -eq 'tasks-refused') { $global:LASTEXITCODE = 1; return 'ERROR: (TasksOperationsNotAllowed) ACR Tasks requests are not permitted.' }; return }
@@ -355,6 +364,11 @@ try {
         $leftovers.Failure -match 'az resource delete -g rg-p94 -n cae-projection-p94fixture --resource-type Microsoft\.App/managedEnvironments' -and
         $leftovers.Failure -match 'az resource delete -g rg-p94 -n sqr-projection-p94fixture-graph-read-failed --resource-type Microsoft\.Insights/scheduledQueryRules' -and
         $leftovers.Failure.IndexOf('Microsoft.App/jobs') -lt $leftovers.Failure.IndexOf('Microsoft.App/managedEnvironments')) "$($leftovers.Failure) | writes $(Get-WriteCount $leftovers)"
+    $otherType = Invoke-DeployScenario 'p86-name-other-type'
+    Assert 'a resource with a P86 name but another type does not stop the deploy' (-not $otherType.Failure -and (Get-WriteCount $otherType) -gt 0) $otherType.Failure
+    $oddSubnet = Invoke-DeployScenario 'odd-subnet-output'
+    Assert 'a renewal subnet from the network output is checked like -RenewalSubnetId before it reaches az' ($oddSubnet.Failure -match 'returned renewal subnet' -and $oddSubnet.Failure -match 'docs/AZ-COMMANDS\.md' -and
+        (Get-CallIndex $oddSubnet '^network vnet show') -lt 0 -and (Get-WriteCount $oddSubnet) -eq 0) "$($oddSubnet.Failure) | writes $(Get-WriteCount $oddSubnet)"
     $tasks = Invoke-DeployScenario 'tasks-refused'
     Assert 'a refused registry build stops before the job, naming the docker path' ($tasks.Failure -match 'TasksOperationsNotAllowed' -and $tasks.Failure -match 'docker build' -and $tasks.Failure -match '-ImageDigest' -and (Get-CallIndex $tasks '^deployment group create .*projection-renewal') -lt 0) $tasks.Failure
     $badDigest = Invoke-DeployScenario 'bad-digest'
