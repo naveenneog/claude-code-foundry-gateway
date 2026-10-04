@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  function createActionHost() {
+  function createActionHost(hostOptions = {}) {
 
     function appendText(parent, text, tag = "span", className = "") {
       const node = document.createElement(tag);
@@ -66,6 +66,8 @@
         button.textContent = oldText;
         delete button.dataset.actionBusy;
         button.disabled = false;
+
+        if (typeof hostOptions.onSettled === "function") hostOptions.onSettled(button);
       }
     }
 

@@ -542,7 +542,7 @@
       validateBusinessUnits,
       validateCurrentAnswers,
     });
-    actions = globalThis.ClaudeInstallerActions.create();
+    actions = globalThis.ClaudeInstallerActions.create({ onSettled: updateRunAdmission });
     prefill = globalThis.ClaudeInstallerPrefill.create({
       liveMode,
       markPreflightStale,

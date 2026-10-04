@@ -218,3 +218,44 @@ async function expectPollDisabled(page, name) {
   }
   assert.equal(await button.isDisabled(), true);
 }
+
+
+test('U1 fix action settled recomputes stale run and validation-disabled preflight states', async () => {
+  const app = await start({ env: { P93_INSTALLER_UI_STUB_DELAY_MS: '350' } });
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await fillValid(page);
+    await page.getByRole('button', { name: 'List steps' }).click();
+    await page.locator('#step-list input[value="resource-group"]').check();
+    await page.getByRole('button', { name: 'Run preflight' }).click();
+    await page.getByText(/Passing preflight/).waitFor();
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await page.locator('[name="ResourceGroup"]').fill('rg-changed-while-running');
+    await page.getByText(/summary:/).waitFor();
+    await page.getByText(/Preflight is stale/).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Run selected steps' }).isDisabled(), true);
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+
+  const preflightApp = await start();
+  const opened = await openPage(preflightApp);
+  try {
+    await fillValid(opened.page);
+    await opened.page.route('**/api/preflight', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(passPayload) });
+    });
+    await expectPollEnabled(opened.page, 'Run preflight');
+    await opened.page.getByRole('button', { name: 'Run preflight' }).click();
+    await opened.page.locator('[name="FoundryAccount"]').fill('bad account');
+    await opened.page.getByText('Preflight finished.').waitFor();
+    assert.equal(await opened.page.getByRole('button', { name: 'Run preflight' }).isDisabled(), true);
+    await assertClean(opened.page, opened.pageErrors);
+  } finally {
+    await opened.browser.close();
+    await preflightApp.close();
+  }
+});
