@@ -146,9 +146,10 @@ Assert 'the result names the backup and the rollback' ($Result -and $Result.Swit
     $Result.Rollback -match 'Sync-ClaudeAccess\.ps1' -and $Result.Rollback -match 'Compare-ClaudeEntitlement\.ps1 -FailOnDrift' -and $Result.Rollback -match 'named-value') "$($Result | ConvertTo-Json -Compress)"
 
 foreach ($case in @(
-        @{ Name = 'drift between the lists and Entra'; Fixture = 'healthy'; Drift = $true; Extra = @{}; Expect = 'drift'; RunnerIdle = $true }
-        @{ Name = 'an admission refusal'; Fixture = 'action-group-disabled'; Drift = $false; Extra = @{}; Expect = 'disabled'; RunnerIdle = $false }
-        @{ Name = 'a receipt for another gateway'; Fixture = 'healthy'; Drift = $false; Extra = @{ Renewal = ($renewal | Select-Object * -ExcludeProperty gatewayResourceId | Add-Member -NotePropertyName gatewayResourceId -NotePropertyValue $FixtureGatewayId.Replace('apim-p84', 'apim-other') -PassThru) }; Expect = 'apim-other'; RunnerIdle = $true }
+        @{ Name = 'drift between the lists and Entra'; Fixture = 'healthy'; Drift = $true; Extra = @{}; Expect = 'drift'; RunnerIdle = $true; AdmissionIdle = $true }
+        @{ Name = 'a projection that differs from the gateway'; Fixture = 'compare-differs'; Drift = $false; Extra = @{}; Expect = "does not match the gateway's decisions"; RunnerIdle = $false; AdmissionIdle = $true }
+        @{ Name = 'an admission refusal'; Fixture = 'action-group-disabled'; Drift = $false; Extra = @{}; Expect = 'disabled'; RunnerIdle = $false; AdmissionIdle = $false }
+        @{ Name = 'a receipt for another gateway'; Fixture = 'healthy'; Drift = $false; Extra = @{ Renewal = ($renewal | Select-Object * -ExcludeProperty gatewayResourceId | Add-Member -NotePropertyName gatewayResourceId -NotePropertyValue $FixtureGatewayId.Replace('apim-p84', 'apim-other') -PassThru) }; Expect = 'apim-other'; RunnerIdle = $true; AdmissionIdle = $true }
     )) {
     Reset-ProjectionFixture $case.Fixture
     Set-GoodRenewalJob
@@ -156,8 +157,9 @@ foreach ($case in @(
     Get-Backups | Remove-Item -Force
     Capture { Invoke-Switch $case.Extra }
     $runnerRan = ($FixtureCalls -join "`n") -match 'container exec'
+    $admissionRan = ($FixtureCalls -join "`n") -match 'actionGroups/|check-admission\.mjs'
     Assert "a refusal for $($case.Name) leaves entitlement-source and writes no backup" ($Failure -match '^Projection switch refused' -and $Failure -match $case.Expect -and
-        (Get-Writes).Count -eq 0 -and (Get-Backups).Count -eq 0 -and (-not $case.RunnerIdle -or -not $runnerRan)) "$Failure | writes $((Get-Writes).Count) backups $((Get-Backups).Count) runner $runnerRan"
+        (Get-Writes).Count -eq 0 -and (Get-Backups).Count -eq 0 -and (-not $case.RunnerIdle -or -not $runnerRan) -and (-not $case.AdmissionIdle -or -not $admissionRan)) "$Failure | writes $((Get-Writes).Count) backups $((Get-Backups).Count) runner $runnerRan admission $admissionRan"
 }
 $global:CompareDrift = $false
 Reset-ProjectionFixture

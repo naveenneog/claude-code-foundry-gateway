@@ -186,6 +186,8 @@ function az {
             $b64 += '=' * ((4 - $b64.Length % 4) % 4)
             return [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Convert]::FromBase64String($b64))).Replace('-', '').ToLower()
         }
+        # apply-projection.mjs --compare prints ok:false with the differences when the projection and the gateway disagree.
+        if ($FixtureCase -eq 'compare-differs' -and $command -match 'apply-projection\.mjs .*--compare ') { return '{"ok":false,"mode":"compare","compared":2,"differences":1,"byKind":{"missing":1}}' }
         return '{"ok":true}'
     }
     throw "UNEXPECTED AZURE CALL (offline fixture): $line"
