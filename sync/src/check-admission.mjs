@@ -15,7 +15,13 @@ const accountResourceId = opt('--account-resource-id', process.env.PROJECTION_AC
 const databaseName = opt('--database', 'claude');
 const containerName = opt('--container', 'entitlement');
 const imageDigest = opt('--image-digest', process.env.PROJECTION_IMAGE_DIGEST);
-const entrypoint = opt('--entrypoint', process.env.PROJECTION_ENTRYPOINT);
+// The runner splits its command on spaces with no quoting (scripts/ClaudeRunner.ps1), so a runner
+// caller passes the entry point base64url-encoded; a direct caller can pass it plain.
+const encodedEntrypoint = opt('--entrypoint-base64url');
+if (encodedEntrypoint !== undefined && !/^[A-Za-z0-9_-]+$/.test(encodedEntrypoint)) fail('--entrypoint-base64url must be base64url');
+const entrypoint = encodedEntrypoint
+  ? Buffer.from(encodedEntrypoint, 'base64url').toString('utf8')
+  : opt('--entrypoint', process.env.PROJECTION_ENTRYPOINT);
 const actionGroupResourceId = opt('--action-group-resource-id', process.env.PROJECTION_ACTION_GROUP_ID);
 // The settings the job definition carries now; only evidence written under them counts (ADR-0050).
 const settings = normalizeJobSettings({

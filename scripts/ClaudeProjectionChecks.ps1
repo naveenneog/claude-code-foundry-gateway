@@ -208,7 +208,10 @@ function Assert-ClaudeProjectionAdmission {
         -PremiumGroupId $PremiumGroupId -IdentityClientId $IdentityClientId
 
     Write-Host '    Checking scheduled renewal evidence from Cosmos through the in-VNet runner (expected wait: about 60-90 minutes after the first successful 30-minute run).' -ForegroundColor DarkGray
-    $command = "node /work/sync/src/check-admission.mjs --cosmos https://$CosmosAccount.documents.azure.com:443/ --tenant $TenantId --account-resource-id $AccountResourceId --database $Database --container $Container --image-digest $ImageDigest --entrypoint `"$EntryPoint`" --action-group-resource-id $ActionGroupResourceId --client-id $($settings.ClientId) --standard-group-id $($settings.StandardGroupId) --premium-group-id $($settings.PremiumGroupId) --gateway-resource-id $($settings.GatewayResourceId)"
+    # The runner splits on spaces with no quoting, and az.cmd re-quotes for cmd.exe: the entry point,
+    # which holds a space, travels base64url-encoded.
+    $entryPointEncoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($EntryPoint)).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+    $command = "node /work/sync/src/check-admission.mjs --cosmos https://$CosmosAccount.documents.azure.com:443/ --tenant $TenantId --account-resource-id $AccountResourceId --database $Database --container $Container --image-digest $ImageDigest --entrypoint-base64url $entryPointEncoded --action-group-resource-id $ActionGroupResourceId --client-id $($settings.ClientId) --standard-group-id $($settings.StandardGroupId) --premium-group-id $($settings.PremiumGroupId) --gateway-resource-id $($settings.GatewayResourceId)"
     $raw = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $RunnerName -Command $command
     return (ConvertFrom-ClaudeProjectionAdmissionResult -RawOutput $raw)
 }

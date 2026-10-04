@@ -175,8 +175,11 @@ function az {
     }
     if ($line -like 'container exec*') {
         if ($FixtureCase -eq 'runner-exit') { $global:LASTEXITCODE = 9; return 'runner transport failed' }
-        # Send-RunnerFile: an empty temp file, base64url chunks appended, then the decoded file's SHA-256.
         $command = [string]$words[[array]::IndexOf($words, '--exec-command') + 1]
+        # az.cmd re-quotes its arguments for cmd.exe, so an embedded quote splits the command (measured with
+        # the real az.cmd in P95 council round 1: "ERROR: unrecognized arguments").
+        if ($command.Contains('"')) { $global:LASTEXITCODE = 2; return "ERROR: unrecognized arguments: $command" }
+        # Send-RunnerFile: an empty temp file, base64url chunks appended, then the decoded file's SHA-256.
         if ($command -match "^node -e require\('fs'\)\.mkdirSync\('[^']*',\{recursive:true\}\);require\('fs'\)\.writeFileSync\('([^']+)',''\)$") {
             $global:FixtureRunnerFiles[$Matches[1]] = [Text.StringBuilder]::new(); return ''
         }

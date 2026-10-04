@@ -14,7 +14,7 @@ function Assert($Label, [bool]$Condition, $Detail = '') {
 }
 
 # The simulation's test count. A test that stops loading or is removed shows up as a lower count.
-$expectedTests = 11
+$expectedTests = 12
 
 . (Join-Path $root 'scripts\ClaudeProjectionPackage.ps1')
 . (Join-Path $root 'scripts\ClaudeBusinessUnit.ps1')

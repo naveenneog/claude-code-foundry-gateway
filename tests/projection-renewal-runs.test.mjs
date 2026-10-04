@@ -196,6 +196,24 @@ test('the evidence admits only under the settings the job ran with', () => {
   assert.match(unbound.json.error, /--client-id/);
 });
 
+test('the entry point travels base64url-encoded, because the runner splits its command on spaces', () => {
+  const where = scenario('encoded entry point');
+  assert.equal(snapshotRun(where, '2026-10-04T09:50:00.000Z', SNAPSHOT_RECORDS).code, 0);
+  for (const now of ['2026-10-04T10:00:00.000Z', '2026-10-04T10:30:00.000Z', '2026-10-04T11:00:00.000Z']) {
+    assert.equal(jobRun(where, now).code, 0, now);
+  }
+  const withEntry = (entry) => ['--cosmos', ENDPOINT, '--tenant', TENANT, '--account-resource-id', ACCOUNT, '--database', 'claude',
+    '--container', 'entitlement', '--image-digest', DIGEST, ...entry, '--action-group-resource-id', ACTION_GROUP, ...JOB_SETTINGS];
+  const encodedEntry = Buffer.from(ENTRYPOINT, 'utf8').toString('base64url');
+  assert.match(encodedEntry, /^[A-Za-z0-9_-]+$/);
+  const encoded = run(where, 'check-admission.mjs', withEntry(['--entrypoint-base64url', encodedEntry]), { now: '2026-10-04T11:01:00.000Z' });
+  assert.equal(encoded.code, 0, encoded.stdout + encoded.stderr);
+  assert.equal(encoded.json.ok, true);
+  const malformed = run(where, 'check-admission.mjs', withEntry(['--entrypoint-base64url', 'node%20app']), { now: '2026-10-04T11:01:00.000Z' });
+  assert.equal(malformed.code, 1, malformed.stdout + malformed.stderr);
+  assert.match(malformed.json.error, /--entrypoint-base64url must be base64url/);
+});
+
 test('the job reads its tier groups from its environment and its units from the gateway', () => {
   const where = scenario('settings');
   const ran = jobRun(where, '2026-10-04T10:00:00.000Z');
