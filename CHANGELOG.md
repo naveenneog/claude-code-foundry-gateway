@@ -58,6 +58,7 @@ exact streaming cache-creation detail remains **U13**.
   Installer UI actions now use visible busy, success and alert states, including duplicate-click
   blocking and recovery text for HTTP and network failures.
   Static mode now presents the Cloud Shell handoff as download, Manage files > Upload and one pasteable command, with invalid answers blocking the download.
+  Preflight problems can now link to their answer fields through optional problem paths, check-id mappings or browser-validator fallback paths.
 - **Installers read an answers file, check it before any change, run selected steps and write a progress stream (P92, phase 0).**
   One answers file, described by `schemas/claude-gateway.answers.schema.json`, feeds
   `Install-ClaudeGateway.ps1 -AnswersPath`, `install-claude-gateway.sh --answers-file` and

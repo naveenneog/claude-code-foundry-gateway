@@ -1,7 +1,6 @@
 (function () {
   "use strict";
-  const { buildPortableCommands, collectAnswersFromEntries, fieldGroups, isFieldActive, validateAnswers, validateBusinessUnits, isPlainObject } = globalThis.ClaudeInstallerUiModel;
-
+  const { buildPortableCommands, collectAnswersFromEntries, fieldGroups, fieldsByCheckId, isFieldActive, validateAnswers, validateBusinessUnits, isPlainObject } = globalThis.ClaudeInstallerUiModel;
   let schema;
   let identity = {};
   let lastFailedStep = "";
@@ -15,12 +14,13 @@
   let preflightFingerprint = "";
   let preflightStale = true;
   let validationProblems = [];
+  let checkFields = {};
+  const touchedFields = new Set();
   let prefill;
   let actions;
   const maxRunOutputLines = 2000;
   let runOutputLines = [];
   let removedRunOutputLines = 0;
-
   function byId(id) {
     return document.getElementById(id);
   }
@@ -37,7 +37,6 @@
   function liveMode() {
     return location.protocol !== "file:" && sessionMode === "live";
   }
-
   async function postJson(path, body) {
     if (location.protocol === "file:") throw new Error("Server mode is not running. Use the generated commands.");
     const res = await fetch(path, {
@@ -62,7 +61,6 @@
     }
     return data;
   }
-
   async function getJson(path) {
     if (location.protocol === "file:") throw new Error("Server mode is not running. Use the generated commands.");
     const res = await fetch(path);
@@ -80,13 +78,11 @@
     }
     return data;
   }
-
   async function loadSchema() {
     const carried = byId("schema-json")?.textContent?.trim();
     if (carried) return JSON.parse(carried);
     return (await fetch("./api/schema")).json();
   }
-
   function createErrorNode(id) {
     const node = document.createElement("div");
     node.id = id;
@@ -94,14 +90,12 @@
     node.setAttribute("role", "alert");
     return node;
   }
-
   function labelFor(name, property) {
     const label = document.createElement("label");
     label.dataset.answer = name;
     appendText(label, property.title || name);
     return label;
   }
-
   function renderField(parent, name, property) {
     const label = labelFor(name, property);
     let field;
@@ -133,7 +127,6 @@
     if (name === "SubscriptionId") renderPrefillControl(label, "subscriptions", name, "Read subscriptions");
     if (name === "FoundryAccount") renderPrefillControl(label, "foundryAccounts", name, "Read Foundry accounts");
   }
-
   function renderPrefillControl(label, kind, name, text) {
     const button = document.createElement("button");
     button.type = "button";
@@ -144,7 +137,6 @@
     select.hidden = true;
     label.append(button, select);
   }
-
   function renderModelList(parent, name, property) {
     const label = labelFor(name, property);
     const select = document.createElement("select");
@@ -159,7 +151,6 @@
     label.append(select, input, createErrorNode(`field-${name}-error`));
     parent.append(label);
   }
-
   function renderPendingDeployment(parent, property) {
     const fieldset = document.createElement("fieldset");
     fieldset.dataset.answer = "PendingClaudeDeployment";
@@ -183,7 +174,6 @@
     fieldset.append(fields);
     parent.append(fieldset);
   }
-
   function renderNestedField(parent, name, node) {
     const property = node.$ref ? { ...schema.$defs[node.$ref.replace(/^#\/\$defs\//, "")], ...node } : node;
     const label = labelFor(name, property);
@@ -194,7 +184,6 @@
     label.append(input, createErrorNode(`${input.id}-error`));
     parent.append(label);
   }
-
   function renderGroupedFields() {
     for (const group of Object.values(fieldGroups)) {
       const parent = byId(group.target);
@@ -208,7 +197,6 @@
       }
     }
   }
-
   function currentEntryMap() {
     const entries = new Map();
     for (const field of document.querySelectorAll("[name]")) {
@@ -218,12 +206,10 @@
     }
     return entries;
   }
-
   function collectAnswers() {
     businessUnitsEditor.sync();
     return collectAnswersFromEntries(schema, currentEntryMap(), byId("business-units").value);
   }
-
   function refreshConditionalVisibility() {
     const entries = currentEntryMap();
     for (const node of document.querySelectorAll("[data-answer]")) {
@@ -239,7 +225,6 @@
       }
     }
   }
-
   function validateCurrentAnswers() {
     let answers;
     try {
@@ -257,10 +242,17 @@
       return validationProblems;
     }
     validationProblems = validateAnswers(schema, answers, "Install-ClaudeGateway.ps1");
+    if (touchedFields.has("SubscriptionId") && !currentEntryMap().get("SubscriptionId")) {
+      validationProblems.unshift({
+        checkId: "target.subscription",
+        path: "SubscriptionId",
+        message: "SubscriptionId is required",
+        remedy: "Give SubscriptionId.",
+      });
+    }
     renderValidationProblems();
     return validationProblems;
   }
-
   function renderValidationProblems() {
     for (const field of document.querySelectorAll("[aria-invalid]")) field.removeAttribute("aria-invalid");
     for (const node of document.querySelectorAll(".field-error")) node.textContent = "";
@@ -270,20 +262,58 @@
       const list = document.createElement("ul");
       for (const p of validationProblems) {
         appendText(list, `${p.path || "answers"}: ${p.message} ${p.remedy || ""}`.trim(), "li");
-        const rootName = String(p.path || "").split(/[.\[]/)[0];
-        const field = rootName === "BusinessUnits" ? byId("business-units") : document.querySelector(`[name="${CSS.escape(rootName)}"], [name^="${CSS.escape(rootName)}."]`);
-        if (field) {
-          field.setAttribute("aria-invalid", "true");
-          const described = field.getAttribute("aria-describedby");
-          const err = described ? byId(described.split(/\s+/)[0]) : null;
-          if (err) err.textContent = `${p.message} ${p.remedy || ""}`.trim();
-        }
+        markFieldProblem(p.path, p.message, p.remedy);
+        appendProblemButton(list.lastChild, p.path, `Review ${p.path}`);
       }
       errors.append(list);
     }
     refreshCommands();
     updateRunAdmission();
     return validationProblems;
+  }
+  function fieldForPath(path) {
+    const rootName = String(path || "").split(/[.\[]/)[0];
+    if (!rootName) return null;
+    if (rootName === "BusinessUnits") return byId("business-units");
+    return document.querySelector(`[name="${CSS.escape(rootName)}"], [name^="${CSS.escape(rootName)}."]`);
+  }
+  function markFieldProblem(path, message, remedy) {
+    const field = fieldForPath(path);
+    if (!field) return null;
+    field.setAttribute("aria-invalid", "true");
+    const described = field.getAttribute("aria-describedby") || "";
+    const errorId = described.split(/\s+/).filter(Boolean)[0];
+    const err = errorId ? byId(errorId) : null;
+    if (err) err.textContent = `${message || "Review this field."} ${remedy || ""}`.trim();
+    return field;
+  }
+
+  function focusProblemPath(path) {
+    const field = fieldForPath(path);
+    field?.focus();
+  }
+
+  function appendProblemButton(parent, path, label) {
+    if (!fieldForPath(path)) return;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = label || `Review ${path}`;
+    button.addEventListener("click", () => focusProblemPath(path));
+    parent.append(button);
+  }
+
+  function preflightProblemPaths(check, browserFallback) {
+    const out = [];
+    for (const problem of check.problems || []) {
+      if (problem.path) out.push({ path: problem.path, message: problem.message, remedy: problem.remedy });
+    }
+    if (!out.length) {
+      for (const path of checkFields[check.id] || []) out.push({ path, message: check.message, remedy: check.remedy });
+    }
+    if (!out.length && ["answers.schema", "answers.crossField"].includes(check.id)) {
+      for (const problem of browserFallback.values()) out.push(problem);
+    }
+    return out;
   }
 
   function markPreflightStale() {
@@ -375,18 +405,10 @@
   }
 
   function markFields(checks) {
+    const browserFallback = new Map(validationProblems.map((p) => [p.path, p]));
     for (const check of checks) {
       if (check.result === "PASS") continue;
-      for (const problem of check.problems || []) {
-        const p = {
-          path: problem.path || "",
-          message: problem.message || check.message || "",
-          remedy: problem.remedy || check.remedy || "",
-        };
-        const rootName = String(p.path).split(/[.\[]/)[0];
-        const field = rootName === "BusinessUnits" ? byId("business-units") : document.querySelector(`[name="${CSS.escape(rootName)}"]`);
-        field?.setAttribute("aria-invalid", "true");
-      }
+      for (const p of preflightProblemPaths(check, browserFallback)) markFieldProblem(p.path, p.message || check.message, p.remedy || check.remedy);
     }
   }
 
@@ -394,9 +416,10 @@
     const container = byId("preflight-output");
     clearChildren(container);
     const checks = result.preflight?.checks || result.preflight || [];
+    const browserFallback = new Map(validationProblems.map((p) => [p.path, p]));
     const table = document.createElement("table");
     const header = document.createElement("tr");
-    for (const text of ["Check", "Result", "Message", "Remedy"]) appendText(header, text, "th");
+    for (const text of ["Check", "Result", "Message", "Remedy", "Field"]) appendText(header, text, "th");
     table.append(header);
     for (const check of checks) {
       const row = document.createElement("tr");
@@ -404,6 +427,8 @@
       appendText(row, check.result || "", "td", check.result === "PASS" ? "passed" : "failed");
       appendText(row, check.message || "", "td");
       appendText(row, check.remedy || "", "td");
+      const problemCell = appendText(row, "", "td");
+      for (const p of preflightProblemPaths(check, browserFallback)) appendProblemButton(problemCell, p.path, `Review ${p.path}`);
       table.append(row);
     }
     container.append(table);
@@ -533,6 +558,7 @@
 
   async function main() {
     schema = await loadSchema();
+    checkFields = fieldsByCheckId(schema);
     businessUnitsEditor = globalThis.ClaudeInstallerBusinessUnits.create({
       appendText,
       byId,
@@ -570,9 +596,11 @@
         updateRunAdmission();
         return;
       }
+      if (event.target?.name) touchedFields.add(event.target.name);
       if (event.target?.closest("#business-unit-tree") || event.target?.matches("[name], #business-units")) markPreflightStale();
     });
     document.addEventListener("change", (event) => {
+      if (event.target?.name) touchedFields.add(event.target.name);
       if (event.target?.matches("[name], #step-list input")) markPreflightStale();
     });
     byId("preflight").onclick = () => actions.run(byId("preflight"), { busyText: "Running preflight...", successText: "Preflight finished." }, async () => {

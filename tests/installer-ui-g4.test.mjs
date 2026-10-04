@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { createInstallerUiServer } from '../tools/installer-ui/server.mjs';
+import { validatePreflight } from '../tools/installer-ui/installer-contract.mjs';
 
 const stubInstaller = fileURLToPath(new URL('./installer-ui-stub.mjs', import.meta.url));
 
@@ -257,5 +258,109 @@ test('U1 fix action settled recomputes stale run and validation-disabled preflig
   } finally {
     await opened.browser.close();
     await preflightApp.close();
+  }
+});
+
+
+function failPreflight(check) {
+  return {
+    preflight: {
+      schemaVersion: 1,
+      installer: 'pwsh',
+      answersSchemaVersion: 1,
+      result: 'FAIL',
+      checks: [check],
+    },
+    exitCode: 1,
+  };
+}
+
+test('U3 contract accepts optional string problem paths and rejects non-string paths', () => {
+  const payload = failPreflight({
+    id: 'answers.schema',
+    result: 'FAIL',
+    reason: null,
+    message: 'SubscriptionId is required',
+    remedy: 'Give SubscriptionId.',
+    problems: [{ path: 'SubscriptionId', message: 'SubscriptionId is required', remedy: 'Give SubscriptionId.' }],
+  }).preflight;
+  assert.equal(validatePreflight(payload).checks[0].problems[0].path, 'SubscriptionId');
+  const bad = structuredClone(payload);
+  bad.checks[0].problems[0].path = 93;
+  assert.throws(() => validatePreflight(bad), /problem path is not text/);
+});
+
+test('U3 preflight problem path links to the field and focuses it', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await fillValid(page);
+    await page.route('**/api/preflight', (route) => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(failPreflight({
+        id: 'answers.schema',
+        result: 'FAIL',
+        reason: null,
+        message: 'SubscriptionId is required',
+        remedy: 'Give SubscriptionId.',
+        problems: [{ path: 'SubscriptionId', message: 'SubscriptionId is required', remedy: 'Give SubscriptionId.' }],
+      })),
+    }));
+    await page.getByRole('button', { name: 'Run preflight' }).click();
+    await page.getByRole('button', { name: 'Review SubscriptionId' }).click();
+    assert.equal(await page.evaluate(() => document.activeElement?.name), 'SubscriptionId');
+    assert.equal(await page.locator('[name="SubscriptionId"]').getAttribute('aria-invalid'), 'true');
+    const described = await page.locator('[name="SubscriptionId"]').getAttribute('aria-describedby');
+    const errorId = described.split(/\s+/)[0];
+    assert.match(await page.locator('#' + errorId).textContent(), /SubscriptionId is required/);
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
+test('U3 preflight problem without a path falls back to x-checkId mapped fields', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await fillValid(page);
+    await page.route('**/api/preflight', (route) => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(failPreflight({
+        id: 'foundry.account',
+        result: 'FAIL',
+        reason: null,
+        message: 'The Foundry account was not found',
+        remedy: 'Choose a readable account.',
+        problems: [{ message: 'The Foundry account was not found', remedy: 'Choose a readable account.' }],
+      })),
+    }));
+    await page.getByRole('button', { name: 'Run preflight' }).click();
+    await page.getByRole('button', { name: 'Review FoundryAccount' }).click();
+    assert.equal(await page.evaluate(() => document.activeElement?.name), 'FoundryAccount');
+    assert.equal(await page.locator('[name="FoundryAccount"]').getAttribute('aria-invalid'), 'true');
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
+test('U3 blank SubscriptionId is marked by browser validation and focusable from the problem', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await page.locator('[name="SubscriptionId"]').fill('00000000-0000-4000-8000-000000000093');
+    await page.locator('[name="SubscriptionId"]').fill('');
+    await page.getByRole('button', { name: 'Review SubscriptionId' }).click();
+    assert.equal(await page.evaluate(() => document.activeElement?.name), 'SubscriptionId');
+    assert.equal(await page.locator('[name="SubscriptionId"]').getAttribute('aria-invalid'), 'true');
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
   }
 });

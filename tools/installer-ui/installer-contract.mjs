@@ -66,6 +66,7 @@ export function validatePreflight(payload) {
         requireObject(problem, interfaceName);
         if (problem.message !== undefined && typeof problem.message !== 'string') throw fail(interfaceName, 'problem message is not text');
         if (problem.remedy !== undefined && typeof problem.remedy !== 'string') throw fail(interfaceName, 'problem remedy is not text');
+        if (problem.path !== undefined && typeof problem.path !== 'string') throw fail(interfaceName, 'problem path is not text');
       }
     }
   }
