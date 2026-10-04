@@ -123,6 +123,21 @@ function Assert-ClaudeProjectionJobDefinition {
     return $true
 }
 
+function Assert-ClaudeProjectionActionGroup {
+    # U119: ARM reports each receiver's status; receivers that are not Enabled receive nothing, and a
+    # disabled group sends to none of its receivers.
+    param([Parameter(Mandatory)]$ActionGroup, [Parameter(Mandatory)][string]$ActionGroupResourceId)
+    $redeploy = 'Remedy: confirm the alert address from the Azure Monitor email, or redeploy the renewal job with scripts/Deploy-ClaudeProjectionRenewal.ps1 -AlertEmail, then rerun.'
+    if (-not $ActionGroup.properties -or $ActionGroup.properties.enabled -ne $true) {
+        throw "Projection switch refused: the renewal alerts' action group $ActionGroupResourceId is disabled, so no receiver gets an alert. Remedy: enable it under Monitor > Action groups, then rerun."
+    }
+    $enabled = @($ActionGroup.properties.emailReceivers | Where-Object { $_ -and [string]$_.status -eq 'Enabled' })
+    if (-not $enabled.Count) {
+        throw "Projection switch refused: the renewal alerts' action group $ActionGroupResourceId has no email receiver with status Enabled. $redeploy"
+    }
+    return $true
+}
+
 function Assert-ClaudeProjectionAdmission {
     param(
         [Parameter(Mandatory)][string]$ResourceGroup,
@@ -140,16 +155,21 @@ function Assert-ClaudeProjectionAdmission {
     if ([string]::IsNullOrWhiteSpace($ActionGroupResourceId)) {
         throw 'Projection switch refused: renewal alerts have no action group with email receivers. Remedy: deploy the P86 action group and alerts, then wait for fresh evidence.'
     }
+    # ARM first: an action group that alerts nobody, or a job that is not the tested one, refuses the
+    # switch before the runner reads Cosmos.
+    $token = Invoke-ClaudeNetworkAz @('account','get-access-token','--resource','https://management.azure.com')
+    if (-not $token.accessToken) { throw 'Projection switch refused: could not get a management-plane token to read the renewal job definition.' }
+    $headers = @{ Authorization = "Bearer $($token.accessToken)" }
+    try { $group = Invoke-RestMethod -Method Get -Headers $headers -Uri "https://management.azure.com${ActionGroupResourceId}?api-version=2023-01-01" -ErrorAction Stop }
+    catch { throw "Projection switch refused: could not read the renewal alerts' action group ${ActionGroupResourceId}: $($_.Exception.Message) Remedy: check the receipt's action group id and the signed-in account's read access, then rerun." }
+    $null = Assert-ClaudeProjectionActionGroup -ActionGroup $group -ActionGroupResourceId $ActionGroupResourceId
+    $job = Invoke-RestMethod -Method Get -Headers $headers -Uri "https://management.azure.com${ReconcilerResourceId}?api-version=2024-03-01" -ErrorAction Stop
+    $null = Assert-ClaudeProjectionJobDefinition -Job $job -ImageDigest $ImageDigest
+
     Write-Host '    Checking scheduled renewal evidence from Cosmos through the in-VNet runner (expected wait: about 60-90 minutes after the first successful 30-minute run).' -ForegroundColor DarkGray
     $command = "node /work/sync/src/check-admission.mjs --cosmos https://$CosmosAccount.documents.azure.com:443/ --tenant $TenantId --account-resource-id $AccountResourceId --database $Database --container $Container --image-digest $ImageDigest --entrypoint `"$EntryPoint`" --action-group-resource-id $ActionGroupResourceId"
     $raw = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $RunnerName -Command $command
-    $admission = ConvertFrom-ClaudeProjectionAdmissionResult -RawOutput $raw
-
-    $token = Invoke-ClaudeNetworkAz @('account','get-access-token','--resource','https://management.azure.com')
-    if (-not $token.accessToken) { throw 'Projection switch refused: could not get a management-plane token to read the renewal job definition.' }
-    $job = Invoke-RestMethod -Method Get -Headers @{ Authorization = "Bearer $($token.accessToken)" } -Uri "https://management.azure.com${ReconcilerResourceId}?api-version=2024-03-01" -ErrorAction Stop
-    $null = Assert-ClaudeProjectionJobDefinition -Job $job -ImageDigest $ImageDigest
-    return $admission
+    return (ConvertFrom-ClaudeProjectionAdmissionResult -RawOutput $raw)
 }
 
 function Invoke-ClaudeProjectionPreflight {

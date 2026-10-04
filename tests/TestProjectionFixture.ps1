@@ -51,6 +51,14 @@ function Reset-ProjectionFixture {
         }
     } | ConvertTo-Json -Depth 20 | ConvertFrom-Json
     $global:FixtureExecutions = @($FixtureExecution)
+    $global:FixtureActionGroupId = "$FixtureRgId/providers/Microsoft.Insights/actionGroups/ag-projection-renewal"
+    $global:FixtureActionGroup = [pscustomobject]@{
+        id = $FixtureActionGroupId; type = 'Microsoft.Insights/ActionGroups'
+        properties = [pscustomobject]@{
+            enabled = ($Case -ne 'action-group-disabled')
+            emailReceivers = @([pscustomobject]@{ name = 'email-0'; emailAddress = 'ops@example.invalid'; status = $(if ($Case -eq 'action-group-no-email') { 'Disabled' } else { 'Enabled' }) })
+        }
+    }
     $global:LASTEXITCODE = 0
 }
 
@@ -238,6 +246,10 @@ function Invoke-RestMethod {
         $job = $FixtureJob | ConvertTo-Json -Depth 20 | ConvertFrom-Json
         $job.id = $foreignId
         return $job
+    }
+    if ($url -match '^https://management\.azure\.com/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\.Insights/actionGroups/[^/?]+\?api-version=') {
+        if ($FixtureCase -eq 'action-group-error') { throw 'ARM 404 ResourceNotFound: the action group was not found.' }
+        return $FixtureActionGroup
     }
     if ($url -eq "https://management.azure.com${FixtureJobId}?api-version=2024-03-01") {
         if ($FixtureCase -eq 'job-error') { throw 'ARM 403 job read denied' }

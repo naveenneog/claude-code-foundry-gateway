@@ -2,7 +2,7 @@
   "SchemaVersion": 1,
   "ShardCount": 12,
   "DefaultSeconds": 60,
-  "Source": "95 PASS, 0 FAIL, 0 SKIP; hosted run 36457223984 attempt 1, f82981270702f0af5eeceb41a4e8d776524acf28, 2026-09-28. Per-check elapsed seconds seed future whole-check LPT assignment; setup/proof time is separate. P85 (2026-09-29) replaced the unsharded AUM check (130.4 s) with four shards and added 'AUM shards run every test file once' at its local 14 s. P85 final follow-up integration (2026-09-30 IST, 8139c06) refreshes the four planned weights from one serial JUnit run: all 1200 cases passed, 983.3 s summed case time. Planned seconds are 259, 259, 258 and 258; current and earlier integration results remain recorded in docs/status/P85.md. P89/P90 round 16 split Azure CLI setup guide into four registered shards measured locally on 2026-10-02: 397.0, 37.0, 43.1 and 34.0 s. Round 16 follow-up rebalanced scenario chunks and remeasured shards locally: 206.9, 108.4, 226.1 and 143.8 s; shard 0 profile: 30 az help calls 65.2 s, 43 bash scenarios 139.7 s, static checks 2.1 s. P94 (2026-10-04) adds 'Projection sync package and its import closure' at its local 4 s, 'Projection renewal templates and deploy script' at 16 s, 'Projection renewal runs reach admission offline' at 12.4 s and 'Azure CLI guide renewal block runs in order' at 20 s.",
+  "Source": "95 PASS, 0 FAIL, 0 SKIP; hosted run 36457223984 attempt 1, f82981270702f0af5eeceb41a4e8d776524acf28, 2026-09-28. Per-check elapsed seconds seed future whole-check LPT assignment; setup/proof time is separate. P85 (2026-09-29) replaced the unsharded AUM check (130.4 s) with four shards and added 'AUM shards run every test file once' at its local 14 s. P85 final follow-up integration (2026-09-30 IST, 8139c06) refreshes the four planned weights from one serial JUnit run: all 1200 cases passed, 983.3 s summed case time. Planned seconds are 259, 259, 258 and 258; current and earlier integration results remain recorded in docs/status/P85.md. P89/P90 round 16 split Azure CLI setup guide into four registered shards measured locally on 2026-10-02: 397.0, 37.0, 43.1 and 34.0 s. Round 16 follow-up rebalanced scenario chunks and remeasured shards locally: 206.9, 108.4, 226.1 and 143.8 s; shard 0 profile: 30 az help calls 65.2 s, 43 bash scenarios 139.7 s, static checks 2.1 s. P94 (2026-10-04) adds 'Projection sync package and its import closure' at its local 4 s, 'Projection renewal templates and deploy script' at 16 s, 'Projection renewal runs reach admission offline' at 12.4 s and 'Azure CLI guide renewal block runs in order' at 20 s. P95 (2026-10-05) adds 'Projection switch admission and switch function' at 2 s, measured locally at 1.2 s for its first slice.",
   "SourceRunUrl": "https://github.com/naveenneog/claude-code-foundry-gateway/actions/runs/36457223984",
   "SourceReceiptSha256": "03dee5e0919ce0a183881b46649d9aca379ea2d49b82994ace882a465ae533e4",
   "Seconds": {
@@ -78,6 +78,7 @@
     "Projection sync package and its import closure": 4.0,
     "Projection renewal templates and deploy script": 16.0,
     "Projection renewal runs reach admission offline": 12.4,
+    "Projection switch admission and switch function": 2.0,
     "Azure CLI guide renewal block runs in order": 20.0,
     "Claude Desktop sign-in choice": 7.7,
     "Workstation clients read what setup writes": 188.2,
