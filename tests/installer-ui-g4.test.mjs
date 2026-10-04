@@ -280,11 +280,11 @@ test('U3 contract accepts optional string problem paths and rejects non-string p
     id: 'answers.schema',
     result: 'FAIL',
     reason: null,
-    message: 'SubscriptionId is required',
-    remedy: 'Give SubscriptionId.',
-    problems: [{ path: 'SubscriptionId', message: 'SubscriptionId is required', remedy: 'Give SubscriptionId.' }],
+    message: "FoundryAccount 'bad account' is not a Foundry account name (2 to 64 letters, digits and hyphens)",
+    remedy: 'Give the account name as az cognitiveservices account list -o table shows it.',
+    problems: [{ path: 'FoundryAccount', message: "FoundryAccount 'bad account' is not a Foundry account name (2 to 64 letters, digits and hyphens)", remedy: 'Give the account name as az cognitiveservices account list -o table shows it.' }],
   }).preflight;
-  assert.equal(validatePreflight(payload).checks[0].problems[0].path, 'SubscriptionId');
+  assert.equal(validatePreflight(payload).checks[0].problems[0].path, 'FoundryAccount');
   const bad = structuredClone(payload);
   bad.checks[0].problems[0].path = 93;
   assert.throws(() => validatePreflight(bad), /problem path is not text/);
@@ -302,18 +302,18 @@ test('U3 preflight problem path links to the field and focuses it', async () => 
         id: 'answers.schema',
         result: 'FAIL',
         reason: null,
-        message: 'SubscriptionId is required',
-        remedy: 'Give SubscriptionId.',
-        problems: [{ path: 'SubscriptionId', message: 'SubscriptionId is required', remedy: 'Give SubscriptionId.' }],
+        message: "FoundryAccount 'bad account' is not a Foundry account name (2 to 64 letters, digits and hyphens)",
+        remedy: 'Give the account name as az cognitiveservices account list -o table shows it.',
+        problems: [{ path: 'FoundryAccount', message: "FoundryAccount 'bad account' is not a Foundry account name (2 to 64 letters, digits and hyphens)", remedy: 'Give the account name as az cognitiveservices account list -o table shows it.' }],
       })),
     }));
     await page.getByRole('button', { name: 'Run preflight' }).click();
-    await page.getByRole('button', { name: 'Review SubscriptionId' }).click();
-    assert.equal(await page.evaluate(() => document.activeElement?.name), 'SubscriptionId');
-    assert.equal(await page.locator('[name="SubscriptionId"]').getAttribute('aria-invalid'), 'true');
-    const described = await page.locator('[name="SubscriptionId"]').getAttribute('aria-describedby');
+    await page.getByRole('button', { name: 'Review FoundryAccount' }).click();
+    assert.equal(await page.evaluate(() => document.activeElement?.name), 'FoundryAccount');
+    assert.equal(await page.locator('[name="FoundryAccount"]').getAttribute('aria-invalid'), 'true');
+    const described = await page.locator('[name="FoundryAccount"]').getAttribute('aria-describedby');
     const errorId = described.split(/\s+/)[0];
-    assert.match(await page.locator('#' + errorId).textContent(), /SubscriptionId is required/);
+    assert.match(await page.locator('#' + errorId).textContent(), /FoundryAccount 'bad account' is not a Foundry account name/);
     await assertClean(page, pageErrors);
   } finally {
     await browser.close();
@@ -349,19 +349,35 @@ test('U3 preflight problem without a path falls back to x-checkId mapped fields'
   }
 });
 
-test('U3 blank SubscriptionId is marked by browser validation and focusable from the problem', async () => {
+test('U3 a blank SubscriptionId is accepted, and a target.subscription failure links to the Subscription field', async () => {
   const app = await start();
   const { browser, page, pageErrors } = await openPage(app);
   try {
     await page.locator('[name="SubscriptionId"]').fill('00000000-0000-4000-8000-000000000093');
     await page.locator('[name="SubscriptionId"]').fill('');
-    await page.getByRole('button', { name: 'Review SubscriptionId' }).click();
-    assert.equal(await page.evaluate(() => document.activeElement?.name), 'SubscriptionId');
-    assert.equal(await page.locator('[name="SubscriptionId"]').getAttribute('aria-invalid'), 'true');
-    await assertClean(page, pageErrors);
+    assert.equal(await page.getByRole('button', { name: 'Run preflight' }).isEnabled(), true);
+    assert.equal(await page.getByRole('button', { name: 'Download answers.json' }).isEnabled(), true);
+    await page.route('**/api/preflight', (route) => route.continue());
+    await page.evaluate(() => window.__p93Noop = true);
   } finally {
     await browser.close();
     await app.close();
+  }
+
+  const failApp = await start({ env: { P93_INSTALLER_UI_STUB_NO_CURRENT_SUBSCRIPTION: '1' } });
+  const opened = await openPage(failApp);
+  try {
+    await opened.page.getByRole('button', { name: 'Run preflight' }).click();
+    await opened.page.getByRole('button', { name: 'Review SubscriptionId' }).click();
+    assert.equal(await opened.page.evaluate(() => document.activeElement?.name), 'SubscriptionId');
+    assert.equal(await opened.page.locator('[name="SubscriptionId"]').getAttribute('aria-invalid'), 'true');
+    const described = await opened.page.locator('[name="SubscriptionId"]').getAttribute('aria-describedby');
+    const errorId = described.split(/\s+/)[0];
+    assert.match(await opened.page.locator('#' + errorId).textContent(), /the current subscription could not be read/);
+    await assertClean(opened.page, opened.pageErrors);
+  } finally {
+    await opened.browser.close();
+    await failApp.close();
   }
 });
 

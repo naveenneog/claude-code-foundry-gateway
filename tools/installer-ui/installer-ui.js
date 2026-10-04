@@ -15,7 +15,6 @@
   let preflightStale = true;
   let validationProblems = [];
   let checkFields = {};
-  const touchedFields = new Set();
   let prefill;
   let actions;
   const maxRunOutputLines = 2000;
@@ -242,14 +241,6 @@
       return validationProblems;
     }
     validationProblems = validateAnswers(schema, answers, "Install-ClaudeGateway.ps1");
-    if (touchedFields.has("SubscriptionId") && !currentEntryMap().get("SubscriptionId")) {
-      validationProblems.unshift({
-        checkId: "target.subscription",
-        path: "SubscriptionId",
-        message: "SubscriptionId is required",
-        remedy: "Give SubscriptionId.",
-      });
-    }
     renderValidationProblems();
     return validationProblems;
   }
@@ -596,11 +587,9 @@
         updateRunAdmission();
         return;
       }
-      if (event.target?.name) touchedFields.add(event.target.name);
       if (event.target?.closest("#business-unit-tree") || event.target?.matches("[name], #business-units")) markPreflightStale();
     });
     document.addEventListener("change", (event) => {
-      if (event.target?.name) touchedFields.add(event.target.name);
       if (event.target?.matches("[name], #step-list input")) markPreflightStale();
     });
     byId("preflight").onclick = () => actions.run(byId("preflight"), { busyText: "Running preflight...", successText: "Preflight finished." }, async () => {

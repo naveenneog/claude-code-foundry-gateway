@@ -86,17 +86,25 @@ if (args.includes('-Preflight')) {
     if (count >= 1) process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_FAIL = '1';
   }
   const fail = process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_FAIL === '1';
+  const noCurrentSubscription = process.env.P93_INSTALLER_UI_STUB_NO_CURRENT_SUBSCRIPTION === '1' && !answers.SubscriptionId;
+  const overallFail = fail || noCurrentSubscription;
+  const targetSubscription = answers.SubscriptionId
+    ? { id: 'target.subscription', result: 'PASS', reason: null, message: `subscription Capture subscription (${answers.SubscriptionId})`, remedy: '', problems: [] }
+    : noCurrentSubscription
+      ? { id: 'target.subscription', result: 'FAIL', reason: null, message: 'the current subscription could not be read (az account show returned no subscription id)', remedy: 'Check az account show, or answer SubscriptionId, then run the preflight again.', problems: [{ message: 'the current subscription could not be read (az account show returned no subscription id)', remedy: 'Check az account show, or answer SubscriptionId, then run the preflight again.' }] }
+      : { id: 'target.subscription', result: 'PASS', reason: null, message: 'SubscriptionId is not answered; the run uses the current subscription Capture subscription (00000000-0000-4000-8000-000000000093)', remedy: '', problems: [] };
   console.log(JSON.stringify({
     schemaVersion: 1,
     installer: 'pwsh',
     answersSchemaVersion: 1,
-    result: fail || !answers.SubscriptionId ? 'FAIL' : 'PASS',
+    result: overallFail ? 'FAIL' : 'PASS',
     checks: [
       { id: 'target.tenant', result: process.env.P93_INSTALLER_UI_STUB_SIGNED_IN === '1' ? 'PASS' : 'NOT-RUN', reason: process.env.P93_INSTALLER_UI_STUB_SIGNED_IN === '1' ? null : 'not-signed-in', message: process.env.P93_INSTALLER_UI_STUB_SIGNED_IN === '1' ? 'Azure CLI tenant matches the subscription' : 'Azure CLI is not signed in', remedy: process.env.P93_INSTALLER_UI_STUB_SIGNED_IN === '1' ? '' : 'Run az login --use-device-code.', problems: [] },
-      { id: 'answers.schema', result: fail || !answers.SubscriptionId ? 'FAIL' : 'PASS', reason: null, message: fail || !answers.SubscriptionId ? 'SubscriptionId is required' : 'answers file is valid', remedy: 'Give SubscriptionId.', problems: fail || !answers.SubscriptionId ? [{ message: 'SubscriptionId is required', remedy: 'Give SubscriptionId.' }] : [] },
+      targetSubscription,
+      { id: 'answers.schema', result: fail ? 'FAIL' : 'PASS', reason: null, message: fail ? 'stub requested answers.schema failure' : 'the answers match the answers schema, version 1', remedy: fail ? 'Fix the stub-requested failure.' : '', problems: fail ? [{ message: 'stub requested answers.schema failure', remedy: 'Fix the stub-requested failure.' }] : [] },
     ],
   }));
-  process.exit(process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_PASS_EXIT_1 === '1' ? 1 : (fail ? 1 : 0));
+  process.exit(process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_PASS_EXIT_1 === '1' ? 1 : (overallFail ? 1 : 0));
 }
 
 if (args.includes('-Yes')) {
