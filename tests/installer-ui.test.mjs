@@ -608,7 +608,7 @@ test('stream ordering, removed run route and browser DOM cap are enforced', asyn
     await expectText(page, 'summary:');
     const output = await page.locator('#run-output').textContent();
     assert.match(output, /Earlier run output lines were removed/);
-    assert.ok(output.split(/\n/).length <= 550);
+    assert.ok(output.split(/\n/).length <= 2050);
   } finally {
     await browser.close();
     await pageApp.close();

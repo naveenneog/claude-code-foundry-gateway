@@ -10,8 +10,9 @@ let csrfToken = '';
 let activeRunId = '';
 let activeStepId = '';
 let lastRunSeq = 0;
-const maxRunOutputLines = 500;
+const maxRunOutputLines = 2000;
 let runOutputLines = [];
+let removedRunOutputLines = 0;
 
 function byId(id) {
   return document.getElementById(id);
@@ -261,7 +262,8 @@ function appendRunLine(text) {
   runOutputLines.push(text);
   if (runOutputLines.length > maxRunOutputLines) {
     const removed = runOutputLines.length - maxRunOutputLines;
-    runOutputLines = [`Earlier run output lines were removed (${removed}).`, ...runOutputLines.slice(-maxRunOutputLines + 1)];
+    removedRunOutputLines += removed;
+    runOutputLines = [`Earlier run output lines were removed (${removedRunOutputLines}).`, ...runOutputLines.slice(-maxRunOutputLines + 1)];
   }
   output.textContent = `${runOutputLines.join('\n')}\n`;
 }
@@ -271,6 +273,7 @@ async function readRunStream(res) {
   if (!activeRunId) {
     output.textContent = '';
     runOutputLines = [];
+    removedRunOutputLines = 0;
   }
   const reader = res.body.getReader();
   const decoder = new TextDecoder();

@@ -122,6 +122,11 @@ if (args.includes('-Yes')) {
     process.stdout.write('last line without newline');
     process.exit(0);
   }
+  if (process.env.P93_INSTALLER_UI_STUB_LONG_LINE) {
+    process.stdout.write('x'.repeat(Number(process.env.P93_INSTALLER_UI_STUB_LONG_LINE)));
+    process.stdout.write('\nnext line\n');
+    process.exit(0);
+  }
   if (process.env.P93_INSTALLER_UI_STUB_MANY_LINES) {
     const count = Number(process.env.P93_INSTALLER_UI_STUB_MANY_LINES);
     const pad = 'y'.repeat(Number(process.env.P93_INSTALLER_UI_STUB_PAD || 0));

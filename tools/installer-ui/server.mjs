@@ -26,6 +26,7 @@ const uiModelScript = join(here, 'ui-model.js');
 const uiCss = join(here, 'installer-ui.css');
 const defaultIdleMs = 30 * 60 * 1000;
 const consoleOutputCapBytes = 4 * 1024 * 1024;
+const consoleLineCapBytes = 64 * 1024;
 const runTailLimit = 1000;
 
 
@@ -193,20 +194,38 @@ async function runInstallerStreaming(kind, args, options, onEvent, progressPath,
     const decoder = new StringDecoder('utf8');
     let carry = '';
     let work = Promise.resolve();
+    let discarding = false;
+    const emitBounded = async (line, final = false) => {
+      if (discarding) {
+        if (final) discarding = false;
+        return;
+      }
+      const bytes = Buffer.byteLength(line);
+      if (bytes > consoleLineCapBytes) {
+        await emitConsoleLine(type, `${Buffer.from(line).subarray(0, consoleLineCapBytes).toString('utf8')} [line truncated]`);
+        discarding = !final;
+      } else if (line) {
+        await emitConsoleLine(type, line);
+      }
+    };
     return {
       chunk(chunk) {
         work = work.then(async () => {
         carry += decoder.write(chunk);
         const lines = carry.split(/\r?\n/);
         carry = lines.pop() || '';
-        for (const line of lines) await emitConsoleLine(type, line);
+        for (const line of lines) await emitBounded(line, true);
+        if (Buffer.byteLength(carry) > consoleLineCapBytes) {
+          await emitBounded(carry, false);
+          carry = '';
+        }
         });
         return work;
       },
       async end() {
         await work;
         carry += decoder.end();
-        if (carry) await emitConsoleLine(type, carry);
+        if (carry) await emitBounded(carry, true);
         carry = '';
       },
     };

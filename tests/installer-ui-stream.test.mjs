@@ -115,4 +115,26 @@ test('attach refuses a negative or non-integer cursor before streaming', async (
   }
 });
 
+test('console cap is large enough for normal output and long lines are truncated', async () => {
+  const cap = await start({ P93_INSTALLER_UI_STUB_MANY_LINES: '6000', P93_INSTALLER_UI_STUB_PAD: '1000' });
+  try {
+    const events = await streamRun(cap, { answers: {}, steps: ['resource-group'] });
+    assert.equal(events.filter((event) => event.type === 'notice' && /output cap/.test(event.message || '')).length, 1);
+    assert.equal(events.at(-1).type, 'summary');
+  } finally {
+    await cap.close();
+  }
+
+  const longLine = await start({ P93_INSTALLER_UI_STUB_LONG_LINE: String(1024 * 1024) });
+  try {
+    const events = await streamRun(longLine, { answers: {}, steps: ['resource-group'] });
+    const stdout = events.filter((event) => event.type === 'stdout').map((event) => event.line);
+    assert.equal(stdout.length, 2);
+    assert.match(stdout[0], / \[line truncated\]$/);
+    assert.ok(stdout[0].length < 70_000);
+    assert.equal(stdout[1], 'next line');
+  } finally {
+    await longLine.close();
+  }
+});
 
