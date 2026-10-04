@@ -684,6 +684,17 @@ test('preflight malformed output, fail JSON and versioned interfaces fail closed
     assert.equal(response.status, 502);
     assert.match(body.error, /preflight output was not JSON/);
     assert.match(body.detail, /\[redacted\]/);
+    const { chromium } = await import('playwright');
+    const browser = await chromium.launch({ headless: true });
+    try {
+      const page = await browser.newPage();
+      await page.context().addCookies([{ name: 'installer_token', value: textApp.token, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Strict' }]);
+      await page.goto(`${textApp.base}/`);
+      await page.getByRole('button', { name: 'Run preflight' }).click();
+      await page.getByText(/preflight output was not JSON/).waitFor();
+    } finally {
+      await browser.close();
+    }
   } finally {
     await textApp.close();
   }
