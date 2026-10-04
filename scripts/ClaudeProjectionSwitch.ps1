@@ -127,7 +127,8 @@ function Invoke-ClaudeProjectionSwitch {
         The renewal receipt (Read-ClaudeProjectionRenewalReceipt), or an object with the same fields.
 
     .PARAMETER Backup
-        Replaces the backup file; the guided flow passes its own snapshot gate.
+        Replaces the backup file and returns the path of the backup it took; the guided flow passes its
+        own snapshot gate.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     param(
@@ -215,7 +216,7 @@ function Invoke-ClaudeProjectionSwitch {
             throw 'Projection switch declined after admission; entitlement-source is unchanged and no backup was written.'
         }
         Write-Host '==> Backup and switch' -ForegroundColor Cyan
-        $backupPath = if ($Backup) { & $Backup; $null } else { Save-ClaudeProjectionSwitchBackup -ResourceGroup $ResourceGroup -ApimName $ApimName -GatewayResourceId $gatewayId -Directory $BackupDirectory }
+        $backupPath = if ($Backup) { [string](@(& $Backup) | Select-Object -Last 1) } else { Save-ClaudeProjectionSwitchBackup -ResourceGroup $ResourceGroup -ApimName $ApimName -GatewayResourceId $gatewayId -Directory $BackupDirectory }
         Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-source' -Value 'projection'
         $rollback = Get-ClaudeProjectionRollbackText -BackupPath $backupPath
         Write-Host "    [OK]   entitlement-source is projection after admission over $($admission.generations) renewals" -ForegroundColor Green

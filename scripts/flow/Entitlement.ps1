@@ -73,6 +73,17 @@ function Get-ClaudeFlowStepPlan {
             RenewalProblem = $(if ($Discovery -and $Discovery.renewalProblem) { [string]$Discovery.renewalProblem } else { $null }) }
 }
 
+function Initialize-ClaudeFlowStep {
+    # Start-ClaudeGateway.ps1 runs this after approval and before Invoke-ClaudeFlowStep. It names the
+    # snapshot the write gate takes, as scripts/Update-ClaudeGateway.ps1 does for its migrations; the
+    # snapshot itself is taken at the write, so a refused switch leaves none.
+    param([Parameter(Mandatory = $true)]$Record, [Parameter(Mandatory = $true)]$Plan)
+    if ((Test-ClaudeFlowPlanIsNoop $Plan) -or $Plan.Data.SnapshotPath) { return }
+    $name = 'before-entitlement-{0}-{1}.json' -f $Plan.Data.Target.ApimName, [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ')
+    $Plan.Data.SnapshotPath = Join-Path (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'backups') $name
+    $Plan.Data.SnapshotTaken = $false
+}
+
 function Invoke-ClaudeFlowStep {
     param([Parameter(Mandatory = $true)]$Record, [Parameter(Mandatory = $true)]$Plan)
     if (Test-ClaudeFlowPlanIsNoop $Plan) { return @{} }
@@ -84,10 +95,10 @@ function Invoke-ClaudeFlowStep {
             throw "Projection switch refused: P86 admission needs renewal runner, Cosmos destination, reconciler job, image digest and email action group evidence, from the renewal job's receipt.$why Expected wait after deploying the 30-minute job is about 60-90 minutes."
         }
         # ADR-0050: the shared switch runs the drift check and the compare before admission; the flow's
-        # own snapshot is its backup.
-        . (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'scripts\ClaudeProjectionSwitch.ps1')
+        # own snapshot, taken at the write and named in the rollback text, is its backup.
+        . (Join-Path (Split-Path $PSScriptRoot -Parent) 'ClaudeProjectionSwitch.ps1')
         $flowPlan = $Plan
-        $snapshotGate = { Assert-ClaudeFlowLifecycleSnapshotBeforeWrite -Plan $flowPlan }.GetNewClosure()
+        $snapshotGate = { Assert-ClaudeFlowLifecycleSnapshotBeforeWrite -Plan $flowPlan | Out-Null; [string]$flowPlan.Data.SnapshotPath }.GetNewClosure()
         $null = Invoke-ClaudeProjectionSwitch -ResourceGroup $target.ResourceGroup -ApimName $target.ApimName -Renewal $renewal `
             -StandardGroup ([string]$renewal.standardGroupId) -PremiumGroup ([string]$renewal.premiumGroupId) -Backup $snapshotGate
     }

@@ -407,6 +407,54 @@ Capture { Invoke-LiveDiscovery }
 Assert 'live discovery carries the receipt that names the discovered gateway (AC4)' (-not $Failure -and $Result.renewal.reconcilerResourceId -eq $FixtureJobId -and -not $Result.renewalProblem -and
     (Get-ClaudeFlowLifecycleRepoRoot) -eq $root) "$Failure $($Result.renewalProblem) | root $(Get-ClaudeFlowLifecycleRepoRoot)"
 
+# Council round 1 (Coder): Start-ClaudeGateway.ps1 -Action Change runs Get-ClaudeFlowDiscovery, the step's plan,
+# its Initialize-ClaudeFlowStep as Prepare, then Invoke. The same sequence through the real functions; the
+# repository root is a temporary directory whose Backup-ClaudeGateway.ps1 records the gate's backup.
+$startText = Get-Content -LiteralPath (Join-Path $root 'Start-ClaudeGateway.ps1') -Raw
+Assert 'Start-ClaudeGateway prepares each step with its Initialize-ClaudeFlowStep before applying it' ($startText -match "'Initialize-ClaudeFlowStep'" -and $startText -match '\$Steps\[\$i\]\.Prepare' -and
+    $startText.IndexOf('Initialize-FlowSteps -Steps $steps') -gt 0 -and $startText.IndexOf('Initialize-FlowSteps -Steps $steps') -lt $startText.IndexOf('Invoke-ApplySteps -Steps $steps -Plans @($plans)'))
+. (Join-Path $root 'scripts\flow\Discovery.ps1')
+$startRoot = Join-Path $work 'start-root'
+New-Item -ItemType Directory -Force -Path (Join-Path $startRoot 'onboarding'), (Join-Path $startRoot 'scripts') | Out-Null
+$startRecordPath = Join-Path $startRoot 'onboarding\claude-gateway.json'
+$startRecord = [pscustomobject]@{ schemaVersion = 2; apimName = 'apim-p84'; resourceGroup = 'rg-p84'; decisions = [pscustomobject]@{ entitlementStore = [pscustomobject]@{ target = 'projection' } }; history = @() }
+[IO.File]::WriteAllText($startRecordPath, ($startRecord | ConvertTo-Json -Depth 6))
+[IO.File]::WriteAllText((Join-Path $startRoot 'onboarding\projection-renewal-p84fixture.json'), (Get-Content -LiteralPath $receiptPath -Raw))
+[IO.File]::WriteAllText((Join-Path $startRoot 'scripts\Backup-ClaudeGateway.ps1'), @'
+param([string]$ResourceGroup, [string]$ApimName, [string]$Path, [string]$SubscriptionId)
+$global:FixtureCalls.Add("backup $ApimName")
+New-Item -ItemType Directory -Force -Path (Split-Path $Path -Parent) | Out-Null
+[IO.File]::WriteAllText($Path, '{}')
+exit 0
+'@)
+Reset-ProjectionFixture
+Set-GoodRenewalJob
+$global:ListMode = 'clean'
+Set-Item -Path function:global:Get-ClaudeFlowLifecycleRepoRoot -Value ([scriptblock]::Create("'$startRoot'"))
+$script:StartPlan = $null
+$script:StartOutput = @()
+try {
+    Capture {
+        $startDiscovery = Get-ClaudeFlowDiscovery -RecordPath $startRecordPath -Record $startRecord
+        $script:StartPlan = Get-ClaudeFlowStepPlan -Record $startRecord -Discovery $startDiscovery
+        if (Get-Command Initialize-ClaudeFlowStep -ErrorAction SilentlyContinue) { $null = Initialize-ClaudeFlowStep -Record $startRecord -Plan $script:StartPlan }
+        Invoke-ClaudeFlowStep -Record $startRecord -Plan $script:StartPlan 6>&1 | ForEach-Object {
+            if ($_ -is [Management.Automation.InformationRecord]) { $script:StartOutput += [string]$_.MessageData } else { $_ }
+        }
+    }
+}
+finally {
+    Set-Item -Path function:global:Get-ClaudeFlowLifecycleRepoRoot -Value $realRepoRoot
+    $global:ListMode = $null
+}
+$startSnapshot = if ($script:StartPlan) { [string]$script:StartPlan.Data.SnapshotPath } else { '' }
+Assert 'through Start-ClaudeGateway''s sequence, discovery finds the receipt beside the record and the switch makes its one write' (-not $Failure -and $script:StartPlan.Data.Renewal.reconcilerResourceId -eq $FixtureJobId -and
+    @(Get-Writes).Count -eq 1 -and (Get-CallAt '^backup apim-p84') -gt (Get-CallAt 'check-admission\.mjs') -and (Get-CallAt '^backup apim-p84') -lt (Get-CallAt '^az apim nv update .*entitlement-source --value projection')) "$Failure | renewal $($script:StartPlan.Data.Renewal.reconcilerResourceId) | writes $(@(Get-Writes).Count)"
+Assert "the flow's rollback text names its snapshot (AC6)" ($startSnapshot -and (Test-Path -LiteralPath $startSnapshot) -and (($script:StartOutput -join "`n") -match [regex]::Escape($startSnapshot))) "snapshot '$startSnapshot'"
+Reset-ProjectionFixture
+Capture { Get-ClaudeFlowDiscovery -RecordPath (Join-Path $work 'no-receipts\claude-gateway.json') -Record $startRecord }
+Assert 'discovery without a receipt for the gateway carries the reason the flow refuses with' (-not $Failure -and -not $Result.renewal -and $Result.renewalProblem -match 'no renewal receipt') "$Failure | $($Result.renewalProblem)"
+
 $flowRecord = [pscustomobject]@{ schemaVersion = 2; decisions = [pscustomobject]@{ entitlementStore = [pscustomobject]@{ target = 'projection' } }; history = @() }
 $flowDiscovery = [pscustomobject]@{ resourceGroup = 'rg-p84'; apimName = 'apim-p84'; sku = 'BasicV2'; apimId = $FixtureGatewayId; namedValues = @{ 'entitlement-source' = 'named-value' }; renewal = $null; renewalProblem = 'no renewal receipt under onboarding/ names gateway x. Remedy: deploy the renewal job.' }
 $flowPlan = Get-ClaudeFlowStepPlan -Record $flowRecord -Discovery $flowDiscovery
