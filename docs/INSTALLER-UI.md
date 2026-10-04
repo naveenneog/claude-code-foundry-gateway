@@ -25,6 +25,8 @@ long waits.
 `tools/installer-ui/index.html` opens from disk. It uses a classic deferred script so Chromium can run
 it from `file://`, and it carries the same schema as `schemas/claude-gateway.answers.schema.json`;
 `tests/installer-ui.test.mjs` compares the two copies and opens the file page in a real browser.
+The local server serves the same `index.html` bytes for `/` and `/index.html`, so static and live
+mode share one page source.
 Static mode validates formats, creates `answers.json` and shows readable PowerShell and bash command
 blocks. It does not read Azure and does not run the installer. The Cloud Shell path is **Manage files >
 Upload** for `answers.json`, then one pasted command.

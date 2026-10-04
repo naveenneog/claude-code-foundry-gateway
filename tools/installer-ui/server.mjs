@@ -9,7 +9,6 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validatePreflight, validateProgressEvent, validateStepList } from './installer-contract.mjs';
 import { assertSameOrigin, constantTimeTokenEquals, contentSecurityPolicy, isAllowedHost, isLoopbackBind, parseCookies, readJsonBody, send, sendText, tokenHash } from './http-helpers.mjs';
-import { renderHtml } from './page-template.mjs';
 import { attachSubscriber, createRunRecord, publicRun, publishEvent } from './run-record.mjs';
 import { createLineHandler, readProgressFile, writeNdjson } from './run-transport.mjs';
 import { buildCommands, fieldsByCheckId, loadSchema, prefillArguments, redactText, root, scrubLocalPaths } from './server-model.mjs';
@@ -25,6 +24,7 @@ const planScript = join(root, 'scripts', 'Get-ClaudeInstallerUiPlan.ps1');
 const uiScript = join(here, 'installer-ui.js');
 const uiModelScript = join(here, 'ui-model.js');
 const uiCss = join(here, 'installer-ui.css');
+const uiIndex = join(here, 'index.html');
 const defaultIdleMs = 30 * 60 * 1000;
 const consoleOutputCapBytes = 4 * 1024 * 1024;
 const consoleLineCapBytes = 64 * 1024;
@@ -389,7 +389,7 @@ export async function createInstallerUiServer(options = {}) {
         if (!constantTimeTokenEquals(String(req.headers['x-csrf-token'] || ''), tokenHash(csrfToken))) return send(res, 403, { error: 'CSRF token is required' }, setCookie);
       }
 
-      if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) return send(res, 200, await renderHtml(loadSchema), setCookie);
+      if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) return sendText(res, 200, await readFile(uiIndex, 'utf8'), 'text/html; charset=utf-8', setCookie);
       if (req.method === 'GET' && url.pathname === '/installer-ui.js') return sendText(res, 200, await readFile(uiScript, 'utf8'), 'text/javascript; charset=utf-8', setCookie);
       if (req.method === 'GET' && url.pathname === '/ui-model.js') return sendText(res, 200, await readFile(uiModelScript, 'utf8'), 'text/javascript; charset=utf-8', setCookie);
       if (req.method === 'GET' && url.pathname === '/installer-ui.css') return sendText(res, 200, await readFile(uiCss, 'utf8'), 'text/css; charset=utf-8', setCookie);
