@@ -64,7 +64,9 @@ exact streaming cache-creation detail remains **U13**.
   The business-unit editor and run output now expose live-region labels and keyboard focus rules,
   and an action keeps keyboard focus beside its button while it runs.
   Installer UI guide screenshots now follow the passing-preflight fingerprint flow and use distinct,
-  coherent signed-in tenant states.
+  coherent signed-in tenant states. The Installer UI test wrapper now requires an exact node:test
+  subtest count and fails closed on skipped, todo, cancelled, failed, missing, duplicate or
+  load-failed TAP output.
 - **Installers read an answers file, check it before any change, run selected steps and write a progress stream (P92, phase 0).**
   One answers file, described by `schemas/claude-gateway.answers.schema.json`, feeds
   `Install-ClaudeGateway.ps1 -AnswersPath`, `install-claude-gateway.sh --answers-file` and
