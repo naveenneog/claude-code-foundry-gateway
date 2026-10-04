@@ -259,7 +259,7 @@ test('the static fallback renders fields in a real browser from file', async () 
     await page.waitForSelector('[name="SubscriptionId"]');
     assert.deepEqual(await page.locator('main > section > h2').evaluateAll((nodes) => nodes.slice(1, 5).map((node) => node.textContent)), ['First install', 'Optional parts', 'Business units and teams', 'Advanced']);
     assert.equal(await page.locator('#first-install label').count(), 17);
-    await expectText(page, 'PowerShell preflight');
+    await expectText(page, 'PowerShell command');
     await page.getByRole('button', { name: 'Add unit' }).click();
     await page.locator('[data-bu-field="id"]').first().fill('finance');
     await page.locator('[data-bu-field="group"]').first().fill('claude-bu-finance');
@@ -544,7 +544,7 @@ setTimeout(() => { console.log('done'); process.exit(0); }, 500);
 
 test('stream transport preserves split output, final tails, malformed progress and the output cap', async () => {
   for (const [env, expected] of [
-    [{ P93_INSTALLER_UI_STUB_MULTIBYTE: '1' }, /split Ã°Å¸Ëœâ‚¬ line/],
+    [{ P93_INSTALLER_UI_STUB_MULTIBYTE: '1' }, /split \u{1F600} line/u],
     [{ P93_INSTALLER_UI_STUB_SPLIT_LINE: '1' }, /split line/],
     [{ P93_INSTALLER_UI_STUB_NO_FINAL_NEWLINE: '1' }, /last line without newline/],
   ]) {

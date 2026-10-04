@@ -102,7 +102,7 @@ async function browserPage(url, cookieApp) {
     ]);
   await page.goto(url);
   await page.waitForSelector('[name="SubscriptionId"]');
-  await page.getByText("PowerShell preflight").waitFor();
+  await page.locator("#commands").waitFor();
   return { browser, page };
 }
 

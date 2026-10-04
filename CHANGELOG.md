@@ -57,6 +57,7 @@ exact streaming cache-creation detail remains **U13**.
   refuses non-object business-unit JSON edits while preserving the last valid tree.
   Installer UI actions now use visible busy, success and alert states, including duplicate-click
   blocking and recovery text for HTTP and network failures.
+  Static mode now presents the Cloud Shell handoff as download, Manage files > Upload and one pasteable command, with invalid answers blocking the download.
 - **Installers read an answers file, check it before any change, run selected steps and write a progress stream (P92, phase 0).**
   One answers file, described by `schemas/claude-gateway.answers.schema.json`, feeds
   `Install-ClaudeGateway.ps1 -AnswersPath`, `install-claude-gateway.sh --answers-file` and

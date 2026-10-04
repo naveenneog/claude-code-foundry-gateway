@@ -2,7 +2,7 @@
   "use strict";
 
   function createPrefill(deps) {
-    const { liveMode, markPreflightStale, postJson, actions } = deps;
+    const { liveMode, markPreflightStale, postJson } = deps;
     const deploymentChoices = new Set();
 
     function showFieldError(field, message, remedy) {
@@ -53,20 +53,17 @@
     async function handleClick(event) {
       const button = event.target.closest("[data-prefill-kind]");
       if (!button || !liveMode()) return;
-      await actions.run(button, { busyText: `${button.textContent}...`, successText: "Read complete." }, async () => {
-        const kind = button.dataset.prefillKind;
-        const field = button.closest("label")?.querySelector("[name]");
-        const select = button.closest("label")?.querySelector("[data-prefill-select]");
-        try {
-          const data = await load(kind);
-          if (kind === "subscriptions") fillSelect(select, data.subscriptions || [], "id", (item) => `${item.name} (${item.id})`);
-          if (kind === "foundryAccounts") fillSelect(select, data.foundryAccounts || [], "name", (item) => `${item.name} / ${item.resourceGroup}`);
-          field?.focus();
-        } catch (error) {
-          showError(error, field?.name || "SubscriptionId");
-          throw error;
-        }
-      });
+      const kind = button.dataset.prefillKind;
+      const field = button.closest("label")?.querySelector("[name]");
+      const select = button.closest("label")?.querySelector("[data-prefill-select]");
+      try {
+        const data = await load(kind);
+        if (kind === "subscriptions") fillSelect(select, data.subscriptions || [], "id", (item) => `${item.name} (${item.id})`);
+        if (kind === "foundryAccounts") fillSelect(select, data.foundryAccounts || [], "name", (item) => `${item.name} / ${item.resourceGroup}`);
+        field?.focus();
+      } catch (error) {
+        showError(error, field?.name || "SubscriptionId");
+      }
     }
 
     async function handleChoice(event) {

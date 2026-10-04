@@ -322,6 +322,17 @@
       appendText(root, "Commands are unavailable until validation problems are fixed.", "p", "failed");
       return;
     }
+    if (!liveMode()) {
+      appendText(root, "Cloud Shell handoff", "h3");
+      appendText(root, commands.cloudShell, "p");
+      appendText(root, "PowerShell command", "h3");
+      appendText(root, commands.powershellRun, "pre");
+      if (commands.bashRun) {
+        appendText(root, "Bash command", "h3");
+        appendText(root, commands.bashRun, "pre");
+      }
+      return;
+    }
     for (const [title, value] of [
       ["PowerShell preflight", commands.powershell],
       ["PowerShell run", commands.powershellRun],

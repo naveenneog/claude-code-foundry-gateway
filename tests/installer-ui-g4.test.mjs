@@ -164,3 +164,57 @@ async function expectPollEnabled(page, name) {
     assert.equal(await button.isEnabled(), true);
   });
 }
+
+
+test('U2 file static mode shows download upload command handoff and blocks invalid download', async () => {
+  const { chromium } = await import('playwright');
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    const pageErrors = [];
+    page.on('pageerror', (error) => pageErrors.push(error.message));
+    await page.addInitScript(() => {
+      window.__p93Unhandled = [];
+      window.addEventListener('unhandledrejection', (event) => {
+        window.__p93Unhandled.push(String(event.reason?.message || event.reason));
+      });
+    });
+    await page.goto(new URL('../tools/installer-ui/index.html', import.meta.url).href);
+    await page.waitForSelector('[name="SubscriptionId"]');
+    assert.equal(await page.getByRole('button', { name: 'Run preflight' }).count(), 0);
+    await page.getByText('Manage files > Upload').waitFor();
+    await page.getByText('PowerShell command').waitFor();
+    await page.locator('[name="FoundryAccount"]').fill('bad account');
+    await expectPollDisabled(page, 'Download answers.json');
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('U2 server static mode without pwsh shows the same handoff and downloads valid answers', async () => {
+  const app = await start({ pwsh: 'pwsh-missing-for-u2' });
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    assert.equal(await page.getByRole('button', { name: 'Run preflight' }).count(), 0);
+    await fillValid(page);
+    await page.getByText('Manage files > Upload').waitFor();
+    await page.getByText('PowerShell command').waitFor();
+    const download = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Download answers.json' }).click();
+    assert.equal((await download).suggestedFilename(), 'answers.json');
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
+async function expectPollDisabled(page, name) {
+  const button = page.getByRole('button', { name });
+  for (let i = 0; i < 20; i += 1) {
+    if (await button.isDisabled()) return;
+    await page.waitForTimeout(50);
+  }
+  assert.equal(await button.isDisabled(), true);
+}
