@@ -3,6 +3,7 @@
 # (scripts/ClaudeInstallerAnswers.ps1) and the bash validator (scripts/install-answers.sh, with jq) check
 # one corpus of answers files: each invalid file fails under the check id that owns its rule, and the
 # two validators report the same problems, word for word.
+param([string]$ExportCorpus)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $script:fail = 0
@@ -148,6 +149,22 @@ try {
 }
 catch { $psError = $_.Exception.Message }
 Assert 'the PowerShell validator runs over the corpus' (-not $psError -and $psResults.Count -eq $cases.Count) $psError
+
+if ($ExportCorpus) {
+    $export = @($cases | ForEach-Object {
+        [pscustomobject][ordered]@{
+            name = $_.Name
+            consumer = $_.Consumer
+            expected = @($_.Expected)
+            answersText = [IO.File]::ReadAllText($_.File)
+            powerShellProblems = @($psResults[$_.Name])
+        }
+    })
+    Write-Lf $ExportCorpus ($export | ConvertTo-Json -Depth 20)
+    Remove-Item -LiteralPath $scratch -Recurse -Force -ErrorAction SilentlyContinue
+    Write-Host ("exported {0} corpus cases" -f $export.Count)
+    exit 0
+}
 
 # Bash: one process sources the library and checks every file.
 $bash = $null

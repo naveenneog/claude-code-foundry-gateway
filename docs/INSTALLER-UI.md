@@ -37,6 +37,9 @@ one of the bash installer's steps, `CKPT_ORDER` in `scripts/install-checkpoint.s
 `tools/installer-ui/ui-model.js` lists and a test keeps equal. It does not read Azure and does not run
 the installer. The Cloud Shell path is **Manage files > Upload** for `answers.json`, then one pasted
 command.
+The browser validator uses the same answer names, schema subset and cross-field rules as the
+PowerShell validator for `Install-ClaudeGateway.ps1`. It marks invalid fields and withholds download,
+preflight, run and command text while a problem remains.
 
 ## Security model
 
@@ -73,9 +76,9 @@ stream say that the install checkpoint resumes when the same steps run again.
 | Section | Source and behaviour |
 |---|---|
 | Account | Shows user, tenant id, subscription name and subscription id from the Azure CLI account through repository PowerShell. A button shows `az login --use-device-code` when sign-in is needed. |
-| Foundation | Renders subscription, Foundry, region, SKU and name fields from the schema. Select fields start as `not set (the installer default)`. |
-| Access | Renders groups, tier limits and model deployment fields from the schema. |
-| Optional parts | Renders company address, Desktop sign-in, projection and monitoring answers from the schema. Projection answers are schema answers only; no projection switch is exposed. |
+| First install | Renders the subscription, Foundry account, gateway resource group, region, publisher, tier, initial groups, quotas and model deployment fields that `Install-ClaudeGateway.ps1` applies. Select fields start as `not set (the installer default)`. Server mode can read subscriptions, Foundry accounts and deployment names through `POST /api/prefill`; static mode hides those read actions. |
+| Optional parts | Renders company-address, existing-APIM reuse, Desktop sign-in, projection toggle, entitlement-store and business-unit answers that `Install-ClaudeGateway.ps1` applies. Fields with declarative conditions are hidden until their condition holds and hidden fields are not written to `answers.json`. The PFX password is not an answer; with `-Yes -NonInteractive` and `AddressCertificateSource = Pfx`, `Install-ClaudeGateway.ps1` does not prompt and passes no certificate password unless it is supplied on the command line (`Install-ClaudeGateway.ps1:1164-1166`, `:1179`). |
+| Advanced | Renders projection renewal, resolver app, organisation quota, developer estimate, revocation window, model-organisation metadata, team-budget behaviour, unassigned-developer behaviour and the optional pending Claude deployment object that `Install-ClaudeGateway.ps1` applies. |
 | Business units | Provides a two-level editor: add a unit, add a team under a unit, remove either, then serialize units before teams. Fields are id, Entra group, monthly USD budget, mode and percent only for `Allowance`. Ids are lower-case letters, digits and hyphens, max 64; ids are unique; group names exclude `'`, `,` and `:`; `Allowance` requires percent 1-100; teams name one parent unit. The JSON view round-trips through the same validation. |
 | Review | Runs installer preflight and shows check, result, message and remedy. A passing preflight returns a 64-character SHA-256 fingerprint over canonical answers, engine and step scope. Failing checks mark fields through `x-checkId`. Non-JSON preflight output returns a visible error with the exit code and a short redacted, path-scrubbed output tail. |
 | Run | Lists installer step ids, streams selected-step output as it arrives, shows a failed step with a rerun action and resume command, reattaches to an active run after reload and keeps a full run as a separate confirmed action. A run starts only when its fingerprint matches a stored passing preflight for the same answers and a covering scope. Displayed commands use `./` relative paths; a 2026-10-04 PowerShell 7 run accepted `-File ./Install-ClaudeGateway.ps1 -AnswersPath ./scratch-p93-e2/answers.json -Preflight -Json` and returned versioned JSON with exit 1 because the isolated profile was signed out. |

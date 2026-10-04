@@ -250,7 +250,7 @@ test('the static fallback renders fields in a real browser from file', async () 
     const page = await browser.newPage();
     await page.goto(new URL('../tools/installer-ui/index.html', import.meta.url).href);
     await page.waitForSelector('[name="SubscriptionId"]');
-    assert.equal(await page.locator('#foundation label').count(), 8);
+    assert.equal(await page.locator('#foundation label').count(), 17);
     await expectText(page, 'PowerShell preflight');
     await page.getByRole('button', { name: 'Add unit' }).click();
     await page.locator('[data-bu-field="id"]').first().fill('finance');
@@ -258,16 +258,16 @@ test('the static fallback renders fields in a real browser from file', async () 
     await page.locator('[data-bu-field="monthlyUsdBudget"]').first().fill('5000');
     await page.getByRole('button', { name: 'Add team' }).click();
     await expectText(page, 'Team under finance');
-    assert.equal(await page.locator('fieldset').count(), 2);
+    assert.equal(await page.locator('[data-bu-index]').count(), 2);
     assert.match(await page.locator('#business-units').inputValue(), /"id": "finance"/);
     assert.match(await page.locator('#business-units').inputValue(), /"parent": "finance"/);
     assert.ok((await page.locator('#business-units').inputValue()).indexOf('"id": "finance"') < (await page.locator('#business-units').inputValue()).indexOf('"parent": "finance"'));
     await page.getByText('JSON view').click();
     await page.locator('#business-units').fill('[{"id":');
     assert.match(await page.locator('#business-unit-problems').textContent(), /JSON/i);
-    assert.equal(await page.locator('fieldset').count(), 2);
+    assert.equal(await page.locator('[data-bu-index]').count(), 2);
     await page.locator('#business-units').fill('[{"id":"sales","group":"claude-bu-sales","monthlyUsdBudget":100,"mode":"Strict"}]');
-    assert.equal(await page.locator('fieldset').count(), 1);
+    assert.equal(await page.locator('[data-bu-index]').count(), 1);
     assert.match(await page.locator('#business-units').inputValue(), /"id": "sales"/);
     await page.locator('[data-bu-field="id"]').first().fill('Finance');
     assert.match(await page.locator('#business-unit-problems').textContent(), /lower-case/);
