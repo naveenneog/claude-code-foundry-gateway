@@ -35,7 +35,10 @@ exact streaming cache-creation detail remains **U13**.
   form from the P92 answers schema, runs the PowerShell installer preflight with a per-run temporary
   answers file, offers `answers.json` commands for PowerShell and bash, validates selected step ids
   against `-ListSteps -Json`, runs selected steps through the existing installer, redacts streamed
-  output with the installer redaction rules and refuses a second concurrent run.
+  output with the installer redaction rules and refuses a second concurrent run. Azure prefill refuses
+  an unknown read, a value that is not text and, where `az` is the Windows `az.cmd` shim, a resource
+  group name with `(` or `)` before any Azure CLI call; its errors name the field and the remedy and
+  show no local path.
 - **Installers read an answers file, check it before any change, run selected steps and write a progress stream (P92, phase 0).**
   One answers file, described by `schemas/claude-gateway.answers.schema.json`, feeds
   `Install-ClaudeGateway.ps1 -AnswersPath`, `install-claude-gateway.sh --answers-file` and

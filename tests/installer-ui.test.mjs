@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process';
 import { request } from 'node:http';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +13,9 @@ import { createInstallerUiServer } from '../tools/installer-ui/server.mjs';
 
 const stub = fileURLToPath(new URL('./installer-ui-stub.mjs', import.meta.url));
 const serverCli = fileURLToPath(new URL('../tools/installer-ui/server.mjs', import.meta.url));
+const repoRoot = fileURLToPath(new URL('..', import.meta.url)).replace(/[\\/]+$/, '');
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const localPathPattern = new RegExp([homedir(), repoRoot].map(escapeRegExp).join('|') + '|[A-Za-z]:\\\\|Get-ClaudeInstallerUiPrefill\\.ps1', 'i');
 const modelContext = createContext({ globalThis: {} });
 runInContext(await readFile(new URL('../tools/installer-ui/ui-model.js', import.meta.url), 'utf8'), modelContext);
 const { collectAnswersFromEntries, validateBusinessUnits } = modelContext.globalThis.ClaudeInstallerUiModel;
@@ -28,9 +31,13 @@ async function start(extra = {}) {
     await writeFile(stub, `@echo off\r\nnode "${stub.replace(/\\/g, '\\\\')}.mjs" %*\r\n`, 'utf8');
     await writeFile(`${stub}.mjs`, `
 import { appendFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 const args = process.argv.slice(2);
 const joined = args.join(' ');
 if (process.env.P93_AZ_LOG) appendFileSync(process.env.P93_AZ_LOG, joined + '\\n');
+if (process.env.P93_AZ_ENV_LOG) appendFileSync(process.env.P93_AZ_ENV_LOG, JSON.stringify({ args: joined, NO_COLOR: process.env.NO_COLOR ?? null }) + '\\n');
+if (joined.includes('path-error')) { console.error('ERROR: cannot read ' + join(homedir(), '.azure', 'config') + ' from ' + process.cwd()); process.exit(1); }
 if (joined.includes('fail-secret')) { console.error('password=super-secret failed'); process.exit(9); }
 if (joined.startsWith('account show')) { console.log(JSON.stringify({ id: '00000000-0000-4000-8000-000000000093', name: 'Sub One', tenantId: 'tenant-1', user: { name: 'operator@example.com' } })); process.exit(0); }
 if (joined.startsWith('account list')) { console.log(JSON.stringify([{ id: '00000000-0000-4000-8000-000000000093', name: 'Sub One', tenantId: 'tenant-1' }])); process.exit(0); }
@@ -359,7 +366,9 @@ test('prefill validates parameters before invoking az.cmd', async () => {
   const app = await start({ az: true });
   try {
     const marker = '&echo.P93_PREFILL_MARKER&rem';
-    const result = await (await app.fetch('/api/prefill', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind: 'foundryAccounts', subscriptionId: marker }) })).json();
+    const markerResponse = await app.fetch('/api/prefill', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind: 'foundryAccounts', subscriptionId: marker }) });
+    assert.equal(markerResponse.status, 400, 'a refused answer is a request problem');
+    const result = await markerResponse.json();
     assert.equal(result.field, 'SubscriptionId');
     assert.match(result.error, /is not valid for installer UI prefill/);
     assert.match(result.patternMessage, /GUID/);
@@ -367,19 +376,38 @@ test('prefill validates parameters before invoking az.cmd', async () => {
     assert.doesNotMatch(JSON.stringify(result), /\u001b\[[0-9;]*m|Users[\\/]|Get-ClaudeInstallerUiPrefill\.ps1/);
     const logPath = join(app.scratch, 'az.log');
     const log = existsSync(logPath) ? await readFile(logPath, 'utf8') : '';
-    assert.doesNotMatch(log, /P93_PREFILL_MARKER/);
+    assert.equal(log, '', 'a refused subscription id reaches no az call');
     const missing = await (await app.fetch('/api/prefill', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind: 'deployments', foundryAccount: 'ai-p93' }) })).json();
     assert.equal(missing.field, 'FoundryResourceGroup');
     assert.match(missing.error, /required/);
     const logAfterMissing = existsSync(logPath) ? await readFile(logPath, 'utf8') : '';
     assert.equal(logAfterMissing, log);
-    const envLogPath = join(app.scratch, 'az-env.log');
-    const envLog = existsSync(envLogPath) ? await readFile(envLogPath, 'utf8') : '';
-    for (const line of envLog.trim().split(/\r?\n/).filter(Boolean)) {
-      const entry = JSON.parse(line);
-      assert.equal(entry.NO_COLOR, '1');
-      assert.equal(entry.PSStyle, 'PlainText');
+    // Azure allows ( and ) in a resource group name; az.cmd expands its arguments inside an IF ( ... ) block.
+    const parens = await (await app.fetch('/api/prefill', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind: 'deployments', foundryAccount: 'ai-p93', foundryResourceGroup: 'rg(prod)' }) })).json();
+    assert.equal(parens.field, 'FoundryResourceGroup');
+    assert.match(parens.error, /az\.cmd/);
+    assert.match(parens.remedy, /\w/);
+    assert.equal(existsSync(logPath) ? await readFile(logPath, 'utf8') : '', log, 'a resource group with parentheses reaches no az.cmd call');
+    for (const body of [{ kind: 'bogus' }, { kind: ['subscriptions'] }, { kind: 'deployments', foundryAccount: ['ai-p93'], foundryResourceGroup: 'rg-p93' }]) {
+      const response = await app.fetch('/api/prefill', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      const text = await response.text();
+      assert.equal(response.status, 400, text);
+      const refused = JSON.parse(text);
+      assert.ok(refused.field, text);
+      assert.match(refused.remedy, /\w/, text);
+      assert.doesNotMatch(refused.error, localPathPattern, text);
+      assert.equal(existsSync(logPath) ? await readFile(logPath, 'utf8') : '', log, `${text} reaches no az call`);
     }
+    const pathError = await (await app.fetch('/api/prefill', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind: 'deployments', foundryAccount: 'path-error', foundryResourceGroup: 'rg-p93' }) })).json();
+    assert.match(pathError.error, /cannot read/);
+    assert.doesNotMatch(pathError.error, localPathPattern);
+    const dashed = await (await app.fetch('/api/prefill', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind: 'foundryAccounts', subscriptionId: '-Kind' }) })).json();
+    assert.equal(dashed.field, 'SubscriptionId', 'a value that starts with - binds as the value, not as a PowerShell parameter name');
+    // The identity seam does not set NO_COLOR itself, so its az call shows the environment the server gives PowerShell.
+    assert.equal((await app.fetch('/api/identity')).status, 200);
+    const envLog = (await readFile(join(app.scratch, 'az-env.log'), 'utf8')).trim().split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
+    assert.ok(envLog.some((entry) => entry.args.startsWith('account show')), 'the identity seam reached az');
+    for (const entry of envLog) assert.equal(entry.NO_COLOR, '1', entry.args);
   } finally {
     await app.close();
   }

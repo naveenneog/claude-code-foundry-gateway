@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { mkdtemp, readFile, rm, writeFile, chmod } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -21,6 +21,8 @@ const uiModelScript = join(here, 'ui-model.js');
 const uiCss = join(here, 'installer-ui.css');
 const defaultIdleMs = 30 * 60 * 1000;
 const maxBodyBytes = 256 * 1024;
+const prefillKinds = new Set(['subscriptions', 'foundryAccounts', 'deployments']);
+const prefillParameters = [['-SubscriptionId', 'subscriptionId', 'SubscriptionId'], ['-FoundryAccount', 'foundryAccount', 'FoundryAccount'], ['-FoundryResourceGroup', 'foundryResourceGroup', 'FoundryResourceGroup']];
 
 let redactionRules;
 
@@ -49,6 +51,41 @@ export async function redactText(text) {
     });
   }
   return output;
+}
+
+// The checkout and the home directory name the operator's machine; error text names them by placeholder.
+export function scrubLocalPaths(text) {
+  let output = String(text ?? '');
+  for (const [prefix, label] of [[root, '<checkout>'], [homedir(), '~']]) {
+    if (!prefix) continue;
+    const source = prefix.replace(/[\\/]+$/, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\\\|\//g, '[\\\\/]');
+    output = output.replace(new RegExp(source, 'gi'), () => label);
+  }
+  return output;
+}
+
+function requestProblem(field, message, remedy) {
+  const error = new Error(message);
+  error.status = 400;
+  error.field = field;
+  error.remedy = remedy;
+  return error;
+}
+
+function prefillArguments(body) {
+  const kind = body.kind ?? 'subscriptions';
+  if (typeof kind !== 'string' || !prefillKinds.has(kind)) {
+    throw requestProblem('kind', 'kind is not subscriptions, foundryAccounts or deployments.', 'Ask for subscriptions, foundryAccounts or deployments.');
+  }
+  const args = [`-Kind:${kind}`];
+  for (const [parameter, key, field] of prefillParameters) {
+    const value = body[key];
+    if (value === undefined || value === null || value === '') continue;
+    if (typeof value !== 'string') throw requestProblem(field, `${field} is not text.`, `Give ${field} as text.`);
+    // -Name:value binds a value that starts with - as the value, not as a parameter name.
+    args.push(`${parameter}:${value}`);
+  }
+  return args;
 }
 
 export function buildCommands(answersPath = '.\\answers.json', schema = null) {
@@ -207,7 +244,7 @@ async function runInstaller(kind, args, options) {
     cwd: root,
     shell: false,
     windowsHide: true,
-    env: { ...process.env, NO_COLOR: '1', PSSTYLE_OUTPUT_RENDERING: 'PlainText', ...(options.env || {}) },
+    env: { ...process.env, NO_COLOR: '1', ...(options.env || {}) },
   });
   let stdout = '';
   let stderr = '';
@@ -225,7 +262,7 @@ async function runPowerShell(script, args, options, runOptions = {}) {
     cwd: root,
     shell: false,
     windowsHide: true,
-    env: { ...process.env, NO_COLOR: '1', PSSTYLE_OUTPUT_RENDERING: 'PlainText', ...(options.env || {}) },
+    env: { ...process.env, NO_COLOR: '1', ...(options.env || {}) },
   });
   let stdout = '';
   let stderr = '';
@@ -252,7 +289,7 @@ async function runInstallerStreaming(kind, args, options, onEvent, progressPath)
     cwd: root,
     shell: false,
     windowsHide: true,
-    env: { ...process.env, NO_COLOR: '1', PSSTYLE_OUTPUT_RENDERING: 'PlainText', ...(options.env || {}) },
+    env: { ...process.env, NO_COLOR: '1', ...(options.env || {}) },
   });
   let progressOffset = 0;
   let progressCarry = '';
@@ -473,16 +510,15 @@ export async function createInstallerUiServer(options = {}) {
       if (req.method === 'POST' && url.pathname === '/api/prefill') {
         assertSameOrigin(req);
         const body = await readJsonBody(req);
-        const args = ['-Kind', body.kind || 'subscriptions'];
-        for (const [param, query] of [['-SubscriptionId', 'subscriptionId'], ['-FoundryAccount', 'foundryAccount'], ['-FoundryResourceGroup', 'foundryResourceGroup']]) {
-          const value = body[query];
-          if (value) args.push(param, value);
-        }
+        const args = prefillArguments(body);
         const result = await runPowerShell(prefillScript, args, options, { redactStdout: false });
-        if (!result.stdout.trim()) return send(res, 400, { schemaVersion: 1, error: result.stderr || 'prefill failed' }, setCookie);
+        if (!result.stdout.trim()) {
+          log(`Prefill returned no JSON (exit ${result.code}): ${scrubLocalPaths(result.stderr)}`);
+          return send(res, 500, { schemaVersion: 1, error: 'The prefill read returned no result. The terminal that started the installer UI shows the details.' }, setCookie);
+        }
         const parsed = JSON.parse(result.stdout);
-        if (parsed.error) parsed.error = await redactText(parsed.error);
-        return send(res, 200, parsed, setCookie);
+        if (parsed.error) parsed.error = scrubLocalPaths(await redactText(parsed.error));
+        return send(res, parsed.field ? 400 : 200, parsed, setCookie);
       }
       if (req.method === 'POST' && url.pathname === '/api/commands') {
         const body = await readJsonBody(req);
@@ -576,7 +612,8 @@ export async function createInstallerUiServer(options = {}) {
       }
       return send(res, 404, { error: 'route not found' }, setCookie);
     } catch (error) {
-      return send(res, error.status || 500, { error: error.status ? error.message : 'request failed' });
+      if (!error.status) return send(res, 500, { error: 'request failed' });
+      return send(res, error.status, error.field ? { schemaVersion: 1, field: error.field, error: error.message, remedy: error.remedy } : { error: error.message });
     } finally {
       if (!activeRun) armIdle();
     }
