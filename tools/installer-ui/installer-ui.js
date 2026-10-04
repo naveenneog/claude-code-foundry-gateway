@@ -10,6 +10,7 @@
   let sessionReason = "";
   let activeRunId = "";
   let activeStepId = "";
+  let runActive = false;
   let lastRunSeq = 0;
   let preflightFingerprint = "";
   let preflightStale = true;
@@ -274,7 +275,7 @@
     return validationProblems.length > 0;
   }
   function updateRunAdmission() {
-    const admitted = liveMode() && preflightFingerprint && !preflightStale && !hasBlockingProblems();
+    const admitted = liveMode() && preflightFingerprint && !preflightStale && !hasBlockingProblems() && !runActive;
     for (const id of ["run", "full-run", "rerun"]) {
       const button = byId(id);
       if (button && button.dataset.actionBusy !== "true") button.disabled = id === "rerun" ? !lastFailedStep || !admitted : !admitted;
@@ -283,6 +284,8 @@
       const button = byId(id);
       if (button && button.dataset.actionBusy !== "true") button.disabled = hasBlockingProblems();
     }
+    const stop = byId("stop-run");
+    if (stop && stop.dataset.actionBusy !== "true") stop.disabled = !runActive;
     const state = byId("preflight-state");
     if (!state) return;
     if (hasBlockingProblems()) state.textContent = `${preflightStale ? "Preflight is stale. " : ""}Validation problems block download, preflight, run and command copying.`;
@@ -406,6 +409,8 @@
   }
   async function streamRun(body) {
     if (hasBlockingProblems()) return;
+    runActive = true;
+    updateRunAdmission();
     const res = await fetch("./api/run/stream", {
       method: "POST",
       headers: {
@@ -415,6 +420,8 @@
       body: JSON.stringify(body),
     });
     if (!res.ok) {
+      runActive = false;
+      updateRunAdmission();
       let data = {};
       try {
         data = await res.json();
@@ -423,7 +430,13 @@
       error.data = { ...data, status: res.status };
       throw error;
     }
-    await readRunStream(res);
+    try {
+      await readRunStream(res);
+    } catch (error) {
+      runActive = false;
+      updateRunAdmission();
+      throw error;
+    }
   }
   function appendRunLine(text) {
     const output = byId("run-output");
@@ -461,7 +474,7 @@
         if (event.type === "summary") {
           activeRunId = "";
           activeStepId = "";
-          byId("stop-run").disabled = true;
+          runActive = false;
           lastFailedStep = event.failedStepId || "";
           updateRunAdmission();
           if (event.resumeCommand) appendRunLine(`Resume: ${event.resumeCommand}`);
@@ -475,7 +488,8 @@
     if (status.id && status.state === "running") {
       activeRunId = status.id;
       activeStepId = status.currentStepId || status.steps?.[0] || "";
-      byId("stop-run").disabled = false;
+      runActive = true;
+      updateRunAdmission();
       const res = await fetch(`./api/run/attach?after=${lastRunSeq}`);
       await readRunStream(res);
     }
@@ -558,7 +572,6 @@
       const steps = selectedSteps();
       if (!steps.length) throw new Error("Select at least one step, or use Full run.");
       activeRunId = "";
-      byId("stop-run").disabled = false;
       await streamRun({
         answers: collectAnswers(),
         steps,
@@ -570,7 +583,6 @@
       const resourceGroup = answers.ResourceGroup || "(not set)";
       if (!globalThis.confirm(`Run the full installer as ${identity.user || "the current account"} against resource group ${resourceGroup}?`)) return;
       activeRunId = "";
-      byId("stop-run").disabled = false;
       await streamRun({
         answers,
         steps: [],

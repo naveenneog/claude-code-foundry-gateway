@@ -417,6 +417,56 @@ test('U3 a schema problem without a path links no field even when other answers 
   }
 });
 
+test('U1 fix Stop run is disabled after the run ends even when the stop response arrives after the summary', async () => {
+  const app = await start({ env: { P93_INSTALLER_UI_STUB_GRANDCHILD_HEARTBEAT: join(tmpdir(), `g4-stop-${process.pid}-${Date.now()}.txt`) } });
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await fillValid(page);
+    await page.getByRole('button', { name: 'List steps' }).click();
+    await page.locator('#step-list input[value="resource-group"]').check();
+    await page.getByRole('button', { name: 'Run preflight' }).click();
+    await page.getByText(/Passing preflight/).waitFor();
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await page.waitForFunction(() => document.querySelector('#run-output')?.textContent.includes('started'));
+    await page.route('**/api/run/stop', async (route) => {
+      const response = await route.fetch();
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await route.fulfill({ response });
+    });
+    await page.evaluate(() => { globalThis.confirm = () => true; });
+    await page.getByRole('button', { name: 'Stop run' }).click();
+    await page.waitForFunction(() => document.querySelector('#run-output')?.textContent.includes('summary:'));
+    await page.waitForTimeout(1700);
+    assert.equal(await page.getByRole('button', { name: 'Stop run' }).isDisabled(), true);
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
+test('U1 fix run-starting buttons are disabled while a run is active', async () => {
+  const app = await start({ env: { P93_INSTALLER_UI_STUB_GRANDCHILD_HEARTBEAT: join(tmpdir(), `g4-active-${process.pid}-${Date.now()}.txt`) } });
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await fillValid(page);
+    await page.getByRole('button', { name: 'List steps' }).click();
+    await page.locator('#step-list input[value="resource-group"]').check();
+    await page.getByRole('button', { name: 'Run preflight' }).click();
+    await page.getByText(/Passing preflight/).waitFor();
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await page.waitForFunction(() => document.querySelector('#run-output')?.textContent.includes('started'));
+    assert.equal(await page.locator('#run').isDisabled(), true);
+    assert.equal(await page.locator('#full-run').isDisabled(), true);
+    assert.equal(await page.locator('#rerun').isDisabled(), true);
+    assert.equal(await page.locator('#stop-run').isEnabled(), true);
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
 
 test('U4 keyboard and accessibility journey has names, live regions, focus moves and labelled output', async () => {
   const app = await start({ env: { P93_INSTALLER_UI_STUB_FAIL_STEP: 'gateway-deployment' } });
