@@ -69,11 +69,11 @@ resource environment 'Microsoft.App/managedEnvironments@2024-03-01' = {
   name: environmentName
   location: location
   properties: {
+    // Console lines reach the workspace through the diagnostic setting below, in the
+    // ContainerAppConsoleLogs table with a JobName column (U107). The legacy log-analytics
+    // destination would need the workspace's shared key.
     appLogsConfiguration: {
-      destination: 'log-analytics'
-      logAnalyticsConfiguration: {
-        customerId: reference(logAnalyticsWorkspaceId, '2022-10-01').customerId
-      }
+      destination: 'azure-monitor'
     }
     vnetConfiguration: {
       internal: true
@@ -83,6 +83,20 @@ resource environment 'Microsoft.App/managedEnvironments@2024-03-01' = {
       {
         name: 'Consumption'
         workloadProfileType: 'Consumption'
+      }
+    ]
+  }
+}
+
+resource environmentLogs 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  name: 'projection-renewal-console'
+  scope: environment
+  properties: {
+    workspaceId: logAnalyticsWorkspaceId
+    logs: [
+      {
+        categoryGroup: 'allLogs'
+        enabled: true
       }
     ]
   }
@@ -196,6 +210,7 @@ resource job 'Microsoft.App/jobs@2024-03-01' = {
   dependsOn: [
     cosmosWriter
     gatewayReader
+    environmentLogs
   ]
 }
 
@@ -210,27 +225,43 @@ module gatewayReader 'projection-renewal-gateway-reader.bicep' = {
   }
 }
 
+// Each rule returns rows only when the renewal is unhealthy: a log search alert with Count
+// aggregation counts rows, and a summarize without by returns one row even when nothing matched
+// (U108). The fuzzy union with an empty table lets a rule deploy before the job's first console
+// line exists (U109). The quoted events are the last lines sync/src/apply-projection.mjs prints
+// (sync/src/events.mjs); tests/projection-renewal-runs.test.mjs matches them against real runs.
+var renewalLogs = '''
+union isfuzzy=true (datatable(TimeGenerated: datetime, JobName: string, Log: string) []), ContainerAppConsoleLogs
+| where TimeGenerated > ago(45m) and JobName == "{jobName}"
+'''
+
 var alertDefinitions = [
   {
     name: 'no-success-45m'
     description: 'No successful projection renewal in 45 minutes.'
-    query: 'ContainerAppConsoleLogs_CL | where TimeGenerated > ago(45m) | where Log_s has "ok" and Log_s has "true" and Log_s has "reconciliationGeneration" | summarize Count=count()'
-    threshold: 1
-    operator: 'LessThan'
+    query: '''
+| where Log contains '"event":"projection-renewal-succeeded"'
+| summarize Succeeded = count()
+| where Succeeded == 0
+'''
   }
   {
     name: 'expiry-margin-60m'
-    description: 'Projection oldest expiry margin is below 60 minutes.'
-    query: 'ContainerAppConsoleLogs_CL | where TimeGenerated > ago(45m) | where Log_s has "oldestExpiresAt" | extend d=parse_json(Log_s) | extend margin=todouble(d.oldestExpiresAt) - unixtime_seconds_todatetime(now()) | summarize Count=countif(margin < 3600)'
-    threshold: 0
-    operator: 'GreaterThan'
+    description: 'The newest successful projection renewal leaves less than 60 minutes before the oldest entitlement record expires.'
+    query: '''
+| where Log contains '"event":"projection-renewal-succeeded"'
+| top 1 by TimeGenerated desc
+| extend OldestExpiresAt = unixtime_seconds_todatetime(todouble(extract('"oldestExpiresAt":([0-9]+)', 1, Log)))
+| where isnull(OldestExpiresAt) or OldestExpiresAt - now() < 1h
+'''
   }
   {
-    name: 'graph-read-failed'
-    description: 'Projection renewal Graph read was denied or failed.'
-    query: 'ContainerAppConsoleLogs_CL | where TimeGenerated > ago(45m) | where Log_s has "Graph" and (Log_s has "denied" or Log_s has "failed" or Log_s has "Authorization_RequestDenied") | summarize Count=count()'
-    threshold: 0
-    operator: 'GreaterThan'
+    name: 'renewal-failed'
+    description: 'A projection renewal run failed: a Graph read was denied or failed, the business-unit read failed, or a Cosmos read or write failed. The line names the stage.'
+    query: '''
+| where Log contains '"event":"projection-renewal-failed"'
+| project TimeGenerated, Log
+'''
   }
 ]
 
@@ -249,10 +280,10 @@ resource alerts 'Microsoft.Insights/scheduledQueryRules@2023-12-01' = [for alert
     criteria: {
       allOf: [
         {
-          query: alert.query
+          query: replace('${renewalLogs}${alert.query}', '{jobName}', jobName)
           timeAggregation: 'Count'
-          operator: alert.operator
-          threshold: alert.threshold
+          operator: 'GreaterThan'
+          threshold: 0
           failingPeriods: {
             numberOfEvaluationPeriods: 1
             minFailingPeriodsToAlert: 1

@@ -148,6 +148,47 @@ try {
     Assert 'the image command is --graph alone, and the job supplies the rest' ($docker -match '(?m)^CMD \["--graph"\]\s*$')
 
     Write-Host ''
+    Write-Host 'Projection renewal - logs reach the workspace and alerts fire only when unhealthy' -ForegroundColor Cyan
+    if ($renewalTemplate) {
+        $res = Get-TemplateResources $renewalTemplate
+        $environment = $res | Where-Object { $_.type -eq 'Microsoft.App/managedEnvironments' } | Select-Object -First 1
+        $logsConfig = $environment.properties.appLogsConfiguration
+        Assert 'the environment sends logs through Azure Monitor, with no shared key' ($logsConfig.destination -eq 'azure-monitor' -and -not $logsConfig.Contains('logAnalyticsConfiguration')) ($logsConfig | ConvertTo-Json -Compress)
+        $diagnostic = $res | Where-Object { $_.type -eq 'Microsoft.Insights/diagnosticSettings' } | Select-Object -First 1
+        Assert 'a diagnostic setting sends every log category to the gateway workspace' (
+            $diagnostic -and [string]$diagnostic.scope -match 'Microsoft\.App/managedEnvironments' -and
+            [string]$diagnostic.properties.workspaceId -match "parameters\('logAnalyticsWorkspaceId'\)" -and
+            @($diagnostic.properties.logs | Where-Object { $_.categoryGroup -eq 'allLogs' -and $_.enabled }).Count -eq 1)
+        $job = $res | Where-Object { $_.type -eq 'Microsoft.App/jobs' } | Select-Object -First 1
+        Assert 'the job waits for its log route' ((@($job.dependsOn) -join ' ') -match 'diagnosticSettings|environmentLogs')
+
+        $definitions = @($renewalTemplate.variables.alertDefinitions)
+        $base = [string]$renewalTemplate.variables.renewalLogs
+        Assert 'there are three renewal alerts' ((($definitions | ForEach-Object name) -join ',') -eq 'no-success-45m,expiry-margin-60m,renewal-failed') (($definitions | ForEach-Object name) -join ',')
+        Assert 'each query reads the job''s console table through a fuzzy union with an empty table' ($base -match '(?m)^union isfuzzy=true \(datatable\(TimeGenerated: datetime, JobName: string, Log: string\) \[\]\), ContainerAppConsoleLogs\s*$') $base
+        Assert 'each query keeps only the job''s own lines' ($base -match 'JobName == "\{jobName\}"') $base
+        $rule = $res | Where-Object { $_.type -eq 'Microsoft.Insights/scheduledQueryRules' } | Select-Object -First 1
+        $criterion = @($rule.properties.criteria.allOf)[0]
+        Assert 'the job name is put into each query' ([string]$criterion.query -match "replace\(" -and [string]$criterion.query -match "'\{jobName\}', variables\('jobName'\)") ([string]$criterion.query)
+        Assert 'a rule fires when its query returns any row' ($criterion.timeAggregation -eq 'Count' -and $criterion.operator -eq 'GreaterThan' -and [int]$criterion.threshold -eq 0 -and -not $criterion.Contains('metricMeasureColumn'))
+        Assert 'each rule notifies the action group' ([string](@($rule.properties.actions.actionGroups)[0]) -match 'actionGroups')
+        $events = [IO.File]::ReadAllText((Join-Path $root 'sync\src\events.mjs'))
+        $succeeded = [regex]::Match($events, "RENEWAL_SUCCEEDED = '([^']+)'").Groups[1].Value
+        $failedEvent = [regex]::Match($events, "RENEWAL_FAILED = '([^']+)'").Groups[1].Value
+        foreach ($definition in $definitions) {
+            $query = $base + [string]$definition.query
+            $lines = @($query -split "`r?`n" | Where-Object { $_.Trim() })
+            Assert "$($definition.name): no legacy table or column" ($query -notmatch '_CL\b|Log_s\b')
+            Assert "$($definition.name): no summarize that always returns a row" ($query -notmatch 'summarize' -or $lines[-1] -match '^\| where ') $lines[-1]
+            Assert "$($definition.name): no datetime passed as epoch seconds" ($query -notmatch 'unixtime_seconds_todatetime\(now\(\)\)')
+            $expected = if ($definition.name -eq 'renewal-failed') { $failedEvent } else { $succeeded }
+            Assert "$($definition.name): it matches the job's $expected line" ($expected -and $query.Contains("'`"event`":`"$expected`"'")) $query
+        }
+        $expiry = [string]($definitions | Where-Object name -eq 'expiry-margin-60m').query
+        Assert 'the expiry rule reads the newest success and its remaining lease' ($expiry -match 'top 1 by TimeGenerated desc' -and $expiry -match "unixtime_seconds_todatetime\(todouble\(extract\('`"oldestExpiresAt`":\(\[0-9\]\+\)', 1, Log\)\)\)" -and $expiry -match '- now\(\) < 1h') $expiry
+    }
+
+    Write-Host ''
     Write-Host 'Projection renewal - admission refuses a job without these settings' -ForegroundColor Cyan
     . (Join-Path $root 'scripts\ClaudeProjectionChecks.ps1')
     $digest = 'sha256:' + ('c' * 64)

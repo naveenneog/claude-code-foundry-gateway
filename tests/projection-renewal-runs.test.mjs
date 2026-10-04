@@ -268,3 +268,24 @@ test('a snapshot applied after scheduled runs leaves admission refusing until th
   assert.equal(refused.code, 4, refused.stdout + refused.stderr);
   assert.match(refused.json.reason, /older generation/);
 });
+
+// The alerts in infra/projection-renewal.bicep search the job's console lines for quoted event
+// strings and read the expiry with a regular expression; both are checked against real lines here.
+test("the alert queries match the job's own last lines", () => {
+  const bicep = readFileSync(join(process.env.PROJECTION_REPO, 'infra', 'projection-renewal.bicep'), 'utf8');
+  const events = [...bicep.matchAll(/'"event":"([a-z-]+)"'/g)].map((m) => m[1]);
+  assert.deepEqual([...new Set(events)].sort(), ['projection-renewal-failed', 'projection-renewal-succeeded']);
+  const pattern = /extract\('(.+?)', 1, Log\)/.exec(bicep)?.[1];
+  assert.ok(pattern, 'the expiry rule extracts the expiry from the line');
+
+  const where = scenario('alert contract');
+  const ok = jobRun(where, '2026-10-04T10:00:00.000Z');
+  const okLine = ok.stdout.split(/\r?\n/).filter((line) => line.startsWith('{')).at(-1);
+  assert.ok(okLine.includes('"event":"projection-renewal-succeeded"'), okLine);
+  assert.equal(Number(new RegExp(pattern).exec(okLine)?.[1]), ok.json.oldestExpiresAt);
+
+  const denied = jobRun(where, '2026-10-04T10:30:00.000Z', { fetch: fixture({ deny: [PREMIUM] }) });
+  const deniedLine = denied.stdout.split(/\r?\n/).filter((line) => line.startsWith('{')).at(-1);
+  assert.ok(deniedLine.includes('"event":"projection-renewal-failed"'), deniedLine);
+  assert.ok(!deniedLine.includes('"event":"projection-renewal-succeeded"'), deniedLine);
+});
