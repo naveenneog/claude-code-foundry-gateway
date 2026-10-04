@@ -13,15 +13,25 @@ function Assert($Label, [bool]$Condition, $Detail = '') {
 $work = Join-Path ([IO.Path]::GetTempPath()) ('projection-renewal-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force -Path $work | Out-Null
 
+# Each az bicep build takes about 13 s, nearly all of it CLI start-up, so the templates compile at once.
+$templateFiles = 'infra\projection-network.bicep', 'infra\projection-registry.bicep', 'infra\projection-renewal.bicep'
+$compileJobs = foreach ($relative in $templateFiles) {
+    $out = Join-Path $work (([IO.Path]::GetFileNameWithoutExtension($relative)) + '.json')
+    Start-ThreadJob -ArgumentList (Join-Path $root $relative), $out, $relative -ScriptBlock {
+        param($file, $out, $relative)
+        $ErrorActionPreference = 'Continue'
+        $log = & az bicep build --file $file --outfile $out 2>&1 | Out-String
+        [pscustomobject]@{ Relative = $relative; Out = $out; Log = $log }
+    }
+}
+$compiled = @{}
+foreach ($job in $compileJobs) { $result = Receive-Job -Job $job -Wait -AutoRemoveJob; $compiled[$result.Relative] = $result }
+
 function Get-CompiledTemplate([string]$Relative) {
-    $out = Join-Path $work (([IO.Path]::GetFileNameWithoutExtension($Relative)) + '.json')
-    $previous = $ErrorActionPreference
-    $ErrorActionPreference = 'Continue'
-    $log = & az bicep build --file (Join-Path $root $Relative) --outfile $out 2>&1 | Out-String
-    $ErrorActionPreference = $previous
-    if (-not (Test-Path -LiteralPath $out)) { Assert "$Relative compiles" $false $log.Trim(); return $null }
+    $result = $compiled[$Relative]
+    if (-not $result -or -not (Test-Path -LiteralPath $result.Out)) { Assert "$Relative compiles" $false $(if ($result) { $result.Log.Trim() } else { 'not compiled' }); return $null }
     Assert "$Relative compiles" $true
-    return (Get-Content -LiteralPath $out -Raw | ConvertFrom-Json -AsHashtable)
+    return (Get-Content -LiteralPath $result.Out -Raw | ConvertFrom-Json -AsHashtable)
 }
 
 function Get-TemplateResources($Template) {
