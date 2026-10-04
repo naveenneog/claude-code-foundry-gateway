@@ -1,6 +1,11 @@
-const stepStates = new Set(['not-started', 'running', 'completed', 'skipped-verified', 'failed', 'pending']);
-const preflightResults = new Set(['PASS', 'FAIL', 'NOT-RUN']);
-const progressEvents = new Set(['started', 'completed', 'skipped-verified', 'warning', 'failed']);
+// Producer vocabularies: scripts/ClaudeInstallCheckpoint.ps1 writes started/completed/incomplete,
+// scripts/ClaudeInstallSteps.ps1 adds not-started in -ListSteps and emits progress events.
+export const STEP_STATES = ['not-started', 'started', 'completed', 'incomplete'];
+export const PREFLIGHT_RESULTS = ['PASS', 'FAIL', 'NOT-RUN'];
+export const PROGRESS_EVENTS = ['started', 'completed', 'skipped-verified', 'warning', 'failed', 'refused'];
+const stepStates = new Set(STEP_STATES);
+const preflightResults = new Set(PREFLIGHT_RESULTS);
+const progressEvents = new Set(PROGRESS_EVENTS);
 
 function fail(interfaceName, message) {
   const error = new Error(`the installer's ${interfaceName} ${message}`);
@@ -51,9 +56,10 @@ export function validatePreflight(payload) {
     requireObject(check, interfaceName);
     for (const field of ['id', 'result']) requireString(check, field, interfaceName);
     if (!preflightResults.has(check.result)) throw fail(interfaceName, `check ${index} result ${check.result} is unsupported`);
-    for (const optional of ['message', 'remedy', 'reason']) {
+    for (const optional of ['message', 'remedy']) {
       if (check[optional] !== undefined && typeof check[optional] !== 'string') throw fail(interfaceName, `check ${index} field ${optional} is not text`);
     }
+    if (check.reason !== undefined && check.reason !== null && typeof check.reason !== 'string') throw fail(interfaceName, `check ${index} field reason is not text or null`);
     if (check.problems !== undefined) {
       if (!Array.isArray(check.problems)) throw fail(interfaceName, `check ${index} field problems is not an array`);
       for (const problem of check.problems) {
@@ -70,7 +76,8 @@ export function validateProgressEvent(payload) {
   const interfaceName = 'progress event';
   requireObject(payload, interfaceName);
   requireVersion(payload, interfaceName);
-  for (const field of ['time', 'runId', 'stepId', 'event']) requireString(payload, field, interfaceName);
+  for (const field of ['time', 'runId', 'event']) requireString(payload, field, interfaceName);
+  if (payload.stepId !== undefined && typeof payload.stepId !== 'string') throw fail(interfaceName, 'field stepId is not text');
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(payload.time)) throw fail(interfaceName, 'field time is not yyyy-MM-ddTHH:mm:ssZ');
   if (!/^[a-fA-F0-9]{32}$/.test(payload.runId)) throw fail(interfaceName, 'field runId is not 32 hex characters');
   if (!progressEvents.has(payload.event)) throw fail(interfaceName, `event ${payload.event} is unsupported`);

@@ -28,6 +28,20 @@ if (args.includes('-ListSteps')) {
     process.exit(0);
   }
   const ids = ['claude-deployment', 'resource-group', 'gateway-deployment', 'company-address', 'entra-groups', 'sync', 'projection', 'business-units', 'onboarding-package', 'verify'];
+  if (process.env.P93_INSTALLER_UI_STUB_CHECKPOINT_STATES) {
+    console.log(JSON.stringify({
+      schemaVersion: 1,
+      installer: 'pwsh',
+      checkpoint: 'checkpoint.json',
+      runId: runId,
+      steps: [
+        { id: 'resource-group', title: 'resource group', dependencies: [], state: 'started' },
+        { id: 'gateway-deployment', title: 'gateway deployment', dependencies: ['resource-group'], state: 'incomplete' },
+        { id: 'verify', title: 'verify', dependencies: ['gateway-deployment'], state: 'completed' },
+      ],
+    }));
+    process.exit(0);
+  }
   console.log(JSON.stringify({
     schemaVersion: 1,
     installer: 'pwsh',
@@ -65,7 +79,7 @@ if (args.includes('-Preflight')) {
     result: fail || !answers.SubscriptionId ? 'FAIL' : 'PASS',
     checks: [
       { id: 'target.tenant', result: 'NOT-RUN', reason: 'not-signed-in', message: 'Azure CLI is not signed in', remedy: 'Run az login --use-device-code.', problems: [] },
-      { id: 'answers.schema', result: fail || !answers.SubscriptionId ? 'FAIL' : 'PASS', message: fail || !answers.SubscriptionId ? 'SubscriptionId is required' : 'answers file is valid', remedy: 'Give SubscriptionId.', problems: fail || !answers.SubscriptionId ? [{ message: 'SubscriptionId is required', remedy: 'Give SubscriptionId.' }] : [] },
+      { id: 'answers.schema', result: fail || !answers.SubscriptionId ? 'FAIL' : 'PASS', reason: null, message: fail || !answers.SubscriptionId ? 'SubscriptionId is required' : 'answers file is valid', remedy: 'Give SubscriptionId.', problems: fail || !answers.SubscriptionId ? [{ message: 'SubscriptionId is required', remedy: 'Give SubscriptionId.' }] : [] },
     ],
   }));
   process.exit(fail ? 1 : 0);
@@ -124,6 +138,10 @@ if (args.includes('-Yes')) {
   if (process.env.P93_INSTALLER_UI_STUB_PROGRESS_NO_NEWLINE && progressPath) {
     appendFileSync(progressPath, progressLine({ stepId: steps[0], event: 'failed', message: 'failed at tail', resumeCommand: `Install-ClaudeGateway.ps1 -Steps ${steps[0]}` }));
     process.exit(7);
+  }
+  if (process.env.P93_INSTALLER_UI_STUB_REFUSED_PROGRESS && progressPath) {
+    appendFileSync(progressPath, progressLine({ stepId: '', event: 'refused', message: 'Refused: nothing was changed.', resumeCommand: '' }) + '\n');
+    process.exit(1);
   }
   for (const step of steps) {
     if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
