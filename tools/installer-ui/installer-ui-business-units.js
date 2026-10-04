@@ -1,0 +1,160 @@
+(function () {
+  "use strict";
+
+  function createBusinessUnitsEditor(deps) {
+    const { byId, clearChildren, appendText, markPreflightStale, validateCurrentAnswers, validateBusinessUnits, isPlainObject } = deps;
+    let businessUnits = [];
+
+    function defaultBusinessUnit(parent = "") {
+      return { id: "", group: "", parent, monthlyUsdBudget: 0, mode: "Strict" };
+    }
+
+    function orderedBusinessUnits() {
+      return [...businessUnits.filter((u) => !u.parent), ...businessUnits.filter((u) => u.parent)];
+    }
+
+    function sync() {
+      businessUnits = [...document.querySelectorAll("[data-bu-index]")].map((row) => {
+        const unit = {
+          id: row.querySelector('[data-bu-field="id"]').value.trim(),
+          group: row.querySelector('[data-bu-field="group"]').value.trim(),
+          monthlyUsdBudget: Number(row.querySelector('[data-bu-field="monthlyUsdBudget"]').value),
+          mode: row.querySelector('[data-bu-field="mode"]').value,
+        };
+        const parent = row.dataset.parent || "";
+        if (parent) unit.parent = parent;
+        if (unit.mode === "Allowance") unit.percent = Number(row.querySelector('[data-bu-field="percent"]').value);
+        return unit;
+      });
+      businessUnits = orderedBusinessUnits();
+      byId("business-units").value = businessUnits.length ? JSON.stringify(businessUnits, null, 2) : "";
+      renderValidation();
+    }
+
+    function renderValidation() {
+      const problems = validateBusinessUnits(businessUnits);
+      byId("business-unit-problems").textContent = problems.join("\n");
+      return problems;
+    }
+
+    function refreshParentOptions() {
+      const parentSelect = byId("team-parent");
+      const current = parentSelect.value;
+      clearChildren(parentSelect);
+      for (const unit of businessUnits.filter((u) => !u.parent && u.id)) {
+        const option = document.createElement("option");
+        option.value = unit.id;
+        option.textContent = unit.id;
+        option.selected = unit.id === current;
+        parentSelect.append(option);
+      }
+    }
+
+    function field(row, label, name, value, type = "text") {
+      const wrapper = document.createElement("label");
+      appendText(wrapper, label);
+      const input = document.createElement("input");
+      input.dataset.buField = name;
+      input.type = type === "number" ? "text" : type;
+      input.value = value ?? "";
+      wrapper.append(input);
+      row.append(wrapper);
+      return input;
+    }
+
+    function render() {
+      const tree = byId("business-unit-tree");
+      clearChildren(tree);
+      businessUnits = orderedBusinessUnits();
+      refreshParentOptions();
+      businessUnits.forEach((unit, index) => {
+        const row = document.createElement("fieldset");
+        row.dataset.buIndex = String(index);
+        row.dataset.parent = unit.parent || "";
+        appendText(row, unit.parent ? `Team under ${unit.parent}` : "Business unit", "legend");
+        field(row, "Id", "id", unit.id);
+        field(row, "Entra group", "group", unit.group);
+        field(row, "Monthly USD budget", "monthlyUsdBudget", unit.monthlyUsdBudget, "number");
+        const modeLabel = document.createElement("label");
+        appendText(modeLabel, "Mode");
+        const mode = document.createElement("select");
+        mode.dataset.buField = "mode";
+        for (const value of ["Strict", "Allowance", "Notify"]) {
+          const option = document.createElement("option");
+          option.value = value;
+          option.textContent = value;
+          option.selected = unit.mode === value;
+          mode.append(option);
+        }
+        modeLabel.append(mode);
+        row.append(modeLabel);
+        const percent = field(row, "Allowance percent", "percent", unit.percent ?? "", "number");
+        percent.closest("label").hidden = unit.mode !== "Allowance";
+        mode.onchange = () => {
+          percent.closest("label").hidden = mode.value !== "Allowance";
+          sync();
+          markPreflightStale();
+        };
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.textContent = "Remove";
+        remove.onclick = () => {
+          businessUnits.splice(index, 1);
+          render();
+          sync();
+          markPreflightStale();
+        };
+        row.append(remove);
+        row.oninput = () => {
+          sync();
+          validateCurrentAnswers();
+        };
+        tree.append(row);
+      });
+      byId("business-units").value = businessUnits.length ? JSON.stringify(businessUnits, null, 2) : "";
+      refreshParentOptions();
+      renderValidation();
+    }
+
+    function addUnit() {
+      sync();
+      businessUnits.push(defaultBusinessUnit());
+      render();
+      markPreflightStale();
+    }
+
+    function addTeam() {
+      sync();
+      refreshParentOptions();
+      const parent = byId("team-parent").value;
+      if (!parent) {
+        byId("business-unit-problems").textContent = "Give a business unit an id before adding a team.";
+        return;
+      }
+      businessUnits.push(defaultBusinessUnit(parent));
+      render();
+      markPreflightStale();
+    }
+
+    function applyJsonText(text) {
+      let candidate;
+      try {
+        candidate = text.trim() ? JSON.parse(text.trim()) : [];
+      } catch (error) {
+        byId("business-unit-problems").textContent = `JSON parse error: ${error.message}`;
+        return;
+      }
+      if (!Array.isArray(candidate) || candidate.some((item) => !isPlainObject(item))) {
+        byId("business-unit-problems").textContent = "BusinessUnits JSON must be an array of objects.";
+        return;
+      }
+      businessUnits = candidate;
+      render();
+      markPreflightStale();
+    }
+
+    return { addTeam, addUnit, applyJsonText, render, sync };
+  }
+
+  globalThis.ClaudeInstallerBusinessUnits = { create: createBusinessUnitsEditor };
+})();

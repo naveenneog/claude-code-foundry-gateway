@@ -22,6 +22,8 @@ const bashInstaller = join(root, 'install-claude-gateway.sh');
 const identityScript = join(root, 'scripts', 'Get-ClaudeInstallerUiIdentity.ps1');
 const prefillScript = join(root, 'scripts', 'Get-ClaudeInstallerUiPrefill.ps1');
 const uiScript = join(here, 'installer-ui.js');
+const uiBusinessUnitsScript = join(here, 'installer-ui-business-units.js');
+const uiPrefillScript = join(here, 'installer-ui-prefill.js');
 const uiModelScript = join(here, 'ui-model.js');
 const uiCss = join(here, 'installer-ui.css');
 const uiIndex = join(here, 'index.html');
@@ -437,6 +439,8 @@ export async function createInstallerUiServer(options = {}) {
 
       if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) return sendText(res, 200, await readFile(uiIndex, 'utf8'), 'text/html; charset=utf-8', setCookie);
       if (req.method === 'GET' && url.pathname === '/installer-ui.js') return sendText(res, 200, await readFile(uiScript, 'utf8'), 'text/javascript; charset=utf-8', setCookie);
+      if (req.method === 'GET' && url.pathname === '/installer-ui-business-units.js') return sendText(res, 200, await readFile(uiBusinessUnitsScript, 'utf8'), 'text/javascript; charset=utf-8', setCookie);
+      if (req.method === 'GET' && url.pathname === '/installer-ui-prefill.js') return sendText(res, 200, await readFile(uiPrefillScript, 'utf8'), 'text/javascript; charset=utf-8', setCookie);
       if (req.method === 'GET' && url.pathname === '/ui-model.js') return sendText(res, 200, await readFile(uiModelScript, 'utf8'), 'text/javascript; charset=utf-8', setCookie);
       if (req.method === 'GET' && url.pathname === '/installer-ui.css') return sendText(res, 200, await readFile(uiCss, 'utf8'), 'text/css; charset=utf-8', setCookie);
       if (req.method === 'GET' && url.pathname === '/api/schema') return send(res, 200, await loadSchema(), setCookie);
