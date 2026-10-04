@@ -256,7 +256,8 @@ test('the static fallback renders fields in a real browser from file', async () 
     const page = await browser.newPage();
     await page.goto(new URL('../tools/installer-ui/index.html', import.meta.url).href);
     await page.waitForSelector('[name="SubscriptionId"]');
-    assert.equal(await page.locator('#foundation label').count(), 17);
+    assert.deepEqual(await page.locator('main > section > h2').evaluateAll((nodes) => nodes.slice(1, 5).map((node) => node.textContent)), ['First install', 'Optional parts', 'Business units and teams', 'Advanced']);
+    assert.equal(await page.locator('#first-install label').count(), 17);
     await expectText(page, 'PowerShell preflight');
     await page.getByRole('button', { name: 'Add unit' }).click();
     await page.locator('[data-bu-field="id"]').first().fill('finance');
@@ -290,7 +291,7 @@ test('the form renders from the answers schema', async () => {
   const app = await start();
   try {
     const html = await (await app.fetch('/')).text();
-    assert.match(html, /id="foundation"/);
+    assert.match(html, /id="first-install"/);
     assert.match(html, /schema-json/);
     const schema = await (await app.fetch('/api/schema')).json();
     assert.equal(schema.properties.SubscriptionId.title, 'Subscription');

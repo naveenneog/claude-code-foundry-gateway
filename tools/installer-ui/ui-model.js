@@ -6,7 +6,7 @@
   const fieldGroups = Object.freeze({
     firstInstall: Object.freeze({
       title: "First install",
-      target: "foundation",
+      target: "first-install",
       fields: Object.freeze([
         "SubscriptionId",
         "FoundryAccount",
@@ -29,7 +29,7 @@
     }),
     optionalParts: Object.freeze({
       title: "Optional parts",
-      target: "optional",
+      target: "optional-parts",
       fields: Object.freeze([
         "AddressMode",
         "AddressHostname",
@@ -56,7 +56,7 @@
     }),
     advanced: Object.freeze({
       title: "Advanced",
-      target: "access",
+      target: "advanced",
       fields: Object.freeze([
         "ProjectionReconcilerResourceId",
         "ProjectionRenewalImageDigest",
