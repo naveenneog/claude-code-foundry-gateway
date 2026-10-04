@@ -13,6 +13,9 @@ The command prints a URL of the form `http://127.0.0.1:<port>/?token=<token>`. T
 at least 32 bytes before encoding, and is required on every request. The default bind address is
 `127.0.0.1`. A different bind address is explicit and prints a risk line. Cloud Shell Web preview
 loopback reachability is unverified (U90).
+Before listening, the server checks the configured PowerShell command, `pwsh` by default, and live
+mode requires PowerShell 7 or newer. Without it, `/api/session` reports static mode, live routes
+return `503` and the page shows the same static fallback path as `file://`.
 
 In Azure Cloud Shell, start the command from the checkout, then use **Web preview > Open and browse**
 for the printed port. Microsoft Learn documents Web preview port opening and browsing

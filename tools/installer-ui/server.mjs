@@ -87,7 +87,7 @@ async function withRunDirectory(fn, tempDirs, parent = tmpdir()) {
 function spawnInstallerArgs(kind, args, options) {
   const stub = options.stubInstaller || process.env.CLAUDE_INSTALLER_UI_STUB;
   if (stub) return { file: process.execPath, args: [stub, kind, ...args] };
-  if (kind === 'powershell') return { file: 'pwsh', args: ['-NoProfile', '-NonInteractive', '-File', psInstaller, ...args] };
+  if (kind === 'powershell') return { file: options.pwsh || 'pwsh', args: ['-NoProfile', '-NonInteractive', '-File', psInstaller, ...args] };
   return { file: 'bash', args: [bashInstaller, ...args] };
 }
 
@@ -153,7 +153,7 @@ async function runInstaller(kind, args, options, runOptions = {}) {
 }
 
 async function runPowerShell(script, args, options, runOptions = {}) {
-  const child = spawnChild('pwsh', ['-NoProfile', '-NonInteractive', '-File', script, ...args], options);
+  const child = spawnChild(options.pwsh || 'pwsh', ['-NoProfile', '-NonInteractive', '-File', script, ...args], options);
   let stdout = '';
   let stderr = '';
   child.stdout.on('data', (chunk) => { stdout += chunk.toString('utf8'); });
@@ -169,6 +169,7 @@ async function runPowerShell(script, args, options, runOptions = {}) {
       }, timeoutMs);
       timer.unref?.();
     }
+
     child.on('error', reject);
     child.on('close', resolveCode);
   });
@@ -183,6 +184,29 @@ async function runPowerShell(script, args, options, runOptions = {}) {
     stdout: runOptions.redactStdout === false ? stdout : await redactText(stdout),
     stderr: await redactText(stderr),
   };
+}
+
+async function checkPowerShell(options) {
+  const command = options.pwsh || 'pwsh';
+  const child = spawn(command, ['-NoProfile', '-NonInteractive', '-Command', '$PSVersionTable.PSVersion.Major'], { cwd: root, shell: false, windowsHide: true, env: childEnv(options) });
+  let stdout = '';
+  let stderr = '';
+  child.stdout.on('data', (chunk) => { stdout += chunk.toString('utf8'); });
+  child.stderr.on('data', (chunk) => { stderr += chunk.toString('utf8'); });
+  let timer;
+  const code = await new Promise((resolve) => {
+    timer = setTimeout(() => { void killProcessTree(child); resolve(null); }, Number(options.pwshCheckTimeoutMs || 5000));
+    timer.unref?.();
+    child.on('error', (error) => resolve(error));
+    child.on('close', resolve);
+  });
+  if (timer) clearTimeout(timer);
+  if (code instanceof Error) return { ok: false, reason: `${command} is not available: ${code.message}` };
+  if (code === null) return { ok: false, reason: `${command} did not answer the PowerShell version check.` };
+  const major = Number(stdout.trim());
+  if (code !== 0 || !Number.isInteger(major)) return { ok: false, reason: `${command} could not report PowerShell 7 or newer. ${stderr.trim()}`.trim() };
+  if (major < 7) return { ok: false, reason: `${command} reports PowerShell ${major}; PowerShell 7 or newer is required for live mode.` };
+  return { ok: true, reason: '' };
 }
 
 async function runInstallerStreaming(kind, args, options, onEvent, progressPath, runOptions = {}) {
@@ -321,6 +345,7 @@ export async function createInstallerUiServer(options = {}) {
   let stopping = false;
   let inFlight = 0;
   let preflightPasses = [];
+  let liveMode = await checkPowerShell(options);
   options._children = new Set();
   const idleMs = Number(options.idleMs || defaultIdleMs);
   const tempRoot = options.tempRoot || tmpdir();
@@ -368,6 +393,14 @@ export async function createInstallerUiServer(options = {}) {
       error.status = 403;
       throw error;
     }
+  };
+
+  const requireLive = () => {
+    if (liveMode.ok) return;
+    const error = new Error(liveMode.reason);
+    error.status = 503;
+    error.reason = liveMode.reason;
+    throw error;
   };
 
   const publish = publishEvent;
@@ -439,7 +472,7 @@ export async function createInstallerUiServer(options = {}) {
       }
       if (!constantTimeTokenEquals(String(cookieToken || ''), tokenDigest)) return send(res, 401, { error: 'installer token is required' });
       const setCookie = {};
-      if (req.method === 'GET' && url.pathname === '/api/session') return send(res, 200, { schemaVersion: 1, csrfToken }, setCookie);
+      if (req.method === 'GET' && url.pathname === '/api/session') return send(res, 200, { schemaVersion: 1, csrfToken, mode: liveMode.ok ? 'live' : 'static', reason: liveMode.reason || undefined }, setCookie);
       if (req.method === 'POST') {
         if (!String(req.headers['content-type'] || '').toLowerCase().startsWith('application/json')) return send(res, 415, { error: 'Content-Type application/json is required' }, setCookie);
         if (!constantTimeTokenEquals(String(req.headers['x-csrf-token'] || ''), tokenHash(csrfToken))) return send(res, 403, { error: 'CSRF token is required' }, setCookie);
@@ -451,10 +484,12 @@ export async function createInstallerUiServer(options = {}) {
       if (req.method === 'GET' && url.pathname === '/installer-ui.css') return sendText(res, 200, await readFile(uiCss, 'utf8'), 'text/css; charset=utf-8', setCookie);
       if (req.method === 'GET' && url.pathname === '/api/schema') return send(res, 200, await loadSchema(), setCookie);
       if (req.method === 'GET' && url.pathname === '/api/steps') {
+        requireLive();
         assertFetchMetadataForChildGet(req);
         return send(res, 200, await withJob(() => listSteps(options, timeoutFor('steps'))), setCookie);
       }
       if (req.method === 'GET' && url.pathname === '/api/identity') {
+        requireLive();
         assertFetchMetadataForChildGet(req);
         const result = await withJob(() => runPowerShell(identityScript, [], options, { timeoutMs: timeoutFor('identity'), readName: 'identity' }));
         return send(res, 200, JSON.parse(result.stdout), setCookie);
@@ -467,6 +502,7 @@ export async function createInstallerUiServer(options = {}) {
         return;
       }
       if (req.method === 'POST' && url.pathname === '/api/prefill') {
+        requireLive();
         assertSameOrigin(req);
         const body = await readJsonBody(req);
         const args = prefillArguments(body);
@@ -484,6 +520,7 @@ export async function createInstallerUiServer(options = {}) {
         return send(res, 200, buildCommands(body.answersPath || './answers.json', await loadSchema()), setCookie);
       }
       if (req.method === 'POST' && url.pathname === '/api/preflight') {
+        requireLive();
         assertSameOrigin(req);
         const body = await readJsonBody(req);
         const requestedSteps = await validateStepScope(body, options);
@@ -514,6 +551,7 @@ export async function createInstallerUiServer(options = {}) {
         }, tempDirs, tmpdir())), setCookie);
       }
       if (req.method === 'POST' && url.pathname === '/api/run/stream') {
+        requireLive();
         assertSameOrigin(req);
         if (activeRun?.state === 'running' || activeRun?.state === 'stopping') return send(res, 409, { error: 'an installer run is already active' }, setCookie);
         const body = await readJsonBody(req);
@@ -563,6 +601,7 @@ export async function createInstallerUiServer(options = {}) {
         return;
       }
       if (req.method === 'POST' && url.pathname === '/api/run/stop') {
+        requireLive();
         assertSameOrigin(req);
         const body = await readJsonBody(req);
         const run = activeRun || lastRun;
@@ -598,13 +637,17 @@ export async function createInstallerUiServer(options = {}) {
   server.stopServer = stopServer;
   server.token = token;
   server.csrfToken = csrfToken;
-  server.listenAsync = (host = options.host || '127.0.0.1') => new Promise((resolveListen) => {
+  server.listenAsync = async (host = options.host || '127.0.0.1') => {
+    liveMode = await checkPowerShell(options);
+    if (!liveMode.ok) log(`Installer UI live mode disabled for ${options.pwsh || 'pwsh'}: ${liveMode.reason}`);
+    return new Promise((resolveListen) => {
     server.listen(options.port || 0, host, () => {
       port = server.address().port;
       armIdle();
       resolveListen(server.address());
     });
   });
+  };
   return server;
 }
 

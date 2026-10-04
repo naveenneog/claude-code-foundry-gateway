@@ -7,6 +7,8 @@ let identity = {};
 let lastFailedStep = '';
 let businessUnits = [];
 let csrfToken = '';
+let sessionMode = 'live';
+let sessionReason = '';
 let activeRunId = '';
 let activeStepId = '';
 let lastRunSeq = 0;
@@ -87,7 +89,7 @@ function markPreflightStale() {
 }
 
 function updateRunAdmission() {
-  const liveMode = location.protocol !== 'file:';
+  const liveMode = location.protocol !== 'file:' && sessionMode === 'live';
   const admitted = liveMode && preflightFingerprint && !preflightStale;
   for (const id of ['run', 'full-run', 'rerun']) {
     const button = byId(id);
@@ -95,7 +97,7 @@ function updateRunAdmission() {
   }
   const state = byId('preflight-state');
   if (!state) return;
-  if (!liveMode) state.textContent = 'Static mode: use the generated commands.';
+  if (!liveMode) state.textContent = `Static fallback: ${sessionReason || 'use the generated commands.'}`;
   else if (admitted) state.textContent = `Passing preflight ${preflightFingerprint.slice(0, 12)} is current.`;
   else if (preflightStale) state.textContent = 'Preflight is stale. Run preflight after changing answers or steps.';
   else state.textContent = 'No passing preflight yet.';
@@ -348,9 +350,9 @@ async function refreshRunStatus() {
 }
 
 async function refreshIdentity() {
-  if (location.protocol === 'file:') {
+  if (location.protocol === 'file:' || sessionMode !== 'live') {
     identity = { signedIn: false, signInCommand: 'az login --use-device-code' };
-    byId('identity').textContent = 'Static fallback: Azure reads and installer runs need the generated commands.';
+    byId('identity').textContent = `Static fallback: ${sessionReason || 'Azure reads and installer runs need the generated commands.'}`;
     return;
   }
   identity = await (await fetch('./api/identity')).json();
@@ -363,7 +365,12 @@ async function refreshIdentity() {
 async function main() {
   schema = await loadSchema();
   if (location.protocol !== 'file:') {
-    csrfToken = (await (await fetch('./api/session')).json()).csrfToken;
+    const session = await (await fetch('./api/session')).json();
+    csrfToken = session.csrfToken;
+    sessionMode = session.mode || 'live';
+    sessionReason = session.reason || '';
+  } else {
+    sessionMode = 'static';
   }
   for (const [section, names] of Object.entries(fieldGroups)) {
     const parent = byId(section);
@@ -425,11 +432,10 @@ async function main() {
     if (!parent) {
       byId('business-unit-problems').textContent = 'Give a business unit an id before adding a team.';
       return;
-    }
-    businessUnits.push(defaultBusinessUnit(parent));
-    renderBusinessUnitEditor();
-    updateRunAdmission();
-  };
+      }
+      businessUnits.push(defaultBusinessUnit(parent));
+      renderBusinessUnitEditor();
+    };
   byId('business-units').addEventListener('input', () => {
     const text = byId('business-units').value.trim();
     try {
@@ -441,6 +447,10 @@ async function main() {
     renderBusinessUnitEditor();
   });
   renderBusinessUnitEditor();
+  updateRunAdmission();
+  if (sessionMode !== 'live') {
+    for (const id of ['preflight', 'steps', 'run', 'full-run', 'rerun', 'stop-run', 'refresh-identity', 'signin']) byId(id).hidden = true;
+  }
   try { renderCommands(await postJson('./api/commands', { answersPath: './answers.json' })); }
   catch { renderCommands(buildPortableCommands(schema, './answers.json')); }
   void refreshIdentity().catch((error) => { byId('identity').textContent = error.message; });

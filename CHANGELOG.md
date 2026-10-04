@@ -46,7 +46,8 @@ exact streaming cache-creation detail remains **U13**.
   so a browser that stops reading or disconnects does not hold back the installer or the end of the
   run. The server and static fallback now share the same `tools/installer-ui/index.html` bytes. The
   old plan route is gone; runs now require a fingerprint from a passing preflight over the same
-  answers and a covering step scope.
+  answers and a covering step scope. Live mode now requires a configurable PowerShell 7 command;
+  without it the server and page fall back to static mode and live routes return `503`.
 - **Installers read an answers file, check it before any change, run selected steps and write a progress stream (P92, phase 0).**
   One answers file, described by `schemas/claude-gateway.answers.schema.json`, feeds
   `Install-ClaudeGateway.ps1 -AnswersPath`, `install-claude-gateway.sh --answers-file` and

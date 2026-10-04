@@ -224,3 +224,44 @@ test('P1 browser shows fingerprint, marks stale on answer changes and reruns a c
     await app.close();
   }
 });
+
+test('E1 missing pwsh puts the server and page in static mode without spawning children', async () => {
+  const app = await startServer({ pwsh: 'pwsh-missing-for-p93' });
+  try {
+    const session = await (await app.fetch('/api/session')).json();
+    assert.equal(session.mode, 'static');
+    assert.match(session.reason, /pwsh-missing-for-p93/);
+    assert.match(app.logs.join('\n'), /pwsh-missing-for-p93/);
+    for (const [method, route, body] of [
+      ['GET', '/api/steps'],
+      ['GET', '/api/identity'],
+      ['POST', '/api/prefill', { kind: 'subscriptions' }],
+      ['POST', '/api/preflight', { answers: passingAnswers }],
+      ['POST', '/api/run/stream', { answers: passingAnswers, steps: ['resource-group'], fingerprint: '0'.repeat(64) }],
+      ['POST', '/api/run/stop', { runId: 'x' }],
+    ]) {
+      const response = method === 'POST' ? await postJson(app, route, body) : { response: await app.fetch(route), body: null };
+      const payload = response.body || await response.response.json();
+      assert.equal(response.response.status, 503, route);
+      assert.match(payload.reason, /pwsh/);
+    }
+    await assert.rejects(readFile(app.log, 'utf8'));
+
+    const { chromium } = await import('playwright');
+    let browser;
+    try { browser = await chromium.launch({ channel: 'msedge', headless: true }); }
+    catch { browser = await chromium.launch({ headless: true }); }
+    try {
+      const page = await browser.newPage();
+      await page.context().addCookies([{ name: 'installer_token', value: app.server.token, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Strict' }]);
+      await page.goto(`${app.base}/`);
+      await page.locator('#preflight-state').getByText(/Static fallback/).waitFor();
+      const hidden = await page.evaluate(() => ['preflight', 'steps', 'run', 'full-run', 'stop-run'].map((id) => document.getElementById(id).hidden));
+      assert.deepEqual(hidden, [true, true, true, true, true]);
+    } finally {
+      await browser.close();
+    }
+  } finally {
+    await app.close();
+  }
+});
