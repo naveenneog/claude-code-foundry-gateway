@@ -128,9 +128,42 @@ az rest --method post --url "https://graph.microsoft.com/v1.0/servicePrincipals/
 
 Outbound firewall or forced-tunnel rules must allow `login.microsoftonline.com`, `graph.microsoft.com`, `management.azure.com` (the job reads `bu-registry` and `bu-parents`), the ACR login server and data endpoint, and the Cosmos private endpoint through `privatelink.documents.azure.com`. The job writes status records into `claude/entitlement` with partition key `projection-status::<tenantId>`, `type=projection-reconciliation-status` and `ttl=21600`; resolver point reads by developer object id cannot return them.
 
-Deployment order: deploy the projection (`scripts/Deploy-ClaudeProjection.ps1`), then the renewal job (`scripts/Deploy-ClaudeProjectionRenewal.ps1`); the tenant admin grants `GroupMember.Read.All`; runs succeed; evidence accumulates for about 60-90 minutes on the 30-minute schedule (three successful runs); switch; rollback by refreshing and comparing named values, then setting `entitlement-source` back to `named-value`. The switch itself is P95 ([ROADMAP](ROADMAP.md)). Offline tests prove the deployment order, the job's runs against stand-in Graph, ARM and Cosmos, and admission over their evidence ([P94 status](status/P94.md#p94-the-p86-renewal-job-deploys-and-renews-2026-10-04)); no live tenant has run the job, and the live Graph grant is [U17](UNKNOWNS.md).
+Deployment order: deploy the projection (`scripts/Deploy-ClaudeProjection.ps1`), then the renewal job (`scripts/Deploy-ClaudeProjectionRenewal.ps1`); the tenant admin grants `GroupMember.Read.All`; runs succeed; evidence accumulates for about 60-90 minutes on the 30-minute schedule (three successful runs); the [switch](#switch-to-the-projection-p95); rollback by refreshing and comparing named values, then setting `entitlement-source` back to `named-value`. Offline tests prove the deployment order, the job's runs against stand-in Graph, ARM and Cosmos, admission over their evidence and the switch ([P94 status](status/P94.md#p94-the-p86-renewal-job-deploys-and-renews-2026-10-04), [P95 status](status/P95.md#p95-the-projection-switch-over-runs-end-to-end-2026-10-05)); no live tenant has run the job, and the live Graph grant is [U17](UNKNOWNS.md).
 
-Admission runs fixed repository code through `scripts/ClaudeRunner.ps1`, reads Cosmos status history and computes the oldest expiry from the live entitlement records the resolver can serve, then separately reads the ARM job definition. It applies the resolver's own validation to every unexpired entitlement record before counting it. Invalid live records refuse admission with a count and up to three hashed object-id samples. It requires at least 60 minutes of live-record expiry margin, two generation advances within two hours, newest success within 45 minutes, matching status/member counts, no unexpired entitlement records on an older generation, the tested image digest, no command/args override, a client id, tier group object ids (two different groups, or `none` for premium) and an API Management gateway id in the job's settings, and an email-backed action group. Admission checks the form of those settings; binding them to the compared gateway and groups is P95 ([ROADMAP](ROADMAP.md)). The live-record aggregate is a one-time cross-partition scan during switching, acceptable at 500,000 records; it is not on the request path. Refusals name the reason and remedy.
+Admission runs fixed repository code through `scripts/ClaudeRunner.ps1`, reads Cosmos status history and computes the oldest expiry from the live entitlement records the resolver can serve, then separately reads the ARM job definition and the action group. It applies the resolver's own validation to every unexpired entitlement record before counting it. Invalid live records refuse admission with a count and up to three hashed object-id samples. It requires at least 60 minutes of live-record expiry margin, two generation advances within two hours, newest success within 45 minutes, matching status/member counts, no unexpired entitlement records on an older generation, the tested image digest, no command/args override, a client id, tier group object ids (two different groups, or `none` for premium) and an API Management gateway id in the job's settings, and an enabled action group with an email receiver whose status is `Enabled` ([U119](UNKNOWNS.md#p95-research-before-implementation)). Only status records the job wrote under its current settings count, and the switch requires those settings to name the gateway being switched, the compared tier groups and the receipt's identity ([ADR-0050](adr/0050-projection-switch-function.md)). The live-record aggregate is a one-time cross-partition scan during switching, acceptable at 500,000 records; it is not on the request path. Refusals name the reason and remedy.
+
+### Switch to the projection (P95)
+
+`scripts/Deploy-ClaudeProjection.ps1 -FlipAfterCleanCompare` reads the renewal receipt (`onboarding/projection-renewal-<prefix>.json`, or `-RenewalReceiptPath`) and runs `Invoke-ClaudeProjectionSwitch` (`scripts/ClaudeProjectionSwitch.ps1`, [ADR-0050](adr/0050-projection-switch-function.md)). It deploys, publishes and applies nothing:
+
+```powershell
+pwsh -NoProfile -File .\scripts\Deploy-ClaudeProjection.ps1 `
+  -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> -FlipAfterCleanCompare -WhatIf
+```
+
+1. `scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift` compares the gateway's lists with Entra and exports the gateway's decisions.
+2. The runner unpacks the sync package and runs `apply-projection.mjs --compare` against those decisions, read-only.
+3. Admission reads the action group, the job definition and its settings, and the Cosmos evidence, as above.
+4. The entitlement named values (`entitlement-source`, `allow-standard`, `allow-premium`, `bu-members`) are written to `onboarding/projection-switch-<apim>-<time>.json`.
+5. `entitlement-source` is set to `projection`, the one write.
+
+A refusal at any step leaves `entitlement-source` unchanged and writes no backup; `-WhatIf` runs steps 1-3 and stops. The guided Entitlement step runs the same function with the receipt whose `gatewayResourceId` is the gateway, and its own snapshot as the backup (`scripts/flow/Entitlement.ps1`). The output names the backup and the rollback: `entitlement-source` back to `named-value` after `scripts/Sync-ClaudeAccess.ps1` refreshes the lists and `scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift` checks them.
+
+#### Owner-attended live run
+
+No live tenant has run these steps. Each row states what the step shows.
+
+| Step | Command or place | Shows |
+|---|---|---|
+| 1. Projection | `scripts/Deploy-ClaudeProjection.ps1` without `-FlipAfterCleanCompare` ([one-command deployment](#one-command-deployment)) | Cosmos, the network with its renewal subnet, the resolver, the population and a clean compare |
+| 2. Renewal job | `scripts/Deploy-ClaudeProjectionRenewal.ps1 -AlertEmail <address>` ([renewal job](#scheduled-renewal-job-and-admission-p86-p94)) | The registry, image digest, job and alerts deploy; whether the alert queries pass deployment-time validation ([U109](UNKNOWNS.md#p94-research-before-implementation)) and whether AcrPull was in effect for the job ([U113](UNKNOWNS.md#p94-research-before-implementation)) |
+| 3. Graph grant | A tenant administrator runs `scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1 -PrincipalId <printed id>` | The job's identity reads group membership ([U17](UNKNOWNS.md)) |
+| 4. Alert address | The confirmation email from Azure Monitor, then Monitor > Action groups > Test | The address receives alerts, and whether an unconfirmed address reads `Enabled` ([U116](UNKNOWNS.md#p94-research-before-implementation)) |
+| 5. Runs | `az containerapp job execution list -g <rg> -n <job> -o table`, and `ContainerAppConsoleLogs` in the workspace | Three successful runs 30 minutes apart, each ending with `projection-renewal-succeeded` |
+| 6. Check | Step 1's command with `-FlipAfterCleanCompare -WhatIf` | The drift check, the compare and admission pass |
+| 7. Switch | Step 6's command without `-WhatIf` | One write, the backup path and the rollback text |
+| 8. Requests | Section 11 of the [Azure CLI guide](AZ-COMMANDS.md#11-verification) | Requests resolve through the projection |
+| 9. Rollback, when needed | `scripts/Sync-ClaudeAccess.ps1`, `scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift`, then `entitlement-source` set to `named-value` | Named values serve again |
 
 ### One-command deployment
 
@@ -179,12 +212,13 @@ For Standard v2 and Premium v2, omit `-ResolverInboundAccess` and the script
 chooses `private`. The command deploys private Cosmos, projection networking and
 the resolver, exports named-value decisions, populates from Entra, compares the
 projection against those decisions and leaves `entitlement-source` unchanged. This one-command
-path uses the gateway resource group for its projection resources. `-FlipAfterCleanCompare`
-refuses before Azure discovery or writes, including with `-Confirm` or `-WhatIf`.
+path uses the gateway resource group for its projection resources. With `-FlipAfterCleanCompare`
+the command deploys nothing: it reads the renewal receipt and runs the
+[switch](#switch-to-the-projection-p95); `-WhatIf` runs its checks and stops before the backup.
 A declined deployment/population/comparison prerequisite aborts the run; it does not fall through
 to a later step. `-WhatIf` without a switch request prints the planned operations without
 writing Azure resources. It does not require creating an app merely to preview the plan
-(`scripts/Deploy-ClaudeProjection.ps1:80`).
+(`scripts/Deploy-ClaudeProjection.ps1:109-112`).
 
 #### Resolver registration and the customer's Entra admin
 
@@ -209,7 +243,7 @@ or creation failures still stop the run rather than claiming success.
 | Tier group collections and shared membership readers | `GroupMember.Read.All` or broader group/directory-read permission; service-principal detail can require application-read access |
 | Gateway service principal; existing resolver app/id URI | Graph application/service-principal read permission, such as `Application.Read.All`, and applicable user/role access |
 | Default app-registration policy, only when no existing app is selected | `Policy.Read.All`; unreadable policy produces WARN, and `-ResolverAppId` avoids this read |
-| Switch flag | No Azure read can admit it in P84; the refusal is unconditional |
+| Switch (`-FlipAfterCleanCompare`) | API Management named-value read and write, ARM read of the renewal job and its action group, and Cosmos data read through the runner ([ADR-0050](adr/0050-projection-switch-function.md)) |
 
 Sources, accessed 2026-09-29: [user GET](https://learn.microsoft.com/graph/api/user-get?view=graph-rest-1.0),
 [group list](https://learn.microsoft.com/graph/api/group-list?view=graph-rest-1.0),
@@ -539,19 +573,21 @@ still public. That is the state this step changes: after the private endpoint
 and DNS are verified, select **Disabled** (or **Selected Networks and Private
 Endpoints**), save, and repeat the verification above.
 
-### Switch evidence before population
+### Switch evidence
 
 **A successful initial scan does not supply renewal.** Records expire at most **two hours from
-scan start**, after which **every developer receives 503** unless reconciliation has renewed
-them. P84 refuses `-FlipAfterCleanCompare` unconditionally; no job metadata can override it.
-The installer and guided Entitlement enforce the same refusal.
+scan start**, after which **every developer receives 503** unless the renewal job has renewed
+them. The deployer's `-FlipAfterCleanCompare`, the installer's `-FlipProjectionAfterCleanCompare`
+and the guided Entitlement step switch through `Invoke-ClaudeProjectionSwitch`, which deploys and
+applies nothing: a snapshot applied before admission leaves the job's status records older than
+the live records, and admission refuses ([ADR-0050](adr/0050-projection-switch-function.md)).
 
 ARM success can describe a dry-run and cannot prove actual renewal or continuing schedule
-activity. Proposed P86 admission reads destination-bound Cosmos evidence through the runner:
-oldest expiry has margin, generation advanced at least twice in two hours, and newest renewal
-is within 60 minutes. A tested image/entrypoint rejects dry-run overrides; the tenant-admin
-Graph grant, hourly job and alerts are also P86 work. This is a proposal, not shipped admission
-([ADR-0040](adr/0040-projection-preflight-and-switch.md), U56).
+activity. Admission reads destination-bound Cosmos evidence through the runner: the oldest expiry
+has at least 60 minutes of margin, the generation advanced at least twice in two hours, the newest
+renewal is within 45 minutes, and the job wrote the evidence under its current settings. The tested
+image and entry point reject dry-run overrides ([ADR-0045](adr/0045-scheduled-projection-renewal.md),
+U56).
 
 Apply/compare failure diagnostics expose counts and hashed samples, not raw email or unit values.
 They contain at most 40 lines and 4,096 characters in total, counting the heading line and any

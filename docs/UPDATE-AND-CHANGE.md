@@ -81,13 +81,15 @@ DNS. Do not delete the old gateway until rollback is no longer needed.
 ## 3. Move entitlement between named values and the projection
 
 Named values are the default and hold roughly 100 developers. The projection is the scale path.
-**Switching is unavailable in P84.** Records expire at most **two hours after scan start**;
-without renewal **every developer gets 503 after expiry**. The supported scheduled reconciler
-is proposed as **P86** in [ROADMAP](ROADMAP.md); a clean comparison or ARM job execution is not
-renewal evidence. All automated switching paths refuse unconditionally, with no override.
+Records expire at most **two hours after scan start**; without renewal **every developer gets 503
+after expiry**. `scripts/Deploy-ClaudeProjectionRenewal.ps1` deploys the job that renews them every
+30 minutes ([ADR-0049](adr/0049-projection-renewal-deployment.md)). A switch is admitted after
+three successful runs, with an action group that has an enabled email receiver; a clean comparison
+or an ARM job execution alone is not renewal evidence ([ADR-0050](adr/0050-projection-switch-function.md)).
 
 The `Entitlement` step uses `scripts\Measure-ClaudeProjectionCost.ps1` for the operator's
-scenarios and reports the blocked projection switch. The standalone deployer can still deploy
+scenarios and switches through the same function as the deployer when a renewal receipt names the
+gateway. The standalone deployer can still deploy
 beside, populate and compare while named values remain authoritative. Deployment and
 projection sync require PowerShell 7. `-PreflightOnly` runs the same read-only checks without
 Azure writes (normally 30-90 seconds, including the 25-second Graph probe interval).
@@ -113,15 +115,16 @@ Manual equivalent:
   -ResolverAppId <resolver-app-id>
 ```
 
-`-FlipAfterCleanCompare` now returns the P86 refusal before Azure calls; a supplied historical
-reconciler id is not evaluated. The guided step no longer asks for an id that cannot authorize
-a switch. [ADR-0040](adr/0040-projection-preflight-and-switch.md) records the rejected ARM
-contract and proposed destination-bound Cosmos renewal evidence for P86. No schedule or
-admission machinery is created here.
+`-FlipAfterCleanCompare` deploys, publishes and applies nothing. It reads
+`onboarding/projection-renewal-<prefix>.json`, runs `scripts/Compare-ClaudeEntitlement.ps1
+-FailOnDrift`, the read-only compare in the runner and admission, writes the entitlement named
+values to `onboarding/projection-switch-<apim>-<time>.json`, and sets `entitlement-source` to
+`projection`; `-WhatIf` stops before the backup ([ADR-0050](adr/0050-projection-switch-function.md)).
 
-Reverse path: restore the named-value lists from the snapshot, then set `entitlement-source` to
-`named-value`. This can regrant stale list members if lists were not kept current while the
-projection served traffic, so verify membership before leaving rollback mode.
+Reverse path: `entitlement-source` returns to `named-value` after the lists are refreshed with
+`scripts/Sync-ClaudeAccess.ps1` and checked with `scripts/Compare-ClaudeEntitlement.ps1
+-FailOnDrift`. Lists not kept current while the projection served traffic can regrant stale
+members or deny new ones; the switch's backup holds the values from before it.
 
 ## 4. Change the enterprise network edge
 

@@ -56,8 +56,9 @@ writing and throws rather than discarding the exit code.
 At 100-500 developers the named-value path is already past or close to the
 business-unit membership ceiling. The installer offers the **Cosmos projection**
 as the entitlement store. `scripts/Deploy-ClaudeProjection.ps1` deploys it,
-populates it from Entra and compares it against named-value decisions. P84 leaves that authority
-unchanged and refuses automated switching until the supported P86 scheduled reconciler exists.
+populates it from Entra and compares it against named-value decisions. The named values stay
+authoritative until a switch, which `-FlipAfterCleanCompare` runs over the renewal job's evidence
+([ADR-0050](adr/0050-projection-switch-function.md)).
 
 The SKU changes the resolver inbound path, not the Cosmos rule:
 
@@ -747,16 +748,16 @@ effective identity before a bulk flip.
 ### 5. Flip one value
 
 **Outage warning:** records expire at most **two hours from scan start**. Without continuing
-renewal, **every developer gets 503 after expiry**. A clean comparison is not renewal. P86's
-deployer, installer and guided flow admit switching only after the supported scheduled
-reconciler, tenant-admin grant, email-backed alerts and destination-bound Cosmos evidence are
-present. ARM cron, environment strings and a successful job execution cannot prove actual
-renewal.
+renewal, **every developer gets 503 after expiry**. A clean comparison is not renewal. The
+deployer, the installer and the guided flow switch through one function and admit switching only
+after the renewal job, the tenant-admin grant, email-backed alerts and destination-bound Cosmos
+evidence are present ([ADR-0050](adr/0050-projection-switch-function.md)). ARM cron, environment
+strings and a successful job execution cannot prove actual renewal.
 
 The following low-level manual operation remains documented for independently operated estates,
 after step 4's comparison and the resolver configuration in the
-[private deployment guide](SECURE-PROJECTION.md). It is **not P84-protected admission**, creates
-no reconciler, and can cause the outage above. The former ARM-only guard has been removed:
+[private deployment guide](SECURE-PROJECTION.md). It skips admission, creates no renewal job, and
+can cause the outage above. The former ARM-only guard has been removed:
 
 ```powershell
 . .\scripts\ApimNamedValue.ps1

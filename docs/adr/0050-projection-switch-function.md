@@ -10,7 +10,8 @@
 
 P94 deploys the renewal job and writes a receipt for it. Three callers can still switch
 `entitlement-source` to `projection`, and none can succeed or is fully guarded
-([P95 status](../status/P95.md#p95-the-projection-switch-over-runs-end-to-end-2026-10-05)):
+([P95 status](../status/P95.md#p95-the-projection-switch-over-runs-end-to-end-2026-10-05)).
+Line references in this section are to `d0605cb`:
 
 - The deployer's `-FlipAfterCleanCompare` redeploys and applies a fresh snapshot before admission,
   so admission refuses every attempt (`scripts/Deploy-ClaudeProjection.ps1:111-216`).

@@ -50,7 +50,7 @@ References use repository paths and line numbers from the source scripts that th
 | 7 | Optional Desktop public-client app registration, redirect URIs and APIM Desktop audience for `external-idp-browser` and `external-idp-broker`; the default `helper-script` path needs no app registration | [§7](#7-developer-sign-in-mode-and-claude-desktop-sign-in) | [Part 7 in the portal](#part-7-in-the-portal) | Pending: `p60-desktop-app-overview`, `p60-desktop-app-authentication`, `p60-desktop-app-api-permissions`, `p60-gateway-desktop-audience` | App-registration and APIM audience changes are followed by handover-file regeneration. |
 | 8 | `onboarding/claude-gateway.json` developer handover artifact | [§8](#8-developer-handover-file) | [Part 8 in the portal](#part-8-in-the-portal) | No screenshot; no portal equivalent | Regenerate and redistribute the JSON after endpoint, tenant, app id, SKU or tier-model changes. |
 | 9 | Optional company gateway hostname, certificate source and APIM custom domain binding | [§9](#9-optional-company-address) | [Part 9 in the portal](#part-9-in-the-portal) | Existing: `p54-vault-certificate`, `p54-vault-role`; pending: `p90-company-custom-domains` | Change APIM Custom domains, Key Vault certificate and DNS together, then verify TLS. |
-| 10 | Optional Cosmos projection, resolver app, private networking, resolver auth and APIM resolver named values | [§10](#10-optional-cosmos-projection) | [Part 10 in the portal](#part-10-in-the-portal) | Existing: `docs-review-cosmos-networking`, `docs-review-resolver-authentication`, `docs-review-resolver-networking`, `p54-private-endpoint`, `p54-private-dns`, `architecture-projection-networking` | Resolver named values can change while `entitlement-source` stays `named-value` until the supported switch exists. |
+| 10 | Optional Cosmos projection, resolver app, private networking, resolver auth and APIM resolver named values | [§10](#10-optional-cosmos-projection) | [Part 10 in the portal](#part-10-in-the-portal) | Existing: `docs-review-cosmos-networking`, `docs-review-resolver-authentication`, `docs-review-resolver-networking`, `p54-private-endpoint`, `p54-private-dns`, `architecture-projection-networking` | Resolver named values can change while `entitlement-source` stays `named-value`; the switch is `scripts/Deploy-ClaudeProjection.ps1 -FlipAfterCleanCompare` ([SECURE-PROJECTION](SECURE-PROJECTION.md#switch-to-the-projection-p95)). |
 | 11 | Data-plane verification, refusal cases, bypass audit, call ceiling and diagnostics review | [§11](#11-verification) | [Part 11 in the portal](#part-11-in-the-portal) | Existing: `docs-review-gateway-diagnostics`, `docs-review-workspace-tables`, `docs-review-workspace-functions`, `docs-review-workspace-workbooks` | Change named values, groups or role assignments, then rerun the relevant verification command. |
 | 12 | Teardown of the gateway resource group and receipt-created external role/group/app objects | [§12](#12-teardown) | [Part 12 in the portal](#part-12-in-the-portal) | No current automated capture; `p90-resource-group-delete` moved to Tooling gaps | Delete only owned resources and receipt-created external objects after reviewing receipts. |
 
@@ -1442,7 +1442,7 @@ p89_projection_deploy
 # P89-PROJECTION-DEPLOY-END
 ```
 
-Expected result: `projection.bicep` deploys first, then `projection-network.bicep` uses the Cosmos account output and creates private endpoints, DNS and the in-VNet runner. The private resolver path requires a gateway SKU with outbound VNet integration; Basic v2 cannot use this path (`docs/SCALE.md:628-635`). This mirrors `scripts/Deploy-ClaudeProjection.ps1:107-122`, `infra/projection.bicep:11-68` and `infra/projection-network.bicep:26-49`.
+Expected result: `projection.bicep` deploys first, then `projection-network.bicep` uses the Cosmos account output and creates private endpoints, DNS and the in-VNet runner. The private resolver path requires a gateway SKU with outbound VNet integration; Basic v2 cannot use this path (`docs/SCALE.md:628-635`). This mirrors `scripts/Deploy-ClaudeProjection.ps1:130-151`, `infra/projection.bicep:11-68` and `infra/projection-network.bicep:26-49`.
 
 Deploy the resolver with Standard v2 outbound VNet integration and upload code.
 
@@ -1485,7 +1485,7 @@ p89_resolver_deploy
 # P89-RESOLVER-DEPLOY-END
 ```
 
-Expected result: the Function app is running with VNet integration and resolver code uploaded. `allowedCallerAppIds` is the gateway managed identity application id, and `allowedCallerObjectIds` is the gateway object id; otherwise the resolver refuses the gateway. This mirrors `scripts/Deploy-ClaudeProjection.ps1:130-168` and `infra/resolver.bicep:385-387`.
+Expected result: the Function app is running with VNet integration and resolver code uploaded. `allowedCallerAppIds` is the gateway managed identity application id, and `allowedCallerObjectIds` is the gateway object id; otherwise the resolver refuses the gateway. This mirrors `scripts/Deploy-ClaudeProjection.ps1:153-210` and `infra/resolver.bicep:385-387`.
 
 Set resolver named values without switching entitlement.
 
@@ -1566,7 +1566,7 @@ p89_projection_runner
 # P89-PROJECTION-RUNNER-END
 ```
 
-Expected result: population and comparison run through the runner created by `projection-network.bicep`. `send_runner_file` mirrors `scripts/ClaudeRunner.ps1:113-148`: base64url chunks are appended through `az container exec` and decoded in the container. The snapshot and gateway-decision files are produced by the repository scripts because their Graph and named-value comparison logic is not an Azure CLI data-plane operation. This mirrors `scripts/Deploy-ClaudeProjection.ps1:199-221`, `scripts/Sync-ClaudeProjection.ps1`, `scripts/ClaudeRunner.ps1`, `docs/SCALE.md:681-726` and `infra/projection-network.bicep:46-49`.
+Expected result: population and comparison run through the runner created by `projection-network.bicep`. `send_runner_file` mirrors `scripts/ClaudeRunner.ps1:113-148`: base64url chunks are appended through `az container exec` and decoded in the container. The snapshot and gateway-decision files are produced by the repository scripts because their Graph and named-value comparison logic is not an Azure CLI data-plane operation. This mirrors `scripts/Deploy-ClaudeProjection.ps1:218-247`, `scripts/Sync-ClaudeProjection.ps1`, `scripts/ClaudeRunner.ps1`, `docs/SCALE.md:681-726` and `infra/projection-network.bicep:46-49`.
 
 Deploy the scheduled renewal job, its registry and its alerts.
 
@@ -1655,7 +1655,7 @@ Projection switch status.
 az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id entitlement-source --query value -o tsv
 ```
 
-Expected result: the value stays `named-value`. Records lease for at most two hours, and without renewal every developer receives 503 after expiry (`docs/SCALE.md:744-760`). The renewal job above renews every record each run. Switching to `projection` with admission over the job's evidence ([ADR-0045](adr/0045-scheduled-projection-renewal.md)) is P95 ([ROADMAP](ROADMAP.md)). The manual command can change `entitlement-source` to `projection`, but it skips that admission and can cause that outage.
+Expected result: the value stays `named-value`. Records lease for at most two hours, and without renewal every developer receives 503 after expiry (`docs/SCALE.md:744-760`). The renewal job above renews every record each run. The supported switch is `scripts/Deploy-ClaudeProjection.ps1 -FlipAfterCleanCompare`, which runs repository code in the runner for the compare and admission over the job's evidence and has no Azure CLI equivalent in this guide ([ADR-0050](adr/0050-projection-switch-function.md), [SECURE-PROJECTION](SECURE-PROJECTION.md#switch-to-the-projection-p95)). The manual command can change `entitlement-source` to `projection`, but it skips that admission and can cause that outage.
 
 ### Part 10 in the portal
 
@@ -1702,7 +1702,7 @@ Capture id: `docs-review-resolver-networking`.
 | Resolver private endpoint or VNet integration | Function App > Networking | **Deploy the resolver with Standard v2 outbound VNet integration and upload code** | `infra/policy.xml:86-92` calls the resolver only when the value is `projection`, so §11 request results stay unchanged. |
 | Resolver Microsoft identity provider | Function App > Authentication | **Deploy the resolver with Standard v2 outbound VNet integration and upload code** | `infra/policy.xml:86-92` calls the resolver only when the value is `projection`, so §11 request results stay unchanged. |
 | Resolver app settings, URL or audience | Function App > Environment variables; API Management > Named values | **Deploy the resolver with Standard v2 outbound VNet integration and upload code** and **Set resolver named values without switching entitlement** | `infra/policy.xml:86-92` calls the resolver only when the value is `projection`, so §11 request results stay unchanged. |
-| Entitlement data | No portal equivalent for the runner transfer and compare | **Populate and compare the projection through an in-VNet runner container** | Projection data changes leave §11 request results unchanged until a supported projection switch exists. |
+| Entitlement data | No portal equivalent for the runner transfer and compare | **Populate and compare the projection through an in-VNet runner container** | Projection data changes leave §11 request results unchanged while `entitlement-source` is `named-value`. |
 | Renewal schedule, image, alert addresses or tier groups | Container Apps job > Configuration; Monitor > Action groups | **Deploy the scheduled renewal job, its registry and its alerts** | The job rewrites projection records only; §11 request results stay unchanged. A new image digest needs three new runs before admission accepts its evidence. |
 | Log routing or policy settings | API Management diagnostics or policy blades | The relevant §11 diagnostics check | Diagnostic results change only after log routing or policy changes. |
 

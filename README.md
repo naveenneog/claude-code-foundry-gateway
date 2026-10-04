@@ -20,10 +20,11 @@ Start with [Setup](docs/SETUP.md) for deployment or
 > **not 500,000 concurrent developers** or a completed directory scan.
 >
 > Projection deployment requires PowerShell 7. Its [read-only preflight](docs/SECURE-PROJECTION.md#one-command-deployment)
-> runs before Azure writes. **P84 refuses every automated projection switch** until the supported
-> scheduled reconciler proposed as P86 exists. Without renewal, records expire within two hours
-> and every developer receives 503. A clean comparison or successful ARM job is not renewal
-> evidence ([ADR-0040](docs/adr/0040-projection-preflight-and-switch.md)).
+> runs before Azure writes. Records expire within two hours, and without renewal every developer
+> receives 503, so a switch to the projection is admitted only over the renewal job's evidence:
+> `scripts/Deploy-ClaudeProjectionRenewal.ps1` deploys the job ([ADR-0049](docs/adr/0049-projection-renewal-deployment.md)),
+> and `scripts/Deploy-ClaudeProjection.ps1 -FlipAfterCleanCompare` switches without deploying
+> anything, after a drift check, a compare and admission ([ADR-0050](docs/adr/0050-projection-switch-function.md)).
 >
 > The current two-always-ready-instance profile costs **$91.56/month at rest**.
 > Hourly lease renewal at 500,000 members adds about **365 million writes/month**,

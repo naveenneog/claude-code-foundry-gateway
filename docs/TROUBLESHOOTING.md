@@ -42,7 +42,7 @@ The preflight in both setup scripts reports whether the platform is affected.
 | `An XML comment cannot contain '--', and '-' cannot be the last character` | A `--` inside an XML comment in your policy. Use single dashes. The error does not mention comments. |
 | `az rest` fails with `'charmap' codec can't encode character '\ufeff'` | An Azure CLI bug decoding APIM's policy response on Windows. **The PUT usually succeeded** — verify with a GET before retrying. `Set-GatewayPolicy.ps1` avoids `az rest` for this reason. |
 | Policy references `{{name}}` and returns 500 | The named value does not exist. Create it, or redeploy the template. |
-| A lifecycle entitlement flip is refused after projection deployment | The comparison was not clean. Re-run `Deploy-ClaudeProjection.ps1` without `-FlipAfterCleanCompare`, fix the reported missing/stale identities, then run it with `-FlipAfterCleanCompare`; the guided step deliberately refuses to flip on drift. |
+| A projection switch is refused | The refusal names its step: lists that drift from Entra (`Sync-ClaudeAccess.ps1` refreshes them), a projection that differs from the gateway, or admission (renewal runs, alerts, the job's settings). `Deploy-ClaudeProjection.ps1 -FlipAfterCleanCompare -WhatIf` runs the same checks without the backup and the write ([switch](SECURE-PROJECTION.md#switch-to-the-projection-p95)). |
 
 ## Runtime
 
