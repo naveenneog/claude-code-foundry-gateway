@@ -39,6 +39,16 @@ projection. The merged P86 code cannot be deployed as written. Read on `main` `1
    later by a script, AUM or Turnstile reaches the projection only after someone redeploys the job.
 6. **Business units read by the job on every run** from `bu-registry` and `bu-parents`, ordered as
    `Sort-ClaudeBuByDepth` orders them. Chosen; the job gets a read-only named-value role (U117).
+7. **Keep P86's job and environment names wherever they fit 32 characters** (U118). Rejected: the
+   names would depend on the prefix length, P86's job cannot run (its image misses
+   `resolver/src/entitlement.mjs` and it sets no `AZURE_CLIENT_ID`), and an environment's subnet is
+   given when the environment is created
+   ([custom virtual networks](https://learn.microsoft.com/azure/container-apps/custom-virtual-networks),
+   updated 2026-05-19, read 2026-10-04), so a P86 environment would not move onto the renewal
+   subnet.
+8. **Delete P86's job, environment and failure alert in the deploy script.** Rejected: the script
+   would delete resources this run did not create, without the operator's decision.
+9. **Refuse a resource group that holds them, with the delete commands.** Chosen.
 
 ## Decision
 
@@ -46,7 +56,7 @@ projection. The merged P86 code cannot be deployed as written. Read on `main` `1
    `sync/package.json`, `sync/package-lock.json`, `sync/src/` and `resolver/src/entitlement.mjs`,
    at their repository-relative paths. The runner archive is made from that directory and
    unpacks at `/work`; the image builds from it with `--file sync/Dockerfile`. The image installs
-   with `npm ci --omit=dev` and keeps `ENTRYPOINT ["node", "/app/sync/src/apply-projection.mjs"]`;
+   with `npm ci --omit=dev --ignore-scripts` (no locked package declares an install script) and keeps `ENTRYPOINT ["node", "/app/sync/src/apply-projection.mjs"]`;
    its command is `--graph`.
 2. Deployment has three phases, run by `scripts/Deploy-ClaudeProjectionRenewal.ps1`:
    `infra/projection-registry.bicep` (registry, user-assigned identity, AcrPull), then
@@ -59,8 +69,11 @@ projection. The merged P86 code cannot be deployed as written. Read on `main` `1
    default plan, after the resolver's /26), and outputs `renewalSubnetId`. With an existing VNet the
    caller passes `renewalSubnetId`.
 4. The job sets `AZURE_CLIENT_ID`, the tier group object ids and the gateway resource id. Each run
-   reads `bu-registry` and `bu-parents` through ARM; a failed read writes nothing. Admission's
-   job-definition check requires these settings.
+   reads `bu-registry` and `bu-parents` through ARM; a failed read writes nothing. A unit whose group
+   Graph no longer finds is an empty unit, as `Get-GroupMemberOids` in
+   `scripts/ClaudeGraphMembership.ps1` treats it; a tier group Graph does not find stops the run.
+   Admission's job-definition check requires these settings, and the deploy script, the guide and
+   admission refuse one group for both tiers, because premium membership takes precedence.
 5. The environment uses `azure-monitor` logs with a diagnostic setting to the gateway's workspace.
    The job prints one final JSON line per run with `event` set to `projection-renewal-succeeded` or
    `projection-renewal-failed` (with `stage`). Each alert filters on the job name, reads a fuzzy
@@ -68,9 +81,22 @@ projection. The merged P86 code cannot be deployed as written. Read on `main` `1
 6. (P95) A switch never repopulates. One function checks named-value drift, exports the gateway's
    decisions, compares through the runner, runs admission, takes a backup and writes
    `entitlement-source`; the deployer, the installer and the guided flow call it.
-7. (P95) The renewal deploy script writes a receipt with no secrets (job id, image digest, action
-   group, runner, Cosmos account, tenant, entry point, source commit). The guided flow reads it and
-   confirms the job against ARM before admission.
+7. The renewal deploy script (P94) writes a receipt with no secrets to
+   `onboarding/projection-renewal-<prefix>.json`, `kind` `claude-projection-renewal-receipt`,
+   `schemaVersion` 1: the resource group and prefix, the job id and name, image digest and tag,
+   entry point, action group, runner, Cosmos account and its resource id, tenant, gateway id, tier
+   group ids, identity client and principal ids, workspace, schedule, and the source commit with a
+   dirty flag. (P95) The guided
+   flow reads it and confirms the job against ARM before admission; a change to these fields raises
+   `schemaVersion`.
+8. The job and environment are named `caj-renew-` and `cae-renew-` followed by
+   `uniqueString(resourceGroup().id, namePrefix)` (U118), and the failure alert is
+   `renewal-failed`. The registry, identity, action group and other alerts keep P86's names and
+   update in place. A resource group that holds P86's `caj-projection-renewal-<prefix>`,
+   `cae-projection-<prefix>` or `sqr-projection-<prefix>-graph-read-failed` is refused before any
+   write, with `az resource delete` commands for them in a working order (job before environment).
+9. (P95) Admission binds the job's tier group ids, gateway and identity to the evidence it accepts
+   and to the compared gateway, so a redeploy with other settings needs fresh runs.
 
 ## Consequences
 

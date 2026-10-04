@@ -99,7 +99,15 @@ deployment by hand fails ([P94 status](status/P94.md#p94-the-p86-renewal-job-dep
 | Packet | State | Deliverable |
 |---|---|---|
 | P94 | In progress on `p94-projection-deployable`; merges only with the owner's approval | The P86 renewal job deploys and renews: one sync package for the image and the runner (the image and runner currently miss `resolver/src/entitlement.mjs`), a renewal subnet in the projection network, a registry template deployed before the image build, the job's client id, tier group ids and per-run business units, working log routing and alerts, `scripts/Deploy-ClaudeProjectionRenewal.ps1`, an offline renewal simulation that reaches admission, and the guide and its guard ([ADR-0049](adr/0049-projection-renewal-deployment.md)). |
-| P95 | Proposed; starts after the P94 gate | The switch-over runs end to end: a switch never repopulates; one switch function for the deployer, installer and guided flow (drift check, compare, admission, backup, one named-value write); the guided flow reads the renewal receipt; admission requires an email receiver on the action group; P84 text replaced; an owner-attended live runbook. |
+| P95 | Proposed; starts after the P94 gate | The switch-over runs end to end: a switch never repopulates; one switch function for the deployer, installer and guided flow (drift check, compare, admission, backup, one named-value write); the guided flow reads the renewal receipt; admission requires an email receiver on the action group; admission binds the job's tier group ids, gateway and identity to the evidence it accepts and to the compared gateway, so a renewal redeploy that changes them needs fresh runs; P84 text replaced; an owner-attended live runbook. |
+
+Follow-ups from the P94 council, not yet packets: `sync/package-lock.json` carries `sha1` integrity
+for 50 of its 53 packages because this workstation reaches npm only through a feed whose metadata
+lacks `sha512`, and a lockfile written against `registry.npmjs.org` would carry `sha512`; the deploy
+script reads the image digest back by tag, and the `az acr build` result would name it directly; and
+`tests/Test-ProjectionPreflightNegative.ps1`, a manual suite outside Test-All, stops with "Mutation
+anchor missing: bounded raw output" because `f39524d` changed `Select-Object -Last 40` in
+`scripts/ClaudeRunner.ps1` to `-Last 39`, on `main` as well ([P94 council](status/P94.md#council)).
 
 M0 is shipped. The table below is the queue; the checklist under it is what the gate tracks.
 
@@ -515,11 +523,13 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       ids and gateway id and reads business units every run; logs reach the gateway workspace and
       each alert returns rows only when unhealthy; `Deploy-ClaudeProjectionRenewal.ps1` runs the
       phases in order with tests; three simulated runs pass admission offline
-      ([P94 status](status/P94.md#p94-the-p86-renewal-job-deploys-and-renews-2026-10-04), U107-U117)
+      ([P94 status](status/P94.md#p94-the-p86-renewal-job-deploys-and-renews-2026-10-04), U107-U118)
 - [ ] P95 The projection switch-over runs end to end — acceptance: a switch rerun deploys and
       applies nothing before admission; the deployer, installer and guided flow share one switch
       function that compares before admission; the guided flow reads the renewal receipt; admission
-      requires an email receiver; P84 text is replaced; the live runbook is written for the owner
+      requires an email receiver; admission refuses evidence produced under other tier group ids,
+      another gateway or another identity than the job and the comparison now name; P84 text is
+      replaced; the live runbook is written for the owner
 - [x] P72 permutation tests of the guided flow and the installer — acceptance: every combination of
       action (Setup, Change foundation, Guide, Status), record state (none, recorded and matching,
       recorded with another gateway URL, recorded but missing, not readable), mode (attended,
