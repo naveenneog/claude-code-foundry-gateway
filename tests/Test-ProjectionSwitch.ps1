@@ -269,6 +269,32 @@ foreach ($clean in @($true, $false)) {
 }
 $global:ListMode = $null
 
+Write-Host ''
+Write-Host 'Projection switch - the guides describe the switch (AC7, AC8)' -ForegroundColor Cyan
+$staleSwitch = '(?i)P84 refuses|refuses every (automated )?projection switch|refuses automated switching|returns the P86 refusal|switching is (blocked|unavailable)|unavailable in P84|blocked until P86|(switch( itself)?|switching|binding them[^.]*) is P95|until (a |the )?supported (projection )?switch exists|refused unconditionally|not P84-protected|proposed as \**P86|needs the supported P86'
+$described = @(Get-Item -LiteralPath (Join-Path $root 'README.md'), (Join-Path $root 'Install-ClaudeGateway.ps1')) +
+    @(Get-ChildItem -LiteralPath (Join-Path $root 'docs') -Filter '*.md' -File | Where-Object Name -notin 'ROADMAP.md', 'STATUS.md', 'UNKNOWNS.md') +
+    @(Get-ChildItem -LiteralPath (Join-Path $root 'docs\architecture') -Filter '*.json' -File) +
+    @(Get-ChildItem -LiteralPath (Join-Path $root 'scripts') -Filter '*.ps1' -File -Recurse)
+$d10 = @('README.md', 'SETUP.md', 'UPDATE-AND-CHANGE.md', 'SECURE-PROJECTION.md', 'SCALE.md', 'GUIDED-FLOW.md', 'AZ-COMMANDS.md', 'TROUBLESHOOTING.md', 'ClaudeProjectionChecks.ps1', 'Deploy-ClaudeProjection.ps1')
+$unread = @($d10 | Where-Object { @($described | ForEach-Object Name) -notcontains $_ })
+$stale = @(foreach ($file in $described) {
+    $n = 0
+    foreach ($line in [IO.File]::ReadAllLines($file.FullName)) { $n++; if ($line -match $staleSwitch) { "$($file.Name):$n '$($Matches[0])'" } }
+})
+Assert 'no guide, diagram or script says the switch is unavailable or later work (D10)' (-not $unread.Count -and -not $stale.Count) "unread: $($unread -join ', '); stale: $($stale -join '; ')"
+
+$secure = [IO.File]::ReadAllText((Join-Path $root 'docs\SECURE-PROJECTION.md'))
+$section = [regex]::Match($secure, '(?ms)^### Switch to the projection \(P95\)\r?\n(.*?)(?=^### )').Groups[1].Value
+$steps = @('^1\. .*Compare-ClaudeEntitlement\.ps1 -FailOnDrift', '^2\. .*--compare', '^3\. Admission ', '^4\. .*onboarding/projection-switch-', '^5\. `entitlement-source` is set to `projection`')
+$at = @($steps | ForEach-Object { $m = [regex]::Match($section, "(?m)$_"); if ($m.Success) { $m.Index } else { -1 } })
+Assert 'the switch section lists the drift check, the compare, admission, the backup and the one write, in that order' ($section -and $at -notcontains -1 -and (($at | Sort-Object) -join ',') -eq ($at -join ',')) "positions $($at -join ',')"
+Assert 'the switch section names the backup and the rollback through a refresh and a compare' ($section -match 'Sync-ClaudeAccess\.ps1' -and $section -match 'Compare-ClaudeEntitlement\.ps1 -FailOnDrift' -and $section -match 'back to `named-value`')
+$unknowns = [IO.File]::ReadAllText((Join-Path $root 'docs\UNKNOWNS.md'))
+$rows = @([regex]::Matches($section, '(?m)^\| (\d)\. ') | ForEach-Object { $_.Groups[1].Value })
+$unchecked = @('U17', 'U109', 'U113', 'U116' | Where-Object { $section -notmatch "\[$_\]\(UNKNOWNS\.md" -or $unknowns -notmatch "(?m)^\| $_ \|" })
+Assert 'the owner-attended run lists steps 1-9 and checks U17, U109, U113 and U116 (AC8)' (($rows -join ',') -eq '1,2,3,4,5,6,7,8,9' -and -not $unchecked.Count) "rows $($rows -join ','); unchecked $($unchecked -join ', ')"
+
 Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
 
 Write-Host ''
