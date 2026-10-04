@@ -200,7 +200,8 @@ function Assert-ClaudeProjectionAdmission {
     try { $group = Invoke-RestMethod -Method Get -Headers $headers -Uri "https://management.azure.com${ActionGroupResourceId}?api-version=2023-01-01" -ErrorAction Stop }
     catch { throw "Projection switch refused: could not read the renewal alerts' action group ${ActionGroupResourceId}: $($_.Exception.Message) Remedy: check the receipt's action group id and the signed-in account's read access, then rerun." }
     $null = Assert-ClaudeProjectionActionGroup -ActionGroup $group -ActionGroupResourceId $ActionGroupResourceId
-    $job = Invoke-RestMethod -Method Get -Headers $headers -Uri "https://management.azure.com${ReconcilerResourceId}?api-version=2024-03-01" -ErrorAction Stop
+    try { $job = Invoke-RestMethod -Method Get -Headers $headers -Uri "https://management.azure.com${ReconcilerResourceId}?api-version=2024-03-01" -ErrorAction Stop }
+    catch { throw "Projection switch refused: could not read the renewal job ${ReconcilerResourceId}: $($_.Exception.Message) Remedy: check the receipt's job id and the signed-in account's read access, or redeploy the renewal job with scripts/Deploy-ClaudeProjectionRenewal.ps1, which writes a new receipt, then rerun." }
     $null = Assert-ClaudeProjectionJobDefinition -Job $job -ImageDigest $ImageDigest
     $settings = Get-ClaudeProjectionJobSettings -Job $job
     $null = Assert-ClaudeProjectionJobBinding -Settings $settings -GatewayResourceId $GatewayResourceId -StandardGroupId $StandardGroupId `

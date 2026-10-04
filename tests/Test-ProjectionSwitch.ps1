@@ -66,6 +66,11 @@ foreach ($case in 'action-group-disabled', 'action-group-no-email', 'action-grou
     Capture { Invoke-Admission }
     Assert "admission refuses before the runner reads Cosmos: $case" ($Failure -match '^Projection switch refused' -and (($FixtureCalls -join "`n") -notmatch 'container exec')) $Failure
 }
+Reset-ProjectionFixture 'job-error'
+Set-GoodRenewalJob
+Capture { Invoke-Admission }
+Assert 'a renewal job that cannot be read refuses with the job id and the remedy, before the runner' ($Failure -match '^Projection switch refused: could not read the renewal job' -and
+    $Failure -match [regex]::Escape($FixtureJobId) -and $Failure -match 'Remedy: .*Deploy-ClaudeProjectionRenewal\.ps1' -and (($FixtureCalls -join "`n") -notmatch 'container exec')) $Failure
 
 Write-Host ''
 Write-Host 'Projection switch - admission binds the evidence to the job settings' -ForegroundColor Cyan
@@ -301,6 +306,27 @@ foreach ($clean in @($true, $false)) {
     }
     $made | Remove-Item -Force -ErrorAction SilentlyContinue
 }
+# AC4: discovery reads the receipt only; the switch's admission confirms it in ARM before any write.
+foreach ($case in @(
+        @{ Name = 'a receipt whose job cannot be read'; Fixture = 'job-error'; Renewal = $renewal; Expect = 'could not read the renewal job' }
+        @{ Name = 'a receipt whose job runs another image digest'; Fixture = 'healthy'; Expect = 'not the tested pinned digest'
+            Renewal = ($renewal | Select-Object * -ExcludeProperty imageDigest | Add-Member -NotePropertyName imageDigest -NotePropertyValue ('sha256:' + ('b' * 64)) -PassThru) }
+    )) {
+    $flowDiscovery.renewal = $case.Renewal
+    $flowPlan = Get-ClaudeFlowStepPlan -Record $flowRecord -Discovery $flowDiscovery
+    $flowPlan.Data.SnapshotPath = Join-Path $work 'flow-snapshot.json'
+    $flowPlan.Data.SnapshotTaken = $true
+    $before = @(& $repoBackups | ForEach-Object FullName)
+    Reset-ProjectionFixture $case.Fixture
+    Set-GoodRenewalJob
+    $global:ListMode = 'clean'
+    Capture { Invoke-ClaudeFlowStep -Record $flowRecord -Plan $flowPlan }
+    $made = @(& $repoBackups | Where-Object { $before -notcontains $_.FullName })
+    Assert "the flow refuses $($case.Name), before any write (AC4)" ($Failure -match '^Projection switch refused' -and $Failure -match $case.Expect -and $Failure -match 'Remedy' -and
+        @(Get-Writes).Count -eq 0 -and $made.Count -eq 0 -and (($FixtureCalls -join "`n") -notmatch 'check-admission\.mjs')) "$Failure | writes $(@(Get-Writes).Count) backups $($made.Count)"
+    $made | Remove-Item -Force -ErrorAction SilentlyContinue
+}
+$flowDiscovery.renewal = $renewal
 $global:ListMode = $null
 
 Write-Host ''
