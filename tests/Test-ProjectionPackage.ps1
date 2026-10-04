@@ -173,7 +173,7 @@ Assert 'the runbook builds the image from the package through the renewal script
 # both entry points; a missing module there exits 1 without the JSON line the check requires.
 $workflow = [IO.File]::ReadAllText((Join-Path $root '.github\workflows\projection-image.yml'))
 Assert 'CI builds the image from the package the deployer and the runner use' ($workflow.Contains('New-ClaudeProjectionSyncPackage -Destination') -and $workflow -match 'docker build --file "\$PACKAGE_DIR/sync/Dockerfile" [^\r\n]* "\$PACKAGE_DIR"')
-Assert 'CI starts both entry points and requires their own argument error' ($workflow.Contains('check apply-projection docker run --rm claude-projection-sync:ci') -and $workflow.Contains('/app/sync/src/check-admission.mjs') -and $workflow.Contains('.error == "--cosmos is required"'))
+Assert 'CI starts both entry points and requires their own argument error' ($workflow -match '(?m)^\s+check apply-projection docker run --rm claude-projection-sync:ci\s*$' -and $workflow -match '(?m)^\s+check check-admission docker run --rm --entrypoint node claude-projection-sync:ci /app/sync/src/check-admission\.mjs\s*$' -and $workflow.Contains('.error == "--cosmos is required"'))
 foreach ($path in Get-ClaudeProjectionSyncPackagePaths) {
     Assert "CI runs when $path changes" ($workflow -match "(?m)^\s+- '$([regex]::Escape($(if ($path -eq 'sync/src' -or $path -like 'sync/*') { 'sync/**' } else { $path })))'\s*$")
 }
