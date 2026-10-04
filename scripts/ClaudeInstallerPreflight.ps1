@@ -111,7 +111,9 @@ function Get-ClaudePreflightAnswer([System.Collections.IDictionary]$Answers, [ha
     # An answer to read from Azure: given, and without a problem of its own.
     if ($Bad.ContainsKey($Name) -or -not $Answers.Contains($Name)) { return $null }
     $v = $Answers[$Name]
-    if ($null -eq $v -or "$v" -eq '') { return $null }
+    # "$v" of a list that holds one object from ConvertFrom-Json is an empty string, so only text and lists are
+    # tested for emptiness: a single business unit read as unanswered skipped its group (round 6).
+    if ($null -eq $v -or ($v -is [string] -and $v -eq '') -or ($v -is [System.Collections.ICollection] -and $v.Count -eq 0)) { return $null }
     # A list is returned as its items: callers that read a list wrap the call in @().
     return $v
 }

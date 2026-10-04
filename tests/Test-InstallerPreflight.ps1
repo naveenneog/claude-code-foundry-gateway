@@ -152,6 +152,20 @@ exit /b 0
     Add-Scenario 'list-missing' (New-P91World) (New-Answers { param($a) Remove-Answer $a 'FoundryResourceGroup'; $a.FoundryAccount = 'ai-missing' })
     $w = New-P91World; $w.foundry.deployments = @([ordered]@{ name = 'gpt-4o'; sku = [ordered]@{ name = 'GlobalStandard'; capacity = 10 }; properties = [ordered]@{ provisioningState = 'Succeeded'; model = [ordered]@{ format = 'OpenAI'; name = 'gpt-4o'; version = '2024-08-06' } } })
     Add-Scenario 'no-claude' $w (New-Answers { param($a) Remove-Answer $a 'StandardModels'; Remove-Answer $a 'PremiumModels' })
+    # Round 6, the lead's check of 70f07c0: answers that are objects, read from the answers file. The preflight reads
+    # the groups of the business units as well as the tier groups (ADR-0047 decision 6), and an answered
+    # PendingClaudeDeployment stands in for a Claude deployment that the account does not have yet.
+    $financeGroupId = '00000000-0000-4000-8000-0000000004b1'
+    $finance = [ordered]@{ id = 'finance'; group = 'claude-bu-finance'; monthlyUsdBudget = 5000; mode = 'Strict' }
+    $w = New-P91World; $w.groups[$financeGroupId] = 'claude-bu-finance'
+    # One unit: PowerShell turns a list of one object into an empty string, and two into a space.
+    Add-Scenario 'one-unit' $w (New-Answers { param($a) Set-Answer $a 'BusinessUnits' @($finance) })
+    $w = New-P91World; $w.groups[$financeGroupId] = 'claude-bu-finance'
+    Add-Scenario 'units' $w (New-Answers { param($a) Set-Answer $a 'BusinessUnits' @($finance,
+                [ordered]@{ id = 'finance-emea'; group = 'claude-team-finance-emea'; parent = 'finance'; monthlyUsdBudget = 1000; mode = 'Notify' }) })
+    $w = New-P91World; $w.foundry.deployments = @([ordered]@{ name = 'gpt-4o'; sku = [ordered]@{ name = 'GlobalStandard'; capacity = 10 }; properties = [ordered]@{ provisioningState = 'Succeeded'; model = [ordered]@{ format = 'OpenAI'; name = 'gpt-4o'; version = '2024-08-06' } } })
+    Add-Scenario 'pending' $w (New-Answers { param($a) Remove-Answer $a 'StandardModels'; Remove-Answer $a 'PremiumModels'
+            Set-Answer $a 'PendingClaudeDeployment' ([ordered]@{ name = 'claude-sonnet-5'; model = 'claude-sonnet-5'; version = '1'; sku = 'GlobalStandard'; capacity = 20; account = 'ai-p91'; resourceGroup = 'rg-ai-p91' }) })
     $w = New-P91World; $w.inject.readErrors = @([ordered]@{ match = 'account list --query*'; text = 'az : ].name was unexpected at this time.' })
     Add-Scenario 'prereq-fail' $w (New-Answers)
     $pfxMissing = '/nonexistent-p92/no-such-certificate.pfx'
@@ -251,6 +265,18 @@ exit /b 0
     Assert 'P2 without FoundryResourceGroup, a Foundry account the subscription does not list is a FAIL of foundry.account, and its deployments are NOT-RUN' ((& $one 'list-missing' 'foundry.account' 'Foundry account ai-missing was not found in the subscription') -and
         (Get-Check 'list-missing' 'foundry.deployments').reason -eq 'prerequisite-failed') (Show 'list-missing')
     Assert 'P2 a Foundry account with no Claude deployment and no PendingClaudeDeployment is a FAIL of foundry.deployments' (& $one 'no-claude' 'foundry.deployments' 'the Foundry account ai-p91 has no Claude deployment') (Show 'no-claude')
+    $un = $scenarios['units']; $unGroups = Get-Check 'units' 'entra.groupNames'
+    $unLookups = @($un.Result.Az | Where-Object { $_ -like 'ad group list --display-name claude-bu-finance *' -or $_ -like 'ad group list --display-name claude-team-finance-emea *' })
+    $ou = $scenarios['one-unit']; $ouGroups = Get-Check 'one-unit' 'entra.groupNames'
+    $ouLookups = @($ou.Result.Az | Where-Object { $_ -like 'ad group list --display-name claude-bu-finance *' })
+    Assert 'R6 with one business unit in the answers file, the preflight reads its group by name and names it in entra.groupNames with its id' ($ou.Result.ExitCode -eq 0 -and
+        $ouGroups.result -eq 'PASS' -and "$($ouGroups.message)".Contains("'claude-bu-finance' exists ($financeGroupId)") -and $ouLookups.Count -eq 1) "$($ouGroups.result): $($ouGroups.message) || lookups: $($ouLookups -join ' | ') || $(Show 'one-unit')"
+    Assert 'R6 the preflight reads the group of each business unit and team from the answers file by its name, and names each one in entra.groupNames: one that exists with its id, one the run creates' ($un.Result.ExitCode -eq 0 -and
+        $unGroups.result -eq 'PASS' -and "$($unGroups.message)".Contains("'claude-bu-finance' exists ($financeGroupId)") -and "$($unGroups.message)".Contains("'claude-team-finance-emea' is created by the run") -and
+        $unLookups.Count -eq 2) "$($unGroups.result): $($unGroups.message) || lookups: $($unLookups -join ' | ') || $(Show 'units')"
+    $pd = Get-Check 'pending' 'foundry.deployments'
+    Assert 'R6 an account without a Claude deployment passes foundry.deployments when the answers file gives PendingClaudeDeployment, which the run creates after its summary' ($scenarios['pending'].Result.ExitCode -eq 0 -and
+        $pd.result -eq 'PASS' -and "$($pd.message)".Contains('the run creates PendingClaudeDeployment after its summary')) "$($pd.result): $($pd.message) || $(Show 'pending')"
     Assert 'P2 failing admin prerequisites are a FAIL of operator.adminPrereqs naming the failed check (the harness fails the argument canary)' (& $one 'prereq-fail' 'operator.adminPrereqs' 'Azure CLI could not run a simple query') (Show 'prereq-fail')
     Assert 'P2 an AddressPfxPath that is not a file is a FAIL of address.inputs naming the path' (& $one 'pfx-missing' 'address.inputs' "AddressPfxPath '/nonexistent-p92/no-such-certificate\.pfx' is not a file") (Show 'pfx-missing')
     Assert 'P2 a Foundry account list that is not JSON is an inconclusive FAIL of foundry.account, not a crash, and its deployments are NOT-RUN' ((& $one 'list-not-json' 'foundry.account' 'Foundry account ai-p91 could not be read \(az cognitiveservices account list did not return JSON\)') -and
