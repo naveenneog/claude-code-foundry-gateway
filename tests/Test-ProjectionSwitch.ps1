@@ -174,6 +174,82 @@ Capture { Invoke-Switch @{ WhatIf = $true } }
 Assert '-WhatIf runs the compare and admission and stops before the backup and the write' (-not $Failure -and $Result -and $Result.Switched -eq $false -and
     (Get-CallAt 'check-admission\.mjs') -ge 0 -and (Get-Writes).Count -eq 0 -and (Get-Backups).Count -eq 0) "$Failure"
 
+Write-Host ''
+Write-Host 'Projection switch - the receipt is checked before any call, and bound to the gateway (council round 1)' -ForegroundColor Cyan
+# Receipt values reach az.cmd arguments (re-read by cmd.exe), the runner's command line (split on spaces,
+# URL-decoded) and ARM URLs (which carry the management token).
+function New-RenewalWith([hashtable]$Change) {
+    $copy = $renewal | Select-Object *
+    foreach ($key in $Change.Keys) { $copy | Add-Member -NotePropertyName $key -NotePropertyValue $Change[$key] -Force }
+    $copy
+}
+function Get-Refusals([object[]]$Cases) {
+    @(foreach ($case in $Cases) {
+            Reset-ProjectionFixture
+            Set-GoodRenewalJob
+            Get-Backups | Remove-Item -Force
+            Capture { Invoke-Switch @{ Renewal = (New-RenewalWith $case.Change) } }
+            $field = @($case.Change.Keys)[0]
+            if (-not ($Failure -match '^Projection switch refused' -and $Failure -match [regex]::Escape($case.Expect) -and $FixtureCalls.Count -eq $case.Calls -and (Get-Backups).Count -eq 0)) {
+                "$field=$($case.Change[$field]) (calls $($FixtureCalls.Count): $Failure)"
+            }
+        })
+}
+$unsafe = Get-Refusals @(
+    @{ Change = @{ resourceGroup = 'rg-p84&whoami' }; Expect = 'resourceGroup'; Calls = 0 }
+    @{ Change = @{ runnerName = 'aci-projtest-p84fixture&whoami' }; Expect = 'runnerName'; Calls = 0 }
+    @{ Change = @{ cosmosAccount = 'cosmos-p84fixture^whoami' }; Expect = 'cosmosAccount'; Calls = 0 }
+    @{ Change = @{ tenantId = "$FixtureTenant&whoami" }; Expect = 'tenantId'; Calls = 0 }
+    @{ Change = @{ entryPoint = 'node /app/sync/src/apply-projection.mjs" & whoami & "' }; Expect = 'entryPoint'; Calls = 0 }
+    @{ Change = @{ accountResourceId = "$FixtureCosmosId%26whoami" }; Expect = 'accountResourceId'; Calls = 0 }
+    @{ Change = @{ gatewayResourceId = "$FixtureGatewayId|whoami" }; Expect = 'gatewayResourceId'; Calls = 0 }
+    @{ Change = @{ namePrefix = 'p84(fixture)' }; Expect = 'namePrefix'; Calls = 0 }
+)
+Assert 'a receipt value with characters cmd.exe or the runner re-reads is refused before any call' (-not $unsafe.Count) ($unsafe -join ' || ')
+$offArm = Get-Refusals @(
+    @{ Change = @{ reconcilerResourceId = '@attacker.example/subscriptions/x' }; Expect = 'reconcilerResourceId'; Calls = 0 }
+    @{ Change = @{ actionGroupResourceId = "$FixtureActionGroupId@attacker.example" }; Expect = 'actionGroupResourceId'; Calls = 0 }
+    @{ Change = @{ actionGroupResourceId = "$FixtureActionGroupId#x" }; Expect = 'actionGroupResourceId'; Calls = 0 }
+)
+Assert 'a receipt resource id that would send the management token to another host is refused before any call' (-not $offArm.Count) ($offArm -join ' || ')
+$malformed = Get-Refusals @(
+    @{ Change = @{ kind = 'claude-projection-switch-backup' }; Expect = 'version 1 renewal receipt'; Calls = 0 }
+    @{ Change = @{ schemaVersion = 2 }; Expect = 'version 1 renewal receipt'; Calls = 0 }
+    @{ Change = @{ imageDigest = 'sha256:' + ('A' * 64) }; Expect = 'imageDigest'; Calls = 0 }
+    @{ Change = @{ standardGroupId = 'claude-code-standard' }; Expect = 'standardGroupId'; Calls = 0 }
+    @{ Change = @{ premiumGroupId = 'all' }; Expect = 'premiumGroupId'; Calls = 0 }
+    @{ Change = @{ identityClientId = 'not-a-guid' }; Expect = 'identityClientId'; Calls = 0 }
+)
+Assert 'a receipt of another kind or version, or with a malformed digest or id, is refused before any call' (-not $malformed.Count) ($malformed -join ' || ')
+$otherSubscription = '00000000-0000-4000-8000-000000000099'
+$inconsistent = Get-Refusals @(
+    @{ Change = @{ actionGroupResourceId = $FixtureActionGroupId.Replace('/resourceGroups/rg-p84/', '/resourceGroups/rg-other/') }; Expect = 'resource group'; Calls = 0 }
+    @{ Change = @{ accountResourceId = $FixtureCosmosId.Replace('cosmos-p84fixture', 'cosmos-other') }; Expect = 'cosmosAccount'; Calls = 0 }
+    @{ Change = @{ reconcilerResourceId = $FixtureJobId.Replace($FixtureSubscription, $otherSubscription) }; Expect = 'subscription'; Calls = 0 }
+    @{ Change = @{ reconcilerResourceId = $FixtureJobId.Replace($FixtureSubscription, $otherSubscription); accountResourceId = $FixtureCosmosId.Replace($FixtureSubscription, $otherSubscription); actionGroupResourceId = $FixtureActionGroupId.Replace($FixtureSubscription, $otherSubscription) }; Expect = 'subscription'; Calls = 0 }
+)
+Assert "a receipt whose resources are outside the gateway's subscription or the receipt's resource group, or name another Cosmos account, is refused before any call" (-not $inconsistent.Count) ($inconsistent -join ' || ')
+$unbound = Get-Refusals @(
+    @{ Change = @{ tenantId = $FixtureApp }; Expect = 'tenant'; Calls = 1 }
+)
+Assert "a receipt for another tenant than the gateway's managed identity stops after reading the gateway" (-not $unbound.Count) ($unbound -join ' || ')
+Reset-ProjectionFixture
+Set-GoodRenewalJob
+Capture { Invoke-Admission @{ ActionGroupResourceId = '@attacker.example/x' } }
+Assert 'admission sends the management token only to management.azure.com' ($Failure -match '^Projection switch refused' -and $Failure -match 'not an Azure resource id' -and $FixtureCalls.Count -eq 0) "$Failure | calls $($FixtureCalls.Count)"
+$runnerRefusals = @(foreach ($case in @(
+            @{ ResourceGroup = 'rg-p84'; Name = 'runner-p84'; Command = 'node "x"' }
+            @{ ResourceGroup = 'rg-p84'; Name = 'runner-p84'; Command = 'node a+b' }
+            @{ ResourceGroup = 'rg-p84'; Name = 'runner-p84'; Command = 'node a%20b' }
+            @{ ResourceGroup = 'rg-p84&whoami'; Name = 'runner-p84'; Command = 'node --version' }
+            @{ ResourceGroup = 'rg-p84'; Name = 'runner^p84'; Command = 'node --version' }
+        )) {
+        Reset-ProjectionFixture
+        Capture { Invoke-RunnerCommand @case }
+        if (-not ($Failure -match '^Runner command refused' -and $FixtureCalls.Count -eq 0)) { "$($case.ResourceGroup) $($case.Name) '$($case.Command)' (calls $($FixtureCalls.Count): $Failure)" }
+    })
+Assert 'a runner command or target that the runner or cmd.exe would alter is refused before az' (-not $runnerRefusals.Count) ($runnerRefusals -join ' || ')
+
 # The real scripts/Compare-ClaudeEntitlement.ps1 against chosen gateway lists. The fixture directory has
 # one standard member and no group named 'none'. 'clean' lists hold that member; 'drift' lists do not.
 $global:FixtureAz = ${function:az}

@@ -128,6 +128,7 @@ Assert 'real Entitlement refuses missing P86 evidence with expected wait' ($Fail
 $discoveryGood=[pscustomobject]@{
     resourceGroup='rg-p84';apimName='apim-p84';sku='BasicV2';namedValues=@{'entitlement-source'='named-value'};cleanComparison=$true
     renewal=[pscustomobject]@{
+        kind='claude-projection-renewal-receipt'; schemaVersion=1
         runnerName='aci-projtest-p84fixture'; cosmosAccount='cosmos-p84fixture'; tenantId=$FixtureTenant; accountResourceId=$FixtureCosmosId
         reconcilerResourceId=$FixtureJobId; imageDigest=('sha256:' + ('a' * 64)); actionGroupResourceId="$FixtureRgId/providers/Microsoft.Insights/actionGroups/ag-projection-renewal"
         entryPoint='node /app/sync/src/apply-projection.mjs'

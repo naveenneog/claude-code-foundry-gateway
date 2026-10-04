@@ -6,9 +6,59 @@
 . (Join-Path $PSScriptRoot 'ClaudeProjectionPackage.ps1')
 
 $script:ClaudeProjectionRenewalFields = @(
-    'resourceGroup', 'runnerName', 'cosmosAccount', 'accountResourceId', 'tenantId', 'reconcilerResourceId', 'imageDigest',
+    'resourceGroup', 'namePrefix', 'runnerName', 'cosmosAccount', 'accountResourceId', 'tenantId', 'reconcilerResourceId', 'imageDigest',
     'entryPoint', 'actionGroupResourceId', 'gatewayResourceId', 'standardGroupId', 'premiumGroupId', 'identityClientId'
 )
+
+function Assert-ClaudeProjectionRenewalEvidence {
+    # ADR-0050. Receipt values reach az.cmd arguments, which cmd.exe re-reads; the runner's command line,
+    # which it splits on spaces and URL-decodes; and ARM URLs, which carry the management token. Each value
+    # must have the form Azure gives it before the first call.
+    param([Parameter(Mandatory)]$Renewal)
+    $remedy = 'Remedy: use the receipt that scripts/Deploy-ClaudeProjectionRenewal.ps1 wrote for this gateway, or redeploy the renewal job, which writes a new one.'
+    if ([string]$Renewal.kind -ne 'claude-projection-renewal-receipt' -or [string]$Renewal.schemaVersion -ne '1') {
+        throw "Projection switch refused: the renewal evidence is not a version 1 renewal receipt (kind '$($Renewal.kind)', schemaVersion '$($Renewal.schemaVersion)'). $remedy"
+    }
+    $guid = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
+    $group = '[A-Za-z0-9._-]{1,90}'
+    $resourceId = { param($Type, $Name) "^/subscriptions/$guid/resourceGroups/$group/providers/$Type/$Name`$" }
+    $forms = [ordered]@{
+        resourceGroup         = "^$group`$"
+        namePrefix            = '(?-i)^(?=.{1,37}$)[a-z0-9]+(?:-[a-z0-9]+)*$'
+        runnerName            = '(?-i)^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$'
+        cosmosAccount         = '(?-i)^[a-z0-9][a-z0-9-]{1,42}[a-z0-9]$'
+        accountResourceId     = (& $resourceId 'Microsoft\.DocumentDB/databaseAccounts' '[a-z0-9][a-z0-9-]{1,42}[a-z0-9]')
+        tenantId              = "^$guid`$"
+        reconcilerResourceId  = (& $resourceId 'Microsoft\.App/jobs' '[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?')
+        imageDigest           = '(?-i)^sha256:[0-9a-f]{64}$'
+        entryPoint            = '(?-i)^node /app/sync/src/apply-projection\.mjs$'
+        actionGroupResourceId = (& $resourceId 'Microsoft\.Insights/actionGroups' '[A-Za-z0-9._-]{1,260}')
+        gatewayResourceId     = (& $resourceId 'Microsoft\.ApiManagement/service' '[A-Za-z0-9-]{1,50}')
+        standardGroupId       = "^$guid`$"
+        premiumGroupId        = "^(?:$guid|none)`$"
+        identityClientId      = "^$guid`$"
+    }
+    foreach ($field in $forms.Keys) {
+        $value = [string]$Renewal.$field
+        if ([string]::IsNullOrWhiteSpace($value)) { throw "Projection switch refused: the renewal evidence has no $field. $remedy" }
+        if ($value -notmatch $forms[$field]) {
+            $shown = if ($value.Length -gt 160) { $value.Substring(0, 160) + '...' } else { $value }
+            throw "Projection switch refused: the renewal receipt's $field '$shown' is not in the form Azure gives it, and such a value can change an az.cmd, runner or ARM call. $remedy"
+        }
+    }
+    # The renewal deployment puts the job, its action group and the Cosmos account in the receipt's
+    # resource group, in the gateway's subscription.
+    $subscription = ([string]$Renewal.gatewayResourceId -split '/')[2]
+    foreach ($field in 'accountResourceId', 'reconcilerResourceId', 'actionGroupResourceId') {
+        $parts = ([string]$Renewal.$field) -split '/'
+        if ($parts[2] -ne $subscription) { throw "Projection switch refused: the renewal receipt's $field is in subscription $($parts[2]), not the gateway's subscription $subscription. $remedy" }
+        if ($parts[4] -ne [string]$Renewal.resourceGroup) { throw "Projection switch refused: the renewal receipt's $field is in resource group $($parts[4]), not the receipt's resource group $($Renewal.resourceGroup). $remedy" }
+    }
+    $accountName = ([string]$Renewal.accountResourceId -split '/')[-1]
+    if ($accountName -ne [string]$Renewal.cosmosAccount) {
+        throw "Projection switch refused: the renewal receipt's accountResourceId names Cosmos account $accountName, not its cosmosAccount $($Renewal.cosmosAccount). $remedy"
+    }
+}
 
 function Read-ClaudeProjectionRenewalReceipt {
     # The receipt scripts/Deploy-ClaudeProjectionRenewal.ps1 writes (ADR-0049 decision 7).
@@ -90,9 +140,7 @@ function Invoke-ClaudeProjectionSwitch {
         [scriptblock]$Backup,
         [string]$CompareScript = (Join-Path $PSScriptRoot 'Compare-ClaudeEntitlement.ps1')
     )
-    foreach ($field in $script:ClaudeProjectionRenewalFields) {
-        if ([string]::IsNullOrWhiteSpace([string]$Renewal.$field)) { throw "Projection switch refused: the renewal evidence has no $field. Remedy: deploy the renewal job with scripts/Deploy-ClaudeProjectionRenewal.ps1 and pass its receipt." }
-    }
+    Assert-ClaudeProjectionRenewalEvidence -Renewal $Renewal
     # -WhatIf previews the backup and the write only: the reads, the runner compare and admission run,
     # and their working files are written.
     $previewOnly = [bool]$WhatIfPreference
@@ -102,6 +150,9 @@ function Invoke-ClaudeProjectionSwitch {
     if (-not $gatewayId) { throw "Projection switch refused: API Management $ApimName in $ResourceGroup could not be read." }
     if ([string]$Renewal.gatewayResourceId -ne $gatewayId) {
         throw "Projection switch refused: the renewal receipt is for gateway $($Renewal.gatewayResourceId), not $gatewayId. Remedy: pass the receipt written for this gateway's renewal job."
+    }
+    if ([string]$apim.identity.tenantId -ne [string]$Renewal.tenantId) {
+        throw "Projection switch refused: the renewal receipt's tenant $($Renewal.tenantId) is not the tenant of the gateway's managed identity ($($apim.identity.tenantId)), which the resolver accepts tokens from. Remedy: pass the receipt written for this gateway's renewal job."
     }
     $token = if ($StandardGroup -notmatch '^[0-9a-fA-F-]{36}$' -or ($PremiumGroup -ne 'none' -and $PremiumGroup -notmatch '^[0-9a-fA-F-]{36}$')) { Get-GraphToken } else { $null }
     $standardId = Resolve-ClaudeProjectionTierGroupId -Group $StandardGroup -Tier standard -Token $token

@@ -37,6 +37,14 @@ function Invoke-RunnerCommand {
         [string]$Container = 'runner',
         [string]$SubscriptionId
     )
+    # The runner splits the command on spaces with no quoting and URL-decodes it, and az.cmd hands every
+    # argument to cmd.exe: a quote, '+', '%' or a cmd.exe metacharacter cannot pass through unchanged.
+    if ($Command -match '["%+&|<>^\r\n]') {
+        throw 'Runner command refused: it holds a quote, +, %, &, |, <, >, ^ or a line break, which the runner or cmd.exe would change.'
+    }
+    foreach ($target in @($ResourceGroup, $Name, $Container, $SubscriptionId)) {
+        if ($target -and $target -notmatch '^[A-Za-z0-9._-]+$') { throw "Runner command refused: '$target' is not a name of letters, digits, '.', '_' or '-'." }
+    }
     $arguments = @('container','exec','-g',$ResourceGroup,'-n',$Name,'--container-name',$Container,'--exec-command',$Command)
     if ($SubscriptionId) { $arguments += @('--subscription',$SubscriptionId) }
     $saved = $ErrorActionPreference

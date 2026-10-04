@@ -171,6 +171,21 @@ function Assert-ClaudeProjectionJobBinding {
     return $true
 }
 
+function Get-ClaudeProjectionArmUrl {
+    # The management token goes with this request: the id must be an ARM resource id whose URL stays on
+    # management.azure.com ('@', '#', '?', '%' or '\' would move or cut it).
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$ResourceId, [Parameter(Mandatory)][string]$ApiVersion)
+    if ($ResourceId -notmatch '^/subscriptions/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/resourceGroups/[A-Za-z0-9._-]{1,90}/providers/[A-Za-z0-9.]{1,64}(/[A-Za-z0-9._-]{1,260}){2}$') {
+        throw "Projection switch refused: '$ResourceId' is not an Azure resource id, so the management token is not sent for it. Remedy: use the ids from the renewal receipt that scripts/Deploy-ClaudeProjectionRenewal.ps1 wrote."
+    }
+    $url = "https://management.azure.com${ResourceId}?api-version=$ApiVersion"
+    $uri = [uri]$url
+    if ($uri.Host -ne 'management.azure.com' -or $uri.UserInfo -or $uri.AbsolutePath -ne $ResourceId) {
+        throw "Projection switch refused: '$ResourceId' does not stay on management.azure.com, so the management token is not sent for it."
+    }
+    return $url
+}
+
 function Assert-ClaudeProjectionAdmission {
     param(
         [Parameter(Mandatory)][string]$ResourceGroup,
@@ -193,14 +208,16 @@ function Assert-ClaudeProjectionAdmission {
         throw 'Projection switch refused: renewal alerts have no action group with email receivers. Remedy: deploy the P86 action group and alerts, then wait for fresh evidence.'
     }
     # ARM first: an action group that alerts nobody, or a job that is not the tested one, refuses the
-    # switch before the runner reads Cosmos.
+    # switch before the runner reads Cosmos. The URLs are checked before the token exists.
+    $groupUrl = Get-ClaudeProjectionArmUrl -ResourceId $ActionGroupResourceId -ApiVersion '2023-01-01'
+    $jobUrl = Get-ClaudeProjectionArmUrl -ResourceId $ReconcilerResourceId -ApiVersion '2024-03-01'
     $token = Invoke-ClaudeNetworkAz @('account','get-access-token','--resource','https://management.azure.com')
     if (-not $token.accessToken) { throw 'Projection switch refused: could not get a management-plane token to read the renewal job definition.' }
     $headers = @{ Authorization = "Bearer $($token.accessToken)" }
-    try { $group = Invoke-RestMethod -Method Get -Headers $headers -Uri "https://management.azure.com${ActionGroupResourceId}?api-version=2023-01-01" -ErrorAction Stop }
+    try { $group = Invoke-RestMethod -Method Get -Headers $headers -Uri $groupUrl -ErrorAction Stop }
     catch { throw "Projection switch refused: could not read the renewal alerts' action group ${ActionGroupResourceId}: $($_.Exception.Message) Remedy: check the receipt's action group id and the signed-in account's read access, then rerun." }
     $null = Assert-ClaudeProjectionActionGroup -ActionGroup $group -ActionGroupResourceId $ActionGroupResourceId
-    try { $job = Invoke-RestMethod -Method Get -Headers $headers -Uri "https://management.azure.com${ReconcilerResourceId}?api-version=2024-03-01" -ErrorAction Stop }
+    try { $job = Invoke-RestMethod -Method Get -Headers $headers -Uri $jobUrl -ErrorAction Stop }
     catch { throw "Projection switch refused: could not read the renewal job ${ReconcilerResourceId}: $($_.Exception.Message) Remedy: check the receipt's job id and the signed-in account's read access, or redeploy the renewal job with scripts/Deploy-ClaudeProjectionRenewal.ps1, which writes a new receipt, then rerun." }
     $null = Assert-ClaudeProjectionJobDefinition -Job $job -ImageDigest $ImageDigest
     $settings = Get-ClaudeProjectionJobSettings -Job $job
