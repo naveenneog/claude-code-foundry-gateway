@@ -138,6 +138,39 @@ function Assert-ClaudeProjectionActionGroup {
     return $true
 }
 
+function Get-ClaudeProjectionJobSettings {
+    param([Parameter(Mandatory)]$Job)
+    $env = @{}
+    foreach ($e in @(@($Job.properties.template.containers)[0].env)) { if ($e.name) { $env[$e.name] = [string]$e.value } }
+    [pscustomobject]@{
+        ClientId = $env['AZURE_CLIENT_ID']; StandardGroupId = $env['PROJECTION_STANDARD_GROUP_ID']
+        PremiumGroupId = $env['PROJECTION_PREMIUM_GROUP_ID']; GatewayResourceId = $env['PROJECTION_GATEWAY_RESOURCE_ID']
+    }
+}
+
+function Assert-ClaudeProjectionJobBinding {
+    # ADR-0050: the job must renew for the gateway being switched, from the groups the comparison
+    # read, as the identity the renewal receipt names. Ids compare without case.
+    param([Parameter(Mandatory)]$Settings, [string]$GatewayResourceId, [string]$StandardGroupId, [string]$PremiumGroupId, [string]$IdentityClientId)
+    $redeploy = 'Remedy: redeploy the renewal job with scripts/Deploy-ClaudeProjectionRenewal.ps1 for this gateway and its tier groups, then wait for three runs.'
+    if ([string]$Settings.GatewayResourceId -notmatch '^/subscriptions/[0-9a-fA-F-]{36}/resourceGroups/[A-Za-z0-9._-]{1,90}/providers/Microsoft\.ApiManagement/service/[A-Za-z0-9-]{1,50}$') {
+        throw "Projection switch refused: the renewal job's gateway id '$($Settings.GatewayResourceId)' holds characters other than letters, digits, '.', '_' or '-', and the admission command passes it to az.cmd, which hands them to cmd.exe. $redeploy"
+    }
+    if ($GatewayResourceId -and $Settings.GatewayResourceId -ne $GatewayResourceId) {
+        throw "Projection switch refused: the renewal job reads business units from gateway $($Settings.GatewayResourceId), not $GatewayResourceId, the gateway being switched. $redeploy"
+    }
+    if ($StandardGroupId -and $Settings.StandardGroupId -ne $StandardGroupId) {
+        throw "Projection switch refused: the renewal job's standard tier group is $($Settings.StandardGroupId), not $StandardGroupId, the group the comparison read. $redeploy"
+    }
+    if ($PremiumGroupId -and $Settings.PremiumGroupId -ne $PremiumGroupId) {
+        throw "Projection switch refused: the renewal job's premium tier group is $($Settings.PremiumGroupId), not $PremiumGroupId, the group the comparison read. $redeploy"
+    }
+    if ($IdentityClientId -and $Settings.ClientId -ne $IdentityClientId) {
+        throw "Projection switch refused: the renewal job signs in as client id $($Settings.ClientId), not $IdentityClientId from the renewal receipt. $redeploy"
+    }
+    return $true
+}
+
 function Assert-ClaudeProjectionAdmission {
     param(
         [Parameter(Mandatory)][string]$ResourceGroup,
@@ -149,6 +182,10 @@ function Assert-ClaudeProjectionAdmission {
         [Parameter(Mandatory)][string]$ImageDigest,
         [Parameter(Mandatory)][string]$EntryPoint,
         [Parameter(Mandatory)][string]$ActionGroupResourceId,
+        [string]$GatewayResourceId,
+        [string]$StandardGroupId,
+        [string]$PremiumGroupId,
+        [string]$IdentityClientId,
         [string]$Database = 'claude',
         [string]$Container = 'entitlement'
     )
@@ -165,9 +202,12 @@ function Assert-ClaudeProjectionAdmission {
     $null = Assert-ClaudeProjectionActionGroup -ActionGroup $group -ActionGroupResourceId $ActionGroupResourceId
     $job = Invoke-RestMethod -Method Get -Headers $headers -Uri "https://management.azure.com${ReconcilerResourceId}?api-version=2024-03-01" -ErrorAction Stop
     $null = Assert-ClaudeProjectionJobDefinition -Job $job -ImageDigest $ImageDigest
+    $settings = Get-ClaudeProjectionJobSettings -Job $job
+    $null = Assert-ClaudeProjectionJobBinding -Settings $settings -GatewayResourceId $GatewayResourceId -StandardGroupId $StandardGroupId `
+        -PremiumGroupId $PremiumGroupId -IdentityClientId $IdentityClientId
 
     Write-Host '    Checking scheduled renewal evidence from Cosmos through the in-VNet runner (expected wait: about 60-90 minutes after the first successful 30-minute run).' -ForegroundColor DarkGray
-    $command = "node /work/sync/src/check-admission.mjs --cosmos https://$CosmosAccount.documents.azure.com:443/ --tenant $TenantId --account-resource-id $AccountResourceId --database $Database --container $Container --image-digest $ImageDigest --entrypoint `"$EntryPoint`" --action-group-resource-id $ActionGroupResourceId"
+    $command = "node /work/sync/src/check-admission.mjs --cosmos https://$CosmosAccount.documents.azure.com:443/ --tenant $TenantId --account-resource-id $AccountResourceId --database $Database --container $Container --image-digest $ImageDigest --entrypoint `"$EntryPoint`" --action-group-resource-id $ActionGroupResourceId --client-id $($settings.ClientId) --standard-group-id $($settings.StandardGroupId) --premium-group-id $($settings.PremiumGroupId) --gateway-resource-id $($settings.GatewayResourceId)"
     $raw = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $RunnerName -Command $command
     return (ConvertFrom-ClaudeProjectionAdmissionResult -RawOutput $raw)
 }

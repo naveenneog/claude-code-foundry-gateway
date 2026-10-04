@@ -68,6 +68,33 @@ foreach ($case in 'action-group-disabled', 'action-group-no-email', 'action-grou
 }
 
 Write-Host ''
+Write-Host 'Projection switch - admission binds the evidence to the job settings' -ForegroundColor Cyan
+$fixtureClient = '00000000-0000-4000-8000-000000000088'
+Reset-ProjectionFixture
+Set-GoodRenewalJob
+Capture { Invoke-Admission @{ GatewayResourceId = $FixtureGatewayId.ToUpperInvariant(); StandardGroupId = $FixtureGroupId; PremiumGroupId = 'none'; IdentityClientId = $fixtureClient } }
+$runner = @($FixtureCalls | Where-Object { $_ -match 'container exec' }) -join "`n"
+Assert 'admission passes the job definition settings to the runner check' (-not $Failure -and $runner -match "--client-id $fixtureClient" -and $runner -match "--standard-group-id $FixtureGroupId" -and
+    $runner -match '--premium-group-id none' -and $runner -match [regex]::Escape("--gateway-resource-id $FixtureGatewayId")) "$Failure | $runner"
+foreach ($case in @(
+        @{ Name = 'another gateway'; Extra = @{ GatewayResourceId = $FixtureGatewayId.Replace('apim-p84', 'apim-other') }; Expect = 'gateway' }
+        @{ Name = 'another standard group'; Extra = @{ StandardGroupId = '00000000-0000-4000-8000-0000000000aa' }; Expect = 'standard' }
+        @{ Name = 'a premium group where the job has none'; Extra = @{ PremiumGroupId = '00000000-0000-4000-8000-0000000000bb' }; Expect = 'premium' }
+        @{ Name = 'another identity'; Extra = @{ IdentityClientId = '00000000-0000-4000-8000-0000000000cc' }; Expect = 'client id' }
+    )) {
+    Reset-ProjectionFixture
+    Set-GoodRenewalJob
+    Capture { Invoke-Admission $case.Extra }
+    Assert "admission refuses a job bound to $($case.Name), before the runner" ($Failure -match '^Projection switch refused' -and $Failure -match $case.Expect -and (($FixtureCalls -join "`n") -notmatch 'container exec')) $Failure
+}
+Reset-ProjectionFixture
+Set-GoodRenewalJob
+$FixtureJob.properties.template.containers[0].env = @($FixtureJob.properties.template.containers[0].env | ForEach-Object {
+        if ($_.name -eq 'PROJECTION_GATEWAY_RESOURCE_ID') { [pscustomobject]@{ name = $_.name; value = $FixtureGatewayId.Replace('rg-p84', 'rg(p84)') } } else { $_ } })
+Capture { Invoke-Admission }
+Assert 'a job gateway id with characters cmd.exe re-reads stops before the runner command' ($Failure -match '^Projection switch refused' -and (($FixtureCalls -join "`n") -notmatch 'container exec')) $Failure
+
+Write-Host ''
 if ($fail) { Write-Host "$fail assertion(s) failed." -ForegroundColor Red; exit 1 }
 Write-Host 'Projection switch holds.' -ForegroundColor Green
 exit 0

@@ -35,7 +35,7 @@
 import { readFileSync } from 'node:fs';
 import { CosmosClient } from '@azure/cosmos';
 import { DefaultAzureCredential } from '@azure/identity';
-import { mergeMembership, planChanges, oldestRetainedExpiry, toDocument, toStatusDocument, validateSnapshot, compareWithGateway, createReconciliation } from './plan.mjs';
+import { mergeMembership, planChanges, oldestRetainedExpiry, toDocument, toStatusDocument, validateSnapshot, compareWithGateway, createReconciliation, normalizeJobSettings } from './plan.mjs';
 import { resolveGroupId, getTransitiveMembers } from './graph.mjs';
 import { readGatewayUnits, sortUnitsByDepth } from './business-units.mjs';
 import { RENEWAL_SUCCEEDED, RENEWAL_FAILED } from './events.mjs';
@@ -225,6 +225,13 @@ if (summary.ok) {
     reconciliation,
     startedAt: new Date(started).toISOString(),
     finishedAt: new Date().toISOString(),
+    // The job's settings, which admission binds this evidence to (ADR-0050). A runner run has none.
+    settings: renewal ? normalizeJobSettings({
+      clientId: process.env.AZURE_CLIENT_ID,
+      standardGroupId: process.env.PROJECTION_STANDARD_GROUP_ID,
+      premiumGroupId: process.env.PROJECTION_PREMIUM_GROUP_ID,
+      gatewayResourceId: process.env.PROJECTION_GATEWAY_RESOURCE_ID,
+    }) : null,
   });
   const statusWrite = await step('status', () => bulk(container, [{ operationType: 'Upsert', partitionKey: status.oid, resourceBody: status }]));
   Object.assign(summary, { statusWritten: statusWrite.ok, statusWriteFailed: statusWrite.failed, oldestExpiresAt: status.oldestExpiresAt });

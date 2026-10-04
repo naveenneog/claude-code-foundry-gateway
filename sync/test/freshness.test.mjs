@@ -169,6 +169,33 @@ test('admission requires fresh destination evidence, two advances, tested image 
   assert.match(plan.evaluateProjectionAdmission({ statuses, entitlementEvidence: { ...entitlementEvidence, memberCounts: { standard: 2 } }, expected, job, now }).reason, /member count/);
 });
 
+test('admission counts only evidence written under the job settings it is given', () => {
+  const settings = {
+    clientId: '44444444-4444-4444-8444-444444444441',
+    standardGroupId: '44444444-4444-4444-8444-444444444442',
+    premiumGroupId: 'none',
+    gatewayResourceId: '/subscriptions/sub/resourceGroups/rg/providers/Microsoft.ApiManagement/service/apim',
+  };
+  const recorded = plan.normalizeJobSettings(settings);
+  const base = {
+    type: 'projection-reconciliation-status', tenantId, accountResourceId: '/subscriptions/sub/resourceGroups/rg/providers/Microsoft.DocumentDB/databaseAccounts/cosmos',
+    databaseName: 'claude', containerName: 'entitlement', oldestExpiresAt: Date.parse('2026-09-24T13:00:00Z') / 1000,
+    imageDigest: 'sha256:' + 'a'.repeat(64), entrypoint: '/app/reconcile.mjs', dryRun: false, commandOverride: false, memberCounts: { standard: 1 }, settings: recorded,
+  };
+  const statuses = ['11:00', '11:30', '11:40'].map((time, i) => ({ ...base, reconciliationGeneration: `33333333-3333-4333-8333-33333333333${i + 1}`, finishedAt: `2026-09-24T${time}:00.000Z` }));
+  const expected = { tenantId, accountResourceId: base.accountResourceId, databaseName: 'claude', containerName: 'entitlement', imageDigest: base.imageDigest, entrypoint: base.entrypoint };
+  const job = { image: base.imageDigest, command: [], args: [] };
+  const entitlementEvidence = { total: 1, oldestExpiresAt: base.oldestExpiresAt, latestGeneration: '33333333-3333-4333-8333-333333333333', olderActiveCount: 0, memberCounts: { standard: 1 } };
+  const evaluate = (s, list = statuses) => plan.evaluateProjectionAdmission({ statuses: list, entitlementEvidence, expected: { ...expected, settings: s }, job, now });
+  assert.equal(evaluate(plan.normalizeJobSettings({ ...settings, gatewayResourceId: settings.gatewayResourceId.toUpperCase() })).ok, true, 'ids compare without case');
+  assert.match(evaluate(plan.normalizeJobSettings({ ...settings, premiumGroupId: '44444444-4444-4444-8444-444444444443' })).reason, /other job settings/);
+  assert.match(evaluate(plan.normalizeJobSettings({ ...settings, clientId: '44444444-4444-4444-8444-444444444449' })).reason, /other job settings/);
+  assert.match(evaluate(recorded, statuses.map(({ settings: _, ...s }) => s)).reason, /other job settings/, 'records written before P95 carry no settings');
+  assert.equal(plan.normalizeJobSettings({ ...settings, gatewayResourceId: '' }), null);
+  const status = plan.toStatusDocument({ tenantId, accountResourceId: base.accountResourceId, databaseName: 'claude', containerName: 'entitlement', runId: 'run', imageDigest: base.imageDigest, entrypoint: base.entrypoint, reconciliation: lease, settings: recorded });
+  assert.deepEqual(status.settings, recorded);
+});
+
 test('admission computes freshness from resolver-served entitlement records, not status claims', () => {
   const latest = '33333333-3333-4333-8333-333333333333';
   const older = '33333333-3333-4333-8333-333333333332';

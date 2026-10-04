@@ -130,10 +130,14 @@ function snapshotRun(where, now, records) {
   return run(where, 'apply-projection.mjs', ['--cosmos', ENDPOINT, '--tenant', TENANT, '--snapshot', path], { now });
 }
 
-function admission(where, now) {
+// The settings the job definition carries, which admission binds the evidence to (ADR-0050).
+const JOB_SETTINGS = ['--client-id', '40000000-0000-4000-8000-000000000001', '--standard-group-id', STANDARD, '--premium-group-id', PREMIUM, '--gateway-resource-id', GATEWAY];
+
+function admission(where, now, settings = JOB_SETTINGS) {
   return run(where, 'check-admission.mjs', [
     '--cosmos', ENDPOINT, '--tenant', TENANT, '--account-resource-id', ACCOUNT, '--database', 'claude',
     '--container', 'entitlement', '--image-digest', DIGEST, '--entrypoint', ENTRYPOINT, '--action-group-resource-id', ACTION_GROUP,
+    ...settings,
   ], { now });
 }
 
@@ -171,6 +175,25 @@ test('a snapshot population and three scheduled runs pass admission; two runs do
   assert.equal(admitted.code, 0, admitted.stdout + admitted.stderr);
   assert.equal(admitted.json.ok, true);
   assert.equal(admitted.json.generations, 3);
+});
+
+test('the evidence admits only under the settings the job ran with', () => {
+  const where = scenario('settings binding');
+  assert.equal(snapshotRun(where, '2026-10-04T09:50:00.000Z', SNAPSHOT_RECORDS).code, 0);
+  for (const now of ['2026-10-04T10:00:00.000Z', '2026-10-04T10:30:00.000Z', '2026-10-04T11:00:00.000Z']) {
+    assert.equal(jobRun(where, now).code, 0, now);
+  }
+  const status = JSON.parse(readFileSync(where.store, 'utf8'));
+  const recorded = Object.values(status.docs).filter((d) => d.type === 'projection-reconciliation-status' && d.settings).map((d) => d.settings);
+  assert.equal(recorded.length, 3, 'each scheduled run records its settings');
+  assert.equal(recorded[0].standardGroupId, STANDARD);
+  assert.equal(admission(where, '2026-10-04T11:01:00.000Z').json.ok, true);
+  const otherPremium = admission(where, '2026-10-04T11:01:00.000Z', JOB_SETTINGS.map((value) => (value === PREMIUM ? 'none' : value)));
+  assert.equal(otherPremium.code, 4, otherPremium.stdout + otherPremium.stderr);
+  assert.match(otherPremium.json.reason, /other job settings/);
+  const unbound = admission(where, '2026-10-04T11:01:00.000Z', []);
+  assert.equal(unbound.code, 1, unbound.stdout + unbound.stderr);
+  assert.match(unbound.json.error, /--client-id/);
 });
 
 test('the job reads its tier groups from its environment and its units from the gateway', () => {
