@@ -71,6 +71,9 @@ exact streaming cache-creation detail remains **U13**.
   The Installer UI guide now documents the portable `node ./tools/installer-ui/server.mjs` command,
   static mode, the unverified Cloud Shell Web preview facts, the security model, run lifecycle and
   output limits with source citations.
+  ADR-0048 now describes the implemented bootstrap, CSRF, Host rules, run record, transport,
+  versioned adapters, fingerprint admission, static mode, shared model, no-`az` boundary and process
+  record while remaining Proposed pending the Cloud Shell live check.
 - **Installers read an answers file, check it before any change, run selected steps and write a progress stream (P92, phase 0).**
   One answers file, described by `schemas/claude-gateway.answers.schema.json`, feeds
   `Install-ClaudeGateway.ps1 -AnswersPath`, `install-claude-gateway.sh --answers-file` and
