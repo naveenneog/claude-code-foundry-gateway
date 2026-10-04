@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { mkdir, readFile, rm } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -101,4 +101,27 @@ test('T1 operator journey runs selected steps, shows failed rerun and records ex
     await browser.close();
     await app.close();
   }
+});
+
+test('T4 child exit waits are registered immediately after spawn', async () => {
+  const testsDir = fileURLToPath(new URL('.', import.meta.url));
+  const files = (await readdir(testsDir)).filter((name) => /^installer-ui.*\.test\.mjs$/.test(name)).sort();
+  const offenders = [];
+  for (const file of files) {
+    const text = await readFile(new URL(file, import.meta.url), 'utf8');
+    const lines = text.split(/\r?\n/);
+    for (let index = 0; index < lines.length; index++) {
+      const match = lines[index].match(/\bconst\s+(\w+)\s*=\s*spawn\(/);
+      if (!match) continue;
+      const variable = match[1];
+      const awaited = new RegExp(`await\\s+once\\(${variable},\\s*['"]exit['"]\\)`);
+      if (!awaited.test(text)) continue;
+      let end = index;
+      while (end < lines.length && !lines[end].includes(');')) end++;
+      const next = lines.slice(end + 1).find((line) => line.trim() && !line.trim().startsWith('//')) || '';
+      const registered = new RegExp(`^\\s*const\\s+\\w+\\s*=\\s*once\\(${variable},\\s*['"]exit['"]\\);`).test(next);
+      if (!registered) offenders.push(`${file}:${index + 1} ${variable}`);
+    }
+  }
+  assert.deepEqual(offenders, []);
 });

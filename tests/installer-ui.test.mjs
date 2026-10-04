@@ -133,21 +133,23 @@ async function withPassingPreflight(app, body) {
 
 test('the documented one-command launch prints the URL and token', async () => {
   const child = spawn(process.execPath, [serverCli], { cwd: new URL('..', import.meta.url), stdio: ['ignore', 'pipe', 'pipe'] });
+  const exited = once(child, 'exit');
   try {
     const output = await waitForOutput(child, /One-time token:/);
     assert.match(output, /Claude gateway installer UI: http:\/\/127\.0\.0\.1:\d+\/\?token=/);
     assert.match(output, /Cloud Shell ends a session after 20 minutes without interactive activity/);
   } finally {
     child.kill('SIGINT');
-    await once(child, 'exit').catch(() => {});
+    await exited.catch(() => {});
   }
 });
 
 test('non-loopback binding requires allow-host and logs refused host diagnostics to terminal only', async () => {
   const refused = spawn(process.execPath, [serverCli, '--host', '0.0.0.0', '--idle-ms', '5000'], { cwd: new URL('..', import.meta.url), stdio: ['ignore', 'pipe', 'pipe'] });
+  const exited = once(refused, 'exit');
   const refusedOutput = captureOutput(refused);
   try {
-    const [code] = await once(refused, 'exit');
+    const [code] = await exited;
     assert.notEqual(code, 0);
     assert.match(refusedOutput(), /--allow-host/);
   } finally {
@@ -757,11 +759,12 @@ test('full run requires browser confirmation before invoking the installer', asy
 
 test('idle shutdown exits the CLI process, closes connections and says why', async () => {
   const child = spawn(process.execPath, [serverCli, '--idle-ms', '100'], { cwd: new URL('..', import.meta.url), stdio: ['ignore', 'pipe', 'pipe'] });
+  const exited = once(child, 'exit');
   const outputOf = captureOutput(child);
   try {
     const output = await waitForOutput(child, /One-time token:/);
     assert.match(output, /Claude gateway installer UI:/);
-    const [code] = await once(child, 'exit');
+    const [code] = await exited;
     assert.equal(code, 0);
     assert.match(outputOf(), /Installer UI stopped: idle timeout/);
   } finally {

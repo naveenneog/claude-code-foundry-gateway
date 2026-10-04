@@ -276,7 +276,8 @@ test("F3 browser validator matches the P92 PowerShell corpus check ids and paths
     shell: false,
     env: { ...process.env, CI: "1", FORCE_COLOR: "0" },
   });
-  const [code] = await once(child, "exit");
+  const exited = once(child, "exit");
+  const [code] = await exited;
   assert.equal(code, 0);
   const cases = JSON.parse(await readFile(corpus, "utf8"));
   await rm(corpus, { force: true });
