@@ -167,7 +167,7 @@ Assert 'the guide runner archive lists exactly the package paths' (($guidePaths 
 Assert 'the guide runner unpacks at /work and installs from the lockfile' ($guide.Contains('tar -x -z -f /work/sync-source.tar.gz -C /work"') -and $guide.Contains('npm --prefix /work/sync ci --omit=dev'))
 $secure = [IO.File]::ReadAllText((Join-Path $root 'docs\SECURE-PROJECTION.md'))
 Assert 'the runbook archives the package and unpacks it at /work' ($secure.Contains('New-ClaudeProjectionSyncArchive -Path $archive') -and $secure.Contains("'tar -x -z -f /work/sync-source.tar.gz -C /work'") -and $secure -notmatch 'tar -c -z -f \$archive -C sync')
-Assert 'the runbook builds the image from the package' ($secure -match 'az acr build [^\r\n]*--file sync/Dockerfile --no-logs \$package')
+Assert 'the runbook builds the image from the package through the renewal script' ($secure.Contains('scripts\Deploy-ClaudeProjectionRenewal.ps1') -and $secure.Contains('`az acr build` from the sync package') -and $secure -notmatch 'az acr build [^\r\n]*--no-logs sync\b')
 
 Write-Host ''
 if ($fail) { Write-Host "$fail assertion(s) failed." -ForegroundColor Red; exit 1 }

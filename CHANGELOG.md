@@ -29,6 +29,13 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P94 the projection renewal job deploys and renews.** `scripts/Deploy-ClaudeProjectionRenewal.ps1`
+  deploys `infra/projection-registry.bicep` (registry, job identity, AcrPull), builds the image
+  from the sync package, reads back its digest and deploys `infra/projection-renewal.bicep` pinned
+  to it; `docs/AZ-COMMANDS.md` gives the same steps as Azure CLI commands. The projection network
+  gains a `/27` renewal subnet. The job carries its client id, tier group ids and gateway id, reads
+  `bu-registry` and `bu-parents` on every run, and prints a success or failure line that the
+  alerts match. [ADR-0049](docs/adr/0049-projection-renewal-deployment.md).
 - **P86 scheduled projection renewal.** A 30-minute Container Apps renewal job,
   tenant-admin Graph grant script, Cosmos status evidence, email-backed alerts
   and evidence-gated switch admission replace P84's unconditional projection
@@ -1163,6 +1170,14 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Fixed
 
+- **P94 the renewal job could not be deployed or run as merged.** The image and the runner archive
+  missed `resolver/src/entitlement.mjs`, which `sync/src/plan.mjs` imports, so the job, the runner
+  apply and compare, and admission stopped with a missing module; the runner archive now holds the
+  same package as the image and installs from a committed lockfile. The renewal template needed the
+  digest of an image in a registry it created itself; the job had no `AZURE_CLIENT_ID`; its name
+  exceeded the 32-character Container Apps limit for prefixes over 9 characters; and the alerts read
+  the legacy `_CL` table, ended in a `summarize` that always returns a row and passed `now()` as
+  epoch seconds. Each is corrected with tests ([P94 status](docs/status/P94.md#p94-the-p86-renewal-job-deploys-and-renews-2026-10-04)).
 - **P88 AUM test clock independence.** AUM pytest now pins `datetime.now(timezone.utc)` for `claude_finops` modules and AUM test helpers to an advancing instant inside the September fixture month without changing the stdlib datetime module. A real-clock opt-out, clock-reader coverage guard and September service budget write guard keep the seam reversible.
 - **AUM lookups could cancel their own view refresh (P71 follow-up).** A changed
   tab and its caller both started exclusive refresh workers. Lookup, breadcrumb,

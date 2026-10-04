@@ -199,7 +199,7 @@ if ($ImageDigest) {
 else {
     $package = New-ClaudeProjectionSyncPackage -Destination (Join-Path ([IO.Path]::GetTempPath()) ('claude-sync-' + [guid]::NewGuid().ToString('N'))) -Root $root
     try {
-        Note "az acr build waits for the build (about 1-3 minutes) with log streaming off."
+        Note 'az acr build waits for the registry build to finish; log streaming is off.'
         $previous = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'
         $build = & az acr build --registry $registry.acrName --image "${repository}:$ImageTag" --file sync/Dockerfile --no-logs --only-show-errors -o none $package 2>&1 | Out-String

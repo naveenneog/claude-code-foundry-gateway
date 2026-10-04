@@ -78,21 +78,29 @@ resolver therefore cannot change who is entitled.
 | Private endpoints | Reserve capacity for five projection endpoints plus any Foundry endpoint | None | Cosmos, resolver and resolver storage ×3; Foundry is separate |
 | Resolver integration | /27 minimum (/26 used) | `Microsoft.App/environments` | Flex Consumption's own delegation, not `Microsoft.Web/serverFarms`. No private endpoints in it, and no underscore in its name. [Learn: subnet sizing and requirements](https://learn.microsoft.com/azure/azure-functions/flex-consumption-how-to#subnet-sizing-and-requirements) |
 | Runner (optional) | /27 | `Microsoft.ContainerInstance/containerGroups` | The container that writes, compares and runs the read-only admission checker from inside the network. |
-| Renewal job | /27 minimum | `Microsoft.App/environments` | Internal workload-profiles Container Apps environment, separate from the resolver subnet. Default address plan uses another subnet inside `10.10.0.0/16`. |
+| Renewal job | /27 minimum | `Microsoft.App/environments` | Internal workload-profiles Container Apps environment, separate from the resolver subnet. `infra/projection-network.bicep` creates `renewal` at `10.10.3.64/27` in the default `10.10.0.0/16` plan and outputs `renewalSubnetId`; with an existing VNet, pass `renewalSubnetId`. |
 
 
-### Scheduled renewal job and admission (P86)
+### Scheduled renewal job and admission (P86, P94)
 
-The supported unattended path deploys `infra/projection-renewal.bicep` after the projection network. It creates an internal Container Apps workload-profiles environment on a dedicated `Microsoft.App/environments` subnet, an ACR registry, a user-assigned managed identity, a 30-minute scheduled Container Apps Job, Log Analytics alerts and an action group with email receivers. ACR Basic is the default for standing cost and is reached over the public ACR endpoint with Entra authentication; ACR Premium is required for a private registry endpoint.
-
-The job image comes from `sync/Dockerfile`, is used by digest and carries the tested entrypoint. ARM command and args overrides are refused by admission. The build context is the sync package, which holds `sync/` and `resolver/src/entitlement.mjs` at their repository paths ([ADR-0049](adr/0049-projection-renewal-deployment.md)). Build with log streaming disabled on Windows:
+The renewal job deploys after the projection, in the same resource group, with one command ([ADR-0049](adr/0049-projection-renewal-deployment.md)):
 
 ```powershell
-. ./scripts/ClaudeProjectionPackage.ps1
-$package = New-ClaudeProjectionSyncPackage -Destination (Join-Path ([IO.Path]::GetTempPath()) ('claude-sync-' + [guid]::NewGuid().ToString('N')))
-az acr build --registry <acr-name> --image claude-projection-sync:<tag> --file sync/Dockerfile --no-logs $package
-# Then fetch the run log with the ACR runs/<id>/listLogSasUrl REST API if needed.
+pwsh -NoProfile -File .\scripts\Deploy-ClaudeProjectionRenewal.ps1 `
+  -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> -AlertEmail <alert-email>
 ```
+
+It checks every value that reaches an `az` argument before the first Azure call, reads the projection and network deployment outputs, then runs three phases, each safe to rerun:
+
+1. `infra/projection-registry.bicep`: an ACR registry, the job's user-assigned managed identity and its AcrPull grant. ACR Basic is the default for standing cost and is reached over the public ACR endpoint with Entra authentication; ACR Premium (`-AcrSku Premium`) is required for a private registry endpoint.
+2. `az acr build` from the sync package, which holds `sync/` and `resolver/src/entitlement.mjs` at their repository paths, then the image digest read back with `az acr manifest show-metadata`. ACR task runs are paused for subscriptions on Azure free credits ([U114](UNKNOWNS.md#p94-research-before-implementation)); there, `docker build -f sync/Dockerfile` and `docker push` from the package directory replace the build, and `-ImageDigest <sha256 digest>` skips it.
+3. `infra/projection-renewal.bicep`: an internal Container Apps workload-profiles environment on the renewal subnet (`10.10.3.64/27` in the default plan, delegated to `Microsoft.App/environments`), a scheduled job every 30 minutes pinned to the digest, Cosmos SQL data-plane write access on `claude/entitlement` only, a custom role on the gateway whose only action is `Microsoft.ApiManagement/service/namedValues/read`, a diagnostic setting that sends the environment's logs to the gateway's Log Analytics workspace, an action group with the email receivers, and three alert rules.
+
+The job runs the image's entry point with `--graph` and no command or args override. Its environment carries `AZURE_CLIENT_ID` (the identity has no system-assigned counterpart, [U112](UNKNOWNS.md#p94-research-before-implementation)), the tier group object ids (`none` for no premium tier) and the gateway id. Every run reads `bu-registry` and `bu-parents` through ARM and orders the units as `Sort-ClaudeBuByDepth` does, so a unit added later reaches the projection on the next run. Its last console line is `projection-renewal-succeeded` or `projection-renewal-failed` with the failed stage (`config`, `business-units`, `graph`, `cosmos-read`, `cosmos-write`, `status`, `expired`, `plan` or `lease`). The alert rules read `ContainerAppConsoleLogs` for this job only and return rows only when unhealthy ([U107-U110](UNKNOWNS.md#p94-research-before-implementation)): no success in 45 minutes, the newest success leaving less than 60 minutes before the oldest record expires, and any failed run. The job and environment are named `caj-renew-` and `cae-renew-` followed by a hash of the resource group and prefix, because Container Apps names are at most 32 characters ([U118](UNKNOWNS.md#p94-research-before-implementation)); both carry the tag `claude-projection-prefix`.
+
+The script prints the tenant administrator's Graph grant with the identity's principal id and writes a receipt with no secrets to `onboarding/projection-renewal-<prefix>.json` (ignored by git). Each alert address receives a confirmation email from Azure Monitor and receives no alerts until it confirms ([U116](UNKNOWNS.md#p94-research-before-implementation)). `-WhatIf` reads the deployment outputs and writes nothing. [Azure CLI commands](AZ-COMMANDS.md#10-optional-cosmos-projection) give the same deployment as plain commands.
+
+Standing cost at list price (Azure Retail Prices API, East US 2, read 2026-10-04): ACR Basic $0.1666 a day, about $5.07 a 730-hour month; three log search alert rules at a 5-minute frequency, $1.50 a month each. Each job run bills $0.000024 per vCPU-second and $0.000003 per GiB-second at 1 vCPU and 2 GiB, $0.00003 a second, before the Container Apps monthly free grant; at 1,460 runs a month a 60-second run would cost about $2.63 a month. Run duration depends on the directory and is not measured. Cosmos write cost by member count is in [ADR-0045](adr/0045-scheduled-projection-renewal.md#cost-note).
 
 A tenant administrator grants the job identity Graph membership read once:
 
@@ -110,11 +118,11 @@ $file = New-TemporaryFile; Set-Content -Path $file -Value $body -Encoding utf8
 az rest --method post --url "https://graph.microsoft.com/v1.0/servicePrincipals/<managed-identity-principal-id>/appRoleAssignments" --headers 'Content-Type=application/json' --body "@$file"
 ```
 
-Outbound firewall or forced-tunnel rules must allow `login.microsoftonline.com`, `graph.microsoft.com`, the ACR login server and data endpoint, and the Cosmos private endpoint through `privatelink.documents.azure.com`. The job writes status records into `claude/entitlement` with partition key `projection-status::<tenantId>`, `type=projection-reconciliation-status` and `ttl=21600`; resolver point reads by developer object id cannot return them.
+Outbound firewall or forced-tunnel rules must allow `login.microsoftonline.com`, `graph.microsoft.com`, `management.azure.com` (the job reads `bu-registry` and `bu-parents`), the ACR login server and data endpoint, and the Cosmos private endpoint through `privatelink.documents.azure.com`. The job writes status records into `claude/entitlement` with partition key `projection-status::<tenantId>`, `type=projection-reconciliation-status` and `ttl=21600`; resolver point reads by developer object id cannot return them.
 
-Deployment order: deploy the projection and renewal job; the tenant admin grants `GroupMember.Read.All`; runs succeed; evidence accumulates for about 60-90 minutes on the 30-minute schedule; switch; rollback by refreshing and comparing named values, then setting `entitlement-source` back to `named-value`.
+Deployment order: deploy the projection (`scripts/Deploy-ClaudeProjection.ps1`), then the renewal job (`scripts/Deploy-ClaudeProjectionRenewal.ps1`); the tenant admin grants `GroupMember.Read.All`; runs succeed; evidence accumulates for about 60-90 minutes on the 30-minute schedule (three successful runs); switch; rollback by refreshing and comparing named values, then setting `entitlement-source` back to `named-value`. The switch itself is P95 ([ROADMAP](ROADMAP.md)). Offline tests prove the deployment order, the job's runs against stand-in Graph, ARM and Cosmos, and admission over their evidence ([P94 status](status/P94.md#p94-the-p86-renewal-job-deploys-and-renews-2026-10-04)); no live tenant has run the job, and the live Graph grant is [U17](UNKNOWNS.md).
 
-Admission runs fixed repository code through `scripts/ClaudeRunner.ps1`, reads Cosmos status history and computes the oldest expiry from the live entitlement records the resolver can serve, then separately reads the ARM job definition. It applies the resolver's own validation to every unexpired entitlement record before counting it. Invalid live records refuse admission with a count and up to three hashed object-id samples. It requires at least 60 minutes of live-record expiry margin, two generation advances within two hours, newest success within 45 minutes, matching status/member counts, no unexpired entitlement records on an older generation, the tested image digest, no command/args override and an email-backed action group. The live-record aggregate is a one-time cross-partition scan during switching, acceptable at 500,000 records; it is not on the request path. Refusals name the reason and remedy.
+Admission runs fixed repository code through `scripts/ClaudeRunner.ps1`, reads Cosmos status history and computes the oldest expiry from the live entitlement records the resolver can serve, then separately reads the ARM job definition. It applies the resolver's own validation to every unexpired entitlement record before counting it. Invalid live records refuse admission with a count and up to three hashed object-id samples. It requires at least 60 minutes of live-record expiry margin, two generation advances within two hours, newest success within 45 minutes, matching status/member counts, no unexpired entitlement records on an older generation, the tested image digest, no command/args override, the job's client id, tier group ids and gateway id, and an email-backed action group. The live-record aggregate is a one-time cross-partition scan during switching, acceptable at 500,000 records; it is not on the request path. Refusals name the reason and remedy.
 
 ### One-command deployment
 
@@ -598,15 +606,15 @@ Historical measurement: 8 records written in 1.5 seconds, then no writes on an
 unchanged run. With expiring leases, unchanged members must also be renewed:
 measured 2026-09-24, all 8 unchanged members refreshed in 1.88 seconds.
 
-**B. The job reads Entra itself.** The intended unattended path, which still
-requires a separately provisioned and monitored schedule.
-The job's identity needs the Microsoft Graph application permission
-`GroupMember.Read.All`, which a tenant administrator grants once. Then run
-`apply-projection.mjs --graph` instead of `--snapshot`, including explicit
-`--standard`, `--premium` and ordered `--bu unit=group` arguments.
-The Node Graph path does not read APIM's business-unit registry by itself:
-build the unit list in deepest-first, then registry precedence order and keep it
-current. Missing `--bu` arguments do not reproduce the exported unit mapping.
+**B. The job reads Entra itself.** The unattended path: the scheduled renewal job
+([above](#scheduled-renewal-job-and-admission-p86-p94)). The job's identity needs the
+Microsoft Graph application permission `GroupMember.Read.All`, which a tenant
+administrator grants once. The job runs `apply-projection.mjs --graph` with the tier
+group ids and the gateway id from its environment, and reads `bu-registry` and
+`bu-parents` on every run, in the deepest-first, then registry order of the
+named-value path. A hand run of `--graph` takes `--standard`, `--premium` and ordered
+`--bu unit=group` arguments instead; with neither `--bu` nor a gateway id it writes no
+business units, which does not reproduce the exported unit mapping.
 Measured: an operator
 without a directory role is refused with `Authorization_RequestDenied`.
 
@@ -615,9 +623,9 @@ registry and parent ordering. In either path, compare against the gateway before
 cutover; do not infer equivalence from a successful write.
 
 **Portal:** Entra > Enterprise applications > job identity > Permissions verifies
-the Graph grant; the chosen scheduler's Executions/Runs blade verifies cadence.
+the Graph grant; Container Apps job > Execution history verifies cadence.
 The reference deployment has not demonstrated a scheduled 500,000-member Graph
-scan ([U17](UNKNOWNS.md)); no portal wizard or installer here silently supplies it.
+scan ([U17](UNKNOWNS.md)); the renewal deploy script never grants Graph access itself.
 
 ### Freshness and operating envelope
 
@@ -635,9 +643,12 @@ extends the snapshot's expiry. A scan that fails writes nothing; a failed apply
 may leave multiple generations, each retaining its own expiry, and exits nonzero.
 `-KeepOrphans`/`--keep-orphans` never renew an orphan's lease.
 
-Schedule a fresh reconciliation at least hourly for the default two-hour lease,
-with enough time for the directory scan and all writes. Alert on nonzero exit
-and on the oldest remaining lease, rather than assuming a running job is fresh.
+The renewal job runs every 30 minutes by default: four planned starts inside the
+two-hour lease, so three consecutive missed runs are tolerated before expiry
+([ADR-0045](adr/0045-scheduled-projection-renewal.md)). A custom `-CronExpression`
+needs at least an hourly run, with enough time for the directory scan and all
+writes. Its alerts watch successful runs, failed runs and the oldest remaining
+lease, rather than process exit alone.
 If that workload cannot complete before expiry, reduce scan/apply time or choose
 a separately designed reconciliation scheme; do not silently serve expired data.
 The bound is for **new requests**, subject to directory replication and clock
