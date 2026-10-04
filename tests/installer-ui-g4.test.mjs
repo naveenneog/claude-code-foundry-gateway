@@ -365,8 +365,7 @@ test('U3 a blank SubscriptionId is accepted, and a target.subscription failure l
     await page.locator('[name="SubscriptionId"]').fill('');
     assert.equal(await page.getByRole('button', { name: 'Run preflight' }).isEnabled(), true);
     assert.equal(await page.getByRole('button', { name: 'Download answers.json' }).isEnabled(), true);
-    await page.route('**/api/preflight', (route) => route.continue());
-    await page.evaluate(() => window.__p93Noop = true);
+    await assertClean(page, pageErrors);
   } finally {
     await browser.close();
     await app.close();
