@@ -23,12 +23,15 @@
   const maxRunOutputLines = 2000;
   let runOutputLines = [];
   let removedRunOutputLines = 0;
+
   function byId(id) {
     return document.getElementById(id);
   }
+
   function clearChildren(node) {
     while (node?.firstChild) node.removeChild(node.firstChild);
   }
+
   function appendText(parent, text, tag = "span", className = "") {
     const node = document.createElement(tag);
     node.textContent = text;
@@ -36,9 +39,11 @@
     parent.append(node);
     return node;
   }
+
   function liveMode() {
     return location.protocol !== "file:" && sessionMode === "live";
   }
+
   async function postJson(path, body) {
     if (location.protocol === "file:") throw new Error("Server mode is not running. Use the generated commands.");
     const res = await fetch(path, {
@@ -63,6 +68,7 @@
     }
     return data;
   }
+
   async function getJson(path) {
     if (location.protocol === "file:") throw new Error("Server mode is not running. Use the generated commands.");
     const res = await fetch(path);
@@ -80,11 +86,13 @@
     }
     return data;
   }
+
   async function loadSchema() {
     const carried = byId("schema-json")?.textContent?.trim();
     if (carried) return JSON.parse(carried);
     return (await fetch("./api/schema")).json();
   }
+
   function createErrorNode(id) {
     const node = document.createElement("div");
     node.id = id;
@@ -92,12 +100,14 @@
     node.setAttribute("role", "alert");
     return node;
   }
+
   function labelFor(name, property) {
     const label = document.createElement("label");
     label.dataset.answer = name;
     appendText(label, property.title || name);
     return label;
   }
+
   function renderField(parent, name, property) {
     const label = labelFor(name, property);
     let field;
@@ -129,6 +139,7 @@
     if (name === "SubscriptionId") renderPrefillControl(label, "subscriptions", name, "Read subscriptions");
     if (name === "FoundryAccount") renderPrefillControl(label, "foundryAccounts", name, "Read Foundry accounts");
   }
+
   function renderPrefillControl(label, kind, name, text) {
     const button = document.createElement("button");
     button.type = "button";
@@ -139,6 +150,7 @@
     select.hidden = true;
     label.append(button, select);
   }
+
   function renderModelList(parent, name, property) {
     const label = labelFor(name, property);
     const select = document.createElement("select");
@@ -153,6 +165,7 @@
     label.append(select, input, createErrorNode(`field-${name}-error`));
     parent.append(label);
   }
+
   function renderPendingDeployment(parent, property) {
     const fieldset = document.createElement("fieldset");
     fieldset.dataset.answer = "PendingClaudeDeployment";
@@ -176,6 +189,7 @@
     fieldset.append(fields);
     parent.append(fieldset);
   }
+
   function renderNestedField(parent, name, node) {
     const property = node.$ref ? { ...schema.$defs[node.$ref.replace(/^#\/\$defs\//, "")], ...node } : node;
     const label = labelFor(name, property);
@@ -186,6 +200,7 @@
     label.append(input, createErrorNode(`${input.id}-error`));
     parent.append(label);
   }
+
   function renderGroupedFields() {
     for (const group of Object.values(fieldGroups)) {
       const parent = byId(group.target);
@@ -199,6 +214,7 @@
       }
     }
   }
+
   function currentEntryMap() {
     const entries = new Map();
     for (const field of document.querySelectorAll("[name]")) {
@@ -208,10 +224,12 @@
     }
     return entries;
   }
+
   function collectAnswers() {
     businessUnitsEditor.sync();
     return collectAnswersFromEntries(schema, currentEntryMap(), byId("business-units").value);
   }
+
   function refreshConditionalVisibility() {
     const entries = currentEntryMap();
     for (const node of document.querySelectorAll("[data-answer]")) {
@@ -227,6 +245,7 @@
       }
     }
   }
+
   function validateCurrentAnswers() {
     let answers;
     try {
@@ -247,6 +266,7 @@
     renderValidationProblems();
     return validationProblems;
   }
+
   function renderValidationProblems() {
     for (const field of document.querySelectorAll("[aria-invalid]")) field.removeAttribute("aria-invalid");
     for (const node of document.querySelectorAll(".field-error")) node.textContent = "";
@@ -265,6 +285,7 @@
     updateRunAdmission();
     return validationProblems;
   }
+
   function markPreflightStale() {
     preflightStale = preflightHadResult;
     preflightFingerprint = "";
@@ -275,6 +296,7 @@
   function hasBlockingProblems() {
     return validationProblems.length > 0;
   }
+
   function updateRunAdmission() {
     const admitted = liveMode() && preflightFingerprint && !preflightStale && !hasBlockingProblems() && !runActive;
     for (const id of ["run", "full-run", "rerun"]) {
@@ -386,6 +408,7 @@
     }
     updateRunAdmission();
   }
+
   function showPreflightError(error) {
     const container = byId("preflight-output");
     clearChildren(container);
@@ -407,9 +430,11 @@
       parent.append(label);
     }
   }
+
   function selectedSteps() {
     return [...document.querySelectorAll("#step-list input:checked")].map((input) => input.value);
   }
+
   async function streamRun(body) {
     if (hasBlockingProblems()) return;
     runActive = true;
@@ -441,6 +466,7 @@
       throw error;
     }
   }
+
   function appendRunLine(text) {
     const output = byId("run-output");
     runOutputLines.push(text);
@@ -452,6 +478,7 @@
     const shown = removedRunOutputLines ? [`Earlier run output lines were removed (${removedRunOutputLines}).`, ...runOutputLines] : runOutputLines;
     output.textContent = `${shown.join("\n")}\n`;
   }
+
   async function readRunStream(res) {
     const output = byId("run-output");
     if (!activeRunId) {
@@ -485,6 +512,7 @@
       }
     }
   }
+
   async function refreshRunStatus() {
     if (location.protocol === "file:") return;
     const status = await (await fetch("./api/run/status")).json();
@@ -497,6 +525,7 @@
       await readRunStream(res);
     }
   }
+
   async function refreshIdentity() {
     if (!liveMode()) {
       identity = {
