@@ -1,5 +1,6 @@
-// Scheduled entitlement projection renewal job for P86.
-// The Container Apps environment is internal and uses its own delegated subnet.
+// Scheduled entitlement projection renewal job for P86, phase 3 of ADR-0049.
+// The Container Apps environment is internal and uses its own delegated subnet. The registry and
+// the job identity come from infra/projection-registry.bicep, deployed before the image build.
 
 @description('Prefix shared with the projection resources.')
 @minLength(5)
@@ -19,12 +20,11 @@ param logAnalyticsWorkspaceId string
 @description('Email receivers for the required action group. Admission refuses a switch if the deployed action group is missing.')
 param actionGroupEmailReceivers array
 
-@description('Container registry SKU. Basic uses the public ACR endpoint with Entra authentication; Premium is required for a private endpoint.')
-@allowed([
-  'Basic'
-  'Premium'
-])
-param acrSku string = 'Basic'
+@description('Registry from infra/projection-registry.bicep that holds the sync image.')
+param acrName string
+
+@description('User-assigned identity from infra/projection-registry.bicep that the job runs as.')
+param identityName string
 
 @description('Digest-pinned projection sync image, for example sha256:<digest>.')
 param syncImageDigest string
@@ -40,8 +40,6 @@ param entrypoint string = 'node /app/sync/src/apply-projection.mjs'
 
 var databaseName = 'claude'
 var containerName = 'entitlement'
-var acrName = 'acr${uniqueString(resourceGroup().id, namePrefix)}'
-var identityName = 'id-projection-renewal-${namePrefix}'
 var environmentName = 'cae-projection-${namePrefix}'
 var jobName = 'caj-projection-renewal-${namePrefix}'
 var actionGroupName = 'ag-projection-renewal-${namePrefix}'
@@ -50,21 +48,12 @@ resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' existing = {
   name: cosmosAccountName
 }
 
-resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
+resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
   name: acrName
-  location: location
-  sku: {
-    name: acrSku
-  }
-  properties: {
-    adminUserEnabled: false
-    publicNetworkAccess: 'Enabled'
-  }
 }
 
-resource identity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+resource identity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: identityName
-  location: location
 }
 
 resource environment 'Microsoft.App/managedEnvironments@2024-03-01' = {
@@ -87,16 +76,6 @@ resource environment 'Microsoft.App/managedEnvironments@2024-03-01' = {
         workloadProfileType: 'Consumption'
       }
     ]
-  }
-}
-
-resource acrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(acr.id, identity.id, 'acrpull')
-  scope: acr
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
-    principalId: identity.properties.principalId
-    principalType: 'ServicePrincipal'
   }
 }
 
@@ -189,7 +168,6 @@ resource job 'Microsoft.App/jobs@2024-03-01' = {
     }
   }
   dependsOn: [
-    acrPull
     cosmosWriter
   ]
 }
@@ -258,5 +236,4 @@ output managedIdentityClientId string = identity.properties.clientId
 output managedIdentityPrincipalId string = identity.properties.principalId
 output actionGroupResourceId string = actionGroup.id
 output acrLoginServer string = acr.properties.loginServer
-output acrSkuChosen string = acrSku
 output scheduleCron string = cronExpression

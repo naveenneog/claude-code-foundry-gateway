@@ -76,6 +76,34 @@ try {
         $output = [string]$network.outputs.renewalSubnetId.value
         Assert 'the renewal subnet is an output, from either VNet shape' ($output -match "subnets/renewal" -and $output -match "parameters\('renewalSubnetId'\)") $output
     }
+
+    Write-Host ''
+    Write-Host 'Projection renewal - the registry and the job identity come first' -ForegroundColor Cyan
+
+    $registry = Get-CompiledTemplate 'infra\projection-registry.bicep'
+    if ($registry) {
+        $res = Get-TemplateResources $registry
+        $acr = $res | Where-Object { $_.type -eq 'Microsoft.ContainerRegistry/registries' -and -not $_.existing } | Select-Object -First 1
+        Assert 'the registry template creates the registry' ([bool]$acr)
+        Assert 'with no admin user' ($acr -and $acr.properties.adminUserEnabled -eq $false)
+        Assert 'the registry SKU defaults to Basic, with Premium allowed' ($registry.parameters.acrSku.defaultValue -eq 'Basic' -and (@($registry.parameters.acrSku.allowedValues) -join ',') -eq 'Basic,Premium')
+        Assert 'it creates the job identity' (@($res | Where-Object { $_.type -eq 'Microsoft.ManagedIdentity/userAssignedIdentities' -and -not $_.existing }).Count -eq 1)
+        $pull = $res | Where-Object { $_.type -eq 'Microsoft.Authorization/roleAssignments' } | Select-Object -First 1
+        Assert 'and grants it AcrPull on the registry' ($pull -and [string]$pull.properties.roleDefinitionId -match '7f951dda-4ed3-4680-a7ca-43fe172d538d' -and [string]$pull.scope -match 'Microsoft\.ContainerRegistry/registries') ([string]$pull.scope)
+        foreach ($name in 'acrName', 'acrLoginServer', 'identityName', 'identityClientId', 'identityPrincipalId') {
+            Assert "it outputs $name" ($registry.outputs.Contains($name))
+        }
+    }
+    $renewalTemplate = Get-CompiledTemplate 'infra\projection-renewal.bicep'
+    if ($renewalTemplate) {
+        $res = Get-TemplateResources $renewalTemplate
+        Assert 'the renewal template creates no registry' (-not @($res | Where-Object { $_.type -eq 'Microsoft.ContainerRegistry/registries' -and -not $_.existing }).Count)
+        Assert 'and no identity' (-not @($res | Where-Object { $_.type -eq 'Microsoft.ManagedIdentity/userAssignedIdentities' -and -not $_.existing }).Count)
+        Assert 'and no AcrPull grant' (-not @($res | Where-Object { $_.type -eq 'Microsoft.Authorization/roleAssignments' -and [string]$_.properties.roleDefinitionId -match '7f951dda' }).Count)
+        Assert 'it takes the registry and the identity by name' ($renewalTemplate.parameters.Contains('acrName') -and $renewalTemplate.parameters.Contains('identityName') -and -not $renewalTemplate.parameters.Contains('acrSku'))
+    }
+    $rb = [IO.File]::ReadAllText((Join-Path $root 'infra\projection-renewal.bicep'))
+    Assert 'the renewal template references them as existing resources' ($rb -match "resource acr 'Microsoft\.ContainerRegistry/registries@[0-9-]+' existing" -and $rb -match "resource identity 'Microsoft\.ManagedIdentity/userAssignedIdentities@[0-9-]+' existing")
 }
 finally { Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue }
 
