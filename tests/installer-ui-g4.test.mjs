@@ -528,7 +528,7 @@ test('U1 fix run-starting buttons are disabled while a run is active', async () 
     const releasePromise = new Promise((resolve) => { release = resolve; });
     await page.route('**/api/run/stream', async (route) => {
       await releasePromise;
-      await route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"summary","exitCode":0,"failedStepId":"","resumeCommand":"","state":"exited","message":""}\n' });
+      await route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"summary","exitCode":1,"failedStepId":"gateway-deployment","resumeCommand":"","state":"exited","message":""}\n' });
     });
     await page.getByRole('button', { name: 'Re-run failed step' }).click();
     await page.locator('#rerun-status').getByText(/Re-running failed step/).waitFor();
@@ -538,6 +538,7 @@ test('U1 fix run-starting buttons are disabled while a run is active', async () 
     release();
     await page.locator('#rerun-status').getByText(/Re-run finished/).waitFor();
     await page.unroute('**/api/run/stream');
+    assert.equal(await page.locator('#rerun').isEnabled(), true, 'the re-run failed again, so Re-run is admitted before the next run');
     let releaseSelected;
     const selectedPromise = new Promise((resolve) => { releaseSelected = resolve; });
     await page.route('**/api/run/stream', async (route) => {
@@ -588,7 +589,7 @@ test('U1 fix a reattach stream that ends without a summary clears run activity',
     await page.reload();
     await page.waitForSelector('[name="SubscriptionId"]');
     await page.getByText(/reattached/).waitFor();
-    await page.waitForTimeout(100);
+    await page.waitForFunction(() => document.querySelector('#stop-run')?.disabled === true, null, { timeout: 5000 });
     assert.equal(await page.locator('#stop-run').isDisabled(), true);
     await assertClean(page, pageErrors);
   } finally {
