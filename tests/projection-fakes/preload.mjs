@@ -27,6 +27,9 @@ function graph(url) {
   const members = /^\/v1\.0\/groups\/([^/]+)\/transitiveMembers\/microsoft\.graph\.(user|servicePrincipal)$/.exec(url.pathname);
   if (members) {
     const [, id, cast] = members;
+    if ((graphFixture.missing ?? []).includes(id)) {
+      return reply(404, { error: { code: 'Request_ResourceNotFound', message: `Resource '${id}' does not exist or one of its queried reference-property objects are not present.` } });
+    }
     if ((graphFixture.deny ?? []).includes(id)) {
       return reply(403, { error: { code: 'Authorization_RequestDenied', message: 'Insufficient privileges to complete the operation.' } });
     }

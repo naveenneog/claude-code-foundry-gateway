@@ -58,6 +58,11 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# A refusal or failure prints as its message alone. PowerShell's view of an uncaught throw from a
+# script adds the script path and a code excerpt and folds a multi-line message onto one line.
+trap {
+    $PSCmdlet.ThrowTerminatingError([Management.Automation.ErrorRecord]::new($_.Exception, 'ProjectionRenewalStopped', $_.CategoryInfo.Category, $null))
+}
 $root = Split-Path $PSScriptRoot -Parent
 . (Join-Path $PSScriptRoot 'ClaudeProjectionChecks.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeProjectionPackage.ps1')
@@ -88,12 +93,13 @@ foreach ($email in $emails) {
 }
 if ([string]::IsNullOrWhiteSpace($StandardGroup) -or $StandardGroup -eq 'none') { $problems.Add('-StandardGroup is required: the job reads its members on every run.') }
 if ([string]::IsNullOrWhiteSpace($PremiumGroup)) { $problems.Add('-PremiumGroup is a group or none.') }
+elseif ($PremiumGroup -ne 'none' -and ([string]$StandardGroup).Trim() -eq $PremiumGroup.Trim()) { $problems.Add('-PremiumGroup names the standard group: premium membership takes precedence, so every standard member would be premium. Pass two groups, or -PremiumGroup none.') }
 if ($CronExpression -notmatch '^[0-9*/,-]+( [0-9*/,-]+){4}$') { $problems.Add("-CronExpression '$CronExpression' is not five cron fields.") }
 if (-not $ImageTag) { $ImageTag = 'sync-' + [DateTime]::UtcNow.ToString('yyyyMMddHHmmss') }
 if ($ImageTag -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$') { $problems.Add("-ImageTag '$ImageTag' is not an image tag.") }
 if ($ImageDigest -and $ImageDigest -cnotmatch '^sha256:[0-9a-f]{64}$') { $problems.Add('-ImageDigest is not sha256: followed by 64 lowercase hex digits.') }
 if ($WorkspaceResourceId -and $WorkspaceResourceId -notmatch '^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\.OperationalInsights/workspaces/[^/]+$') { $problems.Add('-WorkspaceResourceId is not a Log Analytics workspace resource id.') }
-if ($RenewalSubnetId -and $RenewalSubnetId -notmatch '^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\.Network/virtualNetworks/[^/]+/subnets/[^/]+$') { $problems.Add('-RenewalSubnetId is not a subnet resource id.') }
+if ($RenewalSubnetId -and $RenewalSubnetId -notmatch '^/subscriptions/[0-9a-fA-F-]{36}/resourceGroups/[A-Za-z0-9._-]{1,90}/providers/Microsoft\.Network/virtualNetworks/[A-Za-z0-9._-]{2,64}/subnets/[A-Za-z0-9._-]{1,80}$') { $problems.Add("-RenewalSubnetId is not a subnet resource id whose names hold only letters, digits, '.', '_' or '-'; other characters are refused before an az call.") }
 if ($problems.Count) { throw ("Projection renewal refused before any Azure call:`n  - " + ($problems -join "`n  - ")) }
 if (-not $ReceiptPath) { $ReceiptPath = Join-Path $root "onboarding/projection-renewal-$NamePrefix.json" }
 
@@ -175,9 +181,26 @@ if (-not $WorkspaceResourceId) {
     $WorkspaceResourceId = [string]$telemetry.WorkspaceResourceId
     if (-not $WorkspaceResourceId) { throw "The gateway's Application Insights has no Log Analytics workspace. Pass -WorkspaceResourceId." }
 }
+# P94 renamed the job, its environment and the failure alert (U118). P86's registry, identity, action
+# group and other alerts keep their names and update in place; these three would stay beside the job.
+$p86Delete = [ordered]@{
+    "caj-projection-renewal-$NamePrefix" = "az resource delete -g $ResourceGroup -n caj-projection-renewal-$NamePrefix --resource-type Microsoft.App/jobs"
+    "cae-projection-$NamePrefix" = "az resource delete -g $ResourceGroup -n cae-projection-$NamePrefix --resource-type Microsoft.App/managedEnvironments"
+    "sqr-projection-$NamePrefix-graph-read-failed" = "az resource delete -g $ResourceGroup -n sqr-projection-$NamePrefix-graph-read-failed --resource-type Microsoft.Insights/scheduledQueryRules"
+}
+$present = @(Invoke-ClaudeNetworkAz @('resource', 'list', '-g', $ResourceGroup, '--query', '[].name'))
+$p86Left = @($p86Delete.Keys | Where-Object { $present -contains $_ })
+if ($p86Left.Count) {
+    throw ("P86 renewal resources are in ${ResourceGroup}: $($p86Left -join ', '). P94 names its job, environment and failure alert differently, so these would stay beside the new job, " +
+        "and P86's job cannot run (its image lacks resolver/src/entitlement.mjs and it sets no AZURE_CLIENT_ID). Delete them in this order, then rerun:`n  " +
+        (($p86Left | ForEach-Object { $p86Delete[$_] }) -join "`n  ") + "`nNothing was deployed.")
+}
 $script:graphToken = if (($StandardGroup -notmatch $guid) -or ($PremiumGroup -ne 'none' -and $PremiumGroup -notmatch $guid)) { Get-GraphToken } else { $null }
 $standardGroupId = Resolve-TierGroup $StandardGroup 'standard'
 $premiumGroupId = Resolve-TierGroup $PremiumGroup 'premium'
+if ($premiumGroupId -eq $standardGroupId) {
+    throw "The standard and premium tier groups are the same group ($standardGroupId): premium membership takes precedence, so every standard member would be premium. Pass two groups, or -PremiumGroup none. Nothing was deployed."
+}
 $accountResourceId = "/subscriptions/$($account.id)/resourceGroups/$ResourceGroup/providers/Microsoft.DocumentDB/databaseAccounts/$cosmosAccount"
 Ok "Cosmos $cosmosAccount; renewal subnet in $location; gateway $ApimName; standard $standardGroupId; premium $premiumGroupId"
 
@@ -189,6 +212,7 @@ if (-not $PSCmdlet.ShouldProcess($ResourceGroup, 'deploy the projection registry
 Step 'Phase 1: registry and job identity'
 $registry = Invoke-Deployment "projection-registry-$NamePrefix" 'infra/projection-registry.bicep' @{ namePrefix = $NamePrefix; location = $location; acrSku = $AcrSku }
 if (-not $registry.acrName -or -not $registry.identityPrincipalId) { throw 'The registry deployment did not return the registry and identity.' }
+if ([string]$registry.acrName -cnotmatch '^[a-z0-9]{5,50}$') { throw "The registry deployment returned '$($registry.acrName)', not a registry name (5-50 lowercase letters or digits); the image was not built." }
 Ok "registry $($registry.acrName); job identity principal $($registry.identityPrincipalId)"
 Note "A tenant administrator can grant Graph access now, while the image builds: ./scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1 -PrincipalId $($registry.identityPrincipalId)"
 
@@ -235,6 +259,7 @@ $receipt = [ordered]@{
     kind = 'claude-projection-renewal-receipt'; schemaVersion = 1; createdAt = [DateTime]::UtcNow.ToString('o')
     sourceCommit = $sourceCommit; sourceDirty = $sourceDirty
     resourceGroup = $ResourceGroup; namePrefix = $NamePrefix; tenantId = $tenantId; gatewayResourceId = $gatewayId
+    standardGroupId = $standardGroupId; premiumGroupId = $premiumGroupId; identityClientId = [string]$registry.identityClientId
     cosmosAccount = $cosmosAccount; accountResourceId = $accountResourceId; runnerName = [string]$network.runnerName
     reconcilerResourceId = [string]$renewal.jobResourceId; jobName = [string]$renewal.jobName
     imageDigest = $ImageDigest; imageTag = $ImageTag; entryPoint = $entryPoint

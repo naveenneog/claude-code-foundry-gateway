@@ -34,6 +34,13 @@ test('depth follows the parent chain and reports a cycle as the largest depth', 
   assert.equal(resolveDepth('a', parents), Number.MAX_SAFE_INTEGER);
 });
 
+test('unit ids in the parent map compare without case, as PowerShell hashtables do', () => {
+  const units = parseBuRegistry(',eng=G:1,team=G2:1,');
+  assert.deepEqual(sortUnitsByDepth(units, parseBuParents(',Team=eng,')).map((u) => u.id), ['team', 'eng']);
+  assert.equal(resolveDepth('team', parseBuParents(',team=eng,TEAM=fin,fin=ops,')), 2, 'a later entry for the same team wins');
+  assert.equal(resolveDepth('a', parseBuParents(',a=B,b=a,')), Number.MAX_SAFE_INTEGER, 'a cycle through another case');
+});
+
 test('units sort deepest first and keep registry order at one depth', () => {
   const units = parseBuRegistry(',eng=G-eng:1,fin=G-fin:1,platform=G-platform:1,api=G-api:1,ops=G-ops:1,');
   const parents = parseBuParents(',platform=eng,api=eng,');

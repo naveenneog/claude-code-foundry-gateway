@@ -36,27 +36,28 @@ export function parseBuRegistry(value) {
 }
 
 export function parseBuParents(value) {
+  // Keys compare without case, as the PowerShell hashtable does; a later entry for a team wins.
   const parents = new Map();
   for (const pair of entries(value)) {
     const eq = pair.indexOf('=');
     if (eq < 0) continue;
     const child = pair.slice(0, eq);
     const parent = pair.slice(eq + 1);
-    if (child && parent) parents.set(child, parent);
+    if (child && parent) parents.set(child.toLowerCase(), parent);
   }
   return parents;
 }
 
-/** Hops above a unit; a cycle reports the largest depth instead of looping. */
+/** Hops above a unit; a cycle reports the largest depth instead of looping. Ids compare without case. */
 export function resolveDepth(id, parents, limit = 10) {
   let depth = 0;
   let cursor = id;
-  const seen = new Set([id]);
-  while (parents.get(cursor) && depth < limit) {
-    cursor = parents.get(cursor);
+  const seen = new Set([id.toLowerCase()]);
+  while (parents.get(cursor.toLowerCase()) && depth < limit) {
+    cursor = parents.get(cursor.toLowerCase());
     depth++;
-    if (seen.has(cursor)) return Number.MAX_SAFE_INTEGER;
-    seen.add(cursor);
+    if (seen.has(cursor.toLowerCase())) return Number.MAX_SAFE_INTEGER;
+    seen.add(cursor.toLowerCase());
   }
   return depth;
 }

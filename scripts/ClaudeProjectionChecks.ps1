@@ -114,6 +114,9 @@ function Assert-ClaudeProjectionJobDefinition {
     if ([string]$env['PROJECTION_PREMIUM_GROUP_ID'] -notmatch $guid -and [string]$env['PROJECTION_PREMIUM_GROUP_ID'] -cne 'none') {
         throw "Projection switch refused: the renewal job does not set PROJECTION_PREMIUM_GROUP_ID to the premium tier group object id or none. $redeploy"
     }
+    if ([string]$env['PROJECTION_PREMIUM_GROUP_ID'] -eq [string]$env['PROJECTION_STANDARD_GROUP_ID']) {
+        throw "Projection switch refused: the renewal job sets PROJECTION_STANDARD_GROUP_ID and PROJECTION_PREMIUM_GROUP_ID to one group, and premium membership takes precedence, so every standard member would be premium. $redeploy"
+    }
     if ([string]$env['PROJECTION_GATEWAY_RESOURCE_ID'] -notmatch '^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\.ApiManagement/service/[^/]+$') {
         throw "Projection switch refused: the renewal job does not set PROJECTION_GATEWAY_RESOURCE_ID to the API Management gateway, so it cannot read business units. $redeploy"
     }

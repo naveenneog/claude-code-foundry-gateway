@@ -210,6 +210,18 @@ try {
     $premium = '10000000-0000-4000-8000-000000000002'
     $digestBuilt = 'sha256:' + ('d' * 64)
     $global:P94Stub = @{ Case = ''; Calls = $null; Params = $null; RenewalAttempts = 0 }
+    # Group names resolve through Graph with Invoke-RestMethod (scripts/ClaudeGraphMembership.ps1).
+    $global:P94Graph = @{ Calls = $null; Refuse = $false; Groups = @{ 'claude-code-standard' = 'ABCDEF00-0000-4000-8000-000000000011'; 'claude-code-premium' = '20000000-0000-4000-8000-000000000012'; 'claude-code-everyone' = 'abcdef00-0000-4000-8000-000000000011' } }
+    function global:Invoke-RestMethod {
+        [CmdletBinding()]
+        param([string]$Uri, [hashtable]$Headers, [string]$Method, [int]$TimeoutSec)
+        $graph = $global:P94Graph
+        $graph.Calls.Add($Uri)
+        if ($graph.Refuse) { throw 'Response status code does not indicate success: 403 (Forbidden).' }
+        $filter = [uri]::UnescapeDataString((($Uri -split '\$filter=', 2)[1] -split '&')[0])
+        $id = if ($filter -match "^displayName eq '(.+)'$") { $graph.Groups[$Matches[1]] }
+        return [pscustomobject]@{ value = @(if ($id) { [pscustomobject]@{ id = $id } }) }
+    }
     function global:az {
         $words = @($args | ForEach-Object { [string]$_ })
         $line = $words -join ' '
@@ -237,12 +249,18 @@ try {
                 return (& $outputs @{ renewalSubnetId = $(if ($state.Case -eq 'no-renewal-subnet') { '' } else { $subnet }); runnerName = 'aci-projtest-p94fixture' })
             }
             '^deployment group show .*-n projection-registry-p94fixture ' {
-                return (& $outputs @{ acrName = 'acrp94fixture'; acrLoginServer = 'acrp94fixture.azurecr.io'; identityName = 'id-projection-renewal-p94fixture'; identityClientId = '40000000-0000-4000-8000-000000000001'; identityPrincipalId = '40000000-0000-4000-8000-000000000002' })
+                return (& $outputs @{ acrName = $(if ($state.Case -eq 'bad-acr-name') { 'acr(p94)' } else { 'acrp94fixture' }); acrLoginServer = 'acrp94fixture.azurecr.io'; identityName = 'id-projection-renewal-p94fixture'; identityClientId = '40000000-0000-4000-8000-000000000001'; identityPrincipalId = '40000000-0000-4000-8000-000000000002' })
             }
             '^deployment group show .*-n projection-renewal-p94fixture ' {
                 return (& $outputs @{ jobName = 'caj-renew-p94'; jobResourceId = "$rgId/providers/Microsoft.App/jobs/caj-renew-p94"; actionGroupResourceId = "$rgId/providers/Microsoft.Insights/actionGroups/ag-projection-renewal-p94fixture" })
             }
             '^network vnet show' { return (@{ location = 'eastus2' } | ConvertTo-Json) }
+            '^resource list -g rg-p94 ' {
+                # Names P94 shares with P86 are updated in place; the three P94 renamed are refused.
+                $names = @('cosmos-p94fixture', 'acrp94fixture', 'id-projection-renewal-p94fixture', 'ag-projection-renewal-p94fixture', 'sqr-projection-p94fixture-no-success-45m')
+                if ($state.Case -eq 'p86-leftovers') { $names += @('caj-projection-renewal-p94fixture', 'cae-projection-p94fixture', 'sqr-projection-p94fixture-graph-read-failed') }
+                return (ConvertTo-Json @($names))
+            }
             '^apim show' { return (@{ id = "$rgId/providers/Microsoft.ApiManagement/service/apim-p94" } | ConvertTo-Json) }
             '^acr build' { if ($state.Case -eq 'tasks-refused') { $global:LASTEXITCODE = 1; return 'ERROR: (TasksOperationsNotAllowed) ACR Tasks requests are not permitted.' }; return }
             '^acr manifest show-metadata' { return (ConvertTo-Json $(if ($state.Case -eq 'bad-digest') { 'latest' } else { $digestBuilt })) }
@@ -255,6 +273,8 @@ try {
         $global:P94Stub.Calls = [Collections.Generic.List[string]]::new()
         $global:P94Stub.Params = @{}
         $global:P94Stub.RenewalAttempts = 0
+        $global:P94Graph.Calls = [Collections.Generic.List[string]]::new()
+        $global:P94Graph.Refuse = ($Case -eq 'graph-refused')
         $receiptPath = Join-Path $work ('receipt-' + [guid]::NewGuid().ToString('N') + '.json')
         $params = @{
             ResourceGroup = 'rg-p94'; ApimName = 'apim-p94'; NamePrefix = 'p94fixture'; AlertEmail = @('ops@example.invalid', 'oncall@example.invalid')
@@ -266,7 +286,7 @@ try {
         $all = @()
         try { $all = @(& $deployScript @params *>&1) } catch { $failure = $_.Exception.Message }
         [pscustomobject]@{
-            Failure = $failure; Output = ($all | Out-String); Calls = @($global:P94Stub.Calls); Params = $global:P94Stub.Params
+            Failure = $failure; Output = ($all | Out-String); Calls = @($global:P94Stub.Calls); Params = $global:P94Stub.Params; GraphCalls = @($global:P94Graph.Calls)
             Receipt = $(if (Test-Path -LiteralPath $receiptPath) { Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json } else { $null })
         }
     }
@@ -301,6 +321,8 @@ try {
         $receipt.imageDigest -ceq $digestBuilt -and $receipt.runnerName -eq 'aci-projtest-p94fixture' -and $receipt.cosmosAccount -eq 'cosmos-p94fixture' -and
         $receipt.accountResourceId -match '/databaseAccounts/cosmos-p94fixture$' -and $receipt.tenantId -eq $tenant -and $receipt.entryPoint -eq 'node /app/sync/src/apply-projection.mjs' -and
         $receipt.actionGroupResourceId -match '/actionGroups/')
+    Assert 'the receipt records the settings the job runs with' ($receipt -and $receipt.standardGroupId -ceq $standard -and $receipt.premiumGroupId -ceq $premium -and
+        $receipt.gatewayResourceId -match 'Microsoft\.ApiManagement/service/apim-p94$' -and $receipt.identityClientId -eq '40000000-0000-4000-8000-000000000001') ($receipt | ConvertTo-Json -Compress)
     Assert 'the receipt holds no secret' ($receipt -and -not (($receipt | ConvertTo-Json) -match '(?i)token|password|secret|key"'))
     Assert 'no Graph call when both groups are object ids' (-not ($run.Calls -match 'get-access-token'))
 
@@ -312,12 +334,27 @@ try {
             @{ Name = 'a malformed digest'; Change = @{ ImageDigest = 'sha256:abc' }; Expect = 'ImageDigest' }
             @{ Name = 'a cron with a separator'; Change = @{ CronExpression = '*/30 * * * *;' }; Expect = 'CronExpression' }
             @{ Name = 'no standard group'; Change = @{ StandardGroup = 'none' }; Expect = 'StandardGroup' }
+            @{ Name = 'the standard group as the premium group'; Change = @{ PremiumGroup = $standard.ToUpperInvariant() }; Expect = 'PremiumGroup' }
+            @{ Name = 'a subnet id with parentheses, which cmd.exe re-reads'; Change = @{ RenewalSubnetId = "/subscriptions/$sub/resourceGroups/rg(p94)/providers/Microsoft.Network/virtualNetworks/vnet-p94fixture/subnets/renewal" }; Expect = 'RenewalSubnetId' }
         )) {
         $refused = Invoke-DeployScenario 'healthy' $case.Change
         Assert "refused before any Azure call: $($case.Name)" ($refused.Failure -match 'before any Azure call' -and $refused.Failure -match $case.Expect -and $refused.Calls.Count -eq 0) "$($refused.Failure) | calls $($refused.Calls.Count)"
     }
+    # As an operator runs it: PowerShell's default view of an uncaught throw adds the script path and
+    # a code excerpt and folds the message onto one line.
+    $operatorView = & (Get-Process -Id $PID).Path -NoProfile -NonInteractive -File $deployScript -ResourceGroup 'rg&echo' -ApimName 'apim-p94' -NamePrefix 'p94fixture' -AlertEmail 'ops@example.invalid&calc' 2>&1 | Out-String -Width 400
+    $operatorCode = $LASTEXITCODE
+    Assert 'an operator sees each refused value on its own line, with no script path or code excerpt' ($operatorCode -eq 1 -and
+        $operatorView -match "(?m)^\s+- -ResourceGroup 'rg&echo' is not 1-90 letters" -and $operatorView -match "(?m)^\s+- -AlertEmail 'ops@example\.invalid&calc' is not an email address\.\s*$" -and
+        $operatorView -notmatch 'Deploy-ClaudeProjectionRenewal\.ps1:\d' -and $operatorView -notmatch '(?m)^\s*Line \|') "exit $operatorCode | $operatorView"
     $noSubnet = Invoke-DeployScenario 'no-renewal-subnet'
     Assert 'a network without the renewal subnet stops before any write, with the remedy' ($noSubnet.Failure -match 'no renewal subnet' -and $noSubnet.Failure -match 'Deploy-ClaudeProjection\.ps1' -and (Get-WriteCount $noSubnet) -eq 0) $noSubnet.Failure
+    $leftovers = Invoke-DeployScenario 'p86-leftovers'
+    Assert 'P86 resources that the new names would leave behind stop the deploy before any write, with the delete commands' ((Get-WriteCount $leftovers) -eq 0 -and
+        $leftovers.Failure -match 'az resource delete -g rg-p94 -n caj-projection-renewal-p94fixture --resource-type Microsoft\.App/jobs' -and
+        $leftovers.Failure -match 'az resource delete -g rg-p94 -n cae-projection-p94fixture --resource-type Microsoft\.App/managedEnvironments' -and
+        $leftovers.Failure -match 'az resource delete -g rg-p94 -n sqr-projection-p94fixture-graph-read-failed --resource-type Microsoft\.Insights/scheduledQueryRules' -and
+        $leftovers.Failure.IndexOf('Microsoft.App/jobs') -lt $leftovers.Failure.IndexOf('Microsoft.App/managedEnvironments')) "$($leftovers.Failure) | writes $(Get-WriteCount $leftovers)"
     $tasks = Invoke-DeployScenario 'tasks-refused'
     Assert 'a refused registry build stops before the job, naming the docker path' ($tasks.Failure -match 'TasksOperationsNotAllowed' -and $tasks.Failure -match 'docker build' -and $tasks.Failure -match '-ImageDigest' -and (Get-CallIndex $tasks '^deployment group create .*projection-renewal') -lt 0) $tasks.Failure
     $badDigest = Invoke-DeployScenario 'bad-digest'
@@ -330,7 +367,21 @@ try {
     Assert 'WhatIf writes nothing and leaves no receipt' (-not $whatIf.Failure -and (Get-WriteCount $whatIf) -eq 0 -and -not $whatIf.Receipt) $whatIf.Failure
     $wrongSubscription = Invoke-DeployScenario 'healthy' @{ SubscriptionId = '00000000-0000-4000-8000-0000000000ff' }
     Assert 'a different signed-in subscription stops before any write' ($wrongSubscription.Failure -match 'az account set' -and (Get-WriteCount $wrongSubscription) -eq 0) $wrongSubscription.Failure
+    $byName = Invoke-DeployScenario 'healthy' @{ StandardGroup = 'claude-code-standard'; PremiumGroup = 'claude-code-premium' }
+    $byNameParams = if ($byName.Params['projection-renewal-p94fixture']) { $byName.Params['projection-renewal-p94fixture'].parameters } else { @{} }
+    Assert 'group names resolve through Graph to the object ids the job receives' (-not $byName.Failure -and @($byName.GraphCalls).Count -eq 2 -and
+        @($byName.Calls -match '^account get-access-token .*https://graph\.microsoft\.com').Count -eq 1 -and
+        $byNameParams.standardGroupId.value -ceq 'abcdef00-0000-4000-8000-000000000011' -and $byNameParams.premiumGroupId.value -ceq '20000000-0000-4000-8000-000000000012') "$($byName.Failure) | graph $(@($byName.GraphCalls).Count) | $($byNameParams.standardGroupId.value) $($byNameParams.premiumGroupId.value)"
+    $missingGroup = Invoke-DeployScenario 'healthy' @{ StandardGroup = 'claude-code-standard'; PremiumGroup = 'claude-code-premim' }
+    Assert 'a group name Graph does not find stops before any write, with the remedy' ($missingGroup.Failure -match "premium tier group 'claude-code-premim' was not found" -and $missingGroup.Failure -match '-PremiumGroup none' -and (Get-WriteCount $missingGroup) -eq 0) "$($missingGroup.Failure) | writes $(Get-WriteCount $missingGroup)"
+    $graphRefused = Invoke-DeployScenario 'graph-refused' @{ StandardGroup = 'claude-code-standard' }
+    Assert 'a refused Graph read stops before any write and is not read as a missing group' ($graphRefused.Failure -match 'Graph read failed' -and $graphRefused.Failure -match '403' -and $graphRefused.Failure -notmatch 'was not found' -and (Get-WriteCount $graphRefused) -eq 0) "$($graphRefused.Failure) | writes $(Get-WriteCount $graphRefused)"
+    $sameGroup = Invoke-DeployScenario 'healthy' @{ StandardGroup = 'claude-code-standard'; PremiumGroup = 'claude-code-everyone' }
+    Assert 'two names for one group stop before any write: premium would take every standard member' ($sameGroup.Failure -match 'same group' -and (Get-WriteCount $sameGroup) -eq 0) "$($sameGroup.Failure) | writes $(Get-WriteCount $sameGroup)"
+    $badAcr = Invoke-DeployScenario 'bad-acr-name'
+    Assert 'a registry name that is not a registry name stops before the build' ($badAcr.Failure -match 'not a registry name' -and (Get-CallIndex $badAcr '^acr build') -lt 0 -and (Get-CallIndex $badAcr '^deployment group create .*projection-renewal') -lt 0) $badAcr.Failure
     Remove-Item Function:\az -ErrorAction SilentlyContinue
+    Remove-Item Function:\Invoke-RestMethod -ErrorAction SilentlyContinue
 
     Write-Host ''
     Write-Host 'Projection renewal - admission refuses a job without these settings' -ForegroundColor Cyan
@@ -359,6 +410,7 @@ try {
             @{ Name = 'an empty premium setting'; Change = @{ PROJECTION_PREMIUM_GROUP_ID = '' }; Names = 'PROJECTION_PREMIUM_GROUP_ID' }
             @{ Name = 'no gateway'; Change = @{ PROJECTION_GATEWAY_RESOURCE_ID = $null }; Names = 'PROJECTION_GATEWAY_RESOURCE_ID' }
             @{ Name = 'a gateway that is not API Management'; Change = @{ PROJECTION_GATEWAY_RESOURCE_ID = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-p94/providers/Microsoft.Storage/storageAccounts/stp94' }; Names = 'PROJECTION_GATEWAY_RESOURCE_ID' }
+            @{ Name = 'one group for both tiers'; Change = @{ PROJECTION_PREMIUM_GROUP_ID = '10000000-0000-4000-8000-000000000001' }; Names = 'PROJECTION_PREMIUM_GROUP_ID' }
         )) {
         $settings = $goodSettings.Clone()
         foreach ($key in $case.Change.Keys) { if ($null -eq $case.Change[$key]) { $settings.Remove($key) } else { $settings[$key] = $case.Change[$key] } }

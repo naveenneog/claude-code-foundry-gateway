@@ -105,6 +105,21 @@ export function planChanges(resolved, existing, { allowEmpty = false, keepOrphan
 }
 
 /**
+ * The earliest expiry among the records a run leaves behind: every record it wrote, which expire
+ * with this run's lease, and every orphan it kept. With neither, the run's own lease.
+ */
+export function oldestRetainedExpiry({ toWrite = [], keptOrphans = [] } = {}, existing = new Map(), expiresAt) {
+  // A loop, not Math.min(...list): spreading one argument per record overflows the stack near
+  // 125,000 records, and a run writes every entitled identity.
+  let oldest = toWrite.length ? expiresAt : Infinity;
+  for (const oid of keptOrphans) {
+    const kept = existing.get(oid)?.expiresAt;
+    if (Number.isFinite(kept) && kept < oldest) oldest = kept;
+  }
+  return Number.isFinite(oldest) ? oldest : expiresAt;
+}
+
+/**
  * The stored document. Same shape the PowerShell sync writes and the resolver
  * reads: id and partition key are both the object id, so a lookup is a point
  * read.

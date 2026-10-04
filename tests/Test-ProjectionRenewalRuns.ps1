@@ -14,7 +14,7 @@ function Assert($Label, [bool]$Condition, $Detail = '') {
 }
 
 # The simulation's test count. A test that stops loading or is removed shows up as a lower count.
-$expectedTests = 9
+$expectedTests = 10
 
 . (Join-Path $root 'scripts\ClaudeProjectionPackage.ps1')
 . (Join-Path $root 'scripts\ClaudeBusinessUnit.ps1')
@@ -53,6 +53,8 @@ try {
         @{ Name = 'a group name with a colon'; Registry = ',fin=Finance: EMEA:7,eng=Eng:1,'; Parents = ',fin=eng,' }
         @{ Name = 'malformed entries'; Registry = ',=x:1,eng,nobudget=G,bad=G:1x,ok=G:7,'; Parents = ',=eng,orphan=,' }
         @{ Name = 'a cycle'; Registry = ',a=GA:1,b=GB:1,c=GC:1,'; Parents = ',a=b,b=a,' }
+    @{ Name = 'a team id in another case in bu-parents'; Registry = ',eng=G:1,team=G2:1,'; Parents = ',Team=eng,' }
+    @{ Name = 'a cycle through another case'; Registry = ',a=GA:1,b=GB:1,c=GC:1,'; Parents = ',a=B,b=a,' }
         @{ Name = 'three hundred units'; Registry = ',' + ((1..300 | ForEach-Object { "u$_=G$($_):1" }) -join ',') + ','; Parents = ',' + ((1..300 | Where-Object { $_ % 3 -eq 0 } | ForEach-Object { "u$_=u1" }) -join ',') + ',' }
     )
     $module = ([Uri](Join-Path $root 'sync\src\business-units.mjs')).AbsoluteUri

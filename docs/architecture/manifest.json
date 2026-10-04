@@ -35,7 +35,7 @@
         "scripts/flow/Foundation.ps1": "fb0d43ee4fbe00a140410bf3f9594b1a6d43bc4f226748f8231c6f23743c7ed4",
         "scripts/flow/Guide.ps1": "73bb63882ee1726fd8528e5e3045ecf6fd57a89dfa82a32f6e190cd2494461db",
         "scripts/flow/Verify.ps1": "7a8b05c6848499a8fbc26d87c90f4f3bfaa899538eeb1e6c068dd7bedda847fa",
-        "sync/src/apply-projection.mjs": "9c54c7b3565f89ee2c355bcf3e3cf1296ccbe0936c5b27504d4f98f98027248f"
+        "sync/src/apply-projection.mjs": "7d017ff632b47c4205aef6f9d3dab8e1653b86cac53ada32f49c216170c8fe3b"
       },
       "outputs": [
         {
@@ -142,15 +142,15 @@
         "resolver/src/entitlement.mjs": "6dc82d9372ddb81b199ae5c6ce099f3a0da315d075524f57e2582caff363e1bf",
         "resolver/src/index.mjs": "b6b755fbbc56ef62e7b535a4bde2756111c2b5fc9913c16a893b45cb6dce33a3",
         "resolver/src/lookup.mjs": "d04392c5eb24a8a084d72f1e5dc72a61fd385992039118aba510c266c3027c3b",
-        "scripts/Deploy-ClaudeProjectionRenewal.ps1": "fffe836ce00c11f0c6c2622ddae4b6a4182cc0aa2a90bc608f87233db0293927",
+        "scripts/Deploy-ClaudeProjectionRenewal.ps1": "e86f01642b02012cc7569d92535f3fe14f4e5e9d194c272ccac195b9f44dcfdd",
         "scripts/Sync-ClaudeProjection.ps1": "0a30b7b4178700d9eb4879d4cb78c01bacf932e21b0856f0f532e38a06a24ca7",
-        "sync/Dockerfile": "59c201fe2d657dbd23affef4a94d13707643e94e0785520882222f002bdc010e",
-        "sync/src/apply-projection.mjs": "9c54c7b3565f89ee2c355bcf3e3cf1296ccbe0936c5b27504d4f98f98027248f",
-        "sync/src/business-units.mjs": "c1b6fcf4d78ba98dab2a6187d249b82853e5d55c49f8ac0b6c8a7ac2bec97400",
+        "sync/Dockerfile": "80ab80a331c8b97f903c30cf714cedfcc9969b8d8c24be0c58777ac7c7f3b382",
+        "sync/src/apply-projection.mjs": "7d017ff632b47c4205aef6f9d3dab8e1653b86cac53ada32f49c216170c8fe3b",
+        "sync/src/business-units.mjs": "45df91c836676e6ad32a2d1b7f730c51b01e4210a22b716ce118c8bc6298ff31",
         "sync/src/check-admission.mjs": "abf63ef96835307ae646658b93b8f7d8536d7707f53d94e21dcc68b4d8da2c8d",
         "sync/src/events.mjs": "4e2fae2fb8370d83c3bb798d8bd6f22d9db501c3a8730f8283bdab30bcb9db3f",
-        "sync/src/graph.mjs": "9a0b140879799dff181af18eb442718d5bbf38e2f45738a63bb377d9a7b36e69",
-        "sync/src/plan.mjs": "f755c48ac3864e3500104dc391b9fc7d8f47e66127ae410a3ac6bc15746e2372"
+        "sync/src/graph.mjs": "de6c2dc421d1882a26d456dcfc1e6d908b32d17c3435663ebb513892b7c1f8ab",
+        "sync/src/plan.mjs": "9476972480dddad8ea289c0bfd547b5b1a76056f93e80f50e5d310a93e085946"
       },
       "outputs": [
         {

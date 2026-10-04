@@ -39,7 +39,7 @@ const USERS = {
 const REGISTRY_UNITS = ',eng=Claude Engineering:1000,fin=Claude Finance:1000,';
 const REGISTRY_TEAMS = ',eng=Claude Engineering:1000,fin=Claude Finance:1000,platform=Claude Platform:1000,';
 
-function fixture({ registry = REGISTRY_UNITS, parents = ',,', deny = [], armStatus = 200, secretRegistry = false } = {}) {
+function fixture({ registry = REGISTRY_UNITS, parents = ',,', deny = [], missing = [], armStatus = 200, secretRegistry = false } = {}) {
   const member = (oid, cast = 'user') => ({ oid, upn: `${oid.slice(-4)}@example.invalid`, cast });
   return {
     graph: {
@@ -52,6 +52,7 @@ function fixture({ registry = REGISTRY_UNITS, parents = ',,', deny = [], armStat
         [FINANCE]: [member(USERS.cy)],
       },
       deny,
+      missing,
     },
     arm: {
       status: armStatus,
@@ -229,6 +230,23 @@ test('an unreadable or secret registry writes nothing and reads no group', () =>
     assert.equal(existsSync(where.store), false, `${name}: nothing was written`);
     assert.doesNotMatch(readFileSync(where.log, 'utf8'), /graph\.microsoft\.com/, `${name}: no group was read`);
   }
+});
+
+test('a unit whose group was deleted is an empty unit, as the PowerShell membership read treats it; a deleted tier group stops the run', () => {
+  const gone = '20000000-0000-4000-8000-0000000000ff';
+  const where = scenario('unit group deleted');
+  const ran = jobRun(where, '2026-10-04T10:00:00.000Z', { fetch: fixture({ registry: `,gone=${gone}:1000,eng=Claude Engineering:1000,`, missing: [gone] }) });
+  assert.equal(ran.code, 0, ran.stdout + ran.stderr);
+  assert.equal(ran.json.event, 'projection-renewal-succeeded');
+  assert.match(ran.stdout + ran.stderr, new RegExp(`warning: unit 'gone' group '${gone}' was not found - treating it as empty`));
+  assert.equal(records(where)[USERS.ada].businessUnit, 'eng');
+  const tier = scenario('tier group deleted');
+  const failed = jobRun(tier, '2026-10-04T10:00:00.000Z', { fetch: fixture({ missing: [STANDARD] }) });
+  assert.notEqual(failed.code, 0);
+  assert.equal(failed.json.event, 'projection-renewal-failed');
+  assert.equal(failed.json.stage, 'graph');
+  assert.match(failed.json.error, /Request_ResourceNotFound/);
+  assert.equal(existsSync(tier.store), false, 'nothing was written');
 });
 
 test('a job with no premium group projects the standard tier only', () => {

@@ -149,7 +149,7 @@ foreach ($source in $copied) {
 foreach ($path in $packagePaths | Where-Object { $_ -ne 'sync/Dockerfile' }) {
     Assert "the image copies package path $path" ($copied -contains $path)
 }
-Assert 'the image installs from the lockfile' ($docker -match '(?m)^RUN npm ci --omit=dev\b')
+Assert 'the image installs from the lockfile' ($docker -match '(?m)^RUN npm ci --omit=dev --ignore-scripts\b')
 Assert 'the entry point is unchanged' ($docker -match '(?m)^ENTRYPOINT \["node", "/app/sync/src/apply-projection\.mjs"\]')
 Assert 'the resolver module lands where plan.mjs imports it' ($docker -match '(?m)^COPY resolver/src/entitlement\.mjs /app/resolver/src/entitlement\.mjs\s*$' -and
     [IO.File]::ReadAllText((Join-Path $root 'sync\src\plan.mjs')).Contains("from '../../resolver/src/entitlement.mjs'"))
@@ -157,15 +157,24 @@ Assert 'the resolver module lands where plan.mjs imports it' ($docker -match '(?
 $deployer = Get-Content -LiteralPath (Join-Path $root 'scripts\Deploy-ClaudeProjection.ps1') -Raw
 Assert 'the deployer archives the package' ($deployer -match 'New-ClaudeProjectionSyncArchive -Path \$syncArchive' -and $deployer -notmatch "tar -c -z -f \`$syncArchive -C \(Join-Path \`$root 'sync'\)")
 Assert 'the runner unpacks the package at /work' ($deployer.Contains("'tar -x -z -f /work/sync-source.tar.gz -C /work'"))
-Assert 'the runner installs from the lockfile' ($deployer.Contains("'npm --prefix /work/sync ci --omit=dev --no-audit --fund=false'"))
+Assert 'the runner installs from the lockfile' ($deployer.Contains("'npm --prefix /work/sync ci --omit=dev --ignore-scripts --no-audit --fund=false'"))
 
 # The bash guide cannot call the PowerShell function, so its archive list is bound to it here.
 $guide = [IO.File]::ReadAllText((Join-Path $root 'docs\AZ-COMMANDS.md'))
 $tarLine = [regex]::Match($guide, '(?m)^\s*tar -c -z -f sync-source\.tar\.gz (.+?) \|\| return 1\s*$')
 $guidePaths = if ($tarLine.Success) { @($tarLine.Groups[1].Value.Trim() -split '\s+') } else { @() }
 Assert 'the guide runner archive lists exactly the package paths' (($guidePaths -join ' ') -ceq ((Get-ClaudeProjectionSyncPackagePaths) -join ' ')) ($guidePaths -join ' ')
-Assert 'the guide runner unpacks at /work and installs from the lockfile' ($guide.Contains('tar -x -z -f /work/sync-source.tar.gz -C /work"') -and $guide.Contains('npm --prefix /work/sync ci --omit=dev'))
+Assert 'the guide runner unpacks at /work and installs from the lockfile' ($guide.Contains('tar -x -z -f /work/sync-source.tar.gz -C /work"') -and $guide.Contains('npm --prefix /work/sync ci --omit=dev --ignore-scripts'))
 $secure = [IO.File]::ReadAllText((Join-Path $root 'docs\SECURE-PROJECTION.md'))
+# No locked package declares an install script, so skipping them changes nothing and removes a path
+# by which a replaced package could run code at install time.
+$lockPackages = @(((Get-Content -LiteralPath (Join-Path $root 'sync\package-lock.json') -Raw | ConvertFrom-Json -AsHashtable).packages).GetEnumerator() | Where-Object { $_.Key })
+$withScripts = @($lockPackages | Where-Object { $_.Value.hasInstallScript } | ForEach-Object Key)
+$installs = foreach ($source in @(@('sync/Dockerfile', $docker), @('scripts/Deploy-ClaudeProjection.ps1', $deployer), @('docs/AZ-COMMANDS.md', $guide), @('docs/SECURE-PROJECTION.md', $secure))) {
+    foreach ($m in [regex]::Matches($source[1], '(?m)npm (?:--prefix \S+ )?ci\b[^\r\n''"]*')) { [pscustomobject]@{ File = $source[0]; Command = $m.Value } }
+}
+$unsafe = @($installs | Where-Object { $_.Command -notmatch '--ignore-scripts\b' } | ForEach-Object { "$($_.File): $($_.Command)" })
+Assert 'every npm ci of the sync package skips install scripts, and no locked package has one' (@($installs).Count -ge 4 -and $unsafe.Count -eq 0 -and $withScripts.Count -eq 0) "installs $(@($installs).Count); unsafe: $($unsafe -join ' | '); with scripts: $($withScripts -join ', ')"
 Assert 'the runbook archives the package and unpacks it at /work' ($secure.Contains('New-ClaudeProjectionSyncArchive -Path $archive') -and $secure.Contains("'tar -x -z -f /work/sync-source.tar.gz -C /work'") -and $secure -notmatch 'tar -c -z -f \$archive -C sync')
 Assert 'the runbook builds the image from the package through the renewal script' ($secure.Contains('scripts\Deploy-ClaudeProjectionRenewal.ps1') -and $secure.Contains('`az acr build` from the sync package') -and $secure -notmatch 'az acr build [^\r\n]*--no-logs sync\b')
 

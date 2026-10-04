@@ -5,7 +5,7 @@ FROM node:22-bookworm-slim
 
 WORKDIR /app/sync
 COPY sync/package.json sync/package-lock.json ./
-RUN npm ci --omit=dev --no-audit --fund=false
+RUN npm ci --omit=dev --ignore-scripts --no-audit --fund=false
 COPY sync/src ./src
 COPY resolver/src/entitlement.mjs /app/resolver/src/entitlement.mjs
 

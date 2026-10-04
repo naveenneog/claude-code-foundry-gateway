@@ -1556,7 +1556,7 @@ p89_projection_runner() {
   send_runner_file snapshot.json /work/snapshot.json || return 1
   az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node -e require('fs').mkdirSync('/work',{recursive:true})" || return 1
   az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "tar -x -z -f /work/sync-source.tar.gz -C /work" || return 1
-  az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "npm --prefix /work/sync ci --omit=dev --no-audit --fund=false" || return 1
+  az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "npm --prefix /work/sync ci --omit=dev --ignore-scripts --no-audit --fund=false" || return 1
   az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node /work/sync/src/apply-projection.mjs --cosmos https://${COSMOS_ACCOUNT}.documents.azure.com:443/ --tenant ${TENANT_ID} --snapshot /work/snapshot.json" || return 1
   ./scripts/Compare-ClaudeEntitlement.ps1 -ResourceGroup "$GATEWAY_RG" -ApimName "$APIM_NAME" -StandardGroup "$STANDARD_GROUP" -PremiumGroup "$PREMIUM_GROUP" -ExportGatewayPath gateway-decisions.json -FailOnDrift || return 1
   send_runner_file gateway-decisions.json /work/gateway-decisions.json || return 1
@@ -1587,18 +1587,31 @@ p94_projection_renewal() {
     echo "Refused: could not read the projection Cosmos account output; nothing was deployed." >&2
     return 1
   fi
+  if ! RG_NAMES="$(az resource list -g "$GATEWAY_RG" --query "[].name" -o tsv)"; then
+    echo "Refused: could not list the resources in $GATEWAY_RG; nothing was deployed." >&2
+    return 1
+  fi
+  P86_LEFT="$(printf '%s\n' "$RG_NAMES" | grep -F -x -e "caj-projection-renewal-${NAME_PREFIX}" -e "cae-projection-${NAME_PREFIX}" -e "sqr-projection-${NAME_PREFIX}-graph-read-failed" | tr '\n' ' ')"
+  if [ -n "$P86_LEFT" ]; then
+    echo "Refused: P86 renewal resources are in $GATEWAY_RG (${P86_LEFT% }), and the new job would run beside them; docs/SECURE-PROJECTION.md lists the delete commands. Nothing was deployed." >&2
+    return 1
+  fi
   if ! WORKSPACE_ID="${WORKSPACE_ID:-$(az monitor log-analytics workspace list -g "$GATEWAY_RG" --query "[].id" -o tsv)}" || [ -z "$WORKSPACE_ID" ] || [ "$(printf '%s\n' "$WORKSPACE_ID" | wc -l)" -ne 1 ]; then
     echo "Refused: set WORKSPACE_ID to the gateway's Log Analytics workspace resource id; nothing was deployed." >&2
     return 1
   fi
-  if ! STANDARD_GROUP_ID="$(az ad group show --group "$STANDARD_GROUP" --query id -o tsv)" || [ -z "$STANDARD_GROUP_ID" ]; then
-    echo "Refused: the standard tier group could not be read; nothing was deployed." >&2
+  if ! STANDARD_GROUP_ID="$(jq -r '.group.id // ""' .p89-receipts/group-standard.json)" || [ -z "$STANDARD_GROUP_ID" ]; then
+    echo "Refused: could not read the standard group receipt that the group block in section 5 records; nothing was deployed." >&2
     return 1
   fi
   if [ "$PREMIUM_GROUP" = "none" ]; then
     PREMIUM_GROUP_ID="none"
-  elif ! PREMIUM_GROUP_ID="$(az ad group show --group "$PREMIUM_GROUP" --query id -o tsv)" || [ -z "$PREMIUM_GROUP_ID" ]; then
-    echo "Refused: the premium tier group could not be read; set PREMIUM_GROUP=none when the gateway has no premium tier. Nothing was deployed." >&2
+  elif ! PREMIUM_GROUP_ID="$(jq -r '.group.id // ""' .p89-receipts/group-premium.json)" || [ -z "$PREMIUM_GROUP_ID" ]; then
+    echo "Refused: could not read the premium group receipt that the group block in section 5 records; set PREMIUM_GROUP=none when the gateway has no premium tier. Nothing was deployed." >&2
+    return 1
+  fi
+  if [ "$PREMIUM_GROUP_ID" = "$STANDARD_GROUP_ID" ]; then
+    echo "Refused: the premium tier group is the same group as the standard tier group, and premium membership takes precedence. Nothing was deployed." >&2
     return 1
   fi
   APIM_ID="$(az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" --query id -o tsv)" || return 1
@@ -1612,8 +1625,9 @@ p94_projection_renewal() {
     return 1
   fi
   PACKAGE_DIR="$(mktemp -d)" || return 1
-  tar -c -f - sync/Dockerfile sync/package.json sync/package-lock.json sync/src resolver/src/entitlement.mjs | tar -x -f - -C "$PACKAGE_DIR" || return 1
-  az acr build --registry "$ACR_NAME" --image "claude-projection-sync:${IMAGE_TAG}" --file sync/Dockerfile --no-logs "$PACKAGE_DIR" -o none || return 1
+  tar -c -f - sync/Dockerfile sync/package.json sync/package-lock.json sync/src resolver/src/entitlement.mjs | tar -x -f - -C "$PACKAGE_DIR" || { rm -rf "$PACKAGE_DIR"; return 1; }
+  az acr build --registry "$ACR_NAME" --image "claude-projection-sync:${IMAGE_TAG}" --file sync/Dockerfile --no-logs "$PACKAGE_DIR" -o none || { rm -rf "$PACKAGE_DIR"; return 1; }
+  rm -rf "$PACKAGE_DIR"
   IMAGE_DIGEST="$(az acr manifest show-metadata --registry "$ACR_NAME" --name "claude-projection-sync:${IMAGE_TAG}" --query digest -o tsv)"
   if ! [[ "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
     echo "Refused: the registry returned '$IMAGE_DIGEST', not a sha256 digest; the job was not deployed." >&2
@@ -1633,7 +1647,7 @@ p94_projection_renewal
 # P89-PROJECTION-RENEWAL-END
 ```
 
-Expected result: the registry and the job identity deploy first, the image builds from the sync package (`sync/` and `resolver/src/entitlement.mjs`), and the job is pinned to the digest the registry reports; it runs every 30 minutes on the renewal subnet. The block prints the job and action group ids and the tenant administrator's Graph grant. Each alert address receives a confirmation email from Azure Monitor and receives no alerts until it is confirmed ([U116](UNKNOWNS.md#p94-research-before-implementation)). Admission needs three successful runs, about 60-90 minutes after the grant takes effect. ACR task runs are paused for subscriptions on Azure free credits ([U114](UNKNOWNS.md#p94-research-before-implementation)); there, `docker build` and `docker push` from the package directory replace `az acr build`. This mirrors `scripts/Deploy-ClaudeProjectionRenewal.ps1:155-232`, `infra/projection-registry.bicep` and `infra/projection-renewal.bicep` ([ADR-0049](adr/0049-projection-renewal-deployment.md)).
+Expected result: the registry and the job identity deploy first, the image builds from the sync package (`sync/` and `resolver/src/entitlement.mjs`), and the job is pinned to the digest the registry reports; it runs every 30 minutes on the renewal subnet. The tier group ids come from the group receipts that section 5 records, and one group for both tiers is refused. A resource group that still holds P86's renewal job, environment or `graph-read-failed` alert is refused before any deployment; [the projection runbook](SECURE-PROJECTION.md#scheduled-renewal-job-and-admission-p86-p94) lists the delete commands. The block prints the job and action group ids and the tenant administrator's Graph grant. Each alert address receives a confirmation email from Azure Monitor and receives no alerts until it is confirmed ([U116](UNKNOWNS.md#p94-research-before-implementation)). Admission needs three successful runs, about 60-90 minutes after the grant takes effect. ACR task runs are paused for subscriptions on Azure free credits ([U114](UNKNOWNS.md#p94-research-before-implementation)); there, `docker build` and `docker push` from the package directory replace `az acr build`. This mirrors `scripts/Deploy-ClaudeProjectionRenewal.ps1:161-254`, `infra/projection-registry.bicep` and `infra/projection-renewal.bicep` ([ADR-0049](adr/0049-projection-renewal-deployment.md)).
 
 Projection switch status.
 

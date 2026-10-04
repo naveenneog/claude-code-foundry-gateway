@@ -35,7 +35,7 @@
 import { readFileSync } from 'node:fs';
 import { CosmosClient } from '@azure/cosmos';
 import { DefaultAzureCredential } from '@azure/identity';
-import { mergeMembership, planChanges, toDocument, toStatusDocument, validateSnapshot, compareWithGateway, createReconciliation } from './plan.mjs';
+import { mergeMembership, planChanges, oldestRetainedExpiry, toDocument, toStatusDocument, validateSnapshot, compareWithGateway, createReconciliation } from './plan.mjs';
 import { resolveGroupId, getTransitiveMembers } from './graph.mjs';
 import { readGatewayUnits, sortUnitsByDepth } from './business-units.mjs';
 import { RENEWAL_SUCCEEDED, RENEWAL_FAILED } from './events.mjs';
@@ -124,7 +124,19 @@ async function resolveMembership() {
   await step('graph', async () => {
     for (const { id: unit, group } of units) {
       const id = await resolveGroupId(group, token);
-      businessUnits.push({ id: unit, members: id ? await getTransitiveMembers(id, token) : [] });
+      let members = null;
+      if (id) {
+        try {
+          members = await getTransitiveMembers(id, token);
+        } catch (error) {
+          // A deleted unit group is an empty unit, as Get-GroupMemberOids in
+          // scripts/ClaudeGraphMembership.ps1 treats it, so one stale registry entry cannot stop every
+          // renewal. Tier groups above stay strict.
+          if (error?.status !== 404) throw error;
+        }
+      }
+      if (!members) log(`warning: unit '${unit}' group '${group}' was not found - treating it as empty`);
+      businessUnits.push({ id: unit, members: members ?? [] });
     }
   });
   const { records, unitWithoutTier } = mergeMembership({ tiers, businessUnits });
@@ -194,11 +206,7 @@ const writeCounts = { written: writes.ok, writeFailed: writes.failed, deleted: d
 Object.assign(summary, { ok: !(writes.failed || deletes.failed), expired, ...writeCounts, mappingVersion, ...reconciliation, seconds: (Date.now() - started) / 1000 });
 summary.ok = summary.ok && !expired;
 if (summary.ok) {
-  const retainedExpiries = [
-    ...plan.toWrite.map(() => reconciliation.expiresAt),
-    ...plan.keptOrphans.map((oid) => existing.get(oid)?.expiresAt).filter(Number.isFinite),
-  ];
-  const oldestExpiresAt = Math.min(...retainedExpiries);
+  const oldestExpiresAt = oldestRetainedExpiry(plan, existing, reconciliation.expiresAt);
   const memberCounts = records.reduce((counts, r) => ({ ...counts, [r.tier]: (counts[r.tier] ?? 0) + 1 }), {});
   const status = toStatusDocument({
     tenantId,
@@ -213,7 +221,7 @@ if (summary.ok) {
     commandOverride: Boolean(process.env.PROJECTION_COMMAND_OVERRIDE),
     memberCounts,
     writeCounts,
-    oldestExpiresAt: Number.isFinite(oldestExpiresAt) ? oldestExpiresAt : reconciliation.expiresAt,
+    oldestExpiresAt,
     reconciliation,
     startedAt: new Date(started).toISOString(),
     finishedAt: new Date().toISOString(),

@@ -39,6 +39,9 @@ case "$args" in
   "deployment group show -g rg -n projection-network-prefix "*)
     if [ "${P94_SCENARIO:-}" = "no-subnet" ]; then printf '\n'; else printf '/subscriptions/sub/resourceGroups/rg/providers/Microsoft.Network/virtualNetworks/vnet-prefix/subnets/renewal\n'; fi ;;
   "deployment group show -g rg -n projection-prefix "*) printf 'cosmos-prefix\n' ;;
+  "resource list -g rg "*)
+    printf 'cosmos-prefix\nacrprefix\nid-projection-renewal-prefix\nag-projection-renewal-prefix\nsqr-projection-prefix-no-success-45m\n'
+    if [ "${P94_SCENARIO:-}" = "p86-leftovers" ]; then printf 'caj-projection-renewal-prefix\ncae-projection-prefix\n'; fi ;;
   "monitor log-analytics workspace list "*)
     printf '/subscriptions/sub/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/law\n'
     if [ "${P94_SCENARIO:-}" = "two-workspaces" ]; then printf '/subscriptions/sub/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/law2\n'; fi ;;
@@ -53,7 +56,9 @@ case "$args" in
   "acr build "*)
     printf 'build %s\n' "$*" >> "$P94_WRITES"
     context="${@: -3:1}"
-    (cd "$context" && find . -type f | sed 's|^\./||' | sort) > "$P94_STATE/package.txt" ;;
+    printf '%s\n' "$context" > "$P94_STATE/package-dir.txt"
+    (cd "$context" && find . -type f | sed 's|^\./||' | sort) > "$P94_STATE/package.txt"
+    if [ "${P94_SCENARIO:-}" = "build-fails" ]; then echo "ERROR: (TasksOperationsNotAllowed) ACR Tasks requests are not permitted." >&2; exit 1; fi ;;
   "acr manifest show-metadata "*)
     if [ "${P94_SCENARIO:-}" = "bad-digest" ]; then printf 'latest\n'; else printf '%s\n' "$P94_DIGEST"; fi ;;
   "deployment group show -g rg -n projection-renewal-prefix "*) printf '{"job":"/subscriptions/sub/resourceGroups/rg/providers/Microsoft.App/jobs/caj-renew-x","actionGroup":"ag"}\n' ;;
@@ -68,6 +73,14 @@ function Invoke-RenewalBlock([string]$Scenario, [hashtable]$Environment = @{}) {
         [IO.File]::WriteAllText((Join-Path $dir $file), "stand-in`n")
     }
     [IO.File]::WriteAllText((Join-Path $dir 'bin\az'), $stub.Replace("`r`n", "`n"))
+    # The group block in section 5 records the tier groups; the renewal block reads those receipts.
+    if ($Scenario -ne 'no-group-receipts') {
+        New-Item -ItemType Directory -Force -Path (Join-Path $dir '.p89-receipts') | Out-Null
+        $premiumId = if ($Scenario -eq 'same-groups') { '10000000-0000-4000-8000-000000000001' } else { '10000000-0000-4000-8000-000000000002' }
+        foreach ($group in @(@('standard', '10000000-0000-4000-8000-000000000001', 'claude-code-standard'), @('premium', $premiumId, 'claude-code-premium'))) {
+            [IO.File]::WriteAllText((Join-Path $dir ".p89-receipts\group-$($group[0]).json"), (@{ group = @{ created = $false; id = $group[1]; displayName = $group[2]; createdAt = '' } } | ConvertTo-Json -Compress))
+        }
+    }
     $exports = @{ GATEWAY_RG = 'rg'; APIM_NAME = 'apim'; NAME_PREFIX = 'prefix'; LOCATION = 'eastus2'; TENANT_ID = '00000000-0000-4000-8000-000000000094'
         STANDARD_GROUP = 'claude-code-standard'; PREMIUM_GROUP = 'claude-code-premium'; ALERT_EMAIL = 'ops@example.invalid'; IMAGE_TAG = 'sync-test' }
     foreach ($key in $Environment.Keys) { $exports[$key] = $Environment[$key] }
@@ -76,12 +89,15 @@ function Invoke-RenewalBlock([string]$Scenario, [hashtable]$Environment = @{}) {
         "export P94_CALLS=`"$(ConvertTo-BashPath (Join-Path $dir 'calls.log'))`"", "export P94_WRITES=`"$(ConvertTo-BashPath (Join-Path $dir 'writes.log'))`"",
         "touch `"`$P94_CALLS`" `"`$P94_WRITES`"", "cd `"$(ConvertTo-BashPath $dir)`"")
     foreach ($key in $exports.Keys) { $lines += "export $key='$($exports[$key])'" }
-    [IO.File]::WriteAllText((Join-Path $dir 'run.sh'), (($lines + $block) -join "`n") + "`n")
+    # After the block: is the directory the build read from still there? The block's status is kept.
+    $leftCheck = @('p94_status=$?', 'if [ -s "$P94_STATE/package-dir.txt" ] && [ -d "$(cat "$P94_STATE/package-dir.txt")" ]; then echo "P94-PACKAGE-DIR-LEFT"; fi', 'exit "$p94_status"')
+    [IO.File]::WriteAllText((Join-Path $dir 'run.sh'), (($lines + $block + $leftCheck) -join "`n") + "`n")
     $output = & $bash (ConvertTo-BashPath (Join-Path $dir 'run.sh')) 2>&1 | Out-String
     $exit = $LASTEXITCODE
     $read = { param($name) $path = Join-Path $dir $name; if (Test-Path -LiteralPath $path) { [IO.File]::ReadAllText($path) } else { '' } }
     $result = [pscustomobject]@{
         Exit = $exit; Output = $output; Calls = (& $read 'calls.log'); Writes = (& $read 'writes.log'); Package = (& $read 'package.txt')
+        PackageDir = (& $read 'package-dir.txt').Trim(); PackageLeft = ($output -match 'P94-PACKAGE-DIR-LEFT')
         Params = $(if (Test-Path -LiteralPath (Join-Path $dir 'renewal-params.captured.json')) { Get-Content -LiteralPath (Join-Path $dir 'renewal-params.captured.json') -Raw | ConvertFrom-Json -AsHashtable } else { $null })
     }
     Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
@@ -104,6 +120,7 @@ $package = @($healthy.Package -split "`n" | Where-Object { $_ })
 foreach ($file in 'sync/Dockerfile', 'sync/package-lock.json', 'sync/src/apply-projection.mjs', 'resolver/src/entitlement.mjs') {
     Assert "the image builds from a package holding $file" ($package -contains $file) ($package -join ', ')
 }
+Assert 'the package directory is removed after the build' ($healthy.PackageDir -and -not $healthy.PackageLeft) "package dir '$($healthy.PackageDir)' left: $($healthy.PackageLeft)"
 $templateText = [IO.File]::ReadAllText((Join-Path $root 'infra\projection-renewal.bicep'))
 $declared = @{}
 foreach ($m in [regex]::Matches($templateText, '(?m)^param\s+([A-Za-z][A-Za-z0-9]*)\s+\w+(\s*=)?')) { $declared[$m.Groups[1].Value] = $m.Groups[2].Success }
@@ -117,20 +134,26 @@ Assert 'the job is pinned to the digest the registry reported' ((& $value 'syncI
 Assert 'the job gets the tier group ids, the gateway and the alert address' ((& $value 'standardGroupId') -eq '10000000-0000-4000-8000-000000000001' -and (& $value 'premiumGroupId') -eq '10000000-0000-4000-8000-000000000002' -and
     (& $value 'gatewayResourceId') -match 'Microsoft\.ApiManagement/service/apim$' -and ((& $value 'actionGroupEmailReceivers') -join ',') -eq 'ops@example.invalid')
 Assert 'the tenant administrator step names the job identity' ($healthy.Output -match 'Grant-ClaudeProjectionRenewalGraphAccess\.ps1 -PrincipalId 40000000-0000-4000-8000-000000000002')
+Assert 'the tier group ids come from the group receipts, with no directory lookup' ($healthy.Calls -notmatch '(?m)^ad group ') (($healthy.Calls -split "`n" | Where-Object { $_ -match '^ad ' }) -join ' | ')
 
 foreach ($case in @(
         @{ Name = 'an alert address with a command separator'; Scenario = 'healthy'; Environment = @{ ALERT_EMAIL = 'ops@example.invalid&calc' }; Expect = 'ALERT_EMAIL' }
         @{ Name = 'the alert address placeholder'; Scenario = 'healthy'; Environment = @{ ALERT_EMAIL = '<alert-email>' }; Expect = 'ALERT_EMAIL' }
         @{ Name = 'a network without the renewal subnet'; Scenario = 'no-subnet'; Environment = @{}; Expect = 'renewal subnet' }
         @{ Name = 'two workspaces in the gateway resource group'; Scenario = 'two-workspaces'; Environment = @{}; Expect = 'WORKSPACE_ID' }
+        @{ Name = 'P86 renewal resources that the new names would leave behind'; Scenario = 'p86-leftovers'; Environment = @{}; Expect = 'caj-projection-renewal-prefix cae-projection-prefix' }
+        @{ Name = 'no group receipts from section 5'; Scenario = 'no-group-receipts'; Environment = @{}; Expect = 'group receipt' }
+        @{ Name = 'one group for both tiers'; Scenario = 'same-groups'; Environment = @{}; Expect = 'same group' }
     )) {
     $refused = Invoke-RenewalBlock $case.Scenario $case.Environment
     Assert "refused before any deployment: $($case.Name)" ($refused.Exit -ne 0 -and $refused.Output -match "Refused: .*$([regex]::Escape($case.Expect))" -and -not $refused.Writes.Trim()) "$($refused.Output.Trim()) | writes: $($refused.Writes.Trim())"
 }
 $badDigest = Invoke-RenewalBlock 'bad-digest'
 Assert 'a digest that is not sha256 stops before the job' ($badDigest.Exit -ne 0 -and $badDigest.Output -match 'not a sha256 digest' -and $badDigest.Writes -notmatch 'projection-renewal-prefix') $badDigest.Output.Trim()
+$buildFails = Invoke-RenewalBlock 'build-fails'
+Assert 'a refused build stops before the job and removes the package directory' ($buildFails.Exit -ne 0 -and $buildFails.Writes -match '(?m)^build ' -and $buildFails.Writes -notmatch 'projection-renewal-prefix' -and $buildFails.PackageDir -and -not $buildFails.PackageLeft) "$($buildFails.Output.Trim()) | left: $($buildFails.PackageLeft)"
 $noPremium = Invoke-RenewalBlock 'healthy' @{ PREMIUM_GROUP = 'none' }
-Assert 'PREMIUM_GROUP=none deploys without a premium lookup' ($noPremium.Exit -eq 0 -and $noPremium.Params.parameters.premiumGroupId.value -eq 'none' -and $noPremium.Calls -notmatch 'ad group show --group none') $noPremium.Output.Trim()
+Assert 'PREMIUM_GROUP=none deploys without the premium receipt' ($noPremium.Exit -eq 0 -and $noPremium.Params.parameters.premiumGroupId.value -eq 'none') $noPremium.Output.Trim()
 
 Write-Host ''
 if ($fail) { Write-Host "$fail assertion(s) failed." -ForegroundColor Red; exit 1 }
