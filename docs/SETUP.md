@@ -824,8 +824,8 @@ dollar budget is enforced (`scripts/ClaudeInstallSteps.ps1:175-227`). Each unit'
 its exact name, from the answers file or at the prompt: one group of that name is reused, none is created,
 and two of that name or a failed read stop the answers' step with the resume command, or at the prompt skip
 that unit with a remedy (`scripts/ClaudeInstallSteps.ps1:159-173`, `:195-197`; `Install-ClaudeGateway.ps1:1795-1800`).
-At the prompt, a group name with a single quote, a comma or a colon is refused with the schema's message and
-remedy before any Azure CLI call, and the prompt asks for the next unit (`Install-ClaudeGateway.ps1:1783-1791`).
+At the prompt, a group name with a single quote, a comma, a colon or one of `& | < > ^ " % ( )`, which `cmd.exe`
+re-reads in an Azure CLI argument on Windows, is refused with the schema's message and remedy before any Azure CLI call, and the prompt asks for the next unit (`Install-ClaudeGateway.ps1:1783-1791`).
 A team names its unit as `parent`, and an `Allowance` unit takes `percent`:
 
 ```json

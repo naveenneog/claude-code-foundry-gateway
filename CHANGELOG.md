@@ -52,7 +52,7 @@ exact streaming cache-creation detail remains **U13**.
   `Install-ClaudeGateway.ps1` applies business units from the answers file, units before teams, through
   `scripts/Set-ClaudeBusinessUnit.ps1`, and prints the `scripts/Sync-ClaudeUsdBudgets.ps1` command when
   a dollar budget is enforced; the answers and the installer's prompt find each unit's Entra group by its
-  exact name, and the prompt refuses a group name with `'`, `,` or `:` before any Azure CLI call. The
+  exact name, and the prompt refuses a group name with `'`, `,`, `:` or a `cmd.exe` metacharacter before any Azure CLI call. The
   run's reuse path and the preflight read an existing API Management
   instance through one function. The guided flow runs the installer's preflight for an unattended plan,
   binds the result into the plan fingerprint and applies a plan only when that preflight passes. The bash

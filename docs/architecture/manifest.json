@@ -458,7 +458,7 @@
       "id": "company-address",
       "source": "docs/architecture/15-company-address.json",
       "inputs": {
-        "Install-ClaudeGateway.ps1": "e32b16a71584e8782229dd9b0c575a73abf677f1564e258b4c06699ff3fe647c",
+        "Install-ClaudeGateway.ps1": "fbc1ad44ddc5d7f3a318b4d8050f410ebb28a3f901dc89d2a9b65457f6de6057",
         "Start-ClaudeGateway.ps1": "22acc30a8feed7b0101dd98bb90fac93abb605aef77bf800f585e881939d8479",
         "docs/architecture/15-company-address.json": "83c08d15d71fcf6a002d004090b67ea77c858b70efa3718e8ff11aebae276981",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
@@ -524,7 +524,7 @@
       "id": "install-checkpoint",
       "source": "docs/architecture/16-install-checkpoint.json",
       "inputs": {
-        "Install-ClaudeGateway.ps1": "e32b16a71584e8782229dd9b0c575a73abf677f1564e258b4c06699ff3fe647c",
+        "Install-ClaudeGateway.ps1": "fbc1ad44ddc5d7f3a318b4d8050f410ebb28a3f901dc89d2a9b65457f6de6057",
         "docs/architecture/16-install-checkpoint.json": "5fa66b3f03fd6a19828e5533b8e3f557700062c7cb97d6a18e7066f3a1110c64",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
@@ -551,7 +551,7 @@
       "id": "lean-installer-phase0",
       "source": "docs/architecture/17-lean-installer-phase0.json",
       "inputs": {
-        "Install-ClaudeGateway.ps1": "e32b16a71584e8782229dd9b0c575a73abf677f1564e258b4c06699ff3fe647c",
+        "Install-ClaudeGateway.ps1": "fbc1ad44ddc5d7f3a318b4d8050f410ebb28a3f901dc89d2a9b65457f6de6057",
         "Start-ClaudeGateway.ps1": "22acc30a8feed7b0101dd98bb90fac93abb605aef77bf800f585e881939d8479",
         "docs/architecture/17-lean-installer-phase0.json": "667eda544454e1742da2ba4ba6899bddfe2ed9768c3851d239816155b4f789f4",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
@@ -563,7 +563,7 @@
         "scripts/ClaudeInstallResume.ps1": "fb6eb9155e8fecaaca2c2afb5c4c681871a989708ed2f205c132ecd8972b2cf6",
         "scripts/ClaudeInstallSteps.ps1": "94f83378feb5102f2c32de40e4807b0c94d49ef365e87da959eb0422b4f3277b",
         "scripts/ClaudeInstallerAnswers.ps1": "b0350cf38059f20690b04ee1635f100d225a79243d5e4af84f3bbec04189b404",
-        "scripts/ClaudeInstallerPreflight.ps1": "489226bc55dea1eaa32458a0b84e5c97778e7189ccc6b4ed296d33f639855d97",
+        "scripts/ClaudeInstallerPreflight.ps1": "86ce45ae822b569dfcbdd74f5588ebdcdf1d92ca45079ee5e59e92c0b6729d7a",
         "scripts/Set-ClaudeBusinessUnit.ps1": "c6f2cc8a385365a5b709ec4c58b109dc3de06a84bace5934d51ed0f309098f49",
         "scripts/Sync-ClaudeUsdBudgets.ps1": "f0d5c3d6d0fb2da6b06b75c38cfecad9773bdadb97803027645910696a1d3d5c",
         "scripts/install-answers.jq": "eccf3fa077f88106fb90f9af4f0e99cd5a65fee972a3b634cb5d9def689ff35e",
