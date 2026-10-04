@@ -91,6 +91,16 @@ premise does not carry over.
 | P88 | Merged (`558fb7e`) with the owner's approval on 2026-10-02, after council and the packet gate at `d3d28d8` | AUM pytest results do not depend on the date they run. Tests pin the AUM UTC clock to the September fixture month with advancing elapsed time, cover all `claude_finops` `datetime.now(` readers and keep current-month write tests deterministic without product changes. |
 | P89 | Merged (`152b4a3`) with the owner's approval on 2026-10-02, together with P90, after council and the packet gate at `1284388` | Azure CLI command guide for every customer setup step the installer and in-scope administration scripts perform, with a guard that checks `az --help`, named-value parity, Bicep parameters and relative links. |
 
+### Projection switch-over, 2026-10-04
+
+P86 merged the renewal job and evidence-gated admission, but nothing deploys the job and a
+deployment by hand fails ([P94 status](status/P94.md#p94-the-p86-renewal-job-deploys-and-renews-2026-10-04)).
+
+| Packet | State | Deliverable |
+|---|---|---|
+| P94 | In progress on `p94-projection-deployable`; merges only with the owner's approval | The P86 renewal job deploys and renews: one sync package for the image and the runner (the image and runner currently miss `resolver/src/entitlement.mjs`), a renewal subnet in the projection network, a registry template deployed before the image build, the job's client id, tier group ids and per-run business units, working log routing and alerts, `scripts/Deploy-ClaudeProjectionRenewal.ps1`, an offline renewal simulation that reaches admission, and the guide and its guard ([ADR-0049](adr/0049-projection-renewal-deployment.md)). |
+| P95 | Proposed; starts after the P94 gate | The switch-over runs end to end: a switch never repopulates; one switch function for the deployer, installer and guided flow (drift check, compare, admission, backup, one named-value write); the guided flow reads the renewal receipt; admission requires an email receiver on the action group; P84 text replaced; an owner-attended live runbook. |
+
 M0 is shipped. The table below is the queue; the checklist under it is what the gate tracks.
 
 | Packet | Milestone | Deliverable | Depends on |
@@ -498,6 +508,18 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       names what it does, the commands, verification, expected result and source
       script lines; the guard validates documented `az` commands and flags against
       help, named-value parity, Bicep parameters and relative links.
+- [ ] P94 The P86 renewal job deploys and renews — acceptance: one staged sync package whose import
+      closure resolves outside the repository feeds the image and the runner; the projection network
+      has a `/27` renewal subnet delegated to `Microsoft.App/environments`; a registry template
+      precedes the image build and the renewal template; the job carries its client id, tier group
+      ids and gateway id and reads business units every run; logs reach the gateway workspace and
+      each alert returns rows only when unhealthy; `Deploy-ClaudeProjectionRenewal.ps1` runs the
+      phases in order with tests; three simulated runs pass admission offline
+      ([P94 status](status/P94.md#p94-the-p86-renewal-job-deploys-and-renews-2026-10-04), U107-U117)
+- [ ] P95 The projection switch-over runs end to end — acceptance: a switch rerun deploys and
+      applies nothing before admission; the deployer, installer and guided flow share one switch
+      function that compares before admission; the guided flow reads the renewal receipt; admission
+      requires an email receiver; P84 text is replaced; the live runbook is written for the owner
 - [x] P72 permutation tests of the guided flow and the installer — acceptance: every combination of
       action (Setup, Change foundation, Guide, Status), record state (none, recorded and matching,
       recorded with another gateway URL, recorded but missing, not readable), mode (attended,
