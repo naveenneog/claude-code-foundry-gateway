@@ -502,20 +502,44 @@ test('U1 fix Stop run is disabled after the run ends even when the stop response
 });
 
 test('U1 fix run-starting buttons are disabled while a run is active', async () => {
-  const app = await start({ env: { P93_INSTALLER_UI_STUB_GRANDCHILD_HEARTBEAT: join(tmpdir(), `g4-active-${process.pid}-${Date.now()}.txt`) } });
+  const app = await start({ env: { P93_INSTALLER_UI_STUB_FAIL_STEP: 'gateway-deployment' } });
   const { browser, page, pageErrors } = await openPage(app);
   try {
     await fillValid(page);
     await page.getByRole('button', { name: 'List steps' }).click();
-    await page.locator('#step-list input[value="resource-group"]').check();
+    await page.locator('#step-list input[value="gateway-deployment"]').check();
     await page.getByRole('button', { name: 'Run preflight' }).click();
     await page.getByText(/Passing preflight/).waitFor();
     await page.getByRole('button', { name: 'Run selected steps' }).click();
-    await page.waitForFunction(() => document.querySelector('#run-output')?.textContent.includes('started'));
+    await page.getByText(/summary:/).waitFor();
+    assert.equal(await page.locator('#rerun').isEnabled(), true);
+    let release;
+    const releasePromise = new Promise((resolve) => { release = resolve; });
+    await page.route('**/api/run/stream', async (route) => {
+      await releasePromise;
+      await route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"summary","exitCode":0,"failedStepId":"","resumeCommand":"","state":"exited","message":""}\n' });
+    });
+    await page.getByRole('button', { name: 'Re-run failed step' }).click();
+    await page.locator('#rerun-status').getByText(/Re-running failed step/).waitFor();
     assert.equal(await page.locator('#run').isDisabled(), true);
     assert.equal(await page.locator('#full-run').isDisabled(), true);
-    assert.equal(await page.locator('#rerun').isDisabled(), true);
     assert.equal(await page.locator('#stop-run').isEnabled(), true);
+    release();
+    await page.locator('#rerun-status').getByText(/Re-run finished/).waitFor();
+    await page.unroute('**/api/run/stream');
+    let releaseSelected;
+    const selectedPromise = new Promise((resolve) => { releaseSelected = resolve; });
+    await page.route('**/api/run/stream', async (route) => {
+      await selectedPromise;
+      await route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"summary","exitCode":0,"failedStepId":"","resumeCommand":"","state":"exited","message":""}\n' });
+    });
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await page.locator('#run-status').getByText(/Running selected steps/).waitFor();
+    assert.equal(await page.locator('#rerun').isDisabled(), true);
+    assert.equal(await page.locator('#full-run').isDisabled(), true);
+    assert.equal(await page.locator('#stop-run').isEnabled(), true);
+    releaseSelected();
+    await page.locator('#run-status').getByText(/Run finished/).waitFor();
     await assertClean(page, pageErrors);
   } finally {
     await browser.close();
