@@ -55,6 +55,12 @@ if (args.includes('-ListSteps')) {
 const answersPath = argValue('-AnswersPath');
 const answers = answersPath ? JSON.parse(readFileSync(answersPath, 'utf8')) : {};
 if (args.includes('-Preflight')) {
+  if (process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_HANG) {
+    const heartbeat = process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_HANG;
+    const child = spawn(process.execPath, ['-e', `const {appendFileSync}=require('fs'); setInterval(()=>appendFileSync(process.argv[1], Date.now()+"\\n"),100);`, heartbeat], { stdio: 'ignore', detached: false });
+    appendFileSync(`${heartbeat}.pid`, `${process.pid}\n${child.pid}\n`);
+    await new Promise(() => {});
+  }
   if (process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_TEXT) {
     console.log(`preflight could not parse password=super-secret at ${answersPath}`);
     process.exit(2);

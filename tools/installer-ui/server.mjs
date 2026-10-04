@@ -107,12 +107,12 @@ async function runInstaller(kind, args, options, runOptions = {}) {
   child.stderr.on('data', (chunk) => { stderr += chunk.toString('utf8'); });
   const timeoutMs = Number(runOptions.timeoutMs || 0);
   let timer;
+  let timedOut = false;
   const code = await new Promise((resolveCode, reject) => {
     if (timeoutMs > 0) {
       timer = setTimeout(() => {
-        const error = new Error('installer child timed out');
-        error.status = 504;
-        void killProcessTree(child).finally(() => reject(error));
+        timedOut = true;
+        void killProcessTree(child);
       }, timeoutMs);
       timer.unref?.();
     }
@@ -120,6 +120,11 @@ async function runInstaller(kind, args, options, runOptions = {}) {
     child.on('close', resolveCode);
   });
   if (timer) clearTimeout(timer);
+  if (timedOut) {
+    const error = new Error(`${runOptions.readName || 'installer read'} timed out after ${timeoutMs} ms`);
+    error.status = 504;
+    throw error;
+  }
   return { code, stdout: await redactText(stdout), stderr: await redactText(stderr) };
 }
 
@@ -131,12 +136,12 @@ async function runPowerShell(script, args, options, runOptions = {}) {
   child.stderr.on('data', (chunk) => { stderr += chunk.toString('utf8'); });
   const timeoutMs = Number(runOptions.timeoutMs || 0);
   let timer;
+  let timedOut = false;
   const code = await new Promise((resolveCode, reject) => {
     if (timeoutMs > 0) {
       timer = setTimeout(() => {
-        const error = new Error('read-only installer child timed out');
-        error.status = 504;
-        void killProcessTree(child).finally(() => reject(error));
+        timedOut = true;
+        void killProcessTree(child);
       }, timeoutMs);
       timer.unref?.();
     }
@@ -144,6 +149,11 @@ async function runPowerShell(script, args, options, runOptions = {}) {
     child.on('close', resolveCode);
   });
   if (timer) clearTimeout(timer);
+  if (timedOut) {
+    const error = new Error(`${runOptions.readName || 'read-only installer child'} timed out after ${timeoutMs} ms`);
+    error.status = 504;
+    throw error;
+  }
   return {
     code,
     stdout: runOptions.redactStdout === false ? stdout : await redactText(stdout),
@@ -264,8 +274,8 @@ async function runInstallerStreaming(kind, args, options, onEvent, progressPath,
   return code;
 }
 
-async function listSteps(options) {
-  const result = await runInstaller('powershell', ['-ListSteps', '-Json'], options);
+async function listSteps(options, timeoutMs = 60_000) {
+  const result = await runInstaller('powershell', ['-ListSteps', '-Json'], options, { timeoutMs, readName: 'step list' });
   if (result.code !== 0) throw new Error(`step list failed: ${result.stderr || result.stdout}`);
   return validateStepList(JSON.parse(result.stdout));
 }
@@ -312,7 +322,7 @@ export async function createInstallerUiServer(options = {}) {
   let inFlight = 0;
   options._children = new Set();
   const idleMs = Number(options.idleMs || defaultIdleMs);
-  const readOnlyTimeoutMs = Number(options.readOnlyTimeoutMs || 30_000);
+  const timeoutFor = (name) => Number(options.readOnlyTimeoutMs || ({ steps: 60_000, identity: 120_000, prefill: 120_000, preflight: 600_000, plan: 120_000 }[name]));
   const extraHosts = options.allowedHosts || [];
   const log = options.log || (() => {});
 
@@ -324,7 +334,7 @@ export async function createInstallerUiServer(options = {}) {
   };
 
   const stopServer = async (reason) => {
-    if (activeRun?.state === 'running' || inFlight > 0 || stopping) return;
+    if ((activeRun?.state === 'running' || activeRun?.state === 'stopping') || inFlight > 0 || stopping) return;
     stopping = true;
     await cleanup();
     log(`Installer UI stopped: ${reason}`);
@@ -337,7 +347,7 @@ export async function createInstallerUiServer(options = {}) {
 
   const armIdle = () => {
     if (idleTimer) clearTimeout(idleTimer);
-    if (activeRun?.state === 'running' || inFlight > 0) return;
+    if ((activeRun?.state === 'running' || activeRun?.state === 'stopping') || inFlight > 0) return;
     idleTimer = setTimeout(() => { void stopServer('idle timeout'); }, idleMs);
     idleTimer.unref?.();
   };
@@ -347,6 +357,15 @@ export async function createInstallerUiServer(options = {}) {
     if (idleTimer) clearTimeout(idleTimer);
     try { return await fn(); }
     finally { inFlight--; armIdle(); }
+  };
+
+  const assertFetchMetadataForChildGet = (request) => {
+    const fetchSite = request.headers['sec-fetch-site'];
+    if (fetchSite && fetchSite !== 'same-origin' && fetchSite !== 'none') {
+      const error = new Error('same-origin request required');
+      error.status = 403;
+      throw error;
+    }
   };
 
   const publicRun = (run, includeTail = false) => run && ({
@@ -495,9 +514,13 @@ export async function createInstallerUiServer(options = {}) {
       if (req.method === 'GET' && url.pathname === '/ui-model.js') return sendText(res, 200, await readFile(uiModelScript, 'utf8'), 'text/javascript; charset=utf-8', setCookie);
       if (req.method === 'GET' && url.pathname === '/installer-ui.css') return sendText(res, 200, await readFile(uiCss, 'utf8'), 'text/css; charset=utf-8', setCookie);
       if (req.method === 'GET' && url.pathname === '/api/schema') return send(res, 200, await loadSchema(), setCookie);
-      if (req.method === 'GET' && url.pathname === '/api/steps') return send(res, 200, await withJob(() => listSteps(options)), setCookie);
+      if (req.method === 'GET' && url.pathname === '/api/steps') {
+        assertFetchMetadataForChildGet(req);
+        return send(res, 200, await withJob(() => listSteps(options, timeoutFor('steps'))), setCookie);
+      }
       if (req.method === 'GET' && url.pathname === '/api/identity') {
-        const result = await withJob(() => runPowerShell(identityScript, [], options, { timeoutMs: readOnlyTimeoutMs }));
+        assertFetchMetadataForChildGet(req);
+        const result = await withJob(() => runPowerShell(identityScript, [], options, { timeoutMs: timeoutFor('identity'), readName: 'identity' }));
         return send(res, 200, JSON.parse(result.stdout), setCookie);
       }
       if (req.method === 'GET' && url.pathname === '/api/run/status') return send(res, 200, { schemaVersion: 1, ...(publicRun(activeRun || lastRun) || {}) }, setCookie);
@@ -511,7 +534,7 @@ export async function createInstallerUiServer(options = {}) {
         assertSameOrigin(req);
         const body = await readJsonBody(req);
         const args = prefillArguments(body);
-        const result = await withJob(() => runPowerShell(prefillScript, args, options, { redactStdout: false, timeoutMs: readOnlyTimeoutMs }));
+        const result = await withJob(() => runPowerShell(prefillScript, args, options, { redactStdout: false, timeoutMs: timeoutFor('prefill'), readName: 'prefill' }));
         if (!result.stdout.trim()) {
           log(`Prefill returned no JSON (exit ${result.code}): ${scrubLocalPaths(result.stderr)}`);
           return send(res, 500, { schemaVersion: 1, error: 'The prefill read returned no result. The terminal that started the installer UI shows the details.' }, setCookie);
@@ -529,7 +552,7 @@ export async function createInstallerUiServer(options = {}) {
         const body = await readJsonBody(req);
         return send(res, 200, await withJob(() => withRunDirectory(async (dir) => {
           const answers = await writeAnswers(dir, body.answers || {});
-          const result = await runPowerShell(planScript, ['-AnswersPath', answers], options, { timeoutMs: readOnlyTimeoutMs });
+          const result = await runPowerShell(planScript, ['-AnswersPath', answers], options, { timeoutMs: timeoutFor('plan'), readName: 'plan' });
           return JSON.parse(result.stdout);
         }, tempDirs)), setCookie);
       }
@@ -538,7 +561,7 @@ export async function createInstallerUiServer(options = {}) {
         const body = await readJsonBody(req);
         return send(res, 200, await withJob(() => withRunDirectory(async (dir) => {
           const answers = await writeAnswers(dir, body.answers || {});
-          const result = await runInstaller('powershell', ['-AnswersPath', answers, '-Preflight', '-Json'], options, { timeoutMs: readOnlyTimeoutMs });
+          const result = await runInstaller('powershell', ['-AnswersPath', answers, '-Preflight', '-Json'], options, { timeoutMs: timeoutFor('preflight'), readName: 'preflight' });
           let parsed;
           try { parsed = validatePreflight(JSON.parse(result.stdout)); } catch (error) {
             if (error.status === 502) throw error;
