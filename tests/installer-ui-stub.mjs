@@ -124,7 +124,17 @@ if (args.includes('-Yes')) {
   const stepsArg = argValue('-Steps');
   const steps = stepsArg ? stepsArg.split(',') : ['resource-group', 'gateway-deployment'];
   const progressPath = argValue('-ProgressPath');
-  const shouldFail = process.env.P93_INSTALLER_UI_STUB_FAIL_STEP || '';
+  let shouldFail = process.env.P93_INSTALLER_UI_STUB_FAIL_STEP || '';
+  const failOnce = process.env.P93_INSTALLER_UI_STUB_FAIL_STEP_ONCE || '';
+  if (failOnce) {
+    const counter = process.env.P93_INSTALLER_UI_STUB_FAIL_STEP_ONCE_COUNTER || `${log}.fail-once`;
+    let count = 0;
+    try { count = Number(readFileSync(counter, 'utf8')); } catch { count = 0; }
+    if (count === 0) {
+      shouldFail = failOnce;
+      writeFileSync(counter, '1');
+    }
+  }
   const delay = Number(process.env.P93_INSTALLER_UI_STUB_DELAY_MS || 0);
   if (process.env.P93_INSTALLER_UI_STUB_REAL_FAILURE === '1' && shouldFail) {
     const failure = `${stepTitle(shouldFail)}: failed: the deployment did not finish (capture stub)`;
