@@ -92,7 +92,7 @@ if (args.includes('-Preflight')) {
     answersSchemaVersion: 1,
     result: fail || !answers.SubscriptionId ? 'FAIL' : 'PASS',
     checks: [
-      { id: 'target.tenant', result: 'NOT-RUN', reason: 'not-signed-in', message: 'Azure CLI is not signed in', remedy: 'Run az login --use-device-code.', problems: [] },
+      { id: 'target.tenant', result: process.env.P93_INSTALLER_UI_STUB_SIGNED_IN === '1' ? 'PASS' : 'NOT-RUN', reason: process.env.P93_INSTALLER_UI_STUB_SIGNED_IN === '1' ? null : 'not-signed-in', message: process.env.P93_INSTALLER_UI_STUB_SIGNED_IN === '1' ? 'Azure CLI tenant matches the subscription' : 'Azure CLI is not signed in', remedy: process.env.P93_INSTALLER_UI_STUB_SIGNED_IN === '1' ? '' : 'Run az login --use-device-code.', problems: [] },
       { id: 'answers.schema', result: fail || !answers.SubscriptionId ? 'FAIL' : 'PASS', reason: null, message: fail || !answers.SubscriptionId ? 'SubscriptionId is required' : 'answers file is valid', remedy: 'Give SubscriptionId.', problems: fail || !answers.SubscriptionId ? [{ message: 'SubscriptionId is required', remedy: 'Give SubscriptionId.' }] : [] },
     ],
   }));
@@ -114,7 +114,7 @@ if (args.includes('-Yes')) {
     await new Promise(() => {});
   }
   if (process.env.P93_INSTALLER_UI_STUB_MULTIBYTE) {
-    const value = Buffer.from('split 😀 line\n');
+    const value = Buffer.from('split ðŸ˜€ line\n');
     process.stdout.write(value.subarray(0, 8));
     await new Promise((resolve) => setTimeout(resolve, 20));
     process.stdout.write(value.subarray(8));

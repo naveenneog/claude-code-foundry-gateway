@@ -22,7 +22,8 @@ const server = await createInstallerUiServer({
   idleMs: 60000,
   env: {
     PATH: `${scratch};${process.env.PATH}`,
-    P93_INSTALLER_UI_STUB_FAIL_STEP: 'gateway-deployment'
+    P93_INSTALLER_UI_STUB_FAIL_STEP: 'gateway-deployment',
+    P93_INSTALLER_UI_STUB_SIGNED_IN: '1'
   }
 });
 const address = await server.listenAsync('127.0.0.1');
@@ -30,17 +31,25 @@ const browser = await chromium.launch({ headless: true });
 try {
   const page = await browser.newPage({ viewport: { width: 1365, height: 900 }, deviceScaleFactor: 1, locale: 'en-US', timezoneId: 'UTC', reducedMotion: 'reduce' });
   await page.goto(`http://127.0.0.1:${address.port}/?token=${encodeURIComponent(server.token)}`);
+  async function assertCoherentTenant() {
+    const banner = await page.locator('#identity').textContent();
+    const tenantResult = await page.locator('tr', { hasText: 'target.tenant' }).locator('td').nth(1).textContent();
+    if (!/operator@example.invalid/.test(banner || '') || tenantResult !== 'PASS') throw new Error(`capture identity mismatch: ${banner} / ${tenantResult}`);
+  }
   await page.getByText('operator@example.invalid').waitFor();
   await page.getByLabel('Gateway resource group').fill('rg-capture');
   await page.getByLabel('Subscription').fill('00000000-0000-4000-8000-000000000093');
-  await page.screenshot({ path: resolve(out, 'installer-ui-overview.png'), fullPage: true });
-  await page.getByRole('button', { name: 'Run preflight' }).click();
-  await page.getByText('target.tenant').waitFor();
-  await page.screenshot({ path: resolve(out, 'installer-ui-preflight.png'), fullPage: true });
   await page.getByRole('button', { name: 'List steps' }).click();
   await page.getByLabel(/gateway-deployment/).check();
+  await page.getByRole('button', { name: 'Run preflight' }).click();
+  await page.getByText('target.tenant').waitFor();
+  await assertCoherentTenant();
+  await page.screenshot({ path: resolve(out, 'installer-ui-overview.png'), fullPage: true });
+  await assertCoherentTenant();
+  await page.screenshot({ path: resolve(out, 'installer-ui-preflight.png'), fullPage: true });
   await page.getByRole('button', { name: 'Run selected steps' }).click();
   await page.waitForFunction(() => document.querySelector('#run-output')?.textContent.includes('Resume:'));
+  await assertCoherentTenant();
   await page.screenshot({ path: resolve(out, 'installer-ui-run.png'), fullPage: true });
 } finally {
   await browser.close();
