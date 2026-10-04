@@ -637,6 +637,17 @@ export async function createInstallerUiServer(options = {}) {
   return server;
 }
 
+export async function shutdownInstallerUiServer(server, reason = 'interrupt') {
+  await server.cleanup();
+  server.closeAllConnections?.();
+  return new Promise((resolveShutdown) => {
+    server.close(() => {
+      server.emit('installer-ui-stopped', reason);
+      resolveShutdown(reason);
+    });
+  });
+}
+
 export async function main(argv = process.argv.slice(2)) {
   const hostIndex = argv.indexOf('--host');
   const portIndex = argv.indexOf('--port');
@@ -664,10 +675,9 @@ export async function main(argv = process.argv.slice(2)) {
   if (bindWarning) console.log(bindWarning);
   console.log('Cloud Shell ends a session after 20 minutes without interactive activity; keep the shell active before long waits.');
   process.on('SIGINT', async () => {
-    await server.cleanup();
+    await shutdownInstallerUiServer(server, 'interrupt');
     console.log('Installer UI stopped: interrupt');
-    server.closeAllConnections?.();
-    server.close(() => process.exit(130));
+    process.exit(130);
   });
 }
 
