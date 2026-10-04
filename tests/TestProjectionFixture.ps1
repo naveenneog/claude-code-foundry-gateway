@@ -24,6 +24,9 @@ function Reset-ProjectionFixture {
         PROJECTION_DATABASE = 'claude'
         PROJECTION_CONTAINER = 'entitlement'
         PROJECTION_MAX_AGE_SECONDS = '7200'
+        AZURE_CLIENT_ID = '00000000-0000-4000-8000-000000000088'
+        PROJECTION_STANDARD_GROUP_ID = $FixtureGroupId
+        PROJECTION_PREMIUM_GROUP_ID = 'none'
     }
     $container = @{
         name = 'reconciler'; image = ('example.invalid/projection@sha256:' + ('a' * 64))

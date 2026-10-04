@@ -101,6 +101,22 @@ function Assert-ClaudeProjectionJobDefinition {
             throw "Projection switch refused: the renewal job has dry-run or command override environment '$name'. Remedy: remove the override and wait for fresh evidence."
         }
     }
+    # The settings the job reads on every run (ADR-0049). Without them it cannot sign in, reads the
+    # wrong groups or drops business units, so its evidence would not describe the gateway.
+    $guid = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+    $redeploy = 'Remedy: redeploy the job with scripts/Deploy-ClaudeProjectionRenewal.ps1 and wait for fresh evidence.'
+    if ([string]$env['AZURE_CLIENT_ID'] -notmatch $guid) {
+        throw "Projection switch refused: the renewal job does not set AZURE_CLIENT_ID to its identity's client id, so it cannot sign in. $redeploy"
+    }
+    if ([string]$env['PROJECTION_STANDARD_GROUP_ID'] -notmatch $guid) {
+        throw "Projection switch refused: the renewal job does not set PROJECTION_STANDARD_GROUP_ID to the standard tier group object id. $redeploy"
+    }
+    if ([string]$env['PROJECTION_PREMIUM_GROUP_ID'] -notmatch $guid -and [string]$env['PROJECTION_PREMIUM_GROUP_ID'] -cne 'none') {
+        throw "Projection switch refused: the renewal job does not set PROJECTION_PREMIUM_GROUP_ID to the premium tier group object id or none. $redeploy"
+    }
+    if ([string]$env['PROJECTION_GATEWAY_RESOURCE_ID'] -notmatch '^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\.ApiManagement/service/[^/]+$') {
+        throw "Projection switch refused: the renewal job does not set PROJECTION_GATEWAY_RESOURCE_ID to the API Management gateway, so it cannot read business units. $redeploy"
+    }
     return $true
 }
 

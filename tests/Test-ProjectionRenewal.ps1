@@ -114,6 +114,72 @@ try {
     }
     $rb = [IO.File]::ReadAllText((Join-Path $root 'infra\projection-renewal.bicep'))
     Assert 'the renewal template references them as existing resources' ($rb -match "resource acr 'Microsoft\.ContainerRegistry/registries@[0-9-]+' existing" -and $rb -match "resource identity 'Microsoft\.ManagedIdentity/userAssignedIdentities@[0-9-]+' existing")
+
+    Write-Host ''
+    Write-Host 'Projection renewal - the job carries its identity, tier groups and gateway' -ForegroundColor Cyan
+    if ($renewalTemplate) {
+        foreach ($name in 'standardGroupId', 'premiumGroupId', 'gatewayResourceId') {
+            Assert "the renewal template takes $name" ($renewalTemplate.parameters.Contains($name))
+        }
+        $job = Get-TemplateResources $renewalTemplate | Where-Object { $_.type -eq 'Microsoft.App/jobs' } | Select-Object -First 1
+        $container = @($job.properties.template.containers)[0]
+        $jobEnv = @{}
+        foreach ($e in @($container.env)) { $jobEnv[$e.name] = [string]$e.value }
+        Assert 'the job names its user-assigned identity to the Azure SDK' ($jobEnv['AZURE_CLIENT_ID'] -match 'clientId' -and $jobEnv['AZURE_CLIENT_ID'] -match 'identityName') $jobEnv['AZURE_CLIENT_ID']
+        Assert 'the job gets the standard tier group id' ($jobEnv['PROJECTION_STANDARD_GROUP_ID'] -eq "[parameters('standardGroupId')]") $jobEnv['PROJECTION_STANDARD_GROUP_ID']
+        Assert 'the job gets the premium tier group id' ($jobEnv['PROJECTION_PREMIUM_GROUP_ID'] -eq "[parameters('premiumGroupId')]") $jobEnv['PROJECTION_PREMIUM_GROUP_ID']
+        Assert 'the job gets the gateway whose units it reads' ($jobEnv['PROJECTION_GATEWAY_RESOURCE_ID'] -eq "[parameters('gatewayResourceId')]") $jobEnv['PROJECTION_GATEWAY_RESOURCE_ID']
+        Assert 'the job runs the image entry point and command unchanged' (@($container.command).Count -eq 0 -and @($container.args).Count -eq 0)
+        $reader = Get-TemplateResources $renewalTemplate | Where-Object { $_.type -eq 'Microsoft.Resources/deployments' } | Select-Object -First 1
+        Assert 'a nested deployment grants the read at the gateway resource group' ($reader -and [string]$reader.resourceGroup -match 'gatewayResourceId' -and [string]$reader.subscriptionId -match 'gatewayResourceId') "rg=$($reader.resourceGroup) subscription=$($reader.subscriptionId)"
+        if ($reader) {
+            $nested = $reader.properties.template
+            $roleDefinition = Get-TemplateResources $nested | Where-Object { $_.type -eq 'Microsoft.Authorization/roleDefinitions' } | Select-Object -First 1
+            $actions = @($roleDefinition.properties.permissions | ForEach-Object { $_.actions } | ForEach-Object { $_ })
+            $dataActions = @($roleDefinition.properties.permissions | ForEach-Object { $_.dataActions } | ForEach-Object { $_ } | Where-Object { $_ })
+            Assert 'the role reads named values and nothing else' (($actions -join ',') -eq 'Microsoft.ApiManagement/service/namedValues/read' -and $dataActions.Count -eq 0) ($actions -join ',')
+            $assignment = Get-TemplateResources $nested | Where-Object { $_.type -eq 'Microsoft.Authorization/roleAssignments' } | Select-Object -First 1
+            Assert 'it is assigned to the job identity on the gateway' ($assignment -and [string]$assignment.scope -match 'Microsoft\.ApiManagement/service' -and $assignment.properties.principalType -eq 'ServicePrincipal' -and [string]$reader.properties.parameters.principalId.value -match 'principalId')
+        }
+        $jobDepends = @($job.dependsOn) -join ' '
+        Assert 'the job waits for its named-value read role' ($jobDepends -match 'Microsoft\.Resources/deployments|gatewayReader') $jobDepends
+    }
+    $docker = [IO.File]::ReadAllText((Join-Path $root 'sync\Dockerfile'))
+    Assert 'the image command is --graph alone, and the job supplies the rest' ($docker -match '(?m)^CMD \["--graph"\]\s*$')
+
+    Write-Host ''
+    Write-Host 'Projection renewal - admission refuses a job without these settings' -ForegroundColor Cyan
+    . (Join-Path $root 'scripts\ClaudeProjectionChecks.ps1')
+    $digest = 'sha256:' + ('c' * 64)
+    function New-JobDefinition([hashtable]$Settings) {
+        $jobContainer = @{
+            name = 'projection-renewal'; image = "acr.example.invalid/claude-projection-sync@$digest"; command = @(); args = @()
+            env = @($Settings.GetEnumerator() | Sort-Object Key | ForEach-Object { @{ name = $_.Key; value = $_.Value } })
+        }
+        return (@{ properties = @{ template = @{ containers = @($jobContainer) } } } | ConvertTo-Json -Depth 10 | ConvertFrom-Json)
+    }
+    $goodSettings = @{
+        AZURE_CLIENT_ID = '40000000-0000-4000-8000-000000000001'
+        PROJECTION_STANDARD_GROUP_ID = '10000000-0000-4000-8000-000000000001'
+        PROJECTION_PREMIUM_GROUP_ID = 'none'
+        PROJECTION_GATEWAY_RESOURCE_ID = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-p94/providers/Microsoft.ApiManagement/service/apim-p94'
+    }
+    $verdict = try { Assert-ClaudeProjectionJobDefinition -Job (New-JobDefinition $goodSettings) -ImageDigest $digest } catch { $_.Exception.Message }
+    Assert 'a job with its client id, tier groups and gateway is accepted' ($verdict -eq $true) "$verdict"
+    foreach ($case in @(
+            @{ Name = 'no client id'; Change = @{ AZURE_CLIENT_ID = $null }; Names = 'AZURE_CLIENT_ID' }
+            @{ Name = 'no standard group'; Change = @{ PROJECTION_STANDARD_GROUP_ID = $null }; Names = 'PROJECTION_STANDARD_GROUP_ID' }
+            @{ Name = 'a standard group name instead of an id'; Change = @{ PROJECTION_STANDARD_GROUP_ID = 'claude-code-standard' }; Names = 'PROJECTION_STANDARD_GROUP_ID' }
+            @{ Name = 'no premium setting'; Change = @{ PROJECTION_PREMIUM_GROUP_ID = $null }; Names = 'PROJECTION_PREMIUM_GROUP_ID' }
+            @{ Name = 'an empty premium setting'; Change = @{ PROJECTION_PREMIUM_GROUP_ID = '' }; Names = 'PROJECTION_PREMIUM_GROUP_ID' }
+            @{ Name = 'no gateway'; Change = @{ PROJECTION_GATEWAY_RESOURCE_ID = $null }; Names = 'PROJECTION_GATEWAY_RESOURCE_ID' }
+            @{ Name = 'a gateway that is not API Management'; Change = @{ PROJECTION_GATEWAY_RESOURCE_ID = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-p94/providers/Microsoft.Storage/storageAccounts/stp94' }; Names = 'PROJECTION_GATEWAY_RESOURCE_ID' }
+        )) {
+        $settings = $goodSettings.Clone()
+        foreach ($key in $case.Change.Keys) { if ($null -eq $case.Change[$key]) { $settings.Remove($key) } else { $settings[$key] = $case.Change[$key] } }
+        $verdict = try { $null = Assert-ClaudeProjectionJobDefinition -Job (New-JobDefinition $settings) -ImageDigest $digest; 'accepted' } catch { $_.Exception.Message }
+        Assert "admission refuses a job with $($case.Name)" ($verdict -ne 'accepted' -and $verdict -match [regex]::Escape($case.Names) -and $verdict -match 'Remedy') "$verdict"
+    }
 }
 finally { Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue }
 

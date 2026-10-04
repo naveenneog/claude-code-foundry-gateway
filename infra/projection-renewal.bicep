@@ -35,6 +35,15 @@ param cronExpression string = '*/30 * * * *'
 @description('Entra tenant id written to every projection record.')
 param tenantId string = subscription().tenantId
 
+@description('Object id of the standard tier group. The job reads its members on every run.')
+param standardGroupId string
+
+@description('Object id of the premium tier group, or none when the gateway has no premium tier.')
+param premiumGroupId string
+
+@description('Resource id of the API Management gateway. The job reads its bu-registry and bu-parents named values on every run.')
+param gatewayResourceId string
+
 @description('Expected entrypoint recorded in status and checked before admission.')
 param entrypoint string = 'node /app/sync/src/apply-projection.mjs'
 
@@ -156,6 +165,23 @@ resource job 'Microsoft.App/jobs@2024-03-01' = {
               name: 'PROJECTION_ENTRYPOINT'
               value: entrypoint
             }
+            {
+              // A user-assigned identity only: DefaultAzureCredential needs its client id (U112).
+              name: 'AZURE_CLIENT_ID'
+              value: identity.properties.clientId
+            }
+            {
+              name: 'PROJECTION_STANDARD_GROUP_ID'
+              value: standardGroupId
+            }
+            {
+              name: 'PROJECTION_PREMIUM_GROUP_ID'
+              value: premiumGroupId
+            }
+            {
+              name: 'PROJECTION_GATEWAY_RESOURCE_ID'
+              value: gatewayResourceId
+            }
           ]
           command: []
           args: []
@@ -169,7 +195,19 @@ resource job 'Microsoft.App/jobs@2024-03-01' = {
   }
   dependsOn: [
     cosmosWriter
+    gatewayReader
   ]
+}
+
+// The gateway may live in another resource group; the read role is created and assigned there.
+module gatewayReader 'projection-renewal-gateway-reader.bicep' = {
+  name: 'projection-renewal-reader-${namePrefix}'
+  scope: resourceGroup(split(gatewayResourceId, '/')[2], split(gatewayResourceId, '/')[4])
+  params: {
+    gatewayName: last(split(gatewayResourceId, '/'))
+    principalId: identity.properties.principalId
+    namePrefix: namePrefix
+  }
 }
 
 var alertDefinitions = [

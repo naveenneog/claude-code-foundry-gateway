@@ -10,4 +10,4 @@ COPY sync/src ./src
 COPY resolver/src/entitlement.mjs /app/resolver/src/entitlement.mjs
 
 ENTRYPOINT ["node", "/app/sync/src/apply-projection.mjs"]
-CMD ["--graph", "--standard", "claude-code-standard", "--premium", "claude-code-premium"]
+CMD ["--graph"]
