@@ -49,12 +49,15 @@ function Save-ClaudeProjectionSwitchBackup {
         $values[$id] = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id $id -FailOnError
     }
     New-Item -ItemType Directory -Force -Path $Directory | Out-Null
-    $path = Join-Path $Directory ("projection-switch-$ApimName-" + [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ') + '.json')
+    # A unique name, created once: a second switch must not overwrite the values from before the first.
+    $path = Join-Path $Directory ("projection-switch-$ApimName-" + [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ') + '-' + [guid]::NewGuid().ToString('N').Substring(0, 8) + '.json')
     $backup = [ordered]@{
         kind = 'claude-projection-switch-backup'; schemaVersion = 1; createdAt = [DateTime]::UtcNow.ToString('o')
         resourceGroup = $ResourceGroup; apimName = $ApimName; gatewayResourceId = $GatewayResourceId; namedValues = $values
     }
-    [IO.File]::WriteAllText($path, ($backup | ConvertTo-Json -Depth 5), [Text.UTF8Encoding]::new($false))
+    $stream = [IO.File]::Open($path, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+    try { $bytes = [Text.UTF8Encoding]::new($false).GetBytes(($backup | ConvertTo-Json -Depth 5)); $stream.Write($bytes, 0, $bytes.Length) }
+    finally { $stream.Dispose() }
     return $path
 }
 

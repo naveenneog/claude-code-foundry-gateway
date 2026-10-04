@@ -167,6 +167,30 @@ Capture { Invoke-Switch @{ WhatIf = $true } }
 Assert '-WhatIf runs the compare and admission and stops before the backup and the write' (-not $Failure -and $Result -and $Result.Switched -eq $false -and
     (Get-CallAt 'check-admission\.mjs') -ge 0 -and (Get-Writes).Count -eq 0 -and (Get-Backups).Count -eq 0) "$Failure"
 
+# The real scripts/Compare-ClaudeEntitlement.ps1 against chosen gateway lists. The fixture directory has
+# one standard member and no group named 'none'. 'clean' lists hold that member; 'drift' lists do not.
+$global:FixtureAz = ${function:az}
+$global:FixtureRest = ${function:Invoke-RestMethod}
+$global:ListMode = $null
+function az {
+    $line = $args -join ' '
+    if ($global:ListMode -and $line -like 'apim nv show*') {
+        $global:FixtureCalls.Add("az $line"); $global:LASTEXITCODE = 0
+        $standard = if ($global:ListMode -eq 'clean') { ",$FixtureApp," } else { ',' }
+        $map = @{ 'allow-standard' = $standard; 'allow-premium' = ','; 'bu-members' = ','; 'entitlement-source' = 'named-value' }
+        $id = $args[([array]::IndexOf($args, '--named-value-id') + 1)]
+        if ($line -match '--query value') { return [string]$map[$id] }
+        return (@{ name = $id; value = $map[$id]; secret = $false } | ConvertTo-Json -Compress)
+    }
+    & $global:FixtureAz @args
+}
+function Invoke-RestMethod {
+    param($Uri, $Headers, $Method, $ErrorAction, $TimeoutSec, $Body, $ContentType, [switch]$UseBasicParsing)
+    if ($global:ListMode -and [uri]::UnescapeDataString([string]$Uri) -match "displayName eq 'none'") { $global:FixtureCalls.Add("HTTP $Method none-group"); return [pscustomobject]@{ value = @() } }
+    & $global:FixtureRest @PSBoundParameters
+}
+$repoBackups = { @(Get-ChildItem -LiteralPath (Join-Path $root 'onboarding') -Filter 'projection-switch-apim-p84-*.json' -ErrorAction SilentlyContinue) }
+
 Write-Host ''
 Write-Host 'Projection switch - the deployer switch mode deploys, publishes and applies nothing (D5)' -ForegroundColor Cyan
 $receiptPath = Join-Path $work 'projection-renewal-p84fixture.json'
@@ -174,19 +198,76 @@ $receiptPath = Join-Path $work 'projection-renewal-p84fixture.json'
 $deployer = Join-Path $root 'scripts\Deploy-ClaudeProjection.ps1'
 $other = Join-Path $work 'projection-renewal-other.json'
 [IO.File]::WriteAllText($other, (($renewal | Select-Object * -ExcludeProperty gatewayResourceId | Add-Member -NotePropertyName gatewayResourceId -NotePropertyValue $FixtureGatewayId.Replace('apim-p84', 'apim-other') -PassThru) | ConvertTo-Json -Depth 5))
-Reset-ProjectionFixture
-Set-GoodRenewalJob
-Capture { & $deployer -ResourceGroup rg-p84 -ApimName apim-p84 -NamePrefix p84fixture -FlipAfterCleanCompare -RenewalReceiptPath $other -StandardGroup claude-code-standard -PremiumGroup none }
-Assert 'the deployer switches through the shared function, which refuses a receipt for another gateway' ($Failure -match 'apim-other' -and (Get-Writes).Count -eq 0) "$Failure"
-Reset-ProjectionFixture
-Set-GoodRenewalJob
-Capture { & $deployer -ResourceGroup rg-p84 -ApimName apim-p84 -NamePrefix p84fixture -FlipAfterCleanCompare -RenewalReceiptPath $receiptPath -StandardGroup claude-code-standard -PremiumGroup none }
-$deployCalls = $FixtureCalls -join "`n"
-Assert 'the deployer switch mode makes no deployment, registration, publish, role assignment, export or apply' ($deployCalls -notmatch 'deployment group create|ad app create|functionapp|cosmosdb sql role assignment|--snapshot' -and
-    @($FixtureCalls | Where-Object { $_ -match '^az apim nv (update|create)' -and $_ -notmatch 'entitlement-source' }).Count -eq 0) "$Failure"
+function Invoke-Deployer([string]$Receipt, [string]$Lists) {
+    Reset-ProjectionFixture
+    Set-GoodRenewalJob
+    $global:ListMode = $Lists
+    $before = @(& $repoBackups | ForEach-Object FullName)
+    Capture { & $deployer -ResourceGroup rg-p84 -ApimName apim-p84 -NamePrefix p84fixture -FlipAfterCleanCompare -RenewalReceiptPath $Receipt -StandardGroup claude-code-standard -PremiumGroup none }
+    $script:Made = @(& $repoBackups | Where-Object { $before -notcontains $_.FullName })
+    $script:Made | Remove-Item -Force -ErrorAction SilentlyContinue
+    $global:ListMode = $null
+}
+Invoke-Deployer $other 'clean'
+Assert 'the deployer switches through the shared function, which refuses a receipt for another gateway' ($Failure -match 'apim-other' -and (Get-Writes).Count -eq 0 -and $Made.Count -eq 0) "$Failure"
+Invoke-Deployer $receiptPath 'drift'
+Assert 'the deployer switch mode makes no deployment, registration, publish, role assignment, export or apply' ($Failure -match 'drift' -and
+    ($FixtureCalls -join "`n") -notmatch 'deployment group create|ad app create|functionapp|cosmosdb sql role assignment|--snapshot' -and (Get-Writes).Count -eq 0 -and $Made.Count -eq 0) "$Failure"
+Invoke-Deployer $receiptPath 'clean'
+$deployOrder = @((Get-CallAt 'apim nv show .*allow-premium -o json'), (Get-CallAt 'apply-projection\.mjs .*--compare'), (Get-CallAt 'check-admission\.mjs'), (Get-CallAt '^az apim nv update .*entitlement-source --value projection'))
+Assert 'the deployer switches end to end through the real drift check: compare, admission, backup, one write' (-not $Failure -and $deployOrder[0] -ge 0 -and
+    (@(0..2 | Where-Object { $deployOrder[$_] -lt $deployOrder[$_ + 1] }).Count -eq 3) -and @(Get-Writes).Count -eq 1 -and $Made.Count -eq 1) "$Failure | positions $($deployOrder -join ',') | backups $($Made.Count)"
 Reset-ProjectionFixture
 Capture { & $deployer -ResourceGroup rg-p84 -ApimName apim-p84 -NamePrefix p84fixture -FlipAfterCleanCompare -RenewalReceiptPath (Join-Path $work 'missing.json') }
 Assert 'a missing receipt and no renewal parameters refuse before any Azure call, with the remedy' ($Failure -match 'P86 admission requires' -and $Failure -match 'Deploy-ClaudeProjectionRenewal\.ps1' -and $Failure -match '60-90 minutes' -and $FixtureCalls.Count -eq 0) "$Failure | calls $($FixtureCalls.Count)"
+Reset-ProjectionFixture
+Capture { @(1..2 | ForEach-Object { Save-ClaudeProjectionSwitchBackup -ResourceGroup rg-p84 -ApimName apim-p84 -GatewayResourceId $FixtureGatewayId -Directory $backupDir }) }
+Assert 'two backups in the same second are two files; neither overwrites the other' (-not $Failure -and @($Result | Select-Object -Unique).Count -eq 2 -and @($Result | Where-Object { Test-Path -LiteralPath $_ }).Count -eq 2) "$Failure"
+Write-Host ''
+Write-Host 'Projection switch - the guided flow finds the receipt and switches through the same function (D9)' -ForegroundColor Cyan
+. (Join-Path $root 'scripts\flow\Entitlement.ps1')
+$receipts = Join-Path $work 'receipts'
+New-Item -ItemType Directory -Force -Path $receipts | Out-Null
+Capture { Find-ClaudeFlowProjectionRenewal -Directory $receipts -GatewayResourceId $FixtureGatewayId }
+Assert 'no receipt names the gateway: no evidence, with the remedy' (-not $Failure -and -not $Result.Receipt -and $Result.Problem -match 'no renewal receipt' -and $Result.Problem -match 'Deploy-ClaudeProjectionRenewal\.ps1') "$Failure $($Result.Problem)"
+[IO.File]::WriteAllText((Join-Path $receipts 'projection-renewal-other.json'), (Get-Content -LiteralPath $other -Raw))
+[IO.File]::WriteAllText((Join-Path $receipts 'projection-renewal-p84fixture.json'), (Get-Content -LiteralPath $receiptPath -Raw))
+Capture { Find-ClaudeFlowProjectionRenewal -Directory $receipts -GatewayResourceId $FixtureGatewayId.ToUpperInvariant() }
+Assert 'the one receipt that names the gateway is the evidence; a receipt for another gateway is not' (-not $Failure -and $Result.Receipt.reconcilerResourceId -eq $FixtureJobId -and -not $Result.Problem) "$Failure $($Result.Problem)"
+[IO.File]::WriteAllText((Join-Path $receipts 'projection-renewal-again.json'), (Get-Content -LiteralPath $receiptPath -Raw))
+Capture { Find-ClaudeFlowProjectionRenewal -Directory $receipts -GatewayResourceId $FixtureGatewayId }
+Assert 'two receipts for one gateway are ambiguous and give no evidence' (-not $Failure -and -not $Result.Receipt -and $Result.Problem -match '2 renewal receipts') "$Failure $($Result.Problem)"
+
+$flowRecord = [pscustomobject]@{ schemaVersion = 2; decisions = [pscustomobject]@{ entitlementStore = [pscustomobject]@{ target = 'projection' } }; history = @() }
+$flowDiscovery = [pscustomobject]@{ resourceGroup = 'rg-p84'; apimName = 'apim-p84'; sku = 'BasicV2'; apimId = $FixtureGatewayId; namedValues = @{ 'entitlement-source' = 'named-value' }; renewal = $null; renewalProblem = 'no renewal receipt under onboarding/ names gateway x. Remedy: deploy the renewal job.' }
+$flowPlan = Get-ClaudeFlowStepPlan -Record $flowRecord -Discovery $flowDiscovery
+Reset-ProjectionFixture
+Capture { Invoke-ClaudeFlowStep -Record $flowRecord -Plan $flowPlan }
+Assert 'the flow without a receipt refuses with the reason, before any Azure call' ($Failure -match 'P86 admission needs' -and $Failure -match 'no renewal receipt under onboarding' -and $Failure -match '60-90 minutes' -and $FixtureCalls.Count -eq 0) "$Failure | calls $($FixtureCalls.Count)"
+
+$flowDiscovery.renewal = $renewal
+$flowDiscovery.renewalProblem = $null
+foreach ($clean in @($true, $false)) {
+    $flowPlan = Get-ClaudeFlowStepPlan -Record $flowRecord -Discovery $flowDiscovery
+    $flowPlan.Data.SnapshotPath = Join-Path $work 'flow-snapshot.json'
+    $flowPlan.Data.SnapshotTaken = $true
+    $before = @(& $repoBackups | ForEach-Object FullName)
+    Reset-ProjectionFixture
+    Set-GoodRenewalJob
+    $global:ListMode = $(if ($clean) { 'clean' } else { 'drift' })
+    Capture { Invoke-ClaudeFlowStep -Record $flowRecord -Plan $flowPlan }
+    $made = @(& $repoBackups | Where-Object { $before -notcontains $_.FullName })
+    if ($clean) {
+        Assert 'the flow switches through the shared function: the real drift check, compare, admission and one write' (-not $Failure -and (Get-CallAt 'apim nv show .*allow-premium -o json') -ge 0 -and
+            (Get-CallAt 'apim nv show .*allow-premium -o json') -lt (Get-CallAt 'check-admission\.mjs') -and @(Get-Writes).Count -eq 1 -and $Result.entitlementStore.to -eq 'projection') "$Failure"
+        Assert "the flow's own snapshot is the backup; no backup file is written" ($made.Count -eq 0) "backups $($made.Count)"
+    }
+    else {
+        Assert 'the flow cannot skip the compare: drift refuses before the runner, with no write' ($Failure -match 'drift' -and (($FixtureCalls -join "`n") -notmatch 'container exec') -and @(Get-Writes).Count -eq 0) "$Failure"
+    }
+    $made | Remove-Item -Force -ErrorAction SilentlyContinue
+}
+$global:ListMode = $null
 
 Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
 

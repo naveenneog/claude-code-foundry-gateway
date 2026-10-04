@@ -57,7 +57,7 @@ function Get-ClaudeFlowStepPlan {
     elseif ($desired -eq 'named-value') {
         $actions += New-ClaudeFlowAction -Verb Update -Target 'named value entitlement-source' -Detail 'projection -> named-value'
         $actions += New-ClaudeFlowAction -Verb Write -Target 'allow-standard / allow-premium' -Detail 'restore list values from the rollback source'
-        $implications += 'Rollback can regrant stale list members if the named-value lists were not kept current during the projection window.'
+        $implications += 'Rollback can regrant stale list members if the named-value lists were not kept current during the projection window: refresh them with scripts/Sync-ClaudeAccess.ps1 and check them with scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift first.'
     }
     else { throw "Unknown entitlement store '$desired'." }
     New-ClaudeFlowPlan -Step Entitlement `
@@ -68,7 +68,9 @@ function Get-ClaudeFlowStepPlan {
         -Requires @('Directory group read permission', 'API Management named value write permission', 'P86 scheduled reconciler evidence, pinned image digest and email-backed action group') `
         -Reversible $true `
         -Rollback 'Restore the pre-change backup and set entitlement-source back to the previous value.' `
-        -Data @{ Target = $target; Current = $current; Desired = $desired; CleanComparison = [bool]($Discovery -and $Discovery.cleanComparison); SnapshotPath = $null; SnapshotTaken = $false; Renewal = $(if ($Discovery -and $Discovery.renewal) { $Discovery.renewal } else { $null }) }
+        -Data @{ Target = $target; Current = $current; Desired = $desired; SnapshotPath = $null; SnapshotTaken = $false
+            Renewal = $(if ($Discovery -and $Discovery.renewal) { $Discovery.renewal } else { $null })
+            RenewalProblem = $(if ($Discovery -and $Discovery.renewalProblem) { [string]$Discovery.renewalProblem } else { $null }) }
 }
 
 function Invoke-ClaudeFlowStep {
@@ -76,19 +78,24 @@ function Invoke-ClaudeFlowStep {
     if (Test-ClaudeFlowPlanIsNoop $Plan) { return @{} }
     $target = $Plan.Data.Target
     if ($Plan.Data.Desired -eq 'projection') {
-        . (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'scripts\ClaudeProjectionChecks.ps1')
         $renewal = $Plan.Data.Renewal
-        if (-not $renewal -or -not $renewal.runnerName -or -not $renewal.cosmosAccount -or -not $renewal.accountResourceId -or -not $renewal.reconcilerResourceId -or -not $renewal.imageDigest -or -not $renewal.actionGroupResourceId) {
-            throw 'Projection switch refused: P86 admission needs renewal runner, Cosmos destination, reconciler job, image digest and email action group evidence. Expected wait after deploying the 30-minute reconciler is about 60-90 minutes.'
+        if (-not $renewal) {
+            $why = if ($Plan.Data.RenewalProblem) { " $($Plan.Data.RenewalProblem)" } else { '' }
+            throw "Projection switch refused: P86 admission needs renewal runner, Cosmos destination, reconciler job, image digest and email action group evidence, from the renewal job's receipt.$why Expected wait after deploying the 30-minute job is about 60-90 minutes."
         }
-        $null = Assert-ClaudeProjectionAdmission -ResourceGroup $target.ResourceGroup -RunnerName $renewal.runnerName -CosmosAccount $renewal.cosmosAccount `
-            -TenantId $renewal.tenantId -AccountResourceId $renewal.accountResourceId -ReconcilerResourceId $renewal.reconcilerResourceId `
-            -ImageDigest $renewal.imageDigest -EntryPoint $(if ($renewal.entryPoint) { $renewal.entryPoint } else { 'node /app/sync/src/apply-projection.mjs' }) `
-            -ActionGroupResourceId $renewal.actionGroupResourceId
+        # ADR-0050: the shared switch runs the drift check and the compare before admission; the flow's
+        # own snapshot is its backup.
+        . (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'scripts\ClaudeProjectionSwitch.ps1')
+        $flowPlan = $Plan
+        $snapshotGate = { Assert-ClaudeFlowLifecycleSnapshotBeforeWrite -Plan $flowPlan }.GetNewClosure()
+        $null = Invoke-ClaudeProjectionSwitch -ResourceGroup $target.ResourceGroup -ApimName $target.ApimName -Renewal $renewal `
+            -StandardGroup ([string]$renewal.standardGroupId) -PremiumGroup ([string]$renewal.premiumGroupId) -Backup $snapshotGate
     }
-    Assert-ClaudeFlowLifecycleSnapshotBeforeWrite -Plan $Plan
-    . (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'scripts\ApimNamedValue.ps1')
-    Set-ApimNamedValue -ResourceGroup $target.ResourceGroup -ApimName $target.ApimName -Id 'entitlement-source' -Value $Plan.Data.Desired
+    else {
+        Assert-ClaudeFlowLifecycleSnapshotBeforeWrite -Plan $Plan
+        . (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'scripts\ApimNamedValue.ps1')
+        Set-ApimNamedValue -ResourceGroup $target.ResourceGroup -ApimName $target.ApimName -Id 'entitlement-source' -Value $Plan.Data.Desired
+    }
     Add-ClaudeDecisionHistory -Record $Record -Action Change -Decision entitlementStore -From $Plan.Data.Current -To $Plan.Data.Desired -Commit (Get-ClaudeFlowReleaseInfo).commit
     @{ entitlementStore = @{ from = $Plan.Data.Current; to = $Plan.Data.Desired } }
 }

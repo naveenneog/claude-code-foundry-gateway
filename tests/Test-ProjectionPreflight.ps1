@@ -275,12 +275,13 @@ Assert 'both runner steps use the checked result parser' ([regex]::Matches($depl
 Assert 'projection sync rejects PS 5.1 explicitly' ($sync -match 'Assert-ClaudeProjectionPowerShell|PSVersion.*-lt 7' -and $sync -match 'pwsh|ClaudeProjectionChecks')
 Assert 'installer still forwards a supplied resolver app separately from switch admission' ($installer -match 'ProjectionResolverAppId' -and $installer -match "'-ResolverAppId'" -and $installer -match 'ProjectionRenewalActionGroupResourceId')
 Assert 'installer refuses missing renewal evidence before foundation writes' ($installer -match '(?s)if \(\$FlipProjectionAfterCleanCompare\).*Projection switch refused.*az group create')
-Assert 'flow forwards P86 admission claims before writing projection' ($flow -match 'Assert-ClaudeProjectionAdmission' -and $flow -match 'reconcilerResourceId' -and $flow -match '-Value \$Plan\.Data\.Desired')
+Assert 'flow switches to the projection only through the shared switch; its own write is the rollback' ($flow -match "(?s)if \(\`$Plan\.Data\.Desired -eq 'projection'\) \{.*?Invoke-ClaudeProjectionSwitch .*?-Backup \`$snapshotGate.*?\}\s*else \{.*?Set-ApimNamedValue" -and
+    ([regex]::Matches($flow, 'Set-ApimNamedValue')).Count -eq 1)
 Assert 'AUM selected group lookup reuses positive Graph collection semantics' ((Get-Content (Join-Path $root 'scripts\Sync-AumMembership.ps1') -Raw) -match 'Get-ClaudeGraphGroup')
 Assert 'projection sync uses the checked Graph token helper' ($sync -match '\$graphToken = Get-GraphToken')
 Assert 'per-run deploy files are not keyed by PID alone' ($deploy -notmatch '\$NamePrefix-\$PID' -and $deploy -match 'NewGuid')
 Assert 'ARM-only admission and its locale-sensitive timestamp parsing are removed' ((Get-Content $checksPath -Raw) -notmatch 'function Assert-ClaudeProjectionReconciler|Get-ClaudeProjectionContainerSignature|DateTimeOffset\]::TryParse')
-Assert 'flow writes the desired entitlement source only after admission' ($flow -match '-Value \$Plan\.Data\.Desired' -and $flow -match 'Assert-ClaudeProjectionAdmission')
+Assert "flow's projection write happens inside the shared switch, after admission" ($flow -match 'Invoke-ClaudeProjectionSwitch' -and $switchText -match "(?s)Assert-ClaudeProjectionAdmission.*Set-ApimNamedValue[^\r\n]*-Id 'entitlement-source'")
 Assert 'the Entra comparison explicitly fails on drift' ($deploy -match 'Compare-ClaudeEntitlement.ps1[\s\S]+?-ExportGatewayPath \$gateway -FailOnDrift:\$true')
 $parseErrors = $null; $tokens = $null
 $deployAst = [Management.Automation.Language.Parser]::ParseInput($deploy, [ref]$tokens, [ref]$parseErrors)
