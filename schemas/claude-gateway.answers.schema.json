@@ -121,7 +121,7 @@
       "x-patternMessage": "is not an Azure resource ID", "x-remedy": "Give the reconciler's full resource ID.", "x-appliedBy": ["Install-ClaudeGateway.ps1"] },
     "ProjectionRenewalImageDigest": { "title": "Projection renewal image digest", "type": "string", "pattern": "^sha256:[0-9a-f]{64}$",
       "x-patternMessage": "is not a sha256 image digest (sha256: and 64 lower-case hexadecimal digits)", "x-remedy": "Give the digest that follows @ in the renewal job's image.", "x-appliedBy": ["Install-ClaudeGateway.ps1"] },
-    "ProjectionRenewalEntryPoint": { "title": "Projection renewal entry point", "type": "string", "minLength": 1, "x-appliedBy": ["Install-ClaudeGateway.ps1"] },
+    "ProjectionRenewalEntryPoint": { "title": "Projection renewal entry point", "type": "string", "minLength": 1, "pattern": "^[^&|<>^\"%()]+$", "x-patternMessage": "holds a cmd.exe metacharacter that the Azure CLI cmd shim re-reads on Windows", "x-remedy": "Give the container command without & | < > ^ \" % ( or ).", "x-appliedBy": ["Install-ClaudeGateway.ps1"] },
     "ProjectionRenewalActionGroupResourceId": { "title": "Projection renewal action group resource ID", "type": "string",
       "pattern": "^/subscriptions/[0-9a-fA-F-]{36}/resource[Gg]roups/[A-Za-z0-9._()-]{1,90}/providers/[Mm]icrosoft\\.[Ii]nsights/[Aa]ction[Gg]roups/[^/]+$",
       "x-patternMessage": "is not an action group resource ID", "x-remedy": "Give the action group's full resource ID, as az monitor action-group show --query id reports it.", "x-appliedBy": ["Install-ClaudeGateway.ps1"] },

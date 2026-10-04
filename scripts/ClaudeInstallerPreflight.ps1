@@ -14,6 +14,10 @@ $script:ClaudePreflightBlocking = @('not-signed-in', 'prerequisite-failed')
 # The reason every check starts with. It also fails the preflight: a check that no branch evaluated is a
 # defect of the preflight, not a pass (ADR-0047 decision 5).
 $script:ClaudePreflightUnevaluated = 'not-evaluated'
+# The answers Install-ClaudeGateway.ps1 passes to Assert-AzArgumentsSafe before its first Azure CLI call. On Windows the
+# preflight refuses the same ones (ADR-0047 decision 17); tests/Test-InstallerPreflight.ps1 compares the two lists.
+$script:ClaudePreflightAzBoundAnswers = @('SubscriptionId', 'FoundryAccount', 'FoundryResourceGroup', 'ResourceGroup', 'Location', 'NamePrefix', 'ExistingApimName',
+    'PublisherEmail', 'StandardGroup', 'PremiumGroup', 'DesktopEntraClientId', 'DesktopEntraAudience')
 
 function Get-ClaudeApimReuseState {
     # The API Management instance to reuse, read once for the preflight and for the run's reuse path:
@@ -132,6 +136,17 @@ function Invoke-ClaudeGatewayPreflight {
     }
     $bad = @{}
     foreach ($p in @($AnswerProblems)) { Add-ClaudePreflightProblem $checks[$p.checkId] $p.message $p.remedy; $bad[(([string]$p.path) -split '[.\[]')[0]] = $true }
+    # On Windows Azure CLI is az.cmd, and cmd.exe re-reads & | < > ^ ( ) " % in an argument: an answer the run refuses before
+    # its first Azure CLI call is a problem of its own check here, and is not read from Azure (ADR-0047 decision 17).
+    foreach ($n in $script:ClaudePreflightAzBoundAnswers) {
+        if ($bad.ContainsKey($n) -or -not $Answers.Contains($n) -or $Answers[$n] -isnot [string]) { continue }
+        $why = Test-ClaudeInstallCmdText $Answers[$n]
+        if (-not $why) { continue }
+        $owner = [string](Get-ClaudeAnswersSchema).Document.properties.$n.'x-checkId'
+        Add-ClaudePreflightProblem $checks[$(if ($owner) { $owner } else { 'answers.schema' })] "$n '$($Answers[$n])' $why in an Azure CLI argument on Windows" `
+            "Give $n without & | < > ^ ( ) `" %, or run the installer in Azure Cloud Shell, on macOS or on Linux, where Azure CLI is not a cmd.exe shim."
+        $bad[$n] = $true
+    }
     $get = { param([string]$Name) Get-ClaudePreflightAnswer $Answers $bad $Name }
     Set-ClaudePreflightPass $checks['answers.schema'] 'the answers match the answers schema, version 1'
     Set-ClaudePreflightPass $checks['answers.crossField'] 'the answers that depend on each other agree'

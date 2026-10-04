@@ -166,6 +166,10 @@ exit /b 0
     $w = New-P91World; $w.foundry.deployments = @([ordered]@{ name = 'gpt-4o'; sku = [ordered]@{ name = 'GlobalStandard'; capacity = 10 }; properties = [ordered]@{ provisioningState = 'Succeeded'; model = [ordered]@{ format = 'OpenAI'; name = 'gpt-4o'; version = '2024-08-06' } } })
     Add-Scenario 'pending' $w (New-Answers { param($a) Remove-Answer $a 'StandardModels'; Remove-Answer $a 'PremiumModels'
             Set-Answer $a 'PendingClaudeDeployment' ([ordered]@{ name = 'claude-sonnet-5'; model = 'claude-sonnet-5'; version = '1'; sku = 'GlobalStandard'; capacity = 20; account = 'ai-p91'; resourceGroup = 'rg-ai-p91' }) })
+    # Council round 3, Coder note 3 and Security note 3: answers the schema accepts and the run refuses on Windows before
+    # its first Azure CLI call (Assert-AzArgumentsSafe, Install-ClaudeGateway.ps1:369): parentheses in a resource group
+    # name, and an ampersand in the publisher email.
+    Add-Scenario 'cmd-chars' (New-P91World) (New-Answers { param($a) $a.FoundryResourceGroup = 'rg(dev)'; $a.ResourceGroup = 'rg(dev)'; $a.PublisherEmail = 'r&d@contoso.com' })
     $w = New-P91World; $w.inject.readErrors = @([ordered]@{ match = 'account list --query*'; text = 'az : ].name was unexpected at this time.' })
     Add-Scenario 'prereq-fail' $w (New-Answers)
     $pfxMissing = '/nonexistent-p92/no-such-certificate.pfx'
@@ -277,6 +281,28 @@ exit /b 0
     $pd = Get-Check 'pending' 'foundry.deployments'
     Assert 'R6 an account without a Claude deployment passes foundry.deployments when the answers file gives PendingClaudeDeployment, which the run creates after its summary' ($scenarios['pending'].Result.ExitCode -eq 0 -and
         $pd.result -eq 'PASS' -and "$($pd.message)".Contains('the run creates PendingClaudeDeployment after its summary')) "$($pd.result): $($pd.message) || $(Show 'pending')"
+    $cc = $scenarios['cmd-chars']
+    $ccProblems = @($cc.Json.checks | ForEach-Object { $c = $_; @($c.problems) | ForEach-Object { [pscustomobject]@{ Check = $c.id; Message = [string]$_.message } } })
+    $ccWanted = [ordered]@{ FoundryResourceGroup = @('foundry.account', "FoundryResourceGroup 'rg(dev)' holds a character that cmd.exe re-reads")
+        ResourceGroup = @('answers.schema', "ResourceGroup 'rg(dev)' holds a character that cmd.exe re-reads"); PublisherEmail = @('answers.schema', "PublisherEmail 'r&d@contoso.com' holds a character that cmd.exe re-reads") }
+    $ccNamed = @($cc.Result.Az | Where-Object { $_.Contains('rg(dev)') -or $_.Contains('r&d@') })
+    if ($script:windows) {
+        $ccMissing = @($ccWanted.Keys | Where-Object { $w = $ccWanted[$_]; -not @($ccProblems | Where-Object { $_.Check -eq $w[0] -and $_.Message.StartsWith($w[1]) }).Count })
+        Assert 'R6 on Windows the preflight refuses what the run refuses before its first Azure CLI call: each answer with a character cmd.exe re-reads is a FAIL under its own check, and no Azure CLI call names it' ($cc.Result.ExitCode -ne 0 -and
+            $cc.Json.result -eq 'FAIL' -and -not $ccMissing.Count -and -not $ccNamed.Count) "missing: $($ccMissing -join ', ') || named by: $($ccNamed -join ' | ') || problems: $(($ccProblems | ForEach-Object { "$($_.Check): $($_.Message)" }) -join ' / ')"
+    }
+    else {
+        Assert 'R6 off Windows Azure CLI is not a cmd.exe shim, and the preflight raises no cmd.exe problem' (-not @($ccProblems | Where-Object { $_.Message -match 'cmd\.exe re-reads' }).Count) (($ccProblems | ForEach-Object { $_.Message }) -join ' / ')
+    }
+    # The preflight's list of those answers is the run's: the keys of the first Assert-AzArgumentsSafe call in the installer.
+    $preflightAst = [Management.Automation.Language.Parser]::ParseFile((Join-Path $script:P91Root 'scripts\ClaudeInstallerPreflight.ps1'), [ref]$null, [ref]$null)
+    $listAst = @($preflightAst.FindAll({ param($n) $n -is [Management.Automation.Language.AssignmentStatementAst] -and $n.Left.Extent.Text -eq '$script:ClaudePreflightAzBoundAnswers' }, $true))[0]
+    $preflightNames = if ($listAst) { @(& ([scriptblock]::Create($listAst.Right.Extent.Text))) } else { @() }
+    $installerAst = [Management.Automation.Language.Parser]::ParseFile((Join-Path $script:P91Root 'Install-ClaudeGateway.ps1'), [ref]$null, [ref]$null)
+    $firstGuard = @($installerAst.FindAll({ param($n) $n -is [Management.Automation.Language.CommandAst] -and $n.GetCommandName() -eq 'Assert-AzArgumentsSafe' }, $true) | Sort-Object { $_.Extent.StartOffset })[0]
+    $runNames = if ($firstGuard) { @(@($firstGuard.FindAll({ param($n) $n -is [Management.Automation.Language.HashtableAst] }, $true))[0].KeyValuePairs | ForEach-Object { $_.Item1.Extent.Text }) } else { @() }
+    Assert 'R6 the preflight refuses on Windows the answers that the run''s first Assert-AzArgumentsSafe call checks, no fewer and no more' ($preflightNames.Count -ge 12 -and
+        ((@($preflightNames) | Sort-Object) -join ',') -ceq ((@($runNames) | Sort-Object) -join ',')) "preflight: $($preflightNames -join ',') || run: $($runNames -join ',')"
     Assert 'P2 failing admin prerequisites are a FAIL of operator.adminPrereqs naming the failed check (the harness fails the argument canary)' (& $one 'prereq-fail' 'operator.adminPrereqs' 'Azure CLI could not run a simple query') (Show 'prereq-fail')
     Assert 'P2 an AddressPfxPath that is not a file is a FAIL of address.inputs naming the path' (& $one 'pfx-missing' 'address.inputs' "AddressPfxPath '/nonexistent-p92/no-such-certificate\.pfx' is not a file") (Show 'pfx-missing')
     Assert 'P2 a Foundry account list that is not JSON is an inconclusive FAIL of foundry.account, not a crash, and its deployments are NOT-RUN' ((& $one 'list-not-json' 'foundry.account' 'Foundry account ai-p91 could not be read \(az cognitiveservices account list did not return JSON\)') -and

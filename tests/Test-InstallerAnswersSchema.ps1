@@ -138,6 +138,8 @@ Add-Case 'projection-renewal-response-casing' $pw @() $valid { param($d) foreach
 Add-Case 'projection-digest-malformed' $pw @('answers.schema') $valid { param($d) Set-Answer $d 'ProjectionRenewalImageDigest' 'sha256:ABC' }
 Add-Case 'projection-action-group-not-id' $pw @('answers.schema') $valid { param($d) Set-Answer $d 'ProjectionRenewalActionGroupResourceId' 'ag-projection-renewal' }
 Add-Case 'projection-entry-point-empty' $pw @('answers.schema') $valid { param($d) Set-Answer $d 'ProjectionRenewalEntryPoint' '' }
+# Council round 3, Security note 2: the entry point reaches az container exec on the switch path (ADR-0047 decision 17).
+Add-Case 'projection-entry-point-cmd-marker' $pw @('answers.schema') $valid { param($d) Set-Answer $d 'ProjectionRenewalEntryPoint' 'node /app/sync/src/apply-projection.mjs&echo.P92_ENTRY_MARKER&rem' }
 Add-Case 'not-json' $pw @('answers.schema') -Text '{"Sku": "BasicV2", '
 Add-Case 'names-differ-in-case' $pw @('answers.schema') -Text '{"Sku": "BasicV2", "sku": "BasicV2"}'
 Add-Case 'not-an-object' $pw @('answers.schema') -Text '["Sku"]'
