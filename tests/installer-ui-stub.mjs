@@ -13,6 +13,20 @@ function argValue(name) {
 const runId = '0123456789abcdef0123456789abcdef';
 const time = () => new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
 const progressLine = (event) => JSON.stringify({ schemaVersion: 1, time: time(), runId, ...event });
+// The real step ids, titles and dependencies: scripts/ClaudeInstallCheckpoint.ps1:8-11 and scripts/ClaudeInstallSteps.ps1:9-11.
+const realSteps = [
+  ['claude-deployment', 'Claude deployment', []],
+  ['resource-group', 'Resource group', []],
+  ['gateway-deployment', 'Gateway deployment', ['resource-group']],
+  ['company-address', 'Company address', ['gateway-deployment']],
+  ['entra-groups', 'Entra groups', []],
+  ['sync', 'Sync entitlement', ['gateway-deployment', 'entra-groups']],
+  ['projection', 'Projection deployment', ['gateway-deployment']],
+  ['business-units', 'Business units', ['gateway-deployment']],
+  ['onboarding-package', 'Onboarding package', ['gateway-deployment']],
+  ['verify', 'Verification', ['gateway-deployment']],
+];
+const stepTitle = (id) => realSteps.find(([stepId]) => stepId === id)?.[1] || id;
 
 if (args.includes('-ListSteps')) {
   if (process.env.P93_INSTALLER_UI_STUB_BAD_LIST === 'version') {
@@ -27,7 +41,6 @@ if (args.includes('-ListSteps')) {
     console.log(JSON.stringify({ schemaVersion: 1, installer: 'pwsh', checkpoint: null, runId: null, steps: [{ id: 1, title: 'bad', dependencies: [], state: 'not-started' }] }));
     process.exit(0);
   }
-  const ids = ['claude-deployment', 'resource-group', 'gateway-deployment', 'company-address', 'entra-groups', 'sync', 'projection', 'business-units', 'onboarding-package', 'verify'];
   if (process.env.P93_INSTALLER_UI_STUB_CHECKPOINT_STATES) {
     console.log(JSON.stringify({
       schemaVersion: 1,
@@ -47,7 +60,7 @@ if (args.includes('-ListSteps')) {
     installer: 'pwsh',
     checkpoint: null,
     runId: null,
-    steps: ids.map((id, index) => ({ id, title: id.replaceAll('-', ' '), dependencies: index ? [ids[index - 1]] : [], state: 'not-started' })),
+    steps: realSteps.map(([id, title, dependencies]) => ({ id, title, dependencies, state: 'not-started' })),
   }));
   process.exit(0);
 }
@@ -114,9 +127,10 @@ if (args.includes('-Yes')) {
   const shouldFail = process.env.P93_INSTALLER_UI_STUB_FAIL_STEP || '';
   const delay = Number(process.env.P93_INSTALLER_UI_STUB_DELAY_MS || 0);
   if (process.env.P93_INSTALLER_UI_STUB_REAL_FAILURE === '1' && shouldFail) {
-    if (progressPath) appendFileSync(progressPath, progressLine({ stepId: shouldFail, event: 'started', message: `${shouldFail} started` }) + '\n');
-    if (progressPath) appendFileSync(progressPath, progressLine({ stepId: shouldFail, event: 'failed', message: `${shouldFail}: simulated deployment failed`, resumeCommand: `Set-Location -LiteralPath '/home/operator/claude-code-foundry-gateway'; ./Install-ClaudeGateway.ps1 -Steps ${shouldFail}` }) + '\n');
-    console.error(`${shouldFail}: simulated deployment failed`);
+    const failure = `${stepTitle(shouldFail)}: failed: the deployment did not finish (capture stub)`;
+    if (progressPath) appendFileSync(progressPath, progressLine({ stepId: shouldFail, event: 'started', message: `${stepTitle(shouldFail)}: started` }) + '\n');
+    if (progressPath) appendFileSync(progressPath, progressLine({ stepId: shouldFail, event: 'failed', message: failure, resumeCommand: "Set-Location -LiteralPath '/home/operator/claude-code-foundry-gateway'; ./Install-ClaudeGateway.ps1" }) + '\n');
+    console.error(failure);
     process.exit(7);
   }
   if (process.env.P93_INSTALLER_UI_STUB_GRANDCHILD_HEARTBEAT) {
