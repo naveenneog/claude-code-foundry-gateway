@@ -8,6 +8,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { createInstallerUiServer } from '../tools/installer-ui/server.mjs';
+import { loadUiModel } from '../tools/installer-ui/server-model.mjs';
 import { canonicalize, createPreflightStore, preflightFingerprint, scopeCovers, scopeFromBody } from '../tools/installer-ui/preflight-record.mjs';
 
 const stub = fileURLToPath(new URL('./installer-ui-stub.mjs', import.meta.url));
@@ -87,8 +88,10 @@ async function waitForStubRuns(app, count) {
   throw new Error(`timed out waiting for ${count} installer runs`);
 }
 
+// The command's elements as PowerShell's parser reads them: a parameter as -Name, a string as its value, and an array
+// literal such as a,b as its elements joined by commas (the one argument the installer's [string[]] parameter receives).
 async function parsePowerShellCommand(command) {
-  const script = `$tokens=$null;$errors=$null;[System.Management.Automation.Language.Parser]::ParseInput($env:P93_COMMAND,[ref]$tokens,[ref]$errors)>$null;if($errors){throw $errors[0].Message};$tokens|?{ $_.Kind -ne 'EndOfInput' }|%{ $_.Text }|ConvertTo-Json -Compress`;
+  const script = "$tokens=$null;$errors=$null;$ast=[System.Management.Automation.Language.Parser]::ParseInput($env:P93_COMMAND,[ref]$tokens,[ref]$errors);if($errors){throw $errors[0].Message};$cmd=$ast.Find({param($n) $n -is [System.Management.Automation.Language.CommandAst]},$true);@($cmd.CommandElements|%{ if($_ -is [System.Management.Automation.Language.CommandParameterAst]){'-'+$_.ParameterName} elseif($_ -is [System.Management.Automation.Language.ArrayLiteralAst]){($_.Elements|%{$_.Value}) -join ','} elseif($_ -is [System.Management.Automation.Language.StringConstantExpressionAst]){$_.Value} else {$_.Extent.Text} })|ConvertTo-Json -Compress";
   const child = spawn('pwsh', ['-NoProfile', '-NonInteractive', '-Command', script], { shell: false, windowsHide: true, env: { ...process.env, P93_COMMAND: command } });
   let stdout = '';
   let stderr = '';
@@ -341,10 +344,14 @@ test('E1 missing pwsh puts the server and page in static mode without spawning c
 test('E2 shared installer arguments, CKPT_ORDER parse and removed commands route', async () => {
   const app = await startServer();
   try {
-    const bashSteps = await (await app.fetch('/api/bash-steps')).json();
-    assert.deepEqual(bashSteps.steps, ['resource-group', 'gateway-deployment', 'entra-groups', 'sync', 'onboarding-package']);
+    const checkpointSource = await readFile(new URL('../scripts/install-checkpoint.sh', import.meta.url), 'utf8');
+    const ckptOrder = checkpointSource.match(/^CKPT_ORDER="([^"]+)"/m)?.[1].trim().split(/\s+/);
+    assert.ok(ckptOrder?.length >= 5, 'CKPT_ORDER is found in scripts/install-checkpoint.sh');
+    const model = await loadUiModel();
+    assert.deepEqual([...model.bashInstallerSteps], ckptOrder, 'the model lists the bash installer steps of CKPT_ORDER');
     const stepIds = (await (await app.fetch('/api/steps')).json()).steps.map((step) => step.id);
-    for (const step of bashSteps.steps) assert.ok(stepIds.includes(step), step);
+    for (const step of ckptOrder) assert.ok(stepIds.includes(step), step);
+    assert.equal((await app.fetch('/api/bash-steps')).status, 404, 'the page needs no server route for the bash steps');
     const removed = await postJson(app, '/api/commands', { answersPath: './answers.json' });
     assert.equal(removed.response.status, 404);
 
@@ -390,10 +397,11 @@ test('E2 displayed PowerShell run argv matches the server installer argv', async
     await page.getByRole('button', { name: 'List steps' }).click();
     await page.locator('[name="SubscriptionId"]').fill(passingAnswers.SubscriptionId);
     await page.locator('#step-list input[value="resource-group"]').check();
+    await page.locator('#step-list input[value="gateway-deployment"]').check();
     await page.getByRole('button', { name: 'Run preflight' }).click();
     await page.getByText(/Passing preflight/).waitFor();
     const command = await page.locator('#commands pre').nth(1).textContent();
-    assert.match(command, /\.\/Install-ClaudeGateway\.ps1 -AnswersPath \.\/answers\.json -Yes -ProgressPath \.\/install-progress\.ndjson -Steps resource-group/);
+    assert.match(command, /\.\/Install-ClaudeGateway\.ps1 -AnswersPath \.\/answers\.json -Yes -ProgressPath \.\/install-progress\.ndjson -Steps resource-group,gateway-deployment/);
     await page.getByRole('button', { name: 'Run selected steps' }).click();
     await page.getByText(/summary:/).waitFor();
     const tokens = await parsePowerShellCommand(command);

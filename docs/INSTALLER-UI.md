@@ -32,8 +32,11 @@ The local server serves the same `index.html` bytes for `/` and `/index.html`, s
 mode share one page source.
 Static mode validates formats, creates `answers.json` and shows readable PowerShell command blocks.
 Bash command blocks appear only when the current answers and selected steps are all handled by the
-bash installer. It does not read Azure and does not run the installer. The Cloud Shell path is
-**Manage files > Upload** for `answers.json`, then one pasted command.
+bash installer: each answer's schema `x-appliedBy` names `install-claude-gateway.sh`, and each step is
+one of the bash installer's steps, `CKPT_ORDER` in `scripts/install-checkpoint.sh`, which
+`tools/installer-ui/ui-model.js` lists and a test keeps equal. It does not read Azure and does not run
+the installer. The Cloud Shell path is **Manage files > Upload** for `answers.json`, then one pasted
+command.
 
 ## Security model
 

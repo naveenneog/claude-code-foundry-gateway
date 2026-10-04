@@ -11,7 +11,7 @@ import { validatePreflight, validateProgressEvent, validateStepList } from './in
 import { assertSameOrigin, constantTimeTokenEquals, contentSecurityPolicy, isAllowedHost, isLoopbackBind, parseCookies, readJsonBody, send, sendText, tokenHash } from './http-helpers.mjs';
 import { attachSubscriber, createRunRecord, publicRun, publishEvent } from './run-record.mjs';
 import { createLineHandler, readProgressFile, writeNdjson } from './run-transport.mjs';
-import { fieldsByCheckId, installerArguments, loadBashSteps, loadSchema, prefillArguments, redactText, root, scrubLocalPaths } from './server-model.mjs';
+import { fieldsByCheckId, installerArguments, loadSchema, prefillArguments, redactText, root, scrubLocalPaths } from './server-model.mjs';
 import { answersDigest, createPreflightStore, preflightFingerprint, preflightRequired, scopeCovers, scopeFromBody, sortedUniqueSteps } from './preflight-record.mjs';
 
 export { loadSchema, redactText, scrubLocalPaths } from './server-model.mjs';
@@ -440,7 +440,6 @@ export async function createInstallerUiServer(options = {}) {
       if (req.method === 'GET' && url.pathname === '/ui-model.js') return sendText(res, 200, await readFile(uiModelScript, 'utf8'), 'text/javascript; charset=utf-8', setCookie);
       if (req.method === 'GET' && url.pathname === '/installer-ui.css') return sendText(res, 200, await readFile(uiCss, 'utf8'), 'text/css; charset=utf-8', setCookie);
       if (req.method === 'GET' && url.pathname === '/api/schema') return send(res, 200, await loadSchema(), setCookie);
-      if (req.method === 'GET' && url.pathname === '/api/bash-steps') return send(res, 200, { schemaVersion: 1, steps: await loadBashSteps() }, setCookie);
       if (req.method === 'GET' && url.pathname === '/api/steps') {
         requireLive();
         assertFetchMetadataForChildGet(req);
@@ -473,7 +472,6 @@ export async function createInstallerUiServer(options = {}) {
         if (parsed.error) parsed.error = scrubLocalPaths(await redactText(parsed.error));
         return send(res, parsed.field ? 400 : 200, parsed, setCookie);
       }
-      if (req.method === 'POST' && url.pathname === '/api/commands') return send(res, 404, { error: 'route not found' }, setCookie);
       if (req.method === 'POST' && url.pathname === '/api/preflight') {
         requireLive();
         assertSameOrigin(req);
@@ -567,9 +565,6 @@ export async function createInstallerUiServer(options = {}) {
         publish(run, { type: 'stopped', stepId: step, message: run.stoppedMessage });
         await killProcessTree(run.child);
         return send(res, 200, { schemaVersion: 1, runId: run.id, message: run.stoppedMessage }, setCookie);
-      }
-      if (req.method === 'POST' && url.pathname === '/api/run') {
-        return send(res, 404, { error: 'route not found' }, setCookie);
       }
       return send(res, 404, { error: 'route not found' }, setCookie);
     } catch (error) {

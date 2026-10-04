@@ -9,7 +9,6 @@ let businessUnits = [];
 let csrfToken = '';
 let sessionMode = 'live';
 let sessionReason = '';
-let bashSteps = [];
 let activeRunId = '';
 let activeStepId = '';
 let lastRunSeq = 0;
@@ -135,7 +134,6 @@ function refreshCommands() {
     progressPath: './install-progress.ndjson',
     steps: selectedSteps(),
     fullRun: !selectedSteps().length,
-    bashSteps,
     presentAnswers: Object.keys(answers).filter((key) => key !== 'schemaVersion'),
   }));
 }
@@ -395,11 +393,6 @@ async function main() {
     sessionReason = session.reason || '';
   } else {
     sessionMode = 'static';
-  }
-  if (location.protocol !== 'file:') {
-    try { bashSteps = (await (await fetch('./api/bash-steps')).json()).steps || []; } catch { bashSteps = []; }
-  } else {
-    bashSteps = ['resource-group', 'gateway-deployment', 'entra-groups', 'sync', 'onboarding-package'];
   }
   for (const [section, names] of Object.entries(fieldGroups)) {
     const parent = byId(section);

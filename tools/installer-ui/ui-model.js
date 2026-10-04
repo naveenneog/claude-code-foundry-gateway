@@ -85,6 +85,9 @@ function quoteBash(value) {
   return `'${String(value).replaceAll("'", "'\"'\"'")}'`;
 }
 
+// The steps the bash installer runs: CKPT_ORDER in scripts/install-checkpoint.sh (a test keeps this list equal to it).
+const bashInstallerSteps = Object.freeze(['resource-group', 'gateway-deployment', 'entra-groups', 'sync', 'onboarding-package']);
+
 function installerArguments({ engine, action, answersPath = './answers.json', progressPath = './install-progress.ndjson', steps = [], fullRun = false }) {
   if (engine === 'pwsh') {
     const args = ['-AnswersPath', answersPath];
@@ -118,7 +121,7 @@ function buildPortableCommands(schema, answersPath = './answers.json', options =
   const steps = options.steps || [];
   const fullRun = Boolean(options.fullRun);
   const progressPath = options.progressPath || './install-progress.ndjson';
-  const bashSteps = new Set(options.bashSteps || []);
+  const bashSteps = new Set(options.bashSteps || bashInstallerSteps);
   const presentAnswers = new Set(options.presentAnswers || []);
   const bashDoesNotApply = [];
   for (const [name, property] of Object.entries(schema.properties || {})) {
@@ -136,5 +139,5 @@ function buildPortableCommands(schema, answersPath = './answers.json', options =
     cloudShell: 'Manage files > Upload answers.json, then paste the PowerShell or bash command above.',
   };
 }
-globalThis.ClaudeInstallerUiModel = { buildPortableCommands, coerceAnswerValue, collectAnswersFromEntries, fieldGroups, fieldsByCheckId, installerArguments, validateBusinessUnits };
+globalThis.ClaudeInstallerUiModel = { bashInstallerSteps, buildPortableCommands, coerceAnswerValue, collectAnswersFromEntries, fieldGroups, fieldsByCheckId, installerArguments, validateBusinessUnits };
 })();
