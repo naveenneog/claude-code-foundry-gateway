@@ -508,6 +508,51 @@ $flowDiscovery.renewal = $renewal
 $global:ListMode = $null
 
 Write-Host ''
+Write-Host 'Projection switch - no other supported path moves entitlement-source to projection (council round 1)' -ForegroundColor Cyan
+# Every code path that names entitlement-source in a write. A new one fails here until it is classified.
+$writerPattern = "Set-ApimNamedValue\b.*-Id\s+'?entitlement-source\b|nv (update|create)\b.*--named-value-id\s+`"?entitlement-source\b|key:\s*'entitlement-source'|namedValues/entitlement-source\b"
+$writerFiles = @(@(Get-ChildItem -LiteralPath (Join-Path $root 'scripts') -Filter '*.ps1' -File -Recurse) + @(Get-Item -LiteralPath (Join-Path $root 'Install-ClaudeGateway.ps1')) +
+    @(Get-ChildItem -LiteralPath (Join-Path $root 'infra') -Filter '*.bicep' -File) | Where-Object { @([IO.File]::ReadAllLines($_.FullName) | Where-Object { $_ -match $writerPattern -and $_ -notmatch '^\s*#' }).Count } |
+    ForEach-Object { $_.FullName.Substring($root.Length + 1).Replace('\', '/') } | Sort-Object)
+$classified = @('infra/main.bicep', 'scripts/ClaudeProjectionSwitch.ps1', 'scripts/flow/Entitlement.ps1')
+Assert 'the only code that writes entitlement-source by name is the switch, the flow''s named-value rollback and the template the installer feeds the live value' (($writerFiles -join ',') -eq ($classified -join ',')) "writers: $($writerFiles -join ', ')"
+$installerText = Get-Content -LiteralPath (Join-Path $root 'Install-ClaudeGateway.ps1') -Raw
+$bicepText = Get-Content -LiteralPath (Join-Path $root 'infra\main.bicep') -Raw
+Assert 'the installer passes the live entitlement-source to the template, whose default is named-value' ($installerText -match "entitlementSource=\`$\(if \(\`$entSrc\) \{ \`$entSrc \} else \{ 'named-value' \}\)" -and $bicepText -match "param entitlementSource string = 'named-value'")
+Assert 'an update creates a missing entitlement-source as named-value' ((Get-ClaudeFlowLifecycleTemplateNamedValueDefaults)['entitlement-source'].Value -eq 'named-value')
+# Restore-ClaudeGateway.ps1 puts back every named value it changed; entitlement-source=projection waits for the switch.
+$restoreScript = Join-Path $root 'scripts\Restore-ClaudeGateway.ps1'
+foreach ($case in @(
+        @{ Name = 'a backup taken on the projection does not switch a named-value gateway'; Backup = 'projection'; Live = 'named-value'; Writes = $false }
+        @{ Name = 'a backup taken on named values returns a projection gateway to them'; Backup = 'named-value'; Live = 'projection'; Writes = $true }
+    )) {
+    $backupFile = Join-Path $work "restore-$($case.Backup).json"
+    [IO.File]::WriteAllText($backupFile, (@{
+                schemaVersion = 1; capturedAt = '2026-10-05T00:00:00Z'; capturedBy = 'test'
+                gateway = @{ subscriptionId = $FixtureSubscription; resourceGroup = 'rg-p84'; apimName = 'apim-p84'; workspaceName = 'law-p84'; apiId = 'claude-foundry' }
+                namedValues = @(@{ name = 'entitlement-source'; displayName = 'entitlement-source'; value = $case.Backup }, @{ name = 'allow-standard'; displayName = 'allow-standard'; value = ',x,' })
+                secretsSkipped = @(); functions = @(); workbooks = @(); policy = $null
+            } | ConvertTo-Json -Depth 6))
+    Reset-ProjectionFixture
+    $global:RestoreLiveSource = $case.Live
+    $restoreText = & {
+        function Invoke-RestMethod {
+            param($Uri, $Headers, $Method, $Body, $ErrorAction, $ContentType)
+            if ($Method -eq 'Put') { $global:FixtureCalls.Add("PUT $Uri"); return $null }
+            [pscustomobject]@{ value = @(
+                    [pscustomobject]@{ name = 'entitlement-source'; properties = [pscustomobject]@{ value = $global:RestoreLiveSource; secret = $false } }
+                    [pscustomobject]@{ name = 'allow-standard'; properties = [pscustomobject]@{ value = ','; secret = $false } }) }
+        }
+        try { & $restoreScript -Path $backupFile -Apply *>&1 | Out-String -Width 400 } catch { "THREW $($_.Exception.Message)" }
+    }
+    $puts = @($FixtureCalls | Where-Object { $_ -like 'PUT *' })
+    $wroteSource = @($puts | Where-Object { $_ -match 'namedValues/entitlement-source\?' }).Count -gt 0
+    $ok = $restoreText -notmatch 'THREW' -and @($puts | Where-Object { $_ -match 'namedValues/allow-standard\?' }).Count -eq 1 -and $wroteSource -eq $case.Writes
+    if (-not $case.Writes) { $ok = $ok -and $restoreText -match 'entitlement-source stays named-value' -and $restoreText -match 'Deploy-ClaudeProjection\.ps1 -FlipAfterCleanCompare' }
+    Assert "restore: $($case.Name)" $ok "puts: $($puts -join ' | ') | $(($restoreText -split "`r?`n" | Where-Object { $_ -match 'entitlement|THREW' }) -join ' / ')"
+}
+
+Write-Host ''
 Write-Host 'Projection switch - the guides describe the switch (AC7, AC8)' -ForegroundColor Cyan
 $staleSwitch = '(?i)P84 refuses|refuses every (automated )?projection switch|refuses automated switching|returns the P86 refusal|switching is (blocked|unavailable)|unavailable in P84|blocked until P86|(switch( itself)?|switching|binding them[^.]*) is P95|until (a |the )?supported (projection )?switch exists|refused unconditionally|not P84-protected|proposed as \**P86|needs the supported P86'
 $described = @(Get-Item -LiteralPath (Join-Path $root 'README.md'), (Join-Path $root 'Install-ClaudeGateway.ps1')) +

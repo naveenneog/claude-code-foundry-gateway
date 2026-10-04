@@ -108,9 +108,16 @@ try {
 catch { throw "Could not read $ApimName to compare against. $($_.Exception.Message)" }
 
 $plan = @()
+$held = @()
 foreach ($n in $backup.namedValues) {
     $now = if ($live.ContainsKey($n.name)) { $live[$n.name] } else { $null }
     $state = if ($null -eq $now) { 'create' } elseif ($now -ne [string]$n.value) { 'change' } else { 'same' }
+    # A restore does not move entitlement-source to projection: that switch needs the renewal job's
+    # evidence (ADR-0050). Returning to named-value is restored as usual.
+    if ($n.name -eq 'entitlement-source' -and [string]$n.value -eq 'projection' -and $state -ne 'same') {
+        $held += [pscustomobject]@{ Name = $n.name; From = $now; To = [string]$n.value }
+        continue
+    }
     $plan += [pscustomobject]@{ Name = $n.name; State = $state; From = $now; To = [string]$n.value }
 }
 
@@ -131,6 +138,10 @@ else {
 
 Write-Host ''
 Write-Host ("  policy      {0}" -f $(if ($backup.policy) { "$($backup.policy.Length) characters would be applied" } else { 'not in this backup' })) -ForegroundColor DarkGray
+foreach ($h in $held) {
+    Write-Host ("  entitlement-source stays {0}: the backup holds projection, and a switch to the projection needs the renewal job's evidence." -f $(if ($null -eq $h.From) { '(absent)' } else { $h.From })) -ForegroundColor Yellow
+    Write-Host '  The switch is scripts/Deploy-ClaudeProjection.ps1 -FlipAfterCleanCompare (docs/SECURE-PROJECTION.md#switch-to-the-projection-p95).' -ForegroundColor DarkGray
+}
 Write-Host ("  functions   {0} would be published to {1}" -f $backup.functions.Count, $WorkspaceName) -ForegroundColor DarkGray
 Write-Host ("  workbooks   {0} would be published" -f $backup.workbooks.Count) -ForegroundColor DarkGray
 
