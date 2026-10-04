@@ -221,6 +221,9 @@ Reset-ProjectionFixture
 Capture { & $deployer -ResourceGroup rg-p84 -ApimName apim-p84 -NamePrefix p84fixture -FlipAfterCleanCompare -RenewalReceiptPath (Join-Path $work 'missing.json') }
 Assert 'a missing receipt and no renewal parameters refuse before any Azure call, with the remedy' ($Failure -match 'P86 admission requires' -and $Failure -match 'Deploy-ClaudeProjectionRenewal\.ps1' -and $Failure -match '60-90 minutes' -and $FixtureCalls.Count -eq 0) "$Failure | calls $($FixtureCalls.Count)"
 Reset-ProjectionFixture
+Capture { & $deployer -ResourceGroup rg-p84 -ApimName apim-p84 -NamePrefix p84fixture -FlipAfterCleanCompare -RenewalReceiptPath $receiptPath -RenewalImageDigest ('sha256:' + ('b' * 64)) }
+Assert 'a renewal parameter that differs from the receipt refuses before any Azure call, with the remedy' ($Failure -match '-RenewalImageDigest is sha256:b{64}, but the renewal receipt .* records sha256:a{64}\. Remedy: pass the receipt''s value, or leave the parameter out' -and $FixtureCalls.Count -eq 0) "$Failure | calls $($FixtureCalls.Count)"
+Reset-ProjectionFixture
 Capture { @(1..2 | ForEach-Object { Save-ClaudeProjectionSwitchBackup -ResourceGroup rg-p84 -ApimName apim-p84 -GatewayResourceId $FixtureGatewayId -Directory $backupDir }) }
 Assert 'two backups in the same second are two files; neither overwrites the other' (-not $Failure -and @($Result | Select-Object -Unique).Count -eq 2 -and @($Result | Where-Object { Test-Path -LiteralPath $_ }).Count -eq 2) "$Failure"
 Write-Host ''
