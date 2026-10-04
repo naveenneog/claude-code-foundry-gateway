@@ -23,13 +23,13 @@
     <p class="small">Cloud Shell ends a session after 20 minutes without interactive activity. Keep the shell active before long waits.</p>
   </header>
   <main>
-    <section><h2>Prerequisites</h2><button id="preflight" type="button" accesskey="p">Run preflight</button><div id="preflight-output"></div></section>
+    <section><h2>Prerequisites</h2><button id="preflight" type="button">Run preflight</button><div id="preflight-output"></div></section>
     <section><h2>First install</h2><div id="first-install" class="grid"></div></section>
     <section><h2>Optional parts</h2><div id="optional-parts" class="grid"></div></section>
-    <section><h2>Business units and teams</h2><div id="business-unit-tree"></div><button id="add-unit" type="button" accesskey="u">Add unit</button><label>Add team under <select id="team-parent"></select></label><button id="add-team" type="button" accesskey="t">Add team</button><details><summary>JSON view</summary><label>Business units JSON<textarea id="business-units" rows="8" cols="80"></textarea></label></details><pre id="business-unit-problems" role="alert" tabindex="-1"></pre></section>
+    <section><h2>Business units and teams</h2><div id="business-unit-tree"></div><button id="add-unit" type="button">Add unit</button><label>Add team under <select id="team-parent"></select></label><button id="add-team" type="button">Add team</button><details><summary>JSON view</summary><label>Business units JSON<textarea id="business-units" rows="8" cols="80"></textarea></label></details><pre id="business-unit-problems" role="alert" tabindex="-1"></pre></section>
     <section><h2>Advanced</h2><div id="advanced" class="grid"></div></section>
     <section><h2>Review</h2><button id="download" type="button">Download answers.json</button><p id="preflight-state" role="status">No passing preflight yet.</p><pre id="commands"></pre></section>
-    <section><h2>Run</h2><button id="steps" type="button" accesskey="l">List steps</button><div id="step-list"></div><button id="run" type="button" accesskey="r">Run selected steps</button><button id="full-run" type="button">Full run</button><button id="rerun" type="button" accesskey="e" disabled>Re-run failed step</button><button id="stop-run" type="button" disabled>Stop run</button><pre id="run-output" role="log" aria-label="Run output"></pre></section>
+    <section><h2>Run</h2><button id="steps" type="button">List steps</button><div id="step-list"></div><button id="run" type="button">Run selected steps</button><button id="full-run" type="button">Full run</button><button id="rerun" type="button" disabled>Re-run failed step</button><button id="stop-run" type="button" disabled>Stop run</button><pre id="run-output" role="log" aria-label="Run output"></pre></section>
     <pre id="errors" role="alert" tabindex="-1"></pre>
   </main>
 </body>

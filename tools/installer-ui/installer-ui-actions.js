@@ -41,6 +41,7 @@
 
     async function run(button, options, action) {
       if (button.dataset.actionBusy === "true" || button.disabled) return undefined;
+      const hadFocus = document.activeElement === button;
       const oldText = button.textContent;
       const busyText = options.busyText || `${oldText}...`;
       const successText = options.successText || "Done.";
@@ -52,6 +53,7 @@
       button.disabled = true;
       button.textContent = busyText;
       appendText(status, busyText);
+      if (hadFocus) status.focus();
       try {
         const result = await action();
         clearChildren(status);
@@ -68,7 +70,16 @@
         button.disabled = false;
 
         if (typeof hostOptions.onSettled === "function") hostOptions.onSettled(button);
+        if (hadFocus) returnFocus(button, status);
       }
+    }
+
+    function returnFocus(button, status) {
+      // Chromium moves focus to the body when the focused button is disabled; the status region keeps the keyboard position.
+      const active = document.activeElement;
+      if (active && active !== document.body && active !== status) return;
+      if (button.disabled || button.hidden) status.focus();
+      else button.focus();
     }
 
     return { run };

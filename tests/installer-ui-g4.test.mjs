@@ -466,6 +466,10 @@ test('P1 the preflight state says no passing preflight before the first prefligh
     await fillValid(page);
     await page.locator('[name="ResourceGroup"]').fill('rg-before-preflight');
     await page.getByText('No passing preflight yet.').waitFor();
+    await page.locator('summary', { hasText: 'JSON view' }).click();
+    await page.locator('#business-units').fill('[]');
+    assert.equal(await page.locator('#preflight-state').textContent(), 'No passing preflight yet.');
+    await page.locator('#business-units').fill('');
     await page.getByRole('button', { name: 'List steps' }).click();
     await page.locator('#step-list input[value="resource-group"]').check();
     await page.getByRole('button', { name: 'Run preflight' }).click();
@@ -601,57 +605,86 @@ test('U4 keyboard and accessibility journey has names, live regions, focus moves
     assert.equal(await page.locator('#preflight-state').getAttribute('role'), 'status');
     assert.equal(await page.locator('#errors').getAttribute('role'), 'alert');
     assert.equal(await page.locator('#run-output').getAttribute('aria-label'), 'Run output');
-    async function focusBy(selector, reverse = false) {
-      for (let i = 0; i < 160; i += 1) {
-        const ok = await page.locator(':focus').evaluate((node, sel) => node?.matches(sel), selector).catch(() => false);
-        if (ok) return;
-        await page.keyboard.press(reverse ? 'Shift+Tab' : 'Tab');
+    const focusIs = (selector) => page.evaluate((sel) => Boolean(document.activeElement?.matches(sel)), selector);
+    const focusedRow = () => page.evaluate(() => [document.activeElement?.closest('[data-bu-index]')?.dataset.buIndex ?? '', document.activeElement?.dataset.buField ?? '', document.activeElement?.value ?? '']);
+    async function pressUntil(key, selector) {
+      for (let presses = 0; presses < 150; presses += 1) {
+        if (await focusIs(selector)) return;
+        await page.keyboard.press(key);
       }
-      assert.fail(`Could not focus ${selector}`);
+      assert.fail(`${key} did not reach ${selector} within 150 presses`);
     }
 
     async function assertInteractiveNames() {
-      const snapshot = await page.locator('body').ariaSnapshot();
-      assert.deepEqual(unnamedInteractiveLines(snapshot), []);
+      assert.deepEqual(unnamedInteractiveLines(await page.locator('body').ariaSnapshot()), []);
     }
 
-    async function access(key) {
-      await page.keyboard.press(`Alt+${key.toUpperCase()}`);
-    }
-
-    await assertInteractiveNames();
-    await access('u');
-    assert.equal(await page.evaluate(() => document.activeElement?.dataset.buField), 'id');
+    await pressUntil('Tab', '[name="SubscriptionId"]');
+    await page.keyboard.type('00000000-0000-4000-8000-000000000093');
+    await pressUntil('Tab', '#add-unit');
+    await page.keyboard.press('Enter');
+    assert.deepEqual(await focusedRow(), ['0', 'id', '']);
     await page.keyboard.type('finance');
     await page.keyboard.press('Tab');
     await page.keyboard.type('claude-bu-finance');
     await page.keyboard.press('Tab');
     await page.keyboard.type('100');
-    await access('t');
-    assert.equal(await page.evaluate(() => document.activeElement?.dataset.buField), 'id');
+    await pressUntil('Tab', '#add-team');
+    await page.keyboard.press('Enter');
+    assert.deepEqual(await focusedRow(), ['1', 'id', '']);
     await page.keyboard.type('finance-apps');
     await assertInteractiveNames();
-    await focusBy('[data-bu-index="0"] button');
+    await pressUntil('Tab', '[data-bu-index="1"] button');
     await page.keyboard.press('Enter');
-    assert.equal(await page.evaluate(() => document.activeElement?.dataset.buField), 'id');
-    assert.equal(await page.locator(':focus').evaluate((node) => node.closest('[data-bu-index]')?.dataset.buIndex), '0');
-    assert.equal(await page.locator(':focus').inputValue(), 'finance-apps');
-    await focusBy('[data-bu-index="0"] button');
+    assert.deepEqual(await focusedRow(), ['0', 'id', 'finance'], 'removing the last row focuses the previous row');
+    await pressUntil('Tab', '#add-team');
     await page.keyboard.press('Enter');
-    assert.equal(await page.evaluate(() => document.activeElement?.id), 'add-unit');
-    await access('s');
-    await page.keyboard.type('00000000-0000-4000-8000-000000000093');
-    await access('l');
-    await focusBy('#step-list input[value="gateway-deployment"]');
+    await page.keyboard.type('finance-ops');
+    await pressUntil('Shift+Tab', '[data-bu-index="0"] button');
+    await page.keyboard.press('Enter');
+    assert.deepEqual(await focusedRow(), ['0', 'id', 'finance-ops'], 'removing the first row focuses the row that takes its place');
+    await pressUntil('Tab', '[data-bu-index="0"] button');
+    await page.keyboard.press('Enter');
+    assert.equal(await focusIs('#add-unit'), true, 'removing the only row focuses Add unit');
+
+    await pressUntil('Tab', '#steps');
+    await page.keyboard.press('Enter');
+    await page.locator('#steps-status').getByText('Steps listed.').waitFor();
+    assert.equal(await focusIs('#steps'), true, 'focus returns to List steps after the action');
+    await pressUntil('Tab', '#step-list input[value="gateway-deployment"]');
     await page.keyboard.press('Space');
-    await access('p');
-    await page.getByText(/Passing preflight/).waitFor();
-    assert.match(await page.locator('#preflight-state').textContent(), /Passing preflight/);
-    await access('r');
+    assert.equal(await page.locator('#step-list input[value="gateway-deployment"]').isChecked(), true);
+    await assertInteractiveNames();
+    await pressUntil('Tab', '#preflight');
+    await page.keyboard.press('Enter');
+    await page.locator('#preflight-state').getByText(/Passing preflight/).waitFor();
+    assert.equal(await focusIs('#preflight'), true, 'focus returns to Run preflight after the action');
+    assert.match(await page.locator('#preflight-output').textContent(), /answers\.schema/);
+    await pressUntil('Shift+Tab', '#run');
+    await page.keyboard.press('Enter');
     await page.getByText(/summary:/).waitFor();
-    assert.equal(await page.getByRole('button', { name: 'Re-run failed step' }).isEnabled(), true);
-    await access('e');
-    await page.getByText(/Re-run finished/).waitFor();
+    await page.locator('#run-status').getByText('Run finished.').waitFor();
+    await pressUntil('Tab', '#rerun');
+    await page.keyboard.press('Enter');
+    await page.locator('#rerun-status').getByText('Re-run finished.').waitFor();
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
+test('U4 an action keeps keyboard focus beside its button while busy and returns it afterwards', async () => {
+  const app = await start({ env: { P93_INSTALLER_UI_STUB_PREFLIGHT_DELAY_MS: '800' } });
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await fillValid(page);
+    await page.locator('#preflight').focus();
+    await page.keyboard.press('Enter');
+    await page.locator('#preflight-status').getByText('Running preflight...').waitFor();
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'preflight-status');
+    await page.locator('#preflight-status').getByText('Preflight finished.').waitFor();
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'preflight');
     await assertClean(page, pageErrors);
   } finally {
     await browser.close();
