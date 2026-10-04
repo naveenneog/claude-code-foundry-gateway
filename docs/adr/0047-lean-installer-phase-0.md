@@ -407,8 +407,10 @@ The RED phase adds these tests before product code:
       shard-contract checks there, because on PR #2's Windows runners they failed while other checks ran and
       passed alone. Decision 16 found the cause, a child's output that the harness stopped reading. With the
       reader of decision 16, CI run `37219348012` passed all 12 shards with those 19 registrations in the
-      parallel lane again, and they stay there (`tests/Test-All.ps1:217-246`): each run has its own copy of the
-      files, its own stubs, state directory and TEMP, so these checks share no resource; ADR-0036 (option 3)
+      parallel lane again, and they stay there (`tests/Test-All.ps1:217-246`): each check has its own TEMP and
+      state directory (`tests/Test-All.ps1:138-140`), its installer scenarios their own copy of the files, stubs
+      and HOME (`tests/BashInstallerHarness.ps1:251-298`, `tests/Test-BashInstaller.ps1:215-231`), and the
+      library probes only read the checkout, so these checks share no mutable resource; ADR-0036 (option 3)
       rejected moving checks into the parallel lane without such isolation. In a Test-All run without shards the exclusive checks'
       weights summed to 2,724 s (38 checks) with them and sum to 1,193 s (19 checks) without them
       (`tests/test-all-durations.json`), against the gate's 3,600 s budget (ADR-0036).

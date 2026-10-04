@@ -214,7 +214,7 @@ try {
     Invoke-Check 'Release log hygiene'                     'Test-ReleaseLog.ps1'
     Invoke-Check 'Azure CLI arguments vs cmd.exe'          'Test-AzArguments.ps1' -SerialLane
     Invoke-Check 'Shell scripts - syntax and banner'       'Test-ShellScripts.ps1' -SerialLane
-    # The bash installer suites share no resource: each run has its own copy, stubs, state and TEMP (ADR-0047 decision 14).
+    # The bash installer suites share no mutable resource: each check has its own TEMP and state directory, its installer scenarios their own copy of the files, stubs and HOME, and library probes only read the checkout (ADR-0047 decision 14).
     $installerBash = if ($IsWindows -or $env:OS -eq 'Windows_NT') { @(@('C:\Program Files\Git\bin\bash.exe', 'C:\Program Files\Git\usr\bin\bash.exe', (Join-Path "$env:LOCALAPPDATA" 'Programs\Git\bin\bash.exe')) | Where-Object { Test-Path -LiteralPath $_ }) | Select-Object -First 1 } else { (Get-Command bash -ErrorAction SilentlyContinue | Select-Object -First 1).Source }
     $bashInstallerSkip = if (-not $installerBash) { 'macOS/Linux installer: no Git Bash (Windows) or bash on this machine.' } elseif (-not (& $installerBash -c 'command -v jq' 2>$null)) { 'macOS/Linux installer: jq is not on the bash PATH; the installer needs it.' } else { '' }
     # The installer and flow harnesses read each child's output on a thread of their own, not the thread pool's (U92).
