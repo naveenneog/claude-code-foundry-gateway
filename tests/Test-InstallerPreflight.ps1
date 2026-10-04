@@ -47,19 +47,10 @@ function Invoke-CmdMarkerPreflight {
     Copy-Item -LiteralPath $template -Destination $repo -Recurse
     $marker = Join-Path $dir 'marker.txt'
     $doc = New-Answers
-    & $Change $doc $marker
+    & $Change $doc
     $answersPath = Join-Path $dir 'answers.json'
     Write-P91Text $answersPath ($doc | ConvertTo-Json -Depth 10)
-    $az = @'
-@echo off
-if "%1"=="version" echo {"azure-cli":"2.90.0"}& exit /b 0
-if "%1"=="bicep" echo Bicep CLI version 0.46.1& exit /b 0
-if "%1"=="account" if "%2"=="show" echo {"id":"00000000-0000-4000-8000-0000000000a1","tenantId":"00000000-0000-4000-8000-0000000000f1","name":"p91-subscription","state":"Enabled","user":{"name":"admin@contoso.com"}}& exit /b 0
-if "%1"=="account" if "%2"=="list" echo [{"id":"00000000-0000-4000-8000-0000000000a1","tenantId":"00000000-0000-4000-8000-0000000000f1","name":"p91-subscription","state":"Enabled"}]& exit /b 0
-echo []
-exit /b 0
-'@
-    Write-P91Text (Join-Path $bin 'az.cmd') $az
+    Write-P91Text (Join-Path $bin 'az.cmd') $markerAz
     $psi = [Diagnostics.ProcessStartInfo]::new($script:P91Pwsh)
     foreach ($arg in @('-NoProfile', '-NonInteractive', '-File', (Join-Path $repo 'Install-ClaudeGateway.ps1'), '-Preflight', '-Json', '-AnswersPath', $answersPath)) { $psi.ArgumentList.Add($arg) }
     $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
@@ -67,6 +58,7 @@ exit /b 0
     $psi.WorkingDirectory = $repo
     $psi.Environment['PATH'] = "$bin;$($psi.Environment['PATH'])"
     $psi.Environment['AZURE_CONFIG_DIR'] = Join-Path $dir 'az'
+    $psi.Environment['P93_MARKER_PATH'] = $marker
     $p = [Diagnostics.Process]::Start($psi)
     # Both pipes drain at once on threads of their own (ADR-0047 decision 16), and the run is bounded.
     $outRead = Start-ChildOutputRead $p.StandardOutput
@@ -75,26 +67,53 @@ exit /b 0
     if (-not $exited) { try { $p.Kill($true) } catch { } }
     $out = Receive-ChildOutputRead $outRead "The standard output of the $Name marker preflight"
     $err = Receive-ChildOutputRead $errRead "The standard error of the $Name marker preflight"
-    [pscustomobject]@{ Name = $Name; ExitCode = $(if ($exited) { $p.ExitCode } else { -1 }); Out = $out; Err = $err; Marker = $marker }
+    $messages = try { @(($out | ConvertFrom-Json -ErrorAction Stop).checks | ForEach-Object { $_.problems } | ForEach-Object { [string]$_.message }) } catch { @() }
+    [pscustomobject]@{ Name = $Name; ExitCode = $(if ($exited) { $p.ExitCode } else { -1 }); Out = $out; Err = $err; Marker = $marker; Messages = $messages }
 }
 
 try {
     $template = New-P91Template $scratch
     if ($script:windows) {
-        $markerPayload = { param([string]$Marker) "p93&echo.P93_PREFILL_MARKER>$Marker&rem" }
-        $markerRuns = @(
-            (Invoke-CmdMarkerPreflight 'SubscriptionId' { param($a, $m) $a.SubscriptionId = (& $markerPayload $m) })
-            (Invoke-CmdMarkerPreflight 'StandardGroup' { param($a, $m) Set-Answer $a 'StandardGroup' (& $markerPayload $m) })
-            (Invoke-CmdMarkerPreflight 'PremiumGroup' { param($a, $m) Set-Answer $a 'PremiumGroup' (& $markerPayload $m) })
-            (Invoke-CmdMarkerPreflight 'BusinessUnits.group' { param($a, $m) Set-Answer $a 'BusinessUnits' @([ordered]@{ id = 'finance'; group = (& $markerPayload $m); monthlyUsdBudget = 100; mode = 'Strict' }) })
-            (Invoke-CmdMarkerPreflight 'FoundryAccount' { param($a, $m) $a.FoundryAccount = (& $markerPayload $m) })
+        # A payload that fits every other rule of each answer: short (SubscriptionId allows 100 characters) and
+        # without a colon (a unit's group refused a colon before 70f07c0). cmd.exe expands P93_MARKER_PATH, which
+        # each run sets to its own marker file, so a value that reaches the az.cmd shim writes that file.
+        $markerPayload = 'p93&echo.P93_PREFILL_MARKER>%P93_MARKER_PATH%&rem'
+        $markerAz = @'
+@echo off
+if "%1"=="version" echo {"azure-cli":"2.90.0"}& exit /b 0
+if "%1"=="bicep" echo Bicep CLI version 0.46.1& exit /b 0
+if "%1"=="account" if "%2"=="show" echo {"id":"00000000-0000-4000-8000-0000000000a1","tenantId":"00000000-0000-4000-8000-0000000000f1","name":"p91-subscription","state":"Enabled","user":{"name":"admin@contoso.com"}}& exit /b 0
+if "%1"=="account" if "%2"=="list" echo [{"id":"00000000-0000-4000-8000-0000000000a1","tenantId":"00000000-0000-4000-8000-0000000000f1","name":"p91-subscription","state":"Enabled"}]& exit /b 0
+echo []
+exit /b 0
+'@
+        # Control: the payload given to the shim as PowerShell passes a native argument writes the marker, so a
+        # preflight that leaves no marker never passed the value to Azure CLI.
+        $controlDir = Join-Path $scratch 'cmd-marker\control'
+        New-Item -ItemType Directory -Force -Path $controlDir | Out-Null
+        Write-P91Text (Join-Path $controlDir 'az.cmd') $markerAz
+        $controlMarker = Join-Path $controlDir 'marker.txt'
+        $env:P93_MARKER_PATH = $controlMarker
+        try { $null = & (Join-Path $controlDir 'az.cmd') account show --subscription $markerPayload 2>&1 } finally { Remove-Item Env:P93_MARKER_PATH -ErrorAction SilentlyContinue }
+        Assert 'control: the marker payload given straight to an az.cmd shim writes its marker file on this machine' (Test-Path -LiteralPath $controlMarker) $controlMarker
+        $schemaDoc = [IO.File]::ReadAllText((Join-Path $script:P91Root 'schemas/claude-gateway.answers.schema.json')) | ConvertFrom-Json
+        $markerCases = @(
+            @{ Name = 'SubscriptionId'; Path = 'SubscriptionId'; Rule = $schemaDoc.properties.SubscriptionId; Change = { param($a) $a.SubscriptionId = $markerPayload } }
+            @{ Name = 'StandardGroup'; Path = 'StandardGroup'; Rule = $schemaDoc.properties.StandardGroup; Change = { param($a) Set-Answer $a 'StandardGroup' $markerPayload } }
+            @{ Name = 'PremiumGroup'; Path = 'PremiumGroup'; Rule = $schemaDoc.properties.PremiumGroup; Change = { param($a) Set-Answer $a 'PremiumGroup' $markerPayload } }
+            @{ Name = 'BusinessUnits.group'; Path = 'BusinessUnits'; Rule = $schemaDoc.'$defs'.BusinessUnit.properties.group; Change = { param($a) Set-Answer $a 'BusinessUnits' @([ordered]@{ id = 'finance'; group = $markerPayload; monthlyUsdBudget = 100; mode = 'Strict' }) } }
+            @{ Name = 'FoundryAccount'; Path = 'FoundryAccount'; Rule = $schemaDoc.properties.FoundryAccount; Change = { param($a) $a.FoundryAccount = $markerPayload } }
         )
+        $markerRuns = @(foreach ($c in $markerCases) { $r = Invoke-CmdMarkerPreflight $c.Name $c.Change; $r | Add-Member -NotePropertyName Case -NotePropertyValue $c; $r })
         $markerLeaks = @($markerRuns | Where-Object { Test-Path -LiteralPath $_.Marker })
-        $markerMisses = @($markerRuns | Where-Object { $_.ExitCode -eq 0 -or "$($_.Out)$($_.Err)" -notmatch "$([regex]::Escape($_.Name))|cmd\.exe metacharacter|expected form|Foundry account name" })
+        # Each value is refused by its own pattern rule: a problem that names the answer and carries the schema's message.
+        $markerMisses = @($markerRuns | Where-Object { $run = $_; $why = [string]$run.Case.Rule.'x-patternMessage'
+                $run.ExitCode -eq 0 -or -not $why -or -not @($run.Messages | Where-Object { $_.StartsWith($run.Case.Path) -and $_.Contains($why) }).Count })
         Assert 'P93 Windows preflight refuses cmd.exe marker answers before any az.cmd argument can execute them: SubscriptionId, StandardGroup, PremiumGroup, BusinessUnits.group and another az-bound answer' (-not $markerLeaks.Count -and -not $markerMisses.Count) (
-            'leaks: ' + (($markerLeaks | ForEach-Object { $_.Name }) -join ', ') + '; misses: ' + (($markerMisses | ForEach-Object { "$($_.Name) exit=$($_.ExitCode)" }) -join ', '))
+            'leaks: ' + (($markerLeaks | ForEach-Object { $_.Name }) -join ', ') + '; misses: ' + (($markerMisses | ForEach-Object { "$($_.Name) exit=$($_.ExitCode) problems=$($_.Messages -join ' / ')" }) -join ', '))
     }
     else {
+        Assert 'P93 Windows cmd.exe marker preflight control is Windows-only' $true
         Assert 'P93 Windows cmd.exe marker preflight cases are Windows-only' $true
     }
     Add-Scenario 'pass' (New-P91World) (New-Answers)
