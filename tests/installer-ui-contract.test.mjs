@@ -28,6 +28,48 @@ async function runPwsh(args, env = {}) {
   return { code, stdout, stderr };
 }
 
+async function runStub(args, env = {}) {
+  const child = spawn(process.execPath, [stub, 'pwsh', ...args], {
+    cwd: repoRoot,
+    shell: false,
+    windowsHide: true,
+    env: { ...process.env, CI: '1', FORCE_COLOR: '0', ...env },
+  });
+  let stdout = '';
+  let stderr = '';
+  child.stdout.on('data', (chunk) => { stdout += chunk.toString('utf8'); });
+  child.stderr.on('data', (chunk) => { stderr += chunk.toString('utf8'); });
+  const [code] = await once(child, 'close');
+  return { code, stdout, stderr };
+}
+
+function sortedKeys(value) {
+  return Object.keys(value).sort();
+}
+
+function valueType(value) {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'array';
+  return typeof value;
+}
+
+function assertPreflightValueTypes(preflight) {
+  assert.equal(valueType(preflight.schemaVersion), 'number');
+  assert.equal(valueType(preflight.installer), 'string');
+  assert.equal(valueType(preflight.answersSchemaVersion), 'number');
+  assert.equal(valueType(preflight.result), 'string');
+  assert.equal(valueType(preflight.checks), 'array');
+  for (const check of preflight.checks) {
+    assert.equal(valueType(check.id), 'string');
+    assert.equal(valueType(check.result), 'string');
+    assert.equal(valueType(check.message), 'string');
+    assert.equal(valueType(check.remedy), 'string');
+    assert.equal(valueType(check.problems), 'array');
+    if (check.result === 'NOT-RUN') assert.equal(valueType(check.reason), 'string');
+    else assert.equal(valueType(check.reason), 'null');
+  }
+}
+
 async function start(env = {}) {
   const scratch = join(tmpdir(), 'p93-installer-ui-contract', `${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`);
   await rm(scratch, { recursive: true, force: true });
@@ -91,6 +133,89 @@ test('contract adapter accepts real step list and logged-out preflight output', 
   } finally {
     await rm(scratch, { recursive: true, force: true });
     await rmdir(dirname(scratch)).catch(() => {});
+  }
+});
+
+test('T2 stub step list and preflight stay byte-shape compatible with the real installer', { timeout: 180_000 }, async () => {
+  const scratch = join(repoRoot, '.p93-installer-ui-real-contract', `${process.pid}-${Date.now()}`);
+  const stateDir = join(scratch, 'state-that-does-not-exist-yet');
+  const answersPath = join(scratch, 'answers.json');
+  await rm(scratch, { recursive: true, force: true });
+  await mkdir(scratch, { recursive: true });
+  try {
+    await writeFile(answersPath, JSON.stringify({
+      schemaVersion: 1,
+      SubscriptionId: '00000000-0000-4000-8000-000000000093',
+      ResourceGroup: 'rg-p93',
+      FoundryAccount: 'ai-p93',
+      FoundryResourceGroup: 'rg-ai-p93',
+    }, null, 2));
+    const env = {
+      AZURE_CONFIG_DIR: process.env.AZURE_CONFIG_DIR,
+      CLAUDE_GATEWAY_STATE_DIR: stateDir,
+    };
+    const realStepsRun = await runPwsh(['-ListSteps', '-Json'], env);
+    const stubStepsRun = await runStub(['-ListSteps', '-Json']);
+    assert.equal(realStepsRun.code, 0, realStepsRun.stderr || realStepsRun.stdout);
+    assert.equal(stubStepsRun.code, 0, stubStepsRun.stderr || stubStepsRun.stdout);
+    const realSteps = JSON.parse(realStepsRun.stdout);
+    const stubSteps = JSON.parse(stubStepsRun.stdout);
+    assert.deepEqual(sortedKeys(stubSteps), sortedKeys(realSteps));
+    assert.deepEqual(stubSteps.steps.map(({ id, title, dependencies }) => ({ id, title, dependencies })), realSteps.steps.map(({ id, title, dependencies }) => ({ id, title, dependencies })));
+    assert.deepEqual([...new Set(stubSteps.steps.map((step) => step.state))].sort(), ['not-started']);
+    for (const step of [...realSteps.steps, ...stubSteps.steps]) {
+      assert.equal(valueType(step.id), 'string');
+      assert.equal(valueType(step.title), 'string');
+      assert.equal(valueType(step.dependencies), 'array');
+      assert.equal(valueType(step.state), 'string');
+      assert.ok(STEP_STATES.includes(step.state), `${step.state} is missing from STEP_STATES`);
+    }
+
+    const realPreflightRun = await runPwsh(['-AnswersPath', answersPath, '-Preflight', '-Json'], env);
+    const stubPreflightRun = await runStub(['-AnswersPath', answersPath, '-Preflight', '-Json']);
+    const realPreflight = JSON.parse(realPreflightRun.stdout);
+    const stubPreflight = JSON.parse(stubPreflightRun.stdout);
+    assert.deepEqual(sortedKeys(stubPreflight), sortedKeys(realPreflight));
+    assert.equal(realPreflightRun.code === 0, realPreflight.result === 'PASS');
+    assert.equal(stubPreflightRun.code === 0, stubPreflight.result === 'PASS');
+    assert.deepEqual(new Set(stubPreflight.checks.map((check) => sortedKeys(check).join(','))), new Set(realPreflight.checks.map((check) => sortedKeys(check).join(','))));
+    assertPreflightValueTypes(realPreflight);
+    assertPreflightValueTypes(stubPreflight);
+    const results = new Set([...realPreflight.checks, ...stubPreflight.checks].map((check) => check.result));
+    for (const result of results) assert.ok(['PASS', 'FAIL', 'NOT-RUN'].includes(result), `${result} is not a preflight result vocabulary member`);
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+    await rmdir(dirname(scratch)).catch(() => {});
+  }
+});
+
+test('T2 stub progress lines match the producer progress field contract', async () => {
+  const scratch = join(tmpdir(), 'p93-installer-ui-progress', `${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+  const progress = join(scratch, 'progress.ndjson');
+  const answers = join(scratch, 'answers.json');
+  await mkdir(scratch, { recursive: true });
+  try {
+    await writeFile(answers, JSON.stringify(passingAnswers));
+    const run = await runStub(['-AnswersPath', answers, '-ProgressPath', progress, '-Steps', 'resource-group,gateway-deployment', '-Yes', '-NonInteractive']);
+    assert.equal(run.code, 0, run.stderr || run.stdout);
+    const events = (await readFile(progress, 'utf8')).trim().split(/\r?\n/).map((line) => JSON.parse(line));
+    assert.ok(events.length >= 4);
+    for (const event of events) {
+      assert.deepEqual(Object.keys(event), ['schemaVersion', 'time', 'runId', 'stepId', 'event', 'message', 'resumeCommand']);
+      assert.equal(event.schemaVersion, 1);
+      assert.match(event.time, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+      assert.match(event.runId, /^[0-9a-f]{32}$/);
+      assert.ok(PROGRESS_EVENTS.includes(event.event), `${event.event} is missing from PROGRESS_EVENTS`);
+      assert.equal(valueType(event.stepId), 'string');
+      assert.equal(valueType(event.message), 'string');
+      assert.equal(valueType(event.resumeCommand), 'string');
+    }
+    const p92StepSelection = await readFile(new URL('./Test-InstallerStepSelection.ps1', import.meta.url), 'utf8');
+    assert.match(p92StepSelection, /schemaVersion,time,runId,stepId,event,message,resumeCommand/);
+    assert.match(p92StepSelection, /\\d\{4\}-\\d\{2\}-\\d\{2\}T\\d\{2\}:\\d\{2\}:\\d\{2\}Z/);
+    assert.match(p92StepSelection, /\[0-9a-f\]\{32\}/);
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
   }
 });
 

@@ -12,7 +12,15 @@ function argValue(name) {
 
 const runId = '0123456789abcdef0123456789abcdef';
 const time = () => new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
-const progressLine = (event) => JSON.stringify({ schemaVersion: 1, time: time(), runId, ...event });
+const progressLine = (item) => JSON.stringify({
+  schemaVersion: 1,
+  time: time(),
+  runId,
+  stepId: item.stepId ?? '',
+  event: item.event,
+  message: item.message ?? '',
+  resumeCommand: item.resumeCommand ?? '',
+});
 // The real step ids, titles and dependencies: scripts/ClaudeInstallCheckpoint.ps1:8-11 and scripts/ClaudeInstallSteps.ps1:9-11.
 const realSteps = [
   ['claude-deployment', 'Claude deployment', []],
