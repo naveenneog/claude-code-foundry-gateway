@@ -220,6 +220,14 @@ async function expectPollDisabled(page, name) {
   assert.equal(await button.isDisabled(), true);
 }
 
+function unnamedInteractiveLines(snapshot) {
+  return snapshot
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => /^- (button|textbox|checkbox|combobox|spinbutton|radio|link|switch|slider|listbox)(?:$|:)/.test(line))
+    .filter((line) => !/"[^"]+"/.test(line));
+}
+
 
 test('U1 fix action settled recomputes stale run and validation-disabled preflight states', async () => {
   const app = await start({ env: { P93_INSTALLER_UI_STUB_DELAY_MS: '350' } });
@@ -597,57 +605,74 @@ test('U4 keyboard and accessibility journey has names, live regions, focus moves
     async function focusBy(selector, reverse = false) {
       for (let i = 0; i < 160; i += 1) {
         const ok = await page.locator(':focus').evaluate((node, sel) => node?.matches(sel), selector).catch(() => false);
-        if (ok) {
-          const snapshot = await page.locator(':focus').ariaSnapshot();
-          assert.match(snapshot, /\S/, `focused ${selector} has an accessible name`);
-          return;
-        }
+        if (ok) return;
         await page.keyboard.press(reverse ? 'Shift+Tab' : 'Tab');
-        const snapshot = await page.locator(':focus').ariaSnapshot().catch(() => '');
-        if (!/\S/.test(snapshot)) {
-          const html = await page.locator(':focus').evaluate((node) => node?.outerHTML || node?.nodeName).catch(() => '');
-          assert.match(snapshot, /\S/, `focused element on the keyboard path has an accessible name: ${html}`);
-        }
       }
       assert.fail(`Could not focus ${selector}`);
     }
-    await focusBy('#add-unit');
-    await page.keyboard.press('Enter');
+
+    async function assertInteractiveNames() {
+      const snapshot = await page.locator('body').ariaSnapshot();
+      assert.deepEqual(unnamedInteractiveLines(snapshot), []);
+    }
+
+    async function access(key) {
+      await page.keyboard.press(`Alt+${key.toUpperCase()}`);
+    }
+
+    await assertInteractiveNames();
+    await access('u');
     assert.equal(await page.evaluate(() => document.activeElement?.dataset.buField), 'id');
     await page.keyboard.type('finance');
     await page.keyboard.press('Tab');
     await page.keyboard.type('claude-bu-finance');
     await page.keyboard.press('Tab');
     await page.keyboard.type('100');
-    await focusBy('#add-team');
-    await page.keyboard.press('Enter');
+    await access('t');
     assert.equal(await page.evaluate(() => document.activeElement?.dataset.buField), 'id');
     await page.keyboard.type('finance-apps');
-    await focusBy('[data-bu-index="1"] button');
+    await assertInteractiveNames();
+    await focusBy('[data-bu-index="0"] button');
     await page.keyboard.press('Enter');
     assert.equal(await page.evaluate(() => document.activeElement?.dataset.buField), 'id');
     assert.equal(await page.locator(':focus').evaluate((node) => node.closest('[data-bu-index]')?.dataset.buIndex), '0');
+    assert.equal(await page.locator(':focus').inputValue(), 'finance-apps');
     await focusBy('[data-bu-index="0"] button');
     await page.keyboard.press('Enter');
     assert.equal(await page.evaluate(() => document.activeElement?.id), 'add-unit');
-    await focusBy('[name="SubscriptionId"]', true);
+    await access('s');
     await page.keyboard.type('00000000-0000-4000-8000-000000000093');
-    await focusBy('#steps');
-    await page.keyboard.press('Enter');
+    await access('l');
     await focusBy('#step-list input[value="gateway-deployment"]');
     await page.keyboard.press('Space');
-    await focusBy('#preflight', true);
-    await page.keyboard.press('Enter');
+    await access('p');
     await page.getByText(/Passing preflight/).waitFor();
     assert.match(await page.locator('#preflight-state').textContent(), /Passing preflight/);
-    await focusBy('#run');
-    await page.keyboard.press('Enter');
+    await access('r');
     await page.getByText(/summary:/).waitFor();
     assert.equal(await page.getByRole('button', { name: 'Re-run failed step' }).isEnabled(), true);
-    await focusBy('#rerun');
-    await page.keyboard.press('Enter');
+    await access('e');
     await page.getByText(/Re-run finished/).waitFor();
     await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
+test('U4 accessible-name detector rejects unnamed interactive controls', async () => {
+  const app = await start();
+  const { browser, page } = await openPage(app);
+  try {
+    await page.evaluate(() => {
+      for (const label of document.querySelectorAll('label')) {
+        if (label.textContent?.includes('Add team under')) {
+          label.firstChild.textContent = '';
+          break;
+        }
+      }
+    });
+    assert.ok(unnamedInteractiveLines(await page.locator('body').ariaSnapshot()).some((line) => line.startsWith('- combobox')));
   } finally {
     await browser.close();
     await app.close();

@@ -131,6 +131,7 @@
     }
     field.name = name;
     field.id = `field-${name.replace(/[^A-Za-z0-9_-]/g, "-")}`;
+    if (name === "SubscriptionId") field.accessKey = "s";
     field.setAttribute("aria-describedby", `${field.id}-error`);
     label.append(field);
     if (property["x-remedy"]) appendText(label, property["x-remedy"], "span", "small");
@@ -588,6 +589,21 @@
     document.addEventListener("click", prefill.handleClick);
     document.addEventListener("change", prefill.handleChoice);
     document.addEventListener("change", prefill.syncModelInput);
+    document.addEventListener("keydown", (event) => {
+      if (!event.altKey) return;
+      const key = event.key.toLowerCase();
+      const actionsByKey = { u: "add-unit", t: "add-team", l: "steps", p: "preflight", r: "run", e: "rerun" };
+      if (key === "s") {
+        event.preventDefault();
+        byId("field-SubscriptionId")?.focus();
+        return;
+      }
+      const target = actionsByKey[key] ? byId(actionsByKey[key]) : null;
+      if (target && !target.hidden && !target.disabled) {
+        event.preventDefault();
+        target.click();
+      }
+    });
     document.addEventListener("input", (event) => {
       if (event.target?.id === "business-units") {
         preflightStale = true;
