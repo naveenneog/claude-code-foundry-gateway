@@ -18,7 +18,6 @@ export { loadSchema, redactText, scrubLocalPaths } from './server-model.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const psInstaller = join(root, 'Install-ClaudeGateway.ps1');
-const bashInstaller = join(root, 'install-claude-gateway.sh');
 const identityScript = join(root, 'scripts', 'Get-ClaudeInstallerUiIdentity.ps1');
 const prefillScript = join(root, 'scripts', 'Get-ClaudeInstallerUiPrefill.ps1');
 const uiScript = join(here, 'installer-ui.js');
@@ -49,7 +48,7 @@ function spawnInstallerArgs(kind, args, options) {
   const stub = options.stubInstaller || process.env.CLAUDE_INSTALLER_UI_STUB;
   if (stub) return { file: process.execPath, args: [stub, kind, ...args] };
   if (kind === 'powershell') return { file: options.pwsh || 'pwsh', args: ['-NoProfile', '-NonInteractive', '-File', psInstaller, ...args] };
-  return { file: 'bash', args: [bashInstaller, ...args] };
+  throw new Error(`unsupported installer engine: ${kind}`);
 }
 
 async function killProcessTree(child) {
@@ -86,35 +85,15 @@ function spawnChild(file, args, options, spawnOptions = {}) {
 async function runInstaller(kind, args, options, runOptions = {}) {
   const command = spawnInstallerArgs(kind, args, options);
   const child = spawnChild(command.file, command.args, options);
-  let stdout = '';
-  let stderr = '';
-  child.stdout.on('data', (chunk) => { stdout += chunk.toString('utf8'); });
-  child.stderr.on('data', (chunk) => { stderr += chunk.toString('utf8'); });
-  const timeoutMs = Number(runOptions.timeoutMs || 0);
-  let timer;
-  let timedOut = false;
-  const code = await new Promise((resolveCode, reject) => {
-    if (timeoutMs > 0) {
-      timer = setTimeout(() => {
-        timedOut = true;
-        void killProcessTree(child);
-      }, timeoutMs);
-      timer.unref?.();
-    }
-    child.on('error', reject);
-    child.on('close', resolveCode);
-  });
-  if (timer) clearTimeout(timer);
-  if (timedOut) {
-    const error = new Error(`${runOptions.readName || 'installer read'} timed out after ${timeoutMs} ms`);
-    error.status = 504;
-    throw error;
-  }
-  return { code, stdout: await redactText(stdout), stderr: await redactText(stderr) };
+  return collectChildOutput(child, runOptions, 'installer read');
 }
 
 async function runPowerShell(script, args, options, runOptions = {}) {
   const child = spawnChild(options.pwsh || 'pwsh', ['-NoProfile', '-NonInteractive', '-File', script, ...args], options);
+  return collectChildOutput(child, runOptions, 'read-only installer child');
+}
+
+async function collectChildOutput(child, runOptions, defaultReadName) {
   let stdout = '';
   let stderr = '';
   child.stdout.on('data', (chunk) => { stdout += chunk.toString('utf8'); });
@@ -136,7 +115,7 @@ async function runPowerShell(script, args, options, runOptions = {}) {
   });
   if (timer) clearTimeout(timer);
   if (timedOut) {
-    const error = new Error(`${runOptions.readName || 'read-only installer child'} timed out after ${timeoutMs} ms`);
+    const error = new Error(`${runOptions.readName || defaultReadName} timed out after ${timeoutMs} ms`);
     error.status = 504;
     throw error;
   }

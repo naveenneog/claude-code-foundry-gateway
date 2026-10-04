@@ -62,3 +62,15 @@ test('the form uses fixed script routes and no string-built DOM insertion sinks'
     await once(server, 'close').catch(() => {});
   }
 });
+
+test('server modules spawn only PowerShell, node stubs or taskkill', async () => {
+  const modules = (await readdir(new URL('../tools/installer-ui/', import.meta.url))).filter((name) => name.endsWith('.mjs'));
+  assert.ok(modules.length > 0);
+  for (const file of modules) {
+    const source = await readFile(new URL(`../tools/installer-ui/${file}`, import.meta.url), 'utf8');
+    assert.doesNotMatch(source, /\bexec(?:File|Sync)?\s*\(/, `${file} must not use exec-style child processes`);
+    assert.doesNotMatch(source, /\bspawn(?:Sync)?\s*\(\s*['"`](?:az(?:\.cmd)?|bash)['"`]/, `${file} must not spawn az or bash directly`);
+    assert.doesNotMatch(source, /\bfile\s*:\s*['"`](?:az(?:\.cmd)?|bash)['"`]/, `${file} must not return az or bash as a spawn target`);
+    assert.doesNotMatch(source, /\bcommand\s*=\s*['"`](?:az(?:\.cmd)?|bash)['"`]/, `${file} must not assign az or bash as a command`);
+  }
+});

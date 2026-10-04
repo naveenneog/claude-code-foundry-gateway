@@ -62,18 +62,39 @@ confirmed summary; the preflight, `-ListSteps` and the guided flow's plan only r
 
 ## Installer UI
 
-![Installer UI: a local Node server renders the answers schema, reads Azure through repository PowerShell, runs installer preflight and selected steps, streams redacted output and keeps a static fallback.](images/architecture/installer-ui.png)
+![Installer UI: a local Node server and static page share the UI model, gate runs on preflight fingerprints, keep a server-side run record and stream redacted installer progress.](images/architecture/installer-ui.png)
 
 Source: [18-installer-ui.json](architecture/18-installer-ui.json);
 [Installer UI](INSTALLER-UI.md); [ADR-0048](adr/0048-installer-ui-local-server.md).
 
 The installer UI adds an operator-side local server and static page. It adds no Azure resource and no
-hosted control plane. The browser form, static fallback and server all read
-`schemas/claude-gateway.answers.schema.json`; the static page carries a checked copy and a drift test
-compares it with the schema. Azure context and prefill reads go through repository PowerShell scripts,
-not Node-to-`az` calls. Installer execution stays in `Install-ClaudeGateway.ps1`, with selected steps,
-`-ProgressPath` and the existing redaction table. The server writes per-run temporary answer files and
-removes them after the request.
+hosted control plane. `tools/installer-ui/server.mjs` owns the HTTP routes, local session controls,
+PowerShell child process calls and idle lifecycle; `tools/installer-ui/http-helpers.mjs` owns Host,
+cookie, CSRF, same-origin and JSON-body helpers. The browser, server and tests share
+`tools/installer-ui/ui-model.js` through `tools/installer-ui/server-model.mjs`, while the static page
+serves the same `index.html` bytes as the live server (`tools/installer-ui/server.mjs:276`;
+`tools/installer-ui/http-helpers.mjs:61-119`; `tools/installer-ui/server-model.mjs:77-97`).
+
+Azure context and prefill reads go through `scripts/Get-ClaudeInstallerUiIdentity.ps1` and
+`scripts/Get-ClaudeInstallerUiPrefill.ps1`, not Node-to-`az` calls. Installer execution stays in
+`Install-ClaudeGateway.ps1`, with selected steps, `-ProgressPath` and the existing redaction table.
+The Node server starts only the configured PowerShell command, a Node test stub through
+`process.execPath` or `taskkill.exe` for Windows stop (`tools/installer-ui/server.mjs:48-82`;
+`tests/installer-ui-structure.test.mjs:66-77`).
+
+Preflight admission is fingerprinted by `tools/installer-ui/preflight-record.mjs`; a run needs a
+stored PASS for the same answers and a covering step scope. Versioned installer-interface checks live
+in `tools/installer-ui/installer-contract.mjs`, so malformed step lists and preflight payloads fail
+closed and malformed progress events become stream errors (`tools/installer-ui/preflight-record.mjs:28-61`;
+`tools/installer-ui/installer-contract.mjs:29-97`).
+
+Run state lives in `tools/installer-ui/run-record.mjs`, not in a browser connection. `GET
+/api/run/status` reports the active or last run, `GET /api/run/attach?after=<seq>` replays the tail
+and follows live events, and `POST /api/run/stop` stops the child process tree. `tools/installer-ui/run-transport.mjs`
+handles UTF-8 carries, progress-file offsets, NDJSON writes and backpressure; the server caps console
+bytes and line bytes before publishing output (`tools/installer-ui/run-record.mjs:10-149`;
+`tools/installer-ui/run-transport.mjs:21-80`; `tools/installer-ui/server.mjs:173-248`,
+`tools/installer-ui/server.mjs:553-589`).
 
 **Answers schema.** [`schemas/claude-gateway.answers.schema.json`](../schemas/claude-gateway.answers.schema.json)
 names each answer once, by its installer parameter, with the programs that apply it (`x-appliedBy`),
@@ -943,4 +964,3 @@ Review behavior against the implementation whenever a feature changes a componen
 flow, identity, schedule or network path. PNGs are repeatable with the same locked
 Playwright/browser and installed fonts; cross-platform font rasterization can differ
 without changing the architecture.
-

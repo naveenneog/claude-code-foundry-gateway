@@ -117,6 +117,11 @@ PowerShell is the live engine for the Node server. Bash parity stays visible thr
 commands only when the bash installer applies the selected answers and steps
 (`tools/installer-ui/ui-model.js:94-115`; `tools/installer-ui/installer-ui.js:106-139`).
 
+The charter treats `tools/installer-ui/**` and `scripts/Get-ClaudeInstallerUi*.ps1` as
+architecture-significant paths. Those files hold the local HTTP server, browser model, PowerShell
+seams and Node-to-child-process boundary, so later changes to them need ADR-aware review
+(`.ironclad/charter.json:30-37`).
+
 ## Process record
 
 Implementation preceded this ADR in two slices. Commit `4871cbb` added the first local server before
