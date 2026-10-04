@@ -214,36 +214,36 @@ try {
     Invoke-Check 'Release log hygiene'                     'Test-ReleaseLog.ps1'
     Invoke-Check 'Azure CLI arguments vs cmd.exe'          'Test-AzArguments.ps1' -SerialLane
     Invoke-Check 'Shell scripts - syntax and banner'       'Test-ShellScripts.ps1' -SerialLane
-    # The bash installer suites share no mutable resource: each check has its own TEMP and state directory, its installer scenarios their own copy of the files, stubs and HOME, and library probes only read the checkout (ADR-0047 decision 14).
+    # The bash installer suites run alone (ADR-0047 decision 14): beside other checks, AUM tests in the same hosted shard failed in three runs, and several at once failed with Git Bash fork errors on the gate machine (U93).
     $installerBash = if ($IsWindows -or $env:OS -eq 'Windows_NT') { @(@('C:\Program Files\Git\bin\bash.exe', 'C:\Program Files\Git\usr\bin\bash.exe', (Join-Path "$env:LOCALAPPDATA" 'Programs\Git\bin\bash.exe')) | Where-Object { Test-Path -LiteralPath $_ }) | Select-Object -First 1 } else { (Get-Command bash -ErrorAction SilentlyContinue | Select-Object -First 1).Source }
     $bashInstallerSkip = if (-not $installerBash) { 'macOS/Linux installer: no Git Bash (Windows) or bash on this machine.' } elseif (-not (& $installerBash -c 'command -v jq' 2>$null)) { 'macOS/Linux installer: jq is not on the bash PATH; the installer needs it.' } else { '' }
     # The installer and flow harnesses read each child's output on a thread of their own, not the thread pool's (U92).
     Invoke-Check 'Harness reads of child output with a busy thread pool' 'Test-ChildOutputRead.ps1'
-    Invoke-Check 'macOS/Linux installer prices and record'  'Test-BashInstaller.ps1' -SkipReason $bashInstallerSkip
+    Invoke-Check 'macOS/Linux installer prices and record'  'Test-BashInstaller.ps1' -SkipReason $bashInstallerSkip -SerialLane
     # Its checks drive the bash installer through Git Bash; two groups of scenarios run as two checks (ADR-0047).
-    Invoke-Check 'macOS/Linux installer checkpoint and resume [0/7]' 'Test-BashInstallerCheckpoint.ps1' @{ Shard = '0/7' } -SkipReason $bashInstallerSkip
-    Invoke-Check 'macOS/Linux installer checkpoint and resume [1/7]' 'Test-BashInstallerCheckpoint.ps1' @{ Shard = '1/7' } -SkipReason $bashInstallerSkip
-    Invoke-Check 'macOS/Linux installer checkpoint and resume [2/7]' 'Test-BashInstallerCheckpoint.ps1' @{ Shard = '2/7' } -SkipReason $bashInstallerSkip
-    Invoke-Check 'macOS/Linux installer checkpoint and resume [3/7]' 'Test-BashInstallerCheckpoint.ps1' @{ Shard = '3/7' } -SkipReason $bashInstallerSkip
-    Invoke-Check 'macOS/Linux installer checkpoint and resume [4/7]' 'Test-BashInstallerCheckpoint.ps1' @{ Shard = '4/7' } -SkipReason $bashInstallerSkip
-    Invoke-Check 'macOS/Linux installer checkpoint and resume [5/7]' 'Test-BashInstallerCheckpoint.ps1' @{ Shard = '5/7' } -SkipReason $bashInstallerSkip
-    Invoke-Check 'macOS/Linux installer checkpoint and resume [6/7]' 'Test-BashInstallerCheckpoint.ps1' @{ Shard = '6/7' } -SkipReason $bashInstallerSkip
-    Invoke-Check 'Installer checkpoint store permissions'  'Test-InstallerCheckpointStore.ps1' -SkipReason $bashInstallerSkip
-    Invoke-Check 'Installer answers schema, both validators' 'Test-InstallerAnswersSchema.ps1' -SkipReason $bashInstallerSkip
+    Invoke-Check 'macOS/Linux installer checkpoint and resume [0/7]' 'Test-BashInstallerCheckpoint.ps1' @{ Shard = '0/7' } -SkipReason $bashInstallerSkip -SerialLane
+    Invoke-Check 'macOS/Linux installer checkpoint and resume [1/7]' 'Test-BashInstallerCheckpoint.ps1' @{ Shard = '1/7' } -SkipReason $bashInstallerSkip -SerialLane
+    Invoke-Check 'macOS/Linux installer checkpoint and resume [2/7]' 'Test-BashInstallerCheckpoint.ps1' @{ Shard = '2/7' } -SkipReason $bashInstallerSkip -SerialLane
+    Invoke-Check 'macOS/Linux installer checkpoint and resume [3/7]' 'Test-BashInstallerCheckpoint.ps1' @{ Shard = '3/7' } -SkipReason $bashInstallerSkip -SerialLane
+    Invoke-Check 'macOS/Linux installer checkpoint and resume [4/7]' 'Test-BashInstallerCheckpoint.ps1' @{ Shard = '4/7' } -SkipReason $bashInstallerSkip -SerialLane
+    Invoke-Check 'macOS/Linux installer checkpoint and resume [5/7]' 'Test-BashInstallerCheckpoint.ps1' @{ Shard = '5/7' } -SkipReason $bashInstallerSkip -SerialLane
+    Invoke-Check 'macOS/Linux installer checkpoint and resume [6/7]' 'Test-BashInstallerCheckpoint.ps1' @{ Shard = '6/7' } -SkipReason $bashInstallerSkip -SerialLane
+    Invoke-Check 'Installer checkpoint store permissions'  'Test-InstallerCheckpointStore.ps1' -SkipReason $bashInstallerSkip -SerialLane
+    Invoke-Check 'Installer answers schema, both validators' 'Test-InstallerAnswersSchema.ps1' -SkipReason $bashInstallerSkip -SerialLane
     Invoke-Check 'Installer answers schema matches its sources' 'Test-InstallerAnswersDrift.ps1'
-    Invoke-Check 'Installer redaction, one rule set in both engines' 'Test-InstallerRedaction.ps1' -SkipReason $bashInstallerSkip
+    Invoke-Check 'Installer redaction, one rule set in both engines' 'Test-InstallerRedaction.ps1' -SkipReason $bashInstallerSkip -SerialLane
     Invoke-Check 'Installer preflight (PowerShell)'        'Test-InstallerPreflight.ps1'
-    Invoke-Check 'macOS/Linux installer preflight [0/2]'   'Test-BashInstallerPreflight.ps1' @{ Shard = '0/2' } -SkipReason $bashInstallerSkip
-    Invoke-Check 'macOS/Linux installer preflight [1/2]'   'Test-BashInstallerPreflight.ps1' @{ Shard = '1/2' } -SkipReason $bashInstallerSkip
+    Invoke-Check 'macOS/Linux installer preflight [0/2]'   'Test-BashInstallerPreflight.ps1' @{ Shard = '0/2' } -SkipReason $bashInstallerSkip -SerialLane
+    Invoke-Check 'macOS/Linux installer preflight [1/2]'   'Test-BashInstallerPreflight.ps1' @{ Shard = '1/2' } -SkipReason $bashInstallerSkip -SerialLane
     Invoke-Check 'Installer steps, precedence and progress (PowerShell)' 'Test-InstallerStepSelection.ps1'
-    Invoke-Check 'macOS/Linux installer steps, precedence and progress [0/3]' 'Test-BashInstallerStepSelection.ps1' @{ Shard = '0/3' } -SkipReason $bashInstallerSkip
-    Invoke-Check 'macOS/Linux installer steps, precedence and progress [1/3]' 'Test-BashInstallerStepSelection.ps1' @{ Shard = '1/3' } -SkipReason $bashInstallerSkip
-    Invoke-Check 'macOS/Linux installer steps, precedence and progress [2/3]' 'Test-BashInstallerStepSelection.ps1' @{ Shard = '2/3' } -SkipReason $bashInstallerSkip
+    Invoke-Check 'macOS/Linux installer steps, precedence and progress [0/3]' 'Test-BashInstallerStepSelection.ps1' @{ Shard = '0/3' } -SkipReason $bashInstallerSkip -SerialLane
+    Invoke-Check 'macOS/Linux installer steps, precedence and progress [1/3]' 'Test-BashInstallerStepSelection.ps1' @{ Shard = '1/3' } -SkipReason $bashInstallerSkip -SerialLane
+    Invoke-Check 'macOS/Linux installer steps, precedence and progress [2/3]' 'Test-BashInstallerStepSelection.ps1' @{ Shard = '2/3' } -SkipReason $bashInstallerSkip -SerialLane
     Invoke-Check 'Installer business units from answers'   'Test-InstallerBusinessUnitAnswers.ps1'
     Invoke-Check 'Guided flow runs the installer preflight' 'Test-GuidedFlowAnswersSchema.ps1'
-    Invoke-Check 'macOS/Linux checkpoint suite shards'     'Test-BashInstallerCheckpointShards.ps1'
-    Invoke-Check 'macOS/Linux step suite shards'          'Test-BashInstallerStepShards.ps1'
-    Invoke-Check 'macOS/Linux preflight suite shards'     'Test-BashInstallerPreflightShards.ps1'
+    Invoke-Check 'macOS/Linux checkpoint suite shards'     'Test-BashInstallerCheckpointShards.ps1' -SerialLane
+    Invoke-Check 'macOS/Linux step suite shards'          'Test-BashInstallerStepShards.ps1' -SerialLane
+    Invoke-Check 'macOS/Linux preflight suite shards'     'Test-BashInstallerPreflightShards.ps1' -SerialLane
     Invoke-Check 'Preflight on both PowerShell hosts'      'Test-PreflightBothHosts.ps1' -SerialLane
     Invoke-Check 'Guided diagnostics and support bundles'  'Test-Diagnose.ps1' -SerialLane
     Invoke-Check 'Wizard reaches summary on PS 5.1'        'Test-On-PS51.ps1' -SerialLane

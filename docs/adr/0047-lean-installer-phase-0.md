@@ -401,22 +401,21 @@ The RED phase adds these tests before product code:
       probe, and `branches` holds the round-2 branches and the subscription records of round 3. The JSON
       shape, fail-closed and read-only checks run once per group. Alone under the gate lock the two
       shards took 93.1 and 78.2 s.
-    - **The bash suites run in the parallel lane (round 5, `15ada4b`; council round 3).** Test-All runs a check
-      registered with `-SerialLane` alone, and runs all such checks before the parallel ones
+    - **The bash suites run in the exclusive lane (round 5, `15ada4b`; council round 3; the packet gate).** Test-All
+      runs a check registered with `-SerialLane` alone, and runs all such checks before the parallel ones
       (`tests/Test-All.ps1:380-399`). `15ada4b` registered the bash installer suites, their shards and the three
-      shard-contract checks there, because on PR #2's Windows runners they failed while other checks ran and
-      passed alone. Decision 16 found the cause, a child's output that the harness stopped reading. With the
-      reader of decision 16, CI run `37219348012` passed all 12 shards with those 19 registrations in the
-      parallel lane again, and they stay there (`tests/Test-All.ps1:217-246`): each check has its own TEMP and
-      state directory (`tests/Test-All.ps1:138-140`), its installer scenarios their own copy of the files, stubs
-      and HOME (`tests/BashInstallerHarness.ps1:251-298`, `tests/Test-BashInstaller.ps1:215-231`), and the
-      library probes only read the checkout, so these checks share no mutable resource; ADR-0036 (option 3)
-      rejected moving checks into the parallel lane without such isolation. In a Test-All run without shards the exclusive checks'
-      weights summed to 2,724 s (38 checks) with them and sum to 1,193 s (19 checks) without them
-      (`tests/test-all-durations.json`), against the gate's 3,600 s budget (ADR-0036). On the gate machine,
-      with several bash suites at once, installer runs exceeded the harness's 300 s per run and Git Bash printed
-      fork errors (P92 gate attempt 2 and its reproduction, U93 in [UNKNOWNS](../UNKNOWNS.md)); the route of
-      P92's packet gate is the owner's decision ([ROADMAP](../ROADMAP.md)).
+      shard-contract checks there (`tests/Test-All.ps1:217-246`), because on PR #2's Windows runners they failed
+      while other checks ran and passed alone; decision 16 found that cause, a child's output that the harness
+      stopped reading. `4fade0d` moved the 19 registrations to the parallel lane for the gate's 3,600 s budget
+      (ADR-0036): in a Test-All run without shards the exclusive checks' committed weights sum to 2,724 s (38
+      checks) with them and 1,193 s (19 checks) without them (`tests/test-all-durations.json`). Each check has its
+      own TEMP and state directory (`tests/Test-All.ps1:138-140`), its installer scenarios their own copy of the
+      files, stubs and HOME (`tests/BashInstallerHarness.ps1:251-298`, `tests/Test-BashInstaller.ps1:215-231`), and
+      the library probes only read the checkout, so these checks share no mutable resource. In the parallel lane,
+      AUM tests failed in three consecutive hosted runs, each in a shard where a bash checkpoint shard ran beside
+      the AUM shard, and on the gate machine installer runs exceeded the harness's 300 s per run, with Git Bash
+      fork errors, when several suites ran at once (U93 in [UNKNOWNS](../UNKNOWNS.md)). The suites are in the
+      exclusive lane again. The route of P92's packet gate is the owner's decision ([ROADMAP](../ROADMAP.md)).
     - **The prices suite gives its runs 300 s (round 5, `a87c708`).** `tests/Test-BashInstaller.ps1` starts its
       22 installer runs at once and gives them 300 s together, the time the checkpoint harness gives each run
       (`tests/Test-BashInstaller.ps1:246`, `tests/BashInstallerHarness.ps1:304`); it was 150 s. With decision 16,
