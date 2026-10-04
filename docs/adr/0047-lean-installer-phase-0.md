@@ -190,11 +190,11 @@ The RED phase adds these tests before product code:
    do not. A check that did not run never passes (P91 R1). The preflight exits 0 only when no check
    fails and none is NOT-RUN for a failing reason (`Invoke-ClaudeGatewayPreflight`,
    `scripts/ClaudeInstallerPreflight.ps1:125-201`; `preflight_run_`, `scripts/install-preflight.sh:222-286`).
-   `Get-ClaudePreflightBlocking` (`scripts/ClaudeInstallerPreflight.ps1:94-97`) returns those checks for
-   the result (`:182`) and for the guided flow (decision 9).
+   `Get-ClaudePreflightBlocking` (`scripts/ClaudeInstallerPreflight.ps1:98-101`) returns those checks for
+   the result (`:199`) and for the guided flow (decision 9).
    - **Fail closed by construction (lead review of `cb2cd70`).** Every check starts NOT-RUN with reason
      `not-evaluated` (`scripts/ClaudeInstallerPreflight.ps1:133-134`). Only `Set-ClaudePreflightPass`
-     (`:100-105`) makes it PASS, and only for a check with no problem, not set NOT-RUN by a branch, and with
+     (`:104-109`) makes it PASS, and only for a check with no problem, not set NOT-RUN by a branch, and with
      a message. The bash aggregator reports a check with no problem, no NOT-RUN line and no `pf_pass_` line
      that has a message as NOT-RUN `not-evaluated` (`scripts/install-preflight.sh:273-274`). A branch that
      sets nothing therefore fails the preflight. At `cb2cd70` every check started as PASS, so the lead's
@@ -211,7 +211,7 @@ The RED phase adds these tests before product code:
      `foundry.account` (`scripts/ClaudeInstallerPreflight.ps1:243-252`; `scripts/install-preflight.sh:121-128`).
      A stop of `Test-ClaudePrerequisites`, which parses `az account show` itself
      (`scripts/Test-Prerequisites.ps1:166`), is a FAIL of `operator.adminPrereqs`
-     (`scripts/ClaudeInstallerPreflight.ps1:71-81`).
+     (`scripts/ClaudeInstallerPreflight.ps1:75-85`).
    - **A subscription record is used only with its id and tenant (council round 1, Coder).** A record
      from `az account show --subscription` that is not a JSON object, whose `id` is missing, `null` or
      empty, or that has no `tenantId` is a FAIL of `target.subscription` ("subscription '<id>' is not
@@ -219,7 +219,7 @@ The RED phase adds these tests before product code:
      later Azure checks are NOT-RUN `prerequisite-failed`. With no `SubscriptionId` answered, a signed-in
      account without an `id` is the same FAIL ("the current subscription could not be read"). Each later
      read names the record's own `id` (`Get-ClaudePreflightRecordProblem`,
-     `scripts/ClaudeInstallerPreflight.ps1:83-92`, used at `:198` and checked at `:207-208`;
+     `scripts/ClaudeInstallerPreflight.ps1:87-96`, used at `:215` and checked at `:224-225`;
      `pf_record_problem_`, `scripts/install-preflight.sh:48-53`, used at `:83` and checked at `:93-94`).
      At `cfb9dd7` such a record passed, and the later reads named `--subscription ''` (PowerShell) or
      `--subscription null` (bash).
@@ -228,10 +228,10 @@ The RED phase adds these tests before product code:
    and writes no checkpoint, lock or temporary file. `tests/Test-InstallerPreflight.ps1` and
    `tests/Test-BashInstallerPreflight.ps1` check the stub log of every scenario for such calls.
 7. **One APIM reader for the preflight and the run (U82).** `Get-ClaudeApimReuseState`
-   (`scripts/ClaudeInstallerPreflight.ps1:18-39`) reads the instance once through the P91 verdict reader
+   (`scripts/ClaudeInstallerPreflight.ps1:22-43`) reads the instance once through the P91 verdict reader
    `Invoke-ClaudeInstallAzRead` (`scripts/ClaudeInstallResume.ps1:5-18`): present, absent or
-   inconclusive. `Get-ClaudeApimReuseProblems` (`scripts/ClaudeInstallerPreflight.ps1:41-57`) names a classic tier and a missing
-   system-assigned identity with their remedies, and `Get-ClaudeApimReuseCandidates` (`scripts/ClaudeInstallerPreflight.ps1:59-69`) lists
+   inconclusive. `Get-ClaudeApimReuseProblems` (`scripts/ClaudeInstallerPreflight.ps1:45-61`) names a classic tier and a missing
+   system-assigned identity with their remedies, and `Get-ClaudeApimReuseCandidates` (`scripts/ClaudeInstallerPreflight.ps1:63-73`) lists
    the instances the run's menu offers. The run's `-ExistingApimName` path and menu
    (`Install-ClaudeGateway.ps1:661-704`) call the same functions; `pf_apim_`
    (`scripts/install-preflight.sh:151-194`) is the bash twin through `ckpt_az_read_`. A list that cannot
