@@ -3635,6 +3635,455 @@
           ]
         }
       ]
+    },
+    {
+      "round": "Lead round 6",
+      "by": "lead",
+      "dateUtc": "2026-10-04",
+      "measuredCommit": "69a37b8 to d87ae26, per mutant",
+      "trigger": "PR #2 Test-All runs 37110260005 to 37127982623 lost the output of installer runs (U92), and the lead's check of 70f07c0 (ADR-0047 decision 13, round 5 Security).",
+      "rule": "A mutant counts as caught only when its suite reaches the baseline check count and at least one check fails. targetFailed says whether the targeted check is among the failures. Every mutated file was restored to its hash.",
+      "loadNote": "Another session loaded this machine (CPU at 100%); suite seconds are not timing measurements.",
+      "baselines": [
+        {
+          "suite": "tests/Test-ChildOutputRead.ps1",
+          "checks": 8,
+          "failed": 0
+        },
+        {
+          "suite": "tests/Test-InstallerAnswersSchema.ps1",
+          "checks": 50,
+          "failed": 0
+        },
+        {
+          "suite": "tests/Test-InstallerBusinessUnitAnswers.ps1",
+          "checks": 17,
+          "failed": 0
+        },
+        {
+          "suite": "tests/Test-InstallerPreflight.ps1",
+          "checks": 38,
+          "failed": 0,
+          "commit": "1c6f929"
+        },
+        {
+          "suite": "tests/Test-InstallerPreflight.ps1",
+          "checks": 39,
+          "failed": 0,
+          "commit": "42c78b3"
+        },
+        {
+          "suite": "tests/Test-InstallerPreflight.ps1",
+          "checks": 42,
+          "failed": 0,
+          "commit": "d87ae26"
+        }
+      ],
+      "caught": 22,
+      "targetFailed": 22,
+      "total": 24,
+      "missedThenFixed": [
+        "G01p@1c6f929 and G04p@1c6f929: the marker payload held an absolute path, refused by SubscriptionId's 100-character limit and by the older colon rule (fixed in 42c78b3); G04p@42c78b3 wrote no marker because the preflight skipped a single unit's group (fixed in d87ae26)."
+      ],
+      "mutants": [
+        {
+          "id": "U92-M1",
+          "item": "U92",
+          "measuredCommit": "working tree of 69a37b8 before commit",
+          "suite": "tests/Test-ChildOutputRead.ps1",
+          "target": "with every worker busy, Start-ChildOutputRead reads the whole standard output and standard error of a child that exited",
+          "file": "tests/ChildOutputRead.ps1",
+          "mutation": "the reader returns ReadToEndAsync instead of a LongRunning ReadToEnd",
+          "checks": 8,
+          "failed": 1,
+          "targetFailed": true,
+          "caught": true,
+          "restored": true
+        },
+        {
+          "id": "U92-M2",
+          "item": "U92",
+          "measuredCommit": "working tree of 69a37b8 before commit",
+          "suite": "tests/Test-ChildOutputRead.ps1",
+          "target": "with every worker busy, Start-ChildOutputRead reads the whole standard output and standard error of a child that exited",
+          "file": "tests/ChildOutputRead.ps1",
+          "mutation": "the reader's task is TaskCreationOptions None, not LongRunning",
+          "checks": 8,
+          "failed": 1,
+          "targetFailed": true,
+          "caught": true,
+          "restored": true
+        },
+        {
+          "id": "U92-M3",
+          "item": "U92",
+          "measuredCommit": "working tree of 69a37b8 before commit",
+          "suite": "tests/Test-ChildOutputRead.ps1",
+          "target": "a read that a process started by the child keeps open is reported when its bound passes, naming the stream, and is not returned as empty",
+          "file": "tests/ChildOutputRead.ps1",
+          "mutation": "a read still open after its bound returns an empty string",
+          "checks": 8,
+          "failed": 1,
+          "targetFailed": true,
+          "caught": true,
+          "restored": true
+        },
+        {
+          "id": "U92-M4",
+          "item": "U92",
+          "measuredCommit": "working tree of 69a37b8 before commit",
+          "suite": "tests/Test-ChildOutputRead.ps1",
+          "target": "no test turns a read that is still open after a short wait into empty output",
+          "file": "tests/BashInstallerHarness.ps1",
+          "mutation": "the bash harness's stdout read goes back to a 5 s wait and an empty string",
+          "checks": 8,
+          "failed": 1,
+          "targetFailed": true,
+          "caught": true,
+          "restored": true
+        },
+        {
+          "id": "U92-M5",
+          "item": "U92",
+          "measuredCommit": "working tree of 69a37b8 before commit",
+          "suite": "tests/Test-ChildOutputRead.ps1",
+          "target": "the harnesses that run installer and flow children read their output through Start-ChildOutputRead, and none through ReadToEndAsync",
+          "file": "tests/InstallerCheckpointHarness.ps1",
+          "mutation": "the PowerShell harness's stdout read goes back to ReadToEndAsync",
+          "checks": 8,
+          "failed": 1,
+          "targetFailed": true,
+          "caught": true,
+          "restored": true
+        },
+        {
+          "id": "U92-M6",
+          "item": "U92",
+          "measuredCommit": "working tree of 69a37b8 before commit",
+          "suite": "tests/Test-ChildOutputRead.ps1",
+          "target": "no test turns a read that is still open after a short wait into empty output",
+          "file": "tests/Test-BashInstaller.ps1",
+          "mutation": "the prices suite's stderr read goes back to a 5 s wait and an empty string",
+          "checks": 8,
+          "failed": 1,
+          "targetFailed": true,
+          "caught": true,
+          "restored": true
+        },
+        {
+          "id": "U92-M7",
+          "item": "U92",
+          "measuredCommit": "working tree of 69a37b8 before commit",
+          "suite": "tests/Test-ChildOutputRead.ps1",
+          "target": "the harnesses that run installer and flow children read their output through Start-ChildOutputRead, and none through ReadToEndAsync",
+          "file": "tests/Test-FlowPermutations.ps1",
+          "mutation": "the flow permutation suite's stderr read goes back to ReadToEndAsync",
+          "checks": 8,
+          "failed": 1,
+          "targetFailed": true,
+          "caught": true,
+          "restored": true
+        },
+        {
+          "id": "U92-M8",
+          "item": "U92",
+          "measuredCommit": "working tree of 69a37b8 before commit",
+          "suite": "tests/Test-ChildOutputRead.ps1",
+          "target": "no test turns a read that is still open after a short wait into empty output",
+          "file": "tests/Test-FlowStart.ps1",
+          "mutation": "the flow start suite's stderr read goes back to a 5 s wait and an empty string",
+          "checks": 8,
+          "failed": 1,
+          "targetFailed": true,
+          "caught": true,
+          "restored": true
+        },
+        {
+          "id": "P01",
+          "item": "70f07c0 lead check",
+          "measuredCommit": "1c6f929",
+          "suite": "tests/Test-InstallerBusinessUnitAnswers.ps1",
+          "file": "Install-ClaudeGateway.ps1",
+          "mutation": "business-unit prompt accepts a group name the schema refuses",
+          "checks": 17,
+          "baseline": 17,
+          "failed": 2,
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 46.9,
+          "failures": [
+            "[FAIL] R4 a group name with a single quote at the prompt is refused there with the schema's message and remedy, before any Azure CLI call names it; no unit is written and the run goes on - message: holds a single quote, comma, colon or cmd.exe metacharacter: Azure CLI places a group name inside an OData string literal, bu-registry separates entries with commas and colons, and the Azure CLI cmd shi...",
+            "[FAIL] R6 a group name with cmd.exe metacharacters at the prompt is refused there with the schema's message and remedy, before any Azure CLI call names it; no unit is written and the run goes on - message: holds a single quote, comma, colon or cmd.exe metacharacter: Azure CLI places a group name inside an OData string literal, bu-registry separates entries with commas and colons, and the Azure CLI..."
+          ]
+        },
+        {
+          "id": "G01s",
+          "item": "70f07c0 lead check",
+          "measuredCommit": "1c6f929",
+          "suite": "tests/Test-InstallerAnswersSchema.ps1",
+          "file": "schemas/claude-gateway.answers.schema.json",
+          "mutation": "SubscriptionId loses its cmd.exe metacharacter pattern",
+          "checks": 50,
+          "baseline": 50,
+          "failed": 1,
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 16.5,
+          "failures": [
+            "[FAIL] subscription-cmd-marker fails under target.subscription only, with the same problems in both validators (Install-ClaudeGateway.ps1) - PowerShell:"
+          ]
+        },
+        {
+          "id": "G02p",
+          "item": "70f07c0 lead check",
+          "measuredCommit": "1c6f929",
+          "suite": "tests/Test-InstallerPreflight.ps1",
+          "file": "schemas/claude-gateway.answers.schema.json",
+          "mutation": "StandardGroup refuses a single quote only, as before 70f07c0",
+          "checks": 38,
+          "baseline": 38,
+          "failed": 1,
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 90.4,
+          "failures": [
+            "[FAIL] P93 Windows preflight refuses cmd.exe marker answers before any az.cmd argument can execute them: SubscriptionId, StandardGroup, PremiumGroup, BusinessUnits.group and another az-bound answer - leaks: StandardGroup; misses:"
+          ]
+        },
+        {
+          "id": "G02s",
+          "item": "70f07c0 lead check",
+          "measuredCommit": "1c6f929",
+          "suite": "tests/Test-InstallerAnswersSchema.ps1",
+          "file": "schemas/claude-gateway.answers.schema.json",
+          "mutation": "StandardGroup refuses a single quote only, as before 70f07c0",
+          "checks": 50,
+          "baseline": 50,
+          "failed": 1,
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 16.7,
+          "failures": [
+            "[FAIL] standard-group-cmd-marker fails under entra.groupNames only, with the same problems in both validators (Install-ClaudeGateway.ps1) - PowerShell:"
+          ]
+        },
+        {
+          "id": "G03p",
+          "item": "70f07c0 lead check",
+          "measuredCommit": "1c6f929",
+          "suite": "tests/Test-InstallerPreflight.ps1",
+          "file": "schemas/claude-gateway.answers.schema.json",
+          "mutation": "PremiumGroup refuses a single quote only, as before 70f07c0",
+          "checks": 38,
+          "baseline": 38,
+          "failed": 1,
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 72.6,
+          "failures": [
+            "[FAIL] P93 Windows preflight refuses cmd.exe marker answers before any az.cmd argument can execute them: SubscriptionId, StandardGroup, PremiumGroup, BusinessUnits.group and another az-bound answer - leaks: PremiumGroup; misses:"
+          ]
+        },
+        {
+          "id": "G03s",
+          "item": "70f07c0 lead check",
+          "measuredCommit": "1c6f929",
+          "suite": "tests/Test-InstallerAnswersSchema.ps1",
+          "file": "schemas/claude-gateway.answers.schema.json",
+          "mutation": "PremiumGroup refuses a single quote only, as before 70f07c0",
+          "checks": 50,
+          "baseline": 50,
+          "failed": 1,
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 64.3,
+          "failures": [
+            "[FAIL] premium-group-cmd-marker fails under entra.groupNames only, with the same problems in both validators (Install-ClaudeGateway.ps1) - PowerShell:"
+          ]
+        },
+        {
+          "id": "G04s",
+          "item": "70f07c0 lead check",
+          "measuredCommit": "1c6f929",
+          "suite": "tests/Test-InstallerAnswersSchema.ps1",
+          "file": "schemas/claude-gateway.answers.schema.json",
+          "mutation": "a unit's group refuses a single quote, comma and colon only, as before 70f07c0",
+          "checks": 50,
+          "baseline": 50,
+          "failed": 1,
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 25.5,
+          "failures": [
+            "[FAIL] bu-group-cmd-marker fails under entra.groupNames only, with the same problems in both validators (Install-ClaudeGateway.ps1) - PowerShell:"
+          ]
+        },
+        {
+          "id": "G04b",
+          "item": "70f07c0 lead check",
+          "measuredCommit": "1c6f929",
+          "suite": "tests/Test-InstallerBusinessUnitAnswers.ps1",
+          "file": "schemas/claude-gateway.answers.schema.json",
+          "mutation": "a unit's group refuses a single quote, comma and colon only, as before 70f07c0 (the prompt)",
+          "checks": 17,
+          "baseline": 17,
+          "failed": 1,
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 189.0,
+          "failures": [
+            "[FAIL] R6 a group name with cmd.exe metacharacters at the prompt is refused there with the schema's message and remedy, before any Azure CLI call names it; no unit is written and the run goes on - message: holds a single quote, comma, colon or cmd.exe metacharacter: Azure CLI places a group name inside an OData string literal, bu-registry separates entries with commas and colons, and the Azure CLI..."
+          ]
+        },
+        {
+          "id": "G01p@1c6f929",
+          "item": "70f07c0 lead check",
+          "measuredCommit": "1c6f929",
+          "suite": "tests/Test-InstallerPreflight.ps1",
+          "file": "schemas/claude-gateway.answers.schema.json",
+          "mutation": "SubscriptionId loses its cmd.exe metacharacter pattern",
+          "checks": 38,
+          "baseline": 38,
+          "failed": 0,
+          "targetFailed": false,
+          "caught": false,
+          "restored": true,
+          "seconds": 80.1,
+          "failures": []
+        },
+        {
+          "id": "G04p@1c6f929",
+          "item": "70f07c0 lead check",
+          "measuredCommit": "1c6f929",
+          "suite": "tests/Test-InstallerPreflight.ps1",
+          "file": "schemas/claude-gateway.answers.schema.json",
+          "mutation": "a unit's group refuses a single quote, comma and colon only, as before 70f07c0",
+          "checks": 38,
+          "baseline": 38,
+          "failed": 0,
+          "targetFailed": false,
+          "caught": false,
+          "restored": true,
+          "seconds": 131.2,
+          "failures": []
+        },
+        {
+          "id": "G01p@42c78b3",
+          "item": "70f07c0 lead check",
+          "measuredCommit": "working tree of 42c78b3 before commit",
+          "suite": "tests/Test-InstallerPreflight.ps1",
+          "file": "schemas/claude-gateway.answers.schema.json",
+          "mutation": "SubscriptionId loses its cmd.exe metacharacter pattern",
+          "checks": 39,
+          "baseline": 39,
+          "failed": 1,
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 303.4,
+          "failures": [
+            "[FAIL] P93 Windows preflight refuses cmd.exe marker answers before any az.cmd argument can execute them: SubscriptionId, StandardGroup, PremiumGroup, BusinessUnits.group and another az-bound answer - leaks: SubscriptionId; misses: SubscriptionId exit=1 problems=the Foundry account ai-p91 has no deployment named claude-sonnet-5, claude-opus-5 / whether apim-p92gw is free could not be read (az exite..."
+          ]
+        },
+        {
+          "id": "G02p@42c78b3",
+          "item": "70f07c0 lead check",
+          "measuredCommit": "working tree of 42c78b3 before commit",
+          "suite": "tests/Test-InstallerPreflight.ps1",
+          "file": "schemas/claude-gateway.answers.schema.json",
+          "mutation": "StandardGroup refuses a single quote only, as before 70f07c0",
+          "checks": 39,
+          "baseline": 39,
+          "failed": 1,
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 277.1,
+          "failures": [
+            "[FAIL] P93 Windows preflight refuses cmd.exe marker answers before any az.cmd argument can execute them: SubscriptionId, StandardGroup, PremiumGroup, BusinessUnits.group and another az-bound answer - leaks: StandardGroup; misses: StandardGroup exit=1 problems=the Foundry account ai-p91 has no deployment named claude-sonnet-5, claude-opus-5 / whether apim-p92gw is free could not be read (az exited ..."
+          ]
+        },
+        {
+          "id": "G03p@42c78b3",
+          "item": "70f07c0 lead check",
+          "measuredCommit": "working tree of 42c78b3 before commit",
+          "suite": "tests/Test-InstallerPreflight.ps1",
+          "file": "schemas/claude-gateway.answers.schema.json",
+          "mutation": "PremiumGroup refuses a single quote only, as before 70f07c0",
+          "checks": 39,
+          "baseline": 39,
+          "failed": 1,
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 132.4,
+          "failures": [
+            "[FAIL] P93 Windows preflight refuses cmd.exe marker answers before any az.cmd argument can execute them: SubscriptionId, StandardGroup, PremiumGroup, BusinessUnits.group and another az-bound answer - leaks: PremiumGroup; misses: PremiumGroup exit=1 problems=the Foundry account ai-p91 has no deployment named claude-sonnet-5, claude-opus-5 / whether apim-p92gw is free could not be read (az exited 0)"
+          ]
+        },
+        {
+          "id": "G04p@42c78b3",
+          "item": "70f07c0 lead check",
+          "measuredCommit": "working tree of 42c78b3 before commit",
+          "suite": "tests/Test-InstallerPreflight.ps1",
+          "file": "schemas/claude-gateway.answers.schema.json",
+          "mutation": "a unit's group refuses a single quote, comma and colon only, as before 70f07c0",
+          "checks": 39,
+          "baseline": 39,
+          "failed": 1,
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 134.7,
+          "failures": [
+            "[FAIL] P93 Windows preflight refuses cmd.exe marker answers before any az.cmd argument can execute them: SubscriptionId, StandardGroup, PremiumGroup, BusinessUnits.group and another az-bound answer - leaks: ; misses: BusinessUnits.group exit=1 problems=the Foundry account ai-p91 has no deployment named claude-sonnet-5, claude-opus-5 / whether apim-p92gw is free could not be read (az exited 0)"
+          ]
+        },
+        {
+          "id": "G04p@d87ae26",
+          "item": "70f07c0 lead check",
+          "measuredCommit": "d87ae26",
+          "suite": "tests/Test-InstallerPreflight.ps1",
+          "file": "schemas/claude-gateway.answers.schema.json",
+          "mutation": "a unit's group refuses a single quote, comma and colon only, as before 70f07c0",
+          "checks": 42,
+          "baseline": 42,
+          "failed": 1,
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 74.2,
+          "failures": [
+            "[FAIL] P93 Windows preflight refuses cmd.exe marker answers before any az.cmd argument can execute them: SubscriptionId, StandardGroup, PremiumGroup, BusinessUnits.group and another az-bound answer - leaks: BusinessUnits.group; misses: BusinessUnits.group exit=1 problems=the Foundry account ai-p91 has no deployment named claude-sonnet-5, claude-opus-5 / whether apim-p92gw is free could not be read..."
+          ]
+        },
+        {
+          "id": "O01@d87ae26",
+          "item": "70f07c0 lead check",
+          "measuredCommit": "d87ae26",
+          "suite": "tests/Test-InstallerPreflight.ps1",
+          "file": "scripts/ClaudeInstallerPreflight.ps1",
+          "mutation": "an answer is empty when its text is: a list of one business unit reads as unanswered again",
+          "checks": 42,
+          "baseline": 42,
+          "failed": 1,
+          "targetFailed": true,
+          "caught": true,
+          "restored": true,
+          "seconds": 83.6,
+          "failures": [
+            "[FAIL] R6 with one business unit in the answers file, the preflight reads its group by name and names it in entra.groupNames with its id - PASS: Entra groups: 'claude-code-standard' is created by the run; 'claude-code-premium' is created by the run || lookups:  || exit 0:       \"problems\": [] |     } |   ] | }"
+          ]
+        }
+      ]
     }
   ]
 }
