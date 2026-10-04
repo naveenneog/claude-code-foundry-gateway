@@ -66,7 +66,8 @@ exact streaming cache-creation detail remains **U13**.
   Installer UI guide screenshots now follow the passing-preflight fingerprint flow and use distinct,
   coherent signed-in tenant states. The Installer UI test wrapper now requires an exact node:test
   subtest count and fails closed on skipped, todo, cancelled, failed, missing, duplicate or
-  load-failed TAP output.
+  load-failed TAP output. Its mutation record now stores exact find and replacement text, parse
+  result, exit code, check count, failed count, target test and verdict for each measured mutant.
 - **Installers read an answers file, check it before any change, run selected steps and write a progress stream (P92, phase 0).**
   One answers file, described by `schemas/claude-gateway.answers.schema.json`, feeds
   `Install-ClaudeGateway.ps1 -AnswersPath`, `install-claude-gateway.sh --answers-file` and

@@ -1,0 +1,74 @@
+[
+  {
+    "id": "T1-fail-once-disabled",
+    "why": "The T1 journey must fail when the stub no longer fails the first selected gateway-deployment run.",
+    "file": "tests/installer-ui-stub.mjs",
+    "find": "    if (count === 0) {\n",
+    "replace": "    if (count !== 0) {\n",
+    "testFile": "tests/installer-ui-g5.test.mjs",
+    "test": "T1 operator journey runs selected steps, shows failed rerun and records exact installer scopes"
+  },
+  {
+    "id": "T2-progress-resumeCommand-omitted",
+    "why": "The stub progress events must keep the P92 resumeCommand field on every event.",
+    "file": "tests/installer-ui-stub.mjs",
+    "find": "  resumeCommand: item.resumeCommand ?? '',\n",
+    "replace": "",
+    "testFile": "tests/installer-ui-contract.test.mjs",
+    "test": "T2 stub progress lines match the producer progress field contract"
+  },
+  {
+    "id": "T3-skipped-summary-ignored",
+    "why": "The TAP wrapper must reject skipped node:test subtests.",
+    "file": "tests/Test-InstallerUi.ps1",
+    "find": "    foreach ($key in 'fail', 'cancelled', 'skipped', 'todo') {\n        if ($summary.ContainsKey($key) -and $summary[$key] -ne 0) { $errors += \"# $key is $($summary[$key])\" }\n    }\n    if ($skippedResultLines.Count) { $errors += \"SKIP result line(s): $($skippedResultLines -join '; ')\" }\n",
+    "replace": "    foreach ($key in 'fail', 'cancelled', 'todo') {\n        if ($summary.ContainsKey($key) -and $summary[$key] -ne 0) { $errors += \"# $key is $($summary[$key])\" }\n    }\n    if ($false -and $skippedResultLines.Count) { $errors += \"SKIP result line(s): $($skippedResultLines -join '; ')\" }\n",
+    "command": ["pwsh", "-NoProfile", "-File", "tests/Test-InstallerUi.ps1", "-SelfTest"],
+    "test": "TAP parser self-test rejects skipped subtests"
+  },
+  {
+    "id": "T4-idle-exit-listener-late",
+    "why": "The T4 detector must catch a child exit listener removed from the immediate post-spawn position.",
+    "file": "tests/installer-ui.test.mjs",
+    "find": "  const exited = once(child, 'exit');\n  const outputOf = captureOutput(child);\n  try {\n    const output = await waitForOutput(child, /One-time token:/);\n    assert.match(output, /Claude gateway installer UI:/);\n    const [code] = await exited;\n",
+    "replace": "  const outputOf = captureOutput(child);\n  try {\n    const output = await waitForOutput(child, /One-time token:/);\n    assert.match(output, /Claude gateway installer UI:/);\n    const [code] = await once(child, 'exit');\n",
+    "testFile": "tests/installer-ui-g5.test.mjs",
+    "test": "T4 child exit waits are registered immediately after spawn"
+  },
+  {
+    "id": "P1-preflight-scope-widened",
+    "why": "A step-scoped preflight fingerprint must not cover every run scope.",
+    "file": "tools/installer-ui/preflight-record.mjs",
+    "find": "  return sha256Hex(canonicalize({ schemaVersion: 1, engine, answers: answers || {}, steps: scope }));\n",
+    "replace": "  return sha256Hex(canonicalize({ schemaVersion: 1, engine, answers: answers || {}, steps: 'full' }));\n",
+    "testFile": "tests/installer-ui-g2.test.mjs",
+    "test": "P1 fingerprints canonicalize answer keys and cover step scopes"
+  },
+  {
+    "id": "F4-integer-truncation",
+    "why": "Integer coercion must not parse fractional or exponent text with parseInt.",
+    "file": "tools/installer-ui/ui-model.js",
+    "find": "    if (property.type === \"integer\") {\n      const value = Number(raw);\n      return Number.isFinite(value) ? value : String(raw);\n    }\n",
+    "replace": "    if (property.type === \"integer\") {\n      const value = Number.parseInt(String(raw), 10);\n      return Number.isFinite(value) ? value : String(raw);\n    }\n",
+    "testFile": "tests/installer-ui-g3.test.mjs",
+    "test": "F4 integer coercion accepts exponent form and rejects fractional, text and out-of-range values"
+  },
+  {
+    "id": "U1-run-admission-ignores-active-run",
+    "why": "Run-starting controls must remain disabled while a run is active.",
+    "file": "tools/installer-ui/installer-ui.js",
+    "find": "    const admitted = liveMode() && preflightFingerprint && !preflightStale && !hasBlockingProblems() && !runActive;\n",
+    "replace": "    const admitted = liveMode() && preflightFingerprint && !preflightStale && !hasBlockingProblems();\n",
+    "testFile": "tests/installer-ui-g4.test.mjs",
+    "test": "U1 fix run-starting buttons are disabled while a run is active"
+  },
+  {
+    "id": "D4-model-delegation-removed",
+    "why": "Server modules must not carry non-delegating UI model function copies.",
+    "file": "tools/installer-ui/server-model.mjs",
+    "find": "export async function fieldsByCheckId(schema) {\n  return (await loadUiModel()).fieldsByCheckId(schema);\n}\n",
+    "replace": "export function fieldsByCheckId(schema) {\n  return {};\n}\n",
+    "testFile": "tests/installer-ui-structure.test.mjs",
+    "test": "the form uses fixed script routes and no string-built DOM insertion sinks"
+  }
+]
