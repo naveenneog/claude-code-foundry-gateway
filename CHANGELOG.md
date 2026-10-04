@@ -42,7 +42,9 @@ exact streaming cache-creation detail remains **U13**.
   caps forwarded console output, removes the non-streaming run route, keeps active runs alive across
   browser disconnects, exposes status and reattach routes, provides a Stop run button, surfaces
   malformed preflight output visibly, and validates the step list, preflight and progress interfaces
-  as schema version 1 before use.
+  as schema version 1 before use. Each browser stream reads a bounded tail of the run at its own pace,
+  so a browser that stops reading or disconnects does not hold back the installer or the end of the
+  run.
 - **Installers read an answers file, check it before any change, run selected steps and write a progress stream (P92, phase 0).**
   One answers file, described by `schemas/claude-gateway.answers.schema.json`, feeds
   `Install-ClaudeGateway.ps1 -AnswersPath`, `install-claude-gateway.sh --answers-file` and

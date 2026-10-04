@@ -61,6 +61,7 @@ if (args.includes('-Preflight')) {
     appendFileSync(`${heartbeat}.pid`, `${process.pid}\n${child.pid}\n`);
     await new Promise(() => {});
   }
+  if (process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_DELAY_MS) await new Promise((resolve) => setTimeout(resolve, Number(process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_DELAY_MS)));
   if (process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_TEXT) {
     console.log(`preflight could not parse password=super-secret at ${answersPath}`);
     process.exit(2);

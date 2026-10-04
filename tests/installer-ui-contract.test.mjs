@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { spawn } from 'node:child_process';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, readFile, rm, rmdir, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { createInstallerUiServer } from '../tools/installer-ui/server.mjs';
@@ -27,7 +28,7 @@ async function runPwsh(args, env = {}) {
 }
 
 async function start(env = {}) {
-  const scratch = join(repoRoot, '.p93-installer-ui-contract', `${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+  const scratch = join(tmpdir(), 'p93-installer-ui-contract', `${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`);
   await rm(scratch, { recursive: true, force: true });
   await mkdir(scratch, { recursive: true });
   const log = join(scratch, 'stub.ndjson');
@@ -61,6 +62,8 @@ async function start(env = {}) {
 }
 
 test('contract adapter accepts real step list and logged-out preflight output', { timeout: 180_000 }, async () => {
+  // The installer trusts a state directory only under a parent that other accounts cannot change (P91), so this
+  // scratch sits in the checkout (ignored by git) rather than the system temporary directory.
   const scratch = join(repoRoot, '.p93-installer-ui-real-contract', `${process.pid}-${Date.now()}`);
   const stateDir = join(scratch, 'state-that-does-not-exist-yet');
   const answersPath = join(scratch, 'answers.json');
@@ -86,6 +89,7 @@ test('contract adapter accepts real step list and logged-out preflight output', 
     assert.ok(validatePreflight(JSON.parse(preflight.stdout)).checks.length > 0);
   } finally {
     await rm(scratch, { recursive: true, force: true });
+    await rmdir(dirname(scratch)).catch(() => {});
   }
 });
 
@@ -119,13 +123,24 @@ test('contract adapter vocabularies cover producer literals and resume/refusal s
 
 test('contract vocabulary drift detector reads producer sources', async () => {
   const checkpointSource = await readFile(new URL('../scripts/ClaudeInstallCheckpoint.ps1', import.meta.url), 'utf8');
+  const resumeSource = await readFile(new URL('../scripts/ClaudeInstallResume.ps1', import.meta.url), 'utf8');
   const stepSource = await readFile(new URL('../scripts/ClaudeInstallSteps.ps1', import.meta.url), 'utf8');
-  for (const state of ['started', 'completed', 'incomplete']) {
-    assert.match(checkpointSource, new RegExp(`'${state}'`));
-    assert.ok(STEP_STATES.includes(state), `${state} is missing from STEP_STATES`);
-  }
-  const validateSet = stepSource.match(/ValidateSet\(([^)]*)\)/)?.[1] || '';
-  for (const event of [...validateSet.matchAll(/'([^']+)'/g)].map((match) => match[1]).concat('refused')) {
-    assert.ok(PROGRESS_EVENTS.includes(event), `${event} is missing from PROGRESS_EVENTS`);
-  }
+  // Every state a producer writes into the checkpoint, and the one -ListSteps adds.
+  const states = new Set();
+  for (const source of [checkpointSource, resumeSource]) for (const match of source.matchAll(/-State\s+'([a-z-]+)'/g)) states.add(match[1]);
+  const completion = checkpointSource.match(/\$state = if \(\$Incomplete\) \{ '([a-z-]+)' \} else \{ '([a-z-]+)' \}/);
+  assert.ok(completion, 'Complete-ClaudeInstallStep state literals are found');
+  states.add(completion[1]).add(completion[2]);
+  const listed = stepSource.match(/state = \$\(if \(\$s\) \{ \[string\]\$s\.state \} else \{ '([a-z-]+)' \}\)/);
+  assert.ok(listed, 'the -ListSteps default state literal is found');
+  states.add(listed[1]);
+  assert.ok(states.size >= 4, `the detector found the producer states: ${[...states].join(', ')}`);
+  for (const state of states) assert.ok(STEP_STATES.includes(state), `${state} is missing from STEP_STATES`);
+  // Every progress event: the step-event ValidateSet and every literal -Event value.
+  const events = new Set();
+  const validateSet = stepSource.match(/\[ValidateSet\(([^)]*)\)\]\[string\]\$Event/)?.[1] || '';
+  for (const match of validateSet.matchAll(/'([^']+)'/g)) events.add(match[1]);
+  for (const match of stepSource.matchAll(/-Event\s+'([a-z-]+)'/g)) events.add(match[1]);
+  assert.ok(events.size >= 6, `the detector found the producer events: ${[...events].join(', ')}`);
+  for (const event of events) assert.ok(PROGRESS_EVENTS.includes(event), `${event} is missing from PROGRESS_EVENTS`);
 });

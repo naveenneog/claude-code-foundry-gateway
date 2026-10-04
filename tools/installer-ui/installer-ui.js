@@ -262,10 +262,11 @@ function appendRunLine(text) {
   runOutputLines.push(text);
   if (runOutputLines.length > maxRunOutputLines) {
     const removed = runOutputLines.length - maxRunOutputLines;
+    runOutputLines.splice(0, removed);
     removedRunOutputLines += removed;
-    runOutputLines = [`Earlier run output lines were removed (${removedRunOutputLines}).`, ...runOutputLines.slice(-maxRunOutputLines + 1)];
   }
-  output.textContent = `${runOutputLines.join('\n')}\n`;
+  const shown = removedRunOutputLines ? [`Earlier run output lines were removed (${removedRunOutputLines}).`, ...runOutputLines] : runOutputLines;
+  output.textContent = `${shown.join('\n')}\n`;
 }
 
 async function readRunStream(res) {

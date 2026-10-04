@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { validatePreflight, validateProgressEvent, validateStepList } from './installer-contract.mjs';
 import { assertSameOrigin, constantTimeTokenEquals, contentSecurityPolicy, isAllowedHost, isLoopbackBind, parseCookies, readJsonBody, send, sendText, tokenHash } from './http-helpers.mjs';
 import { renderHtml } from './page-template.mjs';
+import { attachSubscriber, createRunRecord, publicRun, publishEvent } from './run-record.mjs';
 import { createLineHandler, readProgressFile, writeNdjson } from './run-transport.mjs';
 import { buildCommands, fieldsByCheckId, loadSchema, prefillArguments, redactText, root, scrubLocalPaths } from './server-model.mjs';
 
@@ -27,11 +28,10 @@ const uiCss = join(here, 'installer-ui.css');
 const defaultIdleMs = 30 * 60 * 1000;
 const consoleOutputCapBytes = 4 * 1024 * 1024;
 const consoleLineCapBytes = 64 * 1024;
-const runTailLimit = 1000;
 
 
-async function withRunDirectory(fn, tempDirs) {
-  const dir = await mkdtemp(join(tmpdir(), 'claude-installer-ui-'));
+async function withRunDirectory(fn, tempDirs, parent = tmpdir()) {
+  const dir = await mkdtemp(join(parent, 'claude-installer-ui-'));
   tempDirs.add(dir);
   try {
     try { await chmod(dir, 0o700); } catch { /* Windows ACLs are inherited; the directory is still per-run. */ }
@@ -197,11 +197,15 @@ async function runInstallerStreaming(kind, args, options, onEvent, progressPath,
   };
   const progressState = { offset: 0, decoder: progressDecoder };
   const timer = setInterval(() => { progressReading = progressReading.then(() => readProgressFile(progressPath, progressState, processProgressText, false)).catch((error) => enqueue({ type: 'error', message: `progress read failed: ${error.message}` })); }, 100);
-  const code = await new Promise((resolveCode, reject) => {
-    child.on('error', reject);
-    child.on('close', resolveCode);
-  });
-  clearInterval(timer);
+  let code;
+  try {
+    code = await new Promise((resolveCode, reject) => {
+      child.on('error', reject);
+      child.on('close', resolveCode);
+    });
+  } finally {
+    clearInterval(timer);
+  }
   await Promise.all([
     child.stdout.readableEnded ? Promise.resolve() : once(child.stdout, 'end').catch(() => {}),
     child.stderr.readableEnded ? Promise.resolve() : once(child.stderr, 'end').catch(() => {}),
@@ -263,6 +267,7 @@ export async function createInstallerUiServer(options = {}) {
   let inFlight = 0;
   options._children = new Set();
   const idleMs = Number(options.idleMs || defaultIdleMs);
+  const tempRoot = options.tempRoot || tmpdir();
   const timeoutFor = (name) => Number(options.readOnlyTimeoutMs || ({ steps: 60_000, identity: 120_000, prefill: 120_000, preflight: 600_000, plan: 120_000 }[name]));
   const extraHosts = options.allowedHosts || [];
   const log = options.log || (() => {});
@@ -309,111 +314,45 @@ export async function createInstallerUiServer(options = {}) {
     }
   };
 
-  const publicRun = (run, includeTail = false) => run && ({
-    id: run.id,
-    steps: run.steps,
-    state: run.state,
-    currentStepId: run.currentStepId,
-    exitCode: run.exitCode,
-    failedStepId: run.failedStepId,
-    resumeCommand: run.resumeCommand,
-    startTime: run.startTime,
-    nextSeq: run.nextSeq,
-    stoppedMessage: run.stoppedMessage,
-    tempDirRemoved: run.tempDirRemoved,
-    events: includeTail ? run.tail : undefined,
-  });
-
-  const publish = async (run, event) => {
-    const item = { seq: run.nextSeq++, ...event };
-    run.tail.push(item);
-    if (run.tail.length > runTailLimit) run.tail.splice(0, run.tail.length - runTailLimit);
-    if (item.type === 'progress' && item.event === 'started') run.currentStepId = item.stepId || run.currentStepId;
-    if (item.type === 'progress' && item.event === 'failed') {
-      run.failedStepId = item.stepId || '';
-      run.resumeCommand = item.resumeCommand || (run.failedStepId ? `Install-ClaudeGateway.ps1 -Steps ${run.failedStepId}` : '');
-    }
-    await Promise.all([...run.subscribers].map((subscriber) => subscriber.enqueue()));
-  };
-
-  const attachRun = async (run, res, after) => {
-    if (!Number.isInteger(after) || after < 0) {
-      const error = new Error('after must be a non-negative integer');
-      error.status = 400;
-      throw error;
-    }
-    res.writeHead(200, {
-      'content-type': 'application/x-ndjson; charset=utf-8',
-      'cache-control': 'no-store',
-      'content-security-policy': contentSecurityPolicy(),
-      'x-content-type-options': 'nosniff',
-    });
-    let closed = false;
-    const subscriber = {
-      cursor: after,
-      writing: false,
-      enqueue() {
-        return this.flush();
-      },
-      async flush() {
-        if (this.writing) return;
-        this.writing = true;
-        try {
-          for (;;) {
-            if (closed) return;
-            const firstSeq = run.tail[0]?.seq ?? run.nextSeq;
-            if (this.cursor < firstSeq - 1) {
-              const skipped = firstSeq - this.cursor - 1;
-              this.cursor = firstSeq - 1;
-              if (!await writeNdjson(res, { seq: this.cursor, type: 'notice', skippedEvents: skipped, message: 'Earlier run events fell out of the bounded tail.' })) return;
-            }
-            const next = run.tail.find((event) => event.seq > this.cursor);
-            if (!next) return;
-            if (!await writeNdjson(res, next)) return;
-            this.cursor = next.seq;
-            if (next.type === 'summary') {
-              closed = true;
-              res.end();
-              return;
-            }
-          }
-        } finally {
-          this.writing = false;
-          if (!closed && run.tail.some((event) => event.seq > this.cursor)) void this.flush();
-        }
-      },
-      end() {
-        if (!closed) res.end();
-      },
-    };
-    if (run.state === 'running' || run.state === 'stopping') run.subscribers.add(subscriber);
-    subscriber.enqueue();
-    res.on('close', () => { closed = true; run.subscribers.delete(subscriber); });
-  };
+  const publish = publishEvent;
+  const attachRun = attachSubscriber;
 
   const createRun = (steps) => {
     if (activeRun?.state === 'running' || activeRun?.state === 'stopping') return null;
-    const run = {
-      id: randomBytes(16).toString('hex'),
-      steps,
-      state: 'running',
-      currentStepId: '',
-      exitCode: null,
-      failedStepId: '',
-      resumeCommand: '',
-      startTime: new Date().toISOString(),
-      nextSeq: 1,
-      tail: [],
-      subscribers: new Set(),
-      child: null,
-      tempDir: '',
-      progressPath: '',
-      stoppedMessage: '',
-      tempDirRemoved: false,
-    };
+    const run = createRunRecord(steps, { tailEvents: options.runTailEvents, tailBytes: options.runTailBytes });
     activeRun = run;
     lastRun = run;
     return run;
+  };
+
+  // The run's own directory (answers and progress file) and the installer arguments. When the directory
+  // cannot be prepared, the run is released with an error and a summary, so later runs are not refused.
+  const prepareRun = async (run, answers, steps) => {
+    try {
+      run.tempDir = await mkdtemp(join(tempRoot, 'claude-installer-ui-'));
+      tempDirs.add(run.tempDir);
+      try { await chmod(run.tempDir, 0o700); } catch { /* Windows ACLs are inherited; the directory is still per-run. */ }
+      const answersPath = await writeAnswers(run.tempDir, answers || {});
+      run.progressPath = join(run.tempDir, 'progress.ndjson');
+      const args = ['-AnswersPath', answersPath, '-Yes', '-ProgressPath', run.progressPath];
+      if (steps.length) args.push('-Steps', steps.join(','));
+      return args;
+    } catch (error) {
+      log(`Installer run could not start: ${error.message}`);
+      const message = 'The installer run could not start: its temporary directory could not be prepared. The terminal that started the installer UI shows the details.';
+      run.state = 'exited';
+      publish(run, { type: 'error', message });
+      publish(run, { type: 'summary', exitCode: null, failedStepId: '', resumeCommand: '', state: run.state, message: '' });
+      if (run.tempDir) {
+        await rm(run.tempDir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }).catch(() => {});
+        tempDirs.delete(run.tempDir);
+      }
+      run.tempDirRemoved = true;
+      if (activeRun === run) activeRun = null;
+      const failure = new Error(message);
+      failure.status = 500;
+      throw failure;
+    }
   };
 
   const server = createHttpServer(async (req, res) => {
@@ -495,7 +434,7 @@ export async function createInstallerUiServer(options = {}) {
           const answers = await writeAnswers(dir, body.answers || {});
           const result = await runPowerShell(planScript, ['-AnswersPath', answers], options, { timeoutMs: timeoutFor('plan'), readName: 'plan' });
           return JSON.parse(result.stdout);
-        }, tempDirs)), setCookie);
+        }, tempDirs, tempRoot)), setCookie);
       }
       if (req.method === 'POST' && url.pathname === '/api/preflight') {
         assertSameOrigin(req);
@@ -514,7 +453,7 @@ export async function createInstallerUiServer(options = {}) {
             throw malformed;
           }
           return { exitCode: result.code, preflight: parsed, stdout: result.stdout, stderr: result.stderr, fieldsByCheckId: fieldsByCheckId(await loadSchema()) };
-        }, tempDirs)), setCookie);
+        }, tempDirs, tempRoot)), setCookie);
       }
       if (req.method === 'POST' && url.pathname === '/api/run/stream') {
         assertSameOrigin(req);
@@ -523,34 +462,23 @@ export async function createInstallerUiServer(options = {}) {
         const steps = await validateRunRequest(body, options);
         const run = createRun(steps);
         if (!run) return send(res, 409, { error: 'an installer run is already active' }, setCookie);
-        const dir = await mkdtemp(join(tmpdir(), 'claude-installer-ui-'));
-        tempDirs.add(dir);
-        try { await chmod(dir, 0o700); } catch { /* Windows ACLs are inherited; the directory is still per-run. */ }
-        run.tempDir = dir;
-        const answers = await writeAnswers(dir, body.answers || {});
-        const progress = join(dir, 'progress.ndjson');
-        run.progressPath = progress;
-        const args = ['-AnswersPath', answers, '-Yes', '-ProgressPath', progress];
-        if (steps.length) args.push('-Steps', steps.join(','));
+        const args = await prepareRun(run, body.answers, steps);
         await attachRun(run, res, 0);
         void (async () => {
           try {
             const code = await runInstallerStreaming('powershell', args, options, async (event) => {
-              await publish(run, event);
-            }, progress, { onChild: (child) => { run.child = child; } });
+              publish(run, event);
+            }, run.progressPath, { onChild: (child) => { run.child = child; } });
             run.exitCode = code;
             run.state = run.state === 'stopping' ? 'stopped' : 'exited';
           } catch (error) {
             run.exitCode = 1;
             run.state = run.state === 'stopping' ? 'stopped' : 'exited';
-            await publish(run, { type: 'error', message: await redactText(scrubLocalPaths(error.message)) });
+            publish(run, { type: 'error', message: await redactText(scrubLocalPaths(error.message)) });
           } finally {
             if (run.failedStepId && !run.resumeCommand) run.resumeCommand = `Install-ClaudeGateway.ps1 -Steps ${run.failedStepId}`;
-            await publish(run, { type: 'summary', exitCode: run.exitCode, failedStepId: run.failedStepId, resumeCommand: run.resumeCommand, state: run.state, message: run.stoppedMessage });
-            for (const subscriber of [...run.subscribers]) {
-              await subscriber.flush?.();
-              subscriber.end?.();
-            }
+            // Each subscriber ends its own response once it has written this summary.
+            publish(run, { type: 'summary', exitCode: run.exitCode, failedStepId: run.failedStepId, resumeCommand: run.resumeCommand, state: run.state, message: run.stoppedMessage });
             try {
               await rm(run.tempDir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
               tempDirs.delete(run.tempDir);
@@ -577,7 +505,7 @@ export async function createInstallerUiServer(options = {}) {
         run.state = 'stopping';
         const step = run.currentStepId || run.steps[0] || 'the current step';
         run.stoppedMessage = `Stopped installer run at ${step}. The install checkpoint resumes when the same steps run again.`;
-        await publish(run, { type: 'stopped', stepId: step, message: run.stoppedMessage });
+        publish(run, { type: 'stopped', stepId: step, message: run.stoppedMessage });
         await killProcessTree(run.child);
         return send(res, 200, { schemaVersion: 1, runId: run.id, message: run.stoppedMessage }, setCookie);
       }

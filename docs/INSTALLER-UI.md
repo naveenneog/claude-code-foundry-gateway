@@ -45,10 +45,14 @@ only run endpoint; `POST /api/run` returns `404`.
 Each run writes its answers and progress file to a per-run temporary directory and keeps that
 directory until the child exits, even if the browser disconnects. The server records the active or
 last run, exposes `GET /api/run/status`, and reattaches through `GET /api/run/attach?after=<seq>`
-from a bounded event tail. Every console line and progress line is redacted with the installer
-redaction rules before it leaves the server. Console output above 4 MiB for a run is replaced by
-one notice while progress and the final summary continue. The browser keeps 2,000 output lines and
-shows one line when earlier lines are removed.
+from a bounded event tail: the latest 8 MiB or 50,000 events of the run
+(`tools/installer-ui/run-record.mjs`). Each browser stream reads the tail at its own pace, so a paused
+or disconnected browser does not hold back the installer or the end of the run; a stream whose
+position leaves the tail receives one notice with the number of events it missed. Every console line
+and progress line is redacted with the installer redaction rules before it leaves the server. Console
+output above 4 MiB for a run is replaced by one notice while progress and the final summary continue,
+and a console line longer than 64 KiB is cut with ` [line truncated]`. The browser keeps 2,000 output
+lines and shows one line with the number of earlier lines removed.
 
 The Stop run button is enabled only while a run is active. It confirms the running step name and
 then stops the process tree. On Windows the server uses `taskkill.exe /PID <pid> /T /F`; on POSIX

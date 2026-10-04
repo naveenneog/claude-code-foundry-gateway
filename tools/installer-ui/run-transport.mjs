@@ -1,11 +1,21 @@
-import { once } from 'node:events';
 import { existsSync } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { StringDecoder } from 'node:string_decoder';
 
 export async function waitForDrain(res) {
   if (res.destroyed || res.writableEnded) return;
-  await once(res, 'drain').catch(() => {});
+  // A client that disconnects while its socket is full never drains; close and error end the wait too.
+  await new Promise((resolve) => {
+    const done = () => {
+      res.off('drain', done);
+      res.off('close', done);
+      res.off('error', done);
+      resolve();
+    };
+    res.on('drain', done);
+    res.on('close', done);
+    res.on('error', done);
+  });
 }
 
 export async function writeNdjson(res, payload) {

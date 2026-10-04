@@ -607,8 +607,10 @@ test('stream ordering, removed run route and browser DOM cap are enforced', asyn
     await page.getByRole('button', { name: 'Run selected steps' }).click();
     await expectText(page, 'summary:');
     const output = await page.locator('#run-output').textContent();
-    assert.match(output, /Earlier run output lines were removed/);
-    assert.ok(output.split(/\n/).length <= 2050);
+    assert.match(output, /Earlier run output lines were removed \(601\)\./, '2,601 appended lines, 2,000 kept');
+    const shown = output.trimEnd().split('\n');
+    assert.equal(shown.length, 2001, 'the notice and the 2,000 latest lines');
+    assert.match(shown[1], /line 0601$/, 'the oldest kept line follows the 601 removed ones');
   } finally {
     await browser.close();
     await pageApp.close();

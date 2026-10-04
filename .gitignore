@@ -75,3 +75,7 @@ onboarding/support/
 True.zip
 # Logged-out Azure CLI config used by tests/Test-AzCommandsGuide.ps1 for az --help checks
 /.az-help-cache-p89/
+
+# Installer UI tests run the real installer with a state directory in this scratch path; P91 trusts no
+# state directory under the system temporary directory when other accounts can change it.
+.p93-installer-ui-real-contract/
