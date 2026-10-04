@@ -44,6 +44,16 @@ fails the release stage while any remain. Detail for each one follows below.
 
 ---
 
+## P95 research before implementation
+
+Researched 2026-10-05, before any P95 code.
+
+| ID | State | Question | Blocks |
+|---|---|---|---|
+| U119 | CLOSED | Does ARM say whether an action group's email receiver receives alerts? Yes: `GET .../Microsoft.Insights/actionGroups/<name>` returns `properties.enabled` and, for each `emailReceivers` entry, `status` `NotSpecified`, `Enabled` or `Disabled`; "Receivers that are not Enabled will not receive any communications", and a disabled group sends to none of its receivers ([Action Groups - Get](https://learn.microsoft.com/rest/api/monitor/action-groups/get?view=rest-monitor-2021-09-01), updated 2026-03-17, read 2026-10-05). Whether a receiver that has not confirmed its passcode reads `Enabled` is not documented; U116 stays an assumption with the live test notification as its detector. | P95 admission |
+
+---
+
 ## P94 research before implementation
 
 Researched 2026-10-04, before any P94 code. Rows marked ASSUMED name the blast radius and the
