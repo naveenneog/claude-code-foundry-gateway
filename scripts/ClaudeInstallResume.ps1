@@ -482,3 +482,12 @@ function Assert-ClaudeInstallDesktopApp([string]$ClientId) {
         Stop-ClaudeInstall "the Claude Desktop app id $ClientId names the application whose appId is $(if ($appId) { $appId } else { 'empty' }), so it is not used. Nothing was changed. Resume: $(Format-ClaudeInstallResume)"
     }
 }
+
+function Test-ClaudeInstallWindows { return ($env:OS -eq 'Windows_NT') }
+
+function Test-ClaudeInstallCmdText([string]$Text) {
+    # On Windows az is az.cmd, and cmd.exe re-reads & | < > ^ ( ) " % in an argument: the characters that Assert-AzArgumentsSafe
+    # refuses in Install-ClaudeGateway.ps1. The checkpoint reader and the preflight use this rule (ADR-0047 decision 17).
+    if ((Test-ClaudeInstallWindows) -and $Text -match '[&|<>^()"%]') { return 'holds a character that cmd.exe re-reads' }
+    return ''
+}

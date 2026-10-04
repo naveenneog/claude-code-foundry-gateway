@@ -107,11 +107,11 @@ read it and report the same problems word for word (ADR-0047 decision 2). The sc
 
 **Preflight.** `-Preflight` and `--preflight` report the 14 checks that `x-preflightChecks` lists, as
 text or as JSON with `schemaVersion`, `installer`, `answersSchemaVersion`, `result` and `checks`
-(`scripts/ClaudeInstallerPreflight.ps1:119-184`, `scripts/install-preflight.sh:222-286`). Each check is
+(`scripts/ClaudeInstallerPreflight.ps1:125-201`, `scripts/install-preflight.sh:222-286`). Each check is
 PASS, FAIL or NOT-RUN with a reason. A check starts NOT-RUN with reason `not-evaluated`, which fails the
 preflight, and is PASS only where a branch passes it with a message (ADR-0047 decision 5). Its reads go
 through the P91 verdict readers, and the API Management reads are the ones the run's reuse path makes
-(`Get-ClaudeApimReuseState`, `scripts/ClaudeInstallerPreflight.ps1:18-39`). The guided flow applies an
+(`Get-ClaudeApimReuseState`, `scripts/ClaudeInstallerPreflight.ps1:22-43`). The guided flow applies an
 approved plan only when this result is PASS (ADR-0047 decision 9).
 
 **Progress stream.** `-ProgressPath` and `--progress-file` append one JSON object per line

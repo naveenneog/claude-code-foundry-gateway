@@ -5,6 +5,7 @@
 # PowerShell 7 and Windows PowerShell 5.1.
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
+. (Join-Path $PSScriptRoot 'ChildOutputRead.ps1')
 $fail = 0
 function Assert($label, $condition, $detail = '') {
     if ($condition) { Write-Host "  [OK]   $label" -ForegroundColor Green }
@@ -193,7 +194,7 @@ function Start-Run($Run) {
     $process = [Diagnostics.Process]::Start($psi)
     foreach ($line in $Run.Input) { $process.StandardInput.WriteLine($line) }
     $process.StandardInput.Close()
-    [pscustomobject]@{ Run = $Run; Process = $process; Out = $process.StandardOutput.ReadToEndAsync(); Err = $process.StandardError.ReadToEndAsync(); Clock = [Diagnostics.Stopwatch]::StartNew() }
+    [pscustomobject]@{ Run = $Run; Process = $process; Out = (Start-ChildOutputRead $process.StandardOutput); Err = (Start-ChildOutputRead $process.StandardError); Clock = [Diagnostics.Stopwatch]::StartNew() }
 }
 function Invoke-Runs([object[]]$Runs, [int]$Throttle = 6, [int]$TimeoutSeconds = 150) {
     $queue = [System.Collections.Generic.Queue[object]]::new()
@@ -208,8 +209,8 @@ function Invoke-Runs([object[]]$Runs, [int]$Throttle = 6, [int]$TimeoutSeconds =
             if (-not $h.Process.HasExited -and -not $timedOut) { continue }
             if (-not $h.Process.HasExited) { try { $h.Process.Kill($true) } catch { } }
             [void]$h.Process.WaitForExit(10000)
-            $out = if ($h.Out.Wait(5000)) { $h.Out.Result -replace "`e\[[0-9;]*m", '' } else { '' }
-            $err = if ($h.Err.Wait(5000)) { $h.Err.Result -replace "`e\[[0-9;]*m", '' } else { '' }
+            $out = (Receive-ChildOutputRead $h.Out "The standard output of run $($h.Run.Id)") -replace "`e\[[0-9;]*m", ''
+            $err = (Receive-ChildOutputRead $h.Err "The standard error of run $($h.Run.Id)") -replace "`e\[[0-9;]*m", ''
             $r = $h.Run
             $installer = if (Test-Path -LiteralPath $r.InstallerLog) { Get-Content -LiteralPath $r.InstallerLog -Raw | ConvertFrom-Json } else { $null }
             $done[$r.Id] = [pscustomobject]@{

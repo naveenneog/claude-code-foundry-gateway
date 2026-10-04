@@ -102,6 +102,7 @@ Add-Case 'bu-upper-id' $pw @('businessUnits.ids') $valid { param($d) $d.Business
 Add-Case 'bu-group-quote' $pw @('entra.groupNames') $valid { param($d) $d.BusinessUnits[1].group = "claude-bu-o'brien" }
 Add-Case 'bu-group-comma' $pw @('entra.groupNames') $valid { param($d) $d.BusinessUnits[1].group = 'claude-bu-a,b' }
 Add-Case 'bu-group-colon' $pw @('entra.groupNames') $valid { param($d) $d.BusinessUnits[1].group = 'claude-bu-a:b' }
+Add-Case 'bu-group-cmd-marker' $pw @('entra.groupNames') $valid { param($d) $d.BusinessUnits[1].group = 'claude-bu&echo.P93_PREFILL_MARKER&rem' }
 Add-Case 'bu-depth-3' $pw @('businessUnits.depth') $valid { param($d) $d.BusinessUnits += [pscustomobject][ordered]@{ id = 'emea-pay'; group = 'claude-team-emea-pay'; parent = 'finance-emea'; monthlyUsdBudget = 100; mode = 'Strict' } }
 Add-Case 'bu-allowance-no-percent' $pw @('answers.crossField') $valid { param($d) $d.BusinessUnits[1].PSObject.Properties.Remove('percent') }
 Add-Case 'bu-allowance-0' $pw @('answers.schema') $valid { param($d) $d.BusinessUnits[1].percent = 0 }
@@ -110,6 +111,9 @@ Add-Case 'bu-negative-budget' $pw @('answers.schema') $valid { param($d) $d.Busi
 Add-Case 'secret-answer' $pw @('answers.schema') $valid { param($d) Set-Answer $d 'AddressCertificatePassword' 'not-a-real-password' }
 # Further rules the preflight reports from the answers alone.
 Add-Case 'tier-group-quote' $pw @('entra.groupNames') $valid { param($d) $d.StandardGroup = "O'Brien" }
+Add-Case 'standard-group-cmd-marker' $pw @('entra.groupNames') $valid { param($d) $d.StandardGroup = 'standard&echo.P93_PREFILL_MARKER&rem' }
+Add-Case 'premium-group-cmd-marker' $pw @('entra.groupNames') $valid { param($d) $d.PremiumGroup = 'premium&echo.P93_PREFILL_MARKER&rem' }
+Add-Case 'subscription-cmd-marker' $pw @('target.subscription') $valid { param($d) $d.SubscriptionId = 'sub&echo.P93_PREFILL_MARKER&rem' }
 Add-Case 'kv-url-malformed' $pw @('address.inputs') $valid { param($d) $d.AddressKeyVaultCertificateId = 'http://kv-contoso/certificates' }
 Add-Case 'custom-address-no-hostname' $pw @('address.inputs') $valid { param($d) $d.PSObject.Properties.Remove('AddressHostname') }
 Add-Case 'bu-duplicate-id' $pw @('businessUnits.ids') $valid { param($d) $d.BusinessUnits[3].id = 'finance-emea' }
@@ -135,6 +139,8 @@ Add-Case 'projection-renewal-response-casing' $pw @() $valid { param($d) foreach
 Add-Case 'projection-digest-malformed' $pw @('answers.schema') $valid { param($d) Set-Answer $d 'ProjectionRenewalImageDigest' 'sha256:ABC' }
 Add-Case 'projection-action-group-not-id' $pw @('answers.schema') $valid { param($d) Set-Answer $d 'ProjectionRenewalActionGroupResourceId' 'ag-projection-renewal' }
 Add-Case 'projection-entry-point-empty' $pw @('answers.schema') $valid { param($d) Set-Answer $d 'ProjectionRenewalEntryPoint' '' }
+# Council round 3, Security note 2: the entry point reaches az container exec on the switch path (ADR-0047 decision 17).
+Add-Case 'projection-entry-point-cmd-marker' $pw @('answers.schema') $valid { param($d) Set-Answer $d 'ProjectionRenewalEntryPoint' 'node /app/sync/src/apply-projection.mjs&echo.P92_ENTRY_MARKER&rem' }
 Add-Case 'not-json' $pw @('answers.schema') -Text '{"Sku": "BasicV2", '
 Add-Case 'names-differ-in-case' $pw @('answers.schema') -Text '{"Sku": "BasicV2", "sku": "BasicV2"}'
 Add-Case 'not-an-object' $pw @('answers.schema') -Text '["Sku"]'

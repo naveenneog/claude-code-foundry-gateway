@@ -468,6 +468,7 @@ ckpt_lock_() {
       # with the installer even when no EXIT trap runs.
       ( parent=$$; while sleep 60; do kill -0 "$parent" 2>/dev/null || exit 0; [ -f "$CKPT_LOCK" ] || exit 0; touch "$CKPT_LOCK" 2>/dev/null || exit 0; done ) >/dev/null 2>&1 &
       CKPT_HEARTBEAT=$!
+      disown "$CKPT_HEARTBEAT" 2>/dev/null || true
       return 0
     fi
     [ -f "$CKPT_LOCK" ] || ckpt_refuse_ "the lock $CKPT_LOCK could not be created. Nothing was changed."

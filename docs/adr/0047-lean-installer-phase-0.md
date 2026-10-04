@@ -189,12 +189,12 @@ The RED phase adds these tests before product code:
    and `not-evaluated` fail the preflight; `not-applicable`, `not-answered` and `discovery-skipped`
    do not. A check that did not run never passes (P91 R1). The preflight exits 0 only when no check
    fails and none is NOT-RUN for a failing reason (`Invoke-ClaudeGatewayPreflight`,
-   `scripts/ClaudeInstallerPreflight.ps1:119-184`; `preflight_run_`, `scripts/install-preflight.sh:222-286`).
-   `Get-ClaudePreflightBlocking` (`scripts/ClaudeInstallerPreflight.ps1:94-97`) returns those checks for
-   the result (`:182`) and for the guided flow (decision 9).
+   `scripts/ClaudeInstallerPreflight.ps1:125-201`; `preflight_run_`, `scripts/install-preflight.sh:222-286`).
+   `Get-ClaudePreflightBlocking` (`scripts/ClaudeInstallerPreflight.ps1:98-101`) returns those checks for
+   the result (`:199`) and for the guided flow (decision 9).
    - **Fail closed by construction (lead review of `cb2cd70`).** Every check starts NOT-RUN with reason
-     `not-evaluated` (`scripts/ClaudeInstallerPreflight.ps1:127-128`). Only `Set-ClaudePreflightPass`
-     (`:100-105`) makes it PASS, and only for a check with no problem, not set NOT-RUN by a branch, and with
+     `not-evaluated` (`scripts/ClaudeInstallerPreflight.ps1:133-134`). Only `Set-ClaudePreflightPass`
+     (`:104-109`) makes it PASS, and only for a check with no problem, not set NOT-RUN by a branch, and with
      a message. The bash aggregator reports a check with no problem, no NOT-RUN line and no `pf_pass_` line
      that has a message as NOT-RUN `not-evaluated` (`scripts/install-preflight.sh:273-274`). A branch that
      sets nothing therefore fails the preflight. At `cb2cd70` every check started as PASS, so the lead's
@@ -206,12 +206,12 @@ The RED phase adds these tests before product code:
      preflight from the latest checkout; if the check is still not evaluated, report it with this output."
    - **Output that is not JSON is an inconclusive read.** `az account show` output that is not JSON, or
      has no `tenantId`, is a FAIL of `target.tenant` ("did not return JSON", "returned no tenantId"), and
-     the other Azure checks are NOT-RUN `prerequisite-failed` (`scripts/ClaudeInstallerPreflight.ps1:144-160`;
+     the other Azure checks are NOT-RUN `prerequisite-failed` (`scripts/ClaudeInstallerPreflight.ps1:161-177`;
      `scripts/install-preflight.sh:231-248`). A Foundry account list that is not JSON is a FAIL of
-     `foundry.account` (`scripts/ClaudeInstallerPreflight.ps1:226-235`; `scripts/install-preflight.sh:121-128`).
+     `foundry.account` (`scripts/ClaudeInstallerPreflight.ps1:243-252`; `scripts/install-preflight.sh:121-128`).
      A stop of `Test-ClaudePrerequisites`, which parses `az account show` itself
      (`scripts/Test-Prerequisites.ps1:166`), is a FAIL of `operator.adminPrereqs`
-     (`scripts/ClaudeInstallerPreflight.ps1:71-81`).
+     (`scripts/ClaudeInstallerPreflight.ps1:75-85`).
    - **A subscription record is used only with its id and tenant (council round 1, Coder).** A record
      from `az account show --subscription` that is not a JSON object, whose `id` is missing, `null` or
      empty, or that has no `tenantId` is a FAIL of `target.subscription` ("subscription '<id>' is not
@@ -219,7 +219,7 @@ The RED phase adds these tests before product code:
      later Azure checks are NOT-RUN `prerequisite-failed`. With no `SubscriptionId` answered, a signed-in
      account without an `id` is the same FAIL ("the current subscription could not be read"). Each later
      read names the record's own `id` (`Get-ClaudePreflightRecordProblem`,
-     `scripts/ClaudeInstallerPreflight.ps1:83-92`, used at `:198` and checked at `:207-208`;
+     `scripts/ClaudeInstallerPreflight.ps1:87-96`, used at `:215` and checked at `:224-225`;
      `pf_record_problem_`, `scripts/install-preflight.sh:48-53`, used at `:83` and checked at `:93-94`).
      At `cfb9dd7` such a record passed, and the later reads named `--subscription ''` (PowerShell) or
      `--subscription null` (bash).
@@ -228,10 +228,10 @@ The RED phase adds these tests before product code:
    and writes no checkpoint, lock or temporary file. `tests/Test-InstallerPreflight.ps1` and
    `tests/Test-BashInstallerPreflight.ps1` check the stub log of every scenario for such calls.
 7. **One APIM reader for the preflight and the run (U82).** `Get-ClaudeApimReuseState`
-   (`scripts/ClaudeInstallerPreflight.ps1:18-39`) reads the instance once through the P91 verdict reader
+   (`scripts/ClaudeInstallerPreflight.ps1:22-43`) reads the instance once through the P91 verdict reader
    `Invoke-ClaudeInstallAzRead` (`scripts/ClaudeInstallResume.ps1:5-18`): present, absent or
-   inconclusive. `Get-ClaudeApimReuseProblems` (`scripts/ClaudeInstallerPreflight.ps1:41-57`) names a classic tier and a missing
-   system-assigned identity with their remedies, and `Get-ClaudeApimReuseCandidates` (`scripts/ClaudeInstallerPreflight.ps1:59-69`) lists
+   inconclusive. `Get-ClaudeApimReuseProblems` (`scripts/ClaudeInstallerPreflight.ps1:45-61`) names a classic tier and a missing
+   system-assigned identity with their remedies, and `Get-ClaudeApimReuseCandidates` (`scripts/ClaudeInstallerPreflight.ps1:63-73`) lists
    the instances the run's menu offers. The run's `-ExistingApimName` path and menu
    (`Install-ClaudeGateway.ps1:661-704`) call the same functions; `pf_apim_`
    (`scripts/install-preflight.sh:151-194`) is the bash twin through `ckpt_az_read_`. A list that cannot
@@ -299,7 +299,7 @@ The RED phase adds these tests before product code:
       jq function `redact` (`CKPT_REDACT_JQ`, `scripts/install-checkpoint.sh:37`): to each progress event's
       `message` and `resumeCommand` (`scripts/ClaudeInstallSteps.ps1:34-36`; `scripts/install-steps.sh:27-29`),
       and to every preflight check's `message` and `remedy`, before the text or JSON report is printed
-      (`scripts/ClaudeInstallerPreflight.ps1:176-179`; `scripts/install-preflight.sh:265-267`). At `cfb9dd7`
+      (`scripts/ClaudeInstallerPreflight.ps1:193-196`; `scripts/install-preflight.sh:265-267`). At `cfb9dd7`
       only a JWT in the stream was redacted. The checkpoint keeps ADR-0046 decision 15: its writers
       serialise an allowlist of fields, and the rules cover free text, such as an error that a message
       quotes. `tests/Test-InstallerRedaction.ps1` checks that both engines hold the same rules and give
@@ -361,10 +361,13 @@ The RED phase adds these tests before product code:
       are outside P92; the lead logged them for the owner (`docs/status/P92.md`, round 3).
     - **A group name the schema refuses, at the prompt (council round 2, Coder).** Before the group
       lookup, the prompt checks the typed name against the answers schema's rule for a unit's group,
-      `^[^',:]+$` (`schemas/claude-gateway.answers.schema.json:219-220`): a name with a single quote, a
+      `^[^',:]+$` at `c1ed585` (`schemas/claude-gateway.answers.schema.json:220-221`, which decision 17 extends): a name with a single quote, a
       comma or a colon prints the schema's message and remedy, writes no unit, and the prompt asks for the
       next unit, before any Azure CLI call names the group (`Install-ClaudeGateway.ps1:1783-1791`). At
       `c1ed585` the prompt sent such a name to `az ad group list`.
+    - **The cmd.exe metacharacters (round 5, Security).** The group rule also refuses `& | < > ^ " % ( )`,
+      which `cmd.exe` re-reads in an Azure CLI argument on Windows; decision 17 records this rule for every
+      answer that reaches Azure CLI.
 14. **The bash checkpoint suite runs as seven Test-All checks.** `tests/Test-BashInstallerCheckpoint.ps1`
     takes `-Shard i/7`; its checks sit in twelve groups, each run by one shard (`Test-ShardGroup`):
     `static` and `shell` (shard 0), `graph` and `untrusted` (1), `names` and `preexisting` (2), `resume`
@@ -398,6 +401,25 @@ The RED phase adds these tests before product code:
       probe, and `branches` holds the round-2 branches and the subscription records of round 3. The JSON
       shape, fail-closed and read-only checks run once per group. Alone under the gate lock the two
       shards took 93.1 and 78.2 s.
+    - **The bash suites run in the exclusive lane (round 5, `15ada4b`; council round 3; the packet gate).** Test-All
+      runs a check registered with `-SerialLane` alone, and runs all such checks before the parallel ones
+      (`tests/Test-All.ps1:380-399`). `15ada4b` registered the bash installer suites, their shards and the three
+      shard-contract checks there (`tests/Test-All.ps1:217-246`), because on PR #2's Windows runners they failed
+      while other checks ran and passed alone; decision 16 found that cause, a child's output that the harness
+      stopped reading. `4fade0d` moved the 19 registrations to the parallel lane for the gate's 3,600 s budget
+      (ADR-0036): in a Test-All run without shards the exclusive checks' committed weights sum to 2,724 s (38
+      checks) with them and 1,193 s (19 checks) without them (`tests/test-all-durations.json`). Each check has its
+      own TEMP and state directory (`tests/Test-All.ps1:138-140`), its installer scenarios their own copy of the
+      files, stubs and HOME (`tests/BashInstallerHarness.ps1:251-298`, `tests/Test-BashInstaller.ps1:215-231`), and
+      the library probes only read the checkout, so these checks share no mutable resource. In the parallel lane,
+      AUM tests failed in three consecutive hosted runs, each in a shard where a bash checkpoint shard ran beside
+      the AUM shard, and on the gate machine installer runs exceeded the harness's 300 s per run, with Git Bash
+      fork errors, when several suites ran at once (U93 in [UNKNOWNS](../UNKNOWNS.md)). The suites are in the
+      exclusive lane again. The route of P92's packet gate is the owner's decision ([ROADMAP](../ROADMAP.md)).
+    - **The prices suite gives its runs 300 s (round 5, `a87c708`).** `tests/Test-BashInstaller.ps1` starts its
+      22 installer runs at once and gives them 300 s together, the time the checkpoint harness gives each run
+      (`tests/Test-BashInstaller.ps1:246`, `tests/BashInstallerHarness.ps1:304`); it was 150 s. With decision 16,
+      the 22 runs took 50.2 s on CI (run `37207970008`, shard 9).
 15. **The projection step's inputs (council round 2, Architect).** The install checkpoint records every
     answer the projection step passes to `scripts/Deploy-ClaudeProjection.ps1`. P86's
     `ProjectionRenewalImageDigest`, `ProjectionRenewalEntryPoint` and
@@ -418,6 +440,54 @@ The RED phase adds these tests before product code:
     lists for `Install-ClaudeGateway.ps1` is recorded by the checkpoint, as a parameter or prompt answer, or
     is a run option or a secret. At `c1ed585` the checkpoint recorded none of the three renewal inputs, and
     the projection step's hash held none of the four.
+16. **The installer and flow harnesses read a child's output on a thread of its own (U92, PR #2 CI).** On
+    Windows, .NET 10 redirects a child's standard output and standard error through synchronous anonymous
+    pipes, so `ReadToEndAsync` holds a thread-pool worker for each pipe until the child closes it. The
+    harnesses ran six children at once (the prices suite 22) and, 5 s after a child exited, recorded a read
+    that had not finished as an empty string. On `windows-latest` (4 vCPUs, so a minimum of four workers)
+    such reads had not started, and checks of startup refusals and of the `--what-if` region table failed
+    with empty details (PR #2 runs `37110260005` to `37127982623`). Diagnostic run `37206003130` logged each
+    such read with the pool at 5 to 17 threads and 4 to 24 work items queued, and its output arriving 0.1 to
+    21.6 s later. `tests/ChildOutputRead.ps1` reads each pipe with `ReadToEnd` in a `LongRunning` task, which
+    runs on a dedicated thread, and a read still open 60 s after its process exited throws, naming the stream,
+    instead of returning part of the text. `tests/BashInstallerHarness.ps1`,
+    `tests/InstallerCheckpointHarness.ps1`, `tests/Test-BashInstaller.ps1`, `tests/Test-FlowPermutations.ps1`,
+    `tests/Test-FlowStart.ps1` and the Windows marker preflight of `tests/Test-InstallerPreflight.ps1` read
+    through it. `tests/Test-ChildOutputRead.ps1` checks the reader with
+    every pool worker busy and fails on any test that turns an unfinished read into an empty string.
+17. **Answers that reach Azure CLI on Windows refuse what cmd.exe re-reads (round 5, Security; council round 3).**
+    On Windows Azure CLI is the `az.cmd` shim, and `cmd.exe` treats `&`, `|`, `<`, `>`, parentheses and `^` as
+    special characters that are to be escaped or quoted in an argument (cmd reference, ms.date 2025-05-23,
+    fetched 2026-10-03: https://learn.microsoft.com/windows-server/administration/windows-commands/cmd).
+    PowerShell quotes a native argument only when it holds a space, so an argument without one reaches
+    `cmd.exe` as it is (`tests/Test-AzArguments.ps1:6-9`).
+    - **The run.** `Assert-AzArgumentsSafe` (`Install-ClaudeGateway.ps1:324-339`) refuses `& | < > ^ ( ) " %` in
+      twelve parameters before the run's first Azure CLI call (`:369-374`) and in the values the prompts set
+      (`:1356-1361`). `-Preflight` returns before both (`:174-180`).
+    - **The schema (round 5, `70f07c0`).** Four answers that the preflight passes to Azure CLI accepted these
+      characters: `SubscriptionId` (`schemas/claude-gateway.answers.schema.json:63-64`), `StandardGroup` and
+      `PremiumGroup` (`:142-147`) and a business unit's `group` (`:220-221`). Each refuses them now, in both
+      validators, and the business-unit prompt reads the same group rule (`Install-ClaudeGateway.ps1:1786-1790`).
+      `ProjectionRenewalEntryPoint`, which reaches `az container exec` when the projection is switched, refuses
+      them as well (`schemas/claude-gateway.answers.schema.json:124`, council round 3). An answer that names a group with one of these characters is refused
+      on every platform, although Azure CLI is a `cmd.exe` shim only on Windows.
+    - **The preflight on Windows (council round 3).** The schema accepts parentheses in a resource group name
+      (`schemas/claude-gateway.answers.schema.json:69`, `:72`) and any character in the publisher email (`:81`), which the run refuses on Windows. The
+      preflight checks the twelve answers of the run's first call (`scripts/ClaudeInstallerPreflight.ps1:17-20`)
+      with `Test-ClaudeInstallCmdText` (`scripts/ClaudeInstallResume.ps1:488-493`): each one that holds such a
+      character is a problem of its own check, or of `answers.schema`, and is not read from Azure (`scripts/ClaudeInstallerPreflight.ps1:139-149`).
+      The install checkpoint's reader applies the same rule to recorded answers
+      (`scripts/ClaudeInstallCheckpoint.ps1:131`). `tests/Test-InstallerPreflight.ps1` compares the preflight's
+      list with the keys of the run's first `Assert-AzArgumentsSafe` call.
+    - **Tests.** `tests/Test-InstallerAnswersSchema.ps1` runs each refused value through both validators.
+      `tests/Test-InstallerPreflight.ps1` runs the Windows preflight with a marker-writing `az.cmd` on `PATH`,
+      requires each of the four values to be refused by its own rule and to write no marker, and, as a control,
+      gives the payload straight to the shim, which writes the marker; it also requires the preflight to refuse
+      `rg(dev)` and `r&d@contoso.com` without an Azure CLI call naming them. R6 of
+      `tests/Test-InstallerBusinessUnitAnswers.ps1` types such a group name at the prompt.
+    - **Outside P92.** Values read from Azure and passed back to Azure CLI are not checked, for example the named
+      values the run reads before it deploys the gateway again (`Install-ClaudeGateway.ps1:1510-1532`, passed at
+      `:1649-1669`); `main` has the same code (council round 3, Security note 1, `docs/ROADMAP.md`).
 
 ## Consequences
 

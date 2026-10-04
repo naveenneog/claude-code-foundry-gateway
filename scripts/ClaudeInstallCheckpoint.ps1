@@ -35,7 +35,7 @@ $script:ClaudeInstallTerminal = @('Succeeded', 'Failed', 'Canceled')
 $script:ClaudeInstallFiles = @('Install-ClaudeGateway.ps1', 'scripts/ClaudeInstallCheckpoint.ps1', 'scripts/ClaudeInstallStore.ps1', 'scripts/ClaudeInstallResume.ps1')
 $script:ClaudeInstall = $null
 
-function Test-ClaudeInstallWindows { return ($env:OS -eq 'Windows_NT') }
+# Test-ClaudeInstallWindows and Test-ClaudeInstallCmdText are in ClaudeInstallResume.ps1, which the preflight loads as well.
 
 function Stop-ClaudeInstall {
     # A refusal is one line: PowerShell's error view would wrap a long one at the console width. A secret that
@@ -128,7 +128,7 @@ function Test-ClaudeInstallAnswerText([string]$Text) {
     # Control characters, az's @file syntax, and on Windows what Assert-AzArgumentsSafe refuses.
     if ($Text -match '[\x00-\x1f]') { return 'holds a control character' }
     if ($Text.StartsWith('@')) { return 'begins with @, which az reads as a file name' }
-    if ((Test-ClaudeInstallWindows) -and $Text -match '[&|<>^()"%]') { return 'holds a character that cmd.exe re-reads' }
+    $cmd = Test-ClaudeInstallCmdText $Text; if ($cmd) { return $cmd }
     return ''
 }
 

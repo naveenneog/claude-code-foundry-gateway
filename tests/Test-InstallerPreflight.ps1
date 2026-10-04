@@ -17,6 +17,7 @@ Write-Host 'Installer preflight (PowerShell installer)' -ForegroundColor Cyan
 $watch = [Diagnostics.Stopwatch]::StartNew()
 $scratch = [IO.Path]::GetFullPath((Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) ('p92-preflight-' + [guid]::NewGuid().ToString('N'))))
 New-Item -ItemType Directory -Force -Path $scratch | Out-Null
+$script:windows = [bool]($IsWindows -or $env:OS -eq 'Windows_NT')
 $ids = @('answers.schema', 'answers.crossField', 'target.tenant', 'target.subscription', 'operator.adminPrereqs', 'foundry.account', 'foundry.deployments',
     'apim.nameAvailability', 'apim.existingSku', 'apim.existingIdentity', 'entra.groupNames', 'businessUnits.ids', 'businessUnits.depth', 'address.inputs')
 $azureChecks = @('target.tenant', 'target.subscription', 'foundry.account', 'foundry.deployments', 'apim.nameAvailability', 'apim.existingSku', 'apim.existingIdentity', 'entra.groupNames')
@@ -37,9 +38,84 @@ function Add-Scenario([string]$Name, $World, $Answers, [switch]$Text) {
 }
 function Get-Check($Name, [string]$Id) { $j = $scenarios[$Name].Json; if ($j) { @($j.checks | Where-Object { $_.id -eq $Id })[0] } }
 function Show($Name) { $r = $scenarios[$Name].Result; if ($r) { "exit $($r.ExitCode): " + (Get-P91Tail $r) } else { 'no result' } }
+function Invoke-CmdMarkerPreflight {
+    param([string]$Name, [scriptblock]$Change)
+    $dir = Join-Path $scratch "cmd-marker\$Name"
+    $repo = Join-Path $dir 'repo'
+    $bin = Join-Path $dir 'bin'
+    New-Item -ItemType Directory -Force -Path $bin | Out-Null
+    Copy-Item -LiteralPath $template -Destination $repo -Recurse
+    $marker = Join-Path $dir 'marker.txt'
+    $doc = New-Answers
+    & $Change $doc
+    $answersPath = Join-Path $dir 'answers.json'
+    Write-P91Text $answersPath ($doc | ConvertTo-Json -Depth 10)
+    Write-P91Text (Join-Path $bin 'az.cmd') $markerAz
+    $psi = [Diagnostics.ProcessStartInfo]::new($script:P91Pwsh)
+    foreach ($arg in @('-NoProfile', '-NonInteractive', '-File', (Join-Path $repo 'Install-ClaudeGateway.ps1'), '-Preflight', '-Json', '-AnswersPath', $answersPath)) { $psi.ArgumentList.Add($arg) }
+    $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+    $psi.StandardOutputEncoding = [Text.Encoding]::UTF8; $psi.StandardErrorEncoding = [Text.Encoding]::UTF8
+    $psi.WorkingDirectory = $repo
+    $psi.Environment['PATH'] = "$bin;$($psi.Environment['PATH'])"
+    $psi.Environment['AZURE_CONFIG_DIR'] = Join-Path $dir 'az'
+    $psi.Environment['P93_MARKER_PATH'] = $marker
+    $p = [Diagnostics.Process]::Start($psi)
+    # Both pipes drain at once on threads of their own (ADR-0047 decision 16), and the run is bounded.
+    $outRead = Start-ChildOutputRead $p.StandardOutput
+    $errRead = Start-ChildOutputRead $p.StandardError
+    $exited = $p.WaitForExit(120000)
+    if (-not $exited) { try { $p.Kill($true) } catch { } }
+    $out = Receive-ChildOutputRead $outRead "The standard output of the $Name marker preflight"
+    $err = Receive-ChildOutputRead $errRead "The standard error of the $Name marker preflight"
+    $messages = try { @(($out | ConvertFrom-Json -ErrorAction Stop).checks | ForEach-Object { $_.problems } | ForEach-Object { [string]$_.message }) } catch { @() }
+    [pscustomobject]@{ Name = $Name; ExitCode = $(if ($exited) { $p.ExitCode } else { -1 }); Out = $out; Err = $err; Marker = $marker; Messages = $messages }
+}
 
 try {
     $template = New-P91Template $scratch
+    if ($script:windows) {
+        # A payload that fits every other rule of each answer: short (SubscriptionId allows 100 characters) and
+        # without a colon (a unit's group refused a colon before 70f07c0). cmd.exe expands P93_MARKER_PATH, which
+        # each run sets to its own marker file, so a value that reaches the az.cmd shim writes that file.
+        $markerPayload = 'p93&echo.P93_PREFILL_MARKER>%P93_MARKER_PATH%&rem'
+        $markerAz = @'
+@echo off
+if "%1"=="version" echo {"azure-cli":"2.90.0"}& exit /b 0
+if "%1"=="bicep" echo Bicep CLI version 0.46.1& exit /b 0
+if "%1"=="account" if "%2"=="show" echo {"id":"00000000-0000-4000-8000-0000000000a1","tenantId":"00000000-0000-4000-8000-0000000000f1","name":"p91-subscription","state":"Enabled","user":{"name":"admin@contoso.com"}}& exit /b 0
+if "%1"=="account" if "%2"=="list" echo [{"id":"00000000-0000-4000-8000-0000000000a1","tenantId":"00000000-0000-4000-8000-0000000000f1","name":"p91-subscription","state":"Enabled"}]& exit /b 0
+echo []
+exit /b 0
+'@
+        # Control: the payload given to the shim as PowerShell passes a native argument writes the marker, so a
+        # preflight that leaves no marker never passed the value to Azure CLI.
+        $controlDir = Join-Path $scratch 'cmd-marker\control'
+        New-Item -ItemType Directory -Force -Path $controlDir | Out-Null
+        Write-P91Text (Join-Path $controlDir 'az.cmd') $markerAz
+        $controlMarker = Join-Path $controlDir 'marker.txt'
+        $env:P93_MARKER_PATH = $controlMarker
+        try { $null = & (Join-Path $controlDir 'az.cmd') account show --subscription $markerPayload 2>&1 } finally { Remove-Item Env:P93_MARKER_PATH -ErrorAction SilentlyContinue }
+        Assert 'control: the marker payload given straight to an az.cmd shim writes its marker file on this machine' (Test-Path -LiteralPath $controlMarker) $controlMarker
+        $schemaDoc = [IO.File]::ReadAllText((Join-Path $script:P91Root 'schemas/claude-gateway.answers.schema.json')) | ConvertFrom-Json
+        $markerCases = @(
+            @{ Name = 'SubscriptionId'; Path = 'SubscriptionId'; Rule = $schemaDoc.properties.SubscriptionId; Change = { param($a) $a.SubscriptionId = $markerPayload } }
+            @{ Name = 'StandardGroup'; Path = 'StandardGroup'; Rule = $schemaDoc.properties.StandardGroup; Change = { param($a) Set-Answer $a 'StandardGroup' $markerPayload } }
+            @{ Name = 'PremiumGroup'; Path = 'PremiumGroup'; Rule = $schemaDoc.properties.PremiumGroup; Change = { param($a) Set-Answer $a 'PremiumGroup' $markerPayload } }
+            @{ Name = 'BusinessUnits.group'; Path = 'BusinessUnits'; Rule = $schemaDoc.'$defs'.BusinessUnit.properties.group; Change = { param($a) Set-Answer $a 'BusinessUnits' @([ordered]@{ id = 'finance'; group = $markerPayload; monthlyUsdBudget = 100; mode = 'Strict' }) } }
+            @{ Name = 'FoundryAccount'; Path = 'FoundryAccount'; Rule = $schemaDoc.properties.FoundryAccount; Change = { param($a) $a.FoundryAccount = $markerPayload } }
+        )
+        $markerRuns = @(foreach ($c in $markerCases) { $r = Invoke-CmdMarkerPreflight $c.Name $c.Change; $r | Add-Member -NotePropertyName Case -NotePropertyValue $c; $r })
+        $markerLeaks = @($markerRuns | Where-Object { Test-Path -LiteralPath $_.Marker })
+        # Each value is refused by its own pattern rule: a problem that names the answer and carries the schema's message.
+        $markerMisses = @($markerRuns | Where-Object { $run = $_; $why = [string]$run.Case.Rule.'x-patternMessage'
+                $run.ExitCode -eq 0 -or -not $why -or -not @($run.Messages | Where-Object { $_.StartsWith($run.Case.Path) -and $_.Contains($why) }).Count })
+        Assert 'P93 Windows preflight refuses cmd.exe marker answers before any az.cmd argument can execute them: SubscriptionId, StandardGroup, PremiumGroup, BusinessUnits.group and another az-bound answer' (-not $markerLeaks.Count -and -not $markerMisses.Count) (
+            'leaks: ' + (($markerLeaks | ForEach-Object { $_.Name }) -join ', ') + '; misses: ' + (($markerMisses | ForEach-Object { "$($_.Name) exit=$($_.ExitCode) problems=$($_.Messages -join ' / ')" }) -join ', '))
+    }
+    else {
+        Assert 'P93 Windows cmd.exe marker preflight control is Windows-only' $true
+        Assert 'P93 Windows cmd.exe marker preflight cases are Windows-only' $true
+    }
     Add-Scenario 'pass' (New-P91World) (New-Answers)
     $w = New-P91World; $w['signedOut'] = $true
     Add-Scenario 'signed-out' $w (New-Answers)
@@ -76,6 +152,24 @@ try {
     Add-Scenario 'list-missing' (New-P91World) (New-Answers { param($a) Remove-Answer $a 'FoundryResourceGroup'; $a.FoundryAccount = 'ai-missing' })
     $w = New-P91World; $w.foundry.deployments = @([ordered]@{ name = 'gpt-4o'; sku = [ordered]@{ name = 'GlobalStandard'; capacity = 10 }; properties = [ordered]@{ provisioningState = 'Succeeded'; model = [ordered]@{ format = 'OpenAI'; name = 'gpt-4o'; version = '2024-08-06' } } })
     Add-Scenario 'no-claude' $w (New-Answers { param($a) Remove-Answer $a 'StandardModels'; Remove-Answer $a 'PremiumModels' })
+    # Round 6, the lead's check of 70f07c0: answers that are objects, read from the answers file. The preflight reads
+    # the groups of the business units as well as the tier groups (ADR-0047 decision 6), and an answered
+    # PendingClaudeDeployment stands in for a Claude deployment that the account does not have yet.
+    $financeGroupId = '00000000-0000-4000-8000-0000000004b1'
+    $finance = [ordered]@{ id = 'finance'; group = 'claude-bu-finance'; monthlyUsdBudget = 5000; mode = 'Strict' }
+    $w = New-P91World; $w.groups[$financeGroupId] = 'claude-bu-finance'
+    # One unit: PowerShell turns a list of one object into an empty string, and two into a space.
+    Add-Scenario 'one-unit' $w (New-Answers { param($a) Set-Answer $a 'BusinessUnits' @($finance) })
+    $w = New-P91World; $w.groups[$financeGroupId] = 'claude-bu-finance'
+    Add-Scenario 'units' $w (New-Answers { param($a) Set-Answer $a 'BusinessUnits' @($finance,
+                [ordered]@{ id = 'finance-emea'; group = 'claude-team-finance-emea'; parent = 'finance'; monthlyUsdBudget = 1000; mode = 'Notify' }) })
+    $w = New-P91World; $w.foundry.deployments = @([ordered]@{ name = 'gpt-4o'; sku = [ordered]@{ name = 'GlobalStandard'; capacity = 10 }; properties = [ordered]@{ provisioningState = 'Succeeded'; model = [ordered]@{ format = 'OpenAI'; name = 'gpt-4o'; version = '2024-08-06' } } })
+    Add-Scenario 'pending' $w (New-Answers { param($a) Remove-Answer $a 'StandardModels'; Remove-Answer $a 'PremiumModels'
+            Set-Answer $a 'PendingClaudeDeployment' ([ordered]@{ name = 'claude-sonnet-5'; model = 'claude-sonnet-5'; version = '1'; sku = 'GlobalStandard'; capacity = 20; account = 'ai-p91'; resourceGroup = 'rg-ai-p91' }) })
+    # Council round 3, Coder note 3 and Security note 3: answers the schema accepts and the run refuses on Windows before
+    # its first Azure CLI call (Assert-AzArgumentsSafe, Install-ClaudeGateway.ps1:369): parentheses in a resource group
+    # name, and an ampersand in the publisher email.
+    Add-Scenario 'cmd-chars' (New-P91World) (New-Answers { param($a) $a.FoundryResourceGroup = 'rg(dev)'; $a.ResourceGroup = 'rg(dev)'; $a.PublisherEmail = 'r&d@contoso.com' })
     $w = New-P91World; $w.inject.readErrors = @([ordered]@{ match = 'account list --query*'; text = 'az : ].name was unexpected at this time.' })
     Add-Scenario 'prereq-fail' $w (New-Answers)
     $pfxMissing = '/nonexistent-p92/no-such-certificate.pfx'
@@ -175,6 +269,40 @@ try {
     Assert 'P2 without FoundryResourceGroup, a Foundry account the subscription does not list is a FAIL of foundry.account, and its deployments are NOT-RUN' ((& $one 'list-missing' 'foundry.account' 'Foundry account ai-missing was not found in the subscription') -and
         (Get-Check 'list-missing' 'foundry.deployments').reason -eq 'prerequisite-failed') (Show 'list-missing')
     Assert 'P2 a Foundry account with no Claude deployment and no PendingClaudeDeployment is a FAIL of foundry.deployments' (& $one 'no-claude' 'foundry.deployments' 'the Foundry account ai-p91 has no Claude deployment') (Show 'no-claude')
+    $un = $scenarios['units']; $unGroups = Get-Check 'units' 'entra.groupNames'
+    $unLookups = @($un.Result.Az | Where-Object { $_ -like 'ad group list --display-name claude-bu-finance *' -or $_ -like 'ad group list --display-name claude-team-finance-emea *' })
+    $ou = $scenarios['one-unit']; $ouGroups = Get-Check 'one-unit' 'entra.groupNames'
+    $ouLookups = @($ou.Result.Az | Where-Object { $_ -like 'ad group list --display-name claude-bu-finance *' })
+    Assert 'R6 with one business unit in the answers file, the preflight reads its group by name and names it in entra.groupNames with its id' ($ou.Result.ExitCode -eq 0 -and
+        $ouGroups.result -eq 'PASS' -and "$($ouGroups.message)".Contains("'claude-bu-finance' exists ($financeGroupId)") -and $ouLookups.Count -eq 1) "$($ouGroups.result): $($ouGroups.message) || lookups: $($ouLookups -join ' | ') || $(Show 'one-unit')"
+    Assert 'R6 the preflight reads the group of each business unit and team from the answers file by its name, and names each one in entra.groupNames: one that exists with its id, one the run creates' ($un.Result.ExitCode -eq 0 -and
+        $unGroups.result -eq 'PASS' -and "$($unGroups.message)".Contains("'claude-bu-finance' exists ($financeGroupId)") -and "$($unGroups.message)".Contains("'claude-team-finance-emea' is created by the run") -and
+        $unLookups.Count -eq 2) "$($unGroups.result): $($unGroups.message) || lookups: $($unLookups -join ' | ') || $(Show 'units')"
+    $pd = Get-Check 'pending' 'foundry.deployments'
+    Assert 'R6 an account without a Claude deployment passes foundry.deployments when the answers file gives PendingClaudeDeployment, which the run creates after its summary' ($scenarios['pending'].Result.ExitCode -eq 0 -and
+        $pd.result -eq 'PASS' -and "$($pd.message)".Contains('the run creates PendingClaudeDeployment after its summary')) "$($pd.result): $($pd.message) || $(Show 'pending')"
+    $cc = $scenarios['cmd-chars']
+    $ccProblems = @($cc.Json.checks | ForEach-Object { $c = $_; @($c.problems) | ForEach-Object { [pscustomobject]@{ Check = $c.id; Message = [string]$_.message } } })
+    $ccWanted = [ordered]@{ FoundryResourceGroup = @('foundry.account', "FoundryResourceGroup 'rg(dev)' holds a character that cmd.exe re-reads")
+        ResourceGroup = @('answers.schema', "ResourceGroup 'rg(dev)' holds a character that cmd.exe re-reads"); PublisherEmail = @('answers.schema', "PublisherEmail 'r&d@contoso.com' holds a character that cmd.exe re-reads") }
+    $ccNamed = @($cc.Result.Az | Where-Object { $_.Contains('rg(dev)') -or $_.Contains('r&d@') })
+    if ($script:windows) {
+        $ccMissing = @($ccWanted.Keys | Where-Object { $w = $ccWanted[$_]; -not @($ccProblems | Where-Object { $_.Check -eq $w[0] -and $_.Message.StartsWith($w[1]) }).Count })
+        Assert 'R6 on Windows the preflight refuses what the run refuses before its first Azure CLI call: each answer with a character cmd.exe re-reads is a FAIL under its own check, and no Azure CLI call names it' ($cc.Result.ExitCode -ne 0 -and
+            $cc.Json.result -eq 'FAIL' -and -not $ccMissing.Count -and -not $ccNamed.Count) "missing: $($ccMissing -join ', ') || named by: $($ccNamed -join ' | ') || problems: $(($ccProblems | ForEach-Object { "$($_.Check): $($_.Message)" }) -join ' / ')"
+    }
+    else {
+        Assert 'R6 off Windows Azure CLI is not a cmd.exe shim, and the preflight raises no cmd.exe problem' (-not @($ccProblems | Where-Object { $_.Message -match 'cmd\.exe re-reads' }).Count) (($ccProblems | ForEach-Object { $_.Message }) -join ' / ')
+    }
+    # The preflight's list of those answers is the run's: the keys of the first Assert-AzArgumentsSafe call in the installer.
+    $preflightAst = [Management.Automation.Language.Parser]::ParseFile((Join-Path $script:P91Root 'scripts\ClaudeInstallerPreflight.ps1'), [ref]$null, [ref]$null)
+    $listAst = @($preflightAst.FindAll({ param($n) $n -is [Management.Automation.Language.AssignmentStatementAst] -and $n.Left.Extent.Text -eq '$script:ClaudePreflightAzBoundAnswers' }, $true))[0]
+    $preflightNames = if ($listAst) { @(& ([scriptblock]::Create($listAst.Right.Extent.Text))) } else { @() }
+    $installerAst = [Management.Automation.Language.Parser]::ParseFile((Join-Path $script:P91Root 'Install-ClaudeGateway.ps1'), [ref]$null, [ref]$null)
+    $firstGuard = @($installerAst.FindAll({ param($n) $n -is [Management.Automation.Language.CommandAst] -and $n.GetCommandName() -eq 'Assert-AzArgumentsSafe' }, $true) | Sort-Object { $_.Extent.StartOffset })[0]
+    $runNames = if ($firstGuard) { @(@($firstGuard.FindAll({ param($n) $n -is [Management.Automation.Language.HashtableAst] }, $true))[0].KeyValuePairs | ForEach-Object { $_.Item1.Extent.Text }) } else { @() }
+    Assert 'R6 the preflight refuses on Windows the answers that the run''s first Assert-AzArgumentsSafe call checks, no fewer and no more' ($preflightNames.Count -ge 12 -and
+        ((@($preflightNames) | Sort-Object) -join ',') -ceq ((@($runNames) | Sort-Object) -join ',')) "preflight: $($preflightNames -join ',') || run: $($runNames -join ',')"
     Assert 'P2 failing admin prerequisites are a FAIL of operator.adminPrereqs naming the failed check (the harness fails the argument canary)' (& $one 'prereq-fail' 'operator.adminPrereqs' 'Azure CLI could not run a simple query') (Show 'prereq-fail')
     Assert 'P2 an AddressPfxPath that is not a file is a FAIL of address.inputs naming the path' (& $one 'pfx-missing' 'address.inputs' "AddressPfxPath '/nonexistent-p92/no-such-certificate\.pfx' is not a file") (Show 'pfx-missing')
     Assert 'P2 a Foundry account list that is not JSON is an inconclusive FAIL of foundry.account, not a crash, and its deployments are NOT-RUN' ((& $one 'list-not-json' 'foundry.account' 'Foundry account ai-p91 could not be read \(az cognitiveservices account list did not return JSON\)') -and

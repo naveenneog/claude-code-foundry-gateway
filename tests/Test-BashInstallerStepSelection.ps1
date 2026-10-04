@@ -318,6 +318,28 @@ try {
         $cfProblems = @(Get-P92RedactionProblems $cf.Err)
         Assert 'R4 bash a failure whose Azure CLI error quotes every secret shape prints that error with each in its [redacted] form, then the failure line and the resume command, and no sentinel appears in stdout or stderr' (
             $cf.ExitCode -ne 0 -and -not $cfProblems.Count -and $cf.Out -match '\[FAIL\] deployment failed' -and $cf.Out -match '(?m)^Resume: ' -and (Test-P92NoSentinel ($cf.Out + $cf.Err))) "$($cfProblems -join '; ') || $(Get-Tail $cf)"
+        $sentenceFile = Join-Path $scratch 'console-sentence.txt'
+        Write-Lf $sentenceFile $P92RedactionSentence
+        $probe = Join-Path $scratch 'console-sites.sh'
+        $probeOut = Join-Path $scratch 'console-sites.out'
+        $probeErr = Join-Path $scratch 'console-sites.err'
+        Write-Lf $probe (@"
+exec >'$(ConvertTo-BashPath $probeOut)' 2>'$(ConvertTo-BashPath $probeErr)'
+HERE='$(ConvertTo-BashPath $root)'
+C_GREEN=''; C_YELLOW=''; C_RED=''; C_GREY=''; C_WHITE=''; C_OFF=''
+eval "`$(sed -n '/^ok_() /,/^note_() /p' "`$HERE/install-claude-gateway.sh")"
+. "`$HERE/scripts/install-checkpoint.sh" || exit 90
+sentence="`$(cat '$(ConvertTo-BashPath $sentenceFile)')"
+warn_ "an error that quotes (`$sentence)"
+bad_ "an error that quotes (`$sentence)"
+"@)
+        & $bash (ConvertTo-BashPath $probe) 2>&1 | Out-Null
+        $siteOut = if (Test-Path -LiteralPath $probeOut) { [IO.File]::ReadAllText($probeOut, [Text.Encoding]::UTF8) } else { '' }
+        $siteErr = if (Test-Path -LiteralPath $probeErr) { [IO.File]::ReadAllText($probeErr, [Text.Encoding]::UTF8) } else { '' }
+        $warnLine = @($siteOut -split "`n" | Where-Object { $_ -match '\[WARN\] an error that quotes' }) -join "`n"
+        $badLine = @($siteOut -split "`n" | Where-Object { $_ -match '\[FAIL\] an error that quotes' }) -join "`n"
+        $siteProblems = @(@(Get-P92RedactionProblems $warnLine | ForEach-Object { "warn_: $_" }) + @(Get-P92RedactionProblems $badLine | ForEach-Object { "bad_: $_" }))
+        Assert 'R5 bash warn_ and bad_ warning and failure lines quote every secret shape only in its [redacted] form, with no sentinel' ($warnLine -and $badLine -and -not $siteProblems.Count) "$($siteProblems -join '; ') || $siteOut || $siteErr"
         # R3's run in a checkout whose path holds sig=<value>, on the console: the Resume line after the failure.
         $rpc = $r1[$runRedactPath.Dir]
         Assert 'R4 bash the failed run''s Resume line on the console holds sig=[redacted] for a checkout path that holds sig=<value>, and that value appears in neither stdout nor stderr' ($rpc.ExitCode -ne 0 -and
