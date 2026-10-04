@@ -434,12 +434,21 @@ failed-to-delete orphans do not receive a new lease. A partial write can leave m
 generations, each with its own expiry, and exits nonzero.
 
 P86 adds the scheduled renewal path in `infra/projection-renewal.bicep`. It declares an
-ACR registry, an internal Container Apps environment, a scheduled Container Apps job, a
-user-assigned identity, a container-scoped Cosmos SQL data-plane writer role, an email-backed
-action group and scheduled-query alerts. The job writes destination-bound status records in
-the entitlement container. Switch admission reads those records through
-`sync/src/check-admission.mjs` and also checks that the ARM job uses the tested pinned image
-without command or args overrides.
+internal Container Apps environment, a scheduled Container Apps job, a container-scoped Cosmos
+SQL data-plane writer role, an email-backed action group and scheduled-query alerts. The job
+writes destination-bound status records in the entitlement container. Switch admission reads
+those records through `sync/src/check-admission.mjs` and also checks that the ARM job uses the
+tested pinned image without command or args overrides.
+
+P94 makes that path deployable ([ADR-0049](adr/0049-projection-renewal-deployment.md)).
+`scripts/Deploy-ClaudeProjectionRenewal.ps1` deploys `infra/projection-registry.bicep` (the ACR
+registry, the job's user-assigned identity and its AcrPull grant) before the image build, then
+the renewal template with the registry and identity as existing resources. The job runs on the
+`renewal` subnet of `infra/projection-network.bicep`, sends its console lines to the gateway's
+Log Analytics workspace through a diagnostic setting, and reads `bu-registry` and `bu-parents`
+on every run through a named-value read role that `infra/projection-renewal-gateway-reader.bicep`
+grants at the gateway's resource group. The image and the in-network runner use one sync package
+that includes `resolver/src/entitlement.mjs`.
 
 Before a resolver call, APIM limits `entitlement-misses` to 200 per second and 100
 concurrent. Excess returns retryable 429. These approximate distributed controls bound
