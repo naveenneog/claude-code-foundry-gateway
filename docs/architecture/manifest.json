@@ -559,7 +559,7 @@
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
         "install-claude-gateway.sh": "7da93aa0877dd2cd45e064765a60dd62a48a262a82fd82dacc537c6f5a4c4b61",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
-        "schemas/claude-gateway.answers.schema.json": "197507a7f053d8647ed61349e280a7d5f449ca26d64fe723d12cee433f3a50ad",
+        "schemas/claude-gateway.answers.schema.json": "fb641eb2b9f0ea84bfc614c6dc9ba98979be5cafa87d44eb81c7ba12976c1058",
         "scripts/ClaudeInstallResume.ps1": "fb6eb9155e8fecaaca2c2afb5c4c681871a989708ed2f205c132ecd8972b2cf6",
         "scripts/ClaudeInstallSteps.ps1": "94f83378feb5102f2c32de40e4807b0c94d49ef365e87da959eb0422b4f3277b",
         "scripts/ClaudeInstallerAnswers.ps1": "b0350cf38059f20690b04ee1635f100d225a79243d5e4af84f3bbec04189b404",
