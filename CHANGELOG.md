@@ -29,6 +29,17 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P95 the projection switch runs end to end.** `Invoke-ClaudeProjectionSwitch`
+  (`scripts/ClaudeProjectionSwitch.ps1`) takes the renewal receipt, runs the drift check with
+  `scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift` and a read-only compare in the runner, runs
+  admission, writes the entitlement named values to `onboarding/projection-switch-<apim>-<time>.json`
+  and sets `entitlement-source` to `projection`, then prints the rollback. The deployer's
+  `-FlipAfterCleanCompare`, the installer through it, and the guided Entitlement step use it and
+  deploy, publish and apply nothing; `-WhatIf` stops before the backup. Admission reads the action
+  group and requires an email receiver whose status is `Enabled`, and counts only status records
+  the job wrote under its current settings, which must name the gateway, the compared tier groups
+  and the receipt's identity. `docs/SECURE-PROJECTION.md` lists the owner-attended live run.
+  [ADR-0050](docs/adr/0050-projection-switch-function.md).
 - **P94 the projection renewal job deploys and renews.** `scripts/Deploy-ClaudeProjectionRenewal.ps1`
   deploys `infra/projection-registry.bicep` (registry, job identity, AcrPull), builds the image
   from the sync package, reads back its digest and deploys `infra/projection-renewal.bicep` pinned
@@ -1170,6 +1181,13 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Fixed
 
+- **P95 no switch path could reach the projection.** The deployer's `-FlipAfterCleanCompare`
+  redeployed and applied a fresh snapshot before admission, so admission refused every attempt as
+  an older generation; the guided flow's live discovery supplied no renewal evidence and ran no
+  compare; admission accepted any action-group id and did not tie the job's evidence to its
+  settings. README, six guides, the deployer synopsis and the preflight refusal said the switch
+  was unavailable or later work. Each is corrected with tests
+  ([P95 status](docs/status/P95.md#p95-the-projection-switch-over-runs-end-to-end-2026-10-05)).
 - **P94 the renewal job could not be deployed or run as merged.** The image and the runner archive
   missed `resolver/src/entitlement.mjs`, which `sync/src/plan.mjs` imports, so the job, the runner
   apply and compare, and admission stopped with a missing module; the runner archive now holds the
