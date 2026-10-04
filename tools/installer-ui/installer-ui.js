@@ -460,6 +460,10 @@
     }
     try {
       await readRunStream(res);
+      if (runActive) {
+        runActive = false;
+        updateRunAdmission();
+      }
     } catch (error) {
       runActive = false;
       updateRunAdmission();
@@ -521,8 +525,15 @@
       activeStepId = status.currentStepId || status.steps?.[0] || "";
       runActive = true;
       updateRunAdmission();
-      const res = await fetch(`./api/run/attach?after=${lastRunSeq}`);
-      await readRunStream(res);
+      try {
+        const res = await fetch(`./api/run/attach?after=${lastRunSeq}`);
+        await readRunStream(res);
+      } finally {
+        if (runActive) {
+          runActive = false;
+          updateRunAdmission();
+        }
+      }
     }
   }
 

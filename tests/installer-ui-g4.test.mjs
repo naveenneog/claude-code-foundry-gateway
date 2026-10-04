@@ -523,6 +523,45 @@ test('U1 fix run-starting buttons are disabled while a run is active', async () 
   }
 });
 
+test('U1 fix a run stream that ends without a summary clears run activity', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await fillValid(page);
+    await page.getByRole('button', { name: 'List steps' }).click();
+    await page.locator('#step-list input[value="resource-group"]').check();
+    await page.getByRole('button', { name: 'Run preflight' }).click();
+    await page.getByText(/Passing preflight/).waitFor();
+    await page.route('**/api/run/stream', (route) => route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"progress","stepId":"resource-group","event":"started","message":"started"}\n' }));
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await page.locator('#run-status').getByText(/Run finished/).waitFor();
+    assert.equal(await page.locator('#stop-run').isDisabled(), true);
+    assert.equal(await page.locator('#run').isEnabled(), true);
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
+test('U1 fix a reattach stream that ends without a summary clears run activity', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await page.route('**/api/run/status', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'reattach-run', state: 'running', currentStepId: 'resource-group', steps: ['resource-group'] }) }));
+    await page.route('**/api/run/attach?after=0', (route) => route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"progress","stepId":"resource-group","event":"started","message":"reattached"}\n' }));
+    await page.reload();
+    await page.waitForSelector('[name="SubscriptionId"]');
+    await page.getByText(/reattached/).waitFor();
+    await page.waitForTimeout(100);
+    assert.equal(await page.locator('#stop-run').isDisabled(), true);
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
 
 test('U4 keyboard and accessibility journey has names, live regions, focus moves and labelled output', async () => {
   const app = await start({ env: { P93_INSTALLER_UI_STUB_FAIL_STEP: 'gateway-deployment' } });
