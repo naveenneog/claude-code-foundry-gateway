@@ -417,6 +417,42 @@ test('U3 a schema problem without a path links no field even when other answers 
   }
 });
 
+test('U3 PASS and NOT-RUN rows link and mark no field', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await fillValid(page);
+    await page.route('**/api/preflight', (route) => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        preflight: {
+          schemaVersion: 1,
+          installer: 'pwsh',
+          answersSchemaVersion: 1,
+          result: 'FAIL',
+          checks: [
+            { id: 'target.subscription', result: 'PASS', reason: null, message: 'subscription Capture subscription (00000000-0000-4000-8000-000000000093)', remedy: '', problems: [] },
+            { id: 'foundry.account', result: 'NOT-RUN', reason: 'not-signed-in', message: 'Azure CLI is not signed in', remedy: 'Run az login --use-device-code.', problems: [] },
+          ],
+        },
+        exitCode: 1,
+      }),
+    }));
+    await page.getByRole('button', { name: 'Run preflight' }).click();
+    await page.getByText('target.subscription').waitFor();
+    assert.equal(await page.locator('tr', { hasText: 'target.subscription' }).getByRole('button', { name: /Review/ }).count(), 0);
+    assert.equal(await page.locator('tr', { hasText: 'foundry.account' }).getByRole('button', { name: /Review/ }).count(), 0);
+    assert.notEqual(await page.locator('[name="SubscriptionId"]').getAttribute('aria-invalid'), 'true');
+    assert.notEqual(await page.locator('[name="FoundryAccount"]').getAttribute('aria-invalid'), 'true');
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
+
 test('U1 fix Stop run is disabled after the run ends even when the stop response arrives after the summary', async () => {
   const app = await start({ env: { P93_INSTALLER_UI_STUB_GRANDCHILD_HEARTBEAT: join(tmpdir(), `g4-stop-${process.pid}-${Date.now()}.txt`) } });
   const { browser, page, pageErrors } = await openPage(app);

@@ -37,6 +37,7 @@
     }
 
     function preflightProblemPaths(check) {
+      if (check.result !== "FAIL") return [];
       const out = [];
       for (const problem of check.problems || []) {
         if (problem.path) out.push({ path: problem.path, message: problem.message, remedy: problem.remedy });
