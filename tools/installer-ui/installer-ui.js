@@ -9,6 +9,7 @@ let businessUnits = [];
 let csrfToken = '';
 let sessionMode = 'live';
 let sessionReason = '';
+let bashSteps = [];
 let activeRunId = '';
 let activeStepId = '';
 let lastRunSeq = 0;
@@ -85,6 +86,7 @@ function collectAnswers() {
 function markPreflightStale() {
   preflightStale = true;
   preflightFingerprint = '';
+  refreshCommands();
   updateRunAdmission();
 }
 
@@ -106,14 +108,36 @@ function updateRunAdmission() {
 function renderCommands(commands) {
   const root = byId('commands');
   clearChildren(root);
-  for (const [title, value] of [['PowerShell preflight', commands.powershell], ['PowerShell run', commands.powershellRun], ['Bash preflight', commands.bash], ['Bash run', commands.bashRun]]) {
+  for (const [title, value] of [['PowerShell preflight', commands.powershell], ['PowerShell run', commands.powershellRun]]) {
     appendText(root, title, 'h3');
     appendText(root, value, 'pre');
   }
-  appendText(root, 'Answers the bash installer does not apply', 'h3');
+  appendText(root, 'PowerShell applies every current answer and selected step.', 'p');
+  if (commands.bash && commands.bashRun) {
+    for (const [title, value] of [['Bash preflight', commands.bash], ['Bash run', commands.bashRun]]) {
+      appendText(root, title, 'h3');
+      appendText(root, value, 'pre');
+    }
+    return;
+  }
+  appendText(root, 'Bash commands are not shown because bash does not apply the following current inputs.', 'p');
   const ul = document.createElement('ul');
-  for (const item of commands.bashDoesNotApply || []) appendText(ul, item, 'li');
+  for (const item of commands.bashDoesNotApply || []) appendText(ul, `answer ${item}`, 'li');
+  for (const item of commands.bashStepsNotApply || []) appendText(ul, `step ${item}`, 'li');
   root.append(ul);
+}
+
+function refreshCommands() {
+  if (!schema) return;
+  let answers = { schemaVersion: 1 };
+  try { answers = collectAnswers(); } catch { /* partial edits still keep command rendering best-effort. */ }
+  renderCommands(buildPortableCommands(schema, './answers.json', {
+    progressPath: './install-progress.ndjson',
+    steps: selectedSteps(),
+    fullRun: !selectedSteps().length,
+    bashSteps,
+    presentAnswers: Object.keys(answers).filter((key) => key !== 'schemaVersion'),
+  }));
 }
 
 function clearChildren(node) {
@@ -372,6 +396,11 @@ async function main() {
   } else {
     sessionMode = 'static';
   }
+  if (location.protocol !== 'file:') {
+    try { bashSteps = (await (await fetch('./api/bash-steps')).json()).steps || []; } catch { bashSteps = []; }
+  } else {
+    bashSteps = ['resource-group', 'gateway-deployment', 'entra-groups', 'sync', 'onboarding-package'];
+  }
   for (const [section, names] of Object.entries(fieldGroups)) {
     const parent = byId(section);
     for (const name of names) if (schema.properties[name]) renderField(parent, name, schema.properties[name]);
@@ -379,6 +408,12 @@ async function main() {
   byId('refresh-identity').onclick = () => refreshIdentity();
   byId('signin').onclick = () => { byId('signin-command').textContent = identity.signInCommand || 'az login --use-device-code'; };
   document.addEventListener('input', (event) => {
+    if (event.target?.id === 'business-units') {
+      preflightStale = true;
+      preflightFingerprint = '';
+      updateRunAdmission();
+      return;
+    }
     if (event.target?.closest('#business-unit-tree') || event.target?.matches('[name], #business-units')) markPreflightStale();
   });
   document.addEventListener('change', (event) => {
@@ -453,8 +488,7 @@ async function main() {
   if (sessionMode !== 'live') {
     for (const id of ['preflight', 'steps', 'run', 'full-run', 'rerun', 'stop-run', 'refresh-identity', 'signin']) byId(id).hidden = true;
   }
-  try { renderCommands(await postJson('./api/commands', { answersPath: './answers.json' })); }
-  catch { renderCommands(buildPortableCommands(schema, './answers.json')); }
+  refreshCommands();
   void refreshIdentity().catch((error) => { byId('identity').textContent = error.message; });
   void refreshRunStatus().catch(() => {});
 }

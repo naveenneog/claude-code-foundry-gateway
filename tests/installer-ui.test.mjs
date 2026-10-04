@@ -194,11 +194,11 @@ test('token, host, fixed routes and headers protect the local server', async () 
     assert.equal(options.headers.get('access-control-allow-origin'), null);
     const unknown = await app.fetch('/nope');
     assert.equal(unknown.status, 404);
-    const large = await app.fetch('/api/commands', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ x: 'x'.repeat(300_000) }) });
+    const large = await app.fetch('/api/prefill', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ x: 'x'.repeat(300_000) }) });
     assert.equal(large.status, 413);
-    const badContent = await app.fetch('/api/commands', { method: 'POST', headers: { 'content-type': 'text/plain' }, body: '{}' });
+    const badContent = await app.fetch('/api/prefill', { method: 'POST', headers: { 'content-type': 'text/plain' }, body: '{}' });
     assert.equal(badContent.status, 415);
-    const bad = await app.fetch('/api/commands', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{' });
+    const bad = await app.fetch('/api/prefill', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{' });
     assert.equal(bad.status, 400);
     const ok = await app.fetch('/');
     assert.match(ok.headers.get('content-security-policy'), /default-src 'self'/);
@@ -280,7 +280,7 @@ async function expectText(page, text) {
   await page.getByText(text).first().waitFor();
 }
 
-test('the form renders from the answers schema and exposes portable commands', async () => {
+test('the form renders from the answers schema', async () => {
   const app = await start();
   try {
     const html = await (await app.fetch('/')).text();
@@ -288,14 +288,6 @@ test('the form renders from the answers schema and exposes portable commands', a
     assert.match(html, /schema-json/);
     const schema = await (await app.fetch('/api/schema')).json();
     assert.equal(schema.properties.SubscriptionId.title, 'Subscription');
-    const commands = await (await app.fetch('/api/commands', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ answersPath: '.\\answers.json' }),
-    })).json();
-    assert.match(commands.powershell, /Install-ClaudeGateway\.ps1 -AnswersPath '.\\answers\.json' -Preflight -Json/);
-    assert.match(commands.bash, /install-claude-gateway\.sh --answers-file '\.\/answers\.json' --preflight --json/);
-    assert.ok(commands.bashDoesNotApply.includes('BusinessUnits'));
   } finally {
     await app.close();
   }

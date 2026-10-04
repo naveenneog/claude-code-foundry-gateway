@@ -11,10 +11,10 @@ import { validatePreflight, validateProgressEvent, validateStepList } from './in
 import { assertSameOrigin, constantTimeTokenEquals, contentSecurityPolicy, isAllowedHost, isLoopbackBind, parseCookies, readJsonBody, send, sendText, tokenHash } from './http-helpers.mjs';
 import { attachSubscriber, createRunRecord, publicRun, publishEvent } from './run-record.mjs';
 import { createLineHandler, readProgressFile, writeNdjson } from './run-transport.mjs';
-import { buildCommands, fieldsByCheckId, loadSchema, prefillArguments, redactText, root, scrubLocalPaths } from './server-model.mjs';
+import { fieldsByCheckId, installerArguments, loadBashSteps, loadSchema, prefillArguments, redactText, root, scrubLocalPaths } from './server-model.mjs';
 import { answersDigest, createPreflightStore, preflightFingerprint, preflightRequired, scopeCovers, scopeFromBody, sortedUniqueSteps } from './preflight-record.mjs';
 
-export { buildCommands, loadSchema, redactText, scrubLocalPaths } from './server-model.mjs';
+export { loadSchema, redactText, scrubLocalPaths } from './server-model.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const psInstaller = join(root, 'Install-ClaudeGateway.ps1');
@@ -381,8 +381,7 @@ export async function createInstallerUiServer(options = {}) {
       try { await chmod(run.tempDir, 0o700); } catch { /* Windows ACLs are inherited; the directory is still per-run. */ }
       const answersPath = await writeAnswers(run.tempDir, answers || {});
       run.progressPath = join(run.tempDir, 'progress.ndjson');
-      const args = ['-AnswersPath', answersPath, '-Yes', '-ProgressPath', run.progressPath];
-      if (steps.length) args.push('-Steps', steps.join(','));
+      const args = await installerArguments({ engine: 'pwsh', action: 'run', answersPath, progressPath: run.progressPath, steps, fullRun: !steps.length });
       return args;
     } catch (error) {
       log(`Installer run could not start: ${error.message}`);
@@ -441,6 +440,7 @@ export async function createInstallerUiServer(options = {}) {
       if (req.method === 'GET' && url.pathname === '/ui-model.js') return sendText(res, 200, await readFile(uiModelScript, 'utf8'), 'text/javascript; charset=utf-8', setCookie);
       if (req.method === 'GET' && url.pathname === '/installer-ui.css') return sendText(res, 200, await readFile(uiCss, 'utf8'), 'text/css; charset=utf-8', setCookie);
       if (req.method === 'GET' && url.pathname === '/api/schema') return send(res, 200, await loadSchema(), setCookie);
+      if (req.method === 'GET' && url.pathname === '/api/bash-steps') return send(res, 200, { schemaVersion: 1, steps: await loadBashSteps() }, setCookie);
       if (req.method === 'GET' && url.pathname === '/api/steps') {
         requireLive();
         assertFetchMetadataForChildGet(req);
@@ -473,10 +473,7 @@ export async function createInstallerUiServer(options = {}) {
         if (parsed.error) parsed.error = scrubLocalPaths(await redactText(parsed.error));
         return send(res, parsed.field ? 400 : 200, parsed, setCookie);
       }
-      if (req.method === 'POST' && url.pathname === '/api/commands') {
-        const body = await readJsonBody(req);
-        return send(res, 200, buildCommands(body.answersPath || './answers.json', await loadSchema()), setCookie);
-      }
+      if (req.method === 'POST' && url.pathname === '/api/commands') return send(res, 404, { error: 'route not found' }, setCookie);
       if (req.method === 'POST' && url.pathname === '/api/preflight') {
         requireLive();
         assertSameOrigin(req);
@@ -487,7 +484,7 @@ export async function createInstallerUiServer(options = {}) {
         const engine = 'pwsh';
         return send(res, 200, await withJob(() => withRunDirectory(async (dir) => {
           const answers = await writeAnswers(dir, body.answers || {});
-          const result = await runInstaller('powershell', ['-AnswersPath', answers, '-Preflight', '-Json'], options, { timeoutMs: timeoutFor('preflight'), readName: 'preflight' });
+          const result = await runInstaller('powershell', await installerArguments({ engine: 'pwsh', action: 'preflight', answersPath: answers }), options, { timeoutMs: timeoutFor('preflight'), readName: 'preflight' });
           let parsed;
           try { parsed = validatePreflight(JSON.parse(result.stdout)); } catch (error) {
             if (error.status === 502) throw error;

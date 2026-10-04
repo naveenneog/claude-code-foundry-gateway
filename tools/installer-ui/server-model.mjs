@@ -2,15 +2,19 @@ import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { quoteBash, quotePowerShell } from './http-helpers.mjs';
+import { createContext, runInContext } from 'node:vm';
 
 const here = dirname(fileURLToPath(import.meta.url));
 export const root = resolve(here, '..', '..');
 const schemaPath = join(root, 'schemas', 'claude-gateway.answers.schema.json');
 const redactionPath = join(root, 'scripts', 'ClaudeInstallResume.ps1');
+const uiModelPath = join(here, 'ui-model.js');
+const bashCheckpointPath = join(root, 'scripts', 'install-checkpoint.sh');
 const prefillKinds = new Set(['subscriptions', 'foundryAccounts', 'deployments']);
 const prefillParameters = [['-SubscriptionId', 'subscriptionId', 'SubscriptionId'], ['-FoundryAccount', 'foundryAccount', 'FoundryAccount'], ['-FoundryResourceGroup', 'foundryResourceGroup', 'FoundryResourceGroup']];
 let redactionRules;
+let uiModel;
+let bashSteps;
 
 export async function loadSchema() {
   return JSON.parse(await readFile(schemaPath, 'utf8'));
@@ -72,19 +76,25 @@ export function prefillArguments(body) {
   return args;
 }
 
-export function buildCommands(answersPath = '.\\answers.json', schema = null) {
-  const ps = `.\\Install-ClaudeGateway.ps1 -AnswersPath ${quotePowerShell(answersPath)} -Preflight -Json`;
-  const runPs = `.\\Install-ClaudeGateway.ps1 -AnswersPath ${quotePowerShell(answersPath)} -Yes -ProgressPath .\\install-progress.ndjson`;
-  const bashPath = answersPath.replaceAll('\\', '/');
-  const bash = `./install-claude-gateway.sh --answers-file ${quoteBash(bashPath)} --preflight --json`;
-  const bashRun = `./install-claude-gateway.sh --answers-file ${quoteBash(bashPath)} --yes --progress-file ./install-progress.ndjson`;
-  const unsupported = [];
-  if (schema?.properties) {
-    for (const [name, property] of Object.entries(schema.properties)) {
-      if (Array.isArray(property['x-appliedBy']) && !property['x-appliedBy'].includes('install-claude-gateway.sh')) unsupported.push(name);
-    }
-  }
-  return { powershell: ps, powershellRun: runPs, bash, bashRun, bashDoesNotApply: unsupported };
+export async function loadUiModel() {
+  if (uiModel) return uiModel;
+  const context = createContext({ globalThis: {} });
+  runInContext(await readFile(uiModelPath, 'utf8'), context);
+  uiModel = context.globalThis.ClaudeInstallerUiModel;
+  return uiModel;
+}
+
+export async function installerArguments(options) {
+  return (await loadUiModel()).installerArguments(options);
+}
+
+export async function loadBashSteps() {
+  if (bashSteps) return bashSteps;
+  const source = await readFile(bashCheckpointPath, 'utf8');
+  const match = source.match(/^CKPT_ORDER="([^"]+)"/m);
+  if (!match) throw new Error('CKPT_ORDER not found in scripts/install-checkpoint.sh');
+  bashSteps = match[1].trim().split(/\s+/).filter(Boolean);
+  return bashSteps;
 }
 
 export function fieldsByCheckId(schema) {

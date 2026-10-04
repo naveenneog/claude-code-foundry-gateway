@@ -30,9 +30,10 @@ it from `file://`, and it carries the same schema as `schemas/claude-gateway.ans
 `tests/installer-ui.test.mjs` compares the two copies and opens the file page in a real browser.
 The local server serves the same `index.html` bytes for `/` and `/index.html`, so static and live
 mode share one page source.
-Static mode validates formats, creates `answers.json` and shows readable PowerShell and bash command
-blocks. It does not read Azure and does not run the installer. The Cloud Shell path is **Manage files >
-Upload** for `answers.json`, then one pasted command.
+Static mode validates formats, creates `answers.json` and shows readable PowerShell command blocks.
+Bash command blocks appear only when the current answers and selected steps are all handled by the
+bash installer. It does not read Azure and does not run the installer. The Cloud Shell path is
+**Manage files > Upload** for `answers.json`, then one pasted command.
 
 ## Security model
 
@@ -74,7 +75,7 @@ stream say that the install checkpoint resumes when the same steps run again.
 | Optional parts | Renders company address, Desktop sign-in, projection and monitoring answers from the schema. Projection answers are schema answers only; no projection switch is exposed. |
 | Business units | Provides a two-level editor: add a unit, add a team under a unit, remove either, then serialize units before teams. Fields are id, Entra group, monthly USD budget, mode and percent only for `Allowance`. Ids are lower-case letters, digits and hyphens, max 64; ids are unique; group names exclude `'`, `,` and `:`; `Allowance` requires percent 1-100; teams name one parent unit. The JSON view round-trips through the same validation. |
 | Review | Runs installer preflight and shows check, result, message and remedy. A passing preflight returns a 64-character SHA-256 fingerprint over canonical answers, engine and step scope. Failing checks mark fields through `x-checkId`. Non-JSON preflight output returns a visible error with the exit code and a short redacted, path-scrubbed output tail. |
-| Run | Lists installer step ids, streams selected-step output as it arrives, shows a failed step with a rerun action and resume command, reattaches to an active run after reload and keeps a full run as a separate confirmed action. A run starts only when its fingerprint matches a stored passing preflight for the same answers and a covering scope. |
+| Run | Lists installer step ids, streams selected-step output as it arrives, shows a failed step with a rerun action and resume command, reattaches to an active run after reload and keeps a full run as a separate confirmed action. A run starts only when its fingerprint matches a stored passing preflight for the same answers and a covering scope. Displayed commands use `./` relative paths; a 2026-10-04 PowerShell 7 run accepted `-File ./Install-ClaudeGateway.ps1 -AnswersPath ./scratch-p93-e2/answers.json -Preflight -Json` and returned versioned JSON with exit 1 because the isolated profile was signed out. |
 
 ## Installer interface checks
 

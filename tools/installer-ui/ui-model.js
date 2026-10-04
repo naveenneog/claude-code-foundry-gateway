@@ -85,21 +85,56 @@ function quoteBash(value) {
   return `'${String(value).replaceAll("'", "'\"'\"'")}'`;
 }
 
-function buildPortableCommands(schema, answersPath = './answers.json') {
-  const psPath = answersPath.replaceAll('/', '\\');
-  const bashPath = answersPath.replaceAll('\\', '/');
+function installerArguments({ engine, action, answersPath = './answers.json', progressPath = './install-progress.ndjson', steps = [], fullRun = false }) {
+  if (engine === 'pwsh') {
+    const args = ['-AnswersPath', answersPath];
+    if (action === 'preflight') return [...args, '-Preflight', '-Json'];
+    if (action === 'run') {
+      const run = [...args, '-Yes', '-ProgressPath', progressPath];
+      if (!fullRun && steps.length) run.push('-Steps', steps.join(','));
+      return run;
+    }
+  }
+  if (engine === 'bash') {
+    const args = ['--answers-file', answersPath];
+    if (action === 'preflight') return [...args, '--preflight', '--json'];
+    if (action === 'run') {
+      const run = [...args, '--yes', '--progress-file', progressPath];
+      if (!fullRun && steps.length) run.push('--steps', steps.join(','));
+      return run;
+    }
+  }
+  throw new Error(`unsupported installer action: ${engine} ${action}`);
+}
+
+function shellCommand(engine, action, options) {
+  const args = installerArguments({ engine, action, ...options });
+  const plain = (value) => /^[A-Za-z0-9_./,-]+$/.test(String(value));
+  if (engine === 'pwsh') return ['./Install-ClaudeGateway.ps1', ...args].map((part) => plain(part) ? String(part) : quotePowerShell(part)).join(' ');
+  return ['./install-claude-gateway.sh', ...args].map((part) => plain(part) ? String(part) : quoteBash(part)).join(' ');
+}
+
+function buildPortableCommands(schema, answersPath = './answers.json', options = {}) {
+  const steps = options.steps || [];
+  const fullRun = Boolean(options.fullRun);
+  const progressPath = options.progressPath || './install-progress.ndjson';
+  const bashSteps = new Set(options.bashSteps || []);
+  const presentAnswers = new Set(options.presentAnswers || []);
   const bashDoesNotApply = [];
   for (const [name, property] of Object.entries(schema.properties || {})) {
-    if (Array.isArray(property['x-appliedBy']) && !property['x-appliedBy'].includes('install-claude-gateway.sh')) bashDoesNotApply.push(name);
+    if (presentAnswers.has(name) && Array.isArray(property['x-appliedBy']) && !property['x-appliedBy'].includes('install-claude-gateway.sh')) bashDoesNotApply.push(name);
   }
+  const bashStepsNotApply = steps.filter((step) => !bashSteps.has(step));
+  const bashAvailable = bashDoesNotApply.length === 0 && bashStepsNotApply.length === 0;
   return {
-    powershell: `.\\Install-ClaudeGateway.ps1 -AnswersPath ${quotePowerShell(psPath)} -Preflight -Json`,
-    powershellRun: `.\\Install-ClaudeGateway.ps1 -AnswersPath ${quotePowerShell(psPath)} -Yes -ProgressPath .\\install-progress.ndjson`,
-    bash: `./install-claude-gateway.sh --answers-file ${quoteBash(bashPath)} --preflight --json`,
-    bashRun: `./install-claude-gateway.sh --answers-file ${quoteBash(bashPath)} --yes --progress-file ./install-progress.ndjson`,
+    powershell: shellCommand('pwsh', 'preflight', { answersPath }),
+    powershellRun: shellCommand('pwsh', 'run', { answersPath, progressPath, steps, fullRun }),
+    bash: bashAvailable ? shellCommand('bash', 'preflight', { answersPath }) : '',
+    bashRun: bashAvailable ? shellCommand('bash', 'run', { answersPath, progressPath, steps, fullRun }) : '',
     bashDoesNotApply,
+    bashStepsNotApply,
     cloudShell: 'Manage files > Upload answers.json, then paste the PowerShell or bash command above.',
   };
 }
-globalThis.ClaudeInstallerUiModel = { buildPortableCommands, coerceAnswerValue, collectAnswersFromEntries, fieldGroups, fieldsByCheckId, validateBusinessUnits };
+globalThis.ClaudeInstallerUiModel = { buildPortableCommands, coerceAnswerValue, collectAnswersFromEntries, fieldGroups, fieldsByCheckId, installerArguments, validateBusinessUnits };
 })();

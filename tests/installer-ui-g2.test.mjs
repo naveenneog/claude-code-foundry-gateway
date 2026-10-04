@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { spawn } from 'node:child_process';
 import { createInstallerUiServer } from '../tools/installer-ui/server.mjs';
 import { canonicalize, createPreflightStore, preflightFingerprint, scopeCovers, scopeFromBody } from '../tools/installer-ui/preflight-record.mjs';
 
@@ -80,9 +81,22 @@ async function waitForStubRuns(app, count) {
       const lines = (await readFile(app.log, 'utf8')).trim().split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
       if (lines.filter((entry) => entry.args?.includes('-Yes')).length >= count) return;
     }
+
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   throw new Error(`timed out waiting for ${count} installer runs`);
+}
+
+async function parsePowerShellCommand(command) {
+  const script = `$tokens=$null;$errors=$null;[System.Management.Automation.Language.Parser]::ParseInput($env:P93_COMMAND,[ref]$tokens,[ref]$errors)>$null;if($errors){throw $errors[0].Message};$tokens|?{ $_.Kind -ne 'EndOfInput' }|%{ $_.Text }|ConvertTo-Json -Compress`;
+  const child = spawn('pwsh', ['-NoProfile', '-NonInteractive', '-Command', script], { shell: false, windowsHide: true, env: { ...process.env, P93_COMMAND: command } });
+  let stdout = '';
+  let stderr = '';
+  child.stdout.on('data', (chunk) => { stdout += chunk.toString('utf8'); });
+  child.stderr.on('data', (chunk) => { stderr += chunk.toString('utf8'); });
+  const [code] = await once(child, 'close');
+  assert.equal(code, 0, stderr);
+  return JSON.parse(stdout);
 }
 
 test('G0 serves index.html byte-identically at the root route', async () => {
@@ -320,6 +334,79 @@ test('E1 missing pwsh puts the server and page in static mode without spawning c
       await browser.close();
     }
   } finally {
+    await app.close();
+  }
+});
+
+test('E2 shared installer arguments, CKPT_ORDER parse and removed commands route', async () => {
+  const app = await startServer();
+  try {
+    const bashSteps = await (await app.fetch('/api/bash-steps')).json();
+    assert.deepEqual(bashSteps.steps, ['resource-group', 'gateway-deployment', 'entra-groups', 'sync', 'onboarding-package']);
+    const stepIds = (await (await app.fetch('/api/steps')).json()).steps.map((step) => step.id);
+    for (const step of bashSteps.steps) assert.ok(stepIds.includes(step), step);
+    const removed = await postJson(app, '/api/commands', { answersPath: './answers.json' });
+    assert.equal(removed.response.status, 404);
+
+    const { chromium } = await import('playwright');
+    let browser;
+    try { browser = await chromium.launch({ channel: 'msedge', headless: true }); }
+    catch { browser = await chromium.launch({ headless: true }); }
+    try {
+      const page = await browser.newPage();
+      await page.context().addCookies([{ name: 'installer_token', value: app.server.token, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Strict' }]);
+      await page.route('**/api/identity', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ signedIn: true, user: 'operator@example.com' }) }));
+      await page.goto(`${app.base}/`);
+      await page.getByRole('button', { name: 'List steps' }).click();
+      await page.locator('[name="SubscriptionId"]').fill(passingAnswers.SubscriptionId);
+      await page.locator('#step-list input[value="resource-group"]').check();
+      await page.getByText(/--steps resource-group/).waitFor();
+      await page.locator('#step-list input[value="gateway-deployment"]').check();
+      await page.getByText(/-Steps resource-group,gateway-deployment/).waitFor();
+      await page.locator('[name="QuotaOrg"]').fill('10');
+      await page.getByText(/answer QuotaOrg/).waitFor();
+      await page.locator('[name="QuotaOrg"]').fill('');
+      await page.locator('#step-list input[value="verify"]').check();
+      await page.getByText(/step verify/).waitFor();
+    } finally {
+      await browser.close();
+    }
+  } finally {
+    await app.close();
+  }
+});
+
+test('E2 displayed PowerShell run argv matches the server installer argv', async () => {
+  const app = await startServer();
+  const { chromium } = await import('playwright');
+  let browser;
+  try { browser = await chromium.launch({ channel: 'msedge', headless: true }); }
+  catch { browser = await chromium.launch({ headless: true }); }
+  try {
+    const page = await browser.newPage();
+    await page.context().addCookies([{ name: 'installer_token', value: app.server.token, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Strict' }]);
+    await page.route('**/api/identity', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ signedIn: true, user: 'operator@example.com' }) }));
+    await page.goto(`${app.base}/`);
+    await page.getByRole('button', { name: 'List steps' }).click();
+    await page.locator('[name="SubscriptionId"]').fill(passingAnswers.SubscriptionId);
+    await page.locator('#step-list input[value="resource-group"]').check();
+    await page.getByRole('button', { name: 'Run preflight' }).click();
+    await page.getByText(/Passing preflight/).waitFor();
+    const command = await page.locator('#commands pre').nth(1).textContent();
+    assert.match(command, /\.\/Install-ClaudeGateway\.ps1 -AnswersPath \.\/answers\.json -Yes -ProgressPath \.\/install-progress\.ndjson -Steps resource-group/);
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await page.getByText(/summary:/).waitFor();
+    const tokens = await parsePowerShellCommand(command);
+    const calls = (await readFile(app.log, 'utf8')).trim().split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
+    const run = calls.find((entry) => entry.args.includes('-Yes'));
+    const normalized = [tokens[0], ...run.args.map((arg, index, args) => {
+      if (args[index - 1] === '-AnswersPath') return './answers.json';
+      if (args[index - 1] === '-ProgressPath') return './install-progress.ndjson';
+      return arg;
+    })];
+    assert.deepEqual(normalized, tokens);
+  } finally {
+    await browser.close();
     await app.close();
   }
 });
