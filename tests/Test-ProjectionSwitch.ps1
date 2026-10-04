@@ -241,6 +241,35 @@ Assert 'the one receipt that names the gateway is the evidence; a receipt for an
 Capture { Find-ClaudeFlowProjectionRenewal -Directory $receipts -GatewayResourceId $FixtureGatewayId }
 Assert 'two receipts for one gateway are ambiguous and give no evidence' (-not $Failure -and -not $Result.Receipt -and $Result.Problem -match '2 renewal receipts') "$Failure $($Result.Problem)"
 
+# Live discovery reads receipts under the repository's onboarding/; here that root is a temporary directory.
+$discoveryRoot = Join-Path $work 'discovery-root'
+$discoveryReceipts = Join-Path $discoveryRoot 'onboarding'
+New-Item -ItemType Directory -Force -Path $discoveryReceipts | Out-Null
+$realRepoRoot = ${function:Get-ClaudeFlowLifecycleRepoRoot}
+function Invoke-LiveDiscovery {
+    Set-Item -Path function:global:Get-ClaudeFlowLifecycleRepoRoot -Value ([scriptblock]::Create("'$discoveryRoot'"))
+    try {
+        & {
+            function az {
+                $joined = $args -join ' '
+                if ($joined -like 'apim show*') { return (@{ id = $FixtureGatewayId; location = 'eastus2'; sku = @{ name = 'BasicV2'; capacity = 1 } } | ConvertTo-Json -Compress) }
+                if ($joined -like 'apim nv list*') { return '[]' }
+                if ($joined -like 'account get-access-token*') { return 'token' }
+                throw "unexpected az $joined"
+            }
+            function Invoke-RestMethod { [pscustomobject]@{ properties = [pscustomobject]@{ value = '<policies />' } } }
+            Get-ClaudeFlowLifecycleLiveDiscovery -ResourceGroup rg-p84 -ApimName apim-p84
+        }
+    }
+    finally { Set-Item -Path function:global:Get-ClaudeFlowLifecycleRepoRoot -Value $realRepoRoot }
+}
+Capture { Invoke-LiveDiscovery }
+Assert 'live discovery without a receipt for the gateway carries no renewal, and the reason' (-not $Failure -and -not $Result.renewal -and $Result.renewalProblem -match 'no renewal receipt under onboarding/ names gateway') "$Failure $($Result.renewalProblem)"
+[IO.File]::WriteAllText((Join-Path $discoveryReceipts 'projection-renewal-p84fixture.json'), (Get-Content -LiteralPath $receiptPath -Raw))
+Capture { Invoke-LiveDiscovery }
+Assert 'live discovery carries the receipt that names the discovered gateway (AC4)' (-not $Failure -and $Result.renewal.reconcilerResourceId -eq $FixtureJobId -and -not $Result.renewalProblem -and
+    (Get-ClaudeFlowLifecycleRepoRoot) -eq $root) "$Failure $($Result.renewalProblem) | root $(Get-ClaudeFlowLifecycleRepoRoot)"
+
 $flowRecord = [pscustomobject]@{ schemaVersion = 2; decisions = [pscustomobject]@{ entitlementStore = [pscustomobject]@{ target = 'projection' } }; history = @() }
 $flowDiscovery = [pscustomobject]@{ resourceGroup = 'rg-p84'; apimName = 'apim-p84'; sku = 'BasicV2'; apimId = $FixtureGatewayId; namedValues = @{ 'entitlement-source' = 'named-value' }; renewal = $null; renewalProblem = 'no renewal receipt under onboarding/ names gateway x. Remedy: deploy the renewal job.' }
 $flowPlan = Get-ClaudeFlowStepPlan -Record $flowRecord -Discovery $flowDiscovery
