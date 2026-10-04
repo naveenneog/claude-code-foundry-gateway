@@ -201,7 +201,17 @@ foreach($step in $steps) {
     Capture { & $testBlock }
     Assert "declined prerequisite aborts: $($step.Clauses[0].Item1.Extent.Text)" ($Failure -and $Output -match 'declined.*abort|declined.*stopp|declined.*no further|declined after admission') $Failure
 }
-Assert 'all eight prerequisite decisions are exercised' ($steps.Count -eq 8)
+Assert 'all seven deployment decisions are exercised' ($steps.Count -eq 7)
+# The eighth decision, the switch itself, lives in the shared switch (ADR-0050): declining it writes nothing.
+$switchSource = Get-Content (Join-Path $root 'scripts\ClaudeProjectionSwitch.ps1') -Raw
+$switchAst = [Management.Automation.Language.Parser]::ParseInput($switchSource, [ref]$tokens, [ref]$errors)
+$switchSteps = @($switchAst.FindAll({ param($node) $node -is [Management.Automation.Language.IfStatementAst] -and $node.Clauses[0].Item1.Extent.Text -match '-not \$PSCmdlet\.ShouldProcess' }, $true))
+foreach ($step in $switchSteps) {
+    $testBlock = [scriptblock]::Create($step.Extent.Text.Replace($step.Clauses[0].Item1.Extent.Text, '$true'))
+    Capture { & $testBlock }
+    Assert "declined switch aborts: $($step.Clauses[0].Item1.Extent.Text)" ($Failure -and $Output -match 'declined after admission' -and $Output -match 'unchanged') $Failure
+}
+Assert 'the switch decision is exercised' ($switchSteps.Count -eq 1)
 Assert 'deployer binds the comparison Boolean rather than an absent switch value' ($source -match '-FailOnDrift:\$true')
 }
 

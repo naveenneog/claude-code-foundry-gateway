@@ -64,7 +64,7 @@ function Format-ClaudeProjectionChecks {
 }
 
 function Stop-ClaudeProjectionSwitch {
-    throw 'Projection switching is unavailable in P84. Records expire at most 2 hours after scan start; every developer gets 503 after expiry without renewal. Switching needs the scheduled reconciler in P86 (docs/ROADMAP.md). No override is available.'
+    throw 'Projection switch refused: the deployment preflight does not switch. Records expire at most 2 hours after a scan, and every developer gets 503 after expiry without renewal, so a switch needs the renewal job''s evidence: deploy the job with scripts/Deploy-ClaudeProjectionRenewal.ps1, wait for three runs, then run scripts/Deploy-ClaudeProjection.ps1 -FlipAfterCleanCompare (ADR-0050).'
 }
 
 function ConvertFrom-ClaudeProjectionAdmissionResult {

@@ -51,6 +51,7 @@ function Reset-ProjectionFixture {
         }
     } | ConvertTo-Json -Depth 20 | ConvertFrom-Json
     $global:FixtureExecutions = @($FixtureExecution)
+    $global:FixtureRunnerFiles = @{}
     $global:FixtureActionGroupId = "$FixtureRgId/providers/Microsoft.Insights/actionGroups/ag-projection-renewal"
     $global:FixtureActionGroup = [pscustomobject]@{
         id = $FixtureActionGroupId; type = 'Microsoft.Insights/ActionGroups'
@@ -174,6 +175,17 @@ function az {
     }
     if ($line -like 'container exec*') {
         if ($FixtureCase -eq 'runner-exit') { $global:LASTEXITCODE = 9; return 'runner transport failed' }
+        # Send-RunnerFile: an empty temp file, base64url chunks appended, then the decoded file's SHA-256.
+        $command = [string]$words[[array]::IndexOf($words, '--exec-command') + 1]
+        if ($command -match "^node -e require\('fs'\)\.mkdirSync\('[^']*',\{recursive:true\}\);require\('fs'\)\.writeFileSync\('([^']+)',''\)$") {
+            $global:FixtureRunnerFiles[$Matches[1]] = [Text.StringBuilder]::new(); return ''
+        }
+        if ($command -match "^node -e require\('fs'\)\.appendFileSync\('([^']+)','([^']*)'\)$") { $null = $global:FixtureRunnerFiles[$Matches[1]].Append($Matches[2]); return '' }
+        if ($command -match "^node -e f=require\('fs'\);f\.writeFileSync\('[^']+',Buffer\.from\(f\.readFileSync\('([^']+)','utf8'\),'base64url'\)\)") {
+            $b64 = $global:FixtureRunnerFiles[$Matches[1]].ToString().Replace('-', '+').Replace('_', '/')
+            $b64 += '=' * ((4 - $b64.Length % 4) % 4)
+            return [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Convert]::FromBase64String($b64))).Replace('-', '').ToLower()
+        }
         return '{"ok":true}'
     }
     throw "UNEXPECTED AZURE CALL (offline fixture): $line"

@@ -268,7 +268,9 @@ $flow = Get-Content (Join-Path $root 'scripts\flow\Entitlement.ps1') -Raw
 $register = Get-Content (Join-Path $root 'tests\Test-All.ps1') -Raw
 Assert 'offline check is registered' ($register -match "'Test-ProjectionPreflight.ps1'")
 Assert 'deployer checks before its first Azure write' ($deploy -match '(?s)Invoke-ClaudeProjectionPreflight.*if \(\$PreflightOnly\).*New-ClaudeProjectionResolverApp')
-Assert 'deployer switches only through P86 admission' ($deploy -match 'Assert-ClaudeProjectionAdmission' -and $deploy -match 'Set-ApimNamedValue' -and $deploy -match 'RenewalActionGroupResourceId')
+$switchText = Get-Content (Join-Path $root 'scripts\ClaudeProjectionSwitch.ps1') -Raw
+Assert 'deployer switches only through the shared switch, which writes after P86 admission' ($deploy -match 'Invoke-ClaudeProjectionSwitch' -and $deploy -notmatch "-Id 'entitlement-source'" -and
+    $deploy -match 'RenewalActionGroupResourceId' -and $switchText -match "(?s)Assert-ClaudeProjectionAdmission.*Set-ApimNamedValue[^\r\n]*-Id 'entitlement-source'")
 Assert 'both runner steps use the checked result parser' ([regex]::Matches($deploy, 'ConvertFrom-ClaudeRunnerResult').Count -eq 2)
 Assert 'projection sync rejects PS 5.1 explicitly' ($sync -match 'Assert-ClaudeProjectionPowerShell|PSVersion.*-lt 7' -and $sync -match 'pwsh|ClaudeProjectionChecks')
 Assert 'installer still forwards a supplied resolver app separately from switch admission' ($installer -match 'ProjectionResolverAppId' -and $installer -match "'-ResolverAppId'" -and $installer -match 'ProjectionRenewalActionGroupResourceId')
