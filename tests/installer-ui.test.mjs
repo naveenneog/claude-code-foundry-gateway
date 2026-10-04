@@ -544,7 +544,7 @@ setTimeout(() => { console.log('done'); process.exit(0); }, 500);
 
 test('stream transport preserves split output, final tails, malformed progress and the output cap', async () => {
   for (const [env, expected] of [
-    [{ P93_INSTALLER_UI_STUB_MULTIBYTE: '1' }, /split (?:\u{1F600}|ðŸ˜€) line/u],
+    [{ P93_INSTALLER_UI_STUB_MULTIBYTE: '1' }, /split \u{1F600} line/u],
     [{ P93_INSTALLER_UI_STUB_SPLIT_LINE: '1' }, /split line/],
     [{ P93_INSTALLER_UI_STUB_NO_FINAL_NEWLINE: '1' }, /last line without newline/],
   ]) {

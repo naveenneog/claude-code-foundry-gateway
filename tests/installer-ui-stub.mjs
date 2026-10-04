@@ -114,7 +114,7 @@ if (args.includes('-Yes')) {
     await new Promise(() => {});
   }
   if (process.env.P93_INSTALLER_UI_STUB_MULTIBYTE) {
-    const value = Buffer.from('split ðŸ˜€ line\n');
+    const value = Buffer.from('split 😀 line\n');
     process.stdout.write(value.subarray(0, 8));
     await new Promise((resolve) => setTimeout(resolve, 20));
     process.stdout.write(value.subarray(8));
