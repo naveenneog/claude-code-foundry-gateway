@@ -450,6 +450,16 @@ on every run through a named-value read role that `infra/projection-renewal-gate
 grants at the gateway's resource group. The image and the in-network runner use one sync package
 that includes `resolver/src/entitlement.mjs`.
 
+P95 adds the switch ([ADR-0050](adr/0050-projection-switch-function.md)).
+`Invoke-ClaudeProjectionSwitch` in `scripts/ClaudeProjectionSwitch.ps1` takes the receipt that
+`scripts/Deploy-ClaudeProjectionRenewal.ps1` writes. It runs `scripts/Compare-ClaudeEntitlement.ps1
+-FailOnDrift` and a read-only `apply-projection.mjs --compare` in the runner, reads the action group
+and the job definition through ARM, and runs admission over the status records the job wrote under
+its current settings. It then writes the entitlement named values to a backup file and sets
+`entitlement-source` to `projection`. The deployer's `-FlipAfterCleanCompare`, the installer through
+the deployer, and the guided Entitlement step call it, and none of them deploys, publishes or applies
+in switch mode.
+
 Before a resolver call, APIM limits `entitlement-misses` to 200 per second and 100
 concurrent. Excess returns retryable 429. These approximate distributed controls bound
 the admitted burst; they are not a 500,000-user throughput guarantee.
