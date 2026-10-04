@@ -293,16 +293,13 @@
     parent.append(button);
   }
 
-  function preflightProblemPaths(check, browserFallback) {
+  function preflightProblemPaths(check) {
     const out = [];
     for (const problem of check.problems || []) {
       if (problem.path) out.push({ path: problem.path, message: problem.message, remedy: problem.remedy });
     }
     if (!out.length) {
       for (const path of checkFields[check.id] || []) out.push({ path, message: check.message, remedy: check.remedy });
-    }
-    if (!out.length && ["answers.schema", "answers.crossField"].includes(check.id)) {
-      for (const problem of browserFallback.values()) out.push(problem);
     }
     return out;
   }
@@ -396,10 +393,9 @@
   }
 
   function markFields(checks) {
-    const browserFallback = new Map(validationProblems.map((p) => [p.path, p]));
     for (const check of checks) {
       if (check.result === "PASS") continue;
-      for (const p of preflightProblemPaths(check, browserFallback)) markFieldProblem(p.path, p.message || check.message, p.remedy || check.remedy);
+      for (const p of preflightProblemPaths(check)) markFieldProblem(p.path, p.message || check.message, p.remedy || check.remedy);
     }
   }
 
@@ -407,7 +403,6 @@
     const container = byId("preflight-output");
     clearChildren(container);
     const checks = result.preflight?.checks || result.preflight || [];
-    const browserFallback = new Map(validationProblems.map((p) => [p.path, p]));
     const table = document.createElement("table");
     const header = document.createElement("tr");
     for (const text of ["Check", "Result", "Message", "Remedy", "Field"]) appendText(header, text, "th");
@@ -419,7 +414,7 @@
       appendText(row, check.message || "", "td");
       appendText(row, check.remedy || "", "td");
       const problemCell = appendText(row, "", "td");
-      for (const p of preflightProblemPaths(check, browserFallback)) appendProblemButton(problemCell, p.path, `Review ${p.path}`);
+      for (const p of preflightProblemPaths(check)) appendProblemButton(problemCell, p.path, `Review ${p.path}`);
       table.append(row);
     }
     container.append(table);

@@ -381,6 +381,42 @@ test('U3 a blank SubscriptionId is accepted, and a target.subscription failure l
   }
 });
 
+test('U3 a schema problem without a path links no field even when other answers now fail browser validation', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await fillValid(page);
+    await page.route('**/api/preflight', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(failPreflight({
+          id: 'answers.crossField',
+          result: 'FAIL',
+          reason: null,
+          message: 'cross-field check failed without a path',
+          remedy: 'Review the answers.',
+          problems: [{ message: 'cross-field check failed without a path', remedy: 'Review the answers.' }],
+        })),
+      });
+    });
+    await page.getByRole('button', { name: 'Run preflight' }).click();
+    await page.locator('[name="FoundryAccount"]').fill('bad account');
+    await page.getByText('cross-field check failed without a path').waitFor();
+    const row = page.locator('tr', { hasText: 'answers.crossField' });
+    assert.equal(await row.getByRole('button', { name: /Review/ }).count(), 0);
+    const described = await page.locator('[name="FoundryAccount"]').getAttribute('aria-describedby');
+    const errorId = described.split(/\s+/)[0];
+    assert.match(await page.locator('#' + errorId).textContent(), /FoundryAccount 'bad account' is not a Foundry account name/);
+    assert.doesNotMatch(await page.locator('#' + errorId).textContent(), /cross-field check failed/);
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
 
 test('U4 keyboard and accessibility journey has names, live regions, focus moves and labelled output', async () => {
   const app = await start({ env: { P93_INSTALLER_UI_STUB_FAIL_STEP: 'gateway-deployment' } });
