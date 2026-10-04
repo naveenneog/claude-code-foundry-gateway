@@ -187,7 +187,7 @@ $missingParity = @($scriptNamedValues | Where-Object { $_ -and -not $guideNamedV
 Assert 'every in-scope script-written named value appears in the guide or not-covered list' ($missingParity.Count -eq 0) ($missingParity -join ', ')
 
 $bicepParams = @{}
-foreach ($file in 'infra\main.bicep','infra\projection-network.bicep','infra\projection.bicep','infra\resolver.bicep') {
+foreach ($file in 'infra\main.bicep','infra\projection-network.bicep','infra\projection.bicep','infra\resolver.bicep','infra\projection-registry.bicep','infra\projection-renewal.bicep') {
     $text = Read-Text (Join-Path $root $file)
     $set = New-Object Collections.Generic.HashSet[string]
     foreach ($m in [regex]::Matches($text, '(?m)^\s*param\s+([A-Za-z][A-Za-z0-9_]*)\s+')) { [void]$set.Add($m.Groups[1].Value) }
@@ -200,7 +200,8 @@ foreach ($cmd in $commands) {
     $paramIndex = [Array]::IndexOf($tokens, '--parameters')
     if ($templateIndex -lt 0 -or $paramIndex -lt 0 -or $templateIndex + 1 -ge $tokens.Count) { continue }
     $template = $tokens[$templateIndex + 1].Trim('"''')
-    if (-not $bicepParams.ContainsKey($template)) { continue }
+    # A template missing from the list above would have its parameters skipped without a word.
+    if (-not $bicepParams.ContainsKey($template)) { Assert "guide template $template has its parameters checked" $false $cmd; continue }
     for ($i = $paramIndex + 1; $i -lt $tokens.Count; $i++) {
         $token = $tokens[$i]
         if ($token.StartsWith('-')) { break }

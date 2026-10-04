@@ -1568,13 +1568,80 @@ p89_projection_runner
 
 Expected result: population and comparison run through the runner created by `projection-network.bicep`. `send_runner_file` mirrors `scripts/ClaudeRunner.ps1:113-148`: base64url chunks are appended through `az container exec` and decoded in the container. The snapshot and gateway-decision files are produced by the repository scripts because their Graph and named-value comparison logic is not an Azure CLI data-plane operation. This mirrors `scripts/Deploy-ClaudeProjection.ps1:199-221`, `scripts/Sync-ClaudeProjection.ps1`, `scripts/ClaudeRunner.ps1`, `docs/SCALE.md:681-726` and `infra/projection-network.bicep:46-49`.
 
+Deploy the scheduled renewal job, its registry and its alerts.
+
+```bash
+# P89-PROJECTION-RENEWAL-BEGIN
+p94_projection_renewal() {
+  export ALERT_EMAIL="${ALERT_EMAIL:-<alert-email>}"
+  export IMAGE_TAG="${IMAGE_TAG:-sync-$(date -u +%Y%m%d%H%M%S)}"
+  if ! [[ "$ALERT_EMAIL" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$ ]]; then
+    echo "Refused: ALERT_EMAIL is not one email address; nothing was deployed." >&2
+    return 1
+  fi
+  if ! RENEWAL_SUBNET_ID="$(az deployment group show -g "$GATEWAY_RG" -n "projection-network-${NAME_PREFIX}" --query "properties.outputs.renewalSubnetId.value" -o tsv)" || [ -z "$RENEWAL_SUBNET_ID" ]; then
+    echo "Refused: the projection network has no renewal subnet; rerun the projection deployment block above. Nothing was deployed." >&2
+    return 1
+  fi
+  if ! COSMOS_ACCOUNT="$(az deployment group show -g "$GATEWAY_RG" -n "projection-${NAME_PREFIX}" --query "properties.outputs.accountName.value" -o tsv)" || [ -z "$COSMOS_ACCOUNT" ]; then
+    echo "Refused: could not read the projection Cosmos account output; nothing was deployed." >&2
+    return 1
+  fi
+  if ! WORKSPACE_ID="${WORKSPACE_ID:-$(az monitor log-analytics workspace list -g "$GATEWAY_RG" --query "[].id" -o tsv)}" || [ -z "$WORKSPACE_ID" ] || [ "$(printf '%s\n' "$WORKSPACE_ID" | wc -l)" -ne 1 ]; then
+    echo "Refused: set WORKSPACE_ID to the gateway's Log Analytics workspace resource id; nothing was deployed." >&2
+    return 1
+  fi
+  if ! STANDARD_GROUP_ID="$(az ad group show --group "$STANDARD_GROUP" --query id -o tsv)" || [ -z "$STANDARD_GROUP_ID" ]; then
+    echo "Refused: the standard tier group could not be read; nothing was deployed." >&2
+    return 1
+  fi
+  if [ "$PREMIUM_GROUP" = "none" ]; then
+    PREMIUM_GROUP_ID="none"
+  elif ! PREMIUM_GROUP_ID="$(az ad group show --group "$PREMIUM_GROUP" --query id -o tsv)" || [ -z "$PREMIUM_GROUP_ID" ]; then
+    echo "Refused: the premium tier group could not be read; set PREMIUM_GROUP=none when the gateway has no premium tier. Nothing was deployed." >&2
+    return 1
+  fi
+  APIM_ID="$(az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" --query id -o tsv)" || return 1
+  az deployment group create -g "$GATEWAY_RG" -n "projection-registry-${NAME_PREFIX}" --template-file infra/projection-registry.bicep --parameters namePrefix="$NAME_PREFIX" location="$LOCATION" acrSku=Basic -o none || return 1
+  REGISTRY_OUTPUTS="$(az deployment group show -g "$GATEWAY_RG" -n "projection-registry-${NAME_PREFIX}" --query properties.outputs -o json)" || return 1
+  ACR_NAME="$(printf '%s' "$REGISTRY_OUTPUTS" | jq -r '.acrName.value // ""')"
+  IDENTITY_NAME="$(printf '%s' "$REGISTRY_OUTPUTS" | jq -r '.identityName.value // ""')"
+  IDENTITY_PRINCIPAL_ID="$(printf '%s' "$REGISTRY_OUTPUTS" | jq -r '.identityPrincipalId.value // ""')"
+  if [ -z "$ACR_NAME" ] || [ -z "$IDENTITY_NAME" ] || [ -z "$IDENTITY_PRINCIPAL_ID" ]; then
+    echo "Refused: the registry deployment returned no registry or identity; the image was not built." >&2
+    return 1
+  fi
+  PACKAGE_DIR="$(mktemp -d)" || return 1
+  tar -c -f - sync/Dockerfile sync/package.json sync/package-lock.json sync/src resolver/src/entitlement.mjs | tar -x -f - -C "$PACKAGE_DIR" || return 1
+  az acr build --registry "$ACR_NAME" --image "claude-projection-sync:${IMAGE_TAG}" --file sync/Dockerfile --no-logs "$PACKAGE_DIR" -o none || return 1
+  IMAGE_DIGEST="$(az acr manifest show-metadata --registry "$ACR_NAME" --name "claude-projection-sync:${IMAGE_TAG}" --query digest -o tsv)"
+  if ! [[ "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+    echo "Refused: the registry returned '$IMAGE_DIGEST', not a sha256 digest; the job was not deployed." >&2
+    return 1
+  fi
+  rm -f renewal-params.json
+  jq -n --arg namePrefix "$NAME_PREFIX" --arg location "$LOCATION" --arg cosmos "$COSMOS_ACCOUNT" --arg subnet "$RENEWAL_SUBNET_ID" --arg workspace "$WORKSPACE_ID" --arg email "$ALERT_EMAIL" --arg acr "$ACR_NAME" --arg identity "$IDENTITY_NAME" --arg digest "$IMAGE_DIGEST" --arg tenant "$TENANT_ID" --arg standard "$STANDARD_GROUP_ID" --arg premium "$PREMIUM_GROUP_ID" --arg gateway "$APIM_ID" '{"$schema":"https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#","contentVersion":"1.0.0.0",parameters:{namePrefix:{value:$namePrefix},location:{value:$location},cosmosAccountName:{value:$cosmos},containerAppsSubnetId:{value:$subnet},logAnalyticsWorkspaceId:{value:$workspace},actionGroupEmailReceivers:{value:[$email]},acrName:{value:$acr},identityName:{value:$identity},syncImageDigest:{value:$digest},tenantId:{value:$tenant},standardGroupId:{value:$standard},premiumGroupId:{value:$premium},gatewayResourceId:{value:$gateway}}}' > renewal-params.json || {
+    rm -f renewal-params.json
+    echo "Refused: renewal parameters could not be generated; the job was not deployed." >&2
+    return 1
+  }
+  az deployment group create -g "$GATEWAY_RG" -n "projection-renewal-${NAME_PREFIX}" --template-file infra/projection-renewal.bicep --parameters @renewal-params.json -o none || return 1
+  az deployment group show -g "$GATEWAY_RG" -n "projection-renewal-${NAME_PREFIX}" --query "properties.outputs.{job:jobResourceId.value,actionGroup:actionGroupResourceId.value}" -o json || return 1
+  echo "Tenant administrator, once: ./scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1 -PrincipalId ${IDENTITY_PRINCIPAL_ID}"
+}
+p94_projection_renewal
+# P89-PROJECTION-RENEWAL-END
+```
+
+Expected result: the registry and the job identity deploy first, the image builds from the sync package (`sync/` and `resolver/src/entitlement.mjs`), and the job is pinned to the digest the registry reports; it runs every 30 minutes on the renewal subnet. The block prints the job and action group ids and the tenant administrator's Graph grant. Each alert address receives a confirmation email from Azure Monitor and receives no alerts until it is confirmed ([U116](UNKNOWNS.md#p94-research-before-implementation)). Admission needs three successful runs, about 60-90 minutes after the grant takes effect. ACR task runs are paused for subscriptions on Azure free credits ([U114](UNKNOWNS.md#p94-research-before-implementation)); there, `docker build` and `docker push` from the package directory replace `az acr build`. This mirrors `scripts/Deploy-ClaudeProjectionRenewal.ps1:155-232`, `infra/projection-registry.bicep` and `infra/projection-renewal.bicep` ([ADR-0049](adr/0049-projection-renewal-deployment.md)).
+
 Projection switch status.
 
 ```bash
 az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id entitlement-source --query value -o tsv
 ```
 
-Expected result: the value stays `named-value`. P84 refuses automated switching. `docs/SCALE.md:744-760` states the reason: records lease for at most two hours, and without renewal every developer receives 503 after expiry. The legacy manual command can change `entitlement-source` to `projection`, but it is not P84-protected admission, creates no reconciler, and can cause that outage. P86, in progress on another branch, will add supported renewal and switch; this guide does not include P86's content.
+Expected result: the value stays `named-value`. Records lease for at most two hours, and without renewal every developer receives 503 after expiry (`docs/SCALE.md:744-760`). The renewal job above renews every record each run. Switching to `projection` with admission over the job's evidence ([ADR-0045](adr/0045-scheduled-projection-renewal.md)) is P95 ([ROADMAP](ROADMAP.md)). The manual command can change `entitlement-source` to `projection`, but it skips that admission and can cause that outage.
 
 ### Part 10 in the portal
 
@@ -1610,6 +1677,7 @@ Capture id: `docs-review-resolver-networking`.
 
 5. **Set resolver named values without switching entitlement.** API Management services > `$APIM_NAME` > APIs > Named values: edit `entitlement-resolver-url` and `entitlement-resolver-audience`; Value: `$RESOLVER_URL` and `$RESOLVER_AUDIENCE`; **Save**. `entitlement-source` stays `named-value`; `infra/policy.xml:86-92` calls the resolver only when the value is `projection`.
 6. **Populate and compare the projection through an in-VNet runner container.** No portal equivalent: the runner transfer, hash check, package install and compare are command-line computation steps.
+7. **Deploy the scheduled renewal job, its registry and its alerts.** The image build has no portal equivalent in this guide. After deployment: Container Apps job (`caj-renew-...`, tag `claude-projection-prefix`) > Execution history lists runs every 30 minutes; Monitor > Alerts > Alert rules lists the three `sqr-projection-...` rules; Monitor > Action groups > `ag-projection-renewal-...` > Test sends a test notification to the confirmed addresses.
 
 **Change later.**
 
@@ -1621,6 +1689,7 @@ Capture id: `docs-review-resolver-networking`.
 | Resolver Microsoft identity provider | Function App > Authentication | **Deploy the resolver with Standard v2 outbound VNet integration and upload code** | `infra/policy.xml:86-92` calls the resolver only when the value is `projection`, so §11 request results stay unchanged. |
 | Resolver app settings, URL or audience | Function App > Environment variables; API Management > Named values | **Deploy the resolver with Standard v2 outbound VNet integration and upload code** and **Set resolver named values without switching entitlement** | `infra/policy.xml:86-92` calls the resolver only when the value is `projection`, so §11 request results stay unchanged. |
 | Entitlement data | No portal equivalent for the runner transfer and compare | **Populate and compare the projection through an in-VNet runner container** | Projection data changes leave §11 request results unchanged until a supported projection switch exists. |
+| Renewal schedule, image, alert addresses or tier groups | Container Apps job > Configuration; Monitor > Action groups | **Deploy the scheduled renewal job, its registry and its alerts** | The job rewrites projection records only; §11 request results stay unchanged. A new image digest needs three new runs before admission accepts its evidence. |
 | Log routing or policy settings | API Management diagnostics or policy blades | The relevant §11 diagnostics check | Diagnostic results change only after log routing or policy changes. |
 
 

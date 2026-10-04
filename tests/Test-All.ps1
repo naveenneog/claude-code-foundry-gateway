@@ -202,6 +202,7 @@ try {
     Invoke-Check 'Azure CLI setup guide mirrors scripts [2/4]' 'Test-AzCommandsGuide.ps1' @{ Shard = '2/4' }
     Invoke-Check 'Azure CLI setup guide mirrors scripts [3/4]' 'Test-AzCommandsGuide.ps1' @{ Shard = '3/4' }
     Invoke-Check 'Azure CLI setup guide portal path'       'Test-AzPortalGuide.ps1'
+Invoke-Check 'Azure CLI guide renewal block runs in order' 'Test-AzCommandsRenewal.ps1'
     Invoke-Check 'Portal capture specs and batch safety'   'Test-PortalCaptureSpecs.ps1'
     Invoke-Check 'Resolver - the entitlement read path'   'Test-Resolver.ps1'
     Invoke-Check 'Named value writes fail loudly'          'Test-NamedValueWrites.ps1' @{ SkipLive = $true }
