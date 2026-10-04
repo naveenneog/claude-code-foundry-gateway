@@ -85,10 +85,12 @@ resolver therefore cannot change who is entitled.
 
 The supported unattended path deploys `infra/projection-renewal.bicep` after the projection network. It creates an internal Container Apps workload-profiles environment on a dedicated `Microsoft.App/environments` subnet, an ACR registry, a user-assigned managed identity, a 30-minute scheduled Container Apps Job, Log Analytics alerts and an action group with email receivers. ACR Basic is the default for standing cost and is reached over the public ACR endpoint with Entra authentication; ACR Premium is required for a private registry endpoint.
 
-The job image comes from `sync/Dockerfile`, is used by digest and carries the tested entrypoint. ARM command and args overrides are refused by admission. Build with log streaming disabled on Windows:
+The job image comes from `sync/Dockerfile`, is used by digest and carries the tested entrypoint. ARM command and args overrides are refused by admission. The build context is the sync package, which holds `sync/` and `resolver/src/entitlement.mjs` at their repository paths ([ADR-0049](adr/0049-projection-renewal-deployment.md)). Build with log streaming disabled on Windows:
 
 ```powershell
-az acr build --registry <acr-name> --image claude-projection-sync:<tag> --file sync/Dockerfile --no-logs sync
+. ./scripts/ClaudeProjectionPackage.ps1
+$package = New-ClaudeProjectionSyncPackage -Destination (Join-Path ([IO.Path]::GetTempPath()) ('claude-sync-' + [guid]::NewGuid().ToString('N')))
+az acr build --registry <acr-name> --image claude-projection-sync:<tag> --file sync/Dockerfile --no-logs $package
 # Then fetch the run log with the ACR runs/<id>/listLogSasUrl REST API if needed.
 ```
 
@@ -559,15 +561,16 @@ az cosmosdb sql role assignment create -g $rg -a cosmos-<prefix> `
     --role-definition-id 00000000-0000-0000-0000-000000000002 `
     --principal-id $runnerOid --scope /dbs/claude/colls/entitlement
 
-# Send a package, not a directory: Send-RunnerFile accepts one file.
+# Send a package, not a directory: Send-RunnerFile accepts one file. The package holds sync/ and
+# resolver/src/entitlement.mjs, which sync/src/plan.mjs imports (ADR-0049).
 $archive = Join-Path (Get-Location) ('backups\sync-' + [guid]::NewGuid().ToString('N') + '.tar.gz')
-tar -c -z -f $archive -C sync package.json src
-if ($LASTEXITCODE -ne 0) { throw 'Sync package creation failed' }
+. ./scripts/ClaudeProjectionPackage.ps1
+$null = New-ClaudeProjectionSyncArchive -Path $archive
 . ./scripts/ClaudeRunner.ps1
 Send-RunnerFile -ResourceGroup $rg -Name $runner -Path $archive -Destination /work/sync-source.tar.gz
-Invoke-RunnerCommand -ResourceGroup $rg -Name $runner -Command "node -e require('fs').mkdirSync('/work/sync',{recursive:true})"
-Invoke-RunnerCommand -ResourceGroup $rg -Name $runner -Command 'tar -x -z -f /work/sync-source.tar.gz -C /work/sync'
-Invoke-RunnerCommand -ResourceGroup $rg -Name $runner -Command 'npm --prefix /work/sync install --omit=dev'
+Invoke-RunnerCommand -ResourceGroup $rg -Name $runner -Command "node -e require('fs').mkdirSync('/work',{recursive:true})"
+Invoke-RunnerCommand -ResourceGroup $rg -Name $runner -Command 'tar -x -z -f /work/sync-source.tar.gz -C /work'
+Invoke-RunnerCommand -ResourceGroup $rg -Name $runner -Command 'npm --prefix /work/sync ci --omit=dev'
 
 # Now export using the GATEWAY resource group, copy, and apply before expiry.
 ./scripts/Sync-ClaudeProjection.ps1 -Account cosmos-<prefix> -ApimName <apim> `

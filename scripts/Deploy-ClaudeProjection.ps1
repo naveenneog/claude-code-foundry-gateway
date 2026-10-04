@@ -45,6 +45,7 @@ $root = Split-Path $PSScriptRoot -Parent
 . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeRunner.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeProjectionChecks.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeProjectionPackage.ps1')
 if ($FlipAfterCleanCompare -and (-not $ReconcilerResourceId -or -not $RenewalImageDigest -or -not $RenewalActionGroupResourceId)) {
     throw 'Projection switch refused: P86 admission requires -ReconcilerResourceId, -RenewalImageDigest and -RenewalActionGroupResourceId. Expected wait after deployment is about 60-90 minutes for two generation advances on the 30-minute schedule.'
 }
@@ -205,13 +206,12 @@ try {
             --scope /dbs/claude/colls/entitlement --principal-id $($network.runnerPrincipalId) `
             --role-definition-id 00000000-0000-0000-0000-000000000002 -o none 2>$null
         if ($LASTEXITCODE -ne 0) { throw 'Runner Cosmos role assignment failed; projection apply was not attempted.' }
-        tar -c -z -f $syncArchive -C (Join-Path $root 'sync') package.json src
-        if ($LASTEXITCODE -ne 0) { throw 'sync package creation failed' }
+        $null = New-ClaudeProjectionSyncArchive -Path $syncArchive -Root $root
         Send-RunnerFile -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Path $syncArchive -Destination /work/sync-source.tar.gz | Out-Null
         Send-RunnerFile -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Path $snapshot -Destination /work/snapshot.json | Out-Null
-        Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command "node -e require('fs').mkdirSync('/work/sync',{recursive:true})" | Out-Null
-        Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command 'tar -x -z -f /work/sync-source.tar.gz -C /work/sync' | Out-Null
-        Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command 'npm --prefix /work/sync install --omit=dev --no-audit --fund=false' | Out-Null
+        Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command "node -e require('fs').mkdirSync('/work',{recursive:true})" | Out-Null
+        Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command 'tar -x -z -f /work/sync-source.tar.gz -C /work' | Out-Null
+        Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command 'npm --prefix /work/sync ci --omit=dev --no-audit --fund=false' | Out-Null
         $applyRaw = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command "node /work/sync/src/apply-projection.mjs --cosmos https://$cosmosAccount.documents.azure.com:443/ --tenant $($apim.identity.tenantId) --snapshot /work/snapshot.json"
         $apply = ConvertFrom-ClaudeRunnerResult -RawOutput $applyRaw -Step 'projection apply'
     } else { throw 'Projection population was declined; no further steps run.' }

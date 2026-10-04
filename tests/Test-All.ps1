@@ -270,6 +270,7 @@ try {
     Invoke-Check 'Projection checks detect breakage'        'Test-ProjectionNegative.ps1'
     Invoke-Check 'Projection preflight and safe switch'     'Test-ProjectionPreflight.ps1'
     Invoke-Check 'Projection council corrections'           'Test-ProjectionCouncil.ps1'
+Invoke-Check 'Projection sync package and its import closure' 'Test-ProjectionPackage.ps1'
     Invoke-Check 'Claude Desktop sign-in choice'             'Test-DesktopSignIn.ps1'
     Invoke-Check 'Workstation clients read what setup writes' 'Test-WorkstationClients.ps1' -SerialLane
     Invoke-Check 'Workstation model retirement agrees across shells' 'Test-WorkstationModels.ps1'

@@ -786,7 +786,10 @@ function Invoke-GuideBashScenario([string]$Name, [string]$Script, [hashtable]$Ex
     [IO.File]::WriteAllText((Join-Path $dir 'scripts\Sync-ClaudeProjection.ps1'), "#!/usr/bin/env bash`nwhile [ `"`$#`" -gt 0 ]; do if [ `"`$1`" = `"-ExportPath`" ]; then shift; printf '{`"members`":[]}\n' > `"`$1`"; fi; shift || true; done`n")
     [IO.File]::WriteAllText((Join-Path $dir 'scripts\Compare-ClaudeEntitlement.ps1'), "#!/usr/bin/env bash`nwhile [ `"`$#`" -gt 0 ]; do if [ `"`$1`" = `"-ExportGatewayPath`" ]; then shift; printf '{`"decisions`":[]}\n' > `"`$1`"; fi; shift || true; done`n")
     [IO.File]::WriteAllText((Join-Path $dir 'sync\package.json'), "{`"scripts`":{}}`n")
+    [IO.File]::WriteAllText((Join-Path $dir 'sync\package-lock.json'), "{`"lockfileVersion`":3}`n")
+    [IO.File]::WriteAllText((Join-Path $dir 'sync\Dockerfile'), "FROM scratch`n")
     [IO.File]::WriteAllText((Join-Path $dir 'sync\src\apply-projection.mjs'), "console.log(`"ok`")`n")
+    [IO.File]::WriteAllText((Join-Path $dir 'resolver\src\entitlement.mjs'), "export const KNOWN_TIERS = [];`n")
     [IO.File]::WriteAllText((Join-Path $dir 'resolver\host.json'), "{}`n")
     [IO.File]::WriteAllText((Join-Path $dir 'resolver\package.json'), "{`"dependencies`":{}}`n")
     [IO.File]::WriteAllText((Join-Path $dir 'resolver\src\index.js'), "module.exports={}`n")
@@ -1619,6 +1622,10 @@ Assert 'projection runner block assigns Cosmos role and transfers files before a
     $runnerCalls -match 'gateway-decisions\.json' -and
     $runnerCalls -match 'apply-projection\.mjs --cosmos .* --compare /work/gateway-decisions\.json'
 ) $projectionRunner.Output
+$runnerArchive = if ($projectionRunner.Dir -and (Test-Path -LiteralPath (Join-Path $projectionRunner.Dir 'sync-source.tar.gz'))) { @(& tar -t -z -f (Join-Path $projectionRunner.Dir 'sync-source.tar.gz')) } else { @() }
+Assert 'projection runner archive carries the resolver module that plan.mjs imports' (
+    $runnerArchive -contains 'resolver/src/entitlement.mjs' -and $runnerArchive -contains 'sync/src/apply-projection.mjs' -and $runnerArchive -contains 'sync/package-lock.json'
+) ($runnerArchive -join ', ')
 
 $runnerChunkFail = Invoke-GuideBashScenario 'runner-chunk-fail' (Join-GuideBlocks @($projectionDeployBlock, $projectionRunnerBlock))
 Assert 'runner failed chunk stops before apply and compare' (
