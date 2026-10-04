@@ -332,12 +332,25 @@ async function refreshRunStatus() { if (location.protocol === 'file:') return; c
 async function refreshIdentity() { if (!liveMode()) { identity = { signedIn: false, signInCommand: 'az login --use-device-code' }; byId('identity').textContent = `Static fallback: ${sessionReason || 'Azure reads and installer runs need the generated commands.'}`; return; } identity = await (await fetch('./api/identity')).json(); const target = byId('identity'); target.textContent = identity.signedIn ? `Signed-in account: ${identity.user}; tenant ${identity.tenantId}; subscription ${identity.subscriptionName} (${identity.subscriptionId}).` : `Signed-in account: not signed in. ${identity.signInCommand || 'Run az login --use-device-code.'}`; }
 
 async function loadPrefill(kind) {
-  const body = { kind, subscriptionId: document.querySelector('[name="SubscriptionId"]')?.value || '', foundryAccount: document.querySelector('[name="FoundryAccount"]')?.value || '', foundryResourceGroup: document.querySelector('[name="FoundryResourceGroup"]')?.value || '' };
+  const body = { kind };
+  if (kind === 'foundryAccounts' || kind === 'deployments') body.subscriptionId = document.querySelector('[name="SubscriptionId"]')?.value || '';
+  if (kind === 'deployments') {
+    body.foundryAccount = document.querySelector('[name="FoundryAccount"]')?.value || '';
+    body.foundryResourceGroup = document.querySelector('[name="FoundryResourceGroup"]')?.value || '';
+  }
   const result = await postJson('./api/prefill', body);
-  if (result.field || result.error) { showFieldError(result.field || (kind === 'subscriptions' ? 'SubscriptionId' : 'FoundryAccount'), result.error || 'Prefill failed', result.remedy || 'Type the value manually.'); return result; }
+  if (result.field || result.error) {
+    const error = new Error(result.error || 'Prefill failed');
+    error.data = { field: result.field || (kind === 'subscriptions' ? 'SubscriptionId' : 'FoundryAccount'), error: result.error || 'Prefill failed', remedy: result.remedy || 'Type the value manually.' };
+    throw error;
+  }
   return result;
 }
 function showFieldError(field, message, remedy) { const input = document.querySelector(`[name="${CSS.escape(field)}"]`); input?.setAttribute('aria-invalid', 'true'); const err = input ? byId((input.getAttribute('aria-describedby') || '').split(/\s+/)[0]) : null; if (err) err.textContent = `${message} ${remedy || ''}`.trim(); }
+function showPrefillError(error, fallbackField) {
+  const data = error?.data || {};
+  showFieldError(data.field || fallbackField, data.error || error.message || 'Prefill failed', data.remedy || 'Type the value manually.');
+}
 function fillPrefillSelect(select, items, valueKey, label) { clearChildren(select); const empty = document.createElement('option'); empty.value = ''; empty.textContent = 'choose…'; select.append(empty); for (const item of items) { const option = document.createElement('option'); option.value = item[valueKey]; option.textContent = label(item); option.dataset.item = JSON.stringify(item); select.append(option); } select.hidden = false; }
 async function handlePrefillClick(event) {
   const button = event.target.closest('[data-prefill-kind]'); if (!button || !liveMode()) return;
@@ -347,13 +360,17 @@ async function handlePrefillClick(event) {
     if (kind === 'subscriptions') fillPrefillSelect(select, data.subscriptions || [], 'id', (item) => `${item.name} (${item.id})`);
     if (kind === 'foundryAccounts') fillPrefillSelect(select, data.foundryAccounts || [], 'name', (item) => `${item.name} / ${item.resourceGroup}`);
     field?.focus();
-  } catch (error) { showFieldError(field?.name || 'SubscriptionId', error.message, error.data?.remedy); }
+  } catch (error) { showPrefillError(error, field?.name || 'SubscriptionId'); }
 }
 async function handlePrefillChoice(event) {
   const select = event.target.closest('[data-prefill-select]'); if (!select || !select.value) return;
   const item = JSON.parse(select.selectedOptions[0].dataset.item || '{}');
-  if (select.dataset.prefillSelect === 'SubscriptionId') { document.querySelector('[name="SubscriptionId"]').value = item.id || ''; markPreflightStale(); const data = await loadPrefill('foundryAccounts'); const accountSelect = document.querySelector('[data-prefill-select="FoundryAccount"]'); fillPrefillSelect(accountSelect, data.foundryAccounts || [], 'name', (x) => `${x.name} / ${x.resourceGroup}`); }
-  if (select.dataset.prefillSelect === 'FoundryAccount') { document.querySelector('[name="FoundryAccount"]').value = item.name || ''; document.querySelector('[name="FoundryResourceGroup"]').value = item.resourceGroup || ''; markPreflightStale(); const data = await loadPrefill('deployments'); updateDeploymentChoices(data.deployments || []); }
+  try {
+    if (select.dataset.prefillSelect === 'SubscriptionId') { document.querySelector('[name="SubscriptionId"]').value = item.id || ''; markPreflightStale(); const data = await loadPrefill('foundryAccounts'); const accountSelect = document.querySelector('[data-prefill-select="FoundryAccount"]'); fillPrefillSelect(accountSelect, data.foundryAccounts || [], 'name', (x) => `${x.name} / ${x.resourceGroup}`); }
+    if (select.dataset.prefillSelect === 'FoundryAccount') { document.querySelector('[name="FoundryAccount"]').value = item.name || ''; document.querySelector('[name="FoundryResourceGroup"]').value = item.resourceGroup || ''; markPreflightStale(); const data = await loadPrefill('deployments'); updateDeploymentChoices(data.deployments || []); }
+  } catch (error) {
+    showPrefillError(error, select.dataset.prefillSelect || 'SubscriptionId');
+  }
 }
 function updateDeploymentChoices(deployments) { for (const item of deployments) deploymentChoices.add(item.name); for (const select of document.querySelectorAll('[data-model-select]')) { const chosen = new Set([...select.selectedOptions].map((o) => o.value)); clearChildren(select); for (const name of deploymentChoices) { const option = document.createElement('option'); option.value = name; option.textContent = name; option.selected = chosen.has(name); select.append(option); } } }
 function syncModelInput(event) { const select = event.target.closest('[data-model-select]'); if (!select) return; const input = select.closest('label').querySelector('input[name]'); const selected = [...select.selectedOptions].map((o) => o.value); const manual = input.value.split(',').map((x) => x.trim()).filter((x) => x && !deploymentChoices.has(x)); input.value = [...selected, ...manual].join(', '); markPreflightStale(); }

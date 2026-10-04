@@ -31,8 +31,16 @@ const args = process.argv.slice(2);
 const joined = args.join(' ');
 appendFileSync(process.env.P93_AZ_LOG, joined + '\\n');
 if (joined.startsWith('account show')) { console.log(JSON.stringify({ id: '00000000-0000-4000-8000-000000000093', name: 'Sub One', tenantId: 'tenant-1', user: { name: 'operator@example.com' } })); process.exit(0); }
-if (joined.startsWith('account list')) { console.log(JSON.stringify([{ id: '00000000-0000-4000-8000-000000000093', name: 'Sub One', tenantId: 'tenant-1' }])); process.exit(0); }
-if (joined.startsWith('cognitiveservices account list')) { console.log(JSON.stringify([{ name: 'ai-p93', resourceGroup: 'rg-ai-p93', location: 'eastus2' }])); process.exit(0); }
+if (joined.startsWith('account list')) {
+  if (process.env.P93_G3_SUBSCRIPTION_FAIL) { console.error('subscription list failed for P93'); process.exit(9); }
+  console.log(JSON.stringify([{ id: '00000000-0000-4000-8000-000000000093', name: 'Sub One', tenantId: 'tenant-1' }]));
+  process.exit(0);
+}
+if (joined.startsWith('cognitiveservices account list')) {
+  const resourceGroup = process.env.P93_G3_PREFILL_RG_PARENS ? 'rg(prod)' : 'rg-ai-p93';
+  console.log(JSON.stringify([{ name: 'ai-p93', resourceGroup, location: 'eastus2' }]));
+  process.exit(0);
+}
 if (joined.startsWith('cognitiveservices account deployment list')) { console.log(JSON.stringify([{ name: 'claude-sonnet-5', properties: { model: { name: 'claude', version: '5' } } }, { name: 'claude-opus-5', properties: { model: { name: 'claude', version: '5' } } }])); process.exit(0); }
 console.error('unexpected az ' + joined); process.exit(2);
 `, 'utf8');
@@ -57,6 +65,7 @@ async function browserPage(url, cookieApp) {
   if (cookieApp) await page.context().addCookies([{ name: 'installer_token', value: cookieApp.token, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Strict' }]);
   await page.goto(url);
   await page.waitForSelector('[name="SubscriptionId"]');
+  await page.getByText('PowerShell preflight').waitFor();
   return { browser, page };
 }
 
@@ -128,14 +137,62 @@ test('F2 static mode shows no prefill actions', async () => {
   finally { await browser.close(); }
 });
 
+test('G3-1 prefill choice errors appear on the named field without clearing typed values', async () => {
+  const app = await start({ az: true, env: { P93_G3_PREFILL_RG_PARENS: '1' } });
+  const { browser, page } = await browserPage(`${app.base}/`, app);
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+  try {
+    await page.locator('[name="ResourceGroup"]').fill('typed-rg');
+    await page.getByRole('button', { name: 'Read subscriptions' }).click();
+    await page.locator('[data-prefill-select="SubscriptionId"]').selectOption('00000000-0000-4000-8000-000000000093');
+    await page.locator('[data-prefill-select="FoundryAccount"]').selectOption('ai-p93');
+    const error = page.locator('#field-FoundryResourceGroup-error');
+    await error.getByText(/az\.cmd re-reads on Windows/).waitFor();
+    await error.getByText(/Type the deployment names/).waitFor();
+    assert.equal(await page.locator('[name="FoundryResourceGroup"]').getAttribute('aria-invalid'), 'true');
+    assert.equal(await page.locator('[name="SubscriptionId"]').inputValue(), '00000000-0000-4000-8000-000000000093');
+    assert.equal(await page.locator('[name="FoundryAccount"]').inputValue(), 'ai-p93');
+    assert.equal(await page.locator('[name="ResourceGroup"]').inputValue(), 'typed-rg');
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
+test('G3-1 prefill click errors appear next to SubscriptionId without pageerror', async () => {
+  const app = await start({ az: true, env: { P93_G3_SUBSCRIPTION_FAIL: '1' } });
+  const { browser, page } = await browserPage(`${app.base}/`, app);
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+  try {
+    await page.locator('[name="SubscriptionId"]').fill('typed-subscription');
+    await page.getByRole('button', { name: 'Read subscriptions' }).click();
+    await page.locator('#field-SubscriptionId-error').getByText(/subscription list failed for P93/).waitFor();
+    assert.equal(await page.locator('[name="SubscriptionId"]').getAttribute('aria-invalid'), 'true');
+    assert.equal(await page.locator('[name="SubscriptionId"]').inputValue(), 'typed-subscription');
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
 test('F3 browser validator matches the P92 PowerShell corpus check ids and paths', async () => {
   const corpus = join(tmpdir(), `p93-corpus-${process.pid}-${Date.now()}.json`);
-  const child = spawn('pwsh', ['-NoProfile', '-File', '.\\tests\\Test-InstallerAnswersSchema.ps1', '-ExportCorpus', corpus], { cwd: root, shell: false, env: { ...process.env, AZURE_CONFIG_DIR: 'C:\\Users\\navg\\.copilot\\session-state\\af7c7fa8-f971-4b4e-a8ba-c90265a135f5\\files\\az-isolated-gate', CI: '1', FORCE_COLOR: '0' } });
+  const script = join(root, 'tests', 'Test-InstallerAnswersSchema.ps1');
+  const child = spawn('pwsh', ['-NoProfile', '-File', script, '-ExportCorpus', corpus], { cwd: root, shell: false, env: { ...process.env, CI: '1', FORCE_COLOR: '0' } });
   const [code] = await once(child, 'exit');
   assert.equal(code, 0);
   const cases = JSON.parse(await readFile(corpus, 'utf8'));
   await rm(corpus, { force: true });
-  for (const c of cases.filter((x) => x.consumer === 'Install-ClaudeGateway.ps1')) {
+  const source = await readFile(script, 'utf8');
+  const expectedInstallCases = [...source.matchAll(/Add-Case\s+['"][^'"]+['"]\s+\$pw\b/g)].length;
+  const installCases = cases.filter((x) => x.consumer === 'Install-ClaudeGateway.ps1');
+  assert.ok(expectedInstallCases >= 25, `expected at least 25 Install-ClaudeGateway.ps1 cases, saw ${expectedInstallCases}`);
+  assert.equal(installCases.length, expectedInstallCases);
+  for (const c of installCases) {
     const js = model.validateAnswers(schema, c.answersText, c.consumer);
     assert.deepEqual([...new Set(js.map((p) => p.checkId))].sort(), [...new Set(c.powerShellProblems.map((p) => p.checkId))].sort(), c.name);
     const psPaths = c.powerShellProblems.map((p) => p.path).filter(Boolean).sort();
