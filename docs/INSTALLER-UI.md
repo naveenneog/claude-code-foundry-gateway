@@ -28,13 +28,13 @@ new tab, and the same article describes **Manage files > Upload** for file uploa
 ([Cloud Shell window](https://learn.microsoft.com/en-us/azure/cloud-shell/use-the-shell-window),
 fetched 2026-10-05; ms.date 2026-08-07). It does not state whether Web preview reaches a process
 bound to loopback, which Host header it forwards, whether it adds a URL prefix or how a cookie with
-`Path=/` behaves. Those facts remain unverified until the owner-attended Web preview check (U90, U91).
+`Path=/` behaves. Those facts remain unverified until the owner-attended Web preview check (U100, U101).
 The server has `--allow-host <host[:port]>` for that check, and refused Host requests log the Host and
 `X-Forwarded-*` shape to the terminal only (`tools/installer-ui/server.mjs:630-642`,
 `tools/installer-ui/server.mjs:345-354`). Microsoft Learn states that Cloud Shell sessions time out
 after 20 minutes without interactive activity
 ([Cloud Shell FAQ](https://learn.microsoft.com/en-us/azure/cloud-shell/faq-troubleshooting), fetched
-2026-10-05; ms.date 2026-02-09); whether a Web preview tab counts as activity is unverified (U92).
+2026-10-05; ms.date 2026-02-09); whether a Web preview tab counts as activity is unverified (U102).
 
 ## Static fallback
 

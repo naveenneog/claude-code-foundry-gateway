@@ -74,6 +74,8 @@ exact streaming cache-creation detail remains **U13**.
   ADR-0048 now describes the implemented bootstrap, CSRF, Host rules, run record, transport,
   versioned adapters, fingerprint admission, static mode, shared model, no-`az` boundary and process
   record while remaining Proposed pending the Cloud Shell live check.
+  P93's unknown rows now use U100-U103, leaving P92's U90 and U91 rows unchanged, and the
+  documentation guard rejects duplicate unknown ids.
 - **Installers read an answers file, check it before any change, run selected steps and write a progress stream (P92, phase 0).**
   One answers file, described by `schemas/claude-gateway.answers.schema.json`, feeds
   `Install-ClaudeGateway.ps1 -AnswersPath`, `install-claude-gateway.sh --answers-file` and
