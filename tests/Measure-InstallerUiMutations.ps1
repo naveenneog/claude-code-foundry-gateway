@@ -2,13 +2,17 @@ param(
     [string]$Mutants = (Join-Path $PSScriptRoot 'installer-ui-mutants.json'),
     [string]$Out = (Join-Path (Split-Path $PSScriptRoot -Parent) 'docs\measurements\p93-mutations.json'),
     [string[]]$Only = @(),
-    [switch]$DryRun
+    [switch]$DryRun,
+    [string]$AzureConfigDir = $env:AZURE_CONFIG_DIR
 )
 
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
 Set-Location $repo
-$env:AZURE_CONFIG_DIR = 'C:\Users\navg\.copilot\session-state\af7c7fa8-f971-4b4e-a8ba-c90265a135f5\files\az-isolated-gate'
+if (-not $DryRun -and -not $AzureConfigDir) {
+    throw 'Set AZURE_CONFIG_DIR, or pass -AzureConfigDir, to an isolated signed-out Azure CLI profile: the mutated tests start installer children.'
+}
+if ($AzureConfigDir) { $env:AZURE_CONFIG_DIR = $AzureConfigDir }
 $env:CI = '1'
 $env:FORCE_COLOR = '0'
 
