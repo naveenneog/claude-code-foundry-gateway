@@ -61,7 +61,8 @@ exact streaming cache-creation detail remains **U13**.
   Preflight problems can now link to their answer fields through optional problem paths or check-id
   mappings. Blank `SubscriptionId` is accepted like the installer and uses the current
   subscription unless that current subscription cannot be read.
-  The business-unit editor and run output now expose live-region labels and keyboard focus rules.
+  The business-unit editor and run output now expose live-region labels and keyboard focus rules,
+  and an action keeps keyboard focus beside its button while it runs.
   Installer UI guide screenshots now follow the passing-preflight fingerprint flow and use distinct,
   coherent signed-in tenant states.
 - **Installers read an answers file, check it before any change, run selected steps and write a progress stream (P92, phase 0).**

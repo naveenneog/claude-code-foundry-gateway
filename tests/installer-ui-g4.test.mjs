@@ -676,20 +676,34 @@ test('U4 keyboard and accessibility journey has names, live regions, focus moves
 });
 
 test('U4 an action keeps keyboard focus beside its button while busy and returns it afterwards', async () => {
-  const app = await start({ env: { P93_INSTALLER_UI_STUB_PREFLIGHT_DELAY_MS: '800' } });
+  const heartbeat = join(tmpdir(), `g4-focus-${process.pid}-${Date.now()}.txt`);
+  const app = await start({ env: { P93_INSTALLER_UI_STUB_PREFLIGHT_DELAY_MS: '800', P93_INSTALLER_UI_STUB_GRANDCHILD_HEARTBEAT: heartbeat } });
   const { browser, page, pageErrors } = await openPage(app);
   try {
     await fillValid(page);
+    await page.getByRole('button', { name: 'List steps' }).click();
+    await page.locator('#step-list input[value="resource-group"]').check();
     await page.locator('#preflight').focus();
     await page.keyboard.press('Enter');
     await page.locator('#preflight-status').getByText('Running preflight...').waitFor();
     assert.equal(await page.evaluate(() => document.activeElement?.id), 'preflight-status');
     await page.locator('#preflight-status').getByText('Preflight finished.').waitFor();
     assert.equal(await page.evaluate(() => document.activeElement?.id), 'preflight');
+    await page.locator('#run').focus();
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => document.querySelector('#run-output')?.textContent.includes('started'));
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'run-status');
+    await page.keyboard.press('Tab');
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'stop-run', 'one Tab reaches Stop run during a run');
+    await page.evaluate(() => { globalThis.confirm = () => true; });
+    await page.keyboard.press('Enter');
+    await page.getByText(/summary:/).waitFor();
     await assertClean(page, pageErrors);
   } finally {
     await browser.close();
     await app.close();
+    await rm(heartbeat, { force: true });
+    await rm(`${heartbeat}.pid`, { force: true });
   }
 });
 

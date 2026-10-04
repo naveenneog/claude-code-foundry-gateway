@@ -41,7 +41,10 @@ The browser validator uses the same answer names, schema subset and cross-field 
 PowerShell validator for `Install-ClaudeGateway.ps1`. It marks invalid fields and withholds download,
 preflight, run and command text while a problem remains. Action buttons show a busy label while a
 request is in flight, restore their controls afterward and place failures next to the action as an
-alert with a recovery sentence.
+alert with a recovery sentence. A busy button is disabled, and Chromium then moves focus to the page
+body; the page moves keyboard focus to the action's status line while the request runs and back to
+the button when it ends (`tools/installer-ui/installer-ui-actions.js`), so during a run one Tab
+reaches Stop run. The page has no keyboard shortcuts of its own.
 
 ## Security model
 
