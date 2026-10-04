@@ -181,6 +181,8 @@ test('T2 stub step list and preflight stay byte-shape compatible with the real i
     assert.deepEqual(new Set(stubPreflight.checks.map((check) => sortedKeys(check).join(','))), new Set(realPreflight.checks.map((check) => sortedKeys(check).join(','))));
     assertPreflightValueTypes(realPreflight);
     assertPreflightValueTypes(stubPreflight);
+    const realCheckIds = new Set(realPreflight.checks.map((check) => check.id));
+    for (const check of stubPreflight.checks) assert.ok(realCheckIds.has(check.id), `${check.id} is not a check the real preflight reports`);
     const results = new Set([...realPreflight.checks, ...stubPreflight.checks].map((check) => check.result));
     for (const result of results) assert.ok(['PASS', 'FAIL', 'NOT-RUN'].includes(result), `${result} is not a preflight result vocabulary member`);
   } finally {

@@ -107,21 +107,28 @@ test('T4 child exit waits are registered immediately after spawn', async () => {
   const testsDir = fileURLToPath(new URL('.', import.meta.url));
   const files = (await readdir(testsDir)).filter((name) => /^installer-ui.*\.test\.mjs$/.test(name)).sort();
   const offenders = [];
+  let checked = 0;
   for (const file of files) {
-    const text = await readFile(new URL(file, import.meta.url), 'utf8');
-    const lines = text.split(/\r?\n/);
+    const lines = (await readFile(new URL(file, import.meta.url), 'utf8')).split(/\r?\n/);
     for (let index = 0; index < lines.length; index++) {
       const match = lines[index].match(/\bconst\s+(\w+)\s*=\s*spawn\(/);
       if (!match) continue;
-      const variable = match[1];
-      const awaited = new RegExp(`await\\s+once\\(${variable},\\s*['"]exit['"]\\)`);
-      if (!awaited.test(text)) continue;
+      const child = match[1];
+      const exitListener = new RegExp(`(?:once\\(${child},\\s*|${child}\\.(?:on|once)\\()['"](?:exit|close)['"]`);
+      if (!lines.some((line) => exitListener.test(line))) continue;
+      checked++;
       let end = index;
-      while (end < lines.length && !lines[end].includes(');')) end++;
-      const next = lines.slice(end + 1).find((line) => line.trim() && !line.trim().startsWith('//')) || '';
-      const registered = new RegExp(`^\\s*const\\s+\\w+\\s*=\\s*once\\(${variable},\\s*['"]exit['"]\\);`).test(next);
-      if (!registered) offenders.push(`${file}:${index + 1} ${variable}`);
+      while (end < lines.length && !/\);\s*$/.test(lines[end])) end++;
+      // A child can exit while the test awaits something else, so its exit or close listener must exist before the first await.
+      for (let next = end + 1; next < lines.length; next++) {
+        if (exitListener.test(lines[next])) break;
+        if (/\bawait\b/.test(lines[next])) {
+          offenders.push(`${file}:${next + 1} awaits before ${child} has an exit listener`);
+          break;
+        }
+      }
     }
   }
+  assert.ok(checked >= 4, `the detector checked ${checked} spawned children`);
   assert.deepEqual(offenders, []);
 });
