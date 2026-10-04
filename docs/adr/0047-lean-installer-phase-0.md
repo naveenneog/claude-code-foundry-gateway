@@ -413,7 +413,10 @@ The RED phase adds these tests before product code:
       library probes only read the checkout, so these checks share no mutable resource; ADR-0036 (option 3)
       rejected moving checks into the parallel lane without such isolation. In a Test-All run without shards the exclusive checks'
       weights summed to 2,724 s (38 checks) with them and sum to 1,193 s (19 checks) without them
-      (`tests/test-all-durations.json`), against the gate's 3,600 s budget (ADR-0036).
+      (`tests/test-all-durations.json`), against the gate's 3,600 s budget (ADR-0036). On the gate machine,
+      with several bash suites at once, installer runs exceeded the harness's 300 s per run and Git Bash printed
+      fork errors (P92 gate attempt 2 and its reproduction, U93 in [UNKNOWNS](../UNKNOWNS.md)); the route of
+      P92's packet gate is the owner's decision ([ROADMAP](../ROADMAP.md)).
     - **The prices suite gives its runs 300 s (round 5, `a87c708`).** `tests/Test-BashInstaller.ps1` starts its
       22 installer runs at once and gives them 300 s together, the time the checkpoint harness gives each run
       (`tests/Test-BashInstaller.ps1:246`, `tests/BashInstallerHarness.ps1:304`); it was 150 s. With decision 16,
