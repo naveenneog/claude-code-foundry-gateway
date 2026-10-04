@@ -65,12 +65,28 @@ test('the form uses fixed script routes and no string-built DOM insertion sinks'
 
 test('server modules spawn only PowerShell, node stubs or taskkill', async () => {
   const modules = (await readdir(new URL('../tools/installer-ui/', import.meta.url))).filter((name) => name.endsWith('.mjs'));
-  assert.ok(modules.length > 0);
+  const importers = [];
+  const targets = [];
   for (const file of modules) {
     const source = await readFile(new URL(`../tools/installer-ui/${file}`, import.meta.url), 'utf8');
-    assert.doesNotMatch(source, /\bexec(?:File|Sync)?\s*\(/, `${file} must not use exec-style child processes`);
-    assert.doesNotMatch(source, /\bspawn(?:Sync)?\s*\(\s*['"`](?:az(?:\.cmd)?|bash)['"`]/, `${file} must not spawn az or bash directly`);
-    assert.doesNotMatch(source, /\bfile\s*:\s*['"`](?:az(?:\.cmd)?|bash)['"`]/, `${file} must not return az or bash as a spawn target`);
-    assert.doesNotMatch(source, /\bcommand\s*=\s*['"`](?:az(?:\.cmd)?|bash)['"`]/, `${file} must not assign az or bash as a command`);
+    if (/['"](?:node:)?child_process['"]/.test(source)) importers.push(file);
+    for (const match of source.matchAll(/(?<![.\w])(spawn|spawnSync|spawnChild|exec|execSync|execFile|execFileSync|fork)\s*\(\s*([^,)]+?)\s*[,)]/g)) targets.push(`${file} ${match[1]}(${match[2]})`);
+    for (const match of source.matchAll(/(?<![.\w])file\s*:\s*([^,}]+?)\s*[,}]/g)) targets.push(`${file} file: ${match[1]}`);
   }
+  assert.deepEqual(importers, ['server.mjs'], 'only server.mjs imports child_process');
+  // Every child-process target in the UI server: taskkill for Windows stop, the configured pwsh, or process.execPath for the test stub.
+  const allowed = new Set([
+    "server.mjs spawn('taskkill.exe')",
+    'server.mjs spawnChild(file)',
+    'server.mjs spawn(file)',
+    'server.mjs spawnChild(command.file)',
+    "server.mjs spawnChild(options.pwsh || 'pwsh')",
+    'server.mjs spawn(command)',
+    'server.mjs file: process.execPath',
+    "server.mjs file: options.pwsh || 'pwsh'",
+  ]);
+  assert.deepEqual(targets.filter((target) => !allowed.has(target)), [], 'a child-process target outside the allowlist');
+  const server = await readFile(new URL('../tools/installer-ui/server.mjs', import.meta.url), 'utf8');
+  assert.match(server, /function spawnChild\(file, args, options, spawnOptions = \{\}\) \{\r?\n\s*const child = spawn\(file, args,/, 'spawn(file) is only the spawnChild body');
+  assert.match(server, /const command = options\.pwsh \|\| 'pwsh';\r?\n\s*const child = spawn\(command,/, 'spawn(command) is only the PowerShell version check');
 });
