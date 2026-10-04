@@ -62,6 +62,11 @@
       return input;
     }
 
+    function focusRow(index) {
+      const row = document.querySelector(`[data-bu-index="${index}"]`);
+      row?.querySelector("input, select, button")?.focus();
+    }
+
     function render() {
       const tree = byId("business-unit-tree");
       clearChildren(tree);
@@ -100,9 +105,12 @@
         remove.textContent = "Remove";
         remove.onclick = () => {
           businessUnits.splice(index, 1);
+          const nextIndex = Math.min(index, businessUnits.length - 1);
           render();
           sync();
           markPreflightStale();
+          if (nextIndex >= 0) focusRow(nextIndex);
+          else byId("add-unit").focus();
         };
         row.append(remove);
         row.oninput = () => {
@@ -119,8 +127,10 @@
     function addUnit() {
       sync();
       businessUnits.push(defaultBusinessUnit());
+      const index = businessUnits.length - 1;
       render();
       markPreflightStale();
+      focusRow(index);
     }
 
     function addTeam() {
@@ -132,8 +142,10 @@
         return;
       }
       businessUnits.push(defaultBusinessUnit(parent));
+      const index = businessUnits.length - 1;
       render();
       markPreflightStale();
+      focusRow(index);
     }
 
     function applyJsonText(text) {

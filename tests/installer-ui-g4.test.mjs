@@ -364,3 +364,54 @@ test('U3 blank SubscriptionId is marked by browser validation and focusable from
     await app.close();
   }
 });
+
+
+test('U4 keyboard and accessibility journey has names, live regions, focus moves and labelled output', async () => {
+  const app = await start({ env: { P93_INSTALLER_UI_STUB_FAIL_STEP: 'gateway-deployment' } });
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    const unnamed = await page.locator('button:visible, input:visible, select:visible, textarea:visible').evaluateAll((nodes) => nodes.filter((node) => {
+      const id = node.id;
+      const aria = node.getAttribute('aria-label') || node.getAttribute('aria-labelledby');
+      const label = id ? document.querySelector(`label[for="${CSS.escape(id)}"]`) : null;
+      const wrapped = node.closest('label');
+      const text = node.textContent || node.getAttribute('placeholder') || '';
+      return !(aria || label?.textContent?.trim() || wrapped?.textContent?.trim() || text.trim());
+    }).map((node) => node.outerHTML));
+    assert.deepEqual(unnamed, []);
+    assert.equal(await page.locator('#preflight-state').getAttribute('role'), 'status');
+    assert.equal(await page.locator('#errors').getAttribute('role'), 'alert');
+    assert.equal(await page.locator('#run-output').getAttribute('aria-label'), 'Run output');
+
+    await page.getByRole('button', { name: 'Add unit' }).focus();
+    await page.keyboard.press('Enter');
+    assert.equal(await page.evaluate(() => document.activeElement?.dataset.buField), 'id');
+    await page.keyboard.type('finance');
+    await page.keyboard.press('Tab');
+    await page.keyboard.type('claude-bu-finance');
+    await page.keyboard.press('Tab');
+    await page.keyboard.type('100');
+    await page.getByRole('button', { name: 'Add team' }).focus();
+    await page.keyboard.press('Enter');
+    assert.equal(await page.evaluate(() => document.activeElement?.dataset.buField), 'id');
+    await page.keyboard.type('finance-apps');
+    await page.locator('[data-bu-index="1"] button').focus();
+    await page.keyboard.press('Enter');
+    assert.equal(await page.evaluate(() => document.activeElement?.dataset.buField), 'id');
+
+    await fillValid(page);
+    await page.getByRole('button', { name: 'List steps' }).click();
+    await page.locator('#step-list input[value="gateway-deployment"]').check();
+    await page.getByRole('button', { name: 'Run preflight' }).click();
+    await page.getByText(/Passing preflight/).waitFor();
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await page.getByText(/summary:/).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Re-run failed step' }).isEnabled(), true);
+    await page.getByRole('button', { name: 'Re-run failed step' }).click();
+    await page.getByText(/Re-run finished/).waitFor();
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});

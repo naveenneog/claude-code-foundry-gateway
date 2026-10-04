@@ -68,7 +68,7 @@ output above 4 MiB for a run is replaced by one notice while progress and the fi
 and a console line longer than 64 KiB is cut with ` [line truncated]`. The browser keeps 2,000 output
 lines and shows one line with the number of earlier lines removed.
 
-The Stop run button is enabled only while a run is active. It confirms the running step name and
+The run output is exposed as a labelled log region. The Stop run button is enabled only while a run is active. It confirms the running step name and
 then stops the process tree. On Windows the server uses `taskkill.exe /PID <pid> /T /F`; on POSIX
 installer runs start in their own process group so the group can be signalled. The stop response and
 stream say that the install checkpoint resumes when the same steps run again.
