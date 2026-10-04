@@ -11,7 +11,8 @@ function Assert($label, $condition, $detail = '') {
 Write-Host ''
 Write-Host 'Installer UI server' -ForegroundColor Cyan
 $watch = [Diagnostics.Stopwatch]::StartNew()
-$out = & node --test --test-reporter=tap (Join-Path $PSScriptRoot 'installer-ui.test.mjs') 2>&1 | Out-String
+$files = Get-ChildItem -Path $PSScriptRoot -Filter 'installer-ui*.test.mjs' | Sort-Object Name | ForEach-Object { $_.FullName }
+$out = & node --test --test-reporter=tap @files 2>&1 | Out-String
 $code = $LASTEXITCODE
 $summary = [regex]::Match($out, '(?m)^# tests\s+(\d+)\s*$')
 $reported = @([regex]::Matches($out, '(?m)^\s*(?:not )?ok\s+\d+\s+-\s+'))

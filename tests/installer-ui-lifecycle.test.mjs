@@ -88,3 +88,38 @@ test('child-spawning GET routes reject cross-site Fetch Metadata before spawning
     await app.close();
   }
 });
+
+test('stop kills the installer process and its grandchild', async () => {
+  const heartbeat = join(repoRoot, '.p93-stop-heartbeat.txt');
+  await rm(heartbeat, { force: true });
+  await rm(`${heartbeat}.pid`, { force: true });
+  const app = await start({ P93_INSTALLER_UI_STUB_GRANDCHILD_HEARTBEAT: heartbeat });
+  try {
+    const runPromise = app.fetch('/api/run/stream', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ answers: {}, steps: ['resource-group'] }),
+    });
+    let status;
+    for (let i = 0; i < 40; i++) {
+      status = await (await app.fetch('/api/run/status')).json();
+      if (status.id && status.currentStepId) break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    const pids = (await readFile(`${heartbeat}.pid`, 'utf8')).trim().split(/\r?\n/).map(Number);
+    const stopped = await (await app.fetch('/api/run/stop', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ runId: status.id }),
+    })).json();
+    assert.match(stopped.message, /resource-group/);
+    assert.match(stopped.message, /checkpoint resumes/i);
+    await (await runPromise).text();
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    for (const pid of pids) assert.equal(alive(pid), false, `pid ${pid} should be gone`);
+  } finally {
+    await app.close();
+    await rm(heartbeat, { force: true });
+    await rm(`${heartbeat}.pid`, { force: true });
+  }
+});

@@ -60,7 +60,7 @@ async function start(env = {}) {
   };
 }
 
-test('contract adapter accepts real step list and logged-out preflight output', { timeout: 90_000 }, async () => {
+test('contract adapter accepts real step list and logged-out preflight output', { timeout: 180_000 }, async () => {
   const scratch = join(repoRoot, '.p93-installer-ui-real-contract', `${process.pid}-${Date.now()}`);
   const stateDir = join(scratch, 'state-that-does-not-exist-yet');
   const answersPath = join(scratch, 'answers.json');

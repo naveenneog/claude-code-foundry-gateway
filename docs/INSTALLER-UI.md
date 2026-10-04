@@ -46,8 +46,8 @@ Each run writes its answers and progress file to a per-run temporary directory a
 directory until the child exits, even if the browser disconnects. The server records the active or
 last run, exposes `GET /api/run/status`, and reattaches through `GET /api/run/attach?after=<seq>`
 from a bounded event tail. Every console line and progress line is redacted with the installer
-redaction rules before it leaves the server. Console output above 16 KiB for a run is replaced by
-one notice while progress and the final summary continue. The browser keeps 500 output lines and
+redaction rules before it leaves the server. Console output above 4 MiB for a run is replaced by
+one notice while progress and the final summary continue. The browser keeps 2,000 output lines and
 shows one line when earlier lines are removed.
 
 The Stop run button is enabled only while a run is active. It confirms the running step name and

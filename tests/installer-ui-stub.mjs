@@ -147,7 +147,7 @@ if (args.includes('-Yes')) {
     const event = bad === 'version'
       ? { schemaVersion: 2, time: time(), runId, stepId: steps[0], event: 'failed', message: 'bad version', resumeCommand: 'bad' }
       : bad === 'missing'
-        ? { schemaVersion: 1, time: time(), runId, event: 'failed', message: 'missing', resumeCommand: 'bad' }
+        ? { schemaVersion: 1, time: time(), runId, stepId: steps[0], message: 'missing', resumeCommand: 'bad' }
         : { schemaVersion: 1, time: time(), runId, stepId: steps[0], event: 99, message: 'wrong', resumeCommand: 'bad' };
     appendFileSync(progressPath, JSON.stringify(event) + '\n');
     process.exit(0);
