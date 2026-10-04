@@ -46,7 +46,7 @@
   "groups": [
     { "x": 0, "y": 0, "w": 1440, "h": 300, "tone": "purple", "title": "Launch, browser and shared model" },
     { "x": 0, "y": 340, "w": 1440, "h": 300, "tone": "blue", "title": "Read-only context, preflight and admission" },
-    { "x": 0, "y": 690, "w": 1440, "h": 390, "tone": "teal", "title": "Run lifecycle, streaming and static fallback" }
+    { "x": 0, "y": 690, "w": 1440, "h": 390, "tone": "teal", "title": "Run lifecycle, streaming and stop" }
   ],
   "nodes": [
     { "id": "launch", "x": 24, "y": 78, "w": 320, "h": 190, "tone": "purple", "title": "1 - Local server", "lines": ["[[server]] uses Node http.", "[[http]] guards Host, cookie, CSRF, JSON and same-origin."] },
@@ -60,17 +60,17 @@
     { "id": "run", "x": 24, "y": 768, "w": 320, "h": 220, "tone": "teal", "title": "9 - Streamed run", "lines": ["[[server]] starts [[installer]] only through pwsh or node stub.", "Selected steps write progress NDJSON."] },
     { "id": "record", "x": 386, "y": 768, "w": 320, "h": 220, "tone": "teal", "title": "10 - Run record", "lines": ["[[record]] stores active or last run state and tail.", "Status and attach routes survive browser disconnect."] },
     { "id": "transport", "x": 748, "y": 768, "w": 320, "h": 220, "tone": "teal", "title": "11 - Transport limits", "lines": ["[[transport]] handles UTF-8, carries and backpressure.", "The server caps console output and long lines."] },
-    { "id": "stop", "x": 1110, "y": 768, "w": 306, "h": 220, "tone": "teal", "title": "12 - Stop and redaction", "lines": ["Stop uses taskkill.exe on Windows or a POSIX process group.", "Every outgoing line passes [[redact]]."] }
+    { "id": "stop", "x": 1110, "y": 768, "w": 306, "h": 220, "tone": "teal", "title": "12 - Stop and redaction", "lines": ["Stop uses taskkill.exe on Windows or a POSIX process group.", "server-model.mjs applies [[redact]] rules."] }
   ],
   "edges": [
     { "from": "launch", "to": "form", "kind": "data", "points": [[344,170],[386,170]] },
     { "from": "form", "to": "static", "kind": "data", "points": [[706,170],[748,170]] },
     { "from": "static", "to": "commands", "kind": "data", "points": [[1068,170],[1110,170]] },
-    { "from": "form", "to": "identity", "kind": "control", "points": [[546,268],[546,370],[184,370],[184,422]] },
+    { "from": "form", "to": "identity", "kind": "control", "points": [[546,268],[546,320],[10,320],[10,517],[24,517]] },
     { "from": "identity", "to": "prefill", "kind": "data", "points": [[344,517],[386,517]] },
     { "from": "prefill", "to": "preflight", "kind": "control", "points": [[706,517],[748,517]] },
     { "from": "preflight", "to": "fingerprint", "kind": "data", "points": [[1068,517],[1110,517]] },
-    { "from": "fingerprint", "to": "run", "kind": "control", "points": [[1263,612],[1263,710],[184,710],[184,768]] },
+    { "from": "fingerprint", "to": "run", "kind": "control", "points": [[1263,612],[1263,670],[10,670],[10,878],[24,878]] },
     { "from": "run", "to": "record", "kind": "data", "points": [[344,878],[386,878]] },
     { "from": "record", "to": "transport", "kind": "data", "points": [[706,878],[748,878]] },
     { "from": "transport", "to": "stop", "kind": "control", "points": [[1068,878],[1110,878]] },

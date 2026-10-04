@@ -72,27 +72,28 @@ hosted control plane. `tools/installer-ui/server.mjs` owns the HTTP routes, loca
 PowerShell child process calls and idle lifecycle; `tools/installer-ui/http-helpers.mjs` owns Host,
 cookie, CSRF, same-origin and JSON-body helpers. The browser, server and tests share
 `tools/installer-ui/ui-model.js` through `tools/installer-ui/server-model.mjs`, while the static page
-serves the same `index.html` bytes as the live server (`tools/installer-ui/server.mjs:276`;
-`tools/installer-ui/http-helpers.mjs:61-119`; `tools/installer-ui/server-model.mjs:77-97`).
+serves the same `index.html` bytes as the live server (`tools/installer-ui/server.mjs:276-294`;
+`tools/installer-ui/server.mjs:420-435`; `tools/installer-ui/http-helpers.mjs:60-117`;
+`tools/installer-ui/server-model.mjs:77-91`).
 
 Azure context and prefill reads go through `scripts/Get-ClaudeInstallerUiIdentity.ps1` and
 `scripts/Get-ClaudeInstallerUiPrefill.ps1`, not Node-to-`az` calls. Installer execution stays in
 `Install-ClaudeGateway.ps1`, with selected steps, `-ProgressPath` and the existing redaction table.
 The Node server starts only the configured PowerShell command, a Node test stub through
 `process.execPath` or `taskkill.exe` for Windows stop (`tools/installer-ui/server.mjs:48-82`;
-`tests/installer-ui-structure.test.mjs:66-77`).
+`tests/installer-ui-structure.test.mjs:67-87`).
 
 Preflight admission is fingerprinted by `tools/installer-ui/preflight-record.mjs`; a run needs a
 stored PASS for the same answers and a covering step scope. Versioned installer-interface checks live
 in `tools/installer-ui/installer-contract.mjs`, so malformed step lists and preflight payloads fail
 closed and malformed progress events become stream errors (`tools/installer-ui/preflight-record.mjs:28-61`;
-`tools/installer-ui/installer-contract.mjs:29-97`).
+`tools/installer-ui/installer-contract.mjs:29-89`).
 
 Run state lives in `tools/installer-ui/run-record.mjs`, not in a browser connection. `GET
 /api/run/status` reports the active or last run, `GET /api/run/attach?after=<seq>` replays the tail
 and follows live events, and `POST /api/run/stop` stops the child process tree. `tools/installer-ui/run-transport.mjs`
 handles UTF-8 carries, progress-file offsets, NDJSON writes and backpressure; the server caps console
-bytes and line bytes before publishing output (`tools/installer-ui/run-record.mjs:10-149`;
+bytes and line bytes before publishing output (`tools/installer-ui/run-record.mjs:10-126`;
 `tools/installer-ui/run-transport.mjs:21-80`; `tools/installer-ui/server.mjs:173-248`,
 `tools/installer-ui/server.mjs:553-589`).
 

@@ -80,6 +80,12 @@ exact streaming cache-creation detail remains **U13**.
   the UI suite rejects direct `az` or bash child-process spawns from server modules, and the
   Installer UI architecture diagram now shows the run record, transport, contract adapter,
   fingerprint store, static mode and stop path.
+  The guide has been restored to include the implemented bootstrap URL and token details, static
+  schema copy, bash command rule, browser validation parity, action focus behaviour, run lifecycle,
+  Stop run, section-level details and business-unit validation rules. The Installer UI guide,
+  ADR-0048 and architecture article citations now point inside the cited files, and the architecture
+  image text now names the `redactText` rule-table path rather than a direct server call to
+  `Protect-ClaudeInstallText`.
 - **Installers read an answers file, check it before any change, run selected steps and write a progress stream (P92, phase 0).**
   One answers file, described by `schemas/claude-gateway.answers.schema.json`, feeds
   `Install-ClaudeGateway.ps1 -AnswersPath`, `install-claude-gateway.sh --answers-file` and
