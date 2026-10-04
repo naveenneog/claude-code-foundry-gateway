@@ -38,7 +38,11 @@ exact streaming cache-creation detail remains **U13**.
   output with the installer redaction rules and refuses a second concurrent run. Azure prefill refuses
   an unknown read, a value that is not text and, where `az` is the Windows `az.cmd` shim, a resource
   group name with `(` or `)` before any Azure CLI call; its errors name the field and the remedy and
-  show no local path.
+  show no local path. The stream transport now preserves split UTF-8 and final unterminated lines,
+  caps forwarded console output, removes the non-streaming run route, keeps active runs alive across
+  browser disconnects, exposes status and reattach routes, provides a Stop run button, surfaces
+  malformed preflight output visibly, and validates the step list, preflight and progress interfaces
+  as schema version 1 before use.
 - **Installers read an answers file, check it before any change, run selected steps and write a progress stream (P92, phase 0).**
   One answers file, described by `schemas/claude-gateway.answers.schema.json`, feeds
   `Install-ClaudeGateway.ps1 -AnswersPath`, `install-claude-gateway.sh --answers-file` and

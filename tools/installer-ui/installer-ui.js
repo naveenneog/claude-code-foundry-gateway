@@ -7,6 +7,11 @@ let identity = {};
 let lastFailedStep = '';
 let businessUnits = [];
 let csrfToken = '';
+let activeRunId = '';
+let activeStepId = '';
+let lastRunSeq = 0;
+const maxRunOutputLines = 500;
+let runOutputLines = [];
 
 function byId(id) {
   return document.getElementById(id);
@@ -119,6 +124,12 @@ function renderPreflight(result) {
   }
   container.append(table);
   markFields(checks, result.fieldsByCheckId || fieldsByCheckId(schema));
+}
+
+function showPreflightError(error) {
+  const container = byId('preflight-output');
+  clearChildren(container);
+  appendText(container, error.message || String(error), 'p', 'failed');
 }
 
 function renderSteps(payload) {
@@ -242,8 +253,25 @@ function renderBusinessUnitEditor() {
 async function streamRun(body) {
   const res = await fetch('./api/run/stream', { method: 'POST', headers: { 'content-type': 'application/json', 'x-csrf-token': csrfToken }, body: JSON.stringify(body) });
   if (!res.ok) throw new Error((await res.json()).error || 'run failed');
+  await readRunStream(res);
+}
+
+function appendRunLine(text) {
   const output = byId('run-output');
-  output.textContent = '';
+  runOutputLines.push(text);
+  if (runOutputLines.length > maxRunOutputLines) {
+    const removed = runOutputLines.length - maxRunOutputLines;
+    runOutputLines = [`Earlier run output lines were removed (${removed}).`, ...runOutputLines.slice(-maxRunOutputLines + 1)];
+  }
+  output.textContent = `${runOutputLines.join('\n')}\n`;
+}
+
+async function readRunStream(res) {
+  const output = byId('run-output');
+  if (!activeRunId) {
+    output.textContent = '';
+    runOutputLines = [];
+  }
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
@@ -256,13 +284,30 @@ async function streamRun(body) {
     for (const line of lines) {
       if (!line) continue;
       const event = JSON.parse(line);
-      output.textContent += `${event.type}: ${event.stepId || ''} ${event.event || ''} ${event.line || event.message || ''}\n`;
+      lastRunSeq = event.seq || lastRunSeq;
+      if (event.type === 'progress' && event.event === 'started') activeStepId = event.stepId || activeStepId;
+      appendRunLine(`${event.type}: ${event.stepId || ''} ${event.event || ''} ${event.line || event.message || ''}`);
       if (event.type === 'summary') {
+        activeRunId = '';
+        activeStepId = '';
+        byId('stop-run').disabled = true;
         lastFailedStep = event.failedStepId || '';
         byId('rerun').disabled = !lastFailedStep;
-        if (event.resumeCommand) output.textContent += `Resume: ${event.resumeCommand}\n`;
+        if (event.resumeCommand) appendRunLine(`Resume: ${event.resumeCommand}`);
       }
     }
+  }
+}
+
+async function refreshRunStatus() {
+  if (location.protocol === 'file:') return;
+  const status = await (await fetch('./api/run/status')).json();
+  if (status.id && status.state === 'running') {
+    activeRunId = status.id;
+    activeStepId = status.currentStepId || status.steps?.[0] || '';
+    byId('stop-run').disabled = false;
+    const res = await fetch(`./api/run/attach?after=${lastRunSeq}`);
+    await readRunStream(res);
   }
 }
 
@@ -290,21 +335,36 @@ async function main() {
   }
   byId('refresh-identity').onclick = () => refreshIdentity();
   byId('signin').onclick = () => { byId('signin-command').textContent = identity.signInCommand || 'az login --use-device-code'; };
-  byId('preflight').onclick = async () => renderPreflight(await postJson('./api/preflight', { answers: collectAnswers() }));
+  byId('preflight').onclick = async () => {
+    try { renderPreflight(await postJson('./api/preflight', { answers: collectAnswers() })); }
+    catch (error) { showPreflightError(error); }
+  };
   byId('steps').onclick = async () => renderSteps(await (await fetch('./api/steps')).json());
   byId('plan').onclick = async () => { byId('plan-output').textContent = JSON.stringify(await postJson('./api/plan', { answers: collectAnswers() }), null, 2); };
   byId('run').onclick = async () => {
     const steps = selectedSteps();
     if (!steps.length) throw new Error('Select at least one step, or use Full run.');
+    activeRunId = '';
+    byId('stop-run').disabled = false;
     await streamRun({ answers: collectAnswers(), steps });
   };
   byId('full-run').onclick = async () => {
     const answers = collectAnswers();
     const resourceGroup = answers.ResourceGroup || '(not set)';
     if (!globalThis.confirm(`Run the full installer as ${identity.user || 'the current account'} against resource group ${resourceGroup}?`)) return;
+    activeRunId = '';
+    byId('stop-run').disabled = false;
     await streamRun({ answers, steps: [], fullRun: true, confirmFullRun: true, account: identity });
   };
   byId('rerun').onclick = async () => { if (lastFailedStep) await streamRun({ answers: collectAnswers(), steps: [lastFailedStep] }); };
+  byId('stop-run').onclick = async () => {
+    const status = await (await fetch('./api/run/status')).json();
+    const runId = status.id || activeRunId;
+    const step = status.currentStepId || activeStepId || 'the current step';
+    if (!runId || !globalThis.confirm(`Stop run at ${step}? Running the same steps again resumes from the install checkpoint.`)) return;
+    const result = await postJson('./api/run/stop', { runId });
+    appendRunLine(`stopped: ${result.message}`);
+  };
   byId('download').onclick = () => {
     const blob = new Blob([JSON.stringify(collectAnswers(), null, 2) + '\n'], { type: 'application/json' });
     const a = document.createElement('a');
@@ -339,6 +399,7 @@ async function main() {
   try { renderCommands(await postJson('./api/commands', { answersPath: './answers.json' })); }
   catch { renderCommands(buildPortableCommands(schema, './answers.json')); }
   void refreshIdentity().catch((error) => { byId('identity').textContent = error.message; });
+  void refreshRunStatus().catch(() => {});
 }
 
 main().catch((error) => { byId('errors').textContent = error.message; });

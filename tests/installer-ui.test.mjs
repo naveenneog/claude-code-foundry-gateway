@@ -118,6 +118,16 @@ function captureOutput(child) {
   return () => chunks.join('');
 }
 
+async function streamEvents(app, body, path = '/api/run/stream') {
+  const response = await app.fetch(path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const text = await response.text();
+  return { response, text, events: text.trim() ? text.trim().split(/\r?\n/).map((line) => JSON.parse(line)) : [] };
+}
+
 test('the documented one-command launch prints the URL and token', async () => {
   const child = spawn(process.execPath, [serverCli], { cwd: new URL('..', import.meta.url), stdio: ['ignore', 'pipe', 'pipe'] });
   try {
@@ -437,7 +447,7 @@ test('preflight writes answers to a temporary file, invokes the installer withou
 test('selected runs stream progress, refuse empty selections, support explicit full runs and expose failed-step reruns', async () => {
   const app = await start({ env: { P93_INSTALLER_UI_STUB_FAIL_STEP: 'gateway-deployment' } });
   try {
-    const injected = await app.fetch('/api/run', {
+    const injected = await app.fetch('/api/run/stream', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ answers: {}, steps: ['resource-group;Remove-Item'] }),
@@ -445,7 +455,7 @@ test('selected runs stream progress, refuse empty selections, support explicit f
 
     assert.equal(injected.status, 400);
     assert.match((await injected.json()).error, /unknown step id/);
-    const empty = await app.fetch('/api/run', {
+    const empty = await app.fetch('/api/run/stream', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ answers: {}, steps: [] }),
@@ -478,7 +488,7 @@ test('selected runs stream progress, refuse empty selections, support explicit f
     assert.doesNotMatch(run, /super-secret|abc\.def\.ghi/);
     assert.match(run, /\[redacted\]/);
 
-    const full = await app.fetch('/api/run', {
+    const full = await app.fetch('/api/run/stream', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ answers: { ResourceGroup: 'rg-p93' }, steps: [], fullRun: true, confirmFullRun: true, account: { user: 'operator@example.com' } }),
@@ -493,7 +503,7 @@ test('selected runs stream progress, refuse empty selections, support explicit f
 import { appendFileSync } from 'node:fs';
 if (process.env.P93_INSTALLER_UI_STUB_LOG) appendFileSync(process.env.P93_INSTALLER_UI_STUB_LOG, JSON.stringify({ mode: process.argv[2], args: process.argv.slice(3) }) + '\\n');
 if (process.argv.includes('-ListSteps')) {
-  console.log(JSON.stringify({ schemaVersion: 1, steps: [{ id: 'resource-group', title: 'Resource group' }] }));
+  console.log(JSON.stringify({ schemaVersion: 1, installer: 'pwsh', checkpoint: null, runId: null, steps: [{ id: 'resource-group', title: 'Resource group', dependencies: [], state: 'not-started' }] }));
   process.exit(0);
 }
 setTimeout(() => { console.log('done'); process.exit(0); }, 500);
@@ -519,6 +529,214 @@ setTimeout(() => { console.log('done'); process.exit(0); }, 500);
     await rm(slowStub, { force: true });
   }
 });
+
+test('stream transport preserves split output, final tails, malformed progress and the output cap', async () => {
+  for (const [env, expected] of [
+    [{ P93_INSTALLER_UI_STUB_MULTIBYTE: '1' }, /split 😀 line/],
+    [{ P93_INSTALLER_UI_STUB_SPLIT_LINE: '1' }, /split line/],
+    [{ P93_INSTALLER_UI_STUB_NO_FINAL_NEWLINE: '1' }, /last line without newline/],
+  ]) {
+    const app = await start({ env });
+    try {
+      const { text, events } = await streamEvents(app, { answers: {}, steps: ['resource-group'] });
+      assert.match(text, expected);
+      assert.ok(events.some((event) => event.type === 'summary'));
+      assert.doesNotMatch(text, /\uFFFD/);
+    } finally {
+      await app.close();
+    }
+  }
+
+  const tail = await start({ env: { P93_INSTALLER_UI_STUB_PROGRESS_NO_NEWLINE: '1' } });
+  try {
+    const { events } = await streamEvents(tail, { answers: {}, steps: ['resource-group'] });
+    const summary = events.find((event) => event.type === 'summary');
+    assert.equal(summary.failedStepId, 'resource-group');
+    assert.match(summary.resumeCommand, /-Steps resource-group/);
+  } finally {
+    await tail.close();
+  }
+
+  const malformed = await start({ env: { P93_INSTALLER_UI_STUB_MALFORMED_PROGRESS: '1' } });
+  try {
+    const { text, events } = await streamEvents(malformed, { answers: {}, steps: ['resource-group'] });
+    assert.ok(events.some((event) => event.type === 'error' && /progress/i.test(event.message)));
+    assert.ok(events.some((event) => event.type === 'summary'));
+    assert.doesNotMatch(text, /super-secret/);
+    assert.equal((await malformed.fetch('/api/session')).status, 200);
+  } finally {
+    await malformed.close();
+  }
+
+  const capped = await start({ env: { P93_INSTALLER_UI_STUB_MANY_LINES: '6000' } });
+  try {
+    const { text, events } = await streamEvents(capped, { answers: {}, steps: ['resource-group'] });
+    assert.ok(events.some((event) => event.type === 'notice' && /output cap/i.test(event.message)));
+    assert.ok(events.some((event) => event.type === 'summary'));
+    assert.ok(Buffer.byteLength(text) < 650_000, `stream was ${Buffer.byteLength(text)} bytes`);
+  } finally {
+    await capped.close();
+  }
+});
+
+test('stream ordering, removed run route and browser DOM cap are enforced', async () => {
+  const app = await start({ env: { P93_INSTALLER_UI_STUB_MANY_LINES: '500' } });
+  try {
+    const removed = await app.fetch('/api/run', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ answers: {}, steps: ['resource-group'] }),
+    });
+    assert.equal(removed.status, 404);
+    const { events } = await streamEvents(app, { answers: {}, steps: ['resource-group'] });
+    const lines = events.filter((event) => event.type === 'stdout').map((event) => event.line);
+    assert.deepEqual(lines.slice(0, 20), Array.from({ length: 20 }, (_, i) => `line ${String(i).padStart(4, '0')}`));
+  } finally {
+    await app.close();
+  }
+
+  const pageApp = await start({ env: { P93_INSTALLER_UI_STUB_MANY_LINES: '2600' } });
+  const { chromium } = await import('playwright');
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.context().addCookies([{ name: 'installer_token', value: pageApp.token, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Strict' }]);
+    await page.goto(`${pageApp.base}/`);
+    await page.getByRole('button', { name: 'List steps' }).click();
+    await page.locator('#step-list input').first().check();
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await expectText(page, 'summary:');
+    const output = await page.locator('#run-output').textContent();
+    assert.match(output, /Earlier run output lines were removed/);
+    assert.ok(output.split(/\n/).length <= 550);
+  } finally {
+    await browser.close();
+    await pageApp.close();
+  }
+});
+
+test('run lifecycle survives disconnect, reports status, supports reattach and stop', async () => {
+  const app = await start({ env: { P93_INSTALLER_UI_STUB_DELAY_MS: '80' } });
+  try {
+    const controller = new AbortController();
+    const started = app.fetch('/api/run/stream', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ answers: {}, steps: ['resource-group', 'gateway-deployment'] }),
+      signal: controller.signal,
+    }).catch((error) => error);
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    controller.abort();
+    await started;
+    let status;
+    for (let i = 0; i < 30; i++) {
+      status = await (await app.fetch('/api/run/status')).json();
+      if (status?.state === 'exited') break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    assert.equal(status.state, 'exited');
+    assert.equal(status.exitCode, 0);
+    const attach = await (await app.fetch('/api/run/attach?after=0')).text();
+    assert.match(attach, /"type":"summary"/);
+    const log = (await readFile(app.log, 'utf8')).trim().split(/\r?\n/).filter(Boolean).map(JSON.parse);
+    assert.equal(log.filter((entry) => entry.args.includes('-Yes')).length, 1);
+  } finally {
+    await app.close();
+  }
+
+  const stopApp = await start({ env: { P93_INSTALLER_UI_STUB_GRANDCHILD_HEARTBEAT: join(tmpdir(), `p93-heartbeat-${process.pid}.txt`) } });
+  try {
+    const runPromise = stopApp.fetch('/api/run/stream', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ answers: {}, steps: ['resource-group'] }),
+    });
+    let status;
+    for (let i = 0; i < 30; i++) {
+      status = await (await stopApp.fetch('/api/run/status')).json();
+      if (status?.state === 'running' && status.currentStepId) break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    const stopped = await (await stopApp.fetch('/api/run/stop', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ runId: status.id }),
+    })).json();
+    assert.equal(stopped.error, undefined, JSON.stringify(stopped));
+    assert.match(stopped.message, /resource-group/);
+    assert.match(stopped.message, /checkpoint resumes/i);
+    const runText = await (await runPromise).text();
+    assert.match(runText, /stopped/);
+  } finally {
+    await stopApp.close();
+  }
+});
+
+test('preflight malformed output, fail JSON and versioned interfaces fail closed visibly', async () => {
+  const textApp = await start({ env: { P93_INSTALLER_UI_STUB_PREFLIGHT_TEXT: '1' } });
+  try {
+    const response = await textApp.fetch('/api/preflight', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ answers: {} }),
+    });
+    const body = await response.json();
+    assert.equal(response.status, 502);
+    assert.match(body.error, /preflight output was not JSON/);
+    assert.match(body.detail, /\[redacted\]/);
+  } finally {
+    await textApp.close();
+  }
+
+  const failApp = await start({ env: { P93_INSTALLER_UI_STUB_PREFLIGHT_FAIL: '1' } });
+  try {
+    const response = await failApp.fetch('/api/preflight', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ answers: { SubscriptionId: '00000000-0000-4000-8000-000000000093' } }),
+    });
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.exitCode, 1);
+    assert.equal(body.preflight.result, 'FAIL');
+  } finally {
+    await failApp.close();
+  }
+
+  for (const [env, path, pattern] of [
+    [{ P93_INSTALLER_UI_STUB_BAD_LIST: 'version' }, '/api/steps', /step list is schemaVersion 2/],
+    [{ P93_INSTALLER_UI_STUB_BAD_LIST: 'missing' }, '/api/steps', /step list field steps/],
+    [{ P93_INSTALLER_UI_STUB_BAD_LIST: 'type' }, '/api/steps', /step list field id|step list step 0/],
+    [{ P93_INSTALLER_UI_STUB_BAD_PREFLIGHT: 'version' }, '/api/preflight', /preflight result is schemaVersion 2/],
+    [{ P93_INSTALLER_UI_STUB_BAD_PREFLIGHT: 'missing' }, '/api/preflight', /preflight result field result/],
+    [{ P93_INSTALLER_UI_STUB_BAD_PREFLIGHT: 'type' }, '/api/preflight', /preflight result field result|preflight result check 0 field result/],
+  ]) {
+    const app = await start({ env });
+    try {
+      const response = path === '/api/steps'
+        ? await app.fetch(path)
+        : await app.fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: {} }) });
+      assert.equal(response.status, 502);
+      assert.match((await response.json()).error, pattern);
+    } finally {
+      await app.close();
+    }
+  }
+
+  for (const mode of ['version', 'missing', 'type']) {
+    const app = await start({ env: { P93_INSTALLER_UI_STUB_BAD_PROGRESS: mode } });
+    try {
+      const { events } = await streamEvents(app, { answers: {}, steps: ['resource-group'] });
+      assert.ok(events.some((event) => event.type === 'error' && /progress event/.test(event.message)));
+      const summary = events.find((event) => event.type === 'summary');
+      assert.equal(summary.failedStepId, '');
+      assert.equal(summary.resumeCommand, '');
+    } finally {
+      await app.close();
+    }
+  }
+});
+
 
 test('full run requires browser confirmation before invoking the installer', async () => {
   const app = await start();

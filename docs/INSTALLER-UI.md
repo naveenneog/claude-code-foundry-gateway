@@ -39,11 +39,21 @@ cookie path behaviour are unverified (U91).
 Node does not spawn `az`. Azure reads go through repository PowerShell scripts:
 `scripts/Get-ClaudeInstallerUiIdentity.ps1`, `scripts/Get-ClaudeInstallerUiPrefill.ps1` and
 `scripts/Get-ClaudeInstallerUiPlan.ps1`. Installer calls use `pwsh -NoProfile -NonInteractive` with
-argument arrays. One installer run is active at a time. A second receives `409`.
+argument arrays. One installer run is active at a time. A second receives `409`. The streaming run endpoint is the
+only run endpoint; `POST /api/run` returns `404`.
 
-Each run writes its answers and progress file to a per-run temporary directory and removes that
-directory after the request. Every console line and progress line is redacted with the installer
-redaction rules before it leaves the server.
+Each run writes its answers and progress file to a per-run temporary directory and keeps that
+directory until the child exits, even if the browser disconnects. The server records the active or
+last run, exposes `GET /api/run/status`, and reattaches through `GET /api/run/attach?after=<seq>`
+from a bounded event tail. Every console line and progress line is redacted with the installer
+redaction rules before it leaves the server. Console output above 16 KiB for a run is replaced by
+one notice while progress and the final summary continue. The browser keeps 500 output lines and
+shows one line when earlier lines are removed.
+
+The Stop run button is enabled only while a run is active. It confirms the running step name and
+then stops the process tree. On Windows the server uses `taskkill.exe /PID <pid> /T /F`; on POSIX
+installer runs start in their own process group so the group can be signalled. The stop response and
+stream say that the install checkpoint resumes when the same steps run again.
 
 ## Sections
 
@@ -54,8 +64,16 @@ redaction rules before it leaves the server.
 | Access | Renders groups, tier limits and model deployment fields from the schema. |
 | Optional parts | Renders company address, Desktop sign-in, projection and monitoring answers from the schema. Projection answers are schema answers only; no projection switch is exposed. |
 | Business units | Provides a two-level editor: add a unit, add a team under a unit, remove either, then serialize units before teams. Fields are id, Entra group, monthly USD budget, mode and percent only for `Allowance`. Ids are lower-case letters, digits and hyphens, max 64; ids are unique; group names exclude `'`, `,` and `:`; `Allowance` requires percent 1-100; teams name one parent unit. The JSON view round-trips through the same validation. |
-| Review | Runs installer preflight and shows check, result, message and remedy. Failing checks mark fields through `x-checkId`. The plan route calls `Start-ClaudeGateway.ps1 -Action Setup -PlanOnly -AnswersPath`. |
-| Run | Lists installer step ids, streams selected-step output as it arrives, shows a failed step with a rerun action and resume command, and keeps a full run as a separate confirmed action. |
+| Review | Runs installer preflight and shows check, result, message and remedy. Failing checks mark fields through `x-checkId`. Non-JSON preflight output returns a visible error with the exit code and a short redacted, path-scrubbed output tail. The plan route calls `Start-ClaudeGateway.ps1 -Action Setup -PlanOnly -AnswersPath`. |
+| Run | Lists installer step ids, streams selected-step output as it arrives, shows a failed step with a rerun action and resume command, reattaches to an active run after reload and keeps a full run as a separate confirmed action. |
+
+## Installer interface checks
+
+The server validates the versioned P92 interfaces before rendering or using them:
+`-ListSteps -Json`, `-Preflight -Json` and progress NDJSON events must have `schemaVersion: 1` and
+the required fields documented by the installer contract. Incompatible step lists and preflight
+results return `502` with the interface name. Incompatible progress events become stream error
+events and do not change the failed-step rerun state.
 
 ## Screenshots
 

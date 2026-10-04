@@ -1,16 +1,21 @@
 import { createServer as createHttpServer } from 'node:http';
 import { spawn } from 'node:child_process';
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import { mkdtemp, readFile, rm, writeFile, chmod } from 'node:fs/promises';
+import { randomBytes } from 'node:crypto';
+import { StringDecoder } from 'node:string_decoder';
+import { once } from 'node:events';
+import { mkdtemp, open, readFile, rm, writeFile, chmod } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { homedir, tmpdir } from 'node:os';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { validatePreflight, validateProgressEvent, validateStepList } from './installer-contract.mjs';
+import { assertSameOrigin, constantTimeTokenEquals, contentSecurityPolicy, isAllowedHost, isLoopbackBind, parseCookies, readJsonBody, send, sendText, tokenHash } from './http-helpers.mjs';
+import { renderHtml } from './page-template.mjs';
+import { buildCommands, fieldsByCheckId, loadSchema, prefillArguments, redactText, root, scrubLocalPaths } from './server-model.mjs';
+
+export { buildCommands, loadSchema, redactText, scrubLocalPaths } from './server-model.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const root = resolve(here, '..', '..');
-const schemaPath = join(root, 'schemas', 'claude-gateway.answers.schema.json');
-const redactionPath = join(root, 'scripts', 'ClaudeInstallResume.ps1');
 const psInstaller = join(root, 'Install-ClaudeGateway.ps1');
 const bashInstaller = join(root, 'install-claude-gateway.sh');
 const identityScript = join(root, 'scripts', 'Get-ClaudeInstallerUiIdentity.ps1');
@@ -20,204 +25,10 @@ const uiScript = join(here, 'installer-ui.js');
 const uiModelScript = join(here, 'ui-model.js');
 const uiCss = join(here, 'installer-ui.css');
 const defaultIdleMs = 30 * 60 * 1000;
-const maxBodyBytes = 256 * 1024;
-const prefillKinds = new Set(['subscriptions', 'foundryAccounts', 'deployments']);
-const prefillParameters = [['-SubscriptionId', 'subscriptionId', 'SubscriptionId'], ['-FoundryAccount', 'foundryAccount', 'FoundryAccount'], ['-FoundryResourceGroup', 'foundryResourceGroup', 'FoundryResourceGroup']];
+const consoleOutputCapBytes = 16 * 1024;
+const clientBacklogLimit = 256;
+const runTailLimit = 1000;
 
-let redactionRules;
-
-export async function loadSchema() {
-  return JSON.parse(await readFile(schemaPath, 'utf8'));
-}
-
-export async function loadRedactionRules() {
-  if (redactionRules) return redactionRules;
-  const source = await readFile(redactionPath, 'utf8');
-  const match = source.match(/^\s*\$json = '(\[[^']*\])'/m);
-  if (!match) throw new Error('redaction rules not found in scripts/ClaudeInstallResume.ps1');
-  redactionRules = JSON.parse(match[1]).map((rule) => ({
-    name: rule.name,
-    regex: new RegExp(rule.pattern, 'gi'),
-  }));
-  return redactionRules;
-}
-
-export async function redactText(text) {
-  let output = String(text ?? '');
-  for (const rule of await loadRedactionRules()) {
-    output = output.replace(rule.regex, (...args) => {
-      const groups = args.at(-1);
-      return `${groups?.keep ?? ''}[redacted]`;
-    });
-  }
-  return output;
-}
-
-// The checkout and the home directory name the operator's machine; error text names them by placeholder.
-export function scrubLocalPaths(text) {
-  let output = String(text ?? '');
-  for (const [prefix, label] of [[root, '<checkout>'], [homedir(), '~']]) {
-    if (!prefix) continue;
-    const source = prefix.replace(/[\\/]+$/, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\\\|\//g, '[\\\\/]');
-    output = output.replace(new RegExp(source, 'gi'), () => label);
-  }
-  return output;
-}
-
-function requestProblem(field, message, remedy) {
-  const error = new Error(message);
-  error.status = 400;
-  error.field = field;
-  error.remedy = remedy;
-  return error;
-}
-
-function prefillArguments(body) {
-  const kind = body.kind ?? 'subscriptions';
-  if (typeof kind !== 'string' || !prefillKinds.has(kind)) {
-    throw requestProblem('kind', 'kind is not subscriptions, foundryAccounts or deployments.', 'Ask for subscriptions, foundryAccounts or deployments.');
-  }
-  const args = [`-Kind:${kind}`];
-  for (const [parameter, key, field] of prefillParameters) {
-    const value = body[key];
-    if (value === undefined || value === null || value === '') continue;
-    if (typeof value !== 'string') throw requestProblem(field, `${field} is not text.`, `Give ${field} as text.`);
-    // -Name:value binds a value that starts with - as the value, not as a parameter name.
-    args.push(`${parameter}:${value}`);
-  }
-  return args;
-}
-
-export function buildCommands(answersPath = '.\\answers.json', schema = null) {
-  const ps = `.\\Install-ClaudeGateway.ps1 -AnswersPath ${quotePowerShell(answersPath)} -Preflight -Json`;
-  const runPs = `.\\Install-ClaudeGateway.ps1 -AnswersPath ${quotePowerShell(answersPath)} -Yes -ProgressPath .\\install-progress.ndjson`;
-  const bashPath = answersPath.replaceAll('\\', '/');
-  const bash = `./install-claude-gateway.sh --answers-file ${quoteBash(bashPath)} --preflight --json`;
-  const bashRun = `./install-claude-gateway.sh --answers-file ${quoteBash(bashPath)} --yes --progress-file ./install-progress.ndjson`;
-  const unsupported = [];
-  if (schema?.properties) {
-    for (const [name, property] of Object.entries(schema.properties)) {
-      if (Array.isArray(property['x-appliedBy']) && !property['x-appliedBy'].includes('install-claude-gateway.sh')) {
-        unsupported.push(name);
-      }
-    }
-  }
-  return { powershell: ps, powershellRun: runPs, bash, bashRun, bashDoesNotApply: unsupported };
-}
-
-function quotePowerShell(value) {
-  return `'${String(value).replaceAll("'", "''")}'`;
-}
-
-function quoteBash(value) {
-  return `'${String(value).replaceAll("'", "'\"'\"'")}'`;
-}
-
-function tokenHash(token) {
-  return createHash('sha256').update(token).digest();
-}
-
-function constantTimeTokenEquals(actual, expectedHash) {
-  if (!actual) return false;
-  const actualHash = tokenHash(actual);
-  return actualHash.length === expectedHash.length && timingSafeEqual(actualHash, expectedHash);
-}
-
-function parseCookies(header) {
-  const cookies = new Map();
-  for (const part of String(header || '').split(';')) {
-    const index = part.indexOf('=');
-    if (index > 0) cookies.set(part.slice(0, index).trim(), decodeURIComponent(part.slice(index + 1).trim()));
-  }
-  return cookies;
-}
-
-function contentSecurityPolicy() {
-  return "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'none'; script-src 'self'; style-src 'self'";
-}
-
-function send(res, status, body, headers = {}) {
-  const text = typeof body === 'string' ? body : JSON.stringify(body);
-  res.writeHead(status, {
-    'content-type': typeof body === 'string' && body.startsWith('<!doctype') ? 'text/html; charset=utf-8' : 'application/json; charset=utf-8',
-    'content-length': Buffer.byteLength(text),
-    'content-security-policy': contentSecurityPolicy(),
-    'x-content-type-options': 'nosniff',
-    'referrer-policy': 'no-referrer',
-    ...headers,
-  });
-  res.end(text);
-}
-
-function sendText(res, status, text, contentType, headers = {}) {
-  res.writeHead(status, {
-    'content-type': contentType,
-    'content-length': Buffer.byteLength(text),
-    'content-security-policy': contentSecurityPolicy(),
-    'x-content-type-options': 'nosniff',
-    'referrer-policy': 'no-referrer',
-    ...headers,
-  });
-  res.end(text);
-}
-
-function isAllowedHost(host, port, extraHosts = []) {
-  const value = String(host || '').toLowerCase();
-  const withPort = value.includes(':') ? value : `${value}:${port}`;
-  const allowed = new Set([
-    `127.0.0.1:${port}`,
-    `localhost:${port}`,
-    `[::1]:${port}`,
-    ...extraHosts.map((h) => {
-      const lower = h.toLowerCase();
-      return lower.includes(':') ? lower : `${lower}:${port}`;
-    }),
-  ]);
-  return allowed.has(value) || allowed.has(withPort);
-}
-
-function isLoopbackBind(host) {
-  return host === '127.0.0.1' || host === 'localhost' || host === '::1' || host === '[::1]';
-}
-
-function assertSameOrigin(req) {
-  const expected = `http://${req.headers.host}`;
-  const origin = req.headers.origin;
-  if (origin && origin !== expected) {
-    const error = new Error('same-origin request required');
-    error.status = 403;
-    throw error;
-  }
-  const fetchSite = req.headers['sec-fetch-site'];
-  if (fetchSite && fetchSite !== 'same-origin' && fetchSite !== 'none') {
-    const error = new Error('same-origin request required');
-    error.status = 403;
-    throw error;
-  }
-}
-
-async function readJsonBody(req) {
-  let total = 0;
-  const chunks = [];
-  for await (const chunk of req) {
-    total += chunk.length;
-    if (total > maxBodyBytes) {
-      const error = new Error('request body is too large');
-      error.status = 413;
-      throw error;
-    }
-    chunks.push(chunk);
-  }
-  const raw = Buffer.concat(chunks).toString('utf8');
-  if (!raw) return {};
-  try {
-    return JSON.parse(raw);
-  } catch {
-    const error = new Error('request body is not valid JSON');
-    error.status = 400;
-    throw error;
-  }
-}
 
 async function withRunDirectory(fn, tempDirs) {
   const dir = await mkdtemp(join(tmpdir(), 'claude-installer-ui-'));
@@ -238,40 +49,102 @@ function spawnInstallerArgs(kind, args, options) {
   return { file: 'bash', args: [bashInstaller, ...args] };
 }
 
-async function runInstaller(kind, args, options) {
-  const command = spawnInstallerArgs(kind, args, options);
-  const child = spawn(command.file, command.args, {
+async function killProcessTree(child) {
+  if (!child?.pid) return;
+  if (process.platform === 'win32') {
+    const killer = spawn('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { shell: false, windowsHide: true, stdio: 'ignore' });
+    await once(killer, 'close').catch(() => {});
+    return;
+  }
+  try { process.kill(-child.pid, 'SIGTERM'); } catch { try { child.kill('SIGTERM'); } catch { /* already gone */ } }
+  await new Promise((resolve) => setTimeout(resolve, 750));
+  try { process.kill(-child.pid, 'SIGKILL'); } catch { try { child.kill('SIGKILL'); } catch { /* already gone */ } }
+}
+
+async function waitForDrain(res) {
+  if (res.destroyed || res.writableEnded) return;
+  await once(res, 'drain').catch(() => {});
+}
+
+function reqDone(res) {
+  return Promise.race([
+    once(res, 'close'),
+    once(res, 'finish'),
+  ]);
+}
+
+async function writeNdjson(res, payload) {
+  if (res.destroyed || res.writableEnded) return false;
+  const ok = res.write(`${JSON.stringify(payload)}\n`);
+  if (!ok) await waitForDrain(res);
+  return !res.destroyed && !res.writableEnded;
+}
+
+function childEnv(options) {
+  return { ...process.env, NO_COLOR: '1', ...(options.env || {}) };
+}
+
+function spawnChild(file, args, options, spawnOptions = {}) {
+  const child = spawn(file, args, {
     cwd: root,
     shell: false,
     windowsHide: true,
-    env: { ...process.env, NO_COLOR: '1', ...(options.env || {}) },
+    detached: process.platform !== 'win32',
+    env: childEnv(options),
+    ...spawnOptions,
   });
+  options._children?.add(child);
+  child.on('close', () => options._children?.delete(child));
+  child.on('error', () => options._children?.delete(child));
+  return child;
+}
+
+async function runInstaller(kind, args, options, runOptions = {}) {
+  const command = spawnInstallerArgs(kind, args, options);
+  const child = spawnChild(command.file, command.args, options);
   let stdout = '';
   let stderr = '';
   child.stdout.on('data', (chunk) => { stdout += chunk.toString('utf8'); });
   child.stderr.on('data', (chunk) => { stderr += chunk.toString('utf8'); });
+  const timeoutMs = Number(runOptions.timeoutMs || 0);
+  let timer;
   const code = await new Promise((resolveCode, reject) => {
+    if (timeoutMs > 0) {
+      timer = setTimeout(() => {
+        const error = new Error('installer child timed out');
+        error.status = 504;
+        void killProcessTree(child).finally(() => reject(error));
+      }, timeoutMs);
+      timer.unref?.();
+    }
     child.on('error', reject);
     child.on('close', resolveCode);
   });
+  if (timer) clearTimeout(timer);
   return { code, stdout: await redactText(stdout), stderr: await redactText(stderr) };
 }
 
 async function runPowerShell(script, args, options, runOptions = {}) {
-  const child = spawn('pwsh', ['-NoProfile', '-NonInteractive', '-File', script, ...args], {
-    cwd: root,
-    shell: false,
-    windowsHide: true,
-    env: { ...process.env, NO_COLOR: '1', ...(options.env || {}) },
-  });
+  const child = spawnChild('pwsh', ['-NoProfile', '-NonInteractive', '-File', script, ...args], options);
   let stdout = '';
   let stderr = '';
   child.stdout.on('data', (chunk) => { stdout += chunk.toString('utf8'); });
   child.stderr.on('data', (chunk) => { stderr += chunk.toString('utf8'); });
+  const timeoutMs = Number(runOptions.timeoutMs || 0);
+  let timer;
   const code = await new Promise((resolveCode, reject) => {
+    if (timeoutMs > 0) {
+      timer = setTimeout(() => {
+        const error = new Error('read-only installer child timed out');
+        error.status = 504;
+        void killProcessTree(child).finally(() => reject(error));
+      }, timeoutMs);
+      timer.unref?.();
+    }
     child.on('error', reject);
     child.on('close', resolveCode);
   });
+  if (timer) clearTimeout(timer);
   return {
     code,
     stdout: runOptions.redactStdout === false ? stdout : await redactText(stdout),
@@ -279,80 +152,119 @@ async function runPowerShell(script, args, options, runOptions = {}) {
   };
 }
 
-function writeNdjson(res, payload) {
-  res.write(`${JSON.stringify(payload)}\n`);
-}
-
-async function runInstallerStreaming(kind, args, options, onEvent, progressPath) {
+async function runInstallerStreaming(kind, args, options, onEvent, progressPath, runOptions = {}) {
   const command = spawnInstallerArgs(kind, args, options);
-  const child = spawn(command.file, command.args, {
-    cwd: root,
-    shell: false,
-    windowsHide: true,
-    env: { ...process.env, NO_COLOR: '1', ...(options.env || {}) },
-  });
+  const child = spawnChild(command.file, command.args, options);
+  runOptions.onChild?.(child);
   let progressOffset = 0;
   let progressCarry = '';
-  const emitLines = async (type, chunk) => {
-    for (const line of String(chunk).split(/\r?\n/)) {
-      if (line) await onEvent({ type, line: await redactText(line) });
-    }
+  let progressReading = Promise.resolve();
+  let emitQueue = Promise.resolve();
+  let consoleBytes = 0;
+  let capNoticed = false;
+  const enqueue = (event) => {
+    emitQueue = emitQueue.then(() => onEvent(event)).catch((error) => onEvent({ type: 'error', message: error.message }).catch(() => {}));
+    return emitQueue;
   };
-  child.stdout.on('data', (chunk) => { void emitLines('stdout', chunk.toString('utf8')); });
-  child.stderr.on('data', (chunk) => { void emitLines('stderr', chunk.toString('utf8')); });
-  const readProgress = async () => {
-    if (!progressPath || !existsSync(progressPath)) return;
-    const text = await readFile(progressPath, 'utf8');
-    if (text.length <= progressOffset) return;
-    progressCarry += text.slice(progressOffset);
-    progressOffset = text.length;
+  const emitConsoleLine = async (type, line) => {
+    if (!line) return;
+    const redacted = await redactText(line);
+    const bytes = Buffer.byteLength(redacted);
+    if (consoleBytes + bytes > consoleOutputCapBytes) {
+      if (!capNoticed) {
+        capNoticed = true;
+        await enqueue({ type: 'notice', message: `The ${consoleOutputCapBytes} byte output cap was reached; the installer continues and progress plus summary events are still shown.` });
+      }
+      return;
+    }
+    consoleBytes += bytes;
+    await enqueue({ type, line: redacted });
+  };
+  const makeLineHandler = (type) => {
+    const decoder = new StringDecoder('utf8');
+    let carry = '';
+    return {
+      async chunk(chunk) {
+        carry += decoder.write(chunk);
+        const lines = carry.split(/\r?\n/);
+        carry = lines.pop() || '';
+        for (const line of lines) await emitConsoleLine(type, line);
+      },
+      async end() {
+        carry += decoder.end();
+        if (carry) await emitConsoleLine(type, carry);
+        carry = '';
+      },
+    };
+  };
+  const stdout = makeLineHandler('stdout');
+  const stderr = makeLineHandler('stderr');
+  child.stdout.on('data', (chunk) => { void stdout.chunk(chunk); });
+  child.stderr.on('data', (chunk) => { void stderr.chunk(chunk); });
+  const progressDecoder = new StringDecoder('utf8');
+  const processProgressText = async (text, final) => {
+    progressCarry += text;
     const lines = progressCarry.split(/\r?\n/);
     progressCarry = lines.pop() || '';
+    if (final && progressCarry) {
+      lines.push(progressCarry);
+      progressCarry = '';
+    }
     for (const line of lines) {
       if (!line) continue;
-      const event = JSON.parse(line);
-      if (event.message) event.message = await redactText(event.message);
-      if (event.resumeCommand) event.resumeCommand = await redactText(event.resumeCommand);
-      await onEvent({ type: 'progress', ...event });
+      try {
+        const event = validateProgressEvent(JSON.parse(line));
+        if (event.message) event.message = await redactText(event.message);
+        if (event.resumeCommand) event.resumeCommand = await redactText(event.resumeCommand);
+        await enqueue({ type: 'progress', ...event });
+      } catch (error) {
+        await enqueue({ type: 'error', message: await redactText(`progress parse failed: ${error.message}`) });
+      }
     }
   };
-  const timer = setInterval(() => { void readProgress(); }, 100);
+  const readProgress = async (final = false) => {
+    if (!progressPath || !existsSync(progressPath)) return;
+    const file = await open(progressPath, 'r');
+    try {
+      const stat = await file.stat();
+      if (stat.size <= progressOffset && !final) return;
+      const length = stat.size - progressOffset;
+      if (length > 0) {
+        const buffer = Buffer.alloc(length);
+        await file.read(buffer, 0, length, progressOffset);
+        progressOffset = stat.size;
+        await processProgressText(progressDecoder.write(buffer), final);
+      } else if (final) {
+        await processProgressText('', true);
+      }
+    } finally {
+      await file.close();
+    }
+  };
+  const timer = setInterval(() => { progressReading = progressReading.then(() => readProgress(false)).catch((error) => enqueue({ type: 'error', message: `progress read failed: ${error.message}` })); }, 100);
   const code = await new Promise((resolveCode, reject) => {
     child.on('error', reject);
     child.on('close', resolveCode);
   });
   clearInterval(timer);
-  await readProgress();
+  await stdout.end();
+  await stderr.end();
+  await progressReading;
+  await processProgressText(progressDecoder.end(), false);
+  await readProgress(true);
+  await emitQueue;
   return code;
 }
 
 async function listSteps(options) {
   const result = await runInstaller('powershell', ['-ListSteps', '-Json'], options);
   if (result.code !== 0) throw new Error(`step list failed: ${result.stderr || result.stdout}`);
-  return JSON.parse(result.stdout);
+  return validateStepList(JSON.parse(result.stdout));
 }
 
 function flattenStepIds(stepPayload) {
   const steps = Array.isArray(stepPayload) ? stepPayload : Array.isArray(stepPayload.steps) ? stepPayload.steps : [];
   return new Set(steps.map((step) => String(step.id || step.stepId || '')).filter(Boolean));
-}
-
-function fieldsByCheckId(schema) {
-  const map = {};
-  for (const [name, property] of Object.entries(schema.properties || {})) {
-    const id = property['x-checkId'];
-    if (!id) continue;
-    map[id] ??= [];
-    map[id].push(name);
-  }
-  const unit = schema?.$defs?.BusinessUnit;
-  for (const [name, property] of Object.entries(unit?.properties || {})) {
-    const id = property['x-checkId'];
-    if (!id) continue;
-    map[id] ??= [];
-    map[id].push(`BusinessUnits.${name}`);
-  }
-  return map;
 }
 
 async function validateRunRequest(body, options) {
@@ -378,42 +290,6 @@ async function writeAnswers(dir, answers) {
   return path;
 }
 
-async function renderHtml() {
-  const schema = JSON.stringify(await loadSchema());
-  return `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Claude gateway installer</title>
-  <link rel="stylesheet" href="./installer-ui.css">
-  <script type="application/json" id="schema-json">${schema.replaceAll('<', '\\u003c')}</script>
-  <script defer src="./ui-model.js"></script>
-  <script defer src="./installer-ui.js"></script>
-</head>
-<body>
-  <header>
-    <h1>Claude gateway installer</h1>
-    <p id="identity">Signed-in account: read-only checks use the Azure CLI session in this terminal.</p>
-    <button id="refresh-identity" type="button">Refresh account</button>
-    <button id="signin" type="button">Show sign-in command</button>
-    <pre id="signin-command"></pre>
-    <p class="small">Cloud Shell ends a session after 20 minutes without interactive activity. Keep the shell active before long waits.</p>
-  </header>
-  <main>
-    <section><h2>Prerequisites</h2><button id="preflight" type="button">Run preflight</button><div id="preflight-output"></div></section>
-    <section><h2>Foundation</h2><div id="foundation" class="grid"></div></section>
-    <section><h2>Access</h2><div id="access" class="grid"></div></section>
-    <section><h2>Optional parts</h2><div id="optional" class="grid"></div></section>
-    <section><h2>Business units and teams</h2><div id="business-unit-tree"></div><button id="add-unit" type="button">Add unit</button><label>Add team under <select id="team-parent"></select></label><button id="add-team" type="button">Add team</button><details><summary>JSON view</summary><textarea id="business-units" rows="8" cols="80"></textarea></details><pre id="business-unit-problems"></pre></section>
-    <section><h2>Review</h2><button id="download" type="button">Download answers.json</button><button id="plan" type="button">Plan fingerprint</button><pre id="commands"></pre><pre id="plan-output"></pre></section>
-    <section><h2>Run</h2><button id="steps" type="button">List steps</button><div id="step-list"></div><button id="run" type="button">Run selected steps</button><button id="full-run" type="button">Full run</button><button id="rerun" type="button" disabled>Re-run failed step</button><pre id="run-output"></pre></section>
-    <pre id="errors"></pre>
-  </main>
-</body>
-</html>`;
-}
-
 export async function createInstallerUiServer(options = {}) {
   const token = options.token || randomBytes(32).toString('base64url');
   const tokenDigest = tokenHash(token);
@@ -422,20 +298,25 @@ export async function createInstallerUiServer(options = {}) {
   let port = Number(options.port || 0);
   let tokenConsumed = false;
   let activeRun = null;
+  let lastRun = null;
   let idleTimer = null;
   let stopping = false;
+  let inFlight = 0;
+  options._children = new Set();
   const idleMs = Number(options.idleMs || defaultIdleMs);
+  const readOnlyTimeoutMs = Number(options.readOnlyTimeoutMs || 30_000);
   const extraHosts = options.allowedHosts || [];
   const log = options.log || (() => {});
 
   const cleanup = async () => {
     if (idleTimer) clearTimeout(idleTimer);
+    await Promise.all([...options._children].map((child) => killProcessTree(child).catch(() => {})));
     server.closeAllConnections?.();
-    for (const dir of [...tempDirs]) await rm(dir, { recursive: true, force: true });
+    for (const dir of [...tempDirs]) await rm(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }).catch(() => {});
   };
 
   const stopServer = async (reason) => {
-    if (activeRun || stopping) return;
+    if (activeRun?.state === 'running' || inFlight > 0 || stopping) return;
     stopping = true;
     await cleanup();
     log(`Installer UI stopped: ${reason}`);
@@ -448,19 +329,120 @@ export async function createInstallerUiServer(options = {}) {
 
   const armIdle = () => {
     if (idleTimer) clearTimeout(idleTimer);
+    if (activeRun?.state === 'running' || inFlight > 0) return;
     idleTimer = setTimeout(() => { void stopServer('idle timeout'); }, idleMs);
     idleTimer.unref?.();
   };
 
-  const claimRun = () => {
-    if (activeRun) return null;
-    const owner = randomBytes(16).toString('hex');
-    activeRun = owner;
-    return owner;
+  const withJob = async (fn) => {
+    inFlight++;
+    if (idleTimer) clearTimeout(idleTimer);
+    try { return await fn(); }
+    finally { inFlight--; armIdle(); }
   };
 
-  const releaseRun = (owner) => {
-    if (activeRun === owner) activeRun = null;
+  const publicRun = (run, includeTail = false) => run && ({
+    id: run.id,
+    steps: run.steps,
+    state: run.state,
+    currentStepId: run.currentStepId,
+    exitCode: run.exitCode,
+    failedStepId: run.failedStepId,
+    resumeCommand: run.resumeCommand,
+    startTime: run.startTime,
+    nextSeq: run.nextSeq,
+    stoppedMessage: run.stoppedMessage,
+    tempDirRemoved: run.tempDirRemoved,
+    events: includeTail ? run.tail : undefined,
+  });
+
+  const publish = (run, event) => {
+    const item = { seq: run.nextSeq++, ...event };
+    run.tail.push(item);
+    if (run.tail.length > runTailLimit) run.tail.splice(0, run.tail.length - runTailLimit);
+    if (item.type === 'progress' && item.event === 'started') run.currentStepId = item.stepId || run.currentStepId;
+    if (item.type === 'progress' && item.event === 'failed') {
+      run.failedStepId = item.stepId || '';
+      run.resumeCommand = item.resumeCommand || (run.failedStepId ? `Install-ClaudeGateway.ps1 -Steps ${run.failedStepId}` : '');
+    }
+    for (const subscriber of run.subscribers) subscriber.enqueue(item);
+  };
+
+  const attachRun = async (run, res, after) => {
+    res.writeHead(200, {
+      'content-type': 'application/x-ndjson; charset=utf-8',
+      'cache-control': 'no-store',
+      'content-security-policy': contentSecurityPolicy(),
+      'x-content-type-options': 'nosniff',
+    });
+    let closed = false;
+    const subscriber = {
+      backlog: [],
+      dropped: 0,
+      writing: false,
+      enqueue(event) {
+        if (closed) return;
+        if (this.backlog.length > clientBacklogLimit) {
+          this.dropped += this.backlog.length;
+          this.backlog = [];
+        }
+        this.backlog.push(event);
+        void this.flush();
+      },
+      async flush() {
+        if (this.writing) return;
+        this.writing = true;
+        try {
+          while (!closed && this.backlog.length) {
+            if (this.dropped) {
+              const dropped = this.dropped;
+              this.dropped = 0;
+              if (!await writeNdjson(res, { type: 'notice', skippedEvents: dropped, message: `${dropped} events were skipped for this slow client.` })) break;
+            }
+            if (!await writeNdjson(res, this.backlog.shift())) break;
+          }
+        } finally {
+          this.writing = false;
+        }
+      },
+      end() {
+        if (!closed) res.end();
+      },
+    };
+    const firstSeq = run.tail[0]?.seq ?? run.nextSeq;
+    if (after < firstSeq - 1) subscriber.enqueue({ seq: firstSeq - 1, type: 'notice', skippedEvents: firstSeq - after - 1, message: 'Earlier run events fell out of the bounded tail.' });
+    for (const event of run.tail.filter((item) => item.seq > after)) subscriber.enqueue(event);
+    if (run.state === 'running' || run.state === 'stopping') run.subscribers.add(subscriber);
+    else {
+      subscriber.enqueue({ seq: run.nextSeq, type: 'summary', exitCode: run.exitCode, failedStepId: run.failedStepId, resumeCommand: run.resumeCommand, state: run.state });
+      setImmediate(async () => { await subscriber.flush(); subscriber.end(); });
+    }
+    reqDone(res).then(() => { closed = true; run.subscribers.delete(subscriber); }).catch(() => {});
+  };
+
+  const createRun = (steps) => {
+    if (activeRun?.state === 'running' || activeRun?.state === 'stopping') return null;
+    const run = {
+      id: randomBytes(16).toString('hex'),
+      steps,
+      state: 'running',
+      currentStepId: '',
+      exitCode: null,
+      failedStepId: '',
+      resumeCommand: '',
+      startTime: new Date().toISOString(),
+      nextSeq: 1,
+      tail: [],
+      subscribers: new Set(),
+      child: null,
+      tempDir: '',
+      progressPath: '',
+      stoppedMessage: '',
+      tempDirRemoved: false,
+    };
+    activeRun = run;
+    lastRun = run;
+    return run;
   };
 
   const server = createHttpServer(async (req, res) => {
@@ -497,21 +479,28 @@ export async function createInstallerUiServer(options = {}) {
         if (!constantTimeTokenEquals(String(req.headers['x-csrf-token'] || ''), tokenHash(csrfToken))) return send(res, 403, { error: 'CSRF token is required' }, setCookie);
       }
 
-      if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) return send(res, 200, await renderHtml(), setCookie);
+      if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) return send(res, 200, await renderHtml(loadSchema), setCookie);
       if (req.method === 'GET' && url.pathname === '/installer-ui.js') return sendText(res, 200, await readFile(uiScript, 'utf8'), 'text/javascript; charset=utf-8', setCookie);
       if (req.method === 'GET' && url.pathname === '/ui-model.js') return sendText(res, 200, await readFile(uiModelScript, 'utf8'), 'text/javascript; charset=utf-8', setCookie);
       if (req.method === 'GET' && url.pathname === '/installer-ui.css') return sendText(res, 200, await readFile(uiCss, 'utf8'), 'text/css; charset=utf-8', setCookie);
       if (req.method === 'GET' && url.pathname === '/api/schema') return send(res, 200, await loadSchema(), setCookie);
-      if (req.method === 'GET' && url.pathname === '/api/steps') return send(res, 200, await listSteps(options), setCookie);
+      if (req.method === 'GET' && url.pathname === '/api/steps') return send(res, 200, await withJob(() => listSteps(options)), setCookie);
       if (req.method === 'GET' && url.pathname === '/api/identity') {
-        const result = await runPowerShell(identityScript, [], options);
+        const result = await withJob(() => runPowerShell(identityScript, [], options, { timeoutMs: readOnlyTimeoutMs }));
         return send(res, 200, JSON.parse(result.stdout), setCookie);
+      }
+      if (req.method === 'GET' && url.pathname === '/api/run/status') return send(res, 200, { schemaVersion: 1, ...(publicRun(activeRun || lastRun) || {}) }, setCookie);
+      if (req.method === 'GET' && url.pathname === '/api/run/attach') {
+        const run = activeRun || lastRun;
+        if (!run) return send(res, 404, { error: 'no installer run is available' }, setCookie);
+        await attachRun(run, res, Number(url.searchParams.get('after') || 0));
+        return;
       }
       if (req.method === 'POST' && url.pathname === '/api/prefill') {
         assertSameOrigin(req);
         const body = await readJsonBody(req);
         const args = prefillArguments(body);
-        const result = await runPowerShell(prefillScript, args, options, { redactStdout: false });
+        const result = await withJob(() => runPowerShell(prefillScript, args, options, { redactStdout: false, timeoutMs: readOnlyTimeoutMs }));
         if (!result.stdout.trim()) {
           log(`Prefill returned no JSON (exit ${result.code}): ${scrubLocalPaths(result.stderr)}`);
           return send(res, 500, { schemaVersion: 1, error: 'The prefill read returned no result. The terminal that started the installer UI shows the details.' }, setCookie);
@@ -527,95 +516,110 @@ export async function createInstallerUiServer(options = {}) {
       if (req.method === 'POST' && url.pathname === '/api/plan') {
         assertSameOrigin(req);
         const body = await readJsonBody(req);
-        return send(res, 200, await withRunDirectory(async (dir) => {
+        return send(res, 200, await withJob(() => withRunDirectory(async (dir) => {
           const answers = await writeAnswers(dir, body.answers || {});
-          const result = await runPowerShell(planScript, ['-AnswersPath', answers], options);
+          const result = await runPowerShell(planScript, ['-AnswersPath', answers], options, { timeoutMs: readOnlyTimeoutMs });
           return JSON.parse(result.stdout);
-        }, tempDirs), setCookie);
+        }, tempDirs)), setCookie);
       }
       if (req.method === 'POST' && url.pathname === '/api/preflight') {
         assertSameOrigin(req);
         const body = await readJsonBody(req);
-        return send(res, 200, await withRunDirectory(async (dir) => {
+        return send(res, 200, await withJob(() => withRunDirectory(async (dir) => {
           const answers = await writeAnswers(dir, body.answers || {});
-          const result = await runInstaller('powershell', ['-AnswersPath', answers, '-Preflight', '-Json'], options);
+          const result = await runInstaller('powershell', ['-AnswersPath', answers, '-Preflight', '-Json'], options, { timeoutMs: readOnlyTimeoutMs });
           let parsed;
-          try { parsed = JSON.parse(result.stdout); } catch { parsed = null; }
+          try { parsed = validatePreflight(JSON.parse(result.stdout)); } catch (error) {
+            if (error.status === 502) throw error;
+            const detail = scrubLocalPaths(await redactText(`${result.stdout}\n${result.stderr}`)).trim().slice(-1000);
+            const malformed = new Error('preflight output was not JSON; the installer output is shown in detail.');
+            malformed.status = 502;
+            malformed.detail = detail;
+            malformed.exitCode = result.code;
+            throw malformed;
+          }
           return { exitCode: result.code, preflight: parsed, stdout: result.stdout, stderr: result.stderr, fieldsByCheckId: fieldsByCheckId(await loadSchema()) };
-        }, tempDirs), setCookie);
+        }, tempDirs)), setCookie);
       }
       if (req.method === 'POST' && url.pathname === '/api/run/stream') {
         assertSameOrigin(req);
-        const owner = claimRun();
-        if (!owner) return send(res, 409, { error: 'an installer run is already active' }, setCookie);
+        if (activeRun?.state === 'running' || activeRun?.state === 'stopping') return send(res, 409, { error: 'an installer run is already active' }, setCookie);
         const body = await readJsonBody(req);
-        try {
-          await withRunDirectory(async (dir) => {
-            const steps = await validateRunRequest(body, options);
-            const answers = await writeAnswers(dir, body.answers || {});
-            const progress = join(dir, 'progress.ndjson');
-            const args = ['-AnswersPath', answers, '-Yes', '-ProgressPath', progress];
-            if (steps.length) args.push('-Steps', steps.join(','));
-            res.writeHead(200, {
-              'content-type': 'application/x-ndjson; charset=utf-8',
-              'cache-control': 'no-store',
-              'content-security-policy': contentSecurityPolicy(),
-              'x-content-type-options': 'nosniff',
-              ...setCookie,
-            });
-            let failedStepId = '';
-            let resumeCommand = '';
+        const steps = await validateRunRequest(body, options);
+        const run = createRun(steps);
+        if (!run) return send(res, 409, { error: 'an installer run is already active' }, setCookie);
+        const dir = await mkdtemp(join(tmpdir(), 'claude-installer-ui-'));
+        tempDirs.add(dir);
+        try { await chmod(dir, 0o700); } catch { /* Windows ACLs are inherited; the directory is still per-run. */ }
+        run.tempDir = dir;
+        const answers = await writeAnswers(dir, body.answers || {});
+        const progress = join(dir, 'progress.ndjson');
+        run.progressPath = progress;
+        const args = ['-AnswersPath', answers, '-Yes', '-ProgressPath', progress];
+        if (steps.length) args.push('-Steps', steps.join(','));
+        void (async () => {
+          try {
             const code = await runInstallerStreaming('powershell', args, options, async (event) => {
-              if (event.type === 'progress' && event.event === 'failed') {
-                failedStepId = event.stepId || '';
-                resumeCommand = event.resumeCommand || (failedStepId ? `Install-ClaudeGateway.ps1 -Steps ${failedStepId}` : '');
-              }
-              writeNdjson(res, event);
-            }, progress);
-            if (failedStepId && !resumeCommand) resumeCommand = `Install-ClaudeGateway.ps1 -Steps ${failedStepId}`;
-            writeNdjson(res, { type: 'summary', exitCode: code, failedStepId, resumeCommand });
-          }, tempDirs);
-        } finally {
-          releaseRun(owner);
-          if (!res.headersSent) {
-            // Validation failed before the stream began; the catch block below sends JSON.
-          } else {
-            res.end();
+              publish(run, event);
+            }, progress, { onChild: (child) => { run.child = child; } });
+            run.exitCode = code;
+            run.state = run.state === 'stopping' ? 'stopped' : 'exited';
+          } catch (error) {
+            run.exitCode = 1;
+            run.state = run.state === 'stopping' ? 'stopped' : 'exited';
+            publish(run, { type: 'error', message: await redactText(scrubLocalPaths(error.message)) });
+          } finally {
+            if (run.failedStepId && !run.resumeCommand) run.resumeCommand = `Install-ClaudeGateway.ps1 -Steps ${run.failedStepId}`;
+            publish(run, { type: 'summary', exitCode: run.exitCode, failedStepId: run.failedStepId, resumeCommand: run.resumeCommand, state: run.state, message: run.stoppedMessage });
+            for (const subscriber of [...run.subscribers]) {
+              await subscriber.flush?.();
+              subscriber.end?.();
+            }
+            try {
+              await rm(run.tempDir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+              tempDirs.delete(run.tempDir);
+              run.tempDirRemoved = true;
+            } catch {
+              setTimeout(() => {
+                void rm(run.tempDir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }).then(() => {
+                  tempDirs.delete(run.tempDir);
+                  run.tempDirRemoved = true;
+                }).catch(() => {});
+              }, 500).unref?.();
+            }
+            if (activeRun === run) activeRun = null;
+            armIdle();
           }
-          armIdle();
-        }
+        })();
+        await attachRun(run, res, 0);
         return;
       }
-      if (req.method === 'POST' && url.pathname === '/api/run') {
+      if (req.method === 'POST' && url.pathname === '/api/run/stop') {
         assertSameOrigin(req);
-        const owner = claimRun();
-        if (!owner) return send(res, 409, { error: 'an installer run is already active' }, setCookie);
         const body = await readJsonBody(req);
-        try {
-          const result = await withRunDirectory(async (dir) => {
-            const steps = await validateRunRequest(body, options);
-            const answers = await writeAnswers(dir, body.answers || {});
-            const progress = join(dir, 'progress.ndjson');
-            const args = ['-AnswersPath', answers, '-Yes', '-ProgressPath', progress];
-            if (steps.length) args.push('-Steps', steps.join(','));
-            const run = await runInstaller('powershell', args, options);
-            let progressText = '';
-            if (existsSync(progress)) progressText = await redactText(await readFile(progress, 'utf8'));
-            const events = progressText.trim() ? progressText.trim().split(/\r?\n/).map((line) => JSON.parse(line)) : [];
-            const failed = events.findLast?.((event) => event.event === 'failed') || [...events].reverse().find((event) => event.event === 'failed');
-            return { exitCode: run.code, stdout: run.stdout, stderr: run.stderr, events, failedStepId: failed?.stepId || '' };
-          }, tempDirs);
-          return send(res, 200, result, setCookie);
-        } finally {
-          releaseRun(owner);
-        }
+        const run = activeRun || lastRun;
+        if (!run || run.id !== body.runId || (run.state !== 'running' && run.state !== 'stopping')) return send(res, 404, { error: 'active run not found' }, setCookie);
+        run.state = 'stopping';
+        const step = run.currentStepId || run.steps[0] || 'the current step';
+        run.stoppedMessage = `Stopped installer run at ${step}. The install checkpoint resumes when the same steps run again.`;
+        publish(run, { type: 'stopped', stepId: step, message: run.stoppedMessage });
+        await killProcessTree(run.child);
+        return send(res, 200, { schemaVersion: 1, runId: run.id, message: run.stoppedMessage }, setCookie);
+      }
+      if (req.method === 'POST' && url.pathname === '/api/run') {
+        return send(res, 404, { error: 'route not found' }, setCookie);
       }
       return send(res, 404, { error: 'route not found' }, setCookie);
     } catch (error) {
+      if (res.headersSent) {
+        await writeNdjson(res, { type: 'error', message: await redactText(scrubLocalPaths(error.message || 'request failed')) }).catch(() => {});
+        res.end();
+        return;
+      }
       if (!error.status) return send(res, 500, { error: 'request failed' });
-      return send(res, error.status, error.field ? { schemaVersion: 1, field: error.field, error: error.message, remedy: error.remedy } : { error: error.message });
+      return send(res, error.status, error.field ? { schemaVersion: 1, field: error.field, error: error.message, remedy: error.remedy } : { error: error.message, detail: error.detail, exitCode: error.exitCode });
     } finally {
-      if (!activeRun) armIdle();
+      if (!activeRun?.state || activeRun.state !== 'running') armIdle();
     }
   });
 
