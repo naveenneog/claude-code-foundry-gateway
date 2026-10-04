@@ -110,7 +110,7 @@ $lossy = '\.Wait\(\s*\d+\s*\)\s*\)\s*\{[^{}]*\.Result\b[^{}]*\}\s*else\s*\{\s*('
 $sources = @(Get-ChildItem -LiteralPath $PSScriptRoot -Recurse -File -Filter '*.ps1')
 $offenders = @($sources | Where-Object { [IO.File]::ReadAllText($_.FullName) -match $lossy } | ForEach-Object { [IO.Path]::GetRelativePath($root, $_.FullName).Replace('\', '/') })
 Assert "no test turns a read that is still open after a short wait into empty output ($($sources.Count) files)" ($sources.Count -gt 100 -and -not $offenders.Count) ($offenders -join ', ')
-$readers = 'tests/BashInstallerHarness.ps1', 'tests/InstallerCheckpointHarness.ps1', 'tests/Test-BashInstaller.ps1', 'tests/Test-FlowPermutations.ps1', 'tests/Test-FlowStart.ps1'
+$readers = 'tests/BashInstallerHarness.ps1', 'tests/InstallerCheckpointHarness.ps1', 'tests/Test-BashInstaller.ps1', 'tests/Test-FlowPermutations.ps1', 'tests/Test-FlowStart.ps1', 'tests/Test-InstallerPreflight.ps1'
 $unshared = @(foreach ($r in $readers) {
         $path = Join-Path $root $r
         if (-not (Test-Path -LiteralPath $path)) { "$r (missing)"; continue }

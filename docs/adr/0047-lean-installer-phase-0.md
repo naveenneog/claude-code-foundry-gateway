@@ -441,8 +441,9 @@ The RED phase adds these tests before product code:
     21.6 s later. `tests/ChildOutputRead.ps1` reads each pipe with `ReadToEnd` in a `LongRunning` task, which
     runs on a dedicated thread, and a read still open 60 s after its process exited throws, naming the stream,
     instead of returning part of the text. `tests/BashInstallerHarness.ps1`,
-    `tests/InstallerCheckpointHarness.ps1`, `tests/Test-BashInstaller.ps1`, `tests/Test-FlowPermutations.ps1`
-    and `tests/Test-FlowStart.ps1` read through it. `tests/Test-ChildOutputRead.ps1` checks the reader with
+    `tests/InstallerCheckpointHarness.ps1`, `tests/Test-BashInstaller.ps1`, `tests/Test-FlowPermutations.ps1`,
+    `tests/Test-FlowStart.ps1` and the Windows marker preflight of `tests/Test-InstallerPreflight.ps1` read
+    through it. `tests/Test-ChildOutputRead.ps1` checks the reader with
     every pool worker busy and fails on any test that turns an unfinished read into an empty string.
 
 ## Consequences
