@@ -68,6 +68,9 @@ exact streaming cache-creation detail remains **U13**.
   subtest count and fails closed on skipped, todo, cancelled, failed, missing, duplicate or
   load-failed TAP output. Its mutation record now stores exact find and replacement text, parse
   result, exit code, check count, failed count, target test and verdict for each measured mutant.
+  The Installer UI guide now documents the portable `node ./tools/installer-ui/server.mjs` command,
+  static mode, the unverified Cloud Shell Web preview facts, the security model, run lifecycle and
+  output limits with source citations.
 - **Installers read an answers file, check it before any change, run selected steps and write a progress stream (P92, phase 0).**
   One answers file, described by `schemas/claude-gateway.answers.schema.json`, feeds
   `Install-ClaudeGateway.ps1 -AnswersPath`, `install-claude-gateway.sh --answers-file` and
