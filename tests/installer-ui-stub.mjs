@@ -99,7 +99,7 @@ if (args.includes('-Preflight')) {
     answersSchemaVersion: 1,
     result: overallFail ? 'FAIL' : 'PASS',
     checks: [
-      { id: 'target.tenant', result: process.env.P93_INSTALLER_UI_STUB_SIGNED_IN === '1' ? 'PASS' : 'NOT-RUN', reason: process.env.P93_INSTALLER_UI_STUB_SIGNED_IN === '1' ? null : 'not-signed-in', message: process.env.P93_INSTALLER_UI_STUB_SIGNED_IN === '1' ? 'Azure CLI tenant matches the subscription' : 'Azure CLI is not signed in', remedy: process.env.P93_INSTALLER_UI_STUB_SIGNED_IN === '1' ? '' : 'Run az login --use-device-code.', problems: [] },
+      { id: 'target.tenant', result: process.env.P93_INSTALLER_UI_STUB_SIGNED_IN === '1' ? 'PASS' : 'NOT-RUN', reason: process.env.P93_INSTALLER_UI_STUB_SIGNED_IN === '1' ? null : 'not-signed-in', message: process.env.P93_INSTALLER_UI_STUB_SIGNED_IN === '1' ? `signed in as ${process.env.P93_INSTALLER_UI_STUB_USER || 'operator@example.invalid'} in tenant ${process.env.P93_INSTALLER_UI_STUB_TENANT || 'tenant-capture'}` : 'Azure CLI is not signed in', remedy: process.env.P93_INSTALLER_UI_STUB_SIGNED_IN === '1' ? '' : 'Run az login --use-device-code.', problems: [] },
       targetSubscription,
       { id: 'answers.schema', result: fail ? 'FAIL' : 'PASS', reason: null, message: fail ? 'stub requested answers.schema failure' : 'the answers match the answers schema, version 1', remedy: fail ? 'Fix the stub-requested failure.' : '', problems: fail ? [{ message: 'stub requested answers.schema failure', remedy: 'Fix the stub-requested failure.' }] : [] },
     ],
