@@ -199,6 +199,140 @@ try {
     }
 
     Write-Host ''
+    Write-Host 'Projection renewal - the deploy script runs the three phases in order' -ForegroundColor Cyan
+    $deployScript = Join-Path $root 'scripts\Deploy-ClaudeProjectionRenewal.ps1'
+    $sub = '00000000-0000-4000-8000-000000000001'
+    $tenant = '00000000-0000-4000-8000-000000000094'
+    $rgId = "/subscriptions/$sub/resourceGroups/rg-p94"
+    $subnet = "$rgId/providers/Microsoft.Network/virtualNetworks/vnet-p94fixture/subnets/renewal"
+    $workspace = "$rgId/providers/Microsoft.OperationalInsights/workspaces/law-p94"
+    $standard = '10000000-0000-4000-8000-000000000001'
+    $premium = '10000000-0000-4000-8000-000000000002'
+    $digestBuilt = 'sha256:' + ('d' * 64)
+    $global:P94Stub = @{ Case = ''; Calls = $null; Params = $null; RenewalAttempts = 0 }
+    function global:az {
+        $words = @($args | ForEach-Object { [string]$_ })
+        $line = $words -join ' '
+        $state = $global:P94Stub
+        $state.Calls.Add($line)
+        $global:LASTEXITCODE = 0
+        $fileIndex = [Array]::IndexOf($words, '--parameters')
+        if ($line -match '^deployment group create' -and $fileIndex -ge 0) {
+            $name = $words[[Array]::IndexOf($words, '-n') + 1]
+            $state.Params[$name] = Get-Content -LiteralPath $words[$fileIndex + 1].TrimStart('@') -Raw | ConvertFrom-Json -AsHashtable
+            if ($name -like 'projection-renewal-*' -and $state.Case -eq 'renewal-fails-once' -and $state.RenewalAttempts++ -eq 0) {
+                $global:LASTEXITCODE = 1; return 'ERROR: (InvalidParameterValueInContainerTemplate) image pull unauthorized'
+            }
+            return
+        }
+        $outputs = {
+            param($values)
+            $o = [ordered]@{}; foreach ($k in $values.Keys) { $o[$k] = @{ value = $values[$k] } }; $o | ConvertTo-Json -Depth 5
+        }
+        switch -Regex ($line) {
+            '^account show' { return (@{ id = $sub; tenantId = $tenant } | ConvertTo-Json) }
+            '^account get-access-token' { return (@{ accessToken = 'graph-token' } | ConvertTo-Json) }
+            '^deployment group show .*-n projection-p94fixture ' { return (& $outputs @{ accountName = 'cosmos-p94fixture' }) }
+            '^deployment group show .*-n projection-network-p94fixture ' {
+                return (& $outputs @{ renewalSubnetId = $(if ($state.Case -eq 'no-renewal-subnet') { '' } else { $subnet }); runnerName = 'aci-projtest-p94fixture' })
+            }
+            '^deployment group show .*-n projection-registry-p94fixture ' {
+                return (& $outputs @{ acrName = 'acrp94fixture'; acrLoginServer = 'acrp94fixture.azurecr.io'; identityName = 'id-projection-renewal-p94fixture'; identityClientId = '40000000-0000-4000-8000-000000000001'; identityPrincipalId = '40000000-0000-4000-8000-000000000002' })
+            }
+            '^deployment group show .*-n projection-renewal-p94fixture ' {
+                return (& $outputs @{ jobName = 'caj-renew-p94'; jobResourceId = "$rgId/providers/Microsoft.App/jobs/caj-renew-p94"; actionGroupResourceId = "$rgId/providers/Microsoft.Insights/actionGroups/ag-projection-renewal-p94fixture" })
+            }
+            '^network vnet show' { return (@{ location = 'eastus2' } | ConvertTo-Json) }
+            '^apim show' { return (@{ id = "$rgId/providers/Microsoft.ApiManagement/service/apim-p94" } | ConvertTo-Json) }
+            '^acr build' { if ($state.Case -eq 'tasks-refused') { $global:LASTEXITCODE = 1; return 'ERROR: (TasksOperationsNotAllowed) ACR Tasks requests are not permitted.' }; return }
+            '^acr manifest show-metadata' { return (ConvertTo-Json $(if ($state.Case -eq 'bad-digest') { 'latest' } else { $digestBuilt })) }
+        }
+        $global:LASTEXITCODE = 9
+        return "stub az has no answer for: $line"
+    }
+    function Invoke-DeployScenario([string]$Case = 'healthy', [hashtable]$Change = @{}) {
+        $global:P94Stub.Case = $Case
+        $global:P94Stub.Calls = [Collections.Generic.List[string]]::new()
+        $global:P94Stub.Params = @{}
+        $global:P94Stub.RenewalAttempts = 0
+        $receiptPath = Join-Path $work ('receipt-' + [guid]::NewGuid().ToString('N') + '.json')
+        $params = @{
+            ResourceGroup = 'rg-p94'; ApimName = 'apim-p94'; NamePrefix = 'p94fixture'; AlertEmail = @('ops@example.invalid', 'oncall@example.invalid')
+            StandardGroup = $standard; PremiumGroup = $premium; WorkspaceResourceId = $workspace; ReceiptPath = $receiptPath
+            RetryDelaySeconds = 0; ImageTag = 'sync-test'
+        }
+        foreach ($key in $Change.Keys) { if ($null -eq $Change[$key]) { $params.Remove($key) } else { $params[$key] = $Change[$key] } }
+        $failure = $null
+        $all = @()
+        try { $all = @(& $deployScript @params *>&1) } catch { $failure = $_.Exception.Message }
+        [pscustomobject]@{
+            Failure = $failure; Output = ($all | Out-String); Calls = @($global:P94Stub.Calls); Params = $global:P94Stub.Params
+            Receipt = $(if (Test-Path -LiteralPath $receiptPath) { Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json } else { $null })
+        }
+    }
+    function Get-CallIndex($Run, [string]$Pattern) {
+        for ($i = 0; $i -lt $Run.Calls.Count; $i++) { if ($Run.Calls[$i] -match $Pattern) { return $i } }
+        return -1
+    }
+    function Get-WriteCount($Run) { @($Run.Calls | Where-Object { $_ -match '^(deployment group create|acr build)' }).Count }
+
+    $run = Invoke-DeployScenario
+    $registryAt = Get-CallIndex $run '^deployment group create .*-n projection-registry-p94fixture '
+    $buildAt = Get-CallIndex $run '^acr build '
+    $digestAt = Get-CallIndex $run '^acr manifest show-metadata '
+    $renewalAt = Get-CallIndex $run '^deployment group create .*-n projection-renewal-p94fixture '
+    Assert 'a healthy run completes' (-not $run.Failure) $run.Failure
+    Assert 'each deployment is named for its template and the prefix' ((@($run.Params.Keys) | Sort-Object) -join ',' -eq 'projection-registry-p94fixture,projection-renewal-p94fixture') (@($run.Params.Keys) -join ',')
+    Assert 'registry, then build, then digest, then the job' ($registryAt -ge 0 -and $registryAt -lt $buildAt -and $buildAt -lt $digestAt -and $digestAt -lt $renewalAt) ($run.Calls -join ' | ')
+    Assert 'the image builds from the sync package with the image Dockerfile' ($run.Calls[$buildAt] -match '--registry acrp94fixture --image claude-projection-sync:sync-test --file sync/Dockerfile --no-logs ')
+    $renewalParams = $run.Params['projection-renewal-p94fixture']
+    $value = { param($name) if ($renewalParams -and $renewalParams.parameters.Contains($name)) { $renewalParams.parameters[$name].value } }
+    Assert 'the job is pinned to the digest the registry reported' ((& $value 'syncImageDigest') -ceq $digestBuilt) (& $value 'syncImageDigest')
+    Assert 'the job runs on the renewal subnet' ((& $value 'containerAppsSubnetId') -eq $subnet)
+    Assert 'its logs go to the given workspace' ((& $value 'logAnalyticsWorkspaceId') -eq $workspace)
+    Assert 'the alert addresses go to the action group' (((& $value 'actionGroupEmailReceivers') -join ',') -eq 'ops@example.invalid,oncall@example.invalid')
+    Assert 'the job uses the registry and identity from phase 1' ((& $value 'acrName') -eq 'acrp94fixture' -and (& $value 'identityName') -eq 'id-projection-renewal-p94fixture')
+    Assert 'the job gets the tier group ids and the gateway' ((& $value 'standardGroupId') -eq $standard -and (& $value 'premiumGroupId') -eq $premium -and (& $value 'gatewayResourceId') -match 'Microsoft\.ApiManagement/service/apim-p94$')
+    Assert 'the job deploys in the network region and the signed-in tenant' ((& $value 'location') -eq 'eastus2' -and (& $value 'tenantId') -eq $tenant)
+    Assert 'the tenant administrator step names the job identity' ($run.Output -match 'Grant-ClaudeProjectionRenewalGraphAccess\.ps1 -PrincipalId 40000000-0000-4000-8000-000000000002')
+    Assert 'the output names the email confirmation and the evidence wait' ($run.Output -match 'confirmation from Azure Monitor' -and $run.Output -match '60-90 minutes')
+    $receipt = $run.Receipt
+    Assert 'the receipt records what the switch needs' ($receipt -and $receipt.kind -eq 'claude-projection-renewal-receipt' -and $receipt.reconcilerResourceId -match '/Microsoft\.App/jobs/caj-renew-p94$' -and
+        $receipt.imageDigest -ceq $digestBuilt -and $receipt.runnerName -eq 'aci-projtest-p94fixture' -and $receipt.cosmosAccount -eq 'cosmos-p94fixture' -and
+        $receipt.accountResourceId -match '/databaseAccounts/cosmos-p94fixture$' -and $receipt.tenantId -eq $tenant -and $receipt.entryPoint -eq 'node /app/sync/src/apply-projection.mjs' -and
+        $receipt.actionGroupResourceId -match '/actionGroups/')
+    Assert 'the receipt holds no secret' ($receipt -and -not (($receipt | ConvertTo-Json) -match '(?i)token|password|secret|key"'))
+    Assert 'no Graph call when both groups are object ids' (-not ($run.Calls -match 'get-access-token'))
+
+    foreach ($case in @(
+            @{ Name = 'an alert address with a command separator'; Change = @{ AlertEmail = @('ops@example.invalid&calc') }; Expect = 'AlertEmail' }
+            @{ Name = 'no alert address'; Change = @{ AlertEmail = @(' ') }; Expect = 'AlertEmail' }
+            @{ Name = 'a resource group with cmd metacharacters'; Change = @{ ResourceGroup = 'rg&echo' }; Expect = 'ResourceGroup' }
+            @{ Name = 'a prefix the projection deployer refuses'; Change = @{ NamePrefix = 'P94_Fixture' }; Expect = 'NamePrefix' }
+            @{ Name = 'a malformed digest'; Change = @{ ImageDigest = 'sha256:abc' }; Expect = 'ImageDigest' }
+            @{ Name = 'a cron with a separator'; Change = @{ CronExpression = '*/30 * * * *;' }; Expect = 'CronExpression' }
+            @{ Name = 'no standard group'; Change = @{ StandardGroup = 'none' }; Expect = 'StandardGroup' }
+        )) {
+        $refused = Invoke-DeployScenario 'healthy' $case.Change
+        Assert "refused before any Azure call: $($case.Name)" ($refused.Failure -match 'before any Azure call' -and $refused.Failure -match $case.Expect -and $refused.Calls.Count -eq 0) "$($refused.Failure) | calls $($refused.Calls.Count)"
+    }
+    $noSubnet = Invoke-DeployScenario 'no-renewal-subnet'
+    Assert 'a network without the renewal subnet stops before any write, with the remedy' ($noSubnet.Failure -match 'no renewal subnet' -and $noSubnet.Failure -match 'Deploy-ClaudeProjection\.ps1' -and (Get-WriteCount $noSubnet) -eq 0) $noSubnet.Failure
+    $tasks = Invoke-DeployScenario 'tasks-refused'
+    Assert 'a refused registry build stops before the job, naming the docker path' ($tasks.Failure -match 'TasksOperationsNotAllowed' -and $tasks.Failure -match 'docker build' -and $tasks.Failure -match '-ImageDigest' -and (Get-CallIndex $tasks '^deployment group create .*projection-renewal') -lt 0) $tasks.Failure
+    $badDigest = Invoke-DeployScenario 'bad-digest'
+    Assert 'a digest that is not sha256 stops before the job' ($badDigest.Failure -match 'not a sha256 digest' -and (Get-CallIndex $badDigest '^deployment group create .*projection-renewal') -lt 0) $badDigest.Failure
+    $given = Invoke-DeployScenario 'healthy' @{ ImageDigest = 'sha256:' + ('e' * 64) }
+    Assert 'a given digest skips the build and pins the job to it' (-not $given.Failure -and (Get-CallIndex $given '^acr build') -lt 0 -and $given.Params['projection-renewal-p94fixture'].parameters.syncImageDigest.value -ceq ('sha256:' + ('e' * 64))) $given.Failure
+    $retry = Invoke-DeployScenario 'renewal-fails-once'
+    Assert 'a job deployment that fails once (AcrPull still propagating) is retried' (-not $retry.Failure -and @($retry.Calls -match '^deployment group create .*projection-renewal').Count -eq 2) $retry.Failure
+    $whatIf = Invoke-DeployScenario 'healthy' @{ WhatIf = $true }
+    Assert 'WhatIf writes nothing and leaves no receipt' (-not $whatIf.Failure -and (Get-WriteCount $whatIf) -eq 0 -and -not $whatIf.Receipt) $whatIf.Failure
+    $wrongSubscription = Invoke-DeployScenario 'healthy' @{ SubscriptionId = '00000000-0000-4000-8000-0000000000ff' }
+    Assert 'a different signed-in subscription stops before any write' ($wrongSubscription.Failure -match 'az account set' -and (Get-WriteCount $wrongSubscription) -eq 0) $wrongSubscription.Failure
+    Remove-Item Function:\az -ErrorAction SilentlyContinue
+
+    Write-Host ''
     Write-Host 'Projection renewal - admission refuses a job without these settings' -ForegroundColor Cyan
     . (Join-Path $root 'scripts\ClaudeProjectionChecks.ps1')
     $digest = 'sha256:' + ('c' * 64)
