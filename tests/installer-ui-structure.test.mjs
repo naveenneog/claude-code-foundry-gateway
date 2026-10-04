@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
+import { once } from 'node:events';
 import { readdir, readFile } from 'node:fs/promises';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { createContext, runInContext } from 'node:vm';
+import { createInstallerUiServer } from '../tools/installer-ui/server.mjs';
 
 test('the form uses fixed script routes and no string-built DOM insertion sinks', async () => {
   const html = await readFile(new URL('../tools/installer-ui/index.html', import.meta.url), 'utf8');
@@ -38,4 +41,23 @@ test('the form uses fixed script routes and no string-built DOM insertion sinks'
   }
   const model = await readFile(new URL('../tools/installer-ui/ui-model.js', import.meta.url), 'utf8');
   assert.match(model, /ClaudeInstallerUiModel/);
+  const server = await createInstallerUiServer({ token: 'structure-token-with-at-least-32-bytes-0000', stubInstaller: fileURLToPath(new URL('./installer-ui-stub.mjs', import.meta.url)) });
+  const address = await server.listenAsync('127.0.0.1');
+  const base = `http://127.0.0.1:${address.port}`;
+  try {
+    const bootstrap = await fetch(`${base}/?token=${encodeURIComponent(server.token)}`, { redirect: 'manual' });
+    const cookie = bootstrap.headers.get('set-cookie').split(';')[0];
+    const routeFiles = [...html.matchAll(/<script defer src="\.\/([^"]+)"><\/script>/g)].map((match) => match[1]);
+    routeFiles.push('installer-ui.css');
+    for (const file of routeFiles) {
+      const response = await fetch(`${base}/${file}`, { headers: { cookie } });
+      assert.equal(response.status, 200, file);
+      assert.equal(await response.text(), await readFile(new URL(`../tools/installer-ui/${file}`, import.meta.url), 'utf8'), file);
+    }
+    assert.equal((await fetch(`${base}/installer-ui-missing.js`, { headers: { cookie } })).status, 404);
+  } finally {
+    await server.cleanup();
+    server.close();
+    await once(server, 'close').catch(() => {});
+  }
 });
