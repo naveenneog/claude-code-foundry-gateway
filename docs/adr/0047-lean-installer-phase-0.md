@@ -401,13 +401,17 @@ The RED phase adds these tests before product code:
       probe, and `branches` holds the round-2 branches and the subscription records of round 3. The JSON
       shape, fail-closed and read-only checks run once per group. Alone under the gate lock the two
       shards took 93.1 and 78.2 s.
-    - **The bash suites run in the exclusive lane (round 5, `15ada4b`).** Test-All runs a check registered
-      with `-SerialLane` alone, and runs all such checks before the parallel ones (`tests/Test-All.ps1:380-399`).
-      `15ada4b` registers the bash installer suites, their shards and the three shard-contract checks there
-      (`tests/Test-All.ps1:217-246`), because on PR #2's Windows runners they failed while other checks ran and
-      passed alone. Decision 16 records the cause of those failures, a child's output that the harness stopped
-      reading; the lane stays, as ADR-0036 keeps timing-sensitive checks out of the parallel lane. In a Test-All
-      run without shards, the 38 exclusive checks' weights sum to 2,724 s (`tests/test-all-durations.json`).
+    - **The bash suites run in the parallel lane (round 5, `15ada4b`; council round 3).** Test-All runs a check
+      registered with `-SerialLane` alone, and runs all such checks before the parallel ones
+      (`tests/Test-All.ps1:380-399`). `15ada4b` registered the bash installer suites, their shards and the three
+      shard-contract checks there, because on PR #2's Windows runners they failed while other checks ran and
+      passed alone. Decision 16 found the cause, a child's output that the harness stopped reading. With the
+      reader of decision 16, CI run `37219348012` passed all 12 shards with those 19 registrations in the
+      parallel lane again, and they stay there (`tests/Test-All.ps1:217-246`): each run has its own copy of the
+      files, its own stubs, state directory and TEMP, so these checks share no resource; ADR-0036 (option 3)
+      rejected moving checks into the parallel lane without such isolation. In a Test-All run without shards the exclusive checks'
+      weights summed to 2,724 s (38 checks) with them and sum to 1,193 s (19 checks) without them
+      (`tests/test-all-durations.json`), against the gate's 3,600 s budget (ADR-0036).
     - **The prices suite gives its runs 300 s (round 5, `a87c708`).** `tests/Test-BashInstaller.ps1` starts its
       22 installer runs at once and gives them 300 s together, the time the checkpoint harness gives each run
       (`tests/Test-BashInstaller.ps1:246`, `tests/BashInstallerHarness.ps1:304`); it was 150 s. With decision 16,
