@@ -5,7 +5,7 @@
       "id": "system-overview",
       "source": "docs/architecture/01-system.json",
       "inputs": {
-        "Start-ClaudeGateway.ps1": "86e92a50b603e0466f2d94ef03964f1ef8a511fe49262bfb694d6df32ad2d4dc",
+        "Start-ClaudeGateway.ps1": "22acc30a8feed7b0101dd98bb90fac93abb605aef77bf800f585e881939d8479",
         "analytics/chargeback-cost.kql": "8d8a66a8980348851f37889579bf019666b229105bb4e64caae02c474de080b1",
         "analytics/chargeback-ledger.kql": "3924ba7e4edb21d761b16254452c0509a2a9d27558033d7a980c5e201e22b2f5",
         "docs/architecture/01-system.json": "dfb279d7bec41abefa25f18d44dfef14c47435d4d45467577f02cc4ca6d8b4f3",
@@ -458,8 +458,8 @@
       "id": "company-address",
       "source": "docs/architecture/15-company-address.json",
       "inputs": {
-        "Install-ClaudeGateway.ps1": "48873a2a7249b74b3a04070ba69f07ecb83c1f9a6ab55e3e497aed0ff53fc20a",
-        "Start-ClaudeGateway.ps1": "86e92a50b603e0466f2d94ef03964f1ef8a511fe49262bfb694d6df32ad2d4dc",
+        "Install-ClaudeGateway.ps1": "fbc1ad44ddc5d7f3a318b4d8050f410ebb28a3f901dc89d2a9b65457f6de6057",
+        "Start-ClaudeGateway.ps1": "22acc30a8feed7b0101dd98bb90fac93abb605aef77bf800f585e881939d8479",
         "docs/architecture/15-company-address.json": "83c08d15d71fcf6a002d004090b67ea77c858b70efa3718e8ff11aebae276981",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
@@ -474,7 +474,7 @@
         "scripts/ClaudeGatewayCertificate.ps1": "eb3895a08d7ad19d1d307f4116d6ec80260629402c253cf98219bc0508566d98",
         "scripts/ClaudeNetwork.ps1": "5709a3e94dfc7ca71e75429ea4d278b7737198a5488e07556fccc28cda9d00f9",
         "scripts/flow/Address.ps1": "88b0499d3eaf5423f98f4e6cb1ca1b2f221c4a44d4b8677a790ada807e495869",
-        "scripts/flow/Discovery.ps1": "42af4fad6cb875d2ff4618c3d5f9f0b45eb11ce02123ccf960a10928385c9c67",
+        "scripts/flow/Discovery.ps1": "4503029d3aa1c89351e039bb26c8fde64e4c9ebb02502d2da8b671c203aaa161",
         "scripts/flow/FlowContract.ps1": "5fe01f9f68710671039ba8d1fd4a303ccd3547d7f29096e23d87c58dae1b8bf8",
         "scripts/flow/Foundation.ps1": "fb0d43ee4fbe00a140410bf3f9594b1a6d43bc4f226748f8231c6f23743c7ed4"
       },
@@ -489,7 +489,7 @@
       "id": "model-lifecycle",
       "source": "docs/architecture/15-model-lifecycle.json",
       "inputs": {
-        "Start-ClaudeGateway.ps1": "86e92a50b603e0466f2d94ef03964f1ef8a511fe49262bfb694d6df32ad2d4dc",
+        "Start-ClaudeGateway.ps1": "22acc30a8feed7b0101dd98bb90fac93abb605aef77bf800f585e881939d8479",
         "docs/architecture/15-model-lifecycle.json": "53b9396e65ec695f644d7e702ce01f44c06043d62c9f97ff13d2297024e1262b",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
@@ -517,6 +517,63 @@
         {
           "path": "docs/images/architecture/model-lifecycle.png",
           "sha256": "395f296ab8e5440a0984fa406d1f05ac6f426e29b996e47e1c83615eae2e6ea5"
+        }
+      ]
+    },
+    {
+      "id": "install-checkpoint",
+      "source": "docs/architecture/16-install-checkpoint.json",
+      "inputs": {
+        "Install-ClaudeGateway.ps1": "fbc1ad44ddc5d7f3a318b4d8050f410ebb28a3f901dc89d2a9b65457f6de6057",
+        "docs/architecture/16-install-checkpoint.json": "5fa66b3f03fd6a19828e5533b8e3f557700062c7cb97d6a18e7066f3a1110c64",
+        "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
+        "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
+        "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
+        "infra/main.bicep": "c449423ad43d86c9c15b56c19d18ece9d7681cd627efb7110b38d06b6b0ba82b",
+        "install-claude-gateway.sh": "7da93aa0877dd2cd45e064765a60dd62a48a262a82fd82dacc537c6f5a4c4b61",
+        "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
+        "scripts/ClaudeInstallCheckpoint.ps1": "074226080a1119fad816e82285b94f1d2eb70a7ee698682da80be5b5c3a4150a",
+        "scripts/ClaudeInstallResume.ps1": "03a7e6a3752414097c9ce7b68f607e3ed9ed23a6814776e1f915469693314e69",
+        "scripts/ClaudeInstallStore.ps1": "37624fb3c330fa346a3ed131ef422380eebe8e54c8f04823b6a1aaa34fdd10f3",
+        "scripts/flow/Foundation.ps1": "fb0d43ee4fbe00a140410bf3f9594b1a6d43bc4f226748f8231c6f23743c7ed4",
+        "scripts/install-checkpoint.sh": "8d080e3b53de94b1a123fbf9f591feaeae1526b6686623e066fc8d09a7e5859e",
+        "scripts/install-resume.sh": "19f52d8c00cb23ebe5237185e9589d3a053099aa2bd61613d1c88f13e9d95fc8",
+        "scripts/install-store.sh": "025765d841de25acd19346a72c41bfe4fc58a48a262c2d7ab2e5ecc8d019d629"
+      },
+      "outputs": [
+        {
+          "path": "docs/images/architecture/install-checkpoint.png",
+          "sha256": "5d915b60d87c475e6453ce3854340b2a24704c86e7d70e6063a790846c2491a6"
+        }
+      ]
+    },
+    {
+      "id": "lean-installer-phase0",
+      "source": "docs/architecture/17-lean-installer-phase0.json",
+      "inputs": {
+        "Install-ClaudeGateway.ps1": "fbc1ad44ddc5d7f3a318b4d8050f410ebb28a3f901dc89d2a9b65457f6de6057",
+        "Start-ClaudeGateway.ps1": "22acc30a8feed7b0101dd98bb90fac93abb605aef77bf800f585e881939d8479",
+        "docs/architecture/17-lean-installer-phase0.json": "667eda544454e1742da2ba4ba6899bddfe2ed9768c3851d239816155b4f789f4",
+        "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
+        "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
+        "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
+        "install-claude-gateway.sh": "7da93aa0877dd2cd45e064765a60dd62a48a262a82fd82dacc537c6f5a4c4b61",
+        "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
+        "schemas/claude-gateway.answers.schema.json": "64d2279b808d008f9cec1aff4e998c195df62f86adb1b6b53f24762e5bd54edf",
+        "scripts/ClaudeInstallResume.ps1": "03a7e6a3752414097c9ce7b68f607e3ed9ed23a6814776e1f915469693314e69",
+        "scripts/ClaudeInstallSteps.ps1": "94f83378feb5102f2c32de40e4807b0c94d49ef365e87da959eb0422b4f3277b",
+        "scripts/ClaudeInstallerAnswers.ps1": "b0350cf38059f20690b04ee1635f100d225a79243d5e4af84f3bbec04189b404",
+        "scripts/ClaudeInstallerPreflight.ps1": "98bc1547b1afdcc13efefe57f60da301fe7157760d34ad6b53be2bbc9bbfb96c",
+        "scripts/Set-ClaudeBusinessUnit.ps1": "c6f2cc8a385365a5b709ec4c58b109dc3de06a84bace5934d51ed0f309098f49",
+        "scripts/Sync-ClaudeUsdBudgets.ps1": "f0d5c3d6d0fb2da6b06b75c38cfecad9773bdadb97803027645910696a1d3d5c",
+        "scripts/install-answers.jq": "eccf3fa077f88106fb90f9af4f0e99cd5a65fee972a3b634cb5d9def689ff35e",
+        "scripts/install-preflight.sh": "426c052098af5c52d4823fb6ecc96068e04b30b7fb8eef0a07fe828309a6a377",
+        "scripts/install-steps.sh": "61e1d751e5ce2308a2116cfdf5deb4d1449f41657e87bae16b916f8d8a079f45"
+      },
+      "outputs": [
+        {
+          "path": "docs/images/architecture/lean-installer-phase0.png",
+          "sha256": "e3ff76a5e78f9c02649b513950ba0b1d71c7ad7a12f0f46f6eb38cd08a53bb62"
         }
       ]
     }

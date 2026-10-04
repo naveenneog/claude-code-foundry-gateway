@@ -29,6 +29,66 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **Installers read an answers file, check it before any change, run selected steps and write a progress stream (P92, phase 0).**
+  One answers file, described by `schemas/claude-gateway.answers.schema.json`, feeds
+  `Install-ClaudeGateway.ps1 -AnswersPath`, `install-claude-gateway.sh --answers-file` and
+  `Start-ClaudeGateway.ps1 -AnswersPath`. PowerShell and jq check it with the same rules and messages,
+  and a file with any problem, or with a secret, is refused before any Azure resource is read; the
+  refusal gives the first problem with its remedy, the number of problems and the `-Preflight` command
+  that lists them all. The schema also holds P86's three projection renewal inputs; the install checkpoint
+  records them, and a changed one runs the projection step again.
+  `-Preflight`/`--preflight` runs 14 read-only checks, each PASS, FAIL or NOT-RUN with a reason, as
+  text or JSON; a check that cannot run never passes, and a check starts NOT-RUN until a branch evaluates
+  it, so one that no branch reaches fails the preflight. `az` output that is not JSON, or a subscription
+  record without its id or tenant, is an inconclusive FAIL, not a stop. A JWT, `Bearer <token>` or a
+  named secret such as `sig=` or `password:` in a preflight message or remedy, in the progress
+  stream, or in a refusal, warning or failure line and the Azure CLI error output either installer prints,
+  is written as `[redacted]`, by one rule table that both installers hold.
+  `-ListSteps`/`--list-steps` prints the steps and
+  the checkpoint's state; `-Steps`/`--steps` runs the named steps once their prerequisites are
+  verified live, and an unknown step id is refused with the command that lists them;
+  `-ProgressPath`/`--progress-file` appends one JSON event per line, and a file that
+  cannot be written stops the run before any Azure call, naming the next step.
+  `Install-ClaudeGateway.ps1` applies business units from the answers file, units before teams, through
+  `scripts/Set-ClaudeBusinessUnit.ps1`, and prints the `scripts/Sync-ClaudeUsdBudgets.ps1` command when
+  a dollar budget is enforced; the answers and the installer's prompt find each unit's Entra group by its
+  exact name, and the prompt refuses a group name with `'`, `,`, `:` or a `cmd.exe` metacharacter before any Azure CLI call. The
+  run's reuse path and the preflight read an existing API Management
+  instance through one function. The guided flow runs the installer's preflight for an unattended plan,
+  binds the result into the plan fingerprint and applies a plan only when that preflight passes. The bash
+  checkpoint suite runs as seven Test-All checks, the bash step-selection suite as three and the bash
+  preflight suite as two, each within the default timeout, and
+  `.github/workflows/installer-unix.yml` runs the P92 bash suites on Linux and macOS and continues the later suite steps after an earlier suite failure. The bash admin preflight warns on the jq 1.7.0 number-conversion behavior, not on a distribution version string. Windows preflight refuses cmd.exe metacharacters in Azure CLI-bound answers before any `az.cmd` invocation can re-parse them. The installer and flow test harnesses read each child's output on a thread of their own, so a busy thread pool no longer records a run's output as empty (U92, 8 checks in `tests/Test-ChildOutputRead.ps1`). 51 schema, 15 drift, 11 redaction, 44 PowerShell and 40 bash preflight, 37 PowerShell and 38 bash step, 17 business-unit, 10 guided-flow and 15 shard checks
+  ([lean installer design record (ADR-0047)](docs/adr/0047-lean-installer-phase-0.md),
+  [Setup](docs/SETUP.md#answers-file-preflight-and-selected-steps)).
+- **Installers resume after a failure.** `Install-ClaudeGateway.ps1` and
+  `install-claude-gateway.sh` keep one checkpoint per checkout in a per-user state
+  directory, from the confirmed summary until the last step completes; in Azure Cloud
+  Shell it is in `clouddrive` when storage is mounted, otherwise in the session's
+  `$HOME`, with the full resume command printed. A rerun resumes after the last step
+  whose result a live Azure read still shows, with the recorded answers; refuses on one
+  line for another tenant, subscription, resource group, gateway or installer; records
+  the deployment name before `az deployment group create` and starts no second
+  main.bicep deployment; reads Entra groups by id, and by name only as the one listed
+  group with as many Unicode code points as the configured name, alike in both
+  installers; checks receipt values before they reach `az`, and uses a recorded group,
+  role assignment, resolver app or Desktop app only when the live object is the one
+  the run recorded; refuses a tier group name with a single quote, which Azure CLI
+  would place inside an OData string literal. The state directory is used by its real
+  path and only inside the user's home directory or profile; a junction or symbolic
+  link, another owner, inherited Windows access rules, a Windows directory up to the
+  profile that another account may delete, rename or re-permission, or a directory up
+  to `$HOME` that another account can write fails the store check before anything is
+  read. Such a store stops the run when `CLAUDE_GATEWAY_STATE_DIR` names it or when it
+  holds a file of the checkout; otherwise the run keeps no checkpoint, prints the
+  failed check and the resume command with the answers, and continues on its live
+  checks. The bash installer under Git Bash keeps no checkpoint and names
+  `Install-ClaudeGateway.ps1` as the Windows installer. `-Restart`/`--restart` sets
+  the checkpoint aside. The bash checkpoint lock heartbeat is removed from the shell job table before release kills it, so bash 3.2 prints no job-termination notice beside a refusal. 86 PowerShell, 53 bash and 24 store checks
+  ([installer checkpoint design record (ADR-0046)](docs/adr/0046-installer-checkpoint-and-resume.md),
+  [Setup](docs/SETUP.md#resume-after-a-failure)). `.github/workflows/installer-unix.yml`
+  runs the bash suites and the store suite on `ubuntu-latest` and `macos-latest`
+  ([U75](docs/UNKNOWNS.md#p91-research-before-implementation)).
 - **P86 scheduled projection renewal.** A 30-minute Container Apps renewal job,
   tenant-admin Graph grant script, Cosmos status evidence, email-backed alerts
   and evidence-gated switch admission replace P84's unconditional projection

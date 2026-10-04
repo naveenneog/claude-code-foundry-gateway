@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "id": "install-checkpoint",
+  "kind": "flow",
+  "title": "Install checkpoint: resume after the last verified step",
+  "subtitle": "Installer checkpoint design record (ADR-0046). Both installers, on Windows, Linux, macOS and Azure Cloud Shell. The checkpoint says where a rerun starts; a live Azure read decides whether a step is skipped.",
+  "width": 1280,
+  "height": 1100,
+  "outputs": ["docs/images/architecture/install-checkpoint.png"],
+  "sources": ["Install-ClaudeGateway.ps1", "install-claude-gateway.sh", "scripts/ClaudeInstallCheckpoint.ps1", "scripts/ClaudeInstallStore.ps1", "scripts/ClaudeInstallResume.ps1", "scripts/install-checkpoint.sh", "scripts/install-store.sh", "scripts/install-resume.sh", "scripts/flow/Foundation.ps1", "infra/main.bicep"],
+  "identifiers": {
+    "flowcall": {"label": "Invoke-ClaudeFlowStep", "source": "scripts/flow/Foundation.ps1", "match": "function Invoke-ClaudeFlowStep"},
+    "record": {"label": "claude-gateway.json", "source": "scripts/flow/Foundation.ps1", "match": "onboarding\\claude-gateway.json"},
+    "ps": {"label": "Install-ClaudeGateway.ps1", "source": "Install-ClaudeGateway.ps1", "match": "Open-ClaudeInstallCheckpoint -Root"},
+    "open": {"label": "Open-ClaudeInstallCheckpoint", "source": "scripts/ClaudeInstallCheckpoint.ps1", "match": "function Open-ClaudeInstallCheckpoint"},
+    "sh": {"label": "install-claude-gateway.sh", "source": "install-claude-gateway.sh", "match": "ckpt_open_ \"$HERE\""},
+    "shopen": {"label": "ckpt_open_", "source": "scripts/install-checkpoint.sh", "match": "ckpt_open_() {"},
+    "location": {"label": "Get-ClaudeInstallLocation", "source": "scripts/ClaudeInstallStore.ps1", "match": "function Get-ClaudeInstallLocation"},
+    "statedir": {"label": "CLAUDE_GATEWAY_STATE_DIR", "source": "scripts/ClaudeInstallStore.ps1", "match": "$env:CLAUDE_GATEWAY_STATE_DIR"},
+    "clouddrive": {"label": "clouddrive", "source": "scripts/ClaudeInstallStore.ps1", "match": "& $join $homeDir 'clouddrive'"},
+    "save": {"label": "Save-ClaudeInstallCheckpoint", "source": "scripts/ClaudeInstallCheckpoint.ps1", "match": "function Save-ClaudeInstallCheckpoint"},
+    "shsave": {"label": "ckpt_save_", "source": "scripts/install-checkpoint.sh", "match": "ckpt_save_() {"},
+    "register": {"label": "Register-ClaudeInstallDeployment", "source": "scripts/ClaudeInstallResume.ps1", "match": "function Register-ClaudeInstallDeployment"},
+    "deployname": {"label": "deployName", "source": "Install-ClaudeGateway.ps1", "match": "$deployName = \"claude-gw-"},
+    "main": {"label": "main.bicep", "source": "infra/main.bicep", "kind": "file"},
+    "groups": {"label": "Invoke-ClaudeInstallGroups", "source": "scripts/ClaudeInstallResume.ps1", "match": "function Invoke-ClaudeInstallGroups"},
+    "skip": {"label": "Test-ClaudeInstallStepSkip", "source": "scripts/ClaudeInstallCheckpoint.ps1", "match": "function Test-ClaudeInstallStepSkip"},
+    "shskip": {"label": "ckpt_skip_", "source": "scripts/install-checkpoint.sh", "match": "ckpt_skip_() {"},
+    "azread": {"label": "Invoke-ClaudeInstallAzRead", "source": "scripts/ClaudeInstallResume.ps1", "match": "function Invoke-ClaudeInstallAzRead"},
+    "gateway": {"label": "Resolve-ClaudeInstallGatewayStep", "source": "scripts/ClaudeInstallResume.ps1", "match": "function Resolve-ClaudeInstallGatewayStep"},
+    "cloudline": {"label": "Write-ClaudeInstallCloudShellLine", "source": "scripts/ClaudeInstallResume.ps1", "match": "function Write-ClaudeInstallCloudShellLine"},
+    "storecheck": {"label": "Assert-ClaudeInstallStore", "source": "scripts/ClaudeInstallStore.ps1", "match": "function Assert-ClaudeInstallStore {"}
+  },
+  "groups": [
+    {"x": 0, "y": 0, "w": 1280, "h": 340, "tone": "purple", "title": "Operator side - one checkpoint per checkout, with no tokens, keys or connection strings"},
+    {"x": 0, "y": 380, "w": 1280, "h": 340, "tone": "blue", "title": "Apply - the first write follows the confirmed summary (ADR-0032)"},
+    {"x": 0, "y": 760, "w": 1280, "h": 340, "tone": "teal", "title": "Resume - live Azure state decides; the checkpoint only says where to start"}
+  ],
+  "nodes": [
+    {"id": "flow", "x": 18, "y": 76, "w": 385, "h": 248, "tone": "purple", "title": "1 - Guided flow", "lines": [
+      "[[flowcall]] runs the installer; a rerun of the flow's first phase resumes it.",
+      "[[record]] keeps applied values only.",
+      "A refusal reaches the flow as an exception."
+    ]},
+    {"id": "installers", "x": 447, "y": 76, "w": 385, "h": 248, "tone": "purple", "title": "2 - Two installers, one contract", "lines": [
+      "[[open]] in [[ps]].",
+      "[[shopen]] in [[sh]].",
+      "Neither resumes the other's checkpoint."
+    ]},
+    {"id": "store", "x": 876, "y": 76, "w": 385, "h": 248, "tone": "purple", "title": "3 - Per-user state directory", "lines": [
+      "[[location]]: [[statedir]] when set, [[clouddrive]] in Cloud Shell, else LOCALAPPDATA or XDG state.",
+      "[[storecheck]] skips a store another account can alter; a named or occupied one refuses."
+    ]},
+    {"id": "save", "x": 18, "y": 456, "w": 385, "h": 248, "tone": "blue", "title": "4 - Commit point", "lines": [
+      "[[save]] and [[shsave]] record the binding, the answers and the lock.",
+      "Another tenant, subscription, resource group or gateway refuses."
+    ]},
+    {"id": "deploy", "x": 447, "y": 456, "w": 385, "h": 248, "tone": "blue", "title": "5 - Name before create", "lines": [
+      "[[register]] records [[deployname]] before [[main]] is deployed.",
+      "No second main.bicep deployment starts while one runs."
+    ]},
+    {"id": "groups", "x": 876, "y": 456, "w": 385, "h": 248, "tone": "blue", "title": "6 - Receipts by id", "lines": [
+      "[[groups]] records each Entra group's id and whether this run created it.",
+      "A resume reads each group by id; by name only the one listed group with the name's length counts, and a failed read creates nothing."
+    ]},
+    {"id": "verify", "x": 18, "y": 836, "w": 385, "h": 248, "tone": "teal", "title": "7 - Verify before a skip", "lines": [
+      "[[skip]] and [[shskip]] skip a step only on a live read.",
+      "[[azread]]: present skips, absent reruns, inconclusive refuses (an idempotent step reruns)."
+    ]},
+    {"id": "gateway", "x": 447, "y": 836, "w": 385, "h": 248, "tone": "teal", "title": "8 - Recorded deployment", "lines": [
+      "[[gateway]]: running waits, succeeded gives outputs, failed or canceled reruns.",
+      "Read-backs run before a PowerShell deployment; bash redeploys only a gateway its own run created."
+    ]},
+    {"id": "cloud", "x": 876, "y": 836, "w": 385, "h": 248, "tone": "teal", "title": "9 - Azure Cloud Shell", "lines": [
+      "Without clouddrive: the session's $HOME, a warning and the full resume command.",
+      "[[cloudline]]: the 20-minute idle limit before a wait over 60 s."
+    ]}
+  ],
+  "edges": [
+    {"from": "flow", "to": "installers", "kind": "control", "points": [[403, 200], [447, 200]]},
+    {"from": "installers", "to": "store", "kind": "data", "points": [[832, 200], [876, 200]]},
+    {"from": "installers", "to": "save", "kind": "control", "points": [[640, 324], [640, 428], [210, 428], [210, 456]]},
+    {"from": "save", "to": "deploy", "kind": "control", "points": [[403, 580], [447, 580]]},
+    {"from": "deploy", "to": "groups", "kind": "control", "points": [[832, 580], [876, 580]]},
+    {"from": "store", "to": "verify", "kind": "data", "label": "a rerun reads the checkpoint", "labelAt": [900, 808], "points": [[1261, 270], [1272, 270], [1272, 808], [210, 808], [210, 836]]},
+    {"from": "verify", "to": "gateway", "kind": "control", "points": [[403, 960], [447, 960]]}
+  ],
+  "notice": "The installers add no Azure resource or identity: the live reads use the operator's Azure CLI sign-in. The checkpoint is a file on the operator's machine; in Cloud Shell it is in clouddrive when storage is mounted, otherwise in the session's $HOME, with the full resume command printed."
+}

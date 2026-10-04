@@ -128,6 +128,8 @@ try {
     Copy-Item -LiteralPath (Join-Path $root "tests\$suiteFile") -Destination $suitePath
     Copy-Item -LiteralPath (Join-Path $root 'tests\ScriptImportCoverage.ps1') -Destination (Join-Path $shadow 'tests')
     Copy-Item -LiteralPath (Join-Path $root 'scripts') -Destination $shadow -Recurse
+    # The answers schema the guided flow checks -AnswersPath against (ADR-0047).
+    Copy-Item -LiteralPath (Join-Path $root 'schemas') -Destination $shadow -Recurse
     foreach ($file in 'Start-ClaudeGateway.ps1','Install-ClaudeGateway.ps1','.gitignore') { Copy-Item -LiteralPath (Join-Path $root $file) -Destination $shadow }
     & git -C $shadow init --quiet
     if ($LASTEXITCODE) { throw 'Cannot initialise the private mutation source repository.' }
