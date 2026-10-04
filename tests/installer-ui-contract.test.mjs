@@ -11,6 +11,7 @@ import { PROGRESS_EVENTS, STEP_STATES, validatePreflight, validateStepList } fro
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url)).replace(/[\\/]+$/, '');
 const stub = fileURLToPath(new URL('./installer-ui-stub.mjs', import.meta.url));
+const passingAnswers = { schemaVersion: 1, SubscriptionId: '00000000-0000-4000-8000-000000000093' };
 
 async function runPwsh(args, env = {}) {
   const child = spawn('pwsh', ['-NoProfile', '-NonInteractive', '-File', 'Install-ClaudeGateway.ps1', ...args], {
@@ -107,10 +108,15 @@ test('contract adapter vocabularies cover producer literals and resume/refusal s
 
   const refused = await start({ P93_INSTALLER_UI_STUB_REFUSED_PROGRESS: '1' });
   try {
+    const preflight = await (await refused.fetch('/api/preflight', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'] }),
+    })).json();
     const response = await refused.fetch('/api/run/stream', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ answers: {}, steps: ['resource-group'] }),
+      body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'], fingerprint: preflight.fingerprint }),
     });
     const events = (await response.text()).trim().split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
     assert.ok(events.some((event) => event.type === 'progress' && event.event === 'refused' && event.stepId === ''));

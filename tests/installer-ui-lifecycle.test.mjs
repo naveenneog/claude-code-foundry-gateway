@@ -11,6 +11,7 @@ import { createInstallerUiServer, shutdownInstallerUiServer } from '../tools/ins
 const stub = fileURLToPath(new URL('./installer-ui-stub.mjs', import.meta.url));
 const scratchRoot = join(tmpdir(), 'p93-installer-ui-lifecycle');
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const passingAnswers = { schemaVersion: 1, SubscriptionId: '00000000-0000-4000-8000-000000000093' };
 
 async function start(env = {}, options = {}) {
   const scratch = join(scratchRoot, `${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`);
@@ -104,11 +105,7 @@ test('stop kills the installer process and its grandchild', async () => {
   await rm(`${heartbeat}.pid`, { force: true });
   const app = await start({ P93_INSTALLER_UI_STUB_GRANDCHILD_HEARTBEAT: heartbeat });
   try {
-    const runPromise = app.fetch('/api/run/stream', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ answers: {}, steps: ['resource-group'] }),
-    });
+    const runPromise = runRequest(app, ['resource-group']);
     let status;
     for (let i = 0; i < 40; i++) {
       status = await (await app.fetch('/api/run/status')).json();
@@ -144,8 +141,14 @@ async function waitForStatus(app, predicate, ms = 10_000) {
   return status;
 }
 
-function runRequest(app, steps, signal) {
-  return app.fetch('/api/run/stream', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: {}, steps }), signal });
+async function runRequest(app, steps, signal) {
+  const preflight = await (await app.fetch('/api/preflight', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ answers: passingAnswers, steps }),
+  })).json();
+  assert.match(preflight.fingerprint, /^[0-9a-f]{64}$/);
+  return app.fetch('/api/run/stream', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers, steps, fingerprint: preflight.fingerprint }), signal });
 }
 
 function answersPathOf(app) {
@@ -266,7 +269,10 @@ test('the page Stop run confirmation names the running step, and cancelling it s
     await page.context().addCookies([{ name: 'installer_token', value: app.token, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Strict' }]);
     await page.goto(`${app.base}/`);
     await page.getByRole('button', { name: 'List steps' }).click();
+    await page.locator('[name="SubscriptionId"]').fill(passingAnswers.SubscriptionId);
     await page.locator('#step-list input[value="resource-group"]').check();
+    await page.getByRole('button', { name: 'Run preflight' }).click();
+    await page.getByText(/Passing preflight/).waitFor();
     await page.getByRole('button', { name: 'Run selected steps' }).click();
     await waitForStatus(app, (status) => status.state === 'running' && status.currentStepId === 'resource-group');
     await page.evaluate(() => { globalThis.confirm = (text) => { globalThis.p93ConfirmText = text; return false; }; });

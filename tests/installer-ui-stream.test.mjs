@@ -10,6 +10,7 @@ import { createInstallerUiServer } from '../tools/installer-ui/server.mjs';
 import { waitForDrain } from '../tools/installer-ui/run-transport.mjs';
 
 const stub = fileURLToPath(new URL('./installer-ui-stub.mjs', import.meta.url));
+const passingAnswers = { schemaVersion: 1, SubscriptionId: '00000000-0000-4000-8000-000000000093' };
 
 async function start(env = {}, options = {}) {
   const scratch = join(tmpdir(), 'p93-installer-ui-stream', `${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`);
@@ -49,10 +50,18 @@ async function start(env = {}, options = {}) {
 }
 
 async function streamRun(app, body) {
+  const prepared = { ...body, answers: { ...passingAnswers, ...(body.answers || {}) } };
+  const preflight = await (await app.fetch('/api/preflight', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(prepared.fullRun ? { answers: prepared.answers, fullRun: true } : { answers: prepared.answers, steps: prepared.steps }),
+  })).json();
+  assert.match(preflight.fingerprint, /^[0-9a-f]{64}$/);
+  prepared.fingerprint = preflight.fingerprint;
   const response = await app.fetch('/api/run/stream', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify(prepared),
   });
   const text = await response.text();
   assert.equal(response.status, 200, text);
@@ -155,8 +164,9 @@ async function waitForStatus(app, predicate, ms = 15_000) {
 }
 
 // A raw request whose response the test reads only when it chooses, so the server sees TCP backpressure.
-function pausedRunRequest(app, onResponse) {
-  const body = JSON.stringify({ answers: {}, steps: ['resource-group'] });
+async function pausedRunRequest(app, onResponse) {
+  const preflight = await (await app.fetch('/api/preflight', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'] }) })).json();
+  const body = JSON.stringify({ answers: passingAnswers, steps: ['resource-group'], fingerprint: preflight.fingerprint });
   const req = request({
     host: '127.0.0.1',
     port: app.port,
@@ -181,7 +191,8 @@ test('a client that stops reading and then disconnects does not hold the run', a
     const status = await waitForStatus(app, (value) => value.state === 'exited');
     assert.equal(status.state, 'exited', `the run is ${status.state} at seq ${status.nextSeq} after its client disconnected`);
     assert.equal(status.exitCode, 0);
-    const next = await app.fetch('/api/run/stream', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: {}, steps: ['resource-group'] }) });
+    const preflight = await (await app.fetch('/api/preflight', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'] }) })).json();
+    const next = await app.fetch('/api/run/stream', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'], fingerprint: preflight.fingerprint }) });
     assert.equal(next.status, 200, 'a new run is admitted');
     assertStreamInvariant((await next.text()).trim().split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line)));
   } finally {

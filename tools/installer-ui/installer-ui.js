@@ -10,6 +10,8 @@ let csrfToken = '';
 let activeRunId = '';
 let activeStepId = '';
 let lastRunSeq = 0;
+let preflightFingerprint = '';
+let preflightStale = true;
 const maxRunOutputLines = 2000;
 let runOutputLines = [];
 let removedRunOutputLines = 0;
@@ -78,6 +80,27 @@ function collectAnswers() {
   return collectAnswersFromEntries(schema, entries, byId('business-units').value);
 }
 
+function markPreflightStale() {
+  preflightStale = true;
+  preflightFingerprint = '';
+  updateRunAdmission();
+}
+
+function updateRunAdmission() {
+  const liveMode = location.protocol !== 'file:';
+  const admitted = liveMode && preflightFingerprint && !preflightStale;
+  for (const id of ['run', 'full-run', 'rerun']) {
+    const button = byId(id);
+    if (button) button.disabled = id === 'rerun' ? (!lastFailedStep || !admitted) : !admitted;
+  }
+  const state = byId('preflight-state');
+  if (!state) return;
+  if (!liveMode) state.textContent = 'Static mode: use the generated commands.';
+  else if (admitted) state.textContent = `Passing preflight ${preflightFingerprint.slice(0, 12)} is current.`;
+  else if (preflightStale) state.textContent = 'Preflight is stale. Run preflight after changing answers or steps.';
+  else state.textContent = 'No passing preflight yet.';
+}
+
 function renderCommands(commands) {
   const root = byId('commands');
   clearChildren(root);
@@ -125,6 +148,14 @@ function renderPreflight(result) {
   }
   container.append(table);
   markFields(checks, result.fieldsByCheckId || fieldsByCheckId(schema));
+  if (result.preflight?.result === 'PASS' && result.fingerprint) {
+    preflightFingerprint = result.fingerprint;
+    preflightStale = false;
+  } else {
+    preflightFingerprint = '';
+    preflightStale = false;
+  }
+  updateRunAdmission();
 }
 
 function showPreflightError(error) {
@@ -142,6 +173,7 @@ function renderSteps(payload) {
     const input = document.createElement('input');
     input.type = 'checkbox';
     input.value = step.id;
+    input.addEventListener('change', markPreflightStale);
     label.append(input);
     appendText(label, ` ${step.id} - ${step.title || ''}`);
     parent.append(label);
@@ -296,7 +328,7 @@ async function readRunStream(res) {
         activeStepId = '';
         byId('stop-run').disabled = true;
         lastFailedStep = event.failedStepId || '';
-        byId('rerun').disabled = !lastFailedStep;
+        updateRunAdmission();
         if (event.resumeCommand) appendRunLine(`Resume: ${event.resumeCommand}`);
       }
     }
@@ -339,18 +371,26 @@ async function main() {
   }
   byId('refresh-identity').onclick = () => refreshIdentity();
   byId('signin').onclick = () => { byId('signin-command').textContent = identity.signInCommand || 'az login --use-device-code'; };
+  document.addEventListener('input', (event) => {
+    if (event.target?.closest('#business-unit-tree') || event.target?.matches('[name], #business-units')) markPreflightStale();
+  });
+  document.addEventListener('change', (event) => {
+    if (event.target?.matches('[name], #step-list input')) markPreflightStale();
+  });
   byId('preflight').onclick = async () => {
-    try { renderPreflight(await postJson('./api/preflight', { answers: collectAnswers() })); }
+    try {
+      const steps = selectedSteps();
+      renderPreflight(await postJson('./api/preflight', { answers: collectAnswers(), ...(steps.length ? { steps } : { fullRun: true }) }));
+    }
     catch (error) { showPreflightError(error); }
   };
   byId('steps').onclick = async () => renderSteps(await (await fetch('./api/steps')).json());
-  byId('plan').onclick = async () => { byId('plan-output').textContent = JSON.stringify(await postJson('./api/plan', { answers: collectAnswers() }), null, 2); };
   byId('run').onclick = async () => {
     const steps = selectedSteps();
     if (!steps.length) throw new Error('Select at least one step, or use Full run.');
     activeRunId = '';
     byId('stop-run').disabled = false;
-    await streamRun({ answers: collectAnswers(), steps });
+    await streamRun({ answers: collectAnswers(), steps, fingerprint: preflightFingerprint });
   };
   byId('full-run').onclick = async () => {
     const answers = collectAnswers();
@@ -358,9 +398,9 @@ async function main() {
     if (!globalThis.confirm(`Run the full installer as ${identity.user || 'the current account'} against resource group ${resourceGroup}?`)) return;
     activeRunId = '';
     byId('stop-run').disabled = false;
-    await streamRun({ answers, steps: [], fullRun: true, confirmFullRun: true, account: identity });
+    await streamRun({ answers, steps: [], fullRun: true, confirmFullRun: true, account: identity, fingerprint: preflightFingerprint });
   };
-  byId('rerun').onclick = async () => { if (lastFailedStep) await streamRun({ answers: collectAnswers(), steps: [lastFailedStep] }); };
+  byId('rerun').onclick = async () => { if (lastFailedStep) await streamRun({ answers: collectAnswers(), steps: [lastFailedStep], fingerprint: preflightFingerprint }); };
   byId('stop-run').onclick = async () => {
     const status = await (await fetch('./api/run/status')).json();
     const runId = status.id || activeRunId;
@@ -388,6 +428,7 @@ async function main() {
     }
     businessUnits.push(defaultBusinessUnit(parent));
     renderBusinessUnitEditor();
+    updateRunAdmission();
   };
   byId('business-units').addEventListener('input', () => {
     const text = byId('business-units').value.trim();

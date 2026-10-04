@@ -1,6 +1,6 @@
 import { createServer as createHttpServer } from 'node:http';
 import { spawn } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { StringDecoder } from 'node:string_decoder';
 import { once } from 'node:events';
 import { mkdtemp, readFile, rm, writeFile, chmod } from 'node:fs/promises';
@@ -20,7 +20,6 @@ const psInstaller = join(root, 'Install-ClaudeGateway.ps1');
 const bashInstaller = join(root, 'install-claude-gateway.sh');
 const identityScript = join(root, 'scripts', 'Get-ClaudeInstallerUiIdentity.ps1');
 const prefillScript = join(root, 'scripts', 'Get-ClaudeInstallerUiPrefill.ps1');
-const planScript = join(root, 'scripts', 'Get-ClaudeInstallerUiPlan.ps1');
 const uiScript = join(here, 'installer-ui.js');
 const uiModelScript = join(here, 'ui-model.js');
 const uiCss = join(here, 'installer-ui.css');
@@ -28,6 +27,49 @@ const uiIndex = join(here, 'index.html');
 const defaultIdleMs = 30 * 60 * 1000;
 const consoleOutputCapBytes = 4 * 1024 * 1024;
 const consoleLineCapBytes = 64 * 1024;
+
+function canonicalize(value) {
+  if (Array.isArray(value)) return `[${value.map((item) => canonicalize(item)).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalize(value[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function sha256Hex(text) {
+  return createHash('sha256').update(text, 'utf8').digest('hex');
+}
+
+function sortedUniqueSteps(steps) {
+  return [...new Set((steps || []).map(String).filter(Boolean))].sort();
+}
+
+function scopeFromBody(body, steps = []) {
+  if (body.fullRun || (!steps.length && !Array.isArray(body.steps))) return 'full';
+  return sortedUniqueSteps(steps);
+}
+
+function answersDigest(answers) {
+  return sha256Hex(canonicalize(answers || {}));
+}
+
+function preflightFingerprint({ answers, scope, engine = 'pwsh' }) {
+  return sha256Hex(canonicalize({ schemaVersion: 1, engine, answers: answers || {}, steps: scope }));
+}
+
+function scopeCovers(recordScope, runScope) {
+  if (recordScope === 'full') return true;
+  if (runScope === 'full') return false;
+  const allowed = new Set(recordScope);
+  return runScope.every((step) => allowed.has(step));
+}
+
+function preflightRequired(reason) {
+  const error = new Error(reason || 'The answers or steps changed since the last passing preflight, or no passing preflight exists.');
+  error.status = 409;
+  error.reason = 'preflight-required';
+  return error;
+}
 
 
 async function withRunDirectory(fn, tempDirs, parent = tmpdir()) {
@@ -237,6 +279,19 @@ async function validateRunRequest(body, options) {
     error.status = 400;
     throw error;
   }
+
+  const allowed = flattenStepIds(await listSteps(options));
+  const injected = steps.filter((step) => !allowed.has(step));
+  if (injected.length) {
+    const error = new Error(`unknown step id: ${injected.join(', ')}`);
+    error.status = 400;
+    throw error;
+  }
+  return steps;
+}
+
+async function validateStepScope(body, options) {
+  const steps = Array.isArray(body.steps) ? sortedUniqueSteps(body.steps) : [];
   const allowed = flattenStepIds(await listSteps(options));
   const injected = steps.filter((step) => !allowed.has(step));
   if (injected.length) {
@@ -265,10 +320,11 @@ export async function createInstallerUiServer(options = {}) {
   let idleTimer = null;
   let stopping = false;
   let inFlight = 0;
+  let preflightPasses = [];
   options._children = new Set();
   const idleMs = Number(options.idleMs || defaultIdleMs);
   const tempRoot = options.tempRoot || tmpdir();
-  const timeoutFor = (name) => Number(options.readOnlyTimeoutMs || ({ steps: 60_000, identity: 120_000, prefill: 120_000, preflight: 600_000, plan: 120_000 }[name]));
+  const timeoutFor = (name) => Number(options.readOnlyTimeoutMs || ({ steps: 60_000, identity: 120_000, prefill: 120_000, preflight: 600_000 }[name]));
   const extraHosts = options.allowedHosts || [];
   const log = options.log || (() => {});
 
@@ -427,18 +483,13 @@ export async function createInstallerUiServer(options = {}) {
         const body = await readJsonBody(req);
         return send(res, 200, buildCommands(body.answersPath || './answers.json', await loadSchema()), setCookie);
       }
-      if (req.method === 'POST' && url.pathname === '/api/plan') {
-        assertSameOrigin(req);
-        const body = await readJsonBody(req);
-        return send(res, 200, await withJob(() => withRunDirectory(async (dir) => {
-          const answers = await writeAnswers(dir, body.answers || {});
-          const result = await runPowerShell(planScript, ['-AnswersPath', answers], options, { timeoutMs: timeoutFor('plan'), readName: 'plan' });
-          return JSON.parse(result.stdout);
-        }, tempDirs, tempRoot)), setCookie);
-      }
       if (req.method === 'POST' && url.pathname === '/api/preflight') {
         assertSameOrigin(req);
         const body = await readJsonBody(req);
+        const requestedSteps = await validateStepScope(body, options);
+        const scope = scopeFromBody(body, requestedSteps);
+        const digest = answersDigest(body.answers || {});
+        const engine = 'pwsh';
         return send(res, 200, await withJob(() => withRunDirectory(async (dir) => {
           const answers = await writeAnswers(dir, body.answers || {});
           const result = await runInstaller('powershell', ['-AnswersPath', answers, '-Preflight', '-Json'], options, { timeoutMs: timeoutFor('preflight'), readName: 'preflight' });
@@ -452,14 +503,28 @@ export async function createInstallerUiServer(options = {}) {
             malformed.exitCode = result.code;
             throw malformed;
           }
-          return { exitCode: result.code, preflight: parsed, stdout: result.stdout, stderr: result.stderr, fieldsByCheckId: fieldsByCheckId(await loadSchema()) };
-        }, tempDirs, tempRoot)), setCookie);
+          preflightPasses = preflightPasses.filter((record) => !(record.answersDigest === digest && record.engine === engine));
+          let fingerprint = '';
+          if (parsed.result === 'PASS' && result.code === 0) {
+            fingerprint = preflightFingerprint({ answers: body.answers || {}, scope, engine });
+            preflightPasses.push({ fingerprint, answersDigest: digest, engine, scope, time: new Date().toISOString() });
+            preflightPasses = preflightPasses.slice(-20);
+          }
+          return { exitCode: result.code, fingerprint: fingerprint || undefined, preflight: parsed, stdout: result.stdout, stderr: result.stderr, fieldsByCheckId: fieldsByCheckId(await loadSchema()) };
+        }, tempDirs, tmpdir())), setCookie);
       }
       if (req.method === 'POST' && url.pathname === '/api/run/stream') {
         assertSameOrigin(req);
         if (activeRun?.state === 'running' || activeRun?.state === 'stopping') return send(res, 409, { error: 'an installer run is already active' }, setCookie);
         const body = await readJsonBody(req);
         const steps = await validateRunRequest(body, options);
+        const scope = scopeFromBody(body, steps);
+        const digest = answersDigest(body.answers || {});
+        const record = preflightPasses.find((candidate) => candidate.fingerprint === body.fingerprint);
+        if (!record) throw preflightRequired('No passing preflight matched this run. Run preflight again before starting the installer.');
+        if (record.engine !== 'pwsh' || record.answersDigest !== digest || !scopeCovers(record.scope, scope)) {
+          throw preflightRequired('The answers or selected steps changed since the last passing preflight. Run preflight again.');
+        }
         const run = createRun(steps);
         if (!run) return send(res, 409, { error: 'an installer run is already active' }, setCookie);
         const args = await prepareRun(run, body.answers, steps);
@@ -519,8 +584,11 @@ export async function createInstallerUiServer(options = {}) {
         res.end();
         return;
       }
-      if (!error.status) return send(res, 500, { error: 'request failed' });
-      return send(res, error.status, error.field ? { schemaVersion: 1, field: error.field, error: error.message, remedy: error.remedy } : { error: error.message, detail: error.detail, exitCode: error.exitCode });
+      if (!error.status) {
+        log(`Installer UI request failed: ${scrubLocalPaths(error.stack || error.message || error)}`);
+        return send(res, 500, { error: 'request failed' });
+      }
+      return send(res, error.status, error.field ? { schemaVersion: 1, field: error.field, error: error.message, remedy: error.remedy } : { error: error.message, reason: error.reason, detail: error.detail, exitCode: error.exitCode });
     } finally {
       if (!activeRun?.state || activeRun.state !== 'running') armIdle();
     }

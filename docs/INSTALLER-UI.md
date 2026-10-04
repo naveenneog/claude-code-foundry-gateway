@@ -39,8 +39,8 @@ Host allowlist accepts loopback names with the selected port. The Cloud Shell pr
 cookie path behaviour are unverified (U91).
 
 Node does not spawn `az`. Azure reads go through repository PowerShell scripts:
-`scripts/Get-ClaudeInstallerUiIdentity.ps1`, `scripts/Get-ClaudeInstallerUiPrefill.ps1` and
-`scripts/Get-ClaudeInstallerUiPlan.ps1`. Installer calls use `pwsh -NoProfile -NonInteractive` with
+`scripts/Get-ClaudeInstallerUiIdentity.ps1` and `scripts/Get-ClaudeInstallerUiPrefill.ps1`.
+Installer calls use `pwsh -NoProfile -NonInteractive` with
 argument arrays. One installer run is active at a time. A second receives `409`. The streaming run endpoint is the
 only run endpoint; `POST /api/run` returns `404`.
 
@@ -70,8 +70,8 @@ stream say that the install checkpoint resumes when the same steps run again.
 | Access | Renders groups, tier limits and model deployment fields from the schema. |
 | Optional parts | Renders company address, Desktop sign-in, projection and monitoring answers from the schema. Projection answers are schema answers only; no projection switch is exposed. |
 | Business units | Provides a two-level editor: add a unit, add a team under a unit, remove either, then serialize units before teams. Fields are id, Entra group, monthly USD budget, mode and percent only for `Allowance`. Ids are lower-case letters, digits and hyphens, max 64; ids are unique; group names exclude `'`, `,` and `:`; `Allowance` requires percent 1-100; teams name one parent unit. The JSON view round-trips through the same validation. |
-| Review | Runs installer preflight and shows check, result, message and remedy. Failing checks mark fields through `x-checkId`. Non-JSON preflight output returns a visible error with the exit code and a short redacted, path-scrubbed output tail. The plan route calls `Start-ClaudeGateway.ps1 -Action Setup -PlanOnly -AnswersPath`. |
-| Run | Lists installer step ids, streams selected-step output as it arrives, shows a failed step with a rerun action and resume command, reattaches to an active run after reload and keeps a full run as a separate confirmed action. |
+| Review | Runs installer preflight and shows check, result, message and remedy. A passing preflight returns a 64-character SHA-256 fingerprint over canonical answers, engine and step scope. Failing checks mark fields through `x-checkId`. Non-JSON preflight output returns a visible error with the exit code and a short redacted, path-scrubbed output tail. |
+| Run | Lists installer step ids, streams selected-step output as it arrives, shows a failed step with a rerun action and resume command, reattaches to an active run after reload and keeps a full run as a separate confirmed action. A run starts only when its fingerprint matches a stored passing preflight for the same answers and a covering scope. |
 
 ## Installer interface checks
 

@@ -1,4 +1,4 @@
-import { appendFileSync, readFileSync } from 'node:fs';
+import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 
 const [, , mode, ...args] = process.argv;
@@ -78,6 +78,13 @@ if (args.includes('-Preflight')) {
     console.log(JSON.stringify({ schemaVersion: 1, installer: 'pwsh', answersSchemaVersion: 1, result: 'PASS', checks: [{ id: 'x', result: 1 }] }));
     process.exit(0);
   }
+  if (process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_FAIL_ON_SECOND) {
+    const counterPath = process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_FAIL_ON_SECOND;
+    let count = 0;
+    try { count = Number(readFileSync(counterPath, 'utf8')); } catch { count = 0; }
+    writeFileSync(counterPath, String(count + 1));
+    if (count >= 1) process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_FAIL = '1';
+  }
   const fail = process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_FAIL === '1';
   console.log(JSON.stringify({
     schemaVersion: 1,
@@ -89,7 +96,7 @@ if (args.includes('-Preflight')) {
       { id: 'answers.schema', result: fail || !answers.SubscriptionId ? 'FAIL' : 'PASS', reason: null, message: fail || !answers.SubscriptionId ? 'SubscriptionId is required' : 'answers file is valid', remedy: 'Give SubscriptionId.', problems: fail || !answers.SubscriptionId ? [{ message: 'SubscriptionId is required', remedy: 'Give SubscriptionId.' }] : [] },
     ],
   }));
-  process.exit(fail ? 1 : 0);
+  process.exit(process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_PASS_EXIT_1 === '1' ? 1 : (fail ? 1 : 0));
 }
 
 if (args.includes('-Yes')) {

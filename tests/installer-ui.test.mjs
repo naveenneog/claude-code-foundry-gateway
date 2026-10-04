@@ -19,6 +19,7 @@ const localPathPattern = new RegExp([homedir(), repoRoot].map(escapeRegExp).join
 const modelContext = createContext({ globalThis: {} });
 runInContext(await readFile(new URL('../tools/installer-ui/ui-model.js', import.meta.url), 'utf8'), modelContext);
 const { collectAnswersFromEntries, validateBusinessUnits } = modelContext.globalThis.ClaudeInstallerUiModel;
+const passingAnswers = { schemaVersion: 1, SubscriptionId: '00000000-0000-4000-8000-000000000093' };
 
 async function start(extra = {}) {
   const scratch = join(tmpdir(), `p93-ui-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`);
@@ -119,13 +120,17 @@ function captureOutput(child) {
 }
 
 async function streamEvents(app, body, path = '/api/run/stream') {
-  const response = await app.fetch(path, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  if (path === '/api/run/stream' && !body.fingerprint) body = await withPassingPreflight(app, body);
+  const response = await app.fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   const text = await response.text();
   return { response, text, events: text.trim() ? text.trim().split(/\r?\n/).map((line) => JSON.parse(line)) : [] };
+}
+
+async function withPassingPreflight(app, body) {
+  const prepared = { ...body, answers: { ...passingAnswers, ...(body.answers || {}) } };
+  const preflight = await (await app.fetch('/api/preflight', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(prepared.fullRun ? { answers: prepared.answers, fullRun: true } : { answers: prepared.answers, steps: prepared.steps }) })).json();
+  assert.match(preflight.fingerprint, /^[0-9a-f]{64}$/);
+  return { ...prepared, fingerprint: preflight.fingerprint };
 }
 
 test('the documented one-command launch prints the URL and token', async () => {
@@ -326,7 +331,7 @@ test('untouched controls are not collected as answers and business units enforce
   ]).join(' | '), /percent is required/);
 });
 
-test('identity, prefill and plan routes go through repository PowerShell seams', async () => {
+test('identity and prefill routes go through repository PowerShell seams', async () => {
   const app = await start({ az: true });
   try {
     const identity = await (await app.fetch('/api/identity')).json();
@@ -435,10 +440,11 @@ test('preflight writes answers to a temporary file, invokes the installer withou
     assert.equal(result.preflight.checks[0].reason, 'not-signed-in');
     assert.ok(result.fieldsByCheckId['target.subscription'].includes('SubscriptionId'));
     const log = (await readFile(app.log, 'utf8')).trim().split(/\r?\n/).map(JSON.parse);
-    assert.equal(log[0].mode, 'powershell');
-    assert.deepEqual(log[0].args.slice(-2), ['-Preflight', '-Json']);
-    assert.ok(log[0].args.includes('-AnswersPath'));
-    await assert.rejects(readFile(log[0].args[log[0].args.indexOf('-AnswersPath') + 1], 'utf8'));
+    const preflightCall = log.find((entry) => entry.args.includes('-Preflight'));
+    assert.equal(preflightCall.mode, 'powershell');
+    assert.deepEqual(preflightCall.args.slice(-2), ['-Preflight', '-Json']);
+    assert.ok(preflightCall.args.includes('-AnswersPath'));
+    await assert.rejects(readFile(preflightCall.args[preflightCall.args.indexOf('-AnswersPath') + 1], 'utf8'));
   } finally {
     await app.close();
   }
@@ -477,10 +483,11 @@ test('selected runs stream progress, refuse empty selections, support explicit f
     assert.equal(streamInjected.status, 400);
     assert.match((await streamInjected.json()).error, /unknown step id/);
 
+    const runBody = await withPassingPreflight(app, { answers: {}, steps: ['gateway-deployment'] });
     const run = await (await app.fetch('/api/run/stream', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ answers: {}, steps: ['gateway-deployment'] }),
+      body: JSON.stringify(runBody),
     })).text();
     const events = run.trim().split(/\r?\n/).map((line) => JSON.parse(line));
     assert.ok(events.some((event) => event.type === 'progress' && event.stepId === 'gateway-deployment' && event.event === 'failed'));
@@ -488,10 +495,11 @@ test('selected runs stream progress, refuse empty selections, support explicit f
     assert.doesNotMatch(run, /super-secret|abc\.def\.ghi/);
     assert.match(run, /\[redacted\]/);
 
+    const fullBody = await withPassingPreflight(app, { answers: { ResourceGroup: 'rg-p93' }, steps: [], fullRun: true, confirmFullRun: true, account: { user: 'operator@example.com' } });
     const full = await app.fetch('/api/run/stream', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ answers: { ResourceGroup: 'rg-p93' }, steps: [], fullRun: true, confirmFullRun: true, account: { user: 'operator@example.com' } }),
+      body: JSON.stringify(fullBody),
     });
     assert.equal(full.status, 200);
   } finally {
@@ -503,22 +511,26 @@ test('selected runs stream progress, refuse empty selections, support explicit f
 import { appendFileSync } from 'node:fs';
 if (process.env.P93_INSTALLER_UI_STUB_LOG) appendFileSync(process.env.P93_INSTALLER_UI_STUB_LOG, JSON.stringify({ mode: process.argv[2], args: process.argv.slice(3) }) + '\\n');
 if (process.argv.includes('-ListSteps')) {
-  console.log(JSON.stringify({ schemaVersion: 1, installer: 'pwsh', checkpoint: null, runId: null, steps: [{ id: 'resource-group', title: 'Resource group', dependencies: [], state: 'not-started' }] }));
-  process.exit(0);
+  console.log(JSON.stringify({ schemaVersion: 1, installer: 'pwsh', checkpoint: null, runId: null, steps: [{ id: 'resource-group', title: 'Resource group', dependencies: [], state: 'not-started' }] })); process.exit(0);
+}
+if (process.argv.includes('-Preflight')) {
+  console.log(JSON.stringify({ schemaVersion: 1, installer: 'pwsh', answersSchemaVersion: 1, result: 'PASS', checks: [{ id: 'answers.schema', result: 'PASS', reason: null, message: 'ok', remedy: '', problems: [] }] })); process.exit(0);
 }
 setTimeout(() => { console.log('done'); process.exit(0); }, 500);
 `, 'utf8');
   const slow = await start({ stubInstaller: slowStub });
   try {
+    const firstBody = await withPassingPreflight(slow, { answers: {}, steps: ['resource-group'] });
+    const secondBody = await withPassingPreflight(slow, { answers: {}, steps: ['resource-group'] });
     const first = slow.fetch('/api/run/stream', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ answers: {}, steps: ['resource-group'] }),
+      body: JSON.stringify(firstBody),
     });
     const second = slow.fetch('/api/run/stream', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ answers: {}, steps: ['resource-group'] }),
+      body: JSON.stringify(secondBody),
     });
     const responses = await Promise.all([first, second]);
     assert.deepEqual(responses.map((response) => response.status).sort(), [200, 409]);
@@ -604,6 +616,9 @@ test('stream ordering, removed run route and browser DOM cap are enforced', asyn
     await page.goto(`${pageApp.base}/`);
     await page.getByRole('button', { name: 'List steps' }).click();
     await page.locator('#step-list input').first().check();
+    await page.locator('[name="SubscriptionId"]').fill('00000000-0000-4000-8000-000000000093');
+    await page.getByRole('button', { name: 'Run preflight' }).click();
+    await expectText(page, 'Passing preflight');
     await page.getByRole('button', { name: 'Run selected steps' }).click();
     await expectText(page, 'summary:');
     const output = await page.locator('#run-output').textContent();
@@ -620,10 +635,11 @@ test('stream ordering, removed run route and browser DOM cap are enforced', asyn
 test('run lifecycle survives disconnect, reports status, supports reattach and stop', async () => {
   const app = await start({ env: { P93_INSTALLER_UI_STUB_DELAY_MS: '80' } });
   try {
+    const runBody = await withPassingPreflight(app, { answers: {}, steps: ['resource-group', 'gateway-deployment'] });
     const run = await app.fetch('/api/run/stream', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ answers: {}, steps: ['resource-group', 'gateway-deployment'] }),
+      body: JSON.stringify(runBody),
     });
     await run.text();
     const status = await (await app.fetch('/api/run/status')).json();
@@ -639,10 +655,11 @@ test('run lifecycle survives disconnect, reports status, supports reattach and s
 
   const stopApp = await start({ env: { P93_INSTALLER_UI_STUB_GRANDCHILD_HEARTBEAT: join(tmpdir(), `p93-heartbeat-${process.pid}.txt`) } });
   try {
+    const runBody = await withPassingPreflight(stopApp, { answers: {}, steps: ['resource-group'] });
     const runPromise = stopApp.fetch('/api/run/stream', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ answers: {}, steps: ['resource-group'] }),
+      body: JSON.stringify(runBody),
     });
     let status;
     for (let i = 0; i < 30; i++) {
@@ -748,14 +765,19 @@ test('full run requires browser confirmation before invoking the installer', asy
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage();
+    await page.route('**/api/identity', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ signedIn: true, user: 'operator@example.com' }) }));
     await page.context().addCookies([{ name: 'installer_token', value: app.token, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Strict' }]);
     await page.goto(`${app.base}/`);
     await page.waitForSelector('[name="ResourceGroup"]');
+    await page.locator('[name="SubscriptionId"]').fill(passingAnswers.SubscriptionId);
     await page.locator('[name="ResourceGroup"]').fill('rg-p93');
+    await page.getByRole('button', { name: 'Run preflight' }).click();
+    await page.getByText(/Passing preflight/).waitFor();
     await page.evaluate(() => { globalThis.confirm = () => false; });
     await page.getByRole('button', { name: 'Full run' }).click();
     await new Promise((resolve) => setTimeout(resolve, 250));
-    assert.equal(existsSync(app.log), false);
+    const calls = existsSync(app.log) ? (await readFile(app.log, 'utf8')).trim().split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line)) : [];
+    assert.equal(calls.some((entry) => entry.args.includes('-Yes')), false);
   } finally {
     await browser.close();
     await app.close();
