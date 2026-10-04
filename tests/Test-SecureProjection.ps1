@@ -63,7 +63,7 @@ Assert 'with the endpoint subnet it is given'    ($nb -match "param endpointsSub
 Assert 'and the VNet is only created when absent' ($nb -match "var createVnet = empty\(vnetId\)")
 # Learn, flex-consumption-how-to: Microsoft.App/environments, /27 minimum,
 # no private endpoints in the same subnet.
-Assert 'the resolver subnet has the Flex delegation' ($nb -match "serviceName: 'Microsoft.App/environments'")
+Assert 'the resolver subnet has the Flex delegation' ($nb -match "(?s)name: 'resolver'\s*properties: \{\s*addressPrefix: cidrSubnet\(vnetAddressPrefix, 26, 12\)\s*delegations: \[\s*\{\s*name: 'flex'\s*properties: \{\s*serviceName: 'Microsoft\.App/environments'")
 Assert 'and is at least a /27'                    ($nb -match 'cidrSubnet\(vnetAddressPrefix, 26, ')
 Assert 'the resolver endpoint zone is created'    ($nb -match "privatelink\.azurewebsites\.net")
 Assert 'and linked to the VNet'                   ($nb -match '(?s)resource sitesLink.*virtualNetwork: \{\s*id: linkedVnetId')
