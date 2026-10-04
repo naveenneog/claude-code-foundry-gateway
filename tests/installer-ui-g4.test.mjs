@@ -452,6 +452,26 @@ test('U3 PASS and NOT-RUN rows link and mark no field', async () => {
   }
 });
 
+test('P1 the preflight state says no passing preflight before the first preflight and stale only after a result changes', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await fillValid(page);
+    await page.locator('[name="ResourceGroup"]').fill('rg-before-preflight');
+    await page.getByText('No passing preflight yet.').waitFor();
+    await page.getByRole('button', { name: 'List steps' }).click();
+    await page.locator('#step-list input[value="resource-group"]').check();
+    await page.getByRole('button', { name: 'Run preflight' }).click();
+    await page.getByText(/Passing preflight/).waitFor();
+    await page.locator('[name="ResourceGroup"]').fill('rg-after-preflight');
+    await page.getByText(/Preflight is stale/).waitFor();
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
 
 test('U1 fix Stop run is disabled after the run ends even when the stop response arrives after the summary', async () => {
   const app = await start({ env: { P93_INSTALLER_UI_STUB_GRANDCHILD_HEARTBEAT: join(tmpdir(), `g4-stop-${process.pid}-${Date.now()}.txt`) } });

@@ -14,6 +14,7 @@
   let lastRunSeq = 0;
   let preflightFingerprint = "";
   let preflightStale = true;
+  let preflightHadResult = false;
   let validationProblems = [];
   let checkFields = {};
   let prefill;
@@ -265,7 +266,7 @@
     return validationProblems;
   }
   function markPreflightStale() {
-    preflightStale = true;
+    preflightStale = preflightHadResult;
     preflightFingerprint = "";
     refreshConditionalVisibility();
     validateCurrentAnswers();
@@ -291,7 +292,7 @@
     if (hasBlockingProblems()) state.textContent = `${preflightStale ? "Preflight is stale. " : ""}Validation problems block download, preflight, run and command copying.`;
     else if (!liveMode()) state.textContent = `Static fallback: ${sessionReason || "use the generated commands."}`;
     else if (admitted) state.textContent = `Passing preflight ${preflightFingerprint.slice(0, 12)} is current.`;
-    else if (preflightStale) state.textContent = "Preflight is stale. Run preflight after changing answers or steps.";
+    else if (preflightStale && preflightHadResult) state.textContent = "Preflight is stale. Run preflight after changing answers or steps.";
     else state.textContent = "No passing preflight yet.";
   }
 
@@ -377,9 +378,11 @@
     if (result.preflight?.result === "PASS" && result.fingerprint) {
       preflightFingerprint = result.fingerprint;
       preflightStale = false;
+      preflightHadResult = true;
     } else {
       preflightFingerprint = "";
       preflightStale = false;
+      preflightHadResult = true;
     }
     updateRunAdmission();
   }
