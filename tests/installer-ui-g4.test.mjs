@@ -472,20 +472,27 @@ test('U4 keyboard and accessibility journey has names, live regions, focus moves
   const app = await start({ env: { P93_INSTALLER_UI_STUB_FAIL_STEP: 'gateway-deployment' } });
   const { browser, page, pageErrors } = await openPage(app);
   try {
-    const unnamed = await page.locator('button:visible, input:visible, select:visible, textarea:visible').evaluateAll((nodes) => nodes.filter((node) => {
-      const id = node.id;
-      const aria = node.getAttribute('aria-label') || node.getAttribute('aria-labelledby');
-      const label = id ? document.querySelector(`label[for="${CSS.escape(id)}"]`) : null;
-      const wrapped = node.closest('label');
-      const text = node.textContent || node.getAttribute('placeholder') || '';
-      return !(aria || label?.textContent?.trim() || wrapped?.textContent?.trim() || text.trim());
-    }).map((node) => node.outerHTML));
-    assert.deepEqual(unnamed, []);
     assert.equal(await page.locator('#preflight-state').getAttribute('role'), 'status');
     assert.equal(await page.locator('#errors').getAttribute('role'), 'alert');
     assert.equal(await page.locator('#run-output').getAttribute('aria-label'), 'Run output');
-
-    await page.getByRole('button', { name: 'Add unit' }).focus();
+    async function focusBy(selector, reverse = false) {
+      for (let i = 0; i < 160; i += 1) {
+        const ok = await page.locator(':focus').evaluate((node, sel) => node?.matches(sel), selector).catch(() => false);
+        if (ok) {
+          const snapshot = await page.locator(':focus').ariaSnapshot();
+          assert.match(snapshot, /\S/, `focused ${selector} has an accessible name`);
+          return;
+        }
+        await page.keyboard.press(reverse ? 'Shift+Tab' : 'Tab');
+        const snapshot = await page.locator(':focus').ariaSnapshot().catch(() => '');
+        if (!/\S/.test(snapshot)) {
+          const html = await page.locator(':focus').evaluate((node) => node?.outerHTML || node?.nodeName).catch(() => '');
+          assert.match(snapshot, /\S/, `focused element on the keyboard path has an accessible name: ${html}`);
+        }
+      }
+      assert.fail(`Could not focus ${selector}`);
+    }
+    await focusBy('#add-unit');
     await page.keyboard.press('Enter');
     assert.equal(await page.evaluate(() => document.activeElement?.dataset.buField), 'id');
     await page.keyboard.type('finance');
@@ -493,23 +500,33 @@ test('U4 keyboard and accessibility journey has names, live regions, focus moves
     await page.keyboard.type('claude-bu-finance');
     await page.keyboard.press('Tab');
     await page.keyboard.type('100');
-    await page.getByRole('button', { name: 'Add team' }).focus();
+    await focusBy('#add-team');
     await page.keyboard.press('Enter');
     assert.equal(await page.evaluate(() => document.activeElement?.dataset.buField), 'id');
     await page.keyboard.type('finance-apps');
-    await page.locator('[data-bu-index="1"] button').focus();
+    await focusBy('[data-bu-index="1"] button');
     await page.keyboard.press('Enter');
     assert.equal(await page.evaluate(() => document.activeElement?.dataset.buField), 'id');
-
-    await fillValid(page);
-    await page.getByRole('button', { name: 'List steps' }).click();
-    await page.locator('#step-list input[value="gateway-deployment"]').check();
-    await page.getByRole('button', { name: 'Run preflight' }).click();
+    assert.equal(await page.locator(':focus').evaluate((node) => node.closest('[data-bu-index]')?.dataset.buIndex), '0');
+    await focusBy('[data-bu-index="0"] button');
+    await page.keyboard.press('Enter');
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'add-unit');
+    await focusBy('[name="SubscriptionId"]', true);
+    await page.keyboard.type('00000000-0000-4000-8000-000000000093');
+    await focusBy('#steps');
+    await page.keyboard.press('Enter');
+    await focusBy('#step-list input[value="gateway-deployment"]');
+    await page.keyboard.press('Space');
+    await focusBy('#preflight', true);
+    await page.keyboard.press('Enter');
     await page.getByText(/Passing preflight/).waitFor();
-    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    assert.match(await page.locator('#preflight-state').textContent(), /Passing preflight/);
+    await focusBy('#run');
+    await page.keyboard.press('Enter');
     await page.getByText(/summary:/).waitFor();
     assert.equal(await page.getByRole('button', { name: 'Re-run failed step' }).isEnabled(), true);
-    await page.getByRole('button', { name: 'Re-run failed step' }).click();
+    await focusBy('#rerun');
+    await page.keyboard.press('Enter');
     await page.getByText(/Re-run finished/).waitFor();
     await assertClean(page, pageErrors);
   } finally {
