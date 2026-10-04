@@ -140,6 +140,9 @@ function Invoke-ClaudeProjectionSwitch {
         [scriptblock]$Backup,
         [string]$CompareScript = (Join-Path $PSScriptRoot 'Compare-ClaudeEntitlement.ps1')
     )
+    if ($ResourceGroup -notmatch '^[A-Za-z0-9._-]{1,90}$' -or $ApimName -notmatch '^[A-Za-z][A-Za-z0-9-]{0,49}$') {
+        throw "Projection switch refused: resource group '$ResourceGroup' or gateway name '$ApimName' holds characters other than letters, digits, '.', '_' or '-', which az.cmd hands to cmd.exe. Remedy: pass the names as the Azure portal shows them."
+    }
     Assert-ClaudeProjectionRenewalEvidence -Renewal $Renewal
     # -WhatIf previews the backup and the write only: the reads, the runner compare and admission run,
     # and their working files are written.
@@ -153,6 +156,24 @@ function Invoke-ClaudeProjectionSwitch {
     }
     if ([string]$apim.identity.tenantId -ne [string]$Renewal.tenantId) {
         throw "Projection switch refused: the renewal receipt's tenant $($Renewal.tenantId) is not the tenant of the gateway's managed identity ($($apim.identity.tenantId)), which the resolver accepts tokens from. Remedy: pass the receipt written for this gateway's renewal job."
+    }
+
+    # After the switch the gateway calls entitlement-resolver-url for every request. It must be the
+    # resolver deployed with this projection, which reads the Cosmos account the job renews.
+    Write-Host "`n==> Resolver: the gateway's resolver reads the Cosmos account the renewal job renews" -ForegroundColor Cyan
+    $resolverDeployment = "projection-resolver-$($Renewal.namePrefix)"
+    try { $resolver = Invoke-ClaudeNetworkAz @('deployment', 'group', 'show', '-g', [string]$Renewal.resourceGroup, '-n', $resolverDeployment, '--query', 'properties') }
+    catch { throw "Projection switch refused: could not read the resolver deployment $resolverDeployment in $($Renewal.resourceGroup): $($_.Exception.Message) Remedy: deploy the projection with scripts/Deploy-ClaudeProjection.ps1 -NamePrefix $($Renewal.namePrefix), then rerun." }
+    $resolverCosmos = [string]$resolver.parameters.cosmosAccountName.value
+    if ($resolverCosmos -ne [string]$Renewal.cosmosAccount) {
+        throw "Projection switch refused: the resolver deployed as $resolverDeployment reads Cosmos account $resolverCosmos, not $($Renewal.cosmosAccount), which the renewal job renews. Remedy: deploy the projection and the renewal job with one -NamePrefix, then rerun."
+    }
+    $resolverUrl = [string]$resolver.outputs.resolverUrl.value
+    $resolverAudience = [string]$resolver.outputs.resolverAudience.value
+    $gatewayUrl = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-url' -FailOnError
+    $gatewayAudience = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-audience' -FailOnError
+    if (-not $resolverUrl -or $gatewayUrl -ne $resolverUrl -or $gatewayAudience -ne $resolverAudience) {
+        throw "Projection switch refused: the gateway calls entitlement-resolver-url '$gatewayUrl' with audience '$gatewayAudience', not $resolverUrl with $resolverAudience from $resolverDeployment; after the switch every request would go to the first. Remedy: set both named values to the outputs of $resolverDeployment (docs/SECURE-PROJECTION.md, section 9), or rerun scripts/Deploy-ClaudeProjection.ps1 -NamePrefix $($Renewal.namePrefix) without -FlipAfterCleanCompare, which sets them, then rerun."
     }
     $token = if ($StandardGroup -notmatch '^[0-9a-fA-F-]{36}$' -or ($PremiumGroup -ne 'none' -and $PremiumGroup -notmatch '^[0-9a-fA-F-]{36}$')) { Get-GraphToken } else { $null }
     $standardId = Resolve-ClaudeProjectionTierGroupId -Group $StandardGroup -Tier standard -Token $token

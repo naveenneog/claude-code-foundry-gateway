@@ -52,6 +52,13 @@ function Reset-ProjectionFixture {
     } | ConvertTo-Json -Depth 20 | ConvertFrom-Json
     $global:FixtureExecutions = @($FixtureExecution)
     $global:FixtureRunnerFiles = @{}
+    # The resolver the gateway calls (entitlement-resolver-url/-audience) and the one deployed with the projection.
+    $global:FixtureResolverUrl = switch ($Case) {
+        'resolver-placeholder' { 'https://resolver-not-deployed.invalid' }
+        'resolver-other-url' { 'https://func-resolver-other.azurewebsites.net/api' }
+        default { 'https://func-resolver-p84fixture.azurewebsites.net/api' }
+    }
+    $global:FixtureResolverAudience = "api://$FixtureApp"
     $global:FixtureActionGroupId = "$FixtureRgId/providers/Microsoft.Insights/actionGroups/ag-projection-renewal"
     $global:FixtureActionGroup = [pscustomobject]@{
         id = $FixtureActionGroupId; type = 'Microsoft.Insights/ActionGroups'
@@ -88,9 +95,28 @@ function az {
         return (@{ id = $id; identity = $identity; sku = @{ name = $sku } } | ConvertTo-Json -Depth 5 -Compress)
     }
     if ($line -like 'apim nv show*') {
+        $id = [string]$words[[array]::IndexOf($words, '--named-value-id') + 1]
+        $resolverValues = @{ 'entitlement-resolver-url' = $FixtureResolverUrl; 'entitlement-resolver-audience' = $FixtureResolverAudience }
+        if ($resolverValues.ContainsKey($id)) {
+            if ($line -match '--query name') { return $id }
+            if ($line -match '--query value') { return $resolverValues[$id] }
+            return (@{ name = $id; value = $resolverValues[$id]; secret = $false } | ConvertTo-Json -Compress)
+        }
         if ($line -match '--query name') { return 'entitlement-source' }
         if ($line -match '--query value') { return 'named-value' }
         return (@{ name='entitlement-source'; value='named-value'; secret=$false } | ConvertTo-Json -Compress)
+    }
+    if ($line -like 'deployment group show*') {
+        $name = [string]$words[[array]::IndexOf($words, '-n') + 1]
+        if ($name -eq 'projection-resolver-p84fixture' -and $FixtureCase -ne 'resolver-missing') {
+            $cosmos = if ($FixtureCase -eq 'resolver-other-cosmos') { 'cosmos-other' } else { 'cosmos-p84fixture' }
+            return (@{
+                    parameters = @{ cosmosAccountName = @{ type = 'String'; value = $cosmos } }
+                    outputs = @{ resolverUrl = @{ type = 'String'; value = 'https://func-resolver-p84fixture.azurewebsites.net/api' }; resolverAudience = @{ type = 'String'; value = "api://$FixtureApp" } }
+                } | ConvertTo-Json -Depth 5 -Compress)
+        }
+        $global:LASTEXITCODE = 3
+        return "ERROR: (DeploymentNotFound) Deployment '$name' could not be found."
     }
     if ($line -like 'apim nv update*' -or $line -like 'apim nv create*') {
         return ''

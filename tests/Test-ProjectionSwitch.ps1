@@ -98,6 +98,18 @@ $FixtureJob.properties.template.containers[0].env = @($FixtureJob.properties.tem
         if ($_.name -eq 'PROJECTION_GATEWAY_RESOURCE_ID') { [pscustomobject]@{ name = $_.name; value = $FixtureGatewayId.Replace('rg-p84', 'rg(p84)') } } else { $_ } })
 Capture { Invoke-Admission }
 Assert 'a job gateway id with characters cmd.exe re-reads stops before the runner command' ($Failure -match '^Projection switch refused' -and (($FixtureCalls -join "`n") -notmatch 'container exec')) $Failure
+# Council round 1: the job must renew the Cosmos account and tenant that admission reads and the receipt names.
+foreach ($case in @(
+        @{ Name = 'another Cosmos account'; Env = 'PROJECTION_ACCOUNT_RESOURCE_ID'; Value = $FixtureCosmosId.Replace('cosmos-p84fixture', 'cosmos-other'); Expect = 'Cosmos account' }
+        @{ Name = 'another tenant'; Env = 'PROJECTION_TENANT_ID'; Value = $FixtureApp; Expect = 'tenant' }
+    )) {
+    Reset-ProjectionFixture
+    Set-GoodRenewalJob
+    $FixtureJob.properties.template.containers[0].env = @($FixtureJob.properties.template.containers[0].env | ForEach-Object {
+            if ($_.name -eq $case.Env) { [pscustomobject]@{ name = $_.name; value = $case.Value } } else { $_ } })
+    Capture { Invoke-Admission }
+    Assert "admission refuses a job that renews $($case.Name) than the one it reads, before the runner" ($Failure -match '^Projection switch refused' -and $Failure -match $case.Expect -and $Failure -match 'Remedy' -and (($FixtureCalls -join "`n") -notmatch 'container exec')) $Failure
+}
 
 Write-Host ''
 Write-Host 'Projection switch - one function: drift check, compare, admission, backup, one write' -ForegroundColor Cyan
@@ -249,6 +261,29 @@ $runnerRefusals = @(foreach ($case in @(
         if (-not ($Failure -match '^Runner command refused' -and $FixtureCalls.Count -eq 0)) { "$($case.ResourceGroup) $($case.Name) '$($case.Command)' (calls $($FixtureCalls.Count): $Failure)" }
     })
 Assert 'a runner command or target that the runner or cmd.exe would alter is refused before az' (-not $runnerRefusals.Count) ($runnerRefusals -join ' || ')
+$callerRefusals = @(foreach ($case in @(@{ ResourceGroup = 'rg-p84&whoami' }, @{ ApimName = 'apim-p84^x' })) {
+        Reset-ProjectionFixture
+        Set-GoodRenewalJob
+        Capture { Invoke-Switch $case }
+        if (-not ($Failure -match '^Projection switch refused' -and $FixtureCalls.Count -eq 0)) { "$(@($case.Values)[0]) (calls $($FixtureCalls.Count): $Failure)" }
+    })
+Assert "the switch's own resource group and gateway name are checked before any call" (-not $callerRefusals.Count) ($callerRefusals -join ' || ')
+
+Write-Host ''
+Write-Host 'Projection switch - the gateway calls the resolver that reads the renewed Cosmos account (council round 1)' -ForegroundColor Cyan
+foreach ($case in @(
+        @{ Name = 'a gateway that still calls the resolver placeholder'; Fixture = 'resolver-placeholder'; Expect = 'entitlement-resolver-url' }
+        @{ Name = 'a gateway that calls another resolver'; Fixture = 'resolver-other-url'; Expect = 'entitlement-resolver-url' }
+        @{ Name = 'a resolver that reads another Cosmos account'; Fixture = 'resolver-other-cosmos'; Expect = 'reads Cosmos account cosmos-other' }
+        @{ Name = 'no resolver deployment for the receipt'; Fixture = 'resolver-missing'; Expect = 'could not read the resolver deployment projection-resolver-p84fixture' }
+    )) {
+    Reset-ProjectionFixture $case.Fixture
+    Set-GoodRenewalJob
+    Get-Backups | Remove-Item -Force
+    Capture { Invoke-Switch }
+    Assert "the switch refuses $($case.Name), before the drift check" ($Failure -match '^Projection switch refused' -and $Failure -match [regex]::Escape($case.Expect) -and $Failure -match 'Remedy' -and
+        (Get-CallAt '^compare-stub') -lt 0 -and (Get-Writes).Count -eq 0 -and (Get-Backups).Count -eq 0) "$Failure | compare at $(Get-CallAt '^compare-stub')"
+}
 
 # The real scripts/Compare-ClaudeEntitlement.ps1 against chosen gateway lists. The fixture directory has
 # one standard member and no group named 'none'. 'clean' lists hold that member; 'drift' lists do not.
@@ -260,7 +295,7 @@ function az {
     if ($global:ListMode -and $line -like 'apim nv show*') {
         $global:FixtureCalls.Add("az $line"); $global:LASTEXITCODE = 0
         $standard = if ($global:ListMode -eq 'clean') { ",$FixtureApp," } else { ',' }
-        $map = @{ 'allow-standard' = $standard; 'allow-premium' = ','; 'bu-members' = ','; 'entitlement-source' = 'named-value' }
+        $map = @{ 'allow-standard' = $standard; 'allow-premium' = ','; 'bu-members' = ','; 'entitlement-source' = 'named-value'; 'entitlement-resolver-url' = $FixtureResolverUrl; 'entitlement-resolver-audience' = $FixtureResolverAudience }
         $id = $args[([array]::IndexOf($args, '--named-value-id') + 1)]
         if ($line -match '--query value') { return [string]$map[$id] }
         return (@{ name = $id; value = $map[$id]; secret = $false } | ConvertTo-Json -Compress)
@@ -306,6 +341,25 @@ Assert 'a missing receipt and no renewal parameters refuse before any Azure call
 Reset-ProjectionFixture
 Capture { & $deployer -ResourceGroup rg-p84 -ApimName apim-p84 -NamePrefix p84fixture -FlipAfterCleanCompare -RenewalReceiptPath $receiptPath -RenewalImageDigest ('sha256:' + ('b' * 64)) }
 Assert 'a renewal parameter that differs from the receipt refuses before any Azure call, with the remedy' ($Failure -match '-RenewalImageDigest is sha256:b{64}, but the renewal receipt .* records sha256:a{64}\. Remedy: pass the receipt''s value, or leave the parameter out' -and $FixtureCalls.Count -eq 0) "$Failure | calls $($FixtureCalls.Count)"
+# Council round 1: the deployer's normal run points the gateway at the resolver it deployed, which the
+# switch then requires (entitlement-source stays named-value, so the gateway does not call it yet).
+$deploySource = Get-Content -LiteralPath $deployer -Raw
+$deployAst = [Management.Automation.Language.Parser]::ParseInput($deploySource, [ref]$null, [ref]$null)
+$pointStep = @($deployAst.FindAll({ param($node) $node -is [Management.Automation.Language.IfStatementAst] -and $node.Clauses[0].Item1.Extent.Text -match 'ShouldProcess' -and $node.Extent.Text -match 'entitlement-resolver-url' }, $true))
+$pointAt = if ($pointStep.Count -eq 1) { $deploySource.IndexOf($pointStep[0].Extent.Text) } else { -1 }
+Assert 'the deployer points the gateway at the resolver it deployed, after the resolver and before population' ($pointStep.Count -eq 1 -and
+    $pointAt -gt $deploySource.IndexOf("Step 'Publish resolver code'") -and $pointAt -lt $deploySource.IndexOf("Step 'Populate projection from Entra'")) "decisions $($pointStep.Count) at $pointAt"
+if ($pointStep.Count -eq 1) {
+    Reset-ProjectionFixture
+    $ResourceGroup = 'rg-p84'; $ApimName = 'apim-p84'
+    $resolverUrl = 'https://func-resolver-p84fixture.azurewebsites.net/api'; $resolverAudience = "api://$FixtureApp"
+    $pointBlock = [scriptblock]::Create($pointStep[0].Extent.Text.Replace($pointStep[0].Clauses[0].Item1.Extent.Text, '$true'))
+    Capture { & $pointBlock }
+    $pointCalls = $FixtureCalls -join "`n"
+    Assert 'it writes entitlement-resolver-url and entitlement-resolver-audience from the resolver deployment outputs' (-not $Failure -and
+        $pointCalls -match [regex]::Escape("--named-value-id entitlement-resolver-url --value $resolverUrl") -and $pointCalls -match [regex]::Escape("--named-value-id entitlement-resolver-audience --value $resolverAudience")) "$Failure | $pointCalls"
+    Remove-Variable ResourceGroup, ApimName, resolverUrl, resolverAudience -ErrorAction SilentlyContinue
+}
 Reset-ProjectionFixture
 Capture { @(1..2 | ForEach-Object { Save-ClaudeProjectionSwitchBackup -ResourceGroup rg-p84 -ApimName apim-p84 -GatewayResourceId $FixtureGatewayId -Directory $backupDir }) }
 Assert 'two backups in the same second are two files; neither overwrites the other' (-not $Failure -and @($Result | Select-Object -Unique).Count -eq 2 -and @($Result | Where-Object { Test-Path -LiteralPath $_ }).Count -eq 2) "$Failure"

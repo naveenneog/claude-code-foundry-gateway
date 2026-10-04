@@ -107,7 +107,7 @@ $preflight = Invoke-ClaudeProjectionPreflight -ResourceGroup $ResourceGroup -Api
     -ResolverAppId $ResolverAppId -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup
 if ($PreflightOnly) { return }
 if ($WhatIfPreference) {
-    Note 'WhatIf: app registration if needed; private Cosmos/network; resolver publish; fresh snapshot/apply/compare. No Azure writes or projection switch.'
+    Note 'WhatIf: app registration if needed; private Cosmos/network; resolver publish; gateway resolver named values; fresh snapshot/apply/compare. No Azure writes or projection switch.'
     return
 }
 $Location = $preflight.Location
@@ -208,6 +208,15 @@ if ($PSCmdlet.ShouldProcess($resolver.siteName, 'package and publish resolver co
         Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
     }
 } else { throw 'Resolver publication was declined; no further steps run.' }
+
+Step 'Point the gateway at the resolver'
+# The gateway reads these two only while entitlement-source is projection; the switch requires them to
+# name this resolver (ADR-0050). SECURE-PROJECTION section 9 gives the same step by hand.
+if ($PSCmdlet.ShouldProcess($ApimName, 'set entitlement-resolver-url and entitlement-resolver-audience to the deployed resolver')) {
+    Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-url' -Value $resolverUrl
+    Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-audience' -Value $resolverAudience
+} else { throw 'Pointing the gateway at the resolver was declined; no further steps run.' }
+Ok "entitlement-resolver-url is $resolverUrl; entitlement-source is unchanged"
 $work = Join-Path ([IO.Path]::GetTempPath()) ("claude-projection-" + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force -Path $work | Out-Null
 $snapshot = Join-Path $work 'snapshot.json'

@@ -145,13 +145,16 @@ function Get-ClaudeProjectionJobSettings {
     [pscustomobject]@{
         ClientId = $env['AZURE_CLIENT_ID']; StandardGroupId = $env['PROJECTION_STANDARD_GROUP_ID']
         PremiumGroupId = $env['PROJECTION_PREMIUM_GROUP_ID']; GatewayResourceId = $env['PROJECTION_GATEWAY_RESOURCE_ID']
+        AccountResourceId = $env['PROJECTION_ACCOUNT_RESOURCE_ID']; TenantId = $env['PROJECTION_TENANT_ID']
     }
 }
 
 function Assert-ClaudeProjectionJobBinding {
     # ADR-0050: the job must renew for the gateway being switched, from the groups the comparison
-    # read, as the identity the renewal receipt names. Ids compare without case.
-    param([Parameter(Mandatory)]$Settings, [string]$GatewayResourceId, [string]$StandardGroupId, [string]$PremiumGroupId, [string]$IdentityClientId)
+    # read, as the identity the renewal receipt names, into the Cosmos account and tenant admission
+    # reads. Ids compare without case.
+    param([Parameter(Mandatory)]$Settings, [string]$GatewayResourceId, [string]$StandardGroupId, [string]$PremiumGroupId, [string]$IdentityClientId,
+        [string]$AccountResourceId, [string]$TenantId)
     $redeploy = 'Remedy: redeploy the renewal job with scripts/Deploy-ClaudeProjectionRenewal.ps1 for this gateway and its tier groups, then wait for three runs.'
     if ([string]$Settings.GatewayResourceId -notmatch '^/subscriptions/[0-9a-fA-F-]{36}/resourceGroups/[A-Za-z0-9._-]{1,90}/providers/Microsoft\.ApiManagement/service/[A-Za-z0-9-]{1,50}$') {
         throw "Projection switch refused: the renewal job's gateway id '$($Settings.GatewayResourceId)' holds characters other than letters, digits, '.', '_' or '-', and the admission command passes it to az.cmd, which hands them to cmd.exe. $redeploy"
@@ -167,6 +170,12 @@ function Assert-ClaudeProjectionJobBinding {
     }
     if ($IdentityClientId -and $Settings.ClientId -ne $IdentityClientId) {
         throw "Projection switch refused: the renewal job signs in as client id $($Settings.ClientId), not $IdentityClientId from the renewal receipt. $redeploy"
+    }
+    if ($AccountResourceId -and $Settings.AccountResourceId -ne $AccountResourceId) {
+        throw "Projection switch refused: the renewal job renews Cosmos account $($Settings.AccountResourceId), not $AccountResourceId, which admission reads and the renewal receipt names. $redeploy"
+    }
+    if ($TenantId -and $Settings.TenantId -ne $TenantId) {
+        throw "Projection switch refused: the renewal job writes records for tenant $($Settings.TenantId), not $TenantId from the renewal receipt. $redeploy"
     }
     return $true
 }
@@ -222,7 +231,7 @@ function Assert-ClaudeProjectionAdmission {
     $null = Assert-ClaudeProjectionJobDefinition -Job $job -ImageDigest $ImageDigest
     $settings = Get-ClaudeProjectionJobSettings -Job $job
     $null = Assert-ClaudeProjectionJobBinding -Settings $settings -GatewayResourceId $GatewayResourceId -StandardGroupId $StandardGroupId `
-        -PremiumGroupId $PremiumGroupId -IdentityClientId $IdentityClientId
+        -PremiumGroupId $PremiumGroupId -IdentityClientId $IdentityClientId -AccountResourceId $AccountResourceId -TenantId $TenantId
 
     Write-Host '    Checking scheduled renewal evidence from Cosmos through the in-VNet runner (expected wait: about 60-90 minutes after the first successful 30-minute run).' -ForegroundColor DarkGray
     # The runner splits on spaces with no quoting, and az.cmd re-quotes for cmd.exe: the entry point,
