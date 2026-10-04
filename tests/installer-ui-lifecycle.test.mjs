@@ -106,12 +106,7 @@ test('stop kills the installer process and its grandchild', async () => {
   const app = await start({ P93_INSTALLER_UI_STUB_GRANDCHILD_HEARTBEAT: heartbeat });
   try {
     const runPromise = runRequest(app, ['resource-group']);
-    let status;
-    for (let i = 0; i < 40; i++) {
-      status = await (await app.fetch('/api/run/status')).json();
-      if (status.id && status.currentStepId) break;
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
+    const status = await waitForStatus(app, (value) => value.id && value.currentStepId);
     const pids = (await readFile(`${heartbeat}.pid`, 'utf8')).trim().split(/\r?\n/).map(Number);
     const stopped = await (await app.fetch('/api/run/stop', {
       method: 'POST',
@@ -138,7 +133,7 @@ async function waitForStatus(app, predicate, ms = 10_000) {
     if (predicate(status)) return status;
     await sleep(50);
   }
-  return status;
+  throw new Error(`run status did not reach the expected state within ${ms} ms; last status ${JSON.stringify(status)}`);
 }
 
 async function runRequest(app, steps, signal) {
