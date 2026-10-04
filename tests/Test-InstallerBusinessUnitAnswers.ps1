@@ -81,8 +81,9 @@ try {
         # platform, then zzz, which the stub refuses, so that the checkpoint keeps platform's receipt.
         ($runPrefix = New-P91Run $prefixGroup -Arguments $prompted -Attended -Answers @('', '', '', '', '', 'y', 'platform', '', '', 'y', 'zzz', '', '', '', ''))
         ($runTwoGroups = New-P91Run $twoGroups -Arguments $prompted -Attended -Answers @('', '', '', '', '', 'y', 'platform', '', 'n', '', '', '', ''))
-        ($runQuote = New-P91Run $quoteGroup -Arguments $prompted -Attended -Answers @('', '', '', '', '', 'y', 'platform', "O'Brien", 'n', '', '', '', ''))
-        ($runMeta = New-P91Run $metaGroup -Arguments $prompted -Attended -Answers @('', '', '', '', '', 'y', 'platform', $metaName, 'n', '', '', '', ''))
+        # After the refused name the loop asks for the next unit: platform with its default group, then no more.
+        ($runQuote = New-P91Run $quoteGroup -Arguments $prompted -Attended -Answers @('', '', '', '', '', 'y', 'platform', "O'Brien", 'y', 'platform', '', '', 'n', '', '', '', ''))
+        ($runMeta = New-P91Run $metaGroup -Arguments $prompted -Attended -Answers @('', '', '', '', '', 'y', 'platform', $metaName, 'y', 'platform', '', '', 'n', '', '', '', ''))
     )
     $r1 = Invoke-P91Runs $wave1
     $a = Get-P91Result $r1 $runApply
@@ -157,13 +158,16 @@ try {
     # added metacharacters change their wording here too; the message still has to name the single quote.
     $groupRule = ([IO.File]::ReadAllText((Join-Path $script:P91Root 'schemas/claude-gateway.answers.schema.json')) | ConvertFrom-Json).'$defs'.BusinessUnit.properties.group
     $quoteMessage = [string]$groupRule.'x-patternMessage'; $quoteRemedy = [string]$groupRule.'x-remedy'
-    Assert 'R4 a group name with a single quote at the prompt is refused there with the schema''s message and remedy, before any Azure CLI call names it; no unit is written and the run goes on' ($tq.ExitCode -eq 0 -and
+    $nextUnit = { param($Result) @($Result.Scripts | Where-Object { $_ -like 'bu platform claude-bu-platform *' }).Count -eq 1 }
+    Assert 'R4 a group name with a single quote at the prompt is refused there with the schema''s message and remedy, before any Azure CLI call names it; no unit is written with that name, and the prompt asks for the next unit, which is written once' ($tq.ExitCode -eq 0 -and
         $quoteMessage -match 'single quote' -and $quoteRemedy -and $tq.Out.Contains("Entra group 'O'Brien' $quoteMessage, so business unit platform is not written.") -and
-        $tq.Out.Contains($quoteRemedy) -and -not @($tq.Az | Where-Object { $_.Contains("O'Brien") }).Count -and -not @($tq.Scripts | Where-Object { $_ -like 'bu platform *' }).Count) "message: $quoteMessage || $(Get-P91Tail $tq)"
+        $tq.Out.Contains($quoteRemedy) -and -not @($tq.Az | Where-Object { $_.Contains("O'Brien") }).Count -and -not @($tq.Scripts | Where-Object { $_.Contains("O'Brien") }).Count -and
+        (& $nextUnit $tq)) "message: $quoteMessage || units: $(@($tq.Scripts | Where-Object { $_ -like 'bu *' }) -join ' | ') || $(Get-P91Tail $tq)"
     $tm = Get-P91Result $r1 $runMeta
-    Assert 'R6 a group name with cmd.exe metacharacters at the prompt is refused there with the schema''s message and remedy, before any Azure CLI call names it; no unit is written and the run goes on' ($tm.ExitCode -eq 0 -and
+    Assert 'R6 a group name with cmd.exe metacharacters at the prompt is refused there with the schema''s message and remedy, before any Azure CLI call names it; no unit is written with that name, and the prompt asks for the next unit, which is written once' ($tm.ExitCode -eq 0 -and
         $quoteMessage -match 'cmd\.exe' -and $tm.Out.Contains("Entra group '$metaName' $quoteMessage, so business unit platform is not written.") -and $tm.Out.Contains($quoteRemedy) -and
-        -not @($tm.Az | Where-Object { $_.Contains('P92_PROMPT_MARKER') }).Count -and -not @($tm.Scripts | Where-Object { $_ -like 'bu platform *' }).Count) "message: $quoteMessage || $(Get-P91Tail $tm)"
+        -not @($tm.Az | Where-Object { $_.Contains('P92_PROMPT_MARKER') }).Count -and -not @($tm.Scripts | Where-Object { $_.Contains('P92_PROMPT_MARKER') }).Count -and
+        (& $nextUnit $tm)) "message: $quoteMessage || units: $(@($tm.Scripts | Where-Object { $_ -like 'bu *' }) -join ' | ') || $(Get-P91Tail $tm)"
     $unexpected = @(foreach ($r in @($r1.Values) + @($r2.Values)) { @($r.Unexpected) })
     Assert 'harness: every az call was one the stub knows, and no run timed out' (-not $unexpected.Count -and -not @(@($r1.Values) + @($r2.Values) | Where-Object { $_.TimedOut }).Count) (($unexpected | Select-Object -Unique -First 4) -join ' | ')
 }
