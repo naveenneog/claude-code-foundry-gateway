@@ -271,11 +271,11 @@ function renderBusinessUnitEditor() {
     row.append(modeLabel);
     const percent = businessUnitField(row, 'Allowance percent', 'percent', unit.percent ?? '', 'number');
     percent.closest('label').hidden = unit.mode !== 'Allowance';
-    mode.onchange = () => { percent.closest('label').hidden = mode.value !== 'Allowance'; syncBusinessUnitsFromEditor(); };
+    mode.onchange = () => { percent.closest('label').hidden = mode.value !== 'Allowance'; syncBusinessUnitsFromEditor(); markPreflightStale(); };
     const remove = document.createElement('button');
     remove.type = 'button';
     remove.textContent = 'Remove';
-    remove.onclick = () => { businessUnits.splice(index, 1); renderBusinessUnitEditor(); syncBusinessUnitsFromEditor(); };
+    remove.onclick = () => { businessUnits.splice(index, 1); renderBusinessUnitEditor(); syncBusinessUnitsFromEditor(); markPreflightStale(); };
     row.append(remove);
     row.oninput = () => syncBusinessUnitsFromEditor();
     tree.append(row);
@@ -424,7 +424,7 @@ async function main() {
     a.click();
     URL.revokeObjectURL(a.href);
   };
-  byId('add-unit').onclick = () => { syncBusinessUnitsFromEditor(); businessUnits.push(defaultBusinessUnit()); renderBusinessUnitEditor(); };
+  byId('add-unit').onclick = () => { syncBusinessUnitsFromEditor(); businessUnits.push(defaultBusinessUnit()); renderBusinessUnitEditor(); markPreflightStale(); };
   byId('add-team').onclick = () => {
     syncBusinessUnitsFromEditor();
     refreshTeamParentOptions();
@@ -432,10 +432,11 @@ async function main() {
     if (!parent) {
       byId('business-unit-problems').textContent = 'Give a business unit an id before adding a team.';
       return;
-      }
-      businessUnits.push(defaultBusinessUnit(parent));
-      renderBusinessUnitEditor();
-    };
+    }
+    businessUnits.push(defaultBusinessUnit(parent));
+    renderBusinessUnitEditor();
+    markPreflightStale();
+  };
   byId('business-units').addEventListener('input', () => {
     const text = byId('business-units').value.trim();
     try {
@@ -445,6 +446,7 @@ async function main() {
       return;
     }
     renderBusinessUnitEditor();
+    markPreflightStale();
   });
   renderBusinessUnitEditor();
   updateRunAdmission();

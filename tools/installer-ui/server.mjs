@@ -1,6 +1,6 @@
 import { createServer as createHttpServer } from 'node:http';
 import { spawn } from 'node:child_process';
-import { createHash, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { StringDecoder } from 'node:string_decoder';
 import { once } from 'node:events';
 import { mkdtemp, readFile, rm, writeFile, chmod } from 'node:fs/promises';
@@ -12,6 +12,7 @@ import { assertSameOrigin, constantTimeTokenEquals, contentSecurityPolicy, isAll
 import { attachSubscriber, createRunRecord, publicRun, publishEvent } from './run-record.mjs';
 import { createLineHandler, readProgressFile, writeNdjson } from './run-transport.mjs';
 import { buildCommands, fieldsByCheckId, loadSchema, prefillArguments, redactText, root, scrubLocalPaths } from './server-model.mjs';
+import { answersDigest, createPreflightStore, preflightFingerprint, preflightRequired, scopeCovers, scopeFromBody, sortedUniqueSteps } from './preflight-record.mjs';
 
 export { buildCommands, loadSchema, redactText, scrubLocalPaths } from './server-model.mjs';
 
@@ -27,50 +28,6 @@ const uiIndex = join(here, 'index.html');
 const defaultIdleMs = 30 * 60 * 1000;
 const consoleOutputCapBytes = 4 * 1024 * 1024;
 const consoleLineCapBytes = 64 * 1024;
-
-function canonicalize(value) {
-  if (Array.isArray(value)) return `[${value.map((item) => canonicalize(item)).join(',')}]`;
-  if (value && typeof value === 'object') {
-    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalize(value[key])}`).join(',')}}`;
-  }
-  return JSON.stringify(value);
-}
-
-function sha256Hex(text) {
-  return createHash('sha256').update(text, 'utf8').digest('hex');
-}
-
-function sortedUniqueSteps(steps) {
-  return [...new Set((steps || []).map(String).filter(Boolean))].sort();
-}
-
-function scopeFromBody(body, steps = []) {
-  if (body.fullRun || (!steps.length && !Array.isArray(body.steps))) return 'full';
-  return sortedUniqueSteps(steps);
-}
-
-function answersDigest(answers) {
-  return sha256Hex(canonicalize(answers || {}));
-}
-
-function preflightFingerprint({ answers, scope, engine = 'pwsh' }) {
-  return sha256Hex(canonicalize({ schemaVersion: 1, engine, answers: answers || {}, steps: scope }));
-}
-
-function scopeCovers(recordScope, runScope) {
-  if (recordScope === 'full') return true;
-  if (runScope === 'full') return false;
-  const allowed = new Set(recordScope);
-  return runScope.every((step) => allowed.has(step));
-}
-
-function preflightRequired(reason) {
-  const error = new Error(reason || 'The answers or steps changed since the last passing preflight, or no passing preflight exists.');
-  error.status = 409;
-  error.reason = 'preflight-required';
-  return error;
-}
-
 
 async function withRunDirectory(fn, tempDirs, parent = tmpdir()) {
   const dir = await mkdtemp(join(parent, 'claude-installer-ui-'));
@@ -316,6 +273,7 @@ async function validateRunRequest(body, options) {
 
 async function validateStepScope(body, options) {
   const steps = Array.isArray(body.steps) ? sortedUniqueSteps(body.steps) : [];
+  if (!steps.length) return steps;
   const allowed = flattenStepIds(await listSteps(options));
   const injected = steps.filter((step) => !allowed.has(step));
   if (injected.length) {
@@ -344,8 +302,8 @@ export async function createInstallerUiServer(options = {}) {
   let idleTimer = null;
   let stopping = false;
   let inFlight = 0;
-  let preflightPasses = [];
-  let liveMode = await checkPowerShell(options);
+  const preflightPasses = createPreflightStore(20);
+  let liveMode = { ok: false, reason: 'PowerShell live-mode check has not completed.' };
   options._children = new Set();
   const idleMs = Number(options.idleMs || defaultIdleMs);
   const tempRoot = options.tempRoot || tmpdir();
@@ -523,7 +481,7 @@ export async function createInstallerUiServer(options = {}) {
         requireLive();
         assertSameOrigin(req);
         const body = await readJsonBody(req);
-        const requestedSteps = await validateStepScope(body, options);
+        const requestedSteps = await withJob(() => validateStepScope(body, options));
         const scope = scopeFromBody(body, requestedSteps);
         const digest = answersDigest(body.answers || {});
         const engine = 'pwsh';
@@ -540,15 +498,15 @@ export async function createInstallerUiServer(options = {}) {
             malformed.exitCode = result.code;
             throw malformed;
           }
-          preflightPasses = preflightPasses.filter((record) => !(record.answersDigest === digest && record.engine === engine));
           let fingerprint = '';
           if (parsed.result === 'PASS' && result.code === 0) {
             fingerprint = preflightFingerprint({ answers: body.answers || {}, scope, engine });
-            preflightPasses.push({ fingerprint, answersDigest: digest, engine, scope, time: new Date().toISOString() });
-            preflightPasses = preflightPasses.slice(-20);
+            preflightPasses.replaceForAnswers({ fingerprint, answersDigest: digest, engine, scope, time: new Date().toISOString() });
+          } else {
+            preflightPasses.clearForAnswers(digest, engine);
           }
           return { exitCode: result.code, fingerprint: fingerprint || undefined, preflight: parsed, stdout: result.stdout, stderr: result.stderr, fieldsByCheckId: fieldsByCheckId(await loadSchema()) };
-        }, tempDirs, tmpdir())), setCookie);
+        }, tempDirs, tempRoot)), setCookie);
       }
       if (req.method === 'POST' && url.pathname === '/api/run/stream') {
         requireLive();
@@ -558,7 +516,7 @@ export async function createInstallerUiServer(options = {}) {
         const steps = await validateRunRequest(body, options);
         const scope = scopeFromBody(body, steps);
         const digest = answersDigest(body.answers || {});
-        const record = preflightPasses.find((candidate) => candidate.fingerprint === body.fingerprint);
+        const record = preflightPasses.lookup(body.fingerprint);
         if (!record) throw preflightRequired('No passing preflight matched this run. Run preflight again before starting the installer.');
         if (record.engine !== 'pwsh' || record.answersDigest !== digest || !scopeCovers(record.scope, scope)) {
           throw preflightRequired('The answers or selected steps changed since the last passing preflight. Run preflight again.');

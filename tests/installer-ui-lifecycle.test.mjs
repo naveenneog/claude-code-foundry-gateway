@@ -158,12 +158,16 @@ function answersPathOf(app) {
 
 test('a run whose directory cannot be prepared is released and a later run is not refused as active', async () => {
   await mkdir(scratchRoot, { recursive: true });
-  const blocker = join(scratchRoot, `not-a-directory-${process.pid}-${Date.now()}`);
-  await writeFile(blocker, 'a file where the run directory root should be');
-  const app = await start({}, { tempRoot: join(blocker, 'runs') });
+  const tempRoot = join(scratchRoot, `run-root-${process.pid}-${Date.now()}`);
+  await mkdir(tempRoot, { recursive: true });
+  const app = await start({}, { tempRoot });
   try {
+    const preflight = await (await app.fetch('/api/preflight', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'] }) })).json();
+    assert.match(preflight.fingerprint, /^[0-9a-f]{64}$/);
+    await rm(tempRoot, { recursive: true, force: true });
+    await writeFile(tempRoot, 'a file where the run directory root should be');
     for (const attempt of [1, 2]) {
-      const response = await runRequest(app, ['resource-group']);
+      const response = await app.fetch('/api/run/stream', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'], fingerprint: preflight.fingerprint }) });
       const text = await response.text();
       assert.equal(response.status, 500, `attempt ${attempt}: ${text}`);
       assert.match(JSON.parse(text).error, /could not start/);
@@ -174,7 +178,7 @@ test('a run whose directory cannot be prepared is released and a later run is no
     assert.equal(app.stubCalls().filter((entry) => entry.args.includes('-Yes')).length, 0, 'the installer never started');
   } finally {
     await app.close();
-    await rm(blocker, { force: true });
+    await rm(tempRoot, { recursive: true, force: true });
   }
 });
 

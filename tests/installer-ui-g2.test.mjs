@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { createInstallerUiServer } from '../tools/installer-ui/server.mjs';
+import { canonicalize, createPreflightStore, preflightFingerprint, scopeCovers, scopeFromBody } from '../tools/installer-ui/preflight-record.mjs';
 
 const stub = fileURLToPath(new URL('./installer-ui-stub.mjs', import.meta.url));
 const passingAnswers = { schemaVersion: 1, SubscriptionId: '00000000-0000-4000-8000-000000000093' };
@@ -94,6 +95,21 @@ test('G0 serves index.html byte-identically at the root route', async () => {
   } finally {
     await app.close();
   }
+});
+
+test('P1 preflight record canonical form and scope coverage are deterministic', () => {
+  assert.equal(canonicalize({ b: 2, a: { d: 4, c: [3, 2] } }), '{"a":{"c":[3,2],"d":4},"b":2}');
+  assert.equal(preflightFingerprint({ answers: { b: 2, a: 1 }, scope: ['resource-group'], engine: 'pwsh' }), preflightFingerprint({ answers: { a: 1, b: 2 }, scope: ['resource-group'], engine: 'pwsh' }));
+  assert.equal(scopeFromBody({ answers: {} }), 'full');
+  assert.deepEqual(scopeFromBody({ steps: ['b', 'a', 'a'] }, ['b', 'a', 'a']), ['a', 'b']);
+  assert.equal(scopeCovers('full', ['verify']), true);
+  assert.equal(scopeCovers(['a', 'b'], ['a']), true);
+  assert.equal(scopeCovers(['a'], ['a', 'b']), false);
+  const store = createPreflightStore();
+  store.replaceForAnswers({ fingerprint: 'a', answersDigest: 'd', engine: 'pwsh', scope: ['a'], time: '1' });
+  store.replaceForAnswers({ fingerprint: 'b', answersDigest: 'd', engine: 'pwsh', scope: ['b'], time: '2' });
+  assert.equal(store.lookup('a'), null);
+  assert.equal(store.lookup('b').scope[0], 'b');
 });
 
 test('P1 run admission requires a matching passing preflight fingerprint', async () => {
@@ -221,6 +237,48 @@ test('P1 browser shows fingerprint, marks stale on answer changes and reruns a c
   } finally {
     await app.server.cleanup();
     await browser.close();
+    await app.close();
+  }
+});
+
+test('P1 business-unit button changes mark a passing preflight stale', async () => {
+  const app = await startServer();
+  const { chromium } = await import('playwright');
+  let browser;
+  try { browser = await chromium.launch({ channel: 'msedge', headless: true }); }
+  catch { browser = await chromium.launch({ headless: true }); }
+  try {
+    const page = await browser.newPage();
+    await page.context().addCookies([{ name: 'installer_token', value: app.server.token, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Strict' }]);
+    await page.route('**/api/identity', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ signedIn: true, user: 'operator@example.com' }) }));
+    await page.goto(`${app.base}/`);
+    await page.getByRole('button', { name: 'List steps' }).click();
+    await page.locator('[name="SubscriptionId"]').fill(passingAnswers.SubscriptionId);
+    await page.locator('#step-list input[value="resource-group"]').check();
+    await page.getByRole('button', { name: 'Run preflight' }).click();
+    await page.getByText(/Passing preflight [0-9a-f]{12}/).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Run selected steps' }).isEnabled(), true);
+    await page.getByRole('button', { name: 'Add unit' }).click();
+    await page.getByText(/Preflight is stale/).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Run selected steps' }).isDisabled(), true);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
+test('P1 preflight lists steps only when a step scope is requested', async () => {
+  const app = await startServer();
+  try {
+    await postJson(app, '/api/preflight', { answers: passingAnswers, fullRun: true });
+    let calls = (await readFile(app.log, 'utf8')).trim().split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
+    assert.equal(calls.length, 1);
+    assert.ok(calls[0].args.includes('-Preflight'));
+    await postJson(app, '/api/preflight', { answers: passingAnswers, steps: ['resource-group'] });
+    calls = (await readFile(app.log, 'utf8')).trim().split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
+    assert.equal(calls.length, 3);
+    assert.ok(calls.some((entry) => entry.args.includes('-ListSteps')));
+  } finally {
     await app.close();
   }
 });
