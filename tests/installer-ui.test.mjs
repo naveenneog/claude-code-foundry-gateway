@@ -568,7 +568,7 @@ test('stream transport preserves split output, final tails, malformed progress a
     await malformed.close();
   }
 
-  const capped = await start({ env: { P93_INSTALLER_UI_STUB_MANY_LINES: '6000' } });
+  const capped = await start({ env: { P93_INSTALLER_UI_STUB_MANY_LINES: '6000', P93_INSTALLER_UI_STUB_PAD: '1000' } });
   try {
     const { text, events } = await streamEvents(capped, { answers: {}, steps: ['resource-group'] });
     assert.ok(events.some((event) => event.type === 'notice' && /output cap/i.test(event.message)));

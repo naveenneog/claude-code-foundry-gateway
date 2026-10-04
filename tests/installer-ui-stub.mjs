@@ -118,7 +118,13 @@ if (args.includes('-Yes')) {
   }
   if (process.env.P93_INSTALLER_UI_STUB_MANY_LINES) {
     const count = Number(process.env.P93_INSTALLER_UI_STUB_MANY_LINES);
-    for (let i = 0; i < count; i++) console.log(`line ${String(i).padStart(4, '0')}`);
+    const pad = 'y'.repeat(Number(process.env.P93_INSTALLER_UI_STUB_PAD || 0));
+    for (let i = 0; i < count; i++) console.log(`line ${String(i).padStart(4, '0')}${pad}`);
+    process.exit(0);
+  }
+  if (process.env.P93_INSTALLER_UI_STUB_PROGRESS_EVENTS && progressPath) {
+    const count = Number(process.env.P93_INSTALLER_UI_STUB_PROGRESS_EVENTS);
+    for (let i = 0; i < count; i++) appendFileSync(progressPath, progressLine({ stepId: steps[0], event: i % 2 ? 'completed' : 'started', message: `event ${i}` }) + '\n');
     process.exit(0);
   }
   if (process.env.P93_INSTALLER_UI_STUB_MALFORMED_PROGRESS && progressPath) {

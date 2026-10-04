@@ -25,8 +25,7 @@ const uiScript = join(here, 'installer-ui.js');
 const uiModelScript = join(here, 'ui-model.js');
 const uiCss = join(here, 'installer-ui.css');
 const defaultIdleMs = 30 * 60 * 1000;
-const consoleOutputCapBytes = 16 * 1024;
-const clientBacklogLimit = 256;
+const consoleOutputCapBytes = 4 * 1024 * 1024;
 const runTailLimit = 1000;
 
 
@@ -183,14 +182,19 @@ async function runInstallerStreaming(kind, args, options, onEvent, progressPath,
   const makeLineHandler = (type) => {
     const decoder = new StringDecoder('utf8');
     let carry = '';
+    let work = Promise.resolve();
     return {
-      async chunk(chunk) {
+      chunk(chunk) {
+        work = work.then(async () => {
         carry += decoder.write(chunk);
         const lines = carry.split(/\r?\n/);
         carry = lines.pop() || '';
         for (const line of lines) await emitConsoleLine(type, line);
+        });
+        return work;
       },
       async end() {
+        await work;
         carry += decoder.end();
         if (carry) await emitConsoleLine(type, carry);
         carry = '';
@@ -247,6 +251,10 @@ async function runInstallerStreaming(kind, args, options, onEvent, progressPath,
     child.on('close', resolveCode);
   });
   clearInterval(timer);
+  await Promise.all([
+    child.stdout.readableEnded ? Promise.resolve() : once(child.stdout, 'end').catch(() => {}),
+    child.stderr.readableEnded ? Promise.resolve() : once(child.stderr, 'end').catch(() => {}),
+  ]);
   await stdout.end();
   await stderr.end();
   await progressReading;
@@ -356,7 +364,7 @@ export async function createInstallerUiServer(options = {}) {
     events: includeTail ? run.tail : undefined,
   });
 
-  const publish = (run, event) => {
+  const publish = async (run, event) => {
     const item = { seq: run.nextSeq++, ...event };
     run.tail.push(item);
     if (run.tail.length > runTailLimit) run.tail.splice(0, run.tail.length - runTailLimit);
@@ -365,10 +373,15 @@ export async function createInstallerUiServer(options = {}) {
       run.failedStepId = item.stepId || '';
       run.resumeCommand = item.resumeCommand || (run.failedStepId ? `Install-ClaudeGateway.ps1 -Steps ${run.failedStepId}` : '');
     }
-    for (const subscriber of run.subscribers) subscriber.enqueue(item);
+    await Promise.all([...run.subscribers].map((subscriber) => subscriber.enqueue()));
   };
 
   const attachRun = async (run, res, after) => {
+    if (!Number.isInteger(after) || after < 0) {
+      const error = new Error('after must be a non-negative integer');
+      error.status = 400;
+      throw error;
+    }
     res.writeHead(200, {
       'content-type': 'application/x-ndjson; charset=utf-8',
       'cache-control': 'no-store',
@@ -377,46 +390,44 @@ export async function createInstallerUiServer(options = {}) {
     });
     let closed = false;
     const subscriber = {
-      backlog: [],
-      dropped: 0,
+      cursor: after,
       writing: false,
-      enqueue(event) {
-        if (closed) return;
-        if (this.backlog.length > clientBacklogLimit) {
-          this.dropped += this.backlog.length;
-          this.backlog = [];
-        }
-        this.backlog.push(event);
-        void this.flush();
+      enqueue() {
+        return this.flush();
       },
       async flush() {
         if (this.writing) return;
         this.writing = true;
         try {
-          while (!closed && this.backlog.length) {
-            if (this.dropped) {
-              const dropped = this.dropped;
-              this.dropped = 0;
-              if (!await writeNdjson(res, { type: 'notice', skippedEvents: dropped, message: `${dropped} events were skipped for this slow client.` })) break;
+          for (;;) {
+            if (closed) return;
+            const firstSeq = run.tail[0]?.seq ?? run.nextSeq;
+            if (this.cursor < firstSeq - 1) {
+              const skipped = firstSeq - this.cursor - 1;
+              this.cursor = firstSeq - 1;
+              if (!await writeNdjson(res, { seq: this.cursor, type: 'notice', skippedEvents: skipped, message: 'Earlier run events fell out of the bounded tail.' })) return;
             }
-            if (!await writeNdjson(res, this.backlog.shift())) break;
+            const next = run.tail.find((event) => event.seq > this.cursor);
+            if (!next) return;
+            if (!await writeNdjson(res, next)) return;
+            this.cursor = next.seq;
+            if (next.type === 'summary') {
+              closed = true;
+              res.end();
+              return;
+            }
           }
         } finally {
           this.writing = false;
+          if (!closed && run.tail.some((event) => event.seq > this.cursor)) void this.flush();
         }
       },
       end() {
         if (!closed) res.end();
       },
     };
-    const firstSeq = run.tail[0]?.seq ?? run.nextSeq;
-    if (after < firstSeq - 1) subscriber.enqueue({ seq: firstSeq - 1, type: 'notice', skippedEvents: firstSeq - after - 1, message: 'Earlier run events fell out of the bounded tail.' });
-    for (const event of run.tail.filter((item) => item.seq > after)) subscriber.enqueue(event);
     if (run.state === 'running' || run.state === 'stopping') run.subscribers.add(subscriber);
-    else {
-      subscriber.enqueue({ seq: run.nextSeq, type: 'summary', exitCode: run.exitCode, failedStepId: run.failedStepId, resumeCommand: run.resumeCommand, state: run.state });
-      setImmediate(async () => { await subscriber.flush(); subscriber.end(); });
-    }
+    subscriber.enqueue();
     reqDone(res).then(() => { closed = true; run.subscribers.delete(subscriber); }).catch(() => {});
   };
 
@@ -557,20 +568,21 @@ export async function createInstallerUiServer(options = {}) {
         run.progressPath = progress;
         const args = ['-AnswersPath', answers, '-Yes', '-ProgressPath', progress];
         if (steps.length) args.push('-Steps', steps.join(','));
+        await attachRun(run, res, 0);
         void (async () => {
           try {
             const code = await runInstallerStreaming('powershell', args, options, async (event) => {
-              publish(run, event);
+              await publish(run, event);
             }, progress, { onChild: (child) => { run.child = child; } });
             run.exitCode = code;
             run.state = run.state === 'stopping' ? 'stopped' : 'exited';
           } catch (error) {
             run.exitCode = 1;
             run.state = run.state === 'stopping' ? 'stopped' : 'exited';
-            publish(run, { type: 'error', message: await redactText(scrubLocalPaths(error.message)) });
+            await publish(run, { type: 'error', message: await redactText(scrubLocalPaths(error.message)) });
           } finally {
             if (run.failedStepId && !run.resumeCommand) run.resumeCommand = `Install-ClaudeGateway.ps1 -Steps ${run.failedStepId}`;
-            publish(run, { type: 'summary', exitCode: run.exitCode, failedStepId: run.failedStepId, resumeCommand: run.resumeCommand, state: run.state, message: run.stoppedMessage });
+            await publish(run, { type: 'summary', exitCode: run.exitCode, failedStepId: run.failedStepId, resumeCommand: run.resumeCommand, state: run.state, message: run.stoppedMessage });
             for (const subscriber of [...run.subscribers]) {
               await subscriber.flush?.();
               subscriber.end?.();
@@ -591,7 +603,6 @@ export async function createInstallerUiServer(options = {}) {
             armIdle();
           }
         })();
-        await attachRun(run, res, 0);
         return;
       }
       if (req.method === 'POST' && url.pathname === '/api/run/stop') {
@@ -602,7 +613,7 @@ export async function createInstallerUiServer(options = {}) {
         run.state = 'stopping';
         const step = run.currentStepId || run.steps[0] || 'the current step';
         run.stoppedMessage = `Stopped installer run at ${step}. The install checkpoint resumes when the same steps run again.`;
-        publish(run, { type: 'stopped', stepId: step, message: run.stoppedMessage });
+        await publish(run, { type: 'stopped', stepId: step, message: run.stoppedMessage });
         await killProcessTree(run.child);
         return send(res, 200, { schemaVersion: 1, runId: run.id, message: run.stoppedMessage }, setCookie);
       }
