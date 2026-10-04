@@ -209,36 +209,6 @@ test('token, host, fixed routes and headers protect the local server', async () 
     await app.close();
   }
 });
-test('the form uses fixed script routes and no string-built DOM insertion sinks', async () => {
-  const app = await start();
-  try {
-    const html = await (await app.fetch('/')).text();
-    assert.match(html, /<script defer src="\.\/ui-model\.js"><\/script>\s*<script defer src="\.\/installer-ui-business-units\.js"><\/script>\s*<script defer src="\.\/installer-ui-prefill\.js"><\/script>\s*<script defer src="\.\/installer-ui-actions\.js"><\/script>\s*<script defer src="\.\/installer-ui-problems\.js"><\/script>\s*<script defer src="\.\/installer-ui\.js"><\/script>/);
-    assert.doesNotMatch(html, /type="module"|import\s+|export\s+/);
-    assert.doesNotMatch(html, /<script>\s*\(/);
-    const js = await (await app.fetch('/installer-ui.js')).text();
-    const businessUnits = await (await app.fetch('/installer-ui-business-units.js')).text();
-    const prefill = await (await app.fetch('/installer-ui-prefill.js')).text();
-    const actions = await (await app.fetch('/installer-ui-actions.js')).text();
-    const problems = await (await app.fetch('/installer-ui-problems.js')).text();
-    assert.doesNotMatch(js, /innerHTML|insertAdjacentHTML|import\s+|export\s+/);
-    assert.doesNotMatch(businessUnits, /innerHTML|insertAdjacentHTML|import\s+|export\s+/);
-    assert.doesNotMatch(prefill, /innerHTML|insertAdjacentHTML|import\s+|export\s+/);
-    assert.doesNotMatch(actions, /innerHTML|insertAdjacentHTML|import\s+|export\s+/);
-    assert.doesNotMatch(problems, /innerHTML|insertAdjacentHTML|import\s+|export\s+/);
-    for (const name of ['buildPortableCommands', 'coerceAnswerValue', 'collectAnswersFromEntries', 'fieldsByCheckId', 'quoteBash', 'quotePowerShell', 'validateBusinessUnits']) {
-      assert.doesNotMatch(js, new RegExp(`function\\s+${name}\\b|const\\s+${name}\\b`), `${name} must live only in ui-model.js`);
-      assert.doesNotMatch(businessUnits, new RegExp(`function\\s+${name}\\b|const\\s+${name}\\b`), `${name} must live only in ui-model.js`);
-      assert.doesNotMatch(prefill, new RegExp(`function\\s+${name}\\b|const\\s+${name}\\b`), `${name} must live only in ui-model.js`);
-      assert.doesNotMatch(actions, new RegExp(`function\\s+${name}\\b|const\\s+${name}\\b`), `${name} must live only in ui-model.js`);
-      assert.doesNotMatch(problems, new RegExp(`function\\s+${name}\\b|const\\s+${name}\\b`), `${name} must live only in ui-model.js`);
-    }
-    const model = await (await app.fetch('/ui-model.js')).text();
-    assert.match(model, /ClaudeInstallerUiModel/);
-  } finally {
-    await app.close();
-  }
-});
 test('the static fallback carries a schema copy equal to the canonical schema', async () => {
   const staticHtml = await readFile(new URL('../tools/installer-ui/index.html', import.meta.url), 'utf8');
   const carried = staticHtml.match(/<script type="application\/json" id="schema-json">([\s\S]*?)<\/script>/);

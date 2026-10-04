@@ -86,20 +86,6 @@ export async function installerArguments(options) {
   return (await loadUiModel()).installerArguments(options);
 }
 
-export function fieldsByCheckId(schema) {
-  const map = {};
-  for (const [name, property] of Object.entries(schema.properties || {})) {
-    const id = property['x-checkId'];
-    if (!id) continue;
-    map[id] ??= [];
-    map[id].push(name);
-  }
-  const unit = schema?.$defs?.BusinessUnit;
-  for (const [name, property] of Object.entries(unit?.properties || {})) {
-    const id = property['x-checkId'];
-    if (!id) continue;
-    map[id] ??= [];
-    map[id].push(`BusinessUnits.${name}`);
-  }
-  return map;
+export async function fieldsByCheckId(schema) {
+  return (await loadUiModel()).fieldsByCheckId(schema);
 }

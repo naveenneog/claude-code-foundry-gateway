@@ -508,7 +508,7 @@ export async function createInstallerUiServer(options = {}) {
           } else {
             preflightPasses.clearForAnswers(digest, engine);
           }
-          return { exitCode: result.code, fingerprint: fingerprint || undefined, preflight: parsed, stdout: result.stdout, stderr: result.stderr, fieldsByCheckId: fieldsByCheckId(await loadSchema()) };
+          return { exitCode: result.code, fingerprint: fingerprint || undefined, preflight: parsed, stdout: result.stdout, stderr: result.stderr, fieldsByCheckId: await fieldsByCheckId(await loadSchema()) };
         }, tempDirs, tempRoot)), setCookie);
       }
       if (req.method === 'POST' && url.pathname === '/api/run/stream') {
