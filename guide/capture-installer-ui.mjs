@@ -24,6 +24,7 @@ const server = await createInstallerUiServer({
   env: {
     PATH: `${scratch};${process.env.PATH}`,
     P93_INSTALLER_UI_STUB_FAIL_STEP: 'gateway-deployment',
+    P93_INSTALLER_UI_STUB_REAL_FAILURE: '1',
     P93_INSTALLER_UI_STUB_SIGNED_IN: '1',
     P93_INSTALLER_UI_STUB_USER: 'operator@example.invalid',
     P93_INSTALLER_UI_STUB_TENANT: 'tenant-capture',

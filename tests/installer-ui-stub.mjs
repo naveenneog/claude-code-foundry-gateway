@@ -113,6 +113,12 @@ if (args.includes('-Yes')) {
   const progressPath = argValue('-ProgressPath');
   const shouldFail = process.env.P93_INSTALLER_UI_STUB_FAIL_STEP || '';
   const delay = Number(process.env.P93_INSTALLER_UI_STUB_DELAY_MS || 0);
+  if (process.env.P93_INSTALLER_UI_STUB_REAL_FAILURE === '1' && shouldFail) {
+    if (progressPath) appendFileSync(progressPath, progressLine({ stepId: shouldFail, event: 'started', message: `${shouldFail} started` }) + '\n');
+    if (progressPath) appendFileSync(progressPath, progressLine({ stepId: shouldFail, event: 'failed', message: `${shouldFail}: simulated deployment failed`, resumeCommand: `Set-Location -LiteralPath '/home/operator/claude-code-foundry-gateway'; ./Install-ClaudeGateway.ps1 -Steps ${shouldFail}` }) + '\n');
+    console.error(`${shouldFail}: simulated deployment failed`);
+    process.exit(7);
+  }
   if (process.env.P93_INSTALLER_UI_STUB_GRANDCHILD_HEARTBEAT) {
     const heartbeat = process.env.P93_INSTALLER_UI_STUB_GRANDCHILD_HEARTBEAT;
     const child = spawn(process.execPath, ['-e', `const {appendFileSync}=require('fs'); setInterval(()=>appendFileSync(process.argv[1], Date.now()+"\\n"),100);`, heartbeat], { stdio: 'ignore', detached: false });
