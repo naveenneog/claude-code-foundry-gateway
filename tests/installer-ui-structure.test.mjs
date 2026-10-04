@@ -33,6 +33,7 @@ test('the form uses fixed script routes and no string-built DOM insertion sinks'
     const source = await readFile(new URL(`../tools/installer-ui/${file}`, import.meta.url), 'utf8');
     for (const key of schemaExtensionKeys) assert.doesNotMatch(source, new RegExp(`['"]${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"]`), `${file} must not copy schema extension key ${key}`);
     for (const name of modelFunctionNames) {
+      assert.doesNotMatch(source, new RegExp(`(?:const|let|var)\\s+${name}\\s*=`), `${file} must not define ${name}; delegate to ui-model.js`);
       const declaration = new RegExp(`(?:export\\s+)?(?:async\\s+)?function\\s+${name}\\s*\\([^)]*\\)\\s*\\{([\\s\\S]*?)\\}`, 'm');
       const match = source.match(declaration);
       if (!match) continue;
