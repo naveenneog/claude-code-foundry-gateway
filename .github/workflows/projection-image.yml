@@ -1,0 +1,62 @@
+name: Projection image
+
+# Builds the projection sync image from the sync package (ADR-0049) and starts both entry points
+# with no settings. Each must load every module and stop asking for its Cosmos endpoint; a missing
+# module fails here instead of in the first scheduled run. The Windows test suite cannot build
+# Linux images, so this is the one place the image itself is built before deployment.
+
+on:
+  push:
+    branches: [main, 'p94-*']
+    paths:
+      - 'sync/**'
+      - 'resolver/src/entitlement.mjs'
+      - 'scripts/ClaudeProjectionPackage.ps1'
+      - '.github/workflows/projection-image.yml'
+  pull_request:
+    paths:
+      - 'sync/**'
+      - 'resolver/src/entitlement.mjs'
+      - 'scripts/ClaudeProjectionPackage.ps1'
+      - '.github/workflows/projection-image.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: projection-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  image:
+    name: Sync image builds and its entry points start
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Write the sync package
+        shell: pwsh
+        run: |
+          . ./scripts/ClaudeProjectionPackage.ps1
+          $package = New-ClaudeProjectionSyncPackage -Destination (Join-Path $env:RUNNER_TEMP 'sync-package')
+          "PACKAGE_DIR=$package" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Build the image from the package
+        run: docker build --file "$PACKAGE_DIR/sync/Dockerfile" --tag claude-projection-sync:ci "$PACKAGE_DIR"
+      - name: Start both entry points without settings
+        run: |
+          check() {
+            label="$1"; shift
+            set +e
+            out="$("$@" 2>&1)"
+            code=$?
+            set -e
+            echo "$label exited $code: $out"
+            last="$(printf '%s\n' "$out" | grep '^{' | tail -n 1)"
+            [ "$code" -eq 1 ] || { echo "$label exited $code, not 1" >&2; return 1; }
+            printf '%s' "$last" | jq -e '.ok == false and .error == "--cosmos is required"' > /dev/null || { echo "$label did not stop asking for its endpoint" >&2; return 1; }
+          }
+          check apply-projection docker run --rm claude-projection-sync:ci
+          check check-admission docker run --rm --entrypoint node claude-projection-sync:ci /app/sync/src/check-admission.mjs

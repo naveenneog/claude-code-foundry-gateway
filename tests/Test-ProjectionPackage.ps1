@@ -169,6 +169,15 @@ $secure = [IO.File]::ReadAllText((Join-Path $root 'docs\SECURE-PROJECTION.md'))
 Assert 'the runbook archives the package and unpacks it at /work' ($secure.Contains('New-ClaudeProjectionSyncArchive -Path $archive') -and $secure.Contains("'tar -x -z -f /work/sync-source.tar.gz -C /work'") -and $secure -notmatch 'tar -c -z -f \$archive -C sync')
 Assert 'the runbook builds the image from the package through the renewal script' ($secure.Contains('scripts\Deploy-ClaudeProjectionRenewal.ps1') -and $secure.Contains('`az acr build` from the sync package') -and $secure -notmatch 'az acr build [^\r\n]*--no-logs sync\b')
 
+# The Windows suite cannot build a Linux image, so CI builds it from the same package and starts
+# both entry points; a missing module there exits 1 without the JSON line the check requires.
+$workflow = [IO.File]::ReadAllText((Join-Path $root '.github\workflows\projection-image.yml'))
+Assert 'CI builds the image from the package the deployer and the runner use' ($workflow.Contains('New-ClaudeProjectionSyncPackage -Destination') -and $workflow -match 'docker build --file "\$PACKAGE_DIR/sync/Dockerfile" [^\r\n]* "\$PACKAGE_DIR"')
+Assert 'CI starts both entry points and requires their own argument error' ($workflow.Contains('check apply-projection docker run --rm claude-projection-sync:ci') -and $workflow.Contains('/app/sync/src/check-admission.mjs') -and $workflow.Contains('.error == "--cosmos is required"'))
+foreach ($path in Get-ClaudeProjectionSyncPackagePaths) {
+    Assert "CI runs when $path changes" ($workflow -match "(?m)^\s+- '$([regex]::Escape($(if ($path -eq 'sync/src' -or $path -like 'sync/*') { 'sync/**' } else { $path })))'\s*$")
+}
+
 Write-Host ''
 if ($fail) { Write-Host "$fail assertion(s) failed." -ForegroundColor Red; exit 1 }
 Write-Host 'Projection sync package holds.' -ForegroundColor Green
