@@ -68,10 +68,14 @@ exit /b 0
     $psi.Environment['PATH'] = "$bin;$($psi.Environment['PATH'])"
     $psi.Environment['AZURE_CONFIG_DIR'] = Join-Path $dir 'az'
     $p = [Diagnostics.Process]::Start($psi)
-    $out = $p.StandardOutput.ReadToEnd()
-    $err = $p.StandardError.ReadToEnd()
-    $p.WaitForExit(30000) | Out-Null
-    [pscustomobject]@{ Name = $Name; ExitCode = $p.ExitCode; Out = $out; Err = $err; Marker = $marker }
+    # Both pipes drain at once on threads of their own (ADR-0047 decision 16), and the run is bounded.
+    $outRead = Start-ChildOutputRead $p.StandardOutput
+    $errRead = Start-ChildOutputRead $p.StandardError
+    $exited = $p.WaitForExit(120000)
+    if (-not $exited) { try { $p.Kill($true) } catch { } }
+    $out = Receive-ChildOutputRead $outRead "The standard output of the $Name marker preflight"
+    $err = Receive-ChildOutputRead $errRead "The standard error of the $Name marker preflight"
+    [pscustomobject]@{ Name = $Name; ExitCode = $(if ($exited) { $p.ExitCode } else { -1 }); Out = $out; Err = $err; Marker = $marker }
 }
 
 try {

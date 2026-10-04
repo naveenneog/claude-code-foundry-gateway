@@ -68,6 +68,10 @@ try {
     # Round 4, the Coder seat's item 5: a group name the schema refuses (a single quote, a comma or a colon)
     # typed at the prompt is refused there, before any Azure CLI call reads Graph for it.
     $quoteGroup = New-P91Scenario -Name 'prompt-quote' -Scratch $scratch -Template $template -World (New-P91World -ReusedGateway)
+    # Round 6, the lead's check of 70f07c0: the prompt applies the same schema rule to cmd.exe metacharacters, which
+    # the Azure CLI's az.cmd shim on Windows would re-read (ADR-0047 decision 13, round 5 Security).
+    $metaName = 'claude-bu&echo.P92_PROMPT_MARKER&rem'
+    $metaGroup = New-P91Scenario -Name 'prompt-metachar' -Scratch $scratch -Template $template -World (New-P91World -ReusedGateway)
     $wave1 = @(
         ($runApply = New-P91Run $apply.Scenario -Arguments ($common + "-AnswersPath '$($apply.Answers)'"))
         ($runNotify = New-P91Run $quiet.Scenario -Arguments ($common + "-AnswersPath '$($quiet.Answers)'"))
@@ -78,6 +82,7 @@ try {
         ($runPrefix = New-P91Run $prefixGroup -Arguments $prompted -Attended -Answers @('', '', '', '', '', 'y', 'platform', '', '', 'y', 'zzz', '', '', '', ''))
         ($runTwoGroups = New-P91Run $twoGroups -Arguments $prompted -Attended -Answers @('', '', '', '', '', 'y', 'platform', '', 'n', '', '', '', ''))
         ($runQuote = New-P91Run $quoteGroup -Arguments $prompted -Attended -Answers @('', '', '', '', '', 'y', 'platform', "O'Brien", 'n', '', '', '', ''))
+        ($runMeta = New-P91Run $metaGroup -Arguments $prompted -Attended -Answers @('', '', '', '', '', 'y', 'platform', $metaName, 'n', '', '', '', ''))
     )
     $r1 = Invoke-P91Runs $wave1
     $a = Get-P91Result $r1 $runApply
@@ -155,6 +160,10 @@ try {
     Assert 'R4 a group name with a single quote at the prompt is refused there with the schema''s message and remedy, before any Azure CLI call names it; no unit is written and the run goes on' ($tq.ExitCode -eq 0 -and
         $quoteMessage -match 'single quote' -and $quoteRemedy -and $tq.Out.Contains("Entra group 'O'Brien' $quoteMessage, so business unit platform is not written.") -and
         $tq.Out.Contains($quoteRemedy) -and -not @($tq.Az | Where-Object { $_.Contains("O'Brien") }).Count -and -not @($tq.Scripts | Where-Object { $_ -like 'bu platform *' }).Count) "message: $quoteMessage || $(Get-P91Tail $tq)"
+    $tm = Get-P91Result $r1 $runMeta
+    Assert 'R6 a group name with cmd.exe metacharacters at the prompt is refused there with the schema''s message and remedy, before any Azure CLI call names it; no unit is written and the run goes on' ($tm.ExitCode -eq 0 -and
+        $quoteMessage -match 'cmd\.exe' -and $tm.Out.Contains("Entra group '$metaName' $quoteMessage, so business unit platform is not written.") -and $tm.Out.Contains($quoteRemedy) -and
+        -not @($tm.Az | Where-Object { $_.Contains('P92_PROMPT_MARKER') }).Count -and -not @($tm.Scripts | Where-Object { $_ -like 'bu platform *' }).Count) "message: $quoteMessage || $(Get-P91Tail $tm)"
     $unexpected = @(foreach ($r in @($r1.Values) + @($r2.Values)) { @($r.Unexpected) })
     Assert 'harness: every az call was one the stub knows, and no run timed out' (-not $unexpected.Count -and -not @(@($r1.Values) + @($r2.Values) | Where-Object { $_.TimedOut }).Count) (($unexpected | Select-Object -Unique -First 4) -join ' | ')
 }
