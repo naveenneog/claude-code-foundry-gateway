@@ -376,3 +376,31 @@ test("F5 business-unit JSON refuses non-array object shapes without pageerror an
     await browser.close();
   }
 });
+
+test("F1 conditional fields follow their requires conditions in the model and the page", async () => {
+  const collect = (pairs) => JSON.parse(JSON.stringify(model.collectAnswersFromEntries(schema, new Map(pairs))));
+  const zone = "/subscriptions/00000000-0000-4000-8000-000000000093/resourceGroups/rg-dns/providers/Microsoft.Network/dnsZones/contoso.com";
+  const external = collect([["AddressMode", "custom"], ["AddressDnsMode", "External"], ["AddressDnsZoneResourceId", zone]]);
+  assert.equal(external.AddressDnsZoneResourceId, undefined, "AddressDnsZoneResourceId is not collected with AddressDnsMode External");
+  assert.equal(collect([["AddressMode", "custom"], ["AddressDnsMode", "AzureDns"], ["AddressDnsZoneResourceId", zone]]).AddressDnsZoneResourceId, zone);
+  assert.equal(collect([["DesktopSignInKind", "helper-script"], ["DesktopEntraClientId", "00000000-0000-4000-8000-0000000000d3"]]).DesktopEntraClientId, undefined, "DesktopEntraClientId is not collected for helper-script");
+  assert.equal(collect([["DesktopSignInKind", "external-idp-broker"], ["DesktopEntraClientId", "00000000-0000-4000-8000-0000000000d3"]]).DesktopEntraClientId, "00000000-0000-4000-8000-0000000000d3");
+
+  const { browser, page } = await browserPage(new URL("../tools/installer-ui/index.html", import.meta.url).href);
+  try {
+    const zoneField = page.locator('[data-answer="AddressDnsZoneResourceId"]');
+    const clientField = page.locator('[data-answer="DesktopEntraClientId"]');
+    await page.locator('[name="AddressMode"]').selectOption("custom");
+    await page.locator('[name="AddressDnsMode"]').selectOption("External");
+    assert.equal(await zoneField.isHidden(), true, "the zone id is hidden with AddressDnsMode External");
+    await page.locator('[name="AddressDnsMode"]').selectOption("AzureDns");
+    await zoneField.waitFor({ state: "visible" });
+    assert.equal(await clientField.isHidden(), true, "the client id is hidden while DesktopSignInKind is not set");
+    await page.locator('[name="DesktopSignInKind"]').selectOption("helper-script");
+    assert.equal(await clientField.isHidden(), true, "the client id is hidden for helper-script");
+    await page.locator('[name="DesktopSignInKind"]').selectOption("external-idp-browser");
+    await clientField.waitFor({ state: "visible" });
+  } finally {
+    await browser.close();
+  }
+});
