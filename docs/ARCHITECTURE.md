@@ -69,11 +69,12 @@ Source: [18-installer-ui.json](architecture/18-installer-ui.json);
 
 The installer UI adds an operator-side local server and static page. It adds no Azure resource and no
 hosted control plane. `tools/installer-ui/server.mjs` owns the HTTP routes, local session controls,
-PowerShell child process calls and idle lifecycle; `tools/installer-ui/http-helpers.mjs` owns Host,
-cookie, CSRF, same-origin and JSON-body helpers. The browser, server and tests share
+PowerShell child process calls and idle lifecycle (`tools/installer-ui/server.mjs:286-318`;
+`tools/installer-ui/server.mjs:393-435`). `tools/installer-ui/http-helpers.mjs` owns Host, cookie,
+CSRF, same-origin and JSON-body helpers (`tools/installer-ui/http-helpers.mjs:23-29`;
+`tools/installer-ui/http-helpers.mjs:60-117`). The browser, server and tests share
 `tools/installer-ui/ui-model.js` through `tools/installer-ui/server-model.mjs`, while the static page
-serves the same `index.html` bytes as the live server (`tools/installer-ui/server.mjs:276-294`;
-`tools/installer-ui/server.mjs:420-435`; `tools/installer-ui/http-helpers.mjs:60-117`;
+serves the same `index.html` bytes as the live server (`tools/installer-ui/server.mjs:420-435`;
 `tools/installer-ui/server-model.mjs:77-91`).
 
 Azure context and prefill reads go through `scripts/Get-ClaudeInstallerUiIdentity.ps1` and
@@ -84,18 +85,18 @@ The Node server starts only the configured PowerShell command, a Node test stub 
 `tests/installer-ui-structure.test.mjs:67-87`).
 
 Preflight admission is fingerprinted by `tools/installer-ui/preflight-record.mjs`; a run needs a
-stored PASS for the same answers and a covering step scope. Versioned installer-interface checks live
-in `tools/installer-ui/installer-contract.mjs`, so malformed step lists and preflight payloads fail
-closed and malformed progress events become stream errors (`tools/installer-ui/preflight-record.mjs:28-61`;
-`tools/installer-ui/installer-contract.mjs:29-89`).
+stored PASS for the same answers and a covering step scope (`tools/installer-ui/preflight-record.mjs:28-61`).
+Versioned installer-interface checks live in `tools/installer-ui/installer-contract.mjs`, so malformed
+step lists and preflight payloads fail closed and malformed progress events become stream errors
+(`tools/installer-ui/installer-contract.mjs:29-89`).
 
 Run state lives in `tools/installer-ui/run-record.mjs`, not in a browser connection. `GET
 /api/run/status` reports the active or last run, `GET /api/run/attach?after=<seq>` replays the tail
 and follows live events, and `POST /api/run/stop` stops the child process tree. `tools/installer-ui/run-transport.mjs`
-handles UTF-8 carries, progress-file offsets, NDJSON writes and backpressure; the server caps console
+handles UTF-8 carries, progress-file offsets, NDJSON writes and backpressure. The server caps console
 bytes and line bytes before publishing output (`tools/installer-ui/run-record.mjs:10-126`;
-`tools/installer-ui/run-transport.mjs:21-80`; `tools/installer-ui/server.mjs:173-248`,
-`tools/installer-ui/server.mjs:553-589`).
+`tools/installer-ui/run-transport.mjs:21-80`; `tools/installer-ui/server.mjs:31-33`;
+`tools/installer-ui/server.mjs:149-167`; `tools/installer-ui/server.mjs:173-248`).
 
 **Answers schema.** [`schemas/claude-gateway.answers.schema.json`](../schemas/claude-gateway.answers.schema.json)
 names each answer once, by its installer parameter, with the programs that apply it (`x-appliedBy`),

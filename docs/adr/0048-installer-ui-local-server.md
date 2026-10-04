@@ -43,8 +43,8 @@ The bootstrap token is accepted on the initial top-level page request, then the 
 `HttpOnly; SameSite=Strict` cookie and redirects to a tokenless URL. `GET /api/session` returns the
 CSRF token and `live` or `static` mode. JSON POST routes require `Content-Type: application/json`,
 state-changing routes require `x-csrf-token`, child-spawning routes check Origin and Fetch Metadata,
-the server sends no CORS header, and `OPTIONS` is refused (`tools/installer-ui/server.mjs:394-418`;
-`tools/installer-ui/server.mjs:320-330`; `tools/installer-ui/http-helpers.mjs:23-53`;
+the server sends no CORS header, and `OPTIONS` is refused (`tools/installer-ui/server.mjs:393-418`;
+`tools/installer-ui/server.mjs:331-337`; `tools/installer-ui/http-helpers.mjs:23-53`;
 `tools/installer-ui/http-helpers.mjs:79-108`).
 
 The server exposes fixed routes. The page uses classic deferred scripts so the same
@@ -71,7 +71,7 @@ uses them. They require `schemaVersion: 1`, required fields, allowed step states
 results and allowed progress events. Malformed step lists and preflight results fail closed as
 `502`; malformed progress events become redacted stream error events
 (`tools/installer-ui/installer-contract.mjs:29-89`; `tools/installer-ui/server.mjs:190-201`;
-`tools/installer-ui/server.mjs:251-269`; `tools/installer-ui/server.mjs:472-491`).
+`tools/installer-ui/server.mjs:228-234`; `tools/installer-ui/server.mjs:472-491`).
 
 Preflight fingerprints are lower-case SHA-256 values over a canonical JSON object containing schema
 version, engine, sorted answers and a sorted step scope or `full`. The server stores at most 20
@@ -83,8 +83,8 @@ engine is `pwsh` and the stored scope covers the requested run scope
 Live mode uses the configured PowerShell command, `pwsh` by default. `listenAsync` checks PowerShell
 once and requires major version 7 or newer. If that check fails, `/api/session` reports static mode
 and live child-spawning routes return `503`. Static mode is also the `file://` path
-(`tools/installer-ui/server.mjs:125-142`; `tools/installer-ui/server.mjs:337-343`;
-`tools/installer-ui/server.mjs:584-594`).
+(`tools/installer-ui/server.mjs:129-149`; `tools/installer-ui/server.mjs:337-343`;
+`tools/installer-ui/server.mjs:576-586`; `tools/installer-ui/installer-ui.js:576-582`).
 
 The page and server share one model file, `tools/installer-ui/ui-model.js`. The page loads it as a
 classic script, the server loads it through `node:vm`, and tests use the same file. It owns field

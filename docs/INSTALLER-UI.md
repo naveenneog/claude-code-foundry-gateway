@@ -22,8 +22,8 @@ cookie; `GET /api/session` returns the CSRF token and `live` or `static` mode
 
 Live mode requires PowerShell 7 or newer from the configured `pwsh` command. If the command is absent
 or reports an older major version, the server stays in static mode, `/api/session` reports the reason
-and live child-spawning routes return `503` (`tools/installer-ui/server.mjs:125-142`;
-`tools/installer-ui/server.mjs:337-343`; `tools/installer-ui/server.mjs:584-594`).
+and live child-spawning routes return `503` (`tools/installer-ui/server.mjs:129-149`;
+`tools/installer-ui/server.mjs:337-343`; `tools/installer-ui/server.mjs:576-586`).
 
 Microsoft Learn states that Azure Cloud Shell's Web preview menu can open a port and browse it in a
 new tab, and the same article describes **Manage files > Upload** for file uploads
@@ -82,7 +82,7 @@ The Host allowlist accepts loopback names for the selected port and any explicit
 The bootstrap cookie and `x-csrf-token` header protect JSON `POST` routes. JSON POST routes require
 `Content-Type: application/json`; child-spawning POST routes also check Origin and Fetch Metadata,
 and child-spawning GET routes refuse cross-site Fetch Metadata (`tools/installer-ui/server.mjs:415-418`;
-`tools/installer-ui/server.mjs:320-330`; `tools/installer-ui/http-helpers.mjs:79-96`). Prefill accepts
+`tools/installer-ui/server.mjs:331-337`; `tools/installer-ui/http-helpers.mjs:79-96`). Prefill accepts
 only the three known read kinds and text parameters before starting PowerShell
 (`tools/installer-ui/server-model.mjs:9-16`; `tools/installer-ui/server-model.mjs:62-75`;
 `tools/installer-ui/server.mjs:446-464`). When Azure CLI resolves to a Windows `.cmd` or `.bat` shim,
@@ -96,11 +96,11 @@ work goes through `Install-ClaudeGateway.ps1` with argument arrays and `shell: f
 `tools/installer-ui/server.mjs:472-491`; `tests/installer-ui-structure.test.mjs:67-87`). Output from
 children is redacted with the installer's rule table and local paths are scrubbed before HTTP details
 or stream events leave the server (`tools/installer-ui/server-model.mjs:17-48`;
-`tools/installer-ui/server.mjs:149-167`; `tools/installer-ui/server.mjs:481-487`).
+`tools/installer-ui/server.mjs:149-167`; `tools/installer-ui/server.mjs:475-480`).
 
 The UI does not collect the PFX password because the schema marks `AddressCertificatePassword` as a
 secret and the page renders non-secret installer answers only
-(`schemas/claude-gateway.answers.schema.json:31-35`; `tools/installer-ui/ui-model.js:94-104`;
+(`schemas/claude-gateway.answers.schema.json:26-27`; `tools/installer-ui/ui-model.js:94-104`;
 `tools/installer-ui/ui-model.js:170-177`). With `-Yes -NonInteractive` and
 `AddressCertificateSource = Pfx`, `Install-ClaudeGateway.ps1` does not prompt and passes no
 certificate password unless it is supplied on the command line
@@ -115,7 +115,7 @@ answers and a covering scope; failing preflight or an exit-code failure clears t
 
 One installer run can be active. A second run receives `409`, and `POST /api/run` is not a route, so
 it returns `404` through the fixed-route fallback (`tools/installer-ui/server.mjs:493-500`;
-`tools/installer-ui/server.mjs:552`). A run writes its answers and progress file to a per-run
+`tools/installer-ui/server.mjs:555-557`). A run writes its answers and progress file to a per-run
 temporary directory and removes that directory after the child exits (`tools/installer-ui/server.mjs:359-368`;
 `tools/installer-ui/server.mjs:526-534`). A disconnected browser does not kill the child. `GET
 /api/run/status` reports the active or last run without the tail, and `GET /api/run/attach?after=<seq>`
@@ -150,11 +150,11 @@ run is active (`tools/installer-ui/server.mjs:286-318`).
 | Section | Source and behaviour |
 |---|---|
 | Account | Shows user, tenant id, subscription name and subscription id from the Azure CLI account through repository PowerShell. A button shows `az login --use-device-code` when sign-in is needed (`scripts/Get-ClaudeInstallerUiIdentity.ps1:1-29`; `tools/installer-ui/installer-ui.js:544-551`; `tools/installer-ui/installer-ui.js:584-586`). |
-| First install | Renders the subscription, Foundry account, gateway resource group, region, publisher, tier, initial groups, quotas and model deployment fields that `Install-ClaudeGateway.ps1` applies. Select fields start as `not set (the installer default)`. Server mode can read subscriptions, Foundry accounts and deployment names through `POST /api/prefill`; static mode hides those read actions (`tools/installer-ui/ui-model.js:7-32`; `tools/installer-ui/installer-ui.js:102-116`; `tools/installer-ui/installer-ui-prefill.js:15-24`; `tools/installer-ui/installer-ui.js:675-679`). |
+| First install | Renders the subscription, Foundry account, gateway resource group, region, publisher, tier, initial groups, quotas and model deployment fields that `Install-ClaudeGateway.ps1` applies. Select fields start as `not set (the installer default)`. Server mode can read subscriptions, Foundry accounts and deployment names through `POST /api/prefill`; static mode hides those read actions (`tools/installer-ui/ui-model.js:7-32`; `tools/installer-ui/installer-ui.js:109-121`; `tools/installer-ui/installer-ui-prefill.js:15-24`; `tools/installer-ui/installer-ui.js:675-679`). |
 | Optional parts | Renders company-address, existing-APIM reuse, Desktop sign-in, projection toggle, entitlement-store and business-unit answers that `Install-ClaudeGateway.ps1` applies. Fields with declarative conditions are hidden until their condition holds and hidden fields are not written to `answers.json`. The PFX password is not an answer, and the installer prompt behaviour is the one stated above (`tools/installer-ui/ui-model.js:33-58`; `tools/installer-ui/ui-model.js:140-189`; `tools/installer-ui/installer-ui.js:220-246`; `Install-ClaudeGateway.ps1:1164-1179`). |
 | Advanced | Renders projection renewal, resolver app, organisation quota, developer estimate, revocation window, model-organisation metadata, team-budget behaviour, unassigned-developer behaviour and the optional pending Claude deployment object that `Install-ClaudeGateway.ps1` applies (`tools/installer-ui/ui-model.js:59-78`; `tools/installer-ui/installer-ui.js:171-189`). |
 | Business units | Provides a two-level editor: add a unit, add a team under a unit, remove either, then serialize units before teams. Add unit and Add team focus the new row's first field. Remove focuses the row that takes the removed row's place, else the previous row, else Add unit. Fields are id, Entra group, monthly USD budget, mode and percent only for `Allowance`. Ids are lower-case letters, digits and hyphens, max 64; ids are unique; group names exclude `'`, `,` and `:`; `Allowance` requires percent 1-100; teams name one parent unit. The JSON view round-trips through the same validation (`tools/installer-ui/installer-ui-business-units.js:7-29`; `tools/installer-ui/installer-ui-business-units.js:65-158`; `tools/installer-ui/ui-model.js:214-233`; `tools/installer-ui/ui-model.js:504-542`). |
-| Review | Runs installer preflight and shows check, result, message, remedy and field links when a problem names or maps to an answer path. A passing preflight returns a 64-character SHA-256 fingerprint over canonical answers, engine and step scope. Failing checks mark fields through a problem path when present, otherwise through the schema's `x-checkId` mapping. Non-JSON preflight output returns a visible error with the exit code and a short redacted, path-scrubbed output tail (`tools/installer-ui/installer-ui.js:386-405`; `tools/installer-ui/installer-ui-problems.js:39-58`; `tools/installer-ui/preflight-record.mjs:28-46`; `tools/installer-ui/server.mjs:472-491`). |
+| Review | Runs installer preflight and shows check, result, message, remedy and field links when a problem names or maps to an answer path. A passing preflight returns a 64-character SHA-256 fingerprint over canonical answers, engine and step scope. Failing checks mark fields through a problem path when present, otherwise through the schema's `x-checkId` mapping. Non-JSON preflight output returns a visible error with the exit code and a short redacted, path-scrubbed output tail (`tools/installer-ui/installer-ui.js:386-405`; `tools/installer-ui/installer-ui-problems.js:39-58`; `tools/installer-ui/preflight-record.mjs:28-46`; `tools/installer-ui/server.mjs:475-480`). |
 | Run | Lists installer step ids, streams selected-step output as it arrives, shows a failed step with a rerun action and resume command, reattaches to an active run after reload and keeps a full run as a separate confirmed action. A run starts only when its fingerprint matches a stored passing preflight for the same answers and a covering scope. Displayed commands use `./` relative paths (`tools/installer-ui/installer-ui.js:414-468`; `tools/installer-ui/installer-ui.js:486-538`; `tools/installer-ui/installer-ui.js:613-652`; `tools/installer-ui/ui-model.js:593-618`). |
 
 ## Installer interface checks
@@ -162,7 +162,7 @@ run is active (`tools/installer-ui/server.mjs:286-318`).
 The server validates the P92 step list, preflight result and progress event interfaces before using
 them. Each must use `schemaVersion: 1`, required fields and accepted vocabularies; malformed step
 lists and preflight results return `502`, and malformed progress events become stream error events
-(`tools/installer-ui/installer-contract.mjs:1-89`; `tools/installer-ui/server.mjs:251-269`;
+(`tools/installer-ui/installer-contract.mjs:1-89`; `tools/installer-ui/server.mjs:228-234`;
 `tools/installer-ui/server.mjs:472-491`; `tools/installer-ui/server.mjs:190-201`).
 
 ## Screenshots
