@@ -68,10 +68,11 @@ output above 4 MiB for a run is replaced by one notice while progress and the fi
 and a console line longer than 64 KiB is cut with ` [line truncated]`. The browser keeps 2,000 output
 lines and shows one line with the number of earlier lines removed.
 
-The run output is exposed as a labelled log region. The Stop run button is enabled only while a run is active. It confirms the running step name and
-then stops the process tree. On Windows the server uses `taskkill.exe /PID <pid> /T /F`; on POSIX
-installer runs start in their own process group so the group can be signalled. The stop response and
-stream say that the install checkpoint resumes when the same steps run again.
+The run output is exposed as a labelled log region. The Stop run button is enabled only while a run
+is active. It confirms the running step name and then stops the process tree. On Windows the server
+uses `taskkill.exe /PID <pid> /T /F`; on POSIX installer runs start in their own process group so the
+group can be signalled. The stop response and stream say that the install checkpoint resumes when the
+same steps run again.
 
 ## Sections
 
@@ -82,7 +83,7 @@ stream say that the install checkpoint resumes when the same steps run again.
 | Optional parts | Renders company-address, existing-APIM reuse, Desktop sign-in, projection toggle, entitlement-store and business-unit answers that `Install-ClaudeGateway.ps1` applies. Fields with declarative conditions are hidden until their condition holds and hidden fields are not written to `answers.json`. The PFX password is not an answer; with `-Yes -NonInteractive` and `AddressCertificateSource = Pfx`, `Install-ClaudeGateway.ps1` does not prompt and passes no certificate password unless it is supplied on the command line (`Install-ClaudeGateway.ps1:1164-1166`, `:1179`). |
 | Advanced | Renders projection renewal, resolver app, organisation quota, developer estimate, revocation window, model-organisation metadata, team-budget behaviour, unassigned-developer behaviour and the optional pending Claude deployment object that `Install-ClaudeGateway.ps1` applies. |
 | Business units | Provides a two-level editor: add a unit, add a team under a unit, remove either, then serialize units before teams. Add unit and Add team focus the new row's first field. Remove focuses the row that takes the removed row's place, else the previous row, else Add unit. Fields are id, Entra group, monthly USD budget, mode and percent only for `Allowance`. Ids are lower-case letters, digits and hyphens, max 64; ids are unique; group names exclude `'`, `,` and `:`; `Allowance` requires percent 1-100; teams name one parent unit. The JSON view round-trips through the same validation. |
-| Review | Runs installer preflight and shows check, result, message, remedy and field links when a problem names or maps to an answer path. A passing preflight returns a 64-character SHA-256 fingerprint over canonical answers, engine and step scope. Failing checks mark fields through `x-checkId`. Non-JSON preflight output returns a visible error with the exit code and a short redacted, path-scrubbed output tail. |
+| Review | Runs installer preflight and shows check, result, message, remedy and field links when a problem names or maps to an answer path. A passing preflight returns a 64-character SHA-256 fingerprint over canonical answers, engine and step scope. Failing checks mark fields through a problem path when present, otherwise through the schema's `x-checkId` mapping. Non-JSON preflight output returns a visible error with the exit code and a short redacted, path-scrubbed output tail. |
 | Run | Lists installer step ids, streams selected-step output as it arrives, shows a failed step with a rerun action and resume command, reattaches to an active run after reload and keeps a full run as a separate confirmed action. A run starts only when its fingerprint matches a stored passing preflight for the same answers and a covering scope. Displayed commands use `./` relative paths; a 2026-10-04 PowerShell 7 run accepted `-File ./Install-ClaudeGateway.ps1 -AnswersPath ./scratch-p93-e2/answers.json -Preflight -Json` and returned versioned JSON with exit 1 because the isolated profile was signed out. |
 
 ## Installer interface checks
