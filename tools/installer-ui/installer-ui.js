@@ -17,6 +17,7 @@
   let checkFields = {};
   let prefill;
   let actions;
+  let problems;
   const maxRunOutputLines = 2000;
   let runOutputLines = [];
   let removedRunOutputLines = 0;
@@ -253,8 +254,8 @@
       const list = document.createElement("ul");
       for (const p of validationProblems) {
         appendText(list, `${p.path || "answers"}: ${p.message} ${p.remedy || ""}`.trim(), "li");
-        markFieldProblem(p.path, p.message, p.remedy);
-        appendProblemButton(list.lastChild, p.path, `Review ${p.path}`);
+        problems.markFieldProblem(p.path, p.message, p.remedy);
+        problems.appendProblemButton(list.lastChild, p.path, `Review ${p.path}`);
       }
       errors.append(list);
     }
@@ -262,48 +263,6 @@
     updateRunAdmission();
     return validationProblems;
   }
-  function fieldForPath(path) {
-    const rootName = String(path || "").split(/[.\[]/)[0];
-    if (!rootName) return null;
-    if (rootName === "BusinessUnits") return byId("business-units");
-    return document.querySelector(`[name="${CSS.escape(rootName)}"], [name^="${CSS.escape(rootName)}."]`);
-  }
-  function markFieldProblem(path, message, remedy) {
-    const field = fieldForPath(path);
-    if (!field) return null;
-    field.setAttribute("aria-invalid", "true");
-    const described = field.getAttribute("aria-describedby") || "";
-    const errorId = described.split(/\s+/).filter(Boolean)[0];
-    const err = errorId ? byId(errorId) : null;
-    if (err) err.textContent = `${message || "Review this field."} ${remedy || ""}`.trim();
-    return field;
-  }
-
-  function focusProblemPath(path) {
-    const field = fieldForPath(path);
-    field?.focus();
-  }
-
-  function appendProblemButton(parent, path, label) {
-    if (!fieldForPath(path)) return;
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = label || `Review ${path}`;
-    button.addEventListener("click", () => focusProblemPath(path));
-    parent.append(button);
-  }
-
-  function preflightProblemPaths(check) {
-    const out = [];
-    for (const problem of check.problems || []) {
-      if (problem.path) out.push({ path: problem.path, message: problem.message, remedy: problem.remedy });
-    }
-    if (!out.length) {
-      for (const path of checkFields[check.id] || []) out.push({ path, message: check.message, remedy: check.remedy });
-    }
-    return out;
-  }
-
   function markPreflightStale() {
     preflightStale = true;
     preflightFingerprint = "";
@@ -392,13 +351,6 @@
     );
   }
 
-  function markFields(checks) {
-    for (const check of checks) {
-      if (check.result === "PASS") continue;
-      for (const p of preflightProblemPaths(check)) markFieldProblem(p.path, p.message || check.message, p.remedy || check.remedy);
-    }
-  }
-
   function renderPreflight(result) {
     const container = byId("preflight-output");
     clearChildren(container);
@@ -414,11 +366,11 @@
       appendText(row, check.message || "", "td");
       appendText(row, check.remedy || "", "td");
       const problemCell = appendText(row, "", "td");
-      for (const p of preflightProblemPaths(check)) appendProblemButton(problemCell, p.path, `Review ${p.path}`);
+      for (const p of problems.preflightProblemPaths(check)) problems.appendProblemButton(problemCell, p.path, `Review ${p.path}`);
       table.append(row);
     }
     container.append(table);
-    markFields(checks);
+    problems.markFields(checks);
     if (result.preflight?.result === "PASS" && result.fingerprint) {
       preflightFingerprint = result.fingerprint;
       preflightStale = false;
@@ -545,6 +497,10 @@
   async function main() {
     schema = await loadSchema();
     checkFields = fieldsByCheckId(schema);
+    problems = globalThis.ClaudeInstallerProblems.create({
+      byId,
+      checkFields,
+    });
     businessUnitsEditor = globalThis.ClaudeInstallerBusinessUnits.create({
       appendText,
       byId,
