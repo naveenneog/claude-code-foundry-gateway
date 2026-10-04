@@ -55,6 +55,8 @@ exact streaming cache-creation detail remains **U13**.
   pending-deployment editors, cascades Azure prefill in the page, validates with the PowerShell
   answer-validator corpus before download/preflight/run, parses numeric inputs without truncation and
   refuses non-object business-unit JSON edits while preserving the last valid tree.
+  Installer UI actions now use visible busy, success and alert states, including duplicate-click
+  blocking and recovery text for HTTP and network failures.
 - **Installers read an answers file, check it before any change, run selected steps and write a progress stream (P92, phase 0).**
   One answers file, described by `schemas/claude-gateway.answers.schema.json`, feeds
   `Install-ClaudeGateway.ps1 -AnswersPath`, `install-claude-gateway.sh --answers-file` and

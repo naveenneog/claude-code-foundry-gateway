@@ -39,7 +39,9 @@ the installer. The Cloud Shell path is **Manage files > Upload** for `answers.js
 command.
 The browser validator uses the same answer names, schema subset and cross-field rules as the
 PowerShell validator for `Install-ClaudeGateway.ps1`. It marks invalid fields and withholds download,
-preflight, run and command text while a problem remains.
+preflight, run and command text while a problem remains. Action buttons show a busy label while a
+request is in flight, restore their controls afterward and place failures next to the action as an
+alert with a recovery sentence.
 
 ## Security model
 

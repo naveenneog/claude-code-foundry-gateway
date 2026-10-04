@@ -10,7 +10,6 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { createContext, runInContext } from 'node:vm';
 import { createInstallerUiServer } from '../tools/installer-ui/server.mjs';
-
 const stub = fileURLToPath(new URL('./installer-ui-stub.mjs', import.meta.url));
 const serverCli = fileURLToPath(new URL('../tools/installer-ui/server.mjs', import.meta.url));
 const repoRoot = fileURLToPath(new URL('..', import.meta.url)).replace(/[\\/]+$/, '');
@@ -20,7 +19,6 @@ const modelContext = createContext({ globalThis: {} });
 runInContext(await readFile(new URL('../tools/installer-ui/ui-model.js', import.meta.url), 'utf8'), modelContext);
 const { collectAnswersFromEntries, validateBusinessUnits } = modelContext.globalThis.ClaudeInstallerUiModel;
 const passingAnswers = { schemaVersion: 1, SubscriptionId: '00000000-0000-4000-8000-000000000093' };
-
 async function start(extra = {}) {
   const scratch = join(tmpdir(), `p93-ui-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`);
   const log = join(scratch, 'stub.ndjson');
@@ -216,19 +214,22 @@ test('the form uses fixed script routes and no string-built DOM insertion sinks'
   const app = await start();
   try {
     const html = await (await app.fetch('/')).text();
-    assert.match(html, /<script defer src="\.\/ui-model\.js"><\/script>\s*<script defer src="\.\/installer-ui-business-units\.js"><\/script>\s*<script defer src="\.\/installer-ui-prefill\.js"><\/script>\s*<script defer src="\.\/installer-ui\.js"><\/script>/);
+    assert.match(html, /<script defer src="\.\/ui-model\.js"><\/script>\s*<script defer src="\.\/installer-ui-business-units\.js"><\/script>\s*<script defer src="\.\/installer-ui-prefill\.js"><\/script>\s*<script defer src="\.\/installer-ui-actions\.js"><\/script>\s*<script defer src="\.\/installer-ui\.js"><\/script>/);
     assert.doesNotMatch(html, /type="module"|import\s+|export\s+/);
     assert.doesNotMatch(html, /<script>\s*\(/);
     const js = await (await app.fetch('/installer-ui.js')).text();
     const businessUnits = await (await app.fetch('/installer-ui-business-units.js')).text();
     const prefill = await (await app.fetch('/installer-ui-prefill.js')).text();
+    const actions = await (await app.fetch('/installer-ui-actions.js')).text();
     assert.doesNotMatch(js, /innerHTML|insertAdjacentHTML|import\s+|export\s+/);
     assert.doesNotMatch(businessUnits, /innerHTML|insertAdjacentHTML|import\s+|export\s+/);
     assert.doesNotMatch(prefill, /innerHTML|insertAdjacentHTML|import\s+|export\s+/);
+    assert.doesNotMatch(actions, /innerHTML|insertAdjacentHTML|import\s+|export\s+/);
     for (const name of ['buildPortableCommands', 'coerceAnswerValue', 'collectAnswersFromEntries', 'fieldsByCheckId', 'quoteBash', 'quotePowerShell', 'validateBusinessUnits']) {
       assert.doesNotMatch(js, new RegExp(`function\\s+${name}\\b|const\\s+${name}\\b`), `${name} must live only in ui-model.js`);
       assert.doesNotMatch(businessUnits, new RegExp(`function\\s+${name}\\b|const\\s+${name}\\b`), `${name} must live only in ui-model.js`);
       assert.doesNotMatch(prefill, new RegExp(`function\\s+${name}\\b|const\\s+${name}\\b`), `${name} must live only in ui-model.js`);
+      assert.doesNotMatch(actions, new RegExp(`function\\s+${name}\\b|const\\s+${name}\\b`), `${name} must live only in ui-model.js`);
     }
     const model = await (await app.fetch('/ui-model.js')).text();
     assert.match(model, /ClaudeInstallerUiModel/);
@@ -543,7 +544,7 @@ setTimeout(() => { console.log('done'); process.exit(0); }, 500);
 
 test('stream transport preserves split output, final tails, malformed progress and the output cap', async () => {
   for (const [env, expected] of [
-    [{ P93_INSTALLER_UI_STUB_MULTIBYTE: '1' }, /split 😀 line/],
+    [{ P93_INSTALLER_UI_STUB_MULTIBYTE: '1' }, /split Ã°Å¸Ëœâ‚¬ line/],
     [{ P93_INSTALLER_UI_STUB_SPLIT_LINE: '1' }, /split line/],
     [{ P93_INSTALLER_UI_STUB_NO_FINAL_NEWLINE: '1' }, /last line without newline/],
   ]) {

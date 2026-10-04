@@ -2,7 +2,7 @@
   "use strict";
 
   function createPrefill(deps) {
-    const { liveMode, markPreflightStale, postJson } = deps;
+    const { liveMode, markPreflightStale, postJson, actions } = deps;
     const deploymentChoices = new Set();
 
     function showFieldError(field, message, remedy) {
@@ -38,7 +38,7 @@
       while (select.firstChild) select.removeChild(select.firstChild);
       const empty = document.createElement("option");
       empty.value = "";
-      empty.textContent = "choose…";
+      empty.textContent = "choose...";
       select.append(empty);
       for (const item of items) {
         const option = document.createElement("option");
@@ -53,17 +53,20 @@
     async function handleClick(event) {
       const button = event.target.closest("[data-prefill-kind]");
       if (!button || !liveMode()) return;
-      const kind = button.dataset.prefillKind;
-      const field = button.closest("label")?.querySelector("[name]");
-      const select = button.closest("label")?.querySelector("[data-prefill-select]");
-      try {
-        const data = await load(kind);
-        if (kind === "subscriptions") fillSelect(select, data.subscriptions || [], "id", (item) => `${item.name} (${item.id})`);
-        if (kind === "foundryAccounts") fillSelect(select, data.foundryAccounts || [], "name", (item) => `${item.name} / ${item.resourceGroup}`);
-        field?.focus();
-      } catch (error) {
-        showError(error, field?.name || "SubscriptionId");
-      }
+      await actions.run(button, { busyText: `${button.textContent}...`, successText: "Read complete." }, async () => {
+        const kind = button.dataset.prefillKind;
+        const field = button.closest("label")?.querySelector("[name]");
+        const select = button.closest("label")?.querySelector("[data-prefill-select]");
+        try {
+          const data = await load(kind);
+          if (kind === "subscriptions") fillSelect(select, data.subscriptions || [], "id", (item) => `${item.name} (${item.id})`);
+          if (kind === "foundryAccounts") fillSelect(select, data.foundryAccounts || [], "name", (item) => `${item.name} / ${item.resourceGroup}`);
+          field?.focus();
+        } catch (error) {
+          showError(error, field?.name || "SubscriptionId");
+          throw error;
+        }
+      });
     }
 
     async function handleChoice(event) {

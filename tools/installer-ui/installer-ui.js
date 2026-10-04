@@ -16,6 +16,7 @@
   let preflightStale = true;
   let validationProblems = [];
   let prefill;
+  let actions;
   const maxRunOutputLines = 2000;
   let runOutputLines = [];
   let removedRunOutputLines = 0;
@@ -55,8 +56,26 @@
       data = { text };
     }
     if (!res.ok) {
-      const error = new Error(data.error || text);
-      error.data = data;
+      const error = new Error(data.error || text || `request failed with HTTP ${res.status}`);
+      error.data = { ...data, status: res.status };
+      throw error;
+    }
+    return data;
+  }
+
+  async function getJson(path) {
+    if (location.protocol === "file:") throw new Error("Server mode is not running. Use the generated commands.");
+    const res = await fetch(path);
+    const text = await res.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { text };
+    }
+    if (!res.ok) {
+      const error = new Error(data.error || text || `request failed with HTTP ${res.status}`);
+      error.data = { ...data, status: res.status };
       throw error;
     }
     return data;
@@ -281,11 +300,11 @@
     const admitted = liveMode() && preflightFingerprint && !preflightStale && !hasBlockingProblems();
     for (const id of ["run", "full-run", "rerun"]) {
       const button = byId(id);
-      if (button) button.disabled = id === "rerun" ? !lastFailedStep || !admitted : !admitted;
+      if (button && button.dataset.actionBusy !== "true") button.disabled = id === "rerun" ? !lastFailedStep || !admitted : !admitted;
     }
     for (const id of ["preflight", "download"]) {
       const button = byId(id);
-      if (button) button.disabled = hasBlockingProblems();
+      if (button && button.dataset.actionBusy !== "true") button.disabled = hasBlockingProblems();
     }
     const state = byId("preflight-state");
     if (!state) return;
@@ -421,7 +440,15 @@
       },
       body: JSON.stringify(body),
     });
-    if (!res.ok) throw new Error((await res.json()).error || "run failed");
+    if (!res.ok) {
+      let data = {};
+      try {
+        data = await res.json();
+      } catch {}
+      const error = new Error(data.error || `run failed with HTTP ${res.status}`);
+      error.data = { ...data, status: res.status };
+      throw error;
+    }
     await readRunStream(res);
   }
   function appendRunLine(text) {
@@ -504,10 +531,12 @@
       validateBusinessUnits,
       validateCurrentAnswers,
     });
+    actions = globalThis.ClaudeInstallerActions.create();
     prefill = globalThis.ClaudeInstallerPrefill.create({
       liveMode,
       markPreflightStale,
       postJson,
+      actions,
     });
     if (location.protocol !== "file:") {
       const session = await (await fetch("./api/session")).json();
@@ -516,10 +545,10 @@
       sessionReason = session.reason || "";
     } else sessionMode = "static";
     renderGroupedFields();
-    byId("refresh-identity").onclick = () => refreshIdentity();
-    byId("signin").onclick = () => {
+    byId("refresh-identity").onclick = () => actions.run(byId("refresh-identity"), { busyText: "Refreshing account...", successText: "Account refreshed." }, refreshIdentity);
+    byId("signin").onclick = () => actions.run(byId("signin"), { busyText: "Preparing sign-in command...", successText: "Sign-in command shown." }, async () => {
       byId("signin-command").textContent = identity.signInCommand || "az login --use-device-code";
-    };
+    });
     document.addEventListener("click", prefill.handleClick);
     document.addEventListener("change", prefill.handleChoice);
     document.addEventListener("change", prefill.syncModelInput);
@@ -535,22 +564,18 @@
     document.addEventListener("change", (event) => {
       if (event.target?.matches("[name], #step-list input")) markPreflightStale();
     });
-    byId("preflight").onclick = async () => {
-      try {
-        if (validateCurrentAnswers().length) return;
-        const steps = selectedSteps();
-        renderPreflight(
-          await postJson("./api/preflight", {
-            answers: collectAnswers(),
-            ...(steps.length ? { steps } : { fullRun: true }),
-          }),
-        );
-      } catch (error) {
-        showPreflightError(error);
-      }
-    };
-    byId("steps").onclick = async () => renderSteps(await (await fetch("./api/steps")).json());
-    byId("run").onclick = async () => {
+    byId("preflight").onclick = () => actions.run(byId("preflight"), { busyText: "Running preflight...", successText: "Preflight finished." }, async () => {
+      if (validateCurrentAnswers().length) return;
+      const steps = selectedSteps();
+      renderPreflight(
+        await postJson("./api/preflight", {
+          answers: collectAnswers(),
+          ...(steps.length ? { steps } : { fullRun: true }),
+        }),
+      );
+    });
+    byId("steps").onclick = () => actions.run(byId("steps"), { busyText: "Listing steps...", successText: "Steps listed." }, async () => renderSteps(await getJson("./api/steps")));
+    byId("run").onclick = () => actions.run(byId("run"), { busyText: "Running selected steps...", successText: "Run finished." }, async () => {
       const steps = selectedSteps();
       if (!steps.length) throw new Error("Select at least one step, or use Full run.");
       activeRunId = "";
@@ -560,8 +585,8 @@
         steps,
         fingerprint: preflightFingerprint,
       });
-    };
-    byId("full-run").onclick = async () => {
+    });
+    byId("full-run").onclick = () => actions.run(byId("full-run"), { busyText: "Running full installer...", successText: "Full run finished." }, async () => {
       const answers = collectAnswers();
       const resourceGroup = answers.ResourceGroup || "(not set)";
       if (!globalThis.confirm(`Run the full installer as ${identity.user || "the current account"} against resource group ${resourceGroup}?`)) return;
@@ -575,24 +600,24 @@
         account: identity,
         fingerprint: preflightFingerprint,
       });
-    };
-    byId("rerun").onclick = async () => {
+    });
+    byId("rerun").onclick = () => actions.run(byId("rerun"), { busyText: "Re-running failed step...", successText: "Re-run finished." }, async () => {
       if (lastFailedStep)
         await streamRun({
           answers: collectAnswers(),
           steps: [lastFailedStep],
           fingerprint: preflightFingerprint,
         });
-    };
-    byId("stop-run").onclick = async () => {
-      const status = await (await fetch("./api/run/status")).json();
+    });
+    byId("stop-run").onclick = () => actions.run(byId("stop-run"), { busyText: "Stopping run...", successText: "Stop requested." }, async () => {
+      const status = await getJson("./api/run/status");
       const runId = status.id || activeRunId;
       const step = status.currentStepId || activeStepId || "the current step";
       if (!runId || !globalThis.confirm(`Stop run at ${step}? Running the same steps again resumes from the install checkpoint.`)) return;
       const result = await postJson("./api/run/stop", { runId });
       appendRunLine(`stopped: ${result.message}`);
-    };
-    byId("download").onclick = () => {
+    });
+    byId("download").onclick = () => actions.run(byId("download"), { busyText: "Preparing answers.json...", successText: "answers.json is ready." }, async () => {
       if (validateCurrentAnswers().length) return;
       const blob = new Blob([JSON.stringify(collectAnswers(), null, 2) + "\n"], { type: "application/json" });
       const a = document.createElement("a");
@@ -600,7 +625,7 @@
       a.download = "answers.json";
       a.click();
       URL.revokeObjectURL(a.href);
-    };
+    });
     byId("add-unit").onclick = () => {
       businessUnitsEditor.addUnit();
     };
