@@ -199,8 +199,17 @@ function Invoke-ClaudeProjectionSwitch {
         Invoke-RunnerCommand -ResourceGroup $runnerGroup -Name $runner -Command 'npm --prefix /work/sync ci --omit=dev --ignore-scripts --no-audit --fund=false' | Out-Null
         Send-RunnerFile -ResourceGroup $runnerGroup -Name $runner -Path $gateway -Destination /work/gateway-decisions.json | Out-Null
         $compareRaw = Invoke-RunnerCommand -ResourceGroup $runnerGroup -Name $runner -Command "node /work/sync/src/apply-projection.mjs --cosmos https://$($Renewal.cosmosAccount).documents.azure.com:443/ --tenant $($Renewal.tenantId) --compare /work/gateway-decisions.json"
-        try { $compare = ConvertFrom-ClaudeRunnerResult -RawOutput $compareRaw -Step 'Projection compare' }
-        catch { throw "Projection switch refused: the projection does not match the gateway's decisions. $($_.Exception.Message) Remedy: let the renewal job run, refresh the lists with scripts/Sync-ClaudeAccess.ps1 if they are behind, then rerun." }
+        # The compare's last line is its summary: mode compare, with ok and the differences, or an error.
+        $summaryLine = @(([string]$compareRaw).TrimEnd("`r", "`n") -split '\r?\n' | Select-Object -Last 1)[0]
+        $compare = try { $summaryLine | ConvertFrom-Json -ErrorAction Stop } catch { $null }
+        if (-not ($compare -and $compare.mode -eq 'compare' -and $compare.ok -eq $true)) {
+            if ($compare -and $compare.mode -eq 'compare' -and $compare.differences -gt 0) {
+                $kinds = @($compare.byKind.PSObject.Properties | ForEach-Object { "$($_.Name) $($_.Value)" }) -join ', '
+                throw "Projection switch refused: the projection and the gateway's decisions differ for $($compare.differences) of $($compare.compared) identities ($kinds). Remedy: let the renewal job run, refresh the lists with scripts/Sync-ClaudeAccess.ps1 if they are behind, then rerun."
+            }
+            Write-ClaudeRunnerOutput -RawOutput ([string]$compareRaw) -Step 'Projection compare'
+            throw 'Projection switch refused: the runner compare did not complete; its sanitized output is shown above. Remedy: check the in-VNet runner and its Cosmos access, then rerun.'
+        }
 
         Write-Host '==> Admission: alerts, the job definition and its settings, and Cosmos evidence' -ForegroundColor Cyan
         $admission = Assert-ClaudeProjectionAdmission -ResourceGroup $runnerGroup -RunnerName $runner -CosmosAccount $Renewal.cosmosAccount `

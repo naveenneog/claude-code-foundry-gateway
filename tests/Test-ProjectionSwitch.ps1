@@ -161,10 +161,18 @@ Assert 'the backup holds the entitlement named values from before the write' ($b
     @('allow-standard', 'allow-premium', 'bu-members' | Where-Object { $backupJson.namedValues.PSObject.Properties.Name -contains $_ }).Count -eq 3) "backups $($backups.Count)"
 Assert 'the result names the backup and the rollback' ($Result -and $Result.Switched -eq $true -and $Result.BackupPath -eq $backups[0].FullName -and
     $Result.Rollback -match 'Sync-ClaudeAccess\.ps1' -and $Result.Rollback -match 'Compare-ClaudeEntitlement\.ps1 -FailOnDrift' -and $Result.Rollback -match 'named-value') "$($Result | ConvertTo-Json -Compress)"
+Reset-ProjectionFixture
+Set-GoodRenewalJob
+Get-Backups | Remove-Item -Force
+$switchLines = @(try { Invoke-Switch 6>&1 | Where-Object { $_ -is [Management.Automation.InformationRecord] } | ForEach-Object { [string]$_.MessageData } } catch { "THREW $($_.Exception.Message)" })
+Assert 'the success line names how many renewals admission counted' (($switchLines -join "`n") -match 'entitlement-source is projection after admission over 3 renewals') (($switchLines | Select-Object -Last 3) -join ' / ')
+Get-Backups | Remove-Item -Force
 
 foreach ($case in @(
         @{ Name = 'drift between the lists and Entra'; Fixture = 'healthy'; Drift = $true; Extra = @{}; Expect = 'drift'; RunnerIdle = $true; AdmissionIdle = $true }
-        @{ Name = 'a projection that differs from the gateway'; Fixture = 'compare-differs'; Drift = $false; Extra = @{}; Expect = "does not match the gateway's decisions"; RunnerIdle = $false; AdmissionIdle = $true }
+        @{ Name = 'a projection that differs from the gateway'; Fixture = 'compare-differs'; Drift = $false; Extra = @{}; Expect = "projection and the gateway's decisions differ for 1 of 2 identities \(missing 1\)"; RunnerIdle = $false; AdmissionIdle = $true }
+        @{ Name = 'a runner compare that fails'; Fixture = 'compare-error'; Drift = $false; Extra = @{}; Expect = 'runner compare did not complete'; RunnerIdle = $false; AdmissionIdle = $true }
+        @{ Name = 'a runner answer that is not a compare'; Fixture = 'compare-no-mode'; Drift = $false; Extra = @{}; Expect = 'runner compare did not complete'; RunnerIdle = $false; AdmissionIdle = $true }
         @{ Name = 'an admission refusal'; Fixture = 'action-group-disabled'; Drift = $false; Extra = @{}; Expect = 'disabled'; RunnerIdle = $false; AdmissionIdle = $false }
         @{ Name = 'a receipt for another gateway'; Fixture = 'healthy'; Drift = $false; Extra = @{ Renewal = ($renewal | Select-Object * -ExcludeProperty gatewayResourceId | Add-Member -NotePropertyName gatewayResourceId -NotePropertyValue $FixtureGatewayId.Replace('apim-p84', 'apim-other') -PassThru) }; Expect = 'apim-other'; RunnerIdle = $true; AdmissionIdle = $true }
     )) {

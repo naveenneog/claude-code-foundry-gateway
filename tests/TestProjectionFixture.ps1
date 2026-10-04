@@ -217,6 +217,11 @@ function az {
         }
         # apply-projection.mjs --compare prints ok:false with the differences when the projection and the gateway disagree.
         if ($FixtureCase -eq 'compare-differs' -and $command -match 'apply-projection\.mjs .*--compare ') { return '{"ok":false,"mode":"compare","compared":2,"differences":1,"byKind":{"missing":1}}' }
+        if ($FixtureCase -eq 'compare-error' -and $command -match 'apply-projection\.mjs .*--compare ') { $global:LASTEXITCODE = 0; return '{"ok":false,"error":"Cosmos read failed: 403 Forbidden"}' }
+        if ($FixtureCase -eq 'compare-no-mode' -and $command -match 'apply-projection\.mjs .*--compare ') { return '{"ok":true}' }
+        # The summaries the real scripts print last (sync/src/apply-projection.mjs, sync/src/check-admission.mjs).
+        if ($command -match 'apply-projection\.mjs .*--compare ') { return '{"ok":true,"mode":"compare","gateway":"apim-p84","compared":1,"projectionRecords":1,"differences":0,"byKind":{},"sample":[]}' }
+        if ($command -match 'check-admission\.mjs ') { return '{"ok":true,"newestFinishedAt":"2026-10-05T11:00:00.000Z","oldestExpiresAt":1791205200,"generations":3,"mode":"projection-admission","statuses":3,"entitlementRecords":1}' }
         return '{"ok":true}'
     }
     throw "UNEXPECTED AZURE CALL (offline fixture): $line"
