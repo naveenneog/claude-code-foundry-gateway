@@ -5,6 +5,7 @@
 # so nothing reaches Azure, the Retail Prices API or the repository.
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
+. (Join-Path $PSScriptRoot 'ChildOutputRead.ps1')
 $fail = 0
 function Assert($label, $condition, $detail = '') {
     if ($condition) { Write-Host "  [OK]   $label" -ForegroundColor Green }
@@ -254,7 +255,7 @@ function Invoke-InstallerRuns([object[]]$Runs, [int]$TimeoutSeconds = 300) {
         # LF only: bash's read keeps a carriage return in the answer.
         $p.StandardInput.Write((@($r.Answers) -join "`n") + "`n")
         $p.StandardInput.Close()
-        [pscustomobject]@{ Run = $r; Process = $p; Out = $p.StandardOutput.ReadToEndAsync(); Err = $p.StandardError.ReadToEndAsync() }
+        [pscustomobject]@{ Run = $r; Process = $p; Out = (Start-ChildOutputRead $p.StandardOutput); Err = (Start-ChildOutputRead $p.StandardError) }
     }
     $clock = [Diagnostics.Stopwatch]::StartNew()
     $results = @{}
@@ -262,8 +263,8 @@ function Invoke-InstallerRuns([object[]]$Runs, [int]$TimeoutSeconds = 300) {
         $left = [int][math]::Max(1000, $TimeoutSeconds * 1000 - $clock.ElapsedMilliseconds)
         $timedOut = -not $s.Process.WaitForExit($left)
         if ($timedOut) { try { $s.Process.Kill($true) } catch { } }
-        $out = if ($s.Out.Wait(5000)) { $s.Out.Result } else { '' }
-        $err = if ($s.Err.Wait(5000)) { $s.Err.Result } else { '' }
+        $out = Receive-ChildOutputRead $s.Out "The standard output of run $($s.Run.Id)"
+        $err = Receive-ChildOutputRead $s.Err "The standard error of run $($s.Run.Id)"
         $text = (($out + "`n" + $err) -replace "`e\[[0-9;]*m", '').Replace("`r", '')
         $record = Join-Path $s.Run.Repo 'onboarding\claude-gateway.json'
         $read = { param($n) $f = Join-Path $s.Run.Logs $n; if (Test-Path -LiteralPath $f) { @(Get-Content -LiteralPath $f | Where-Object { $_ }) } else { @() } }

@@ -3,6 +3,7 @@
 # tests/InstallerCheckpointStubs.ps1, and its own CLAUDE_GATEWAY_STATE_DIR. Runs are child
 # PowerShell processes, started from the command line so that the installer runs at top level.
 $script:P91Root = Split-Path $PSScriptRoot -Parent
+. (Join-Path $PSScriptRoot 'ChildOutputRead.ps1')
 $script:P91StubsPath = Join-Path $PSScriptRoot 'InstallerCheckpointStubs.ps1'
 $script:P91Pwsh = (Get-Process -Id $PID).Path
 $script:P91Subscription = '00000000-0000-4000-8000-0000000000a1'
@@ -178,15 +179,15 @@ function Invoke-P91Runs([object[]]$Runs, [int]$Parallel = 6, [int]$TimeoutSecond
             $p = [Diagnostics.Process]::Start($psi)
             $p.StandardInput.Write((@($r.Answers) -join "`n") + "`n")
             $p.StandardInput.Close()
-            $active.Add([pscustomobject]@{ Run = $r; Process = $p; Out = $p.StandardOutput.ReadToEndAsync(); Err = $p.StandardError.ReadToEndAsync(); Clock = [Diagnostics.Stopwatch]::StartNew() })
+            $active.Add([pscustomobject]@{ Run = $r; Process = $p; Out = (Start-ChildOutputRead $p.StandardOutput); Err = (Start-ChildOutputRead $p.StandardError); Clock = [Diagnostics.Stopwatch]::StartNew() })
         }
         foreach ($s in @($active)) {
             $timedOut = $s.Clock.Elapsed.TotalSeconds -gt $TimeoutSeconds
             if (-not $s.Process.HasExited -and -not $timedOut) { continue }
             if ($timedOut -and -not $s.Process.HasExited) { try { $s.Process.Kill($true) } catch { } }
             $s.Process.WaitForExit()
-            $out = if ($s.Out.Wait(5000)) { $s.Out.Result } else { '' }
-            $err = if ($s.Err.Wait(5000)) { $s.Err.Result } else { '' }
+            $out = Receive-ChildOutputRead $s.Out "The standard output of the run in $($s.Run.Logs)"
+            $err = Receive-ChildOutputRead $s.Err "The standard error of the run in $($s.Run.Logs)"
             $read = { param($n) $f = Join-Path $s.Run.Logs $n; if (Test-Path -LiteralPath $f) { @(Get-Content -LiteralPath $f | Where-Object { $_ }) } else { @() } }
             $results[$s.Run.Logs] = [pscustomobject]@{
                 Run = $s.Run; ExitCode = $(if ($timedOut) { -1 } else { $s.Process.ExitCode }); TimedOut = $timedOut; Seconds = [math]::Round($s.Clock.Elapsed.TotalSeconds, 1)

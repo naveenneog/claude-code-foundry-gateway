@@ -430,6 +430,20 @@ The RED phase adds these tests before product code:
     lists for `Install-ClaudeGateway.ps1` is recorded by the checkpoint, as a parameter or prompt answer, or
     is a run option or a secret. At `c1ed585` the checkpoint recorded none of the three renewal inputs, and
     the projection step's hash held none of the four.
+16. **The installer and flow harnesses read a child's output on a thread of its own (U92, PR #2 CI).** On
+    Windows, .NET 10 redirects a child's standard output and standard error through synchronous anonymous
+    pipes, so `ReadToEndAsync` holds a thread-pool worker for each pipe until the child closes it. The
+    harnesses ran six children at once (the prices suite 22) and, 5 s after a child exited, recorded a read
+    that had not finished as an empty string. On `windows-latest` (4 vCPUs, so a minimum of four workers)
+    such reads had not started, and checks of startup refusals and of the `--what-if` region table failed
+    with empty details (PR #2 runs `37110260005` to `37127982623`). Diagnostic run `37206003130` logged each
+    such read with the pool at 5 to 17 threads and 4 to 24 work items queued, and its output arriving 0.1 to
+    21.6 s later. `tests/ChildOutputRead.ps1` reads each pipe with `ReadToEnd` in a `LongRunning` task, which
+    runs on a dedicated thread, and a read still open 60 s after its process exited throws, naming the stream,
+    instead of returning part of the text. `tests/BashInstallerHarness.ps1`,
+    `tests/InstallerCheckpointHarness.ps1`, `tests/Test-BashInstaller.ps1`, `tests/Test-FlowPermutations.ps1`
+    and `tests/Test-FlowStart.ps1` read through it. `tests/Test-ChildOutputRead.ps1` checks the reader with
+    every pool worker busy and fails on any test that turns an unfinished read into an empty string.
 
 ## Consequences
 

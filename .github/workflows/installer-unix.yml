@@ -29,6 +29,7 @@ on:
       - tests/Test-BashInstallerCheckpoint.ps1
       - tests/Test-InstallerCheckpointStore.ps1
       - tests/BashInstallerHarness.ps1
+      - tests/ChildOutputRead.ps1
       - tests/Test-InstallerAnswersSchema.ps1
       - tests/Test-BashInstallerPreflight.ps1
       - tests/Test-BashInstallerStepSelection.ps1

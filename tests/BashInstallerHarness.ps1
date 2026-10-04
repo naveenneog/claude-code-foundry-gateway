@@ -3,6 +3,7 @@
 # ps and uname first on a PATH; the az stub keeps its state in a JSON world file through jq, so nothing reaches
 # Azure. A suite sets $scratch, then calls New-BashTemplate for $template and $psTable.
 $script:windows = [bool]($IsWindows -or $env:OS -eq 'Windows_NT')
+. (Join-Path $PSScriptRoot 'ChildOutputRead.ps1')
 $bash = $null
 if ($script:windows) {
     foreach ($c in @('C:\Program Files\Git\bin\bash.exe', 'C:\Program Files\Git\usr\bin\bash.exe', (Join-Path "$env:LOCALAPPDATA" 'Programs\Git\bin\bash.exe'))) { if (Test-Path -LiteralPath $c) { $bash = $c; break } }
@@ -314,15 +315,15 @@ function Invoke-Runs([object[]]$Runs, [int]$Parallel = 6, [int]$TimeoutSeconds =
             $psi.StandardOutputEncoding = [Text.Encoding]::UTF8; $psi.StandardErrorEncoding = [Text.Encoding]::UTF8
             foreach ($name in @($psi.Environment.Keys | Where-Object { $_ -like 'P91_*' -or $_ -like 'CLAUDE_*' -or $_ -in 'CI', 'TF_BUILD', 'GITHUB_ACTIONS', 'AZUREPS_HOST_ENVIRONMENT', 'ACC_CLOUD' })) { [void]$psi.Environment.Remove($name) }
             $p = [Diagnostics.Process]::Start($psi)
-            $active.Add([pscustomobject]@{ Run = $r; Process = $p; Out = $p.StandardOutput.ReadToEndAsync(); Err = $p.StandardError.ReadToEndAsync(); Clock = [Diagnostics.Stopwatch]::StartNew() })
+            $active.Add([pscustomobject]@{ Run = $r; Process = $p; Out = (Start-ChildOutputRead $p.StandardOutput); Err = (Start-ChildOutputRead $p.StandardError); Clock = [Diagnostics.Stopwatch]::StartNew() })
         }
         foreach ($s in @($active)) {
             $timedOut = $s.Clock.Elapsed.TotalSeconds -gt $TimeoutSeconds
             if (-not $s.Process.HasExited -and -not $timedOut) { continue }
             if ($timedOut -and -not $s.Process.HasExited) { try { $s.Process.Kill($true) } catch { } }
             $s.Process.WaitForExit()
-            $out = if ($s.Out.Wait(5000)) { $s.Out.Result } else { '' }
-            $err = if ($s.Err.Wait(5000)) { $s.Err.Result } else { '' }
+            $out = Receive-ChildOutputRead $s.Out "The standard output of $($s.Run.Runner)"
+            $err = Receive-ChildOutputRead $s.Err "The standard error of $($s.Run.Runner)"
             $read = { param($n) $f = Join-Path $s.Run.Logs $n; if (Test-Path -LiteralPath $f) { @(Get-Content -LiteralPath $f | Where-Object { $_ }) } else { @() } }
             $results[$s.Run.Dir] = [pscustomobject]@{ ExitCode = $(if ($timedOut) { -1 } else { $s.Process.ExitCode }); TimedOut = $timedOut
                 Out = (($out -replace "`e\[[0-9;]*m", '').Replace("`r", '')); Err = (($err -replace "`e\[[0-9;]*m", '').Replace("`r", ''))

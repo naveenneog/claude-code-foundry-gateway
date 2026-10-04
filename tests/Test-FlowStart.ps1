@@ -3,6 +3,7 @@
 # and the Azure Retail Prices API are stubbed.
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
+. (Join-Path $PSScriptRoot 'ChildOutputRead.ps1')
 $fail = 0
 function Assert($label, $condition, $detail = '') {
     if ($condition) { Write-Host "  [OK]   $label" -ForegroundColor Green }
@@ -77,7 +78,7 @@ function Invoke-Child {
     $process = [Diagnostics.Process]::Start($psi)
     foreach ($line in $InputLines) { $process.StandardInput.WriteLine($line) }
     $process.StandardInput.Close()
-    $stderr = $process.StandardError.ReadToEndAsync()
+    $stderr = Start-ChildOutputRead $process.StandardError
     $lines = [Collections.Generic.List[object]]::new()
     $timedOut = $false
     while ($true) {
@@ -88,7 +89,7 @@ function Invoke-Child {
         $lines.Add([pscustomobject]@{ Ms = $clock.ElapsedMilliseconds; Text = ($next.Result -replace "`e\[[0-9;]*m", '') })
     }
     [void]$process.WaitForExit(15000)
-    $err = if ($stderr.Wait(5000)) { $stderr.Result -replace "`e\[[0-9;]*m", '' } else { '' }
+    $err = (Receive-ChildOutputRead $stderr 'The standard error of the guided flow') -replace "`e\[[0-9;]*m", ''
     [pscustomobject]@{
         Lines = @($lines)
         Text = (@($lines | ForEach-Object Text) -join "`n")

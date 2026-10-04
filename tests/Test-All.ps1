@@ -217,6 +217,8 @@ try {
     # Git Bash and its jq are native runner tools; keep bash installer suites exclusive within a shard.
     $installerBash = if ($IsWindows -or $env:OS -eq 'Windows_NT') { @(@('C:\Program Files\Git\bin\bash.exe', 'C:\Program Files\Git\usr\bin\bash.exe', (Join-Path "$env:LOCALAPPDATA" 'Programs\Git\bin\bash.exe')) | Where-Object { Test-Path -LiteralPath $_ }) | Select-Object -First 1 } else { (Get-Command bash -ErrorAction SilentlyContinue | Select-Object -First 1).Source }
     $bashInstallerSkip = if (-not $installerBash) { 'macOS/Linux installer: no Git Bash (Windows) or bash on this machine.' } elseif (-not (& $installerBash -c 'command -v jq' 2>$null)) { 'macOS/Linux installer: jq is not on the bash PATH; the installer needs it.' } else { '' }
+    # The installer and flow harnesses read each child's output on a thread of their own, not the thread pool's (U92).
+    Invoke-Check 'Harness reads of child output with a busy thread pool' 'Test-ChildOutputRead.ps1'
     Invoke-Check 'macOS/Linux installer prices and record'  'Test-BashInstaller.ps1' -SkipReason $bashInstallerSkip -SerialLane
     # Its checks drive the bash installer through Git Bash; two groups of scenarios run as two checks (ADR-0047).
     Invoke-Check 'macOS/Linux installer checkpoint and resume [0/7]' 'Test-BashInstallerCheckpoint.ps1' @{ Shard = '0/7' } -SkipReason $bashInstallerSkip -SerialLane
