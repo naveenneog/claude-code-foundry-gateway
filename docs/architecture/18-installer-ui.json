@@ -17,9 +17,8 @@
     "schemas/claude-gateway.answers.schema.json",
     "scripts/Get-ClaudeInstallerUiIdentity.ps1",
     "scripts/Get-ClaudeInstallerUiPrefill.ps1",
-    "scripts/Get-ClaudeInstallerUiPlan.ps1",
+    "tools/installer-ui/preflight-record.mjs",
     "Install-ClaudeGateway.ps1",
-    "Start-ClaudeGateway.ps1",
     "scripts/ClaudeInstallResume.ps1"
   ],
   "identifiers": {
@@ -30,9 +29,8 @@
     "schema": { "label": "answers schema", "source": "schemas/claude-gateway.answers.schema.json", "match": "Claude gateway answers" },
     "identity": { "label": "Get-ClaudeInstallerUiIdentity.ps1", "source": "scripts/Get-ClaudeInstallerUiIdentity.ps1", "match": "az account show" },
     "prefill": { "label": "Get-ClaudeInstallerUiPrefill.ps1", "source": "scripts/Get-ClaudeInstallerUiPrefill.ps1", "match": "cognitiveservices" },
-    "plan": { "label": "Get-ClaudeInstallerUiPlan.ps1", "source": "scripts/Get-ClaudeInstallerUiPlan.ps1", "match": "Start-ClaudeGateway.ps1" },
+    "fingerprint": { "label": "preflight-record.mjs", "source": "tools/installer-ui/preflight-record.mjs", "match": "preflightFingerprint" },
     "installer": { "label": "Install-ClaudeGateway.ps1", "source": "Install-ClaudeGateway.ps1", "match": "$ProgressPath" },
-    "flow": { "label": "Start-ClaudeGateway.ps1", "source": "Start-ClaudeGateway.ps1", "match": "PlanOnly" },
     "redact": { "label": "Protect-ClaudeInstallText", "source": "scripts/ClaudeInstallResume.ps1", "match": "function Protect-ClaudeInstallText" }
   },
   "groups": [
@@ -45,7 +43,7 @@
     { "id": "form", "x": 458, "y": 80, "w": 365, "h": 185, "tone": "purple", "title": "2 - Schema form", "lines": ["[[browser]] and [[model]] render [[schema]].", "Unset controls are omitted."] },
     { "id": "static", "x": 892, "y": 80, "w": 365, "h": 185, "tone": "purple", "title": "3 - Static fallback", "lines": ["[[static]] carries the schema for file://.", "It writes answers.json and commands."] },
     { "id": "identity", "x": 24, "y": 420, "w": 365, "h": 185, "tone": "blue", "title": "4 - Account", "lines": ["[[identity]] reads Azure CLI through PowerShell.", "The account is shown before a run."] },
-    { "id": "prefill", "x": 458, "y": 420, "w": 365, "h": 185, "tone": "blue", "title": "5 - Prefill and plan", "lines": ["[[prefill]] lists subscriptions and Foundry.", "[[plan]] calls [[flow]] -PlanOnly."] },
+    { "id": "prefill", "x": 458, "y": 420, "w": 365, "h": 185, "tone": "blue", "title": "5 - Prefill and fingerprint", "lines": ["[[prefill]] lists subscriptions and Foundry.", "[[fingerprint]] binds a run to a passing preflight."] },
     { "id": "preflight", "x": 892, "y": 420, "w": 365, "h": 185, "tone": "blue", "title": "6 - Preflight", "lines": ["The UI runs [[installer]] -Preflight -Json.", "Failing checks mark x-checkId fields."] },
     { "id": "run", "x": 24, "y": 765, "w": 365, "h": 170, "tone": "teal", "title": "7 - Streamed run", "lines": ["Selected steps stream progress NDJSON.", "Full run needs confirmation."] },
     { "id": "redaction", "x": 458, "y": 765, "w": 365, "h": 170, "tone": "teal", "title": "8 - Redaction", "lines": ["Each line passes [[redact]].", "Failed steps expose rerun and resume."] },

@@ -582,8 +582,7 @@
       "source": "docs/architecture/18-installer-ui.json",
       "inputs": {
         "Install-ClaudeGateway.ps1": "e32b16a71584e8782229dd9b0c575a73abf677f1564e258b4c06699ff3fe647c",
-        "Start-ClaudeGateway.ps1": "22acc30a8feed7b0101dd98bb90fac93abb605aef77bf800f585e881939d8479",
-        "docs/architecture/18-installer-ui.json": "ee72e57038e3bf823bf0956f0c5118ff4a8222bc578f3e1eadbcef4b1ae119c0",
+        "docs/architecture/18-installer-ui.json": "361a7eb08de013c369f5e9752c8fa22e8451d2649fbedbebb37c9c1b5141784d",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
@@ -591,17 +590,17 @@
         "schemas/claude-gateway.answers.schema.json": "197507a7f053d8647ed61349e280a7d5f449ca26d64fe723d12cee433f3a50ad",
         "scripts/ClaudeInstallResume.ps1": "fb6eb9155e8fecaaca2c2afb5c4c681871a989708ed2f205c132ecd8972b2cf6",
         "scripts/Get-ClaudeInstallerUiIdentity.ps1": "e4589458fe16baed9f3e8b7d15473579d9c517af790475d4fb9a7c216e76f5a1",
-        "scripts/Get-ClaudeInstallerUiPlan.ps1": "d08fd58b6331d7d6831bcf765552685c460aa76bfbdcbfb01160fc7a680ff396",
-        "scripts/Get-ClaudeInstallerUiPrefill.ps1": "075cb52676cf03773d05d7d2784428e354ef6a7cf3c3d91f3354a6e037eeb4ca",
-        "tools/installer-ui/index.html": "c54fa955bda1f56aba92d4ad8bc631660c5bac335d7d6f5c5eb8d28fdd38bf6b",
-        "tools/installer-ui/installer-ui.js": "6b639665b7a0610cc74d54ff182312bf64e52443c5b05b74ba7a9a105a842355",
-        "tools/installer-ui/server.mjs": "3f2c781dbbdc7f4cf01547744e5e72931fbedadca087761c9e55acb4d0dfa51d",
-        "tools/installer-ui/ui-model.js": "4153f5121dc5b81f5348c057767d6e1b32fc66e01891ecab0bc7a66c826e96eb"
+        "scripts/Get-ClaudeInstallerUiPrefill.ps1": "f40a152cbdccb9562a1dce3bab3386adea8ac0d761eb8c6798397261151d2a5a",
+        "tools/installer-ui/index.html": "40e418f25367e7ce8aef015bbb7a84ef7842a8e4b356374f9a6fb377098378c7",
+        "tools/installer-ui/installer-ui.js": "5f79528406392a90d94f2f143c0bcff8c208b2c2b890e3b28a43a84bb8ad366c",
+        "tools/installer-ui/preflight-record.mjs": "869bc316ae5281a7053c437592af56b90b99ee56da2961933a6a2e6611293ef8",
+        "tools/installer-ui/server.mjs": "4c02f22ade8f29c109bd0f4d01399cb8b7f3ac4a605e84888ebfe909695694d5",
+        "tools/installer-ui/ui-model.js": "a00f5ced92a22ba3780f6e5d9d2cd4b558934a48b27ea2a519ec76c77b9fabae"
       },
       "outputs": [
         {
           "path": "docs/images/architecture/installer-ui.png",
-          "sha256": "fc7b1310e78b061daebc3b560c2d611273cac5838169d728af76c7a9b6793584"
+          "sha256": "7dd1e482a10d53ad04b20cb00317f5cd195e12e34b6e2382c49b5fc738d73448"
         }
       ]
     }
