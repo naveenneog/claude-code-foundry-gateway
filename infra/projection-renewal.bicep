@@ -2,8 +2,9 @@
 // The Container Apps environment is internal and uses its own delegated subnet. The registry and
 // the job identity come from infra/projection-registry.bicep, deployed before the image build.
 
-@description('Prefix shared with the projection resources.')
-@minLength(5)
+@description('Prefix shared with the projection resources: the same 1-37 characters scripts/Deploy-ClaudeProjection.ps1 accepts.')
+@minLength(1)
+@maxLength(37)
 param namePrefix string
 
 param location string = resourceGroup().location
@@ -49,9 +50,14 @@ param entrypoint string = 'node /app/sync/src/apply-projection.mjs'
 
 var databaseName = 'claude'
 var containerName = 'entitlement'
-var environmentName = 'cae-projection-${namePrefix}'
-var jobName = 'caj-projection-renewal-${namePrefix}'
+// Container Apps names are 2-32 characters (U118); a literal start and uniqueString's 13 characters fit
+// any prefix. The claude-projection-prefix tag names the prefix.
+var environmentName = 'cae-renew-${uniqueString(resourceGroup().id, namePrefix)}'
+var jobName = 'caj-renew-${uniqueString(resourceGroup().id, namePrefix)}'
 var actionGroupName = 'ag-projection-renewal-${namePrefix}'
+var tags = {
+  'claude-projection-prefix': namePrefix
+}
 
 resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' existing = {
   name: cosmosAccountName
@@ -68,6 +74,7 @@ resource identity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' 
 resource environment 'Microsoft.App/managedEnvironments@2024-03-01' = {
   name: environmentName
   location: location
+  tags: tags
   properties: {
     // Console lines reach the workspace through the diagnostic setting below, in the
     // ContainerAppConsoleLogs table with a JobName column (U107). The legacy log-analytics
@@ -129,6 +136,7 @@ resource actionGroup 'Microsoft.Insights/actionGroups@2023-01-01' = {
 resource job 'Microsoft.App/jobs@2024-03-01' = {
   name: jobName
   location: location
+  tags: tags
   identity: {
     type: 'UserAssigned'
     userAssignedIdentities: {

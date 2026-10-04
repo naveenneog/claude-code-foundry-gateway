@@ -3,8 +3,9 @@
 // before the job and a tenant administrator can grant Graph access while the image builds, and
 // the AcrPull grant has time to take effect before infra/projection-renewal.bicep creates the job.
 
-@description('Prefix shared with the projection resources.')
-@minLength(5)
+@description('Prefix shared with the projection resources: the same 1-37 characters scripts/Deploy-ClaudeProjection.ps1 accepts.')
+@minLength(1)
+@maxLength(37)
 param namePrefix string
 
 param location string = resourceGroup().location

@@ -144,6 +144,16 @@ try {
         $jobDepends = @($job.dependsOn) -join ' '
         Assert 'the job waits for its named-value read role' ($jobDepends -match 'Microsoft\.Resources/deployments|gatewayReader') $jobDepends
     }
+
+    # Container Apps names are 2-32 characters (U118); a projection prefix can be 37. Each name is a
+    # literal start plus uniqueString's 13 characters, so its length does not depend on the prefix.
+    foreach ($variable in 'jobName', 'environmentName') {
+        $m = [regex]::Match($rb, "(?m)^var $variable = '([a-z][a-z0-9-]*-)\$\{uniqueString\(resourceGroup\(\)\.id, namePrefix\)\}'\s*$")
+        Assert "the $variable is a short literal and a 13-character hash" ($m.Success -and ($m.Groups[1].Value.Length + 13) -le 32) ([regex]::Match($rb, "(?m)^var $variable = .*$").Value)
+    }
+    foreach ($template in @($renewalTemplate, $registry) | Where-Object { $_ }) {
+        Assert 'the templates accept every projection prefix, 1 to 37 characters' ($template.parameters.namePrefix.minLength -eq 1 -and $template.parameters.namePrefix.maxLength -eq 37) "min $($template.parameters.namePrefix.minLength) max $($template.parameters.namePrefix.maxLength)"
+    }
     $docker = [IO.File]::ReadAllText((Join-Path $root 'sync\Dockerfile'))
     Assert 'the image command is --graph alone, and the job supplies the rest' ($docker -match '(?m)^CMD \["--graph"\]\s*$')
 
