@@ -3,14 +3,14 @@ import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { StringDecoder } from 'node:string_decoder';
 import { once } from 'node:events';
-import { mkdtemp, open, readFile, rm, writeFile, chmod } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { mkdtemp, readFile, rm, writeFile, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validatePreflight, validateProgressEvent, validateStepList } from './installer-contract.mjs';
 import { assertSameOrigin, constantTimeTokenEquals, contentSecurityPolicy, isAllowedHost, isLoopbackBind, parseCookies, readJsonBody, send, sendText, tokenHash } from './http-helpers.mjs';
 import { renderHtml } from './page-template.mjs';
+import { createLineHandler, readProgressFile, writeNdjson } from './run-transport.mjs';
 import { buildCommands, fieldsByCheckId, loadSchema, prefillArguments, redactText, root, scrubLocalPaths } from './server-model.mjs';
 
 export { buildCommands, loadSchema, redactText, scrubLocalPaths } from './server-model.mjs';
@@ -59,25 +59,6 @@ async function killProcessTree(child) {
   try { process.kill(-child.pid, 'SIGTERM'); } catch { try { child.kill('SIGTERM'); } catch { /* already gone */ } }
   await new Promise((resolve) => setTimeout(resolve, 750));
   try { process.kill(-child.pid, 'SIGKILL'); } catch { try { child.kill('SIGKILL'); } catch { /* already gone */ } }
-}
-
-async function waitForDrain(res) {
-  if (res.destroyed || res.writableEnded) return;
-  await once(res, 'drain').catch(() => {});
-}
-
-function reqDone(res) {
-  return Promise.race([
-    once(res, 'close'),
-    once(res, 'finish'),
-  ]);
-}
-
-async function writeNdjson(res, payload) {
-  if (res.destroyed || res.writableEnded) return false;
-  const ok = res.write(`${JSON.stringify(payload)}\n`);
-  if (!ok) await waitForDrain(res);
-  return !res.destroyed && !res.writableEnded;
 }
 
 function childEnv(options) {
@@ -166,7 +147,6 @@ async function runInstallerStreaming(kind, args, options, onEvent, progressPath,
   const command = spawnInstallerArgs(kind, args, options);
   const child = spawnChild(command.file, command.args, options);
   runOptions.onChild?.(child);
-  let progressOffset = 0;
   let progressCarry = '';
   let progressReading = Promise.resolve();
   let emitQueue = Promise.resolve();
@@ -190,48 +170,8 @@ async function runInstallerStreaming(kind, args, options, onEvent, progressPath,
     consoleBytes += bytes;
     await enqueue({ type, line: redacted });
   };
-  const makeLineHandler = (type) => {
-    const decoder = new StringDecoder('utf8');
-    let carry = '';
-    let work = Promise.resolve();
-    let discarding = false;
-    const emitBounded = async (line, final = false) => {
-      if (discarding) {
-        if (final) discarding = false;
-        return;
-      }
-      const bytes = Buffer.byteLength(line);
-      if (bytes > consoleLineCapBytes) {
-        await emitConsoleLine(type, `${Buffer.from(line).subarray(0, consoleLineCapBytes).toString('utf8')} [line truncated]`);
-        discarding = !final;
-      } else if (line) {
-        await emitConsoleLine(type, line);
-      }
-    };
-    return {
-      chunk(chunk) {
-        work = work.then(async () => {
-        carry += decoder.write(chunk);
-        const lines = carry.split(/\r?\n/);
-        carry = lines.pop() || '';
-        for (const line of lines) await emitBounded(line, true);
-        if (Buffer.byteLength(carry) > consoleLineCapBytes) {
-          await emitBounded(carry, false);
-          carry = '';
-        }
-        });
-        return work;
-      },
-      async end() {
-        await work;
-        carry += decoder.end();
-        if (carry) await emitBounded(carry, true);
-        carry = '';
-      },
-    };
-  };
-  const stdout = makeLineHandler('stdout');
-  const stderr = makeLineHandler('stderr');
+  const stdout = createLineHandler('stdout', emitConsoleLine, consoleLineCapBytes);
+  const stderr = createLineHandler('stderr', emitConsoleLine, consoleLineCapBytes);
   child.stdout.on('data', (chunk) => { void stdout.chunk(chunk); });
   child.stderr.on('data', (chunk) => { void stderr.chunk(chunk); });
   const progressDecoder = new StringDecoder('utf8');
@@ -255,26 +195,8 @@ async function runInstallerStreaming(kind, args, options, onEvent, progressPath,
       }
     }
   };
-  const readProgress = async (final = false) => {
-    if (!progressPath || !existsSync(progressPath)) return;
-    const file = await open(progressPath, 'r');
-    try {
-      const stat = await file.stat();
-      if (stat.size <= progressOffset && !final) return;
-      const length = stat.size - progressOffset;
-      if (length > 0) {
-        const buffer = Buffer.alloc(length);
-        await file.read(buffer, 0, length, progressOffset);
-        progressOffset = stat.size;
-        await processProgressText(progressDecoder.write(buffer), final);
-      } else if (final) {
-        await processProgressText('', true);
-      }
-    } finally {
-      await file.close();
-    }
-  };
-  const timer = setInterval(() => { progressReading = progressReading.then(() => readProgress(false)).catch((error) => enqueue({ type: 'error', message: `progress read failed: ${error.message}` })); }, 100);
+  const progressState = { offset: 0, decoder: progressDecoder };
+  const timer = setInterval(() => { progressReading = progressReading.then(() => readProgressFile(progressPath, progressState, processProgressText, false)).catch((error) => enqueue({ type: 'error', message: `progress read failed: ${error.message}` })); }, 100);
   const code = await new Promise((resolveCode, reject) => {
     child.on('error', reject);
     child.on('close', resolveCode);
@@ -287,8 +209,8 @@ async function runInstallerStreaming(kind, args, options, onEvent, progressPath,
   await stdout.end();
   await stderr.end();
   await progressReading;
-  await processProgressText(progressDecoder.end(), false);
-  await readProgress(true);
+  await readProgressFile(progressPath, progressState, processProgressText, true);
+  await processProgressText(progressDecoder.end(), true);
   await emitQueue;
   return code;
 }
@@ -466,7 +388,7 @@ export async function createInstallerUiServer(options = {}) {
     };
     if (run.state === 'running' || run.state === 'stopping') run.subscribers.add(subscriber);
     subscriber.enqueue();
-    reqDone(res).then(() => { closed = true; run.subscribers.delete(subscriber); }).catch(() => {});
+    res.on('close', () => { closed = true; run.subscribers.delete(subscriber); });
   };
 
   const createRun = (steps) => {
@@ -727,11 +649,13 @@ export async function main(argv = process.argv.slice(2)) {
   console.log(`One-time token: ${server.token}`);
   if (bindWarning) console.log(bindWarning);
   console.log('Cloud Shell ends a session after 20 minutes without interactive activity; keep the shell active before long waits.');
-  process.on('SIGINT', async () => {
+  const stopForSignal = async () => {
     await shutdownInstallerUiServer(server, 'interrupt');
     console.log('Installer UI stopped: interrupt');
     process.exit(130);
-  });
+  };
+  process.on('SIGINT', stopForSignal);
+  process.on('SIGTERM', stopForSignal);
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
