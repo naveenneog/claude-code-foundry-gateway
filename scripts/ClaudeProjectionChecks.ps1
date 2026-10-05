@@ -10,6 +10,24 @@ function Get-ClaudeProjectionAppRemedy {
     return "Customer Entra admin: https://entra.microsoft.com > Entra ID > App registrations > New registration > claude-projection-resolver-$NamePrefix > Accounts in this organizational directory only > Register; Overview supplies the Application (client) ID; Expose an API > Application ID URI is api://<id>. CLI equivalent: az ad app create --display-name claude-projection-resolver-$NamePrefix --sign-in-audience AzureADMyOrg --query appId -o tsv; after a successful nonempty id, az ad app update --id <id> --identifier-uris api://<id>. The operator supplies -ResolverAppId <id>."
 }
 
+function Confirm-ClaudeProjectionResolverServicePrincipal {
+    param([Parameter(Mandatory)][string]$AppId)
+    if ($AppId -notmatch '^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$') {
+        throw 'Resolver application id must be a GUID before creating its service principal.'
+    }
+    try {
+        $sp = Invoke-ClaudeNetworkAz @('ad','sp','show','--id',$AppId)
+        if ($sp -and $sp.appId) { return [string]$sp.appId }
+    }
+    catch {
+        if ($_.Exception.Message -notmatch '(?i)not\s*found|Request_ResourceNotFound|does not exist') { throw }
+        $null = Invoke-ClaudeNetworkAz @('ad','sp','create','--id',$AppId)
+        return $AppId
+    }
+    $null = Invoke-ClaudeNetworkAz @('ad','sp','create','--id',$AppId)
+    return $AppId
+}
+
 function New-ClaudeProjectionResolverApp {
     param([string]$NamePrefix)
     try {
@@ -21,7 +39,13 @@ function New-ClaudeProjectionResolverApp {
         throw "Resolver app creation returned no valid application id; no update was attempted. $(Get-ClaudeProjectionAppRemedy $NamePrefix)"
     }
     $null = Invoke-ClaudeNetworkAz @('ad','app','update','--id',[string]$made.appId,'--identifier-uris',"api://$($made.appId)")
+    $null = Confirm-ClaudeProjectionResolverServicePrincipal -AppId ([string]$made.appId)
     return [string]$made.appId
+}
+
+function ConvertTo-ClaudeProjectionLocationKey {
+    param([AllowEmptyString()][string]$Location)
+    return (($Location -replace '[^A-Za-z0-9]', '').ToLowerInvariant())
 }
 
 function Get-ClaudeProjectionStorageName {
@@ -416,6 +440,17 @@ function Invoke-ClaudeProjectionPreflight {
         if (-not $context.ResourceGroupId) { throw 'Name availability requires the verified resource group.' }
         $storageName = Get-ClaudeProjectionStorageName -ResourceGroupId $context.ResourceGroupId -NamePrefix $NamePrefix
         $resources = @(Invoke-ClaudeNetworkAz @('resource','list','-g',$ResourceGroup,'--subscription',$context.SubscriptionId))
+        $existingCosmos = @($resources | Where-Object id -eq $context.AccountResourceId | Select-Object -First 1)
+        if ($existingCosmos.Count -and [string]$existingCosmos[0].location) {
+            $existingLocation = [string]$existingCosmos[0].location
+            if ($Location) {
+                if ((ConvertTo-ClaudeProjectionLocationKey $Location) -ne (ConvertTo-ClaudeProjectionLocationKey $existingLocation)) {
+                    throw "Cosmos account cosmos-$NamePrefix already exists in $existingLocation, but -Location requested $Location. Remedy: rerun with -Location $existingLocation or another -NamePrefix."
+                }
+            } else {
+                $context.Location = $existingLocation
+            }
+        }
         $cosmosTaken = Invoke-ClaudeNetworkAz @('cosmosdb','check-name-exists','-n',"cosmos-$NamePrefix",'--subscription',$context.SubscriptionId)
         if ($cosmosTaken -isnot [bool] -or ($cosmosTaken -and -not @($resources | Where-Object id -eq $context.AccountResourceId).Count)) { throw "Cosmos name cosmos-$NamePrefix is unavailable or its availability is unproven." }
         $storage = Invoke-ClaudeNetworkAz @('storage','account','check-name','--name',$storageName,'--subscription',$context.SubscriptionId)

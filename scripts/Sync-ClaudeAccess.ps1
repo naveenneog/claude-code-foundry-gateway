@@ -38,7 +38,9 @@ param(
     [switch]$AllowEmpty,
     [switch]$AllowEmptyStandard,
     [switch]$AllowEmptyPremium,
-    [switch]$WhatIf
+    [switch]$WhatIf,
+    [ValidateSet('auto','named-value','projection')][string]$Store = 'auto',
+    [string]$User
 )
 
 $ErrorActionPreference = 'Stop'
@@ -53,6 +55,77 @@ if (-not $PremiumGroup) { $PremiumGroup = 'claude-code-premium' }
 . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
 
 . (Join-Path $PSScriptRoot 'ClaudeGraphMembership.ps1')
+
+function Invoke-ClaudeProjectionAccessSync {
+    param(
+        [string]$ApimName, [string]$ResourceGroup, [string]$StandardGroup, [string]$PremiumGroup,
+        [string]$User, [switch]$AllowEmpty, [switch]$WhatIf
+    )
+    . (Join-Path $PSScriptRoot 'ClaudeRunner.ps1')
+    . (Join-Path $PSScriptRoot 'ClaudeProjectionPackage.ps1')
+    $prefix = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-projection-prefix' -FailOnError
+    if ([string]::IsNullOrWhiteSpace($prefix)) {
+        throw "Projection sync needs named value 'entitlement-projection-prefix'. Remedy: redeploy with scripts/Deploy-ClaudeProjection.ps1, which writes it."
+    }
+    if ($prefix -notmatch '^[a-z0-9]+(?:-[a-z0-9]+)*$') { throw "Projection prefix '$prefix' is unsafe." }
+    $apim = az apim show -g $ResourceGroup -n $ApimName -o json | ConvertFrom-Json
+    if (-not $apim -or -not $apim.identity -or -not $apim.identity.tenantId) { throw 'Could not read the APIM managed identity tenant id for projection sync.' }
+    $tenantId = [string]$apim.identity.tenantId
+    if ($tenantId -notmatch '^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$') { throw 'APIM identity tenant id is not a GUID.' }
+    $work = Join-Path (Get-Location) '.claude-projection-sync'
+    if (Test-Path -LiteralPath $work) { Remove-Item -LiteralPath $work -Recurse -Force -WhatIf:$false }
+    $null = New-Item -ItemType Directory -Path $work -Force
+    try {
+        $snapshot = Join-Path $work 'projection-snapshot.json'
+        $exportArgs = @('-NoProfile','-File',(Join-Path $PSScriptRoot 'Sync-ClaudeProjection.ps1'),
+            '-Account',"cosmos-$prefix",'-TenantId',$tenantId,'-StandardGroup',$StandardGroup,'-PremiumGroup',$PremiumGroup,
+            '-ApimName',$ApimName,'-ResourceGroup',$ResourceGroup,'-ExportPath',$snapshot)
+        if ($AllowEmpty) { $exportArgs += '-AllowEmpty' }
+        if ($User) { $exportArgs += @('-User',$User) }
+        $exportOutput = & pwsh @exportArgs 2>&1
+        if ($LASTEXITCODE -ne 0) { throw "Projection snapshot export failed (exit $LASTEXITCODE): $(($exportOutput | Select-Object -Last 12) -join "`n")" }
+        $targetUserOid = $null
+        if ($User) {
+            $snap = Get-Content -LiteralPath $snapshot -Raw | ConvertFrom-Json
+            if (-not $snap.user -or [string]$snap.scope -ne 'user') { throw 'Targeted projection export did not produce a user-scoped snapshot.' }
+            $targetUserOid = [string]$snap.user
+        }
+        if ($WhatIf) {
+            Write-Host "  [WhatIf] Projection snapshot exported to $snapshot; runner was not started and Cosmos was not changed." -ForegroundColor DarkGray
+            return
+        }
+        $runner = "aci-projtest-$prefix"
+        $null = Start-ClaudeProjectionRunner -ResourceGroup $ResourceGroup -Name $runner
+        $archive = Join-Path $work 'sync-package.tgz'
+        $null = New-ClaudeProjectionSyncArchive -Path $archive -Root (Split-Path $PSScriptRoot -Parent)
+        $null = Send-RunnerFile -ResourceGroup $ResourceGroup -Name $runner -Path $archive -Destination '/work/sync-package.tgz'
+        $null = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $runner -Command 'tar -xzf /work/sync-package.tgz -C /work'
+        $null = Send-RunnerFile -ResourceGroup $ResourceGroup -Name $runner -Path $snapshot -Destination '/work/projection-snapshot.json'
+        $nodeModules = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $runner -Command "node -e console.log(require('fs').existsSync('/work/sync/node_modules')?'present':'absent')"
+        if (($nodeModules -split '\r?\n' | Select-Object -Last 1).Trim() -ne 'present') {
+            $null = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $runner -Command 'npm ci --prefix /work/sync'
+        }
+        $command = "node /work/sync/src/apply-projection.mjs --cosmos https://cosmos-$prefix.documents.azure.com:443/ --tenant $tenantId --snapshot /work/projection-snapshot.json"
+        if ($targetUserOid) { $command += " --user $targetUserOid" }
+        $raw = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $runner -Command $command
+        $result = ConvertFrom-ClaudeRunnerResult -RawOutput $raw -Step 'projection apply'
+        Write-Host ("Projection sync complete: written={0} deleted={1} unchanged={2}" -f ([int]$result.written), ([int]$result.deleted), ([int]$result.unchanged)) -ForegroundColor Green
+    }
+    finally {
+        if (Test-Path -LiteralPath $work) { Remove-Item -LiteralPath $work -Recurse -Force -WhatIf:$false -ErrorAction SilentlyContinue }
+    }
+}
+
+$selectedStore = $Store
+if ($selectedStore -eq 'auto') {
+    $source = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-source' -FailOnError
+    $selectedStore = if ($source -eq 'projection') { 'projection' } else { 'named-value' }
+}
+if ($User -and $selectedStore -eq 'named-value') { throw '-User cannot be used with -Store named-value because named values are rewritten whole.' }
+if ($selectedStore -eq 'projection') {
+    Invoke-ClaudeProjectionAccessSync -ApimName $ApimName -ResourceGroup $ResourceGroup -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -User $User -AllowEmpty:$AllowEmpty -WhatIf:$WhatIf
+    return
+}
 
 function Set-NamedValue {
     param([string]$Id, [string]$Value)

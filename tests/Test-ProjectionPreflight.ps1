@@ -184,6 +184,10 @@ Run-Preflight 'healthy' @{ FlipAfterCleanCompare=$true; ReconcilerResourceId='/s
 Assert 'preflight with a job id remains read-only and is not admission evidence' (-not $CapturedError -and ($FixtureCalls -join "`n") -notmatch 'az (deployment .*create|ad app (create|update)|apim nv (create|update))') $CapturedError
 Run-Preflight 'healthy' @{ ResourceGroup='RG-P84' }
 Assert 'Bicep storage hash uses the canonical ARM group id, not user casing' (-not $CapturedError -and $FixtureBicepExpression.Contains("uniqueString('$FixtureRgId',")) $CapturedError
+Run-Preflight 'owned-names' @{ Location='westus' }
+Assert 'existing Cosmos in another region refuses the requested Location with remedy' ($CapturedError -and $CapturedOutput -match 'eastus2' -and $CapturedOutput -match 'westus' -and $CapturedOutput -match '-Location eastus2 or another -NamePrefix') $CapturedOutput
+Run-Preflight 'owned-names'
+Assert 'missing Location adopts existing Cosmos region' (-not $CapturedError -and $CapturedResult.Location -eq 'eastus2') $CapturedError
 
 Write-Host 'P84 Graph failure boundaries'
 Reset-ProjectionFixture

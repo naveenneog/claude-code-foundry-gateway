@@ -70,7 +70,11 @@ param(
     # inside the network with an identity that can write only the container.
     # No credential crosses into the network - only object ids and tiers.
     [ValidateRange(60,7200)][int]$MaxAgeSeconds = 7200,
-    [string]$ExportPath
+    [string]$ExportPath,
+
+    # Export a snapshot for one user only. The apply side then upserts or
+    # deletes only that user's record.
+    [string]$User
 )
 
 $ErrorActionPreference = 'Stop'
@@ -82,6 +86,93 @@ function Step($m) { Write-Host "`n==> $m" -ForegroundColor Cyan }
 function Ok($m)   { Write-Host "  [OK]   $m" -ForegroundColor Green }
 function Bad($m)  { Write-Host "  [FAIL] $m" -ForegroundColor Red }
 function Note($m) { Write-Host "         $m" -ForegroundColor DarkGray }
+
+function Resolve-ClaudeProjectionUserObjectId {
+    param([Parameter(Mandatory)][string]$Identity, [Parameter(Mandatory)][string]$Token)
+    $guid = '^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$'
+    if ($Identity -match $guid) { return $Identity.ToLowerInvariant() }
+    if ($Identity -notmatch "^[A-Za-z0-9.!#`$%&'*+/=?^_``{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$") {
+        throw '-User must be an object id GUID or a valid user principal name.'
+    }
+    $encoded = [uri]::EscapeDataString($Identity)
+    $user = Invoke-ClaudeGraphRead -Uri "https://graph.microsoft.com/v1.0/users/$encoded?`$select=id" -Token $Token
+    if (-not $user -or [string]$user.id -notmatch $guid) { throw "Graph did not return a valid object id for user '$Identity'." }
+    return ([string]$user.id).ToLowerInvariant()
+}
+
+function Invoke-ClaudeProjectionCheckMemberGroups {
+    param([Parameter(Mandatory)][string]$UserObjectId, [Parameter(Mandatory)][string[]]$GroupIds, [Parameter(Mandatory)][string]$Token)
+    $guid = '^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$'
+    if ($UserObjectId -notmatch $guid) { throw 'Target user object id must be a GUID.' }
+    $matched = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    for ($i = 0; $i -lt $GroupIds.Count; $i += 20) {
+        $batch = @($GroupIds[$i..([Math]::Min($i + 19, $GroupIds.Count - 1))] | Where-Object { $_ })
+        if (-not $batch.Count) { continue }
+        $body = @{ groupIds = @($batch) } | ConvertTo-Json -Depth 3
+        try {
+            $page = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/users/$UserObjectId/checkMemberGroups" `
+                -Method Post -Headers @{ Authorization = "Bearer $Token"; 'Content-Type' = 'application/json' } `
+                -Body $body -TimeoutSec 30 -ErrorAction Stop
+        } catch {
+            throw "Graph checkMemberGroups failed for target user: $($_.Exception.Message) $(Get-ClaudeGraphFailureRemedy $_.Exception.Message)"
+        }
+        if (-not $page -or -not $page.PSObject.Properties['value'] -or $page.value -isnot [array]) {
+            throw 'Graph checkMemberGroups returned an invalid collection.'
+        }
+        foreach ($id in @($page.value)) { if ($id -match $guid) { $null = $matched.Add([string]$id) } }
+    }
+    return $matched
+}
+
+function Get-ClaudeProjectionUnitRegistry {
+    param([string[]]$BusinessUnitGroups, [string]$ApimName, [string]$ResourceGroup)
+    $units = @()
+    if ($BusinessUnitGroups) {
+        foreach ($spec in $BusinessUnitGroups) {
+            $parts = $spec -split '=', 2
+            if ($parts.Count -ne 2) { Write-Warning "Skipping '$spec' - expected id=group-name"; continue }
+            $units += [pscustomobject]@{ Id = $parts[0].Trim(); Group = $parts[1].Trim() }
+        }
+    }
+    elseif ($ApimName -and $ResourceGroup) {
+        . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
+        . (Join-Path $PSScriptRoot 'ClaudeBusinessUnit.ps1')
+        $registry = @(ConvertFrom-ClaudeBuRegistry (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-registry'))
+        $parents = ConvertFrom-ClaudeBuParents (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-parents')
+        $units = @(Sort-ClaudeBuByDepth $registry -Parents $parents)
+    }
+    return @($units)
+}
+
+function Resolve-ClaudeProjectionTargetRecord {
+    param([string]$UserObjectId, [string]$Token, [string]$StandardGroup, [string]$PremiumGroup, [object[]]$Units)
+    $groupSpecs = [Collections.Generic.List[object]]::new()
+    foreach ($spec in @(
+        [pscustomobject]@{ Kind='tier'; Id='premium'; Group=$PremiumGroup },
+        [pscustomobject]@{ Kind='tier'; Id='standard'; Group=$StandardGroup }
+    )) {
+        $group = Get-ClaudeGraphGroup -GroupName $spec.Group -Token $Token
+        if ($group) { $groupSpecs.Add([pscustomobject]@{ Kind=$spec.Kind; Id=$spec.Id; GroupId=[string]$group.id }) }
+    }
+    foreach ($u in @($Units)) {
+        $group = Get-ClaudeGraphGroup -GroupName $u.Group -Token $Token
+        if ($group) { $groupSpecs.Add([pscustomobject]@{ Kind='bu'; Id=$u.Id; GroupId=[string]$group.id }) }
+    }
+    if (-not $groupSpecs.Count) { return $null }
+    $memberships = Invoke-ClaudeProjectionCheckMemberGroups -UserObjectId $UserObjectId -GroupIds @($groupSpecs.GroupId) -Token $Token
+    $tier = ''
+    foreach ($name in 'premium','standard') {
+        $spec = @($groupSpecs | Where-Object { $_.Kind -eq 'tier' -and $_.Id -eq $name } | Select-Object -First 1)
+        if ($spec.Count -and $memberships.Contains($spec[0].GroupId)) { $tier = $name; break }
+    }
+    if (-not $tier) { return $null }
+    $businessUnit = ''
+    foreach ($u in @($Units)) {
+        $spec = @($groupSpecs | Where-Object { $_.Kind -eq 'bu' -and $_.Id -eq $u.Id } | Select-Object -First 1)
+        if ($spec.Count -and $memberships.Contains($spec[0].GroupId)) { $businessUnit = [string]$u.Id; break }
+    }
+    return [pscustomobject]@{ Oid = $UserObjectId; Name = $UserObjectId; Tier = $tier; BusinessUnit = $businessUnit }
+}
 
 # ---------------------------------------------------------------- config file
 if ($ConfigPath) {
@@ -96,6 +187,7 @@ if ($ConfigPath) {
         Ok "loaded from $ConfigPath"
     } catch { Write-Warning "Could not read $ConfigPath - $($_.Exception.Message)" }
 }
+if ($User -and -not $ExportPath) { throw '-User requires -ExportPath because targeted sync is applied from a snapshot.' }
 
 Write-Host ''
 Write-Host 'Entra groups -> entitlement projection' -ForegroundColor Cyan
@@ -132,57 +224,43 @@ $signedInOid = '<your-object-id>'
 Ok $(if ($ExportPath) { 'Graph token acquired (export only - Cosmos is not contacted)' } else { 'Graph and Cosmos tokens acquired' })
 
 # ---------------------------------------------------------------- 2. resolve
+$units = @(Get-ClaudeProjectionUnitRegistry -BusinessUnitGroups $BusinessUnitGroups -ApimName $ApimName -ResourceGroup $ResourceGroup)
 Step 'Reading group membership'
 $scanStarted = [DateTimeOffset]::UtcNow
 $byOid = @{}
+$targetUserOid = $null
 
-foreach ($t in @(
-    @{ Name = 'premium';  Group = $PremiumGroup },
-    @{ Name = 'standard'; Group = $StandardGroup })) {
-    $members = @(Get-GroupMemberOids -GroupName $t.Group -Token $graphToken)
-    Write-Host ("  {0,-10} {1,-32} {2} member(s)" -f $t.Name, $t.Group, $members.Count)
-    foreach ($m in $members) {
-        # Premium is read first and wins, matching the policy, which checks the
-        # premium list before the standard one. Someone in both groups is
-        # premium in the gateway, so the projection must say the same.
-        if (-not $byOid.ContainsKey($m.Oid)) {
-            $byOid[$m.Oid] = [pscustomobject]@{ Oid = $m.Oid; Name = $m.Name; Tier = $t.Name; BusinessUnit = '' }
+if ($User) {
+    $targetUserOid = Resolve-ClaudeProjectionUserObjectId -Identity $User -Token $graphToken
+    $targetRecord = Resolve-ClaudeProjectionTargetRecord -UserObjectId $targetUserOid -Token $graphToken -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -Units $units
+    if ($targetRecord) { $byOid[$targetRecord.Oid] = $targetRecord }
+    Write-Host ("  {0,-10} {1,-32} {2} record(s)" -f 'user', $targetUserOid, $byOid.Count)
+} else {
+    foreach ($t in @(
+        @{ Name = 'premium';  Group = $PremiumGroup },
+        @{ Name = 'standard'; Group = $StandardGroup })) {
+        $members = @(Get-GroupMemberOids -GroupName $t.Group -Token $graphToken)
+        Write-Host ("  {0,-10} {1,-32} {2} member(s)" -f $t.Name, $t.Group, $members.Count)
+        foreach ($m in $members) {
+            # Premium is read first and wins, matching the policy, which checks the
+            # premium list before the standard one. Someone in both groups is
+            # premium in the gateway, so the projection must say the same.
+            if (-not $byOid.ContainsKey($m.Oid)) {
+                $byOid[$m.Oid] = [pscustomobject]@{ Oid = $m.Oid; Name = $m.Name; Tier = $t.Name; BusinessUnit = '' }
+            }
         }
     }
-}
 
-# Business units, with exactly the precedence Sync-ClaudeAccess.ps1 writes into
-# bu-members: deepest first, so a team wins over the unit that contains it, then
-# registry order, and the first match wins. This used to apply
-# -BusinessUnitGroups in the order given with the last match winning, so anyone
-# in a team and its parent was charged to a different unit here than on the
-# named-value path - and the migration would have moved their spend at the flip
-# without a single entitlement difference to show for it.
-$units = @()
-if ($BusinessUnitGroups) {
-    foreach ($spec in $BusinessUnitGroups) {
-        $parts = $spec -split '=', 2
-        if ($parts.Count -ne 2) { Write-Warning "Skipping '$spec' - expected id=group-name"; continue }
-        $units += [pscustomobject]@{ Id = $parts[0].Trim(); Group = $parts[1].Trim() }
-    }
-}
-elseif ($ApimName -and $ResourceGroup) {
-    . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
-    . (Join-Path $PSScriptRoot 'ClaudeBusinessUnit.ps1')
-    $registry = @(ConvertFrom-ClaudeBuRegistry (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-registry'))
-    $parents = ConvertFrom-ClaudeBuParents (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-parents')
-    $units = @(Sort-ClaudeBuByDepth $registry -Parents $parents)
-}
-
-if ($units.Count) {
-    Step 'Reading business unit membership'
-    $assigned = @{}
-    foreach ($u in $units) {
-        $bm = @(Get-GroupMemberOids -GroupName $u.Group -Token $graphToken)
-        Write-Host ("  {0,-22} {1,-30} {2} member(s)" -f $u.Id, $u.Group, $bm.Count)
-        foreach ($m in $bm) {
-            if (-not $byOid.ContainsKey($m.Oid)) { Note "  $($m.Name) is in $($u.Id) but no tier - not entitled, so not projected"; continue }
-            if (-not $assigned.ContainsKey($m.Oid)) { $byOid[$m.Oid].BusinessUnit = $u.Id; $assigned[$m.Oid] = $true }
+    if ($units.Count) {
+        Step 'Reading business unit membership'
+        $assigned = @{}
+        foreach ($u in $units) {
+            $bm = @(Get-GroupMemberOids -GroupName $u.Group -Token $graphToken)
+            Write-Host ("  {0,-22} {1,-30} {2} member(s)" -f $u.Id, $u.Group, $bm.Count)
+            foreach ($m in $bm) {
+                if (-not $byOid.ContainsKey($m.Oid)) { Note "  $($m.Name) is in $($u.Id) but no tier - not entitled, so not projected"; continue }
+                if (-not $assigned.ContainsKey($m.Oid)) { $byOid[$m.Oid].BusinessUnit = $u.Id; $assigned[$m.Oid] = $true }
+            }
         }
     }
 }
@@ -209,6 +287,10 @@ if ($ExportPath) {
         mappingVersion = [int][double]::Parse((Get-Date -UFormat %s))
         groups         = [ordered]@{ standard = $StandardGroup; premium = $PremiumGroup; businessUnits = @($BusinessUnitGroups) }
         records        = @($resolved | ForEach-Object { [ordered]@{ oid = $_.Oid; tier = $_.Tier; businessUnit = $_.BusinessUnit } })
+    }
+    if ($targetUserOid) {
+        $snapshot.scope = 'user'
+        $snapshot.user = $targetUserOid
     }
     # Without a byte-order mark: Windows PowerShell 5.1 adds one to UTF8 and
     # JSON.parse in Node refuses it.
