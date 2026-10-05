@@ -646,6 +646,7 @@
       bashDoesNotApply,
       bashStepsNotApply,
       cloudShell: "Manage files > Upload answers.json, then paste the PowerShell or bash command above.",
+      terminalPfx,
     };
   }
 

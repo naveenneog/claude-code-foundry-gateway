@@ -443,6 +443,7 @@
       appendText(root, commands.cloudShell, "p");
       appendText(root, "PowerShell command", "h3");
       appendText(root, commands.powershellRun, "pre");
+      if (commands.terminalPfx) appendText(root, "The installer asks for the PFX password in the terminal.", "p");
       if (commands.bashRun) {
         appendText(root, "Bash command", "h3");
         appendText(root, commands.bashRun, "pre");
@@ -456,7 +457,7 @@
       appendText(root, title, "h3");
       appendText(root, value, "pre");
     }
-    if (!commands.powershellRun.includes(" -Yes ")) appendText(root, "The installer asks for the PFX password in the terminal.", "p");
+    if (commands.terminalPfx) appendText(root, "The installer asks for the PFX password in the terminal.", "p");
     appendText(root, "PowerShell applies every current answer and selected step.", "p");
     if (commands.bash && commands.bashRun) {
       for (const [title, value] of [

@@ -274,6 +274,36 @@ test('P3 PFX answers disable page runs and render a terminal command without -Ye
   }
 });
 
+test('G7B-6 PFX command metadata distinguishes terminal PFX from KeyVault and static mode', async () => {
+  const source = await readFile(new URL('../tools/installer-ui/ui-model.js', import.meta.url), 'utf8');
+  const context = { globalThis: {} };
+  (await import('node:vm')).runInNewContext(source, context);
+  const model = context.globalThis.ClaudeInstallerUiModel;
+  const schema = JSON.parse(await readFile(new URL('../schemas/claude-gateway.answers.schema.json', import.meta.url), 'utf8'));
+  const pfx = model.buildPortableCommands(schema, './answers.json', { answers: { AddressMode: 'custom', AddressCertificateSource: 'Pfx' }, presentAnswers: ['AddressMode', 'AddressCertificateSource'] });
+  assert.equal(pfx.terminalPfx, true);
+  assert.match(pfx.powershellRun, /-AnswersPath/);
+  assert.doesNotMatch(pfx.powershellRun, / -Yes /);
+  const keyVault = model.buildPortableCommands(schema, './answers.json', { answers: { AddressMode: 'custom', AddressCertificateSource: 'KeyVault' }, presentAnswers: ['AddressMode', 'AddressCertificateSource'] });
+  assert.equal(keyVault.terminalPfx, false);
+  assert.match(keyVault.powershellRun, / -Yes /);
+});
+
+test('G7B-6 pfx-needs-terminal server refusal is shown with its sentence', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await passPreflight(page);
+    await page.route('**/api/run/stream', (route) => route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'A PFX certificate is installed from a terminal because the installer asks for the PFX password only when it runs without -Yes.', reason: 'pfx-needs-terminal' }) }));
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await page.locator('#run-error[role="alert"]').getByText(/PFX certificate is installed from a terminal/).waitFor();
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
 test('P4 invalid business-unit JSON blocks download and keeps the draft text', async () => {
   const app = await start();
   const { browser, page, pageErrors } = await openPage(app);
