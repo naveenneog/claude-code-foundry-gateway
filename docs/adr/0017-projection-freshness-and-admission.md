@@ -1,6 +1,7 @@
 # ADR-0017: Projection freshness is an absolute lease; misses have a bounded admission envelope
 
-- **Status:** Accepted
+- **Status:** Accepted; the lease is superseded by [ADR-0051](0051-persistent-sync-based-cosmos-entitlement.md)
+  (P97, 2026-10-05): records persist until a sync changes them
 - **Date:** 2026-09-24
 - **Packet:** P19 completion (explicitly requested alongside the active P45 work)
 - **Refines:** [ADR-0005](0005-identity-projection.md), [ADR-0011](0011-projection-platform.md)

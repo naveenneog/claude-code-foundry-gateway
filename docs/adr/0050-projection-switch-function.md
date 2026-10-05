@@ -1,6 +1,7 @@
 # ADR-0050: The projection switch is one function over the renewal receipt
 
-- **Status:** Proposed for P95
+- **Status:** Proposed for P95; refined by [ADR-0051](0051-persistent-sync-based-cosmos-entitlement.md)
+  (P97, 2026-10-05): the switch reads no renewal receipt and needs no job
 - **Date:** 2026-10-05
 - **Packet:** P95
 - **Refines:** [ADR-0049](0049-projection-renewal-deployment.md) decisions 6, 7 and 9,
