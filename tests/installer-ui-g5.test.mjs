@@ -46,22 +46,28 @@ async function start(extra = {}) {
 async function openPage(app) {
   const { chromium } = await import('playwright');
   const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
-  const pageErrors = [];
-  const consoleErrors = [];
-  page.on('pageerror', (error) => pageErrors.push(error.message));
-  page.on('console', (message) => {
-    if (message.type() === 'error') consoleErrors.push(message.text());
-  });
-  await page.addInitScript(() => {
-    window.__p93Unhandled = [];
-    window.addEventListener('unhandledrejection', (event) => {
-      window.__p93Unhandled.push(String(event.reason?.message || event.reason));
+  try {
+    const page = await browser.newPage();
+    const pageErrors = [];
+    const consoleErrors = [];
+    page.on('pageerror', (error) => pageErrors.push(error.message));
+    page.on('console', (message) => {
+      if (message.type() === 'error') consoleErrors.push(message.text());
     });
-  });
-  await page.goto(`${app.base}/?token=${encodeURIComponent(app.token)}`);
-  await page.waitForSelector('[name="SubscriptionId"]');
-  return { browser, page, pageErrors, consoleErrors };
+    await page.addInitScript(() => {
+      window.__p93Unhandled = [];
+      window.addEventListener('unhandledrejection', (event) => {
+        window.__p93Unhandled.push(String(event.reason?.message || event.reason));
+      });
+    });
+    await page.goto(`${app.base}/?token=${encodeURIComponent(app.token)}`);
+    await page.waitForSelector('[name="SubscriptionId"]');
+    return { browser, page, pageErrors, consoleErrors };
+  } catch (error) {
+    await browser.close().catch(() => {});
+    await app.close?.().catch(() => {});
+    throw error;
+  }
 }
 
 async function readStubLog(app) {

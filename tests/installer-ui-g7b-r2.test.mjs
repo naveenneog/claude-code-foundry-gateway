@@ -98,27 +98,36 @@ async function startLeadPage() {
   const address = await server.listenAsync('127.0.0.1');
   const { chromium } = await import('playwright');
   const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
-  const pageErrors = [];
-  page.on('pageerror', (error) => pageErrors.push(error.message));
-  await page.goto(`http://127.0.0.1:${address.port}/?token=${encodeURIComponent(server.token)}`);
-  await page.waitForSelector('[name="SubscriptionId"]');
-  await page.locator('[name="SubscriptionId"]').fill('00000000-0000-4000-8000-000000000093');
-  await page.getByRole('button', { name: 'List steps' }).click();
-  await page.locator('#step-list input[value="resource-group"]').check();
-  await page.getByRole('button', { name: 'Run preflight' }).click();
-  await page.locator('#preflight-state').getByText(/Passing preflight [0-9a-f]{12} is current/).waitFor();
-  return {
-    page,
-    pageErrors,
-    async close() {
-      await browser.close();
-      await server.cleanup();
-      server.close();
-      await once(server, 'close').catch(() => {});
-      await rm(scratch, { recursive: true, force: true });
-    },
-  };
+  try {
+    const page = await browser.newPage();
+    const pageErrors = [];
+    page.on('pageerror', (error) => pageErrors.push(error.message));
+    await page.goto(`http://127.0.0.1:${address.port}/?token=${encodeURIComponent(server.token)}`);
+    await page.waitForSelector('[name="SubscriptionId"]');
+    await page.locator('[name="SubscriptionId"]').fill('00000000-0000-4000-8000-000000000093');
+    await page.getByRole('button', { name: 'List steps' }).click();
+    await page.locator('#step-list input[value="resource-group"]').check();
+    await page.getByRole('button', { name: 'Run preflight' }).click();
+    await page.locator('#preflight-state').getByText(/Passing preflight [0-9a-f]{12} is current/).waitFor();
+    return {
+      page,
+      pageErrors,
+      async close() {
+        await browser.close();
+        await server.cleanup();
+        server.close();
+        await once(server, 'close').catch(() => {});
+        await rm(scratch, { recursive: true, force: true });
+      },
+    };
+  } catch (error) {
+    await browser.close().catch(() => {});
+    await server.cleanup().catch(() => {});
+    server.close();
+    await once(server, 'close').catch(() => {});
+    await rm(scratch, { recursive: true, force: true });
+    throw error;
+  }
 }
 
 test('lead: a run request that fails at the network level restores the run controls', async () => {
