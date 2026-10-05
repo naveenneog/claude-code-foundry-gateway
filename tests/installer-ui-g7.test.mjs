@@ -102,6 +102,30 @@ test('S1 bootstrap token is not the session cookie before or after bootstrap', a
   }
 });
 
+test('S1 bootstrap token cookie is rejected before the bootstrap request', async () => {
+  const server = await createInstallerUiServer({
+    token: 'g7-unbootstrapped-token-with-at-least-32-bytes',
+    csrfToken: 'g7-unbootstrapped-csrf-with-at-least-32-bytes',
+    stubInstaller: stubInstaller,
+    idleMs: 60_000,
+    readIdentity: async () => identityOne,
+  });
+  const address = await server.listenAsync('127.0.0.1');
+  const base = `http://127.0.0.1:${address.port}`;
+  const tokenCookie = `installer_token=${encodeURIComponent(server.token)}`;
+  try {
+    assert.equal((await fetch(`${base}/api/session`, { headers: { cookie: tokenCookie } })).status, 401);
+    const boot = await fetch(`${base}/?token=${encodeURIComponent(server.token)}`, { redirect: 'manual' });
+    const issuedCookie = boot.headers.get('set-cookie').split(';')[0];
+    assert.equal((await fetch(`${base}/api/session`, { headers: { cookie: tokenCookie } })).status, 401);
+    assert.equal((await fetch(`${base}/api/session`, { headers: { cookie: issuedCookie } })).status, 200);
+  } finally {
+    await server.cleanup();
+    server.close();
+    await once(server, 'close').catch(() => {});
+  }
+});
+
 test('S2 stop requested before spawn prevents the installer child from starting', async () => {
   let releaseSpawn;
   const spawnBarrier = new Promise((resolve) => { releaseSpawn = resolve; });
