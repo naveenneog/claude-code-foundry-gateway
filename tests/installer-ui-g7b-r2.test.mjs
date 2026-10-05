@@ -128,7 +128,7 @@ test('lead: a run request that fails at the network level restores the run contr
     await page.route('**/api/run/stream', (route) => route.abort('failed'));
     await page.getByRole('button', { name: 'Run selected steps' }).click();
     const alert = page.locator('#run-error[role="alert"]');
-    await alert.getByText(/run request failed before the server answered .*and the installer UI server reports no active run/).waitFor();
+    await alert.getByText(/run request failed before the server answered .*and the installer UI server has no record of that request/).waitFor();
     assert.match(await alert.textContent(), /still running in its terminal/);
     assert.equal(await page.getByRole('button', { name: 'Run selected steps' }).isEnabled(), true);
     assert.equal(await page.getByRole('button', { name: 'Stop run' }).isDisabled(), true);
@@ -147,8 +147,12 @@ test('lead: a later run whose stream ends before any event reattaches from the s
     await page.locator('#run-status').getByText('Run finished.').waitFor();
     // The second run's stream ends before any event; the server still reports that run as running.
     const attachUrls = [];
-    await page.route('**/api/run/stream', (route) => route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '' }));
-    await page.route('**/api/run/status', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'second-run', state: 'running', currentStepId: 'resource-group', steps: ['resource-group'] }) }));
+    let requestId = '';
+    await page.route('**/api/run/stream', (route) => {
+      requestId = route.request().headers()['x-client-request-id'];
+      return route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '' });
+    });
+    await page.route('**/api/run/status', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'second-run', clientRequestId: requestId, state: 'running', currentStepId: 'resource-group', steps: ['resource-group'] }) }));
     await page.route('**/api/run/attach?after=*', (route) => {
       attachUrls.push(new URL(route.request().url()).search);
       return route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"summary","exitCode":0,"failedStepId":"","resumeCommand":"","state":"exited","message":""}\n' });
@@ -166,8 +170,12 @@ test('lead: a run request that fails after the server started the run reattaches
   const app = await startLeadPage();
   try {
     const { page } = app;
-    await page.route('**/api/run/stream', (route) => route.abort('connectionreset'));
-    await page.route('**/api/run/status', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'started-run', state: 'running', currentStepId: 'resource-group', steps: ['resource-group'] }) }));
+  let requestId = '';
+  await page.route('**/api/run/stream', (route) => route.abort('connectionreset'));
+  page.on('request', (request) => {
+    if (request.url().includes('/api/run/stream')) requestId = request.headers()['x-client-request-id'];
+  });
+  await page.route('**/api/run/status?request=*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'started-run', clientRequestId: requestId, state: 'running', currentStepId: 'resource-group', steps: ['resource-group'], admission: { state: 'started', runId: 'started-run' } }) }));
     await page.route('**/api/run/attach?after=0', (route) => route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"progress","stepId":"resource-group","event":"started","message":"reattached after the lost request"}\n{"seq":2,"type":"summary","exitCode":0,"failedStepId":"","resumeCommand":"","state":"exited","message":""}\n' }));
     await page.getByRole('button', { name: 'Run selected steps' }).click();
     await page.locator('#run-status').getByText('Run finished.').waitFor();

@@ -165,3 +165,80 @@ test('R3-2 browser sends a client request id with each run request', async () =>
     await app.close();
   }
 });
+
+test('R3-2 admission null does not attach to another running run', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await passPreflight(page);
+    let attachCount = 0;
+    await page.route('**/api/run/stream', (route) => route.abort('failed'));
+    await page.route('**/api/run/status?request=*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'other-run', state: 'running', currentStepId: 'resource-group', steps: ['resource-group'], admission: null }) }));
+    await page.route('**/api/run/attach?after=*', (route) => {
+      attachCount++;
+      return route.fulfill({ status: 500, body: '' });
+    });
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await page.locator('#run-error').getByText(/server has no record of that request/i).waitFor();
+    assert.equal(attachCount, 0);
+    assert.equal(await page.getByRole('button', { name: 'Run selected steps' }).isEnabled(), true);
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
+test('R3-2 failed status recovery says the server did not answer', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await passPreflight(page);
+    await page.route('**/api/run/stream', (route) => route.abort('failed'));
+    await page.route('**/api/run/status?request=*', (route) => route.abort('failed'));
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await page.locator('#run-error').getByText(/server did not answer status requests/i).waitFor();
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
+test('R3-2 refused admission found by recovery marks the preflight stale', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await passPreflight(page);
+    await page.route('**/api/run/stream', (route) => route.abort('failed'));
+    await page.route('**/api/run/status?request=*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ admission: { state: 'refused', error: 'Run preflight again before starting the installer.', reason: 'preflight-required' } }) }));
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await page.locator('#preflight-state').getByText(/Run preflight again before starting the installer/).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Run selected steps' }).isDisabled(), true);
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
+test('R3-2 malformed stream line reattaches to the same run and finishes', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await passPreflight(page);
+    let requestId = '';
+    await page.route('**/api/run/stream', (route) => {
+      requestId = route.request().headers()['x-client-request-id'];
+      return route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"progress","stepId":"resource-group","event":"started","message":"started"}\nnot-json\n' });
+    });
+    await page.route('**/api/run/status?request=*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'same-run', clientRequestId: requestId, state: 'running', currentStepId: 'resource-group', steps: ['resource-group'], admission: { state: 'started', runId: 'same-run' } }) }));
+    await page.route('**/api/run/attach?after=1', (route) => route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":2,"type":"summary","exitCode":0,"failedStepId":"","resumeCommand":"","state":"exited","message":""}\n' }));
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await page.locator('#run-status').getByText(/Run finished/).waitFor();
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});

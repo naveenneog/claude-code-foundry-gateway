@@ -362,8 +362,12 @@ test('R2-7 summary-less stream reattaches to a running run and finishes', async 
   const { browser, page, pageErrors } = await openPage(app);
   try {
     await passPreflight(page);
-    await page.route('**/api/run/stream', (route) => route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"progress","stepId":"resource-group","event":"started","message":"started"}\n' }));
-    await page.route('**/api/run/status', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'run-1', state: 'running', currentStepId: 'resource-group', steps: ['resource-group'] }) }));
+    let requestId = '';
+    await page.route('**/api/run/stream', (route) => {
+      requestId = route.request().headers()['x-client-request-id'];
+      return route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"progress","stepId":"resource-group","event":"started","message":"started"}\n' });
+    });
+    await page.route('**/api/run/status', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'run-1', clientRequestId: requestId, state: 'running', currentStepId: 'resource-group', steps: ['resource-group'] }) }));
     await page.route('**/api/run/attach?after=1', (route) => route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":2,"type":"summary","exitCode":0,"failedStepId":"","resumeCommand":"","state":"exited","message":""}\n' }));
     await page.getByRole('button', { name: 'Run selected steps' }).click();
     await page.locator('#run-status').getByText(/Run finished/).waitFor();

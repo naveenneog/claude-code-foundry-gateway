@@ -126,6 +126,15 @@
     "test": "R3-2 refused admissions are recorded for every pre-start failure path"
   },
   {
+    "id": "r3-2-4",
+    "why": "Lost-request recovery must not wait the full admission timeout when every status read fails; it reports that the server did not answer.",
+    "file": "tools/installer-ui/installer-ui-run.js",
+    "find": "          if (statusFailures >= 3) break;\n",
+    "replace": "",
+    "testFile": "tests/installer-ui-g8b.test.mjs",
+    "test": "R3-2 failed status recovery says the server did not answer"
+  },
+  {
     "id": "T1-fail-once-disabled",
     "why": "The T1 journey must fail when the stub no longer fails the first selected gateway-deployment run.",
     "file": "tests/installer-ui-stub.mjs",
@@ -1269,7 +1278,7 @@
     "id": "g7b-F03",
     "why": "lead fix: a lost run request whose run started is not reattached",
     "file": "tools/installer-ui/installer-ui-run.js",
-    "find": "      if (status?.id && status.state === \"running\") return followRun(async () => null);\n",
+    "find": "        if (status?.admission?.state === \"started\") {\n          activeRunId = status.admission.runId || status.id || \"\";\n          return followRun(() => fetchRunStream(`./api/run/attach?after=0`).then(readRunStream));\n        }\n",
     "replace": "",
     "testFile": "tests/installer-ui-g7b-r2.test.mjs",
     "test": "lead: a run request that fails after the server started the run reattaches to that run"

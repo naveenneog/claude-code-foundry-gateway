@@ -124,7 +124,7 @@
 
     async function recoverMissingSummary(reattachCount = 0, quietCount = 0) {
       const status = await getJson("./api/run/status");
-      if (status.id && status.state === "running") {
+      if (sameRun(status)) {
         if (quietCount >= 3) {
           runActive = false;
           updateRunAdmission();
@@ -135,6 +135,12 @@
         const before = lastRunSeq;
         const result = await readRunStream(await fetchRunStream(`./api/run/attach?after=${lastRunSeq}`));
         if (result) return result;
+        if (status.state !== "running" && status.state !== "stopping") {
+          runActive = false;
+          updateRunAdmission();
+          const state = status.state || "unknown";
+          throw new Error(`The run stream ended without a summary; the server reports state ${state}.`);
+        }
         return recoverMissingSummary(reattachCount + 1, before === lastRunSeq ? quietCount + 1 : 0);
       }
       runActive = false;
@@ -149,6 +155,13 @@
         refreshIdentityAfterRun();
         return result;
       } catch (error) {
+        if (!error.data?.runSummary) {
+          const recovered = await reconcileBrokenStream().catch(() => null);
+          if (recovered) {
+            refreshIdentityAfterRun();
+            return recovered;
+          }
+        }
         runActive = false;
         updateRunAdmission();
         if (error.data?.runSummary) refreshIdentityAfterRun();
@@ -156,10 +169,35 @@
       }
     }
 
+    function sameRun(status) {
+      if (!status?.id) return false;
+      return status.id === activeRunId || (activeClientRequestId && status.clientRequestId === activeClientRequestId);
+    }
+
+    async function reconcileBrokenStream() {
+      const status = await getJson(activeClientRequestId ? `./api/run/status?request=${encodeURIComponent(activeClientRequestId)}` : "./api/run/status");
+      const run = status?.admission?.state === "started" ? { ...status, id: status.admission.runId || status.id } : status;
+      if (!sameRun(run)) return null;
+      activeRunId = run.id;
+      activeStepId = run.currentStepId || run.steps?.[0] || activeStepId;
+      runActive = true;
+      updateRunAdmission();
+      return (await readRunStream(await fetchRunStream(`./api/run/attach?after=${lastRunSeq}`))) || null;
+    }
+
     async function recoverLostRequest(requestError) {
       // The request may have reached the server before the connection failed: a run that started is reattached.
+      let statusFailures = 0;
       for (let i = 0; i < 400; i++) {
-        const status = await getJson(`./api/run/status?request=${encodeURIComponent(activeClientRequestId)}`).catch(() => null);
+        let status;
+        try {
+          status = await getJson(`./api/run/status?request=${encodeURIComponent(activeClientRequestId)}`);
+        } catch {
+          statusFailures++;
+          if (statusFailures >= 3) break;
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          continue;
+        }
         if (status?.admission?.state === "admitting") {
           await new Promise((resolve) => setTimeout(resolve, 500));
           continue;
@@ -176,16 +214,18 @@
           if (["identity-changed", "preflight-required"].includes(error.data.reason) && typeof onPreflightStale === "function") onPreflightStale(error.message);
           throw error;
         }
-        if (status?.id && status.state === "running") return followRun(async () => null);
         if (!status?.admission) {
-          const plainStatus = await getJson("./api/run/status").catch(() => null);
-          if (plainStatus?.id && plainStatus.state === "running") return followRun(async () => null);
+          runActive = false;
+          updateRunAdmission();
+          const error = new Error(`The run request failed before the server answered (${requestError.message}), and the installer UI server has no record of that request.`);
+          error.data = { error: error.message, remedy: "Check that the installer UI server is still running in its terminal, then try again." };
+          throw error;
         }
         break;
       }
       runActive = false;
       updateRunAdmission();
-      const server = "the installer UI server reports no active run";
+      const server = statusFailures ? "the installer UI server did not answer status requests" : "the installer UI server did not finish admitting the run";
       const error = new Error(`The run request failed before the server answered (${requestError.message}), and ${server}.`);
       error.data = { error: error.message, remedy: "Check that the installer UI server is still running in its terminal, then try again." };
       throw error;
