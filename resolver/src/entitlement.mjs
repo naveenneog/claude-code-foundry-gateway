@@ -55,6 +55,12 @@ export function toEntitlement(doc, { tenantId, now = new Date() } = {}) {
     };
   }
 
+  const legacyExpiresAt = Number(doc.expiresAt);
+  if (doc.expiresAt !== undefined && doc.expiresAt !== null &&
+      Number.isFinite(legacyExpiresAt) && legacyExpiresAt < Math.floor(now.getTime() / 1000)) {
+    return { ok: false, status: 404, reason: 'legacy projection record expired; run a full sync' };
+  }
+
   const verified = Date.parse(doc.lastVerifiedAt);
   if (!isObjectId(doc.reconciliationGeneration) || !Number.isFinite(verified) || verified > now.getTime()) {
     return { ok: false, status: 503, reason: 'projection record is invalid; run a full sync' };

@@ -46,14 +46,20 @@ test('a fresh entitlement carries its generation but no expiry through the resol
   assert.equal('expiresAt' in r.record, false);
   assert.equal(r.record.reconciliationGeneration, lease.reconciliationGeneration);
 });
-test('record expiry is ignored, while generation and verification freshness are service failures', () => {
+test('legacy future record expiry is ignored until it passes, while generation and verification freshness are service failures', () => {
   for (const changes of [
-    { expiresAt: now.getTime() / 1000 }, { expiresAt: 0 }, { expiresAt: null },
-    { expiresAt: 'tomorrow' }, { expiresAt: lease.expiresAt + 1 }, { expiresAt: undefined },
+    { expiresAt: lease.expiresAt + 1 }, { expiresAt: undefined },
   ]) {
     const r = toEntitlement({ ...doc, ...changes }, { tenantId, now });
     assert.equal(r.ok, true, JSON.stringify(changes));
     assert.equal('expiresAt' in r.record, false);
+  }
+  for (const changes of [
+    { expiresAt: now.getTime() / 1000 - 1 }, { expiresAt: 0 },
+  ]) {
+    const r = toEntitlement({ ...doc, ...changes }, { tenantId, now });
+    assert.equal(r.ok, false, JSON.stringify(changes));
+    assert.equal(r.status, 404);
   }
   for (const changes of [
     { lastVerifiedAt: undefined }, { lastVerifiedAt: 'bad' }, { lastVerifiedAt: new Date(now.getTime() + 1000).toISOString() },
@@ -71,7 +77,7 @@ test('a missing tenant cannot authorize through a leased record', () => {
   assert.equal(r.status, 403);
 });
 test('migration comparison uses resolver validation and ignores legacy record expiry', () => {
-  const r = plan.compareWithGateway({ standard: [oid] }, [{ ...doc, expiresAt: now.getTime() / 1000 }], { tenantId, now });
+  const r = plan.compareWithGateway({ standard: [oid] }, [{ ...doc, expiresAt: lease.expiresAt + 1 }], { tenantId, now });
   assert.deepEqual(r.differences, []);
 });
 
@@ -178,12 +184,12 @@ test('switch evidence counts only live records the resolver would refuse and has
   ];
   const evidence = plan.summarizeEntitlementEvidence(records, { tenantId, now });
   assert.equal(evidence.total, 3);
-  assert.equal(evidence.invalidCount, 2);
-  assert.equal(evidence.invalidSamples.length, 2);
+  assert.equal(evidence.invalidCount, 3);
+  assert.equal(evidence.invalidSamples.length, 3);
   assert.match(evidence.invalidSamples[0].oidHash, /^[0-9a-f]{12}$/);
   assert.equal(JSON.stringify(evidence).includes('44444444-4444'), false);
   const admission = plan.evaluateProjectionAdmission({ statuses: [status], entitlementRecords: records, expected, now });
   assert.equal(admission.ok, false);
-  assert.equal(admission.invalidCount, 2);
+  assert.equal(admission.invalidCount, 3);
   assert.match(admission.reason, /would be refused by the resolver/);
 });

@@ -87,6 +87,10 @@ export function planChanges(resolved, existing, { allowEmpty = false, keepOrphan
     wanted.add(r.oid);
     const cur = existing.get(r.oid);
     if (cur && cur.tier === r.tier && (cur.businessUnit ?? '') === (r.businessUnit ?? '')) {
+      if (Object.hasOwn(cur, 'expiresAt')) {
+        toWrite.push(r);
+        continue;
+      }
       unchanged++;
       if (!refresh) continue;
     }
@@ -102,21 +106,6 @@ export function planChanges(resolved, existing, { allowEmpty = false, keepOrphan
     keptOrphans: keepOrphans ? orphans : [],
     unchanged,
   };
-}
-
-/**
- * The earliest expiry among the records a run leaves behind: every record it wrote, which expire
- * with this run's lease, and every orphan it kept. With neither, the run's own lease.
- */
-export function oldestRetainedExpiry({ toWrite = [], keptOrphans = [] } = {}, existing = new Map(), expiresAt) {
-  // A loop, not Math.min(...list): spreading one argument per record overflows the stack near
-  // 125,000 records, and a run writes every entitled identity.
-  let oldest = toWrite.length ? expiresAt : Infinity;
-  for (const oid of keptOrphans) {
-    const kept = existing.get(oid)?.expiresAt;
-    if (Number.isFinite(kept) && kept < oldest) oldest = kept;
-  }
-  return Number.isFinite(oldest) ? oldest : expiresAt;
 }
 
 /**
@@ -175,6 +164,7 @@ export function toStatusDocument({
   executor = 'runner',
   ok = true,
   settings = null,
+  user = null,
 }) {
   if (!reconciliation || !GUID.test(reconciliation.reconciliationGeneration ?? '')) {
     throw new Error('status requires a reconciliation generation');
@@ -198,6 +188,7 @@ export function toStatusDocument({
     ok: Boolean(ok),
     mode,
     executor,
+    ...(user ? { user } : {}),
     memberCounts,
     writeCounts,
     startedAt,
@@ -221,9 +212,27 @@ export function normalizeJobSettings(settings = {}) {
   return Object.fromEntries(SETTING_KEYS.map((key, i) => [key, values[i].trim().toLowerCase()]));
 }
 
-function sameSettings(recorded, expected) {
-  const normalized = normalizeJobSettings(recorded ?? {});
-  return Boolean(normalized && expected) && SETTING_KEYS.every((key) => normalized[key] === expected[key]);
+export function validateJobSettings(env = {}) {
+  const remedy = 'Remedy: redeploy with scripts/Deploy-ClaudeProjectionRenewal.ps1.';
+  const problems = [];
+  const objectId = (value) => GUID.test(value ?? '');
+  const apimId = (value) => typeof value === 'string' &&
+    /^\/subscriptions\/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\/resourceGroups\/[^/]+\/providers\/Microsoft\.ApiManagement\/service\/[^/]+$/i.test(value);
+  const clientId = env.AZURE_CLIENT_ID;
+  const standard = env.PROJECTION_STANDARD_GROUP_ID;
+  const premium = env.PROJECTION_PREMIUM_GROUP_ID;
+  const gateway = env.PROJECTION_GATEWAY_RESOURCE_ID;
+  if (!objectId(clientId)) problems.push(`AZURE_CLIENT_ID must be the job identity client id GUID. ${remedy}`);
+  if (!objectId(standard)) problems.push(`PROJECTION_STANDARD_GROUP_ID must be the standard tier group object id GUID, not a group name. ${remedy}`);
+  if (typeof premium !== 'string' || !premium.trim()) {
+    problems.push(`PROJECTION_PREMIUM_GROUP_ID must be the premium tier group object id GUID, or none. ${remedy}`);
+  } else if (premium !== 'none' && !objectId(premium)) {
+    problems.push(`PROJECTION_PREMIUM_GROUP_ID must be the premium tier group object id GUID, or none. ${remedy}`);
+  } else if (objectId(standard) && premium.toLowerCase() === standard.toLowerCase()) {
+    problems.push(`PROJECTION_PREMIUM_GROUP_ID must not equal PROJECTION_STANDARD_GROUP_ID; one group for both tiers would make premium take every standard member. ${remedy}`);
+  }
+  if (!apimId(gateway)) problems.push(`PROJECTION_GATEWAY_RESOURCE_ID must be a Microsoft.ApiManagement/service resource id. ${remedy}`);
+  return problems;
 }
 
 const GUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
@@ -377,17 +386,6 @@ function switchEvidence(ok, newestFullSync, invalidCount, reason) {
 
 function digest(value) {
   return createHash('sha256').update(String(value)).digest('hex').slice(0, 12);
-}
-
-function normalizeCounts(counts) {
-  return Object.fromEntries(Object.entries(counts)
-    .filter(([, value]) => Number(value) > 0)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, value]) => [key, Number(value)]));
-}
-
-function refuse(reason) {
-  return { ok: false, reason, remedy: reason };
 }
 
 /**

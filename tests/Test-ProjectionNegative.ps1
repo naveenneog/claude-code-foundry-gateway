@@ -30,7 +30,7 @@ $mutations = @(
     @{ Name='missing verification authorizes'; File='resolver\src\entitlement.mjs'; From='!Number.isFinite(verified) || '; To=''; Suite=$node }
     @{ Name='missing generation authorizes'; File='resolver\src\entitlement.mjs'; From='!isObjectId(doc.reconciliationGeneration) || '; To=''; Suite=$node }
     @{ Name='future verification authorizes'; File='resolver\src\entitlement.mjs'; From=' || verified > now.getTime()'; To=''; Suite=$node }
-    @{ Name='legacy expiry refuses access'; File='resolver\src\entitlement.mjs'; From='if (doc.effectiveFrom) {'; To="if (doc.expiresAt <= Math.floor(now.getTime() / 1000)) { return { ok: false, status: 503, reason: 'projection record expired' }; }`n`n  if (doc.effectiveFrom) {"; Suite=$node }
+    @{ Name='legacy past expiry authorizes'; File='resolver\src\entitlement.mjs'; From='Number.isFinite(legacyExpiresAt) && legacyExpiresAt < Math.floor(now.getTime() / 1000)'; To='false && Number.isFinite(legacyExpiresAt) && legacyExpiresAt < Math.floor(now.getTime() / 1000)'; Suite=$node }
     @{ Name='missing tenant authorizes'; File='resolver\src\entitlement.mjs'; From='if (!tenantId || doc.tenantId !== tenantId)'; To='if (tenantId && doc.tenantId && doc.tenantId !== tenantId)'; Suite=$node }
     @{ Name='resolver exposes legacy expiry'; File='resolver\src\entitlement.mjs'; From='reconciliationGeneration: doc.reconciliationGeneration,'; To="reconciliationGeneration: doc.reconciliationGeneration,`n      expiresAt: doc.expiresAt,"; Suite=$node }
     @{ Name='tenant-free cache key'; File='infra\policy.xml'; From='ent:v2:{{tenant-id}}:'; To='ent:'; Suite=$rules }

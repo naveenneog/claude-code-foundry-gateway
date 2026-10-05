@@ -95,7 +95,7 @@ function Resolve-ClaudeProjectionUserObjectId {
         throw '-User must be an object id GUID or a valid user principal name.'
     }
     $encoded = [uri]::EscapeDataString($Identity)
-    $user = Invoke-ClaudeGraphRead -Uri "https://graph.microsoft.com/v1.0/users/$encoded?`$select=id" -Token $Token
+    $user = Invoke-ClaudeGraphRead -Uri "https://graph.microsoft.com/v1.0/users/${encoded}?`$select=id" -Token $Token
     if (-not $user -or [string]$user.id -notmatch $guid) { throw "Graph did not return a valid object id for user '$Identity'." }
     return ([string]$user.id).ToLowerInvariant()
 }
@@ -121,7 +121,7 @@ function Invoke-ClaudeProjectionCheckMemberGroups {
         }
         foreach ($id in @($page.value)) { if ($id -match $guid) { $null = $matched.Add([string]$id) } }
     }
-    return $matched
+    return ,$matched
 }
 
 function Get-ClaudeProjectionUnitRegistry {
@@ -300,7 +300,7 @@ if ($ExportPath) {
     Ok "$($resolved.Count) record(s) written to $full"
     Note 'Nothing was written to Cosmos. Apply it from inside the network:'
     Note "  node sync/src/apply-projection.mjs --cosmos https://$Account.documents.azure.com:443/ --tenant $TenantId --snapshot <file>"
-    exit 0
+    return
 }
 
 # ---------------------------------------------------------------- 3. existing

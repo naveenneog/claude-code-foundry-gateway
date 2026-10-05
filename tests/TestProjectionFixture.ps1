@@ -245,6 +245,9 @@ function az {
             $b64 += '=' * ((4 - $b64.Length % 4) % 4)
             return [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Convert]::FromBase64String($b64))).Replace('-', '').ToLower()
         }
+        if ($command -match "existsSync\('/work/sync/node_modules'\)") {
+            return $(if ($FixtureCase -eq 'node-modules-present') { 'present' } else { 'absent' })
+        }
         # apply-projection.mjs --compare prints ok:false with the differences when the projection and the gateway disagree.
         if ($FixtureCase -eq 'compare-differs' -and $command -match 'apply-projection\.mjs .*--compare ') { return '{"ok":false,"mode":"compare","compared":2,"differences":1,"byKind":{"missing":1}}' }
         if ($FixtureCase -eq 'compare-error' -and $command -match 'apply-projection\.mjs .*--compare ') { $global:LASTEXITCODE = 0; return '{"ok":false,"error":"Cosmos read failed: 403 Forbidden"}' }
@@ -360,4 +363,3 @@ function Invoke-RestMethod {
     }
     throw "UNEXPECTED HTTP CALL (offline fixture): $Method $url"
 }
-
