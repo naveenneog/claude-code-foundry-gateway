@@ -382,6 +382,28 @@ test('R3-2 lost request does not attach a later run that replaced the admitted r
   }
 });
 
+test('R3-8 review buttons keep first pointer clicks after validation blur rerenders', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await page.locator('[name="NamePrefix"]').fill('-bad');
+    await page.getByRole('button', { name: 'Review NamePrefix' }).click();
+    assert.equal(await page.evaluate(() => document.activeElement?.name), 'NamePrefix');
+    assert.equal(await page.locator('[name="NamePrefix"]').getAttribute('aria-invalid'), 'true');
+
+    await page.locator('[name="NamePrefix"]').fill('p93');
+    await page.locator('#pending-deployment-enabled').check();
+    await page.locator('[name="PendingClaudeDeployment.capacity"]').fill('0');
+    await page.getByRole('button', { name: 'Review PendingClaudeDeployment.capacity' }).click();
+    assert.equal(await page.evaluate(() => document.activeElement?.name), 'PendingClaudeDeployment.capacity');
+    assert.equal(await page.locator('[name="PendingClaudeDeployment.capacity"]').getAttribute('aria-invalid'), 'true');
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
 test('R3-9 page load attaches to a stopping run with controls disabled until summary', async () => {
   const app = await start();
   const { chromium } = await import('playwright');

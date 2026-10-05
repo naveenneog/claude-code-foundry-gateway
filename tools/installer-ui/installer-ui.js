@@ -16,6 +16,7 @@
   let preflightStaleReason = "";
   let preflightScope = null;
   let validationProblems = [];
+  let validationProblemNodes = new Map();
   let checkFields = {};
   let prefill;
   let actions;
@@ -277,15 +278,34 @@
     for (const field of document.querySelectorAll("[aria-invalid]")) field.removeAttribute("aria-invalid");
     for (const node of document.querySelectorAll(".field-error")) node.textContent = "";
     const errors = byId("errors");
-    clearChildren(errors);
+    const previousNodes = validationProblemNodes;
+    validationProblemNodes = new Map();
     if (validationProblems.length) {
-      const list = document.createElement("ul");
+      const list = errors.querySelector("ul") || document.createElement("ul");
       for (const p of validationProblems) {
-        appendText(list, `${p.path || "answers"}: ${p.message} ${p.remedy || ""}`.trim(), "li");
+        const key = [p.checkId || "", p.path || "", p.message || ""].join("\u0000");
+        const item = previousNodes.get(key) || document.createElement("li");
+        let text = item.querySelector("[data-validation-problem-text]");
+        if (!text) {
+          text = document.createElement("span");
+          text.dataset.validationProblemText = "true";
+          item.prepend(text);
+        }
+        text.textContent = `${p.path || "answers"}: ${p.message} ${p.remedy || ""}`.trim();
         problems.markFieldProblem(p.path, p.message, p.remedy);
-        problems.appendProblemButton(list.lastChild, p.path, `Review ${p.path}`);
+        if (!item.querySelector("button")) problems.appendProblemButton(item, p.path, `Review ${p.path}`);
+        list.append(item);
+        validationProblemNodes.set(key, item);
       }
-      errors.append(list);
+      for (const [key, item] of previousNodes) {
+        if (!validationProblemNodes.has(key)) item.remove();
+      }
+      if (list.parentNode !== errors) {
+        clearChildren(errors);
+        errors.append(list);
+      }
+    } else {
+      clearChildren(errors);
     }
     refreshCommands();
     updateRunAdmission();

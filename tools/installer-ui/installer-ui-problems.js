@@ -42,6 +42,10 @@
       const button = document.createElement("button");
       button.type = "button";
       button.textContent = label || `Review ${path}`;
+      button.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        focusProblemPath(path);
+      });
       button.addEventListener("click", () => focusProblemPath(path));
       parent.append(button);
     }

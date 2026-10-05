@@ -9,6 +9,15 @@
     "test": "R3-9 page load attaches to a stopping run with controls disabled until summary"
   },
   {
+    "id": "r3-8-1",
+    "why": "Review buttons must focus their target on the first pointer click even when validation blur rerenders the problem list.",
+    "file": "tools/installer-ui/installer-ui-problems.js",
+    "find": "      button.addEventListener(\"pointerdown\", (event) => {\n        event.preventDefault();\n        focusProblemPath(path);\n      });\n",
+    "replace": "",
+    "testFile": "tests/installer-ui-g8b.test.mjs",
+    "test": "R3-8 review buttons keep first pointer clicks after validation blur rerenders"
+  },
+  {
     "id": "r3-3-1",
     "why": "The preflight adapter must reject a top-level PASS when a blocking NOT-RUN or FAIL check recomputes to FAIL.",
     "file": "tools/installer-ui/installer-contract.mjs",
