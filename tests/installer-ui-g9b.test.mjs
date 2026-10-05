@@ -59,6 +59,30 @@ async function openPage(app) {
   }
 }
 
+async function openPageWithRoutes(app, installRoutes) {
+  const { chromium } = await import('playwright');
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    const pageErrors = [];
+    page.on('pageerror', (error) => pageErrors.push(error.message));
+    await page.addInitScript(() => {
+      window.__p93Unhandled = [];
+      window.addEventListener('unhandledrejection', (event) => {
+        window.__p93Unhandled.push(String(event.reason?.message || event.reason));
+      });
+    });
+    await installRoutes(page);
+    await page.goto(`${app.base}/?token=${encodeURIComponent(app.token)}`);
+    await page.waitForSelector('[name="SubscriptionId"]');
+    return { browser, page, pageErrors };
+  } catch (error) {
+    await browser.close().catch(() => {});
+    await app.close?.().catch(() => {});
+    throw error;
+  }
+}
+
 async function assertClean(page, pageErrors) {
   assert.deepEqual(pageErrors, []);
   assert.deepEqual(await page.evaluate(() => window.__p93Unhandled), []);
@@ -104,6 +128,31 @@ test('R4-2 broken stream reports a replaced run record and does not attach', asy
     await page.getByRole('button', { name: 'Run selected steps' }).click();
     await page.locator('#run-error').getByText(/later run replaced its record/i).waitFor();
     assert.equal(attachCount, 0);
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
+test('L6-1 page-load reattach run-replaced clears run state and controls', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPageWithRoutes(app, async (routePage) => {
+    await routePage.route('**/api/run/status', (route) => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ id: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', state: 'running', currentStepId: 'resource-group', steps: ['resource-group'] }),
+    }));
+    await routePage.route('**/api/run/attach?after=*&run=*', (route) => route.fulfill({
+      status: 409,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'The requested run record was replaced by a later installer run.', reason: 'run-replaced' }),
+    }));
+  });
+  try {
+    await page.locator('#run-error').getByText(/later run replaced its record/i).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Stop run' }).isDisabled(), true);
+    assert.equal(await page.getByRole('button', { name: 'Refresh account' }).isEnabled(), true);
     await assertClean(page, pageErrors);
   } finally {
     await browser.close();

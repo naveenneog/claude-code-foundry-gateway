@@ -1435,5 +1435,14 @@
     "replace": "",
     "testFile": "tests/installer-ui-g9b.test.mjs",
     "test": "R4-3 Stop is disabled during admission and while an accepted stop is pending summary"
+  },
+  {
+    "id": "l6-1-1",
+    "why": "L6-1: page-load reattach must clear run state and report the common replaced-record error when attach returns run-replaced.",
+    "file": "tools/installer-ui/installer-ui-run.js",
+    "find": "          if (error.data?.reason === \"run-replaced\") {\n            clearForReplacedRun();\n            throw replacedRunError();\n          }\n",
+    "replace": "",
+    "testFile": "tests/installer-ui-g9b.test.mjs",
+    "test": "L6-1 page-load reattach run-replaced clears run state and controls"
   }
 ]
