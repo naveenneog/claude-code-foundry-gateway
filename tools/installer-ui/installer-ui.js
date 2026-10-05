@@ -20,6 +20,7 @@
   let actions;
   let problems;
   let azureBusy = false;
+  let azureBusyText = "";
 
   function byId(id) {
     return document.getElementById(id);
@@ -374,11 +375,20 @@
 
   function setAzureBusy(value, starter) {
     azureBusy = value;
+    azureBusyText = value ? azureBusySentence(starter) : "";
     for (const control of azureControls()) {
       if (control === starter || control.dataset.actionBusy === "true") continue;
-      control.disabled = value;
+      control.disabled = value || Boolean(runHost?.isActive());
     }
     if (!value) updateRunAdmission();
+  }
+
+  function azureBusySentence(starter) {
+    if (starter?.id === "preflight") return "A preflight is using Azure CLI.";
+    if (starter?.id === "refresh-identity") return "An account read is using Azure CLI.";
+    if (starter?.dataset?.prefillKind) return "A prefill read is using Azure CLI.";
+    if (starter?.id === "run" || starter?.id === "full-run" || starter?.id === "rerun") return "An installer run is using Azure CLI.";
+    return "Azure CLI work is already active.";
   }
 
   function updateRunAdmission() {
@@ -388,6 +398,12 @@
     const runScopeOk = selected.length > 0 && scopeCovers(selected);
     const rerunScopeOk = runHost?.failedStep() && scopeCovers([runHost.failedStep()]);
     const admitted = liveMode() && preflightFingerprint && !preflightStale && !hasBlockingProblems() && !runHost?.isActive() && !azureBusy && !terminalPfx;
+    const activeRun = Boolean(runHost?.isActive());
+    for (const control of document.querySelectorAll("[data-prefill-kind]")) {
+      if (control.dataset.actionBusy !== "true") control.disabled = azureBusy || activeRun;
+    }
+    const refresh = byId("refresh-identity");
+    if (refresh && refresh.dataset.actionBusy !== "true") refresh.disabled = azureBusy || activeRun;
     for (const id of ["run", "full-run", "rerun"]) {
       const button = byId(id);
       if (button && button.dataset.actionBusy !== "true") {
@@ -407,7 +423,7 @@
     if (hasBlockingProblems()) state.textContent = `${preflightStale ? "Preflight is stale. " : ""}Validation problems block download, preflight, run and command copying.`;
     else if (!liveMode()) state.textContent = `Static fallback: ${sessionReason || "use the generated commands."}`;
     else if (terminalPfx) state.textContent = "A PFX certificate is installed from a terminal because the installer asks for the PFX password only when it runs without -Yes.";
-    else if (azureBusy) state.textContent = "Azure CLI work is already active.";
+    else if (azureBusy) state.textContent = azureBusyText || "Azure CLI work is already active.";
     else if (preflightFingerprint && !preflightStale && scopeBlocksFull) state.textContent = `Passing preflight ${preflightFingerprint.slice(0, 12)} is current. Full run needs a preflight with no step selected.`;
     else if (preflightFingerprint && !preflightStale && selected.length && !scopeCovers(selected)) state.textContent = `Passing preflight ${preflightFingerprint.slice(0, 12)} is current. Run selected steps needs a preflight of that selection.`;
     else if (admitted) state.textContent = `Passing preflight ${preflightFingerprint.slice(0, 12)} is current.`;

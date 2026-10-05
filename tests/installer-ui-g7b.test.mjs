@@ -185,6 +185,71 @@ test('P2 azure-busy response names the operation that holds Azure CLI', async ()
   }
 });
 
+test('G7B-5 pending Azure work and active runs disable every Azure-starting page control', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    let releasePrefill;
+    const prefillPending = new Promise((resolve) => { releasePrefill = resolve; });
+    await page.route('**/api/prefill', async (route) => {
+      await prefillPending;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ subscriptions: [{ id: '00000000-0000-4000-8000-000000000093', name: 'Sub One' }] }) });
+    });
+
+    await page.getByRole('button', { name: 'Read subscriptions' }).click();
+    await page.locator('[data-prefill-kind="subscriptions"]').getByText(/Reading Azure/).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Run preflight' }).isDisabled(), true);
+    assert.equal(await page.getByRole('button', { name: 'Refresh account' }).isDisabled(), true);
+    assert.equal(await page.getByRole('button', { name: 'Read Foundry accounts' }).isDisabled(), true);
+    releasePrefill();
+    await page.locator('[data-prefill-kind="subscriptions"]').getByText(/Read subscriptions/).waitFor();
+
+    await page.unroute('**/api/prefill');
+    await passPreflight(page);
+    await page.route('**/api/run/stream', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      await route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"summary","exitCode":0,"failedStepId":"","resumeCommand":"","state":"exited","message":""}\n' });
+    });
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await page.locator('#run-status').getByText(/Running selected steps/).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Refresh account' }).isDisabled(), true);
+    assert.equal(await page.getByRole('button', { name: 'Read subscriptions' }).isDisabled(), true);
+    await page.locator('#run-status').getByText(/Run finished/).waitFor();
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
+test('G7B-5 reattached runs disable Azure controls until the summary refreshes account state', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    let releaseAttach;
+    const attachPending = new Promise((resolve) => { releaseAttach = resolve; });
+    await page.route('**/api/run/status', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'run-reattach', state: 'running', currentStepId: 'resource-group', steps: ['resource-group'] }) }));
+    await page.route('**/api/run/attach?after=0', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"progress","stepId":"resource-group","event":"started","message":"reattached"}\n' });
+    });
+    await page.route('**/api/run/attach?after=1', async (route) => {
+      await attachPending;
+      await route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":2,"type":"summary","exitCode":0,"failedStepId":"","resumeCommand":"","state":"exited","message":""}\n' });
+    });
+    await page.reload();
+    await page.waitForSelector('[name="SubscriptionId"]');
+    await page.locator('#run-output').getByText(/reattached/).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Refresh account' }).isDisabled(), true);
+    assert.equal(await page.getByRole('button', { name: 'Read subscriptions' }).isDisabled(), true);
+    releaseAttach();
+    await page.getByRole('button', { name: 'Refresh account' }).waitFor({ state: 'visible' });
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
 test('P3 PFX answers disable page runs and render a terminal command without -Yes', async () => {
   const app = await start();
   const { browser, page, pageErrors } = await openPage(app);
