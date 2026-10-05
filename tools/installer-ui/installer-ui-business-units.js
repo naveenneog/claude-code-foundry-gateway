@@ -4,6 +4,7 @@
   function createBusinessUnitsEditor(deps) {
     const { byId, clearChildren, appendText, markPreflightStale, validateCurrentAnswers, validateBusinessUnits, isPlainObject } = deps;
     let businessUnits = [];
+    let jsonDraftProblem = "";
 
     function defaultBusinessUnit(parent = "") {
       return { id: "", group: "", parent, monthlyUsdBudget: 0, mode: "Strict" };
@@ -14,6 +15,10 @@
     }
 
     function sync() {
+      if (jsonDraftProblem) {
+        renderValidation();
+        throw new Error(jsonDraftProblem);
+      }
       businessUnits = [...document.querySelectorAll("[data-bu-index]")].map((row) => {
         const unit = {
           id: row.querySelector('[data-bu-field="id"]').value.trim(),
@@ -32,7 +37,7 @@
     }
 
     function renderValidation() {
-      const problems = validateBusinessUnits(businessUnits);
+      const problems = jsonDraftProblem ? [jsonDraftProblem] : validateBusinessUnits(businessUnits);
       byId("business-unit-problems").textContent = problems.join("\n");
       return problems;
     }
@@ -57,7 +62,12 @@
       input.dataset.buField = name;
       input.type = type === "number" ? "text" : type;
       input.value = value ?? "";
-      wrapper.append(input);
+      const error = document.createElement("div");
+      error.id = `business-unit-${row.dataset.buIndex || "new"}-${name}-error`;
+      error.className = "field-error";
+      error.setAttribute("role", "alert");
+      input.setAttribute("aria-describedby", error.id);
+      wrapper.append(input, error);
       row.append(wrapper);
       return input;
     }
@@ -84,6 +94,7 @@
         appendText(modeLabel, "Mode");
         const mode = document.createElement("select");
         mode.dataset.buField = "mode";
+        mode.setAttribute("aria-describedby", `business-unit-${index}-mode-error`);
         for (const value of ["Strict", "Allowance", "Notify"]) {
           const option = document.createElement("option");
           option.value = value;
@@ -91,7 +102,11 @@
           option.selected = unit.mode === value;
           mode.append(option);
         }
-        modeLabel.append(mode);
+        const modeError = document.createElement("div");
+        modeError.id = `business-unit-${index}-mode-error`;
+        modeError.className = "field-error";
+        modeError.setAttribute("role", "alert");
+        modeLabel.append(mode, modeError);
         row.append(modeLabel);
         const percent = field(row, "Allowance percent", "percent", unit.percent ?? "", "number");
         percent.closest("label").hidden = unit.mode !== "Allowance";
@@ -153,13 +168,18 @@
       try {
         candidate = text.trim() ? JSON.parse(text.trim()) : [];
       } catch (error) {
-        byId("business-unit-problems").textContent = `JSON parse error: ${error.message}`;
+        jsonDraftProblem = `JSON parse error: ${error.message}`;
+        renderValidation();
+        validateCurrentAnswers();
         return;
       }
       if (!Array.isArray(candidate) || candidate.some((item) => !isPlainObject(item))) {
-        byId("business-unit-problems").textContent = "BusinessUnits JSON must be an array of objects.";
+        jsonDraftProblem = "BusinessUnits JSON must be an array of objects.";
+        renderValidation();
+        validateCurrentAnswers();
         return;
       }
+      jsonDraftProblem = "";
       businessUnits = candidate;
       render();
       markPreflightStale();

@@ -5,7 +5,17 @@
     const { byId, checkFields } = deps;
 
     function fieldForPath(path) {
-      const rootName = String(path || "").split(/[.\[]/)[0];
+      const text = String(path || "");
+      const exact = document.querySelector(`[name="${CSS.escape(text)}"]`);
+      if (exact) return exact;
+      const bu = text.match(/^BusinessUnits\[(\d+)\](?:\.([A-Za-z]+))?$/);
+      if (bu) {
+        const row = document.querySelector(`[data-bu-index="${CSS.escape(bu[1])}"]`);
+        if (row && bu[2]) return row.querySelector(`[data-bu-field="${CSS.escape(bu[2])}"]`);
+        if (row) return row.querySelector("input, select, button");
+      }
+      if (text.startsWith("BusinessUnits")) return byId("business-units");
+      const rootName = text.split(/[.\[]/)[0];
       if (!rootName) return null;
       if (rootName === "BusinessUnits") return byId("business-units");
       return document.querySelector(`[name="${CSS.escape(rootName)}"], [name^="${CSS.escape(rootName)}."]`);

@@ -91,7 +91,7 @@ test('T1 operator journey runs selected steps, shows failed rerun and records ex
     await page.getByText(/Passing preflight [0-9a-f]{12}/).waitFor();
     await page.getByRole('button', { name: 'Run selected steps' }).click();
     await page.getByText(/Gateway deployment failed|gateway-deployment failed|\[redacted\] failed/).waitFor();
-    await page.getByText(/Install-ClaudeGateway\.ps1 -Steps gateway-deployment/).waitFor();
+    await page.locator('#run-output').getByText(/Install-ClaudeGateway\.ps1 -Steps gateway-deployment/).waitFor();
     await page.getByRole('button', { name: 'Re-run failed step' }).click();
     await page.locator('#rerun-status').getByText(/Re-run finished/).waitFor();
     const runs = await waitForInstallerRuns(app, 2);

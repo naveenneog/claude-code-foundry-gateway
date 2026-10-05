@@ -1,31 +1,34 @@
 (function () {
   "use strict";
-  const { buildPortableCommands, collectAnswersFromEntries, fieldGroups, fieldsByCheckId, isFieldActive, validateAnswers, validateBusinessUnits, isPlainObject } = globalThis.ClaudeInstallerUiModel;
+  const { buildPortableCommands, collectAnswersFromEntries, fieldGroups, fieldsByCheckId, isFieldActive, validateAnswers, validateBusinessUnits, isPlainObject, withEffectiveAddressDefaults } = globalThis.ClaudeInstallerUiModel;
   let schema;
   let identity = {};
-  let lastFailedStep = "";
+  let runHost;
   let businessUnitsEditor;
   let csrfToken = "";
   let sessionMode = "live";
   let sessionReason = "";
-  let activeRunId = "";
-  let activeStepId = "";
-  let runActive = false;
-  let lastRunSeq = 0;
   let preflightFingerprint = "";
   let preflightStale = true;
   let preflightHadResult = false;
+  let preflightIdentity = null;
+  let preflightStaleReason = "";
+  let preflightScope = null;
   let validationProblems = [];
   let checkFields = {};
   let prefill;
   let actions;
   let problems;
-  const maxRunOutputLines = 2000;
-  let runOutputLines = [];
-  let removedRunOutputLines = 0;
+  let azureBusy = false;
 
   function byId(id) {
     return document.getElementById(id);
+  }
+
+  function scopeCovers(steps) {
+    if (preflightScope === "full") return true;
+    if (!Array.isArray(preflightScope)) return false;
+    return steps.every((step) => preflightScope.includes(step));
   }
 
   function clearChildren(node) {
@@ -197,6 +200,7 @@
     input.name = name;
     input.id = `field-${name.replace(/[^A-Za-z0-9_-]/g, "-")}`;
     input.type = "text";
+    input.setAttribute("aria-describedby", `${input.id}-error`);
     label.append(input, createErrorNode(`${input.id}-error`));
     parent.append(label);
   }
@@ -255,7 +259,7 @@
         {
           checkId: "answers.schema",
           path: "BusinessUnits",
-          message: error.message,
+          message: "Correct the JSON view.",
           remedy: "Correct the JSON view.",
         },
       ];
@@ -288,6 +292,7 @@
 
   function markPreflightStale() {
     preflightStale = preflightHadResult;
+    if (preflightStale) preflightStaleReason = "Run preflight after changing answers or steps.";
     preflightFingerprint = "";
     refreshConditionalVisibility();
     validateCurrentAnswers();
@@ -297,24 +302,96 @@
     return validationProblems.length > 0;
   }
 
+  function pfxNeedsTerminal() {
+    try {
+      const answers = Object.fromEntries(withEffectiveAddressDefaults(collectAnswers()));
+      return answers.AddressMode === "custom" && answers.AddressCertificateSource === "Pfx";
+    } catch {
+      return false;
+    }
+  }
+
+  function identityDiff(before, after) {
+    if (!before || !after) return [];
+    const fields = [
+      ["signedIn", "signed-in state"],
+      ["user", "user"],
+      ["tenantId", "tenant"],
+      ["subscriptionId", "subscription"],
+    ];
+    return fields.filter(([key]) => String(before[key] ?? "") !== String(after[key] ?? "")).map(([, label]) => label);
+  }
+
+  function markIdentityStale(reason) {
+    preflightStale = true;
+    preflightFingerprint = "";
+    preflightStaleReason = reason || "The Azure identity changed. Run preflight again.";
+    updateRunAdmission();
+  }
+
+  function setActionText(id, text, alert = false) {
+    const button = byId(id);
+    if (!button) return;
+    const status = document.getElementById(`${id}-status`) || document.createElement("p");
+    if (!status.id) {
+      status.id = `${id}-status`;
+      button.insertAdjacentElement("afterend", status);
+    }
+    status.setAttribute("role", alert ? "alert" : "status");
+    status.textContent = text;
+  }
+
+  function azureControls() {
+    return [
+      ...document.querySelectorAll("[data-prefill-kind]"),
+      byId("refresh-identity"),
+      byId("preflight"),
+      byId("run"),
+      byId("full-run"),
+      byId("rerun"),
+    ].filter(Boolean);
+  }
+
+  function setAzureBusy(value, starter) {
+    azureBusy = value;
+    for (const control of azureControls()) {
+      if (control === starter || control.dataset.actionBusy === "true") continue;
+      control.disabled = value;
+    }
+    if (!value) updateRunAdmission();
+  }
+
   function updateRunAdmission() {
-    const admitted = liveMode() && preflightFingerprint && !preflightStale && !hasBlockingProblems() && !runActive;
+    const terminalPfx = pfxNeedsTerminal();
+    const selected = selectedSteps();
+    const scopeBlocksFull = preflightFingerprint && !preflightStale && preflightScope !== "full";
+    const runScopeOk = selected.length > 0 && scopeCovers(selected);
+    const rerunScopeOk = runHost?.failedStep() && scopeCovers([runHost.failedStep()]);
+    const admitted = liveMode() && preflightFingerprint && !preflightStale && !hasBlockingProblems() && !runHost?.isActive() && !azureBusy && !terminalPfx;
     for (const id of ["run", "full-run", "rerun"]) {
       const button = byId(id);
-      if (button && button.dataset.actionBusy !== "true") button.disabled = id === "rerun" ? !lastFailedStep || !admitted : !admitted;
+      if (button && button.dataset.actionBusy !== "true") {
+        if (id === "full-run") button.disabled = azureBusy || !admitted || scopeBlocksFull;
+        else if (id === "run") button.disabled = azureBusy || !admitted || !runScopeOk;
+        else button.disabled = azureBusy || !admitted || !rerunScopeOk;
+      }
     }
     for (const id of ["preflight", "download"]) {
       const button = byId(id);
-      if (button && button.dataset.actionBusy !== "true") button.disabled = hasBlockingProblems();
+      if (button && button.dataset.actionBusy !== "true") button.disabled = hasBlockingProblems() || (id === "preflight" && azureBusy);
     }
     const stop = byId("stop-run");
-    if (stop && stop.dataset.actionBusy !== "true") stop.disabled = !runActive;
+    if (stop && stop.dataset.actionBusy !== "true") stop.disabled = !runHost?.isActive();
     const state = byId("preflight-state");
     if (!state) return;
     if (hasBlockingProblems()) state.textContent = `${preflightStale ? "Preflight is stale. " : ""}Validation problems block download, preflight, run and command copying.`;
     else if (!liveMode()) state.textContent = `Static fallback: ${sessionReason || "use the generated commands."}`;
+    else if (terminalPfx) state.textContent = "A PFX certificate is installed from a terminal because the installer asks for the PFX password only when it runs without -Yes.";
+    else if (azureBusy) state.textContent = "Azure CLI work is already active.";
+    else if (preflightFingerprint && !preflightStale && scopeBlocksFull) state.textContent = `Passing preflight ${preflightFingerprint.slice(0, 12)} is current. Full run needs a preflight with no step selected.`;
+    else if (preflightFingerprint && !preflightStale && selected.length && !scopeCovers(selected)) state.textContent = `Passing preflight ${preflightFingerprint.slice(0, 12)} is current. Run selected steps needs a preflight of that selection.`;
     else if (admitted) state.textContent = `Passing preflight ${preflightFingerprint.slice(0, 12)} is current.`;
-    else if (preflightStale && preflightHadResult) state.textContent = "Preflight is stale. Run preflight after changing answers or steps.";
+    else if (preflightStale && preflightHadResult) state.textContent = `Preflight is stale. ${preflightStaleReason || "Run preflight again."}`;
     else state.textContent = "No passing preflight yet.";
   }
 
@@ -343,6 +420,7 @@
       appendText(root, title, "h3");
       appendText(root, value, "pre");
     }
+    if (!commands.powershellRun.includes(" -Yes ")) appendText(root, "The installer asks for the PFX password in the terminal.", "p");
     appendText(root, "PowerShell applies every current answer and selected step.", "p");
     if (commands.bash && commands.bashRun) {
       for (const [title, value] of [
@@ -369,6 +447,7 @@
     } catch {}
     renderCommands(
       buildPortableCommands(schema, "./answers.json", {
+        answers,
         progressPath: "./install-progress.ndjson",
         steps: selectedSteps(),
         fullRun: !selectedSteps().length,
@@ -399,10 +478,15 @@
     problems.markFields(checks);
     if (result.preflight?.result === "PASS" && result.fingerprint) {
       preflightFingerprint = result.fingerprint;
+      preflightIdentity = result.identity || null;
+      preflightScope = result.scope || null;
+      preflightStaleReason = "";
       preflightStale = false;
       preflightHadResult = true;
     } else {
       preflightFingerprint = "";
+      preflightIdentity = null;
+      preflightScope = null;
       preflightStale = false;
       preflightHadResult = true;
     }
@@ -424,7 +508,10 @@
       const input = document.createElement("input");
       input.type = "checkbox";
       input.value = step.id;
-      input.addEventListener("change", markPreflightStale);
+      input.addEventListener("change", () => {
+        refreshCommands();
+        updateRunAdmission();
+      });
       label.append(input);
       appendText(label, ` ${step.id} - ${step.title || ""}`);
       parent.append(label);
@@ -433,108 +520,6 @@
 
   function selectedSteps() {
     return [...document.querySelectorAll("#step-list input:checked")].map((input) => input.value);
-  }
-
-  async function streamRun(body) {
-    if (hasBlockingProblems()) return;
-    runActive = true;
-    updateRunAdmission();
-    const res = await fetch("./api/run/stream", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-csrf-token": csrfToken,
-      },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      runActive = false;
-      updateRunAdmission();
-      let data = {};
-      try {
-        data = await res.json();
-      } catch {}
-      const error = new Error(data.error || `run failed with HTTP ${res.status}`);
-      error.data = { ...data, status: res.status };
-      throw error;
-    }
-    try {
-      await readRunStream(res);
-      if (runActive) {
-        runActive = false;
-        updateRunAdmission();
-      }
-    } catch (error) {
-      runActive = false;
-      updateRunAdmission();
-      throw error;
-    }
-  }
-
-  function appendRunLine(text) {
-    const output = byId("run-output");
-    runOutputLines.push(text);
-    if (runOutputLines.length > maxRunOutputLines) {
-      const removed = runOutputLines.length - maxRunOutputLines;
-      runOutputLines.splice(0, removed);
-      removedRunOutputLines += removed;
-    }
-    const shown = removedRunOutputLines ? [`Earlier run output lines were removed (${removedRunOutputLines}).`, ...runOutputLines] : runOutputLines;
-    output.textContent = `${shown.join("\n")}\n`;
-  }
-
-  async function readRunStream(res) {
-    const output = byId("run-output");
-    if (!activeRunId) {
-      output.textContent = "";
-      runOutputLines = [];
-      removedRunOutputLines = 0;
-    }
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split(/\r?\n/);
-      buffer = lines.pop() || "";
-      for (const line of lines) {
-        if (!line) continue;
-        const event = JSON.parse(line);
-        lastRunSeq = event.seq || lastRunSeq;
-        if (event.type === "progress" && event.event === "started") activeStepId = event.stepId || activeStepId;
-        appendRunLine(`${event.type}: ${event.stepId || ""} ${event.event || ""} ${event.line || event.message || ""}`);
-        if (event.type === "summary") {
-          activeRunId = "";
-          activeStepId = "";
-          runActive = false;
-          lastFailedStep = event.failedStepId || "";
-          updateRunAdmission();
-          if (event.resumeCommand) appendRunLine(`Resume: ${event.resumeCommand}`);
-        }
-      }
-    }
-  }
-
-  async function refreshRunStatus() {
-    if (location.protocol === "file:") return;
-    const status = await (await fetch("./api/run/status")).json();
-    if (status.id && status.state === "running") {
-      activeRunId = status.id;
-      activeStepId = status.currentStepId || status.steps?.[0] || "";
-      runActive = true;
-      updateRunAdmission();
-      try {
-        const res = await fetch(`./api/run/attach?after=${lastRunSeq}`);
-        await readRunStream(res);
-      } finally {
-        if (runActive) {
-          runActive = false;
-          updateRunAdmission();
-        }
-      }
-    }
   }
 
   async function refreshIdentity() {
@@ -546,7 +531,9 @@
       byId("identity").textContent = `Static fallback: ${sessionReason || "Azure reads and installer runs need the generated commands."}`;
       return;
     }
-    identity = await (await fetch("./api/identity")).json();
+    identity = await getJson("./api/identity");
+    const changed = identityDiff(preflightIdentity, identity);
+    if (changed.length) markIdentityStale(`The Azure identity changed (${changed.join(", ")}). Run preflight again.`);
     const target = byId("identity");
     target.textContent = identity.signedIn ? `Signed-in account: ${identity.user}; tenant ${identity.tenantId}; subscription ${identity.subscriptionName} (${identity.subscriptionId}).` : `Signed-in account: not signed in. ${identity.signInCommand || "Run az login --use-device-code."}`;
   }
@@ -567,7 +554,18 @@
       validateBusinessUnits,
       validateCurrentAnswers,
     });
-    actions = globalThis.ClaudeInstallerActions.create({ onSettled: updateRunAdmission });
+    actions = globalThis.ClaudeInstallerActions.create({ onSettled: updateRunAdmission, onAzureBusy: setAzureBusy });
+    runHost = globalThis.ClaudeInstallerRun.create({
+      byId,
+      csrfToken: () => csrfToken,
+      getJson,
+      hasBlockingProblems,
+      postJson,
+      onIdentityStale: markIdentityStale,
+      readIdentityAfterRun: refreshIdentity,
+      setStatusText: setActionText,
+      updateRunAdmission,
+    });
     prefill = globalThis.ClaudeInstallerPrefill.create({
       liveMode,
       markPreflightStale,
@@ -581,7 +579,7 @@
       sessionReason = session.reason || "";
     } else sessionMode = "static";
     renderGroupedFields();
-    byId("refresh-identity").onclick = () => actions.run(byId("refresh-identity"), { busyText: "Refreshing account...", successText: "Account refreshed." }, refreshIdentity);
+    byId("refresh-identity").onclick = () => actions.run(byId("refresh-identity"), { busyText: "Refreshing account...", successText: "Account refreshed.", azure: true }, refreshIdentity);
     byId("signin").onclick = () => actions.run(byId("signin"), { busyText: "Preparing sign-in command...", successText: "Sign-in command shown." }, async () => {
       byId("signin-command").textContent = identity.signInCommand || "az login --use-device-code";
     });
@@ -598,9 +596,13 @@
       if (event.target?.closest("#business-unit-tree") || event.target?.matches("[name], #business-units")) markPreflightStale();
     });
     document.addEventListener("change", (event) => {
-      if (event.target?.matches("[name], #step-list input")) markPreflightStale();
+      if (event.target?.matches("[name]")) markPreflightStale();
+      else if (event.target?.matches("#step-list input")) {
+        refreshCommands();
+        updateRunAdmission();
+      }
     });
-    byId("preflight").onclick = () => actions.run(byId("preflight"), { busyText: "Running preflight...", successText: "Preflight finished." }, async () => {
+    byId("preflight").onclick = () => actions.run(byId("preflight"), { busyText: "Running preflight...", successText: "Preflight finished.", azure: true }, async () => {
       if (validateCurrentAnswers().length) return;
       const steps = selectedSteps();
       renderPreflight(
@@ -611,22 +613,22 @@
       );
     });
     byId("steps").onclick = () => actions.run(byId("steps"), { busyText: "Listing steps...", successText: "Steps listed." }, async () => renderSteps(await getJson("./api/steps")));
-    byId("run").onclick = () => actions.run(byId("run"), { busyText: "Running selected steps...", successText: "Run finished." }, async () => {
+    byId("run").onclick = () => actions.run(byId("run"), { busyText: "Running selected steps...", successText: "Run finished.", azure: true }, async () => {
       const steps = selectedSteps();
       if (!steps.length) throw new Error("Select at least one step, or use Full run.");
-      activeRunId = "";
-      await streamRun({
+      runHost.resetActiveRun();
+      return runHost.streamRun({
         answers: collectAnswers(),
         steps,
         fingerprint: preflightFingerprint,
       });
     });
-    byId("full-run").onclick = () => actions.run(byId("full-run"), { busyText: "Running full installer...", successText: "Full run finished." }, async () => {
+    byId("full-run").onclick = () => actions.run(byId("full-run"), { busyText: "Running full installer...", successText: "Full run finished.", azure: true }, async () => {
       const answers = collectAnswers();
       const resourceGroup = answers.ResourceGroup || "(not set)";
-      if (!globalThis.confirm(`Run the full installer as ${identity.user || "the current account"} against resource group ${resourceGroup}?`)) return;
-      activeRunId = "";
-      await streamRun({
+      if (!globalThis.confirm(`Run the full installer as ${identity.user || "the current account"} against resource group ${resourceGroup}?`)) return { statusText: "No full run was started." };
+      runHost.resetActiveRun();
+      return runHost.streamRun({
         answers,
         steps: [],
         fullRun: true,
@@ -635,21 +637,17 @@
         fingerprint: preflightFingerprint,
       });
     });
-    byId("rerun").onclick = () => actions.run(byId("rerun"), { busyText: "Re-running failed step...", successText: "Re-run finished." }, async () => {
+    byId("rerun").onclick = () => actions.run(byId("rerun"), { busyText: "Re-running failed step...", successText: "Re-run finished.", azure: true }, async () => {
+      const lastFailedStep = runHost.failedStep();
       if (lastFailedStep)
-        await streamRun({
+        return runHost.streamRun({
           answers: collectAnswers(),
           steps: [lastFailedStep],
           fingerprint: preflightFingerprint,
         });
     });
     byId("stop-run").onclick = () => actions.run(byId("stop-run"), { busyText: "Stopping run...", successText: "Stop requested." }, async () => {
-      const status = await getJson("./api/run/status");
-      const runId = status.id || activeRunId;
-      const step = status.currentStepId || activeStepId || "the current step";
-      if (!runId || !globalThis.confirm(`Stop run at ${step}? Running the same steps again resumes from the install checkpoint.`)) return;
-      const result = await postJson("./api/run/stop", { runId });
-      appendRunLine(`stopped: ${result.message}`);
+      return runHost.stopRun();
     });
     byId("download").onclick = () => actions.run(byId("download"), { busyText: "Preparing answers.json...", successText: "answers.json is ready." }, async () => {
       if (validateCurrentAnswers().length) return;
@@ -679,9 +677,11 @@
     }
     refreshCommands();
     void refreshIdentity().catch((error) => {
-      byId("identity").textContent = error.message;
+      byId("identity").textContent = error.data?.reason === "azure-busy" ? "An installer run is using Azure CLI. Wait for it to finish, then try again." : error.message;
     });
-    void refreshRunStatus().catch(() => {});
+    void runHost.refreshRunStatus().catch((error) => {
+      runHost.handleAttachError(error);
+    });
   }
 
   main().catch((error) => {

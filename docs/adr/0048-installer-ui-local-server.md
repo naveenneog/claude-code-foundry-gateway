@@ -93,6 +93,11 @@ before creating a run because the page does not collect the PFX password and the
 that password only when it runs without `-Yes` (`tools/installer-ui/server.mjs:489-491`;
 `Install-ClaudeGateway.ps1:1164-1166`).
 
+The page mirrors the same decision: PFX custom-address answers disable browser run buttons and render
+the PowerShell run command without `-Yes`, while omitted custom-address certificate and DNS modes use
+the installer defaults for visibility and validation only (`tools/installer-ui/installer-ui.js:305-312`;
+`tools/installer-ui/ui-model.js:155-162`; `tools/installer-ui/ui-model.js:582-620`).
+
 Live mode uses the configured PowerShell command, `pwsh` by default. `listenAsync` checks PowerShell
 once and requires major version 7 or newer. If that check fails, `/api/session` reports static mode
 and live child-spawning routes return `503`. The browser also has a `file://` static path
@@ -147,6 +152,11 @@ subscription requires a new preflight (`scripts/Get-ClaudeInstallerUiIdentity.ps
 A PFX certificate run from the page is refused. Installing a PFX certificate remains a terminal
 operation because the installer asks for the PFX password only when it is not running with `-Yes`
 (`tools/installer-ui/server.mjs:489-491`; `Install-ClaudeGateway.ps1:1164-1166`).
+
+The browser treats invalid business-unit JSON as a blocking draft instead of replacing it from the
+last valid tree, and it keeps deployment choices scoped to the current account. Nested problem paths
+focus their exact controls, including business-unit rows (`tools/installer-ui/installer-ui-business-units.js:169-184`;
+`tools/installer-ui/installer-ui-prefill.js:109-126`; `tools/installer-ui/installer-ui-problems.js:7-22`).
 
 The run tail and fingerprint store are in-memory. Restarting the server loses them, while the
 installer checkpoint remains the resume authority for a later installer run

@@ -2,7 +2,7 @@
   "use strict";
 
   function createPrefill(deps) {
-    const { liveMode, markPreflightStale, postJson } = deps;
+    const { actions, liveMode, markPreflightStale, postJson } = deps;
     const deploymentChoices = new Set();
 
     function showFieldError(field, message, remedy) {
@@ -56,14 +56,17 @@
       const kind = button.dataset.prefillKind;
       const field = button.closest("label")?.querySelector("[name]");
       const select = button.closest("label")?.querySelector("[data-prefill-select]");
-      try {
-        const data = await load(kind);
-        if (kind === "subscriptions") fillSelect(select, data.subscriptions || [], "id", (item) => `${item.name} (${item.id})`);
-        if (kind === "foundryAccounts") fillSelect(select, data.foundryAccounts || [], "name", (item) => `${item.name} / ${item.resourceGroup}`);
-        field?.focus();
-      } catch (error) {
-        showError(error, field?.name || "SubscriptionId");
-      }
+      await actions.run(button, { busyText: "Reading Azure...", successText: "Azure values loaded.", azure: true }, async () => {
+        try {
+          const data = await load(kind);
+          if (kind === "subscriptions") fillSelect(select, data.subscriptions || [], "id", (item) => `${item.name} (${item.id})`);
+          if (kind === "foundryAccounts") fillSelect(select, data.foundryAccounts || [], "name", (item) => `${item.name} / ${item.resourceGroup}`);
+          field?.focus();
+        } catch (error) {
+          showError(error, field?.name || "SubscriptionId");
+          throw error;
+        }
+      });
     }
 
     async function handleChoice(event) {
@@ -74,15 +77,29 @@
         if (select.dataset.prefillSelect === "SubscriptionId") {
           document.querySelector('[name="SubscriptionId"]').value = item.id || "";
           markPreflightStale();
-          const data = await load("foundryAccounts");
-          fillSelect(document.querySelector('[data-prefill-select="FoundryAccount"]'), data.foundryAccounts || [], "name", (x) => `${x.name} / ${x.resourceGroup}`);
+          const data = await actions.run(document.querySelector('[data-prefill-kind="foundryAccounts"]'), { busyText: "Reading Azure...", successText: "Azure values loaded.", azure: true }, async () => {
+            try {
+              return await load("foundryAccounts");
+            } catch (error) {
+              showError(error, "FoundryAccount");
+              throw error;
+            }
+          });
+          if (data) fillSelect(document.querySelector('[data-prefill-select="FoundryAccount"]'), data.foundryAccounts || [], "name", (x) => `${x.name} / ${x.resourceGroup}`);
         }
         if (select.dataset.prefillSelect === "FoundryAccount") {
           document.querySelector('[name="FoundryAccount"]').value = item.name || "";
           document.querySelector('[name="FoundryResourceGroup"]').value = item.resourceGroup || "";
           markPreflightStale();
-          const data = await load("deployments");
-          updateDeploymentChoices(data.deployments || []);
+          const data = await actions.run(select, { busyText: "Reading Azure...", successText: "Azure values loaded.", azure: true }, async () => {
+            try {
+              return await load("deployments");
+            } catch (error) {
+              showError(error, "FoundryResourceGroup");
+              throw error;
+            }
+          });
+          if (data) updateDeploymentChoices(data.deployments || []);
         }
       } catch (error) {
         showError(error, select.dataset.prefillSelect || "SubscriptionId");
@@ -90,15 +107,18 @@
     }
 
     function updateDeploymentChoices(deployments) {
+      deploymentChoices.clear();
       for (const item of deployments) deploymentChoices.add(item.name);
       for (const select of document.querySelectorAll("[data-model-select]")) {
+        const input = select.closest("label").querySelector("input[name]");
+        const typed = new Set(input.value.split(",").map((x) => x.trim()).filter(Boolean));
         const chosen = new Set([...select.selectedOptions].map((o) => o.value));
         while (select.firstChild) select.removeChild(select.firstChild);
         for (const name of deploymentChoices) {
           const option = document.createElement("option");
           option.value = name;
           option.textContent = name;
-          option.selected = chosen.has(name);
+          option.selected = chosen.has(name) || typed.has(name);
           select.append(option);
         }
       }

@@ -8,7 +8,7 @@ import { createInstallerUiServer } from '../tools/installer-ui/server.mjs';
 
 test('the form uses fixed script routes and no string-built DOM insertion sinks', async () => {
   const html = await readFile(new URL('../tools/installer-ui/index.html', import.meta.url), 'utf8');
-  assert.match(html, /<script defer src="\.\/ui-model\.js"><\/script>\s*<script defer src="\.\/installer-ui-business-units\.js"><\/script>\s*<script defer src="\.\/installer-ui-prefill\.js"><\/script>\s*<script defer src="\.\/installer-ui-actions\.js"><\/script>\s*<script defer src="\.\/installer-ui-problems\.js"><\/script>\s*<script defer src="\.\/installer-ui\.js"><\/script>/);
+  assert.match(html, /<script defer src="\.\/ui-model\.js"><\/script>\s*<script defer src="\.\/installer-ui-business-units\.js"><\/script>\s*<script defer src="\.\/installer-ui-prefill\.js"><\/script>\s*<script defer src="\.\/installer-ui-actions\.js"><\/script>\s*<script defer src="\.\/installer-ui-problems\.js"><\/script>\s*<script defer src="\.\/installer-ui-run\.js"><\/script>\s*<script defer src="\.\/installer-ui\.js"><\/script>/);
   assert.doesNotMatch(html, /type="module"|import\s+|export\s+/);
   assert.doesNotMatch(html, /<script>\s*\(/);
   const scripts = {
@@ -17,6 +17,7 @@ test('the form uses fixed script routes and no string-built DOM insertion sinks'
     prefill: await readFile(new URL('../tools/installer-ui/installer-ui-prefill.js', import.meta.url), 'utf8'),
     actions: await readFile(new URL('../tools/installer-ui/installer-ui-actions.js', import.meta.url), 'utf8'),
     problems: await readFile(new URL('../tools/installer-ui/installer-ui-problems.js', import.meta.url), 'utf8'),
+    run: await readFile(new URL('../tools/installer-ui/installer-ui-run.js', import.meta.url), 'utf8'),
   };
   for (const source of Object.values(scripts)) assert.doesNotMatch(source, /innerHTML|insertAdjacentHTML|import\s+|export\s+/);
   for (const name of ['buildPortableCommands', 'coerceAnswerValue', 'collectAnswersFromEntries', 'fieldsByCheckId', 'quoteBash', 'quotePowerShell', 'validateBusinessUnits']) {

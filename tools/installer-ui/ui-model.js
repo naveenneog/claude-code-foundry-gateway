@@ -152,6 +152,14 @@
     return false;
   }
 
+  function withEffectiveAddressDefaults(values) {
+    const out = new Map(typeof values?.entries === "function" ? values.entries() : Object.entries(values || {}));
+    // Install-ClaudeGateway.ps1 defaults: scripts/ClaudeGatewayAddressInput.ps1 lines 27-28.
+    if (out.get("AddressMode") === "custom" && !out.get("AddressCertificateSource")) out.set("AddressCertificateSource", "KeyVault");
+    if (out.get("AddressMode") === "custom" && !out.get("AddressDnsMode")) out.set("AddressDnsMode", out.get("AddressDnsZoneResourceId") ? "AzureDns" : "External");
+    return out;
+  }
+
   function effectiveRequires(schema, name) {
     const own = [...(schema.properties?.[name]?.requires || [])];
     if (name.startsWith("Address") && name !== "AddressMode") own.unshift({ answer: "AddressMode", equals: "custom" });
@@ -162,12 +170,12 @@
   }
 
   function isFieldActive(schema, name, values) {
-    return effectiveRequires(schema, name).every((condition) => holdsCondition(condition, values));
+    return effectiveRequires(schema, name).every((condition) => holdsCondition(condition, withEffectiveAddressDefaults(values)));
   }
 
   function collectAnswersFromEntries(schema, entries, businessUnitsText = "") {
     const out = { schemaVersion: 1 };
-    const values = new Map(entries);
+    const values = withEffectiveAddressDefaults(entries);
     for (const [name, property] of Object.entries(schema.properties || {})) {
       if (!property["x-appliedBy"]?.includes(INSTALLER) || schema["x-secrets"]?.[name]) continue;
       if (!entries.has(name) || !isFieldActive(schema, name, values)) continue;
@@ -226,7 +234,7 @@
       ids.add(unit.id);
       if (!unit.group || /[',:]/.test(String(unit.group))) problems.push(`${label}.group name contains ', comma or colon`);
       if (unit.parent && !/^[a-z0-9][a-z0-9-]*$/.test(String(unit.parent))) problems.push(`${label}.parent is not a business-unit id`);
-      if (typeof unit.monthlyUsdBudget !== "number" || !Number.isInteger(unit.monthlyUsdBudget) || unit.monthlyUsdBudget < 0 || unit.monthlyUsdBudget > 100000000) problems.push(`${label}.monthlyUsdBudget is outside the monthly budget range`);
+      if (typeof unit.monthlyUsdBudget !== "number" || !Number.isFinite(unit.monthlyUsdBudget) || unit.monthlyUsdBudget < 0 || unit.monthlyUsdBudget > 100000000) problems.push(`${label}.monthlyUsdBudget is outside the monthly budget range`);
       if (!["Strict", "Allowance", "Notify"].includes(unit.mode)) problems.push(`${label}.mode is not Strict, Allowance or Notify`);
       if (unit.mode === "Allowance" && unit.percent === undefined) problems.push(`${label}.percent is required for Allowance`);
       else if (unit.mode === "Allowance" && (!Number.isInteger(unit.percent) || unit.percent < 1 || unit.percent > 100)) problems.push(`${label}.percent must be 1-100`);
@@ -449,12 +457,13 @@
       if (dupes.length) return [problem("answers.schema", "", `the answers file names properties that differ only in case or repeat: ${dupes.join(", ")}`, "Keep one spelling of each name.")];
     }
     if (!isPlainObject(answers)) return [problem("answers.schema", "", "the answers file is not a JSON object", "Write the answers as one JSON object.")];
+    const effectiveAnswers = Object.fromEntries(withEffectiveAddressDefaults(answers));
     const out = [];
     const canon = new Map();
     const keyOf = new Map();
     const props = schema.properties || {};
     const aliases = new Map(Object.entries(props).flatMap(([name, prop]) => (prop["x-flowKeys"] || []).map((alias) => [alias, name])));
-    for (const [key, value] of Object.entries(answers)) {
+    for (const [key, value] of Object.entries(effectiveAnswers)) {
       const add = (message, remedy) => out.push(problem("answers.schema", key, message, remedy));
       const matchingPattern = Object.entries(schema.patternProperties || {}).find(([pattern]) => new RegExp(pattern).test(key));
       if (schema["x-secrets"]?.[key]) {
@@ -561,12 +570,12 @@
   // The steps the bash installer runs: CKPT_ORDER in scripts/install-checkpoint.sh.
   const bashInstallerSteps = Object.freeze(["resource-group", "gateway-deployment", "entra-groups", "sync", "onboarding-package"]);
 
-  function installerArguments({ engine, action, answersPath = "./answers.json", progressPath = "./install-progress.ndjson", steps = [], fullRun = false }) {
+  function installerArguments({ engine, action, answersPath = "./answers.json", progressPath = "./install-progress.ndjson", steps = [], fullRun = false, terminalPfx = false }) {
     if (engine === "pwsh") {
       const args = ["-AnswersPath", answersPath];
       if (action === "preflight") return [...args, "-Preflight", "-Json"];
       if (action === "run") {
-        const run = [...args, "-Yes", "-ProgressPath", progressPath];
+        const run = terminalPfx ? [...args, "-ProgressPath", progressPath] : [...args, "-Yes", "-ProgressPath", progressPath];
         if (!fullRun && steps.length) run.push("-Steps", steps.join(","));
         return run;
       }
@@ -601,6 +610,8 @@
       if (presentAnswers.has(name) && Array.isArray(property["x-appliedBy"]) && !property["x-appliedBy"].includes("install-claude-gateway.sh")) bashDoesNotApply.push(name);
     }
     const bashStepsNotApply = steps.filter((step) => !bashSteps.has(step));
+    const effective = Object.fromEntries(withEffectiveAddressDefaults(options.answers || {}));
+    const terminalPfx = effective.AddressMode === "custom" && effective.AddressCertificateSource === "Pfx";
     const bashAvailable = bashDoesNotApply.length === 0 && bashStepsNotApply.length === 0;
     return {
       powershell: shellCommand("pwsh", "preflight", { answersPath }),
@@ -609,6 +620,7 @@
         progressPath,
         steps,
         fullRun,
+        terminalPfx,
       }),
       bash: bashAvailable ? shellCommand("bash", "preflight", { answersPath }) : "",
       bashRun: bashAvailable
@@ -633,6 +645,7 @@
     coerceAnswerValue,
     collectAnswersFromEntries,
     effectiveRequires,
+    withEffectiveAddressDefaults,
     fieldGroups,
     fieldsByCheckId,
     installerArguments,

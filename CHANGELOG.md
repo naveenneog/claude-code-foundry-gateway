@@ -95,6 +95,12 @@ exact streaming cache-creation detail remains **U13**.
   shapes to the terminal while keeping the HTTP refusal generic.
   The Installer UI architecture diagram now lists the split page scripts, producer PowerShell
   sources and the session and Azure-lease modules as freshness sources.
+  The Installer UI page now reports failed, stopped and summary-less runs accurately, disables Azure
+  CLI actions while another Azure action is in progress, sends PFX custom-address runs to the terminal,
+  treats invalid business-unit JSON as a blocking draft, accepts decimal business-unit budgets, marks
+  preflights stale when identity changes, enforces preflight step scope on run buttons, applies custom
+  address defaults for validation, scopes deployment choices to the current account and focuses nested
+  problem paths on their exact controls.
 - **Installers read an answers file, check it before any change, run selected steps and write a progress stream (P92, phase 0).**
   One answers file, described by `schemas/claude-gateway.answers.schema.json`, feeds
   `Install-ClaudeGateway.ps1 -AnswersPath`, `install-claude-gateway.sh --answers-file` and

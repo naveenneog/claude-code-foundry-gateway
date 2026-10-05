@@ -32,11 +32,26 @@
     function errorText(error) {
       const data = error?.data || {};
       const pieces = [];
-      pieces.push(data.error || error?.message || "The action failed.");
+      pieces.push(formatError(data, error));
       if (data.reason === "preflight-required") pieces.push("Run the preflight again, then retry this action.");
+      else if (data.reason === "azure-busy") pieces.push("Wait for it to finish, then try again.");
       else if (data.remedy) pieces.push(data.remedy);
       else pieces.push("Check the values above and try again.");
       return pieces.join(" ");
+    }
+
+    function operationName(operation) {
+      return {
+        identity: "an account read",
+        prefill: "a prefill read",
+        preflight: "a preflight",
+        run: "an installer run",
+      }[operation] || "Azure CLI work";
+    }
+
+    function formatError(data, error) {
+      if (data.reason === "azure-busy") return `${operationName(data.operation)} is already using Azure CLI.`;
+      return data.error || error?.message || "The action failed.";
     }
 
     async function run(button, options, action) {
@@ -52,12 +67,13 @@
       button.dataset.actionBusy = "true";
       button.disabled = true;
       button.textContent = busyText;
+      if (options.azure && typeof hostOptions.onAzureBusy === "function") hostOptions.onAzureBusy(true, button);
       appendText(status, busyText);
       if (hadFocus) status.focus();
       try {
         const result = await action();
         clearChildren(status);
-        appendText(status, successText);
+        appendText(status, result?.statusText || successText);
         return result;
       } catch (ex) {
         clearChildren(error);
@@ -68,6 +84,7 @@
         button.textContent = oldText;
         delete button.dataset.actionBusy;
         button.disabled = false;
+        if (options.azure && typeof hostOptions.onAzureBusy === "function") hostOptions.onAzureBusy(false, button);
 
         if (typeof hostOptions.onSettled === "function") hostOptions.onSettled(button);
         if (hadFocus) returnFocus(button, status);
@@ -87,4 +104,3 @@
 
   globalThis.ClaudeInstallerActions = { create: createActionHost };
 })();
-

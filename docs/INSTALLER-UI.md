@@ -70,6 +70,9 @@ moves keyboard focus to the action status line and then back to the button; duri
 reaches Stop run (`tools/installer-ui/installer-ui-actions.js:42-83`;
 `docs/status/P93.md:1604-1611`). The page has no keyboard shortcuts of its own
 (`docs/status/P93.md:1604-1611`).
+Account refresh, prefill, preflight and run actions share a page-level Azure-busy state. A 409
+`azure-busy` response is shown beside the used control with the operation that holds Azure CLI
+(`tools/installer-ui/installer-ui-actions.js:27-48`; `tools/installer-ui/installer-ui.js:345-363`).
 
 ## Security model
 
@@ -112,6 +115,9 @@ certificate password unless it is supplied on the command line
 (`Install-ClaudeGateway.ps1:1164-1166`; `Install-ClaudeGateway.ps1:1178-1179`).
 The live server refuses that run shape with `409` and `reason: pfx-needs-terminal` before creating a
 run (`tools/installer-ui/server.mjs:489-491`).
+The page also disables run buttons for a PFX custom address, keeps preflight available and renders
+the PowerShell run command without `-Yes`, so the installer asks for the PFX password in the terminal
+(`tools/installer-ui/installer-ui.js:305-312`; `tools/installer-ui/ui-model.js:582-620`).
 
 ## Run lifecycle and limits
 
@@ -156,6 +162,9 @@ response and stream say that the install checkpoint resumes when the same steps 
 If Stop run arrives after a run record exists but before the installer child is spawned, the server
 records the stop request and skips the spawn; if the child appears after the request, it is killed
 immediately (`tools/installer-ui/server.mjs:529-542`; `tools/installer-ui/server.mjs:570-578`).
+The browser run script reports non-zero summaries as alerts with the exit code, failed step and
+resume command, reports stopped summaries as status, and bounds reattaches for streams that end
+without a summary (`tools/installer-ui/installer-ui-run.js:50-129`).
 
 Read-only child routes use per-route timeouts: step list 60 seconds, identity 120 seconds, prefill
 120 seconds and preflight 600 seconds, with the test override `readOnlyTimeoutMs`
@@ -175,6 +184,10 @@ error while later valid progress lines still arrive (`tools/installer-ui/child-o
 | Optional parts | Renders company-address, existing-APIM reuse, Desktop sign-in, projection toggle, entitlement-store and business-unit answers that `Install-ClaudeGateway.ps1` applies. Fields with declarative conditions are hidden until their condition holds and hidden fields are not written to `answers.json`. The PFX password is not an answer, and the installer prompt behaviour is the one stated above (`tools/installer-ui/ui-model.js:33-58`; `tools/installer-ui/ui-model.js:140-189`; `tools/installer-ui/installer-ui.js:220-246`; `Install-ClaudeGateway.ps1:1164-1179`). |
 | Advanced | Renders projection renewal, resolver app, organisation quota, developer estimate, revocation window, model-organisation metadata, team-budget behaviour, unassigned-developer behaviour and the optional pending Claude deployment object (`tools/installer-ui/ui-model.js:59-78`; `tools/installer-ui/installer-ui.js:171-189`). |
 | Business units | Provides a two-level editor: add a unit, add a team under a unit, remove either, then serialize units before teams. Add unit and Add team focus the new row's first field. Remove focuses the row that takes the removed row's place, else the previous row, else Add unit. Fields are id, Entra group, monthly USD budget, mode and percent only for `Allowance`. Ids are lower-case letters, digits and hyphens, max 64; ids are unique; group names exclude `'`, `,` and `:`; `Allowance` requires percent 1-100; teams name one parent unit. The JSON view round-trips through the same validation (`tools/installer-ui/installer-ui-business-units.js:7-29`; `tools/installer-ui/installer-ui-business-units.js:65-158`; `tools/installer-ui/ui-model.js:214-233`; `tools/installer-ui/ui-model.js:504-542`). |
+Invalid business-unit JSON stays in the textarea as a blocking validation problem until it becomes a
+JSON array of objects again, and monthly USD budgets accept finite decimals in the schema range
+(`tools/installer-ui/installer-ui-business-units.js:16-31`; `tools/installer-ui/installer-ui-business-units.js:169-184`;
+`tools/installer-ui/ui-model.js:214-237`).
 | Review | Runs installer preflight and shows check, result, message, remedy and field links when a problem names or maps to an answer path. A passing preflight returns a 64-character SHA-256 fingerprint over canonical answers, engine and step scope. Failing checks mark fields through a problem path when present, otherwise through the schema's `x-checkId` mapping. Non-JSON preflight output returns a visible error with the exit code and a short redacted, path-scrubbed output tail (`tools/installer-ui/installer-ui.js:386-405`; `tools/installer-ui/installer-ui-problems.js:39-58`; `tools/installer-ui/preflight-record.mjs:28-46`; `tools/installer-ui/server.mjs:475-480`). |
 | Run | Lists installer step ids, streams selected-step output as it arrives, shows a failed step with a rerun action and resume command, reattaches to an active run after reload and keeps a full run as a separate confirmed action (`tools/installer-ui/installer-ui.js:414-468`; `tools/installer-ui/installer-ui.js:486-538`; `tools/installer-ui/installer-ui.js:613-652`). A run starts only when its fingerprint matches a stored passing preflight for the same answers and a covering scope. Displayed commands use `./Install-ClaudeGateway.ps1` and `./install-claude-gateway.sh` (`tools/installer-ui/ui-model.js:588-618`). |
 
