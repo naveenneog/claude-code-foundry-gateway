@@ -153,7 +153,6 @@ async function runInstallerStreaming(kind, args, options, onEvent, progressPath,
   child.stderr.on('data', (chunk) => { void stderr.chunk(chunk); });
   const progressDecoder = new StringDecoder('utf8');
   let progressDiscarding = false;
-  let progressOversizeNoticed = false;
   const processProgressText = async (text, final) => {
     progressCarry += text;
     const lines = progressCarry.split(/\r?\n/);
@@ -168,6 +167,10 @@ async function runInstallerStreaming(kind, args, options, onEvent, progressPath,
         continue;
       }
       if (!line) continue;
+      if (Buffer.byteLength(line) > consoleLineCapBytes) {
+        await enqueue({ type: 'error', message: `progress line exceeded the ${consoleLineCapBytes} byte cap` });
+        continue;
+      }
       try {
         const event = validateProgressEvent(JSON.parse(line));
         if (event.message) event.message = await redactText(event.message);
@@ -180,10 +183,7 @@ async function runInstallerStreaming(kind, args, options, onEvent, progressPath,
     if (Buffer.byteLength(progressCarry) > consoleLineCapBytes) {
       progressCarry = '';
       progressDiscarding = true;
-      if (!progressOversizeNoticed) {
-        progressOversizeNoticed = true;
-        await enqueue({ type: 'error', message: `progress line exceeded the ${consoleLineCapBytes} byte cap` });
-      }
+      await enqueue({ type: 'error', message: `progress line exceeded the ${consoleLineCapBytes} byte cap` });
     }
   };
   const progressState = { offset: 0, decoder: progressDecoder };

@@ -4,18 +4,29 @@ import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { StringDecoder } from 'node:string_decoder';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { validatePreflight, validateProgressEvent, validateStepList } from '../tools/installer-ui/installer-contract.mjs';
 import { createAzureLease } from '../tools/installer-ui/azure-lease.mjs';
 import { createInstallerUiServer } from '../tools/installer-ui/server.mjs';
 import { preflightFingerprint } from '../tools/installer-ui/preflight-record.mjs';
+import { readProgressFile } from '../tools/installer-ui/run-transport.mjs';
 
 const stubInstaller = fileURLToPath(new URL('./installer-ui-stub.mjs', import.meta.url));
 const passingAnswers = { schemaVersion: 1, SubscriptionId: '00000000-0000-4000-8000-000000000093' };
 const identityOne = { signedIn: true, user: 'operator@example.com', tenantId: 'tenant-1', subscriptionId: '00000000-0000-4000-8000-000000000093' };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function alive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 async function start(extra = {}) {
   const scratch = join(tmpdir(), `p93-g7-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`);
@@ -464,6 +475,41 @@ test('S7 read-only output over the cap is stopped with 502', async () => {
   }
 });
 
+test('S7 read-only output over the cap kills a child that keeps writing', async () => {
+  const pidFile = join(tmpdir(), `p93-g7-stream-pid-${process.pid}-${Date.now()}.txt`);
+  const app = await start({ env: { P93_INSTALLER_UI_STUB_PREFLIGHT_STREAM_PID: pidFile }, readOnlyOutputCapBytes: 4096, readOnlyTimeoutMs: 2000 });
+  try {
+    const response = await app.fetch('/api/preflight', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers }) });
+    assert.equal(response.status, 502);
+    assert.match((await response.json()).error, /preflight output exceeded the 4096 byte cap/);
+    const pid = Number(await readFile(pidFile, 'utf8'));
+    for (let i = 0; i < 20 && alive(pid); i++) await sleep(50);
+    assert.equal(alive(pid), false, `pid ${pid} should be gone`);
+  } finally {
+    await app.close();
+    await rm(pidFile, { force: true });
+  }
+});
+
+test('S7 progress file reads are chunked to 64 KiB', async () => {
+  const scratch = join(tmpdir(), `p93-g7-progress-chunks-${process.pid}-${Date.now()}`);
+  const progress = join(scratch, 'progress.ndjson');
+  await mkdir(scratch, { recursive: true });
+  try {
+    const text = 'a'.repeat(200 * 1024);
+    await writeFile(progress, text, 'utf8');
+    const chunks = [];
+    await readProgressFile(progress, { offset: 0, decoder: new StringDecoder('utf8') }, async (chunk) => {
+      chunks.push(chunk);
+    }, true);
+    assert.ok(chunks.length > 3);
+    assert.equal(chunks.every((chunk) => Buffer.byteLength(chunk) <= 64 * 1024), true);
+    assert.equal(chunks.join(''), text);
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
+});
+
 test('S7 oversized progress lines become one error and later progress still arrives', async () => {
   const app = await start({ env: { P93_INSTALLER_UI_STUB_PROGRESS_LONG_LINE: '70000' } });
   try {
@@ -471,6 +517,19 @@ test('S7 oversized progress lines become one error and later progress still arri
     assert.equal(result.response.status, 200);
     assert.equal(result.events.filter((event) => event.type === 'error' && /progress line exceeded/.test(event.message)).length, 1);
     assert.ok(result.events.some((event) => event.type === 'progress' && event.event === 'completed' && event.message === 'after long progress'));
+  } finally {
+    await app.close();
+  }
+});
+
+test('S7 every oversized progress line is one error and complete oversized lines are capped', async () => {
+  const app = await start({ env: { P93_INSTALLER_UI_STUB_PROGRESS_LONG_LINES: '2' } });
+  try {
+    const result = await stream(app, { steps: ['resource-group'] });
+    assert.equal(result.response.status, 200);
+    assert.equal(result.events.filter((event) => event.type === 'error' && /progress line exceeded/.test(event.message)).length, 2);
+    assert.ok(result.events.some((event) => event.type === 'progress' && event.message === 'after long progress 1'));
+    assert.ok(result.events.some((event) => event.type === 'progress' && event.message === 'after long progress 2'));
   } finally {
     await app.close();
   }

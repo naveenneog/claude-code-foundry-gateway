@@ -9,11 +9,15 @@ export async function collectChildOutput(child, runOptions, defaultReadName, hel
   let stdout = '';
   let stderr = '';
   let exceeded = false;
+  let killRequested = false;
   const append = (target, decoder, chunk) => {
     totalBytes += chunk.length;
     if (totalBytes > capBytes) {
       exceeded = true;
-      void killProcessTree(child);
+      if (!killRequested) {
+        killRequested = true;
+        void killProcessTree(child);
+      }
       return target;
     }
     return target + decoder.write(chunk);

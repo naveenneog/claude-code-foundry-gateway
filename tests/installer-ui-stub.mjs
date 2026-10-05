@@ -109,6 +109,13 @@ if (args.includes('-Preflight')) {
     process.stdout.write('x'.repeat(Number(process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_LARGE_STDOUT)));
     finish(2);
   }
+  if (process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_STREAM_PID) {
+    writeFileSync(process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_STREAM_PID, String(process.pid));
+    while (true) {
+      process.stdout.write('x'.repeat(1024));
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
   if (process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_TEXT) {
     console.log(`preflight could not parse password=super-secret at ${answersPath}`);
     finish(2);
@@ -223,6 +230,14 @@ if (args.includes('-Yes')) {
     await new Promise((resolve) => setTimeout(resolve, 150));
     appendFileSync(progressPath, '\n');
     appendFileSync(progressPath, progressLine({ stepId: steps[0], event: 'completed', message: 'after long progress' }) + '\n');
+    finish(0);
+  }
+  if (process.env.P93_INSTALLER_UI_STUB_PROGRESS_LONG_LINES && progressPath) {
+    const count = Number(process.env.P93_INSTALLER_UI_STUB_PROGRESS_LONG_LINES);
+    for (let i = 0; i < count; i++) {
+      appendFileSync(progressPath, 'x'.repeat(70000) + '\n');
+      appendFileSync(progressPath, progressLine({ stepId: steps[0], event: 'completed', message: `after long progress ${i + 1}` }) + '\n');
+    }
     finish(0);
   }
   if (process.env.P93_INSTALLER_UI_STUB_MALFORMED_PROGRESS && progressPath) {
