@@ -69,48 +69,49 @@ Source: [18-installer-ui.json](architecture/18-installer-ui.json);
 
 The installer UI adds an operator-side local server and static page. It adds no Azure resource and no
 hosted control plane. `tools/installer-ui/server.mjs` owns the HTTP routes, local session controls,
-PowerShell child process calls and idle lifecycle (`tools/installer-ui/server.mjs:253-324`;
-`tools/installer-ui/server.mjs:377-418`). `tools/installer-ui/http-helpers.mjs` owns Host, cookie,
+PowerShell child process calls and idle lifecycle (`tools/installer-ui/server.mjs:227-335`;
+`tools/installer-ui/server.mjs:380-422`). `tools/installer-ui/http-helpers.mjs` owns Host, cookie,
 CSRF, same-origin and JSON-body helpers (`tools/installer-ui/http-helpers.mjs:23-29`;
 `tools/installer-ui/http-helpers.mjs:61-112`). The browser, server and tests share
 `tools/installer-ui/ui-model.js` through `tools/installer-ui/server-model.mjs`, while the static page
-serves the same `index.html` bytes as the live server (`tools/installer-ui/server.mjs:363-418`;
+serves the same `index.html` bytes as the live server (`tools/installer-ui/server.mjs:414`;
 `tools/installer-ui/server-model.mjs:77-91`).
 
 The first page load consumes the URL token and `tools/installer-ui/session-auth.mjs` issues a
 separate session cookie secret, so the bootstrap token is not a reusable API credential
-(`tools/installer-ui/session-auth.mjs:4-13`; `tools/installer-ui/server.mjs:385-405`).
+(`tools/installer-ui/session-auth.mjs:4-13`; `tools/installer-ui/server.mjs:390-408`).
 
 Azure context and prefill reads go through `scripts/Get-ClaudeInstallerUiIdentity.ps1` and
 `scripts/Get-ClaudeInstallerUiPrefill.ps1`, not Node-to-`az` calls. Installer execution stays in
 `Install-ClaudeGateway.ps1`, with selected steps, `-ProgressPath` and the existing redaction table.
 The Node server starts only the configured PowerShell command, a Node test stub through
-`process.execPath` or `taskkill.exe` for Windows stop (`tools/installer-ui/server.mjs:46-81`;
+`process.execPath` or `taskkill.exe` for Windows stop (`tools/installer-ui/server.mjs:49-82`;
 `tests/installer-ui-structure.test.mjs:67-87`).
 `tools/installer-ui/azure-lease.mjs` serializes identity, prefill, preflight and run admission so the
 server has one Azure CLI-producing operation at a time (`tools/installer-ui/azure-lease.mjs:1-64`;
-`tools/installer-ui/server.mjs:287-289`).
+`tools/installer-ui/server.mjs:287-290`).
 
 Preflight admission is fingerprinted by `tools/installer-ui/preflight-record.mjs`; a run needs a
 stored PASS for the same answers, a covering step scope and the same identity snapshot
-(`tools/installer-ui/preflight-record.mjs:28-54`; `tools/installer-ui/server.mjs:464-508`).
+(`tools/installer-ui/preflight-record.mjs:28-54`; `tools/installer-ui/server.mjs:465-486`;
+`tools/installer-ui/server.mjs:499-513`).
 `tools/installer-ui/step-scope.mjs` validates selected step ids against the producer step list before
 the Azure lease is requested (`tools/installer-ui/step-scope.mjs:1-35`;
-`tools/installer-ui/server.mjs:455-463`; `tools/installer-ui/server.mjs:488-499`).
+`tools/installer-ui/server.mjs:456-463`; `tools/installer-ui/server.mjs:493-499`).
 Versioned installer-interface checks live in `tools/installer-ui/installer-contract.mjs`, so malformed
 step lists and preflight payloads fail closed and malformed progress events become stream errors
-(`tools/installer-ui/installer-contract.mjs:29-89`).
+(`tools/installer-ui/installer-contract.mjs:29-90`).
 
 Run state lives in `tools/installer-ui/run-record.mjs`, not in a browser connection. `GET
 /api/run/status` reports the active or last run, `GET /api/run/attach?after=<seq>` replays the tail
 and follows live events, and `POST /api/run/stop` stops the child process tree. `tools/installer-ui/run-transport.mjs`
 handles UTF-8 carries, progress-file offsets, NDJSON writes and backpressure. The server caps console
 bytes and line bytes before publishing output (`tools/installer-ui/run-record.mjs:10-126`;
-`tools/installer-ui/run-transport.mjs:21-89`; `tools/installer-ui/server.mjs:36-37`;
+`tools/installer-ui/run-transport.mjs:21-89`; `tools/installer-ui/server.mjs:37-38`;
 `tools/installer-ui/server.mjs:134-177`; `tools/installer-ui/server.mjs:183-190`).
 Read-only children use `tools/installer-ui/child-output.mjs` for UTF-8 decoding and a 1 MiB
 stdout/stderr cap. Streaming runs keep a 4 MiB console cap and a 64 KiB line cap for console and
-progress lines (`tools/installer-ui/child-output.mjs:1-52`; `tools/installer-ui/server.mjs:36-37`;
+progress lines (`tools/installer-ui/child-output.mjs:1-52`; `tools/installer-ui/server.mjs:37-38`;
 `tools/installer-ui/server.mjs:134-190`; `tools/installer-ui/run-transport.mjs:28-89`).
 
 **Answers schema.** [`schemas/claude-gateway.answers.schema.json`](../schemas/claude-gateway.answers.schema.json)
