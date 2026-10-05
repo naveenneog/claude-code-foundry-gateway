@@ -90,6 +90,33 @@ $spelledTeam = @(
 $teamChanges = Compare-ClaudeTurnstileBudgets -Registry $spelledTeam -Parents ([ordered]@{ sales = 'platform' }) -TurnstileItems @([pscustomobject]@{ scope_type = 'organization'; scope_id = 'Sales'; token_limit = 900; updated_by = 'admin@contoso.com' })
 Assert 'a Turnstile organization budget for Sales applies when the team is sales' ($teamChanges.Count -eq 1 -and $teamChanges[0].Id -ceq 'Sales' -and $teamChanges[0].Was -eq 2000 -and $teamChanges[0].Now -eq 900) (($teamChanges | ForEach-Object { "$($_.Id) $($_.ScopeType) $($_.Was)->$($_.Now)" }) -join ', ')
 Assert 'the budget pull reads bu-parents by exact key' ($sync -match "ConvertFrom-ClaudeBuParents \(Get-ApimNamedValue [^\r\n]*'bu-parents'\) -ExactKeys")
+# P96 council round 4 (Architect): the catalog and the budget plan match parents by exact spelling too, whatever map the
+# caller passes. A parent 'Sales' that is not a unit leaves the team unmatched rather than rebound to 'sales', and a team
+# 'sales' does not make the unit 'Sales' a team in the budget plan.
+$exactParents = [System.Collections.Specialized.OrderedDictionary]::new([System.StringComparer]::Ordinal)
+$exactParents['eu'] = 'Sales'
+$foldCatalog = ConvertTo-ClaudeTurnstileCatalog -Registry @(
+    [pscustomobject]@{ Id = 'sales'; Group = 'Sales'; TokensPerMonth = 1000 },
+    [pscustomobject]@{ Id = 'eu'; Group = 'EU'; TokensPerMonth = 100 }
+) -Parents $exactParents
+Assert 'the catalog does not rebind a team to another spelling of its parent' (@($foldCatalog.departments | Where-Object { $_.id -ceq 'eu' }).Count -eq 0) (($foldCatalog.departments | ForEach-Object { "$($_.id)->$($_.parent_id)" }) -join ', ')
+$spelledTeamParents = [System.Collections.Specialized.OrderedDictionary]::new([System.StringComparer]::Ordinal)
+$spelledTeamParents['EU'] = 'sales'
+$teamKeyCatalog = ConvertTo-ClaudeTurnstileCatalog -Registry @(
+    [pscustomobject]@{ Id = 'sales'; Group = 'Sales'; TokensPerMonth = 1000 },
+    [pscustomobject]@{ Id = 'eu'; Group = 'EU'; TokensPerMonth = 100 }
+) -Parents $spelledTeamParents
+Assert 'the catalog does not take a team key EU for the unit eu' (@($teamKeyCatalog.departments | Where-Object { $_.id -ceq 'eu' }).Count -eq 1 -and @($teamKeyCatalog.departments | Where-Object { $_.parent_id -ceq 'sales' -and $_.id -cne 'sales' }).Count -eq 0) (($teamKeyCatalog.departments | ForEach-Object { "$($_.id)->$($_.parent_id)" }) -join ', ')
+$spelledRegistry = @(
+    [pscustomobject]@{ Id = 'platform'; Group = 'Platform'; TokensPerMonth = 5000 },
+    [pscustomobject]@{ Id = 'sales'; Group = 'Lower Sales'; TokensPerMonth = 1000 },
+    [pscustomobject]@{ Id = 'Sales'; Group = 'Upper Sales'; TokensPerMonth = 2000 }
+)
+$foldingMap = [ordered]@{ sales = 'platform' }
+# The catalog cannot hold a unit stored with capitals: its mode attributes refuse it (a ROADMAP follow-up), so only the
+# budget plan is checked with both spellings.
+$spelledPlan = Get-ClaudeTurnstileBudgetPlan -Registry $spelledRegistry -Parents $foldingMap
+Assert 'the budget plan sets Sales as an organization and sales as a department' (@($spelledPlan | Where-Object { $_.ScopeType -eq 'organization' -and $_.ScopeId -ceq 'Sales' -and $_.TokenLimit -eq 2000 }).Count -eq 1 -and @($spelledPlan | Where-Object { $_.ScopeType -eq 'department' -and $_.ScopeId -ceq 'sales' -and $_.TokenLimit -eq 1000 }).Count -eq 1) (($spelledPlan | ForEach-Object { "$($_.ScopeType):$($_.ScopeId)" }) -join ', ')
 
 Write-Host ''
 Write-Host 'Turnstile governance - tiers' -ForegroundColor Cyan
