@@ -104,7 +104,9 @@ exact streaming cache-creation detail remains **U13**.
   leaves the run controls disabled: the page reattaches to a run that started, or reports that none is
   active. Preflight and progress adapters now fail closed on producer-impossible PASS or NOT-RUN
   combinations, incomplete or duplicate preflight check sets and per-step progress events without a
-  step id.
+  step id. Preflight attempts now clear the previous pass before starting, fingerprints include the
+  passing identity snapshot, and the page drops stale fingerprints when answers change during a
+  preflight, when re-preflight fails or when a run is refused as preflight-required.
 - **Installers read an answers file, check it before any change, run selected steps and write a progress stream (P92, phase 0).**
   One answers file, described by `schemas/claude-gateway.answers.schema.json`, feeds
   `Install-ClaudeGateway.ps1 -AnswersPath`, `install-claude-gateway.sh --answers-file` and

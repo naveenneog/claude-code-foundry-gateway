@@ -462,6 +462,7 @@ export async function createInstallerUiServer(options = {}) {
         const engine = 'pwsh';
         return send(res, 200, await withAzureRead('preflight', (lease) => withRunDirectory(async (dir) => {
           const answers = await writeAnswers(dir, body.answers || {});
+          preflightPasses.clearForAnswers(digest, engine);
           const result = await runInstaller('powershell', await installerArguments({ engine: 'pwsh', action: 'preflight', answersPath: answers }), options, { ...childTimeout(lease), readName: 'preflight', outputCapBytes: outputCapFor() });
           let parsed;
           const schema = await loadSchema();
@@ -479,7 +480,7 @@ export async function createInstallerUiServer(options = {}) {
           let identity;
           if (parsed.result === 'PASS' && result.code === 0) {
             identity = await readIdentitySnapshot(childTimeout(lease));
-            fingerprint = preflightFingerprint({ answers: body.answers || {}, scope, engine });
+            fingerprint = preflightFingerprint({ answers: body.answers || {}, scope, engine, identity });
             preflightPasses.replaceForAnswers({ fingerprint, answersDigest: digest, engine, scope, time: new Date().toISOString(), identity });
           } else {
             preflightPasses.clearForAnswers(digest, engine);

@@ -11,6 +11,7 @@
   let preflightFingerprint = "";
   let preflightStale = true;
   let preflightHadResult = false;
+  let answerRevision = 0;
   let preflightIdentity = null;
   let preflightStaleReason = "";
   let preflightScope = null;
@@ -292,6 +293,7 @@
   }
 
   function markPreflightStale() {
+    answerRevision++;
     preflightStale = preflightHadResult;
     if (preflightStale) preflightStaleReason = "Run preflight after changing answers or steps.";
     preflightFingerprint = "";
@@ -494,7 +496,7 @@
     );
   }
 
-  function renderPreflight(result) {
+  function renderPreflight(result, options = {}) {
     const container = byId("preflight-output");
     clearChildren(container);
     const checks = result.preflight?.checks || result.preflight || [];
@@ -514,7 +516,7 @@
     }
     container.append(table);
     problems.markFields(checks);
-    if (result.preflight?.result === "PASS" && result.fingerprint) {
+    if (result.preflight?.result === "PASS" && result.fingerprint && !options.staleReason) {
       preflightFingerprint = result.fingerprint;
       preflightIdentity = result.identity || null;
       preflightScope = result.scope || null;
@@ -525,16 +527,23 @@
       preflightFingerprint = "";
       preflightIdentity = null;
       preflightScope = null;
-      preflightStale = false;
+      preflightStaleReason = options.staleReason || "";
+      preflightStale = Boolean(options.staleReason);
       preflightHadResult = true;
     }
     updateRunAdmission();
   }
 
   function showPreflightError(error) {
+    preflightFingerprint = "";
+    preflightIdentity = null;
+    preflightScope = null;
+    preflightStale = preflightHadResult;
+    preflightStaleReason = "Run preflight again.";
     const container = byId("preflight-output");
     clearChildren(container);
     appendText(container, error.message || String(error), "p", "failed");
+    updateRunAdmission();
   }
 
   function renderSteps(payload) {
@@ -643,13 +652,26 @@
     });
     byId("preflight").onclick = () => actions.run(byId("preflight"), { busyText: "Running preflight...", successText: "Preflight finished.", azure: true }, async () => {
       if (validateCurrentAnswers().length) return;
+      preflightFingerprint = "";
+      preflightIdentity = null;
+      preflightScope = null;
+      preflightStale = false;
+      const startedRevision = answerRevision;
+      updateRunAdmission();
       const steps = selectedSteps();
-      renderPreflight(
-        await postJson("./api/preflight", {
+      try {
+        const result = await postJson("./api/preflight", {
           answers: collectAnswers(),
           ...(steps.length ? { steps } : { fullRun: true }),
-        }),
-      );
+        });
+        renderPreflight(
+          result,
+          startedRevision === answerRevision ? {} : { staleReason: "The answers changed while the preflight ran. Run preflight again." },
+        );
+      } catch (error) {
+        showPreflightError(error);
+        throw error;
+      }
     });
     byId("steps").onclick = () => actions.run(byId("steps"), { busyText: "Listing steps...", successText: "Steps listed." }, async () => renderSteps(await getJson("./api/steps")));
     byId("run").onclick = () => actions.run(byId("run"), { busyText: "Running selected steps...", successText: "Run finished.", azure: true }, async () => {

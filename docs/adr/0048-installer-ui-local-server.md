@@ -83,13 +83,15 @@ empty `stepId` only for whole-run `failed` and `refused` events
 `tools/installer-ui/server.mjs:466-470`).
 
 Preflight fingerprints are lower-case SHA-256 values over a canonical JSON object containing schema
-version, engine, sorted answers and a sorted step scope or `full`. The server stores at most 20
-passing records. A passing record also stores the signed-in state, user, tenant and subscription
-snapshot. A later fail or exit-code failure for the same answers and engine clears the prior pass. A
+version, engine, sorted answers, a sorted step scope or `full`, and the Azure identity snapshot read
+after a PASS. The server stores at most 20 passing records. A passing record also stores the
+signed-in state, user, tenant and subscription snapshot. A new preflight attempt clears the prior
+pass for the same answers and engine before the child starts, so any later malformed output, timeout
+or identity-read failure leaves no stored pass. A
 run is admitted only when the submitted fingerprint exists, the answers digest matches, the engine is
 `pwsh`, the stored scope covers the requested run scope and the current identity snapshot matches
 the passing preflight (`tools/installer-ui/preflight-record.mjs:3-37`; `tools/installer-ui/preflight-record.mjs:46-64`;
-`tools/installer-ui/server.mjs:241`; `tools/installer-ui/server.mjs:476-484`; `tools/installer-ui/server.mjs:499-513`).
+`tools/installer-ui/server.mjs:241`; `tools/installer-ui/server.mjs:461-487`; `tools/installer-ui/server.mjs:499-513`).
 
 One Azure CLI lease covers identity, prefill, preflight and run work. Reads wait behind reads in
 arrival order, wait time counts against the read timeout, runs are refused while a read holds the

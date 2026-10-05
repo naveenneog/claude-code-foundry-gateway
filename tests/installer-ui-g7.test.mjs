@@ -491,7 +491,7 @@ test('S7 read-only output over the cap is stopped with 502', async () => {
 
 test('S7 read-only output over the cap kills a child that keeps writing', async () => {
   const pidFile = join(tmpdir(), `p93-g7-stream-pid-${process.pid}-${Date.now()}.txt`);
-  const app = await start({ env: { P93_INSTALLER_UI_STUB_PREFLIGHT_STREAM_PID: pidFile }, readOnlyOutputCapBytes: 4096, readOnlyTimeoutMs: 2000 });
+  const app = await start({ env: { P93_INSTALLER_UI_STUB_PREFLIGHT_STREAM_PID: pidFile }, readOnlyOutputCapBytes: 4096, readOnlyTimeoutMs: 10_000 });
   try {
     const response = await app.fetch('/api/preflight', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers }) });
     assert.equal(response.status, 502);

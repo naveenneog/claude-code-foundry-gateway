@@ -20,10 +20,11 @@ async function start(extra = {}) {
   const server = await createInstallerUiServer({
     token: 'g8-token-with-at-least-32-bytes-0000',
     csrfToken: 'g8-csrf-token-with-at-least-32-bytes',
-    stubInstaller,
+    stubInstaller: extra.stubInstaller || stubInstaller,
     idleMs: 60_000,
     env: extra.env || {},
     readIdentity: extra.readIdentity ?? (async () => identityOne),
+    readOnlyTimeoutMs: extra.readOnlyTimeoutMs,
   });
   const address = await server.listenAsync('127.0.0.1');
   const base = `http://127.0.0.1:${address.port}`;
@@ -126,5 +127,95 @@ test('R3-3 installer stub emits every schema preflight check id exactly once', a
     assert.equal(body.checks.find((check) => check.id === 'target.tenant').result, 'PASS');
   } finally {
     await rm(answersPath, { force: true });
+  }
+});
+
+async function passingPreflight(app, answers = passingAnswers) {
+  const response = await app.fetch('/api/preflight', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ answers, steps: ['resource-group'] }),
+  });
+  const json = await response.json();
+  assert.equal(response.status, 200, JSON.stringify(json));
+  assert.match(json.fingerprint, /^[0-9a-f]{64}$/);
+  return json;
+}
+
+test('R3-1 an identity-read failure clears an earlier pass for the same answers', async () => {
+  let identity = identityOne;
+  const identityApp = await start({ readIdentity: async () => {
+    if (!identity) throw Object.assign(new Error('identity failed for R3-1'), { status: 504 });
+    return identity;
+  } });
+  try {
+    const pass = await passingPreflight(identityApp);
+    identity = null;
+    const failed = await identityApp.fetch('/api/preflight', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'] }) });
+    assert.equal(failed.status, 504);
+    const run = await identityApp.fetch('/api/run/stream', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'], fingerprint: pass.fingerprint }) });
+    assert.equal(run.status, 409);
+    assert.equal((await run.json()).reason, 'preflight-required');
+  } finally {
+    await identityApp.close();
+  }
+
+});
+
+test('R3-1 malformed preflight output clears an earlier pass for the same answers', async () => {
+  const malformedApp = await start({ env: { P93_INSTALLER_UI_STUB_BAD_PREFLIGHT_ON_SECOND: 'type' } });
+  try {
+    const pass = await passingPreflight(malformedApp);
+    const failed = await malformedApp.fetch('/api/preflight', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'] }) });
+    assert.equal(failed.status, 502, 'malformed');
+    const run = await malformedApp.fetch('/api/run/stream', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'], fingerprint: pass.fingerprint }) });
+    assert.equal(run.status, 409, 'malformed');
+    assert.equal((await run.json()).reason, 'preflight-required', 'malformed');
+  } finally {
+    await malformedApp.close();
+    await rm('type.count', { force: true });
+  }
+});
+
+test('R3-1 a preflight timeout clears an earlier pass for the same answers', async () => {
+  const timeoutMarker = `p93-r3-1-timeout-${process.pid}-${Date.now()}.marker`;
+  await rm(timeoutMarker, { force: true });
+  const timeoutApp = await start({ env: { P93_INSTALLER_UI_STUB_PREFLIGHT_DELAY_MARKER: timeoutMarker, P93_INSTALLER_UI_STUB_PREFLIGHT_DELAY_MARKER_MS: '3000' }, readOnlyTimeoutMs: 1000 });
+  try {
+    await rm(timeoutMarker, { force: true });
+    let response = await timeoutApp.fetch('/api/preflight', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'] }) });
+    if (response.status !== 200) {
+      await response.text();
+      await rm(timeoutMarker, { force: true });
+      response = await timeoutApp.fetch('/api/preflight', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'] }) });
+    }
+    const pass = await response.json();
+    assert.equal(response.status, 200, JSON.stringify(pass));
+    assert.match(pass.fingerprint, /^[0-9a-f]{64}$/);
+    await import('node:fs/promises').then(({ writeFile }) => writeFile(timeoutMarker, 'delay', 'utf8'));
+    const failed = await timeoutApp.fetch('/api/preflight', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'] }) });
+    assert.equal(failed.status, 504, 'timeout');
+    const run = await timeoutApp.fetch('/api/run/stream', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'], fingerprint: pass.fingerprint }) });
+    assert.equal(run.status, 409, 'timeout');
+    assert.equal((await run.json()).reason, 'preflight-required', 'timeout');
+  } finally {
+    await timeoutApp.close();
+    await rm(timeoutMarker, { force: true });
+  }
+});
+
+test('R3-1 preflight fingerprints include the passing identity snapshot', async () => {
+  let identity = identityOne;
+  const app = await start({ readIdentity: async () => identity });
+  try {
+    const first = await passingPreflight(app);
+    identity = { ...identityOne, subscriptionId: '00000000-0000-4000-8000-000000000094' };
+    const second = await passingPreflight(app);
+    assert.notEqual(first.fingerprint, second.fingerprint);
+    const oldRun = await app.fetch('/api/run/stream', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'], fingerprint: first.fingerprint }) });
+    assert.equal(oldRun.status, 409);
+    assert.equal((await oldRun.json()).reason, 'preflight-required');
+  } finally {
+    await app.close();
   }
 });

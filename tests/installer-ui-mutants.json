@@ -27,6 +27,33 @@
     "test": "R3-3 installer stub emits every schema preflight check id exactly once"
   },
   {
+    "id": "r3-1-1",
+    "why": "A new preflight attempt must clear the previous pass for the same answers before later failures.",
+    "file": "tools/installer-ui/server.mjs",
+    "find": "          const answers = await writeAnswers(dir, body.answers || {});\n          preflightPasses.clearForAnswers(digest, engine);\n          const result = await runInstaller('powershell', await installerArguments({ engine: 'pwsh', action: 'preflight', answersPath: answers }), options, { ...childTimeout(lease), readName: 'preflight', outputCapBytes: outputCapFor() });\n",
+    "replace": "          const answers = await writeAnswers(dir, body.answers || {});\n          const result = await runInstaller('powershell', await installerArguments({ engine: 'pwsh', action: 'preflight', answersPath: answers }), options, { ...childTimeout(lease), readName: 'preflight', outputCapBytes: outputCapFor() });\n",
+    "testFile": "tests/installer-ui-g8.test.mjs",
+    "test": "R3-1 malformed preflight output clears an earlier pass for the same answers"
+  },
+  {
+    "id": "r3-1-2",
+    "why": "The preflight fingerprint must include the identity snapshot read after PASS.",
+    "file": "tools/installer-ui/preflight-record.mjs",
+    "find": "  return sha256Hex(canonicalize({ schemaVersion: 1, engine, identity, answers: answers || {}, steps: scope }));\n",
+    "replace": "  return sha256Hex(canonicalize({ schemaVersion: 1, engine, answers: answers || {}, steps: scope }));\n",
+    "testFile": "tests/installer-ui-g8.test.mjs",
+    "test": "R3-1 preflight fingerprints include the passing identity snapshot"
+  },
+  {
+    "id": "r3-1-3",
+    "why": "The page must not install a preflight fingerprint when answers change while the attempt is running.",
+    "file": "tools/installer-ui/installer-ui.js",
+    "find": "          startedRevision === answerRevision ? {} : { staleReason: \"The answers changed while the preflight ran. Run preflight again.\" },\n",
+    "replace": "          {},\n",
+    "testFile": "tests/installer-ui-g8b.test.mjs",
+    "test": "R3-1 delayed preflight answer edits show stale state without installing the fingerprint"
+  },
+  {
     "id": "T1-fail-once-disabled",
     "why": "The T1 journey must fail when the stub no longer fails the first selected gateway-deployment run.",
     "file": "tests/installer-ui-stub.mjs",
@@ -72,8 +99,8 @@
     "id": "P1-preflight-scope-widened",
     "why": "A step-scoped preflight fingerprint must not cover every run scope.",
     "file": "tools/installer-ui/preflight-record.mjs",
-    "find": "  return sha256Hex(canonicalize({ schemaVersion: 1, engine, answers: answers || {}, steps: scope }));\n",
-    "replace": "  return sha256Hex(canonicalize({ schemaVersion: 1, engine, answers: answers || {}, steps: 'full' }));\n",
+    "find": "  return sha256Hex(canonicalize({ schemaVersion: 1, engine, identity, answers: answers || {}, steps: scope }));\n",
+    "replace": "  return sha256Hex(canonicalize({ schemaVersion: 1, engine, identity, answers: answers || {}, steps: 'full' }));\n",
     "testFile": "tests/installer-ui-g2.test.mjs",
     "test": "P1 fingerprints canonicalize answer keys and cover step scopes"
   },

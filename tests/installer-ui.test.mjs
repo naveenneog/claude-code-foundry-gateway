@@ -682,7 +682,7 @@ test('preflight malformed output, fail JSON and versioned interfaces fail closed
       await page.context().addCookies([{ name: 'installer_token', value: textApp.cookie.split('=')[1], domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Strict' }]);
       await page.goto(`${textApp.base}/`);
       await page.getByRole('button', { name: 'Run preflight' }).click();
-      await page.getByText(/preflight output was not JSON/).waitFor();
+      await page.locator('#preflight-output').getByText(/preflight output was not JSON/).waitFor();
     } finally {
       await browser.close();
     }

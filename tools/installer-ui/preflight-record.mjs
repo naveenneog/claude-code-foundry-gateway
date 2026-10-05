@@ -25,8 +25,8 @@ export function answersDigest(answers) {
   return sha256Hex(canonicalize(answers || {}));
 }
 
-export function preflightFingerprint({ answers, scope, engine = 'pwsh' }) {
-  return sha256Hex(canonicalize({ schemaVersion: 1, engine, answers: answers || {}, steps: scope }));
+export function preflightFingerprint({ answers, scope, engine = 'pwsh', identity = null }) {
+  return sha256Hex(canonicalize({ schemaVersion: 1, engine, identity, answers: answers || {}, steps: scope }));
 }
 
 export function scopeCovers(recordScope, runScope) {

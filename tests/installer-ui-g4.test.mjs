@@ -116,7 +116,8 @@ test('U1 run refusal 409 tells the operator to run preflight again and restores 
     await page.getByRole('button', { name: 'Run selected steps' }).click();
     const alert = page.locator('#run-error[role="alert"]');
     await alert.getByText(/Run the preflight again/i).waitFor();
-    await expectPollEnabled(page, 'Run selected steps');
+    assert.equal(await page.getByRole('button', { name: 'Run selected steps' }).isDisabled(), true);
+    await expectPollEnabled(page, 'Run preflight');
     await assertClean(page, pageErrors);
   } finally {
     await browser.close();

@@ -183,7 +183,7 @@
         runActive = false;
         updateRunAdmission();
         const error = await responseError(res, "run failed");
-        if (error.data?.reason === "identity-changed" && typeof onIdentityStale === "function") onIdentityStale(error.message);
+        if (["identity-changed", "preflight-required"].includes(error.data?.reason) && typeof onIdentityStale === "function") onIdentityStale(error.message);
         throw error;
       }
       return followRun(() => readRunStream(res));

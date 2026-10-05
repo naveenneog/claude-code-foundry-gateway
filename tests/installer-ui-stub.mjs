@@ -120,6 +120,13 @@ if (args.includes('-Preflight')) {
     console.log(`preflight could not parse password=super-secret at ${answersPath}`);
     finish(2);
   }
+  if (process.env.P93_INSTALLER_UI_STUB_BAD_PREFLIGHT_ON_SECOND) {
+    const counterPath = `${process.env.P93_INSTALLER_UI_STUB_BAD_PREFLIGHT_ON_SECOND}.count`;
+    let count = 0;
+    try { count = Number(readFileSync(counterPath, 'utf8')); } catch { count = 0; }
+    writeFileSync(counterPath, String(count + 1));
+    if (count >= 1) process.env.P93_INSTALLER_UI_STUB_BAD_PREFLIGHT = process.env.P93_INSTALLER_UI_STUB_BAD_PREFLIGHT_ON_SECOND;
+  }
   if (process.env.P93_INSTALLER_UI_STUB_BAD_PREFLIGHT === 'version') {
     console.log(JSON.stringify({ schemaVersion: 2, installer: 'pwsh', answersSchemaVersion: 1, result: 'PASS', checks: [] }));
     finish(0);
@@ -138,6 +145,29 @@ if (args.includes('-Preflight')) {
     try { count = Number(readFileSync(counterPath, 'utf8')); } catch { count = 0; }
     writeFileSync(counterPath, String(count + 1));
     if (count >= 1) process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_FAIL = '1';
+  }
+  if (process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_HANG_ON_SECOND) {
+    const counterPath = process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_HANG_ON_SECOND;
+    let count = 0;
+    try { count = Number(readFileSync(counterPath, 'utf8')); } catch { count = 0; }
+    writeFileSync(counterPath, String(count + 1));
+    if (count >= 1) {
+      setInterval(() => {}, 1000);
+      await new Promise(() => {});
+    }
+  }
+  if (process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_DELAY_ON_SECOND_MS) {
+    const counterPath = process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_DELAY_ON_SECOND_COUNTER || `${process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_DELAY_ON_SECOND_MS}.count`;
+    let count = 0;
+    try { count = Number(readFileSync(counterPath, 'utf8')); } catch { count = 0; }
+    writeFileSync(counterPath, String(count + 1));
+    if (count >= 1) await new Promise((resolve) => setTimeout(resolve, Number(process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_DELAY_ON_SECOND_MS)));
+  }
+  if (process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_DELAY_MARKER && process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_DELAY_MARKER_MS) {
+    try {
+      readFileSync(process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_DELAY_MARKER, 'utf8');
+      await new Promise((resolve) => setTimeout(resolve, Number(process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_DELAY_MARKER_MS)));
+    } catch {}
   }
   const fail = process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_FAIL === '1';
   const signedOut = process.env.P93_INSTALLER_UI_STUB_SIGNED_OUT === '1';
