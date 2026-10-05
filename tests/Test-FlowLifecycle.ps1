@@ -106,7 +106,7 @@ $entRecord = [pscustomobject]@{ schemaVersion = 2; decisions = [pscustomobject]@
 $entDiscovery = [pscustomobject]@{ resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; location = 'eastus2'; sku = 'BasicV2'; namedValues = @{ 'entitlement-source' = 'named-value' }; cleanComparison = $false }
 $entPlan = Get-ClaudeFlowStepPlan -Record $entRecord -Discovery $entDiscovery
 Assert 'entitlement plan states Basic v2 public Entra resolver rule' (($entPlan.Implications -join "`n") -match 'Basic v2 uses a public resolver endpoint')
-Assert 'entitlement flip is refused without P86 renewal evidence before backup/write' ((Get-Thrown { Invoke-ClaudeFlowStep -Record $entRecord -Plan $entPlan }) -match 'P86 admission needs renewal runner, Cosmos destination, reconciler job, image digest and email action group evidence')
+Assert 'entitlement flip is refused without projection prefix before backup/write' ((Get-Thrown { Invoke-ClaudeFlowStep -Record $entRecord -Plan $entPlan }) -match 'entitlement-projection-prefix' -and (Get-Thrown { Invoke-ClaudeFlowStep -Record $entRecord -Plan $entPlan }) -match 'Deploy-ClaudeProjection\.ps1')
 $entQuestions = @(Get-ClaudeFlowStepQuestions -Record $entRecord -Discovery $entDiscovery)
 Assert 'entitlement question uses orchestrator property names' ($entQuestions[0].Key -eq 'entitlementStore' -and $entQuestions[0].Question -and $entQuestions[0].WhereToFind)
 

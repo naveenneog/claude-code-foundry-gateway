@@ -149,7 +149,8 @@ function global:Get-ClaudeFlowLifecycleLiveDiscovery {
     $token = az account get-access-token --resource https://management.azure.com --query accessToken -o tsv
     $policyUri = "https://management.azure.com$($apim.id)/apis/$ApiId/policies/policy?api-version=2024-05-01&format=rawxml"
     $policy = Invoke-RestMethod -Method Get -Uri $policyUri -Headers @{ Authorization = "Bearer $token" }
-    $renewal = Find-ClaudeFlowProjectionRenewal -Directory (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'onboarding') -GatewayResourceId ([string]$apim.id)
+    $prefixValue = @($nvs | Where-Object { $_.name -eq 'entitlement-projection-prefix' } | Select-Object -First 1)
+    $projectionPrefix = if ($prefixValue) { if ($prefixValue.PSObject.Properties.Name -contains 'properties') { [string]$prefixValue.properties.value } else { [string]$prefixValue.value } } else { '' }
     [pscustomobject]@{
         subscriptionId = (($apim.id -split '/')[2])
         resourceGroup = $ResourceGroup
@@ -158,8 +159,8 @@ function global:Get-ClaudeFlowLifecycleLiveDiscovery {
         sku = $apim.sku.name
         capacity = $apim.sku.capacity
         apimId = $apim.id
-        renewal = $renewal.Receipt
-        renewalProblem = $renewal.Problem
+        projectionPrefix = $projectionPrefix
+        projectionPrefixProblem = $(if ($projectionPrefix) { $null } else { 'entitlement-projection-prefix is missing. Remedy: deploy the projection with scripts/Deploy-ClaudeProjection.ps1.' })
         policy = $policy.properties.value
         # az apim nv list returns flattened objects; ARM returns them under properties.
         namedValues = @($nvs | Where-Object {
