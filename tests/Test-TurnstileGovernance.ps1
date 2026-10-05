@@ -305,6 +305,12 @@ $lfCatalog = [pscustomobject]@{
 }
 $lf = ConvertFrom-ClaudeTurnstileGovernance -Catalog $lfCatalog
 Assert 'an imported id with a trailing line feed is not a gateway id' (@($lf.Registry).Count -eq 0 -and (@($lf.Problems) -join '; ') -match 'not a valid gateway id') ((@($lf.Problems) -join '; ') + " | registry $(@($lf.Registry).Count)")
+$lfTeam = ConvertFrom-ClaudeTurnstileGovernance -Catalog ([pscustomobject]@{
+    source        = 'configured'
+    organizations = @([pscustomobject]@{ id = 'research'; name = 'R'; external_ref = 'entra-group:Claude Research' })
+    departments   = @([pscustomobject]@{ id = "web`n"; name = 'W'; parent_id = 'research'; external_ref = 'entra-group:Claude Web' })
+})
+Assert 'an imported team id with a trailing line feed under a valid unit is not a gateway id' (@($lfTeam.Registry | Where-Object { $_.Id -cne 'research' }).Count -eq 0 -and (@($lfTeam.Problems) -join '; ') -match "team 'web\s*': not a valid gateway id") ((@($lfTeam.Problems) -join '; ') + " | registry $((@($lfTeam.Registry) | ForEach-Object Id) -join ',')")
 Assert 'Test-ClaudeBuId refuses an identifier with a trailing line feed' (Throws { Test-ClaudeBuId "research`n" })
 $modelTiers = ConvertFrom-ClaudeTurnstileGovernance -Catalog $stored -BudgetItems $budgetRows -Tiers @(
     [pscustomobject]@{ id = 'standard'; entra_group = 'claude-code-standard'; tokens_per_minute = 1; tokens_per_day = 1; models = @('claude-sonnet-5', 'x&calc.exe') },
