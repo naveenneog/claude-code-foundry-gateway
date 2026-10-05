@@ -116,7 +116,10 @@ exact streaming cache-creation detail remains **U13**.
   field they reference when validation blur rerenders the problem list. The copied custom-address
   defaults now have a drift detector against the installer address input script and an architecture
   source entry. Command, preflight-table and step-list rendering now live in a split page script so
-  `installer-ui.js` stays under the production file-size budget.
+  `installer-ui.js` stays under the production file-size budget. A preflight retry now clears the
+  earlier pass for its answers as soon as the server has read the request, so a retry that fails while
+  listing steps or is refused while a run uses Azure CLI leaves no fingerprint that can start a run.
+  The run admission record is now an architecture source, drawn in the run record card.
 - **Installers read an answers file, check it before any change, run selected steps and write a progress stream (P92, phase 0).**
   One answers file, described by `schemas/claude-gateway.answers.schema.json`, feeds
   `Install-ClaudeGateway.ps1 -AnswersPath`, `install-claude-gateway.sh --answers-file` and
