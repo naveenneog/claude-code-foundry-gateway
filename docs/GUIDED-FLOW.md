@@ -273,8 +273,9 @@ cost and caller impact before applying.
 
 The Entitlement step switches to the projection only through `Invoke-ClaudeProjectionSwitch`
 ([ADR-0050](adr/0050-projection-switch-function.md)). Discovery (`scripts/flow/Discovery.ps1`)
-supplies the renewal receipt beside the decision record whose gateway is the discovered one, and the
-switch checks the receipt and the gateway's resolver, then runs the drift check, the compare and
+supplies the renewal receipt, from the decision record's folder or the repository's `onboarding/`,
+whose gateway is the discovered one, and the switch checks the receipt, the gateway's resolver values
+and the live resolver site's settings, then runs the drift check, the compare and
 admission before its one write. The step's snapshot, `backups/before-entitlement-<apim>-<UTC time>.json`,
 is its backup and is taken at the write. No receipt, two receipts for the gateway, or an unknown
 gateway refuse with the reason. Records expire at most two hours after scan start; without renewal

@@ -1203,6 +1203,14 @@ exact streaming cache-creation detail remains **U13**.
   compare read as a projection mismatch, an unreadable job gave the raw ARM error, `-Confirm`
   prompted for working files first, and `-RenewalEntryPoint` was ignored. Each is corrected with a
   test ([P95 council](docs/status/P95.md#council)).
+- **P95 council round 2.** The switch trusted the resolver deployment's recorded parameters, so a
+  resolver site whose settings had since changed passed; it now reads the live site and its
+  application settings. The deployer's normal run repointed a gateway that already served from the
+  projection, which would move every request to a new, unpopulated resolver; it now stops. A failed
+  read of `entitlement-source` or the resolver values during an installer redeploy returned the
+  gateway to named values; those reads now stop the run. Discovery found a receipt only beside the
+  decision record; it now also reads the repository's `onboarding/`, where the renewal deployer
+  writes it. Each is corrected with a test ([P95 council](docs/status/P95.md#council)).
 - **P94 the renewal job could not be deployed or run as merged.** The image and the runner archive
   missed `resolver/src/entitlement.mjs`, which `sync/src/plan.mjs` imports, so the job, the runner
   apply and compare, and admission stopped with a missing module; the runner archive now holds the

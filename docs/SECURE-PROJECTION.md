@@ -142,14 +142,14 @@ pwsh -NoProfile -File .\scripts\Deploy-ClaudeProjection.ps1 `
 ```
 
 1. The receipt's values are checked before any call: each has the form Azure gives it, the job, action group and Cosmos account are in the receipt's resource group and the gateway's subscription, and, after the gateway is read, the receipt's tenant is the tenant of the gateway's managed identity.
-2. The deployment `projection-resolver-<prefix>` must read the receipt's Cosmos account, and the gateway's `entitlement-resolver-url` and `entitlement-resolver-audience` must be its outputs; the deployer's normal run sets them ([section 9](#9-point-the-gateway-at-the-resolver) gives the same step by hand).
+2. The deployment `projection-resolver-<prefix>` must read the receipt's Cosmos account, and the gateway's `entitlement-resolver-url` and `entitlement-resolver-audience` must be its outputs; the deployer's normal run sets them ([section 9](#9-point-the-gateway-at-the-resolver) gives the same step by hand). The site that deployment names is then read live: it must serve the gateway's URL, and its application settings `COSMOS_ENDPOINT`, `COSMOS_DATABASE`, `COSMOS_CONTAINER` and `PROJECTION_TENANT_ID` must be the receipt's Cosmos account, `claude`, `entitlement` and the receipt's tenant ([U122](UNKNOWNS.md#p95-research-before-implementation)).
 3. `scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift` compares the gateway's lists with Entra and exports the gateway's decisions.
 4. The runner unpacks the sync package and runs `apply-projection.mjs --compare` against those decisions, read-only.
 5. Admission reads the action group, the job definition and its settings, and the Cosmos evidence, as above.
 6. The entitlement named values (`entitlement-source`, `allow-standard`, `allow-premium`, `bu-members`) are written to `onboarding/projection-switch-<apim>-<UTC time>-<8 hex digits>.json`.
 7. `entitlement-source` is set to `projection`, the one write.
 
-A refusal at any step leaves `entitlement-source` unchanged and writes no backup; `-WhatIf` runs steps 1-5 and stops, and `-Confirm` asks about step 7 alone. The guided Entitlement step runs the same function with the receipt beside its decision record whose `gatewayResourceId` is the gateway, and its own snapshot, `backups/before-entitlement-<apim>-<UTC time>.json`, as the backup (`scripts/flow/Entitlement.ps1`). The output names the backup and the rollback: `entitlement-source` back to `named-value` after `scripts/Sync-ClaudeAccess.ps1` refreshes the lists and `scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift` checks them.
+A refusal at any step leaves `entitlement-source` unchanged and writes no backup; `-WhatIf` runs steps 1-5 and stops, and `-Confirm` asks about step 7 alone. The guided Entitlement step runs the same function with the receipt, from the decision record's folder or the repository's `onboarding/`, whose `gatewayResourceId` is the gateway, and its own snapshot, `backups/before-entitlement-<apim>-<UTC time>.json`, as the backup (`scripts/flow/Entitlement.ps1`). The output names the backup and the rollback: `entitlement-source` back to `named-value` after `scripts/Sync-ClaudeAccess.ps1` refreshes the lists and `scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift` checks them.
 
 `scripts/Restore-ClaudeGateway.ps1` does not move `entitlement-source` to `projection`; it names this switch instead. A deployment of `infra/main.bicep` with `entitlementSource=projection`, like the manual command in the [Azure CLI guide](AZ-COMMANDS.md#10-optional-cosmos-projection), skips admission. The installer passes the template the live value ([ADR-0050](adr/0050-projection-switch-function.md) decision 9).
 
@@ -216,7 +216,9 @@ For Standard v2 and Premium v2, omit `-ResolverInboundAccess` and the script
 chooses `private`. The command deploys private Cosmos, projection networking and
 the resolver, sets the gateway's `entitlement-resolver-url` and `entitlement-resolver-audience` to
 the resolver's outputs, exports named-value decisions, populates from Entra, compares the
-projection against those decisions and leaves `entitlement-source` unchanged. This one-command
+projection against those decisions and leaves `entitlement-source` unchanged. On a gateway whose
+`entitlement-source` is already `projection`, the run stops before the two resolver values change,
+unless they already name this resolver (`scripts/Deploy-ClaudeProjection.ps1:214-230`). This one-command
 path uses the gateway resource group for its projection resources. With `-FlipAfterCleanCompare`
 the command deploys nothing: it reads the renewal receipt and runs the
 [switch](#switch-to-the-projection-p95); `-WhatIf` runs its checks and stops before the backup.
@@ -248,7 +250,7 @@ or creation failures still stop the run rather than claiming success.
 | Tier group collections and shared membership readers | `GroupMember.Read.All` or broader group/directory-read permission; service-principal detail can require application-read access |
 | Gateway service principal; existing resolver app/id URI | Graph application/service-principal read permission, such as `Application.Read.All`, and applicable user/role access |
 | Default app-registration policy, only when no existing app is selected | `Policy.Read.All`; unreadable policy produces WARN, and `-ResolverAppId` avoids this read |
-| Switch (`-FlipAfterCleanCompare`) | API Management named-value read and write, ARM read of the renewal job and its action group, and Cosmos data read through the runner ([ADR-0050](adr/0050-projection-switch-function.md)) |
+| Switch (`-FlipAfterCleanCompare`) | API Management named-value read and write; ARM read of the renewal job, its action group, the resolver deployment and the resolver site; the list action on the site's application settings (`Microsoft.Web/sites/config/list/action`, which the Reader role does not include); and Cosmos data read through the runner ([ADR-0050](adr/0050-projection-switch-function.md), [U122](UNKNOWNS.md#p95-research-before-implementation)) |
 
 Sources, accessed 2026-09-29: [user GET](https://learn.microsoft.com/graph/api/user-get?view=graph-rest-1.0),
 [group list](https://learn.microsoft.com/graph/api/group-list?view=graph-rest-1.0),
@@ -726,9 +728,11 @@ Set-ApimNamedValue -ResourceGroup <rg> -ApimName <apim> -Id entitlement-resolver
 Use the gateway's resource group on these two commands. **Portal:** APIM > APIs
 > Named values > `entitlement-resolver-url` and `entitlement-resolver-audience` >
 Edit. Copy their values from the resolver deployment outputs; the URL and token
-audience are different things. `scripts/Deploy-ClaudeProjection.ps1` runs this step in its normal
-run, and the [switch](#switch-to-the-projection-p95) refuses unless both are the outputs of
-`projection-resolver-<prefix>`.
+audience are different things. On a gateway whose `entitlement-source` is `projection`, a change to
+these values moves every request to the new resolver at once. `scripts/Deploy-ClaudeProjection.ps1`
+runs this step in its normal run, and stops instead when `entitlement-source` is `projection` and
+the values name another resolver. The [switch](#switch-to-the-projection-p95) refuses unless both
+are the outputs of `projection-resolver-<prefix>` and the site serves that URL.
 
 `entitlement-source` is still `named-value`, so nothing reads the projection yet.
 Continue with [the migration runbook](SCALE.md#the-move-itself-step-by-step).

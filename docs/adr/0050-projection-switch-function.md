@@ -6,7 +6,7 @@
 - **Refines:** [ADR-0049](0049-projection-renewal-deployment.md) decisions 6, 7 and 9,
   [ADR-0045](0045-scheduled-projection-renewal.md)
 - **Revised:** 2026-10-05 after council round 1 ([P95 status](../status/P95.md#council)): decisions
-  1-3, 5 and 6 changed, 7-9 and options 5-6 added
+  1-3, 5 and 6 changed, 7-9 and options 5-6 added; after round 2, decisions 3, 8 and 9 changed
 
 ## Context
 
@@ -57,8 +57,9 @@ Admission accepts any action-group id and does not bind the job's settings to it
    `-ReconcilerResourceId`, `-RenewalImageDigest`, `-RenewalActionGroupResourceId` or
    `-RenewalEntryPoint` values that differ from the receipt.
 3. The guided flow's discovery (`Get-ClaudeFlowDiscovery`, and `Get-ClaudeFlowLifecycleLiveDiscovery`
-   for updates) reads the receipt beside the decision record whose `gatewayResourceId` is the
-   discovered gateway. It reads a file only: admission confirms in ARM that the job exists and runs
+   for updates) reads the receipts beside the decision record and under the repository's
+   `onboarding/`, and keeps the one whose `gatewayResourceId` is the discovered gateway; two are
+   ambiguous. It reads files only: admission confirms in ARM that the job exists and runs
    the receipt's digest, inside the switch and before any write. The flow's switch calls the same
    function, with the flow's own snapshot gate as the backup; `Initialize-ClaudeFlowStep` names the
    snapshot, and the gate takes it at the write.
@@ -84,10 +85,17 @@ Admission accepts any action-group id and does not bind the job's settings to it
 8. After the switch, the gateway calls `entitlement-resolver-url` for every request. The switch reads
    the deployment `projection-resolver-<prefix>` in the receipt's resource group (U120) and refuses
    unless its `cosmosAccountName` is the receipt's Cosmos account and the gateway's
-   `entitlement-resolver-url` and `entitlement-resolver-audience` are its outputs.
+   `entitlement-resolver-url` and `entitlement-resolver-audience` are its outputs. It then reads the
+   site that deployment names and its application settings (U122), because the resolver reads those
+   at run time whatever was redeployed since: the site must serve the gateway's URL, and
+   `COSMOS_ENDPOINT`, `COSMOS_DATABASE`, `COSMOS_CONTAINER` and `PROJECTION_TENANT_ID` must be the
+   receipt's account, `claude`, `entitlement` and tenant. The deployer's normal run points the
+   gateway at the resolver it deployed, and refuses to point a gateway already on the projection at
+   another resolver.
 9. Other writers of `entitlement-source`: `scripts/Restore-ClaudeGateway.ps1` does not move it to
    `projection`, and names the switch instead; `infra/main.bicep` receives the live value from the
-   installer and defaults to `named-value`; migration 0002 creates a missing value as `named-value`.
+   installer, which reads it, and the two resolver values, fail-closed on an existing gateway, and
+   defaults to `named-value`; migration 0002 creates a missing value as `named-value`.
    A template deployment with `entitlementSource=projection`, like the manual command in the Azure CLI
    guide, skips admission. `tests/Test-ProjectionSwitch.ps1` lists the code that writes it by name.
 
@@ -104,6 +112,8 @@ Admission accepts any action-group id and does not bind the job's settings to it
   stay a separate run without it.
 − A resolver deployed under another deployment name than `projection-resolver-<prefix>`, or a
   resource group whose name holds parentheses, cannot be switched by this function.
+− The switch lists the resolver site's application settings, an action
+  (`Microsoft.Web/sites/config/list/action`) that the Reader role does not include (U122).
 
 ## How we'd know this was wrong
 

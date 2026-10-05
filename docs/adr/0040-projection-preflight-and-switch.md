@@ -1,9 +1,9 @@
 # ADR-0040: P84 refuses projection switching; renewal admission belongs to P86
 
 - **Status:** P84 decision directed by the lead after council round 1. For switching,
-  [ADR-0045](0045-scheduled-projection-renewal.md) (renewal admission) and
-  [ADR-0050](0050-projection-switch-function.md) (the switch) are proposed to replace it; both await
-  the owner's acceptance
+  [ADR-0045](0045-scheduled-projection-renewal.md) (renewal admission, accepted with P86) refines it,
+  and [ADR-0050](0050-projection-switch-function.md) (the switch, proposed with P95) replaces its
+  switch refusal once the owner accepts it
 - **Date:** 2026-09-29
 - **Packets:** P84; proposed P86
 - **Refines:** ADR-0017 and ADR-0028

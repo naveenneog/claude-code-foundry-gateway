@@ -142,7 +142,7 @@
         "resolver/src/entitlement.mjs": "6dc82d9372ddb81b199ae5c6ce099f3a0da315d075524f57e2582caff363e1bf",
         "resolver/src/index.mjs": "b6b755fbbc56ef62e7b535a4bde2756111c2b5fc9913c16a893b45cb6dce33a3",
         "resolver/src/lookup.mjs": "d04392c5eb24a8a084d72f1e5dc72a61fd385992039118aba510c266c3027c3b",
-        "scripts/ClaudeProjectionSwitch.ps1": "ce8efa8da5b1e590b848b568d383d380bb4f6f41618c1ba1a03084797e4c42bd",
+        "scripts/ClaudeProjectionSwitch.ps1": "c017a480898ba6f6f4b5c60bac4a3d82c8ad51c061a75a9e65151607b96c0209",
         "scripts/Deploy-ClaudeProjectionRenewal.ps1": "7ed4535d5463c25696e5add082d776ff0bc93a4b6e32169b252455af772bf3e5",
         "scripts/Sync-ClaudeProjection.ps1": "0a30b7b4178700d9eb4879d4cb78c01bacf932e21b0856f0f532e38a06a24ca7",
         "sync/Dockerfile": "80ab80a331c8b97f903c30cf714cedfcc9969b8d8c24be0c58777ac7c7f3b382",
@@ -466,7 +466,7 @@
       "id": "company-address",
       "source": "docs/architecture/15-company-address.json",
       "inputs": {
-        "Install-ClaudeGateway.ps1": "48873a2a7249b74b3a04070ba69f07ecb83c1f9a6ab55e3e497aed0ff53fc20a",
+        "Install-ClaudeGateway.ps1": "8977f2eb0d9e79ce6662f08b9eae73ede6ff99518241d868d60724a1c26030f8",
         "Start-ClaudeGateway.ps1": "86e92a50b603e0466f2d94ef03964f1ef8a511fe49262bfb694d6df32ad2d4dc",
         "docs/architecture/15-company-address.json": "83c08d15d71fcf6a002d004090b67ea77c858b70efa3718e8ff11aebae276981",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
@@ -482,7 +482,7 @@
         "scripts/ClaudeGatewayCertificate.ps1": "eb3895a08d7ad19d1d307f4116d6ec80260629402c253cf98219bc0508566d98",
         "scripts/ClaudeNetwork.ps1": "5709a3e94dfc7ca71e75429ea4d278b7737198a5488e07556fccc28cda9d00f9",
         "scripts/flow/Address.ps1": "88b0499d3eaf5423f98f4e6cb1ca1b2f221c4a44d4b8677a790ada807e495869",
-        "scripts/flow/Discovery.ps1": "812f7a46122aa4c5692cddd41e6b5ddc2fb455a522ab1429732e5b8ec1849547",
+        "scripts/flow/Discovery.ps1": "30cb1c9d4492f5f869a8f2ce7b6821018db1ed3b4ae1d5dbaafe4f8449a51201",
         "scripts/flow/FlowContract.ps1": "5fe01f9f68710671039ba8d1fd4a303ccd3547d7f29096e23d87c58dae1b8bf8",
         "scripts/flow/Foundation.ps1": "fb0d43ee4fbe00a140410bf3f9594b1a6d43bc4f226748f8231c6f23743c7ed4"
       },
