@@ -452,7 +452,19 @@ To add one at any time:
 
 The identifier must be lower-case letters, digits and hyphens. It becomes a
 counter key and a map key, so a space, comma, equals or colon is refused rather
-than silently mangled.
+than silently mangled. A capital letter is refused before anything is written,
+because the dollar budget uses the identifier as its scope and accepts only
+lower-case (`scripts/ClaudeUsdBudgets.ps1`).
+
+Before P96 the check ignored case, so a registry can hold a unit with capitals.
+That unit keeps working under its exact spelling: its group, parent and token
+budget can be changed, it can be a parent, and it can be removed. A dollar
+budget, a budget mode and the chargeback report refuse it, because each accepts
+only lower-case identifiers (`scripts/ClaudeUsdBudgets.ps1`,
+`scripts/ClaudeBudgetModes.ps1`, `scripts/ClaudeChargebackReport.ps1`); the
+chargeback report then stops for every unit. A lower-case unit for the same
+group, created before the old one is removed, has all three. Spend before the
+change stays under the old identifier ([Removing one](#removing-one)).
 
 Creating one needs both `-Group` and `-MonthlyBudgetUsd`. After that, either can
 be changed on its own.

@@ -1186,6 +1186,19 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Fixed
 
+- **P96 a business unit identifier with a capital.** `scripts/Set-ClaudeBusinessUnit.ps1` accepted a
+  new identifier such as `Platform` and then stopped at the dollar budget with "Invalid USD scope
+  identifier." (`scripts/ClaudeUsdBudgets.ps1:42`); the AUM catalog action wrote such an identifier to
+  `bu-registry`; a capitalised spelling of a stored unit, such as `Sales` for `sales`, matched that
+  unit; and `scripts/Manage-ClaudeBusinessUnits.ps1` accepted it at its prompt and offered to create
+  the Entra group. A new identifier is now refused with the lower-case rule before any write. A unit
+  that the registry holds with capitals keeps working under that spelling
+  ([P96 status](docs/status/P96.md#p96-fixes-from-a-live-deployment-2026-10-05)).
+- **P96 the guided flow's Tier and Desktop sign-in changes.** `Start-ClaudeGateway.ps1 -Action Change`
+  with `-Change sku` or `-Change desktopSignIn` stopped at the write gate with "A named-value snapshot
+  path is required before applying this lifecycle change." Both steps now export the gateway to
+  `backups/before-tier-<apim>-<UTC time>.json` or `backups/before-desktop-sign-in-<apim>-<UTC time>.json`
+  before their write ([P96 status](docs/status/P96.md#p96-fixes-from-a-live-deployment-2026-10-05)).
 - **P95 no switch path could reach the projection.** The deployer's `-FlipAfterCleanCompare`
   redeployed and applied a fresh snapshot before admission, so admission refused every attempt as
   an older generation; the guided flow's live discovery supplied no renewal evidence and ran no
