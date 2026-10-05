@@ -25,6 +25,7 @@ async function start(extra = {}) {
     stubInstaller,
     idleMs: 60_000,
     env: { P93_INSTALLER_UI_STUB_LOG: log, ...(extra.env || {}) },
+    readIdentity: extra.readIdentity ?? (async () => ({ signedIn: false, user: '', tenantId: '', subscriptionId: '' })),
   });
   const address = await server.listenAsync('127.0.0.1');
   return {

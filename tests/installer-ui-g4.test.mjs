@@ -20,6 +20,7 @@ async function start(extra = {}) {
     idleMs: 60_000,
     env: { P93_INSTALLER_UI_STUB_LOG: join(scratch, 'stub.ndjson'), ...(extra.env || {}) },
     pwsh: extra.pwsh,
+    readIdentity: extra.readIdentity ?? (async () => ({ signedIn: false, user: '', tenantId: '', subscriptionId: '' })),
   });
   const address = await server.listenAsync('127.0.0.1');
   return {

@@ -95,7 +95,7 @@ test('S1 bootstrap token is not the session cookie before or after bootstrap', a
     assert.notEqual(app.cookie, tokenCookie);
     assert.equal((await fetch(`${app.base}/api/session`, { headers: { cookie: tokenCookie } })).status, 401);
     assert.equal((await fetch(`${app.base}/api/session`, { headers: { cookie: app.cookie } })).status, 200);
-    const accepted = await app.fetch('/api/prefill', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind: 'subscriptions' }) });
+    const accepted = await app.fetch('/api/run/stop', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ runId: 'missing' }) });
     assert.notEqual(accepted.status, 403);
   } finally {
     await app.close();
