@@ -95,6 +95,18 @@ function Get-ClaudeInstallerProjectionPlan {
     [pscustomobject]@{ Steps = $steps; Writes = $(if ($WhatIf) { @() } else { $steps }) }
 }
 
+# Runs one repository script the way the installer does: its output goes to the console, a thrown
+# refusal becomes exit 1 with its message shown. Tests pass -InvokeScript to record the call instead.
+function Invoke-ClaudeInstallerScript {
+    param([Parameter(Mandatory)][string]$ScriptPath, [Parameter(Mandatory)][string[]]$Arguments, [scriptblock]$InvokeScript)
+    if ($InvokeScript) { return [int](& $InvokeScript $ScriptPath $Arguments) }
+    try { & $ScriptPath @Arguments | Out-Host; return 0 }
+    catch { Write-Host "    $($_.Exception.Message)" -ForegroundColor Red; return 1 }
+}
+
+# Choosing projection deploys it, then switches the gateway (ADR-0052, P98). The deployer deploys,
+# populates and compares and leaves named values serving; its -FlipAfterCleanCompare run deploys nothing
+# and switches only after the resolver checks, the compare and switch evidence (ADR-0051).
 function Invoke-ClaudeInstallerProjectionDeployment {
     param(
         [Parameter(Mandatory)][string]$Root,
@@ -112,61 +124,67 @@ function Invoke-ClaudeInstallerProjectionDeployment {
         [scriptblock]$InvokeScript
     )
     $scriptPath = Join-Path $Root 'scripts\Deploy-ClaudeProjection.ps1'
-    $args = @(
-        '-ResourceGroup', $ResourceGroup,
-        '-ApimName', $ApimName,
-        '-NamePrefix', $NamePrefix,
-        '-Location', $Location,
-        '-Sku', $Sku,
-        '-ResolverInboundAccess', $ResolverInboundAccess,
-        '-StandardGroup', $StandardGroup,
-        '-PremiumGroup', $PremiumGroup,
-        '-FlipAfterCleanCompare'
-    )
-    if ($ProjectionResolverAppId) { $args += @('-ResolverAppId', $ProjectionResolverAppId) }
-    if ($SubscriptionId) { $args += @('-SubscriptionId', $SubscriptionId) }
-    if ($WhatIf) { $args += '-WhatIf' }
-    $exitCode = if ($InvokeScript) { & $InvokeScript $scriptPath $args } else {
-        & $scriptPath @args
-        $LASTEXITCODE
+    $common = @('-ResourceGroup', $ResourceGroup, '-ApimName', $ApimName, '-NamePrefix', $NamePrefix, '-StandardGroup', $StandardGroup, '-PremiumGroup', $PremiumGroup)
+    if ($SubscriptionId) { $common += @('-SubscriptionId', $SubscriptionId) }
+    $deployArguments = $common + @('-Location', $Location, '-Sku', $Sku, '-ResolverInboundAccess', $ResolverInboundAccess)
+    if ($ProjectionResolverAppId) { $deployArguments += @('-ResolverAppId', $ProjectionResolverAppId) }
+    if ($WhatIf) {
+        if ((Invoke-ClaudeInstallerScript -ScriptPath $scriptPath -Arguments ($deployArguments + '-WhatIf') -InvokeScript $InvokeScript) -ne 0) {
+            throw 'The projection deployment preview failed; nothing was created.'
+        }
+        Write-Host '    WhatIf: the switch follows the deployment; it reads the deployed resolver and Cosmos account, so a preview does not run it.' -ForegroundColor DarkGray
+        return $true
     }
-    if ($exitCode -ne 0) {
-        throw "Projection switch refused or deployment failed; named values keep serving. Rerun after fixing the reason with: .\scripts\Deploy-ClaudeProjection.ps1 -ResourceGroup $ResourceGroup -ApimName $ApimName -NamePrefix $NamePrefix -FlipAfterCleanCompare"
+    $deployRerun = ".\scripts\Deploy-ClaudeProjection.ps1 -ResourceGroup $ResourceGroup -ApimName $ApimName -NamePrefix $NamePrefix -Location $Location -Sku $Sku -ResolverInboundAccess $ResolverInboundAccess -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup"
+    if ((Invoke-ClaudeInstallerScript -ScriptPath $scriptPath -Arguments $deployArguments -InvokeScript $InvokeScript) -ne 0) {
+        throw "Projection deployment failed; named values keep serving and nothing was switched. Rerun after fixing the reason with: $deployRerun"
+    }
+    if ((Invoke-ClaudeInstallerScript -ScriptPath $scriptPath -Arguments ($common + '-FlipAfterCleanCompare') -InvokeScript $InvokeScript) -ne 0) {
+        throw "Projection switch refused; named values keep serving. Rerun after fixing the reason with: .\scripts\Deploy-ClaudeProjection.ps1 -ResourceGroup $ResourceGroup -ApimName $ApimName -NamePrefix $NamePrefix -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -FlipAfterCleanCompare"
     }
     return $true
 }
 
+# The optional sync job (ADR-0051) is deployed after the switch. A failure leaves the projection and the
+# switch as they are, so it is reported with the rerun command rather than ending the install.
 function Invoke-ClaudeInstallerSyncJobDeployment {
     param(
         [Parameter(Mandatory)][string]$Root,
         [Parameter(Mandatory)][string]$ResourceGroup,
         [Parameter(Mandatory)][string]$ApimName,
         [Parameter(Mandatory)][string]$NamePrefix,
-        [string]$SubscriptionId
+        [Parameter(Mandatory)][string]$StandardGroup,
+        [Parameter(Mandatory)][string]$PremiumGroup,
+        [Parameter(Mandatory)][string]$AlertEmail,
+        [string]$SubscriptionId,
+        [scriptblock]$InvokeScript
     )
-    $args = @('-ResourceGroup', $ResourceGroup, '-ApimName', $ApimName, '-NamePrefix', $NamePrefix)
-    if ($SubscriptionId) { $args += @('-SubscriptionId', $SubscriptionId) }
-    & (Join-Path $Root 'scripts\Deploy-ClaudeProjectionRenewal.ps1') @args
-    if ($LASTEXITCODE -ne 0) { throw 'Optional sync job deployment failed.' }
-    Write-Host 'Tenant administrator grant command: .\scripts\Grant-ClaudeProjectionRenewalGraphAccess.ps1 -ReceiptPath .\onboarding\projection-renewal-<namePrefix>.json' -ForegroundColor Yellow
+    $jobArguments = @('-ResourceGroup', $ResourceGroup, '-ApimName', $ApimName, '-NamePrefix', $NamePrefix,
+        '-StandardGroup', $StandardGroup, '-PremiumGroup', $PremiumGroup, '-AlertEmail', $AlertEmail)
+    if ($SubscriptionId) { $jobArguments += @('-SubscriptionId', $SubscriptionId) }
+    $scriptPath = Join-Path $Root 'scripts\Deploy-ClaudeProjectionRenewal.ps1'
+    if ((Invoke-ClaudeInstallerScript -ScriptPath $scriptPath -Arguments $jobArguments -InvokeScript $InvokeScript) -ne 0) {
+        Write-Warning "The optional sync job was not deployed; the projection and the switch are unaffected. Rerun: .\scripts\Deploy-ClaudeProjectionRenewal.ps1 -ResourceGroup $ResourceGroup -ApimName $ApimName -NamePrefix $NamePrefix -AlertEmail $AlertEmail"
+        return $false
+    }
+    return $true
 }
-
 function Test-ClaudeInstallerShouldSyncNamedValues {
     param([ValidateSet('named-value','projection')][string]$EntitlementStore, [bool]$NewGateway)
     return ($EntitlementStore -eq 'named-value' -or -not $NewGateway)
 }
 
 function Get-ClaudeInstallerProjectionNextSteps {
-    param([Parameter(Mandatory)][string]$ResourceGroup, [Parameter(Mandatory)][string]$ApimName, [switch]$DeploySyncJob)
+    param([Parameter(Mandatory)][string]$ResourceGroup, [Parameter(Mandatory)][string]$ApimName, [Parameter(Mandatory)][string]$NamePrefix, [switch]$DeploySyncJob)
     $steps = @(
         "        .\scripts\Sync-ClaudeAccess.ps1 -ResourceGroup $ResourceGroup -ApimName $ApimName -User <name-or-object-id>",
-        '        Add or remove the developer in Entra first; this targeted sync publishes the one projection record.',
+        '        Add or remove the developer in the Entra group first; this targeted sync publishes that one projection record.',
         '        .\scripts\New-OnboardingEmail.ps1 -ConfigPath .\onboarding\claude-gateway.json -To dev@contoso.com'
     )
     if ($DeploySyncJob) {
-        $steps += '        The optional sync job is deployed; ask a tenant administrator to grant its Graph permission before running it.'
+        $steps += '        The optional sync job is deployed. A Privileged Role Administrator or Global Administrator grants its Microsoft Graph permission with the command the deployment printed; then start it with az containerapp job start.'
     } else {
-        $steps += "        For very large directories, deploy the optional sync job later with .\scripts\Deploy-ClaudeProjectionRenewal.ps1 -ResourceGroup $ResourceGroup -ApimName $ApimName -NamePrefix <prefix>."
+        $steps += "        For very large directories, the optional sync job reads Microsoft Graph inside the network: .\scripts\Deploy-ClaudeProjectionRenewal.ps1 -ResourceGroup $ResourceGroup -ApimName $ApimName -NamePrefix $NamePrefix -AlertEmail <address>"
     }
     return $steps
 }

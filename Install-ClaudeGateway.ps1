@@ -1582,7 +1582,8 @@ if ($EntitlementStore -eq 'projection') {
         -Location $Location -Sku $Sku -ResolverInboundAccess $ResolverInboundAccess -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup `
         -SubscriptionId $SubscriptionId -ProjectionResolverAppId $ProjectionResolverAppId -WhatIf:$WhatIfPreference | Out-Null
     if ($DeploySyncJob -and -not $WhatIfPreference) {
-        Invoke-ClaudeInstallerSyncJobDeployment -Root $root -ResourceGroup $ResourceGroup -ApimName $apimName -NamePrefix $NamePrefix -SubscriptionId $SubscriptionId
+        $null = Invoke-ClaudeInstallerSyncJobDeployment -Root $root -ResourceGroup $ResourceGroup -ApimName $apimName -NamePrefix $NamePrefix `
+            -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -AlertEmail $PublisherEmail -SubscriptionId $SubscriptionId
     }
 }
 
@@ -1746,7 +1747,7 @@ if ($addressMode -eq 'custom') {
     ) })
 }
 if ($EntitlementStore -eq 'projection') {
-    $nextSteps.Add([pscustomobject]@{ Title = 'Add or remove a developer in the projection'; Warn = $false; Detail = (Get-ClaudeInstallerProjectionNextSteps -ResourceGroup $ResourceGroup -ApimName $apimName -DeploySyncJob:$DeploySyncJob) })
+    $nextSteps.Add([pscustomobject]@{ Title = 'Add or remove a developer in the projection'; Warn = $false; Detail = (Get-ClaudeInstallerProjectionNextSteps -ResourceGroup $ResourceGroup -ApimName $apimName -NamePrefix $NamePrefix -DeploySyncJob:$DeploySyncJob) })
 }
 else {
     $nextSteps.Add([pscustomobject]@{ Title = 'Entitle a developer'; Warn = $false; Detail = @(
