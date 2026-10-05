@@ -1,6 +1,28 @@
 <#
 .SYNOPSIS
-    Runs a disposable live projection install and one request through the gateway.
+    Installs a disposable gateway with the Cosmos projection and checks one developer's access through it.
+
+.DESCRIPTION
+    Works only in the subscription named by -SubscriptionId, and refuses the default Azure CLI profile
+    unless -UseCurrentAzLogin is passed. Each step prints what it does:
+
+      1. Checks every input before any Azure call, and that the resource group does not exist yet.
+      2. Creates the two tier groups when they are missing, and adds the signed-in user to the
+         standard group, before the installer reads them.
+      3. Runs Install-ClaudeGateway.ps1 -EntitlementStore projection -Yes on Basic v2. The installer
+         creates the resource group, deploys the gateway and the projection, and switches the gateway.
+      4. Checks that entitlement-source is projection and entitlement-projection-prefix is the prefix.
+      5. Sets entitlement-cache-seconds to 60 on this disposable gateway, so a removal shows within a
+         minute; the gateway caches an allowed answer for that many seconds (infra/policy.xml).
+      6. Sends a request through the gateway as the signed-in user and expects 200.
+      7. Removes the user from the group, runs Sync-ClaudeAccess.ps1 -User, and expects 403.
+      8. Adds the user back, runs Sync-ClaudeAccess.ps1 -User, and expects 200.
+
+    With -Teardown, whatever happened: deletes the gateway identity's role assignments on the Foundry
+    account, the resolver app registration, the resource group, and the tier groups this run created.
+
+.EXAMPLE
+    ./scripts/Test-ClaudeLiveProjection.ps1 -SubscriptionId <id> -Location eastus2 -FoundryAccount <name> -FoundryResourceGroup <rg> -UseCurrentAzLogin -Teardown
 #>
 [CmdletBinding()]
 param(
@@ -12,83 +34,175 @@ param(
     [string]$NamePrefix,
     [string]$StandardGroup = 'claude-live-projection-standard',
     [string]$PremiumGroup = 'claude-live-projection-premium',
+    [string]$Model,
+    [ValidateRange(60, 1800)][int]$ChangeWaitSeconds = 300,
+    [ValidateRange(1, 60)][int]$PollSeconds = 15,
     [switch]$UseCurrentAzLogin,
-    [switch]$Teardown
+    [switch]$Teardown,
+    # Tests point these at stubs; a live run uses the repository's scripts.
+    [Parameter(DontShow)][string]$InstallerPath,
+    [Parameter(DontShow)][string]$SyncAccessPath
 )
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
+if (-not $InstallerPath) { $InstallerPath = Join-Path $root 'Install-ClaudeGateway.ps1' }
+if (-not $SyncAccessPath) { $SyncAccessPath = Join-Path $root 'scripts\Sync-ClaudeAccess.ps1' }
 $results = [System.Collections.Generic.List[object]]::new()
 function Add-Result([string]$Step, [bool]$Ok, [string]$Detail = '') {
     $results.Add([pscustomobject]@{ step = $Step; ok = $Ok; detail = $Detail })
+    $colour = if ($Ok) { 'Green' } else { 'Red' }
+    Write-Host ("  [{0}] {1} {2}" -f $(if ($Ok) { 'OK' } else { 'FAIL' }), $Step, $Detail) -ForegroundColor $colour
 }
 function Assert-Form([string]$Name, [string]$Value, [string]$Pattern) {
-    if ([string]::IsNullOrWhiteSpace($Value) -or $Value -notmatch $Pattern) { throw "$Name is not in the accepted form." }
+    if ([string]::IsNullOrWhiteSpace($Value) -or $Value -notmatch $Pattern) { throw "-$Name '$Value' is not in the accepted form; nothing was created." }
 }
+# az.cmd hands its arguments to cmd.exe, so every value reaching it is checked by Assert-Form first.
+function Invoke-Az([string[]]$Arguments, [switch]$AllowFailure) {
+    $saved = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try { $output = @(& az @Arguments 2>&1); $code = $LASTEXITCODE }
+    finally { $ErrorActionPreference = $saved }
+    $text = (@($output | Where-Object { $_ -isnot [Management.Automation.ErrorRecord] }) -join "`n").Trim()
+    if ($code -ne 0 -and -not $AllowFailure) {
+        $errors = (@($output | Where-Object { $_ -is [Management.Automation.ErrorRecord] }) -join ' ').Trim()
+        throw "az $($Arguments[0..1] -join ' ') failed (exit $code): $errors"
+    }
+    if ($code -ne 0) { return $null }
+    return $text
+}
+function Get-GatewayStatus([string]$Url, [string]$ModelName) {
+    $token = Invoke-Az @('account', 'get-access-token', '--resource', 'https://cognitiveservices.azure.com', '--query', 'accessToken', '-o', 'tsv')
+    if (-not $token) { throw 'No access token for https://cognitiveservices.azure.com; the request was not sent.' }
+    $body = @{ model = $ModelName; max_tokens = 16; messages = @(@{ role = 'user'; content = 'Reply with OK.' }) } | ConvertTo-Json -Depth 5
+    $headers = @{ Authorization = "Bearer $token"; 'anthropic-version' = '2023-06-01' }
+    $response = Invoke-WebRequest -Uri $Url -Method Post -Headers $headers -ContentType 'application/json' -Body $body -SkipHttpErrorCheck -TimeoutSec 120
+    return [int]$response.StatusCode
+}
+# The gateway answers 200 or 403 for an identity; anything else (a cold resolver, a policy still
+# loading) is retried until the wait ends.
+function Wait-GatewayStatus([string]$Url, [string]$ModelName, [int]$Expected, [string]$Step) {
+    $deadline = (Get-Date).AddSeconds($ChangeWaitSeconds)
+    $seen = @()
+    do {
+        $status = Get-GatewayStatus -Url $Url -ModelName $ModelName
+        $seen += $status
+        if ($status -eq $Expected) { Add-Result $Step $true "HTTP $status after $($seen.Count) request(s)"; return }
+        Start-Sleep -Seconds $PollSeconds
+    } while ((Get-Date) -lt $deadline)
+    Add-Result $Step $false "expected HTTP $Expected; saw $($seen -join ', ') over $ChangeWaitSeconds s"
+    throw "$Step did not reach HTTP $Expected."
+}
+function Wait-Membership([string]$GroupId, [string]$MemberId, [string]$Expected) {
+    $deadline = (Get-Date).AddSeconds($ChangeWaitSeconds)
+    do {
+        $value = Invoke-Az @('ad', 'group', 'member', 'check', '--group', $GroupId, '--member-id', $MemberId, '--query', 'value', '-o', 'tsv')
+        if ($value -eq $Expected) { return }
+        Start-Sleep -Seconds $PollSeconds
+    } while ((Get-Date) -lt $deadline)
+    throw "Microsoft Graph did not report membership '$Expected' for $MemberId in $GroupId within $ChangeWaitSeconds s."
+}
+
+$guid = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+Assert-Form SubscriptionId $SubscriptionId $guid
+Assert-Form Location $Location '^[a-z0-9]{2,40}$'
+Assert-Form FoundryAccount $FoundryAccount '^[A-Za-z0-9][A-Za-z0-9-]{1,62}$'
+Assert-Form FoundryResourceGroup $FoundryResourceGroup '^[A-Za-z0-9._-]{1,90}$'
+Assert-Form StandardGroup $StandardGroup '^[A-Za-z0-9._-]{1,120}$'
+Assert-Form PremiumGroup $PremiumGroup '^[A-Za-z0-9._-]{1,120}$'
+if ($Model) { Assert-Form Model $Model '^[A-Za-z0-9._-]{1,64}$' }
+if (-not $ResourceGroup) { $ResourceGroup = 'rg-claude-live-' + [guid]::NewGuid().ToString('N').Substring(0, 10) }
+if (-not $NamePrefix) { $NamePrefix = 'clive' + [guid]::NewGuid().ToString('N').Substring(0, 10) }
+Assert-Form ResourceGroup $ResourceGroup '^[A-Za-z0-9._-]{1,90}$'
+Assert-Form NamePrefix $NamePrefix '^(?=.{1,37}$)[a-z0-9]+(?:-[a-z0-9]+)*$'
+if (-not $UseCurrentAzLogin -and [string]::IsNullOrWhiteSpace($env:AZURE_CONFIG_DIR)) {
+    throw 'Set AZURE_CONFIG_DIR to a profile signed in for this test, or pass -UseCurrentAzLogin to use the current Azure CLI profile; nothing was created.'
+}
+$apimName = "apim-$NamePrefix"
+$createdGroups = [System.Collections.Generic.List[string]]::new()
+$resourceGroupCreated = $false
+$failed = $false
 
 try {
-    $guid = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
-    Assert-Form SubscriptionId $SubscriptionId $guid
-    Assert-Form Location $Location '^[A-Za-z0-9 -]{2,40}$'
-    Assert-Form FoundryAccount $FoundryAccount '^[A-Za-z0-9][A-Za-z0-9-]{1,62}$'
-    Assert-Form FoundryResourceGroup $FoundryResourceGroup '^[A-Za-z0-9._-]{1,90}$'
-    Assert-Form StandardGroup $StandardGroup '^[A-Za-z0-9._-]{1,120}$'
-    Assert-Form PremiumGroup $PremiumGroup '^[A-Za-z0-9._-]{1,120}$'
-    if (-not $UseCurrentAzLogin -and [string]::IsNullOrWhiteSpace($env:AZURE_CONFIG_DIR)) {
-        throw 'Set an isolated AZURE_CONFIG_DIR or pass -UseCurrentAzLogin to use the current Azure CLI profile.'
+    Write-Host "`n==> Subscription and resource group" -ForegroundColor Cyan
+    Invoke-Az @('account', 'set', '--subscription', $SubscriptionId) | Out-Null
+    $account = Invoke-Az @('account', 'show', '-o', 'json') | ConvertFrom-Json
+    if ([string]$account.id -ne $SubscriptionId) { throw "The Azure CLI is on subscription $($account.id), not $SubscriptionId." }
+    Add-Result 'account' $true "$($account.user.name) in $SubscriptionId"
+    if ((Invoke-Az @('group', 'exists', '--name', $ResourceGroup)) -eq 'true') { throw "Resource group $ResourceGroup already exists; this test deletes what it creates, so it uses a new one. Nothing was created." }
+    $resourceGroupCreated = $true
+
+    Write-Host "`n==> Tier groups and the signed-in user" -ForegroundColor Cyan
+    $groupIds = @{}
+    foreach ($name in @($StandardGroup, $PremiumGroup)) {
+        $id = Invoke-Az @('ad', 'group', 'show', '--group', $name, '--query', 'id', '-o', 'tsv') -AllowFailure
+        if (-not $id) {
+            $id = Invoke-Az @('ad', 'group', 'create', '--display-name', $name, '--mail-nickname', $name, '--query', 'id', '-o', 'tsv')
+            $createdGroups.Add($id)
+        }
+        Assert-Form 'group id' $id $guid
+        $groupIds[$name] = $id
     }
-    if (-not $ResourceGroup) { $ResourceGroup = 'rg-claude-live-' + [guid]::NewGuid().ToString('N').Substring(0, 10) }
-    if (-not $NamePrefix) { $NamePrefix = 'clive' + [guid]::NewGuid().ToString('N').Substring(0, 10) }
-    Assert-Form ResourceGroup $ResourceGroup '^[A-Za-z0-9._-]{1,90}$'
-    Assert-Form NamePrefix $NamePrefix '^(?=.{1,37}$)[a-z0-9]+(?:-[a-z0-9]+)*$'
-    $apimName = "apim-$NamePrefix"
-
-    az account set --subscription $SubscriptionId
-    if ($LASTEXITCODE -ne 0) { throw 'az account set failed.' }
-    $account = az account show -o json | ConvertFrom-Json
-    Add-Result account $true $account.user.name
-
-    $exists = [string](az group exists --name $ResourceGroup -o tsv)
-    if ($exists.Trim().ToLowerInvariant() -eq 'true') { throw "Resource group $ResourceGroup already exists; pass a new name." }
-    az group create --name $ResourceGroup --location $Location -o none
-    if ($LASTEXITCODE -ne 0) { throw 'resource group create failed.' }
-    Add-Result resourceGroup $true $ResourceGroup
-
-    & (Join-Path $root 'Install-ClaudeGateway.ps1') -SubscriptionId $SubscriptionId -FoundryAccount $FoundryAccount `
-        -FoundryResourceGroup $FoundryResourceGroup -ResourceGroup $ResourceGroup -Location $Location -NamePrefix $NamePrefix `
-        -Sku BasicV2 -EntitlementStore projection -DeployProjection -Yes -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup
-    Add-Result installer $true $apimName
-
-    $signedInUser = [string](az ad signed-in-user show --query id -o tsv)
-    Assert-Form SignedInUser $signedInUser $guid
-    az ad group member add --group $StandardGroup --member-id $signedInUser -o none
-    if ($LASTEXITCODE -ne 0) { throw 'adding the signed-in user to the standard group failed.' }
-    Add-Result addUser $true $signedInUser
-
-    & (Join-Path $root 'scripts\Sync-ClaudeAccess.ps1') -ResourceGroup $ResourceGroup -ApimName $apimName -User $signedInUser
-    Add-Result targetedSync $true $signedInUser
-
-    $token = [string](az account get-access-token --resource https://cognitiveservices.azure.com --query accessToken -o tsv)
-    if ([string]::IsNullOrWhiteSpace($token)) { $token = 'stub-token' }
-    $body = @{ model = 'claude-sonnet-5'; max_tokens = 8; messages = @(@{ role = 'user'; content = 'Return ok.' }) } | ConvertTo-Json -Depth 8
-    $gatewayUrl = "https://$apimName.azure-api.net/claude"
-    $reply = Invoke-RestMethod -Uri "$gatewayUrl/v1/messages" -Method Post -Headers @{ Authorization = "Bearer $token"; 'anthropic-version' = '2023-06-01' } -ContentType 'application/json' -Body $body -TimeoutSec 60
-    Add-Result gatewayRequest $true ([string]$reply.id)
-
-    if ($Teardown) {
-        az group delete --name $ResourceGroup --yes --no-wait -o none
-        az ad group delete --group $StandardGroup -o none 2>$null
-        az ad group delete --group $PremiumGroup -o none 2>$null
-        $apps = az ad app list --display-name "claude-projection-resolver-$NamePrefix" -o json | ConvertFrom-Json
-        foreach ($app in @($apps)) { if ($app.appId -match $guid) { az ad app delete --id $app.appId -o none 2>$null } }
-        az role assignment delete --assignee $apimName --scope "/subscriptions/$SubscriptionId/resourceGroups/$FoundryResourceGroup/providers/Microsoft.CognitiveServices/accounts/$FoundryAccount" -o none 2>$null
-        Add-Result teardown $true $ResourceGroup
+    $userId = Invoke-Az @('ad', 'signed-in-user', 'show', '--query', 'id', '-o', 'tsv')
+    Assert-Form 'signed-in user' $userId $guid
+    if ((Invoke-Az @('ad', 'group', 'member', 'check', '--group', $groupIds[$StandardGroup], '--member-id', $userId, '--query', 'value', '-o', 'tsv')) -ne 'true') {
+        Invoke-Az @('ad', 'group', 'member', 'add', '--group', $groupIds[$StandardGroup], '--member-id', $userId) | Out-Null
     }
+    Wait-Membership $groupIds[$StandardGroup] $userId 'true'
+    Add-Result 'groups' $true "$StandardGroup holds $userId; created: $($createdGroups.Count)"
+
+    Write-Host "`n==> Installer with the Cosmos projection" -ForegroundColor Cyan
+    & $InstallerPath -SubscriptionId $SubscriptionId -FoundryAccount $FoundryAccount -FoundryResourceGroup $FoundryResourceGroup `
+        -ResourceGroup $ResourceGroup -Location $Location -NamePrefix $NamePrefix -Sku BasicV2 -EntitlementStore projection -Yes `
+        -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup
+    Add-Result 'installer' $true $apimName
+
+    $source = Invoke-Az @('apim', 'nv', 'show', '-g', $ResourceGroup, '--service-name', $apimName, '--named-value-id', 'entitlement-source', '--query', 'value', '-o', 'tsv')
+    $prefix = Invoke-Az @('apim', 'nv', 'show', '-g', $ResourceGroup, '--service-name', $apimName, '--named-value-id', 'entitlement-projection-prefix', '--query', 'value', '-o', 'tsv')
+    if ($source -ne 'projection' -or $prefix -ne $NamePrefix) { Add-Result 'switch' $false "entitlement-source '$source', prefix '$prefix'"; throw 'The installer did not leave the gateway on the projection.' }
+    Add-Result 'switch' $true "entitlement-source projection, prefix $prefix"
+    Invoke-Az @('apim', 'nv', 'update', '-g', $ResourceGroup, '--service-name', $apimName, '--named-value-id', 'entitlement-cache-seconds', '--value', '60') | Out-Null
+
+    if (-not $Model) {
+        $models = Invoke-Az @('apim', 'nv', 'show', '-g', $ResourceGroup, '--service-name', $apimName, '--named-value-id', 'models-standard', '--query', 'value', '-o', 'tsv')
+        $Model = @([regex]::Matches([string]$models, '[A-Za-z0-9._-]+') | ForEach-Object Value | Select-Object -First 1)[0]
+        if (-not $Model) { throw 'models-standard names no model to request.' }
+    }
+    $gatewayUrl = Invoke-Az @('apim', 'show', '-g', $ResourceGroup, '-n', $apimName, '--query', 'gatewayUrl', '-o', 'tsv')
+    $url = "$($gatewayUrl.TrimEnd('/'))/claude/v1/messages"
+
+    Write-Host "`n==> Requests through the gateway as $userId ($Model)" -ForegroundColor Cyan
+    Wait-GatewayStatus $url $Model 200 'entitled request'
+
+    Invoke-Az @('ad', 'group', 'member', 'remove', '--group', $groupIds[$StandardGroup], '--member-id', $userId) | Out-Null
+    Wait-Membership $groupIds[$StandardGroup] $userId 'false'
+    & $SyncAccessPath -ResourceGroup $ResourceGroup -ApimName $apimName -User $userId
+    Wait-GatewayStatus $url $Model 403 'removed, then targeted sync'
+
+    Invoke-Az @('ad', 'group', 'member', 'add', '--group', $groupIds[$StandardGroup], '--member-id', $userId) | Out-Null
+    Wait-Membership $groupIds[$StandardGroup] $userId 'true'
+    & $SyncAccessPath -ResourceGroup $ResourceGroup -ApimName $apimName -User $userId
+    Wait-GatewayStatus $url $Model 200 're-added, then targeted sync'
 }
 catch {
-    Add-Result failed $false $_.Exception.Message
-    $results | ConvertTo-Json -Depth 5
-    throw
+    $failed = $true
+    Add-Result 'stopped' $false $_.Exception.Message
 }
-
-$results | ConvertTo-Json -Depth 5
+finally {
+    if ($Teardown) {
+        Write-Host "`n==> Teardown" -ForegroundColor Cyan
+        $principal = Invoke-Az @('apim', 'show', '-g', $ResourceGroup, '-n', $apimName, '--query', 'identity.principalId', '-o', 'tsv') -AllowFailure
+        $foundryId = Invoke-Az @('cognitiveservices', 'account', 'show', '-g', $FoundryResourceGroup, '-n', $FoundryAccount, '--query', 'id', '-o', 'tsv') -AllowFailure
+        if ($principal -match $guid -and $foundryId) {
+            $assignments = Invoke-Az @('role', 'assignment', 'list', '--assignee', $principal, '--scope', $foundryId, '--query', '[].id', '-o', 'tsv') -AllowFailure
+            foreach ($assignment in @(([string]$assignments) -split '\r?\n' | Where-Object { $_ })) { Invoke-Az @('role', 'assignment', 'delete', '--ids', $assignment) -AllowFailure | Out-Null }
+        }
+        $apps = Invoke-Az @('ad', 'app', 'list', '--display-name', "claude-projection-resolver-$NamePrefix", '--query', '[].appId', '-o', 'tsv') -AllowFailure
+        foreach ($appId in @(([string]$apps) -split '\r?\n' | Where-Object { $_ -match $guid })) { Invoke-Az @('ad', 'app', 'delete', '--id', $appId) -AllowFailure | Out-Null }
+        if ($resourceGroupCreated) { Invoke-Az @('group', 'delete', '--name', $ResourceGroup, '--yes', '--no-wait') -AllowFailure | Out-Null }
+        foreach ($groupId in $createdGroups) { Invoke-Az @('ad', 'group', 'delete', '--group', $groupId) -AllowFailure | Out-Null }
+        Add-Result 'teardown' $true "role assignments on the Foundry account, resolver app, $ResourceGroup (deleting), $($createdGroups.Count) group(s)"
+    }
+    $results | ConvertTo-Json -Depth 4
+}
+if ($failed) { exit 1 }
