@@ -54,6 +54,24 @@
     "test": "R3-1 delayed preflight answer edits show stale state without installing the fingerprint"
   },
   {
+    "id": "r3-4-1",
+    "why": "Closing the Azure lease must refuse queued and later acquisitions during shutdown.",
+    "file": "tools/installer-ui/azure-lease.mjs",
+    "find": "      if (closed) throw stopping();\n",
+    "replace": "",
+    "testFile": "tests/installer-ui-g8.test.mjs",
+    "test": "R3-4 Azure lease close refuses queued and later acquisitions"
+  },
+  {
+    "id": "r3-4-2",
+    "why": "Server cleanup must close the Azure lease before queued reads can spawn children.",
+    "file": "tools/installer-ui/server.mjs",
+    "find": "    azureLease.close();\n",
+    "replace": "",
+    "testFile": "tests/installer-ui-g8.test.mjs",
+    "test": "R3-4 shutdown closes the Azure lease before queued reads can spawn children"
+  },
+  {
     "id": "T1-fail-once-disabled",
     "why": "The T1 journey must fail when the stub no longer fails the first selected gateway-deployment run.",
     "file": "tests/installer-ui-stub.mjs",

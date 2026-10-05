@@ -88,6 +88,6 @@ test('server modules spawn only PowerShell, node stubs or taskkill', async () =>
   ]);
   assert.deepEqual(targets.filter((target) => !allowed.has(target)), [], 'a child-process target outside the allowlist');
   const server = await readFile(new URL('../tools/installer-ui/server.mjs', import.meta.url), 'utf8');
-  assert.match(server, /function spawnChild\(file, args, options, spawnOptions = \{\}\) \{\r?\n\s*const child = spawn\(file, args,/, 'spawn(file) is only the spawnChild body');
+  assert.match(server, /function spawnChild\(file, args, options, spawnOptions = \{\}\) \{[\s\S]*?const child = spawn\(file, args,/, 'spawn(file) is only the spawnChild body');
   assert.match(server, /const command = options\.pwsh \|\| 'pwsh';\r?\n\s*const child = spawn\(command,/, 'spawn(command) is only the PowerShell version check');
 });

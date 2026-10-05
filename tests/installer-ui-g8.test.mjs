@@ -6,8 +6,9 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { validatePreflight, validateProgressEvent } from '../tools/installer-ui/installer-contract.mjs';
-import { createInstallerUiServer, loadSchema } from '../tools/installer-ui/server.mjs';
+import { createInstallerUiServer, loadSchema, shutdownInstallerUiServer } from '../tools/installer-ui/server.mjs';
 import { preflightFingerprint } from '../tools/installer-ui/preflight-record.mjs';
+import { createAzureLease } from '../tools/installer-ui/azure-lease.mjs';
 
 const stubInstaller = fileURLToPath(new URL('./installer-ui-stub.mjs', import.meta.url));
 const passingAnswers = { schemaVersion: 1, SubscriptionId: '00000000-0000-4000-8000-000000000093' };
@@ -25,6 +26,7 @@ async function start(extra = {}) {
     env: extra.env || {},
     readIdentity: extra.readIdentity ?? (async () => identityOne),
     readOnlyTimeoutMs: extra.readOnlyTimeoutMs,
+    tempRoot: extra.tempRoot,
   });
   const address = await server.listenAsync('127.0.0.1');
   const base = `http://127.0.0.1:${address.port}`;
@@ -32,6 +34,8 @@ async function start(extra = {}) {
   const cookie = boot.headers.get('set-cookie').split(';')[0];
   const csrfToken = (await (await fetch(`${base}/api/session`, { headers: { cookie } })).json()).csrfToken;
   return {
+    server,
+    scratch,
     async fetch(path, options = {}) {
       const headers = { cookie, ...(options.headers || {}) };
       if (options.method === 'POST') headers['x-csrf-token'] ??= csrfToken;
@@ -217,5 +221,47 @@ test('R3-1 preflight fingerprints include the passing identity snapshot', async 
     assert.equal((await oldRun.json()).reason, 'preflight-required');
   } finally {
     await app.close();
+  }
+});
+
+test('R3-4 Azure lease close refuses queued and later acquisitions', async () => {
+  const lease = createAzureLease();
+  const holder = await lease.acquire('identity', 'read', 1000);
+  const queued = lease.acquire('preflight', 'read', 1000);
+  lease.close();
+  await assert.rejects(queued, { status: 503, reason: 'installer-ui-stopping' });
+  await assert.rejects(() => lease.acquire('prefill', 'read', 1000), { status: 503, reason: 'installer-ui-stopping' });
+  holder.release();
+});
+
+test('R3-4 shutdown closes the Azure lease before queued reads can spawn children', async () => {
+  let releaseIdentity;
+  const heldIdentity = new Promise((resolve) => { releaseIdentity = resolve; });
+  const tempRoot = join(tmpdir(), `p93-g8-r3-4-temp-${process.pid}-${Date.now()}`);
+  const app = await start({
+    tempRoot,
+    readIdentity: async () => {
+      await heldIdentity;
+      return identityOne;
+    },
+  });
+  try {
+    const identity = app.fetch('/api/identity');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const preflight = app.fetch('/api/preflight', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'] }) });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const shutdown = shutdownInstallerUiServer(app.server, 'test shutdown');
+    releaseIdentity();
+    const [identityResult, preflightResult] = await Promise.allSettled([identity, preflight]);
+    assert.equal(identityResult.status, 'fulfilled');
+    assert.equal(preflightResult.status, 'fulfilled');
+    assert.equal(preflightResult.value.status, 503);
+    assert.equal((await preflightResult.value.json()).reason, 'installer-ui-stopping');
+    await shutdown;
+    const entries = await import('node:fs/promises').then(({ readdir }) => readdir(tempRoot).catch(() => []));
+    assert.deepEqual(entries.filter((name) => name.startsWith('claude-installer-ui-')), []);
+  } finally {
+    await app.close().catch(() => {});
+    await rm(tempRoot, { recursive: true, force: true });
   }
 });

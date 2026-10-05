@@ -1,6 +1,14 @@
 export function createAzureLease() {
   let holder = null;
   const queue = [];
+  let closed = false;
+
+  const stopping = () => {
+    const error = new Error('Installer UI is stopping.');
+    error.status = 503;
+    error.reason = 'installer-ui-stopping';
+    return error;
+  };
 
   const busy = (operation) => {
     const error = new Error('Azure CLI work is already active.');
@@ -34,6 +42,7 @@ export function createAzureLease() {
       return holder?.operation || '';
     },
     async acquire(operation, kind, timeoutMs = 0) {
+      if (closed) throw stopping();
       const startedAt = Date.now();
       const lease = {
         operation,
@@ -54,7 +63,7 @@ export function createAzureLease() {
       if (holder.kind === 'run') throw busy('run');
       if (kind === 'run') throw busy(holder.operation);
       return new Promise((resolve, reject) => {
-        const entry = { lease, resolve, done: false };
+        const entry = { lease, resolve, reject, done: false };
         entry.timer = setTimeout(() => {
           if (entry.done) return;
           entry.done = true;
@@ -65,6 +74,16 @@ export function createAzureLease() {
         entry.timer.unref?.();
         queue.push(entry);
       });
+    },
+    close() {
+      closed = true;
+      while (queue.length) {
+        const entry = queue.shift();
+        if (entry.done) continue;
+        entry.done = true;
+        clearTimeout(entry.timer);
+        entry.reject(stopping());
+      }
     },
   };
 }

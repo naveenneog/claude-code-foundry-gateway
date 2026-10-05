@@ -133,8 +133,10 @@ admission reads identity again under the Azure lease and refuses changed identit
 
 One Azure CLI lease covers identity, prefill, preflight and a run from admission through its summary.
 Reads queue behind reads, reads and runs are refused while a run holds the lease, and runs are
-refused while a read holds it (`tools/installer-ui/azure-lease.mjs:1-70`;
-`tools/installer-ui/server.mjs:287-291`; `tools/installer-ui/server.mjs:499-517`). One installer run can be active. A second run receives `409`, and `POST /api/run` is not a route, so
+refused while a read holds it. Shutdown closes the lease before killing the current child snapshot,
+so queued and later Azure reads are refused with `installer-ui-stopping` and no child starts after
+cleanup begins (`tools/installer-ui/azure-lease.mjs:1-80`; `tools/installer-ui/server.mjs:73-89`;
+`tools/installer-ui/server.mjs:261-268`). One installer run can be active. A second run receives `409`, and `POST /api/run` is not a route, so
 it returns `404` through the fixed-route fallback (`tools/installer-ui/server.mjs:585`). A run writes its answers and progress file to a per-run
 temporary directory and removes that directory after the child exits (`tools/installer-ui/server.mjs:354-358`;
 `tools/installer-ui/server.mjs:553-564`). A disconnected browser does not kill the child. `GET

@@ -106,7 +106,9 @@ exact streaming cache-creation detail remains **U13**.
   combinations, incomplete or duplicate preflight check sets and per-step progress events without a
   step id. Preflight attempts now clear the previous pass before starting, fingerprints include the
   passing identity snapshot, and the page drops stale fingerprints when answers change during a
-  preflight, when re-preflight fails or when a run is refused as preflight-required.
+  preflight, when re-preflight fails or when a run is refused as preflight-required. Shutdown now
+  closes the Azure lease before cleanup, refusing queued Azure reads before they can start another
+  child.
 - **Installers read an answers file, check it before any change, run selected steps and write a progress stream (P92, phase 0).**
   One answers file, described by `schemas/claude-gateway.answers.schema.json`, feeds
   `Install-ClaudeGateway.ps1 -AnswersPath`, `install-claude-gateway.sh --answers-file` and

@@ -95,7 +95,10 @@ the passing preflight (`tools/installer-ui/preflight-record.mjs:3-37`; `tools/in
 
 One Azure CLI lease covers identity, prefill, preflight and run work. Reads wait behind reads in
 arrival order, wait time counts against the read timeout, runs are refused while a read holds the
-lease, and reads or second runs are refused while a run holds it (`tools/installer-ui/azure-lease.mjs:1-70`;
+lease, and reads or second runs are refused while a run holds it. Server shutdown closes the lease
+first, refusing queued and later Azure work with `installer-ui-stopping`, and child spawning also
+refuses after cleanup starts (`tools/installer-ui/azure-lease.mjs:1-80`;
+`tools/installer-ui/server.mjs:73-89`; `tools/installer-ui/server.mjs:261-268`;
 `tools/installer-ui/server.mjs:287-293`; `tools/installer-ui/server.mjs:491`; `tools/installer-ui/server.mjs:499`).
 
 The server refuses a live run with `AddressMode = custom` and `AddressCertificateSource = Pfx`

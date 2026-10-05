@@ -73,6 +73,12 @@ function childEnv(options) {
 }
 
 function spawnChild(file, args, options, spawnOptions = {}) {
+  if (options._stopping?.()) {
+    const error = new Error('Installer UI is stopping.');
+    error.status = 503;
+    error.reason = 'installer-ui-stopping';
+    throw error;
+  }
   const child = spawn(file, args, {
     cwd: root,
     shell: false,
@@ -241,6 +247,7 @@ export async function createInstallerUiServer(options = {}) {
   const preflightPasses = createPreflightStore(20);
   let liveMode = { ok: false, reason: 'PowerShell live-mode check has not completed.' };
   options._children = new Set();
+  options._stopping = () => stopping;
   const idleMs = Number(options.idleMs || defaultIdleMs);
   const tempRoot = options.tempRoot || tmpdir();
   const timeoutFor = (name) => Number(options.readOnlyTimeoutMs || ({ steps: 60_000, identity: 120_000, prefill: 120_000, preflight: 600_000 }[name]));
@@ -252,7 +259,9 @@ export async function createInstallerUiServer(options = {}) {
   };
 
   const cleanup = async () => {
+    stopping = true;
     if (idleTimer) clearTimeout(idleTimer);
+    azureLease.close();
     await Promise.all([...options._children].map((child) => killProcessTree(child).catch(() => {})));
     server.closeAllConnections?.();
     for (const dir of [...tempDirs]) await rm(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }).catch(() => {});
