@@ -78,14 +78,20 @@ function ConvertFrom-ClaudeTurnstileGovernance {
         if ($ref -like 'entra-group:*') { return $ref.Substring('entra-group:'.Length).Trim() }
         return $ref.Trim()
     }
+    # A unit's group is written into bu-registry (id=group:tokens,...) and every group reaches az.cmd, which cmd.exe reads
+    # again: a registry separator or a shell character in a name from the catalog would change either (P96, round 4).
+    $registryUnsafe = '[,:=&|<>^%!"\r\n]'
+    $shellUnsafe = '[&|<>^%!"\r\n]'
+    $unsafeNote = 'its Entra group name holds a character the registry or the Azure CLI cannot carry (, : = & | < > ^ % ! " or a line break)'
 
     $units = New-Object System.Collections.Generic.List[object]
     foreach ($org in @($Catalog.organizations)) {
         $id = [string]$org.id
         if ($id -eq 'unassigned') { continue }
-        if ($id -notmatch '^[a-z0-9][a-z0-9-]*$') { $problems.Add("business unit '$id': not a valid gateway id (lower-case letters, digits and hyphens)"); continue }
+        if ($id -cnotmatch '^[a-z0-9][a-z0-9-]*$') { $problems.Add("business unit '$id': not a valid gateway id (lower-case letters, digits and hyphens)"); continue }
         $group = & $groupOf $org
         if (-not $group) { $problems.Add("business unit '$id': names no Entra group, so it could have no members"); continue }
+        if ($group -match $registryUnsafe) { $problems.Add("business unit '$id': $unsafeNote"); continue }
         $tokens = if ($limits.ContainsKey("organization/$id")) { $limits["organization/$id"] } else { [long]0 }
         $units.Add([pscustomobject]@{ Id = $id; Group = $group; TokensPerMonth = [long]$tokens })
     }
@@ -96,9 +102,10 @@ function ConvertFrom-ClaudeTurnstileGovernance {
         $parent = [string]$dept.parent_id
         if (-not $parent -or $id -eq $parent -or $parent -eq 'unassigned') { continue }
         if ($unitIds -notcontains $parent) { $problems.Add("team '$id': its business unit '$parent' was not applied"); continue }
-        if ($id -notmatch '^[a-z0-9][a-z0-9-]*$') { $problems.Add("team '$id': not a valid gateway id (lower-case letters, digits and hyphens)"); continue }
+        if ($id -cnotmatch '^[a-z0-9][a-z0-9-]*$') { $problems.Add("team '$id': not a valid gateway id (lower-case letters, digits and hyphens)"); continue }
         $group = & $groupOf $dept
         if (-not $group) { $problems.Add("team '$id': names no Entra group"); continue }
+        if ($group -match $registryUnsafe) { $problems.Add("team '$id': $unsafeNote"); continue }
         $tokens = if ($limits.ContainsKey("department/$id")) { $limits["department/$id"] } else { [long]0 }
         $units.Add([pscustomobject]@{ Id = $id; Group = $group; TokensPerMonth = [long]$tokens })
         $parents[$id] = $parent
@@ -110,6 +117,10 @@ function ConvertFrom-ClaudeTurnstileGovernance {
         $id = [string]$tier.id
         if ($SupportedTiers -notcontains $id) {
             $problems.Add("tier '$id': the gateway's policy enforces only $($SupportedTiers -join ' and '); a new tier is a policy change")
+            continue
+        }
+        if (([string]$tier.entra_group).Trim() -match $shellUnsafe) {
+            $problems.Add("tier '$id': its Entra group name holds a character the Azure CLI cannot carry (& | < > ^ % ! "" or a line break)")
             continue
         }
         $tierSettings.Add([pscustomobject]@{
@@ -211,6 +222,11 @@ function Test-ClaudeEntraGroup {
         'exists', 'missing', or 'unknown' when the directory cannot be read.
     #>
     param([Parameter(Mandatory = $true)][string]$Group)
+    # az is az.cmd on Windows, and cmd.exe reads its arguments again: a name from the Turnstile catalog with a shell
+    # character would run as a command (P96, round 4).
+    if ($Group -match '[&|<>^%!"\r\n]') {
+        throw "The Entra group name '$Group' holds a character that cmd.exe reads again when the Azure CLI runs (& | < > ^ % ! "" or a line break), so it is not passed to the Azure CLI."
+    }
     $raw = az ad group show --group $Group --query id -o tsv 2>&1 | Out-String
     if ($LASTEXITCODE -eq 0 -and $raw.Trim() -match '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$') { return 'exists' }
     if ($raw -match '(?i)Authorization_RequestDenied|Insufficient privileges|Forbidden|403') { return 'unknown' }

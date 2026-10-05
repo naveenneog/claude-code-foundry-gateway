@@ -79,7 +79,7 @@ $spelled = @(
 )
 $spelledChanges = Compare-ClaudeTurnstileBudgets -Registry $spelled -Parents ([ordered]@{}) -TurnstileItems @([pscustomobject]@{ scope_type = 'organization'; scope_id = 'sales'; token_limit = 900; updated_by = 'admin@contoso.com' })
 Assert 'a Turnstile budget is compared with the unit of the exact spelling' ($spelledChanges.Count -eq 1 -and $spelledChanges[0].Id -ceq 'sales' -and $spelledChanges[0].Was -eq 1000 -and $spelledChanges[0].Now -eq 900) (($spelledChanges | ForEach-Object { "$($_.Id) $($_.Was)->$($_.Now)" }) -join ', ')
-Assert 'pulled budgets are written to the unit of the exact spelling' ($sync -match '\[string\]\$u\.Id -ceq \$c\.Id')
+Assert 'pulled budgets are written to the unit of the exact spelling' ($sync -match '\[string\]::Equals\(\[string\]\$u\.Id, \[string\]\$c\.Id, \[System\.StringComparison\]::Ordinal\)')
 # P96 council round 3 (Architect): a team 'sales' does not make the unit 'Sales' a team, whatever map the caller passes,
 # and the pull reads bu-parents by exact key.
 $spelledTeam = @(
@@ -248,6 +248,33 @@ $shape = { param($r) (@($r | Sort-Object Id | ForEach-Object { "$($_.Id)=$($_.Gr
 Assert 'the registry survives the round trip through Turnstile' ((& $shape $round.Registry) -eq (& $shape $registry)) (& $shape $round.Registry)
 Assert 'and so do the teams'                                  ((ConvertTo-ClaudeBuParents $round.Parents) -eq (ConvertTo-ClaudeBuParents $parents))
 Assert 'with nothing to report'                               (@($round.Problems).Count -eq 0) ($round.Problems -join '; ')
+# P96 council round 4 (Security, pre-existing): Turnstile catalog values reach the registry and az.cmd, which cmd.exe reads
+# again. A group name with a registry or shell character, or an id that is not lower-case ASCII, is a problem at import,
+# and Test-ClaudeEntraGroup refuses a shell character before any az call.
+$unsafeCatalog = [pscustomobject]@{
+    source        = 'configured'
+    organizations = @(
+        [pscustomobject]@{ id = 'research'; name = 'R'; external_ref = 'entra-group:x&ver' },
+        [pscustomobject]@{ id = 'Sales'; name = 'S'; external_ref = 'entra-group:Claude Sales' },
+        [pscustomobject]@{ id = ([string][char]0x212A + 'itchen'); name = 'K'; external_ref = 'entra-group:Claude Kitchen' },
+        [pscustomobject]@{ id = 'ops'; name = 'O'; external_ref = 'entra-group:Ops,Team=1' }
+    )
+    departments   = @()
+}
+$unsafe = ConvertFrom-ClaudeTurnstileGovernance -Catalog $unsafeCatalog -Tiers @([pscustomobject]@{ id = 'standard'; entra_group = 'claude|standard'; tokens_per_minute = 1; tokens_per_day = 1; models = @() })
+$unsafeText = @($unsafe.Problems) -join '; '
+Assert 'a unit group with a shell character is a problem at import' ($unsafeText -match "business unit 'research': its Entra group name holds") $unsafeText
+Assert 'a unit group with a registry character is a problem at import' ($unsafeText -match "business unit 'ops': its Entra group name holds") $unsafeText
+Assert 'a tier group with a shell character is a problem at import' ($unsafeText -match "tier 'standard': its Entra group name holds") $unsafeText
+Assert 'an imported id with a capital is not a gateway id' ($unsafeText -match "business unit 'Sales': not a valid gateway id") $unsafeText
+Assert 'an imported id with a Kelvin sign is not a gateway id' ($unsafeText -match "itchen': not a valid gateway id") $unsafeText
+Assert 'no unsafe unit reaches the registry' (@($unsafe.Registry | Where-Object { $_.Id -cin @('research', 'ops', 'Sales') }).Count -eq 0) ((@($unsafe.Registry) | ForEach-Object Id) -join ',')
+$groupCalls = [System.Collections.Generic.List[string]]::new()
+$groupCheck = & {
+    function az { $groupCalls.Add("az $($args -join ' ')"); $global:LASTEXITCODE = 0; '00000000-0000-0000-0000-000000000000' }
+    try { Test-ClaudeEntraGroup -Group 'x&ver'; 'returned' } catch { 'refused' }
+}
+Assert 'Test-ClaudeEntraGroup refuses a shell character before any az call' ($groupCheck -eq 'refused' -and $groupCalls.Count -eq 0) "$groupCheck; calls $($groupCalls -join ' | ')"
 
 # What an administrator might save.
 $edited = [pscustomobject]@{
