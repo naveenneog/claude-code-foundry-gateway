@@ -74,10 +74,12 @@ test('P1 exit-zero run keeps the finished action text', async () => {
     await page.getByRole('button', { name: 'Run preflight' }).click();
     await page.locator('#preflight-output').getByText(/answers\.schema/).waitFor();
     await page.route('**/api/run/stream', (route) => route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"summary","exitCode":0,"failedStepId":"","resumeCommand":"","state":"exited","message":""}\n' }));
+    await page.route('**/api/identity', (route) => route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'identity refresh failed after run' }) }));
     await page.evaluate(() => { globalThis.confirm = () => true; });
-    await page.locator('#full-run').evaluate((button) => button.disabled = false);
     await page.getByRole('button', { name: 'Full run' }).click();
     await page.locator('#full-run-status').getByText('Full run finished.').waitFor();
+    await page.locator('#identity').getByText(/identity refresh failed after run/).waitFor();
+    assert.equal(await page.locator('#full-run-error').textContent(), '');
     await assertClean(page, pageErrors);
   } finally {
     await browser.close();
@@ -89,7 +91,10 @@ test('P1 non-zero run reports the exit code, failed step and resume command as a
   const app = await start();
   const { browser, page, pageErrors } = await openPage(app);
   try {
-    await passPreflight(page);
+    await page.locator('[name="SubscriptionId"]').fill('00000000-0000-4000-8000-000000000093');
+    await page.getByRole('button', { name: 'List steps' }).click();
+    await page.getByRole('button', { name: 'Run preflight' }).click();
+    await page.locator('#preflight-output').getByText(/answers\.schema/).waitFor();
     await page.route('**/api/run/stream', (route) => route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"summary","exitCode":5,"failedStepId":"resource-group","resumeCommand":"./Install-ClaudeGateway.ps1 -Steps resource-group","state":"exited","message":""}\n' }));
     await page.getByRole('button', { name: 'Run selected steps' }).click();
     const alert = page.locator('#run-error[role="alert"]');
@@ -107,7 +112,11 @@ test('P1 stopped run reports stopped status rather than an error', async () => {
   const app = await start();
   const { browser, page, pageErrors } = await openPage(app);
   try {
-    await passPreflight(page);
+    await page.locator('[name="SubscriptionId"]').fill('00000000-0000-4000-8000-000000000093');
+    await page.getByRole('button', { name: 'List steps' }).click();
+    await page.route('**/api/preflight', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ preflight: { schemaVersion: 1, installer: 'pwsh', answersSchemaVersion: 1, result: 'PASS', checks: [{ id: 'answers.schema', result: 'PASS', reason: null, message: 'ok', remedy: '', problems: [] }] }, fingerprint: 'a'.repeat(64), identity: { signedIn: true, user: 'one@example.test', tenantId: 'tenant-1', subscriptionId: '00000000-0000-4000-8000-000000000093' }, scope: 'full' }) }));
+    await page.getByRole('button', { name: 'Run preflight' }).click();
+    await page.locator('#preflight-output').getByText(/answers\.schema/).waitFor();
     await page.route('**/api/run/stream', (route) => route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"summary","exitCode":null,"failedStepId":"resource-group","resumeCommand":"","state":"stopped","message":""}\n' }));
     await page.getByRole('button', { name: 'Run selected steps' }).click();
     await page.locator('#run-status').getByText(/Run stopped at resource-group/).waitFor();
@@ -120,17 +129,41 @@ test('P1 stopped run reports stopped status rather than an error', async () => {
 });
 
 test('P1 cancelled full run and stop explain that nothing was started or stopped', async () => {
+  const app = await start({ env: { P93_INSTALLER_UI_STUB_DELAY_MS: '1200' } });
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await page.locator('[name="SubscriptionId"]').fill('00000000-0000-4000-8000-000000000093');
+    await page.getByRole('button', { name: 'List steps' }).click();
+    await page.getByRole('button', { name: 'Run preflight' }).click();
+    await page.locator('#preflight-output').getByText(/answers\.schema/).waitFor();
+    await page.evaluate(() => { globalThis.confirm = () => false; });
+    await page.getByRole('button', { name: 'Full run' }).click();
+    await page.locator('#full-run-status').getByText(/No full run was started/).waitFor();
+    await page.route('**/api/run/status', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'reattach-run', state: 'running', currentStepId: 'resource-group', steps: ['resource-group'] }) }));
+    await page.route('**/api/run/attach?after=0', (route) => route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"progress","stepId":"resource-group","event":"started","message":"running"}\n' }));
+    await page.reload();
+    await page.waitForSelector('[name="SubscriptionId"]');
+    await page.locator('#run-output').getByText(/running/).waitFor();
+    await page.evaluate(() => { globalThis.confirm = () => false; });
+    await page.getByRole('button', { name: 'Stop run' }).click();
+    await page.locator('#stop-run-status').getByText(/No stop was requested/).waitFor();
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
+test('G7B-4 load-time reattach errors are reported in the run alert region', async () => {
   const app = await start();
   const { browser, page, pageErrors } = await openPage(app);
   try {
-    await passPreflight(page);
-    await page.evaluate(() => { globalThis.confirm = () => false; });
-    await page.locator('#full-run').evaluate((button) => button.disabled = false);
-    await page.getByRole('button', { name: 'Full run' }).click();
-    await page.locator('#full-run-status').getByText(/No full run was started/).waitFor();
-    await page.locator('#stop-run').evaluate((button) => button.disabled = false);
-    await page.getByRole('button', { name: 'Stop run' }).click({ force: true });
-    await page.locator('#stop-run-status').getByText(/nothing was stopped/).waitFor();
+    await page.route('**/api/run/status', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'run-1', state: 'running', currentStepId: 'resource-group', steps: ['resource-group'] }) }));
+    await page.route('**/api/run/attach?after=0', (route) => route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'attach failed for test' }) }));
+    await page.reload();
+    await page.waitForSelector('[name="SubscriptionId"]');
+    await page.locator('#run-error[role="alert"]').getByText(/attach failed for test/).waitFor();
+    assert.equal(await page.locator('#run-status[role="alert"]').count(), 0);
     await assertClean(page, pageErrors);
   } finally {
     await browser.close();

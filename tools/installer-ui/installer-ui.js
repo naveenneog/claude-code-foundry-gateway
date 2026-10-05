@@ -341,6 +341,26 @@
     status.textContent = text;
   }
 
+  function setActionError(id, text) {
+    const button = byId(id);
+    if (!button) return;
+    const error = document.getElementById(`${id}-error`) || document.createElement("p");
+    if (!error.id) {
+      error.id = `${id}-error`;
+      button.insertAdjacentElement("afterend", error);
+    }
+    error.setAttribute("role", "alert");
+    error.textContent = text;
+  }
+
+  async function refreshIdentityAfterRun() {
+    try {
+      await refreshIdentity();
+    } catch (error) {
+      byId("identity").textContent = error.data?.reason === "azure-busy" ? "An installer run is using Azure CLI. Wait for it to finish, then try again." : error.message;
+    }
+  }
+
   function azureControls() {
     return [
       ...document.querySelectorAll("[data-prefill-kind]"),
@@ -562,7 +582,8 @@
       hasBlockingProblems,
       postJson,
       onIdentityStale: markIdentityStale,
-      readIdentityAfterRun: refreshIdentity,
+      readIdentityAfterRun: refreshIdentityAfterRun,
+      setErrorText: setActionError,
       setStatusText: setActionText,
       updateRunAdmission,
     });

@@ -2,7 +2,7 @@
   "use strict";
 
   function createRunHost(deps) {
-    const { byId, csrfToken, getJson, hasBlockingProblems, onIdentityStale, postJson, readIdentityAfterRun, setStatusText, updateRunAdmission } = deps;
+    const { byId, csrfToken, getJson, hasBlockingProblems, onIdentityStale, postJson, readIdentityAfterRun, setErrorText, setStatusText, updateRunAdmission } = deps;
     const maxRunOutputLines = 2000;
     let activeRunId = "";
     let activeStepId = "";
@@ -55,7 +55,7 @@
       updateRunAdmission();
       if (summary.resumeCommand) appendRunLine(`Resume: ${summary.resumeCommand}`);
       if (summary.state === "stopped") {
-        return { statusText: `Run stopped at ${lastFailedStep || summary.stepId || "the current step"}.` };
+        return { statusText: `Run stopped at ${summary.stepId || activeStepId || lastFailedStep || "the current step"}.` };
       }
       if (summary.state === "exited" && summary.exitCode === 0) return {};
       const code = summary.exitCode === null || summary.exitCode === undefined ? "unknown" : String(summary.exitCode);
@@ -150,7 +150,7 @@
       }
       try {
         const result = (await readRunStream(res)) || (await recoverMissingSummary());
-        await readIdentityAfterRun();
+        refreshIdentityAfterRun();
         return result;
       } catch (error) {
         runActive = false;
@@ -168,7 +168,7 @@
         runActive = true;
         updateRunAdmission();
         const result = (await readRunStream(await fetchRunStream(`./api/run/attach?after=${lastRunSeq}`))) || (await recoverMissingSummary());
-        await readIdentityAfterRun();
+        refreshIdentityAfterRun();
         return result;
       }
     }
@@ -185,7 +185,11 @@
     }
 
     function handleAttachError(error) {
-      setStatusText("run", error.message || String(error), true);
+      setErrorText("run", error.message || String(error));
+    }
+
+    function refreshIdentityAfterRun() {
+      void readIdentityAfterRun().catch(() => {});
     }
 
     return { appendRunLine, currentStep, failedStep, handleAttachError, isActive, resetActiveRun, streamRun, stopRun, refreshRunStatus };
