@@ -584,6 +584,24 @@ foreach ($clean in @($true, $false)) {
     }
     $made | Remove-Item -Force -ErrorAction SilentlyContinue
 }
+# Council round 3 (UX): the plan the operator approves lists what the step writes, and its rollback is the documented one.
+$toProjection = Get-ClaudeFlowStepPlan -Record $flowRecord -Discovery $flowDiscovery
+$planned = @($toProjection.Actions | ForEach-Object { "$($_.Verb) $($_.Target)" })
+Assert 'the projection plan lists its one write, entitlement-source, and the rollback through a refresh and a compare' (($planned -join ' | ') -eq 'Update named value entitlement-source' -and
+    $toProjection.Rollback -match 'Sync-ClaudeAccess\.ps1' -and $toProjection.Rollback -match 'Compare-ClaudeEntitlement\.ps1 -FailOnDrift' -and $toProjection.Rollback -match 'back to named-value') "$($planned -join ' | ') / $($toProjection.Rollback)"
+$backRecord = [pscustomobject]@{ schemaVersion = 2; decisions = [pscustomobject]@{ entitlementStore = [pscustomobject]@{ target = 'named-value' } }; history = @() }
+$backDiscovery = [pscustomobject]@{ resourceGroup = 'rg-p84'; apimName = 'apim-p84'; sku = 'BasicV2'; apimId = $FixtureGatewayId; namedValues = @{ 'entitlement-source' = 'projection' } }
+$toLists = Get-ClaudeFlowStepPlan -Record $backRecord -Discovery $backDiscovery
+$toLists.Data.SnapshotPath = Join-Path $work 'flow-back-snapshot.json'
+$toLists.Data.SnapshotTaken = $true
+Reset-ProjectionFixture
+Capture { Invoke-ClaudeFlowStep -Record $backRecord -Plan $toLists }
+$writtenIds = @(Get-Writes | ForEach-Object { if ($_ -match '--named-value-id (\S+)') { $Matches[1] } })
+$planned = @($toLists.Actions | ForEach-Object { "$($_.Verb) $($_.Target)" })
+$listOption = @(@(Get-ClaudeFlowStepQuestions -Record $backRecord -Discovery $backDiscovery)[0].Options | Where-Object Key -eq 'named-value')[0]
+Assert 'the named-value plan lists only the write the step makes, and names the list refresh and compare it does not make' (-not $Failure -and ($writtenIds -join ',') -eq 'entitlement-source' -and
+    ($planned -join ' | ') -eq 'Update named value entitlement-source' -and ($toLists.Implications -join ' ') -match 'Sync-ClaudeAccess\.ps1' -and ($toLists.Implications -join ' ') -match 'Compare-ClaudeEntitlement\.ps1 -FailOnDrift' -and
+    $listOption.Detail -notmatch '(?i)\brestore' -and $listOption.Detail -match 'Sync-ClaudeAccess\.ps1') "$Failure | writes $($writtenIds -join ',') | plan $($planned -join ' | ') | option $($listOption.Detail)"
 # AC4: discovery reads the receipt only; the switch's admission confirms it in ARM before any write.
 foreach ($case in @(
         @{ Name = 'a receipt whose job cannot be read'; Fixture = 'job-error'; Renewal = $renewal; Expect = 'could not read the renewal job' }
