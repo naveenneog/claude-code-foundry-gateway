@@ -64,6 +64,28 @@ async function passPreflight(page) {
   await page.locator('#preflight-state').getByText(/Passing preflight/).waitFor();
 }
 
+async function abortAfterServerRunCompletes(page) {
+  await page.route('**/api/run/stream', async (route) => {
+    await route.fetch();
+    await route.abort('failed');
+  });
+}
+
+function forwardRunThenAbortBrowser(route) {
+  const request = route.request();
+  const requestHeaders = request.headers();
+  const headers = {};
+  for (const name of ['cookie', 'x-csrf-token', 'x-client-request-id', 'content-type']) {
+    if (requestHeaders[name]) headers[name] = requestHeaders[name];
+  }
+  const forwarded = fetch(request.url(), {
+    method: request.method(),
+    headers,
+    body: request.postData(),
+  });
+  return { aborted: route.abort('failed'), forwarded };
+}
+
 async function withDelayedPreflight(page, edit) {
   let releasePreflight;
   const release = new Promise((resolve) => { releasePreflight = resolve; });
@@ -161,6 +183,78 @@ test('R3-2 browser sends a client request id with each run request', async () =>
     assert.match(requestId, /^[0-9a-f]{32}$/);
     await assertClean(page, pageErrors);
   } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
+test('R3-2 real server recovery follows an aborted successful run to its summary', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await passPreflight(page);
+    await abortAfterServerRunCompletes(page);
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await page.locator('#run-status').getByText(/Run finished/).waitFor();
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
+test('R3-2 real server recovery reports an aborted failed run summary', async () => {
+  const app = await start({ env: { P93_INSTALLER_UI_STUB_FAIL_STEP: 'resource-group' } });
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await passPreflight(page);
+    await abortAfterServerRunCompletes(page);
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await page.locator('#run-error').getByText(/Installer run failed with exit code 7/).waitFor();
+    await page.locator('#run-error').getByText(/Failed step: resource-group/).waitFor();
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
+test('R3-2 real server recovery waits through admitting before following the started run', async () => {
+  let holdAdmission = false;
+  let releaseIdentity;
+  let identityEntered;
+  const heldIdentity = new Promise((resolve) => { releaseIdentity = resolve; });
+  const identityStarted = new Promise((resolve) => { identityEntered = resolve; });
+  const app = await start({
+    readIdentity: async () => {
+      if (holdAdmission) {
+        identityEntered();
+        await heldIdentity;
+      }
+      return { signedIn: true, user: 'one@example.test', tenantId: 'tenant-1', subscriptionId: '00000000-0000-4000-8000-000000000093' };
+    },
+  });
+  const { browser, page, pageErrors } = await openPage(app);
+  let forwardedRun;
+  try {
+    await passPreflight(page);
+    holdAdmission = true;
+    await page.route('**/api/run/stream', async (route) => {
+      const forwarded = forwardRunThenAbortBrowser(route);
+      forwardedRun = forwarded.forwarded;
+      await forwarded.aborted;
+    });
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await identityStarted;
+    await page.locator('#run-status').getByText(/Running selected steps/).waitFor();
+    releaseIdentity();
+    const forwardedResponse = await forwardedRun;
+    assert.equal(forwardedResponse.status, 200);
+    await page.locator('#run-status').getByText(/Run finished/).waitFor();
+    await assertClean(page, pageErrors);
+  } finally {
+    releaseIdentity?.();
+    await forwardedRun?.catch(() => {});
     await browser.close();
     await app.close();
   }

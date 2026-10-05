@@ -144,6 +144,24 @@
     "test": "R3-2 failed status recovery says the server did not answer"
   },
   {
+    "id": "r3-2-5",
+    "why": "Lost-request recovery must keep polling while the server is still admitting the browser's run request.",
+    "file": "tools/installer-ui/installer-ui-run.js",
+    "find": "        if (status?.admission?.state === \"admitting\") {\n          await new Promise((resolve) => setTimeout(resolve, 500));\n          continue;\n        }\n",
+    "replace": "        if (status?.admission?.state === \"admitting\") {\n          break;\n        }\n",
+    "testFile": "tests/installer-ui-g8b.test.mjs",
+    "test": "R3-2 real server recovery waits through admitting before following the started run"
+  },
+  {
+    "id": "r3-2-6",
+    "why": "Lost-request recovery must attach a run that has already started and read the real summary from the server.",
+    "file": "tools/installer-ui/installer-ui-run.js",
+    "find": "        if (status?.admission?.state === \"started\") {\n          activeRunId = status.admission.runId || status.id || \"\";\n          return followRun(() => fetchRunStream(`./api/run/attach?after=0`).then(readRunStream));\n        }\n",
+    "replace": "        if (status?.admission?.state === \"started\") {\n          break;\n        }\n",
+    "testFile": "tests/installer-ui-g8b.test.mjs",
+    "test": "R3-2 real server recovery follows an aborted successful run to its summary"
+  },
+  {
     "id": "T1-fail-once-disabled",
     "why": "The T1 journey must fail when the stub no longer fails the first selected gateway-deployment run.",
     "file": "tests/installer-ui-stub.mjs",
