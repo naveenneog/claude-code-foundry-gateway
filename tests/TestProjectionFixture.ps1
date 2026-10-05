@@ -123,7 +123,7 @@ function az {
         return "ERROR: (DeploymentNotFound) Deployment '$name' could not be found."
     }
     # The resolver site and its live application settings (Web Apps - Get; Web Apps - List Application Settings).
-    if ($line -match '^rest --method (get|post) --url https://management\.azure\.com/subscriptions/[^/]+/resourceGroups/rg-p84/providers/Microsoft\.Web/sites/func-resolver-p84fixture(/config/appsettings/list)?\?api-version=') {
+    if ($line -match "^rest --method (get|post) --url https://management\.azure\.com/subscriptions/$FixtureSubscription/resourceGroups/rg-p84/providers/Microsoft\.Web/sites/func-resolver-p84fixture(/config/appsettings/list)?\?api-version=") {
         if ($Matches[2]) {
             if ($FixtureCase -eq 'resolver-settings-error') { $global:LASTEXITCODE = 1; return 'ERROR: (AuthorizationFailed) The client does not have authorization to perform action Microsoft.Web/sites/config/list/action.' }
             $endpoint = if ($FixtureCase -eq 'resolver-live-cosmos') { 'https://cosmos-other.documents.azure.com:443/' } else { 'https://cosmos-p84fixture.documents.azure.com:443/' }
