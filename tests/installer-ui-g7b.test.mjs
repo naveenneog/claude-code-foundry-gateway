@@ -556,6 +556,34 @@ test('P9 nested problem paths focus the exact nested and business-unit controls'
     await page.getByRole('button', { name: 'Run preflight' }).click();
     await page.getByRole('button', { name: 'Review PendingClaudeDeployment.capacity' }).click();
     assert.equal(await page.evaluate(() => document.activeElement?.name), 'PendingClaudeDeployment.capacity');
+    assert.equal(await page.locator('[name="PendingClaudeDeployment.capacity"]').getAttribute('aria-invalid'), 'true');
+    assert.notEqual(await page.locator('[name="PendingClaudeDeployment.name"]').getAttribute('aria-invalid'), 'true');
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
+test('G7B-9 business-unit indexed problem paths mark and describe the row control', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await page.locator('[name="SubscriptionId"]').fill('00000000-0000-4000-8000-000000000093');
+    await page.locator('summary', { hasText: 'JSON view' }).click();
+    await page.locator('#business-units').fill(JSON.stringify([
+      { id: 'finance', group: 'claude-bu-finance', monthlyUsdBudget: 10, mode: 'Strict' },
+      { id: 'sales', group: 'claude-bu-sales', monthlyUsdBudget: 10, mode: 'Strict' },
+    ], null, 2));
+    await page.route('**/api/preflight', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ preflight: { schemaVersion: 1, installer: 'pwsh', answersSchemaVersion: 1, result: 'FAIL', checks: [{ id: 'answers.schema', result: 'FAIL', reason: null, message: 'row group bad', remedy: 'fix row group', problems: [{ path: 'BusinessUnits[1].group', message: 'row group bad', remedy: 'fix row group' }] }] }, exitCode: 1 }) }));
+    await page.getByRole('button', { name: 'Run preflight' }).click();
+    await page.getByRole('button', { name: 'Review BusinessUnits[1].group' }).click();
+    const active = await page.evaluate(() => [document.activeElement?.closest('[data-bu-index]')?.dataset.buIndex, document.activeElement?.dataset.buField]);
+    assert.deepEqual(active, ['1', 'group']);
+    const field = page.locator('[data-bu-index="1"] [data-bu-field="group"]');
+    assert.equal(await field.getAttribute('aria-invalid'), 'true');
+    const described = await field.getAttribute('aria-describedby');
+    assert.match(await page.locator('#' + described.split(/\s+/)[0]).textContent(), /row group bad/);
     await assertClean(page, pageErrors);
   } finally {
     await browser.close();
