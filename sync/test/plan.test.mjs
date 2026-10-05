@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mergeMembership, planChanges, toDocument, validateSnapshot, createReconciliation } from '../src/plan.mjs';
+import { mergeMembership, planChanges, oldestRetainedExpiry, toDocument, validateSnapshot, createReconciliation } from '../src/plan.mjs';
 const lease = createReconciliation({ verifiedAt: new Date() });
 
 const A = '11111111-1111-1111-1111-111111111111';
@@ -67,6 +67,14 @@ test('orphans are kept only when asked, and reported', () => {
   const plan = planChanges([{ oid: A, tier: 'standard' }], existing, { keepOrphans: true });
   assert.deepEqual(plan.toDelete, []);
   assert.deepEqual(plan.keptOrphans, [C]);
+});
+
+test('the oldest retained expiry holds for a directory of 300,000 entitled identities', () => {
+  const toWrite = Array.from({ length: 300000 }, (_, i) => ({ oid: `w${i}` }));
+  const existing = new Map([[C, { tier: 'premium', expiresAt: 100 }]]);
+  assert.equal(oldestRetainedExpiry({ toWrite, keptOrphans: [C] }, existing, 500), 100, 'a kept orphan that expires first');
+  assert.equal(oldestRetainedExpiry({ toWrite, keptOrphans: [] }, existing, 500), 500, 'only this run\'s lease');
+  assert.equal(oldestRetainedExpiry({ toWrite: [], keptOrphans: [] }, existing, 500), 500, 'nothing retained');
 });
 
 test('the document is a point-read shape: id and partition key are the oid', () => {

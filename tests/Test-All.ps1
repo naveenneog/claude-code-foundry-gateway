@@ -202,6 +202,7 @@ try {
     Invoke-Check 'Azure CLI setup guide mirrors scripts [2/4]' 'Test-AzCommandsGuide.ps1' @{ Shard = '2/4' }
     Invoke-Check 'Azure CLI setup guide mirrors scripts [3/4]' 'Test-AzCommandsGuide.ps1' @{ Shard = '3/4' }
     Invoke-Check 'Azure CLI setup guide portal path'       'Test-AzPortalGuide.ps1'
+Invoke-Check 'Azure CLI guide renewal block runs in order' 'Test-AzCommandsRenewal.ps1'
     Invoke-Check 'Portal capture specs and batch safety'   'Test-PortalCaptureSpecs.ps1'
     Invoke-Check 'Resolver - the entitlement read path'   'Test-Resolver.ps1'
     Invoke-Check 'Named value writes fail loudly'          'Test-NamedValueWrites.ps1' @{ SkipLive = $true }
@@ -270,6 +271,9 @@ try {
     Invoke-Check 'Projection checks detect breakage'        'Test-ProjectionNegative.ps1'
     Invoke-Check 'Projection preflight and safe switch'     'Test-ProjectionPreflight.ps1'
     Invoke-Check 'Projection council corrections'           'Test-ProjectionCouncil.ps1'
+Invoke-Check 'Projection sync package and its import closure' 'Test-ProjectionPackage.ps1'
+Invoke-Check 'Projection renewal templates and deploy script' 'Test-ProjectionRenewal.ps1'
+Invoke-Check 'Projection renewal runs reach admission offline' 'Test-ProjectionRenewalRuns.ps1'
     Invoke-Check 'Claude Desktop sign-in choice'             'Test-DesktopSignIn.ps1'
     Invoke-Check 'Workstation clients read what setup writes' 'Test-WorkstationClients.ps1' -SerialLane
     Invoke-Check 'Workstation model retirement agrees across shells' 'Test-WorkstationModels.ps1'

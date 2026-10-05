@@ -22,7 +22,12 @@
     "infra/projection-network.bicep",
     "infra/projection-renewal.bicep",
     "sync/Dockerfile",
-    "sync/src/check-admission.mjs"
+    "sync/src/check-admission.mjs",
+    "infra/projection-registry.bicep",
+    "infra/projection-renewal-gateway-reader.bicep",
+    "sync/src/business-units.mjs",
+    "sync/src/events.mjs",
+    "scripts/Deploy-ClaudeProjectionRenewal.ps1"
   ],
   "identifiers": {
     "snapshot": {
@@ -122,8 +127,8 @@
     },
     "acr": {
       "label": "ACR registry",
-      "source": "infra/projection-renewal.bicep",
-      "match": "Microsoft.ContainerRegistry/registries@2023-07-01"
+      "source": "infra/projection-registry.bicep",
+      "match": "resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {"
     },
     "cae-job": {
       "label": "Container Apps job",
@@ -137,8 +142,8 @@
     },
     "renewal-identity": {
       "label": "renewal identity",
-      "source": "infra/projection-renewal.bicep",
-      "match": "Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31"
+      "source": "infra/projection-registry.bicep",
+      "match": "resource identity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {"
     },
     "cosmos-writer": {
       "label": "Cosmos writer role",
@@ -154,6 +159,31 @@
       "label": "check-admission.mjs",
       "source": "sync/src/check-admission.mjs",
       "kind": "file"
+    },
+    "registry-template": {
+      "label": "projection-registry.bicep",
+      "source": "infra/projection-registry.bicep",
+      "kind": "file"
+    },
+    "deploy-renewal": {
+      "label": "Deploy-ClaudeProjectionRenewal.ps1",
+      "source": "scripts/Deploy-ClaudeProjectionRenewal.ps1",
+      "kind": "file"
+    },
+    "unit-reader": {
+      "label": "named-value reader role",
+      "source": "infra/projection-renewal-gateway-reader.bicep",
+      "match": "'Microsoft.ApiManagement/service/namedValues/read'"
+    },
+    "unit-read": {
+      "label": "bu-registry read",
+      "source": "sync/src/business-units.mjs",
+      "match": "export async function readGatewayUnits("
+    },
+    "renewal-logs": {
+      "label": "diagnostic setting",
+      "source": "infra/projection-renewal.bicep",
+      "match": "Microsoft.Insights/diagnosticSettings@2021-05-01-preview"
     }
   },
   "groups": [
@@ -195,7 +225,7 @@
       "w": 850,
       "h": 340,
       "tone": "amber",
-      "title": "P86 scheduled renewal and switch admission"
+      "title": "P86 and P94 scheduled renewal and switch admission"
     }
   ],
   "nodes": [
@@ -349,12 +379,12 @@
       "tone": "amber",
       "title": "10 \u00b7 Scheduled renewal evidence gate",
       "lines": [
-        "[[renewal-template]]",
-        "[[acr]]",
-        "[[cae-env]] and [[cae-job]]",
-        "[[renewal-identity]] and [[cosmos-writer]]",
-        "[[renewal-alerts]]",
-        "[[admission-check]]"
+        "[[deploy-renewal]] runs three phases:",
+        "[[registry-template]]: [[acr]], [[renewal-identity]], AcrPull",
+        "az acr build from the sync package; sha256 digest read back",
+        "[[renewal-template]]: [[cae-env]], [[cae-job]], [[cosmos-writer]]",
+        "[[unit-reader]] for each [[unit-read]]; [[renewal-logs]]; [[renewal-alerts]]",
+        "[[admission-check]] reads the status records before a switch"
       ]
     }
   ],

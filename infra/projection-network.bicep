@@ -8,7 +8,7 @@
 // Two shapes, because enterprises and evaluations arrive differently:
 //
 //   new VNet        nothing passed in. The template creates a VNet with the
-//                   three subnets the projection needs. Good for an evaluation.
+//                   four subnets the projection needs. Good for an evaluation.
 //   existing VNet   vnetId and endpointsSubnetId passed in. The network team
 //                   owns the address plan and hands over subnets; this creates
 //                   only the private endpoint, the private DNS zones and their
@@ -38,6 +38,9 @@ param endpointsSubnetId string = ''
 
 @description('Existing subnet delegated to Microsoft.ContainerInstance/containerGroups, for the runner. Required with vnetId when runnerEnabled.')
 param runnerSubnetId string = ''
+
+@description('Existing subnet delegated to Microsoft.App/environments for the projection renewal job: at least a /27, separate from the resolver subnet. Used with vnetId.')
+param renewalSubnetId string = ''
 
 @description('Address space when creating a VNet.')
 param vnetAddressPrefix string = '10.10.0.0/16'
@@ -110,6 +113,25 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-11-01' = if (createVnet) {
           delegations: [
             {
               name: 'flex'
+              properties: {
+                serviceName: 'Microsoft.App/environments'
+              }
+            }
+          ]
+        }
+      }
+      {
+        // The projection renewal job's internal Container Apps environment (ADR-0049). A
+        // workload-profiles environment needs at least a /27 delegated to
+        // Microsoft.App/environments and used by that environment only, so it cannot share the
+        // resolver's subnet (Learn, container-apps/networking). 10.10.3.64/27 in the default
+        // plan, after the resolver's 10.10.3.0/26.
+        name: 'renewal'
+        properties: {
+          addressPrefix: cidrSubnet(vnetAddressPrefix, 27, 26)
+          delegations: [
+            {
+              name: 'container-apps'
               properties: {
                 serviceName: 'Microsoft.App/environments'
               }
@@ -286,6 +308,7 @@ output vnetName string = createVnet ? vnetName : last(split(vnetId, '/'))
 output vnetId string = linkedVnetId
 output endpointsSubnetId string = peSubnetId
 output resolverSubnetId string = createVnet ? '${vnet.id}/subnets/resolver' : ''
+output renewalSubnetId string = createVnet ? '${vnet.id}/subnets/renewal' : renewalSubnetId
 output sitesDnsZoneId string = sitesZone.id
 output blobDnsZoneId string = storageZones[0].id
 output queueDnsZoneId string = storageZones[1].id

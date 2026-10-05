@@ -187,7 +187,7 @@ $missingParity = @($scriptNamedValues | Where-Object { $_ -and -not $guideNamedV
 Assert 'every in-scope script-written named value appears in the guide or not-covered list' ($missingParity.Count -eq 0) ($missingParity -join ', ')
 
 $bicepParams = @{}
-foreach ($file in 'infra\main.bicep','infra\projection-network.bicep','infra\projection.bicep','infra\resolver.bicep') {
+foreach ($file in 'infra\main.bicep','infra\projection-network.bicep','infra\projection.bicep','infra\resolver.bicep','infra\projection-registry.bicep','infra\projection-renewal.bicep') {
     $text = Read-Text (Join-Path $root $file)
     $set = New-Object Collections.Generic.HashSet[string]
     foreach ($m in [regex]::Matches($text, '(?m)^\s*param\s+([A-Za-z][A-Za-z0-9_]*)\s+')) { [void]$set.Add($m.Groups[1].Value) }
@@ -200,7 +200,8 @@ foreach ($cmd in $commands) {
     $paramIndex = [Array]::IndexOf($tokens, '--parameters')
     if ($templateIndex -lt 0 -or $paramIndex -lt 0 -or $templateIndex + 1 -ge $tokens.Count) { continue }
     $template = $tokens[$templateIndex + 1].Trim('"''')
-    if (-not $bicepParams.ContainsKey($template)) { continue }
+    # A template missing from the list above would have its parameters skipped without a word.
+    if (-not $bicepParams.ContainsKey($template)) { Assert "guide template $template has its parameters checked" $false $cmd; continue }
     for ($i = $paramIndex + 1; $i -lt $tokens.Count; $i++) {
         $token = $tokens[$i]
         if ($token.StartsWith('-')) { break }
@@ -786,7 +787,10 @@ function Invoke-GuideBashScenario([string]$Name, [string]$Script, [hashtable]$Ex
     [IO.File]::WriteAllText((Join-Path $dir 'scripts\Sync-ClaudeProjection.ps1'), "#!/usr/bin/env bash`nwhile [ `"`$#`" -gt 0 ]; do if [ `"`$1`" = `"-ExportPath`" ]; then shift; printf '{`"members`":[]}\n' > `"`$1`"; fi; shift || true; done`n")
     [IO.File]::WriteAllText((Join-Path $dir 'scripts\Compare-ClaudeEntitlement.ps1'), "#!/usr/bin/env bash`nwhile [ `"`$#`" -gt 0 ]; do if [ `"`$1`" = `"-ExportGatewayPath`" ]; then shift; printf '{`"decisions`":[]}\n' > `"`$1`"; fi; shift || true; done`n")
     [IO.File]::WriteAllText((Join-Path $dir 'sync\package.json'), "{`"scripts`":{}}`n")
+    [IO.File]::WriteAllText((Join-Path $dir 'sync\package-lock.json'), "{`"lockfileVersion`":3}`n")
+    [IO.File]::WriteAllText((Join-Path $dir 'sync\Dockerfile'), "FROM scratch`n")
     [IO.File]::WriteAllText((Join-Path $dir 'sync\src\apply-projection.mjs'), "console.log(`"ok`")`n")
+    [IO.File]::WriteAllText((Join-Path $dir 'resolver\src\entitlement.mjs'), "export const KNOWN_TIERS = [];`n")
     [IO.File]::WriteAllText((Join-Path $dir 'resolver\host.json'), "{}`n")
     [IO.File]::WriteAllText((Join-Path $dir 'resolver\package.json'), "{`"dependencies`":{}}`n")
     [IO.File]::WriteAllText((Join-Path $dir 'resolver\src\index.js'), "module.exports={}`n")
@@ -1619,6 +1623,10 @@ Assert 'projection runner block assigns Cosmos role and transfers files before a
     $runnerCalls -match 'gateway-decisions\.json' -and
     $runnerCalls -match 'apply-projection\.mjs --cosmos .* --compare /work/gateway-decisions\.json'
 ) $projectionRunner.Output
+$runnerArchive = if ($projectionRunner.Dir -and (Test-Path -LiteralPath (Join-Path $projectionRunner.Dir 'sync-source.tar.gz'))) { @(& tar -t -z -f (Join-Path $projectionRunner.Dir 'sync-source.tar.gz')) } else { @() }
+Assert 'projection runner archive carries the resolver module that plan.mjs imports' (
+    $runnerArchive -contains 'resolver/src/entitlement.mjs' -and $runnerArchive -contains 'sync/src/apply-projection.mjs' -and $runnerArchive -contains 'sync/package-lock.json'
+) ($runnerArchive -join ', ')
 
 $runnerChunkFail = Invoke-GuideBashScenario 'runner-chunk-fail' (Join-GuideBlocks @($projectionDeployBlock, $projectionRunnerBlock))
 Assert 'runner failed chunk stops before apply and compare' (

@@ -21,6 +21,12 @@
  *                      administrator. The enterprise default for a scheduled
  *                      sync; not available to an operator without that consent.
  *
+ * As the scheduled job (infra/projection-renewal.bicep), the image runs --graph
+ * and reads PROJECTION_STANDARD_GROUP_ID and PROJECTION_PREMIUM_GROUP_ID (object
+ * ids; the premium one may be `none`) and PROJECTION_GATEWAY_RESOURCE_ID, whose
+ * bu-registry and bu-parents give the business units on every run (ADR-0049).
+ * Its last line carries an event that the renewal alerts match.
+ *
  * Usage:
  *   node src/apply-projection.mjs --cosmos https://<acct>.documents.azure.com:443/
  *        --tenant <guid> (--snapshot file | --graph --standard g --premium g [--bu id=g ...])
@@ -29,8 +35,10 @@
 import { readFileSync } from 'node:fs';
 import { CosmosClient } from '@azure/cosmos';
 import { DefaultAzureCredential } from '@azure/identity';
-import { mergeMembership, planChanges, toDocument, toStatusDocument, validateSnapshot, compareWithGateway, createReconciliation } from './plan.mjs';
+import { mergeMembership, planChanges, oldestRetainedExpiry, toDocument, toStatusDocument, validateSnapshot, compareWithGateway, createReconciliation } from './plan.mjs';
 import { resolveGroupId, getTransitiveMembers } from './graph.mjs';
+import { readGatewayUnits, sortUnitsByDepth } from './business-units.mjs';
+import { RENEWAL_SUCCEEDED, RENEWAL_FAILED } from './events.mjs';
 
 const argv = process.argv.slice(2);
 const flag = (n) => argv.includes(n);
@@ -42,17 +50,51 @@ const databaseName = opt('--database', 'claude');
 const containerName = opt('--container', 'entitlement');
 const tenantId = opt('--tenant', process.env.PROJECTION_TENANT_ID);
 const whatIf = flag('--whatif');
+const renewal = flag('--graph');
+const GUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 const log = (m) => console.log(m);
 
-function fail(message, code = 1) {
-  console.log(JSON.stringify({ ok: false, error: message }));
+function fail(message, code = 1, stage = 'config') {
+  console.log(JSON.stringify({ ok: false, error: message, ...(renewal ? { event: RENEWAL_FAILED, stage } : {}) }));
   process.exit(code);
+}
+
+// One stage of a run. An error ends the run with the stage named, before anything after it is written.
+async function step(stage, work) {
+  try {
+    return await work();
+  } catch (error) {
+    return fail(`${stage} failed: ${error?.message ?? error}`, 3, stage);
+  }
 }
 
 if (!endpoint) fail('--cosmos is required');
 if (!tenantId) fail('--tenant is required: every record is stamped with it and the resolver refuses another');
 
 const credential = new DefaultAzureCredential();
+
+// Tier groups: --standard/--premium, else the job's PROJECTION_*_GROUP_ID settings (object ids,
+// checked here before any read), else the default group names for a --graph run by hand.
+function tierGroups() {
+  const fromJob = ['STANDARD', 'PREMIUM'].some((tier) => process.env[`PROJECTION_${tier}_GROUP_ID`] !== undefined);
+  const standard = opt('--standard', fromJob ? process.env.PROJECTION_STANDARD_GROUP_ID : 'claude-code-standard');
+  const premium = opt('--premium', fromJob ? process.env.PROJECTION_PREMIUM_GROUP_ID : 'claude-code-premium');
+  if (fromJob && !opt('--standard') && !GUID.test(standard ?? '')) fail('PROJECTION_STANDARD_GROUP_ID must be the standard tier group object id');
+  if (fromJob && !opt('--premium') && premium !== 'none' && !GUID.test(premium ?? '')) fail('PROJECTION_PREMIUM_GROUP_ID must be the premium tier group object id, or none');
+  return { premium: premium === 'none' ? '' : premium, standard };
+}
+
+// Business units: --bu id=group in precedence order, else the gateway's bu-registry and bu-parents,
+// read on this run and ordered deepest first as scripts/ClaudeBusinessUnit.ps1 orders them.
+async function unitGroups() {
+  const given = opts('--bu').map((spec) => { const [id, group] = spec.split('='); return { id, group }; });
+  if (given.length || !process.env.PROJECTION_GATEWAY_RESOURCE_ID) return given;
+  const token = (await credential.getToken('https://management.azure.com/.default')).token;
+  const { registry, parents } = await readGatewayUnits(process.env.PROJECTION_GATEWAY_RESOURCE_ID, token);
+  const ordered = sortUnitsByDepth(registry, parents);
+  log(`units     ${ordered.length} from the gateway's bu-registry`);
+  return ordered.map((u) => ({ id: u.id, group: u.group }));
+}
 
 async function resolveMembership() {
   if (opt('--snapshot')) {
@@ -63,25 +105,44 @@ async function resolveMembership() {
       reconciliation: { reconciliationGeneration: snap.reconciliationGeneration, lastVerifiedAt: snap.lastVerifiedAt, expiresAt: snap.expiresAt } };
   }
   if (!flag('--graph')) fail('pass --snapshot <file> or --graph');
+  const groups = tierGroups();
   const verifiedAt = new Date();
-  const token = (await credential.getToken('https://graph.microsoft.com/.default')).token;
+  const units = await step('business-units', unitGroups);
+  const token = await step('graph', async () => (await credential.getToken('https://graph.microsoft.com/.default')).token);
   const tiers = {};
-  for (const [tier, group] of [['premium', opt('--premium', 'claude-code-premium')], ['standard', opt('--standard', 'claude-code-standard')]]) {
-    const id = await resolveGroupId(group, token);
-    if (!id) { log(`warning: group '${group}' not found - treating as empty`); tiers[tier] = []; continue; }
-    tiers[tier] = await getTransitiveMembers(id, token);
-    log(`${tier.padEnd(9)} ${group}  ${tiers[tier].length} member(s)`);
-  }
+  await step('graph', async () => {
+    for (const tier of ['premium', 'standard']) {
+      const group = groups[tier];
+      if (!group) { log(`${tier.padEnd(9)} no group configured - treated as empty`); tiers[tier] = []; continue; }
+      const id = await resolveGroupId(group, token);
+      if (!id) { log(`warning: group '${group}' not found - treating as empty`); tiers[tier] = []; continue; }
+      tiers[tier] = await getTransitiveMembers(id, token);
+      log(`${tier.padEnd(9)} ${group}  ${tiers[tier].length} member(s)`);
+    }
+  });
   const businessUnits = [];
-  for (const spec of opts('--bu')) {
-    const [unit, group] = spec.split('=');
-    const id = await resolveGroupId(group, token);
-    businessUnits.push({ id: unit, members: id ? await getTransitiveMembers(id, token) : [] });
-  }
+  await step('graph', async () => {
+    for (const { id: unit, group } of units) {
+      const id = await resolveGroupId(group, token);
+      let members = null;
+      if (id) {
+        try {
+          members = await getTransitiveMembers(id, token);
+        } catch (error) {
+          // A deleted unit group is an empty unit, as Get-GroupMemberOids in
+          // scripts/ClaudeGraphMembership.ps1 treats it, so one stale registry entry cannot stop every
+          // renewal. Tier groups above stay strict.
+          if (error?.status !== 404) throw error;
+        }
+      }
+      if (!members) log(`warning: unit '${unit}' group '${group}' was not found - treating it as empty`);
+      businessUnits.push({ id: unit, members: members ?? [] });
+    }
+  });
   const { records, unitWithoutTier } = mergeMembership({ tiers, businessUnits });
   for (const u of unitWithoutTier.slice(0, 10)) log(`note: ${u.oid} is in ${u.unit} but holds no tier - not projected`);
-  return { records, mappingVersion: Math.floor(Date.now() / 1000), source: 'graph',
-    reconciliation: createReconciliation({ verifiedAt, maxAgeSeconds: Number(opt('--max-age-seconds', 7200)) }) };
+  const reconciliation = await step('lease', async () => createReconciliation({ verifiedAt, maxAgeSeconds: Number(opt('--max-age-seconds', 7200)) }));
+  return { records, mappingVersion: Math.floor(Date.now() / 1000), source: 'graph', reconciliation };
 }
 
 async function readExisting(container) {
@@ -125,9 +186,9 @@ if (opt('--compare')) {
 
 const { records, mappingVersion, source, reconciliation } = await resolveMembership();
 const container = containerRef();
-const existing = await readExisting(container);
+const existing = await step('cosmos-read', () => readExisting(container));
 const plan = planChanges(records, existing, { allowEmpty: flag('--allow-empty'), keepOrphans: flag('--keep-orphans'), refresh: true });
-if (plan.refused) fail(plan.reason, 2);
+if (plan.refused) fail(plan.reason, 2, 'plan');
 
 const summary = {
   ok: true, source, whatIf, resolved: records.length, existing: existing.size,
@@ -135,21 +196,17 @@ const summary = {
 };
 if (whatIf) { console.log(JSON.stringify(summary)); process.exit(0); }
 
-if (reconciliation.expiresAt <= Math.floor(Date.now() / 1000)) fail('projection expired before writing; resolve the directory again', 2);
-const writes = await bulk(container, plan.toWrite.map((r) => ({
+if (reconciliation.expiresAt <= Math.floor(Date.now() / 1000)) fail('projection expired before writing; resolve the directory again', 2, 'expired');
+const writes = await step('cosmos-write', () => bulk(container, plan.toWrite.map((r) => ({
   operationType: 'Upsert', partitionKey: r.oid, resourceBody: toDocument(r, { tenantId, mappingVersion, reconciliation }),
-})));
-const deletes = await bulk(container, plan.toDelete.map((oid) => ({ operationType: 'Delete', id: oid, partitionKey: oid })));
+}))));
+const deletes = await step('cosmos-write', () => bulk(container, plan.toDelete.map((oid) => ({ operationType: 'Delete', id: oid, partitionKey: oid }))));
 const expired = reconciliation.expiresAt <= Math.floor(Date.now() / 1000);
 const writeCounts = { written: writes.ok, writeFailed: writes.failed, deleted: deletes.ok, deleteFailed: deletes.failed };
 Object.assign(summary, { ok: !(writes.failed || deletes.failed), expired, ...writeCounts, mappingVersion, ...reconciliation, seconds: (Date.now() - started) / 1000 });
 summary.ok = summary.ok && !expired;
 if (summary.ok) {
-  const retainedExpiries = [
-    ...plan.toWrite.map(() => reconciliation.expiresAt),
-    ...plan.keptOrphans.map((oid) => existing.get(oid)?.expiresAt).filter(Number.isFinite),
-  ];
-  const oldestExpiresAt = Math.min(...retainedExpiries);
+  const oldestExpiresAt = oldestRetainedExpiry(plan, existing, reconciliation.expiresAt);
   const memberCounts = records.reduce((counts, r) => ({ ...counts, [r.tier]: (counts[r.tier] ?? 0) + 1 }), {});
   const status = toStatusDocument({
     tenantId,
@@ -164,14 +221,18 @@ if (summary.ok) {
     commandOverride: Boolean(process.env.PROJECTION_COMMAND_OVERRIDE),
     memberCounts,
     writeCounts,
-    oldestExpiresAt: Number.isFinite(oldestExpiresAt) ? oldestExpiresAt : reconciliation.expiresAt,
+    oldestExpiresAt,
     reconciliation,
     startedAt: new Date(started).toISOString(),
     finishedAt: new Date().toISOString(),
   });
-  const statusWrite = await bulk(container, [{ operationType: 'Upsert', partitionKey: status.oid, resourceBody: status }]);
+  const statusWrite = await step('status', () => bulk(container, [{ operationType: 'Upsert', partitionKey: status.oid, resourceBody: status }]));
   Object.assign(summary, { statusWritten: statusWrite.ok, statusWriteFailed: statusWrite.failed, oldestExpiresAt: status.oldestExpiresAt });
   summary.ok = statusWrite.failed === 0;
+}
+if (renewal) {
+  const stage = expired ? 'expired' : (writes.failed || deletes.failed) ? 'cosmos-write' : 'status';
+  Object.assign(summary, summary.ok ? { event: RENEWAL_SUCCEEDED } : { event: RENEWAL_FAILED, stage });
 }
 console.log(JSON.stringify(summary));
 if (!summary.ok) process.exit(3);

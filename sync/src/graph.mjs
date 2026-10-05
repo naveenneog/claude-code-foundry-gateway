@@ -32,7 +32,9 @@ async function getJson(url, token, fetchImpl, { maxRetries = 6 } = {}) {
     }
     if (!res.ok) {
       const body = await res.text().catch(() => '');
-      throw new Error(`Graph ${res.status} for ${url.split('?')[0]}: ${body.slice(0, 200)}`);
+      const error = new Error(`Graph ${res.status} for ${url.split('?')[0]}: ${body.slice(0, 200)}`);
+      error.status = res.status;
+      throw error;
     }
     return res.json();
   }
