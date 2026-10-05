@@ -9,6 +9,7 @@
     let runActive = false;
     let lastRunSeq = 0;
     let lastFailedStep = "";
+    let activeClientRequestId = "";
     let runOutputLines = [];
     let removedRunOutputLines = 0;
 
@@ -26,6 +27,13 @@
 
     function resetActiveRun() {
       activeRunId = "";
+      activeClientRequestId = "";
+    }
+
+    function clientRequestId() {
+      const bytes = new Uint8Array(16);
+      crypto.getRandomValues(bytes);
+      return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
     }
 
     function appendRunLine(text) {
@@ -150,11 +158,34 @@
 
     async function recoverLostRequest(requestError) {
       // The request may have reached the server before the connection failed: a run that started is reattached.
-      const status = await getJson("./api/run/status").catch(() => null);
-      if (status?.id && status.state === "running") return followRun(async () => null);
+      for (let i = 0; i < 400; i++) {
+        const status = await getJson(`./api/run/status?request=${encodeURIComponent(activeClientRequestId)}`).catch(() => null);
+        if (status?.admission?.state === "admitting") {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          continue;
+        }
+        if (status?.admission?.state === "started") {
+          activeRunId = status.admission.runId || status.id || "";
+          return followRun(() => fetchRunStream(`./api/run/attach?after=0`).then(readRunStream));
+        }
+        if (status?.admission?.state === "refused") {
+          runActive = false;
+          updateRunAdmission();
+          const error = new Error(status.admission.error || "run refused");
+          error.data = { error: error.message, reason: status.admission.reason };
+          if (["identity-changed", "preflight-required"].includes(error.data.reason) && typeof onIdentityStale === "function") onIdentityStale(error.message);
+          throw error;
+        }
+        if (status?.id && status.state === "running") return followRun(async () => null);
+        if (!status?.admission) {
+          const plainStatus = await getJson("./api/run/status").catch(() => null);
+          if (plainStatus?.id && plainStatus.state === "running") return followRun(async () => null);
+        }
+        break;
+      }
       runActive = false;
       updateRunAdmission();
-      const server = status ? "the installer UI server reports no active run" : "the installer UI server did not answer";
+      const server = "the installer UI server reports no active run";
       const error = new Error(`The run request failed before the server answered (${requestError.message}), and ${server}.`);
       error.data = { error: error.message, remedy: "Check that the installer UI server is still running in its terminal, then try again." };
       throw error;
@@ -163,6 +194,7 @@
     async function streamRun(body) {
       if (hasBlockingProblems()) return undefined;
       runActive = true;
+      activeClientRequestId = clientRequestId();
       // A new run's events start at 1; a reattach of this run must not use the previous run's cursor.
       lastRunSeq = 0;
       updateRunAdmission();
@@ -173,6 +205,7 @@
           headers: {
             "content-type": "application/json",
             "x-csrf-token": csrfToken(),
+            "x-client-request-id": activeClientRequestId,
           },
           body: JSON.stringify(body),
         });
@@ -192,8 +225,9 @@
     async function refreshRunStatus() {
       if (location.protocol === "file:") return;
       const status = await getJson("./api/run/status");
-      if (status.id && status.state === "running") {
+      if (status.id && (status.state === "running" || status.state === "stopping")) {
         activeRunId = status.id;
+        activeClientRequestId = status.clientRequestId || "";
         activeStepId = status.currentStepId || status.steps?.[0] || "";
         runActive = true;
         updateRunAdmission();

@@ -131,3 +131,23 @@ test('R3-1 preflight-required run refusal marks the page stale and re-enables pr
     await app.close();
   }
 });
+
+test('R3-2 browser sends a client request id with each run request', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await passPreflight(page);
+    let requestId = '';
+    await page.route('**/api/run/stream', (route) => {
+      requestId = route.request().headers()['x-client-request-id'] || '';
+      return route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"summary","exitCode":0,"failedStepId":"","resumeCommand":"","state":"exited","message":""}\n' });
+    });
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await page.locator('#run-status').getByText(/Run finished/).waitFor();
+    assert.match(requestId, /^[0-9a-f]{32}$/);
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});

@@ -81,6 +81,24 @@
     "test": "R3-5 idle shutdown waits for an authenticated run request body being admitted"
   },
   {
+    "id": "r3-2-1",
+    "why": "The server must record admitting requests before body and identity admission complete.",
+    "file": "tools/installer-ui/server.mjs",
+    "find": "        if (clientRequestId) runAdmissions.admit(clientRequestId);\n",
+    "replace": "",
+    "testFile": "tests/installer-ui-g8.test.mjs",
+    "test": "R3-2 server records run admission states by client request id"
+  },
+  {
+    "id": "r3-2-2",
+    "why": "The browser must send a client request id on run requests.",
+    "file": "tools/installer-ui/installer-ui-run.js",
+    "find": "            \"x-client-request-id\": activeClientRequestId,\n",
+    "replace": "",
+    "testFile": "tests/installer-ui-g8b.test.mjs",
+    "test": "R3-2 browser sends a client request id with each run request"
+  },
+  {
     "id": "T1-fail-once-disabled",
     "why": "The T1 journey must fail when the stub no longer fails the first selected gateway-deployment run.",
     "file": "tests/installer-ui-stub.mjs",
@@ -819,8 +837,8 @@
     "id": "g7a-A03",
     "why": "S3: a run refused at admission keeps the Azure lease",
     "file": "tools/installer-ui/server.mjs",
-    "find": "        } catch (error) {\n          lease.release();\n          throw error;\n        }\n        const run = createRun(steps);",
-    "replace": "        } catch (error) {\n          throw error;\n        }\n        const run = createRun(steps);",
+    "find": "        } catch (error) {\n          lease.release();\n          if (clientRequestId) runAdmissions.refused(clientRequestId, error.message, error.reason);\n          throw error;\n        }\n        const run = createRun(steps);",
+    "replace": "        } catch (error) {\n          if (clientRequestId) runAdmissions.refused(clientRequestId, error.message, error.reason);\n          throw error;\n        }\n        const run = createRun(steps);",
     "testFile": "tests/installer-ui-g7.test.mjs",
     "test": "S3 run-admission refusals release the Azure lease"
   },

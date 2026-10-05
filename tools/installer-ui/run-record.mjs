@@ -30,13 +30,14 @@ export function createRunRecord(steps, limits = {}) {
     progressPath: '',
     stoppedMessage: '',
     tempDirRemoved: false,
+    clientRequestId: '',
   };
 }
 
 export function publicRun(run) {
   if (!run) return undefined;
-  const { id, steps, state, currentStepId, exitCode, failedStepId, resumeCommand, startTime, nextSeq, stoppedMessage, tempDirRemoved } = run;
-  return { id, steps, state, currentStepId, exitCode, failedStepId, resumeCommand, startTime, nextSeq, stoppedMessage, tempDirRemoved };
+  const { id, steps, state, currentStepId, exitCode, failedStepId, resumeCommand, startTime, nextSeq, stoppedMessage, tempDirRemoved, clientRequestId } = run;
+  return { id, steps, state, currentStepId, exitCode, failedStepId, resumeCommand, startTime, nextSeq, stoppedMessage, tempDirRemoved, clientRequestId };
 }
 
 function firstTailSeq(run) {

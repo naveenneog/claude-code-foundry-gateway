@@ -120,6 +120,55 @@ test('R3-5 idle shutdown waits for an authenticated run request body being admit
   }
 });
 
+test('R3-2 server records run admission states by client request id', async () => {
+  let releaseIdentity;
+  const heldIdentity = new Promise((resolve) => { releaseIdentity = resolve; });
+  let holdIdentity = false;
+  const app = await start({
+    readIdentity: async () => {
+      if (holdIdentity) await heldIdentity;
+      return identityOne;
+    },
+  });
+  try {
+    const preflight = await passingPreflight(app);
+    holdIdentity = true;
+    const requestId = 'r3-2-admission-0001';
+    const run = app.fetch('/api/run/stream', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-client-request-id': requestId },
+      body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'], fingerprint: preflight.fingerprint }),
+    });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    let status = await (await app.fetch(`/api/run/status?request=${requestId}`)).json();
+    assert.equal(status.admission.state, 'admitting');
+    releaseIdentity();
+    const response = await run;
+    assert.equal(response.status, 200);
+    await response.text();
+    status = await (await app.fetch(`/api/run/status?request=${requestId}`)).json();
+    assert.equal(status.admission.state, 'started');
+    assert.equal(status.admission.runId, status.id);
+    assert.equal(status.clientRequestId, requestId);
+
+    const refusedId = 'r3-2-refused-0001';
+    const refused = await app.fetch('/api/run/stream', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-client-request-id': refusedId },
+      body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'], fingerprint: '0'.repeat(64) }),
+    });
+    assert.equal(refused.status, 409);
+    status = await (await app.fetch(`/api/run/status?request=${refusedId}`)).json();
+    assert.equal(status.admission.state, 'refused');
+    assert.equal(status.admission.reason, 'preflight-required');
+    assert.equal((await app.fetch('/api/run/stream', { method: 'POST', headers: { 'content-type': 'application/json', 'x-client-request-id': 'bad id' }, body: '{}' })).status, 400);
+    assert.equal((await (await app.fetch('/api/run/status?request=unknown-request')).json()).admission, null);
+  } finally {
+    releaseIdentity?.();
+    await app.close();
+  }
+});
+
 test('R3-3 progress adapter rejects empty step ids on per-step events only', () => {
   const base = { schemaVersion: 1, time: '2026-10-05T00:00:00Z', runId: '0123456789abcdef0123456789abcdef', stepId: '', event: 'failed', message: 'failed', resumeCommand: '' };
   assert.doesNotThrow(() => validateProgressEvent(base));

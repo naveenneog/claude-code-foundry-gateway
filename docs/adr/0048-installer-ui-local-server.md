@@ -62,6 +62,11 @@ returns the run without the tail. `GET /api/run/attach?after=<seq>` streams tail
 `POST /api/run/stop` kills the process tree and reports checkpoint-based resume semantics
 (`tools/installer-ui/run-record.mjs:10-40`; `tools/installer-ui/run-record.mjs:77-126`; `tools/installer-ui/server.mjs:434-440`;
 `tools/installer-ui/server.mjs:580-583`).
+Run requests also carry a browser-generated client request id. The server records a small admission
+history for that id before reading the body, then marks it `started` with the run id or `refused`
+with the response reason; `GET /api/run/status?request=<id>` includes that record
+(`tools/installer-ui/run-admission.mjs:1-29`; `tools/installer-ui/server.mjs:451-470`;
+`tools/installer-ui/server.mjs:505-540`; `tools/installer-ui/installer-ui-run.js:153-190`).
 
 The run transport uses per-source UTF-8 decoders, line carry, final flush, a progress-file byte
 offset, serialized console line handling, a 4 MiB console-output cap, a 64 KiB console-line cap and

@@ -11,6 +11,7 @@ import { validatePreflight, validateProgressEvent, validateStepList } from './in
 import { createAzureLease } from './azure-lease.mjs';
 import { assertSameOrigin, constantTimeTokenEquals, contentSecurityPolicy, isAllowedHost, isLoopbackBind, parseCookies, readJsonBody, send, sendText, tokenHash } from './http-helpers.mjs';
 import { attachSubscriber, createRunRecord, publicRun, publishEvent } from './run-record.mjs';
+import { createRunAdmissions } from './run-admission.mjs';
 import { createLineHandler, readProgressFile, writeNdjson } from './run-transport.mjs';
 import { createSessionAuth } from './session-auth.mjs';
 import { collectChildOutput } from './child-output.mjs';
@@ -245,6 +246,7 @@ export async function createInstallerUiServer(options = {}) {
   let stopping = false;
   let inFlight = 0;
   const preflightPasses = createPreflightStore(20);
+  const runAdmissions = createRunAdmissions(20);
   let liveMode = { ok: false, reason: 'PowerShell live-mode check has not completed.' };
   options._children = new Set();
   options._stopping = () => stopping;
@@ -444,7 +446,11 @@ export async function createInstallerUiServer(options = {}) {
         assertFetchMetadataForChildGet(req);
         return send(res, 200, await withAzureRead('identity', (lease) => readIdentityPayload(childTimeout(lease))), setCookie);
       }
-      if (req.method === 'GET' && url.pathname === '/api/run/status') return send(res, 200, { schemaVersion: 1, ...(publicRun(activeRun || lastRun) || {}) }, setCookie);
+      if (req.method === 'GET' && url.pathname === '/api/run/status') {
+        const requestId = url.searchParams.get('request');
+        const admission = requestId ? runAdmissions.lookup(requestId) : undefined;
+        return send(res, 200, { schemaVersion: 1, ...(publicRun(activeRun || lastRun) || {}), ...(requestId ? { admission } : {}) }, setCookie);
+      }
       if (req.method === 'GET' && url.pathname === '/api/run/attach') {
         const run = activeRun || lastRun;
         if (!run) return send(res, 404, { error: 'no installer run is available' }, setCookie);
@@ -504,11 +510,18 @@ export async function createInstallerUiServer(options = {}) {
       if (req.method === 'POST' && url.pathname === '/api/run/stream') {
         requireLive();
         assertSameOrigin(req, logRequestRefusal);
-        if (activeRun?.state === 'running' || activeRun?.state === 'stopping') return send(res, 409, { error: 'an installer run is already active', reason: 'azure-busy', operation: 'run' }, setCookie);
+        const clientRequestId = String(req.headers['x-client-request-id'] || '');
+        if (clientRequestId && !/^[A-Za-z0-9_-]{16,64}$/.test(clientRequestId)) return send(res, 400, { error: 'x-client-request-id is malformed' }, setCookie);
+        if (clientRequestId) runAdmissions.admit(clientRequestId);
+        const refuseAdmission = (status, body) => {
+          if (clientRequestId) runAdmissions.refused(clientRequestId, body.error, body.reason);
+          return send(res, status, body, setCookie);
+        };
+        if (activeRun?.state === 'running' || activeRun?.state === 'stopping') return refuseAdmission(409, { error: 'an installer run is already active', reason: 'azure-busy', operation: 'run' });
         const body = await readJsonBody(req);
         const steps = await validateRunRequest(body, () => listSteps(options));
         if (body.answers?.AddressMode === 'custom' && body.answers?.AddressCertificateSource === 'Pfx') {
-          return send(res, 409, { error: 'A PFX certificate is installed from a terminal because the installer asks for the PFX password only when it runs without -Yes.', reason: 'pfx-needs-terminal' }, setCookie);
+          return refuseAdmission(409, { error: 'A PFX certificate is installed from a terminal because the installer asks for the PFX password only when it runs without -Yes.', reason: 'pfx-needs-terminal' });
         }
         const scope = scopeFromBody(body, steps);
         const digest = answersDigest(body.answers || {});
@@ -529,13 +542,16 @@ export async function createInstallerUiServer(options = {}) {
           }
         } catch (error) {
           lease.release();
+          if (clientRequestId) runAdmissions.refused(clientRequestId, error.message, error.reason);
           throw error;
         }
         const run = createRun(steps);
         if (!run) {
           lease.release();
-          return send(res, 409, { error: 'an installer run is already active', reason: 'azure-busy', operation: 'run' }, setCookie);
+          return refuseAdmission(409, { error: 'an installer run is already active', reason: 'azure-busy', operation: 'run' });
         }
+        run.clientRequestId = clientRequestId;
+        if (clientRequestId) runAdmissions.started(clientRequestId, run.id);
         let args;
         try {
           args = await prepareRun(run, body.answers, steps);
