@@ -147,7 +147,7 @@ temporary directory and removes that directory after the child exits (`tools/ins
 /api/run/attach?after=<seq>&run=<id>` streams prior and live events only when the active or last run
 has that id; another id returns `409` with `reason: run-replaced`. Run and attach streams carry
 `x-installer-run-id` when the response is attached (`tools/installer-ui/server.mjs:357-370`;
-`tools/installer-ui/run-record.mjs:10-130`).
+`tools/installer-ui/run-record.mjs:10-129`).
 
 The run tail keeps the latest 8 MiB or 50,000 events, and each client reads at its own pace. A stream
 whose position leaves the tail receives one notice with the number of events it missed

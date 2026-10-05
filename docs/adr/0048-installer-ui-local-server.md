@@ -63,7 +63,7 @@ returns the run without the tail. `GET /api/run/attach?after=<seq>&run=<id>` str
 events only for that run id and returns `409` with `reason: run-replaced` when the active or last
 record has another id. Run and attach streams carry `x-installer-run-id` when the response is
 attached. `POST /api/run/stop` kills the followed process tree and reports checkpoint-based resume semantics
-(`tools/installer-ui/run-record.mjs:10-41`; `tools/installer-ui/run-record.mjs:78-130`; `tools/installer-ui/server.mjs:357-370`;
+(`tools/installer-ui/run-record.mjs:10-41`; `tools/installer-ui/run-record.mjs:78-129`; `tools/installer-ui/server.mjs:357-370`;
 `tools/installer-ui/server.mjs:531-535`).
 Run requests also carry a browser-generated client request id. The server records a small admission
 history for that id before reading the body, then marks it `started` with the run id or `refused`
