@@ -79,7 +79,7 @@ function Confirm-Identifier {
     param([string]$Id)
     # Same rule the writer enforces, checked here so a bad name is refused while
     # the operator is still looking at the prompt that produced it.
-    if ($Id -match '^[a-z0-9][a-z0-9-]*$') { return $true }
+    if ($Id -cmatch '^[a-z0-9][a-z0-9-]*$') { return $true }
     Write-Host "  '$Id' is not usable. Lower case letters, digits and hyphens." -ForegroundColor Yellow
     return $false
 }

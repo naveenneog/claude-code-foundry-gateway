@@ -97,6 +97,17 @@ if (Test-Path $helper) {
         $written = ''
         try { $written = ConvertTo-ClaudeBuRegistry @([pscustomobject]@{ Id = 'Legacy-Unit'; Group = 'Claude BU Legacy'; TokensPerMonth = 5 }) } catch { $written = "threw: $($_.Exception.Message)" }
         Assert 'a registry that holds a stored identifier with capitals is still written' ($written -eq ',Legacy-Unit=Claude BU Legacy:5,') $written
+
+        # The interactive manager checks a new identifier at its prompt with the writer's rule, before it offers
+        # to create the Entra group (scripts/Manage-ClaudeBusinessUnits.ps1, Add-Unit).
+        $manageAst = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'scripts/Manage-ClaudeBusinessUnits.ps1'), [ref]$null, [ref]$null)
+        $confirmAst = $manageAst.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Confirm-Identifier' }, $true)
+        if ($confirmAst) {
+            . ([scriptblock]::Create($confirmAst.Extent.Text))
+            Assert "the manager's prompt refuses a new identifier with a capital, 'Platform'" (-not (Confirm-Identifier 'Platform' 6>$null))
+            Assert "the manager's prompt accepts 'finance-emea'" ([bool](Confirm-Identifier 'finance-emea' 6>$null))
+        }
+        else { Assert "the manager's prompt checks the identifier" $false 'Confirm-Identifier missing from scripts/Manage-ClaudeBusinessUnits.ps1' }
     }
     else { Assert 'it validates an identifier' $false 'Test-ClaudeBuId missing' }
 }
