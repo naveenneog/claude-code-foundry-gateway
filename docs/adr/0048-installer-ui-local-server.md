@@ -36,7 +36,7 @@ node ./tools/installer-ui/server.mjs
 The server uses Node's built-in `http` module and no packages. It binds `127.0.0.1` by default and
 prints a token URL. A non-loopback bind requires `--allow-host <host[:port]>`; refused Host requests
 log the Host and `X-Forwarded-*` shape to the terminal, while the HTTP response stays generic
-(`tools/installer-ui/server.mjs:377-379`; `tools/installer-ui/server.mjs:630-650`).
+(`tools/installer-ui/server.mjs:382-383`; `tools/installer-ui/server.mjs:630-650`).
 
 The bootstrap token is accepted on the initial top-level page request, then the server sets an
 `HttpOnly; SameSite=Strict` cookie to a new session secret and redirects to a tokenless URL. The
@@ -86,16 +86,16 @@ the passing preflight (`tools/installer-ui/preflight-record.mjs:2-46`;
 One Azure CLI lease covers identity, prefill, preflight and run work. Reads wait behind reads in
 arrival order, wait time counts against the read timeout, runs are refused while a read holds the
 lease, and reads or second runs are refused while a run holds it (`tools/installer-ui/azure-lease.mjs:1-64`;
-`tools/installer-ui/server.mjs:285-289`; `tools/installer-ui/server.mjs:483-516`).
+`tools/installer-ui/server.mjs:287-289`; `tools/installer-ui/server.mjs:483-516`).
 
 The server refuses a live run with `AddressMode = custom` and `AddressCertificateSource = Pfx`
 before creating a run because the page does not collect the PFX password and the installer asks for
-that password only when it runs without `-Yes` (`tools/installer-ui/server.mjs:489-491`;
+that password only when it runs without `-Yes` (`tools/installer-ui/server.mjs:493-495`;
 `Install-ClaudeGateway.ps1:1164-1166`).
 
 The page mirrors the same decision: PFX custom-address answers disable browser run buttons and render
 the PowerShell run command without `-Yes`, while omitted custom-address certificate and DNS modes use
-the installer defaults for visibility and validation only (`tools/installer-ui/installer-ui.js:305-312`;
+the installer defaults for visibility and validation only (`tools/installer-ui/installer-ui.js:396-426`;
 `tools/installer-ui/ui-model.js:155-162`; `tools/installer-ui/ui-model.js:582-620`).
 
 Live mode uses the configured PowerShell command, `pwsh` by default. `listenAsync` checks PowerShell
@@ -142,7 +142,7 @@ does not authenticate later requests (`tools/installer-ui/session-auth.mjs:4-13`
 Azure reads are serialized with other Azure CLI work. A read waits behind another read and can time
 out while waiting; a read sent during a run is refused immediately with `azure-busy`, and a run sent
 during a read is refused with the read operation named (`tools/installer-ui/azure-lease.mjs:1-64`;
-`tools/installer-ui/server.mjs:285-289`; `tools/installer-ui/server.mjs:483-516`).
+`tools/installer-ui/server.mjs:287-289`; `tools/installer-ui/server.mjs:483-516`).
 
 A passing preflight reads identity once after the installer preflight passes, and run admission reads
 identity once again before creating the run. Those reads add one PowerShell/`az account show` path to each passing preflight and admitted run. A changed tenant, user or
@@ -151,7 +151,7 @@ subscription requires a new preflight (`scripts/Get-ClaudeInstallerUiIdentity.ps
 
 A PFX certificate run from the page is refused. Installing a PFX certificate remains a terminal
 operation because the installer asks for the PFX password only when it is not running with `-Yes`
-(`tools/installer-ui/server.mjs:489-491`; `Install-ClaudeGateway.ps1:1164-1166`).
+(`tools/installer-ui/server.mjs:493-495`; `Install-ClaudeGateway.ps1:1164-1166`).
 
 The browser treats invalid business-unit JSON as a blocking draft instead of replacing it from the
 last valid tree, and it keeps deployment choices scoped to the current account. Nested problem paths
