@@ -737,8 +737,9 @@ This is the step that must not be rushed. The first comparison on its own says
 only whether the lists are current; the second is the one that reads the
 records the resolver would serve. It names every difference as
 `would-lose-access`, `would-gain-access`, `tier-drift` or `unit-drift` and exits
-non-zero while there are any. Expired records now count as losing access, so an
-expired snapshot cannot approve a flip. Measured on 2026-09-23: 8 identities compared,
+non-zero while there are any. A record that still carries a past `expiresAt` from before
+[ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md) counts as losing access, because the
+resolver refuses it. Measured on 2026-09-23: 8 identities compared,
 0 differences.
 
 **Portal:** Entra All members, APIM Named values and Cosmos Data Explorer can
@@ -782,8 +783,16 @@ What each developer then experiences, measured on 2026-09-23:
 | No record | `403 permission_error`, cached for at most 60 seconds |
 | Resolver down, answer still cached | Served until the window ends |
 | Resolver down, window ended | `503` with `Retry-After: 5`, and a message saying it is not the developer's access |
-| Reconciliation stopped and record expired | `503` explaining that the projection expired or could not supply an unexpired answer; never stale authorization |
 | Miss-path capacity exhausted | Retryable `429`, before the resolver |
+
+Since [ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md), from offline tests rather
+than the 2026-09-23 measurement:
+
+| Situation | Response |
+|---|---|
+| No sync since a change in Entra | The record from the last sync is served until a sync changes it; a removal takes effect after the sync and at most `entitlement-cache-seconds` |
+| Record with an invalid generation or `lastVerifiedAt` | `503`; never stale authorization |
+| Record with a past `expiresAt` from before ADR-0051 | Answered as no record (`403`) until a sync rewrites or deletes it |
 
 Before 2026-09-23 the policy answered a missing record with that 503, so every
 unentitled attempt read as an outage and invited a retry. Redeploy the current

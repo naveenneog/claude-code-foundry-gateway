@@ -33,9 +33,7 @@
  *        [--whatif] [--allow-empty] [--keep-orphans]
  */
 import { readFileSync } from 'node:fs';
-import { CosmosClient } from '@azure/cosmos';
-import { DefaultAzureCredential } from '@azure/identity';
-import { mergeMembership, planChanges, toDocument, toStatusDocument, validateSnapshot, validateTargetedSnapshot, compareWithGateway, compareWithSnapshot, createReconciliation, normalizeJobSettings } from './plan.mjs';
+import { mergeMembership, planChanges, toDocument, toStatusDocument, validateSnapshot, validateTargetedSnapshot, compareWithGateway, compareWithSnapshot, createReconciliation, normalizeJobSettings, validateJobSettings } from './plan.mjs';
 import { resolveGroupId, getTransitiveMembers } from './graph.mjs';
 import { readGatewayUnits, sortUnitsByDepth } from './business-units.mjs';
 import { RENEWAL_SUCCEEDED, RENEWAL_FAILED } from './events.mjs';
@@ -49,10 +47,12 @@ const endpoint = opt('--cosmos', process.env.COSMOS_ENDPOINT);
 const databaseName = opt('--database', 'claude');
 const containerName = opt('--container', 'entitlement');
 const tenantId = opt('--tenant', process.env.PROJECTION_TENANT_ID);
+const accountResourceIdFlag = opt('--account-resource-id');
 const whatIf = flag('--whatif');
 const renewal = flag('--graph');
 const userOid = opt('--user');
 const GUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+const COSMOS_ACCOUNT_RESOURCE_ID = /^\/subscriptions\/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\/resourceGroups\/([^/]+)\/providers\/Microsoft\.DocumentDB\/databaseAccounts\/([^/]+)$/i;
 const log = (m) => console.log(m);
 
 function fail(message, code = 1, stage = 'config') {
@@ -71,7 +71,17 @@ async function step(stage, work) {
 
 if (!endpoint) fail('--cosmos is required');
 if (!tenantId) fail('--tenant is required: every record is stamped with it and the resolver refuses another');
+const accountResourceId = resolveAccountResourceId({ endpoint, flagValue: accountResourceIdFlag, envValue: process.env.PROJECTION_ACCOUNT_RESOURCE_ID });
+const jobSettingsRun = renewal &&
+  ['PROJECTION_STANDARD_GROUP_ID', 'PROJECTION_PREMIUM_GROUP_ID', 'PROJECTION_GATEWAY_RESOURCE_ID'].some((key) => process.env[key] !== undefined) &&
+  !opt('--standard') && !opt('--premium');
+if (jobSettingsRun) {
+  const problems = validateJobSettings(process.env);
+  if (problems.length) fail(`job settings refused: ${problems.join('; ')}`, 1, 'config');
+}
 
+const { DefaultAzureCredential } = await import('@azure/identity');
+const { CosmosClient } = await import('@azure/cosmos');
 const credential = new DefaultAzureCredential();
 
 // Tier groups: --standard/--premium, else the job's PROJECTION_*_GROUP_ID settings (object ids,
@@ -156,7 +166,11 @@ async function readExisting(container) {
   const iterator = container.items.query("SELECT c.id, c.tier, c.businessUnit, c.expiresAt FROM c WHERE NOT IS_DEFINED(c.type) OR c.type != 'projection-reconciliation-status'", { maxItemCount: 1000 });
   while (iterator.hasMoreResults()) {
     const { resources } = await iterator.fetchNext();
-    for (const d of resources ?? []) existing.set(d.id, { tier: d.tier, businessUnit: d.businessUnit ?? '', expiresAt: d.expiresAt });
+    for (const d of resources ?? []) {
+      const current = { tier: d.tier, businessUnit: d.businessUnit ?? '' };
+      if (Object.hasOwn(d, 'expiresAt')) current.expiresAt = d.expiresAt;
+      existing.set(d.id, current);
+    }
   }
   return existing;
 }
@@ -173,6 +187,27 @@ async function readExistingUser(container, oid) {
     existing.set(resource.id, { tier: resource.tier, businessUnit: resource.businessUnit ?? '' });
   }
   return existing;
+}
+
+async function readSuccessfulStatusesAfter(container, snapshotVerifiedAt) {
+  const cutoff = Date.parse(snapshotVerifiedAt);
+  if (!Number.isFinite(cutoff)) return [];
+  const query = {
+    query: "SELECT c.id, c.oid, c.type, c.tenantId, c.accountResourceId, c.databaseName, c.containerName, c.ok, c.mode, c.user, c.finishedAt FROM c WHERE c.type = 'projection-reconciliation-status' AND c.tenantId = @tenantId AND c.accountResourceId = @accountResourceId AND c.databaseName = @databaseName AND c.containerName = @containerName",
+    parameters: [
+      { name: '@tenantId', value: tenantId },
+      { name: '@accountResourceId', value: accountResourceId },
+      { name: '@databaseName', value: databaseName },
+      { name: '@containerName', value: containerName },
+    ],
+  };
+  const statuses = [];
+  const iterator = container.items.query(query, { maxItemCount: 1000 });
+  while (iterator.hasMoreResults()) {
+    const { resources } = await iterator.fetchNext();
+    statuses.push(...(resources ?? []));
+  }
+  return statuses.filter((s) => s.ok === true && Date.parse(s.finishedAt) > cutoff);
 }
 
 async function bulk(container, operations) {
@@ -218,15 +253,31 @@ if (opt('--compare-snapshot')) {
   process.exit(comparison.differences.length ? 4 : 0);
 }
 
-const { records, mappingVersion, source, reconciliation, scope = 'full' } = await resolveMembership();
+let { records, mappingVersion, source, reconciliation, scope = 'full' } = await resolveMembership();
 const container = containerRef();
-const existing = await step('cosmos-read', () => userOid ? readExistingUser(container, userOid) : readExisting(container));
+let existing = await step('cosmos-read', () => userOid ? readExistingUser(container, userOid) : readExisting(container));
+let excludedByNewerTargetedSync = 0;
+if (!userOid && scope === 'full' && opt('--snapshot')) {
+  const newerStatuses = await step('status-read', () => readSuccessfulStatusesAfter(container, reconciliation.lastVerifiedAt));
+  if (newerStatuses.some((s) => s.mode === 'full')) {
+    fail('a newer full sync finished after this snapshot was taken; export a fresh snapshot', 2, 'plan');
+  }
+  const excluded = new Set(newerStatuses
+    .filter((s) => s.mode === 'user' && GUID.test(s.user ?? ''))
+    .map((s) => s.user));
+  excludedByNewerTargetedSync = excluded.size;
+  if (excluded.size) {
+    records = records.filter((r) => !excluded.has(r.oid));
+    existing = new Map([...existing.entries()].filter(([oid]) => !excluded.has(oid)));
+  }
+}
 const plan = planChanges(records, existing, { allowEmpty: userOid ? true : flag('--allow-empty'), keepOrphans: userOid ? false : flag('--keep-orphans'), refresh: false });
 if (plan.refused) fail(plan.reason, 2, 'plan');
 
 const summary = {
   ok: true, source, whatIf, resolved: records.length, existing: existing.size,
   toWrite: plan.toWrite.length, toDelete: plan.toDelete.length, keptOrphans: plan.keptOrphans.length, unchanged: plan.unchanged,
+  excludedByNewerTargetedSync,
 };
 if (whatIf) { console.log(JSON.stringify(summary)); process.exit(0); }
 
@@ -242,7 +293,7 @@ if (summary.ok) {
   if (explicitExecutor && !['job', 'runner'].includes(explicitExecutor)) fail('--executor must be job or runner', 2, 'config');
   const status = toStatusDocument({
     tenantId,
-    accountResourceId: process.env.PROJECTION_ACCOUNT_RESOURCE_ID ?? '',
+    accountResourceId,
     databaseName,
     containerName,
     runId: process.env.CONTAINER_APP_JOB_EXECUTION_NAME ?? process.env.PROJECTION_RUN_ID ?? `local-${started}`,
@@ -258,6 +309,7 @@ if (summary.ok) {
     finishedAt: new Date().toISOString(),
     mode: scope === 'user' ? 'user' : 'full',
     executor: explicitExecutor ?? (renewal ? 'job' : 'runner'),
+    user: userOid || null,
     // The job's settings, which admission binds this evidence to (ADR-0050). A runner run has none.
     settings: renewal ? normalizeJobSettings({
       clientId: process.env.AZURE_CLIENT_ID,
@@ -277,3 +329,26 @@ if (renewal) {
 console.log(JSON.stringify(summary));
 if (!summary.ok) process.exit(3);
 process.exit(writes.failed || deletes.failed ? 3 : 0);
+
+function resolveAccountResourceId({ endpoint, flagValue, envValue }) {
+  const chosen = flagValue ?? envValue ?? '';
+  if (flagValue && envValue && flagValue !== envValue) {
+    fail('--account-resource-id differs from PROJECTION_ACCOUNT_RESOURCE_ID');
+  }
+  if (!chosen) return '';
+  const match = COSMOS_ACCOUNT_RESOURCE_ID.exec(chosen);
+  if (!match) fail('--account-resource-id must be an ARM id: /subscriptions/<guid>/resourceGroups/<rg>/providers/Microsoft.DocumentDB/databaseAccounts/<name>');
+  let accountName = '';
+  try {
+    const url = new URL(endpoint);
+    const hostMatch = /^([a-z0-9-]+)\.documents\.azure\.com$/i.exec(url.hostname);
+    if (url.protocol !== 'https:' || !hostMatch) fail('--cosmos must be an https Cosmos DB endpoint URL');
+    accountName = hostMatch[1];
+  } catch {
+    fail('--cosmos must be an https Cosmos DB endpoint URL');
+  }
+  if (match[3].toLowerCase() !== accountName.toLowerCase()) {
+    fail(`--account-resource-id names Cosmos account '${match[3]}', but --cosmos is for '${accountName}'`);
+  }
+  return chosen;
+}

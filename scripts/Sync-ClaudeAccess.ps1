@@ -72,8 +72,11 @@ function Invoke-ClaudeProjectionAccessSync {
     if (-not $apim -or -not $apim.identity -or -not $apim.identity.tenantId) { throw 'Could not read the APIM managed identity tenant id for projection sync.' }
     $tenantId = [string]$apim.identity.tenantId
     if ($tenantId -notmatch '^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$') { throw 'APIM identity tenant id is not a GUID.' }
-    $work = Join-Path (Get-Location) '.claude-projection-sync'
-    if (Test-Path -LiteralPath $work) { Remove-Item -LiteralPath $work -Recurse -Force -WhatIf:$false }
+    $subscriptionId = @([string]$apim.id -split '/')[2]
+    if ($subscriptionId -notmatch '^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$') { throw 'APIM resource id did not contain a subscription GUID.' }
+    $accountResourceId = "/subscriptions/$subscriptionId/resourceGroups/$ResourceGroup/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-$prefix"
+    $work = Join-Path ([IO.Path]::GetTempPath()) ('claude-projection-sync-' + [guid]::NewGuid().ToString('N'))
+    $runner = $null
     $null = New-Item -ItemType Directory -Path $work -Force
     try {
         $snapshot = Join-Path $work 'projection-snapshot.json'
@@ -103,15 +106,21 @@ function Invoke-ClaudeProjectionAccessSync {
         $null = Send-RunnerFile -ResourceGroup $ResourceGroup -Name $runner -Path $snapshot -Destination '/work/projection-snapshot.json'
         $nodeModules = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $runner -Command "node -e console.log(require('fs').existsSync('/work/sync/node_modules')?'present':'absent')"
         if (($nodeModules -split '\r?\n' | Select-Object -Last 1).Trim() -ne 'present') {
-            $null = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $runner -Command 'npm ci --prefix /work/sync'
+            $null = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $runner -Command 'npm --prefix /work/sync ci --omit=dev --ignore-scripts --no-audit --fund=false'
         }
-        $command = "node /work/sync/src/apply-projection.mjs --cosmos https://cosmos-$prefix.documents.azure.com:443/ --tenant $tenantId --snapshot /work/projection-snapshot.json"
+        $command = "node /work/sync/src/apply-projection.mjs --cosmos https://cosmos-$prefix.documents.azure.com:443/ --tenant $tenantId --account-resource-id $accountResourceId --snapshot /work/projection-snapshot.json"
         if ($targetUserOid) { $command += " --user $targetUserOid" }
+        if ($AllowEmpty) { $command += ' --allow-empty' }
         $raw = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $runner -Command $command
         $result = ConvertFrom-ClaudeRunnerResult -RawOutput $raw -Step 'projection apply'
         Write-Host ("Projection sync complete: written={0} deleted={1} unchanged={2}" -f ([int]$result.written), ([int]$result.deleted), ([int]$result.unchanged)) -ForegroundColor Green
     }
     finally {
+        if ($runner) {
+            try {
+                $null = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $runner -Command "node -e f=require('fs');f.rmSync('/work/projection-snapshot.json',{force:true});f.rmSync('/work/gateway-decisions.json',{force:true})"
+            } catch { }
+        }
         if (Test-Path -LiteralPath $work) { Remove-Item -LiteralPath $work -Recurse -Force -WhatIf:$false -ErrorAction SilentlyContinue }
     }
 }

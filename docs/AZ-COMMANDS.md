@@ -1508,12 +1508,17 @@ p95_resolver_named_values() {
     az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id entitlement-resolver-url --value "$RESOLVER_URL" -o none || return 1
     az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id entitlement-resolver-audience --value "$RESOLVER_AUDIENCE" -o none || return 1
   fi
+  if CURRENT_PREFIX="$(az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id entitlement-projection-prefix --query value -o tsv 2>/dev/null)"; then
+    [ "$CURRENT_PREFIX" = "$NAME_PREFIX" ] || az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id entitlement-projection-prefix --value "$NAME_PREFIX" -o none || return 1
+  else
+    az apim nv create -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id entitlement-projection-prefix --display-name entitlement-projection-prefix --value "$NAME_PREFIX" -o none || return 1
+  fi
   az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id entitlement-source --query value -o tsv
 }
 p95_resolver_named_values
 ```
 
-Expected result: resolver URL and audience are the resolver deployment's outputs, while `entitlement-source` remains `named-value`; on a gateway already on the projection, a value that differs makes the function write neither value and return 1, and values that already match are not written again (return 0). A failed read also returns 1 before any write. The switch requires these two values to be the outputs of `projection-resolver-${NAME_PREFIX}` ([SECURE-PROJECTION](SECURE-PROJECTION.md#switch-to-the-projection-p95)). This mirrors `scripts/Deploy-ClaudeProjection.ps1:217-233`; the deployer also refuses such a gateway before any write unless the run redeploys the resolver it calls (`scripts/ClaudeProjectionChecks.ps1:201-227`).
+Expected result: resolver URL and audience are the resolver deployment's outputs, `entitlement-projection-prefix` is `$NAME_PREFIX`, and `entitlement-source` remains `named-value`. On a gateway already on the projection, a URL or audience that differs makes the function write neither value and return 1, and values that already match are not written again (return 0). The prefix is written whenever it differs, on that gateway too: it records which projection the gateway uses, the switch and `scripts/Sync-ClaudeAccess.ps1` read it, and no request path changes with it. A gateway that served from a projection before [ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md) has none until this step or the deployer writes it. A failed read of the URL, audience or source returns 1 before any write. The switch requires the two resolver values to be the outputs of `projection-resolver-${NAME_PREFIX}` ([SECURE-PROJECTION](SECURE-PROJECTION.md#switch-to-the-projection-p95)). This mirrors `scripts/ClaudeProjectionChecks.ps1:163-182`, which `scripts/Deploy-ClaudeProjection.ps1:197` calls; the deployer also refuses such a gateway before any write unless the run redeploys the resolver it calls (`scripts/ClaudeProjectionChecks.ps1:184-201`).
 
 Populate and compare the projection through an in-VNet runner container.
 
@@ -1705,7 +1710,7 @@ Capture id: `docs-review-resolver-authentication`.
 
 Capture id: `docs-review-resolver-networking`.
 
-5. **Set resolver named values without switching entitlement.** API Management services > `$APIM_NAME` > APIs > Named values: edit `entitlement-resolver-url` and `entitlement-resolver-audience`; Value: the outputs `resolverUrl` and `resolverAudience` of the deployment `projection-resolver-$NAME_PREFIX` (`$RESOLVER_URL` and `$RESOLVER_AUDIENCE`); **Save**. `entitlement-source` stays `named-value`; `infra/policy.xml:86-92` calls the resolver only when the value is `projection`.
+5. **Set resolver named values without switching entitlement.** API Management services > `$APIM_NAME` > APIs > Named values: edit `entitlement-resolver-url` and `entitlement-resolver-audience`; Value: the outputs `resolverUrl` and `resolverAudience` of the deployment `projection-resolver-$NAME_PREFIX` (`$RESOLVER_URL` and `$RESOLVER_AUDIENCE`); **Save**. Edit `entitlement-projection-prefix`, or **+ Add** it when it is missing (Type: Plain); Value: `$NAME_PREFIX`; **Save**. `entitlement-source` stays `named-value`; `infra/policy.xml:86-92` calls the resolver only when the value is `projection`.
 6. **Populate and compare the projection through an in-VNet runner container.** No portal equivalent: the runner transfer, hash check, package install and compare are command-line computation steps.
 7. **Deploy the optional sync job, its registry and its alerts.** The image build has no portal equivalent in this guide. After deployment: Container Apps job (`caj-renew-...`, tag `claude-projection-prefix`) > Execution history lists manual runs, or scheduled runs when a cron expression is configured; Monitor > Alerts > Alert rules lists failed-run and Graph-denied rules, and the stale-success rule when scheduled; Monitor > Action groups > `ag-projection-renewal-...` > Test sends a test notification to the confirmed addresses.
 

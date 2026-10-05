@@ -268,9 +268,12 @@ try {
                     $items += @(@{ name = 'caj-projection-renewal-p94fixture'; type = 'Microsoft.App/jobs' }, @{ name = 'cae-projection-p94fixture'; type = 'Microsoft.App/managedEnvironments' }, @{ name = 'sqr-projection-p94fixture-graph-read-failed'; type = 'microsoft.insights/scheduledqueryrules' })
                 }
                 if ($state.Case -eq 'p86-name-other-type') { $items += @{ name = 'cae-projection-p94fixture'; type = 'Microsoft.Network/networkSecurityGroups' } }
+                # A P94/P95 deployment also left the expiry-margin rule that ADR-0051 retired.
+                if ($state.Case -eq 'upgrade-from-p95') { $items += @{ name = 'sqr-projection-p94fixture-expiry-margin-60m'; type = 'microsoft.insights/scheduledqueryrules' } }
                 return (ConvertTo-Json @($items))
             }
             '^apim show' { return (@{ id = "$rgId/providers/Microsoft.ApiManagement/service/apim-p94" } | ConvertTo-Json) }
+            '^resource delete ' { return }
             '^acr build' { if ($state.Case -eq 'tasks-refused') { $global:LASTEXITCODE = 1; return 'ERROR: (TasksOperationsNotAllowed) ACR Tasks requests are not permitted.' }; return }
             '^acr manifest show-metadata' { return (ConvertTo-Json $(if ($state.Case -eq 'bad-digest') { 'latest' } else { $digestBuilt })) }
         }
@@ -367,6 +370,16 @@ try {
         $leftovers.Failure.IndexOf('Microsoft.App/jobs') -lt $leftovers.Failure.IndexOf('Microsoft.App/managedEnvironments')) "$($leftovers.Failure) | writes $(Get-WriteCount $leftovers)"
     $otherType = Invoke-DeployScenario 'p86-name-other-type'
     Assert 'a resource with a P86 name but another type does not stop the deploy' (-not $otherType.Failure -and (Get-WriteCount $otherType) -gt 0) $otherType.Failure
+    $upgrade = Invoke-DeployScenario 'upgrade-from-p95'
+    $deleted = @($upgrade.Calls | Where-Object { $_ -match '^resource delete ' })
+    $upgradeJobAt = Get-CallIndex $upgrade '^deployment group create .*-n projection-renewal-p94fixture '
+    Assert 'a manual redeploy over P94 or P95 removes the retired expiry and no-success alert rules, after the job deploys' (-not $upgrade.Failure -and $deleted.Count -eq 2 -and
+        ($deleted -join ' ') -match 'resource delete -g rg-p94 -n sqr-projection-p94fixture-expiry-margin-60m --resource-type Microsoft\.Insights/scheduledQueryRules' -and
+        ($deleted -join ' ') -match 'resource delete -g rg-p94 -n sqr-projection-p94fixture-no-success-45m --resource-type Microsoft\.Insights/scheduledQueryRules' -and
+        $upgradeJobAt -ge 0 -and (Get-CallIndex $upgrade '^resource delete ') -gt $upgradeJobAt) "$($upgrade.Failure) | $($deleted -join ' | ')"
+    $scheduledUpgrade = Invoke-DeployScenario 'upgrade-from-p95' @{ CronExpression = '*/30 * * * *' }
+    $deletedScheduled = @($scheduledUpgrade.Calls | Where-Object { $_ -match '^resource delete ' })
+    Assert 'a scheduled redeploy keeps the no-success rule its template deploys and removes only the expiry rule' (-not $scheduledUpgrade.Failure -and $deletedScheduled.Count -eq 1 -and $deletedScheduled[0] -match 'sqr-projection-p94fixture-expiry-margin-60m') "$($scheduledUpgrade.Failure) | $($deletedScheduled -join ' | ')"
     $oddSubnet = Invoke-DeployScenario 'odd-subnet-output'
     Assert 'a renewal subnet from the network output is checked like -RenewalSubnetId before it reaches az' ($oddSubnet.Failure -match 'returned renewal subnet' -and $oddSubnet.Failure -match 'docs/AZ-COMMANDS\.md' -and
         (Get-CallIndex $oddSubnet '^network vnet show') -lt 0 -and (Get-WriteCount $oddSubnet) -eq 0) "$($oddSubnet.Failure) | writes $(Get-WriteCount $oddSubnet)"
@@ -398,40 +411,6 @@ try {
     Remove-Item Function:\az -ErrorAction SilentlyContinue
     Remove-Item Function:\Invoke-RestMethod -ErrorAction SilentlyContinue
 
-    Write-Host ''
-    Write-Host 'Projection renewal - admission refuses a job without these settings' -ForegroundColor Cyan
-    . (Join-Path $root 'scripts\ClaudeProjectionChecks.ps1')
-    $digest = 'sha256:' + ('c' * 64)
-    function New-JobDefinition([hashtable]$Settings) {
-        $jobContainer = @{
-            name = 'projection-renewal'; image = "acr.example.invalid/claude-projection-sync@$digest"; command = @(); args = @()
-            env = @($Settings.GetEnumerator() | Sort-Object Key | ForEach-Object { @{ name = $_.Key; value = $_.Value } })
-        }
-        return (@{ properties = @{ template = @{ containers = @($jobContainer) } } } | ConvertTo-Json -Depth 10 | ConvertFrom-Json)
-    }
-    $goodSettings = @{
-        AZURE_CLIENT_ID = '40000000-0000-4000-8000-000000000001'
-        PROJECTION_STANDARD_GROUP_ID = '10000000-0000-4000-8000-000000000001'
-        PROJECTION_PREMIUM_GROUP_ID = 'none'
-        PROJECTION_GATEWAY_RESOURCE_ID = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-p94/providers/Microsoft.ApiManagement/service/apim-p94'
-    }
-    $verdict = try { Assert-ClaudeProjectionJobDefinition -Job (New-JobDefinition $goodSettings) -ImageDigest $digest } catch { $_.Exception.Message }
-    Assert 'a job with its client id, tier groups and gateway is accepted' ($verdict -eq $true) "$verdict"
-    foreach ($case in @(
-            @{ Name = 'no client id'; Change = @{ AZURE_CLIENT_ID = $null }; Names = 'AZURE_CLIENT_ID' }
-            @{ Name = 'no standard group'; Change = @{ PROJECTION_STANDARD_GROUP_ID = $null }; Names = 'PROJECTION_STANDARD_GROUP_ID' }
-            @{ Name = 'a standard group name instead of an id'; Change = @{ PROJECTION_STANDARD_GROUP_ID = 'claude-code-standard' }; Names = 'PROJECTION_STANDARD_GROUP_ID' }
-            @{ Name = 'no premium setting'; Change = @{ PROJECTION_PREMIUM_GROUP_ID = $null }; Names = 'PROJECTION_PREMIUM_GROUP_ID' }
-            @{ Name = 'an empty premium setting'; Change = @{ PROJECTION_PREMIUM_GROUP_ID = '' }; Names = 'PROJECTION_PREMIUM_GROUP_ID' }
-            @{ Name = 'no gateway'; Change = @{ PROJECTION_GATEWAY_RESOURCE_ID = $null }; Names = 'PROJECTION_GATEWAY_RESOURCE_ID' }
-            @{ Name = 'a gateway that is not API Management'; Change = @{ PROJECTION_GATEWAY_RESOURCE_ID = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-p94/providers/Microsoft.Storage/storageAccounts/stp94' }; Names = 'PROJECTION_GATEWAY_RESOURCE_ID' }
-            @{ Name = 'one group for both tiers'; Change = @{ PROJECTION_PREMIUM_GROUP_ID = '10000000-0000-4000-8000-000000000001' }; Names = 'PROJECTION_PREMIUM_GROUP_ID' }
-        )) {
-        $settings = $goodSettings.Clone()
-        foreach ($key in $case.Change.Keys) { if ($null -eq $case.Change[$key]) { $settings.Remove($key) } else { $settings[$key] = $case.Change[$key] } }
-        $verdict = try { $null = Assert-ClaudeProjectionJobDefinition -Job (New-JobDefinition $settings) -ImageDigest $digest; 'accepted' } catch { $_.Exception.Message }
-        Assert "admission refuses a job with $($case.Name)" ($verdict -ne 'accepted' -and $verdict -match [regex]::Escape($case.Names) -and $verdict -match 'Remedy') "$verdict"
-    }
 }
 finally { Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue }
 

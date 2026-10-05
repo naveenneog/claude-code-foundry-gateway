@@ -44,6 +44,7 @@ $root = Split-Path $PSScriptRoot -Parent
 . (Join-Path $PSScriptRoot 'ClaudeRunner.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeProjectionChecks.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeProjectionPackage.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeProjectionSwitch.ps1')
 function Step($m) { Write-Host "`n==> $m" -ForegroundColor Cyan }
 function Note($m) { Write-Host "    $m" -ForegroundColor DarkGray }
 function Ok($m) { Write-Host "    [OK]   $m" -ForegroundColor Green }
@@ -120,6 +121,7 @@ if ($PSCmdlet.ShouldProcess($projectionName, 'deploy projection.bicep with netwo
 } else { throw 'Projection deployment was declined; no further steps run.' }
 $projection = Get-DeploymentOutput $projectionName
 $cosmosAccount = if ($projection.accountName) { $projection.accountName } else { "cosmos-$NamePrefix" }
+$accountResourceId = "/subscriptions/$(([string]$apim.id -split '/')[2])/resourceGroups/$ResourceGroup/providers/Microsoft.DocumentDB/databaseAccounts/$cosmosAccount"
 
 Step 'Deploy projection network'
 $networkName = "projection-network-$NamePrefix"
@@ -193,22 +195,8 @@ if ($PSCmdlet.ShouldProcess($resolver.siteName, 'package and publish resolver co
 
 Step 'Point the gateway at the resolver'
 Confirm-ClaudeProjectionResolverServicePrincipal -AppId $ResolverAppId | Out-Null
-# The gateway reads these two only while entitlement-source is projection; the switch requires them to
-# name this resolver (ADR-0050). SECURE-PROJECTION section 9 gives the same step by hand. On a gateway
-# that already serves from the projection, a change would send every request to this resolver at once.
-$liveSource = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-source' -FailOnError
-$pointed = (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-url' -FailOnError) -eq $resolverUrl -and
-    (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-audience' -FailOnError) -eq $resolverAudience -and
-    (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-projection-prefix') -eq $NamePrefix
-if ($liveSource -eq 'projection' -and -not $pointed) {
-    throw "Refusing to point the gateway at $resolverUrl and $resolverAudience`: entitlement-source is projection, so every request would move to them at once, without the switch's checks. Remedy: return the gateway to named values first (refresh the lists with scripts/Sync-ClaudeAccess.ps1, check them with scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift, then set entitlement-source to named-value), then rerun."
-}
 if ($PSCmdlet.ShouldProcess($ApimName, 'set resolver named values and entitlement-projection-prefix to the deployed resolver')) {
-    if (-not $pointed) {
-        Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-url' -Value $resolverUrl
-        Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-audience' -Value $resolverAudience
-        Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-projection-prefix' -Value $NamePrefix
-    }
+    $null = Set-ClaudeProjectionGatewayResolver -ResourceGroup $ResourceGroup -ApimName $ApimName -NamePrefix $NamePrefix -ResolverUrl $resolverUrl -ResolverAudience $resolverAudience
 } else { throw 'Pointing the gateway at the resolver was declined; no further steps run.' }
 Ok "entitlement-resolver-url is $resolverUrl; entitlement-projection-prefix is $NamePrefix; entitlement-source is unchanged"
 $work = Join-Path ([IO.Path]::GetTempPath()) ("claude-projection-" + [guid]::NewGuid().ToString('N'))
@@ -235,18 +223,14 @@ try {
         Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command "node -e require('fs').mkdirSync('/work',{recursive:true})" | Out-Null
         Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command 'tar -x -z -f /work/sync-source.tar.gz -C /work' | Out-Null
         Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command 'npm --prefix /work/sync ci --omit=dev --ignore-scripts --no-audit --fund=false' | Out-Null
-        $applyRaw = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command "node /work/sync/src/apply-projection.mjs --cosmos https://$cosmosAccount.documents.azure.com:443/ --tenant $($apim.identity.tenantId) --snapshot /work/snapshot.json"
+        $applyRaw = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command "node /work/sync/src/apply-projection.mjs --cosmos https://$cosmosAccount.documents.azure.com:443/ --tenant $($apim.identity.tenantId) --account-resource-id $accountResourceId --snapshot /work/snapshot.json"
         $apply = ConvertFrom-ClaudeRunnerResult -RawOutput $applyRaw -Step 'projection apply'
     } else { throw 'Projection population was declined; no further steps run.' }
 
     Step 'Compare before flip'
     if ($PSCmdlet.ShouldProcess($ApimName, 'export gateway decisions and compare projection')) {
-        & (Join-Path $PSScriptRoot 'Compare-ClaudeEntitlement.ps1') -ResourceGroup $ResourceGroup -ApimName $ApimName `
-            -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -ExportGatewayPath $gateway -FailOnDrift:$true
-        if ($LASTEXITCODE -ne 0) { throw 'named-value lists drift from Entra; refusing projection comparison and flip.' }
-        Send-RunnerFile -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Path $gateway -Destination /work/gateway-decisions.json | Out-Null
-        $compareRaw = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command "node /work/sync/src/apply-projection.mjs --cosmos https://$cosmosAccount.documents.azure.com:443/ --tenant $($apim.identity.tenantId) --compare /work/gateway-decisions.json"
-        $compare = ConvertFrom-ClaudeRunnerResult -RawOutput $compareRaw -Step 'Refusing to flip because projection drift remains'
+        $compare = Invoke-ClaudeProjectionDeployerCompare -ResourceGroup $ResourceGroup -ApimName $ApimName -RunnerName $($network.runnerName) `
+            -CosmosAccount $cosmosAccount -TenantId $($apim.identity.tenantId) -GatewayPath $gateway -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup
         Ok "clean comparison: $($compare.compared) identities"
     } else { throw 'Projection comparison was declined; no further steps run.' }
     Note 'Clean comparison complete; named values remain authoritative. To switch now, rerun with -FlipAfterCleanCompare.'

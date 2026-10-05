@@ -27,6 +27,22 @@ Assert 'flow calls the shared switch with the discovered projection prefix' ($so
 Assert 'flow discovery reads entitlement-projection-prefix, not projection renewal receipts' ($source -match 'entitlement-projection-prefix' -and $source -notmatch 'Find-ClaudeFlowProjectionRenewal -Directory')
 
 Write-Host ''
+Write-Host 'Projection guided flow - the prefix comes from the gateway' -ForegroundColor Cyan
+. (Join-Path $PSScriptRoot 'TestProjectionFixture.ps1')
+. (Join-Path $root 'scripts\flow\Discovery.ps1')
+Reset-ProjectionFixture
+$flowRecord = [pscustomobject]@{ schemaVersion = 2; resourceGroup = 'rg-p84'; apimName = 'apim-p84'; decisions = [pscustomobject]@{ entitlementStore = [pscustomobject]@{ target = 'projection' } }; history = @() }
+$live = Get-ClaudeFlowDiscovery -RecordPath '' -Record $flowRecord 6>$null
+Assert 'the guided flow discovery does not report a missing prefix it did not read' ($live.gateway -and -not $live.projectionPrefixProblem -and ($FixtureCalls -join "`n") -match 'apim show -g rg-p84 -n apim-p84') "$($live.projectionPrefixProblem) | $($FixtureCalls -join ' | ')"
+$livePlan = Get-ClaudeFlowStepPlan -Record $flowRecord -Discovery $live
+Reset-ProjectionFixture
+Capture { Invoke-ClaudeFlowStep -Record $flowRecord -Plan $livePlan 6>$null }
+$flowCalls = $FixtureCalls -join "`n"
+Assert 'the Entitlement step reads entitlement-projection-prefix from the gateway and switches that projection' ($flowCalls -match 'apim nv show -g rg-p84 --service-name apim-p84 --named-value-id entitlement-projection-prefix' -and $flowCalls -match 'deployment group show -g rg-p84 -n projection-resolver-p84fixture') "$Failure | $(($FixtureCalls | Select-Object -First 5) -join ' | ')"
+Reset-ProjectionFixture 'prefix-missing'
+Capture { Invoke-ClaudeFlowStep -Record $flowRecord -Plan $livePlan 6>$null }
+Assert 'a gateway without entitlement-projection-prefix refuses with the deploy remedy before the switch reads anything else' ($Failure -match 'entitlement-projection-prefix' -and $Failure -match 'Deploy-ClaudeProjection\.ps1' -and ($FixtureCalls -join "`n") -notmatch 'apim show|deployment group show') "$Failure | $($FixtureCalls -join ' | ')"
+Write-Host ''
 if ($fail) { Write-Host "$fail assertion(s) failed." -ForegroundColor Red; exit 1 }
 Write-Host 'Projection guided flow switch holds.' -ForegroundColor Green
 exit 0

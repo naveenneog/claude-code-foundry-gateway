@@ -14,11 +14,12 @@ function Assert($Label, [bool]$Condition, $Detail = '') {
 }
 
 # The simulation's test count. A test that stops loading or is removed shows up as a lower count.
-$expectedTests = 12
+$expectedTests = 14
 
 . (Join-Path $root 'scripts\ClaudeProjectionPackage.ps1')
 . (Join-Path $root 'scripts\ClaudeBusinessUnit.ps1')
-$work = Join-Path ([IO.Path]::GetTempPath()) ('projection-runs-' + [guid]::NewGuid().ToString('N'))
+$work = Join-Path $root '.test-work\projection-runs'
+Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
 try {
     Write-Host ''
     Write-Host 'Projection renewal runs - scheduled runs reach admission offline' -ForegroundColor Cyan
@@ -32,6 +33,7 @@ try {
     $env:PROJECTION_PACKAGE = $package
     $env:PROJECTION_FAKES = Join-Path $PSScriptRoot 'projection-fakes'
     $env:PROJECTION_REPO = $root
+    $env:PROJECTION_TEST_WORK = Join-Path $work 'node'
     $previous = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     $out = & node --test --test-reporter=tap (Join-Path $PSScriptRoot 'projection-renewal-runs.test.mjs') 2>&1 | Out-String
@@ -72,7 +74,7 @@ try {
 }
 finally {
     Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
-    Remove-Item Env:\PROJECTION_PACKAGE, Env:\PROJECTION_FAKES, Env:\PROJECTION_REPO -ErrorAction SilentlyContinue
+    Remove-Item Env:\PROJECTION_PACKAGE, Env:\PROJECTION_FAKES, Env:\PROJECTION_REPO, Env:\PROJECTION_TEST_WORK -ErrorAction SilentlyContinue
 }
 
 Write-Host ''

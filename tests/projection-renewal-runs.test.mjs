@@ -5,15 +5,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { randomUUID } from 'node:crypto';
 
 const pkg = process.env.PROJECTION_PACKAGE;
 const preload = pathToFileURL(join(process.env.PROJECTION_FAKES, 'preload.mjs')).href;
-const work = mkdtempSync(join(tmpdir(), 'projection-runs-'));
+const work = process.env.PROJECTION_TEST_WORK;
+if (!work) throw new Error('PROJECTION_TEST_WORK is required');
+rmSync(work, { recursive: true, force: true });
+mkdirSync(work, { recursive: true });
 process.on('exit', () => rmSync(work, { recursive: true, force: true }));
 
 const TENANT = '00000000-0000-4000-8000-000000000094';
@@ -79,7 +81,7 @@ function cleanEnvironment() {
 function run(where, script, args, { now, env = {}, fetch = fixture() } = {}) {
   const fixturePath = join(where.dir, `fetch-${randomUUID()}.json`);
   writeFileSync(fixturePath, JSON.stringify(fetch));
-  const childEnv = { ...cleanEnvironment(), FAKE_NOW: now, FAKE_COSMOS_STORE: where.store, FAKE_FETCH_FIXTURE: fixturePath, FAKE_FETCH_LOG: where.log, ...env };
+  const childEnv = { ...cleanEnvironment(), FAKE_NOW: now, FAKE_COSMOS_STORE: where.store, FAKE_COSMOS_LOG: join(where.dir, 'cosmos.log'), FAKE_FETCH_FIXTURE: fixturePath, FAKE_FETCH_LOG: where.log, ...env };
   for (const key of Object.keys(childEnv)) if (childEnv[key] === undefined) delete childEnv[key];
   const result = spawnSync(process.execPath, ['--import', preload, join(pkg, 'sync', 'src', script), ...args], {
     env: childEnv,
@@ -112,7 +114,7 @@ function jobRun(where, now, { fetch, env = {} } = {}) {
 }
 
 // The runner's population: a snapshot resolved outside the network (scripts/Sync-ClaudeProjection.ps1).
-function snapshotRun(where, now, records) {
+function snapshotRun(where, now, records, { args = [], env = {} } = {}) {
   const verified = new Date(Date.parse(now) - 60 * 1000);
   const snapshot = {
     kind: 'claude-entitlement-snapshot',
@@ -127,17 +129,13 @@ function snapshotRun(where, now, records) {
   };
   const path = join(where.dir, `snapshot-${randomUUID()}.json`);
   writeFileSync(path, JSON.stringify(snapshot));
-  return run(where, 'apply-projection.mjs', ['--cosmos', ENDPOINT, '--tenant', TENANT, '--snapshot', path], { now });
+  return run(where, 'apply-projection.mjs', ['--cosmos', ENDPOINT, '--tenant', TENANT, ...args, '--snapshot', path], { now, env });
 }
 
-// The settings the job definition carries, which admission binds the evidence to (ADR-0050).
-const JOB_SETTINGS = ['--client-id', '40000000-0000-4000-8000-000000000001', '--standard-group-id', STANDARD, '--premium-group-id', PREMIUM, '--gateway-resource-id', GATEWAY];
-
-function admission(where, now, settings = JOB_SETTINGS) {
+function admission(where, now, args = []) {
   return run(where, 'check-admission.mjs', [
     '--cosmos', ENDPOINT, '--tenant', TENANT, '--account-resource-id', ACCOUNT, '--database', 'claude',
-    '--container', 'entitlement', '--image-digest', DIGEST, '--entrypoint', ENTRYPOINT, '--action-group-resource-id', ACTION_GROUP,
-    ...settings,
+    '--container', 'entitlement', ...args,
   ], { now });
 }
 
@@ -154,64 +152,71 @@ const SNAPSHOT_RECORDS = [
   { oid: USERS.di, tier: 'premium', businessUnit: '' },
 ];
 
-test('a snapshot population and three scheduled runs pass admission; two runs do not', () => {
-  const where = scenario('three runs');
-  const populated = snapshotRun(where, '2026-10-04T09:50:00.000Z', SNAPSHOT_RECORDS);
-  assert.equal(populated.code, 0, populated.stdout + populated.stderr);
-  for (const now of ['2026-10-04T10:00:00.000Z', '2026-10-04T10:30:00.000Z']) {
-    const ran = jobRun(where, now);
-    assert.equal(ran.code, 0, ran.stdout + ran.stderr);
-    assert.equal(ran.json.event, 'projection-renewal-succeeded');
-  }
-  const early = admission(where, '2026-10-04T10:31:00.000Z');
-  assert.equal(early.code, 4, early.stdout + early.stderr);
-  assert.match(early.json.reason, /advanced at least twice/);
+test('runner snapshot apply requires an account resource id that matches the Cosmos endpoint for switch evidence', () => {
+  const missing = scenario('missing account id');
+  assert.equal(snapshotRun(missing, '2026-10-04T09:50:00.000Z', SNAPSHOT_RECORDS).code, 0);
+  const refused = admission(missing, '2026-10-04T09:51:00.000Z');
+  assert.equal(refused.code, 4, refused.stdout + refused.stderr);
+  assert.match(refused.json.reason, /full sync evidence/);
 
-  const third = jobRun(where, '2026-10-04T11:00:00.000Z');
-  assert.equal(third.code, 0, third.stdout + third.stderr);
-  assert.equal(third.json.event, 'projection-renewal-succeeded');
-  assert.equal(third.json.oldestExpiresAt, Math.floor(Date.parse('2026-10-04T11:00:00.000Z') / 1000) + 7200);
+  const mismatch = scenario('mismatched account id');
+  const wrongAccount = ACCOUNT.replace('cosmos-p94fixture', 'cosmos-other');
+  const failed = snapshotRun(mismatch, '2026-10-04T09:50:00.000Z', SNAPSHOT_RECORDS, { args: ['--account-resource-id', wrongAccount] });
+  assert.equal(failed.code, 1, failed.stdout + failed.stderr);
+  assert.match(failed.json.error, /cosmos-other.*cosmos-p94fixture/);
+
+  const envMismatch = scenario('env mismatched account id');
+  const envFailed = snapshotRun(envMismatch, '2026-10-04T09:50:00.000Z', SNAPSHOT_RECORDS, {
+    args: ['--account-resource-id', ACCOUNT],
+    env: { PROJECTION_ACCOUNT_RESOURCE_ID: wrongAccount },
+  });
+  assert.equal(envFailed.code, 1, envFailed.stdout + envFailed.stderr);
+  assert.match(envFailed.json.error, /differs from PROJECTION_ACCOUNT_RESOURCE_ID/);
+});
+
+test('a recent full runner snapshot with account evidence admits immediately and keeps records persistent', () => {
+  const where = scenario('runner full sync evidence');
+  const populated = snapshotRun(where, '2026-10-04T09:50:00.000Z', SNAPSHOT_RECORDS, { args: ['--account-resource-id', ACCOUNT] });
+  assert.equal(populated.code, 0, populated.stdout + populated.stderr);
   const admitted = admission(where, '2026-10-04T11:01:00.000Z');
   assert.equal(admitted.code, 0, admitted.stdout + admitted.stderr);
   assert.equal(admitted.json.ok, true);
-  assert.equal(admitted.json.generations, 3);
+  assert.equal(admitted.json.newestFullSync.executor, 'runner');
+  assert.equal(admitted.json.invalidCount, 0);
+  for (const record of Object.values(records(where))) assert.equal('expiresAt' in record, false);
 });
 
-test('the evidence admits only under the settings the job ran with', () => {
-  const where = scenario('settings binding');
+test('switch evidence is scoped to this account and only full syncs count', () => {
+  const where = scenario('evidence scope');
   assert.equal(snapshotRun(where, '2026-10-04T09:50:00.000Z', SNAPSHOT_RECORDS).code, 0);
-  for (const now of ['2026-10-04T10:00:00.000Z', '2026-10-04T10:30:00.000Z', '2026-10-04T11:00:00.000Z']) {
-    assert.equal(jobRun(where, now).code, 0, now);
-  }
+  assert.equal(jobRun(where, '2026-10-04T10:00:00.000Z').code, 0);
   const status = JSON.parse(readFileSync(where.store, 'utf8'));
-  const recorded = Object.values(status.docs).filter((d) => d.type === 'projection-reconciliation-status' && d.settings).map((d) => d.settings);
-  assert.equal(recorded.length, 3, 'each scheduled run records its settings');
-  assert.equal(recorded[0].standardGroupId, STANDARD);
+  const recorded = Object.values(status.docs).filter((d) => d.type === 'projection-reconciliation-status');
+  assert.equal(recorded.length, 2, 'the runner and job each record status');
+  assert.equal(recorded.every((d) => d.ttl === 604800), true, 'status records retain seven days');
+  assert.equal(recorded.some((d) => d.mode === 'full' && d.executor === 'job' && d.accountResourceId === ACCOUNT), true);
   assert.equal(admission(where, '2026-10-04T11:01:00.000Z').json.ok, true);
-  const otherPremium = admission(where, '2026-10-04T11:01:00.000Z', JOB_SETTINGS.map((value) => (value === PREMIUM ? 'none' : value)));
-  assert.equal(otherPremium.code, 4, otherPremium.stdout + otherPremium.stderr);
-  assert.match(otherPremium.json.reason, /other job settings/);
-  const unbound = admission(where, '2026-10-04T11:01:00.000Z', []);
-  assert.equal(unbound.code, 1, unbound.stdout + unbound.stderr);
-  assert.match(unbound.json.error, /--client-id/);
+  const otherAccount = run(where, 'check-admission.mjs', ['--cosmos', ENDPOINT, '--tenant', TENANT, '--account-resource-id', ACCOUNT.replace('cosmos-p94fixture', 'cosmos-other')], { now: '2026-10-04T11:01:00.000Z' });
+  assert.equal(otherAccount.code, 4, otherAccount.stdout + otherAccount.stderr);
+  assert.match(otherAccount.json.reason, /full sync evidence/);
+  for (const userStatus of Object.values(status.docs).filter((d) => d.type === 'projection-reconciliation-status')) {
+    userStatus.mode = 'user';
+  }
+  writeFileSync(where.store, JSON.stringify(status));
+  const userOnly = admission(where, '2026-10-04T11:01:00.000Z');
+  assert.equal(userOnly.code, 4, userOnly.stdout + userOnly.stderr);
+  assert.match(userOnly.json.reason, /full sync evidence/);
 });
 
-test('the entry point travels base64url-encoded, because the runner splits its command on spaces', () => {
-  const where = scenario('encoded entry point');
+test('switch evidence uses max evidence age, not entry point or job receipt fields', () => {
+  const where = scenario('evidence age');
   assert.equal(snapshotRun(where, '2026-10-04T09:50:00.000Z', SNAPSHOT_RECORDS).code, 0);
-  for (const now of ['2026-10-04T10:00:00.000Z', '2026-10-04T10:30:00.000Z', '2026-10-04T11:00:00.000Z']) {
-    assert.equal(jobRun(where, now).code, 0, now);
-  }
-  const withEntry = (entry) => ['--cosmos', ENDPOINT, '--tenant', TENANT, '--account-resource-id', ACCOUNT, '--database', 'claude',
-    '--container', 'entitlement', '--image-digest', DIGEST, ...entry, '--action-group-resource-id', ACTION_GROUP, ...JOB_SETTINGS];
-  const encodedEntry = Buffer.from(ENTRYPOINT, 'utf8').toString('base64url');
-  assert.match(encodedEntry, /^[A-Za-z0-9_-]+$/);
-  const encoded = run(where, 'check-admission.mjs', withEntry(['--entrypoint-base64url', encodedEntry]), { now: '2026-10-04T11:01:00.000Z' });
-  assert.equal(encoded.code, 0, encoded.stdout + encoded.stderr);
-  assert.equal(encoded.json.ok, true);
-  const malformed = run(where, 'check-admission.mjs', withEntry(['--entrypoint-base64url', 'node%20app']), { now: '2026-10-04T11:01:00.000Z' });
-  assert.equal(malformed.code, 1, malformed.stdout + malformed.stderr);
-  assert.match(malformed.json.error, /--entrypoint-base64url must be base64url/);
+  assert.equal(jobRun(where, '2026-10-04T10:00:00.000Z').code, 0);
+  const current = admission(where, '2026-10-04T10:30:00.000Z', ['--max-evidence-age-seconds', '3600']);
+  assert.equal(current.code, 0, current.stdout + current.stderr);
+  const stale = admission(where, '2026-10-04T11:01:00.000Z', ['--max-evidence-age-seconds', '60']);
+  assert.equal(stale.code, 4, stale.stdout + stale.stderr);
+  assert.match(stale.json.reason, /full sync evidence/);
 });
 
 test('the job reads its tier groups from its environment and its units from the gateway', () => {
@@ -316,32 +321,67 @@ test('a job whose group settings are missing or malformed writes nothing', () =>
   }
 });
 
-test('a snapshot applied after scheduled runs leaves admission refusing until the next run', () => {
-  const where = scenario('snapshot after runs');
-  for (const now of ['2026-10-04T10:00:00.000Z', '2026-10-04T10:30:00.000Z', '2026-10-04T11:00:00.000Z']) {
-    assert.equal(jobRun(where, now).code, 0);
-  }
+test('a targeted snapshot writes a user-mode status and does not replace full-sync switch evidence', () => {
+  const where = scenario('targeted after full');
+  assert.equal(jobRun(where, '2026-10-04T10:00:00.000Z').code, 0);
   assert.equal(admission(where, '2026-10-04T11:01:00.000Z').code, 0);
-  assert.equal(snapshotRun(where, '2026-10-04T11:02:00.000Z', SNAPSHOT_RECORDS).code, 0);
-  const refused = admission(where, '2026-10-04T11:03:00.000Z');
-  assert.equal(refused.code, 4, refused.stdout + refused.stderr);
-  assert.match(refused.json.reason, /older generation/);
+  const target = USERS.ada;
+  const verified = new Date(Date.parse('2026-10-04T11:02:00.000Z') - 60 * 1000);
+  const snapshot = {
+    kind: 'claude-entitlement-snapshot', tenantId: TENANT, generatedAt: '2026-10-04T11:02:00.000Z',
+    reconciliationGeneration: randomUUID(), lastVerifiedAt: verified.toISOString(),
+    expiresAt: Math.floor(verified.getTime() / 1000) + 7200, mappingVersion: Math.floor(verified.getTime() / 1000),
+    scope: 'user', user: target, records: [{ oid: target, tier: 'premium', businessUnit: 'eng' }],
+  };
+  const path = join(where.dir, 'targeted.json');
+  writeFileSync(path, JSON.stringify(snapshot));
+  const targeted = run(where, 'apply-projection.mjs', ['--cosmos', ENDPOINT, '--tenant', TENANT, '--account-resource-id', ACCOUNT, '--snapshot', path, '--user', target], { now: '2026-10-04T11:02:00.000Z' });
+  assert.equal(targeted.code, 0, targeted.stdout + targeted.stderr);
+  assert.equal(targeted.json.mode, 'user');
+  const admitted = admission(where, '2026-10-04T11:03:00.000Z');
+  assert.equal(admitted.code, 0, admitted.stdout + admitted.stderr);
+  assert.equal(admitted.json.newestFullSync.executor, 'job');
 });
 
-// The alerts in infra/projection-renewal.bicep search the job's console lines for quoted event
-// strings and read the expiry with a regular expression; both are checked against real lines here.
-test("the alert queries match the job's own last lines", () => {
+test('a targeted snapshot point-reads and writes only the target user', () => {
+  const where = scenario('targeted point read');
+  assert.equal(snapshotRun(where, '2026-10-04T10:00:00.000Z', SNAPSHOT_RECORDS, { args: ['--account-resource-id', ACCOUNT] }).code, 0);
+  const before = records(where);
+  const target = USERS.ada;
+  const other = USERS.bo;
+  const verified = new Date(Date.parse('2026-10-04T10:10:00.000Z') - 60 * 1000);
+  const snapshot = {
+    kind: 'claude-entitlement-snapshot', tenantId: TENANT, generatedAt: '2026-10-04T10:10:00.000Z',
+    reconciliationGeneration: randomUUID(), lastVerifiedAt: verified.toISOString(),
+    expiresAt: Math.floor(verified.getTime() / 1000) + 7200, mappingVersion: Math.floor(verified.getTime() / 1000),
+    scope: 'user', user: target, records: [{ oid: target, tier: 'premium', businessUnit: 'eng' }],
+  };
+  const path = join(where.dir, 'target-only.json');
+  writeFileSync(path, JSON.stringify(snapshot));
+  writeFileSync(join(where.dir, 'cosmos.log'), '');
+  const applied = run(where, 'apply-projection.mjs', ['--cosmos', ENDPOINT, '--tenant', TENANT, '--account-resource-id', ACCOUNT, '--snapshot', path, '--user', target], { now: '2026-10-04T10:10:00.000Z' });
+  assert.equal(applied.code, 0, applied.stdout + applied.stderr);
+  const logText = readFileSync(join(where.dir, 'cosmos.log'), 'utf8');
+  assert.match(logText, new RegExp(`point-read ${target}\\|${target}`));
+  assert.doesNotMatch(logText, /WHERE NOT IS_DEFINED\(c\.type\)/);
+  assert.doesNotMatch(logText, new RegExp(`bulk (Upsert|Delete) ${other}`));
+  const after = records(where);
+  assert.equal(after[target].tier, 'premium');
+  assert.deepEqual(after[other], before[other]);
+});
+
+test("the optional job's alerts match event lines and do not require expiry-margin evidence", () => {
   const bicep = readFileSync(join(process.env.PROJECTION_REPO, 'infra', 'projection-renewal.bicep'), 'utf8');
   const events = [...bicep.matchAll(/'"event":"([a-z-]+)"'/g)].map((m) => m[1]);
   assert.deepEqual([...new Set(events)].sort(), ['projection-renewal-failed', 'projection-renewal-succeeded']);
-  const pattern = /extract\('(.+?)', 1, Log\)/.exec(bicep)?.[1];
-  assert.ok(pattern, 'the expiry rule extracts the expiry from the line');
+  assert.doesNotMatch(bicep, /oldestExpiresAt|expiry-margin|expiresAt/);
 
   const where = scenario('alert contract');
   const ok = jobRun(where, '2026-10-04T10:00:00.000Z');
   const okLine = ok.stdout.split(/\r?\n/).filter((line) => line.startsWith('{')).at(-1);
   assert.ok(okLine.includes('"event":"projection-renewal-succeeded"'), okLine);
-  assert.equal(Number(new RegExp(pattern).exec(okLine)?.[1]), ok.json.oldestExpiresAt);
+  assert.equal(ok.json.executor, 'job');
+  assert.equal('oldestExpiresAt' in ok.json, false);
 
   const denied = jobRun(where, '2026-10-04T10:30:00.000Z', { fetch: fixture({ deny: [PREMIUM] }) });
   const deniedLine = denied.stdout.split(/\r?\n/).filter((line) => line.startsWith('{')).at(-1);

@@ -27,7 +27,7 @@ function Invoke-RestMethod {
     & $global:FixtureRest @PSBoundParameters
 }
 function At([string]$Pattern) { for ($i = 0; $i -lt $FixtureCalls.Count; $i++) { if ($FixtureCalls[$i] -match $Pattern) { return $i } }; return -1 }
-function Writes { @($FixtureCalls | Where-Object { $_ -match '^az (deployment group create|apim nv (update|create)|cosmosdb sql role assignment create|functionapp|ad app create)' }) }
+function Writes { @($FixtureCalls | Where-Object { $_ -match '^az (deployment group create|apim nv (update|create)|cosmosdb sql role assignment create|functionapp|ad app create|ad sp create)' }) }
 $repoBackups = { @(Get-ChildItem -LiteralPath (Join-Path $root 'onboarding') -Filter 'projection-switch-apim-p84-*.json' -ErrorAction SilentlyContinue) }
 $deployer = Join-Path $root 'scripts\Deploy-ClaudeProjection.ps1'
 function Invoke-DeployerSwitch([string]$Lists, [string]$Fixture = 'healthy') {
@@ -56,6 +56,25 @@ Assert 'deployer allows a projection gateway when it redeploys the resolver alre
 $install = [IO.File]::ReadAllText((Join-Path $root 'Install-ClaudeGateway.ps1'))
 Assert 'installer exposes FlipProjectionAfterCleanCompare without renewal receipt parameters' ($install -match 'FlipProjectionAfterCleanCompare' -and $install -notmatch 'ProjectionReconcilerResourceId|ProjectionRenewalImageDigest|ProjectionRenewalActionGroupResourceId|ProjectionRenewalEntryPoint|ReconcilerResourceId|RenewalImageDigest|RenewalActionGroupResourceId|RenewalEntryPoint')
 
+Write-Host ''
+Write-Host 'Projection deployer - pointing the gateway at the resolver' -ForegroundColor Cyan
+function WrittenIds { @(Writes | ForEach-Object { [regex]::Match($_, '--named-value-id (\S+)').Groups[1].Value }) }
+foreach ($case in @(
+        @{ Fixture = 'source-projection-no-prefix'; Label = 'a gateway serving from a projection deployed before P97 gets only its prefix recorded'; Expect = 'entitlement-projection-prefix' }
+        @{ Fixture = 'healthy'; Label = 'a gateway already pointed at this resolver with this prefix gets no write'; Expect = '' }
+    )) {
+    Reset-ProjectionFixture $case.Fixture
+    Capture { Set-ClaudeProjectionGatewayResolver -ResourceGroup rg-p84 -ApimName apim-p84 -NamePrefix p84fixture -ResolverUrl $FixtureResolverUrl -ResolverAudience $FixtureResolverAudience }
+    Assert $case.Label (-not $Failure -and ((WrittenIds) -join ',') -eq $case.Expect) "$Failure | writes: $((WrittenIds) -join ', ')"
+}
+Reset-ProjectionFixture 'source-projection-other-url'
+Capture { Set-ClaudeProjectionGatewayResolver -ResourceGroup rg-p84 -ApimName apim-p84 -NamePrefix p84fixture -ResolverUrl 'https://func-resolver-p84fixture.azurewebsites.net/api' -ResolverAudience $FixtureResolverAudience }
+Assert 'a projection gateway that calls another resolver is not redirected, and nothing is written' ($Failure -match '^Refusing to point the gateway' -and @(Writes).Count -eq 0) "$Failure | $(@(Writes) -join ' | ')"
+Reset-ProjectionFixture
+Capture { Set-ClaudeProjectionGatewayResolver -ResourceGroup rg-p84 -ApimName apim-p84 -NamePrefix p84new -ResolverUrl 'https://func-resolver-p84new.azurewebsites.net/api' -ResolverAudience $FixtureResolverAudience }
+Assert 'a named-value gateway is pointed at a new resolver: url, audience, then prefix' (-not $Failure -and ((WrittenIds) -join ',') -eq 'entitlement-resolver-url,entitlement-resolver-audience,entitlement-projection-prefix') "$Failure | writes: $((WrittenIds) -join ', ')"
+$deployText = [IO.File]::ReadAllText($deployer)
+Assert 'the deployer points the gateway only through Set-ClaudeProjectionGatewayResolver, inside its ShouldProcess' ($deployText -match "(?s)ShouldProcess\(\`$ApimName, 'set resolver named values and entitlement-projection-prefix[^']*'\)\) \{\s*\`$null = Set-ClaudeProjectionGatewayResolver" -and $deployText -notmatch "Set-ApimNamedValue[^\r\n]*-Id 'entitlement-resolver-url'")
 Write-Host ''
 if ($fail) { Write-Host "$fail assertion(s) failed." -ForegroundColor Red; exit 1 }
 Write-Host 'Projection deployer and installer wiring holds.' -ForegroundColor Green

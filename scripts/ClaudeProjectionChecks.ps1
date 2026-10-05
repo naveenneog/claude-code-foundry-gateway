@@ -10,20 +10,36 @@ function Get-ClaudeProjectionAppRemedy {
     return "Customer Entra admin: https://entra.microsoft.com > Entra ID > App registrations > New registration > claude-projection-resolver-$NamePrefix > Accounts in this organizational directory only > Register; Overview supplies the Application (client) ID; Expose an API > Application ID URI is api://<id>. CLI equivalent: az ad app create --display-name claude-projection-resolver-$NamePrefix --sign-in-audience AzureADMyOrg --query appId -o tsv; after a successful nonempty id, az ad app update --id <id> --identifier-uris api://<id>. The operator supplies -ResolverAppId <id>."
 }
 
-function Confirm-ClaudeProjectionResolverServicePrincipal {
+# Read-only: does the resolver application have a service principal in this tenant? Entra issues no token
+# for a resource application without one (AADSTS500011).
+function Test-ClaudeProjectionResolverServicePrincipal {
     param([Parameter(Mandatory)][string]$AppId)
     if ($AppId -notmatch '^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$') {
-        throw 'Resolver application id must be a GUID before creating its service principal.'
+        throw 'Resolver application id must be a GUID before its service principal is read.'
     }
     try {
         $sp = Invoke-ClaudeNetworkAz @('ad','sp','show','--id',$AppId)
-        if ($sp -and $sp.appId) { return [string]$sp.appId }
+        return [bool]($sp -and $sp.appId)
     }
     catch {
-        if ($_.Exception.Message -notmatch '(?i)not\s*found|Request_ResourceNotFound|does not exist') { throw }
-        $null = Invoke-ClaudeNetworkAz @('ad','sp','create','--id',$AppId)
-        return $AppId
+        if ($_.Exception.Message -match '(?i)not\s*found|Request_ResourceNotFound|does not exist') { return $false }
+        throw
     }
+}
+
+# The switch checks and never writes: a missing service principal refuses with the remedy.
+function Assert-ClaudeProjectionResolverServicePrincipal {
+    param([Parameter(Mandatory)][string]$AppId)
+    if (-not (Test-ClaudeProjectionResolverServicePrincipal -AppId $AppId)) {
+        throw "Projection switch refused: resolver application $AppId has no service principal in this tenant, so Microsoft Entra ID issues the gateway no token for the resolver (AADSTS500011). Remedy: rerun scripts/Deploy-ClaudeProjection.ps1 with this -NamePrefix, which creates it, or run az ad sp create --id $AppId; then rerun the switch."
+    }
+    return $AppId
+}
+
+# The deployer creates the service principal when it is missing.
+function Confirm-ClaudeProjectionResolverServicePrincipal {
+    param([Parameter(Mandatory)][string]$AppId)
+    if (Test-ClaudeProjectionResolverServicePrincipal -AppId $AppId) { return $AppId }
     $null = Invoke-ClaudeNetworkAz @('ad','sp','create','--id',$AppId)
     return $AppId
 }
@@ -87,10 +103,6 @@ function Format-ClaudeProjectionChecks {
     return ($lines -join "`n").TrimEnd()
 }
 
-function Stop-ClaudeProjectionSwitch {
-    throw 'Projection switch refused: the deployment preflight does not switch. Deploy the projection, run a clean full sync, then run scripts/Deploy-ClaudeProjection.ps1 -FlipAfterCleanCompare (ADR-0051).'
-}
-
 function Get-ClaudeProjectionArmUrl {
     # The management token goes with this request: the id must be an ARM resource id whose URL stays on
     # management.azure.com. A sub-path, such as config/appsettings/list, is letters in segments under
@@ -144,6 +156,31 @@ function Assert-ClaudeProjectionAdmission {
     return (ConvertFrom-ClaudeProjectionAdmissionResult -RawOutput $raw)
 }
 
+# The gateway reads entitlement-resolver-url and -audience only while entitlement-source is projection
+# (ADR-0050). On a gateway that serves from the projection, a change to them moves every request to
+# another resolver at once, without the switch's checks, so it is refused. SECURE-PROJECTION section 9
+# gives the same step by hand.
+function Set-ClaudeProjectionGatewayResolver {
+    param([Parameter(Mandatory)][string]$ResourceGroup, [Parameter(Mandatory)][string]$ApimName,
+        [Parameter(Mandatory)][string]$NamePrefix, [Parameter(Mandatory)][string]$ResolverUrl,
+        [Parameter(Mandatory)][string]$ResolverAudience)
+    $liveSource = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-source' -FailOnError
+    $pointed = (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-url' -FailOnError) -eq $ResolverUrl -and
+        (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-audience' -FailOnError) -eq $ResolverAudience
+    if ($liveSource -eq 'projection' -and -not $pointed) {
+        throw "Refusing to point the gateway at $ResolverUrl and $ResolverAudience`: entitlement-source is projection, so every request would move to them at once, without the switch's checks. Remedy: return the gateway to named values first (refresh the lists with scripts/Sync-ClaudeAccess.ps1, check them with scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift, then set entitlement-source to named-value), then rerun."
+    }
+    if (-not $pointed) {
+        Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-url' -Value $ResolverUrl
+        Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-audience' -Value $ResolverAudience
+    }
+    # The prefix records which projection the gateway uses; the switch and the sync read it, and no request
+    # path changes with it. A gateway that served from a projection before ADR-0051 has none yet.
+    if ((Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-projection-prefix' -FailOnError) -cne $NamePrefix) {
+        Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-projection-prefix' -Value $NamePrefix
+    }
+}
+
 function Assert-ClaudeProjectionResolverRedeploy {
     param([Parameter(Mandatory)][string]$ResourceGroup, [Parameter(Mandatory)][string]$ApimName,
         [Parameter(Mandatory)][string]$NamePrefix, [Parameter(Mandatory)][string]$SubscriptionId,
@@ -168,8 +205,7 @@ function Invoke-ClaudeProjectionPreflight {
         [string]$ResourceGroup, [string]$ApimName, [string]$NamePrefix, [string]$SubscriptionId,
         [string]$Location, [string]$Sku = 'BasicV2', [string]$ResolverInboundAccess,
         [string]$ResolverAppId, [string]$StandardGroup = 'claude-code-standard',
-        [string]$PremiumGroup = 'claude-code-premium', [switch]$FlipAfterCleanCompare,
-        [string]$ReconcilerResourceId
+        [string]$PremiumGroup = 'claude-code-premium'
     )
     Write-Host 'Projection preflight (about 30-90 s, including a 25 s Graph pause). No Azure writes.'
     $checks = [Collections.Generic.List[object]]::new()
