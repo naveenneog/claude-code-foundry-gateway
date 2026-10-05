@@ -537,6 +537,23 @@ Assert "the flow's rollback text names its snapshot (AC6)" ($startSnapshot -and 
 Reset-ProjectionFixture
 Capture { Get-ClaudeFlowDiscovery -RecordPath (Join-Path $work 'no-receipts\claude-gateway.json') -Record $startRecord }
 Assert 'discovery without a receipt for the gateway carries the reason the flow refuses with' (-not $Failure -and -not $Result.renewal -and $Result.renewalProblem -match 'no renewal receipt') "$Failure | $($Result.renewalProblem)"
+# Council round 2: a decision record kept elsewhere still finds the receipt the renewal script writes under the
+# repository's onboarding/, and a second receipt for the gateway beside the record is ambiguous.
+$customRecordPath = Join-Path $work 'custom-record\claude-gateway.json'
+New-Item -ItemType Directory -Force -Path (Split-Path $customRecordPath -Parent) | Out-Null
+Set-Item -Path function:global:Get-ClaudeFlowLifecycleRepoRoot -Value ([scriptblock]::Create("'$startRoot'"))
+try {
+    Reset-ProjectionFixture
+    Capture { Get-ClaudeFlowDiscovery -RecordPath $customRecordPath -Record $startRecord }
+    $fromRepository = $Result
+    [IO.File]::WriteAllText((Join-Path (Split-Path $customRecordPath -Parent) 'projection-renewal-again.json'), (Get-Content -LiteralPath $receiptPath -Raw))
+    Reset-ProjectionFixture
+    Capture { Get-ClaudeFlowDiscovery -RecordPath $customRecordPath -Record $startRecord }
+    $fromBoth = $Result
+}
+finally { Set-Item -Path function:global:Get-ClaudeFlowLifecycleRepoRoot -Value $realRepoRoot }
+Assert "discovery with a record elsewhere finds the receipt under the repository's onboarding/, and two receipts for the gateway are ambiguous" ($fromRepository.renewal.reconcilerResourceId -eq $FixtureJobId -and
+    -not $fromBoth.renewal -and $fromBoth.renewalProblem -match '2 renewal receipts') "repository: $($fromRepository.renewalProblem) | both: $($fromBoth.renewalProblem)"
 
 $flowRecord = [pscustomobject]@{ schemaVersion = 2; decisions = [pscustomobject]@{ entitlementStore = [pscustomobject]@{ target = 'projection' } }; history = @() }
 $flowDiscovery = [pscustomobject]@{ resourceGroup = 'rg-p84'; apimName = 'apim-p84'; sku = 'BasicV2'; apimId = $FixtureGatewayId; namedValues = @{ 'entitlement-source' = 'named-value' }; renewal = $null; renewalProblem = 'no renewal receipt under onboarding/ names gateway x. Remedy: deploy the renewal job.' }

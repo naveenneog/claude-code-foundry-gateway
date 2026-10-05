@@ -118,12 +118,16 @@ function global:Find-ClaudeFlowProjectionRenewal {
     # P95 (ADR-0050): the renewal receipt for this gateway, written by
     # scripts/Deploy-ClaudeProjectionRenewal.ps1. A file read only: admission confirms in ARM that the
     # job exists and runs the receipt's image digest before any write.
-    param([string]$Directory, [string]$GatewayResourceId)
+    param([string[]]$Directory, [string]$GatewayResourceId)
     $remedy = 'Remedy: deploy the renewal job with scripts/Deploy-ClaudeProjectionRenewal.ps1, which writes onboarding/projection-renewal-<prefix>.json.'
     if (-not $GatewayResourceId) { return [pscustomobject]@{ Receipt = $null; Problem = "the gateway's resource id is unknown, so no renewal receipt can be matched. $remedy" } }
     $found = @()
-    if ($Directory -and (Test-Path -LiteralPath $Directory)) {
-        foreach ($file in @(Get-ChildItem -LiteralPath $Directory -Filter 'projection-renewal-*.json' -File)) {
+    $searched = @{}
+    foreach ($folder in @($Directory | Where-Object { $_ -and (Test-Path -LiteralPath $_) })) {
+        $full = [IO.Path]::GetFullPath($folder).TrimEnd('\', '/')
+        if ($searched.ContainsKey($full)) { continue }
+        $searched[$full] = $true
+        foreach ($file in @(Get-ChildItem -LiteralPath $full -Filter 'projection-renewal-*.json' -File)) {
             try { $receipt = Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json } catch { continue }
             if ($receipt.kind -eq 'claude-projection-renewal-receipt' -and [string]$receipt.gatewayResourceId -eq $GatewayResourceId) {
                 $found += [pscustomobject]@{ File = $file.Name; Receipt = $receipt }

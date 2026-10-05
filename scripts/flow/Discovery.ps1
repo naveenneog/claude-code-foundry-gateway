@@ -151,12 +151,13 @@ function Get-ClaudeFlowDiscovery {
         $recovery = Get-ClaudeAddressRecovery -Record $Record -Gateway $gateway
     }
     $region = if ($gateway -and $gateway.location) { $gateway.location } else { ConvertTo-ClaudeArmRegionName $recordedRegion }
-    # ADR-0050: the Entitlement step's switch takes the renewal receipt beside the decision record whose
-    # gatewayResourceId is the discovered gateway. A file read only; the switch confirms it in Azure.
+    # ADR-0050: the Entitlement step's switch takes the renewal receipt, beside the decision record or under
+    # the repository's onboarding/ where the renewal script writes it, whose gatewayResourceId is the
+    # discovered gateway. A file read only; the switch confirms it in Azure.
     if (-not (Get-Command Find-ClaudeFlowProjectionRenewal -ErrorAction SilentlyContinue)) { . (Join-Path $PSScriptRoot 'lib\LifecycleCommon.ps1') }
     $receiptDirectory = if ($RecordPath) { Split-Path $RecordPath -Parent } else { '' }
     if (-not $receiptDirectory) { $receiptDirectory = '.' }
-    $renewal = Find-ClaudeFlowProjectionRenewal -Directory $receiptDirectory -GatewayResourceId $(if ($gateway) { [string]$gateway.id } else { '' })
+    $renewal = Find-ClaudeFlowProjectionRenewal -Directory @($receiptDirectory, (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'onboarding')) -GatewayResourceId $(if ($gateway) { [string]$gateway.id } else { '' })
     [pscustomobject][ordered]@{
         record = $Record
         gateway = $gateway
