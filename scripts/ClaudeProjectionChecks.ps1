@@ -87,13 +87,20 @@ function Get-ClaudeProjectionArmUrl {
 
 function ConvertFrom-ClaudeProjectionAdmissionResult {
     param([Parameter(Mandatory)][string]$RawOutput)
-    $last = @($RawOutput -split '\r?\n' | Where-Object { $_.Trim().StartsWith('{') } | Select-Object -Last 1)
-    if (-not $last) { throw 'Projection admission returned no JSON. Remedy: run the read-only switch-evidence check through the in-VNet runner and inspect its logs.' }
-    try { $obj = $last | ConvertFrom-Json -ErrorAction Stop }
+    $jsonLines = @($RawOutput -split '\r?\n' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    $jsonLines = @($jsonLines | Where-Object { $_.StartsWith('{') -and $_.EndsWith('}') })
+    if ($jsonLines.Count -ne 1) { throw "Projection admission returned $($jsonLines.Count) JSON lines, not exactly one. Remedy: rerun the fixed repository checker through the runner." }
+    try { $obj = $jsonLines[0] | ConvertFrom-Json -ErrorAction Stop }
     catch { throw 'Projection admission returned malformed JSON. Remedy: rerun the fixed repository checker through the runner.' }
     if (-not ($obj.ok -eq $true -and [string]$obj.mode -eq 'switch-evidence')) {
         $reason = if ($obj.reason) { [string]$obj.reason } elseif ($obj.error) { [string]$obj.error } else { 'switch evidence was not accepted' }
-        throw "Projection switch refused: $reason Remedy: run a successful full projection sync and fix invalid projection records, then rerun."
+        if (-not $obj.newestFullSync -and $reason -notmatch 'full sync') { $reason = "no full sync within 24 hours; $reason" }
+        if ($obj.invalidCount -gt 0) {
+            $samples = @($obj.invalidSamples | Select-Object -First 3)
+            $suffix = if ($samples.Count) { " Samples: $($samples -join ', ')." } else { '' }
+            $reason = "$reason Invalid projection records: $($obj.invalidCount).$suffix"
+        }
+        throw "Projection switch refused: $reason Remedy: run scripts/Sync-ClaudeAccess.ps1 for the projection (or a full projection sync), fix invalid projection records, then rerun."
     }
     return $obj
 }

@@ -240,7 +240,17 @@ function az {
         # The summaries the real scripts print last (sync/src/apply-projection.mjs, sync/src/check-admission.mjs).
         if ($command -match 'apply-projection\.mjs .*--compare-snapshot ') { return '{"ok":true,"mode":"compare-snapshot","compared":1,"differences":0,"byKind":{},"sample":[]}' }
         if ($command -match 'apply-projection\.mjs .*--compare ') { return '{"ok":true,"mode":"compare","gateway":"apim-p84","compared":1,"projectionRecords":1,"differences":0,"byKind":{},"sample":[]}' }
-        if ($command -match 'check-admission\.mjs ') { return '{"ok":true,"mode":"switch-evidence","newestFullSync":{"finishedAt":"2026-10-05T11:00:00.000Z","executor":"runner","generation":"00000000-0000-4000-8000-000000000099"},"invalidCount":0}' }
+        if ($command -match 'check-admission\.mjs ') {
+            switch ($FixtureCase) {
+                'admission-no-full-sync' { return '{"ok":false,"mode":"switch-evidence","newestFullSync":null,"invalidCount":0,"reason":"no full sync within 24 hours for this account and tenant"}' }
+                'admission-user-mode' { return '{"ok":false,"mode":"switch-evidence","newestFullSync":null,"invalidCount":0,"reason":"newest status is mode user; only mode full counts"}' }
+                'admission-invalid-records' { return '{"ok":false,"mode":"switch-evidence","newestFullSync":{"finishedAt":"2026-10-05T11:00:00.000Z","executor":"runner","generation":"00000000-0000-4000-8000-000000000099"},"invalidCount":2,"invalidSamples":["aaaaaaaaaaaa","bbbbbbbbbbbb"],"reason":"projection contains records the resolver would refuse"}' }
+                'admission-other-scope' { return '{"ok":false,"mode":"switch-evidence","newestFullSync":null,"invalidCount":0,"reason":"no full sync for this account, database, container and tenant"}' }
+                'admission-no-json' { return 'switch evidence completed without a summary' }
+                'admission-two-json' { return '{"ok":true,"mode":"switch-evidence","newestFullSync":{"finishedAt":"2026-10-05T10:00:00.000Z","executor":"runner"},"invalidCount":0}' + "`n" + '{"ok":true,"mode":"switch-evidence","newestFullSync":{"finishedAt":"2026-10-05T11:00:00.000Z","executor":"runner"},"invalidCount":0}' }
+                default { return '{"ok":true,"mode":"switch-evidence","newestFullSync":{"finishedAt":"2026-10-05T11:00:00.000Z","executor":"runner","generation":"00000000-0000-4000-8000-000000000099"},"invalidCount":0}' }
+            }
+        }
         return '{"ok":true}'
     }
     throw "UNEXPECTED AZURE CALL (offline fixture): $line"

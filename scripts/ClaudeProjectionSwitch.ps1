@@ -166,7 +166,9 @@ function Invoke-ClaudeProjectionSwitch {
         $backupPath = if ($Backup) { [string](@(& $Backup) | Select-Object -Last 1) } else { Save-ClaudeProjectionSwitchBackup -ResourceGroup $ResourceGroup -ApimName $ApimName -GatewayResourceId $gatewayId -Directory $BackupDirectory }
         Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-source' -Value 'projection'
         $rollback = Get-ClaudeProjectionRollbackText -BackupPath $backupPath
-        Write-Host '    [OK]   entitlement-source is projection after switch evidence' -ForegroundColor Green
+        $evidenceFinished = if ($admission.newestFullSync -and $admission.newestFullSync.finishedAt -is [DateTime]) { $admission.newestFullSync.finishedAt.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ') } elseif ($admission.newestFullSync) { [string]$admission.newestFullSync.finishedAt } else { '' }
+        $evidenceText = if ($admission.newestFullSync) { " from full sync finished $evidenceFinished by $($admission.newestFullSync.executor)" } else { '' }
+        Write-Host "    [OK]   entitlement-source is projection after switch evidence$evidenceText" -ForegroundColor Green
         Write-Host "    $rollback" -ForegroundColor DarkGray
         return [pscustomobject]@{ Switched = $true; BackupPath = $backupPath; Compared = $compare.compared; Admission = $admission; Rollback = $rollback }
     }
