@@ -395,7 +395,8 @@ Assert 'the README states the current ceiling'   ($readmeTop -match 'How many de
 Assert 'and gives the measured number'           ($readmeTop -match 'roughly 93 developers')
 # P19 measured 500,000 storage records on 2026-09-24. Keep the deployment
 # caveat, but do not require the superseded "not yet load-tested" sentence.
-Assert 'and says the larger design is not the default yet' ($readmeTop -match '\*\*It is not the default\.\*\*')
+# ADR-0052 (P98): the installer deploys the projection by default; named values are the small-team choice.
+Assert 'and says the installer deploys the projection by default' ($readmeTop -match '\*\*The installer deploys the projection by default\.\*\*')
 Assert 'and distinguishes the storage test from active developers' (
     $readmeTop -match '500,000 records were loaded and read' -and
     $readmeTop -match 'not 500,000 concurrent developers')

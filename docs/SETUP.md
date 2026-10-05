@@ -12,6 +12,41 @@ that step: the gateway and Foundry account need not share one. Use
 [target discovery](OPERATIONS.md#1-select-the-gateway-and-workspace) to distinguish
 the subscription, gateway group, Foundry group and telemetry workspace.
 
+## Quickstart
+
+The first command, from PowerShell 7 at the repository root, signed in with `az login`:
+
+```powershell
+./Install-ClaudeGateway.ps1
+```
+
+It asks for the subscription, the Foundry account, the gateway's resource group, region and SKU, the
+budgets and the tier groups. It shows a summary with prices and changes nothing until that summary is
+approved. The Cosmos DB projection is the default entitlement store, and the installer deploys it and
+switches the gateway to it ([ADR-0052](adr/0052-cosmos-default-installer.md)). Named values remain
+selectable for teams of up to about 93 developers.
+
+The same installation without prompts, previewed with `-WhatIf` first:
+
+```powershell
+./Install-ClaudeGateway.ps1 -Yes -WhatIf -SubscriptionId <sub> -FoundryAccount <account> -FoundryResourceGroup <foundry-rg> `
+    -ResourceGroup <gateway-rg> -Location <region> -NamePrefix <prefix> -Sku BasicV2
+./Install-ClaudeGateway.ps1 -Yes -SubscriptionId <sub> -FoundryAccount <account> -FoundryResourceGroup <foundry-rg> `
+    -ResourceGroup <gateway-rg> -Location <region> -NamePrefix <prefix> -Sku BasicV2
+```
+
+`-EntitlementStore named-value` keeps named values. `-DeploySyncJob` adds the optional sync job for
+very large directories ([private projection](SECURE-PROJECTION.md#optional-sync-job-and-switch-evidence-p97)).
+
+After the installation, in order:
+
+| Step | Command |
+|---|---|
+| Entitle one developer, after adding them to the standard or premium Entra group | `./scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <gateway-rg> -ApimName <apim> -User <upn-or-object-id>` |
+| Send the developer their setup | `./scripts/New-OnboardingEmail.ps1 -ConfigPath ./onboarding/claude-gateway.json -To <address>` |
+| Check the gateway | `./scripts/Test-ClaudeHealth.ps1 -ResourceGroup <gateway-rg> -ApimName <apim>` |
+
+The sections below give the prerequisites, roles, SKU choice and each installer option.
 ### Find the values used in this guide
 
 The following are lookups, not permission grants or deployment commands. Run
@@ -131,11 +166,23 @@ built on an RPS figure would be a guess in a table.
 ([v2 tiers overview](https://learn.microsoft.com/azure/api-management/v2-service-tiers-overview))
 
 On that arithmetic Basic v2 covers roughly 900 developers, so **volume rarely
-decides this**. What usually moves an enterprise to Standard v2 is that Basic v2
-has no VNet integration. Neither Basic v2 nor Standard v2 has availability zones;
-Premium v2 does, but not multi-region. The installer says so rather
-than implying the request count is the deciding factor, and the suggestion is
-only a default — override it at the prompt.
+decides this**. The facts that do, with the projection, from Microsoft Learn:
+
+| Tier | Built-in cache | Scale units | Virtual network | Availability zones |
+|---|---|---|---|---|
+| Basic v2 | 250 MB | up to 10 | none | no |
+| Standard v2 | 1 GB | up to 10 | outbound integration | yes |
+| Premium v2 | 5 GB | up to 30 | injection | yes |
+
+Sources: [features](https://learn.microsoft.com/azure/api-management/api-management-features)
+(updated 2026-06-05), [outbound integration](https://learn.microsoft.com/azure/api-management/integrate-vnet-outbound)
+(2025-12-04), [injection](https://learn.microsoft.com/azure/api-management/inject-vnet-v2) (2025-10-08) and
+[reliability](https://learn.microsoft.com/azure/reliability/reliability-api-management) (2026-09-09).
+Cosmos DB serverless, which the projection uses, is single-region
+([serverless](https://learn.microsoft.com/azure/cosmos-db/serverless), 2026-04-27). The installer's
+suggestion: Basic v2 for evaluation and small teams; Standard v2 for availability zones, outbound
+virtual network integration or more than Basic v2's included volume; Premium v2 for virtual network
+injection or more than 10 units. The suggestion is a default at the prompt.
 
 This is included-request arithmetic, **not supported developer capacity**.
 The shipped named-value membership map fills at roughly 93 developers with
@@ -144,12 +191,13 @@ for an **entitlement store** as a separate choice:
 
 | Store | When it fits | Network shape |
 |---|---|---|
-| Named values | Small deployments below the measured ceiling | No extra components. |
-| Cosmos projection | Around 100 developers and above, or whenever the operator chooses it | Standard v2 and Premium v2 use a private resolver. Basic v2 uses a public resolver endpoint restricted by Microsoft Entra to the gateway managed identity, while Cosmos remains private. |
+| Cosmos projection (default) | Every size ([ADR-0052](adr/0052-cosmos-default-installer.md)) | The resolver endpoint is public on every tier and accepts only the gateway managed identity's Microsoft Entra token; Cosmos remains private. `-ResolverInboundAccess private` on Standard v2 or Premium v2 needs the gateway's outbound virtual network integration into the projection network. |
+| Named values | Teams within the measured ceiling | No extra components. |
 
-The projection deployer is `scripts/Deploy-ClaudeProjection.ps1`. It deploys
+The installer runs the projection deployer, `scripts/Deploy-ClaudeProjection.ps1`, which deploys
 private Cosmos and the resolver, populates from Entra, compares the projection
-against the named-value lists, and leaves named values authoritative. Projection records persist until a sync removes or changes the person; a sync-job outage does not
+against the named-value lists (or, on a new gateway, against the snapshot it applied) and leaves named
+values authoritative; the installer then runs it with `-FlipAfterCleanCompare` to switch. Projection records persist until a sync removes or changes the person; a sync-job outage does not
 stop developers. Add or remove a developer in the Entra group, then run
 `scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim> -User <name-or-object-id>` for one
 person, or omit `-User` for everyone. Removal takes effect after the sync plus at most
@@ -162,10 +210,8 @@ Basic v2 resolver endpoint is public because Basic v2 has no outbound VNet
 integration; APIM outbound IPs are not treated as the primary control.
 Authentication is.
 
-A developer count above the named-value ceiling is noted at the count, and the
-store question then recommends the Cosmos projection. Choosing named values for
-more developers than they hold is stated after the store question, with the
-Cosmos store as the remedy, and asks "Continue with named values".
+Named values chosen for more developers than they hold are refused at the store question, with the
+capacity reason and the Cosmos projection as the remedy, before anything is created.
 
 ### Tooling
 

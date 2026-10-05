@@ -1,4 +1,4 @@
-﻿# P30-P32 and the workstation migration tool: the admin surface.
+# P30-P32 and the workstation migration tool: the admin surface.
 #
 # Four things that share a property - each one guards against a mistake that is
 # invisible after it is made:
@@ -363,16 +363,22 @@ Assert 'and an impossible figure is refused'         ($costModel -match 'is larg
 # refusing to write, by which time the gateway was in production. Since P79 the
 # check follows the store choice: at the developer count it asked before the tier
 # and the store were chosen, and called the Cosmos store unbuilt after P61 built it.
-Assert 'the declared population is checked against the chosen store' ($inst -match 'Named values hold about \{0\} developers, and you said \{1\}' -and $inst -match "\`$EntitlementStore -eq 'named-value' -and \`$devCount -gt \`$buCeiling")
-Assert 'the check follows the store choice, not the developer count' ($inst.IndexOf('Named values hold about') -gt $inst.IndexOf('Select-ClaudeChoice -Parameter EntitlementStore') -and $inst.IndexOf('Select-ClaudeChoice -Parameter EntitlementStore') -gt 0)
-Assert 'the Cosmos store is named as the remedy, not as unbuilt' ($inst -notmatch 'is not built yet' -and $inst -match 'The Cosmos projection store holds them on every v2 tier')
+# ADR-0052 (P98): the check lives in scripts/ClaudeInstallProjection.ps1, and named values above the
+# ceiling are refused rather than offered with a warning (P79 asked "Continue with named values").
+$storeModule = Get-Content (Join-Path $root 'scripts\ClaudeInstallProjection.ps1') -Raw
+. (Join-Path $root 'scripts\ClaudeChoice.ps1')
+. (Join-Path $root 'scripts\ClaudeInstallProjection.ps1')
+$storeRefusal = try { Resolve-ClaudeInstallerEntitlementStore -EntitlementStore named-value -DeveloperCount 94 -BuCeiling 93 -ListCeiling 110 -Yes | Out-Null; '' } catch { $_.Exception.Message }
+Assert 'the declared population is checked against the chosen store' ($storeModule -match 'Named values hold about \{0\} developers' -and $storeModule -match "\`$store -eq 'named-value' -and \`$DeveloperCount -gt \`$BuCeiling" -and $inst -match 'Resolve-ClaudeInstallerEntitlementStore[^\r\n]*-DeveloperCount \$devCount')
+Assert 'the check follows the store choice, not the developer count' ([bool]$storeRefusal -and $storeRefusal -match 'Named values hold about 93' -and
+    (Resolve-ClaudeInstallerEntitlementStore -EntitlementStore projection -DeveloperCount 500 -BuCeiling 93 -ListCeiling 110 -Yes).Store -eq 'projection')
+Assert 'the Cosmos store is named as the remedy, not as unbuilt' (($inst + $storeModule) -notmatch 'is not built yet' -and $storeRefusal -match 'Choose projection')
 Assert 'against a derived ceiling, not a literal' ($inst -match '(?m)^\s*\$buCeiling = \[int\]\[math\]::Floor')
-Assert 'it says a bigger SKU does not help'      ($inst -match 'raising the SKU does not move it')
+Assert 'it says a bigger SKU does not help'      ($storeRefusal -match "raising the API Management SKU does not increase one named value's 4,096-character capacity")
 Assert 'and names what would'                    ($inst -match 'docs/adr/0011')
-Assert 'it says the move is configuration'       ($inst -match 'configuration change rather than a redeployment')
-Assert 'and the operator can still proceed with named values' ($inst -match 'Continue with named values \(yes/no\)')
-Assert 'or stop before anything is created'      ($inst -match 'Stopped before deploying. Nothing was created')
-
+Assert 'named values within their capacity stay selectable' ((Resolve-ClaudeInstallerEntitlementStore -EntitlementStore named-value -DeveloperCount 25 -BuCeiling 93 -ListCeiling 110 -Yes).Store -eq 'named-value')
+Assert 'above the ceiling the operator cannot proceed with named values' ([bool]$storeRefusal)
+Assert 'and the refusal comes before anything is created' ($storeRefusal -match 'Nothing was created')
 Write-Host ''
 Write-Host 'Admin - the direct Foundry path' -ForegroundColor Cyan
 

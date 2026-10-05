@@ -1,4 +1,4 @@
-﻿# Negative test for the business unit checks.
+# Negative test for the business unit checks.
 #
 # A check that passes is worth nothing until it has been seen to fail. This
 # breaks each thing Test-BusinessUnits.ps1 claims to guard, one at a time,
@@ -586,10 +586,10 @@ $mutations = @(
        To    = 'That is a known issue' }
 
     @{ Suite = 'Test-Scale.ps1'
-       Name  = 'the README implies the projection is the default'
+       Name  = 'the README stops saying the installer deploys the projection by default'
        File  = 'README.md'
-       From  = '**It is not the default.**'
-       To    = '**It is the default.**' }
+       From  = '**The installer deploys the projection by default.**'
+       To    = '**The installer deploys named values by default.**' }
 
     @{ Suite = 'Test-Scale.ps1'
        Name  = 'private networking stops being priced'

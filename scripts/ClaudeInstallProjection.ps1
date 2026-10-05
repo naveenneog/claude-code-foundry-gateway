@@ -36,7 +36,7 @@ function Resolve-ClaudeInstallerEntitlementStore {
         else { $store = 'projection' }
     }
     if ($store -eq 'named-value' -and $DeveloperCount -gt $BuCeiling) {
-        throw ("Named values hold about {0} developers in the business-unit map (about {1} in a tier list), and you declared {2}. Choose projection; raising the API Management SKU does not increase one named value's 4,096-character capacity." -f $BuCeiling, $ListCeiling, $DeveloperCount)
+        throw ("Named values hold about {0} developers in the business-unit map (about {1} in a tier list), and you declared {2}. Choose projection; raising the API Management SKU does not increase one named value's 4,096-character capacity. Nothing was created." -f $BuCeiling, $ListCeiling, $DeveloperCount)
     }
     [pscustomobject]@{ Store = $store; DeployProjection = ($store -eq 'projection'); Options = $options }
 }

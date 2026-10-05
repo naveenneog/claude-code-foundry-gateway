@@ -1,5 +1,27 @@
 # Deploy the entitlement projection with private networking
 
+## Quickstart
+
+A new gateway gets the projection from the installer, which deploys it and switches the gateway to it
+([ADR-0052](adr/0052-cosmos-default-installer.md)):
+
+```powershell
+./Install-ClaudeGateway.ps1
+```
+
+An existing gateway, from PowerShell 7 at the repository root, in order:
+
+| Step | Command |
+|---|---|
+| Deploy, populate and compare; named values keep serving | `./scripts/Deploy-ClaudeProjection.ps1 -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix>` |
+| Switch, after the resolver checks, the compare and switch evidence | `./scripts/Deploy-ClaudeProjection.ps1 -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> -FlipAfterCleanCompare` |
+| Publish one developer's change, after the Entra group change | `./scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim> -User <upn-or-object-id>` |
+| Optional, for very large directories: the sync job | `./scripts/Deploy-ClaudeProjectionRenewal.ps1 -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> -AlertEmail <address>` |
+
+Rollback refreshes and compares the named values, then sets `entitlement-source` back to `named-value`
+([switch](#switch-to-the-projection-p95)). The rest of this article covers each step, the network, the
+rights used and the costs.
+
 The gateway decides each developer's tier from two named values. A named value
 holds 4,096 characters, which is about 93 to 110 object ids, so beyond roughly a
 hundred developers entitlement has to move to the **projection**: one Cosmos DB
