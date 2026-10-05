@@ -384,6 +384,17 @@ test('G7B-6 pfx-needs-terminal server refusal is shown with its sentence', async
   }
 });
 
+test('R2-5 PFX path is reported once because defaults create no PFX requirement', async () => {
+  const source = await readFile(new URL('../tools/installer-ui/ui-model.js', import.meta.url), 'utf8');
+  const context = { globalThis: {} };
+  (await import('node:vm')).runInNewContext(source, context);
+  const model = context.globalThis.ClaudeInstallerUiModel;
+  const schema = JSON.parse(await readFile(new URL('../schemas/claude-gateway.answers.schema.json', import.meta.url), 'utf8'));
+  const answers = { schemaVersion: 1, AddressMode: 'custom', AddressCertificateSource: 'Pfx' };
+  const problems = [...model.validateAnswers(schema, answers, 'Install-ClaudeGateway.ps1'), ...model.validateEffectiveAddressDefaults(schema, answers)];
+  assert.equal(problems.filter((p) => p.path === 'AddressPfxPath').length, 1);
+});
+
 test('G7B-7 refreshed identity changes make the preflight stale and same identity keeps it current', async () => {
   let identity = { signedIn: true, user: 'one@example.test', tenantId: 'tenant-1', subscriptionId: '00000000-0000-4000-8000-000000000093' };
   const app = await start({ readIdentity: async () => identity });

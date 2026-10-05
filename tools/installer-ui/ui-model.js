@@ -520,9 +520,6 @@
     if (answers.AddressMode === "custom" && !answers.AddressCertificateSource && !answers.AddressKeyVaultCertificateId) {
       out.push(problem("address.inputs", "AddressKeyVaultCertificateId", "AddressKeyVaultCertificateId is required because the installer uses Key Vault when no certificate source is given", "Give the Key Vault certificate URL, or choose Pfx and give the PFX path."));
     }
-    if (effective.AddressMode === "custom" && effective.AddressCertificateSource === "Pfx" && !answers.AddressPfxPath) {
-      out.push(problem("address.inputs", "AddressPfxPath", "AddressPfxPath is required when AddressCertificateSource is Pfx", "Give the path of the PFX file."));
-    }
     return out;
   }
 
