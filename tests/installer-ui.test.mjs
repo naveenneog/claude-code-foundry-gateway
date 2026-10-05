@@ -417,7 +417,7 @@ test('preflight writes answers to a temporary file, invokes the installer withou
       body: JSON.stringify({ answers: { schemaVersion: 1, SubscriptionId: '00000000-0000-4000-8000-000000000093' } }),
     })).json();
     assert.equal(result.preflight.schemaVersion, 1);
-    assert.equal(result.preflight.checks[0].reason, 'not-signed-in');
+    assert.equal(result.preflight.checks.find((check) => check.id === 'target.tenant').result, 'PASS');
     assert.ok(result.fieldsByCheckId['target.subscription'].includes('SubscriptionId'));
     const log = (await readFile(app.log, 'utf8')).trim().split(/\r?\n/).map(JSON.parse);
     const preflightCall = log.find((entry) => entry.args.includes('-Preflight'));
@@ -494,7 +494,8 @@ if (process.argv.includes('-ListSteps')) {
   console.log(JSON.stringify({ schemaVersion: 1, installer: 'pwsh', checkpoint: null, runId: null, steps: [{ id: 'resource-group', title: 'Resource group', dependencies: [], state: 'not-started' }] })); process.exit(0);
 }
 if (process.argv.includes('-Preflight')) {
-  console.log(JSON.stringify({ schemaVersion: 1, installer: 'pwsh', answersSchemaVersion: 1, result: 'PASS', checks: [{ id: 'answers.schema', result: 'PASS', reason: null, message: 'ok', remedy: '', problems: [] }] })); process.exit(0);
+  const ids = ['answers.schema','answers.crossField','target.tenant','target.subscription','operator.adminPrereqs','foundry.account','foundry.deployments','apim.nameAvailability','apim.existingSku','apim.existingIdentity','entra.groupNames','businessUnits.ids','businessUnits.depth','address.inputs'];
+  console.log(JSON.stringify({ schemaVersion: 1, installer: 'pwsh', answersSchemaVersion: 1, result: 'PASS', checks: ids.map((id) => ({ id, result: 'PASS', reason: null, message: 'ok', remedy: '', problems: [] })) })); process.exit(0);
 }
 setTimeout(() => { console.log('done'); process.exit(0); }, 500);
 `, 'utf8');

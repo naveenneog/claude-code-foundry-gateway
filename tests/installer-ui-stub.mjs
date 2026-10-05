@@ -140,23 +140,38 @@ if (args.includes('-Preflight')) {
     if (count >= 1) process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_FAIL = '1';
   }
   const fail = process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_FAIL === '1';
+  const signedOut = process.env.P93_INSTALLER_UI_STUB_SIGNED_OUT === '1';
+  const impossiblePassNotRun = process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_IMPOSSIBLE_PASS_NOTRUN === '1';
   const noCurrentSubscription = process.env.P93_INSTALLER_UI_STUB_NO_CURRENT_SUBSCRIPTION === '1' && !answers.SubscriptionId;
-  const overallFail = fail || noCurrentSubscription;
+  const blocks = (check) => check.result === 'FAIL' || (check.result === 'NOT-RUN' && ['not-signed-in', 'prerequisite-failed', 'not-evaluated'].includes(check.reason));
   const targetSubscription = answers.SubscriptionId
     ? { id: 'target.subscription', result: 'PASS', reason: null, message: `subscription Capture subscription (${answers.SubscriptionId})`, remedy: '', problems: [] }
     : noCurrentSubscription
       ? { id: 'target.subscription', result: 'FAIL', reason: null, message: 'the current subscription could not be read (az account show returned no subscription id)', remedy: 'Check az account show, or answer SubscriptionId, then run the preflight again.', problems: [{ message: 'the current subscription could not be read (az account show returned no subscription id)', remedy: 'Check az account show, or answer SubscriptionId, then run the preflight again.' }] }
       : { id: 'target.subscription', result: 'PASS', reason: null, message: 'SubscriptionId is not answered; the run uses the current subscription Capture subscription (00000000-0000-4000-8000-000000000093)', remedy: '', problems: [] };
+  const checks = [
+    { id: 'answers.schema', result: fail ? 'FAIL' : 'PASS', reason: null, message: fail ? 'stub requested answers.schema failure' : 'the answers match the answers schema, version 1', remedy: fail ? 'Fix the stub-requested failure.' : '', problems: fail ? [{ message: 'stub requested answers.schema failure', remedy: 'Fix the stub-requested failure.' }] : [] },
+    { id: 'answers.crossField', result: 'PASS', reason: null, message: 'the answers that depend on each other agree', remedy: '', problems: [] },
+    { id: 'target.tenant', result: signedOut || impossiblePassNotRun ? 'NOT-RUN' : 'PASS', reason: signedOut || impossiblePassNotRun ? 'not-signed-in' : null, message: signedOut || impossiblePassNotRun ? 'Azure CLI is not signed in' : `signed in as ${process.env.P93_INSTALLER_UI_STUB_USER || 'operator@example.invalid'} in tenant ${process.env.P93_INSTALLER_UI_STUB_TENANT || 'tenant-capture'}`, remedy: signedOut || impossiblePassNotRun ? 'Run az login --use-device-code.' : '', problems: [] },
+    targetSubscription,
+    { id: 'operator.adminPrereqs', result: 'PASS', reason: null, message: 'admin prerequisites are available', remedy: '', problems: [] },
+    { id: 'foundry.account', result: 'PASS', reason: null, message: 'the Foundry account exists', remedy: '', problems: [] },
+    { id: 'foundry.deployments', result: 'PASS', reason: null, message: 'Claude deployments exist', remedy: '', problems: [] },
+    { id: 'apim.nameAvailability', result: 'PASS', reason: null, message: 'the API Management name is available', remedy: '', problems: [] },
+    { id: 'apim.existingSku', result: 'PASS', reason: null, message: 'no reused API Management instance needs a v2 tier check', remedy: '', problems: [] },
+    { id: 'apim.existingIdentity', result: 'PASS', reason: null, message: 'no reused API Management instance needs an identity check', remedy: '', problems: [] },
+    { id: 'entra.groupNames', result: 'PASS', reason: null, message: 'Entra group names are available', remedy: '', problems: [] },
+    { id: 'businessUnits.ids', result: 'PASS', reason: null, message: 'business unit ids are lower-case and unique', remedy: '', problems: [] },
+    { id: 'businessUnits.depth', result: 'PASS', reason: null, message: 'business units have at most two levels', remedy: '', problems: [] },
+    { id: 'address.inputs', result: 'PASS', reason: null, message: 'company address inputs are complete', remedy: '', problems: [] },
+  ];
+  const overallFail = checks.some(blocks);
   console.log(JSON.stringify({
     schemaVersion: 1,
     installer: 'pwsh',
     answersSchemaVersion: 1,
-    result: overallFail ? 'FAIL' : 'PASS',
-    checks: [
-      { id: 'target.tenant', result: process.env.P93_INSTALLER_UI_STUB_SIGNED_IN === '1' ? 'PASS' : 'NOT-RUN', reason: process.env.P93_INSTALLER_UI_STUB_SIGNED_IN === '1' ? null : 'not-signed-in', message: process.env.P93_INSTALLER_UI_STUB_SIGNED_IN === '1' ? `signed in as ${process.env.P93_INSTALLER_UI_STUB_USER || 'operator@example.invalid'} in tenant ${process.env.P93_INSTALLER_UI_STUB_TENANT || 'tenant-capture'}` : 'Azure CLI is not signed in', remedy: process.env.P93_INSTALLER_UI_STUB_SIGNED_IN === '1' ? '' : 'Run az login --use-device-code.', problems: [] },
-      targetSubscription,
-      { id: 'answers.schema', result: fail ? 'FAIL' : 'PASS', reason: null, message: fail ? 'stub requested answers.schema failure' : 'the answers match the answers schema, version 1', remedy: fail ? 'Fix the stub-requested failure.' : '', problems: fail ? [{ message: 'stub requested answers.schema failure', remedy: 'Fix the stub-requested failure.' }] : [] },
-    ],
+    result: impossiblePassNotRun ? 'PASS' : (overallFail ? 'FAIL' : 'PASS'),
+    checks,
   }));
   finish(process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_PASS_EXIT_1 === '1' ? 1 : (overallFail ? 1 : 0));
 }

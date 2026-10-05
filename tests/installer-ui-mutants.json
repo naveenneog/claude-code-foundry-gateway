@@ -1,5 +1,32 @@
 [
   {
+    "id": "r3-3-1",
+    "why": "The preflight adapter must reject a top-level PASS when a blocking NOT-RUN or FAIL check recomputes to FAIL.",
+    "file": "tools/installer-ui/installer-contract.mjs",
+    "find": "  if (payload.result !== recomputed) throw fail(interfaceName, `result ${payload.result} does not match recomputed ${recomputed}`);\n",
+    "replace": "",
+    "testFile": "tests/installer-ui-g8.test.mjs",
+    "test": "R3-3 preflight adapter requires the producer check set and recomputes result"
+  },
+  {
+    "id": "r3-3-2",
+    "why": "The progress adapter must reject empty stepId on per-step events.",
+    "file": "tools/installer-ui/installer-contract.mjs",
+    "find": "  if (!payload.stepId && !['failed', 'refused'].includes(payload.event)) throw fail(interfaceName, `event ${payload.event} needs a stepId`);\n",
+    "replace": "",
+    "testFile": "tests/installer-ui-g8.test.mjs",
+    "test": "R3-3 progress adapter rejects empty step ids on per-step events only"
+  },
+  {
+    "id": "r3-3-3",
+    "why": "The stub must emit every schema preflight check exactly once.",
+    "file": "tests/installer-ui-stub.mjs",
+    "find": "    { id: 'address.inputs', result: 'PASS', reason: null, message: 'company address inputs are complete', remedy: '', problems: [] },\n",
+    "replace": "",
+    "testFile": "tests/installer-ui-g8.test.mjs",
+    "test": "R3-3 installer stub emits every schema preflight check id exactly once"
+  },
+  {
     "id": "T1-fail-once-disabled",
     "why": "The T1 journey must fail when the stub no longer fails the first selected gateway-deployment run.",
     "file": "tests/installer-ui-stub.mjs",

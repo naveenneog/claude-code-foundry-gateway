@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { createInstallerUiServer } from '../tools/installer-ui/server.mjs';
+import { createInstallerUiServer, loadSchema } from '../tools/installer-ui/server.mjs';
 import { PROGRESS_EVENTS, STEP_STATES, validatePreflight, validateStepList } from '../tools/installer-ui/installer-contract.mjs';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url)).replace(/[\\/]+$/, '');
@@ -68,6 +68,11 @@ function assertPreflightValueTypes(preflight) {
     if (check.result === 'NOT-RUN') assert.equal(valueType(check.reason), 'string');
     else assert.equal(valueType(check.reason), 'null');
   }
+}
+
+function recomputePreflightResult(preflight) {
+  const blockingReasons = new Set(['not-signed-in', 'prerequisite-failed', 'not-evaluated']);
+  return preflight.checks.some((check) => check.result === 'FAIL' || (check.result === 'NOT-RUN' && blockingReasons.has(check.reason))) ? 'FAIL' : 'PASS';
 }
 
 async function start(env = {}) {
@@ -173,17 +178,27 @@ test('T2 stub step list and preflight stay byte-shape compatible with the real i
     }
 
     const realPreflightRun = await runPwsh(['-AnswersPath', answersPath, '-Preflight', '-Json'], env);
-    const stubPreflightRun = await runStub(['-AnswersPath', answersPath, '-Preflight', '-Json']);
+    const stubPreflightRun = await runStub(['-AnswersPath', answersPath, '-Preflight', '-Json'], { P93_INSTALLER_UI_STUB_SIGNED_OUT: '1' });
     const realPreflight = JSON.parse(realPreflightRun.stdout);
     const stubPreflight = JSON.parse(stubPreflightRun.stdout);
+    const expectedCheckIds = (await loadSchema())['x-preflightChecks'].map((check) => check.id).sort();
     assert.deepEqual(sortedKeys(stubPreflight), sortedKeys(realPreflight));
     assert.equal(realPreflightRun.code === 0, realPreflight.result === 'PASS');
     assert.equal(stubPreflightRun.code === 0, stubPreflight.result === 'PASS');
+    assert.equal(realPreflight.result, stubPreflight.result);
+    assert.equal(realPreflight.result, recomputePreflightResult(realPreflight));
+    assert.equal(stubPreflight.result, recomputePreflightResult(stubPreflight));
     assert.deepEqual(new Set(stubPreflight.checks.map((check) => sortedKeys(check).join(','))), new Set(realPreflight.checks.map((check) => sortedKeys(check).join(','))));
     assertPreflightValueTypes(realPreflight);
     assertPreflightValueTypes(stubPreflight);
-    const realCheckIds = new Set(realPreflight.checks.map((check) => check.id));
-    for (const check of stubPreflight.checks) assert.ok(realCheckIds.has(check.id), `${check.id} is not a check the real preflight reports`);
+    assert.deepEqual(realPreflight.checks.map((check) => check.id).sort(), expectedCheckIds);
+    assert.deepEqual(stubPreflight.checks.map((check) => check.id).sort(), expectedCheckIds);
+    for (const output of [realPreflight, stubPreflight]) {
+      const tenant = output.checks.find((check) => check.id === 'target.tenant');
+      assert.equal(tenant.result, 'NOT-RUN');
+      assert.equal(tenant.reason, 'not-signed-in');
+      assert.equal(recomputePreflightResult(output), 'FAIL');
+    }
     const results = new Set([...realPreflight.checks, ...stubPreflight.checks].map((check) => check.result));
     for (const result of results) assert.ok(['PASS', 'FAIL', 'NOT-RUN'].includes(result), `${result} is not a preflight result vocabulary member`);
   } finally {

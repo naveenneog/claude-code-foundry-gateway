@@ -76,6 +76,11 @@ results and allowed progress events. Malformed step lists and preflight results 
 (`tools/installer-ui/installer-contract.mjs:10-15`; `tools/installer-ui/installer-contract.mjs:29-92`;
 `tools/installer-ui/server.mjs:215-219`; `tools/installer-ui/server.mjs:175-182`; `tools/installer-ui/server.mjs:467-475`;
 `tools/installer-ui/server.mjs:592-596`).
+The preflight adapter requires the schema's full preflight-check set exactly once and rejects a
+top-level result that does not match the producer blocking rule. The progress adapter accepts an
+empty `stepId` only for whole-run `failed` and `refused` events
+(`tools/installer-ui/installer-contract.mjs:57-103`; `tools/installer-ui/installer-contract.mjs:106-116`;
+`tools/installer-ui/server.mjs:466-470`).
 
 Preflight fingerprints are lower-case SHA-256 values over a canonical JSON object containing schema
 version, engine, sorted answers and a sorted step scope or `full`. The server stores at most 20

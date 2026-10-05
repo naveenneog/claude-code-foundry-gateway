@@ -215,6 +215,10 @@
     return map;
   }
 
+  function preflightCheckIds(schema) {
+    return (schema["x-preflightChecks"] || []).map((check) => check.id);
+  }
+
   function isPlainObject(value) {
     return value !== null && typeof value === "object" && !Array.isArray(value);
   }
@@ -657,6 +661,7 @@
     withEffectiveAddressDefaults,
     fieldGroups,
     fieldsByCheckId,
+    preflightCheckIds,
     installerArguments,
     installerFieldNames,
     isFieldActive,

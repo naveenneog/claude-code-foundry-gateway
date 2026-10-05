@@ -102,7 +102,9 @@ exact streaming cache-creation detail remains **U13**.
   address defaults for validation, scopes deployment choices to the current account and focuses nested
   problem paths on their exact controls. A run request that fails before the server answers no longer
   leaves the run controls disabled: the page reattaches to a run that started, or reports that none is
-  active.
+  active. Preflight and progress adapters now fail closed on producer-impossible PASS or NOT-RUN
+  combinations, incomplete or duplicate preflight check sets and per-step progress events without a
+  step id.
 - **Installers read an answers file, check it before any change, run selected steps and write a progress stream (P92, phase 0).**
   One answers file, described by `schemas/claude-gateway.answers.schema.json`, feeds
   `Install-ClaudeGateway.ps1 -AnswersPath`, `install-claude-gateway.sh --answers-file` and

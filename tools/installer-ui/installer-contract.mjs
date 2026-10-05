@@ -6,6 +6,8 @@ export const PROGRESS_EVENTS = ['started', 'completed', 'skipped-verified', 'war
 const stepStates = new Set(STEP_STATES);
 const preflightResults = new Set(PREFLIGHT_RESULTS);
 const progressEvents = new Set(PROGRESS_EVENTS);
+const preflightReasons = new Set(['not-signed-in', 'prerequisite-failed', 'not-evaluated', 'not-applicable', 'not-answered', 'discovery-skipped']);
+const blockingNotRunReasons = new Set(['not-signed-in', 'prerequisite-failed', 'not-evaluated']);
 
 function fail(interfaceName, message) {
   const error = new Error(`the installer's ${interfaceName} ${message}`);
@@ -52,8 +54,13 @@ export function validateStepList(payload) {
   return payload;
 }
 
-export function validatePreflight(payload) {
+function checkBlocks(check) {
+  return check.result === 'FAIL' || (check.result === 'NOT-RUN' && blockingNotRunReasons.has(check.reason));
+}
+
+export function validatePreflight(payload, options = {}) {
   const interfaceName = 'preflight result';
+  const expectedCheckIds = options.expectedCheckIds ? new Set(options.expectedCheckIds) : null;
   requireObject(payload, interfaceName);
   requireVersion(payload, interfaceName);
   requireString(payload, 'installer', interfaceName);
@@ -61,12 +68,21 @@ export function validatePreflight(payload) {
   requireString(payload, 'result', interfaceName);
   if (!['PASS', 'FAIL'].includes(payload.result)) throw fail(interfaceName, `result ${payload.result} is not PASS or FAIL`);
   if (!Array.isArray(payload.checks)) throw fail(interfaceName, 'field checks is not an array');
+  if (!payload.checks.length) throw fail(interfaceName, 'has zero checks');
+  const seen = new Set();
   for (const [index, check] of payload.checks.entries()) {
     requireObject(check, interfaceName);
     for (const field of ['id', 'result', 'message', 'remedy']) requireString(check, field, interfaceName);
+    if (seen.has(check.id)) throw fail(interfaceName, `has duplicate check id ${check.id}`);
+    seen.add(check.id);
+    if (expectedCheckIds && !expectedCheckIds.has(check.id)) throw fail(interfaceName, `has unknown check id ${check.id}`);
     if (!preflightResults.has(check.result)) throw fail(interfaceName, `check ${index} result ${check.result} is unsupported`);
-    if (payload.result === 'PASS' && check.result === 'FAIL') throw fail(interfaceName, 'PASS includes a FAIL check');
     if (check.reason !== undefined && check.reason !== null && typeof check.reason !== 'string') throw fail(interfaceName, `check ${index} field reason is not text or null`);
+    if (check.result === 'NOT-RUN') {
+      if (!preflightReasons.has(check.reason)) throw fail(interfaceName, `NOT-RUN check ${check.id} has unsupported reason ${check.reason}`);
+    } else if (check.reason !== undefined && check.reason !== null) {
+      throw fail(interfaceName, `${check.result} check ${check.id} reason is not null`);
+    }
     if (check.problems !== undefined) {
       if (!Array.isArray(check.problems)) throw fail(interfaceName, `check ${index} field problems is not an array`);
       for (const problem of check.problems) {
@@ -77,6 +93,13 @@ export function validatePreflight(payload) {
       }
     }
   }
+  if (expectedCheckIds) {
+    for (const id of expectedCheckIds) {
+      if (!seen.has(id)) throw fail(interfaceName, `is missing expected check ${id}`);
+    }
+  }
+  const recomputed = payload.checks.some(checkBlocks) ? 'FAIL' : 'PASS';
+  if (payload.result !== recomputed) throw fail(interfaceName, `result ${payload.result} does not match recomputed ${recomputed}`);
   return payload;
 }
 
@@ -88,5 +111,6 @@ export function validateProgressEvent(payload) {
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(payload.time)) throw fail(interfaceName, 'field time is not yyyy-MM-ddTHH:mm:ssZ');
   if (!/^[a-fA-F0-9]{32}$/.test(payload.runId)) throw fail(interfaceName, 'field runId is not 32 hex characters');
   if (!progressEvents.has(payload.event)) throw fail(interfaceName, `event ${payload.event} is unsupported`);
+  if (!payload.stepId && !['failed', 'refused'].includes(payload.event)) throw fail(interfaceName, `event ${payload.event} needs a stepId`);
   return payload;
 }

@@ -208,6 +208,11 @@ them. Each must use `schemaVersion: 1`, required fields and accepted vocabularie
 lists and preflight results return `502`, and malformed progress events become stream error events
 (`tools/installer-ui/installer-contract.mjs:29-92`; `tools/installer-ui/server.mjs:175-182`;
 `tools/installer-ui/server.mjs:467-475`; `tools/installer-ui/server.mjs:592-596`).
+The preflight adapter also requires every schema-declared preflight check exactly once, recomputes
+the top-level PASS or FAIL from the producer blocking rule, and accepts empty progress `stepId`
+values only on whole-run `failed` and `refused` events
+(`tools/installer-ui/installer-contract.mjs:57-103`; `tools/installer-ui/installer-contract.mjs:106-116`;
+`tools/installer-ui/server.mjs:466-470`).
 
 ## Screenshots
 

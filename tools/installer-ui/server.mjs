@@ -15,7 +15,7 @@ import { createLineHandler, readProgressFile, writeNdjson } from './run-transpor
 import { createSessionAuth } from './session-auth.mjs';
 import { collectChildOutput } from './child-output.mjs';
 import { validateRunRequest, validateStepScope } from './step-scope.mjs';
-import { fieldsByCheckId, installerArguments, loadSchema, prefillArguments, redactText, root, scrubLocalPaths } from './server-model.mjs';
+import { fieldsByCheckId, installerArguments, loadSchema, prefillArguments, preflightCheckIds, redactText, root, scrubLocalPaths } from './server-model.mjs';
 import { answersDigest, createPreflightStore, preflightFingerprint, preflightRequired, scopeCovers, scopeFromBody } from './preflight-record.mjs';
 
 export { loadSchema, redactText, scrubLocalPaths } from './server-model.mjs';
@@ -464,7 +464,9 @@ export async function createInstallerUiServer(options = {}) {
           const answers = await writeAnswers(dir, body.answers || {});
           const result = await runInstaller('powershell', await installerArguments({ engine: 'pwsh', action: 'preflight', answersPath: answers }), options, { ...childTimeout(lease), readName: 'preflight', outputCapBytes: outputCapFor() });
           let parsed;
-          try { parsed = validatePreflight(JSON.parse(result.stdout)); } catch (error) {
+          const schema = await loadSchema();
+          const expectedCheckIds = await preflightCheckIds(schema);
+          try { parsed = validatePreflight(JSON.parse(result.stdout), { expectedCheckIds }); } catch (error) {
             if (error.status === 502) throw error;
             const detail = scrubLocalPaths(await redactText(`${result.stdout}\n${result.stderr}`)).trim().slice(-1000);
             const malformed = new Error('preflight output was not JSON; the installer output is shown in detail.');
@@ -482,7 +484,7 @@ export async function createInstallerUiServer(options = {}) {
           } else {
             preflightPasses.clearForAnswers(digest, engine);
           }
-          return { exitCode: result.code, fingerprint: fingerprint || undefined, identity, scope: fingerprint ? scope : undefined, preflight: parsed, stdout: result.stdout, stderr: result.stderr, fieldsByCheckId: await fieldsByCheckId(await loadSchema()) };
+          return { exitCode: result.code, fingerprint: fingerprint || undefined, identity, scope: fingerprint ? scope : undefined, preflight: parsed, stdout: result.stdout, stderr: result.stderr, fieldsByCheckId: await fieldsByCheckId(schema) };
         }, tempDirs, tempRoot)), setCookie);
       }
       if (req.method === 'POST' && url.pathname === '/api/run/stream') {

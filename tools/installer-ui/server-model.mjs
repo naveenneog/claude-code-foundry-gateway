@@ -89,3 +89,7 @@ export async function installerArguments(options) {
 export async function fieldsByCheckId(schema) {
   return (await loadUiModel()).fieldsByCheckId(schema);
 }
+
+export async function preflightCheckIds(schema) {
+  return (await loadUiModel()).preflightCheckIds(schema);
+}

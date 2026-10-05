@@ -455,8 +455,8 @@ test('S6 step list adapter rejects empty, duplicate and unknown dependency step 
 
 test('S6 preflight adapter requires messages and no FAIL checks in a PASS result', () => {
   assert.throws(() => validatePreflight({ schemaVersion: 1, installer: 'pwsh', answersSchemaVersion: 1, result: 'PASS', checks: [{ id: 'x', result: 'PASS' }] }), /field message is not text/);
-  assert.throws(() => validatePreflight({ schemaVersion: 1, installer: 'pwsh', answersSchemaVersion: 1, result: 'PASS', checks: [{ id: 'x', result: 'FAIL', message: 'bad', remedy: '', reason: null }] }), /PASS includes a FAIL check/);
-  assert.doesNotThrow(() => validatePreflight({ schemaVersion: 1, installer: 'pwsh', answersSchemaVersion: 1, result: 'PASS', checks: [{ id: 'x', result: 'NOT-RUN', message: 'skip', remedy: '', reason: 'not-signed-in' }] }));
+  assert.throws(() => validatePreflight({ schemaVersion: 1, installer: 'pwsh', answersSchemaVersion: 1, result: 'PASS', checks: [{ id: 'x', result: 'FAIL', message: 'bad', remedy: '', reason: null }] }), /result PASS does not match recomputed FAIL/);
+  assert.throws(() => validatePreflight({ schemaVersion: 1, installer: 'pwsh', answersSchemaVersion: 1, result: 'PASS', checks: [{ id: 'x', result: 'NOT-RUN', message: 'skip', remedy: '', reason: 'not-signed-in' }] }), /result PASS does not match recomputed FAIL/);
 });
 
 test('S6 progress adapter requires producer text fields but allows whole-run failed events', () => {
