@@ -124,7 +124,7 @@ test('S1 bootstrap token is not the session cookie before or after bootstrap', a
     assert.equal((await fetch(`${app.base}/api/session`, { headers: { cookie: tokenCookie } })).status, 401);
     assert.equal((await fetch(`${app.base}/api/session`, { headers: { cookie: app.cookie } })).status, 200);
     const accepted = await app.fetch('/api/run/stop', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ runId: 'missing' }) });
-    assert.notEqual(accepted.status, 403);
+    assert.equal(accepted.status, 404, 'the CSRF check passed and the unknown run id answered 404');
   } finally {
     await app.close();
   }
@@ -239,7 +239,9 @@ test('S3 Azure lease drops timed-out queued reads instead of serving them later'
   const lease = createAzureLease();
   const holder = await lease.acquire('identity', 'read', 1000);
   const queued = lease.acquire('preflight', 'read', 20);
-  await assert.rejects(() => queued, { status: 504 });
+  // Bounded, so a queued read that never times out fails this test instead of hanging the file.
+  const settled = await Promise.race([queued.then(() => 'served', (error) => error), sleep(5000).then(() => 'still waiting after 5 s')]);
+  assert.equal(settled?.status, 504, `the queued read was ${typeof settled === 'string' ? settled : 'refused another way'}; a queued read times out while it waits`);
   holder.release();
   const next = await lease.acquire('prefill', 'read', 1000);
   assert.equal(next.operation, 'prefill');
@@ -288,16 +290,24 @@ test('S3 a queued read that times out while waiting starts no child', async () =
   let releaseIdentity;
   const identityGate = new Promise((resolve) => { releaseIdentity = resolve; });
   const app = await start({ readOnlyTimeoutMs: 100, readIdentity: async () => { await identityGate; return identityOne; } });
+  let second;
   try {
     const first = app.fetch('/api/identity');
     await sleep(25);
-    const second = await app.fetch('/api/preflight', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers, steps: ['gateway-deployment'] }) });
-    assert.equal(second.status, 504);
-    assert.match((await second.json()).error, /preflight timed out after 100 ms/);
-    assert.equal(app.stubCalls().filter((call) => call.args.includes('-Preflight')).length, 0);
-    releaseIdentity();
+    second = app.fetch('/api/preflight', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers, steps: ['gateway-deployment'] }) });
+    // The holder is released in every case, so a queued read that never times out fails this test instead of hanging it.
+    const outcome = await Promise.race([second, sleep(15_000).then(() => null)]);
+    try {
+      assert.ok(outcome, 'the queued preflight was still waiting after 15 s; a queued read times out while it waits');
+      assert.equal(outcome.status, 504);
+      assert.match((await outcome.json()).error, /preflight timed out after 100 ms/);
+      assert.equal(app.stubCalls().filter((call) => call.args.includes('-Preflight')).length, 0);
+    } finally {
+      releaseIdentity();
+    }
     assert.equal((await first).status, 200);
   } finally {
+    await second?.catch(() => {});
     await app.close();
   }
 });
