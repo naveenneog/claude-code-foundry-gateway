@@ -603,6 +603,13 @@ $installerText = Get-Content -LiteralPath (Join-Path $root 'Install-ClaudeGatewa
 $bicepText = Get-Content -LiteralPath (Join-Path $root 'infra\main.bicep') -Raw
 Assert 'the installer passes the live entitlement-source to the template, whose default is named-value' ($installerText -match "entitlementSource=\`$\(if \(\`$entSrc\) \{ \`$entSrc \} else \{ 'named-value' \}\)" -and $bicepText -match "param entitlementSource string = 'named-value'")
 Assert 'an update creates a missing entitlement-source as named-value' ((Get-ClaudeFlowLifecycleTemplateNamedValueDefaults)['entitlement-source'].Value -eq 'named-value')
+# Council round 2: on an existing gateway the installer redeploys infra/main.bicep with the live entitlement
+# values. A failed read must stop it, not become named-value or the placeholder resolver.
+$entReads = @([IO.File]::ReadAllLines((Join-Path $root 'Install-ClaudeGateway.ps1')) | Where-Object { $_ -match '^\s*\$ent(Src|Url|Aud) = ' })
+Assert "the installer's entitlement reads on an existing gateway fail closed" ($entReads.Count -eq 3 -and @($entReads | Where-Object { $_ -match 'Get-ApimNamedValue .*-FailOnError' }).Count -eq 3) ($entReads -join ' | ')
+Reset-ProjectionFixture 'nv-read-error'
+Capture { Get-ApimNamedValue -ResourceGroup rg-p84 -ApimName apim-p84 -Id 'entitlement-source' -FailOnError }
+Assert 'a named-value read that fails throws instead of reading as absent' ($Failure -match "Could not read named value 'entitlement-source'") $Failure
 # Restore-ClaudeGateway.ps1 puts back every named value it changed; entitlement-source=projection waits for the switch.
 $restoreScript = Join-Path $root 'scripts\Restore-ClaudeGateway.ps1'
 foreach ($case in @(

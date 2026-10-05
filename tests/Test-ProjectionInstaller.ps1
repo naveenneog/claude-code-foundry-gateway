@@ -48,7 +48,7 @@ if (Test-Path $deployerPath) {
     Assert 'deployer runs projection comparison' ($deployer -match 'apply-projection\.mjs' -and $deployer -match '--compare')
     Assert 'deployer refuses drift before flip' ($deployer -match 'Refusing to flip' -and $deployer -match 'drift')
     $switchText = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'scripts\ClaudeProjectionSwitch.ps1') -Raw
-    Assert 'deployer switches only through the shared switch, which writes after P86 scheduled-renewal admission' ($deployer -match 'Invoke-ClaudeProjectionSwitch' -and $deployer -notmatch "-Id 'entitlement-source'" -and
+    Assert 'deployer switches only through the shared switch, which writes after P86 scheduled-renewal admission' ($deployer -match 'Invoke-ClaudeProjectionSwitch' -and $deployer -notmatch "Set-ApimNamedValue[^\r\n]*-Id 'entitlement-source'" -and
         $deployer -match 'RenewalActionGroupResourceId' -and $switchText -match "(?s)Assert-ClaudeProjectionAdmission.*Set-ApimNamedValue[^\r\n]*-Id 'entitlement-source'")
     Assert 'deployer has bounded retries' ($deployer -match '\[ValidateRange\(1,10\)\]\[int\]\$RetryCount' -and $deployer -match 'Start-Sleep')
 }

@@ -96,6 +96,7 @@ function az {
         return (@{ id = $id; identity = $identity; sku = @{ name = $sku } } | ConvertTo-Json -Depth 5 -Compress)
     }
     if ($line -like 'apim nv show*') {
+        if ($FixtureCase -eq 'nv-read-error') { $global:LASTEXITCODE = 1; return 'ERROR: (AuthorizationFailed) The client does not have authorization to perform action Microsoft.ApiManagement/service/namedValues/read.' }
         $id = [string]$words[[array]::IndexOf($words, '--named-value-id') + 1]
         $resolverValues = @{ 'entitlement-resolver-url' = $FixtureResolverUrl; 'entitlement-resolver-audience' = $FixtureResolverAudience }
         if ($resolverValues.ContainsKey($id)) {

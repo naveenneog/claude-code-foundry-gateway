@@ -1437,10 +1437,11 @@ if ($ExistingApim -or (Invoke-AzOptional { az apim show -g $ResourceGroup -n $ap
     # it back would return them to the named-value lists silently, and those
     # lists stopped being maintained the moment they migrated. The developer
     # population would shrink to whatever was last written to them, with no
-    # error anywhere. Same failure mode as the business unit registry above.
-    $entSrc = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id entitlement-source --query value -o tsv 2>$null
-    $entUrl = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id entitlement-resolver-url --query value -o tsv 2>$null
-    $entAud = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id entitlement-resolver-audience --query value -o tsv 2>$null
+    # error anywhere. Same failure mode as the business unit registry above, so these three reads stop the run.
+    . (Join-Path $root 'scripts/ApimNamedValue.ps1')
+    $entSrc = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $apimName -Id 'entitlement-source' -FailOnError
+    $entUrl = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $apimName -Id 'entitlement-resolver-url' -FailOnError
+    $entAud = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $apimName -Id 'entitlement-resolver-audience' -FailOnError
     $entTtl = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id entitlement-cache-seconds --query value -o tsv 2>$null
     if (-not $allowStd) { $allowStd = '' }
     if (-not $allowPrm) { $allowPrm = '' }
