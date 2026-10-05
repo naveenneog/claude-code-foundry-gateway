@@ -298,7 +298,7 @@ switch ([string]$request.action) {
         }
         foreach ($unit in @($registry | Where-Object { -not $parents.Contains([string]$_.Id) })) {
             $allocated = [long]0
-            foreach ($child in @($registry | Where-Object { $parents[[string]$_.Id] -eq [string]$unit.Id })) {
+            foreach ($child in @($registry | Where-Object { $parents[[string]$_.Id] -ceq [string]$unit.Id })) {
                 $allocated += [long]$child.TokensPerMonth
             }
             if ($unit.TokensPerMonth -gt 0 -and $allocated -gt $unit.TokensPerMonth) { throw 'Children exceed the parent budget.' }
@@ -386,7 +386,7 @@ switch ([string]$request.action) {
         Test-ClaudeBuDepth -Parents $nextParents
         foreach ($unit in @($nextRegistry | Where-Object { -not $nextParents.Contains([string]$_.Id) })) {
             $allocated = [long]0
-            foreach ($child in @($nextRegistry | Where-Object { $nextParents[[string]$_.Id] -eq [string]$unit.Id })) {
+            foreach ($child in @($nextRegistry | Where-Object { $nextParents[[string]$_.Id] -ceq [string]$unit.Id })) {
                 $allocated += [long]$child.TokensPerMonth
             }
             if ($unit.TokensPerMonth -gt 0 -and $allocated -gt $unit.TokensPerMonth) { throw 'Moving these teams would exceed parent headroom.' }

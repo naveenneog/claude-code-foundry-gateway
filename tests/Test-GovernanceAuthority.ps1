@@ -381,6 +381,19 @@ $gateway.Values['bu-registry'] = $bridgeSpellings
 $gateway.Values['bu-parents'] = ',sales=platform,'
 $m = Invoke-Bridge @{ action = 'budget'; parameters = @{ scope_type = 'organization'; scope_id = 'Sales' }; body = @{ token_limit = 4000 } }
 Assert "the AUM bridge takes a unit for a unit when the other spelling is a team" (-not $m -and $gateway.Values['bu-registry'] -ceq ',platform=Platform:5000,sales=Lower Sales:1000,Sales=Upper Sales:4000,') "$m | registry $($gateway.Values['bu-registry'])"
+# Council round 3 (UX): a team of 'sales' is not counted against 'Sales' when budgets are checked.
+$allocated = ',sales=Lower Sales:1000,Sales=Upper Sales:50,eu=EU:100,'
+Reset-Gateway $local
+$gateway.Values['bu-registry'] = $allocated
+$gateway.Values['bu-parents'] = ',eu=sales,'
+$m = Invoke-Bridge @{ action = 'budget'; parameters = @{ scope_type = 'organization'; scope_id = 'Sales' }; body = @{ token_limit = 60 } }
+Assert "the AUM budget check counts a team only against the exact spelling of its parent" (-not $m -and $gateway.Values['bu-registry'] -ceq ',sales=Lower Sales:1000,Sales=Upper Sales:60,eu=EU:100,') "$m | registry $($gateway.Values['bu-registry'])"
+Reset-Gateway $local
+$gateway.Values['bu-registry'] = $allocated
+$gateway.Values['bu-parents'] = ',eu=sales,'
+$m = Invoke-Bridge @{ action = 'catalog'; body = @{ organizations = @((New-BridgeUnit 'sales' 'Lower Sales'), (New-BridgeUnit 'Sales' 'Upper Sales')); departments = @(
+            @{ id = 'eu'; parent_id = 'sales'; external_ref = 'entra-group:EU'; attributes = @{} }) } }
+Assert "the AUM catalog's headroom check counts a team only against the exact spelling of its parent" (-not $m -and $gateway.Values['bu-registry'] -ceq $allocated -and $gateway.Values['bu-parents'] -ceq ',eu=sales,') "$m | registry $($gateway.Values['bu-registry']) | parents $($gateway.Values['bu-parents'])"
 Reset-Gateway $local
 $gateway.Values['bu-registry'] = $bridgeSpellings
 $m = Invoke-Bridge @{ action = 'mode'; parameters = @{ scope_id = 'sales' }; body = @{ mode = 'notify' } }
