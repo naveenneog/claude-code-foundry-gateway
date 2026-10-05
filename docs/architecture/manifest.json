@@ -29,13 +29,13 @@
         "scripts/Grant-ClaudeGovernanceGraphAccess.ps1": "2313313010eef6867f730bbb1803b7a0a68113a3ad961f798627e274aff56b1a",
         "scripts/Publish-ClaudeQueries.ps1": "d54164f58a76b5d352d46d615da8f877f16df61ce9d2ecb0f3d3c1e7c6a7c72b",
         "scripts/Setup-ClaudeWorkstation.ps1": "540c547d8af1dedc264bd5ac9575e413b2c3564f2554187c55025b3cbd7e0b95",
-        "scripts/Sync-ClaudeAccess.ps1": "c5eed00eebb13088aa7562fb4561a00b1fba5689f5022f1523be77f8df505d31",
-        "scripts/Sync-ClaudeProjection.ps1": "a4b758d06df894b3c2cb673794eead067571520e055788d01031188b57d35083",
+        "scripts/Sync-ClaudeAccess.ps1": "8795e07362d1dcf3bc41776fb07d8a5aee489c5324b988984afe3574dc37a284",
+        "scripts/Sync-ClaudeProjection.ps1": "0d86656288f757e41001f5a1c742f9a05e2ea398441f0ebbc0dcaf6accf3e591",
         "scripts/flow/DeviceProfiles.ps1": "7f3925af5eab6f23599031b118834d1faeb657a960b20af505788ceb6097fbc4",
         "scripts/flow/Foundation.ps1": "fb0d43ee4fbe00a140410bf3f9594b1a6d43bc4f226748f8231c6f23743c7ed4",
         "scripts/flow/Guide.ps1": "73bb63882ee1726fd8528e5e3045ecf6fd57a89dfa82a32f6e190cd2494461db",
         "scripts/flow/Verify.ps1": "7a8b05c6848499a8fbc26d87c90f4f3bfaa899538eeb1e6c068dd7bedda847fa",
-        "sync/src/apply-projection.mjs": "0bb548f22159e2b9f4c63cad1af0e9fb148a8a67e2560f70248f5ac5ad130bdd"
+        "sync/src/apply-projection.mjs": "c54e28b768f7bf836a452a9211232201e216be696a797ca74c618078a8694621"
       },
       "outputs": [
         {
@@ -63,7 +63,7 @@
         "infra/resolver.bicep": "d90c34a0d2b77bfaf0a7589f093ef9e32de1356d4f2cafb1a6180f6966c01f6f",
         "infra/turnstile-schedule.bicep": "54d4b2d5897a14fd580887113f697fafc3cb2993b70b5cf7368adead956a9e36",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
-        "resolver/src/entitlement.mjs": "53b4a2694b870fcfd9899903f4628cfc180a73d92f922443958b910d81b5fa20",
+        "resolver/src/entitlement.mjs": "a3c0f8ea15897fcd080f3e2a11cb794d18a1844b13c6421ab2db288efbf5c421",
         "scripts/Publish-ClaudeQueries.ps1": "d54164f58a76b5d352d46d615da8f877f16df61ce9d2ecb0f3d3c1e7c6a7c72b",
         "scripts/get-foundry-token.ps1": "253049bb1d9c2066e9d1dcfeea4f1033d6f81569c222163a2db3777d46875ba4"
       },
@@ -93,8 +93,8 @@
         "scripts/Connect-ClaudeTurnstile.ps1": "cc4e2c094aaab8ce75856a3ba770d844bd32333d4f8b42f53f91cabdd1129201",
         "scripts/Grant-ClaudeGovernanceGraphAccess.ps1": "2313313010eef6867f730bbb1803b7a0a68113a3ad961f798627e274aff56b1a",
         "scripts/Invoke-ClaudeTurnstileSchedule.ps1": "9a1d8c6dcd25615b2bf9bd11c62306de517c08e0529aee924d5212c758f1d0b9",
-        "scripts/Sync-ClaudeAccess.ps1": "c5eed00eebb13088aa7562fb4561a00b1fba5689f5022f1523be77f8df505d31",
-        "scripts/Sync-ClaudeProjection.ps1": "a4b758d06df894b3c2cb673794eead067571520e055788d01031188b57d35083",
+        "scripts/Sync-ClaudeAccess.ps1": "8795e07362d1dcf3bc41776fb07d8a5aee489c5324b988984afe3574dc37a284",
+        "scripts/Sync-ClaudeProjection.ps1": "0d86656288f757e41001f5a1c742f9a05e2ea398441f0ebbc0dcaf6accf3e591",
         "scripts/Sync-ClaudeTurnstileGovernance.ps1": "ad325ee9514a9cb5d7ac6895018fe2758c1eb12c12dfd01b6a8567f1799bf74f"
       },
       "outputs": [
@@ -139,21 +139,21 @@
         "infra/projection.bicep": "dae83ef1bfe60675e49e50ddf7c795c15d9868ea9a9c72e924a4593a208a8a91",
         "infra/resolver.bicep": "d90c34a0d2b77bfaf0a7589f093ef9e32de1356d4f2cafb1a6180f6966c01f6f",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
-        "resolver/src/entitlement.mjs": "53b4a2694b870fcfd9899903f4628cfc180a73d92f922443958b910d81b5fa20",
+        "resolver/src/entitlement.mjs": "a3c0f8ea15897fcd080f3e2a11cb794d18a1844b13c6421ab2db288efbf5c421",
         "resolver/src/index.mjs": "b6b755fbbc56ef62e7b535a4bde2756111c2b5fc9913c16a893b45cb6dce33a3",
         "resolver/src/lookup.mjs": "d04392c5eb24a8a084d72f1e5dc72a61fd385992039118aba510c266c3027c3b",
-        "scripts/ClaudeProjectionSwitch.ps1": "dc3316eaed6f245f9131e54a7d7cd887301397e35418efe21603dade27593350",
+        "scripts/ClaudeProjectionSwitch.ps1": "12f7f045ec905db017c32e5dce69499e225e6dd9ae4c6ab1ccc52ecdb9e8f73b",
         "scripts/ClaudeRunner.ps1": "01fac12c1f95ad3c292dc4f4cac64d686e4a74699b51e8b44a81fb8312a3ca79",
-        "scripts/Deploy-ClaudeProjectionRenewal.ps1": "55da18f42b8bedc3535ba34902014f5098d7436a98797ec52f520086f5eb41f4",
-        "scripts/Sync-ClaudeAccess.ps1": "c5eed00eebb13088aa7562fb4561a00b1fba5689f5022f1523be77f8df505d31",
-        "scripts/Sync-ClaudeProjection.ps1": "a4b758d06df894b3c2cb673794eead067571520e055788d01031188b57d35083",
+        "scripts/Deploy-ClaudeProjectionRenewal.ps1": "639ca82754aa65293feab6981349223cee501999f24eb2729914aa6d909e6e2c",
+        "scripts/Sync-ClaudeAccess.ps1": "8795e07362d1dcf3bc41776fb07d8a5aee489c5324b988984afe3574dc37a284",
+        "scripts/Sync-ClaudeProjection.ps1": "0d86656288f757e41001f5a1c742f9a05e2ea398441f0ebbc0dcaf6accf3e591",
         "sync/Dockerfile": "80ab80a331c8b97f903c30cf714cedfcc9969b8d8c24be0c58777ac7c7f3b382",
-        "sync/src/apply-projection.mjs": "0bb548f22159e2b9f4c63cad1af0e9fb148a8a67e2560f70248f5ac5ad130bdd",
+        "sync/src/apply-projection.mjs": "c54e28b768f7bf836a452a9211232201e216be696a797ca74c618078a8694621",
         "sync/src/business-units.mjs": "45df91c836676e6ad32a2d1b7f730c51b01e4210a22b716ce118c8bc6298ff31",
         "sync/src/check-admission.mjs": "8cbbe13aa5ef540e36ce635dcca9472a0d700262b3c86c76ba636a555d565739",
         "sync/src/events.mjs": "4e2fae2fb8370d83c3bb798d8bd6f22d9db501c3a8730f8283bdab30bcb9db3f",
         "sync/src/graph.mjs": "de6c2dc421d1882a26d456dcfc1e6d908b32d17c3435663ebb513892b7c1f8ab",
-        "sync/src/plan.mjs": "5306530b9ceeace6cbfbd53fae5641e9624aae3ea97dc7b2f897cced9e6e6d79"
+        "sync/src/plan.mjs": "c9fbd8c6ef38aa471fbe29a87030832005b264fb92e943d8d10178027dfd1da2"
       },
       "outputs": [
         {
@@ -204,7 +204,7 @@
         "scripts/Set-ClaudeDeveloper.ps1": "0587578bad882f89993c347972ebf96214ef9d489dafb7e445fec1c08f30057f",
         "scripts/Set-ClaudeTier.ps1": "90d1a5eb9f9a6ec072b55187f5940a0d19d1942321a52772fe0fa627efe9da0c",
         "scripts/Sync-AumMembership.ps1": "dd156c12bf0568160c9d24e03eba1ca29439b04bbe505a57c8684bc0adddd5f6",
-        "scripts/Sync-ClaudeAccess.ps1": "c5eed00eebb13088aa7562fb4561a00b1fba5689f5022f1523be77f8df505d31",
+        "scripts/Sync-ClaudeAccess.ps1": "8795e07362d1dcf3bc41776fb07d8a5aee489c5324b988984afe3574dc37a284",
         "scripts/aum-cloudshell.sh": "a22627523f81596ddeeee34f0dce0ebd8db7dfd9b649d2e7f94be20658681907"
       },
       "outputs": [
@@ -484,7 +484,7 @@
         "scripts/ClaudeGatewayCertificate.ps1": "eb3895a08d7ad19d1d307f4116d6ec80260629402c253cf98219bc0508566d98",
         "scripts/ClaudeNetwork.ps1": "5709a3e94dfc7ca71e75429ea4d278b7737198a5488e07556fccc28cda9d00f9",
         "scripts/flow/Address.ps1": "88b0499d3eaf5423f98f4e6cb1ca1b2f221c4a44d4b8677a790ada807e495869",
-        "scripts/flow/Discovery.ps1": "3d9dc18b6abd866180ba6031ff50d1f8378d3fbb7ad161b1f8828f4341d2ee95",
+        "scripts/flow/Discovery.ps1": "6e3832eb6250c747bf7ffbd78595ca48a5359dc45381363a2a6cc0a757b2aad3",
         "scripts/flow/FlowContract.ps1": "5fe01f9f68710671039ba8d1fd4a303ccd3547d7f29096e23d87c58dae1b8bf8",
         "scripts/flow/Foundation.ps1": "fb0d43ee4fbe00a140410bf3f9594b1a6d43bc4f226748f8231c6f23743c7ed4"
       },
