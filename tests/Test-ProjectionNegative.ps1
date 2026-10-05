@@ -34,11 +34,11 @@ $mutations = @(
     @{ Name='missing tenant authorizes'; File='resolver\src\entitlement.mjs'; From='if (!tenantId || doc.tenantId !== tenantId)'; To='if (tenantId && doc.tenantId && doc.tenantId !== tenantId)'; Suite=$node }
     @{ Name='resolver drops expiry in response'; File='resolver\src\entitlement.mjs'; From='expiresAt: doc.expiresAt,'; To=''; Suite=$node }
     @{ Name='tenant-free cache key'; File='infra\policy.xml'; From='ent:v2:{{tenant-id}}:'; To='ent:'; Suite=$rules }
-    @{ Name='cache outlives record'; File='infra\policy.xml'; From='Math.Min(int.Parse("{{entitlement-cache-seconds}}"), expires - now)'; To='int.Parse("{{entitlement-cache-seconds}}")'; Suite=$rules }
-    @{ Name='cache hit skips expiry'; File='infra\policy.xml'; From='return expires > now &amp;&amp; !string.IsNullOrEmpty'; To='return !string.IsNullOrEmpty'; Suite=$rules }
+    @{ Name='positive cache is clipped to a lease'; File='infra\policy.xml'; From='duration="@(int.Parse("{{entitlement-cache-seconds}}"))"'; To='duration="@{ var rec = JObject.Parse((string)context.Variables[""entRecord""]); var expires = (long?)rec[""expiresAt""] ?? 0; var now = (long)(DateTime.UtcNow - new DateTime(1970, 1, 1)).TotalSeconds; return (int)Math.Max(0, Math.Min(int.Parse(""{{entitlement-cache-seconds}}""), expires - now)); }"'; Suite=$rules }
+    @{ Name='cache hit skips generation'; File='infra\policy.xml'; From='return !string.IsNullOrEmpty((string)rec["reconciliationGeneration"]);'; To='return true;'; Suite=$rules }
     @{ Name='Razor conditional loses required braces'; File='infra\policy.xml'; From='{ return false; }'; To='return false;'; Suite=$rules }
     @{ Name='stale answer is authorized'; File='infra\policy.xml'; From=' &amp;&amp; (bool)context.Variables["entFresh"]'; To=''; Suite=$rules }
-    @{ Name='expired error loses diagnostic'; File='infra\policy.xml'; From='The entitlement projection expired'; To='Unknown failure'; Suite=$rules }
+    @{ Name='unusable answer loses diagnostic'; File='infra\policy.xml'; From='No usable entitlement answer is available'; To='Unknown failure'; Suite=$rules }
     @{ Name='resolver has no concurrency backpressure'; File='infra\policy.xml'; From='<limit-concurrency key="entitlement-misses" max-count="100">'; To='<limit-concurrency key="entitlement-misses" max-count="10000">'; Suite=$rules }
     @{ Name='resolver has no rate backpressure'; File='infra\policy.xml'; From='<rate-limit-by-key calls="200" renewal-period="1" counter-key="entitlement-misses" />'; To=''; Suite=$rules }
     @{ Name='overload maps to an outage'; File='infra\policy.xml'; From='context.LastError.Source == "limit-concurrency"'; To='context.LastError.Source == "unused"'; Suite=$rules }

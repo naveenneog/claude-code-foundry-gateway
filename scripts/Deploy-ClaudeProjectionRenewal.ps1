@@ -1,10 +1,13 @@
 <#
 .SYNOPSIS
-    Deploys the scheduled projection renewal job: registry, image, job and alerts (ADR-0049).
+    Deploys the optional projection sync job: registry, image, job and alerts (ADR-0051).
 
 .DESCRIPTION
     Runs after scripts/Deploy-ClaudeProjection.ps1, in the same resource group, and reads that
     deployment's outputs: the Cosmos account and the projection network with its renewal subnet.
+    The job is manual by default and can be started on demand with az containerapp job start.
+    -CronExpression switches it to a schedule for tenants where a tenant administrator grants
+    Microsoft Graph GroupMember.Read.All to the job identity.
     Three phases, each safe to rerun:
 
       1. infra/projection-registry.bicep: the registry, the job's user-assigned identity and its
@@ -15,9 +18,9 @@
          subnet, the job pinned to the digest, its Cosmos and named-value grants, the action group
          and the alerts.
 
-    It then prints the tenant administrator's Graph grant and the email confirmation step, and
-    writes a receipt with no secrets for the switch (P95). It never grants Graph access and never
-    changes entitlement-source.
+    It then prints the tenant administrator's Graph grant, the on-demand start command and the
+    email confirmation step, and writes a receipt with no secrets. It never grants Graph access and
+    never changes entitlement-source.
 
 .PARAMETER AlertEmail
     Email addresses for the renewal alerts. Each one receives a confirmation from Azure Monitor.
@@ -47,7 +50,7 @@ param(
     [string]$StandardGroup = 'claude-code-standard',
     [string]$PremiumGroup = 'claude-code-premium',
     [ValidateSet('Basic', 'Premium')][string]$AcrSku = 'Basic',
-    [string]$CronExpression = '*/30 * * * *',
+    [string]$CronExpression = '',
     [string]$ImageTag,
     [string]$ImageDigest,
     [string]$WorkspaceResourceId,
@@ -94,7 +97,7 @@ foreach ($email in $emails) {
 if ([string]::IsNullOrWhiteSpace($StandardGroup) -or $StandardGroup -eq 'none') { $problems.Add('-StandardGroup is required: the job reads its members on every run.') }
 if ([string]::IsNullOrWhiteSpace($PremiumGroup)) { $problems.Add('-PremiumGroup is a group or none.') }
 elseif ($PremiumGroup -ne 'none' -and ([string]$StandardGroup).Trim() -eq $PremiumGroup.Trim()) { $problems.Add('-PremiumGroup names the standard group: premium membership takes precedence, so every standard member would be premium. Pass two groups, or -PremiumGroup none.') }
-if ($CronExpression -notmatch '^[0-9*/,-]+( [0-9*/,-]+){4}$') { $problems.Add("-CronExpression '$CronExpression' is not five cron fields.") }
+if ($CronExpression -ne '' -and $CronExpression -notmatch '^[0-9*/,-]+( [0-9*/,-]+){4}$') { $problems.Add("-CronExpression '$CronExpression' is not five cron fields.") }
 if (-not $ImageTag) { $ImageTag = 'sync-' + [DateTime]::UtcNow.ToString('yyyyMMddHHmmss') }
 if ($ImageTag -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$') { $problems.Add("-ImageTag '$ImageTag' is not an image tag.") }
 if ($ImageDigest -and $ImageDigest -cnotmatch '^sha256:[0-9a-f]{64}$') { $problems.Add('-ImageDigest is not sha256: followed by 64 lowercase hex digits.') }
@@ -212,8 +215,10 @@ if ($premiumGroupId -eq $standardGroupId) {
 $accountResourceId = "/subscriptions/$($account.id)/resourceGroups/$ResourceGroup/providers/Microsoft.DocumentDB/databaseAccounts/$cosmosAccount"
 Ok "Cosmos $cosmosAccount; renewal subnet in $location; gateway $ApimName; standard $standardGroupId; premium $premiumGroupId"
 
-if (-not $PSCmdlet.ShouldProcess($ResourceGroup, 'deploy the projection registry, build the sync image and deploy the renewal job')) {
-    Note "WhatIf: projection-registry-$NamePrefix, az acr build $repository`:$ImageTag, projection-renewal-$NamePrefix on $RenewalSubnetId every '$CronExpression'. No Azure writes."
+$triggerType = if ($CronExpression -eq '') { 'Manual' } else { 'Schedule' }
+$triggerDescription = if ($triggerType -eq 'Manual') { 'manual, on demand' } else { "scheduled by '$CronExpression'" }
+if (-not $PSCmdlet.ShouldProcess($ResourceGroup, "deploy the projection registry, build the sync image and deploy the optional sync job ($triggerDescription)")) {
+    Note "WhatIf: projection-registry-$NamePrefix, az acr build $repository`:$ImageTag, projection-renewal-$NamePrefix on $RenewalSubnetId as $triggerDescription. No Azure writes."
     return
 }
 
@@ -259,7 +264,7 @@ $renewal = Invoke-Deployment "projection-renewal-$NamePrefix" 'infra/projection-
     entrypoint = $entryPoint
 }
 if (-not $renewal.jobResourceId -or -not $renewal.actionGroupResourceId) { throw 'The renewal deployment did not return the job and the action group.' }
-Ok "job $($renewal.jobName) every '$CronExpression'; action group $($renewal.actionGroupResourceId)"
+Ok "optional sync job $($renewal.jobName) trigger $triggerType$(if ($CronExpression) { " '$CronExpression'" }); action group $($renewal.actionGroupResourceId)"
 
 $sourceCommit = (& git -C $root rev-parse HEAD 2>$null | Out-String).Trim()
 $sourceDirty = [bool]((& git -C $root status --porcelain --untracked-files=no 2>$null | Out-String).Trim())
@@ -272,7 +277,7 @@ $receipt = [ordered]@{
     reconcilerResourceId = [string]$renewal.jobResourceId; jobName = [string]$renewal.jobName
     imageDigest = $ImageDigest; imageTag = $ImageTag; entryPoint = $entryPoint
     actionGroupResourceId = [string]$renewal.actionGroupResourceId; identityPrincipalId = [string]$registry.identityPrincipalId
-    workspaceResourceId = $WorkspaceResourceId; cronExpression = $CronExpression
+    workspaceResourceId = $WorkspaceResourceId; triggerType = $triggerType; cronExpression = $CronExpression
 }
 New-Item -ItemType Directory -Force -Path (Split-Path $ReceiptPath -Parent) | Out-Null
 [IO.File]::WriteAllText($ReceiptPath, ($receipt | ConvertTo-Json -Depth 4), [Text.UTF8Encoding]::new($false))
@@ -280,8 +285,9 @@ New-Item -ItemType Directory -Force -Path (Split-Path $ReceiptPath -Parent) | Ou
 Step 'Next steps'
 Write-Host "    1. A Privileged Role Administrator or Global Administrator grants Microsoft Graph GroupMember.Read.All to the job identity, once:"
 Write-Host "       ./scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1 -PrincipalId $($registry.identityPrincipalId)"
-Write-Host "    2. Each alert address receives a confirmation from Azure Monitor; an address not confirmed within 30 minutes receives no alerts (U116)."
-Write-Host "    3. Admission needs three successful runs, about 60-90 minutes on a 30-minute schedule after the grant takes effect."
+Write-Host "    2. This optional sync job is manual unless -CronExpression was supplied. Start it on demand after the Graph grant:"
+Write-Host "       az containerapp job start -g $ResourceGroup -n $($renewal.jobName)"
+Write-Host "    3. Each alert address receives a confirmation from Azure Monitor; an address not confirmed within 30 minutes receives no alerts (U116)."
 Write-Host "       Runs: az containerapp job execution list -g $ResourceGroup -n $($renewal.jobName) -o table"
 Write-Host "    Receipt (no secrets): $ReceiptPath"
 [pscustomobject]$receipt
