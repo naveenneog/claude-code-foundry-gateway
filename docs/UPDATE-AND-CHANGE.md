@@ -46,7 +46,8 @@ unknown named-value default.
 The guided `Tier` step plans only from the discovered SKU and region. Prices are read from the
 Azure Retail Prices API at plan time; unknown price data is shown as unknown, never as zero. Before
 its write, the step exports the gateway with `scripts\Backup-ClaudeGateway.ps1` to
-`backups\before-tier-<apim>-<UTC time>.json`.
+`backups\before-tier-<apim>-<UTC time>.json`. A choice that needs a new instance also takes this export,
+then stops before any Azure write; the export is the backup that the move below restores.
 
 Research fetched 2026-09-26:
 
