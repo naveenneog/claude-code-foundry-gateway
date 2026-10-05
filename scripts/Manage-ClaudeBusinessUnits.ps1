@@ -36,6 +36,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $pending = $false   # a change has been made that the gateway has not seen
+. (Join-Path $PSScriptRoot 'ClaudeBusinessUnit.ps1')
 
 function Invoke-Child {
     param([string]$Script, [hashtable]$Arguments)
@@ -77,11 +78,13 @@ function Read-Value {
 
 function Confirm-Identifier {
     param([string]$Id)
-    # Same rule the writer enforces, checked here so a bad name is refused while
-    # the operator is still looking at the prompt that produced it.
-    if ($Id -cmatch '^[a-z0-9][a-z0-9-]*$') { return $true }
-    Write-Host "  '$Id' is not usable. Lower case letters, digits and hyphens." -ForegroundColor Yellow
-    return $false
+    # The writer's own check (Test-ClaudeBuId), run here so a bad name is refused while the operator is still
+    # looking at the prompt that produced it, before the Entra group is offered.
+    try { Test-ClaudeBuId $Id; return $true }
+    catch {
+        Write-Host "  $($_.Exception.Message)" -ForegroundColor Yellow
+        return $false
+    }
 }
 
 function Show-Units {

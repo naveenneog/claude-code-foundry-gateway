@@ -109,6 +109,8 @@ if (Test-Path $helper) {
             . ([scriptblock]::Create($confirmAst.Extent.Text))
             Assert "the manager's prompt refuses a new identifier with a capital, 'Platform'" (-not (Confirm-Identifier 'Platform' 6>$null))
             Assert "the manager's prompt accepts 'finance-emea'" ([bool](Confirm-Identifier 'finance-emea' 6>$null))
+            $shown = (Confirm-Identifier 'Platform' 6>&1 | ForEach-Object { "$_" }) -join ' '
+            Assert "the manager's prompt shows the writer's message" ($shown.Contains("'Platform' is not a valid business unit identifier") -and $shown.Contains('starting with a letter or digit')) $shown
         }
         else { Assert "the manager's prompt checks the identifier" $false 'Confirm-Identifier missing from scripts/Manage-ClaudeBusinessUnits.ps1' }
     }
