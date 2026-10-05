@@ -8,11 +8,15 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validatePreflight, validateProgressEvent, validateStepList } from './installer-contract.mjs';
+import { createAzureLease } from './azure-lease.mjs';
 import { assertSameOrigin, constantTimeTokenEquals, contentSecurityPolicy, isAllowedHost, isLoopbackBind, parseCookies, readJsonBody, send, sendText, tokenHash } from './http-helpers.mjs';
 import { attachSubscriber, createRunRecord, publicRun, publishEvent } from './run-record.mjs';
 import { createLineHandler, readProgressFile, writeNdjson } from './run-transport.mjs';
+import { createSessionAuth } from './session-auth.mjs';
+import { collectChildOutput } from './child-output.mjs';
+import { validateRunRequest, validateStepScope } from './step-scope.mjs';
 import { fieldsByCheckId, installerArguments, loadSchema, prefillArguments, redactText, root, scrubLocalPaths } from './server-model.mjs';
-import { answersDigest, createPreflightStore, preflightFingerprint, preflightRequired, scopeCovers, scopeFromBody, sortedUniqueSteps } from './preflight-record.mjs';
+import { answersDigest, createPreflightStore, preflightFingerprint, preflightRequired, scopeCovers, scopeFromBody } from './preflight-record.mjs';
 
 export { loadSchema, redactText, scrubLocalPaths } from './server-model.mjs';
 
@@ -85,45 +89,12 @@ function spawnChild(file, args, options, spawnOptions = {}) {
 async function runInstaller(kind, args, options, runOptions = {}) {
   const command = spawnInstallerArgs(kind, args, options);
   const child = spawnChild(command.file, command.args, options);
-  return collectChildOutput(child, runOptions, 'installer read');
+  return collectChildOutput(child, runOptions, 'installer read', { killProcessTree, redactText });
 }
 
 async function runPowerShell(script, args, options, runOptions = {}) {
   const child = spawnChild(options.pwsh || 'pwsh', ['-NoProfile', '-NonInteractive', '-File', script, ...args], options);
-  return collectChildOutput(child, runOptions, 'read-only installer child');
-}
-
-async function collectChildOutput(child, runOptions, defaultReadName) {
-  let stdout = '';
-  let stderr = '';
-  child.stdout.on('data', (chunk) => { stdout += chunk.toString('utf8'); });
-  child.stderr.on('data', (chunk) => { stderr += chunk.toString('utf8'); });
-  const timeoutMs = Number(runOptions.timeoutMs || 0);
-  let timer;
-  let timedOut = false;
-  const code = await new Promise((resolveCode, reject) => {
-    if (timeoutMs > 0) {
-      timer = setTimeout(() => {
-        timedOut = true;
-        void killProcessTree(child);
-      }, timeoutMs);
-      timer.unref?.();
-    }
-
-    child.on('error', reject);
-    child.on('close', resolveCode);
-  });
-  if (timer) clearTimeout(timer);
-  if (timedOut) {
-    const error = new Error(`${runOptions.readName || defaultReadName} timed out after ${timeoutMs} ms`);
-    error.status = 504;
-    throw error;
-  }
-  return {
-    code,
-    stdout: runOptions.redactStdout === false ? stdout : await redactText(stdout),
-    stderr: await redactText(stderr),
-  };
+  return collectChildOutput(child, runOptions, 'read-only installer child', { killProcessTree, redactText });
 }
 
 async function checkPowerShell(options) {
@@ -181,6 +152,8 @@ async function runInstallerStreaming(kind, args, options, onEvent, progressPath,
   child.stdout.on('data', (chunk) => { void stdout.chunk(chunk); });
   child.stderr.on('data', (chunk) => { void stderr.chunk(chunk); });
   const progressDecoder = new StringDecoder('utf8');
+  let progressDiscarding = false;
+  let progressOversizeNoticed = false;
   const processProgressText = async (text, final) => {
     progressCarry += text;
     const lines = progressCarry.split(/\r?\n/);
@@ -190,6 +163,10 @@ async function runInstallerStreaming(kind, args, options, onEvent, progressPath,
       progressCarry = '';
     }
     for (const line of lines) {
+      if (progressDiscarding) {
+        progressDiscarding = false;
+        continue;
+      }
       if (!line) continue;
       try {
         const event = validateProgressEvent(JSON.parse(line));
@@ -198,6 +175,14 @@ async function runInstallerStreaming(kind, args, options, onEvent, progressPath,
         await enqueue({ type: 'progress', ...event });
       } catch (error) {
         await enqueue({ type: 'error', message: await redactText(`progress parse failed: ${error.message}`) });
+      }
+    }
+    if (Buffer.byteLength(progressCarry) > consoleLineCapBytes) {
+      progressCarry = '';
+      progressDiscarding = true;
+      if (!progressOversizeNoticed) {
+        progressOversizeNoticed = true;
+        await enqueue({ type: 'error', message: `progress line exceeded the ${consoleLineCapBytes} byte cap` });
       }
     }
   };
@@ -231,42 +216,6 @@ async function listSteps(options, timeoutMs = 60_000) {
   return validateStepList(JSON.parse(result.stdout));
 }
 
-function flattenStepIds(stepPayload) {
-  const steps = Array.isArray(stepPayload) ? stepPayload : Array.isArray(stepPayload.steps) ? stepPayload.steps : [];
-  return new Set(steps.map((step) => String(step.id || step.stepId || '')).filter(Boolean));
-}
-
-async function validateRunRequest(body, options) {
-  const steps = Array.isArray(body.steps) ? body.steps.map(String).filter(Boolean) : [];
-  if (!steps.length && !(body.fullRun && body.confirmFullRun)) {
-    const error = new Error('Select at least one step, or confirm a full run.');
-    error.status = 400;
-    throw error;
-  }
-
-  const allowed = flattenStepIds(await listSteps(options));
-  const injected = steps.filter((step) => !allowed.has(step));
-  if (injected.length) {
-    const error = new Error(`unknown step id: ${injected.join(', ')}`);
-    error.status = 400;
-    throw error;
-  }
-  return steps;
-}
-
-async function validateStepScope(body, options) {
-  const steps = Array.isArray(body.steps) ? sortedUniqueSteps(body.steps) : [];
-  if (!steps.length) return steps;
-  const allowed = flattenStepIds(await listSteps(options));
-  const injected = steps.filter((step) => !allowed.has(step));
-  if (injected.length) {
-    const error = new Error(`unknown step id: ${injected.join(', ')}`);
-    error.status = 400;
-    throw error;
-  }
-  return steps;
-}
-
 async function writeAnswers(dir, answers) {
   const path = join(dir, 'answers.json');
   await writeFile(path, `${JSON.stringify(answers ?? {}, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
@@ -276,6 +225,8 @@ async function writeAnswers(dir, answers) {
 export async function createInstallerUiServer(options = {}) {
   const token = options.token || randomBytes(32).toString('base64url');
   const tokenDigest = tokenHash(token);
+  const sessionAuth = createSessionAuth();
+  const azureLease = createAzureLease();
   const csrfToken = options.csrfToken || randomBytes(32).toString('base64url');
   const tempDirs = new Set();
   let port = Number(options.port || 0);
@@ -291,8 +242,12 @@ export async function createInstallerUiServer(options = {}) {
   const idleMs = Number(options.idleMs || defaultIdleMs);
   const tempRoot = options.tempRoot || tmpdir();
   const timeoutFor = (name) => Number(options.readOnlyTimeoutMs || ({ steps: 60_000, identity: 120_000, prefill: 120_000, preflight: 600_000 }[name]));
+  const outputCapFor = () => Number(options.readOnlyOutputCapBytes || 1024 * 1024);
   const extraHosts = options.allowedHosts || [];
   const log = options.log || (() => {});
+  const logRequestRefusal = (request) => {
+    log(`Refused same-origin request: origin=${request.headers.origin || ''}; host=${request.headers.host || ''}; sec-fetch-site=${request.headers['sec-fetch-site'] || ''}; x-forwarded-host=${request.headers['x-forwarded-host'] || ''}; x-forwarded-proto=${request.headers['x-forwarded-proto'] || ''}; x-forwarded-prefix=${request.headers['x-forwarded-prefix'] || ''}`);
+  };
 
   const cleanup = async () => {
     if (idleTimer) clearTimeout(idleTimer);
@@ -327,9 +282,42 @@ export async function createInstallerUiServer(options = {}) {
     finally { inFlight--; armIdle(); }
   };
 
+  const withAzureRead = async (operation, fn) => withJob(async () => {
+    const lease = await azureLease.acquire(operation, 'read', timeoutFor(operation));
+    try { return await fn(lease.remainingTimeout()); }
+    finally { lease.release(); }
+  });
+
+  const readIdentityPayload = async (timeoutMs) => {
+    if (options.readIdentity) return options.readIdentity();
+    const result = await runPowerShell(identityScript, [], options, { timeoutMs, readName: 'identity', outputCapBytes: outputCapFor() });
+    return JSON.parse(result.stdout);
+  };
+
+  const identitySnapshot = (value) => ({
+    signedIn: Boolean(value?.signedIn),
+    user: String(value?.user || ''),
+    tenantId: String(value?.tenantId || ''),
+    subscriptionId: String(value?.subscriptionId || value?.id || ''),
+  });
+
+  const readIdentitySnapshot = async (timeoutMs) => {
+    return identitySnapshot(await readIdentityPayload(timeoutMs));
+  };
+
+  const changedIdentityFields = (before, after) => {
+    const fields = [];
+    if (Boolean(before?.signedIn) !== Boolean(after?.signedIn)) fields.push('signed-in state');
+    if (String(before?.user || '') !== String(after?.user || '')) fields.push('user');
+    if (String(before?.tenantId || '') !== String(after?.tenantId || '')) fields.push('tenant');
+    if (String(before?.subscriptionId || '') !== String(after?.subscriptionId || '')) fields.push('subscription');
+    return fields;
+  };
+
   const assertFetchMetadataForChildGet = (request) => {
     const fetchSite = request.headers['sec-fetch-site'];
     if (fetchSite && fetchSite !== 'same-origin' && fetchSite !== 'none') {
+      logRequestRefusal(request);
       const error = new Error('same-origin request required');
       error.status = 403;
       throw error;
@@ -400,9 +388,10 @@ export async function createInstallerUiServer(options = {}) {
           return send(res, 401, { error: 'installer token is required' });
         }
         tokenConsumed = true;
+        const sessionSecret = sessionAuth.issueSecret();
         res.writeHead(303, {
           location: './',
-          'set-cookie': `installer_token=${encodeURIComponent(queryToken)}; HttpOnly; SameSite=Strict; Path=/`,
+          'set-cookie': `installer_token=${encodeURIComponent(sessionSecret)}; HttpOnly; SameSite=Strict; Path=/`,
           'content-security-policy': contentSecurityPolicy(),
           'x-content-type-options': 'nosniff',
           'referrer-policy': 'no-referrer',
@@ -410,7 +399,7 @@ export async function createInstallerUiServer(options = {}) {
         res.end();
         return;
       }
-      if (!constantTimeTokenEquals(String(cookieToken || ''), tokenDigest)) return send(res, 401, { error: 'installer token is required' });
+      if (!sessionAuth.accepts(cookieToken)) return send(res, 401, { error: 'installer token is required' });
       const setCookie = {};
       if (req.method === 'GET' && url.pathname === '/api/session') return send(res, 200, { schemaVersion: 1, csrfToken, mode: liveMode.ok ? 'live' : 'static', reason: liveMode.reason || undefined }, setCookie);
       if (req.method === 'POST') {
@@ -435,8 +424,7 @@ export async function createInstallerUiServer(options = {}) {
       if (req.method === 'GET' && url.pathname === '/api/identity') {
         requireLive();
         assertFetchMetadataForChildGet(req);
-        const result = await withJob(() => runPowerShell(identityScript, [], options, { timeoutMs: timeoutFor('identity'), readName: 'identity' }));
-        return send(res, 200, JSON.parse(result.stdout), setCookie);
+        return send(res, 200, await withAzureRead('identity', (timeoutMs) => readIdentityPayload(timeoutMs)), setCookie);
       }
       if (req.method === 'GET' && url.pathname === '/api/run/status') return send(res, 200, { schemaVersion: 1, ...(publicRun(activeRun || lastRun) || {}) }, setCookie);
       if (req.method === 'GET' && url.pathname === '/api/run/attach') {
@@ -447,10 +435,10 @@ export async function createInstallerUiServer(options = {}) {
       }
       if (req.method === 'POST' && url.pathname === '/api/prefill') {
         requireLive();
-        assertSameOrigin(req);
+        assertSameOrigin(req, logRequestRefusal);
         const body = await readJsonBody(req);
         const args = prefillArguments(body);
-        const result = await withJob(() => runPowerShell(prefillScript, args, options, { redactStdout: false, timeoutMs: timeoutFor('prefill'), readName: 'prefill' }));
+        const result = await withAzureRead('prefill', (timeoutMs) => runPowerShell(prefillScript, args, options, { redactStdout: false, timeoutMs, readName: 'prefill', outputCapBytes: outputCapFor() }));
         if (!result.stdout.trim()) {
           log(`Prefill returned no JSON (exit ${result.code}): ${scrubLocalPaths(result.stderr)}`);
           return send(res, 500, { schemaVersion: 1, error: 'The prefill read returned no result. The terminal that started the installer UI shows the details.' }, setCookie);
@@ -461,15 +449,15 @@ export async function createInstallerUiServer(options = {}) {
       }
       if (req.method === 'POST' && url.pathname === '/api/preflight') {
         requireLive();
-        assertSameOrigin(req);
+        assertSameOrigin(req, logRequestRefusal);
         const body = await readJsonBody(req);
-        const requestedSteps = await withJob(() => validateStepScope(body, options));
+        const requestedSteps = await withJob(() => validateStepScope(body, () => listSteps(options)));
         const scope = scopeFromBody(body, requestedSteps);
         const digest = answersDigest(body.answers || {});
         const engine = 'pwsh';
-        return send(res, 200, await withJob(() => withRunDirectory(async (dir) => {
+        return send(res, 200, await withAzureRead('preflight', (timeoutMs) => withRunDirectory(async (dir) => {
           const answers = await writeAnswers(dir, body.answers || {});
-          const result = await runInstaller('powershell', await installerArguments({ engine: 'pwsh', action: 'preflight', answersPath: answers }), options, { timeoutMs: timeoutFor('preflight'), readName: 'preflight' });
+          const result = await runInstaller('powershell', await installerArguments({ engine: 'pwsh', action: 'preflight', answersPath: answers }), options, { timeoutMs, readName: 'preflight', outputCapBytes: outputCapFor() });
           let parsed;
           try { parsed = validatePreflight(JSON.parse(result.stdout)); } catch (error) {
             if (error.status === 502) throw error;
@@ -481,37 +469,71 @@ export async function createInstallerUiServer(options = {}) {
             throw malformed;
           }
           let fingerprint = '';
+          let identity;
           if (parsed.result === 'PASS' && result.code === 0) {
+            identity = await readIdentitySnapshot(timeoutMs);
             fingerprint = preflightFingerprint({ answers: body.answers || {}, scope, engine });
-            preflightPasses.replaceForAnswers({ fingerprint, answersDigest: digest, engine, scope, time: new Date().toISOString() });
+            preflightPasses.replaceForAnswers({ fingerprint, answersDigest: digest, engine, scope, time: new Date().toISOString(), identity });
           } else {
             preflightPasses.clearForAnswers(digest, engine);
           }
-          return { exitCode: result.code, fingerprint: fingerprint || undefined, preflight: parsed, stdout: result.stdout, stderr: result.stderr, fieldsByCheckId: await fieldsByCheckId(await loadSchema()) };
+          return { exitCode: result.code, fingerprint: fingerprint || undefined, identity, scope: fingerprint ? scope : undefined, preflight: parsed, stdout: result.stdout, stderr: result.stderr, fieldsByCheckId: await fieldsByCheckId(await loadSchema()) };
         }, tempDirs, tempRoot)), setCookie);
       }
       if (req.method === 'POST' && url.pathname === '/api/run/stream') {
         requireLive();
-        assertSameOrigin(req);
-        if (activeRun?.state === 'running' || activeRun?.state === 'stopping') return send(res, 409, { error: 'an installer run is already active' }, setCookie);
+        assertSameOrigin(req, logRequestRefusal);
+        if (activeRun?.state === 'running' || activeRun?.state === 'stopping') return send(res, 409, { error: 'an installer run is already active', reason: 'azure-busy', operation: 'run' }, setCookie);
         const body = await readJsonBody(req);
-        const steps = await validateRunRequest(body, options);
+        const steps = await validateRunRequest(body, () => listSteps(options));
+        if (body.answers?.AddressMode === 'custom' && body.answers?.AddressCertificateSource === 'Pfx') {
+          return send(res, 409, { error: 'A PFX certificate is installed from a terminal because the installer asks for the PFX password only when it runs without -Yes.', reason: 'pfx-needs-terminal' }, setCookie);
+        }
         const scope = scopeFromBody(body, steps);
         const digest = answersDigest(body.answers || {});
+        const lease = await azureLease.acquire('run', 'run', 0);
         const record = preflightPasses.lookup(body.fingerprint);
-        if (!record) throw preflightRequired('No passing preflight matched this run. Run preflight again before starting the installer.');
-        if (record.engine !== 'pwsh' || record.answersDigest !== digest || !scopeCovers(record.scope, scope)) {
-          throw preflightRequired('The answers or selected steps changed since the last passing preflight. Run preflight again.');
+        try {
+          if (!record) throw preflightRequired('No passing preflight matched this run. Run preflight again before starting the installer.');
+          if (record.engine !== 'pwsh' || record.answersDigest !== digest || !scopeCovers(record.scope, scope)) {
+            throw preflightRequired('The answers or selected steps changed since the last passing preflight. Run preflight again.');
+          }
+          const currentIdentity = await readIdentitySnapshot(timeoutFor('identity'));
+          const changed = changedIdentityFields(record.identity, currentIdentity);
+          if (changed.length) {
+            const error = new Error(`The Azure identity ${changed.join(', ')} changed since preflight. Run preflight again.`);
+            error.status = 409;
+            error.reason = 'identity-changed';
+            throw error;
+          }
+        } catch (error) {
+          lease.release();
+          throw error;
         }
         const run = createRun(steps);
-        if (!run) return send(res, 409, { error: 'an installer run is already active' }, setCookie);
-        const args = await prepareRun(run, body.answers, steps);
+        if (!run) {
+          lease.release();
+          return send(res, 409, { error: 'an installer run is already active', reason: 'azure-busy', operation: 'run' }, setCookie);
+        }
+        let args;
+        try {
+          args = await prepareRun(run, body.answers, steps);
+        } catch (error) {
+          lease.release();
+          throw error;
+        }
         await attachRun(run, res, 0);
         void (async () => {
           try {
+            if (options.beforeRunSpawn) await options.beforeRunSpawn(run);
+            if (run.stopRequested) {
+              run.state = 'stopped';
+              run.exitCode = null;
+              return;
+            }
             const code = await runInstallerStreaming('powershell', args, options, async (event) => {
               publish(run, event);
-            }, run.progressPath, { onChild: (child) => { run.child = child; } });
+            }, run.progressPath, { onChild: (child) => { run.child = child; if (run.stopRequested) void killProcessTree(child); } });
             run.exitCode = code;
             run.state = run.state === 'stopping' ? 'stopped' : 'exited';
           } catch (error) {
@@ -522,6 +544,7 @@ export async function createInstallerUiServer(options = {}) {
             if (run.failedStepId && !run.resumeCommand) run.resumeCommand = `Install-ClaudeGateway.ps1 -Steps ${run.failedStepId}`;
             // Each subscriber ends its own response once it has written this summary.
             publish(run, { type: 'summary', exitCode: run.exitCode, failedStepId: run.failedStepId, resumeCommand: run.resumeCommand, state: run.state, message: run.stoppedMessage });
+            lease.release();
             try {
               await rm(run.tempDir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
               tempDirs.delete(run.tempDir);
@@ -542,11 +565,12 @@ export async function createInstallerUiServer(options = {}) {
       }
       if (req.method === 'POST' && url.pathname === '/api/run/stop') {
         requireLive();
-        assertSameOrigin(req);
+        assertSameOrigin(req, logRequestRefusal);
         const body = await readJsonBody(req);
         const run = activeRun || lastRun;
         if (!run || run.id !== body.runId || (run.state !== 'running' && run.state !== 'stopping')) return send(res, 404, { error: 'active run not found' }, setCookie);
         run.state = 'stopping';
+        run.stopRequested = true;
         const step = run.currentStepId || run.steps[0] || 'the current step';
         run.stoppedMessage = `Stopped installer run at ${step}. The install checkpoint resumes when the same steps run again.`;
         publish(run, { type: 'stopped', stepId: step, message: run.stoppedMessage });
@@ -564,7 +588,7 @@ export async function createInstallerUiServer(options = {}) {
         log(`Installer UI request failed: ${scrubLocalPaths(error.stack || error.message || error)}`);
         return send(res, 500, { error: 'request failed' });
       }
-      return send(res, error.status, error.field ? { schemaVersion: 1, field: error.field, error: error.message, remedy: error.remedy } : { error: error.message, reason: error.reason, detail: error.detail, exitCode: error.exitCode });
+      return send(res, error.status, error.field ? { schemaVersion: 1, field: error.field, error: error.message, remedy: error.remedy } : { error: error.message, reason: error.reason, operation: error.operation, detail: error.detail, exitCode: error.exitCode });
     } finally {
       if (!activeRun?.state || activeRun.state !== 'running') armIdle();
     }

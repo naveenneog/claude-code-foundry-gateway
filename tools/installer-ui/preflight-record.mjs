@@ -46,9 +46,9 @@ export function preflightRequired(reason) {
 export function createPreflightStore(limit = 20) {
   let records = [];
   return {
-    replaceForAnswers({ fingerprint, answersDigest: digest, engine, scope, time }) {
+    replaceForAnswers({ fingerprint, answersDigest: digest, engine, scope, time, identity }) {
       records = records.filter((record) => !(record.answersDigest === digest && record.engine === engine));
-      if (fingerprint) records.push({ fingerprint, answersDigest: digest, engine, scope, time });
+      if (fingerprint) records.push({ fingerprint, answersDigest: digest, engine, scope, time, identity });
       records = records.slice(-limit);
     },
     clearForAnswers(digest, engine) {

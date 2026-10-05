@@ -3,7 +3,13 @@ import { spawn } from 'node:child_process';
 
 const [, , mode, ...args] = process.argv;
 const log = process.env.P93_INSTALLER_UI_STUB_LOG;
-if (log) appendFileSync(log, JSON.stringify({ mode, args }) + '\n');
+const callRecord = { mode, args };
+if (process.env.P93_INSTALLER_UI_STUB_TIMES) callRecord.startedAt = Date.now();
+if (log && !process.env.P93_INSTALLER_UI_STUB_TIMES) appendFileSync(log, JSON.stringify(callRecord) + '\n');
+const finish = (code) => {
+  if (log && process.env.P93_INSTALLER_UI_STUB_TIMES) appendFileSync(log, JSON.stringify({ ...callRecord, endedAt: Date.now() }) + '\n');
+  process.exit(code);
+};
 
 function argValue(name) {
   const index = args.indexOf(name);
@@ -48,15 +54,15 @@ function startHeartbeatGrandchild(heartbeat) {
 if (args.includes('-ListSteps')) {
   if (process.env.P93_INSTALLER_UI_STUB_BAD_LIST === 'version') {
     console.log(JSON.stringify({ schemaVersion: 2, installer: 'pwsh', checkpoint: null, runId: null, steps: [] }));
-    process.exit(0);
+    finish(0);
   }
   if (process.env.P93_INSTALLER_UI_STUB_BAD_LIST === 'missing') {
     console.log(JSON.stringify({ schemaVersion: 1, installer: 'pwsh', checkpoint: null, runId: null }));
-    process.exit(0);
+    finish(0);
   }
   if (process.env.P93_INSTALLER_UI_STUB_BAD_LIST === 'type') {
     console.log(JSON.stringify({ schemaVersion: 1, installer: 'pwsh', checkpoint: null, runId: null, steps: [{ id: 1, title: 'bad', dependencies: [], state: 'not-started' }] }));
-    process.exit(0);
+    finish(0);
   }
   if (process.env.P93_INSTALLER_UI_STUB_CHECKPOINT_STATES) {
     console.log(JSON.stringify({
@@ -70,7 +76,7 @@ if (args.includes('-ListSteps')) {
         { id: 'verify', title: 'verify', dependencies: ['gateway-deployment'], state: 'completed' },
       ],
     }));
-    process.exit(0);
+    finish(0);
   }
   console.log(JSON.stringify({
     schemaVersion: 1,
@@ -79,7 +85,7 @@ if (args.includes('-ListSteps')) {
     runId: null,
     steps: realSteps.map(([id, title, dependencies]) => ({ id, title, dependencies, state: 'not-started' })),
   }));
-  process.exit(0);
+  finish(0);
 }
 
 const answersPath = argValue('-AnswersPath');
@@ -92,21 +98,32 @@ if (args.includes('-Preflight')) {
     await new Promise(() => {});
   }
   if (process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_DELAY_MS) await new Promise((resolve) => setTimeout(resolve, Number(process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_DELAY_MS)));
+  if (process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_MULTIBYTE) {
+    const value = Buffer.from('split 😀 line\n');
+    process.stdout.write(value.subarray(0, 8));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    process.stdout.write(value.subarray(8));
+    finish(2);
+  }
+  if (process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_LARGE_STDOUT) {
+    process.stdout.write('x'.repeat(Number(process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_LARGE_STDOUT)));
+    finish(2);
+  }
   if (process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_TEXT) {
     console.log(`preflight could not parse password=super-secret at ${answersPath}`);
-    process.exit(2);
+    finish(2);
   }
   if (process.env.P93_INSTALLER_UI_STUB_BAD_PREFLIGHT === 'version') {
     console.log(JSON.stringify({ schemaVersion: 2, installer: 'pwsh', answersSchemaVersion: 1, result: 'PASS', checks: [] }));
-    process.exit(0);
+    finish(0);
   }
   if (process.env.P93_INSTALLER_UI_STUB_BAD_PREFLIGHT === 'missing') {
     console.log(JSON.stringify({ schemaVersion: 1, installer: 'pwsh', answersSchemaVersion: 1, checks: [] }));
-    process.exit(0);
+    finish(0);
   }
   if (process.env.P93_INSTALLER_UI_STUB_BAD_PREFLIGHT === 'type') {
     console.log(JSON.stringify({ schemaVersion: 1, installer: 'pwsh', answersSchemaVersion: 1, result: 'PASS', checks: [{ id: 'x', result: 1 }] }));
-    process.exit(0);
+    finish(0);
   }
   if (process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_FAIL_ON_SECOND) {
     const counterPath = process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_FAIL_ON_SECOND;
@@ -134,7 +151,7 @@ if (args.includes('-Preflight')) {
       { id: 'answers.schema', result: fail ? 'FAIL' : 'PASS', reason: null, message: fail ? 'stub requested answers.schema failure' : 'the answers match the answers schema, version 1', remedy: fail ? 'Fix the stub-requested failure.' : '', problems: fail ? [{ message: 'stub requested answers.schema failure', remedy: 'Fix the stub-requested failure.' }] : [] },
     ],
   }));
-  process.exit(process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_PASS_EXIT_1 === '1' ? 1 : (overallFail ? 1 : 0));
+  finish(process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_PASS_EXIT_1 === '1' ? 1 : (overallFail ? 1 : 0));
 }
 
 if (args.includes('-Yes')) {
@@ -199,7 +216,14 @@ if (args.includes('-Yes')) {
   if (process.env.P93_INSTALLER_UI_STUB_PROGRESS_EVENTS && progressPath) {
     const count = Number(process.env.P93_INSTALLER_UI_STUB_PROGRESS_EVENTS);
     for (let i = 0; i < count; i++) appendFileSync(progressPath, progressLine({ stepId: steps[0], event: i % 2 ? 'completed' : 'started', message: `event ${i}` }) + '\n');
-    process.exit(0);
+    finish(0);
+  }
+  if (process.env.P93_INSTALLER_UI_STUB_PROGRESS_LONG_LINE && progressPath) {
+    appendFileSync(progressPath, 'x'.repeat(Number(process.env.P93_INSTALLER_UI_STUB_PROGRESS_LONG_LINE)));
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    appendFileSync(progressPath, '\n');
+    appendFileSync(progressPath, progressLine({ stepId: steps[0], event: 'completed', message: 'after long progress' }) + '\n');
+    finish(0);
   }
   if (process.env.P93_INSTALLER_UI_STUB_MALFORMED_PROGRESS && progressPath) {
     appendFileSync(progressPath, '{bad json password=super-secret}\n');

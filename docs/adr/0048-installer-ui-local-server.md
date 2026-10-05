@@ -40,7 +40,9 @@ log the Host and `X-Forwarded-*` shape to the terminal, while the HTTP response 
 (`tools/installer-ui/server.mjs:388-391`; `tools/installer-ui/server.mjs:608-627`).
 
 The bootstrap token is accepted on the initial top-level page request, then the server sets an
-`HttpOnly; SameSite=Strict` cookie and redirects to a tokenless URL. `GET /api/session` returns the
+`HttpOnly; SameSite=Strict` cookie to a new session secret and redirects to a tokenless URL. The
+bootstrap URL token is never accepted as the session cookie (`tools/installer-ui/session-auth.mjs:4-13`;
+`tools/installer-ui/server.mjs:479-490`). `GET /api/session` returns the
 CSRF token and `live` or `static` mode. JSON POST routes require `Content-Type: application/json`,
 state-changing routes require `x-csrf-token`, child-spawning routes check Origin and Fetch Metadata,
 the server sends no CORS header, and `OPTIONS` is refused (`tools/installer-ui/server.mjs:393-418`;
@@ -75,10 +77,22 @@ results and allowed progress events. Malformed step lists and preflight results 
 
 Preflight fingerprints are lower-case SHA-256 values over a canonical JSON object containing schema
 version, engine, sorted answers and a sorted step scope or `full`. The server stores at most 20
-passing records. A later fail or exit-code failure for the same answers and engine clears the prior
-pass. A run is admitted only when the submitted fingerprint exists, the answers digest matches, the
-engine is `pwsh` and the stored scope covers the requested run scope
-(`tools/installer-ui/preflight-record.mjs:2-46`; `tools/installer-ui/server.mjs:472-509`).
+passing records. A passing record also stores the signed-in state, user, tenant and subscription
+snapshot. A later fail or exit-code failure for the same answers and engine clears the prior pass. A
+run is admitted only when the submitted fingerprint exists, the answers digest matches, the engine is
+`pwsh`, the stored scope covers the requested run scope and the current identity snapshot matches
+the passing preflight (`tools/installer-ui/preflight-record.mjs:2-46`;
+`tools/installer-ui/server.mjs:550-596`).
+
+One Azure CLI lease covers identity, prefill, preflight and run work. Reads wait behind reads in
+arrival order, wait time counts against the read timeout, runs are refused while a read holds the
+lease, and reads or second runs are refused while a run holds it (`tools/installer-ui/azure-lease.mjs:1-64`;
+`tools/installer-ui/server.mjs:374-379`; `tools/installer-ui/server.mjs:582-584`).
+
+The server refuses a live run with `AddressMode = custom` and `AddressCertificateSource = Pfx`
+before creating a run because the page does not collect the PFX password and the installer asks for
+that password only when it runs without `-Yes` (`tools/installer-ui/server.mjs:576-579`;
+`Install-ClaudeGateway.ps1:1164-1166`).
 
 Live mode uses the configured PowerShell command, `pwsh` by default. `listenAsync` checks PowerShell
 once and requires major version 7 or newer. If that check fails, `/api/session` reports static mode

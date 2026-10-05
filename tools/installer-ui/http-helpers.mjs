@@ -77,16 +77,18 @@ export function isLoopbackBind(host) {
   return host === '127.0.0.1' || host === 'localhost' || host === '::1' || host === '[::1]';
 }
 
-export function assertSameOrigin(req) {
+export function assertSameOrigin(req, onRefused = () => {}) {
   const expected = `http://${req.headers.host}`;
   const origin = req.headers.origin;
   if (origin && origin !== expected) {
+    onRefused(req);
     const error = new Error('same-origin request required');
     error.status = 403;
     throw error;
   }
   const fetchSite = req.headers['sec-fetch-site'];
   if (fetchSite && fetchSite !== 'same-origin' && fetchSite !== 'none') {
+    onRefused(req);
     const error = new Error('same-origin request required');
     error.status = 403;
     throw error;

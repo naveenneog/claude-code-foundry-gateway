@@ -87,6 +87,14 @@ exact streaming cache-creation detail remains **U13**.
   ADR-0048 and architecture article citations now point inside the cited files, and the architecture
   image text now names the `redactText` rule-table path rather than a direct server call to
   `Protect-ClaudeInstallText`.
+  The installer UI server now separates the one-use bootstrap token from the session cookie, records
+  stop requests that arrive before the child process exists, serializes Azure CLI work with one
+  server-side lease, refuses live PFX certificate runs that need a terminal password, binds passing
+  preflights to the current Azure identity, tightens installer-interface adapters, caps read-only
+  child output, reads progress files in bounded chunks and logs refused Origin or Fetch Metadata
+  shapes to the terminal while keeping the HTTP refusal generic.
+  The Installer UI architecture diagram now lists the split page scripts, producer PowerShell
+  sources and the session and Azure-lease modules as freshness sources.
 - **Installers read an answers file, check it before any change, run selected steps and write a progress stream (P92, phase 0).**
   One answers file, described by `schemas/claude-gateway.answers.schema.json`, feeds
   `Install-ClaudeGateway.ps1 -AnswersPath`, `install-claude-gateway.sh --answers-file` and

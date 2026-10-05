@@ -59,6 +59,7 @@ console.error('unexpected az ' + joined); process.exit(2);
     stubInstaller,
     idleMs: 60_000,
     env,
+    readIdentity: extra.readIdentity ?? (async () => ({ signedIn: false, user: '', tenantId: '', subscriptionId: '' })),
   });
   const address = await server.listenAsync("127.0.0.1");
   const base = `http://127.0.0.1:${address.port}`;
@@ -93,7 +94,7 @@ async function browserPage(url, cookieApp) {
     await page.context().addCookies([
       {
         name: "installer_token",
-        value: cookieApp.token,
+        value: cookieApp.cookie.split('=')[1],
         domain: "127.0.0.1",
         path: "/",
         httpOnly: true,

@@ -72,13 +72,17 @@ export async function readProgressFile(progressPath, state, processText, final =
   try {
     const stat = await file.stat();
     if (stat.size <= state.offset && !final) return;
-    const length = stat.size - state.offset;
-    if (length > 0) {
-      const buffer = Buffer.alloc(length);
-      const { bytesRead } = await file.read(buffer, 0, length, state.offset);
+    let length = stat.size - state.offset;
+    while (length > 0) {
+      const chunkLength = Math.min(length, 64 * 1024);
+      const buffer = Buffer.alloc(chunkLength);
+      const { bytesRead } = await file.read(buffer, 0, chunkLength, state.offset);
+      if (!bytesRead) break;
       state.offset += bytesRead;
-      await processText(state.decoder.write(buffer.subarray(0, bytesRead)), final);
-    } else if (final) {
+      length -= bytesRead;
+      await processText(state.decoder.write(buffer.subarray(0, bytesRead)), false);
+    }
+    if (final) {
       await processText('', true);
     }
   } finally {

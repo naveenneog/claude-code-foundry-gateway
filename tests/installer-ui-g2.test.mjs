@@ -27,6 +27,7 @@ async function startServer(extra = {}) {
     env: { P93_INSTALLER_UI_STUB_LOG: log, ...(extra.env || {}) },
     log: (line) => logs.push(line),
     ...extra,
+    readIdentity: extra.readIdentity ?? (async () => ({ signedIn: false, user: '', tenantId: '', subscriptionId: '' })),
     env: { P93_INSTALLER_UI_STUB_LOG: log, ...(extra.env || {}) },
   });
   const address = await server.listenAsync('127.0.0.1');
@@ -231,7 +232,7 @@ test('P1 browser shows fingerprint, marks stale on answer changes and reruns a c
   catch { browser = await chromium.launch({ headless: true }); }
   try {
     const page = await browser.newPage();
-    await page.context().addCookies([{ name: 'installer_token', value: app.server.token, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Strict' }]);
+    await page.context().addCookies([{ name: 'installer_token', value: app.cookie.split('=')[1], domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Strict' }]);
     await page.route('**/api/identity', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ signedIn: true, user: 'operator@example.com' }) }));
     await page.goto(`${app.base}/`);
     await page.getByRole('button', { name: 'List steps' }).click();
@@ -266,7 +267,7 @@ test('P1 business-unit button changes mark a passing preflight stale', async () 
   catch { browser = await chromium.launch({ headless: true }); }
   try {
     const page = await browser.newPage();
-    await page.context().addCookies([{ name: 'installer_token', value: app.server.token, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Strict' }]);
+    await page.context().addCookies([{ name: 'installer_token', value: app.cookie.split('=')[1], domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Strict' }]);
     await page.route('**/api/identity', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ signedIn: true, user: 'operator@example.com' }) }));
     await page.goto(`${app.base}/`);
     await page.getByRole('button', { name: 'List steps' }).click();
@@ -328,7 +329,7 @@ test('E1 missing pwsh puts the server and page in static mode without spawning c
     catch { browser = await chromium.launch({ headless: true }); }
     try {
       const page = await browser.newPage();
-      await page.context().addCookies([{ name: 'installer_token', value: app.server.token, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Strict' }]);
+      await page.context().addCookies([{ name: 'installer_token', value: app.cookie.split('=')[1], domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Strict' }]);
       await page.goto(`${app.base}/`);
       await page.locator('#preflight-state').getByText(/Static fallback/).waitFor();
       const hidden = await page.evaluate(() => ['preflight', 'steps', 'run', 'full-run', 'stop-run'].map((id) => document.getElementById(id).hidden));
@@ -361,7 +362,7 @@ test('E2 shared installer arguments, CKPT_ORDER parse and removed commands route
     catch { browser = await chromium.launch({ headless: true }); }
     try {
       const page = await browser.newPage();
-      await page.context().addCookies([{ name: 'installer_token', value: app.server.token, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Strict' }]);
+      await page.context().addCookies([{ name: 'installer_token', value: app.cookie.split('=')[1], domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Strict' }]);
       await page.route('**/api/identity', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ signedIn: true, user: 'operator@example.com' }) }));
       await page.goto(`${app.base}/`);
       await page.getByRole('button', { name: 'List steps' }).click();
@@ -391,7 +392,7 @@ test('E2 displayed PowerShell run argv matches the server installer argv', async
   catch { browser = await chromium.launch({ headless: true }); }
   try {
     const page = await browser.newPage();
-    await page.context().addCookies([{ name: 'installer_token', value: app.server.token, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Strict' }]);
+    await page.context().addCookies([{ name: 'installer_token', value: app.cookie.split('=')[1], domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Strict' }]);
     await page.route('**/api/identity', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ signedIn: true, user: 'operator@example.com' }) }));
     await page.goto(`${app.base}/`);
     await page.getByRole('button', { name: 'List steps' }).click();

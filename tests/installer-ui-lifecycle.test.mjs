@@ -23,6 +23,7 @@ async function start(env = {}, options = {}) {
     stubInstaller: stub,
     idleMs: 60_000,
     env: { P93_INSTALLER_UI_STUB_LOG: log, ...env },
+    readIdentity: options.readIdentity ?? (async () => ({ signedIn: false, user: '', tenantId: '', subscriptionId: '' })),
     ...options,
   });
   let closed = false;
@@ -265,7 +266,7 @@ test('the page Stop run confirmation names the running step, and cancelling it s
     page.on('pageerror', (error) => pageErrors.push(error.message));
     const stopRequests = [];
     page.on('request', (request) => { if (new URL(request.url()).pathname === '/api/run/stop') stopRequests.push(request.method()); });
-    await page.context().addCookies([{ name: 'installer_token', value: app.token, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Strict' }]);
+    await page.context().addCookies([{ name: 'installer_token', value: app.cookie.split('=')[1], domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Strict' }]);
     await page.goto(`${app.base}/`);
     await page.getByRole('button', { name: 'List steps' }).click();
     await page.locator('[name="SubscriptionId"]').fill(passingAnswers.SubscriptionId);

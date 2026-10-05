@@ -3,7 +3,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$ExpectedNodeTests = 90
+$ExpectedNodeTests = 108
 $root = Split-Path $PSScriptRoot -Parent
 $script:fail = 0
 $script:checks = 0

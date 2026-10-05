@@ -17,8 +17,9 @@ and at least 32 bytes before encoding, and the default bind address is `127.0.0.
 (`tools/installer-ui/server.mjs:277-279`; `tools/installer-ui/server.mjs:608-627`). A non-loopback
 bind requires `--allow-host <host[:port]>` and prints a risk line (`tools/installer-ui/server.mjs:608-627`).
 The first top-level page request consumes the URL token and sets an `HttpOnly; SameSite=Strict`
-cookie; `GET /api/session` returns the CSRF token and `live` or `static` mode
-(`tools/installer-ui/server.mjs:394-415`; `tools/installer-ui/http-helpers.mjs:13-29`).
+cookie whose value is a new session secret, not the bootstrap URL token; `GET /api/session` returns
+the CSRF token and `live` or `static` mode (`tools/installer-ui/session-auth.mjs:4-13`;
+`tools/installer-ui/server.mjs:479-490`; `tools/installer-ui/http-helpers.mjs:13-29`).
 
 Live mode requires PowerShell 7 or newer from the configured `pwsh` command. If the command is absent
 or reports an older major version, the server stays in static mode, `/api/session` reports the reason
@@ -79,7 +80,9 @@ without inline script (`tools/installer-ui/server.mjs:393-435`; `tools/installer
 The Host allowlist accepts loopback names for the selected port and any explicit `--allow-host` value
 (`tools/installer-ui/http-helpers.mjs:60-73`; `tools/installer-ui/server.mjs:608-627`).
 
-The bootstrap cookie and `x-csrf-token` header protect JSON `POST` routes. JSON POST routes require
+The bootstrap token is one-use and the session cookie is a separate random secret stored only as a
+hash in the server process (`tools/installer-ui/session-auth.mjs:4-13`;
+`tools/installer-ui/server.mjs:479-490`). The session cookie and `x-csrf-token` header protect JSON `POST` routes. JSON POST routes require
 `Content-Type: application/json`; child-spawning POST routes also check Origin and Fetch Metadata,
 and child-spawning GET routes refuse cross-site Fetch Metadata (`tools/installer-ui/server.mjs:415-418`;
 `tools/installer-ui/server.mjs:331-337`; `tools/installer-ui/http-helpers.mjs:79-96`). Prefill accepts
@@ -97,6 +100,9 @@ work goes through `Install-ClaudeGateway.ps1` with argument arrays and `shell: f
 children is redacted with the installer's rule table and local paths are scrubbed before HTTP details
 or stream events leave the server (`tools/installer-ui/server-model.mjs:17-48`;
 `tools/installer-ui/server.mjs:149-167`; `tools/installer-ui/server.mjs:475-480`).
+Origin and Fetch Metadata refusals write one terminal diagnostic containing Origin, Host,
+`Sec-Fetch-Site` and forwarded headers while the HTTP response stays generic
+(`tools/installer-ui/server.mjs:337-343`; `tools/installer-ui/http-helpers.mjs:79-97`).
 
 The UI does not collect the PFX password because the schema marks `AddressCertificatePassword` as a
 secret and the page renders non-secret installer answers only
@@ -105,6 +111,8 @@ secret and the page renders non-secret installer answers only
 `AddressCertificateSource = Pfx`, `Install-ClaudeGateway.ps1` does not prompt and passes no
 certificate password unless it is supplied on the command line
 (`Install-ClaudeGateway.ps1:1164-1166`; `Install-ClaudeGateway.ps1:1178-1179`).
+The live server refuses that run shape with `409` and `reason: pfx-needs-terminal` before creating a
+run (`tools/installer-ui/server.mjs:576-579`).
 
 ## Run lifecycle and limits
 
@@ -112,8 +120,15 @@ Preflight produces a canonical SHA-256 fingerprint over schema version, engine, 
 step scope. A run starts only when that fingerprint matches a stored passing preflight for the same
 answers and a covering scope; failing preflight or an exit-code failure clears the stored pass
 (`tools/installer-ui/preflight-record.mjs:2-46`; `tools/installer-ui/server.mjs:472-509`).
+The passing preflight also stores the signed-in state, user, tenant and subscription snapshot; run
+admission reads identity again under the Azure lease and refuses changed identity with `409`
+(`tools/installer-ui/server.mjs:385-391`; `tools/installer-ui/server.mjs:550-565`;
+`tools/installer-ui/server.mjs:587-596`).
 
-One installer run can be active. A second run receives `409`, and `POST /api/run` is not a route, so
+One Azure CLI lease covers identity, prefill, preflight and a run from admission through its summary.
+Reads queue behind reads, reads and runs are refused while a run holds the lease, and runs are
+refused while a read holds it (`tools/installer-ui/azure-lease.mjs:1-64`;
+`tools/installer-ui/server.mjs:374-379`; `tools/installer-ui/server.mjs:582-584`). One installer run can be active. A second run receives `409`, and `POST /api/run` is not a route, so
 it returns `404` through the fixed-route fallback (`tools/installer-ui/server.mjs:493-500`;
 `tools/installer-ui/server.mjs:555-557`). A run writes its answers and progress file to a per-run
 temporary directory and removes that directory after the child exits (`tools/installer-ui/server.mjs:359-368`;
@@ -139,11 +154,18 @@ uses `taskkill.exe /PID <pid> /T /F`; POSIX children run in a detached process g
 be signalled (`tools/installer-ui/server.mjs:56-66`; `tools/installer-ui/server.mjs:71-82`). The stop
 response and stream say that the install checkpoint resumes when the same steps run again
 (`tools/installer-ui/server.mjs:543-551`).
+If Stop run arrives after a run record exists but before the installer child is spawned, the server
+records the stop request and skips the spawn; if the child appears after the request, it is killed
+immediately (`tools/installer-ui/server.mjs:616-624`; `tools/installer-ui/server.mjs:661`).
 
 Read-only child routes use per-route timeouts: step list 60 seconds, identity 120 seconds, prefill
 120 seconds and preflight 600 seconds, with the test override `readOnlyTimeoutMs`
 (`tools/installer-ui/server.mjs:293`). Idle shutdown is armed only when no tracked read-only job or
 run is active (`tools/installer-ui/server.mjs:286-318`).
+Read-only output is decoded with UTF-8 decoders and capped at 1 MiB across stdout and stderr by
+default. Progress file reads use 64 KiB chunks, and a progress line over 64 KiB becomes one stream
+error while later valid progress lines still arrive (`tools/installer-ui/server.mjs:96-144`;
+`tools/installer-ui/server.mjs:211-238`; `tools/installer-ui/run-transport.mjs:69-89`).
 
 ## Sections
 

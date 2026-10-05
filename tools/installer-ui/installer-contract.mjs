@@ -32,13 +32,22 @@ export function validateStepList(payload) {
   requireVersion(payload, interfaceName);
   requireString(payload, 'installer', interfaceName);
   if (!Array.isArray(payload.steps)) throw fail(interfaceName, 'field steps is not an array');
+  const ids = new Set();
   for (const [index, step] of payload.steps.entries()) {
     requireObject(step, interfaceName);
     for (const field of ['id', 'title', 'state']) requireString(step, field, interfaceName);
+    if (!step.id) throw fail(interfaceName, `step ${index} id is empty`);
+    if (ids.has(step.id)) throw fail(interfaceName, `has duplicate step id ${step.id}`);
+    ids.add(step.id);
     if (!Array.isArray(step.dependencies) || !step.dependencies.every((item) => typeof item === 'string')) {
       throw fail(interfaceName, `step ${index} field dependencies is not a text array`);
     }
     if (!stepStates.has(step.state)) throw fail(interfaceName, `step ${step.id} has unsupported state ${step.state}`);
+  }
+  for (const step of payload.steps) {
+    for (const dependency of step.dependencies) {
+      if (!ids.has(dependency)) throw fail(interfaceName, `step ${step.id} has unknown dependency ${dependency}`);
+    }
   }
   return payload;
 }
@@ -54,11 +63,9 @@ export function validatePreflight(payload) {
   if (!Array.isArray(payload.checks)) throw fail(interfaceName, 'field checks is not an array');
   for (const [index, check] of payload.checks.entries()) {
     requireObject(check, interfaceName);
-    for (const field of ['id', 'result']) requireString(check, field, interfaceName);
+    for (const field of ['id', 'result', 'message', 'remedy']) requireString(check, field, interfaceName);
     if (!preflightResults.has(check.result)) throw fail(interfaceName, `check ${index} result ${check.result} is unsupported`);
-    for (const optional of ['message', 'remedy']) {
-      if (check[optional] !== undefined && typeof check[optional] !== 'string') throw fail(interfaceName, `check ${index} field ${optional} is not text`);
-    }
+    if (payload.result === 'PASS' && check.result === 'FAIL') throw fail(interfaceName, 'PASS includes a FAIL check');
     if (check.reason !== undefined && check.reason !== null && typeof check.reason !== 'string') throw fail(interfaceName, `check ${index} field reason is not text or null`);
     if (check.problems !== undefined) {
       if (!Array.isArray(check.problems)) throw fail(interfaceName, `check ${index} field problems is not an array`);
@@ -77,13 +84,9 @@ export function validateProgressEvent(payload) {
   const interfaceName = 'progress event';
   requireObject(payload, interfaceName);
   requireVersion(payload, interfaceName);
-  for (const field of ['time', 'runId', 'event']) requireString(payload, field, interfaceName);
-  if (payload.stepId !== undefined && typeof payload.stepId !== 'string') throw fail(interfaceName, 'field stepId is not text');
+  for (const field of ['time', 'runId', 'stepId', 'event', 'message', 'resumeCommand']) requireString(payload, field, interfaceName);
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(payload.time)) throw fail(interfaceName, 'field time is not yyyy-MM-ddTHH:mm:ssZ');
   if (!/^[a-fA-F0-9]{32}$/.test(payload.runId)) throw fail(interfaceName, 'field runId is not 32 hex characters');
   if (!progressEvents.has(payload.event)) throw fail(interfaceName, `event ${payload.event} is unsupported`);
-  for (const optional of ['message', 'resumeCommand']) {
-    if (payload[optional] !== undefined && typeof payload[optional] !== 'string') throw fail(interfaceName, `field ${optional} is not text`);
-  }
   return payload;
 }

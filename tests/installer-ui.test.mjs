@@ -53,6 +53,7 @@ console.error('unexpected az ' + joined); process.exit(2);
     stubInstaller: extra.stubInstaller || stub,
     idleMs: 60_000,
     env,
+    readIdentity: extra.readIdentity ?? (extra.az ? undefined : async () => ({ signedIn: false, user: '', tenantId: '', subscriptionId: '' })),
   });
   const address = await server.listenAsync('127.0.0.1');
   const base = `http://127.0.0.1:${address.port}`;
@@ -81,6 +82,10 @@ console.error('unexpected az ' + joined); process.exit(2);
 }
 
 function rawRequest(base, path, headers = {}) {
+  return rawRequestDetailed(base, path, headers).then((res) => res.statusCode);
+}
+
+function rawRequestDetailed(base, path, headers = {}) {
   const url = new URL(path, base);
   return new Promise((resolve, reject) => {
     const req = request({
@@ -91,7 +96,7 @@ function rawRequest(base, path, headers = {}) {
       headers,
     }, (res) => {
       res.resume();
-      res.on('end', () => resolve(res.statusCode));
+      res.on('end', () => resolve(res));
     });
     req.on('error', reject);
     req.end();
@@ -160,13 +165,15 @@ test('non-loopback binding requires allow-host and logs refused host diagnostics
   const server = await createInstallerUiServer({ token: 'allow-host-token-with-32-bytes-0000', allowedHosts: ['preview.example.test'], log: (line) => logs.push(line) });
   const address = await server.listenAsync('127.0.0.1');
   try {
+    const boot = await rawRequestDetailed(`http://127.0.0.1:${address.port}`, `/?token=${encodeURIComponent(server.token)}`, { host: 'preview.example.test' });
+    const issuedCookie = boot.headers['set-cookie'][0].split(';')[0];
     assert.equal(await rawRequest(`http://127.0.0.1:${address.port}`, '/api/schema', {
       host: 'preview.example.test',
-      cookie: `installer_token=${server.token}`,
+      cookie: issuedCookie,
     }), 200);
     const badStatus = await rawRequest(`http://127.0.0.1:${address.port}`, '/api/schema', {
       host: 'wrong.example.test',
-      cookie: `installer_token=${server.token}`,
+      cookie: issuedCookie,
       'x-forwarded-host': 'cloudshell.example.test',
       'x-forwarded-proto': 'https',
       'x-forwarded-prefix': '/preview',
@@ -316,7 +323,7 @@ test('identity and prefill routes go through repository PowerShell seams', async
     const browser = await chromium.launch({ headless: true });
     try {
       const page = await browser.newPage();
-      await page.context().addCookies([{ name: 'installer_token', value: app.token, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Strict' }]);
+      await page.context().addCookies([{ name: 'installer_token', value: app.cookie.split('=')[1], domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Strict' }]);
       await page.goto(`${app.base}/`);
       await page.getByText('operator@example.com').waitFor();
       const banner = await page.locator('#identity').textContent();
@@ -585,7 +592,7 @@ test('stream ordering, removed run route and browser DOM cap are enforced', asyn
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage();
-    await page.context().addCookies([{ name: 'installer_token', value: pageApp.token, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Strict' }]);
+    await page.context().addCookies([{ name: 'installer_token', value: pageApp.cookie.split('=')[1], domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Strict' }]);
     await page.goto(`${pageApp.base}/`);
     await page.getByRole('button', { name: 'List steps' }).click();
     await page.locator('#step-list input').first().check();
@@ -671,7 +678,7 @@ test('preflight malformed output, fail JSON and versioned interfaces fail closed
     const browser = await chromium.launch({ headless: true });
     try {
       const page = await browser.newPage();
-      await page.context().addCookies([{ name: 'installer_token', value: textApp.token, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Strict' }]);
+      await page.context().addCookies([{ name: 'installer_token', value: textApp.cookie.split('=')[1], domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Strict' }]);
       await page.goto(`${textApp.base}/`);
       await page.getByRole('button', { name: 'Run preflight' }).click();
       await page.getByText(/preflight output was not JSON/).waitFor();
@@ -739,7 +746,7 @@ test('full run requires browser confirmation before invoking the installer', asy
   try {
     const page = await browser.newPage();
     await page.route('**/api/identity', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ signedIn: true, user: 'operator@example.com' }) }));
-    await page.context().addCookies([{ name: 'installer_token', value: app.token, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Strict' }]);
+    await page.context().addCookies([{ name: 'installer_token', value: app.cookie.split('=')[1], domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Strict' }]);
     await page.goto(`${app.base}/`);
     await page.waitForSelector('[name="ResourceGroup"]');
     await page.locator('[name="SubscriptionId"]').fill(passingAnswers.SubscriptionId);
