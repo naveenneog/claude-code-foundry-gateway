@@ -111,7 +111,7 @@ function Add-Unit {
         return
     }
     if ($null -eq $registryRaw) {
-        Write-Host "  bu-registry was not found on $ApimName, so nothing was created. Redeploy with the current template first." -ForegroundColor Yellow
+        Write-Host "  bu-registry was not found on $ApimName, so nothing was created. Update the gateway first: .\scripts\Update-ClaudeGateway.ps1 -RecordPath .\onboarding\claude-gateway.json -ResourceGroup $ResourceGroup -ApimName $ApimName (docs/UPDATE-AND-CHANGE.md, section 1)." -ForegroundColor Yellow
         return
     }
     $registryIds = @(ConvertFrom-ClaudeBuRegistry $registryRaw | ForEach-Object Id)
