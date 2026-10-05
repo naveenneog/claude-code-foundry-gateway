@@ -27,7 +27,8 @@
     "infra/projection-renewal-gateway-reader.bicep",
     "sync/src/business-units.mjs",
     "sync/src/events.mjs",
-    "scripts/Deploy-ClaudeProjectionRenewal.ps1"
+    "scripts/Deploy-ClaudeProjectionRenewal.ps1",
+    "scripts/ClaudeProjectionSwitch.ps1"
   ],
   "identifiers": {
     "snapshot": {
@@ -184,6 +185,11 @@
       "label": "diagnostic setting",
       "source": "infra/projection-renewal.bicep",
       "match": "Microsoft.Insights/diagnosticSettings@2021-05-01-preview"
+    },
+    "switch": {
+      "label": "Invoke-ClaudeProjectionSwitch",
+      "source": "scripts/ClaudeProjectionSwitch.ps1",
+      "match": "function Invoke-ClaudeProjectionSwitch {"
     }
   },
   "groups": [
@@ -223,9 +229,9 @@
       "x": 430,
       "y": 1320,
       "w": 850,
-      "h": 340,
+      "h": 356,
       "tone": "amber",
-      "title": "P86 and P94 scheduled renewal and switch admission"
+      "title": "P86, P94 and P95 scheduled renewal and the switch"
     }
   ],
   "nodes": [
@@ -373,7 +379,7 @@
     {
       "id": "renewal-job",
       "x": 446,
-      "y": 1348,
+      "y": 1364,
       "w": 818,
       "h": 300,
       "tone": "amber",
@@ -384,7 +390,7 @@
         "az acr build from the sync package; sha256 digest read back",
         "[[renewal-template]]: [[cae-env]], [[cae-job]], [[cosmos-writer]]",
         "[[unit-reader]] for each [[unit-read]]; [[renewal-logs]]; [[renewal-alerts]]",
-        "[[admission-check]] reads the status records before a switch"
+        "[[switch]]: receipt and resolver checks, drift check, runner compare, [[admission-check]], backup, one write"
       ]
     }
   ],
@@ -540,7 +546,7 @@
         ],
         [
           1210,
-          1348
+          1364
         ]
       ]
     },
@@ -551,7 +557,7 @@
       "points": [
         [
           878,
-          1348
+          1364
         ],
         [
           878,

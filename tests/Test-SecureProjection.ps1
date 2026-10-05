@@ -170,7 +170,11 @@ Assert 'and says so'                              ($ins -match "Keeping this gat
 # ErrorActionPreference Stop the wizard ended before its summary.
 Assert 'optional az calls cannot end the script on 5.1' ($ins -match "(?s)function Invoke-AzOptional.*\`$ErrorActionPreference = 'Continue'")
 Assert 'the window lookup uses it'                ($ins -match '\$liveWindow = Invoke-AzOptional \{')
-Assert 'and so does the network-state lookup'     ($ins -match '\$liveId = Invoke-AzOptional \{')
+# P95 council round 3: the network-state lookup reuses the gateway probe, which also collects stderr on 5.1
+# (ErrorActionPreference Continue) but reads absence only from Azure's not-found answer.
+$apimNv = Get-Content (Join-Path $root 'scripts/ApimNamedValue.ps1') -Raw
+Assert 'and so does the network-state lookup, through the gateway probe' ($ins -match '\$liveId = \$liveApimId' -and $ins -match '\$liveApimId = Get-ApimServiceId ' -and
+    $apimNv -match "(?s)function Get-ApimServiceId \{.*?\`$ErrorActionPreference = 'Continue'.*?ResourceNotFound\|ResourceGroupNotFound")
 
 Write-Host ''
 Write-Host 'Secure projection - the Deploy to Azure button deploys this' -ForegroundColor Cyan

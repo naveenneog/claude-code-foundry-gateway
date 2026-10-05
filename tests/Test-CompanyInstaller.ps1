@@ -10,7 +10,7 @@ function Check([string]$Name,[scriptblock]$Test) {
 }
 try {
     foreach($dir in 'scripts\flow\lib','onboarding\profiles\standard'){New-Item -ItemType Directory -Path (Join-Path $scratch $dir) -Force|Out-Null}
-    foreach($file in 'Install-ClaudeGateway.ps1','scripts\Show-Banner.ps1','scripts\Test-Prerequisites.ps1','scripts\ClaudeModelDeployment.ps1','scripts\ClaudeDesktopSignIn.ps1','scripts\ClaudeChoice.ps1','scripts\ClaudeGatewayRegion.ps1','scripts\AzureRetailPrice.ps1','scripts\flow\FlowContract.ps1','scripts\flow\Foundation.ps1','scripts\flow\lib\LifecycleCommon.ps1'){
+    foreach($file in 'Install-ClaudeGateway.ps1','scripts\Show-Banner.ps1','scripts\Test-Prerequisites.ps1','scripts\ClaudeModelDeployment.ps1','scripts\ClaudeDesktopSignIn.ps1','scripts\ClaudeChoice.ps1','scripts\ClaudeGatewayRegion.ps1','scripts\AzureRetailPrice.ps1','scripts\ApimNamedValue.ps1','scripts\flow\FlowContract.ps1','scripts\flow\Foundation.ps1','scripts\flow\lib\LifecycleCommon.ps1'){
         Copy-Item -LiteralPath (Join-Path $root $file) -Destination (Join-Path $scratch $file)
     }
     $inputs=Join-Path $root 'scripts\ClaudeGatewayAddressInput.ps1'

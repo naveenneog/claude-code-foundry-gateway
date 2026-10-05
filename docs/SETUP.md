@@ -149,9 +149,12 @@ for an **entitlement store** as a separate choice:
 
 The projection deployer is `scripts/Deploy-ClaudeProjection.ps1`. It deploys
 private Cosmos and the resolver, populates from Entra, compares the projection
-against the named-value lists, and leaves named values authoritative. P84 refuses every switch:
-records expire at most two hours after scan start, then every developer receives 503 without
-renewal. The supported scheduled reconciler is proposed as P86 in [ROADMAP](ROADMAP.md). The
+against the named-value lists, and leaves named values authoritative. Records expire at most two
+hours after scan start, then every developer receives 503 without renewal;
+`scripts/Deploy-ClaudeProjectionRenewal.ps1` deploys the job that renews them
+([ADR-0049](adr/0049-projection-renewal-deployment.md)). With `-FlipAfterCleanCompare` the
+deployer deploys nothing: it reads the renewal receipt, runs the drift check, the compare and
+admission, and switches `entitlement-source` ([ADR-0050](adr/0050-projection-switch-function.md)). The
 Basic v2 resolver endpoint is public because Basic v2 has no outbound VNet
 integration; APIM outbound IPs are not treated as the primary control.
 Authentication is.
@@ -653,9 +656,12 @@ account and resource group, as the PowerShell installer's record does.
 
 The interactive installer's projection flags are separate from `deploy.ps1`:
 `-DeployProjection` runs the checked projection deployer and requires PowerShell 7 for apply.
-`-FlipProjectionAfterCleanCompare` is refused unconditionally before discovery or writes,
-including with a historical `-ProjectionReconcilerResourceId`. No supported scheduled reconciler
-ships in P84. An admin-created resolver registration is supplied as
+`-FlipProjectionAfterCleanCompare`, with `-EntitlementStore projection -DeployProjection`, runs the
+installer's gateway deployment and list refresh, then the deployer's switch mode, which deploys
+nothing in place of the projection deployment; without `-DeployProjection` it has no effect. It
+requires `-ProjectionReconcilerResourceId`, `-ProjectionRenewalImageDigest` and
+`-ProjectionRenewalActionGroupResourceId` before discovery or writes, and the deployer refuses
+values that differ from the renewal receipt. An admin-created resolver registration is supplied as
 `-ProjectionResolverAppId <client-id>`. An example installer invocation is:
 
 ```powershell
@@ -666,12 +672,14 @@ pwsh -NoProfile -File .\Install-ClaudeGateway.ps1 `
 ```
 
 The example deploys beside the gateway without switching. Records expire at most two hours after
-scan start, then every developer receives 503 without renewal. Switching needs the supported P86
-scheduled reconciler; neither installer nor deployer creates it. The read-only preflight normally takes 30-90 seconds, including
+scan start, then every developer receives 503 without renewal. The renewal job deploys separately
+with `scripts/Deploy-ClaudeProjectionRenewal.ps1`, and a switch is admitted after its third
+successful run. The read-only preflight normally takes 30-90 seconds, including
 the 25-second Graph interval. [Private projection](SECURE-PROJECTION.md#one-command-deployment)
-contains the `-PreflightOnly` command and admin registration steps; proposed
-[ADR-0040](adr/0040-projection-preflight-and-switch.md) records P84 refusal and proposed P86 evidence.
-Sources: `Install-ClaudeGateway.ps1:64`, `scripts/Deploy-ClaudeProjection.ps1:80`.
+contains the `-PreflightOnly` command and admin registration steps;
+[ADR-0040](adr/0040-projection-preflight-and-switch.md) records the preflight and
+[ADR-0050](adr/0050-projection-switch-function.md) the switch.
+Sources: `Install-ClaudeGateway.ps1:63-67,125-128`, `scripts/Deploy-ClaudeProjection.ps1:52-57`.
 
 ```powershell
 ./deploy.ps1 -FoundryAccount <your-foundry-account> -ResourceGroup rg-claude-gateway

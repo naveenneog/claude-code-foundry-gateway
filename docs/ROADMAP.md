@@ -99,7 +99,7 @@ deployment by hand fails ([P94 status](status/P94.md#p94-the-p86-renewal-job-dep
 | Packet | State | Deliverable |
 |---|---|---|
 | P94 | Packet gate passed at `5320b17` on `p94-projection-deployable`; not pushed; merges only with the owner's approval | The P86 renewal job deploys and renews: one sync package for the image and the runner (the image and runner currently miss `resolver/src/entitlement.mjs`), a renewal subnet in the projection network, a registry template deployed before the image build, the job's client id, tier group ids and per-run business units, working log routing and alerts, `scripts/Deploy-ClaudeProjectionRenewal.ps1`, an offline renewal simulation that reaches admission, and the guide and its guard ([ADR-0049](adr/0049-projection-renewal-deployment.md)). |
-| P95 | Proposed; starts after the P94 gate | The switch-over runs end to end: a switch never repopulates; one switch function for the deployer, installer and guided flow (drift check, compare, admission, backup, one named-value write); the guided flow reads the renewal receipt; admission requires an email receiver on the action group; admission binds the job's tier group ids, gateway and identity to the evidence it accepts and to the compared gateway, so a renewal redeploy that changes them needs fresh runs; P84 text replaced; an owner-attended live runbook. |
+| P95 | Packet gate passed at `8c13d79` on `p95-projection-switch`, based on P94's branch; not pushed; merges only after P94, with the owner's approval | The switch-over runs end to end: a switch never repopulates; one switch function for the deployer, installer and guided flow (receipt and resolver checks, drift check, compare, admission, backup, one named-value write); the guided flow reads the renewal receipt from its decision record's folder or the repository's `onboarding/`; every receipt value is checked before any call; the gateway must call the resolver that reads the renewed Cosmos account, read from the live site and its settings, and the deployer's normal run points it there, but on a gateway already on the projection stops before any write unless it redeploys the resolver the gateway calls; the installer reads `entitlement-source` and the resolver values fail-closed and takes a gateway for new only when Azure reports it missing; the guided flow's plan lists its one write and the documented rollback; admission requires an email receiver on the action group; admission binds the job's tier group ids, gateway, identity, Cosmos account and tenant to the evidence it accepts and to the compared gateway, so a renewal redeploy that changes them needs fresh runs; a restore does not switch to the projection; P84 text replaced; an owner-attended live runbook. |
 
 Follow-ups from the P94 council, not yet packets: `sync/package-lock.json` carries `sha1` integrity
 for 50 of its 53 packages because this workstation reaches npm only through a feed whose metadata
@@ -108,6 +108,32 @@ script reads the image digest back by tag, and the `az acr build` result would n
 `tests/Test-ProjectionPreflightNegative.ps1`, a manual suite outside Test-All, stops with "Mutation
 anchor missing: bounded raw output" because `f39524d` changed `Select-Object -Last 40` in
 `scripts/ClaudeRunner.ps1` to `-Last 39`, on `main` as well ([P94 council](status/P94.md#council)).
+
+Follow-ups from the P95 council, not yet packets: `Start-ClaudeGateway.ps1 -Action Change` gives the
+Tier and DesktopSignIn plans no snapshot path, so their write gate throws "A named-value snapshot
+path is required" (the Entitlement step names its own since P95); `Install-ClaudeGateway.ps1`
+accepts `-FlipProjectionAfterCleanCompare` without `-DeployProjection` and then never reaches the
+switch; and `Invoke-ClaudeProjectionPreflight -FlipAfterCleanCompare` has no caller since the
+deployer's switch mode returns before the preflight. On an existing gateway, the installer reads
+`entitlement-source` and the two resolver values fail-closed since P95 council round 2, but reads
+`allow-standard`, `allow-premium`, `quota-overrides`, `bu-registry`, `bu-modes`, `bu-members`,
+`bu-parents` and `entitlement-cache-seconds` with `2>$null`, so a failed read deploys the template's
+default for that value (`Install-ClaudeGateway.ps1:1428-1450`) ([P95 council](status/P95.md#council)).
+
+From P95 council round 4 (Security, MEDIUM, present since `88fbc4b`, 2026-08-31, for the lists and
+since `0c624dd`, 2026-09-17, for the entitlement values): the installer passes
+the live named values it reads back, among them `entitlement-resolver-url`,
+`entitlement-resolver-audience`, the `allow-*`, `bu-*` and `usd-*` values and `quota-overrides`, to
+`az deployment group create` as unquoted `key=value` arguments (`Install-ClaudeGateway.ps1:1566-1586`).
+On Windows `az` is `az.cmd`, which `cmd.exe` reads again, so a value holding `&`, written by an
+account that can change named values, runs a command as the operator who runs the installer. A JSON
+parameter file, as the installer already uses for the network settings, or a form check of each value
+before the call, closes it.
+
+From the P95 packet gate (`quality.filesize`): `tests/Test-ProjectionSwitch.ps1`, which P95 created,
+has 866 lines against the 800-line test budget. A split by responsibility, into admission and the
+switch, the deployer and the installer, the guided flow, and the guides, keeps each file under the
+budget; the charter's budget stays as it is ([P95 gate](status/P95.md#gate)).
 
 M0 is shipped. The table below is the queue; the checklist under it is what the gate tracks.
 

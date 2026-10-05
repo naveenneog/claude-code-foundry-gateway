@@ -1712,8 +1712,8 @@ $mutations = @(
     @{ Suite = 'Test-Scale.ps1'
        Name  = 'a redeploy silently un-migrates the gateway'
        File  = 'Install-ClaudeGateway.ps1'
-       From  = 'named-value-id entitlement-source --query value'
-       To    = 'named-value-id bu-parents --query value' }
+       From  = "-Id 'entitlement-source' -FailOnError"
+       To    = "-Id 'bu-parents' -FailOnError" }
 
     @{ Suite = 'Test-Scale.ps1'
        Name  = 'the Basic v2 networking floor is dropped'

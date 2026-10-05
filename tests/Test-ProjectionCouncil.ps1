@@ -128,6 +128,7 @@ Assert 'real Entitlement refuses missing P86 evidence with expected wait' ($Fail
 $discoveryGood=[pscustomobject]@{
     resourceGroup='rg-p84';apimName='apim-p84';sku='BasicV2';namedValues=@{'entitlement-source'='named-value'};cleanComparison=$true
     renewal=[pscustomobject]@{
+        kind='claude-projection-renewal-receipt'; schemaVersion=1
         runnerName='aci-projtest-p84fixture'; cosmosAccount='cosmos-p84fixture'; tenantId=$FixtureTenant; accountResourceId=$FixtureCosmosId
         reconcilerResourceId=$FixtureJobId; imageDigest=('sha256:' + ('a' * 64)); actionGroupResourceId="$FixtureRgId/providers/Microsoft.Insights/actionGroups/ag-projection-renewal"
         entryPoint='node /app/sync/src/apply-projection.mjs'
@@ -137,12 +138,11 @@ $planGood=Get-ClaudeFlowStepPlan -Record $record -Discovery $discoveryGood
 $planGood.Data.SnapshotPath = Join-Path ([IO.Path]::GetTempPath()) 'p86-flow-good-snapshot.json'
 $planGood.Data.SnapshotTaken = $true
 Reset-ProjectionFixture
-$FixtureJob.properties.template.containers[0].image='example.invalid/projection@sha256:' + ('a' * 64)
-$FixtureJob.properties.template.containers[0].command=@()
-$FixtureJob.properties.template.containers[0].args=@()
 Capture { Invoke-ClaudeFlowStep -Record $record -Plan $planGood }
-Assert 'real Entitlement good evidence reaches admission with the plan target resource group' (($FixtureCalls -join "`n") -match 'az container exec -g rg-p84 -n aci-projtest-p84fixture')
-Assert 'real Entitlement good evidence writes only the plan gateway named value' (-not $Failure -and ($FixtureCalls -join "`n") -match 'az apim nv update -g rg-p84 --service-name apim-p84 --named-value-id entitlement-source --value projection')
+# P95: the flow switches through Invoke-ClaudeProjectionSwitch, which needs every receipt field; the
+# good path, through the real drift check to the one write, is in tests/Test-ProjectionSwitch.ps1.
+Assert 'real Entitlement refuses renewal evidence without every receipt field, before any Azure call' ($Failure -and $Output -match 'renewal evidence has no' -and $FixtureCalls.Count -eq 0)
+Assert 'real Entitlement writes no named value when the evidence is incomplete' (($FixtureCalls -join "`n") -notmatch 'apim nv update')
 
 $goodJob = $FixtureJob | ConvertTo-Json -Depth 20 | ConvertFrom-Json
 $goodJob.properties.template.containers[0].image = 'example.invalid/projection@sha256:' + ('a' * 64)
@@ -201,7 +201,17 @@ foreach($step in $steps) {
     Capture { & $testBlock }
     Assert "declined prerequisite aborts: $($step.Clauses[0].Item1.Extent.Text)" ($Failure -and $Output -match 'declined.*abort|declined.*stopp|declined.*no further|declined after admission') $Failure
 }
-Assert 'all eight prerequisite decisions are exercised' ($steps.Count -eq 8)
+Assert 'all eight deployment decisions are exercised' ($steps.Count -eq 8)
+# The ninth decision, the switch itself, lives in the shared switch (ADR-0050): declining it writes nothing.
+$switchSource = Get-Content (Join-Path $root 'scripts\ClaudeProjectionSwitch.ps1') -Raw
+$switchAst = [Management.Automation.Language.Parser]::ParseInput($switchSource, [ref]$tokens, [ref]$errors)
+$switchSteps = @($switchAst.FindAll({ param($node) $node -is [Management.Automation.Language.IfStatementAst] -and $node.Clauses[0].Item1.Extent.Text -match '-not \$PSCmdlet\.ShouldProcess' }, $true))
+foreach ($step in $switchSteps) {
+    $testBlock = [scriptblock]::Create($step.Extent.Text.Replace($step.Clauses[0].Item1.Extent.Text, '$true'))
+    Capture { & $testBlock }
+    Assert "declined switch aborts: $($step.Clauses[0].Item1.Extent.Text)" ($Failure -and $Output -match 'declined after admission' -and $Output -match 'unchanged') $Failure
+}
+Assert 'the switch decision is exercised' ($switchSteps.Count -eq 1)
 Assert 'deployer binds the comparison Boolean rather than an absent switch value' ($source -match '-FailOnDrift:\$true')
 }
 

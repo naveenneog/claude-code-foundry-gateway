@@ -274,6 +274,7 @@ Invoke-Check 'Azure CLI guide renewal block runs in order' 'Test-AzCommandsRenew
 Invoke-Check 'Projection sync package and its import closure' 'Test-ProjectionPackage.ps1'
 Invoke-Check 'Projection renewal templates and deploy script' 'Test-ProjectionRenewal.ps1'
 Invoke-Check 'Projection renewal runs reach admission offline' 'Test-ProjectionRenewalRuns.ps1'
+Invoke-Check 'Projection switch admission and switch function' 'Test-ProjectionSwitch.ps1'
     Invoke-Check 'Claude Desktop sign-in choice'             'Test-DesktopSignIn.ps1'
     Invoke-Check 'Workstation clients read what setup writes' 'Test-WorkstationClients.ps1' -SerialLane
     Invoke-Check 'Workstation model retirement agrees across shells' 'Test-WorkstationModels.ps1'

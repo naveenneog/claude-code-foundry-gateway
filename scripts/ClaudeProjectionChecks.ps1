@@ -64,7 +64,7 @@ function Format-ClaudeProjectionChecks {
 }
 
 function Stop-ClaudeProjectionSwitch {
-    throw 'Projection switching is unavailable in P84. Records expire at most 2 hours after scan start; every developer gets 503 after expiry without renewal. Switching needs the scheduled reconciler in P86 (docs/ROADMAP.md). No override is available.'
+    throw 'Projection switch refused: the deployment preflight does not switch. Records expire at most 2 hours after a scan, and every developer gets 503 after expiry without renewal, so a switch needs the renewal job''s evidence: deploy the job with scripts/Deploy-ClaudeProjectionRenewal.ps1, wait for three runs, then run scripts/Deploy-ClaudeProjection.ps1 -FlipAfterCleanCompare (ADR-0050).'
 }
 
 function ConvertFrom-ClaudeProjectionAdmissionResult {
@@ -123,6 +123,109 @@ function Assert-ClaudeProjectionJobDefinition {
     return $true
 }
 
+function Assert-ClaudeProjectionActionGroup {
+    # U119: ARM reports each receiver's status; receivers that are not Enabled receive nothing, and a
+    # disabled group sends to none of its receivers.
+    param([Parameter(Mandatory)]$ActionGroup, [Parameter(Mandatory)][string]$ActionGroupResourceId)
+    $redeploy = 'Remedy: confirm the alert address from the Azure Monitor email, or redeploy the renewal job with scripts/Deploy-ClaudeProjectionRenewal.ps1 -AlertEmail <address>, then rerun.'
+    if (-not $ActionGroup.properties -or $ActionGroup.properties.enabled -ne $true) {
+        throw "Projection switch refused: the renewal alerts' action group $ActionGroupResourceId is disabled, so no receiver gets an alert. Remedy: enable it under Monitor > Action groups, then rerun."
+    }
+    $enabled = @($ActionGroup.properties.emailReceivers | Where-Object { $_ -and [string]$_.status -eq 'Enabled' })
+    if (-not $enabled.Count) {
+        throw "Projection switch refused: the renewal alerts' action group $ActionGroupResourceId has no email receiver with status Enabled. $redeploy"
+    }
+    return $true
+}
+
+function Get-ClaudeProjectionJobSettings {
+    param([Parameter(Mandatory)]$Job)
+    $env = @{}
+    foreach ($e in @(@($Job.properties.template.containers)[0].env)) { if ($e.name) { $env[$e.name] = [string]$e.value } }
+    [pscustomobject]@{
+        ClientId = $env['AZURE_CLIENT_ID']; StandardGroupId = $env['PROJECTION_STANDARD_GROUP_ID']
+        PremiumGroupId = $env['PROJECTION_PREMIUM_GROUP_ID']; GatewayResourceId = $env['PROJECTION_GATEWAY_RESOURCE_ID']
+        AccountResourceId = $env['PROJECTION_ACCOUNT_RESOURCE_ID']; TenantId = $env['PROJECTION_TENANT_ID']
+    }
+}
+
+function Assert-ClaudeProjectionJobBinding {
+    # ADR-0050: the job must renew for the gateway being switched, from the groups the comparison
+    # read, as the identity the renewal receipt names, into the Cosmos account and tenant admission
+    # reads. Ids compare without case.
+    param([Parameter(Mandatory)]$Settings, [string]$GatewayResourceId, [string]$StandardGroupId, [string]$PremiumGroupId, [string]$IdentityClientId,
+        [string]$AccountResourceId, [string]$TenantId)
+    $redeploy = 'Remedy: redeploy the renewal job with scripts/Deploy-ClaudeProjectionRenewal.ps1 for this gateway and its tier groups, then wait for three runs.'
+    if ([string]$Settings.GatewayResourceId -notmatch '^/subscriptions/[0-9a-fA-F-]{36}/resourceGroups/[A-Za-z0-9._-]{1,90}/providers/Microsoft\.ApiManagement/service/[A-Za-z0-9-]{1,50}$') {
+        throw "Projection switch refused: the renewal job's gateway id '$($Settings.GatewayResourceId)' holds characters other than letters, digits, '.', '_' or '-', and the admission command passes it to az.cmd, which hands them to cmd.exe. $redeploy"
+    }
+    if ($GatewayResourceId -and $Settings.GatewayResourceId -ne $GatewayResourceId) {
+        throw "Projection switch refused: the renewal job reads business units from gateway $($Settings.GatewayResourceId), not $GatewayResourceId, the gateway being switched. $redeploy"
+    }
+    if ($StandardGroupId -and $Settings.StandardGroupId -ne $StandardGroupId) {
+        throw "Projection switch refused: the renewal job's standard tier group is $($Settings.StandardGroupId), not $StandardGroupId, the group the comparison read. $redeploy"
+    }
+    if ($PremiumGroupId -and $Settings.PremiumGroupId -ne $PremiumGroupId) {
+        throw "Projection switch refused: the renewal job's premium tier group is $($Settings.PremiumGroupId), not $PremiumGroupId, the group the comparison read. $redeploy"
+    }
+    if ($IdentityClientId -and $Settings.ClientId -ne $IdentityClientId) {
+        throw "Projection switch refused: the renewal job signs in as client id $($Settings.ClientId), not $IdentityClientId from the renewal receipt. $redeploy"
+    }
+    if ($AccountResourceId -and $Settings.AccountResourceId -ne $AccountResourceId) {
+        throw "Projection switch refused: the renewal job renews Cosmos account $($Settings.AccountResourceId), not $AccountResourceId, which admission reads and the renewal receipt names. $redeploy"
+    }
+    if ($TenantId -and $Settings.TenantId -ne $TenantId) {
+        throw "Projection switch refused: the renewal job writes records for tenant $($Settings.TenantId), not $TenantId from the renewal receipt. $redeploy"
+    }
+    return $true
+}
+
+function Get-ClaudeProjectionArmUrl {
+    # The management token goes with this request: the id must be an ARM resource id whose URL stays on
+    # management.azure.com ('@', '#', '?', '%' or '\' would move or cut it). A sub-path, such as
+    # config/appsettings/list, is letters in segments under that resource.
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$ResourceId, [Parameter(Mandatory)][string]$ApiVersion,
+        [ValidatePattern('^[A-Za-z]+(/[A-Za-z]+)*$')][string]$SubPath)
+    if ($ResourceId -notmatch '^/subscriptions/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/resourceGroups/[A-Za-z0-9._-]{1,90}/providers/[A-Za-z0-9.]{1,64}(/[A-Za-z0-9._-]{1,260}){2}$') {
+        throw "Projection switch refused: '$ResourceId' is not an Azure resource id, so the management token is not sent for it. Remedy: use the ids from the renewal receipt that scripts/Deploy-ClaudeProjectionRenewal.ps1 wrote."
+    }
+    $path = if ($SubPath) { "$ResourceId/$SubPath" } else { $ResourceId }
+    $url = "https://management.azure.com${path}?api-version=$ApiVersion"
+    $uri = [uri]$url
+    if ($uri.Host -ne 'management.azure.com' -or $uri.UserInfo -or $uri.AbsolutePath -ne $path) {
+        throw "Projection switch refused: '$path' does not stay on management.azure.com, so the management token is not sent for it."
+    }
+    return $url
+}
+
+function Assert-ClaudeProjectionResolverRedeploy {
+    # A gateway that serves from the projection sends every request to entitlement-resolver-url with a token
+    # for entitlement-resolver-audience. The deployer's normal run redeploys the site func-resolver-<prefix>
+    # (infra/resolver.bicep:110) and its sign-in settings before it points the gateway anywhere, so on such a
+    # gateway it continues only when that site is the one the gateway calls and the run keeps the app the
+    # gateway's tokens are for. The site is read live: a failed deployment leaves its record without outputs,
+    # and a rerun must still be able to retry it. Read-only, and run before the deployer's first write.
+    param([Parameter(Mandatory)][string]$ResourceGroup, [Parameter(Mandatory)][string]$ApimName,
+        [Parameter(Mandatory)][string]$NamePrefix, [Parameter(Mandatory)][string]$SubscriptionId,
+        [AllowEmptyString()][string]$ResolverAppId)
+    if ((Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-source' -FailOnError) -ne 'projection') { return }
+    $gatewayUrl = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-url' -FailOnError
+    $gatewayAudience = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-audience' -FailOnError
+    $siteName = "func-resolver-$NamePrefix"
+    $siteUrl = ''
+    $siteShown = ''
+    try {
+        $siteArmUrl = Get-ClaudeProjectionArmUrl -ResourceId "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroup/providers/Microsoft.Web/sites/$siteName" -ApiVersion '2024-04-01'
+        $siteHost = [string](Invoke-ClaudeNetworkAz @('rest', '--method', 'get', '--url', $siteArmUrl)).properties.defaultHostName
+        if ($siteHost) { $siteUrl = "https://$siteHost/api"; $siteShown = ", which serves $siteUrl" }
+    }
+    catch { $siteShown = ", which could not be read: $($_.Exception.Message)" }
+    if ($ResolverAppId -and "api://$ResolverAppId" -eq $gatewayAudience -and $siteUrl -and $siteUrl -eq $gatewayUrl) { return }
+    $runApp = if ($ResolverAppId) { "the app $ResolverAppId (api://$ResolverAppId)" } else { 'a new app registration' }
+    $appInAudience = $gatewayAudience -replace '^api://', ''
+    throw "Refusing to redeploy the resolver for -NamePrefix ${NamePrefix}: entitlement-source is projection, so every request goes to $gatewayUrl with a token for $gatewayAudience, and this run would redeploy the site $siteName$siteShown, to accept $runApp. This run of scripts/Deploy-ClaudeProjection.ps1 made no Azure writes; steps that ran before it, such as the gateway deployment in Install-ClaudeGateway.ps1, are not undone. Remedy: rerun scripts/Deploy-ClaudeProjection.ps1 with the -NamePrefix of the resolver at $gatewayUrl and -ResolverAppId $appInAudience, or, when that resolver has the installer's own -NamePrefix (the gateway's, when it reuses one), Install-ClaudeGateway.ps1 with -ProjectionResolverAppId $appInAudience; or return the gateway to named values first (refresh the lists with scripts/Sync-ClaudeAccess.ps1, check them with scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift, then set entitlement-source to named-value)."
+}
+
 function Assert-ClaudeProjectionAdmission {
     param(
         [Parameter(Mandatory)][string]$ResourceGroup,
@@ -134,22 +237,40 @@ function Assert-ClaudeProjectionAdmission {
         [Parameter(Mandatory)][string]$ImageDigest,
         [Parameter(Mandatory)][string]$EntryPoint,
         [Parameter(Mandatory)][string]$ActionGroupResourceId,
+        [string]$GatewayResourceId,
+        [string]$StandardGroupId,
+        [string]$PremiumGroupId,
+        [string]$IdentityClientId,
         [string]$Database = 'claude',
         [string]$Container = 'entitlement'
     )
     if ([string]::IsNullOrWhiteSpace($ActionGroupResourceId)) {
         throw 'Projection switch refused: renewal alerts have no action group with email receivers. Remedy: deploy the P86 action group and alerts, then wait for fresh evidence.'
     }
-    Write-Host '    Checking scheduled renewal evidence from Cosmos through the in-VNet runner (expected wait: about 60-90 minutes after the first successful 30-minute run).' -ForegroundColor DarkGray
-    $command = "node /work/sync/src/check-admission.mjs --cosmos https://$CosmosAccount.documents.azure.com:443/ --tenant $TenantId --account-resource-id $AccountResourceId --database $Database --container $Container --image-digest $ImageDigest --entrypoint `"$EntryPoint`" --action-group-resource-id $ActionGroupResourceId"
-    $raw = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $RunnerName -Command $command
-    $admission = ConvertFrom-ClaudeProjectionAdmissionResult -RawOutput $raw
-
+    # ARM first: an action group that alerts nobody, or a job that is not the tested one, refuses the
+    # switch before the runner reads Cosmos. The URLs are checked before the token exists.
+    $groupUrl = Get-ClaudeProjectionArmUrl -ResourceId $ActionGroupResourceId -ApiVersion '2023-01-01'
+    $jobUrl = Get-ClaudeProjectionArmUrl -ResourceId $ReconcilerResourceId -ApiVersion '2024-03-01'
     $token = Invoke-ClaudeNetworkAz @('account','get-access-token','--resource','https://management.azure.com')
-    if (-not $token.accessToken) { throw 'Projection switch refused: could not get a management-plane token to read the renewal job definition.' }
-    $job = Invoke-RestMethod -Method Get -Headers @{ Authorization = "Bearer $($token.accessToken)" } -Uri "https://management.azure.com${ReconcilerResourceId}?api-version=2024-03-01" -ErrorAction Stop
+    if (-not $token.accessToken) { throw 'Projection switch refused: could not get a management-plane token to read the renewal job definition. Remedy: sign in with az login to the tenant of the gateway, then rerun.' }
+    $headers = @{ Authorization = "Bearer $($token.accessToken)" }
+    try { $group = Invoke-RestMethod -Method Get -Headers $headers -Uri $groupUrl -ErrorAction Stop }
+    catch { throw "Projection switch refused: could not read the renewal alerts' action group ${ActionGroupResourceId}: $($_.Exception.Message) Remedy: check the receipt's action group id and the signed-in account's read access, then rerun." }
+    $null = Assert-ClaudeProjectionActionGroup -ActionGroup $group -ActionGroupResourceId $ActionGroupResourceId
+    try { $job = Invoke-RestMethod -Method Get -Headers $headers -Uri $jobUrl -ErrorAction Stop }
+    catch { throw "Projection switch refused: could not read the renewal job ${ReconcilerResourceId}: $($_.Exception.Message) Remedy: check the receipt's job id and the signed-in account's read access, or redeploy the renewal job with scripts/Deploy-ClaudeProjectionRenewal.ps1, which writes a new receipt, then rerun." }
     $null = Assert-ClaudeProjectionJobDefinition -Job $job -ImageDigest $ImageDigest
-    return $admission
+    $settings = Get-ClaudeProjectionJobSettings -Job $job
+    $null = Assert-ClaudeProjectionJobBinding -Settings $settings -GatewayResourceId $GatewayResourceId -StandardGroupId $StandardGroupId `
+        -PremiumGroupId $PremiumGroupId -IdentityClientId $IdentityClientId -AccountResourceId $AccountResourceId -TenantId $TenantId
+
+    Write-Host '    Checking scheduled renewal evidence from Cosmos through the in-VNet runner (expected wait: about 60-90 minutes after the first successful 30-minute run).' -ForegroundColor DarkGray
+    # The runner splits on spaces with no quoting, and az.cmd re-quotes for cmd.exe: the entry point,
+    # which holds a space, travels base64url-encoded.
+    $entryPointEncoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($EntryPoint)).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+    $command = "node /work/sync/src/check-admission.mjs --cosmos https://$CosmosAccount.documents.azure.com:443/ --tenant $TenantId --account-resource-id $AccountResourceId --database $Database --container $Container --image-digest $ImageDigest --entrypoint-base64url $entryPointEncoded --action-group-resource-id $ActionGroupResourceId --client-id $($settings.ClientId) --standard-group-id $($settings.StandardGroupId) --premium-group-id $($settings.PremiumGroupId) --gateway-resource-id $($settings.GatewayResourceId)"
+    $raw = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $RunnerName -Command $command
+    return (ConvertFrom-ClaudeProjectionAdmissionResult -RawOutput $raw)
 }
 
 function Invoke-ClaudeProjectionPreflight {

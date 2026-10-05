@@ -522,7 +522,7 @@ Assert 'the switch is constrained'               ($bicep -match "(?s)@allowed\(\
 # A redeploy that did not read the source back would return a migrated operator
 # to lists that stopped being maintained the moment they migrated.
 $inst = Get-Content (Join-Path $root 'Install-ClaudeGateway.ps1') -Raw
-Assert 'a redeploy preserves the source'         ($inst -match "named-value-id entitlement-source --query value")
+Assert 'a redeploy preserves the source'         ($inst -match "Get-ApimNamedValue[^\r\n]*-Id 'entitlement-source' -FailOnError" -and $inst -match 'entitlementSource=\$\(if \(\$entSrc\)')
 Assert 'and hands it back to the template'       ($inst -match 'entitlementSource=\$\(if \(\$entSrc\)')
 Assert 'the resolver settings survive too'       ($inst -match 'entitlementResolverUrl=\$\(if \(\$entUrl\)')
 Assert 'and it says so when migrated'            ($inst -match 'preserving entitlement source: projection')

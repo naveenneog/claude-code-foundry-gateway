@@ -51,6 +51,23 @@ function Reset-ProjectionFixture {
         }
     } | ConvertTo-Json -Depth 20 | ConvertFrom-Json
     $global:FixtureExecutions = @($FixtureExecution)
+    $global:FixtureRunnerFiles = @{}
+    # The resolver the gateway calls (entitlement-resolver-url/-audience) and the one deployed with the projection.
+    $global:FixtureResolverUrl = switch ($Case) {
+        'resolver-placeholder' { 'https://resolver-not-deployed.invalid' }
+        'resolver-other-url' { 'https://func-resolver-other.azurewebsites.net/api' }
+        'source-projection-other-url' { 'https://func-resolver-other.azurewebsites.net/api' }
+        default { 'https://func-resolver-p84fixture.azurewebsites.net/api' }
+    }
+    $global:FixtureResolverAudience = if ($Case -in 'resolver-other-audience', 'source-projection-other-audience') { 'api://00000000-0000-4000-8000-0000000000dd' } else { "api://$FixtureApp" }
+    $global:FixtureActionGroupId = "$FixtureRgId/providers/Microsoft.Insights/actionGroups/ag-projection-renewal"
+    $global:FixtureActionGroup = [pscustomobject]@{
+        id = $FixtureActionGroupId; type = 'Microsoft.Insights/ActionGroups'
+        properties = [pscustomobject]@{
+            enabled = ($Case -ne 'action-group-disabled')
+            emailReceivers = @([pscustomobject]@{ name = 'email-0'; emailAddress = 'ops@example.invalid'; status = $(if ($Case -eq 'action-group-no-email') { 'Disabled' } else { 'Enabled' }) })
+        }
+    }
     $global:LASTEXITCODE = 0
 }
 
@@ -72,6 +89,7 @@ function az {
         return (@{ id = $(if ($FixtureCase -eq 'wrong-rg') { "$FixtureRgId-other" } else { $FixtureRgId }); location = 'eastus2' } | ConvertTo-Json -Compress)
     }
     if ($line -like 'apim show*') {
+        if ($FixtureCase -eq 'apim-empty') { return '{}' }
         $id = if ($FixtureCase -eq 'wrong-subscription') { $FixtureGatewayId.Replace($FixtureSubscription, $FixtureTenant) } else { $FixtureGatewayId }
         $identity = if ($FixtureCase -eq 'no-identity') { @{} } else { @{ principalId = $FixtureGroupId; tenantId = $FixtureTenant } }
         if ($FixtureCase -eq 'wrong-tenant') { $identity.tenantId = $FixtureSubscription }
@@ -79,9 +97,44 @@ function az {
         return (@{ id = $id; identity = $identity; sku = @{ name = $sku } } | ConvertTo-Json -Depth 5 -Compress)
     }
     if ($line -like 'apim nv show*') {
+        if ($FixtureCase -eq 'nv-read-error') { $global:LASTEXITCODE = 1; return 'ERROR: (AuthorizationFailed) The client does not have authorization to perform action Microsoft.ApiManagement/service/namedValues/read.' }
+        $id = [string]$words[[array]::IndexOf($words, '--named-value-id') + 1]
+        $resolverValues = @{ 'entitlement-resolver-url' = $FixtureResolverUrl; 'entitlement-resolver-audience' = $FixtureResolverAudience }
+        if ($resolverValues.ContainsKey($id)) {
+            if ($line -match '--query name') { return $id }
+            if ($line -match '--query value') { return $resolverValues[$id] }
+            return (@{ name = $id; value = $resolverValues[$id]; secret = $false } | ConvertTo-Json -Compress)
+        }
         if ($line -match '--query name') { return 'entitlement-source' }
+        if ($FixtureCase -like 'source-projection*' -and $id -eq 'entitlement-source' -and $line -match '--query value') { return 'projection' }
         if ($line -match '--query value') { return 'named-value' }
         return (@{ name='entitlement-source'; value='named-value'; secret=$false } | ConvertTo-Json -Compress)
+    }
+    if ($line -like 'deployment group show*') {
+        $name = [string]$words[[array]::IndexOf($words, '-n') + 1]
+        if ($name -eq 'projection-resolver-p84fixture' -and $FixtureCase -notin 'resolver-missing', 'source-projection-failed-deployment') {
+            $cosmos = if ($FixtureCase -eq 'resolver-other-cosmos') { 'cosmos-other' } else { 'cosmos-p84fixture' }
+            return (@{
+                    parameters = @{ cosmosAccountName = @{ type = 'String'; value = $cosmos } }
+                    outputs = @{ siteName = @{ type = 'String'; value = 'func-resolver-p84fixture' }; resolverUrl = @{ type = 'String'; value = 'https://func-resolver-p84fixture.azurewebsites.net/api' }; resolverAudience = @{ type = 'String'; value = "api://$FixtureApp" } }
+                } | ConvertTo-Json -Depth 5 -Compress)
+        }
+        $global:LASTEXITCODE = 3
+        return "ERROR: (DeploymentNotFound) Deployment '$name' could not be found."
+    }
+    # The resolver site and its live application settings (Web Apps - Get; Web Apps - List Application Settings).
+    if ($line -match "^rest --method (get|post) --url https://management\.azure\.com/subscriptions/$FixtureSubscription/resourceGroups/rg-p84/providers/Microsoft\.Web/sites/func-resolver-p84fixture(/config/appsettings/list)?\?api-version=") {
+        if ($Matches[2]) {
+            if ($FixtureCase -eq 'resolver-settings-error') { $global:LASTEXITCODE = 1; return 'ERROR: (AuthorizationFailed) The client does not have authorization to perform action Microsoft.Web/sites/config/list/action.' }
+            $endpoint = if ($FixtureCase -eq 'resolver-live-cosmos') { 'https://cosmos-other.documents.azure.com:443/' } else { 'https://cosmos-p84fixture.documents.azure.com:443/' }
+            $database = if ($FixtureCase -eq 'resolver-live-database') { 'claude-old' } else { 'claude' }
+            $container = if ($FixtureCase -eq 'resolver-live-container') { 'entitlement-old' } else { 'entitlement' }
+            $tenant = if ($FixtureCase -eq 'resolver-live-tenant') { '00000000-0000-4000-8000-0000000000ff' } else { $FixtureTenant }
+            return (@{ name = 'appsettings'; properties = @{ COSMOS_ENDPOINT = $endpoint; COSMOS_DATABASE = $database; COSMOS_CONTAINER = $container; PROJECTION_TENANT_ID = $tenant; APPLICATIONINSIGHTS_CONNECTION_STRING = 'InstrumentationKey=00000000-0000-4000-8000-0000000000ee' } } | ConvertTo-Json -Depth 4 -Compress)
+        }
+        $hostName = if ($FixtureCase -eq 'resolver-live-host') { 'func-resolver-p84fixture-a1b2.eastus2-01.azurewebsites.net' } else { 'func-resolver-p84fixture.azurewebsites.net' }
+        if ($FixtureCase -eq 'source-projection-no-site') { $global:LASTEXITCODE = 3; return "ERROR: (ResourceNotFound) The Resource 'Microsoft.Web/sites/func-resolver-p84fixture' under resource group 'rg-p84' was not found." }
+        return (@{ name = 'func-resolver-p84fixture'; properties = @{ defaultHostName = $hostName; state = 'Running' } } | ConvertTo-Json -Depth 4 -Compress)
     }
     if ($line -like 'apim nv update*' -or $line -like 'apim nv create*') {
         return ''
@@ -166,6 +219,27 @@ function az {
     }
     if ($line -like 'container exec*') {
         if ($FixtureCase -eq 'runner-exit') { $global:LASTEXITCODE = 9; return 'runner transport failed' }
+        $command = [string]$words[[array]::IndexOf($words, '--exec-command') + 1]
+        # az.cmd re-quotes its arguments for cmd.exe, so an embedded quote splits the command (measured with
+        # the real az.cmd in P95 council round 1: "ERROR: unrecognized arguments").
+        if ($command.Contains('"')) { $global:LASTEXITCODE = 2; return "ERROR: unrecognized arguments: $command" }
+        # Send-RunnerFile: an empty temp file, base64url chunks appended, then the decoded file's SHA-256.
+        if ($command -match "^node -e require\('fs'\)\.mkdirSync\('[^']*',\{recursive:true\}\);require\('fs'\)\.writeFileSync\('([^']+)',''\)$") {
+            $global:FixtureRunnerFiles[$Matches[1]] = [Text.StringBuilder]::new(); return ''
+        }
+        if ($command -match "^node -e require\('fs'\)\.appendFileSync\('([^']+)','([^']*)'\)$") { $null = $global:FixtureRunnerFiles[$Matches[1]].Append($Matches[2]); return '' }
+        if ($command -match "^node -e f=require\('fs'\);f\.writeFileSync\('[^']+',Buffer\.from\(f\.readFileSync\('([^']+)','utf8'\),'base64url'\)\)") {
+            $b64 = $global:FixtureRunnerFiles[$Matches[1]].ToString().Replace('-', '+').Replace('_', '/')
+            $b64 += '=' * ((4 - $b64.Length % 4) % 4)
+            return [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Convert]::FromBase64String($b64))).Replace('-', '').ToLower()
+        }
+        # apply-projection.mjs --compare prints ok:false with the differences when the projection and the gateway disagree.
+        if ($FixtureCase -eq 'compare-differs' -and $command -match 'apply-projection\.mjs .*--compare ') { return '{"ok":false,"mode":"compare","compared":2,"differences":1,"byKind":{"missing":1}}' }
+        if ($FixtureCase -eq 'compare-error' -and $command -match 'apply-projection\.mjs .*--compare ') { $global:LASTEXITCODE = 0; return '{"ok":false,"error":"Cosmos read failed: 403 Forbidden"}' }
+        if ($FixtureCase -eq 'compare-no-mode' -and $command -match 'apply-projection\.mjs .*--compare ') { return '{"ok":true}' }
+        # The summaries the real scripts print last (sync/src/apply-projection.mjs, sync/src/check-admission.mjs).
+        if ($command -match 'apply-projection\.mjs .*--compare ') { return '{"ok":true,"mode":"compare","gateway":"apim-p84","compared":1,"projectionRecords":1,"differences":0,"byKind":{},"sample":[]}' }
+        if ($command -match 'check-admission\.mjs ') { return '{"ok":true,"newestFinishedAt":"2026-10-05T11:00:00.000Z","oldestExpiresAt":1791205200,"generations":3,"mode":"projection-admission","statuses":3,"entitlementRecords":1}' }
         return '{"ok":true}'
     }
     throw "UNEXPECTED AZURE CALL (offline fixture): $line"
@@ -238,6 +312,10 @@ function Invoke-RestMethod {
         $job = $FixtureJob | ConvertTo-Json -Depth 20 | ConvertFrom-Json
         $job.id = $foreignId
         return $job
+    }
+    if ($url -match '^https://management\.azure\.com/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\.Insights/actionGroups/[^/?]+\?api-version=') {
+        if ($FixtureCase -eq 'action-group-error') { throw 'ARM 404 ResourceNotFound: the action group was not found.' }
+        return $FixtureActionGroup
     }
     if ($url -eq "https://management.azure.com${FixtureJobId}?api-version=2024-03-01") {
         if ($FixtureCase -eq 'job-error') { throw 'ARM 403 job read denied' }

@@ -268,17 +268,20 @@ $flow = Get-Content (Join-Path $root 'scripts\flow\Entitlement.ps1') -Raw
 $register = Get-Content (Join-Path $root 'tests\Test-All.ps1') -Raw
 Assert 'offline check is registered' ($register -match "'Test-ProjectionPreflight.ps1'")
 Assert 'deployer checks before its first Azure write' ($deploy -match '(?s)Invoke-ClaudeProjectionPreflight.*if \(\$PreflightOnly\).*New-ClaudeProjectionResolverApp')
-Assert 'deployer switches only through P86 admission' ($deploy -match 'Assert-ClaudeProjectionAdmission' -and $deploy -match 'Set-ApimNamedValue' -and $deploy -match 'RenewalActionGroupResourceId')
+$switchText = Get-Content (Join-Path $root 'scripts\ClaudeProjectionSwitch.ps1') -Raw
+Assert 'deployer switches only through the shared switch, which writes after P86 admission' ($deploy -match 'Invoke-ClaudeProjectionSwitch' -and $deploy -notmatch "Set-ApimNamedValue[^\r\n]*-Id 'entitlement-source'" -and
+    $deploy -match 'RenewalActionGroupResourceId' -and $switchText -match "(?s)Assert-ClaudeProjectionAdmission.*Set-ApimNamedValue[^\r\n]*-Id 'entitlement-source'")
 Assert 'both runner steps use the checked result parser' ([regex]::Matches($deploy, 'ConvertFrom-ClaudeRunnerResult').Count -eq 2)
 Assert 'projection sync rejects PS 5.1 explicitly' ($sync -match 'Assert-ClaudeProjectionPowerShell|PSVersion.*-lt 7' -and $sync -match 'pwsh|ClaudeProjectionChecks')
 Assert 'installer still forwards a supplied resolver app separately from switch admission' ($installer -match 'ProjectionResolverAppId' -and $installer -match "'-ResolverAppId'" -and $installer -match 'ProjectionRenewalActionGroupResourceId')
 Assert 'installer refuses missing renewal evidence before foundation writes' ($installer -match '(?s)if \(\$FlipProjectionAfterCleanCompare\).*Projection switch refused.*az group create')
-Assert 'flow forwards P86 admission claims before writing projection' ($flow -match 'Assert-ClaudeProjectionAdmission' -and $flow -match 'reconcilerResourceId' -and $flow -match '-Value \$Plan\.Data\.Desired')
+Assert 'flow switches to the projection only through the shared switch; its own write is the rollback' ($flow -match "(?s)if \(\`$Plan\.Data\.Desired -eq 'projection'\) \{.*?Invoke-ClaudeProjectionSwitch .*?-Backup \`$snapshotGate.*?\}\s*else \{.*?Set-ApimNamedValue" -and
+    ([regex]::Matches($flow, 'Set-ApimNamedValue')).Count -eq 1)
 Assert 'AUM selected group lookup reuses positive Graph collection semantics' ((Get-Content (Join-Path $root 'scripts\Sync-AumMembership.ps1') -Raw) -match 'Get-ClaudeGraphGroup')
 Assert 'projection sync uses the checked Graph token helper' ($sync -match '\$graphToken = Get-GraphToken')
 Assert 'per-run deploy files are not keyed by PID alone' ($deploy -notmatch '\$NamePrefix-\$PID' -and $deploy -match 'NewGuid')
 Assert 'ARM-only admission and its locale-sensitive timestamp parsing are removed' ((Get-Content $checksPath -Raw) -notmatch 'function Assert-ClaudeProjectionReconciler|Get-ClaudeProjectionContainerSignature|DateTimeOffset\]::TryParse')
-Assert 'flow writes the desired entitlement source only after admission' ($flow -match '-Value \$Plan\.Data\.Desired' -and $flow -match 'Assert-ClaudeProjectionAdmission')
+Assert "flow's projection write happens inside the shared switch, after admission" ($flow -match 'Invoke-ClaudeProjectionSwitch' -and $switchText -match "(?s)Assert-ClaudeProjectionAdmission.*Set-ApimNamedValue[^\r\n]*-Id 'entitlement-source'")
 Assert 'the Entra comparison explicitly fails on drift' ($deploy -match 'Compare-ClaudeEntitlement.ps1[\s\S]+?-ExportGatewayPath \$gateway -FailOnDrift:\$true')
 $parseErrors = $null; $tokens = $null
 $deployAst = [Management.Automation.Language.Parser]::ParseInput($deploy, [ref]$tokens, [ref]$parseErrors)
@@ -291,11 +294,14 @@ Expect-Failure 'failed Cosmos role assignment stops before runner apply' {
 
 . (Join-Path $root 'scripts\flow\Entitlement.ps1')
 $entRecord = [pscustomobject]@{ schemaVersion=2; decisions=[pscustomobject]@{ entitlementStore=[pscustomobject]@{ target='projection' } }; history=@() }
-$entDiscovery = [pscustomobject]@{ resourceGroup='rg-p84'; apimName='apim-p84'; location='eastus2'; sku='BasicV2'; subscriptionId=$FixtureSubscription; namedValues=@{ 'entitlement-source'='named-value' }; cleanComparison=$true }
+$entDiscovery = [pscustomobject]@{ resourceGroup='rg-p84'; apimName='apim-p84'; location='eastus2'; sku='BasicV2'; subscriptionId=$FixtureSubscription; namedValues=@{ 'entitlement-source'='named-value' } }
 $plan = Get-ClaudeFlowStepPlan -Record $entRecord -Discovery $entDiscovery
-Expect-Failure 'actual Entitlement refuses a clean compare with no renewal evidence before backup' { Invoke-ClaudeFlowStep -Record $entRecord -Plan $plan } 'P86 admission needs renewal runner'
-$plan.Data.CleanComparison = $false
-Expect-Failure 'actual Entitlement also refuses a dirty comparison without renewal evidence' { Invoke-ClaudeFlowStep -Record $entRecord -Plan $plan } 'P86 admission needs renewal runner'
+Expect-Failure 'actual Entitlement refuses without renewal evidence before backup' { Invoke-ClaudeFlowStep -Record $entRecord -Plan $plan } 'P86 admission needs renewal runner'
+# P95 removed the flow's clean-comparison flag (the shared switch runs the compare); the refusal now
+# carries the reason discovery gives.
+$entDiscovery | Add-Member renewalProblem 'no renewal receipt under onboarding/ names gateway apim-p84.' -Force
+$plan = Get-ClaudeFlowStepPlan -Record $entRecord -Discovery $entDiscovery
+Expect-Failure 'actual Entitlement names the reason discovery found no renewal evidence' { Invoke-ClaudeFlowStep -Record $entRecord -Plan $plan } 'no renewal receipt under onboarding/ names gateway apim-p84'
 $entRecord.decisions.entitlementStore | Add-Member reconcilerResourceId $FixtureJobId
 $plan = Get-ClaudeFlowStepPlan -Record $entRecord -Discovery $entDiscovery
 Assert 'flow plan explains evidence-gated admission rather than preserving an approving id' (($plan.Implications -join ' ') -match 'Cosmos evidence')

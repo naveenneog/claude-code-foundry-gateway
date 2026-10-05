@@ -171,6 +171,7 @@ export function toStatusDocument({
   reconciliation,
   startedAt,
   finishedAt,
+  settings = null,
 }) {
   if (!reconciliation || !GUID.test(reconciliation.reconciliationGeneration ?? '')) {
     throw new Error('status requires a reconciliation generation');
@@ -199,7 +200,26 @@ export function toStatusDocument({
     reconciliationGeneration: reconciliation.reconciliationGeneration,
     lastVerifiedAt: reconciliation.lastVerifiedAt,
     expiresAt: reconciliation.expiresAt,
+    settings: settings ? normalizeJobSettings(settings) : null,
   };
+}
+
+const SETTING_KEYS = ['clientId', 'standardGroupId', 'premiumGroupId', 'gatewayResourceId'];
+
+/**
+ * The job settings a status record carries and admission binds evidence to (ADR-0050): the
+ * identity's client id, the tier group object ids (premium may be 'none') and the gateway id.
+ * Azure ids compare without case. Null when any is missing.
+ */
+export function normalizeJobSettings(settings = {}) {
+  const values = SETTING_KEYS.map((key) => settings?.[key]);
+  if (values.some((value) => typeof value !== 'string' || !value.trim())) return null;
+  return Object.fromEntries(SETTING_KEYS.map((key, i) => [key, values[i].trim().toLowerCase()]));
+}
+
+function sameSettings(recorded, expected) {
+  const normalized = normalizeJobSettings(recorded ?? {});
+  return Boolean(normalized && expected) && SETTING_KEYS.every((key) => normalized[key] === expected[key]);
 }
 
 const GUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
@@ -275,7 +295,7 @@ export function evaluateProjectionAdmission({
   }
   const expectedEntry = expected.entrypoint ?? '';
   const cutoff = now.getTime() - historyWindowSeconds * 1000;
-  const valid = statuses
+  const destination = statuses
     .filter(isStatusRecord)
     .filter((s) => s.tenantId === expected.tenantId &&
       s.accountResourceId === expected.accountResourceId &&
@@ -284,9 +304,15 @@ export function evaluateProjectionAdmission({
     .filter((s) => !s.dryRun && !s.commandOverride)
     .filter((s) => !expected.imageDigest || s.imageDigest === expected.imageDigest)
     .filter((s) => !expectedEntry || s.entrypoint === expectedEntry)
-    .filter((s) => Date.parse(s.finishedAt) >= cutoff)
+    .filter((s) => Date.parse(s.finishedAt) >= cutoff);
+  // Evidence counts only when the job wrote it under the settings the job definition now carries.
+  const valid = (expected.settings ? destination.filter((s) => sameSettings(s.settings, expected.settings)) : destination)
     .sort((a, b) => Date.parse(a.finishedAt) - Date.parse(b.finishedAt));
-  if (!valid.length) return refuse('no destination-bound Cosmos renewal evidence for this tenant and container');
+  if (!valid.length) {
+    return refuse(destination.length
+      ? 'renewal evidence was written under other job settings (tier groups, gateway or identity); wait for three runs under the current settings'
+      : 'no destination-bound Cosmos renewal evidence for this tenant and container');
+  }
   const newest = valid.at(-1);
   const newestAge = (now.getTime() - Date.parse(newest.finishedAt)) / 1000;
   if (!Number.isFinite(newestAge) || newestAge > maxNewestAgeSeconds) {
