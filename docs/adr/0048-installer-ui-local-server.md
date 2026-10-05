@@ -45,7 +45,7 @@ bootstrap URL token is never accepted as the session cookie (`tools/installer-ui
 CSRF token and `live` or `static` mode. JSON POST routes require `Content-Type: application/json`,
 state-changing routes require `x-csrf-token`, child-spawning routes check Origin and Fetch Metadata,
 the server sends no CORS header, and `OPTIONS` is refused (`tools/installer-ui/server.mjs:393-418`;
-`tools/installer-ui/server.mjs:318-324`; `tools/installer-ui/http-helpers.mjs:23-53`;
+`tools/installer-ui/server.mjs:321-328`; `tools/installer-ui/http-helpers.mjs:23-53`;
 `tools/installer-ui/http-helpers.mjs:80-112`).
 
 The server exposes fixed routes. The page uses classic deferred scripts so the same
