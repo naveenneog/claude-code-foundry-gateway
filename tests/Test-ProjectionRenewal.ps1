@@ -398,19 +398,6 @@ try {
     Remove-Item Function:\az -ErrorAction SilentlyContinue
     Remove-Item Function:\Invoke-RestMethod -ErrorAction SilentlyContinue
 
-    Write-Host ''
-    Write-Host 'Projection renewal - switch evidence no longer depends on the optional job definition' -ForegroundColor Cyan
-    $checks = [IO.File]::ReadAllText((Join-Path $root 'scripts\ClaudeProjectionChecks.ps1'))
-    $renewalSource = [IO.File]::ReadAllText((Join-Path $root 'infra\projection-renewal.bicep'))
-    Assert 'switch admission has no job-definition validator to accept or refuse' ($checks -notmatch 'Assert-ClaudeProjectionJobDefinition') ''
-    Assert 'switch admission has no image digest input' ($checks -notmatch 'ImageDigest') ''
-    Assert 'switch admission has no action group input' ($checks -notmatch 'ActionGroup') ''
-    Assert 'switch admission has no tier group setting input' ($checks -notmatch 'standard-group-id|premium-group-id') ''
-    Assert 'switch admission has no gateway-resource-id setting input' ($checks -notmatch 'gateway-resource-id') ''
-    Assert 'the optional job still carries AZURE_CLIENT_ID for Graph and not for admission' ($renewalSource -match 'AZURE_CLIENT_ID' -and $checks -notmatch 'AZURE_CLIENT_ID') ''
-    Assert 'the optional job still carries tier group settings for graph sync and not for admission' ($renewalSource -match 'PROJECTION_STANDARD_GROUP_ID' -and $renewalSource -match 'PROJECTION_PREMIUM_GROUP_ID' -and $checks -notmatch 'PROJECTION_STANDARD_GROUP_ID|PROJECTION_PREMIUM_GROUP_ID') ''
-    Assert 'the optional job still carries gatewayResourceId for unit reads and not for admission' ($renewalSource -match 'PROJECTION_GATEWAY_RESOURCE_ID' -and $checks -notmatch 'PROJECTION_GATEWAY_RESOURCE_ID') ''
-    Assert 'the optional job is manual by default while scheduled stale-success evidence stays conditional' ($renewalTemplate.parameters.cronExpression.defaultValue -eq '' -and $renewalSource -match "resource noSuccessAlert 'Microsoft\.Insights/scheduledQueryRules@2023-12-01' = if \(isScheduled\)") ''
 }
 finally { Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue }
 

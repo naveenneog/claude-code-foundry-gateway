@@ -212,6 +212,29 @@ export function normalizeJobSettings(settings = {}) {
   return Object.fromEntries(SETTING_KEYS.map((key, i) => [key, values[i].trim().toLowerCase()]));
 }
 
+export function validateJobSettings(env = {}) {
+  const remedy = 'Remedy: redeploy with scripts/Deploy-ClaudeProjectionRenewal.ps1.';
+  const problems = [];
+  const objectId = (value) => GUID.test(value ?? '');
+  const apimId = (value) => typeof value === 'string' &&
+    /^\/subscriptions\/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\/resourceGroups\/[^/]+\/providers\/Microsoft\.ApiManagement\/service\/[^/]+$/i.test(value);
+  const clientId = env.AZURE_CLIENT_ID;
+  const standard = env.PROJECTION_STANDARD_GROUP_ID;
+  const premium = env.PROJECTION_PREMIUM_GROUP_ID;
+  const gateway = env.PROJECTION_GATEWAY_RESOURCE_ID;
+  if (!objectId(clientId)) problems.push(`AZURE_CLIENT_ID must be the job identity client id GUID. ${remedy}`);
+  if (!objectId(standard)) problems.push(`PROJECTION_STANDARD_GROUP_ID must be the standard tier group object id GUID, not a group name. ${remedy}`);
+  if (typeof premium !== 'string' || !premium.trim()) {
+    problems.push(`PROJECTION_PREMIUM_GROUP_ID must be the premium tier group object id GUID, or none. ${remedy}`);
+  } else if (premium !== 'none' && !objectId(premium)) {
+    problems.push(`PROJECTION_PREMIUM_GROUP_ID must be the premium tier group object id GUID, or none. ${remedy}`);
+  } else if (objectId(standard) && premium.toLowerCase() === standard.toLowerCase()) {
+    problems.push(`PROJECTION_PREMIUM_GROUP_ID must not equal PROJECTION_STANDARD_GROUP_ID; one group for both tiers would make premium take every standard member. ${remedy}`);
+  }
+  if (!apimId(gateway)) problems.push(`PROJECTION_GATEWAY_RESOURCE_ID must be a Microsoft.ApiManagement/service resource id. ${remedy}`);
+  return problems;
+}
+
 const GUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
 /**

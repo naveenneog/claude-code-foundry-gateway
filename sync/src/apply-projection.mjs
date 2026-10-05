@@ -33,7 +33,7 @@
  *        [--whatif] [--allow-empty] [--keep-orphans]
  */
 import { readFileSync } from 'node:fs';
-import { mergeMembership, planChanges, toDocument, toStatusDocument, validateSnapshot, validateTargetedSnapshot, compareWithGateway, compareWithSnapshot, createReconciliation, normalizeJobSettings } from './plan.mjs';
+import { mergeMembership, planChanges, toDocument, toStatusDocument, validateSnapshot, validateTargetedSnapshot, compareWithGateway, compareWithSnapshot, createReconciliation, normalizeJobSettings, validateJobSettings } from './plan.mjs';
 import { resolveGroupId, getTransitiveMembers } from './graph.mjs';
 import { readGatewayUnits, sortUnitsByDepth } from './business-units.mjs';
 import { RENEWAL_SUCCEEDED, RENEWAL_FAILED } from './events.mjs';
@@ -72,6 +72,13 @@ async function step(stage, work) {
 if (!endpoint) fail('--cosmos is required');
 if (!tenantId) fail('--tenant is required: every record is stamped with it and the resolver refuses another');
 const accountResourceId = resolveAccountResourceId({ endpoint, flagValue: accountResourceIdFlag, envValue: process.env.PROJECTION_ACCOUNT_RESOURCE_ID });
+const jobSettingsRun = renewal &&
+  ['PROJECTION_STANDARD_GROUP_ID', 'PROJECTION_PREMIUM_GROUP_ID', 'PROJECTION_GATEWAY_RESOURCE_ID'].some((key) => process.env[key] !== undefined) &&
+  !opt('--standard') && !opt('--premium');
+if (jobSettingsRun) {
+  const problems = validateJobSettings(process.env);
+  if (problems.length) fail(`job settings refused: ${problems.join('; ')}`, 1, 'config');
+}
 
 const { DefaultAzureCredential } = await import('@azure/identity');
 const { CosmosClient } = await import('@azure/cosmos');
