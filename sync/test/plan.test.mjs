@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mergeMembership, planChanges, oldestRetainedExpiry, toDocument, validateSnapshot, createReconciliation } from '../src/plan.mjs';
+import { mergeMembership, planChanges, oldestRetainedExpiry, toDocument, validateSnapshot, validateTargetedSnapshot, compareWithSnapshot, createReconciliation } from '../src/plan.mjs';
 const lease = createReconciliation({ verifiedAt: new Date() });
 
 const A = '11111111-1111-1111-1111-111111111111';
@@ -78,11 +78,13 @@ test('the oldest retained expiry holds for a directory of 300,000 entitled ident
 });
 
 test('the document is a point-read shape: id and partition key are the oid', () => {
-  const d = toDocument({ oid: A, tier: 'premium', businessUnit: 'sales' }, { tenantId: T, mappingVersion: 7 });
+  const d = toDocument({ oid: A, tier: 'premium', businessUnit: 'sales' }, { tenantId: T, mappingVersion: 7, reconciliation: lease });
   assert.equal(d.id, A);
   assert.equal(d.oid, A);
   assert.equal(d.tenantId, T);
   assert.equal(d.effectiveFrom, null);
+  assert.equal(d.reconciliationGeneration, lease.reconciliationGeneration);
+  assert.equal('expiresAt' in d, false);
 });
 
 test('the flip comparison names what each identity would experience', async () => {
@@ -123,4 +125,34 @@ test('a snapshot with an unknown tier, a bad oid or a duplicate is refused', () 
   assert.match(validateSnapshot({ ...base, records: [{ oid: 'not-a-guid', tier: 'standard' }] }).join(), /not a guid/);
   assert.match(validateSnapshot({ ...base, records: [{ oid: A, tier: 'standard' }, { oid: A, tier: 'premium' }] }).join(), /twice/);
   assert.match(validateSnapshot({ tenantId: T, records: [] }).join(), /kind/);
+});
+
+test('targeted snapshots must name one matching user record or no record', () => {
+  const base = { kind: 'claude-entitlement-snapshot', tenantId: T, scope: 'user', user: A, ...lease };
+  assert.deepEqual(validateTargetedSnapshot({ ...base, records: [{ oid: A, tier: 'standard' }] }, A, { tenantId: T }), []);
+  assert.deepEqual(validateTargetedSnapshot({ ...base, records: [] }, A, { tenantId: T }), []);
+  assert.match(validateTargetedSnapshot({ ...base, scope: 'full', records: [{ oid: A, tier: 'standard' }] }, A, { tenantId: T }).join(), /scope 'user'/);
+  assert.match(validateTargetedSnapshot({ ...base, user: B, records: [{ oid: A, tier: 'standard' }] }, A, { tenantId: T }).join(), /does not match/);
+  assert.match(validateTargetedSnapshot({ ...base, records: [{ oid: B, tier: 'standard' }] }, A, { tenantId: T }).join(), /another user/);
+  assert.match(validateTargetedSnapshot({ ...base, records: [{ oid: A, tier: 'standard' }, { oid: B, tier: 'standard' }] }, A, { tenantId: T }).join(), /more than one/);
+});
+
+test('full snapshot comparison uses resolver validation and reports tier and unit drift', () => {
+  const snap = { kind: 'claude-entitlement-snapshot', tenantId: T, scope: 'full', ...lease, records: [
+    { oid: A, tier: 'standard', businessUnit: 'sales' },
+    { oid: B, tier: 'premium', businessUnit: '' },
+  ] };
+  const live = [
+    { oid: A, tenantId: T, tier: 'standard', businessUnit: 'finance', lastVerifiedAt: lease.lastVerifiedAt, reconciliationGeneration: lease.reconciliationGeneration },
+    { oid: C, tenantId: T, tier: 'standard', businessUnit: '', lastVerifiedAt: lease.lastVerifiedAt, reconciliationGeneration: lease.reconciliationGeneration },
+    { oid: '44444444-4444-4444-4444-444444444444', tenantId: T, tier: 'platinum', lastVerifiedAt: lease.lastVerifiedAt, reconciliationGeneration: lease.reconciliationGeneration },
+  ];
+  const r = compareWithSnapshot(snap, live, { tenantId: T });
+  assert.equal(r.compared, 3);
+  assert.deepEqual(Object.fromEntries(r.differences.map((d) => [d.oid, d.kind])), {
+    [A]: 'unit-drift',
+    [B]: 'missing-record',
+    [C]: 'would-delete-record',
+  });
+  assert.match(compareWithSnapshot({ ...snap, scope: 'user' }, live, { tenantId: T }).problems.join(), /full snapshot/);
 });

@@ -56,13 +56,8 @@ export function toEntitlement(doc, { tenantId, now = new Date() } = {}) {
   }
 
   const verified = Date.parse(doc.lastVerifiedAt);
-  if (!isObjectId(doc.reconciliationGeneration) || !Number.isFinite(verified) ||
-      verified > now.getTime() || !Number.isInteger(doc.expiresAt) ||
-      doc.expiresAt > Math.floor(verified / 1000) + 7200) {
-    return { ok: false, status: 503, reason: 'projection freshness is invalid; run a complete reconciliation' };
-  }
-  if (doc.expiresAt <= Math.floor(now.getTime() / 1000)) {
-    return { ok: false, status: 503, reason: 'projection expired; its directory reconciliation must run again' };
+  if (!isObjectId(doc.reconciliationGeneration) || !Number.isFinite(verified) || verified > now.getTime()) {
+    return { ok: false, status: 503, reason: 'projection record is invalid; run a full sync' };
   }
 
   // A record that has not taken effect is not yet entitlement. This is what
@@ -89,7 +84,6 @@ export function toEntitlement(doc, { tenantId, now = new Date() } = {}) {
       mappingVersion: doc.mappingVersion ?? 0,
       effectiveFrom: doc.effectiveFrom ?? null,
       reconciliationGeneration: doc.reconciliationGeneration,
-      expiresAt: doc.expiresAt,
     },
   };
 }

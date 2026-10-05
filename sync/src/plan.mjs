@@ -15,7 +15,7 @@ export const TIERS_BY_PRECEDENCE = ['premium', 'standard'];
 export const MAX_PROJECTION_AGE_SECONDS = 7200;
 export const STATUS_RECORD_TYPE = 'projection-reconciliation-status';
 export const STATUS_PARTITION_PREFIX = 'projection-status::';
-export const STATUS_TTL_SECONDS = 21600;
+export const STATUS_TTL_SECONDS = 604800;
 
 export function createReconciliation({ verifiedAt, now = new Date(), maxAgeSeconds = MAX_PROJECTION_AGE_SECONDS } = {}) {
   const start = new Date(verifiedAt).getTime();
@@ -133,7 +133,8 @@ export function toDocument(r, { tenantId, mappingVersion, reconciliation }) {
     businessUnit: r.businessUnit ?? '',
     mappingVersion,
     effectiveFrom: null,
-    ...reconciliation,
+    reconciliationGeneration: reconciliation?.reconciliationGeneration,
+    lastVerifiedAt: reconciliation?.lastVerifiedAt,
   };
 }
 
@@ -167,10 +168,12 @@ export function toStatusDocument({
   commandOverride = false,
   memberCounts = {},
   writeCounts = {},
-  oldestExpiresAt,
   reconciliation,
   startedAt,
   finishedAt,
+  mode = 'full',
+  executor = 'runner',
+  ok = true,
   settings = null,
 }) {
   if (!reconciliation || !GUID.test(reconciliation.reconciliationGeneration ?? '')) {
@@ -192,14 +195,15 @@ export function toStatusDocument({
     command,
     dryRun: Boolean(dryRun),
     commandOverride: Boolean(commandOverride),
+    ok: Boolean(ok),
+    mode,
+    executor,
     memberCounts,
     writeCounts,
-    oldestExpiresAt,
     startedAt,
     finishedAt,
     reconciliationGeneration: reconciliation.reconciliationGeneration,
     lastVerifiedAt: reconciliation.lastVerifiedAt,
-    expiresAt: reconciliation.expiresAt,
     settings: settings ? normalizeJobSettings(settings) : null,
   };
 }
@@ -245,7 +249,7 @@ export function compareWithGateway(gateway, records, { tenantId, now = new Date(
   const byOid = new Map();
   for (const r of records) {
     if (isStatusRecord(r)) continue;
-    if (!tenantId || r.tenantId !== tenantId || freshnessProblems(r, now).length) continue;
+    if (!toEntitlement(r, { tenantId, now }).ok) continue;
     byOid.set(r.oid ?? r.id, r);
   }
   const all = new Set([...premium, ...standard, ...byOid.keys()]);
@@ -269,122 +273,106 @@ export function compareWithGateway(gateway, records, { tenantId, now = new Date(
   return { compared: all.size, differences };
 }
 
+export function compareWithSnapshot(snapshot, records, { tenantId, now = new Date() } = {}) {
+  const problems = validateSnapshot(snapshot, { tenantId, now });
+  if (snapshot?.scope && snapshot.scope !== 'full') problems.push("--compare-snapshot expects a full snapshot");
+  if (problems.length) return { refused: true, problems };
+  const expected = new Map((snapshot.records ?? []).map((r) => [r.oid, { tier: r.tier, businessUnit: r.businessUnit ?? '' }]));
+  const live = new Map();
+  for (const r of records ?? []) {
+    if (isStatusRecord(r)) continue;
+    if (!toEntitlement(r, { tenantId, now }).ok) continue;
+    live.set(r.oid ?? r.id, { tier: r.tier, businessUnit: r.businessUnit ?? '' });
+  }
+  const all = new Set([...expected.keys(), ...live.keys()]);
+  const differences = [];
+  for (const oid of all) {
+    const want = expected.get(oid);
+    const got = live.get(oid);
+    if (!want && got) differences.push({ oid, kind: 'would-delete-record', snapshot: 'absent', projection: got.tier });
+    else if (want && !got) differences.push({ oid, kind: 'missing-record', snapshot: want.tier, projection: 'absent' });
+    else if (want.tier !== got.tier) differences.push({ oid, kind: 'tier-drift', snapshot: want.tier, projection: got.tier });
+    else if ((want.businessUnit ?? '') !== (got.businessUnit ?? '')) {
+      differences.push({ oid, kind: 'unit-drift', snapshot: want.businessUnit || '(unassigned)', projection: got.businessUnit || '(unassigned)' });
+    }
+  }
+  return { refused: false, compared: all.size, differences };
+}
+
+export function validateTargetedSnapshot(snap, userOid, { tenantId, now = new Date() } = {}) {
+  const problems = validateSnapshot(snap, { tenantId, now });
+  if (!GUID.test(userOid ?? '')) problems.push('--user is not a guid');
+  if (snap?.scope !== 'user') problems.push("targeted apply requires snapshot scope 'user'");
+  if (snap?.user !== userOid) problems.push('snapshot user does not match --user');
+  if ((snap?.records?.length ?? 0) > 1) problems.push('targeted snapshot carries more than one record');
+  for (const r of snap?.records ?? []) {
+    if (r.oid !== userOid) { problems.push('targeted snapshot contains a record for another user'); break; }
+  }
+  return problems;
+}
+
 export function evaluateProjectionAdmission({
   statuses = [],
   entitlementRecords,
   entitlementEvidence,
   expected = {},
-  job = {},
   now = new Date(),
-  minExpiryMarginSeconds = 3600,
-  maxNewestAgeSeconds = 2700,
-  historyWindowSeconds = 7200,
+  maxEvidenceAgeSeconds = 86400,
 } = {}) {
-  if (!expected.actionGroupResourceId && expected.actionGroupResourceId !== undefined) {
-    return refuse('missing action group; deploy alerts with email receivers before switching');
-  }
-  const image = job.image ?? '';
-  if (expected.imageDigest && image !== expected.imageDigest) {
-    return refuse('job image is not the tested pinned digest');
-  }
-  if ((job.command?.length ?? 0) || (job.args?.length ?? 0)) {
-    const text = [...(job.command ?? []), ...(job.args ?? [])].join(' ');
-    return refuse(/--whatif|--dry-run|whatif/i.test(text)
-      ? 'job definition contains a dry-run override'
-      : 'job definition contains a command or args override');
-  }
-  const expectedEntry = expected.entrypoint ?? '';
-  const cutoff = now.getTime() - historyWindowSeconds * 1000;
-  const destination = statuses
+  const cutoff = now.getTime() - maxEvidenceAgeSeconds * 1000;
+  const valid = statuses
     .filter(isStatusRecord)
     .filter((s) => s.tenantId === expected.tenantId &&
       s.accountResourceId === expected.accountResourceId &&
       s.databaseName === expected.databaseName &&
       s.containerName === expected.containerName)
-    .filter((s) => !s.dryRun && !s.commandOverride)
-    .filter((s) => !expected.imageDigest || s.imageDigest === expected.imageDigest)
-    .filter((s) => !expectedEntry || s.entrypoint === expectedEntry)
-    .filter((s) => Date.parse(s.finishedAt) >= cutoff);
-  // Evidence counts only when the job wrote it under the settings the job definition now carries.
-  const valid = (expected.settings ? destination.filter((s) => sameSettings(s.settings, expected.settings)) : destination)
+    .filter((s) => s.mode === 'full' && s.ok === true)
+    .filter((s) => Date.parse(s.finishedAt) >= cutoff)
     .sort((a, b) => Date.parse(a.finishedAt) - Date.parse(b.finishedAt));
   if (!valid.length) {
-    return refuse(destination.length
-      ? 'renewal evidence was written under other job settings (tier groups, gateway or identity); wait for three runs under the current settings'
-      : 'no destination-bound Cosmos renewal evidence for this tenant and container');
+    return switchEvidence(false, null, 0, 'no successful full sync evidence for this tenant and container within the allowed age');
   }
   const newest = valid.at(-1);
-  const newestAge = (now.getTime() - Date.parse(newest.finishedAt)) / 1000;
-  if (!Number.isFinite(newestAge) || newestAge > maxNewestAgeSeconds) {
-    return refuse('newest successful renewal is older than 45 minutes');
-  }
   const evidence = entitlementEvidence ?? summarizeEntitlementEvidence(entitlementRecords, {
     tenantId: expected.tenantId,
-    latestGeneration: newest.reconciliationGeneration,
     now,
   });
-  if (!evidence) return refuse('admission must read live entitlement records, not only status history');
+  if (!evidence) return switchEvidence(false, newestFullSync(newest), 0, 'admission must read live entitlement records, not only status history');
   if (evidence.invalidCount > 0) {
     const samples = (evidence.invalidSamples ?? []).map((s) => s.oidHash).filter(Boolean).join(', ');
-    return refuse(`${evidence.invalidCount} live entitlement record(s) would be refused by the resolver${samples ? `; oid-sha256 samples: ${samples}` : ''}`);
+    return switchEvidence(false, newestFullSync(newest), evidence.invalidCount, `${evidence.invalidCount} live entitlement record(s) would be refused by the resolver${samples ? `; oid-sha256 samples: ${samples}` : ''}`);
   }
-  if (evidence.olderActiveCount > 0) {
-    return refuse(`${evidence.olderActiveCount} live entitlement record(s) still carry an older generation`);
-  }
-  if (evidence.latestGeneration !== newest.reconciliationGeneration) {
-    return refuse('status generation does not match the live entitlement records');
-  }
-  const statusOldest = Number(newest.oldestExpiresAt);
-  if (Number.isFinite(statusOldest) && Number.isFinite(evidence.oldestExpiresAt) && statusOldest !== evidence.oldestExpiresAt) {
-    return refuse('status oldest expiry mismatch with live entitlement records');
-  }
-  const statusCounts = normalizeCounts(newest.memberCounts ?? {});
-  const liveCounts = normalizeCounts(evidence.memberCounts ?? {});
-  if (JSON.stringify(statusCounts) !== JSON.stringify(liveCounts)) {
-    return refuse('status member count mismatch with live entitlement records');
-  }
-  if (Number.isFinite(evidence.total) && evidence.total !== Object.values(liveCounts).reduce((a, b) => a + b, 0)) {
-    return refuse('live entitlement total does not match member counts');
-  }
-  const oldestExpiry = Number(evidence.oldestExpiresAt);
-  if (!Number.isFinite(oldestExpiry) || oldestExpiry - Math.floor(now.getTime() / 1000) < minExpiryMarginSeconds) {
-    return refuse('oldest entitlement expiry has less than 60 minutes of margin');
-  }
-  const generations = [...new Set(valid.map((s) => s.reconciliationGeneration).filter(Boolean))];
-  if (generations.length < 3) {
-    return refuse('reconciliation generation has not advanced at least twice within two hours; wait about 60-90 minutes on the 30-minute schedule');
-  }
-  return { ok: true, newestFinishedAt: newest.finishedAt, oldestExpiresAt: oldestExpiry, generations: generations.length };
+  return switchEvidence(true, newestFullSync(newest), 0);
 }
 
-export function summarizeEntitlementEvidence(records, { tenantId, latestGeneration, now = new Date() } = {}) {
+export function summarizeEntitlementEvidence(records, { tenantId, now = new Date() } = {}) {
   if (!Array.isArray(records)) return null;
-  const nowSeconds = Math.floor(now.getTime() / 1000);
-  const live = records.filter((r) => !isStatusRecord(r) &&
-    (Number.isInteger(r.expiresAt) ? r.expiresAt > nowSeconds : r.expiresAt !== undefined));
-  const memberCounts = {};
-  let olderActiveCount = 0;
-  let oldestExpiresAt = Infinity;
+  const live = records.filter((r) => !isStatusRecord(r));
   const invalid = [];
   for (const record of live) {
     const verdict = toEntitlement(record, { tenantId, now });
     if (!verdict.ok) {
       invalid.push({ oid: record.oid ?? record.id ?? '', status: verdict.status, reason: verdict.reason });
-      continue;
     }
-    memberCounts[record.tier] = (memberCounts[record.tier] ?? 0) + 1;
-    if (record.reconciliationGeneration !== latestGeneration) olderActiveCount++;
-    if (record.expiresAt < oldestExpiresAt) oldestExpiresAt = record.expiresAt;
   }
   return {
     total: live.length,
-    oldestExpiresAt: Number.isFinite(oldestExpiresAt) ? oldestExpiresAt : null,
-    latestGeneration,
-    olderActiveCount,
     invalidCount: invalid.length,
     invalidSamples: invalid.slice(0, 3).map((r) => ({ oidHash: digest(r.oid), status: r.status })),
-    memberCounts: normalizeCounts(memberCounts),
   };
+}
+
+function newestFullSync(status) {
+  if (!status) return null;
+  return {
+    finishedAt: status.finishedAt,
+    executor: status.executor ?? null,
+    generation: status.reconciliationGeneration ?? null,
+  };
+}
+
+function switchEvidence(ok, newestFullSync, invalidCount, reason) {
+  return { ok, mode: 'switch-evidence', newestFullSync, invalidCount, ...(reason ? { reason } : {}) };
 }
 
 function digest(value) {
