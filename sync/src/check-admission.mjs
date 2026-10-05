@@ -17,13 +17,16 @@ const containerName = opt('--container', 'entitlement');
 const maxEvidenceAgeSeconds = Number(opt('--max-evidence-age-seconds', '86400'));
 
 function fail(error, code = 1) {
-  console.log(JSON.stringify({ ok: false, mode: 'switch-evidence', newestFullSync: null, invalidCount: 0, reason: error }));
+  console.log(JSON.stringify({ ok: false, mode: 'switch-evidence', error }));
   process.exit(code);
 }
 
 if (!endpoint) fail('--cosmos is required');
 if (!tenantId) fail('--tenant is required');
 if (!accountResourceId) fail('--account-resource-id is required');
+if (!isCosmosEndpoint(endpoint)) fail('--cosmos must be an https Cosmos DB endpoint URL');
+if (!isGuid(tenantId)) fail('--tenant must be a guid');
+if (!isCosmosAccountResourceId(accountResourceId)) fail('--account-resource-id must be a Cosmos DB database account resource id');
 if (!Number.isFinite(maxEvidenceAgeSeconds) || maxEvidenceAgeSeconds <= 0) fail('--max-evidence-age-seconds must be positive');
 
 const credential = new DefaultAzureCredential();
@@ -67,3 +70,22 @@ const result = evaluateProjectionAdmission({
 });
 console.log(JSON.stringify(result));
 process.exit(result.ok ? 0 : 4);
+
+function isGuid(value) {
+  return typeof value === 'string' &&
+    /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value);
+}
+
+function isCosmosEndpoint(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && /\.documents\.azure\.com$/i.test(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function isCosmosAccountResourceId(value) {
+  return typeof value === 'string' &&
+    /^\/subscriptions\/[^/]+\/resourceGroups\/[^/]+\/providers\/Microsoft\.DocumentDB\/databaseAccounts\/[^/]+$/i.test(value);
+}
