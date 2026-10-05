@@ -685,6 +685,58 @@ $rows = @([regex]::Matches($section, '(?m)^\| (\d)\. ') | ForEach-Object { $_.Gr
 $unchecked = @('U17', 'U109', 'U113', 'U116' | Where-Object { $section -notmatch "\[$_\]\(UNKNOWNS\.md" -or $unknowns -notmatch "(?m)^\| $_ \|" })
 Assert 'the owner-attended run lists steps 1-9 and checks U17, U109, U113 and U116 (AC8)' (($rows -join ',') -eq '1,2,3,4,5,6,7,8,9' -and -not $unchecked.Count) "rows $($rows -join ','); unchecked $($unchecked -join ', ')"
 
+# Council round 2 (UX, Architect): the Azure CLI guide's resolver block is the deployer's point step by hand.
+# It runs here in Git Bash against a stub az, as tests/Test-AzCommandsRenewal.ps1 runs the renewal block.
+$gitBash = 'C:\Program Files\Git\bin\bash.exe'
+$azGuide = [IO.File]::ReadAllText((Join-Path $root 'docs\AZ-COMMANDS.md'))
+$resolverBlock = [regex]::Match($azGuide, '(?ms)^Set resolver named values without switching entitlement\.\s*^```bash\r?\n(.*?)^```').Groups[1].Value
+$guideStub = @'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$P95_CALLS"
+case "$*" in
+  "deployment group show -g rg -n projection-resolver-prefix --query properties.outputs.resolverUrl.value -o tsv")
+    [ "$P95_OUTPUTS" = none ] || printf 'https://func-resolver-prefix.azurewebsites.net/api\n' ;;
+  "deployment group show -g rg -n projection-resolver-prefix --query properties.outputs.resolverAudience.value -o tsv")
+    [ "$P95_OUTPUTS" = none ] || printf 'api://resolver-app\n' ;;
+  "apim nv show -g rg --service-name apim --named-value-id entitlement-source --query value -o tsv")
+    if [ "$P95_SOURCE" = fail ]; then echo "ERROR: (AuthorizationFailed) The client does not have authorization." >&2; exit 1; fi
+    printf '%s\n' "$P95_SOURCE" ;;
+  "apim nv show -g rg --service-name apim --named-value-id entitlement-resolver-url --query value -o tsv") printf '%s\n' "$P95_URL" ;;
+  "apim nv show -g rg --service-name apim --named-value-id entitlement-resolver-audience --query value -o tsv") printf '%s\n' "$P95_AUDIENCE" ;;
+  "apim nv update "*) printf '%s\n' "$*" >> "$P95_WRITES" ;;
+  *) echo "stub az has no answer for: $*" >&2; exit 9 ;;
+esac
+'@
+function Invoke-GuideResolverBlock([string]$Source, [string]$Url, [string]$Outputs = 'deployed') {
+    if (-not $resolverBlock -or -not (Test-Path -LiteralPath $gitBash)) { return [pscustomobject]@{ Exit = -1; Output = "block found: $([bool]$resolverBlock); Git Bash at $gitBash`: $(Test-Path -LiteralPath $gitBash)"; Writes = @() } }
+    $dir = Join-Path $work ('guide-resolver-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Force -Path (Join-Path $dir 'bin') | Out-Null
+    [IO.File]::WriteAllText((Join-Path $dir 'bin\az'), $guideStub.Replace("`r`n", "`n"))
+    $bashDir = '/' + (($dir -replace '\\', '/') -replace '^([A-Za-z]):', '$1')
+    $run = @('#!/usr/bin/env bash', 'set -uo pipefail', "export PATH=`"$bashDir/bin:`$PATH`"", "chmod +x `"$bashDir/bin/az`"",
+        "export P95_CALLS=`"$bashDir/calls.log`" P95_WRITES=`"$bashDir/writes.log`"", 'touch "$P95_CALLS" "$P95_WRITES"',
+        "export P95_SOURCE='$Source' P95_URL='$Url' P95_AUDIENCE='api://resolver-app' P95_OUTPUTS='$Outputs'",
+        "export GATEWAY_RG='rg' APIM_NAME='apim' NAME_PREFIX='prefix'", $resolverBlock.Replace("`r`n", "`n"))
+    [IO.File]::WriteAllText((Join-Path $dir 'run.sh'), ($run -join "`n") + "`n")
+    $output = & $gitBash "$bashDir/run.sh" 2>&1 | Out-String
+    [pscustomobject]@{ Exit = $LASTEXITCODE; Output = $output.Trim(); Writes = @([IO.File]::ReadAllLines((Join-Path $dir 'writes.log')) | Where-Object { $_ }) }
+}
+$placeholder = 'https://resolver-not-deployed.invalid'
+$deployed = 'https://func-resolver-prefix.azurewebsites.net/api'
+$guided = Invoke-GuideResolverBlock 'named-value' $placeholder
+Assert 'the guide''s resolver block points a named-value gateway at the deployment outputs' ($guided.Exit -eq 0 -and $guided.Writes.Count -eq 2 -and
+    $guided.Writes[0] -match [regex]::Escape("entitlement-resolver-url --value $deployed") -and $guided.Writes[1] -match 'entitlement-resolver-audience --value api://resolver-app' -and $guided.Output -match '(?m)^named-value$') "exit $($guided.Exit); writes $($guided.Writes -join ' | '); $($guided.Output)"
+$guided = Invoke-GuideResolverBlock 'projection' 'https://func-resolver-other.azurewebsites.net/api'
+Assert 'the guide''s resolver block refuses with status 1 to repoint a projection gateway, and writes nothing' ($guided.Exit -eq 1 -and -not $guided.Writes.Count -and
+    $guided.Output -match 'Refused: entitlement-source is projection') "exit $($guided.Exit); writes $($guided.Writes -join ' | '); $($guided.Output)"
+$guided = Invoke-GuideResolverBlock 'projection' $deployed
+Assert 'the guide''s resolver block leaves a projection gateway already on this resolver as it is' ($guided.Exit -eq 0 -and -not $guided.Writes.Count) "exit $($guided.Exit); writes $($guided.Writes -join ' | '); $($guided.Output)"
+$guided = Invoke-GuideResolverBlock 'named-value' $placeholder 'none'
+Assert 'the guide''s resolver block refuses with status 1 when the deployment outputs cannot be read' ($guided.Exit -eq 1 -and -not $guided.Writes.Count -and
+    $guided.Output -match 'Refused: could not read the resolver deployment') "exit $($guided.Exit); writes $($guided.Writes -join ' | '); $($guided.Output)"
+$guided = Invoke-GuideResolverBlock 'fail' $placeholder
+Assert 'the guide''s resolver block stops with status 1 when entitlement-source cannot be read, and writes nothing' ($guided.Exit -eq 1 -and -not $guided.Writes.Count) "exit $($guided.Exit); writes $($guided.Writes -join ' | '); $($guided.Output)"
+
 Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
 
 Write-Host ''
