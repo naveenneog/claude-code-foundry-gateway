@@ -225,7 +225,9 @@ test('P1 removes the plan API and script', async () => {
 });
 
 test('P1 browser shows fingerprint, marks stale on answer changes and reruns a covered failed step', { timeout: 60_000 }, async () => {
-  const app = await startServer({ env: { P93_INSTALLER_UI_STUB_FAIL_STEP: 'gateway-deployment' } });
+  // The page's identity route and the server's identity seam report the same account, as they do outside tests;
+  // the page compares the account read after a run with the identity of the passing preflight.
+  const app = await startServer({ env: { P93_INSTALLER_UI_STUB_FAIL_STEP: 'gateway-deployment' }, readIdentity: async () => ({ signedIn: true, user: 'operator@example.com', tenantId: '', subscriptionId: '' }) });
   const { chromium } = await import('playwright');
   let browser;
   try { browser = await chromium.launch({ channel: 'msedge', headless: true }); }

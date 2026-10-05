@@ -356,9 +356,7 @@
 
   async function refreshIdentityAfterRun() {
     try {
-      identity = await getJson("./api/identity");
-      const target = byId("identity");
-      target.textContent = identity.signedIn ? `Signed-in account: ${identity.user}; tenant ${identity.tenantId}; subscription ${identity.subscriptionName} (${identity.subscriptionId}).` : `Signed-in account: not signed in. ${identity.signInCommand || "Run az login --use-device-code."}`;
+      await refreshIdentity();
     } catch (error) {
       byId("identity").textContent = error.data?.reason === "azure-busy" ? "An installer run is using Azure CLI. Wait for it to finish, then try again." : error.message;
     }

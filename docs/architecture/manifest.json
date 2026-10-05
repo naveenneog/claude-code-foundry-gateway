@@ -603,7 +603,7 @@
         "tools/installer-ui/installer-ui-prefill.js": "2deb19bffb6d2013b9c0acf11fc64e2cdcffc06b996e5c04bb49c36234dfe76f",
         "tools/installer-ui/installer-ui-problems.js": "22693e476338349387e2ff975768e2c16cd89da56e5872ed360abfdc893e4b78",
         "tools/installer-ui/installer-ui-run.js": "51bdce96f49b43adde0f9e29e27d313a87558b14b30f64aefd2d1431548ab4db",
-        "tools/installer-ui/installer-ui.js": "a4e8a8deb11487befd10811757cd3dc1d679f19d27f68361e2f8eda14d3d19d9",
+        "tools/installer-ui/installer-ui.js": "aec46349371ceadce78851c85b1c1f45d081a609efdfa5d47fea9909d6618e12",
         "tools/installer-ui/preflight-record.mjs": "14ad56539700a2838ebe7ab56462b2edb883d4e832ebc81154305bec1858d583",
         "tools/installer-ui/run-record.mjs": "25c9f2ce4bcfa1c539472e1123adfa6c371f1129107e7c775d6bcc6d69c509ba",
         "tools/installer-ui/run-transport.mjs": "58f692b682466303be1bf9c1f88c9f90c09af92ec1f95d429117f70ced2f8253",
