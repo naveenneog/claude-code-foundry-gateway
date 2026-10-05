@@ -462,7 +462,8 @@ budget can be changed, it can be a parent, and it can be removed. Another
 spelling of it, such as `legacy-unit` for `Legacy-Unit`, is refused, and the
 message names the stored spelling. A dollar budget and a budget mode refuse an
 identifier with capitals (`scripts/ClaudeUsdBudgets.ps1`,
-`scripts/ClaudeBudgetModes.ps1`). The chargeback report checks every unit
+`scripts/ClaudeBudgetModes.ps1`), and AUM's read of the units stops at one with
+"Invalid bu-modes entry". The chargeback report checks every unit
 identifier it reads, from the registry and from the month's requests, and stops
 at one with capitals (`scripts/ClaudeChargebackReport.ps1`). A unit with another
 lower-case identifier for the same group, created before the old one is removed,
