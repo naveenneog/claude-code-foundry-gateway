@@ -456,9 +456,10 @@ P95 adds the switch ([ADR-0050](adr/0050-projection-switch-function.md)).
 requires the gateway to call the resolver deployed as `projection-resolver-<prefix>`, which reads the
 receipt's Cosmos account, and reads that resolver's site and application settings to confirm the
 host and the Cosmos account, database, container and tenant it serves from; the deployer's normal run
-sets the gateway's `entitlement-resolver-url` and `entitlement-resolver-audience` to that resolver,
-and stops instead on a gateway whose `entitlement-source` is already `projection` with another
-resolver. It runs `scripts/Compare-ClaudeEntitlement.ps1
+sets the gateway's `entitlement-resolver-url` and `entitlement-resolver-audience` to that resolver.
+On a gateway whose `entitlement-source` is already `projection`, the deployer stops after its
+preflight and before any write unless the run redeploys the resolver the gateway calls, with the app
+in its audience. It runs `scripts/Compare-ClaudeEntitlement.ps1
 -FailOnDrift` and a read-only `apply-projection.mjs --compare` in the runner, reads the action group
 and the job definition through ARM, and runs admission over the status records the job wrote under
 its current settings. It then writes the entitlement named values to a backup file and sets
@@ -466,7 +467,8 @@ its current settings. It then writes the entitlement named values to a backup fi
 Entitlement step call it; the deployer deploys, publishes and applies nothing in switch mode. The
 installer's `-FlipProjectionAfterCleanCompare` runs its own gateway deployment and list refresh,
 then the deployer's switch mode, and reads `entitlement-source` and the resolver values of an existing
-gateway fail-closed. `scripts/Restore-ClaudeGateway.ps1` does not move
+gateway fail-closed; it takes a gateway for new only when Azure reports it or its resource group
+missing. `scripts/Restore-ClaudeGateway.ps1` does not move
 `entitlement-source` to `projection`.
 
 Before a resolver call, APIM limits `entitlement-misses` to 200 per second and 100

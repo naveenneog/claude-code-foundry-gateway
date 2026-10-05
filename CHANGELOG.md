@@ -1211,6 +1211,15 @@ exact streaming cache-creation detail remains **U13**.
   gateway to named values; those reads now stop the run. Discovery found a receipt only beside the
   decision record; it now also reads the repository's `onboarding/`, where the renewal deployer
   writes it. Each is corrected with a test ([P95 council](docs/status/P95.md#council)).
+- **P95 council round 3.** A failed read of whether the gateway exists made the installer take an
+  existing gateway for new, skip its fail-closed reads and deploy the template's defaults over it;
+  only Azure's not-found answer now means a new gateway. The deployer redeployed the resolver site
+  and its sign-in settings before its projection check, so on a gateway on the projection a rerun
+  with another resolver app changed the live resolver and then refused; the check now runs before
+  any write, `-PreflightOnly` and `-WhatIf` included. The guided Entitlement plan listed a deployment
+  and list writes the step does not make and a rollback without the refresh and compare. A resource
+  group name with parentheses was asked for again in the same form. Refusals without a remedy now
+  name one. Each is corrected with a test ([P95 council](docs/status/P95.md#council)).
 - **P94 the renewal job could not be deployed or run as merged.** The image and the runner archive
   missed `resolver/src/entitlement.mjs`, which `sync/src/plan.mjs` imports, so the job, the runner
   apply and compare, and admission stopped with a missing module; the runner archive now holds the

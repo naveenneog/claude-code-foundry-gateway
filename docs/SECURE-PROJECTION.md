@@ -217,15 +217,18 @@ chooses `private`. The command deploys private Cosmos, projection networking and
 the resolver, sets the gateway's `entitlement-resolver-url` and `entitlement-resolver-audience` to
 the resolver's outputs, exports named-value decisions, populates from Entra, compares the
 projection against those decisions and leaves `entitlement-source` unchanged. On a gateway whose
-`entitlement-source` is already `projection`, the run stops before the two resolver values change,
-unless they already name this resolver (`scripts/Deploy-ClaudeProjection.ps1:214-230`). This one-command
+`entitlement-source` is already `projection`, the run redeploys the resolver the gateway calls, so it
+stops after the preflight and before any write, `-PreflightOnly` and `-WhatIf` included, unless the
+deployment `projection-resolver-<prefix>` serves the gateway's `entitlement-resolver-url` and the run's
+resolver app is the one in its `entitlement-resolver-audience` (`scripts/ClaudeProjectionChecks.ps1:201-221`).
+This one-command
 path uses the gateway resource group for its projection resources. With `-FlipAfterCleanCompare`
 the command deploys nothing: it reads the renewal receipt and runs the
 [switch](#switch-to-the-projection-p95); `-WhatIf` runs its checks and stops before the backup.
 A declined deployment/population/comparison prerequisite aborts the run; it does not fall through
 to a later step. `-WhatIf` without a switch request prints the planned operations without
 writing Azure resources. It does not require creating an app merely to preview the plan
-(`scripts/Deploy-ClaudeProjection.ps1:111-114`).
+(`scripts/Deploy-ClaudeProjection.ps1:114-117`).
 
 #### Resolver registration and the customer's Entra admin
 
@@ -730,8 +733,9 @@ Use the gateway's resource group on these two commands. **Portal:** APIM > APIs
 Edit. Copy their values from the resolver deployment outputs; the URL and token
 audience are different things. On a gateway whose `entitlement-source` is `projection`, a change to
 these values moves every request to the new resolver at once. `scripts/Deploy-ClaudeProjection.ps1`
-runs this step in its normal run, and stops instead when `entitlement-source` is `projection` and
-the values name another resolver. The [switch](#switch-to-the-projection-p95) refuses unless both
+runs this step in its normal run; on a gateway whose `entitlement-source` is `projection`, it stops
+before any write unless the run redeploys the resolver these values name, with the app in the
+audience. The [switch](#switch-to-the-projection-p95) refuses unless both
 are the outputs of `projection-resolver-<prefix>` and the site serves that URL.
 
 `entitlement-source` is still `named-value`, so nothing reads the projection yet.

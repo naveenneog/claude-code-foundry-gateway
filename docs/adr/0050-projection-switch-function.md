@@ -6,7 +6,8 @@
 - **Refines:** [ADR-0049](0049-projection-renewal-deployment.md) decisions 6, 7 and 9,
   [ADR-0045](0045-scheduled-projection-renewal.md)
 - **Revised:** 2026-10-05 after council round 1 ([P95 status](../status/P95.md#council)): decisions
-  1-3, 5 and 6 changed, 7-9 and options 5-6 added; after round 2, decisions 3, 8 and 9 changed
+  1-3, 5 and 6 changed, 7-9 and options 5-6 added; after round 2, decisions 3, 8 and 9 changed; after
+  round 3, decisions 3, 8 and 9 and the consequences changed
 
 ## Context
 
@@ -62,7 +63,9 @@ Admission accepts any action-group id and does not bind the job's settings to it
    ambiguous. It reads files only: admission confirms in ARM that the job exists and runs
    the receipt's digest, inside the switch and before any write. The flow's switch calls the same
    function, with the flow's own snapshot gate as the backup; `Initialize-ClaudeFlowStep` names the
-   snapshot, and the gate takes it at the write.
+   snapshot, and the gate takes it at the write. The plan the operator approves lists that one write
+   and the rollback through a refresh and a compare; the named-value direction lists its one write
+   and states that it does not change the lists.
 4. Admission reads the action group from ARM and requires `enabled` and at least one email
    receiver with status `Enabled` (U119).
 5. The job writes `AZURE_CLIENT_ID`, the tier group ids and the gateway id into each status record.
@@ -90,12 +93,17 @@ Admission accepts any action-group id and does not bind the job's settings to it
    at run time whatever was redeployed since: the site must serve the gateway's URL, and
    `COSMOS_ENDPOINT`, `COSMOS_DATABASE`, `COSMOS_CONTAINER` and `PROJECTION_TENANT_ID` must be the
    receipt's account, `claude`, `entitlement` and tenant. The deployer's normal run points the
-   gateway at the resolver it deployed, and refuses to point a gateway already on the projection at
-   another resolver.
+   gateway at the resolver it deployed. That run redeploys the resolver site of `-NamePrefix` and its
+   sign-in settings first, so on a gateway already on the projection it refuses after the preflight
+   and before any write, `-PreflightOnly` and `-WhatIf` included, unless `projection-resolver-<prefix>`
+   serves the gateway's `entitlement-resolver-url` and the run's resolver app is the one in its
+   `entitlement-resolver-audience`.
 9. Other writers of `entitlement-source`: `scripts/Restore-ClaudeGateway.ps1` does not move it to
    `projection`, and names the switch instead; `infra/main.bicep` receives the live value from the
    installer, which reads it, and the two resolver values, fail-closed on an existing gateway, and
-   defaults to `named-value`; migration 0002 creates a missing value as `named-value`.
+   defaults to `named-value`. The installer takes a gateway for new only when Azure reports it or its
+   resource group missing (U123); any other failed read stops the run. Migration 0002 creates a
+   missing value as `named-value`.
    A template deployment with `entitlementSource=projection`, like the manual command in the Azure CLI
    guide, skips admission. `tests/Test-ProjectionSwitch.ps1` lists the code that writes it by name.
 
@@ -111,7 +119,11 @@ Admission accepts any action-group id and does not bind the job's settings to it
 − The deployer's `-FlipAfterCleanCompare` no longer deploys or populates; deployment and population
   stay a separate run without it.
 − A resolver deployed under another deployment name than `projection-resolver-<prefix>`, or a
-  resource group whose name holds parentheses, cannot be switched by this function.
+  resource group whose name holds parentheses, cannot be switched by this function. The refusal names
+  the limitation and Azure's move of an API Management instance between resource groups, which the
+  Consumption tier does not support
+  ([move support](https://learn.microsoft.com/azure/azure-resource-manager/management/move-support-resources),
+  updated 2026-08-18, read 2026-10-05).
 − The switch lists the resolver site's application settings, an action
   (`Microsoft.Web/sites/config/list/action`) that the Reader role does not include (U122).
 

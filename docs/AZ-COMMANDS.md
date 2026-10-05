@@ -118,7 +118,7 @@ az role assignment list --scope "$FOUNDRY_ID" --include-inherited --query "[].{p
 az role assignment list --scope "/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${GATEWAY_RG}" --include-inherited --query "[].{principal:principalName,role:roleDefinitionName,scope:scope}" -o table
 ```
 
-Expected result: the operator has enough rights to deploy the gateway resource group and to inspect or assign the Foundry data-plane role. This mirrors `Install-ClaudeGateway.ps1:1526-1537` and `docs/SETUP.md` section 2.
+Expected result: the operator has enough rights to deploy the gateway resource group and to inspect or assign the Foundry data-plane role. This mirrors `Install-ClaudeGateway.ps1:1532-1551` and `docs/SETUP.md` section 2.
 
 ### Part 1 in the portal
 
@@ -230,7 +230,7 @@ az bicep build --file infra/main.bicep
 az deployment group what-if -g "$GATEWAY_RG" --template-file infra/main.bicep --parameters namePrefix="$NAME_PREFIX" location="$LOCATION" foundryAccountName="$FOUNDRY_ACCOUNT" foundryResourceGroup="$FOUNDRY_RG" publisherEmail="$PUBLISHER_EMAIL" publisherName="$PUBLISHER_NAME" apimSku=BasicV2 apimCapacity=1 sonnetDeployment="$SONNET_DEPLOYMENT" opusDeployment="$OPUS_DEPLOYMENT" haikuDeployment="$HAIKU_DEPLOYMENT" tpmStandard="$TPM_STANDARD" quotaStandard="$QUOTA_STANDARD" tpmPremium="$TPM_PREMIUM" quotaPremium="$QUOTA_PREMIUM" quotaOrg="$QUOTA_ORG" modelsStandard="$MODELS_STANDARD" modelsPremium="$MODELS_PREMIUM" callsPerMinute="$CALLS_PER_MINUTE" entitlementSource=named-value entitlementCacheSeconds="$ENTITLEMENT_CACHE_SECONDS" desktopExtraAudience="$DESKTOP_EXTRA_AUDIENCE"
 ```
 
-Expected result: Bicep builds and what-if shows APIM, API, policy, logger, named values, diagnostics, workspace and role-assignment changes. This mirrors `deploy.ps1:157-170`, `Install-ClaudeGateway.ps1:1543-1585` and `infra/main.bicep:8-179`.
+Expected result: Bicep builds and what-if shows APIM, API, policy, logger, named values, diagnostics, workspace and role-assignment changes. This mirrors `deploy.ps1:157-170`, `Install-ClaudeGateway.ps1:1553-1590` and `infra/main.bicep:8-179`.
 
 Deploy Basic v2.
 
@@ -239,7 +239,7 @@ az deployment group create -g "$GATEWAY_RG" -n "claude-gateway-basicv2" --templa
 az deployment group show -g "$GATEWAY_RG" -n "claude-gateway-basicv2" --query "properties.outputs.{apim:apimName.value,url:gatewayUrl.value,principal:apimPrincipalId.value}" -o json
 ```
 
-Expected result: outputs include the APIM name, gateway URL and APIM principal id. Basic v2 has no outbound VNet integration. This mirrors `infra/main.bicep:31-35`, `infra/main.bicep:443-460` and `Install-ClaudeGateway.ps1:1585`.
+Expected result: outputs include the APIM name, gateway URL and APIM principal id. Basic v2 has no outbound VNet integration. This mirrors `infra/main.bicep:31-35`, `infra/main.bicep:443-460` and `Install-ClaudeGateway.ps1:1595`.
 
 Deploy Standard v2 when outbound VNet integration is required.
 
@@ -316,7 +316,7 @@ The create follows review of the what-if output.
 p89_deploy_reused_apim create
 ```
 
-Expected result: a clean existing v2 APIM is reused without resetting an already-installed gateway. `grantFoundryRole=false` is passed when the gateway identity already has Cognitive Services User, matching `Install-ClaudeGateway.ps1:1514-1541`.
+Expected result: a clean existing v2 APIM is reused without resetting an already-installed gateway. `grantFoundryRole=false` is passed when the gateway identity already has Cognitive Services User, matching `Install-ClaudeGateway.ps1:1524-1551`.
 
 Read policy deployment state.
 
@@ -344,7 +344,7 @@ p89_named_value_readback() {
 p89_named_value_readback
 ```
 
-Expected result: the value length is at most 4,096, and the final read returns the exact value written. This mirrors `scripts/ApimNamedValue.ps1:35-73` and `scripts/ApimNamedValue.ps1:125-191`.
+Expected result: the value length is at most 4,096, and the final read returns the exact value written. This mirrors `scripts/ApimNamedValue.ps1:35-73` and `scripts/ApimNamedValue.ps1:161-227`.
 
 ### Part 2 in the portal
 
@@ -384,7 +384,7 @@ Capture id: `gateway-named-values`.
 
 Capture id: `docs-review-gateway-diagnostics`.
 
-**Change later.** Single named-value, tier-limit and hostname changes go through §4, §6 and §9. A full redeploy over a live gateway goes through `Install-ClaudeGateway.ps1 -ExistingApimName`, which reads back operator-owned named values and APIM network, portal, custom-property and hostname state before deployment (`Install-ClaudeGateway.ps1:1401-1512`). A direct §2 template rerun can reset operator-owned named values (`infra/main.bicep:170-207`, `infra/main.bicep:378-389`), entitlement resolver values (`infra/main.bicep:144-158`) and owned-APIM service properties (`infra/main.bicep:252-292`). The absent-name check is `p89_apim_absent`. Basic v2 ↔ Standard v2 changes use API Management services > `$APIM_NAME` > Pricing tier: select the tier and units; **Save**. Learn documents **Pricing tier** for changing service tier and **Scale** for v2 units. Source: https://learn.microsoft.com/azure/api-management/upgrade-and-scale.
+**Change later.** Single named-value, tier-limit and hostname changes go through §4, §6 and §9. A full redeploy over a live gateway goes through `Install-ClaudeGateway.ps1 -ExistingApimName`, which reads back operator-owned named values and APIM network, portal, custom-property and hostname state before deployment (`Install-ClaudeGateway.ps1:1405-1522`). A direct §2 template rerun can reset operator-owned named values (`infra/main.bicep:170-207`, `infra/main.bicep:378-389`), entitlement resolver values (`infra/main.bicep:144-158`) and owned-APIM service properties (`infra/main.bicep:252-292`). The absent-name check is `p89_apim_absent`. Basic v2 ↔ Standard v2 changes use API Management services > `$APIM_NAME` > Pricing tier: select the tier and units; **Save**. Learn documents **Pricing tier** for changing service tier and **Scale** for v2 units. Source: https://learn.microsoft.com/azure/api-management/upgrade-and-scale.
 
 ## 3. Gateway managed identity and Foundry role
 
@@ -569,7 +569,7 @@ Verify the authorization and budget named values that the template initialized.
 az apim nv list -g "$GATEWAY_RG" --service-name "$APIM_NAME" --query "[?name=='allow-standard' || name=='allow-premium' || name=='quota-overrides' || name=='external-idp-extra-audience'].{name:name,value:value}" -o table
 ```
 
-Expected result: `allow-*` values are comma-sentinel lists, `quota-overrides` is `,,` until personal overrides exist, and the Desktop audience is the disabled sentinel until external sign-in is configured. On an existing gateway, entitlement sync and budget commands own these values after deployment. This mirrors `infra/main.bicep:215-224`, `infra/main.bicep:367-370`, `scripts/Sync-ClaudeAccess.ps1:122-129`, `scripts/ClaudeBudgetOverride.ps1:1-29` and `scripts/ApimNamedValue.ps1:150-154`.
+Expected result: `allow-*` values are comma-sentinel lists, `quota-overrides` is `,,` until personal overrides exist, and the Desktop audience is the disabled sentinel until external sign-in is configured. On an existing gateway, entitlement sync and budget commands own these values after deployment. This mirrors `infra/main.bicep:215-224`, `infra/main.bicep:367-370`, `scripts/Sync-ClaudeAccess.ps1:122-129`, `scripts/ClaudeBudgetOverride.ps1:1-29` and `scripts/ApimNamedValue.ps1:186-190`.
 
 ### Part 4 in the portal
 
@@ -1057,7 +1057,7 @@ az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id 
 az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id external-idp-extra-audience --query value -o tsv
 ```
 
-Expected result: the app id is stored as `external-idp-extra-audience` for id-token mode. For access-token mode, store the gateway API audience instead. Consent is not granted by these commands; a tenant admin grants user/admin consent for scopes that require it. This mirrors `Install-ClaudeGateway.ps1:1141-1238`, `Install-ClaudeGateway.ps1:1573` and `scripts/ClaudeDesktopSignIn.ps1:92-101`.
+Expected result: the app id is stored as `external-idp-extra-audience` for id-token mode. For access-token mode, store the gateway API audience instead. Consent is not granted by these commands; a tenant admin grants user/admin consent for scopes that require it. This mirrors `Install-ClaudeGateway.ps1:1141-1238`, `Install-ClaudeGateway.ps1:1583` and `scripts/ClaudeDesktopSignIn.ps1:92-101`.
 
 ### Part 7 in the portal
 
@@ -1100,7 +1100,7 @@ p89_gateway_url
 # P89-GATEWAY-URL-END
 ```
 
-Expected result: `GATEWAY_URL` is the live APIM gateway URL plus `/claude`, matching `infra/main.bicep:516` and `Install-ClaudeGateway.ps1:1585-1586`. When §9 has a verified `.p89-receipts/gateway-address.json` and the live APIM still lists that Proxy hostname, the URL is `https://<hostname>/claude`, matching `Install-ClaudeGateway.ps1:1590` and `scripts/ClaudeGatewayAddress.ps1:118,123`.
+Expected result: `GATEWAY_URL` is the live APIM gateway URL plus `/claude`, matching `infra/main.bicep:516` and `Install-ClaudeGateway.ps1:1595-1596`. When §9 has a verified `.p89-receipts/gateway-address.json` and the live APIM still lists that Proxy hostname, the URL is `https://<hostname>/claude`, matching `Install-ClaudeGateway.ps1:1600` and `scripts/ClaudeGatewayAddress.ps1:118,123`.
 
 Generate `onboarding/claude-gateway.json` with the same schema the installer writes.
 
@@ -1149,7 +1149,7 @@ p89_handover
 # P89-HANDOVER-END
 ```
 
-Expected result: `jq -e` exits 0, and the file contains no secrets. The key set matches the installer record, including subscription, SKU, region, Foundry account, entitlement store, projection deployer, tier model arrays, tier model allow-list strings and request ceiling. This mirrors `Install-ClaudeGateway.ps1:1699-1726` and `onboarding/README.md:13-41`. `scripts/Setup-ClaudeWorkstation.ps1` consumes this file through `-ConfigPath`; `Onboard-ClaudeDeveloper.ps1` distributes the same handover artifact rather than changing its schema.
+Expected result: `jq -e` exits 0, and the file contains no secrets. The key set matches the installer record, including subscription, SKU, region, Foundry account, entitlement store, projection deployer, tier model arrays, tier model allow-list strings and request ceiling. This mirrors `Install-ClaudeGateway.ps1:1704-1742` and `onboarding/README.md:13-41`. `scripts/Setup-ClaudeWorkstation.ps1` consumes this file through `-ConfigPath`; `Onboard-ClaudeDeveloper.ps1` distributes the same handover artifact rather than changing its schema.
 
 ### Part 8 in the portal
 
@@ -1442,7 +1442,7 @@ p89_projection_deploy
 # P89-PROJECTION-DEPLOY-END
 ```
 
-Expected result: `projection.bicep` deploys first, then `projection-network.bicep` uses the Cosmos account output and creates private endpoints, DNS and the in-VNet runner. The private resolver path requires a gateway SKU with outbound VNet integration; Basic v2 cannot use this path (`docs/SCALE.md:628-635`). This mirrors `scripts/Deploy-ClaudeProjection.ps1:132-153`, `infra/projection.bicep:11-68` and `infra/projection-network.bicep:26-49`.
+Expected result: `projection.bicep` deploys first, then `projection-network.bicep` uses the Cosmos account output and creates private endpoints, DNS and the in-VNet runner. The private resolver path requires a gateway SKU with outbound VNet integration; Basic v2 cannot use this path (`docs/SCALE.md:628-635`). This mirrors `scripts/Deploy-ClaudeProjection.ps1:135-156`, `infra/projection.bicep:11-68` and `infra/projection-network.bicep:26-49`.
 
 Deploy the resolver with Standard v2 outbound VNet integration and upload code.
 
@@ -1485,7 +1485,7 @@ p89_resolver_deploy
 # P89-RESOLVER-DEPLOY-END
 ```
 
-Expected result: the Function app is running with VNet integration and resolver code uploaded. `allowedCallerAppIds` is the gateway managed identity application id, and `allowedCallerObjectIds` is the gateway object id; otherwise the resolver refuses the gateway. This mirrors `scripts/Deploy-ClaudeProjection.ps1:155-212` and `infra/resolver.bicep:385-387`.
+Expected result: the Function app is running with VNet integration and resolver code uploaded. `allowedCallerAppIds` is the gateway managed identity application id, and `allowedCallerObjectIds` is the gateway object id; otherwise the resolver refuses the gateway. This mirrors `scripts/Deploy-ClaudeProjection.ps1:158-215` and `infra/resolver.bicep:385-387`.
 
 Set resolver named values without switching entitlement.
 
@@ -1513,7 +1513,7 @@ p95_resolver_named_values() {
 p95_resolver_named_values
 ```
 
-Expected result: resolver URL and audience are the resolver deployment's outputs, while `entitlement-source` remains `named-value`; on a gateway already on the projection the block refuses a change and writes nothing, and values that already match are not written again. The switch requires these two values to be the outputs of `projection-resolver-${NAME_PREFIX}` ([SECURE-PROJECTION](SECURE-PROJECTION.md#switch-to-the-projection-p95)). This mirrors `scripts/Deploy-ClaudeProjection.ps1:214-230`.
+Expected result: resolver URL and audience are the resolver deployment's outputs, while `entitlement-source` remains `named-value`; on a gateway already on the projection, a value that differs makes the function write neither value and return 1, and values that already match are not written again (return 0). A failed read also returns 1 before any write. The switch requires these two values to be the outputs of `projection-resolver-${NAME_PREFIX}` ([SECURE-PROJECTION](SECURE-PROJECTION.md#switch-to-the-projection-p95)). This mirrors `scripts/Deploy-ClaudeProjection.ps1:217-233`; the deployer also refuses such a gateway before any write unless the run redeploys the resolver it calls (`scripts/ClaudeProjectionChecks.ps1:201-221`).
 
 Populate and compare the projection through an in-VNet runner container.
 
@@ -1582,7 +1582,7 @@ p89_projection_runner
 # P89-PROJECTION-RUNNER-END
 ```
 
-Expected result: population and comparison run through the runner created by `projection-network.bicep`. `send_runner_file` mirrors `scripts/ClaudeRunner.ps1:113-148`: base64url chunks are appended through `az container exec` and decoded in the container. The snapshot and gateway-decision files are produced by the repository scripts because their Graph and named-value comparison logic is not an Azure CLI data-plane operation. This mirrors `scripts/Deploy-ClaudeProjection.ps1:238-267`, `scripts/Sync-ClaudeProjection.ps1`, `scripts/ClaudeRunner.ps1`, `docs/SCALE.md:681-726` and `infra/projection-network.bicep:46-49`.
+Expected result: population and comparison run through the runner created by `projection-network.bicep`. `send_runner_file` mirrors `scripts/ClaudeRunner.ps1:113-148`: base64url chunks are appended through `az container exec` and decoded in the container. The snapshot and gateway-decision files are produced by the repository scripts because their Graph and named-value comparison logic is not an Azure CLI data-plane operation. This mirrors `scripts/Deploy-ClaudeProjection.ps1:241-270`, `scripts/Sync-ClaudeProjection.ps1`, `scripts/ClaudeRunner.ps1`, `docs/SCALE.md:681-726` and `infra/projection-network.bicep:46-49`.
 
 Deploy the scheduled renewal job, its registry and its alerts.
 

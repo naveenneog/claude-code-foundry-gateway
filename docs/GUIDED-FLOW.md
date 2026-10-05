@@ -284,7 +284,8 @@ every developer receives 503 after expiry.
 The standalone deployer can preflight, populate and compare without switching (normally 30-90
 seconds for preflight, including a 25-second Graph pause). PowerShell 7 is required for
 projection deployment/sync. [ADR-0040](adr/0040-projection-preflight-and-switch.md) describes
-the rejected ARM-only check and proposed P86 Cosmos renewal evidence, tested image and alerts.
+the rejected ARM-only check, and [ADR-0045](adr/0045-scheduled-projection-renewal.md), accepted with
+P86, the Cosmos renewal evidence, tested image and alerts.
 
 ### Change the company address
 
