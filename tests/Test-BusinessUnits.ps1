@@ -143,6 +143,9 @@ if (Test-Path $helper) {
                 Assert "the manager refuses another spelling of a stored unit before the Entra group step" (($alias -join ' | ') -ceq 'read bu-registry') ($alias -join ' | ')
                 $unread = & $runAdd 'research' { throw 'ERROR: (AuthorizationFailed) cannot read' }
                 Assert "the manager stops before the Entra group step when it cannot read the registry" (($unread -join ' | ') -ceq 'read bu-registry') ($unread -join ' | ')
+                # Council round 3 (UX): Get-ApimNamedValue -FailOnError returns $null for a named value that does not exist.
+                $absent = & $runAdd 'research' { $null }
+                Assert "the manager stops before the Entra group step when the gateway has no bu-registry" (($absent -join ' | ') -ceq 'read bu-registry') ($absent -join ' | ')
                 $fresh = & $runAdd 'research' $legacy
                 Assert "the manager reaches the Entra group step for a new lower-case identifier" ($fresh.Count -ge 2 -and $fresh[0] -ceq 'read bu-registry' -and $fresh[1] -like 'az ad group show*') ($fresh -join ' | ')
             }

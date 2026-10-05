@@ -104,12 +104,17 @@ function Add-Unit {
     # The registry the writer will check against, read before any group is looked up or created. A failed read
     # stops here: the identifier cannot be checked against the units that exist.
     try {
-        $registryIds = @(ConvertFrom-ClaudeBuRegistry (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-registry' -FailOnError) | ForEach-Object Id)
+        $registryRaw = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-registry' -FailOnError
     }
     catch {
         Write-Host "  The business units could not be read, so nothing was created: $($_.Exception.Message)" -ForegroundColor Yellow
         return
     }
+    if ($null -eq $registryRaw) {
+        Write-Host "  bu-registry was not found on $ApimName, so nothing was created. Redeploy with the current template first." -ForegroundColor Yellow
+        return
+    }
+    $registryIds = @(ConvertFrom-ClaudeBuRegistry $registryRaw | ForEach-Object Id)
     if (-not (Confirm-Identifier $id -Registry $registryIds)) { return }
 
     $prefix = if ($Parent) { 'claude-team-' } else { 'claude-bu-' }
