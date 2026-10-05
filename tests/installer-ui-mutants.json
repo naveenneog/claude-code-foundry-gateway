@@ -36,6 +36,24 @@
     "test": "R3-7 effective address defaults match the installer address script"
   },
   {
+    "id": "r3-6-1",
+    "why": "The fixed script route list must include the split renderer script before installer-ui.js.",
+    "file": "tools/installer-ui/index.html",
+    "find": "<script defer src=\"./installer-ui-render.js\"></script>\n",
+    "replace": "",
+    "testFile": "tests/installer-ui-structure.test.mjs",
+    "test": "the form uses fixed script routes and no string-built DOM insertion sinks"
+  },
+  {
+    "id": "r3-6-2",
+    "why": "The server must serve the split renderer script from a fixed route.",
+    "file": "tools/installer-ui/server.mjs",
+    "find": "      if (req.method === 'GET' && url.pathname === '/installer-ui-render.js') return sendText(res, 200, await readFile(uiRenderScript, 'utf8'), 'text/javascript; charset=utf-8', setCookie);\n",
+    "replace": "",
+    "testFile": "tests/installer-ui-structure.test.mjs",
+    "test": "the form uses fixed script routes and no string-built DOM insertion sinks"
+  },
+  {
     "id": "r3-3-1",
     "why": "The preflight adapter must reject a top-level PASS when a blocking NOT-RUN or FAIL check recomputes to FAIL.",
     "file": "tools/installer-ui/installer-contract.mjs",
@@ -809,7 +827,7 @@
   {
     "id": "lead-U17",
     "why": "static mode shows no Cloud Shell handoff text",
-    "file": "tools/installer-ui/installer-ui.js",
+    "file": "tools/installer-ui/installer-ui-render.js",
     "find": "appendText(root, commands.cloudShell, \"p\");",
     "replace": "",
     "testFile": "tests/installer-ui-g4.test.mjs",
@@ -1223,8 +1241,8 @@
   {
     "id": "g7b-D08",
     "why": "G7B-6: the live commands section no longer says the installer asks for the PFX password",
-    "file": "tools/installer-ui/installer-ui.js",
-    "find": "\n    if (commands.terminalPfx) appendText(root, \"The installer asks for the PFX password in the terminal.\", \"p\");\n",
+    "file": "tools/installer-ui/installer-ui-render.js",
+    "find": "\n      if (commands.terminalPfx) appendText(root, \"The installer asks for the PFX password in the terminal.\", \"p\");",
     "replace": "\n",
     "testFile": "tests/installer-ui-g7b.test.mjs",
     "test": "P3 PFX answers disable page runs and render a terminal command without -Yes"
@@ -1241,9 +1259,9 @@
   {
     "id": "g7b-D10",
     "why": "P6: a step selection change marks the preflight stale again",
-    "file": "tools/installer-ui/installer-ui.js",
-    "find": "      input.addEventListener(\"change\", () => {\n        refreshCommands();",
-    "replace": "      input.addEventListener(\"change\", () => {\n        markPreflightStale();\n        refreshCommands();",
+    "file": "tools/installer-ui/installer-ui-render.js",
+    "find": "        input.addEventListener(\"change\", onChanged);\n",
+    "replace": "        input.addEventListener(\"change\", () => {});\n",
     "testFile": "tests/installer-ui-g7b.test.mjs",
     "test": "P6 one-step preflight admits selected scope but blocks full run"
   },
@@ -1313,7 +1331,7 @@
   {
     "id": "g7b-E08",
     "why": "R2-7: static mode drops the PFX sentence",
-    "file": "tools/installer-ui/installer-ui.js",
+    "file": "tools/installer-ui/installer-ui-render.js",
     "find": "\n      if (commands.terminalPfx) appendText(root, \"The installer asks for the PFX password in the terminal.\", \"p\");\n",
     "replace": "\n",
     "testFile": "tests/installer-ui-g7b-r2.test.mjs",

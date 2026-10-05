@@ -52,9 +52,10 @@ the server sends no CORS header, and `OPTIONS` is refused (`tools/installer-ui/s
 
 The server exposes fixed routes. The page uses classic deferred scripts so the same
 `tools/installer-ui/index.html` works from `file://` and from the server. The server serves `/` and
-`/index.html` byte for byte from that file and serves only the declared script and CSS routes
-(`tools/installer-ui/index.html:8-15`; `tools/installer-ui/server.mjs:414-423`;
-`tests/installer-ui-structure.test.mjs:9-13`; `tests/installer-ui-structure.test.mjs:52-59`).
+`/index.html` byte for byte from that file and serves only the declared script and CSS routes,
+including the split renderer page script (`tools/installer-ui/index.html:8-16`;
+`tools/installer-ui/server.mjs:337-344`; `tests/installer-ui-structure.test.mjs:9-23`;
+`tools/installer-ui/installer-ui-render.js:7-115`).
 
 The run record is server-side. It stores the active or last run id, selected steps, state, current
 step, failed step, resume command, exit code, start time and a bounded tail. `GET /api/run/status`

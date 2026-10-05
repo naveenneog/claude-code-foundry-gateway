@@ -73,9 +73,11 @@ PowerShell child process calls and idle lifecycle (`tools/installer-ui/server.mj
 `tools/installer-ui/server.mjs:261-285`; `tools/installer-ui/server.mjs:379-600`). `tools/installer-ui/http-helpers.mjs` owns Host, cookie,
 CSRF, same-origin and JSON-body helpers (`tools/installer-ui/http-helpers.mjs:13-30`;
 `tools/installer-ui/http-helpers.mjs:61-119`). The browser, server and tests share `tools/installer-ui/ui-model.js` through
-`tools/installer-ui/server-model.mjs`, and the UI model's copied address defaults are checked
+`tools/installer-ui/server-model.mjs`, command and preflight rendering is split into
+`tools/installer-ui/installer-ui-render.js`, and the UI model's copied address defaults are checked
 against `scripts/ClaudeGatewayAddressInput.ps1`; the static page serves the same `index.html` bytes
-as the live server (`tools/installer-ui/ui-model.js:155-161`;
+as the live server (`tools/installer-ui/installer-ui-render.js:7-115`;
+`tools/installer-ui/ui-model.js:155-161`;
 `scripts/ClaudeGatewayAddressInput.ps1:27-28`; `tools/installer-ui/server.mjs:414`;
 `tools/installer-ui/server-model.mjs:77-91`; `tests/installer-ui-structure.test.mjs:28-29`).
 

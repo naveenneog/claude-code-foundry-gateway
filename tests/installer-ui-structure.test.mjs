@@ -8,7 +8,7 @@ import { createInstallerUiServer } from '../tools/installer-ui/server.mjs';
 
 test('the form uses fixed script routes and no string-built DOM insertion sinks', async () => {
   const html = await readFile(new URL('../tools/installer-ui/index.html', import.meta.url), 'utf8');
-  assert.match(html, /<script defer src="\.\/ui-model\.js"><\/script>\s*<script defer src="\.\/installer-ui-business-units\.js"><\/script>\s*<script defer src="\.\/installer-ui-prefill\.js"><\/script>\s*<script defer src="\.\/installer-ui-actions\.js"><\/script>\s*<script defer src="\.\/installer-ui-problems\.js"><\/script>\s*<script defer src="\.\/installer-ui-run\.js"><\/script>\s*<script defer src="\.\/installer-ui\.js"><\/script>/);
+  assert.match(html, /<script defer src="\.\/ui-model\.js"><\/script>\s*<script defer src="\.\/installer-ui-business-units\.js"><\/script>\s*<script defer src="\.\/installer-ui-prefill\.js"><\/script>\s*<script defer src="\.\/installer-ui-actions\.js"><\/script>\s*<script defer src="\.\/installer-ui-problems\.js"><\/script>\s*<script defer src="\.\/installer-ui-run\.js"><\/script>\s*<script defer src="\.\/installer-ui-render\.js"><\/script>\s*<script defer src="\.\/installer-ui\.js"><\/script>/);
   assert.doesNotMatch(html, /type="module"|import\s+|export\s+/);
   assert.doesNotMatch(html, /<script>\s*\(/);
   const scripts = {
@@ -18,7 +18,9 @@ test('the form uses fixed script routes and no string-built DOM insertion sinks'
     actions: await readFile(new URL('../tools/installer-ui/installer-ui-actions.js', import.meta.url), 'utf8'),
     problems: await readFile(new URL('../tools/installer-ui/installer-ui-problems.js', import.meta.url), 'utf8'),
     run: await readFile(new URL('../tools/installer-ui/installer-ui-run.js', import.meta.url), 'utf8'),
+    render: await readFile(new URL('../tools/installer-ui/installer-ui-render.js', import.meta.url), 'utf8'),
   };
+  assert.ok(scripts.js.split(/\r?\n/).length <= 700, 'installer-ui.js must stay within the 700-line production budget');
   for (const source of Object.values(scripts)) assert.doesNotMatch(source, /innerHTML|insertAdjacentHTML|import\s+|export\s+/);
   for (const name of ['buildPortableCommands', 'coerceAnswerValue', 'collectAnswersFromEntries', 'fieldsByCheckId', 'quoteBash', 'quotePowerShell', 'validateBusinessUnits']) {
     for (const [script, source] of Object.entries(scripts)) assert.doesNotMatch(source, new RegExp(`function\\s+${name}\\b|const\\s+${name}\\b`), `${name} must live only in ui-model.js, not ${script}`);
