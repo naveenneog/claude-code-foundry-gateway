@@ -91,12 +91,12 @@
   },
   {
     "id": "r3-1-1",
-    "why": "A new preflight attempt must clear the previous pass for the same answers before later failures.",
+    "why": "A preflight attempt clears the pass for the same answers again when it gets the Azure lease, so a pass that an earlier attempt stored while it waited does not outlive it.",
     "file": "tools/installer-ui/server.mjs",
-    "find": "          const answers = await writeAnswers(dir, body.answers || {});\n          preflightPasses.clearForAnswers(digest, engine);\n          const result = await runInstaller('powershell', await installerArguments({ engine: 'pwsh', action: 'preflight', answersPath: answers }), options, { ...childTimeout(lease), readName: 'preflight', outputCapBytes: outputCapFor() });\n",
-    "replace": "          const answers = await writeAnswers(dir, body.answers || {});\n          const result = await runInstaller('powershell', await installerArguments({ engine: 'pwsh', action: 'preflight', answersPath: answers }), options, { ...childTimeout(lease), readName: 'preflight', outputCapBytes: outputCapFor() });\n",
-    "testFile": "tests/installer-ui-g8.test.mjs",
-    "test": "R3-1 malformed preflight output clears an earlier pass for the same answers"
+    "find": "          // A pass that an earlier attempt stored while this attempt waited for the lease must not outlive it.\n          preflightPasses.clearForAnswers(digest, engine);\n",
+    "replace": "",
+    "testFile": "tests/installer-ui-g9.test.mjs",
+    "test": "R4-1 a pass stored while a later attempt waits for Azure CLI does not outlive that attempt"
   },
   {
     "id": "r3-1-2",
@@ -1372,5 +1372,14 @@
     "replace": "",
     "testFile": "tests/installer-ui-g7b.test.mjs",
     "test": "P6 one-step preflight admits selected scope but blocks full run"
+  },
+  {
+    "id": "r4-1-1",
+    "why": "R4-1: a preflight attempt clears the pass for its answers right after reading the request, before step validation, the Azure lease or any child",
+    "file": "tools/installer-ui/server.mjs",
+    "find": "        // A preflight attempt invalidates the earlier pass for its answers before any step that can fail.\n        preflightPasses.clearForAnswers(digest, engine);\n",
+    "replace": "",
+    "testFile": "tests/installer-ui-g9.test.mjs",
+    "test": "R4-1 a preflight retry whose step list fails clears the earlier pass for the same answers"
   }
 ]

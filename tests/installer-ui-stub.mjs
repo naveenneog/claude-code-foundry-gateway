@@ -52,6 +52,13 @@ function startHeartbeatGrandchild(heartbeat) {
 }
 
 if (args.includes('-ListSteps')) {
+  // The step list is malformed while this marker file exists, so a test can break one call between good ones.
+  if (process.env.P93_INSTALLER_UI_STUB_BAD_LIST_MARKER) {
+    try {
+      readFileSync(process.env.P93_INSTALLER_UI_STUB_BAD_LIST_MARKER);
+      process.env.P93_INSTALLER_UI_STUB_BAD_LIST = 'type';
+    } catch {}
+  }
   if (process.env.P93_INSTALLER_UI_STUB_BAD_LIST === 'version') {
     console.log(JSON.stringify({ schemaVersion: 2, installer: 'pwsh', checkpoint: null, runId: null, steps: [] }));
     finish(0);
@@ -168,6 +175,15 @@ if (args.includes('-Preflight')) {
       readFileSync(process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_DELAY_MARKER, 'utf8');
       await new Promise((resolve) => setTimeout(resolve, Number(process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_DELAY_MARKER_MS)));
     } catch {}
+  }
+  // The preflight waits while this marker file exists (at most 30 s), so a test can order it against other requests.
+  if (process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_HOLD_MARKER) {
+    const until = Date.now() + 30_000;
+    for (;;) {
+      try { readFileSync(process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_HOLD_MARKER); } catch { break; }
+      if (Date.now() > until) break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
   }
   const fail = process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_FAIL === '1';
   const signedOut = process.env.P93_INSTALLER_UI_STUB_SIGNED_OUT === '1';

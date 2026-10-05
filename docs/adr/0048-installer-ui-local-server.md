@@ -96,13 +96,16 @@ empty `stepId` only for whole-run `failed` and `refused` events
 Preflight fingerprints are lower-case SHA-256 values over a canonical JSON object containing schema
 version, engine, sorted answers, a sorted step scope or `full`, and the Azure identity snapshot read
 after a PASS. The server stores at most 20 passing records. A passing record also stores the
-signed-in state, user, tenant and subscription snapshot. A new preflight attempt clears the prior
-pass for the same answers and engine before the child starts, so any later malformed output, timeout
-or identity-read failure leaves no stored pass. A
+signed-in state, user, tenant and subscription snapshot. A preflight attempt clears the prior pass
+for the same answers and engine as soon as the server has read the request, before step validation,
+the Azure lease or any child, and again under the Azure lease before the installer child starts. A
+failure at any stage (step list, Azure CLI busy, malformed output, timeout or identity read)
+therefore leaves no stored pass, and a pass that an earlier attempt stored while this attempt waited
+for the lease does not outlive this attempt. A
 run is admitted only when the submitted fingerprint exists, the answers digest matches, the engine is
 `pwsh`, the stored scope covers the requested run scope and the current identity snapshot matches
 the passing preflight (`tools/installer-ui/preflight-record.mjs:3-37`; `tools/installer-ui/preflight-record.mjs:46-64`;
-`tools/installer-ui/server.mjs:155`; `tools/installer-ui/server.mjs:390-415`; `tools/installer-ui/server.mjs:443-456`).
+`tools/installer-ui/server.mjs:155`; `tools/installer-ui/server.mjs:385-417`; `tools/installer-ui/server.mjs:446-459`).
 
 One Azure CLI lease covers identity, prefill, preflight and run work. Reads wait behind reads in
 arrival order, wait time counts against the read timeout, runs are refused while a read holds the

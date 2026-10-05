@@ -124,10 +124,11 @@ the PowerShell run command without `-Yes`, so the installer asks for the PFX pas
 ## Run lifecycle and limits
 
 Preflight produces a canonical SHA-256 fingerprint over schema version, engine, answers, requested
-step scope and the Azure identity snapshot read after a PASS. A new preflight attempt clears any
-stored pass for the same answers and engine before the child starts, so a later malformed output,
-timeout or identity-read failure leaves no reusable old pass
-(`tools/installer-ui/preflight-record.mjs:28-30`; `tools/installer-ui/server.mjs:390-393`; `tools/installer-ui/server.mjs:408-414`).
+step scope and the Azure identity snapshot read after a PASS. A preflight attempt clears any stored
+pass for the same answers and engine as soon as the server has read the request and again before the
+installer child starts, so a failure at any stage (step list, Azure CLI busy, malformed output,
+timeout or identity read) leaves no reusable old pass
+(`tools/installer-ui/preflight-record.mjs:28-30`; `tools/installer-ui/server.mjs:385-395`; `tools/installer-ui/server.mjs:411-417`).
 The passing preflight also stores the signed-in state, user, tenant and subscription snapshot; run
 admission reads identity again under the Azure lease and refuses changed identity with `409`
 (`tools/installer-ui/server.mjs:219-237`; `tools/installer-ui/server.mjs:408-411`;

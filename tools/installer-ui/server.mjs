@@ -383,12 +383,15 @@ export async function createInstallerUiServer(options = {}) {
         requireLive();
         assertSameOrigin(req, logRequestRefusal);
         const body = await readJsonBody(req);
+        const engine = 'pwsh';
+        const digest = answersDigest(body?.answers || {});
+        // A preflight attempt invalidates the earlier pass for its answers before any step that can fail.
+        preflightPasses.clearForAnswers(digest, engine);
         const requestedSteps = await withJob(() => validateStepScope(body, () => listSteps(options)));
         const scope = scopeFromBody(body, requestedSteps);
-        const digest = answersDigest(body.answers || {});
-        const engine = 'pwsh';
         return send(res, 200, await withAzureRead('preflight', (lease) => withRunDirectory(async (dir) => {
           const answers = await writeAnswers(dir, body.answers || {});
+          // A pass that an earlier attempt stored while this attempt waited for the lease must not outlive it.
           preflightPasses.clearForAnswers(digest, engine);
           const result = await runInstaller('powershell', await installerArguments({ engine: 'pwsh', action: 'preflight', answersPath: answers }), options, { ...childTimeout(lease), readName: 'preflight', outputCapBytes: outputCapFor() });
           let parsed;
