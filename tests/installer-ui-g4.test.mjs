@@ -592,7 +592,7 @@ test('U1 fix a reattach stream that ends without a summary clears run activity',
     await page.reload();
     await page.waitForSelector('[name="SubscriptionId"]');
     await page.getByText(/reattached/).waitFor();
-    await page.locator('#run-status[role="alert"]').getByText(/stream keeps ending|stream ended without a summary/).waitFor();
+    await page.locator('#run-error[role="alert"]').getByText(/stream keeps ending/).waitFor();
     assert.equal(await page.locator('#stop-run').isDisabled(), true);
     await assertClean(page, pageErrors);
   } finally {

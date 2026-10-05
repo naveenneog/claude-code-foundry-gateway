@@ -191,6 +191,14 @@ JSON array of objects again, and monthly USD budgets accept finite decimals in t
 | Review | Runs installer preflight and shows check, result, message, remedy and field links when a problem names or maps to an answer path. A passing preflight returns a 64-character SHA-256 fingerprint over canonical answers, engine and step scope. Failing checks mark fields through a problem path when present, otherwise through the schema's `x-checkId` mapping. Non-JSON preflight output returns a visible error with the exit code and a short redacted, path-scrubbed output tail (`tools/installer-ui/installer-ui.js:386-405`; `tools/installer-ui/installer-ui-problems.js:39-58`; `tools/installer-ui/preflight-record.mjs:28-46`; `tools/installer-ui/server.mjs:475-480`). |
 | Run | Lists installer step ids, streams selected-step output as it arrives, shows a failed step with a rerun action and resume command, reattaches to an active run after reload and keeps a full run as a separate confirmed action (`tools/installer-ui/installer-ui.js:414-468`; `tools/installer-ui/installer-ui.js:486-538`; `tools/installer-ui/installer-ui.js:613-652`). A run starts only when its fingerprint matches a stored passing preflight for the same answers and a covering scope. Displayed commands use `./Install-ClaudeGateway.ps1` and `./install-claude-gateway.sh` (`tools/installer-ui/ui-model.js:588-618`). |
 
+The First install prefill choices are scoped to the current account's read and preserve typed
+deployment names in the answer inputs (`tools/installer-ui/installer-ui-prefill.js:86-132`). Review
+uses the passing preflight's scope and identity to decide which run buttons are admitted
+(`tools/installer-ui/installer-ui.js:365-407`). Run summaries are interpreted by
+`installer-ui-run.js`: non-zero summaries are alerts, stopped summaries are status text and
+reattach failures use the run alert region (`tools/installer-ui/installer-ui-run.js:50-129`;
+`tools/installer-ui/installer-ui-run.js:169-177`).
+
 ## Installer interface checks
 
 The server validates the P92 step list, preflight result and progress event interfaces before using

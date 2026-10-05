@@ -376,7 +376,7 @@ test("F5 business-unit JSON refuses non-array object shapes without pageerror an
     await page.getByText("JSON view").click();
     for (const bad of ["{}", "null", "[null]", "[1]", '"x"']) {
       await page.locator("#business-units").fill(bad);
-      await page.getByText(/array of objects/).waitFor();
+      await page.locator("#business-unit-problems").getByText(/array of objects/).waitFor();
       assert.equal(await page.locator("[data-bu-index]").count(), 1, bad);
       assert.equal(await page.locator('[data-bu-field="id"]').first().inputValue(), "finance", bad);
     }

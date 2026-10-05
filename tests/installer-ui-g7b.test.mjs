@@ -62,7 +62,6 @@ async function passPreflight(page, scope = ['resource-group']) {
   for (const step of scope) await page.locator(`#step-list input[value="${step}"]`).check();
   await page.getByRole('button', { name: 'Run preflight' }).click();
   await page.locator('#preflight-output').getByText(/answers\.schema/).waitFor();
-  await page.locator('#step-list input[value="resource-group"]').check();
 }
 
 test('P1 exit-zero run keeps the finished action text', async () => {
@@ -96,8 +95,9 @@ test('P1 non-zero run reports the exit code, failed step and resume command as a
     await page.getByRole('button', { name: 'Run preflight' }).click();
     await page.locator('#preflight-output').getByText(/answers\.schema/).waitFor();
     await page.route('**/api/run/stream', (route) => route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"summary","exitCode":5,"failedStepId":"resource-group","resumeCommand":"./Install-ClaudeGateway.ps1 -Steps resource-group","state":"exited","message":""}\n' }));
-    await page.getByRole('button', { name: 'Run selected steps' }).click();
-    const alert = page.locator('#run-error[role="alert"]');
+    await page.evaluate(() => { globalThis.confirm = () => true; });
+    await page.getByRole('button', { name: 'Full run' }).click();
+    const alert = page.locator('#full-run-error[role="alert"]');
     await alert.getByText(/exit code 5/).waitFor();
     assert.match(await alert.textContent(), /resource-group/);
     assert.match(await alert.textContent(), /Install-ClaudeGateway\.ps1/);
@@ -118,9 +118,10 @@ test('P1 stopped run reports stopped status rather than an error', async () => {
     await page.getByRole('button', { name: 'Run preflight' }).click();
     await page.locator('#preflight-output').getByText(/answers\.schema/).waitFor();
     await page.route('**/api/run/stream', (route) => route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"summary","exitCode":null,"failedStepId":"resource-group","resumeCommand":"","state":"stopped","message":""}\n' }));
-    await page.getByRole('button', { name: 'Run selected steps' }).click();
-    await page.locator('#run-status').getByText(/Run stopped at resource-group/).waitFor();
-    assert.equal(await page.locator('#run-error').textContent(), '');
+    await page.evaluate(() => { globalThis.confirm = () => true; });
+    await page.getByRole('button', { name: 'Full run' }).click();
+    await page.locator('#full-run-status').getByText(/Run stopped at resource-group/).waitFor();
+    assert.equal(await page.locator('#full-run-error').textContent(), '');
     await assertClean(page, pageErrors);
   } finally {
     await browser.close();
