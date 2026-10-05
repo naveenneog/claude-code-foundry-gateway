@@ -1,23 +1,23 @@
 import { createServer as createHttpServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { StringDecoder } from 'node:string_decoder';
 import { once } from 'node:events';
 import { mkdtemp, readFile, rm, writeFile, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { validatePreflight, validateProgressEvent, validateStepList } from './installer-contract.mjs';
+import { validatePreflight, validateStepList } from './installer-contract.mjs';
 import { createAzureLease } from './azure-lease.mjs';
 import { assertSameOrigin, constantTimeTokenEquals, contentSecurityPolicy, isAllowedHost, isLoopbackBind, parseCookies, readJsonBody, send, sendText, tokenHash } from './http-helpers.mjs';
 import { attachSubscriber, createRunRecord, publicRun, publishEvent } from './run-record.mjs';
 import { createRunAdmissions } from './run-admission.mjs';
-import { createLineHandler, readProgressFile, writeNdjson } from './run-transport.mjs';
+import { writeNdjson } from './run-transport.mjs';
 import { createSessionAuth } from './session-auth.mjs';
 import { collectChildOutput } from './child-output.mjs';
 import { validateRunRequest, validateStepScope } from './step-scope.mjs';
 import { fieldsByCheckId, installerArguments, loadSchema, prefillArguments, preflightCheckIds, redactText, root, scrubLocalPaths } from './server-model.mjs';
 import { answersDigest, createPreflightStore, preflightFingerprint, preflightRequired, scopeCovers, scopeFromBody } from './preflight-record.mjs';
+import { runInstallerStreaming } from './installer-stream.mjs';
 
 export { loadSchema, redactText, scrubLocalPaths } from './server-model.mjs';
 
@@ -35,9 +35,6 @@ const uiModelScript = join(here, 'ui-model.js');
 const uiCss = join(here, 'installer-ui.css');
 const uiIndex = join(here, 'index.html');
 const defaultIdleMs = 30 * 60 * 1000;
-const consoleOutputCapBytes = 4 * 1024 * 1024;
-const consoleLineCapBytes = 64 * 1024;
-
 async function withRunDirectory(fn, tempDirs, parent = tmpdir()) {
   const dir = await mkdtemp(join(parent, 'claude-installer-ui-'));
   tempDirs.add(dir);
@@ -126,97 +123,6 @@ async function checkPowerShell(options) {
   if (code !== 0 || !Number.isInteger(major)) return { ok: false, reason: `${command} could not report PowerShell 7 or newer. ${stderr.trim()}`.trim() };
   if (major < 7) return { ok: false, reason: `${command} reports PowerShell ${major}; PowerShell 7 or newer is required for live mode.` };
   return { ok: true, reason: '' };
-}
-
-async function runInstallerStreaming(kind, args, options, onEvent, progressPath, runOptions = {}) {
-  const command = spawnInstallerArgs(kind, args, options);
-  const child = spawnChild(command.file, command.args, options);
-  runOptions.onChild?.(child);
-  let progressCarry = '';
-  let progressReading = Promise.resolve();
-  let emitQueue = Promise.resolve();
-  let consoleBytes = 0;
-  let capNoticed = false;
-  const enqueue = (event) => {
-    emitQueue = emitQueue.then(() => onEvent(event)).catch((error) => onEvent({ type: 'error', message: error.message }).catch(() => {}));
-    return emitQueue;
-  };
-  const emitConsoleLine = async (type, line) => {
-    if (!line) return;
-    const redacted = await redactText(line);
-    const bytes = Buffer.byteLength(redacted);
-    if (consoleBytes + bytes > consoleOutputCapBytes) {
-      if (!capNoticed) {
-        capNoticed = true;
-        await enqueue({ type: 'notice', message: `The ${consoleOutputCapBytes} byte output cap was reached; the installer continues and progress plus summary events are still shown.` });
-      }
-      return;
-    }
-    consoleBytes += bytes;
-    await enqueue({ type, line: redacted });
-  };
-  const stdout = createLineHandler('stdout', emitConsoleLine, consoleLineCapBytes);
-  const stderr = createLineHandler('stderr', emitConsoleLine, consoleLineCapBytes);
-  child.stdout.on('data', (chunk) => { void stdout.chunk(chunk); });
-  child.stderr.on('data', (chunk) => { void stderr.chunk(chunk); });
-  const progressDecoder = new StringDecoder('utf8');
-  let progressDiscarding = false;
-  const processProgressText = async (text, final) => {
-    progressCarry += text;
-    const lines = progressCarry.split(/\r?\n/);
-    progressCarry = lines.pop() || '';
-    if (final && progressCarry) {
-      lines.push(progressCarry);
-      progressCarry = '';
-    }
-    for (const line of lines) {
-      if (progressDiscarding) {
-        progressDiscarding = false;
-        continue;
-      }
-      if (!line) continue;
-      if (Buffer.byteLength(line) > consoleLineCapBytes) {
-        await enqueue({ type: 'error', message: `progress line exceeded the ${consoleLineCapBytes} byte cap` });
-        continue;
-      }
-      try {
-        const event = validateProgressEvent(JSON.parse(line));
-        if (event.message) event.message = await redactText(event.message);
-        if (event.resumeCommand) event.resumeCommand = await redactText(event.resumeCommand);
-        await enqueue({ type: 'progress', ...event });
-      } catch (error) {
-        await enqueue({ type: 'error', message: await redactText(`progress parse failed: ${error.message}`) });
-      }
-    }
-    if (Buffer.byteLength(progressCarry) > consoleLineCapBytes) {
-      progressCarry = '';
-      // A line that is already being discarded has had its one error event.
-      if (!progressDiscarding) await enqueue({ type: 'error', message: `progress line exceeded the ${consoleLineCapBytes} byte cap` });
-      progressDiscarding = true;
-    }
-  };
-  const progressState = { offset: 0, decoder: progressDecoder };
-  const timer = setInterval(() => { progressReading = progressReading.then(() => readProgressFile(progressPath, progressState, processProgressText, false)).catch((error) => enqueue({ type: 'error', message: `progress read failed: ${error.message}` })); }, 100);
-  let code;
-  try {
-    code = await new Promise((resolveCode, reject) => {
-      child.on('error', reject);
-      child.on('close', resolveCode);
-    });
-  } finally {
-    clearInterval(timer);
-  }
-  await Promise.all([
-    child.stdout.readableEnded ? Promise.resolve() : once(child.stdout, 'end').catch(() => {}),
-    child.stderr.readableEnded ? Promise.resolve() : once(child.stderr, 'end').catch(() => {}),
-  ]);
-  await stdout.end();
-  await stderr.end();
-  await progressReading;
-  await readProgressFile(progressPath, progressState, processProgressText, true);
-  await processProgressText(progressDecoder.end(), true);
-  await emitQueue;
-  return code;
 }
 
 async function listSteps(options, timeoutMs = 60_000) {
@@ -570,7 +476,7 @@ export async function createInstallerUiServer(options = {}) {
             }
             const code = await runInstallerStreaming('powershell', args, options, async (event) => {
               publish(run, event);
-            }, run.progressPath, { onChild: (child) => { run.child = child; if (run.stopRequested) void killProcessTree(child); } });
+            }, run.progressPath, { spawnInstallerArgs, spawnChild, redactText }, { onChild: (child) => { run.child = child; if (run.stopRequested) void killProcessTree(child); } });
             run.exitCode = code;
             run.state = run.state === 'stopping' ? 'stopped' : 'exited';
           } catch (error) {

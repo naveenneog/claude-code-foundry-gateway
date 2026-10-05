@@ -81,6 +81,7 @@ test('server modules spawn only PowerShell, node stubs or taskkill', async () =>
     'server.mjs spawnChild(file)',
     'server.mjs spawn(file)',
     'server.mjs spawnChild(command.file)',
+    'installer-stream.mjs spawnChild(command.file)',
     "server.mjs spawnChild(options.pwsh || 'pwsh')",
     'server.mjs spawn(command)',
     'server.mjs file: process.execPath',

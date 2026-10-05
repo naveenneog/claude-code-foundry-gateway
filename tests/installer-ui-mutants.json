@@ -305,7 +305,7 @@
   {
     "id": "lead-S13",
     "why": "streamed console lines are not redacted",
-    "file": "tools/installer-ui/server.mjs",
+    "file": "tools/installer-ui/installer-stream.mjs",
     "find": "const redacted = await redactText(line);",
     "replace": "const redacted = line;",
     "testFile": "tests/installer-ui.test.mjs",
@@ -314,7 +314,7 @@
   {
     "id": "lead-S14",
     "why": "progress messages are not redacted",
-    "file": "tools/installer-ui/server.mjs",
+    "file": "tools/installer-ui/installer-stream.mjs",
     "find": "if (event.message) event.message = await redactText(event.message);",
     "replace": "if (event.message) {}",
     "testFile": "tests/installer-ui.test.mjs",
@@ -350,7 +350,7 @@
   {
     "id": "lead-L04",
     "why": "console output is not capped",
-    "file": "tools/installer-ui/server.mjs",
+    "file": "tools/installer-ui/installer-stream.mjs",
     "find": "if (consoleBytes + bytes > consoleOutputCapBytes) {",
     "replace": "if (false) {",
     "testFile": "tests/installer-ui-stream.test.mjs",
@@ -377,7 +377,7 @@
   {
     "id": "lead-L07",
     "why": "a final progress line without a newline is dropped",
-    "file": "tools/installer-ui/server.mjs",
+    "file": "tools/installer-ui/installer-stream.mjs",
     "find": "if (final && progressCarry) {",
     "replace": "if (false) {",
     "testFile": "tests/installer-ui.test.mjs",
@@ -1016,7 +1016,7 @@
   {
     "id": "g7a-B02",
     "why": "lead fix: a progress line that passes the cap twice gives two errors",
-    "file": "tools/installer-ui/server.mjs",
+    "file": "tools/installer-ui/installer-stream.mjs",
     "find": "if (!progressDiscarding) await enqueue(",
     "replace": "await enqueue(",
     "testFile": "tests/installer-ui-g7.test.mjs",
@@ -1025,7 +1025,7 @@
   {
     "id": "g7a-B03",
     "why": "G7A-6: a complete progress line over the cap is parsed",
-    "file": "tools/installer-ui/server.mjs",
+    "file": "tools/installer-ui/installer-stream.mjs",
     "find": "      if (Buffer.byteLength(line) > consoleLineCapBytes) {\n        await enqueue({ type: 'error', message: `progress line exceeded the ${consoleLineCapBytes} byte cap` });\n        continue;\n      }\n",
     "replace": "",
     "testFile": "tests/installer-ui-g7.test.mjs",

@@ -12,6 +12,7 @@
   "sources": [
     "tools/installer-ui/server.mjs",
     "tools/installer-ui/run-record.mjs",
+    "tools/installer-ui/installer-stream.mjs",
     "tools/installer-ui/run-transport.mjs",
     "tools/installer-ui/installer-contract.mjs",
     "tools/installer-ui/preflight-record.mjs",
@@ -55,6 +56,7 @@
     "fingerprint": { "label": "preflight-record.mjs", "source": "tools/installer-ui/preflight-record.mjs", "match": "preflightFingerprint" },
     "contract": { "label": "installer-contract.mjs", "source": "tools/installer-ui/installer-contract.mjs", "match": "validateProgressEvent" },
     "record": { "label": "run-record.mjs", "source": "tools/installer-ui/run-record.mjs", "match": "createRunRecord" },
+    "installer-stream": { "label": "installer-stream.mjs", "source": "tools/installer-ui/installer-stream.mjs", "match": "runInstallerStreaming" },
     "transport": { "label": "run-transport.mjs", "source": "tools/installer-ui/run-transport.mjs", "match": "createLineHandler" },
     "installer": { "label": "Install-ClaudeGateway.ps1", "source": "Install-ClaudeGateway.ps1", "match": "$ProgressPath" },
     "steps-producer": { "label": "ClaudeInstallSteps.ps1", "source": "scripts/ClaudeInstallSteps.ps1", "match": "ProgressPath" },
@@ -77,7 +79,7 @@
     { "id": "fingerprint", "x": 1110, "y": 422, "w": 306, "h": 190, "tone": "blue", "title": "8 - Fingerprint gate", "lines": ["[[fingerprint]] binds answers, engine, scope and identity.", "[[step-scope]] validates selected steps."] },
     { "id": "run", "x": 24, "y": 748, "w": 320, "h": 260, "tone": "teal", "title": "9 - Streamed run", "lines": ["[[browser-run]] reports run summaries.", "[[server]] starts [[installer]] only through pwsh or node stub.", "[[steps-producer]] writes progress NDJSON."] },
     { "id": "record", "x": 386, "y": 768, "w": 320, "h": 220, "tone": "teal", "title": "10 - Run record", "lines": ["[[record]] stores active or last run state and tail.", "Status and attach routes survive browser disconnect."] },
-    { "id": "transport", "x": 748, "y": 768, "w": 320, "h": 220, "tone": "teal", "title": "11 - Transport limits", "lines": ["[[transport]] handles progress carries and 64 KiB lines.", "[[child-output]] caps read-only output; console output has a 4 MiB cap."] },
+    { "id": "transport", "x": 748, "y": 768, "w": 320, "h": 220, "tone": "teal", "title": "11 - Transport limits", "lines": ["[[installer-stream]] streams installer output through [[transport]].", "[[child-output]] caps read-only output; console output has a 4 MiB cap."] },
     { "id": "stop", "x": 1110, "y": 768, "w": 306, "h": 220, "tone": "teal", "title": "12 - Stop and redaction", "lines": ["Stop uses taskkill.exe on Windows or a POSIX process group.", "server-model.mjs applies [[redact]] rules."] }
   ],
   "edges": [
