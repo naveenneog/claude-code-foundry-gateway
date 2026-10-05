@@ -259,7 +259,7 @@
         {
           checkId: "answers.schema",
           path: "BusinessUnits",
-          message: "Correct the JSON view.",
+          message: error.message,
           remedy: "Correct the JSON view.",
         },
       ];

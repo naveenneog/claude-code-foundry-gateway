@@ -191,6 +191,36 @@ test('P4 invalid business-unit JSON blocks download and keeps the draft text', a
   }
 });
 
+test('G7B-3 invalid business-unit JSON blocks tree actions without page errors and recovers to submitted JSON', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await page.locator('[name="SubscriptionId"]').fill('00000000-0000-4000-8000-000000000093');
+    await page.locator('summary', { hasText: 'JSON view' }).click();
+    await page.locator('#business-units').fill('{');
+    await page.getByRole('button', { name: 'Add unit' }).click();
+    await page.locator('#business-unit-problems').getByText(/JSON parse error/).waitFor();
+    assert.equal(await page.locator('#business-units').inputValue(), '{');
+    assert.equal(await page.getByRole('button', { name: 'Run preflight' }).isDisabled(), true);
+    assert.match(await page.locator('#commands').textContent(), /Commands are unavailable/);
+    assert.deepEqual(pageErrors, []);
+    const units = [{ id: 'finance', group: 'claude-bu-finance', monthlyUsdBudget: 12.5, mode: 'Strict' }];
+    await page.locator('#business-units').fill(JSON.stringify(units, null, 2));
+    let submitted;
+    await page.route('**/api/preflight', (route) => {
+      submitted = route.request().postDataJSON();
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ preflight: { schemaVersion: 1, installer: 'pwsh', answersSchemaVersion: 1, result: 'PASS', checks: [{ id: 'answers.schema', result: 'PASS', reason: null, message: 'ok', remedy: '', problems: [] }] }, fingerprint: 'a'.repeat(64), identity: { signedIn: true, user: 'one@example.test', tenantId: 'tenant-1', subscriptionId: '00000000-0000-4000-8000-000000000093' }, scope: 'full' }) });
+    });
+    await page.getByRole('button', { name: 'Run preflight' }).click();
+    await page.locator('#preflight-output').getByText(/answers\.schema/).waitFor();
+    assert.deepEqual(submitted.answers.BusinessUnits, units);
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
 test('P4 decimal monthly budget is accepted while text and out-of-range values are refused', async () => {
   const model = globalThis.ClaudeInstallerUiModel || (await import('node:vm')).runInNewContext;
   const { readFile } = await import('node:fs/promises');
@@ -202,6 +232,28 @@ test('P4 decimal monthly budget is accepted while text and out-of-range values a
   assert.match(validate([{ id: 'finance', group: 'claude-bu-finance', monthlyUsdBudget: -1, mode: 'Strict' }]).join('\n'), /monthly budget/);
   assert.match(validate([{ id: 'finance', group: 'claude-bu-finance', monthlyUsdBudget: 100000000.01, mode: 'Strict' }]).join('\n'), /monthly budget/);
   assert.match(validate([{ id: 'finance', group: 'claude-bu-finance', monthlyUsdBudget: '12', mode: 'Strict' }]).join('\n'), /monthly budget/);
+  const scratch = join(tmpdir(), `p93-g7b-decimal-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+  await mkdir(scratch, { recursive: true });
+  try {
+    const answersPath = join(scratch, 'answers.json');
+    const runner = join(scratch, 'validate.ps1');
+    await writeFile(answersPath, JSON.stringify({ schemaVersion: 1, BusinessUnits: [{ id: 'finance', group: 'claude-bu-finance', monthlyUsdBudget: 12.5, mode: 'Strict' }] }), 'utf8');
+    await writeFile(runner, `
+$ErrorActionPreference = 'Stop'
+. '${fileURLToPath(new URL('../scripts/ClaudeInstallerAnswers.ps1', import.meta.url)).replace(/'/g, "''")}'
+@(Test-ClaudeInstallerAnswersFile -Path '${answersPath.replace(/'/g, "''")}' -Consumer 'Install-ClaudeGateway.ps1') | ConvertTo-Json -Depth 10
+`, 'utf8');
+    const ps = spawn('pwsh', ['-NoProfile', '-File', runner], { shell: false });
+    let stdout = '';
+    let stderr = '';
+    ps.stdout.on('data', (chunk) => { stdout += chunk; });
+    ps.stderr.on('data', (chunk) => { stderr += chunk; });
+    const code = await new Promise((resolve) => ps.on('close', resolve));
+    assert.equal(code, 0, stderr);
+    assert.equal(stdout.trim(), '');
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
 });
 
 test('P6 one-step preflight admits selected scope but blocks full run', async () => {

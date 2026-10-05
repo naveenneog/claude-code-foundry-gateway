@@ -42,6 +42,14 @@
       return problems;
     }
 
+    function refuseTreeAction() {
+      if (!jsonDraftProblem) return false;
+      byId("business-unit-problems").textContent = `${jsonDraftProblem}\nCorrect the JSON view before changing the tree.`;
+      byId("business-unit-problems").focus();
+      validateCurrentAnswers();
+      return true;
+    }
+
     function refreshParentOptions() {
       const parentSelect = byId("team-parent");
       const current = parentSelect.value;
@@ -111,6 +119,7 @@
         const percent = field(row, "Allowance percent", "percent", unit.percent ?? "", "number");
         percent.closest("label").hidden = unit.mode !== "Allowance";
         mode.onchange = () => {
+          if (refuseTreeAction()) return;
           percent.closest("label").hidden = mode.value !== "Allowance";
           sync();
           markPreflightStale();
@@ -119,6 +128,7 @@
         remove.type = "button";
         remove.textContent = "Remove";
         remove.onclick = () => {
+          if (refuseTreeAction()) return;
           businessUnits.splice(index, 1);
           const nextIndex = Math.min(index, businessUnits.length - 1);
           render();
@@ -129,6 +139,7 @@
         };
         row.append(remove);
         row.oninput = () => {
+          if (refuseTreeAction()) return;
           sync();
           validateCurrentAnswers();
         };
@@ -140,6 +151,7 @@
     }
 
     function addUnit() {
+      if (refuseTreeAction()) return;
       sync();
       businessUnits.push(defaultBusinessUnit());
       const index = businessUnits.length - 1;
@@ -149,6 +161,7 @@
     }
 
     function addTeam() {
+      if (refuseTreeAction()) return;
       sync();
       refreshParentOptions();
       const parent = byId("team-parent").value;
