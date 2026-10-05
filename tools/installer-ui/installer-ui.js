@@ -427,8 +427,8 @@
     else if (!liveMode()) state.textContent = `Static fallback: ${sessionReason || "use the generated commands."}`;
     else if (terminalPfx) state.textContent = "A PFX certificate is installed from a terminal because the installer asks for the PFX password only when it runs without -Yes.";
     else if (azureBusy) state.textContent = azureBusyText || "Azure CLI work is already active.";
-    else if (preflightFingerprint && !preflightStale && scopeBlocksFull) state.textContent = `Passing preflight ${preflightFingerprint.slice(0, 12)} is current. Full run needs a preflight with no step selected.`;
     else if (preflightFingerprint && !preflightStale && selected.length && !scopeCovers(selected)) state.textContent = `Passing preflight ${preflightFingerprint.slice(0, 12)} is current. Run selected steps needs a preflight of that selection.`;
+    else if (preflightFingerprint && !preflightStale && scopeBlocksFull) state.textContent = `Passing preflight ${preflightFingerprint.slice(0, 12)} is current. Full run needs a preflight with no step selected.`;
     else if (admitted) state.textContent = `Passing preflight ${preflightFingerprint.slice(0, 12)} is current.`;
     else if (preflightStale && preflightHadResult) state.textContent = `Preflight is stale. ${preflightStaleReason || "Run preflight again."}`;
     else state.textContent = "No passing preflight yet.";

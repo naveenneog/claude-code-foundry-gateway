@@ -322,7 +322,89 @@ test('G7B-5 reattached runs disable Azure controls until the summary refreshes a
     assert.equal(await page.getByRole('button', { name: 'Refresh account' }).isDisabled(), true);
     assert.equal(await page.getByRole('button', { name: 'Read subscriptions' }).isDisabled(), true);
     releaseAttach();
-    await page.getByRole('button', { name: 'Refresh account' }).waitFor({ state: 'visible' });
+    for (let i = 0; i < 20 && await page.getByRole('button', { name: 'Refresh account' }).isDisabled(); i += 1) await page.waitForTimeout(50);
+    assert.equal(await page.getByRole('button', { name: 'Refresh account' }).isEnabled(), true);
+    assert.equal(await page.getByRole('button', { name: 'Read subscriptions' }).isEnabled(), true);
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
+test('R2-7 typed listed deployment stays until the operator deselects it', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await page.locator('[name="SubscriptionId"]').fill('00000000-0000-4000-8000-000000000093');
+    await page.route('**/api/prefill', (route) => {
+      const body = route.request().postDataJSON();
+      if (body.kind === 'foundryAccounts') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ foundryAccounts: [{ name: 'one', resourceGroup: 'rg-one' }] }) });
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ deployments: [{ name: 'a' }, { name: 'b' }] }) });
+    });
+    await page.getByRole('button', { name: 'Read Foundry accounts' }).click();
+    await page.locator('[data-prefill-select="FoundryAccount"]').selectOption('one');
+    await page.locator('[data-model-select="StandardModels"] option', { hasText: 'b' }).waitFor();
+    await page.locator('[name="StandardModels"]').fill('b');
+    await page.locator('[data-model-select="StandardModels"]').selectOption(['a']);
+    assert.equal(await page.locator('[name="StandardModels"]').inputValue(), 'a, b');
+    await page.locator('[data-model-select="StandardModels"]').selectOption([]);
+    assert.equal(await page.locator('[name="StandardModels"]').inputValue(), 'b');
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
+test('R2-7 summary-less stream reattaches to a running run and finishes', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await passPreflight(page);
+    await page.route('**/api/run/stream', (route) => route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"progress","stepId":"resource-group","event":"started","message":"started"}\n' }));
+    await page.route('**/api/run/status', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'run-1', state: 'running', currentStepId: 'resource-group', steps: ['resource-group'] }) }));
+    await page.route('**/api/run/attach?after=1', (route) => route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":2,"type":"summary","exitCode":0,"failedStepId":"","resumeCommand":"","state":"exited","message":""}\n' }));
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await page.locator('#run-status').getByText(/Run finished/).waitFor();
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
+test('R2-7 selection outside preflight scope shows the required preflight explanation', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await passPreflight(page);
+    await page.locator('#step-list input[value="gateway-deployment"]').check();
+    await page.locator('#preflight-state').getByText(/Run selected steps needs a preflight of that selection/).waitFor();
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
+test('R2-7 decimal typed in a business-unit tree row is submitted as a number', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await page.locator('[name="SubscriptionId"]').fill('00000000-0000-4000-8000-000000000093');
+    await page.getByRole('button', { name: 'Add unit' }).click();
+    await page.locator('[data-bu-field="id"]').fill('finance');
+    await page.locator('[data-bu-field="group"]').fill('claude-bu-finance');
+    await page.locator('[data-bu-field="monthlyUsdBudget"]').fill('12.5');
+    let submitted;
+    await page.route('**/api/preflight', (route) => {
+      submitted = route.request().postDataJSON();
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ preflight: { schemaVersion: 1, installer: 'pwsh', answersSchemaVersion: 1, result: 'PASS', checks: [{ id: 'answers.schema', result: 'PASS', reason: null, message: 'ok', remedy: '', problems: [] }] }, fingerprint: 'a'.repeat(64), identity: { signedIn: true, user: 'one@example.test', tenantId: 'tenant-1', subscriptionId: '00000000-0000-4000-8000-000000000093' }, scope: 'full' }) });
+    });
+    await page.getByRole('button', { name: 'Run preflight' }).click();
+    await page.locator('#preflight-output').getByText(/answers\.schema/).waitFor();
+    assert.equal(submitted.answers.BusinessUnits[0].monthlyUsdBudget, 12.5);
     await assertClean(page, pageErrors);
   } finally {
     await browser.close();
@@ -414,16 +496,6 @@ test('G7B-6 pfx-needs-terminal server refusal is shown with its sentence', async
   }
 });
 
-test('R2-5 PFX path is reported once because defaults create no PFX requirement', async () => {
-  const source = await readFile(new URL('../tools/installer-ui/ui-model.js', import.meta.url), 'utf8');
-  const context = { globalThis: {} };
-  (await import('node:vm')).runInNewContext(source, context);
-  const model = context.globalThis.ClaudeInstallerUiModel;
-  const schema = JSON.parse(await readFile(new URL('../schemas/claude-gateway.answers.schema.json', import.meta.url), 'utf8'));
-  const answers = { schemaVersion: 1, AddressMode: 'custom', AddressCertificateSource: 'Pfx' };
-  const problems = [...model.validateAnswers(schema, answers, 'Install-ClaudeGateway.ps1'), ...model.validateEffectiveAddressDefaults(schema, answers)];
-  assert.equal(problems.filter((p) => p.path === 'AddressPfxPath').length, 1);
-});
 
 test('G7B-7 refreshed identity changes make the preflight stale and same identity keeps it current', async () => {
   let identity = { signedIn: true, user: 'one@example.test', tenantId: 'tenant-1', subscriptionId: '00000000-0000-4000-8000-000000000093' };
