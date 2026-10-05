@@ -118,7 +118,9 @@ function Compare-ClaudeTurnstileBudgets {
     foreach ($item in @($TurnstileItems | Where-Object { $_.scope_type -in 'organization', 'department' })) {
         $id = [string]$item.scope_id
         $unit = $byId[$id]
-        $isTeam = $Parents.Contains($id)
+        # A key with the same characters, whatever comparer the caller's map has: 'sales' as a team does not make
+        # 'Sales' one.
+        $isTeam = @(@($Parents.Keys) | Where-Object { [string]::Equals([string]$_, $id, [System.StringComparison]::Ordinal) }).Count -gt 0
         $applies = $unit -and (($item.scope_type -eq 'organization' -and -not $isTeam) -or ($item.scope_type -eq 'department' -and $isTeam))
         if (-not $applies) { continue }
         $now = $item.token_limit

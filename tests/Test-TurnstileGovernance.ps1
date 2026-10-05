@@ -77,9 +77,19 @@ $spelled = @(
     [pscustomobject]@{ Id = 'sales'; Group = 'Lower Sales'; TokensPerMonth = 1000 },
     [pscustomobject]@{ Id = 'Sales'; Group = 'Upper Sales'; TokensPerMonth = 2000 }
 )
-$spelledChanges = @(Compare-ClaudeTurnstileBudgets -Registry $spelled -Parents ([ordered]@{}) -TurnstileItems @([pscustomobject]@{ scope_type = 'organization'; scope_id = 'sales'; token_limit = 900; updated_by = 'admin@contoso.com' }))
+$spelledChanges = Compare-ClaudeTurnstileBudgets -Registry $spelled -Parents ([ordered]@{}) -TurnstileItems @([pscustomobject]@{ scope_type = 'organization'; scope_id = 'sales'; token_limit = 900; updated_by = 'admin@contoso.com' })
 Assert 'a Turnstile budget is compared with the unit of the exact spelling' ($spelledChanges.Count -eq 1 -and $spelledChanges[0].Id -ceq 'sales' -and $spelledChanges[0].Was -eq 1000 -and $spelledChanges[0].Now -eq 900) (($spelledChanges | ForEach-Object { "$($_.Id) $($_.Was)->$($_.Now)" }) -join ', ')
 Assert 'pulled budgets are written to the unit of the exact spelling' ($sync -match '\[string\]\$u\.Id -ceq \$c\.Id')
+# P96 council round 3 (Architect): a team 'sales' does not make the unit 'Sales' a team, whatever map the caller passes,
+# and the pull reads bu-parents by exact key.
+$spelledTeam = @(
+    [pscustomobject]@{ Id = 'platform'; Group = 'Platform'; TokensPerMonth = 5000 },
+    [pscustomobject]@{ Id = 'sales'; Group = 'Lower Sales'; TokensPerMonth = 1000 },
+    [pscustomobject]@{ Id = 'Sales'; Group = 'Upper Sales'; TokensPerMonth = 2000 }
+)
+$teamChanges = Compare-ClaudeTurnstileBudgets -Registry $spelledTeam -Parents ([ordered]@{ sales = 'platform' }) -TurnstileItems @([pscustomobject]@{ scope_type = 'organization'; scope_id = 'Sales'; token_limit = 900; updated_by = 'admin@contoso.com' })
+Assert 'a Turnstile organization budget for Sales applies when the team is sales' ($teamChanges.Count -eq 1 -and $teamChanges[0].Id -ceq 'Sales' -and $teamChanges[0].Was -eq 2000 -and $teamChanges[0].Now -eq 900) (($teamChanges | ForEach-Object { "$($_.Id) $($_.ScopeType) $($_.Was)->$($_.Now)" }) -join ', ')
+Assert 'the budget pull reads bu-parents by exact key' ($sync -match "ConvertFrom-ClaudeBuParents \(Get-ApimNamedValue [^\r\n]*'bu-parents'\) -ExactKeys")
 
 Write-Host ''
 Write-Host 'Turnstile governance - tiers' -ForegroundColor Cyan

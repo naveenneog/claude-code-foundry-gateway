@@ -161,7 +161,7 @@ if ($Direction -eq 'FromTurnstile' -and $governanceAuthority -eq 'Turnstile') {
 }
 
 $registry = @(ConvertFrom-ClaudeBuRegistry (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-registry'))
-$parents = ConvertFrom-ClaudeBuParents (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-parents')
+$parents = ConvertFrom-ClaudeBuParents (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-parents') -ExactKeys
 if (-not $parents) { $parents = [ordered]@{} }
 $unassignedMode = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-unassigned'
 if (-not $unassignedMode) { $unassignedMode = 'allow' }
