@@ -91,7 +91,7 @@
           document.querySelector('[name="FoundryAccount"]').value = item.name || "";
           document.querySelector('[name="FoundryResourceGroup"]').value = item.resourceGroup || "";
           markPreflightStale();
-          const data = await actions.run(select, { busyText: "Reading Azure...", successText: "Azure values loaded.", azure: true }, async () => {
+          const data = await actions.run(document.querySelector('[data-prefill-kind="foundryAccounts"]'), { busyText: "Reading Azure...", successText: "Azure values loaded.", azure: true }, async () => {
             try {
               return await load("deployments");
             } catch (error) {
@@ -121,6 +121,7 @@
           option.selected = chosen.has(name) || typed.has(name);
           select.append(option);
         }
+        select.dataset.previousSelection = JSON.stringify([...select.selectedOptions].map((option) => option.value));
       }
     }
 
@@ -129,11 +130,13 @@
       if (!select) return;
       const input = select.closest("label").querySelector("input[name]");
       const selected = [...select.selectedOptions].map((o) => o.value);
+      const previous = new Set(JSON.parse(select.dataset.previousSelection || "[]"));
       const manual = input.value
         .split(",")
         .map((x) => x.trim())
-        .filter((x) => x && !deploymentChoices.has(x));
-      input.value = [...selected, ...manual].join(", ");
+        .filter((x) => x && (!deploymentChoices.has(x) || selected.includes(x) || !previous.has(x)));
+      input.value = [...new Set([...selected, ...manual])].join(", ");
+      select.dataset.previousSelection = JSON.stringify(selected);
       markPreflightStale();
     }
 

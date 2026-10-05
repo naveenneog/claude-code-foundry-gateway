@@ -276,23 +276,28 @@ $problems | ConvertTo-Json -Depth 10
   }
 });
 
-test('P8 switching accounts replaces deployment choices while preserving typed custom names', async () => {
+test('G7B-2 choosing accounts keeps the account list and replaces deployment choices', async () => {
   const app = await start();
   const { browser, page, pageErrors } = await openPage(app);
   try {
-    await page.locator('[name="StandardModels"]').fill('manual-one, account-one');
+    await page.locator('[name="SubscriptionId"]').fill('00000000-0000-4000-8000-000000000093');
     await page.route('**/api/prefill', async (route) => {
       const body = route.request().postDataJSON();
       if (body.kind === 'deployments') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ deployments: [{ name: body.foundryAccount === 'two' ? 'account-two' : 'account-one' }] }) });
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ foundryAccounts: [{ name: 'two', resourceGroup: 'rg-two' }] }) });
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ foundryAccounts: [{ name: 'one', resourceGroup: 'rg-one' }, { name: 'two', resourceGroup: 'rg-two' }] }) });
     });
-    await page.locator('[name="FoundryAccount"]').fill('one');
-    await page.locator('[name="FoundryResourceGroup"]').fill('rg-one');
-    await page.evaluate(() => document.querySelector('[data-prefill-select="FoundryAccount"]').dispatchEvent(new Event('change', { bubbles: true })));
-    await page.locator('[name="FoundryAccount"]').fill('two');
-    await page.locator('[name="FoundryResourceGroup"]').fill('rg-two');
     await page.getByRole('button', { name: 'Read Foundry accounts' }).click();
-    assert.match(await page.locator('[name="StandardModels"]').inputValue(), /manual-one/);
+    await page.locator('[data-prefill-select="FoundryAccount"]').selectOption('one');
+    await page.locator('[data-model-select="StandardModels"] option', { hasText: 'account-one' }).waitFor();
+    assert.deepEqual(await page.locator('[data-prefill-select="FoundryAccount"] option').evaluateAll((options) => options.map((option) => option.textContent)), ['choose...', 'one / rg-one', 'two / rg-two']);
+    assert.deepEqual(await page.locator('[data-model-select="StandardModels"] option').evaluateAll((options) => options.map((option) => option.textContent)), ['account-one']);
+    await page.locator('[name="StandardModels"]').fill('account-one, manual-one');
+    await page.locator('[data-model-select="StandardModels"]').selectOption(['account-one']);
+    assert.equal(await page.locator('[name="StandardModels"]').inputValue(), 'account-one, manual-one');
+    await page.locator('[data-prefill-select="FoundryAccount"]').selectOption('two');
+    await page.locator('[data-model-select="StandardModels"] option', { hasText: 'account-two' }).waitFor();
+    assert.deepEqual(await page.locator('[data-model-select="StandardModels"] option').evaluateAll((options) => options.map((option) => option.textContent)), ['account-two']);
+    assert.equal(await page.locator('[name="StandardModels"]').inputValue(), 'account-one, manual-one');
     await assertClean(page, pageErrors);
   } finally {
     await browser.close();
