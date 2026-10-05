@@ -183,7 +183,7 @@ if ($List) {
 }
 
 Test-ClaudeBuId $Id -Registry @($registry | ForEach-Object Id)
-$existing = @($registry | Where-Object { $_.Id -eq $Id })
+$existing = @($registry | Where-Object { $_.Id -ceq $Id })
 $before = $registry.Count
 $originalUsdKind = if ($parents[$Id]) { 'department' } else { 'organization' }
 $originalUsdParent = [string]$parents[$Id]
@@ -196,13 +196,13 @@ if (-not $Remove -or $existing.Count) {
 
 if ($Remove) {
     if (-not $existing.Count) { Write-Host "No business unit '$Id'. Nothing to remove." -ForegroundColor DarkGray; exit 0 }
-    $registry = @($registry | Where-Object { $_.Id -ne $Id })
+    $registry = @($registry | Where-Object { $_.Id -cne $Id })
     $action = "removed (was $($existing[0].Group), $('{0:n0}' -f $existing[0].TokensPerMonth) tokens/month)"
 
     # A team pointing at a unit that no longer exists would look up a quota of
     # zero and quietly stop cascading. Promote those teams to top level and say
     # so, rather than leaving a dangling parent.
-    $orphans = @($parents.Keys | Where-Object { $parents[$_] -eq $Id })
+    $orphans = @($parents.Keys | Where-Object { $parents[$_] -ceq $Id })
     $parents.Remove($Id)
     $modes.Remove($Id)
     foreach ($o in $orphans) { $parents.Remove($o) }
@@ -278,7 +278,7 @@ else {
 
     if ($existing.Count) {
         $was = "was $($existing[0].Group), $('{0:n0}' -f $existing[0].TokensPerMonth) tokens/month"
-        $registry = @($registry | Where-Object { $_.Id -ne $Id })
+        $registry = @($registry | Where-Object { $_.Id -cne $Id })
         $action = "updated ($was)"
     }
     else {

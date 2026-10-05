@@ -126,7 +126,7 @@ function Test-ClaudeBuId {
         $spelling = @(@($Registry) | Where-Object { $_ -eq $Id })
         if ($spelling.Count) {
             throw ("Business unit '$Id' differs only in case from '$($spelling[0])' in the registry. " +
-                   "Use '$($spelling[0])' to change that unit, or another identifier for a new unit.")
+                   "Use '$($spelling[0])' to change that unit, or another lower-case identifier, such as '$Id-2', for a new unit.")
         }
     }
 }

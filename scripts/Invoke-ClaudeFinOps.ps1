@@ -284,7 +284,7 @@ switch ([string]$request.action) {
         $id = [string]$request.parameters.scope_id
         Test-ClaudeBuId $id -Registry @($registry | ForEach-Object Id)
         if ($request.parameters.scope_type -notin 'organization', 'department') { throw 'Only unit and team budgets are direct gateway limits.' }
-        $row = @($registry | Where-Object Id -eq $id)
+        $row = @($registry | Where-Object Id -ceq $id)
         if ($row.Count -ne 1) { throw 'Scope not found in the gateway registry.' }
         $isTeam = $parents.Contains($id)
         if (($request.parameters.scope_type -eq 'department') -ne $isTeam) { throw 'Scope kind does not match the registry.' }
@@ -336,12 +336,12 @@ switch ([string]$request.action) {
             ApimName = $ApimName
         }
         if ($null -ne $request.body.allowance_percent) { $modeArgs.AllowancePercent = [int]$request.body.allowance_percent }
-        $target = @($registry | Where-Object Id -eq $modeArgs.Id)
+        $target = @($registry | Where-Object Id -ceq $modeArgs.Id)
         if ($target.Count -ne 1) { throw 'Scope not found.' }
         $expectedMode = ConvertTo-ClaudeBudgetMode $request.body.mode $request.body.allowance_percent
         $modes.Remove($modeArgs.Id)
         if ($expectedMode -ne 'strict') { $modes[$modeArgs.Id] = $expectedMode }
-        $reordered = @($registry | Where-Object Id -ne $modeArgs.Id) + $target
+        $reordered = @($registry | Where-Object Id -cne $modeArgs.Id) + $target
         $expected = [ordered]@{
             'bu-registry'=(ConvertTo-ClaudeBuRegistry $reordered)
             'bu-modes'=(ConvertTo-ClaudeBuModes $modes)
@@ -357,8 +357,9 @@ switch ([string]$request.action) {
         $wanted = @($request.body.organizations) + @($request.body.departments | Where-Object { $_.attributes.kind -ne 'unit-direct' })
         if (-not @($request.body.organizations).Count) { throw 'Keep at least one unit.' }
         $nextRegistry = @()
-        $nextParents = [ordered]@{}
-        $seen = @{}
+        # Identifiers compare by exact spelling: a registry can hold two spellings of one identifier.
+        $nextParents = [System.Collections.Specialized.OrderedDictionary]::new([System.StringComparer]::Ordinal)
+        $seen = [hashtable]::new([System.StringComparer]::Ordinal)
         foreach ($item in $wanted) {
             Test-ClaudeBuId ([string]$item.id) -Registry @($registry | ForEach-Object Id)
             if ($seen.ContainsKey([string]$item.id)) { throw 'Duplicate scope identifier.' }
@@ -369,11 +370,11 @@ switch ([string]$request.action) {
             if ($group -match '[,:=&|<>^%!"\r\n]') { throw 'Group contains unsafe registry or shell characters.' }
             $groupId = az ad group show --group $group --query id -o tsv 2>$null
             if ($LASTEXITCODE -ne 0 -or -not $groupId) { throw 'An Entra group could not be verified. Nothing was written.' }
-            $prior = @($registry | Where-Object Id -eq $item.id)
+            $prior = @($registry | Where-Object Id -ceq $item.id)
             $amount = if ($prior.Count) { [long]$prior[0].TokensPerMonth } else { [long]0 }
             $nextRegistry += [pscustomobject]@{ Id = [string]$item.id; Group = $group; TokensPerMonth = $amount }
             if ($item.parent_id) {
-                if ([string]$item.parent_id -notin @($request.body.organizations.id)) { throw 'Team parent is not a unit.' }
+                if ([string]$item.parent_id -cnotin @($request.body.organizations.id)) { throw 'Team parent is not a unit.' }
                 $nextParents[[string]$item.id] = [string]$item.parent_id
             }
         }
@@ -392,7 +393,7 @@ switch ([string]$request.action) {
         $expected = [ordered]@{ 'bu-registry'=$nextRaw; 'bu-parents'=$parentRaw }
         if ($nv.ContainsKey('bu-modes')) {
             foreach ($modeId in @($modes.Keys)) {
-                if ($modeId -notin @($nextRegistry.Id)) { $modes.Remove($modeId) }
+                if ($modeId -cnotin @($nextRegistry.Id)) { $modes.Remove($modeId) }
             }
             $expected['bu-modes'] = ConvertTo-ClaudeBuModes $modes
         }

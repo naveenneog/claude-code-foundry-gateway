@@ -290,6 +290,23 @@ foreach ($case in @(
     Assert "the lower-case spelling of a unit stored with capitals is refused for $($case.Name), before any write" ($m -match 'differs only in case' -and $m.Contains("'Legacy-Unit'") -and
         $gateway.Writes.Count -eq 0) "$m | writes $($gateway.Writes -join ',') | registry $($gateway.Values['bu-registry'])"
 }
+# Council round 1 (QA): a registry can hold two spellings of one identifier (before P96, through Turnstile or a
+# manual edit). They are two units: a change to one leaves the other, its budget and its team as they are.
+# bu-parents is read without case, as the renewal job reads it (sync/src/business-units.mjs), so these cases keep
+# the two spellings out of bu-parents' keys.
+$unitSpellings = ',sales=Lower Sales:1000,Sales=Upper Sales:2000,eu=EU:100,'
+foreach ($case in @(
+        @{ Name = 'a change of group'; P = @{ Id = 'Sales'; Group = 'New Sales' }
+            WantRegistry = ',sales=Lower Sales:1000,eu=EU:100,Sales=New Sales:2000,'; WantParents = ',eu=sales,' }
+        @{ Name = 'the removal of one'; P = @{ Id = 'Sales'; Remove = $true }
+            WantRegistry = ',sales=Lower Sales:1000,eu=EU:100,'; WantParents = ',eu=sales,' }
+    )) {
+    Reset-Gateway $local
+    $gateway.Values['bu-registry'] = $unitSpellings
+    $gateway.Values['bu-parents'] = ',eu=sales,'
+    $m = Invoke-Set 'Set-ClaudeBusinessUnit' $case.P
+    Assert "two spellings of one identifier stay two units after $($case.Name)" (-not $m -and $gateway.Values['bu-registry'] -ceq $case.WantRegistry -and $gateway.Values['bu-parents'] -ceq $case.WantParents) "$m | registry $($gateway.Values['bu-registry']) | parents $($gateway.Values['bu-parents'])"
+}
 
 function Invoke-Bridge([hashtable]$Request) {
     $file = Join-Path ([IO.Path]::GetTempPath()) ('p96-bridge-' + [guid]::NewGuid().ToString('N') + '.json')
@@ -323,6 +340,36 @@ Reset-Gateway $local
 $gateway.Values['bu-registry'] = $legacyRegistry
 $m = Invoke-Bridge @{ action = 'catalog'; body = @{ organizations = @((New-BridgeUnit 'sales' 'Sales'), (New-BridgeUnit 'legacy-unit' 'Legacy')); departments = @() } }
 Assert 'the AUM catalog does not rename a unit stored with capitals to another spelling' ($m -match 'differs only in case' -and $gateway.Writes.Count -eq 0) "$m | writes $($gateway.Writes -join ',') | registry $($gateway.Values['bu-registry'])"
+# Council round 1 (QA): with two spellings stored, the AUM bridge acts on the exact one.
+$bridgeSpellings = ',platform=Platform:5000,sales=Lower Sales:1000,Sales=Upper Sales:2000,'
+Reset-Gateway $local
+$gateway.Values['bu-registry'] = $bridgeSpellings
+$m = Invoke-Bridge @{ action = 'budget'; parameters = @{ scope_type = 'organization'; scope_id = 'Sales' }; body = @{ token_limit = 4000 } }
+Assert 'the AUM bridge sets the budget of the exact spelling when the registry holds two' (-not $m -and $gateway.Values['bu-registry'] -ceq ',platform=Platform:5000,sales=Lower Sales:1000,Sales=Upper Sales:4000,') "$m | registry $($gateway.Values['bu-registry'])"
+Reset-Gateway $local
+$gateway.Values['bu-registry'] = $bridgeSpellings
+$m = Invoke-Bridge @{ action = 'mode'; parameters = @{ scope_id = 'sales' }; body = @{ mode = 'notify' } }
+Assert 'the AUM bridge sets the mode of the exact spelling when the registry holds two' (-not $m -and $gateway.Values['bu-modes'] -ceq ',sales=notify,' -and
+    $gateway.Values['bu-registry'] -cmatch ',sales=Lower Sales:1000,' -and $gateway.Values['bu-registry'] -cmatch ',Sales=Upper Sales:2000,') "$m | registry $($gateway.Values['bu-registry']) | modes $($gateway.Values['bu-modes'])"
+Reset-Gateway $local
+$gateway.Values['bu-registry'] = $bridgeSpellings
+$m = Invoke-Bridge @{ action = 'catalog'; body = @{ organizations = @((New-BridgeUnit 'platform' 'Platform'), (New-BridgeUnit 'sales' 'Lower Sales'), (New-BridgeUnit 'Sales' 'Upper Sales')); departments = @() } }
+Assert 'the AUM catalog keeps two spellings of one identifier as two units' (-not $m -and $gateway.Values['bu-registry'] -ceq $bridgeSpellings) "$m | registry $($gateway.Values['bu-registry'])"
+Reset-Gateway $local
+$gateway.Values['bu-registry'] = $bridgeSpellings
+$gateway.Values['bu-parents'] = ',sales=platform,Sales=platform,'
+$m = Invoke-Bridge @{ action = 'catalog'; body = @{ organizations = @(New-BridgeUnit 'platform' 'Platform'); departments = @(
+            @{ id = 'sales'; parent_id = 'platform'; external_ref = 'entra-group:Lower Sales'; attributes = @{} }
+            @{ id = 'Sales'; parent_id = 'platform'; external_ref = 'entra-group:Upper Sales'; attributes = @{} }) } }
+Assert 'the AUM catalog writes a team for each spelling it is given' (-not $m -and $gateway.Values['bu-registry'] -ceq $bridgeSpellings -and $gateway.Values['bu-parents'] -ceq ',sales=platform,Sales=platform,') "$m | registry $($gateway.Values['bu-registry']) | parents $($gateway.Values['bu-parents'])"
+Reset-Gateway $local
+$gateway.Values['bu-registry'] = $bridgeSpellings
+$gateway.Values['bu-modes'] = ',sales=notify,'
+$m = Invoke-Bridge @{ action = 'catalog'; body = @{ organizations = @((New-BridgeUnit 'platform' 'Platform'), (New-BridgeUnit 'Sales' 'Upper Sales')); departments = @() } }
+Assert "the AUM catalog removes the mode of the spelling it removes" (-not $m -and $gateway.Values['bu-registry'] -ceq ',platform=Platform:5000,Sales=Upper Sales:2000,' -and $gateway.Values['bu-modes'] -ceq ',,') "$m | registry $($gateway.Values['bu-registry']) | modes $($gateway.Values['bu-modes'])"
+Reset-Gateway $local
+$m = Invoke-Bridge @{ action = 'catalog'; body = @{ organizations = @((New-BridgeUnit 'sales' 'Sales'), (New-BridgeUnit 'platform' 'Platform')); departments = @(@{ id = 'eu'; parent_id = 'Platform'; external_ref = 'entra-group:EU'; attributes = @{} }) } }
+Assert "the AUM catalog refuses a team whose parent is another spelling of a unit, before any write" ($m -match 'Team parent is not a unit' -and $gateway.Writes.Count -eq 0) "$m | writes $($gateway.Writes -join ',') | parents $($gateway.Values['bu-parents'])"
 
 # personBudgets mirrors daily tier ceilings TO Turnstile. Neither apply path
 # writes quota-overrides, and neither edits Entra membership.
