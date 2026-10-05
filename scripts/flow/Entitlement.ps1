@@ -46,7 +46,8 @@ function Get-ClaudeFlowStepPlan {
     if (-not $desired -or $desired -eq $current) { return New-ClaudeFlowPlan -Step Entitlement -Summary "Entitlement already uses $current." }
     $actions = @()
     $implications = @()
-    $requires = @('Directory group read permission', 'API Management named value write permission')
+    # The rights each direction's own step uses (docs/SECURE-PROJECTION.md, Rights used by the checks).
+    $requires = @('API Management named value read and write permission', 'A writable backups/ folder for the snapshot')
     if ($desired -eq 'projection') {
         # ADR-0050: the shared switch deploys nothing; its one write follows the drift check, the compare and admission.
         $actions += New-ClaudeFlowAction -Verb Update -Target 'named value entitlement-source' -Detail 'named-value -> projection, after the drift check, the read-only compare and P86 renewal admission; nothing is deployed'
@@ -55,7 +56,9 @@ function Get-ClaudeFlowStepPlan {
         $implications += 'Cost scenarios are measured with Measure-ClaudeProjectionCost.ps1 for 100 and 500 developers before deploy.'
         if ($target.Sku -eq 'BasicV2') { $implications += 'Basic v2 uses a public resolver endpoint protected by Microsoft Entra and pinned to the gateway managed identity.' }
         else { $implications += 'Standard v2 and Premium v2 use a private resolver reachable by gateway VNet integration.' }
-        $requires += @('P86 scheduled reconciler evidence, pinned image digest and email-backed action group', 'Microsoft.Web/sites/config/list/action on the resolver site (U122)')
+        $requires += @('Directory group read permission, for the drift check', 'ARM read of the renewal job, its action group, the resolver deployment and the resolver site',
+            'Microsoft.Web/sites/config/list/action on the resolver site (U122)', 'Cosmos data read through the in-VNet runner',
+            'P86 scheduled reconciler evidence, pinned image digest and email-backed action group')
         $rollback = 'Refresh allow-standard and allow-premium with scripts/Sync-ClaudeAccess.ps1, check them with scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift, then set entitlement-source back to named-value. The snapshot taken at the write holds the values from before it.'
     }
     elseif ($desired -eq 'named-value') {

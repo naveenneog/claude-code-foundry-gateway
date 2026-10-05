@@ -112,7 +112,7 @@ function az {
     }
     if ($line -like 'deployment group show*') {
         $name = [string]$words[[array]::IndexOf($words, '-n') + 1]
-        if ($name -eq 'projection-resolver-p84fixture' -and $FixtureCase -ne 'resolver-missing') {
+        if ($name -eq 'projection-resolver-p84fixture' -and $FixtureCase -notin 'resolver-missing', 'source-projection-failed-deployment') {
             $cosmos = if ($FixtureCase -eq 'resolver-other-cosmos') { 'cosmos-other' } else { 'cosmos-p84fixture' }
             return (@{
                     parameters = @{ cosmosAccountName = @{ type = 'String'; value = $cosmos } }
@@ -133,6 +133,7 @@ function az {
             return (@{ name = 'appsettings'; properties = @{ COSMOS_ENDPOINT = $endpoint; COSMOS_DATABASE = $database; COSMOS_CONTAINER = $container; PROJECTION_TENANT_ID = $tenant; APPLICATIONINSIGHTS_CONNECTION_STRING = 'InstrumentationKey=00000000-0000-4000-8000-0000000000ee' } } | ConvertTo-Json -Depth 4 -Compress)
         }
         $hostName = if ($FixtureCase -eq 'resolver-live-host') { 'func-resolver-p84fixture-a1b2.eastus2-01.azurewebsites.net' } else { 'func-resolver-p84fixture.azurewebsites.net' }
+        if ($FixtureCase -eq 'source-projection-no-site') { $global:LASTEXITCODE = 3; return "ERROR: (ResourceNotFound) The Resource 'Microsoft.Web/sites/func-resolver-p84fixture' under resource group 'rg-p84' was not found." }
         return (@{ name = 'func-resolver-p84fixture'; properties = @{ defaultHostName = $hostName; state = 'Running' } } | ConvertTo-Json -Depth 4 -Compress)
     }
     if ($line -like 'apim nv update*' -or $line -like 'apim nv create*') {

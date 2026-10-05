@@ -109,7 +109,7 @@ $preflight = Invoke-ClaudeProjectionPreflight -ResourceGroup $ResourceGroup -Api
     -ResolverAppId $ResolverAppId -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup
 # Before any write, and for -PreflightOnly and -WhatIf too: on a gateway that serves from the projection, this run
 # continues only when it redeploys the resolver the gateway calls, with the app its tokens are for.
-Assert-ClaudeProjectionResolverRedeploy -ResourceGroup $ResourceGroup -ApimName $ApimName -NamePrefix $NamePrefix -ResolverAppId ([string]$preflight.ResolverAppId)
+Assert-ClaudeProjectionResolverRedeploy -ResourceGroup $ResourceGroup -ApimName $ApimName -NamePrefix $NamePrefix -SubscriptionId ([string]$preflight.SubscriptionId) -ResolverAppId ([string]$preflight.ResolverAppId)
 if ($PreflightOnly) { return }
 if ($WhatIfPreference) {
     Note 'WhatIf: app registration if needed; private Cosmos/network; resolver publish; gateway resolver named values; fresh snapshot/apply/compare. No Azure writes or projection switch.'

@@ -347,10 +347,13 @@ foreach ($case in @(
 $siteId = "$FixtureRgId/providers/Microsoft.Web/sites/func-resolver-p84fixture"
 Capture { Get-ClaudeProjectionArmUrl -ResourceId $siteId -ApiVersion '2024-04-01' -SubPath 'config/appsettings/list' }
 $settingsUrl = $Result
-$looseSubPaths = @(foreach ($subPath in '../../providers/x', 'config/appsettings/list?x=1', '@attacker.example', 'config//list', '/config') {
+$looseSubPaths = @(foreach ($subPath in '../../providers/x', 'config/appsettings/list?x=1', '@attacker.example', 'config//list', '/config', 'config/app.settings') {
         Capture { Get-ClaudeProjectionArmUrl -ResourceId $siteId -ApiVersion '2024-04-01' -SubPath $subPath }
         if (-not $Failure) { $subPath }
     })
+# Council round 4 (QA note): the path check holds on its own, for an id the id pattern admits but a URL normalizes.
+Capture { Get-ClaudeProjectionArmUrl -ResourceId "$FixtureRgId/providers/Microsoft.Web/sites/.." -ApiVersion '2024-04-01' }
+if (-not $Failure) { $looseSubPaths += 'resource id ending in /..' }
 Assert 'the switch builds every management URL through Get-ClaudeProjectionArmUrl, whose sub-path stays under the resource' (
     (Get-Content -LiteralPath $switchModule -Raw) -notmatch 'https://management\.azure\.com' -and
     $settingsUrl -ceq "https://management.azure.com$siteId/config/appsettings/list?api-version=2024-04-01" -and -not $looseSubPaths.Count) "url '$settingsUrl'; accepted: $($looseSubPaths -join ', ')"
@@ -485,6 +488,8 @@ $earlyRefusals = @(foreach ($case in @(
             @{ Name = 'no -ResolverAppId and no app by name, so the run would create one'; Fixture = 'source-projection'; Params = @{}; Refuse = $true }
             @{ Name = 'another resolver audience on the gateway'; Fixture = 'source-projection-other-audience'; Params = @{ ResolverAppId = $FixtureApp }; Refuse = $true }
             @{ Name = 'another resolver URL on the gateway'; Fixture = 'source-projection-other-url'; Params = @{ ResolverAppId = $FixtureApp }; Refuse = $true }
+            @{ Name = 'a resolver site that cannot be read'; Fixture = 'source-projection-no-site'; Params = @{ ResolverAppId = $FixtureApp }; Refuse = $true }
+            @{ Name = 'a preview after a failed resolver deployment, with the site the gateway calls'; Fixture = 'source-projection-failed-deployment'; Params = @{ ResolverAppId = $FixtureApp; WhatIf = $true }; Refuse = $false }
             @{ Name = 'a preview with another resolver audience on the gateway'; Fixture = 'source-projection-other-audience'; Params = @{ ResolverAppId = $FixtureApp; WhatIf = $true }; Refuse = $true }
             @{ Name = 'a preview of the resolver the gateway calls, with its app'; Fixture = 'source-projection'; Params = @{ ResolverAppId = $FixtureApp; WhatIf = $true }; Refuse = $false }
         )) {
@@ -497,6 +502,13 @@ $earlyRefusals = @(foreach ($case in @(
         if (-not $ok) { "$($case.Name): '$Failure' | writes $($earlyWrites -join '; ')" }
     })
 Assert 'on a gateway that serves from the projection, the deployer refuses before any write unless it redeploys the resolver the gateway calls, with its app' (-not $earlyRefusals.Count) ($earlyRefusals -join ' || ')
+# Council round 4 (UX): the installer reaches this refusal after its own writes, and passes the app as
+# -ProjectionResolverAppId; the refusal says what this run did not write and names each entry point's parameter.
+Reset-ProjectionFixture 'source-projection-other-audience'
+Capture { & $deployer -ResourceGroup rg-p84 -ApimName apim-p84 -NamePrefix p84fixture -SubscriptionId $FixtureSubscription -Sku BasicV2 -ResolverInboundAccess public -ResolverAppId $FixtureApp }
+Assert 'the refusal names -ResolverAppId and the installer''s -ProjectionResolverAppId, and claims no undo of earlier installer steps' ($Failure -match '^Refusing to redeploy the resolver' -and
+    $Failure -match '-ResolverAppId 00000000-0000-4000-8000-0000000000dd' -and $Failure -match 'Install-ClaudeGateway\.ps1.*-ProjectionResolverAppId' -and $Failure -match 'made no Azure writes' -and
+    $Failure -notmatch 'Nothing was changed') $Failure
 Reset-ProjectionFixture
 Capture { @(1..2 | ForEach-Object { Save-ClaudeProjectionSwitchBackup -ResourceGroup rg-p84 -ApimName apim-p84 -GatewayResourceId $FixtureGatewayId -Directory $backupDir }) }
 Assert 'two backups in the same second are two files; neither overwrites the other' (-not $Failure -and @($Result | Select-Object -Unique).Count -eq 2 -and @($Result | Where-Object { Test-Path -LiteralPath $_ }).Count -eq 2) "$Failure"
@@ -656,6 +668,12 @@ $listOption = @(@(Get-ClaudeFlowStepQuestions -Record $backRecord -Discovery $ba
 Assert 'the named-value plan lists only the write the step makes, and names the list refresh and compare it does not make' (-not $Failure -and ($writtenIds -join ',') -eq 'entitlement-source' -and
     ($planned -join ' | ') -eq 'Update named value entitlement-source' -and ($toLists.Implications -join ' ') -match 'Sync-ClaudeAccess\.ps1' -and ($toLists.Implications -join ' ') -match 'Compare-ClaudeEntitlement\.ps1 -FailOnDrift' -and
     $listOption.Detail -notmatch '(?i)\brestore' -and $listOption.Detail -match 'Sync-ClaudeAccess\.ps1') "$Failure | writes $($writtenIds -join ',') | plan $($planned -join ' | ') | option $($listOption.Detail)"
+# Council round 4 (UX note): each direction names the rights its own step uses (SECURE-PROJECTION, Rights used by the checks).
+$projectionRights = $toProjection.Requires -join ' | '
+$listRights = $toLists.Requires -join ' | '
+Assert 'each plan names the rights its direction uses: the switch''s reads and runner for the projection, named values alone for the lists' (
+    $projectionRights -match 'Directory group read' -and $projectionRights -match 'named value read and write' -and $projectionRights -match 'Microsoft\.Web/sites/config/list/action' -and
+    $projectionRights -match 'runner' -and $projectionRights -match 'backups/' -and $listRights -match 'named value read and write' -and $listRights -match 'backups/' -and $listRights -notmatch 'Directory group|runner') "projection: $projectionRights || lists: $listRights"
 # AC4: discovery reads the receipt only; the switch's admission confirms it in ARM before any write.
 foreach ($case in @(
         @{ Name = 'a receipt whose job cannot be read'; Fixture = 'job-error'; Renewal = $renewal; Expect = 'could not read the renewal job' }
@@ -710,6 +728,7 @@ $probeOutcomes = @(foreach ($case in @(
             @{ Name = 'a read without authorization'; Native = "process.stderr.write('ERROR: (AuthorizationFailed) The client does not have authorization to perform action Microsoft.ApiManagement/service/read.\n');process.exit(1)"; Expect = 'throw' }
             @{ Name = 'a read that times out'; Native = "process.stderr.write('ERROR: The operation timed out.\n');process.exit(1)"; Expect = 'throw' }
             @{ Name = 'a read that returns no id'; Native = 'process.exit(0)'; Expect = 'throw' }
+            @{ Name = 'a read that returns the id of another resource type'; Native = "process.stdout.write('$FixtureRgId/providers/Microsoft.Web/sites/apim-p84\n')"; Expect = 'throw' }
         )) {
         $outcome = & {
             . (Join-Path $root 'scripts\ApimNamedValue.ps1')
@@ -718,7 +737,7 @@ $probeOutcomes = @(foreach ($case in @(
             try { $probeId = Get-ApimServiceId -ResourceGroup rg-p84 -ApimName apim-p84; if ($probeId) { "id:$probeId" } else { 'none' } }
             catch { "throw:$($_.Exception.Message)" }
         }
-        $ok = if ($case.Expect -eq 'throw') { $outcome -match "^throw:Could not tell whether API Management 'apim-p84' exists in 'rg-p84'" } else { $outcome -ceq $case.Expect }
+        $ok = if ($case.Expect -eq 'throw') { $outcome -match "^throw:Could not tell whether API Management 'apim-p84' exists in 'rg-p84'" -and $outcome -match 'gateway template was not deployed' -and $outcome -notmatch '(?i)nothing was deployed' } else { $outcome -ceq $case.Expect }
         if (-not $ok) { "$($case.Name): $outcome" }
     })
 Assert "the installer's gateway probe reads absence only from Azure's not-found answer and stops on any other failed read" (-not $probeOutcomes.Count) ($probeOutcomes -join ' || ')

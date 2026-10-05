@@ -200,24 +200,30 @@ function Get-ClaudeProjectionArmUrl {
 
 function Assert-ClaudeProjectionResolverRedeploy {
     # A gateway that serves from the projection sends every request to entitlement-resolver-url with a token
-    # for entitlement-resolver-audience. The deployer's normal run redeploys the resolver site of -NamePrefix
-    # and its sign-in settings (infra/resolver.bicep) before it points the gateway anywhere, so on such a
+    # for entitlement-resolver-audience. The deployer's normal run redeploys the site func-resolver-<prefix>
+    # (infra/resolver.bicep:110) and its sign-in settings before it points the gateway anywhere, so on such a
     # gateway it continues only when that site is the one the gateway calls and the run keeps the app the
-    # gateway's tokens are for. Read-only, and run before the deployer's first write (P95 council round 3).
+    # gateway's tokens are for. The site is read live: a failed deployment leaves its record without outputs,
+    # and a rerun must still be able to retry it. Read-only, and run before the deployer's first write.
     param([Parameter(Mandatory)][string]$ResourceGroup, [Parameter(Mandatory)][string]$ApimName,
-        [Parameter(Mandatory)][string]$NamePrefix, [AllowEmptyString()][string]$ResolverAppId)
+        [Parameter(Mandatory)][string]$NamePrefix, [Parameter(Mandatory)][string]$SubscriptionId,
+        [AllowEmptyString()][string]$ResolverAppId)
     if ((Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-source' -FailOnError) -ne 'projection') { return }
     $gatewayUrl = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-url' -FailOnError
     $gatewayAudience = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-audience' -FailOnError
-    $deployment = "projection-resolver-$NamePrefix"
-    $deployedUrl = ''
-    $readProblem = ''
-    try { $deployedUrl = [string](Invoke-ClaudeNetworkAz @('deployment', 'group', 'show', '-g', $ResourceGroup, '-n', $deployment, '--query', 'properties')).outputs.resolverUrl.value }
-    catch { $readProblem = " The deployment $deployment could not be read: $($_.Exception.Message)" }
-    if ($ResolverAppId -and "api://$ResolverAppId" -eq $gatewayAudience -and $deployedUrl -and $deployedUrl -eq $gatewayUrl) { return }
+    $siteName = "func-resolver-$NamePrefix"
+    $siteUrl = ''
+    $siteShown = ''
+    try {
+        $siteArmUrl = Get-ClaudeProjectionArmUrl -ResourceId "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroup/providers/Microsoft.Web/sites/$siteName" -ApiVersion '2024-04-01'
+        $siteHost = [string](Invoke-ClaudeNetworkAz @('rest', '--method', 'get', '--url', $siteArmUrl)).properties.defaultHostName
+        if ($siteHost) { $siteUrl = "https://$siteHost/api"; $siteShown = ", which serves $siteUrl" }
+    }
+    catch { $siteShown = ", which could not be read: $($_.Exception.Message)" }
+    if ($ResolverAppId -and "api://$ResolverAppId" -eq $gatewayAudience -and $siteUrl -and $siteUrl -eq $gatewayUrl) { return }
     $runApp = if ($ResolverAppId) { "the app $ResolverAppId (api://$ResolverAppId)" } else { 'a new app registration' }
-    $runSite = if ($deployedUrl) { $deployedUrl } else { 'a site the gateway does not call' }
-    throw "Refusing to redeploy the resolver for -NamePrefix ${NamePrefix}: entitlement-source is projection, so every request goes to $gatewayUrl with a token for $gatewayAudience, and this run would redeploy $deployment ($runSite) to accept $runApp.$readProblem Nothing was changed. Remedy: rerun with the -NamePrefix of the resolver at $gatewayUrl and -ResolverAppId $($gatewayAudience -replace '^api://', ''), or return the gateway to named values first (refresh the lists with scripts/Sync-ClaudeAccess.ps1, check them with scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift, then set entitlement-source to named-value)."
+    $appInAudience = $gatewayAudience -replace '^api://', ''
+    throw "Refusing to redeploy the resolver for -NamePrefix ${NamePrefix}: entitlement-source is projection, so every request goes to $gatewayUrl with a token for $gatewayAudience, and this run would redeploy the site $siteName$siteShown, to accept $runApp. This run of scripts/Deploy-ClaudeProjection.ps1 made no Azure writes; steps that ran before it, such as the gateway deployment in Install-ClaudeGateway.ps1, are not undone. Remedy: rerun scripts/Deploy-ClaudeProjection.ps1 with the -NamePrefix of the resolver at $gatewayUrl and -ResolverAppId $appInAudience, or Install-ClaudeGateway.ps1 with -ProjectionResolverAppId $appInAudience; or return the gateway to named values first (refresh the lists with scripts/Sync-ClaudeAccess.ps1, check them with scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift, then set entitlement-source to named-value)."
 }
 
 function Assert-ClaudeProjectionAdmission {

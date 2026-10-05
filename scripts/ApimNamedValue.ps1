@@ -152,10 +152,10 @@ function Get-ApimServiceId {
     if ($code -eq 0) {
         $ids = @($output | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] } | ForEach-Object { "$_".Trim() } | Where-Object { $_ })
         if ($ids.Count -eq 1 -and $ids[0] -match '^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\.ApiManagement/service/[^/]+$') { return $ids[0] }
-        throw "$cannotTell`: az apim show returned no resource id. Nothing was deployed. Check the Azure CLI sign-in and read access to the gateway, then rerun."
+        throw "$cannotTell`: az apim show returned no API Management resource id. The gateway template was not deployed; steps before this check are not undone. Check the Azure CLI sign-in and read access to the gateway, then rerun."
     }
     if (($output | Out-String) -match '\((ResourceNotFound|ResourceGroupNotFound)\)') { return $null }
-    throw "$cannotTell (az exit $code). A redeploy that took it for a new gateway would write the template's defaults over its entitlement source, lists and network settings, so nothing was deployed. Check the Azure CLI sign-in, read access to the gateway and connectivity, then rerun."
+    throw "$cannotTell (az exit $code). A redeploy that took it for a new gateway would write the template's defaults over its entitlement source, lists and network settings, so the gateway template was not deployed; steps before this check are not undone. Check the Azure CLI sign-in, read access to the gateway and connectivity, then rerun."
 }
 
 function Set-ApimNamedValue {
