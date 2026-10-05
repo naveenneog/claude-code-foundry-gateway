@@ -582,7 +582,7 @@
       "source": "docs/architecture/18-installer-ui.json",
       "inputs": {
         "Install-ClaudeGateway.ps1": "fbc1ad44ddc5d7f3a318b4d8050f410ebb28a3f901dc89d2a9b65457f6de6057",
-        "docs/architecture/18-installer-ui.json": "8fd5020fda977d62e4ea0266c2ee572fe79b60db5471b85ec32116c50b0a1eed",
+        "docs/architecture/18-installer-ui.json": "c22fd79143c37fb75bc46d999e9187a146c7d1848485e1ed2847710261b985db",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
@@ -594,11 +594,11 @@
         "scripts/Get-ClaudeInstallerUiIdentity.ps1": "e4589458fe16baed9f3e8b7d15473579d9c517af790475d4fb9a7c216e76f5a1",
         "scripts/Get-ClaudeInstallerUiPrefill.ps1": "f40a152cbdccb9562a1dce3bab3386adea8ac0d761eb8c6798397261151d2a5a",
         "tools/installer-ui/azure-lease.mjs": "461b6add9d5c326cecfdd022b8992ba138153207e392bf33362483f1f5953d22",
-        "tools/installer-ui/child-output.mjs": "d55551f0b5e9d9cbf0c4198b921a4d303ca9d0fc81c6d772adca49dab65437f9",
+        "tools/installer-ui/child-output.mjs": "cf4e5fc5c742ca53d07186c8d690216a74d6cc431c933f77cc6ee5f320e154da",
         "tools/installer-ui/http-helpers.mjs": "1fbb9ceddf61ee47fa5afbb03f8e52efd38f7ac943832de5fc41b135d17d3c1b",
         "tools/installer-ui/index.html": "e0f237363823af4d51e79971739ba6cabc6d3ca0d7f1ee6b234b6719d0f7afb4",
         "tools/installer-ui/installer-contract.mjs": "06899c281c9f2b24153bee6bbf7a226814569a4996ad70cbc004942edf50a044",
-        "tools/installer-ui/installer-ui-actions.js": "29b048ca29a83f86f075992fd5718fcd718e44e06aa5188bf391d4d3e93f04be",
+        "tools/installer-ui/installer-ui-actions.js": "e0c3372acbdbdadda129c04e0ed3a1b7ec3e3cf94a2f214bb35c70b77d2f49f8",
         "tools/installer-ui/installer-ui-business-units.js": "995a38d3ab8a0c3d67725a3b2ac60ce7847f84b9805221a52c3b6ab4485bf576",
         "tools/installer-ui/installer-ui-prefill.js": "21634d137612d358295256acf932cbda3132f28b20756882f8c450059e58dc6a",
         "tools/installer-ui/installer-ui-problems.js": "2e21256695f7f4fa94ae4c4e9705b3a84fe3c9101bcd1f9fd3b6606d36c6d9f6",
@@ -607,7 +607,7 @@
         "tools/installer-ui/run-record.mjs": "25c9f2ce4bcfa1c539472e1123adfa6c371f1129107e7c775d6bcc6d69c509ba",
         "tools/installer-ui/run-transport.mjs": "58f692b682466303be1bf9c1f88c9f90c09af92ec1f95d429117f70ced2f8253",
         "tools/installer-ui/server-model.mjs": "1fcc0f8b4db0d7b26aa09f732cd08c7bd47e648f893f493888e7351ccb30a26f",
-        "tools/installer-ui/server.mjs": "b21aca59351d7c6fd236c66b5d56d8b3d7887948b20172a99a1520a8ce937ed9",
+        "tools/installer-ui/server.mjs": "e13462bb41e8f6030bfeeb47b17f5c8db7aa4dbbd0360240020b05f1799b4b5a",
         "tools/installer-ui/session-auth.mjs": "8772b05264d7baed857672c6934c9f149e16470288b9fb2e90e4159f31aac7c9",
         "tools/installer-ui/step-scope.mjs": "2e06c641c5d9292232d75bc38b877da0e883dc238785eb354e09e95790b0e7fd",
         "tools/installer-ui/ui-model.js": "a00f5ced92a22ba3780f6e5d9d2cd4b558934a48b27ea2a519ec76c77b9fabae"
@@ -615,7 +615,7 @@
       "outputs": [
         {
           "path": "docs/images/architecture/installer-ui.png",
-          "sha256": "b6087b358afba295ee5a6562be4db17a6c2bf338580662ee6ac436491b46931a"
+          "sha256": "597d27e83071da53a68766bfdbd9094e636a866855ed5a401f69a9239654c895"
         }
       ]
     }

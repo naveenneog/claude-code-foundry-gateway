@@ -69,13 +69,13 @@
     { "id": "form", "x": 386, "y": 78, "w": 320, "h": 190, "tone": "purple", "title": "2 - Shared model", "lines": ["[[browser]] and [[server-model]] load [[model]].", "[[schema]] drives field groups and validation."] },
     { "id": "static", "x": 748, "y": 78, "w": 320, "h": 190, "tone": "purple", "title": "3 - Static mode", "lines": ["[[static]] carries the schema for file://.", "No pwsh also reports static mode and live routes return 503."] },
     { "id": "commands", "x": 1110, "y": 78, "w": 306, "h": 190, "tone": "purple", "title": "4 - Portable commands", "lines": ["[[model]] renders pwsh commands.", "Bash appears only when bash applies every answer and step."] },
-    { "id": "identity", "x": 24, "y": 422, "w": 320, "h": 190, "tone": "blue", "title": "5 - Account reads", "lines": ["[[identity]] reads account JSON.", "[[lease]] serializes Azure CLI work."] },
+    { "id": "identity", "x": 24, "y": 422, "w": 320, "h": 220, "tone": "blue", "title": "5 - Account reads", "lines": ["[[identity]] reads JSON.", "No Node az spawn.", "[[lease]] serializes CLI work."] },
     { "id": "prefill", "x": 386, "y": 422, "w": 320, "h": 190, "tone": "blue", "title": "6 - Prefill seams", "lines": ["[[prefill]] lists subscriptions, accounts and deployments.", "Input kind and text parameters are validated before PowerShell starts."] },
     { "id": "preflight", "x": 748, "y": 422, "w": 320, "h": 190, "tone": "blue", "title": "7 - Versioned preflight", "lines": ["[[preflight-producer]] -Preflight -Json is checked by [[contract]].", "Field links use problem paths and x-checkId metadata."] },
     { "id": "fingerprint", "x": 1110, "y": 422, "w": 306, "h": 190, "tone": "blue", "title": "8 - Fingerprint gate", "lines": ["[[fingerprint]] binds answers, engine, scope and identity.", "[[step-scope]] validates selected steps."] },
     { "id": "run", "x": 24, "y": 768, "w": 320, "h": 220, "tone": "teal", "title": "9 - Streamed run", "lines": ["[[server]] starts [[installer]] only through pwsh or node stub.", "[[steps-producer]] writes progress NDJSON."] },
     { "id": "record", "x": 386, "y": 768, "w": 320, "h": 220, "tone": "teal", "title": "10 - Run record", "lines": ["[[record]] stores active or last run state and tail.", "Status and attach routes survive browser disconnect."] },
-    { "id": "transport", "x": 748, "y": 768, "w": 320, "h": 220, "tone": "teal", "title": "11 - Transport limits", "lines": ["[[transport]] handles progress carries.", "[[child-output]] caps read-only output."] },
+    { "id": "transport", "x": 748, "y": 768, "w": 320, "h": 220, "tone": "teal", "title": "11 - Transport limits", "lines": ["[[transport]] handles progress carries and 64 KiB lines.", "[[child-output]] caps read-only output; console output has a 4 MiB cap."] },
     { "id": "stop", "x": 1110, "y": 768, "w": 306, "h": 220, "tone": "teal", "title": "12 - Stop and redaction", "lines": ["Stop uses taskkill.exe on Windows or a POSIX process group.", "server-model.mjs applies [[redact]] rules."] }
   ],
   "edges": [
