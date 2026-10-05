@@ -138,11 +138,16 @@ P96 fixes the first P95 council follow-up: the guided flow's Tier and Desktop si
 snapshot path. Follow-ups from P96, not yet packets
 ([P96 status](status/P96.md#p96-fixes-from-a-live-deployment-2026-10-05)):
 
-- Turnstile apply checks a unit or team identifier without regard to case
-  (`scripts/ClaudeTurnstileApply.ps1:86,99`), while [TURNSTILE](TURNSTILE.md) says lower-case, so a
-  Turnstile identifier with capitals reaches `bu-registry`. A unit that fails the check is skipped,
-  so a case-sensitive check without the P96 registry rule removes a unit stored with capitals on the
-  next apply.
+- Turnstile apply, pre-existing LOW notes from P96 council round 6 (Security):
+  - The tier-id check compares by culture (`scripts/ClaudeTurnstileApply.ps1:119`). No `cmd.exe` metacharacter, CR, LF or TAB passes it.
+  - Group names may still carry parentheses and control characters other than CR and LF. A `)` stops `az.cmd`, and a NUL truncates a native command line.
+  - The unknown-group fallback compares `$known` by culture.
+
+  An allow-list for group names and ordinal comparisons close them. Since P96 the import checks identifiers
+  case-sensitively and with `\z`, and a unit with an unsafe group name is reported and left out.
+- `-Id Sales -Parent sales` is refused as its own parent, and `Resolve-ClaudeBuDepth` reads `{Sales=sales}`
+  as a cycle (P96 council rounds 2 and 4). It only refuses; making one spelling a team of the other needs
+  exact keys in the depth check and the readers below.
 - A unit stored with capitals cannot have a dollar budget (`scripts/ClaudeUsdBudgets.ps1:42`) or a
   budget mode (`scripts/ClaudeBudgetModes.ps1:28`), and AUM's read of the units stops with "Invalid
   bu-modes entry" because `Get-ClaudeBudgetModeAttributes` parses `<id>=strict` with that rule (checked
