@@ -508,7 +508,7 @@ Reset-ProjectionFixture 'source-projection-other-audience'
 Capture { & $deployer -ResourceGroup rg-p84 -ApimName apim-p84 -NamePrefix p84fixture -SubscriptionId $FixtureSubscription -Sku BasicV2 -ResolverInboundAccess public -ResolverAppId $FixtureApp }
 Assert 'the refusal names -ResolverAppId and the installer''s -ProjectionResolverAppId, and claims no undo of earlier installer steps' ($Failure -match '^Refusing to redeploy the resolver' -and
     $Failure -match '-ResolverAppId 00000000-0000-4000-8000-0000000000dd' -and $Failure -match 'Install-ClaudeGateway\.ps1.*-ProjectionResolverAppId' -and $Failure -match 'made no Azure writes' -and
-    $Failure -notmatch 'Nothing was changed') $Failure
+    $Failure -match "installer's own -NamePrefix" -and $Failure -notmatch 'Nothing was changed') $Failure
 Reset-ProjectionFixture
 Capture { @(1..2 | ForEach-Object { Save-ClaudeProjectionSwitchBackup -ResourceGroup rg-p84 -ApimName apim-p84 -GatewayResourceId $FixtureGatewayId -Directory $backupDir }) }
 Assert 'two backups in the same second are two files; neither overwrites the other' (-not $Failure -and @($Result | Select-Object -Unique).Count -eq 2 -and @($Result | Where-Object { Test-Path -LiteralPath $_ }).Count -eq 2) "$Failure"
