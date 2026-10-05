@@ -92,7 +92,7 @@
       );
     }
 
-    function renderSteps(payload, onChanged) {
+    function renderSteps(payload) {
       const parent = byId("step-list");
       clearChildren(parent);
       const steps = Array.isArray(payload) ? payload : payload.steps || [];
@@ -101,7 +101,6 @@
         const input = document.createElement("input");
         input.type = "checkbox";
         input.value = step.id;
-        input.addEventListener("change", onChanged);
         label.append(input);
         appendText(label, ` ${step.id} - ${step.title || ""}`);
         parent.append(label);

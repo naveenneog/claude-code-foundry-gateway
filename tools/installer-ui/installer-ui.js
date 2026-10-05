@@ -491,11 +491,9 @@
     updateRunAdmission();
   }
 
+  // The page-level change listener in main() refreshes the commands and run admission when a step is checked.
   function renderSteps(payload) {
-    renderHost.renderSteps(payload, () => {
-      refreshCommands();
-      updateRunAdmission();
-    });
+    renderHost.renderSteps(payload);
   }
 
   function selectedSteps() {

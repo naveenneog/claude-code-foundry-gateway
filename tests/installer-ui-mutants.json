@@ -1250,9 +1250,9 @@
   {
     "id": "g7b-D10",
     "why": "P6: a step selection change marks the preflight stale again",
-    "file": "tools/installer-ui/installer-ui-render.js",
-    "find": "        input.addEventListener(\"change\", onChanged);\n",
-    "replace": "        input.addEventListener(\"change\", () => {});\n",
+    "file": "tools/installer-ui/installer-ui.js",
+    "find": "      else if (event.target?.matches(\"#step-list input\")) {\n        refreshCommands();",
+    "replace": "      else if (event.target?.matches(\"#step-list input\")) {\n        markPreflightStale();\n        refreshCommands();",
     "testFile": "tests/installer-ui-g7b.test.mjs",
     "test": "P6 one-step preflight admits selected scope but blocks full run"
   },
@@ -1323,8 +1323,8 @@
     "id": "g7b-E08",
     "why": "R2-7: static mode drops the PFX sentence",
     "file": "tools/installer-ui/installer-ui-render.js",
-    "find": "\n      if (commands.terminalPfx) appendText(root, \"The installer asks for the PFX password in the terminal.\", \"p\");\n",
-    "replace": "\n",
+    "find": "        appendText(root, commands.powershellRun, \"pre\");\n        if (commands.terminalPfx) appendText(root, \"The installer asks for the PFX password in the terminal.\", \"p\");\n",
+    "replace": "        appendText(root, commands.powershellRun, \"pre\");\n",
     "testFile": "tests/installer-ui-g7b-r2.test.mjs",
     "test": "R2-7 static mode shows terminal PFX command without Yes"
   },
@@ -1363,5 +1363,14 @@
     "replace": "",
     "testFile": "tests/installer-ui-g7b-r2.test.mjs",
     "test": "lead: a run request that fails after the server started the run reattaches to that run"
+  },
+  {
+    "id": "r4-L5-2",
+    "why": "L5-2: a step selection change refreshes the commands and recomputes run admission; the page-level change listener is the only handler that does it",
+    "file": "tools/installer-ui/installer-ui.js",
+    "find": "      else if (event.target?.matches(\"#step-list input\")) {\n        refreshCommands();\n        updateRunAdmission();\n      }\n",
+    "replace": "",
+    "testFile": "tests/installer-ui-g7b.test.mjs",
+    "test": "P6 one-step preflight admits selected scope but blocks full run"
   }
 ]
