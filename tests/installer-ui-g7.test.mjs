@@ -305,6 +305,22 @@ test('S4 a live PFX run is refused before a run is created', async () => {
   }
 });
 
+test('S4 custom address runs with omitted or KeyVault certificate source are not PFX refusals', async () => {
+  for (const source of [undefined, 'KeyVault']) {
+    const app = await start();
+    try {
+      const answers = { ...passingAnswers, AddressMode: 'custom' };
+      if (source) answers.AddressCertificateSource = source;
+      const preflight = await passingPreflight(app, { answers });
+      const response = await app.fetch('/api/run/stream', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers, steps: ['resource-group'], fingerprint: preflight.fingerprint }) });
+      assert.notEqual(response.status, 409);
+      assert.doesNotMatch(await response.text(), /pfx-needs-terminal/);
+    } finally {
+      await app.close();
+    }
+  }
+});
+
 test('S5 passing preflight returns identity and scope and the same identity is admitted', async () => {
   const app = await start();
   try {
