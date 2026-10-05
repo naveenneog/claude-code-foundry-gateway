@@ -38,6 +38,7 @@ export function createAzureLease() {
       const lease = {
         operation,
         kind,
+        timeoutMs,
         remainingTimeout() {
           if (!timeoutMs) return 0;
           return Math.max(1, timeoutMs - (Date.now() - startedAt));

@@ -76,7 +76,7 @@ test('read-only preflight timeout returns 504 and kills the child tree', async (
     });
     const body = await response.json();
     assert.equal(response.status, 504);
-    assert.match(body.error, /preflight timed out after \d+ ms/);
+    assert.match(body.error, /preflight timed out after 500 ms/);
     const pids = (await readFile(`${heartbeat}.pid`, 'utf8')).trim().split(/\r?\n/).map(Number);
     await new Promise((resolve) => setTimeout(resolve, 500));
     for (const pid of pids) assert.equal(alive(pid), false, `pid ${pid} should be gone`);

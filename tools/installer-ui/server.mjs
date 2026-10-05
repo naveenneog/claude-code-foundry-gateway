@@ -288,9 +288,11 @@ export async function createInstallerUiServer(options = {}) {
     finally { lease.release(); }
   });
 
-  const readIdentityPayload = async (timeoutMs) => {
+  const childTimeout = (lease) => ({ timeoutMs: lease.remainingTimeout(), budgetMs: lease.timeoutMs });
+
+  const readIdentityPayload = async (timing) => {
     if (options.readIdentity) return options.readIdentity();
-    const result = await runPowerShell(identityScript, [], options, { timeoutMs, readName: 'identity', outputCapBytes: outputCapFor() });
+    const result = await runPowerShell(identityScript, [], options, { ...timing, readName: 'identity', outputCapBytes: outputCapFor() });
     return JSON.parse(result.stdout);
   };
 
@@ -301,8 +303,8 @@ export async function createInstallerUiServer(options = {}) {
     subscriptionId: String(value?.subscriptionId || value?.id || ''),
   });
 
-  const readIdentitySnapshot = async (timeoutMs) => {
-    return identitySnapshot(await readIdentityPayload(timeoutMs));
+  const readIdentitySnapshot = async (timing) => {
+    return identitySnapshot(await readIdentityPayload(timing));
   };
 
   const changedIdentityFields = (before, after) => {
@@ -424,7 +426,7 @@ export async function createInstallerUiServer(options = {}) {
       if (req.method === 'GET' && url.pathname === '/api/identity') {
         requireLive();
         assertFetchMetadataForChildGet(req);
-        return send(res, 200, await withAzureRead('identity', (lease) => readIdentityPayload(lease.remainingTimeout())), setCookie);
+        return send(res, 200, await withAzureRead('identity', (lease) => readIdentityPayload(childTimeout(lease))), setCookie);
       }
       if (req.method === 'GET' && url.pathname === '/api/run/status') return send(res, 200, { schemaVersion: 1, ...(publicRun(activeRun || lastRun) || {}) }, setCookie);
       if (req.method === 'GET' && url.pathname === '/api/run/attach') {
@@ -438,7 +440,7 @@ export async function createInstallerUiServer(options = {}) {
         assertSameOrigin(req, logRequestRefusal);
         const body = await readJsonBody(req);
         const args = prefillArguments(body);
-        const result = await withAzureRead('prefill', (lease) => runPowerShell(prefillScript, args, options, { redactStdout: false, timeoutMs: lease.remainingTimeout(), readName: 'prefill', outputCapBytes: outputCapFor() }));
+        const result = await withAzureRead('prefill', (lease) => runPowerShell(prefillScript, args, options, { redactStdout: false, ...childTimeout(lease), readName: 'prefill', outputCapBytes: outputCapFor() }));
         if (!result.stdout.trim()) {
           log(`Prefill returned no JSON (exit ${result.code}): ${scrubLocalPaths(result.stderr)}`);
           return send(res, 500, { schemaVersion: 1, error: 'The prefill read returned no result. The terminal that started the installer UI shows the details.' }, setCookie);
@@ -457,7 +459,7 @@ export async function createInstallerUiServer(options = {}) {
         const engine = 'pwsh';
         return send(res, 200, await withAzureRead('preflight', (lease) => withRunDirectory(async (dir) => {
           const answers = await writeAnswers(dir, body.answers || {});
-          const result = await runInstaller('powershell', await installerArguments({ engine: 'pwsh', action: 'preflight', answersPath: answers }), options, { timeoutMs: lease.remainingTimeout(), readName: 'preflight', outputCapBytes: outputCapFor() });
+          const result = await runInstaller('powershell', await installerArguments({ engine: 'pwsh', action: 'preflight', answersPath: answers }), options, { ...childTimeout(lease), readName: 'preflight', outputCapBytes: outputCapFor() });
           let parsed;
           try { parsed = validatePreflight(JSON.parse(result.stdout)); } catch (error) {
             if (error.status === 502) throw error;
@@ -471,7 +473,7 @@ export async function createInstallerUiServer(options = {}) {
           let fingerprint = '';
           let identity;
           if (parsed.result === 'PASS' && result.code === 0) {
-            identity = await readIdentitySnapshot(lease.remainingTimeout());
+            identity = await readIdentitySnapshot(childTimeout(lease));
             fingerprint = preflightFingerprint({ answers: body.answers || {}, scope, engine });
             preflightPasses.replaceForAnswers({ fingerprint, answersDigest: digest, engine, scope, time: new Date().toISOString(), identity });
           } else {
@@ -498,7 +500,7 @@ export async function createInstallerUiServer(options = {}) {
           if (record.engine !== 'pwsh' || record.answersDigest !== digest || !scopeCovers(record.scope, scope)) {
             throw preflightRequired('The answers or selected steps changed since the last passing preflight. Run preflight again.');
           }
-          const currentIdentity = await readIdentitySnapshot(timeoutFor('identity'));
+          const currentIdentity = await readIdentitySnapshot({ timeoutMs: timeoutFor('identity') });
           const changed = changedIdentityFields(record.identity, currentIdentity);
           if (changed.length) {
             const error = new Error(`The Azure identity ${changed.join(', ')} changed since preflight. Run preflight again.`);

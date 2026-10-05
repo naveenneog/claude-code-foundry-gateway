@@ -42,7 +42,8 @@ export async function collectChildOutput(child, runOptions, defaultReadName, hel
   stdout += stdoutDecoder.end();
   stderr += stderrDecoder.end();
   if (timedOut) {
-    const error = new Error(`${runOptions.readName || defaultReadName} timed out after ${timeoutMs} ms`);
+    // A read under the Azure lease gets the time left of its budget; the message names the budget, which is what the operator configured.
+    const error = new Error(`${runOptions.readName || defaultReadName} timed out after ${runOptions.budgetMs || timeoutMs} ms`);
     error.status = 504;
     throw error;
   }
