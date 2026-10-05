@@ -286,6 +286,11 @@ $exactCatalog = [pscustomobject]@{
 $exact = ConvertFrom-ClaudeTurnstileGovernance -Catalog $exactCatalog -BudgetItems @([pscustomobject]@{ scope_type = 'organization'; scope_id = 'Sales'; token_limit = 900 })
 $exactText = @($exact.Problems) -join '; '
 Assert 'a Turnstile budget for Sales is not the budget of the unit sales' (@($exact.Registry | Where-Object { $_.Id -ceq 'sales' -and [long]$_.TokensPerMonth -eq 0 }).Count -eq 1) ((@($exact.Registry) | ForEach-Object { "$($_.Id)=$($_.TokensPerMonth)" }) -join ',')
+# P96 council round 6 (Architect): the scope type is a fixed word Turnstile may capitalise; it must not hide the budget.
+$typeCase = ConvertFrom-ClaudeTurnstileGovernance -Catalog ([pscustomobject]@{
+    source = 'configured'; organizations = @([pscustomobject]@{ id = 'sales'; name = 'Sales'; external_ref = 'entra-group:Claude Sales' }); departments = @()
+}) -BudgetItems @([pscustomobject]@{ scope_type = 'Organization'; scope_id = 'sales'; token_limit = 900 })
+Assert 'a budget whose scope type is capitalised still reaches its unit' (@($typeCase.Registry | Where-Object { $_.Id -ceq 'sales' -and [long]$_.TokensPerMonth -eq 900 }).Count -eq 1) ((@($typeCase.Registry) | ForEach-Object { "$($_.Id)=$($_.TokensPerMonth)" }) -join ',')
 Assert 'a team whose parent is Sales is not a team of sales' (@($exact.Parents.Keys).Count -eq 0 -and $exactText -match "team 'eu': its business unit 'Sales' was not applied") "$exactText | parents $(ConvertTo-ClaudeBuParents $exact.Parents)"
 $spellingChange = Get-ClaudeGatewayGovernanceChanges -Desired ([pscustomobject]@{ Registry = @([pscustomobject]@{ Id = 'sales'; Group = 'Claude Sales'; TokensPerMonth = 0 }); Parents = [ordered]@{}; Modes = [ordered]@{}; Tiers = @() }) -Current ([ordered]@{ 'bu-registry' = ',Sales=Claude Sales:0,'; 'bu-parents' = ',,'; 'bu-modes' = ',,' })
 Assert 'Sales in the gateway against sales from Turnstile is a change' (@($spellingChange | Where-Object { $_.Id -eq 'bu-registry' }).Count -eq 1) ((@($spellingChange) | ForEach-Object Id) -join ',')
@@ -312,6 +317,7 @@ $lfTeam = ConvertFrom-ClaudeTurnstileGovernance -Catalog ([pscustomobject]@{
 })
 Assert 'an imported team id with a trailing line feed under a valid unit is not a gateway id' (@($lfTeam.Registry | Where-Object { $_.Id -cne 'research' }).Count -eq 0 -and (@($lfTeam.Problems) -join '; ') -match "team 'web\s*': not a valid gateway id") ((@($lfTeam.Problems) -join '; ') + " | registry $((@($lfTeam.Registry) | ForEach-Object Id) -join ',')")
 Assert 'Test-ClaudeBuId refuses an identifier with a trailing line feed' (Throws { Test-ClaudeBuId "research`n" })
+Assert 'a stored identifier with a trailing line feed is refused too' (Throws { Test-ClaudeBuId "Legacy-Unit`n" -Stored })
 $modelTiers = ConvertFrom-ClaudeTurnstileGovernance -Catalog $stored -BudgetItems $budgetRows -Tiers @(
     [pscustomobject]@{ id = 'standard'; entra_group = 'claude-code-standard'; tokens_per_minute = 1; tokens_per_day = 1; models = @('claude-sonnet-5', 'x&calc.exe') },
     [pscustomobject]@{ id = 'premium'; entra_group = 'Claude Premium'; tokens_per_minute = 1; tokens_per_day = 1; models = @('claude-opus-5.5', 'claude_haiku-4.5') }

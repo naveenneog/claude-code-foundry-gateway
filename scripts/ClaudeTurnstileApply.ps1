@@ -66,11 +66,12 @@ function ConvertFrom-ClaudeTurnstileGovernance {
         }
         catch { $invalidModes = $true; $problems.Add("'$($entity.id)': $($_.Exception.Message)") }
     }
-    # Scope ids compare by exact spelling: a budget for 'Sales' is not the budget of the unit 'sales' (P96, round 5).
+    # Scope ids compare by exact spelling: a budget for 'Sales' is not the budget of the unit 'sales' (P96, round 5). The
+    # scope type is a fixed word, lower-cased before it joins the key, so 'Organization' does not hide a budget (round 6).
     $limits = [hashtable]::new([System.StringComparer]::Ordinal)
     foreach ($b in @($BudgetItems)) {
         if ($b -and [string]$b.scope_type -in @('organization', 'department') -and $null -ne $b.token_limit) {
-            $limits["$($b.scope_type)/$($b.scope_id)"] = [long]$b.token_limit
+            $limits["$(([string]$b.scope_type).ToLowerInvariant())/$($b.scope_id)"] = [long]$b.token_limit
         }
     }
     $groupOf = {
