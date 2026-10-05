@@ -27,7 +27,7 @@ function Invoke-RestMethod {
     & $global:FixtureRest @PSBoundParameters
 }
 function At([string]$Pattern) { for ($i = 0; $i -lt $FixtureCalls.Count; $i++) { if ($FixtureCalls[$i] -match $Pattern) { return $i } }; return -1 }
-function Writes { @($FixtureCalls | Where-Object { $_ -match '^az (deployment group create|apim nv (update|create)|cosmosdb sql role assignment create|functionapp|ad app create)' }) }
+function Writes { @($FixtureCalls | Where-Object { $_ -match '^az (deployment group create|apim nv (update|create)|cosmosdb sql role assignment create|functionapp|ad app create|ad sp create)' }) }
 $repoBackups = { @(Get-ChildItem -LiteralPath (Join-Path $root 'onboarding') -Filter 'projection-switch-apim-p84-*.json' -ErrorAction SilentlyContinue) }
 $deployer = Join-Path $root 'scripts\Deploy-ClaudeProjection.ps1'
 function Invoke-DeployerSwitch([string]$Lists, [string]$Fixture = 'healthy') {

@@ -91,7 +91,7 @@ function Invoke-ClaudeProjectionSwitch {
     $gatewayAudience = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-audience' -FailOnError
     if (-not $resolverUrl -or $gatewayUrl -ne $resolverUrl -or $gatewayAudience -ne $resolverAudience) { throw "Projection switch refused: the gateway's entitlement-resolver-url is '$gatewayUrl' and its entitlement-resolver-audience is '$gatewayAudience', not $resolverUrl and $resolverAudience from $resolverDeployment. Remedy: rerun scripts/Deploy-ClaudeProjection.ps1 -NamePrefix $NamePrefix without -FlipAfterCleanCompare, then rerun." }
     $resolverAppId = Get-ClaudeProjectionResolverAppId -Resolver $resolver -ResolverAudience $resolverAudience
-    Confirm-ClaudeProjectionResolverServicePrincipal -AppId $resolverAppId | Out-Null
+    Assert-ClaudeProjectionResolverServicePrincipal -AppId $resolverAppId | Out-Null
     $siteId = "/subscriptions/$(($gatewayId -split '/')[2])/resourceGroups/$ResourceGroup/providers/Microsoft.Web/sites/$siteName"
     $siteUrl = Get-ClaudeProjectionArmUrl -ResourceId $siteId -ApiVersion '2024-04-01'
     $settingsUrl = Get-ClaudeProjectionArmUrl -ResourceId $siteId -ApiVersion '2024-04-01' -SubPath 'config/appsettings/list'

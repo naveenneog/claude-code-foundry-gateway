@@ -10,20 +10,36 @@ function Get-ClaudeProjectionAppRemedy {
     return "Customer Entra admin: https://entra.microsoft.com > Entra ID > App registrations > New registration > claude-projection-resolver-$NamePrefix > Accounts in this organizational directory only > Register; Overview supplies the Application (client) ID; Expose an API > Application ID URI is api://<id>. CLI equivalent: az ad app create --display-name claude-projection-resolver-$NamePrefix --sign-in-audience AzureADMyOrg --query appId -o tsv; after a successful nonempty id, az ad app update --id <id> --identifier-uris api://<id>. The operator supplies -ResolverAppId <id>."
 }
 
-function Confirm-ClaudeProjectionResolverServicePrincipal {
+# Read-only: does the resolver application have a service principal in this tenant? Entra issues no token
+# for a resource application without one (AADSTS500011).
+function Test-ClaudeProjectionResolverServicePrincipal {
     param([Parameter(Mandatory)][string]$AppId)
     if ($AppId -notmatch '^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$') {
-        throw 'Resolver application id must be a GUID before creating its service principal.'
+        throw 'Resolver application id must be a GUID before its service principal is read.'
     }
     try {
         $sp = Invoke-ClaudeNetworkAz @('ad','sp','show','--id',$AppId)
-        if ($sp -and $sp.appId) { return [string]$sp.appId }
+        return [bool]($sp -and $sp.appId)
     }
     catch {
-        if ($_.Exception.Message -notmatch '(?i)not\s*found|Request_ResourceNotFound|does not exist') { throw }
-        $null = Invoke-ClaudeNetworkAz @('ad','sp','create','--id',$AppId)
-        return $AppId
+        if ($_.Exception.Message -match '(?i)not\s*found|Request_ResourceNotFound|does not exist') { return $false }
+        throw
     }
+}
+
+# The switch checks and never writes: a missing service principal refuses with the remedy.
+function Assert-ClaudeProjectionResolverServicePrincipal {
+    param([Parameter(Mandatory)][string]$AppId)
+    if (-not (Test-ClaudeProjectionResolverServicePrincipal -AppId $AppId)) {
+        throw "Projection switch refused: resolver application $AppId has no service principal in this tenant, so Microsoft Entra ID issues the gateway no token for the resolver (AADSTS500011). Remedy: rerun scripts/Deploy-ClaudeProjection.ps1 with this -NamePrefix, which creates it, or run az ad sp create --id $AppId; then rerun the switch."
+    }
+    return $AppId
+}
+
+# The deployer creates the service principal when it is missing.
+function Confirm-ClaudeProjectionResolverServicePrincipal {
+    param([Parameter(Mandatory)][string]$AppId)
+    if (Test-ClaudeProjectionResolverServicePrincipal -AppId $AppId) { return $AppId }
     $null = Invoke-ClaudeNetworkAz @('ad','sp','create','--id',$AppId)
     return $AppId
 }

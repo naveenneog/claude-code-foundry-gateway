@@ -62,14 +62,14 @@ function Invoke-Switch([hashtable]$Extra = @{}) {
     Invoke-ClaudeProjectionSwitch @params
 }
 function At([string]$Pattern) { for ($i = 0; $i -lt $FixtureCalls.Count; $i++) { if ($FixtureCalls[$i] -match $Pattern) { return $i } }; return -1 }
-function Writes { @($FixtureCalls | Where-Object { $_ -match '^az (deployment group create|apim nv (update|create)|cosmosdb sql role assignment create|functionapp|ad app create)' }) }
+function Writes { @($FixtureCalls | Where-Object { $_ -match '^az (deployment group create|apim nv (update|create)|cosmosdb sql role assignment create|functionapp|ad app create|ad sp create)' }) }
 function Backups { @(Get-ChildItem -LiteralPath $backupDir -Filter 'projection-switch-apim-p84-*.json' -ErrorAction SilentlyContinue) }
 
 Reset-ProjectionFixture
 $global:CompareDrift = $false
 Get-ChildItem -LiteralPath $backupDir -Filter '*.json' -ErrorAction SilentlyContinue | Remove-Item -Force
 Capture { Invoke-Switch }
-$order = @((At '^confirm-sp '), (At '^compare-stub'), (At '^start-runner rg-p84 aci-projtest-p84fixture'), (At 'apply-projection\.mjs .*--compare /work/gateway-decisions\.json'), (At 'check-admission\.mjs'), (At '^az apim nv update .*entitlement-source --value projection'))
+$order = @((At '^az ad sp show --id 00000000-0000-4000-8000-000000000086'), (At '^compare-stub'), (At '^az container show -g rg-p84 -n aci-projtest-p84fixture --query instanceView\.state'), (At 'apply-projection\.mjs .*--compare /work/gateway-decisions\.json'), (At 'check-admission\.mjs'), (At '^az apim nv update .*entitlement-source --value projection'))
 Assert 'switch takes prefix, confirms resolver SP, starts runner, compares, checks evidence and writes once' (-not $Failure -and ($order -notcontains -1) -and (@(0..4 | Where-Object { $order[$_] -lt $order[$_ + 1] }).Count -eq 5) -and @(Writes).Count -eq 1 -and @(Get-ChildItem -LiteralPath $backupDir -Filter '*.json' -ErrorAction SilentlyContinue).Count -eq 1) "$Failure | $($order -join ',') | $(($FixtureCalls -join '; '))"
 Assert 'its only Azure write is entitlement-source' (@(Writes).Count -eq 1 -and @(Writes)[0] -match 'entitlement-source --value projection') ((Writes) -join ' | ')
 Assert 'nothing is deployed, published, registered, role-assigned or applied in switch mode' ((($FixtureCalls -join "`n") -notmatch 'deployment group create|functionapp|ad app create|role assignment|--snapshot ') -and (($FixtureCalls -join "`n") -notmatch 'Sync-ClaudeProjection')) ($FixtureCalls -join ' | ')
@@ -114,7 +114,16 @@ Assert 'new gateway skips drift export and uses compare-snapshot against a fresh
 Reset-ProjectionFixture 'sp-missing'
 Get-ChildItem -LiteralPath $backupDir -Filter '*.json' -ErrorAction SilentlyContinue | Remove-Item -Force
 Capture { Invoke-Switch }
-Assert 'missing resolver service principal refuses before compare and backup' ($Failure -match 'service principal' -and (At '^compare-stub') -lt 0 -and @(Writes).Count -eq 0 -and -not @(Get-ChildItem -LiteralPath $backupDir -Filter '*.json' -ErrorAction SilentlyContinue).Count) $Failure
+Assert 'missing resolver service principal refuses before compare and backup, and the switch does not create it' ($Failure -match '^Projection switch refused' -and $Failure -match 'service principal' -and $Failure -match 'Deploy-ClaudeProjection\.ps1' -and (At '^compare-stub') -lt 0 -and (At '^az ad sp create') -lt 0 -and @(Writes).Count -eq 0 -and -not @(Get-ChildItem -LiteralPath $backupDir -Filter '*.json' -ErrorAction SilentlyContinue).Count) "$Failure | $(($FixtureCalls | Select-Object -Last 4) -join ' | ')"
+Reset-ProjectionFixture 'sp-missing'
+Capture { Invoke-Switch @{ WhatIf = $true } }
+Assert '-WhatIf with a missing resolver service principal refuses and makes no Entra write' ($Failure -match 'service principal' -and (At '^az ad sp create') -lt 0 -and @(Writes).Count -eq 0) "$Failure | $(($FixtureCalls | Select-Object -Last 4) -join ' | ')"
+Reset-ProjectionFixture 'runner-stopped'
+$global:CompareDrift = $false
+Backups | Remove-Item -Force
+Capture { Invoke-Switch }
+$runnerOrder = @((At '^az container show -g rg-p84 -n aci-projtest-p84fixture --query instanceView\.state'), (At '^az container start -g rg-p84 -n aci-projtest-p84fixture'), (At 'apply-projection\.mjs .*--compare /work/gateway-decisions\.json'), (At '^az apim nv update .*entitlement-source --value projection'))
+Assert 'a stopped runner is started before the compare, and the switch still writes once' (-not $Failure -and ($runnerOrder -notcontains -1) -and (@(0..2 | Where-Object { $runnerOrder[$_] -lt $runnerOrder[$_ + 1] }).Count -eq 3) -and @(Writes).Count -eq 1) "$Failure | $($runnerOrder -join ',')"
 
 $confirmShell = [powershell]::Create()
 $null = $confirmShell.AddScript({

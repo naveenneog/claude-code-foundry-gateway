@@ -5,6 +5,7 @@ function Reset-ProjectionFixture {
     $global:FixtureCalls = [Collections.Generic.List[string]]::new()
     $global:FixtureWaits = [Collections.Generic.List[int]]::new()
     $global:FixtureProbes = 0
+    $global:FixtureRunnerStarted = $false
     $global:FixtureBicepExpression = ''
     $script:ClaudeNetworkTokens = @{}
     $global:FixtureSubscription = '00000000-0000-4000-8000-000000000084'
@@ -141,6 +142,8 @@ function az {
     }
     if ($line -like 'ad sp show*') {
         if ($FixtureCase -eq 'sp-error') { $global:LASTEXITCODE = 1; return }
+        # az ad sp show for an app without a service principal: exit 3 and this message (az 2.6x).
+        if ($FixtureCase -eq 'sp-missing') { $global:LASTEXITCODE = 3; return "ERROR: Resource '$($words[[array]::IndexOf($words, '--id') + 1])' does not exist or one of its queried reference-property objects are not present." }
         if ($line -match '--query appId') { return $FixtureApp }
         return (@{ appId = $(if ($FixtureCase -eq 'sp-empty') { '' } else { $FixtureApp }) } | ConvertTo-Json -Compress)
     }
@@ -218,6 +221,12 @@ function az {
         $params = @{ parameters = @{ storageName = @{ value = $(if ($FixtureCase -eq 'bicep-shape') { 'bad_derived_name' } else { 'stres52p2c4jfs43ig' }) } } } | ConvertTo-Json -Compress -Depth 5
         return (@{ parametersJson = $params } | ConvertTo-Json -Compress)
     }
+    # Start-ClaudeProjectionRunner reads the state, starts a stopped group and polls until Running.
+    if ($line -like 'container show*' -and $line -match '--query instanceView\.state') {
+        if ($FixtureCase -eq 'runner-stopped' -and -not $global:FixtureRunnerStarted) { return 'Stopped' }
+        return 'Running'
+    }
+    if ($line -like 'container start*') { $global:FixtureRunnerStarted = $true; return '' }
     if ($line -like 'container exec*') {
         if ($FixtureCase -eq 'runner-exit') { $global:LASTEXITCODE = 9; return 'runner transport failed' }
         $command = [string]$words[[array]::IndexOf($words, '--exec-command') + 1]
@@ -350,5 +359,3 @@ function Invoke-RestMethod {
     throw "UNEXPECTED HTTP CALL (offline fixture): $Method $url"
 }
 
-function Start-ClaudeProjectionRunner { param([string]$ResourceGroup, [string]$Name, [string]$SubscriptionId) $global:FixtureCalls.Add("start-runner $ResourceGroup $Name") }
-function Confirm-ClaudeProjectionResolverServicePrincipal { param([string]$AppId) $global:FixtureCalls.Add("confirm-sp $AppId"); if ($global:FixtureCase -eq 'sp-missing') { throw "Projection switch refused: resolver app $AppId has no service principal." }; return $true }
