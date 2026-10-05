@@ -76,6 +76,7 @@
         appendText(status, result?.statusText || successText);
         return result;
       } catch (ex) {
+        clearChildren(status);
         clearChildren(error);
         appendText(error, errorText(ex));
         error.focus();

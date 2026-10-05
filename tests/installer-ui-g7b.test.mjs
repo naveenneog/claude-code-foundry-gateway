@@ -108,6 +108,22 @@ test('P1 non-zero run reports the exit code, failed step and resume command as a
   }
 });
 
+test('R2-3 failed run clears the busy status text', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await passPreflight(page);
+    await page.route('**/api/run/stream', (route) => route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"summary","exitCode":9,"failedStepId":"resource-group","resumeCommand":"","state":"exited","message":""}\n' }));
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await page.locator('#run-error[role="alert"]').getByText(/exit code 9/).waitFor();
+    assert.doesNotMatch(await page.locator('#run-status').textContent(), /Running selected steps/);
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
 test('P1 stopped run reports stopped status rather than an error', async () => {
   const app = await start();
   const { browser, page, pageErrors } = await openPage(app);
