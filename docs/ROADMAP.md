@@ -120,7 +120,8 @@ deployer's switch mode returns before the preflight. On an existing gateway, the
 `bu-parents` and `entitlement-cache-seconds` with `2>$null`, so a failed read deploys the template's
 default for that value (`Install-ClaudeGateway.ps1:1428-1450`) ([P95 council](status/P95.md#council)).
 
-From P95 council round 4 (Security, MEDIUM, present since `0c624dd`, 2026-09-17): the installer passes
+From P95 council round 4 (Security, MEDIUM, present since `88fbc4b`, 2026-08-31, for the lists and
+since `0c624dd`, 2026-09-17, for the entitlement values): the installer passes
 the live named values it reads back, among them `entitlement-resolver-url`,
 `entitlement-resolver-audience`, the `allow-*`, `bu-*` and `usd-*` values and `quota-overrides`, to
 `az deployment group create` as unquoted `key=value` arguments (`Install-ClaudeGateway.ps1:1566-1586`).
