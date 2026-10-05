@@ -77,7 +77,16 @@ async function abortAfterServerRunCompletes(page) {
   });
 }
 
-function forwardRunThenAbortBrowser(route) {
+function within(promise, ms, what) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${what} did not happen within ${ms} ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+// The browser request fails only after serverReceived settles, so the page's status poll cannot run before the forwarded copy reaches the server.
+function forwardRunThenAbortBrowser(route, serverReceived) {
   const request = route.request();
   const requestHeaders = request.headers();
   const headers = {};
@@ -89,7 +98,8 @@ function forwardRunThenAbortBrowser(route) {
     headers,
     body: request.postData(),
   });
-  return { aborted: route.abort('failed'), forwarded };
+  const abort = () => route.abort('failed');
+  return { aborted: serverReceived.then(abort, abort), forwarded };
 }
 
 async function withDelayedPreflight(page, edit) {
@@ -245,13 +255,15 @@ test('R3-2 real server recovery waits through admitting before following the sta
   try {
     await passPreflight(page);
     holdAdmission = true;
+    const serverAdmitting = within(identityStarted, 30000, 'The server reading the identity for the forwarded run request');
+    serverAdmitting.catch(() => {});
     await page.route('**/api/run/stream', async (route) => {
-      const forwarded = forwardRunThenAbortBrowser(route);
+      const forwarded = forwardRunThenAbortBrowser(route, serverAdmitting);
       forwardedRun = forwarded.forwarded;
       await forwarded.aborted;
     });
     await page.getByRole('button', { name: 'Run selected steps' }).click();
-    await identityStarted;
+    await serverAdmitting;
     await page.locator('#run-status').getByText(/Running selected steps/).waitFor();
     releaseIdentity();
     const forwardedResponse = await forwardedRun;
