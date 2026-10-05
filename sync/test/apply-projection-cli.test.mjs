@@ -12,6 +12,8 @@ const other = account.replace('databaseAccounts/cosmos', 'databaseAccounts/other
 const cosmos = 'https://cosmos.documents.azure.com:443/';
 const loader = fileURLToPath(new URL('./fake-azure-loader.mjs', import.meta.url));
 const loaderUrl = pathToFileURL(loader).href;
+const graphPreload = fileURLToPath(new URL('./fake-graph-preload.mjs', import.meta.url));
+const graphPreloadUrl = pathToFileURL(graphPreload).href;
 const work = fileURLToPath(new URL('../.test-work/apply-cli/', import.meta.url));
 
 function run(args = [], env = {}) {
@@ -222,4 +224,58 @@ test('a targeted status older than the full snapshot excludes nothing', () => {
   assert.equal(summary.excludedByNewerTargetedSync, 0);
   const docs = Object.values(JSON.parse(readFileSync(store, 'utf8')).docs);
   assert.equal(docs.find((d) => d.oid === target).tier, 'standard');
+});
+
+function runGraphWithConcurrentStatus({ name, mode }) {
+  const dir = join(work, name.replace(/[^a-z0-9]+/gi, '-'));
+  rmSync(dir, { recursive: true, force: true });
+  mkdirSync(dir, { recursive: true });
+  const store = join(dir, 'cosmos.json');
+  const log = join(dir, 'cosmos.log');
+  writeFileSync(store, JSON.stringify({ docs: {} }));
+  writeFileSync(log, '');
+  const target = '33333333-3333-4333-8333-333333333333';
+  const otherUser = '44444444-4444-4444-8444-444444444444';
+  const group = '11111111-1111-4111-8111-111111111111';
+  const result = spawnSync(process.execPath, [
+    '--import', graphPreloadUrl, '--loader', loaderUrl, script,
+    '--cosmos', cosmos, '--tenant', tenant, '--account-resource-id', account,
+    '--graph', '--standard', group, '--premium', 'none',
+  ], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      FAKE_COSMOS_STORE: store,
+      FAKE_COSMOS_LOG: log,
+      FAKE_GRAPH_TENANT: tenant,
+      FAKE_GRAPH_ACCOUNT_RESOURCE_ID: account,
+      FAKE_GRAPH_GROUP_ID: group,
+      FAKE_GRAPH_TARGET_USER: target,
+      FAKE_GRAPH_USERS: `${target},${otherUser}`,
+      FAKE_GRAPH_CONCURRENT_STATUS_MODE: mode,
+      PROJECTION_ACCOUNT_RESOURCE_ID: '',
+      PROJECTION_STANDARD_GROUP_ID: '',
+      PROJECTION_PREMIUM_GROUP_ID: '',
+      PROJECTION_GATEWAY_RESOURCE_ID: '',
+    },
+  });
+  const summary = JSON.parse(result.stdout.trim().split(/\r?\n/).filter((line) => line.startsWith('{')).at(-1));
+  return { result, summary, store, target, otherUser };
+}
+
+test('a concurrent targeted sync during graph full apply excludes that user from writes and deletes', () => {
+  const { result, summary, store, target, otherUser } = runGraphWithConcurrentStatus({ name: 'graph concurrent user', mode: 'user' });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(summary.excludedByNewerTargetedSync, 1);
+  const docs = Object.values(JSON.parse(readFileSync(store, 'utf8')).docs);
+  assert.equal(docs.some((d) => d.oid === target && d.type !== 'projection-reconciliation-status'), false);
+  assert.equal(docs.find((d) => d.oid === otherUser).tier, 'standard');
+});
+
+test('a concurrent full sync during graph full apply refuses before writing users', () => {
+  const { result, summary, store, target, otherUser } = runGraphWithConcurrentStatus({ name: 'graph concurrent full', mode: 'full' });
+  assert.equal(result.status, 2, result.stdout + result.stderr);
+  assert.match(summary.error, /newer full sync finished after this snapshot was taken/);
+  const docs = Object.values(JSON.parse(readFileSync(store, 'utf8')).docs);
+  assert.equal(docs.some((d) => [target, otherUser].includes(d.oid) && d.type !== 'projection-reconciliation-status'), false);
 });

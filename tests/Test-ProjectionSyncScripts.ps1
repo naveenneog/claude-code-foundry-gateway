@@ -54,6 +54,7 @@ function Invoke-TargetedExportFixture {
     }
     function Invoke-RestMethod {
         param($Uri, $Method, $Headers, $Body, $TimeoutSec, $ErrorAction, $ContentType)
+        $global:LASTEXITCODE = 73
         $global:P97SyncFixtureCalls.Add("HTTP $Method $Uri")
         if ([string]$Uri -match '^https://graph\.microsoft\.com/v1\.0/users/[^/]+\?\$select=id$') {
             return [pscustomobject]@{ id = '30000000-0000-4000-8000-000000000001' }
@@ -78,7 +79,7 @@ function Invoke-TargetedExportFixture {
     }
     & (Join-Path $root 'scripts\Sync-ClaudeProjection.ps1') -Account cosmos-p97 -TenantId '00000000-0000-4000-8000-000000000085' -StandardGroup claude-code-standard -PremiumGroup claude-code-premium -BusinessUnitGroups $BusinessUnitGroups -ExportPath $snapshot -User $User | Out-Null
     $json = Get-Content -LiteralPath $snapshot -Raw | ConvertFrom-Json
-    [pscustomobject]@{ Calls = @($global:P97SyncFixtureCalls); Batches = @($global:P97SyncFixtureBatches); Snapshot = $json }
+    [pscustomobject]@{ Calls = @($global:P97SyncFixtureCalls); Batches = @($global:P97SyncFixtureBatches); Snapshot = $json; LastExitCode = $global:LASTEXITCODE }
 }
 
 Capture { & (Join-Path $root 'scripts\Sync-ClaudeProjection.ps1') -Account cosmos-p97 -User dev@contoso.com }
@@ -87,6 +88,7 @@ Assert 'targeted export refuses User without ExportPath' ($CapturedError -match 
 $none = Invoke-TargetedExportFixture -User 'dev@contoso.com'
 Assert 'targeted export resolves a UPN with the exact encoded Graph URL' (($none.Calls -join "`n") -match 'HTTP Get https://graph\.microsoft\.com/v1\.0/users/dev%40contoso\.com\?\$select=id') ($none.Calls -join ' | ')
 Assert 'targeted export for a user in no configured group writes a user removal snapshot' ($none.Snapshot.scope -eq 'user' -and $none.Snapshot.user -eq '30000000-0000-4000-8000-000000000001' -and @($none.Snapshot.records).Count -eq 0) ($none.Snapshot | ConvertTo-Json -Compress)
+Assert 'successful export returns with LASTEXITCODE 0 for caller checks' ($none.LastExitCode -eq 0) "LASTEXITCODE=$($none.LastExitCode)"
 
 $oid = '30000000-0000-4000-8000-000000000009'
 $byId = Invoke-TargetedExportFixture -User $oid

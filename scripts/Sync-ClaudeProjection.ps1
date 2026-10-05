@@ -300,6 +300,7 @@ if ($ExportPath) {
     Ok "$($resolved.Count) record(s) written to $full"
     Note 'Nothing was written to Cosmos. Apply it from inside the network:'
     Note "  node sync/src/apply-projection.mjs --cosmos https://$Account.documents.azure.com:443/ --tenant $TenantId --snapshot <file>"
+    $global:LASTEXITCODE = 0
     return
 }
 
