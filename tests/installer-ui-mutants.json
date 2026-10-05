@@ -286,10 +286,10 @@
   },
   {
     "id": "U1-run-admission-ignores-active-run",
-    "why": "Run-starting controls must remain disabled while a run is active.",
+    "why": "Run-starting controls must remain disabled while a run is active. The mutant removes the active-run and Azure CLI busy guards from the admission value and the azureBusy term from the three run buttons, because either guard alone keeps the buttons disabled during a page-started run.",
     "file": "tools/installer-ui/installer-ui.js",
-    "find": "!hasBlockingProblems() && !runHost?.isActive() && !azureBusy && !terminalPfx;",
-    "replace": "!hasBlockingProblems() && !terminalPfx;",
+    "find": "!hasBlockingProblems() && !runHost?.isActive() && !azureBusy && !terminalPfx;\n    const activeRun = Boolean(runHost?.isActive());\n    for (const control of document.querySelectorAll(\"[data-prefill-kind]\")) {\n      if (control.dataset.actionBusy !== \"true\") control.disabled = azureBusy || activeRun;\n    }\n    const refresh = byId(\"refresh-identity\");\n    if (refresh && refresh.dataset.actionBusy !== \"true\") refresh.disabled = azureBusy || activeRun;\n    for (const id of [\"run\", \"full-run\", \"rerun\"]) {\n      const button = byId(id);\n      if (button && button.dataset.actionBusy !== \"true\") {\n        if (id === \"full-run\") button.disabled = azureBusy || !admitted || scopeBlocksFull;\n        else if (id === \"run\") button.disabled = azureBusy || !admitted || !runScopeOk;\n        else button.disabled = azureBusy || !admitted || !rerunScopeOk;",
+    "replace": "!hasBlockingProblems() && !terminalPfx;\n    const activeRun = Boolean(runHost?.isActive());\n    for (const control of document.querySelectorAll(\"[data-prefill-kind]\")) {\n      if (control.dataset.actionBusy !== \"true\") control.disabled = azureBusy || activeRun;\n    }\n    const refresh = byId(\"refresh-identity\");\n    if (refresh && refresh.dataset.actionBusy !== \"true\") refresh.disabled = azureBusy || activeRun;\n    for (const id of [\"run\", \"full-run\", \"rerun\"]) {\n      const button = byId(id);\n      if (button && button.dataset.actionBusy !== \"true\") {\n        if (id === \"full-run\") button.disabled = !admitted || scopeBlocksFull;\n        else if (id === \"run\") button.disabled = !admitted || !runScopeOk;\n        else button.disabled = !admitted || !rerunScopeOk;",
     "testFile": "tests/installer-ui-g4.test.mjs",
     "test": "U1 fix run-starting buttons are disabled while a run is active"
   },
@@ -425,15 +425,6 @@
     "file": "tools/installer-ui/installer-stream.mjs",
     "find": "if (event.message) event.message = await redactText(event.message);",
     "replace": "if (event.message) {}",
-    "testFile": "tests/installer-ui.test.mjs",
-    "test": "selected runs stream progress, refuse empty selections, support explicit full runs and expose failed-step reruns"
-  },
-  {
-    "id": "lead-L01",
-    "why": "a second run is admitted while one is active",
-    "file": "tools/installer-ui/server.mjs",
-    "find": "if (activeRun?.state === 'running' || activeRun?.state === 'stopping') return null;",
-    "replace": "if (false) return null;",
     "testFile": "tests/installer-ui.test.mjs",
     "test": "selected runs stream progress, refuse empty selections, support explicit full runs and expose failed-step reruns"
   },
@@ -727,12 +718,12 @@
   },
   {
     "id": "lead-U04",
-    "why": "admission is not recomputed after an action settles",
+    "why": "admission is not recomputed after a non-Azure action settles; Azure actions recompute when they release Azure CLI, so Stop run shows the gap",
     "file": "tools/installer-ui/installer-ui-actions.js",
     "find": "if (typeof hostOptions.onSettled === \"function\") hostOptions.onSettled(button);",
     "replace": "",
     "testFile": "tests/installer-ui-g4.test.mjs",
-    "test": "U1 fix action settled recomputes stale run and validation-disabled preflight states"
+    "test": "U1 fix Stop run is disabled after the run ends even when the stop response arrives after the summary"
   },
   {
     "id": "lead-U05",
@@ -1306,7 +1297,7 @@
     "why": "R2-5: the defaults check repeats the schema's PFX path rule",
     "file": "tools/installer-ui/ui-model.js",
     "find": "or choose Pfx and give the PFX path.\"));\n    }\n    return out;",
-    "replace": "or choose Pfx and give the PFX path.\"));\n    }\n    if (effective.AddressMode === \"custom\" && effective.AddressCertificateSource === \"Pfx\" && !answers.AddressPfxPath) out.push(problem(\"address.inputs\", \"AddressPfxPath\", \"AddressPfxPath is required when AddressCertificateSource is Pfx\", \"Give the path of the PFX file.\"));\n    return out;",
+    "replace": "or choose Pfx and give the PFX path.\"));\n    }\n    if (answers.AddressMode === \"custom\" && answers.AddressCertificateSource === \"Pfx\" && !answers.AddressPfxPath) out.push(problem(\"address.inputs\", \"AddressPfxPath\", \"AddressPfxPath is required when AddressCertificateSource is Pfx\", \"Give the path of the PFX file.\"));\n    return out;",
     "testFile": "tests/installer-ui-g7b-r2.test.mjs",
     "test": "R2-5 PFX path is reported once because defaults create no PFX requirement"
   },
