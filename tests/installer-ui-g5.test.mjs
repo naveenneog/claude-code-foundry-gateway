@@ -6,9 +6,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { createContext, runInContext } from 'node:vm';
 import { createInstallerUiServer } from '../tools/installer-ui/server.mjs';
 
 const stubInstaller = fileURLToPath(new URL('./installer-ui-stub.mjs', import.meta.url));
+const modelContext = createContext({ globalThis: {} });
+runInContext(await readFile(new URL('../tools/installer-ui/ui-model.js', import.meta.url), 'utf8'), modelContext);
+const model = modelContext.globalThis.ClaudeInstallerUiModel;
+const schema = JSON.parse(await readFile(new URL('../schemas/claude-gateway.answers.schema.json', import.meta.url), 'utf8'));
 
 async function start(extra = {}) {
   const scratch = join(tmpdir(), `p93-g5-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`);
@@ -131,4 +136,50 @@ test('T4 child exit waits are registered immediately after spawn', async () => {
   }
   assert.ok(checked >= 4, `the detector checked ${checked} spawned children`);
   assert.deepEqual(offenders, []);
+});
+
+test('token checks refuse a wrong bootstrap, cookie or CSRF token', async () => {
+  const app = await start();
+  const wrong = 'wrong-token-with-at-least-32-bytes-0000000';
+  try {
+    assert.equal((await fetch(`${app.base}/?token=${encodeURIComponent(wrong)}`, { redirect: 'manual' })).status, 401);
+    const boot = await fetch(`${app.base}/?token=${encodeURIComponent(app.token)}`, { redirect: 'manual' });
+    assert.equal(boot.status, 303);
+    const cookie = boot.headers.get('set-cookie').split(';')[0];
+    assert.equal((await fetch(`${app.base}/api/session`, { headers: { cookie: `installer_token=${wrong}` } })).status, 401);
+    assert.equal((await fetch(`${app.base}/api/session`, { headers: { cookie } })).status, 200);
+    const stop = await fetch(`${app.base}/api/run/stop`, { method: 'POST', headers: { cookie, 'content-type': 'application/json', 'x-csrf-token': wrong }, body: '{}' });
+    assert.equal(stop.status, 403);
+  } finally {
+    await app.close();
+  }
+});
+
+test('the browser validator refuses an answer the installer does not apply and a BusinessUnits value that is not a list', () => {
+  const notApplied = Object.entries(schema.properties).find(([, property]) => !(property['x-appliedBy'] || []).includes('Install-ClaudeGateway.ps1'));
+  assert.ok(notApplied, 'the schema has an answer that Install-ClaudeGateway.ps1 does not apply');
+  const [name] = notApplied;
+  const consumerProblems = model.validateAnswers(schema, { schemaVersion: 1, [name]: 'x' }, 'Install-ClaudeGateway.ps1');
+  assert.ok(consumerProblems.some((problem) => problem.path === name && /Install-ClaudeGateway\.ps1 does not apply it/.test(problem.message)), JSON.stringify(consumerProblems));
+  const listProblems = model.validateAnswers(schema, { schemaVersion: 1, BusinessUnits: { id: 'finance' } }, 'Install-ClaudeGateway.ps1');
+  assert.ok(listProblems.some((problem) => problem.path === 'BusinessUnits'), JSON.stringify(listProblems));
+});
+
+test('prefill read errors without a field are shown on the Foundry account field', async () => {
+  const app = await start();
+  const { browser, page, pageErrors, consoleErrors } = await openPage(app);
+  try {
+    await page.route('**/api/prefill', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ kind: 'foundryAccounts', error: 'az cognitiveservices account list failed', remedy: 'Check the subscription.' }) }));
+    await page.locator('[name="SubscriptionId"]').fill('00000000-0000-4000-8000-000000000093');
+    await page.getByRole('button', { name: 'Read Foundry accounts' }).click();
+    await page.locator('#field-FoundryAccount-error').getByText(/account list failed/).waitFor();
+    assert.equal(await page.locator('[name="FoundryAccount"]').getAttribute('aria-invalid'), 'true');
+    assert.doesNotMatch(await page.locator('#field-SubscriptionId-error').textContent(), /account list failed/);
+    assert.deepEqual(pageErrors, []);
+    assert.deepEqual(await page.evaluate(() => window.__p93Unhandled), []);
+    assert.deepEqual(consoleErrors, []);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
 });
