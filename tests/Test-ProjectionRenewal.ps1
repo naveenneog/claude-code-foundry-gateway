@@ -268,9 +268,12 @@ try {
                     $items += @(@{ name = 'caj-projection-renewal-p94fixture'; type = 'Microsoft.App/jobs' }, @{ name = 'cae-projection-p94fixture'; type = 'Microsoft.App/managedEnvironments' }, @{ name = 'sqr-projection-p94fixture-graph-read-failed'; type = 'microsoft.insights/scheduledqueryrules' })
                 }
                 if ($state.Case -eq 'p86-name-other-type') { $items += @{ name = 'cae-projection-p94fixture'; type = 'Microsoft.Network/networkSecurityGroups' } }
+                # A P94/P95 deployment also left the expiry-margin rule that ADR-0051 retired.
+                if ($state.Case -eq 'upgrade-from-p95') { $items += @{ name = 'sqr-projection-p94fixture-expiry-margin-60m'; type = 'microsoft.insights/scheduledqueryrules' } }
                 return (ConvertTo-Json @($items))
             }
             '^apim show' { return (@{ id = "$rgId/providers/Microsoft.ApiManagement/service/apim-p94" } | ConvertTo-Json) }
+            '^resource delete ' { return }
             '^acr build' { if ($state.Case -eq 'tasks-refused') { $global:LASTEXITCODE = 1; return 'ERROR: (TasksOperationsNotAllowed) ACR Tasks requests are not permitted.' }; return }
             '^acr manifest show-metadata' { return (ConvertTo-Json $(if ($state.Case -eq 'bad-digest') { 'latest' } else { $digestBuilt })) }
         }
@@ -367,6 +370,16 @@ try {
         $leftovers.Failure.IndexOf('Microsoft.App/jobs') -lt $leftovers.Failure.IndexOf('Microsoft.App/managedEnvironments')) "$($leftovers.Failure) | writes $(Get-WriteCount $leftovers)"
     $otherType = Invoke-DeployScenario 'p86-name-other-type'
     Assert 'a resource with a P86 name but another type does not stop the deploy' (-not $otherType.Failure -and (Get-WriteCount $otherType) -gt 0) $otherType.Failure
+    $upgrade = Invoke-DeployScenario 'upgrade-from-p95'
+    $deleted = @($upgrade.Calls | Where-Object { $_ -match '^resource delete ' })
+    $upgradeJobAt = Get-CallIndex $upgrade '^deployment group create .*-n projection-renewal-p94fixture '
+    Assert 'a manual redeploy over P94 or P95 removes the retired expiry and no-success alert rules, after the job deploys' (-not $upgrade.Failure -and $deleted.Count -eq 2 -and
+        ($deleted -join ' ') -match 'resource delete -g rg-p94 -n sqr-projection-p94fixture-expiry-margin-60m --resource-type Microsoft\.Insights/scheduledQueryRules' -and
+        ($deleted -join ' ') -match 'resource delete -g rg-p94 -n sqr-projection-p94fixture-no-success-45m --resource-type Microsoft\.Insights/scheduledQueryRules' -and
+        $upgradeJobAt -ge 0 -and (Get-CallIndex $upgrade '^resource delete ') -gt $upgradeJobAt) "$($upgrade.Failure) | $($deleted -join ' | ')"
+    $scheduledUpgrade = Invoke-DeployScenario 'upgrade-from-p95' @{ CronExpression = '*/30 * * * *' }
+    $deletedScheduled = @($scheduledUpgrade.Calls | Where-Object { $_ -match '^resource delete ' })
+    Assert 'a scheduled redeploy keeps the no-success rule its template deploys and removes only the expiry rule' (-not $scheduledUpgrade.Failure -and $deletedScheduled.Count -eq 1 -and $deletedScheduled[0] -match 'sqr-projection-p94fixture-expiry-margin-60m') "$($scheduledUpgrade.Failure) | $($deletedScheduled -join ' | ')"
     $oddSubnet = Invoke-DeployScenario 'odd-subnet-output'
     Assert 'a renewal subnet from the network output is checked like -RenewalSubnetId before it reaches az' ($oddSubnet.Failure -match 'returned renewal subnet' -and $oddSubnet.Failure -match 'docs/AZ-COMMANDS\.md' -and
         (Get-CallIndex $oddSubnet '^network vnet show') -lt 0 -and (Get-WriteCount $oddSubnet) -eq 0) "$($oddSubnet.Failure) | writes $(Get-WriteCount $oddSubnet)"

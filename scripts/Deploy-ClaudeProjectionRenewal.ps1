@@ -265,6 +265,17 @@ $renewal = Invoke-Deployment "projection-renewal-$NamePrefix" 'infra/projection-
 }
 if (-not $renewal.jobResourceId -or -not $renewal.actionGroupResourceId) { throw 'The renewal deployment did not return the job and the action group.' }
 Ok "optional sync job $($renewal.jobName) trigger $triggerType$(if ($CronExpression) { " '$CronExpression'" }); action group $($renewal.actionGroupResourceId)"
+# An incremental deployment leaves rules that the template no longer declares. ADR-0051 retired the P94
+# expiry-margin rule, which reads an expiry that a run no longer prints and so fires on every success, and
+# keeps the no-success rule only for a scheduled job.
+$retiredRules = @("sqr-projection-$NamePrefix-expiry-margin-60m")
+if ($triggerType -eq 'Manual') { $retiredRules += "sqr-projection-$NamePrefix-no-success-45m" }
+foreach ($rule in $retiredRules) {
+    if (@($present | Where-Object { $_.name -eq $rule -and $_.type -eq 'Microsoft.Insights/scheduledQueryRules' }).Count) {
+        $null = Invoke-ClaudeNetworkAz @('resource', 'delete', '-g', $ResourceGroup, '-n', $rule, '--resource-type', 'Microsoft.Insights/scheduledQueryRules')
+        Ok "removed the retired alert rule $rule"
+    }
+}
 
 $sourceCommit = (& git -C $root rev-parse HEAD 2>$null | Out-String).Trim()
 $sourceDirty = [bool]((& git -C $root status --porcelain --untracked-files=no 2>$null | Out-String).Trim())
