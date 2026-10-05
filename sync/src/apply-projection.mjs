@@ -35,7 +35,7 @@
 import { readFileSync } from 'node:fs';
 import { CosmosClient } from '@azure/cosmos';
 import { DefaultAzureCredential } from '@azure/identity';
-import { mergeMembership, planChanges, oldestRetainedExpiry, toDocument, toStatusDocument, validateSnapshot, compareWithGateway, createReconciliation, normalizeJobSettings } from './plan.mjs';
+import { mergeMembership, planChanges, toDocument, toStatusDocument, validateSnapshot, validateTargetedSnapshot, compareWithGateway, compareWithSnapshot, createReconciliation, normalizeJobSettings } from './plan.mjs';
 import { resolveGroupId, getTransitiveMembers } from './graph.mjs';
 import { readGatewayUnits, sortUnitsByDepth } from './business-units.mjs';
 import { RENEWAL_SUCCEEDED, RENEWAL_FAILED } from './events.mjs';
@@ -51,6 +51,7 @@ const containerName = opt('--container', 'entitlement');
 const tenantId = opt('--tenant', process.env.PROJECTION_TENANT_ID);
 const whatIf = flag('--whatif');
 const renewal = flag('--graph');
+const userOid = opt('--user');
 const GUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 const log = (m) => console.log(m);
 
@@ -99,11 +100,16 @@ async function unitGroups() {
 async function resolveMembership() {
   if (opt('--snapshot')) {
     const snap = JSON.parse(readFileSync(opt('--snapshot'), 'utf8').replace(/^\uFEFF/, ''));
-    const problems = validateSnapshot(snap, { tenantId });
+    const problems = userOid
+      ? validateTargetedSnapshot(snap, userOid, { tenantId })
+      : validateSnapshot(snap, { tenantId });
+    if (!userOid && snap.scope === 'user') problems.push('pass --user <oid> to apply a targeted snapshot');
     if (problems.length) fail(`snapshot refused: ${problems.join('; ')}`);
     return { records: snap.records, mappingVersion: snap.mappingVersion, source: `snapshot ${snap.generatedAt}`,
+      scope: userOid ? 'user' : 'full',
       reconciliation: { reconciliationGeneration: snap.reconciliationGeneration, lastVerifiedAt: snap.lastVerifiedAt, expiresAt: snap.expiresAt } };
   }
+  if (userOid) fail('--user can only be used with --snapshot <file>');
   if (!flag('--graph')) fail('pass --snapshot <file> or --graph');
   const groups = tierGroups();
   const verifiedAt = new Date();
@@ -155,6 +161,20 @@ async function readExisting(container) {
   return existing;
 }
 
+async function readExistingUser(container, oid) {
+  const existing = new Map();
+  let resource = null;
+  try {
+    ({ resource } = await container.item(oid, oid).read());
+  } catch (error) {
+    if (error?.code !== 404 && error?.statusCode !== 404) throw error;
+  }
+  if (resource && !resource.type) {
+    existing.set(resource.id, { tier: resource.tier, businessUnit: resource.businessUnit ?? '' });
+  }
+  return existing;
+}
+
 async function bulk(container, operations) {
   let ok = 0, failed = 0;
   for (let i = 0; i < operations.length; i += 1000) {
@@ -184,10 +204,24 @@ if (opt('--compare')) {
   process.exit(differences.length ? 4 : 0);
 }
 
-const { records, mappingVersion, source, reconciliation } = await resolveMembership();
+// --compare-snapshot <full-snapshot.json>: read-only. Used when a new gateway has no named values
+// to compare against; the full snapshot is the fresh Entra decision set.
+if (opt('--compare-snapshot')) {
+  const snap = JSON.parse(readFileSync(opt('--compare-snapshot'), 'utf8').replace(/^\uFEFF/, ''));
+  const records = [];
+  const it = containerRef().items.query('SELECT c.id, c.oid, c.tier, c.businessUnit, c.tenantId, c.reconciliationGeneration, c.lastVerifiedAt, c.expiresAt, c.type FROM c', { maxItemCount: 1000 });
+  while (it.hasMoreResults()) { const { resources } = await it.fetchNext(); records.push(...(resources ?? [])); }
+  const comparison = compareWithSnapshot(snap, records, { tenantId });
+  if (comparison.refused) fail(`snapshot refused: ${comparison.problems.join('; ')}`, 2);
+  const byKind = comparison.differences.reduce((a, d) => ({ ...a, [d.kind]: (a[d.kind] ?? 0) + 1 }), {});
+  console.log(JSON.stringify({ ok: comparison.differences.length === 0, mode: 'compare-snapshot', compared: comparison.compared, projectionRecords: records.length, differences: comparison.differences.length, byKind, sample: comparison.differences.slice(0, 20), seconds: (Date.now() - started) / 1000 }));
+  process.exit(comparison.differences.length ? 4 : 0);
+}
+
+const { records, mappingVersion, source, reconciliation, scope = 'full' } = await resolveMembership();
 const container = containerRef();
-const existing = await step('cosmos-read', () => readExisting(container));
-const plan = planChanges(records, existing, { allowEmpty: flag('--allow-empty'), keepOrphans: flag('--keep-orphans'), refresh: true });
+const existing = await step('cosmos-read', () => userOid ? readExistingUser(container, userOid) : readExisting(container));
+const plan = planChanges(records, existing, { allowEmpty: userOid ? true : flag('--allow-empty'), keepOrphans: userOid ? false : flag('--keep-orphans'), refresh: false });
 if (plan.refused) fail(plan.reason, 2, 'plan');
 
 const summary = {
@@ -196,18 +230,16 @@ const summary = {
 };
 if (whatIf) { console.log(JSON.stringify(summary)); process.exit(0); }
 
-if (reconciliation.expiresAt <= Math.floor(Date.now() / 1000)) fail('projection expired before writing; resolve the directory again', 2, 'expired');
 const writes = await step('cosmos-write', () => bulk(container, plan.toWrite.map((r) => ({
   operationType: 'Upsert', partitionKey: r.oid, resourceBody: toDocument(r, { tenantId, mappingVersion, reconciliation }),
 }))));
 const deletes = await step('cosmos-write', () => bulk(container, plan.toDelete.map((oid) => ({ operationType: 'Delete', id: oid, partitionKey: oid }))));
-const expired = reconciliation.expiresAt <= Math.floor(Date.now() / 1000);
 const writeCounts = { written: writes.ok, writeFailed: writes.failed, deleted: deletes.ok, deleteFailed: deletes.failed };
-Object.assign(summary, { ok: !(writes.failed || deletes.failed), expired, ...writeCounts, mappingVersion, ...reconciliation, seconds: (Date.now() - started) / 1000 });
-summary.ok = summary.ok && !expired;
+Object.assign(summary, { ok: !(writes.failed || deletes.failed), ...writeCounts, mappingVersion, reconciliationGeneration: reconciliation.reconciliationGeneration, lastVerifiedAt: reconciliation.lastVerifiedAt, seconds: (Date.now() - started) / 1000 });
 if (summary.ok) {
-  const oldestExpiresAt = oldestRetainedExpiry(plan, existing, reconciliation.expiresAt);
   const memberCounts = records.reduce((counts, r) => ({ ...counts, [r.tier]: (counts[r.tier] ?? 0) + 1 }), {});
+  const explicitExecutor = opt('--executor');
+  if (explicitExecutor && !['job', 'runner'].includes(explicitExecutor)) fail('--executor must be job or runner', 2, 'config');
   const status = toStatusDocument({
     tenantId,
     accountResourceId: process.env.PROJECTION_ACCOUNT_RESOURCE_ID ?? '',
@@ -221,10 +253,11 @@ if (summary.ok) {
     commandOverride: Boolean(process.env.PROJECTION_COMMAND_OVERRIDE),
     memberCounts,
     writeCounts,
-    oldestExpiresAt,
     reconciliation,
     startedAt: new Date(started).toISOString(),
     finishedAt: new Date().toISOString(),
+    mode: scope === 'user' ? 'user' : 'full',
+    executor: explicitExecutor ?? (renewal ? 'job' : 'runner'),
     // The job's settings, which admission binds this evidence to (ADR-0050). A runner run has none.
     settings: renewal ? normalizeJobSettings({
       clientId: process.env.AZURE_CLIENT_ID,
@@ -234,13 +267,13 @@ if (summary.ok) {
     }) : null,
   });
   const statusWrite = await step('status', () => bulk(container, [{ operationType: 'Upsert', partitionKey: status.oid, resourceBody: status }]));
-  Object.assign(summary, { statusWritten: statusWrite.ok, statusWriteFailed: statusWrite.failed, oldestExpiresAt: status.oldestExpiresAt });
+  Object.assign(summary, { statusWritten: statusWrite.ok, statusWriteFailed: statusWrite.failed, mode: status.mode, executor: status.executor });
   summary.ok = statusWrite.failed === 0;
 }
 if (renewal) {
-  const stage = expired ? 'expired' : (writes.failed || deletes.failed) ? 'cosmos-write' : 'status';
+  const stage = (writes.failed || deletes.failed) ? 'cosmos-write' : 'status';
   Object.assign(summary, summary.ok ? { event: RENEWAL_SUCCEEDED } : { event: RENEWAL_FAILED, stage });
 }
 console.log(JSON.stringify(summary));
 if (!summary.ok) process.exit(3);
-process.exit(writes.failed || deletes.failed || expired ? 3 : 0);
+process.exit(writes.failed || deletes.failed ? 3 : 0);

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { CosmosClient } from '@azure/cosmos';
 import { DefaultAzureCredential } from '@azure/identity';
-import { evaluateProjectionAdmission, normalizeJobSettings } from './plan.mjs';
+import { evaluateProjectionAdmission } from './plan.mjs';
 
 const argv = process.argv.slice(2);
 const opt = (name, fallback) => {
@@ -14,34 +14,17 @@ const tenantId = opt('--tenant', process.env.PROJECTION_TENANT_ID);
 const accountResourceId = opt('--account-resource-id', process.env.PROJECTION_ACCOUNT_RESOURCE_ID);
 const databaseName = opt('--database', 'claude');
 const containerName = opt('--container', 'entitlement');
-const imageDigest = opt('--image-digest', process.env.PROJECTION_IMAGE_DIGEST);
-// The runner splits its command on spaces with no quoting (scripts/ClaudeRunner.ps1), so a runner
-// caller passes the entry point base64url-encoded; a direct caller can pass it plain.
-const encodedEntrypoint = opt('--entrypoint-base64url');
-if (encodedEntrypoint !== undefined && !/^[A-Za-z0-9_-]+$/.test(encodedEntrypoint)) fail('--entrypoint-base64url must be base64url');
-const entrypoint = encodedEntrypoint
-  ? Buffer.from(encodedEntrypoint, 'base64url').toString('utf8')
-  : opt('--entrypoint', process.env.PROJECTION_ENTRYPOINT);
-const actionGroupResourceId = opt('--action-group-resource-id', process.env.PROJECTION_ACTION_GROUP_ID);
-// The settings the job definition carries now; only evidence written under them counts (ADR-0050).
-const settings = normalizeJobSettings({
-  clientId: opt('--client-id'),
-  standardGroupId: opt('--standard-group-id'),
-  premiumGroupId: opt('--premium-group-id'),
-  gatewayResourceId: opt('--gateway-resource-id'),
-});
+const maxEvidenceAgeSeconds = Number(opt('--max-evidence-age-seconds', '86400'));
 
 function fail(error, code = 1) {
-  console.log(JSON.stringify({ ok: false, error }));
+  console.log(JSON.stringify({ ok: false, mode: 'switch-evidence', newestFullSync: null, invalidCount: 0, reason: error }));
   process.exit(code);
 }
 
 if (!endpoint) fail('--cosmos is required');
 if (!tenantId) fail('--tenant is required');
 if (!accountResourceId) fail('--account-resource-id is required');
-if (!imageDigest) fail('--image-digest is required');
-if (!entrypoint) fail('--entrypoint is required');
-if (!settings) fail('--client-id, --standard-group-id, --premium-group-id and --gateway-resource-id are required: admission counts only evidence written under the job settings');
+if (!Number.isFinite(maxEvidenceAgeSeconds) || maxEvidenceAgeSeconds <= 0) fail('--max-evidence-age-seconds must be positive');
 
 const credential = new DefaultAzureCredential();
 const container = new CosmosClient({ endpoint, aadCredentials: credential })
@@ -79,8 +62,8 @@ while (entitlementIterator.hasMoreResults()) {
 const result = evaluateProjectionAdmission({
   statuses,
   entitlementRecords,
-  expected: { tenantId, accountResourceId, databaseName, containerName, imageDigest, entrypoint, actionGroupResourceId, settings },
-  job: { image: imageDigest, command: [], args: [] },
+  expected: { tenantId, accountResourceId, databaseName, containerName },
+  maxEvidenceAgeSeconds,
 });
-console.log(JSON.stringify({ ...result, mode: 'projection-admission', statuses: statuses.length, entitlementRecords: entitlementRecords.length }));
+console.log(JSON.stringify(result));
 process.exit(result.ok ? 0 : 4);
