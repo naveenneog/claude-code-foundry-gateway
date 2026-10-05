@@ -91,6 +91,11 @@ if (Test-Path $helper) {
         $inverse = ''
         try { Test-ClaudeBuId 'legacy-unit' -Registry @('finance', 'Legacy-Unit') } catch { $inverse = $_.Exception.Message }
         Assert "'legacy-unit' is refused when the registry holds 'Legacy-Unit', naming the stored spelling" ($inverse -match 'differs only in case' -and $inverse.Contains("'Legacy-Unit'")) $inverse
+        # Council round 2 (Security): -ccontains compares by culture, so U+212A KELVIN SIGN equals 'K'. An identifier is
+        # known only when the registry holds the same characters.
+        $lookalike = ''
+        try { Test-ClaudeBuId "$([char]0x212A)ey" -Registry @('platform', 'Key') } catch { $lookalike = $_.Exception.Message }
+        Assert 'a look-alike of a stored identifier is not known, and is refused' ($lookalike -match 'not a valid business unit identifier') $lookalike
         $legacy = 'not run'
         try { Test-ClaudeBuId 'Legacy-Unit' -Registry @('finance', 'Legacy-Unit'); $legacy = '' } catch { $legacy = $_.Exception.Message }
         Assert 'an identifier the registry holds with capitals stays usable' (-not $legacy) $legacy
@@ -111,6 +116,37 @@ if (Test-Path $helper) {
             Assert "the manager's prompt accepts 'finance-emea'" ([bool](Confirm-Identifier 'finance-emea' 6>$null))
             $shown = (Confirm-Identifier 'Platform' 6>&1 | ForEach-Object { "$_" }) -join ' '
             Assert "the manager's prompt shows the writer's message" ($shown.Contains("'Platform' is not a valid business unit identifier") -and $shown.Contains('starting with a letter or digit')) $shown
+
+            # Council round 2 (UX): Add-Unit reads the registry and checks the identifier against it before it looks up
+            # or offers to create the Entra group; a registry it cannot read stops it the same way.
+            $addAst = $manageAst.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Add-Unit' }, $true)
+            $readAst = $manageAst.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Read-Value' }, $true)
+            $runAdd = {
+                param([string]$Answer, [scriptblock]$ReadRegistry)
+                $calls = [System.Collections.Generic.List[string]]::new()
+                & {
+                    . ([scriptblock]::Create($readAst.Extent.Text))
+                    . ([scriptblock]::Create($addAst.Extent.Text))
+                    function Read-Host { $Answer }
+                    function az { $calls.Add("az $($args -join ' ')"); $global:LASTEXITCODE = 0 }
+                    function Get-ApimNamedValue { param($ResourceGroup, $ApimName, $Id, [switch]$FailOnError) $calls.Add("read $Id"); & $ReadRegistry }
+                    function Invoke-Child { param($Script, $Arguments) $calls.Add("child $Script") }
+                    function Complete-Change { }
+                    $ResourceGroup = 'rg-test'; $ApimName = 'apim-test'
+                    Add-Unit 6>$null | Out-Null
+                }
+                return , $calls.ToArray()
+            }
+            if ($addAst -and $readAst) {
+                $legacy = { ',sales=Sales:1000,Legacy-Unit=Legacy:3000,' }
+                $alias = & $runAdd 'legacy-unit' $legacy
+                Assert "the manager refuses another spelling of a stored unit before the Entra group step" (($alias -join ' | ') -ceq 'read bu-registry') ($alias -join ' | ')
+                $unread = & $runAdd 'research' { throw 'ERROR: (AuthorizationFailed) cannot read' }
+                Assert "the manager stops before the Entra group step when it cannot read the registry" (($unread -join ' | ') -ceq 'read bu-registry') ($unread -join ' | ')
+                $fresh = & $runAdd 'research' $legacy
+                Assert "the manager reaches the Entra group step for a new lower-case identifier" ($fresh.Count -ge 2 -and $fresh[0] -ceq 'read bu-registry' -and $fresh[1] -like 'az ad group show*') ($fresh -join ' | ')
+            }
+            else { Assert "the manager's Add-Unit can be read" $false 'Add-Unit or Read-Value missing from scripts/Manage-ClaudeBusinessUnits.ps1' }
         }
         else { Assert "the manager's prompt checks the identifier" $false 'Confirm-Identifier missing from scripts/Manage-ClaudeBusinessUnits.ps1' }
     }

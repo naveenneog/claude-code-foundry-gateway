@@ -140,7 +140,7 @@ $parentsRaw = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimNa
 if ($null -eq $parentsRaw) {
     throw "bu-parents not found on $ApimName. Redeploy with the current template first."
 }
-$parents = ConvertFrom-ClaudeBuParents $parentsRaw
+$parents = ConvertFrom-ClaudeBuParents $parentsRaw -ExactKeys
 $modesRaw = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-modes'
 $modes = ConvertFrom-ClaudeBuModes $modesRaw
 
@@ -183,6 +183,10 @@ if ($List) {
 }
 
 Test-ClaudeBuId $Id -Registry @($registry | ForEach-Object Id)
+if ($null -ne $requestedMode -and $Id -cnotmatch '^[a-z0-9][a-z0-9-]*$') {
+    throw ("Budget modes accept only lower-case identifiers, so '$Id' cannot have one. " +
+           "A unit with a lower-case identifier for the same group can; see docs/BUSINESS-UNITS.md.")
+}
 $existing = @($registry | Where-Object { $_.Id -ceq $Id })
 $before = $registry.Count
 $originalUsdKind = if ($parents[$Id]) { 'department' } else { 'organization' }
@@ -322,8 +326,8 @@ if ($Remove -or $PSBoundParameters.ContainsKey('MonthlyBudgetUsd')) {
 # The write is only safe because the registry was read first. Assert that every
 # other business unit survived rather than trusting the string building - an
 # earlier version of this pattern emptied the entitlement allow list.
-foreach ($u in ($registry | Where-Object { $_.Id -ne $Id })) {
-    if ($value -notmatch [regex]::Escape(",$($u.Id)=")) {
+foreach ($u in ($registry | Where-Object { $_.Id -cne $Id })) {
+    if ($value -cnotmatch [regex]::Escape(",$($u.Id)=")) {
         throw "Refusing to write: business unit '$($u.Id)' would be lost. Nothing has been changed."
     }
 }
@@ -331,7 +335,7 @@ foreach ($u in ($registry | Where-Object { $_.Id -ne $Id })) {
 Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-registry' -Value $value
 
 $parentValue = ConvertTo-ClaudeBuParents $parents
-if ($parentValue -ne $parentsRaw) {
+if ($parentValue -cne $parentsRaw) {
     Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-parents' -Value $parentValue
 }
 if ($modeValue -ne $modesRaw) {

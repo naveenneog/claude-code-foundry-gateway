@@ -23,7 +23,7 @@
         "resolver/src/index.mjs": "b6b755fbbc56ef62e7b535a4bde2756111c2b5fc9913c16a893b45cb6dce33a3",
         "scripts/ClaudeDesktopSignIn.ps1": "00f6f2b38f15b589d47ec8cb048391910fed44131085fa4a865e0e802df7fe3e",
         "scripts/ClaudeTurnstileApply.ps1": "f5b47f344eacd8c8a7a4e5d73e9641c1eefedf61436093c6e5ec6f7fcced1b84",
-        "scripts/ClaudeTurnstileGovernance.ps1": "cfb6d0022abcb1c601cae573e6dc1dd9033d95b2585512e2675d1a7bbd876916",
+        "scripts/ClaudeTurnstileGovernance.ps1": "f424ba1833ec3124a0d254a05286c957094d7abab673ce5ecbbbced077c83157",
         "scripts/Connect-ClaudeTurnstile.ps1": "cc4e2c094aaab8ce75856a3ba770d844bd32333d4f8b42f53f91cabdd1129201",
         "scripts/Export-ClaudeTurnstileUsage.ps1": "d68e00c953f4bb47492b39862b263377d33ccdf39f15c0e26bb2fbfa783efdb6",
         "scripts/Grant-ClaudeGovernanceGraphAccess.ps1": "2313313010eef6867f730bbb1803b7a0a68113a3ad961f798627e274aff56b1a",
@@ -95,7 +95,7 @@
         "scripts/Invoke-ClaudeTurnstileSchedule.ps1": "9a1d8c6dcd25615b2bf9bd11c62306de517c08e0529aee924d5212c758f1d0b9",
         "scripts/Sync-ClaudeAccess.ps1": "f4f5896df08c22bbfa9702ac0afa532e4cc4c4c990a82a4d7d4676b43e8c0c84",
         "scripts/Sync-ClaudeProjection.ps1": "0a30b7b4178700d9eb4879d4cb78c01bacf932e21b0856f0f532e38a06a24ca7",
-        "scripts/Sync-ClaudeTurnstileGovernance.ps1": "da01488a95c46bc13c130319c14ee1dc59e3aa886d43937926ebe74d2a71e1b2"
+        "scripts/Sync-ClaudeTurnstileGovernance.ps1": "a24e6411dbdea6147db57c5fffc01c356a0c2b8607f8f8b08480f42cf090f00d"
       },
       "outputs": [
         {
@@ -195,7 +195,7 @@
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "scripts/ApimNamedValue.ps1": "cdab947026b92c4df235fcc5ca40d02a41fcb68ab44d66bb2200a1a148c8695a",
         "scripts/ClaudeAumDirectWrites.ps1": "3f6ba0af2f5e52e80156119d6102e86f4d63a6b39241d7043023a0b5a0981a79",
-        "scripts/Invoke-ClaudeFinOps.ps1": "bc61d8a5251bafa5c2e98ee31045ce02fb8b10f037c6c979ce75fa24ff23825e",
+        "scripts/Invoke-ClaudeFinOps.ps1": "a2cc25da629d2fca30655483b8a91959ec8d2f212488fedaafd2d58a1fb8d5e0",
         "scripts/New-ClaudeAumEntraApp.ps1": "489aa5051af325ca4d96e5b9123d29577195f08318976898a8a592aeea2a05fe",
         "scripts/New-ClaudeTurnstileEntraApp.ps1": "0262606c6f2b747ae4dff7534c15d113099ff6fae06b40580eb62daffaf1db1d",
         "scripts/Set-ClaudeBudget.ps1": "6959bf18332942c6b3d7df65fb589c9affb4efb37f1b779d011289c31417d76c",
@@ -279,10 +279,10 @@
         "infra/main.bicep": "c449423ad43d86c9c15b56c19d18ece9d7681cd627efb7110b38d06b6b0ba82b",
         "infra/policy.xml": "afa3bf916dd99e837d0ac190aa7e2f4cdccb08877221f44f853ce1885e257105",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
-        "scripts/ClaudeBudgetModes.ps1": "d27db15c9e257e2e923355978896737bb07cd2227135fa29625b003655f70946",
+        "scripts/ClaudeBudgetModes.ps1": "fd119b3732c78f565ffd22126693f653c939330e4754f33b6c0769dec99cc231",
         "scripts/ClaudeTurnstileApply.ps1": "f5b47f344eacd8c8a7a4e5d73e9641c1eefedf61436093c6e5ec6f7fcced1b84",
-        "scripts/ClaudeTurnstileGovernance.ps1": "cfb6d0022abcb1c601cae573e6dc1dd9033d95b2585512e2675d1a7bbd876916",
-        "scripts/Set-ClaudeBusinessUnit.ps1": "a9c6e4243e43d8a2486e1c59959bfbd41503696428ec7eb0fe2b4c31496b0806"
+        "scripts/ClaudeTurnstileGovernance.ps1": "f424ba1833ec3124a0d254a05286c957094d7abab673ce5ecbbbced077c83157",
+        "scripts/Set-ClaudeBusinessUnit.ps1": "288084ea27e12a005b36a1db659f70b2c2a00942c85905a5cf85625261622b0f"
       },
       "outputs": [
         {
@@ -453,7 +453,7 @@
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
-        "scripts/Invoke-ClaudeFinOps.ps1": "bc61d8a5251bafa5c2e98ee31045ce02fb8b10f037c6c979ce75fa24ff23825e"
+        "scripts/Invoke-ClaudeFinOps.ps1": "a2cc25da629d2fca30655483b8a91959ec8d2f212488fedaafd2d58a1fb8d5e0"
       },
       "outputs": [
         {
@@ -512,7 +512,7 @@
         "scripts/ClaudeModelLifecycle.ps1": "58dfc8b64dbd890093851cc113a3a43dc84694720998398f690918dfd907c53b",
         "scripts/ClaudeModelPrices.ps1": "7c70c71e0505e53f3bf8b6b6ae5b3fc8deb0482c55a9b76c29cdb75ad56deffe",
         "scripts/ClaudeModelProfiles.ps1": "4a032924987f56f118e2deefe21673bfa5583c06dd56164a753b151c9d2a1549",
-        "scripts/ClaudeTurnstileGovernance.ps1": "cfb6d0022abcb1c601cae573e6dc1dd9033d95b2585512e2675d1a7bbd876916",
+        "scripts/ClaudeTurnstileGovernance.ps1": "f424ba1833ec3124a0d254a05286c957094d7abab673ce5ecbbbced077c83157",
         "scripts/New-ClaudeCodePolicy.ps1": "28caaf2a489f4645ff0f7f9e883dddc695e4695c5bd9161143daa51fd655f004",
         "scripts/Show-Banner.ps1": "03aa9c855b2aade332ba6810887c86700fa39dfc6bf04dfc8bc4057a4ad5db41",
         "scripts/Sync-ClaudeModels.ps1": "1afdc91387e87f10388e088060d530f5cca37ffb9c8a4d7ff97b82e9b7b73510",

@@ -111,7 +111,8 @@ function Compare-ClaudeTurnstileBudgets {
         [System.Collections.IDictionary]$Parents = @{},
         [Parameter(Mandatory = $true)][AllowEmptyCollection()][object[]]$TurnstileItems
     )
-    $byId = @{}
+    # Identifiers compare by exact spelling: two spellings of one identifier are two units.
+    $byId = [hashtable]::new([System.StringComparer]::Ordinal)
     foreach ($u in @($Registry | Where-Object { $_ })) { $byId[[string]$u.Id] = $u }
     $changes = New-Object System.Collections.Generic.List[object]
     foreach ($item in @($TurnstileItems | Where-Object { $_.scope_type -in 'organization', 'department' })) {

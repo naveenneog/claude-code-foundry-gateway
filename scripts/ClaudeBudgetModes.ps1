@@ -20,7 +20,8 @@ function ConvertTo-ClaudeBudgetMode {
 
 function ConvertFrom-ClaudeBuModes {
     param([AllowNull()][AllowEmptyString()][string]$Value)
-    $map = [ordered]@{}
+    # Keys compare by exact spelling, as identifiers do: removing a mode for 'Sales' must not remove the mode of 'sales'.
+    $map = [System.Collections.Specialized.OrderedDictionary]::new([System.StringComparer]::Ordinal)
     if ([string]::IsNullOrWhiteSpace($Value) -or $Value -eq ',,') { return $map }
     if ($Value -notmatch '^,.+,$') { throw 'bu-modes must have sentinel commas.' }
     $seen = @{}

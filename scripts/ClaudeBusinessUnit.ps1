@@ -101,8 +101,9 @@ function Test-ClaudeBuId {
         lower-case (ClaudeUsdBudgets.ps1). Before P96 this check ignored case, so a registry can hold an
         identifier with capitals. An identifier that -Registry lists with the same spelling, or one read
         from the registry (-Stored), keeps only the map rule. An identifier that matches a registry entry
-        only when case is ignored is refused, because the callers compare identifiers without case and
-        would change, rename or remove the stored unit through it.
+        only when case is ignored is refused: the policy finds a unit by its exact spelling
+        (infra/policy.xml), so such an identifier is either a mistyped reference to the stored unit or a
+        second unit that a reader cannot tell apart from it.
     #>
     [CmdletBinding()]
     param(
@@ -116,7 +117,8 @@ function Test-ClaudeBuId {
     }
     # Comma separates entries, equals separates id from value, colon separates
     # group from budget. A space would make a counter key ambiguous to read.
-    $known = $Stored -or (@($Registry) -ccontains $Id)
+    # Known means the same characters: -ccontains compares by culture and takes U+212A KELVIN SIGN for 'K'.
+    $known = $Stored -or (@(@($Registry) | Where-Object { [string]::Equals([string]$_, $Id, [System.StringComparison]::Ordinal) }).Count -gt 0)
     if (($known -and $Id -notmatch '^[a-z0-9][a-z0-9-]*$') -or (-not $known -and $Id -cnotmatch '^[a-z0-9][a-z0-9-]*$')) {
         throw ("'$Id' is not a valid business unit identifier. Use lower-case letters, digits and " +
                "hyphens, starting with a letter or digit - for example 'finance-emea'. " +
@@ -222,9 +224,12 @@ function ConvertFrom-ClaudeBuParents {
         that rule ambiguous.
     #>
     [CmdletBinding()]
-    param([Parameter(Mandatory = $true, Position = 0)][AllowEmptyString()][AllowNull()][string]$Value)
+    param([Parameter(Mandatory = $true, Position = 0)][AllowEmptyString()][AllowNull()][string]$Value, [switch]$ExactKeys)
 
-    $map = [ordered]@{}
+    # Without -ExactKeys, keys compare without case, as the renewal job reads bu-parents (sync/src/business-units.mjs);
+    # tests/Test-ProjectionRenewalRuns.ps1 checks that the two agree. The writers pass -ExactKeys, so a change to one
+    # spelling of an identifier leaves the entry of another spelling as it is.
+    $map = if ($ExactKeys) { [System.Collections.Specialized.OrderedDictionary]::new([System.StringComparer]::Ordinal) } else { [ordered]@{} }
     if ([string]::IsNullOrWhiteSpace($Value)) { return $map }
     foreach ($pair in ($Value.Trim(',') -split ',' | Where-Object { $_ })) {
         $bits = $pair -split '=', 2

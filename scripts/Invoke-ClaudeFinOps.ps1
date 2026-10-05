@@ -37,7 +37,7 @@ if ($Subscription) {
 $request = Get-Content -LiteralPath $InputFile -Raw | ConvertFrom-Json
 $nv = Get-AumNamedValueMap -ResourceGroup $ResourceGroup -ApimName $ApimName
 $registry = @(ConvertFrom-ClaudeBuRegistry $nv['bu-registry'])
-$parents = ConvertFrom-ClaudeBuParents $nv['bu-parents']
+$parents = ConvertFrom-ClaudeBuParents $nv['bu-parents'] -ExactKeys
 $modes = ConvertFrom-ClaudeBuModes $nv['bu-modes']
 $result = $null
 
@@ -336,6 +336,9 @@ switch ([string]$request.action) {
             ApimName = $ApimName
         }
         if ($null -ne $request.body.allowance_percent) { $modeArgs.AllowancePercent = [int]$request.body.allowance_percent }
+        if ($modeArgs.Id -cnotmatch '^[a-z0-9][a-z0-9-]*$') {
+            throw "Budget modes accept only lower-case identifiers, so '$($modeArgs.Id)' cannot have one."
+        }
         $target = @($registry | Where-Object Id -ceq $modeArgs.Id)
         if ($target.Count -ne 1) { throw 'Scope not found.' }
         $expectedMode = ConvertTo-ClaudeBudgetMode $request.body.mode $request.body.allowance_percent
@@ -375,6 +378,8 @@ switch ([string]$request.action) {
             $nextRegistry += [pscustomobject]@{ Id = [string]$item.id; Group = $group; TokensPerMonth = $amount }
             if ($item.parent_id) {
                 if ([string]$item.parent_id -cnotin @($request.body.organizations.id)) { throw 'Team parent is not a unit.' }
+                # -cnotin compares by culture and ignores characters such as U+00AD; the parent is checked by its characters.
+                Test-ClaudeBuId ([string]$item.parent_id) -Registry @($request.body.organizations.id)
                 $nextParents[[string]$item.id] = [string]$item.parent_id
             }
         }

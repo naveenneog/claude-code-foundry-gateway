@@ -182,7 +182,7 @@ if ($Direction -eq 'FromTurnstile') {
         return [pscustomobject]@{ Direction = $Direction; Period = $Period; Changes = $toApply.Count; Applied = 0 }
     }
     foreach ($c in $toApply) {
-        foreach ($u in $registry) { if ([string]$u.Id -eq $c.Id) { $u.TokensPerMonth = [long]$c.Now } }
+        foreach ($u in $registry) { if ([string]$u.Id -ceq $c.Id) { $u.TokensPerMonth = [long]$c.Now } }
     }
     $value = ConvertTo-ClaudeBuRegistry $registry
     Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-registry' -Value $value

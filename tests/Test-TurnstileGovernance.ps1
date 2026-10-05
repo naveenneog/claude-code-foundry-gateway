@@ -71,6 +71,15 @@ Assert 'a budget removed in Turnstile is reported, not applied' (@($changes | Wh
 Assert 'a direct-members department cannot set a unit budget' (@($changes | Where-Object { $_.Id -eq 'platform' -and $_.ScopeType -eq 'department' }).Count -eq 0)
 Assert 'unknown scopes and people are ignored'               (@($changes | Where-Object { $_.Id -in 'not-a-unit', 'dev@contoso.com' }).Count -eq 0)
 Assert 'the change says who made it'                         ((@($changes | Where-Object Id -eq 'platform')[0].Reason) -match 'admin@contoso.com')
+# P96 council round 2 (Architect): two spellings of one identifier are two units, so a budget set in Turnstile for one
+# is compared with that unit and applied to that unit only.
+$spelled = @(
+    [pscustomobject]@{ Id = 'sales'; Group = 'Lower Sales'; TokensPerMonth = 1000 },
+    [pscustomobject]@{ Id = 'Sales'; Group = 'Upper Sales'; TokensPerMonth = 2000 }
+)
+$spelledChanges = @(Compare-ClaudeTurnstileBudgets -Registry $spelled -Parents ([ordered]@{}) -TurnstileItems @([pscustomobject]@{ scope_type = 'organization'; scope_id = 'sales'; token_limit = 900; updated_by = 'admin@contoso.com' }))
+Assert 'a Turnstile budget is compared with the unit of the exact spelling' ($spelledChanges.Count -eq 1 -and $spelledChanges[0].Id -ceq 'sales' -and $spelledChanges[0].Was -eq 1000 -and $spelledChanges[0].Now -eq 900) (($spelledChanges | ForEach-Object { "$($_.Id) $($_.Was)->$($_.Now)" }) -join ', ')
+Assert 'pulled budgets are written to the unit of the exact spelling' ($sync -match '\[string\]\$u\.Id -ceq \$c\.Id')
 
 Write-Host ''
 Write-Host 'Turnstile governance - tiers' -ForegroundColor Cyan
