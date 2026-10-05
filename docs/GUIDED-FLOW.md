@@ -264,7 +264,7 @@ cost and caller impact before applying.
 |---|---|---|---|
 | `foundation` | `Foundation.ps1` | Runs `Install-ClaudeGateway.ps1 -ExistingApimName <recorded gateway>`, which updates that gateway and keeps its region, tier, name and publisher. In a console the installer asks its other questions; without a console it runs with `-Yes` and the recorded choices. The review prices the live gateway, as already running | [Setup](SETUP.md) |
 | `sku` | `Tier.ps1` | API Management tier; Basic v2 and Standard v2 change in place | [Tier](UPDATE-AND-CHANGE.md#2-change-the-api-management-tier) |
-| `entitlementStore` | `Entitlement.ps1` | Switches to the projection through the shared switch, from the renewal receipt for the gateway; named-value rollback remains available | [Entitlement](UPDATE-AND-CHANGE.md#3-move-entitlement-between-named-values-and-the-projection) |
+| `entitlementStore` | `Entitlement.ps1` | Switches to the projection through the shared switch, using the gateway `entitlement-projection-prefix`; named-value rollback remains available | [Entitlement](UPDATE-AND-CHANGE.md#3-move-entitlement-between-named-values-and-the-projection) |
 | `network` | `Network.ps1` | Enterprise network edge, through its own fingerprinted review | [Network](UPDATE-AND-CHANGE.md#4-change-the-enterprise-network-edge) |
 | `address` | `Address.ps1` | Company hostname, supplied certificate, DNS and verified developer URL | [Company address](SETUP.md#company-address) |
 | `desktopSignIn` | `DesktopSignIn.ps1` | Claude Desktop sign-in kind and gateway audience | [Desktop sign-in](UPDATE-AND-CHANGE.md#5-change-claude-desktop-sign-in) |
@@ -278,14 +278,13 @@ choice that needs a new instance takes the export and then stops before any Azur
 backup that the move restores ([Tier](UPDATE-AND-CHANGE.md#2-change-the-api-management-tier)).
 
 The Entitlement step switches to the projection only through `Invoke-ClaudeProjectionSwitch`
-([ADR-0050](adr/0050-projection-switch-function.md)). Discovery (`scripts/flow/Discovery.ps1`)
-supplies the renewal receipt, from the decision record's folder or the repository's `onboarding/`,
-whose gateway is the discovered one, and the switch checks the receipt, the gateway's resolver values
-and the live resolver site's settings, then runs the drift check, the compare and
-admission before its one write. The step's snapshot, `backups/before-entitlement-<apim>-<UTC time>.json`,
-is its backup and is taken at the write. No receipt, two receipts for the gateway, or an unknown
-gateway refuse with the reason. Records expire at most two hours after scan start; without renewal
-every developer receives 503 after expiry.
+([ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md)). Discovery
+(`scripts/flow/Discovery.ps1`) reads the gateway named value `entitlement-projection-prefix`, and the
+switch runs with `-ResourceGroup -ApimName -NamePrefix`. It checks the resolver deployment and service
+principal, the gateway's resolver values and the live resolver site's settings, then runs the drift
+check, the runner compare and switch evidence before its one write. The step's snapshot,
+`backups/before-entitlement-<apim>-<UTC time>.json`, is its backup and is taken at the write.
+Projection records persist until a sync removes or changes the person.
 
 The standalone deployer can preflight, populate and compare without switching (normally 30-90
 seconds for preflight, including a 25-second Graph pause). PowerShell 7 is required for

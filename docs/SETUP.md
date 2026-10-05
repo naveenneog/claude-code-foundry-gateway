@@ -149,12 +149,15 @@ for an **entitlement store** as a separate choice:
 
 The projection deployer is `scripts/Deploy-ClaudeProjection.ps1`. It deploys
 private Cosmos and the resolver, populates from Entra, compares the projection
-against the named-value lists, and leaves named values authoritative. Records expire at most two
-hours after scan start, then every developer receives 503 without renewal;
-`scripts/Deploy-ClaudeProjectionRenewal.ps1` deploys the job that renews them
-([ADR-0049](adr/0049-projection-renewal-deployment.md)). With `-FlipAfterCleanCompare` the
-deployer deploys nothing: it reads the renewal receipt, runs the drift check, the compare and
-admission, and switches `entitlement-source` ([ADR-0050](adr/0050-projection-switch-function.md)). The
+against the named-value lists, and leaves named values authoritative. Projection records persist until a sync removes or changes the person; a sync-job outage does not
+stop developers. Add or remove a developer in the Entra group, then run
+`scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim> -User <name-or-object-id>` for one
+person, or omit `-User` for everyone. Removal takes effect after the sync plus at most
+`entitlement-cache-seconds`; disabled Entra accounts lose access when their current token expires,
+60 to 90 minutes by default (Microsoft Learn access tokens, updated 2026-07-17:
+https://learn.microsoft.com/entra/identity-platform/access-tokens). With `-FlipAfterCleanCompare` the
+deployer deploys nothing: it runs resolver checks, the drift check, the runner compare and switch
+evidence, and switches `entitlement-source` ([ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md)). The
 Basic v2 resolver endpoint is public because Basic v2 has no outbound VNet
 integration; APIM outbound IPs are not treated as the primary control.
 Authentication is.
@@ -426,7 +429,7 @@ where it costs money, with the figure at your stated developer count:
 
 | Choice | Options | Why it is asked rather than defaulted |
 |---|---|---|
-| Revocation window | 15 min / 1 hour / 4 hours | A requested projection cache window, not an installed sync schedule. Current projection leases cap stale admission at two hours from scan start, including cache; named values remain stale until synced. |
+| Revocation window | 15 min / 1 hour / 4 hours | Cache window after a sync. Projection records persist until a sync removes or changes the person; disabled Entra accounts lose access when the current token expires. |
 | Team budget | `report` / `stop` | This legacy prompt changes guidance, not a unit's stored mode. The installer preserves `bu-modes`; a missing entry means strict. Configure strict, allowance or notify per unit through [Business units](BUSINESS-UNITS.md#budget-modes) or Turnstile. An enforcing token quota triggers later than the dollar figure suggests because it excludes cache. |
 | Unassigned developers | `allow` / `deny` | `deny` on day one refuses people who have done nothing wrong. Start on `allow` and switch when `Get-ClaudeBusinessUnit.ps1` reports zero unassigned. |
 | Developer sign-in | `interactive` / `device` / `helper` | How developers authenticate. Written into `claude-gateway.json` and applied by the onboarding script on each machine. |
@@ -659,10 +662,8 @@ The interactive installer's projection flags are separate from `deploy.ps1`:
 `-FlipProjectionAfterCleanCompare`, with `-EntitlementStore projection -DeployProjection`, runs the
 installer's gateway deployment and list refresh, then the deployer's switch mode, which deploys
 nothing in place of the projection deployment; without `-DeployProjection` it has no effect. It
-requires `-ProjectionReconcilerResourceId`, `-ProjectionRenewalImageDigest` and
-`-ProjectionRenewalActionGroupResourceId` before discovery or writes, and the deployer refuses
-values that differ from the renewal receipt. An admin-created resolver registration is supplied as
-`-ProjectionResolverAppId <client-id>`. An example installer invocation is:
+takes no renewal receipt, reconciler id or renewal image parameters. An admin-created resolver
+registration is supplied as `-ProjectionResolverAppId <client-id>`. An example installer invocation is:
 
 ```powershell
 pwsh -NoProfile -File .\Install-ClaudeGateway.ps1 `
@@ -671,10 +672,9 @@ pwsh -NoProfile -File .\Install-ClaudeGateway.ps1 `
   -DeployProjection -ProjectionResolverAppId <resolver-app-id>
 ```
 
-The example deploys beside the gateway without switching. Records expire at most two hours after
-scan start, then every developer receives 503 without renewal. The renewal job deploys separately
-with `scripts/Deploy-ClaudeProjectionRenewal.ps1`, and a switch is admitted after its third
-successful run. The read-only preflight normally takes 30-90 seconds, including
+The example deploys beside the gateway without switching. `Deploy-ClaudeProjection.ps1 -FlipAfterCleanCompare`
+switches right after a clean deploy comparison, with no 60-90 minute wait. The optional sync job deploys separately
+with `scripts/Deploy-ClaudeProjectionRenewal.ps1` for very large directories. The read-only preflight normally takes 30-90 seconds, including
 the 25-second Graph interval. [Private projection](SECURE-PROJECTION.md#one-command-deployment)
 contains the `-PreflightOnly` command and admin registration steps;
 [ADR-0040](adr/0040-projection-preflight-and-switch.md) records the preflight and
