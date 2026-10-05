@@ -373,6 +373,30 @@ Assert 'a missing receipt and no renewal parameters refuse before any Azure call
 Reset-ProjectionFixture
 Capture { & $deployer -ResourceGroup rg-p84 -ApimName apim-p84 -NamePrefix p84fixture -FlipAfterCleanCompare -RenewalReceiptPath $receiptPath -RenewalImageDigest ('sha256:' + ('b' * 64)) }
 Assert 'a renewal parameter that differs from the receipt refuses before any Azure call, with the remedy' ($Failure -match '-RenewalImageDigest is sha256:b{64}, but the renewal receipt .* records sha256:a{64}\. Remedy: pass the receipt''s value, or leave the parameter out' -and $FixtureCalls.Count -eq 0) "$Failure | calls $($FixtureCalls.Count)"
+Reset-ProjectionFixture
+Capture { & $deployer -ResourceGroup rg-p84 -ApimName apim-p84 -NamePrefix p84fixture -FlipAfterCleanCompare -RenewalReceiptPath $receiptPath -RenewalEntryPoint 'node /app/other.mjs' }
+Assert 'a -RenewalEntryPoint that differs from the receipt refuses before any Azure call' ($Failure -match '-RenewalEntryPoint is node /app/other\.mjs, but the renewal receipt .* records node /app/sync/src/apply-projection\.mjs' -and $FixtureCalls.Count -eq 0) "$Failure | calls $($FixtureCalls.Count)"
+# Council round 1 (QA): a receipt file that is not a receipt, and reads that find nothing.
+$badReceipts = @(foreach ($case in @(
+            @{ Name = 'not JSON'; Text = '{ not json'; Expect = 'is not JSON' }
+            @{ Name = 'another kind'; Text = (($renewal | Select-Object * -ExcludeProperty kind | Add-Member -NotePropertyName kind -NotePropertyValue 'claude-projection-switch-backup' -PassThru) | ConvertTo-Json -Depth 5); Expect = 'is not a version 1 renewal receipt' }
+            @{ Name = 'no runner'; Text = (($renewal | Select-Object * -ExcludeProperty runnerName) | ConvertTo-Json -Depth 5); Expect = 'has no runnerName' }
+        )) {
+        $badPath = Join-Path $work ("receipt-$($case.Name -replace ' ', '-').json")
+        [IO.File]::WriteAllText($badPath, $case.Text)
+        Reset-ProjectionFixture
+        Capture { & $deployer -ResourceGroup rg-p84 -ApimName apim-p84 -NamePrefix p84fixture -FlipAfterCleanCompare -RenewalReceiptPath $badPath }
+        if (-not ($Failure -match '^Projection switch refused' -and $Failure -match [regex]::Escape($case.Expect) -and $Failure -match 'Deploy-ClaudeProjectionRenewal\.ps1' -and $FixtureCalls.Count -eq 0)) { "$($case.Name): $Failure (calls $($FixtureCalls.Count))" }
+    })
+Assert 'a receipt file that is not JSON, is another kind or lacks a field refuses before any Azure call, with the remedy' (-not $badReceipts.Count) ($badReceipts -join ' || ')
+Reset-ProjectionFixture 'standard-missing'
+Set-GoodRenewalJob
+Capture { Invoke-Switch }
+Assert 'a tier group that Microsoft Graph does not find refuses before the drift check' ($Failure -match "^Projection switch refused: the standard tier group 'claude-code-standard' was not found" -and (Get-CallAt '^compare-stub') -lt 0 -and (Get-Writes).Count -eq 0) "$Failure"
+Reset-ProjectionFixture 'apim-empty'
+Set-GoodRenewalJob
+Capture { Invoke-Switch }
+Assert 'a gateway read that returns no id refuses before anything else is read' ($Failure -match '^Projection switch refused: API Management apim-p84 in rg-p84 could not be read' -and $FixtureCalls.Count -eq 1) "$Failure | calls $($FixtureCalls.Count)"
 # Council round 1: the deployer's normal run points the gateway at the resolver it deployed, which the
 # switch then requires (entitlement-source stays named-value, so the gateway does not call it yet).
 $deploySource = Get-Content -LiteralPath $deployer -Raw

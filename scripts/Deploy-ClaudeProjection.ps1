@@ -93,8 +93,10 @@ if ($FlipAfterCleanCompare) {
     # job's evidence older than the live records, and admission would refuse.
     . (Join-Path $PSScriptRoot 'ClaudeProjectionSwitch.ps1')
     $renewal = Read-ClaudeProjectionRenewalReceipt -Path $RenewalReceiptPath
+    # The entry point has a default, so it is compared only when it was passed.
+    $entryPointGiven = if ($PSBoundParameters.ContainsKey('RenewalEntryPoint')) { $RenewalEntryPoint } else { '' }
     foreach ($given in @(@('-ReconcilerResourceId', $ReconcilerResourceId, 'reconcilerResourceId'), @('-RenewalImageDigest', $RenewalImageDigest, 'imageDigest'),
-            @('-RenewalActionGroupResourceId', $RenewalActionGroupResourceId, 'actionGroupResourceId'))) {
+            @('-RenewalActionGroupResourceId', $RenewalActionGroupResourceId, 'actionGroupResourceId'), @('-RenewalEntryPoint', $entryPointGiven, 'entryPoint'))) {
         if ($given[1] -and $given[1] -ne [string]$renewal.($given[2])) {
             throw "Projection switch refused: $($given[0]) is $($given[1]), but the renewal receipt $RenewalReceiptPath records $($renewal.($given[2])). Remedy: pass the receipt's value, or leave the parameter out."
         }

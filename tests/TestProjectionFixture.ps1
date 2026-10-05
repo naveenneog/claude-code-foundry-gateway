@@ -88,6 +88,7 @@ function az {
         return (@{ id = $(if ($FixtureCase -eq 'wrong-rg') { "$FixtureRgId-other" } else { $FixtureRgId }); location = 'eastus2' } | ConvertTo-Json -Compress)
     }
     if ($line -like 'apim show*') {
+        if ($FixtureCase -eq 'apim-empty') { return '{}' }
         $id = if ($FixtureCase -eq 'wrong-subscription') { $FixtureGatewayId.Replace($FixtureSubscription, $FixtureTenant) } else { $FixtureGatewayId }
         $identity = if ($FixtureCase -eq 'no-identity') { @{} } else { @{ principalId = $FixtureGroupId; tenantId = $FixtureTenant } }
         if ($FixtureCase -eq 'wrong-tenant') { $identity.tenantId = $FixtureSubscription }
