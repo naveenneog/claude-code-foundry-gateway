@@ -193,6 +193,30 @@ Get-Backups | Remove-Item -Force
 Capture { Invoke-Switch @{ WhatIf = $true } }
 Assert '-WhatIf runs the compare and admission and stops before the backup and the write' (-not $Failure -and $Result -and $Result.Switched -eq $false -and
     (Get-CallAt 'check-admission\.mjs') -ge 0 -and (Get-Writes).Count -eq 0 -and (Get-Backups).Count -eq 0) "$Failure"
+# -Confirm asks about the write only (council round 1, Coder). In a runspace with no host the first prompt
+# throws, so the calls made before it show which question came first.
+$confirmShell = [powershell]::Create()
+$null = $confirmShell.AddScript({
+        param($Root, $Renewal, $CompareStub, $BackupDir)
+        $ErrorActionPreference = 'Stop'
+        . (Join-Path $Root 'tests\TestProjectionFixture.ps1')
+        . (Join-Path $Root 'scripts\ClaudeProjectionSwitch.ps1')
+        Reset-ProjectionFixture
+        $global:FixtureJob.properties.template.containers[0].image = "example.invalid/projection@$($Renewal.imageDigest)"
+        $global:FixtureJob.properties.template.containers[0].command = @()
+        $global:FixtureJob.properties.template.containers[0].args = @()
+        $failure = try {
+            $null = Invoke-ClaudeProjectionSwitch -ResourceGroup rg-p84 -ApimName apim-p84 -Renewal $Renewal -StandardGroup claude-code-standard -PremiumGroup none -BackupDirectory $BackupDir -CompareScript $CompareStub -Confirm
+            ''
+        }
+        catch { $_.Exception.Message }
+        [pscustomobject]@{ Failure = $failure; Calls = @($global:FixtureCalls) }
+    }).AddArgument($root).AddArgument($renewal).AddArgument($compareStub).AddArgument($backupDir)
+$confirmRun = @($confirmShell.Invoke())[0]
+$confirmShell.Dispose()
+$confirmCalls = @($confirmRun.Calls) -join "`n"
+Assert '-Confirm asks about the write after admission, not about working files before it' ($confirmRun.Failure -match 'prompts the user' -and $confirmRun.Failure -match 'entitlement-source' -and
+    $confirmCalls -match 'check-admission\.mjs' -and $confirmCalls -notmatch 'apim nv update' -and (Get-Backups).Count -eq 0) "$($confirmRun.Failure)"
 
 Write-Host ''
 Write-Host 'Projection switch - the receipt is checked before any call, and bound to the gateway (council round 1)' -ForegroundColor Cyan

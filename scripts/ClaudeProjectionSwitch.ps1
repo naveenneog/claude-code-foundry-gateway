@@ -149,6 +149,9 @@ function Invoke-ClaudeProjectionSwitch {
     # and their working files are written.
     $previewOnly = [bool]$WhatIfPreference
     $WhatIfPreference = $false
+    # -Confirm asks about the one write: the reads, the working files and the runner calls do not prompt.
+    $confirmWrite = $ConfirmPreference
+    $ConfirmPreference = 'None'
     $apim = Invoke-ClaudeNetworkAz @('apim', 'show', '-g', $ResourceGroup, '-n', $ApimName)
     $gatewayId = [string]$apim.id
     if (-not $gatewayId) { throw "Projection switch refused: API Management $ApimName in $ResourceGroup could not be read." }
@@ -221,9 +224,11 @@ function Invoke-ClaudeProjectionSwitch {
             Write-Host '    WhatIf: the drift check, the compare and admission passed; no backup and no write.' -ForegroundColor DarkGray
             return [pscustomobject]@{ Switched = $false; BackupPath = $null; Compared = $compare.compared; Admission = $admission; Rollback = (Get-ClaudeProjectionRollbackText) }
         }
+        $ConfirmPreference = $confirmWrite
         if (-not $PSCmdlet.ShouldProcess($ApimName, 'set entitlement-source to projection')) {
             throw 'Projection switch declined after admission; entitlement-source is unchanged and no backup was written.'
         }
+        $ConfirmPreference = 'None'
         Write-Host '==> Backup and switch' -ForegroundColor Cyan
         $backupPath = if ($Backup) { [string](@(& $Backup) | Select-Object -Last 1) } else { Save-ClaudeProjectionSwitchBackup -ResourceGroup $ResourceGroup -ApimName $ApimName -GatewayResourceId $gatewayId -Directory $BackupDirectory }
         Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-source' -Value 'projection'
@@ -232,5 +237,5 @@ function Invoke-ClaudeProjectionSwitch {
         Write-Host "    $rollback" -ForegroundColor DarkGray
         return [pscustomobject]@{ Switched = $true; BackupPath = $backupPath; Compared = $compare.compared; Admission = $admission; Rollback = $rollback }
     }
-    finally { Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue }
+    finally { Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue -Confirm:$false }
 }
