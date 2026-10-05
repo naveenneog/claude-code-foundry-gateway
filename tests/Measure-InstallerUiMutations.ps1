@@ -34,7 +34,9 @@ function Invoke-NodeFile([string]$File) {
     $stderr = $proc.StandardError.ReadToEndAsync()
     $done = $proc.WaitForExit(300000)
     if (-not $done) { try { $proc.Kill($true) } catch { } }
-    $text = $stdout.Result + "`n" + $stderr.Result
+    # A process that outlives the test runner can hold the output pipes open, so the reads get a bounded wait.
+    $complete = [Threading.Tasks.Task]::WaitAll([Threading.Tasks.Task[]]@($stdout, $stderr), 30000)
+    $text = if ($complete) { $stdout.Result + "`n" + $stderr.Result } else { '' }
     $tests = -1
     $failed = -1
     if ($text -match '(?m)^# tests\s+(\d+)') { $tests = [int]$Matches[1] }
@@ -42,6 +44,7 @@ function Invoke-NodeFile([string]$File) {
     $failNames = @([regex]::Matches($text, '(?m)^not ok \d+ - (.+)$') | ForEach-Object { $_.Groups[1].Value.Trim().Replace('\#', '#') })
     [pscustomobject]@{
         exitCode = if ($done) { $proc.ExitCode } else { 124 }
+        outputComplete = $complete
         checkCount = $tests
         failedCount = $failed
         failNames = $failNames
@@ -166,7 +169,8 @@ $results = foreach ($mutant in $list) {
             $record.failedCount = $run.failedCount
             $record.seconds = $run.seconds
             $record.targetFailed = [bool](@($run.failNames) | Where-Object { $_ -eq $mutant.test })
-            if ($run.checkCount -ne $baseline[$runnerKey]) { $record.verdict = "LOAD-CHANGED ($($run.checkCount) of $($baseline[$runnerKey]))" }
+            if ($run.PSObject.Properties['outputComplete'] -and -not $run.outputComplete) { $record.verdict = 'OUTPUT-INCOMPLETE' }
+            elseif ($run.checkCount -ne $baseline[$runnerKey]) { $record.verdict = "LOAD-CHANGED ($($run.checkCount) of $($baseline[$runnerKey]))" }
             elseif ($record.targetFailed) { $record.verdict = 'CAUGHT' }
             elseif ($run.failedCount -gt 0) { $record.verdict = 'OTHER-TEST-FAILED' }
             else { $record.verdict = 'MISSED' }
