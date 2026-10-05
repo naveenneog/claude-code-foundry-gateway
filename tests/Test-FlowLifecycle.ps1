@@ -167,6 +167,25 @@ $prepared = @(foreach ($case in @(
         }
     })
 Assert 'Tier and Desktop sign-in name their snapshot under backups/ when Start prepares them, and the write gate takes it' (-not $prepared.Count) ($prepared -join ' || ')
+# The Entitlement step keeps its file name. The shared helper leaves a plan with no actions, and a plan that already
+# names its snapshot, as they are.
+foreach ($name in 'Get-ClaudeFlowStepPlan', 'Initialize-ClaudeFlowStep', 'Invoke-ClaudeFlowStep') { Remove-Item "function:\$name" -Force -ErrorAction SilentlyContinue }
+. (Join-Path $root 'scripts\flow\Entitlement.ps1')
+$entitlementPlan = [pscustomobject]@{ Actions = @(@{ Verb = 'Update'; Target = 'entitlement-source' }); Data = @{ Target = @{ ApimName = 'apim-contoso' }; SnapshotPath = $null; SnapshotTaken = $false } }
+$noopPlan = [pscustomobject]@{ Actions = @(); Data = @{ Target = @{ ApimName = 'apim-contoso' }; SnapshotPath = $null; SnapshotTaken = $false } }
+$namedPlan = [pscustomobject]@{ Actions = @(@{ Verb = 'Update'; Target = 'sku' }); Data = @{ Target = @{ ApimName = 'apim-contoso' }; SnapshotPath = 'kept.json'; SnapshotTaken = $false } }
+$realRoot = ${function:Get-ClaudeFlowLifecycleRepoRoot}
+Set-Item -Path function:global:Get-ClaudeFlowLifecycleRepoRoot -Value ([scriptblock]::Create("'$stubRoot'"))
+try {
+    Initialize-ClaudeFlowStep -Record $desktopRecord -Plan $entitlementPlan
+    Initialize-ClaudeFlowLifecycleSnapshotPath -Plan $noopPlan -Step tier
+    Initialize-ClaudeFlowLifecycleSnapshotPath -Plan $namedPlan -Step tier
+}
+finally { Set-Item -Path function:global:Get-ClaudeFlowLifecycleRepoRoot -Value $realRoot }
+$entitlementLeaf = Split-Path ([string]$entitlementPlan.Data.SnapshotPath) -Leaf
+Assert 'the Entitlement step keeps its snapshot name, before-entitlement-<gateway>-<time>.json' ($entitlementLeaf -match '^before-entitlement-apim-contoso-\d{8}T\d{6}Z\.json$') $entitlementLeaf
+Assert 'a plan with no actions gets no snapshot path' (-not $noopPlan.Data.SnapshotPath) ([string]$noopPlan.Data.SnapshotPath)
+Assert 'a plan that already names its snapshot keeps that path' ($namedPlan.Data.SnapshotPath -eq 'kept.json') ([string]$namedPlan.Data.SnapshotPath)
 Remove-Item -LiteralPath $stubRoot -Recurse -Force -ErrorAction SilentlyContinue
 
 Write-Host ''

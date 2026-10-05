@@ -80,8 +80,8 @@ if (Test-Path $helper) {
 
         # P96: the dollar budget uses the identifier as its scope and accepts only lower-case
         # (scripts/ClaudeUsdBudgets.ps1:42), so a new identifier with a capital is refused here, with the
-        # rule. Units created from 2026-09-15 to 2026-09-25 could store capitals; an identifier the registry
-        # holds with that exact spelling stays usable, and the registry with it can still be written.
+        # rule. Before P96 this check ignored case, so a registry can hold an identifier with capitals; an
+        # identifier the registry holds with that exact spelling stays usable, and the registry with it can still be written.
         $caseRefusal = ''
         try { Test-ClaudeBuId 'Platform' } catch { $caseRefusal = $_.Exception.Message }
         Assert "a new identifier with a capital, 'Platform', is refused with the lower-case rule" ($caseRefusal -match 'lower-case letters') $caseRefusal
