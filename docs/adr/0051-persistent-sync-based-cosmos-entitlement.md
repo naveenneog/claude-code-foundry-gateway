@@ -45,7 +45,10 @@ rescan the whole directory.
 ## Decision
 
 1. **Records persist.** A record grants its tier until a sync deletes or changes it. Writers no longer
-   write `expiresAt` on entitlement records. The resolver ignores a legacy `expiresAt`. It still
+   write `expiresAt` on entitlement records. A record that still carries a legacy `expiresAt` is served
+   until that time and then answered as no record (404); the first full sync rewrites it without one.
+   Amended in council round 1: ignoring a passed `expiresAt` would let records left expired by a job
+   outage before this decision grant again. The resolver still
    answers 404 for a status record, 403 for another tenant and 409 for an unknown tier. It answers 503
    for a record whose generation or verification time is missing, malformed or in the future.
 2. **The gateway caches answers for `entitlement-cache-seconds`.** It no longer checks expiry. A 404 is
