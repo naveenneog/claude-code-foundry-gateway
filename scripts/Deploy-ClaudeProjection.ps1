@@ -5,13 +5,11 @@
 .DESCRIPTION
     One idempotent command for P61. It deploys a private Cosmos projection,
     creates the private network endpoints that the resolver needs to reach it,
-    deploys the resolver with SKU-valid inbound access, exports the gateway's
-    current named-value decisions, populates the projection from Entra, compares
-    the resolver records against those decisions, and leaves named values
-    authoritative. With -FlipAfterCleanCompare it deploys, publishes and applies
-    nothing: it runs Invoke-ClaudeProjectionSwitch (ADR-0050) with the renewal
-    receipt that scripts/Deploy-ClaudeProjectionRenewal.ps1 writes. PreflightOnly
-    runs the checks alone.
+    current named-value decisions when they exist, populates the projection from
+    Entra, compares the resolver records against those decisions or a fresh
+    snapshot for a new gateway, then switches entitlement-source to projection.
+    With -FlipAfterCleanCompare it runs Invoke-ClaudeProjectionSwitch by
+    -ResourceGroup, -ApimName and -NamePrefix. PreflightOnly runs the checks alone.
 
     BasicV2 must use a public resolver endpoint because Basic v2 has no
     outbound VNet integration. The public endpoint is not anonymous: App Service
@@ -33,11 +31,6 @@ param(
     [string]$StandardGroup = 'claude-code-standard',
     [string]$PremiumGroup = 'claude-code-premium',
     [switch]$FlipAfterCleanCompare,
-    [string]$ReconcilerResourceId,
-    [string]$RenewalImageDigest,
-    [string]$RenewalEntryPoint = 'node /app/sync/src/apply-projection.mjs',
-    [string]$RenewalActionGroupResourceId,
-    [string]$RenewalReceiptPath,
     [switch]$PreflightOnly,
     [ValidateRange(1,10)][int]$RetryCount = 3,
     [ValidateRange(5,120)][int]$RetryDelaySeconds = 15
@@ -49,13 +42,6 @@ $root = Split-Path $PSScriptRoot -Parent
 . (Join-Path $PSScriptRoot 'ClaudeRunner.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeProjectionChecks.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeProjectionPackage.ps1')
-if ($FlipAfterCleanCompare) {
-    if (-not $RenewalReceiptPath) { $RenewalReceiptPath = Join-Path $root "onboarding/projection-renewal-$NamePrefix.json" }
-    if (-not (Test-Path -LiteralPath $RenewalReceiptPath)) {
-        throw "Projection switch refused: P86 admission requires the renewal job, its image digest and its action group, from the receipt that scripts/Deploy-ClaudeProjectionRenewal.ps1 writes; there is none at $RenewalReceiptPath. Expected wait after deploying the job is about 60-90 minutes for two generation advances on the 30-minute schedule."
-    }
-}
-
 function Step($m) { Write-Host "`n==> $m" -ForegroundColor Cyan }
 function Note($m) { Write-Host "    $m" -ForegroundColor DarkGray }
 function Ok($m) { Write-Host "    [OK]   $m" -ForegroundColor Green }
@@ -87,22 +73,6 @@ if (-not $ResolverInboundAccess) {
         'StandardV2' { 'private' }
         'PremiumV2' { 'private' }
     }
-}
-if ($FlipAfterCleanCompare) {
-    # ADR-0050: a switch deploys, publishes and applies nothing. A snapshot applied here would make the
-    # job's evidence older than the live records, and admission would refuse.
-    . (Join-Path $PSScriptRoot 'ClaudeProjectionSwitch.ps1')
-    $renewal = Read-ClaudeProjectionRenewalReceipt -Path $RenewalReceiptPath
-    # The entry point has a default, so it is compared only when it was passed.
-    $entryPointGiven = if ($PSBoundParameters.ContainsKey('RenewalEntryPoint')) { $RenewalEntryPoint } else { '' }
-    foreach ($given in @(@('-ReconcilerResourceId', $ReconcilerResourceId, 'reconcilerResourceId'), @('-RenewalImageDigest', $RenewalImageDigest, 'imageDigest'),
-            @('-RenewalActionGroupResourceId', $RenewalActionGroupResourceId, 'actionGroupResourceId'), @('-RenewalEntryPoint', $entryPointGiven, 'entryPoint'))) {
-        if ($given[1] -and $given[1] -ne [string]$renewal.($given[2])) {
-            throw "Projection switch refused: $($given[0]) is $($given[1]), but the renewal receipt $RenewalReceiptPath records $($renewal.($given[2])). Remedy: pass the receipt's value, or leave the parameter out."
-        }
-    }
-    $null = Invoke-ClaudeProjectionSwitch -ResourceGroup $ResourceGroup -ApimName $ApimName -Renewal $renewal -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup
-    return
 }
 $preflight = Invoke-ClaudeProjectionPreflight -ResourceGroup $ResourceGroup -ApimName $ApimName -NamePrefix $NamePrefix `
     -SubscriptionId $SubscriptionId -Location $Location -Sku $Sku -ResolverInboundAccess $ResolverInboundAccess `
@@ -229,6 +199,7 @@ if ($PSCmdlet.ShouldProcess($ApimName, 'set entitlement-resolver-url and entitle
         Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-url' -Value $resolverUrl
         Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-audience' -Value $resolverAudience
     }
+    Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-projection-prefix' -Value $NamePrefix
 } else { throw 'Pointing the gateway at the resolver was declined; no further steps run.' }
 Ok "entitlement-resolver-url is $resolverUrl; entitlement-source is unchanged"
 $work = Join-Path ([IO.Path]::GetTempPath()) ("claude-projection-" + [guid]::NewGuid().ToString('N'))
@@ -268,7 +239,15 @@ try {
         $compare = ConvertFrom-ClaudeRunnerResult -RawOutput $compareRaw -Step 'Refusing to flip because projection drift remains'
         Ok "clean comparison: $($compare.compared) identities"
     } else { throw 'Projection comparison was declined; no further steps run.' }
-    Note 'Clean comparison complete; named values remain authoritative. To switch: deploy the renewal job with scripts/Deploy-ClaudeProjectionRenewal.ps1, wait for three successful 30-minute runs (about 60-90 minutes after the Graph grant), then rerun with -FlipAfterCleanCompare, which reads the renewal receipt and deploys nothing.'
+    if ($FlipAfterCleanCompare) {
+        Step 'Switch gateway to projection'
+        . (Join-Path $PSScriptRoot 'ClaudeProjectionSwitch.ps1')
+        $null = Invoke-ClaudeProjectionSwitch -ResourceGroup $ResourceGroup -ApimName $ApimName -NamePrefix $NamePrefix -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup
+        Ok 'entitlement-source is projection'
+    }
+    else {
+        Note 'Clean comparison complete; rerun with -FlipAfterCleanCompare to switch entitlement-source to projection.'
+    }
 }
 finally {
     Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue

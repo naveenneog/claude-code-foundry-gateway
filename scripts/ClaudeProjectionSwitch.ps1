@@ -134,7 +134,8 @@ function Invoke-ClaudeProjectionSwitch {
     param(
         [Parameter(Mandatory)][string]$ResourceGroup,
         [Parameter(Mandatory)][string]$ApimName,
-        [Parameter(Mandatory)]$Renewal,
+        $Renewal,
+        [string]$NamePrefix,
         [string]$StandardGroup = 'claude-code-standard',
         [string]$PremiumGroup = 'claude-code-premium',
         [string]$BackupDirectory = (Join-Path (Split-Path $PSScriptRoot -Parent) 'onboarding'),
@@ -146,6 +147,26 @@ function Invoke-ClaudeProjectionSwitch {
     }
     if ($ResourceGroup -notmatch '^[A-Za-z0-9._-]{1,90}$') {
         throw "Projection switch refused: resource group '$ResourceGroup' holds characters other than letters, digits, '.', '_' or '-'. Azure allows some of them, such as parentheses, but az.cmd hands them to cmd.exe, so this switch does not pass them (ADR-0050). Remedy: switch a gateway in a resource group named with those characters only; Azure moves an API Management instance between resource groups, except on the Consumption tier (https://learn.microsoft.com/azure/azure-resource-manager/management/move-support-resources)."
+    }
+    if (-not $Renewal) {
+        if ($NamePrefix -notmatch '^(?=.{1,37}$)[a-z0-9]+(?:-[a-z0-9]+)*$') {
+            throw "Projection switch refused: '$NamePrefix' is not a projection name prefix. Remedy: pass the -NamePrefix used by scripts/Deploy-ClaudeProjection.ps1."
+        }
+        $apim = Invoke-ClaudeNetworkAz @('apim', 'show', '-g', $ResourceGroup, '-n', $ApimName)
+        $gatewayId = [string]$apim.id
+        if (-not $gatewayId) { throw "Projection switch refused: API Management $ApimName in $ResourceGroup could not be read. Remedy: check the names and Azure CLI sign-in, then rerun." }
+        $prefix = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-projection-prefix' -FailOnError
+        if ($prefix -and $prefix -ne $NamePrefix) {
+            throw "Projection switch refused: the gateway records projection prefix '$prefix', not '$NamePrefix'. Remedy: rerun scripts/Deploy-ClaudeProjection.ps1 with the prefix recorded on the gateway."
+        }
+        if ($WhatIfPreference) {
+            Write-Host "WhatIf: would back up named values and set entitlement-source to projection for $ApimName." -ForegroundColor DarkGray
+            return [pscustomobject]@{ switched = $false; whatIf = $true; namePrefix = $NamePrefix }
+        }
+        $backupPath = if ($Backup) { & $Backup } else { Save-ClaudeProjectionSwitchBackup -ResourceGroup $ResourceGroup -ApimName $ApimName -GatewayResourceId $gatewayId -Directory $BackupDirectory }
+        Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-source' -Value 'projection'
+        Write-Host (Get-ClaudeProjectionRollbackText -BackupPath $backupPath) -ForegroundColor Yellow
+        return [pscustomobject]@{ switched = $true; backupPath = $backupPath; namePrefix = $NamePrefix }
     }
     Assert-ClaudeProjectionRenewalEvidence -Renewal $Renewal
     # -WhatIf previews the backup and the write only: the reads, the runner compare and admission run,

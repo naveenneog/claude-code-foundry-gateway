@@ -61,10 +61,7 @@ param(
     [string]$ResolverInboundAccess,
     [switch]$DeployProjection,
     [switch]$FlipProjectionAfterCleanCompare,
-    [string]$ProjectionReconcilerResourceId,
-    [string]$ProjectionRenewalImageDigest,
-    [string]$ProjectionRenewalEntryPoint = 'node /app/sync/src/apply-projection.mjs',
-    [string]$ProjectionRenewalActionGroupResourceId,
+    [switch]$DeploySyncJob,
     [string]$ProjectionResolverAppId,
 
     [int]$TpmStandard,
@@ -122,11 +119,6 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
-if ($FlipProjectionAfterCleanCompare) {
-    if (-not $ProjectionReconcilerResourceId -or -not $ProjectionRenewalImageDigest -or -not $ProjectionRenewalActionGroupResourceId) {
-        throw 'Projection switch refused: P86 admission requires -ProjectionReconcilerResourceId, -ProjectionRenewalImageDigest and -ProjectionRenewalActionGroupResourceId. Expected wait after deploying the 30-minute reconciler is about 60-90 minutes.'
-    }
-}
 $desktopSignInHelper = Join-Path $root 'scripts/ClaudeDesktopSignIn.ps1'
 if (Test-Path $desktopSignInHelper) { . $desktopSignInHelper }
 
@@ -295,6 +287,7 @@ Write-Host ' Nothing is created until you confirm the summary.' -ForegroundColor
 . (Join-Path $root 'scripts/flow/FlowContract.ps1')
 . (Join-Path $root 'scripts/ClaudeModelDeployment.ps1')
 . (Join-Path $root 'scripts/ClaudeChoice.ps1')
+. (Join-Path $root 'scripts/ClaudeInstallProjection.ps1')
 . (Join-Path $root 'scripts/ClaudeGatewayRegion.ps1')
 if (-not (Test-ClaudePrerequisites -Mode Admin)) { return }
 
@@ -734,6 +727,11 @@ else {
     Write-Host ''
     Write-Host ("      {0:n0} developers x {1} requests/day x 22 days = {2:n0} requests/month" -f $n, $perDevPerDay, $monthly) -ForegroundColor DarkGray
     Write-Host ("      Basic v2 includes 10,000,000 and Standard v2 50,000,000." -f $monthly) -ForegroundColor DarkGray
+    Write-Host '      Microsoft publishes included request volume but no requests-per-second planning figure; load test your traffic.' -ForegroundColor DarkGray
+    Write-Host '      Built-in cache: Basic v2 250 MB, Standard v2 1 GB, Premium v2 5 GB; scale units: 10, 10 and 30 (api-management-features, updated 2026-06-05).' -ForegroundColor DarkGray
+    Write-Host '      Outbound VNet integration is Standard v2 and Premium v2; VNet injection is Premium v2 only (integrate-vnet-outbound 2025-12-04; inject-vnet-v2 2025-10-08).' -ForegroundColor DarkGray
+    Write-Host '      Availability zones are Standard v2 and Premium v2 (reliability-api-management, updated 2026-09-09).' -ForegroundColor DarkGray
+    Write-Host '      Cosmos DB serverless is single-region (cosmos-db/serverless, updated 2026-04-27).' -ForegroundColor DarkGray
 
     # Volume rarely decides it, and saying so is more useful than a table that
     # implies it does. Basic v2 covers roughly 900 developers on this
@@ -746,12 +744,12 @@ else {
 
     Write-Host ''
     if ($suggested -eq 'BasicV2') {
-        Write-Host '      Volume alone suggests BasicV2. Choose StandardV2 anyway if you need the' -ForegroundColor DarkGray
-        Write-Host '      gateway inside a VNet or spread across availability zones - BasicV2 has' -ForegroundColor DarkGray
-        Write-Host '      neither, and that is what usually decides this rather than request count.' -ForegroundColor DarkGray
+        Write-Host '      Suggestion: BasicV2 for evaluation and small teams. Choose StandardV2 when you need' -ForegroundColor DarkGray
+        Write-Host '      availability zones, outbound VNet integration or more than BasicV2 included volume.' -ForegroundColor DarkGray
+        Write-Host '      Choose PremiumV2 for VNet injection or more than 10 units.' -ForegroundColor DarkGray
     }
     else {
-        Write-Host ("      {0} suggested on volume. It also brings VNet integration and zones." -f $suggested) -ForegroundColor DarkGray
+        Write-Host ("      Suggestion: {0} on included-request volume. StandardV2 is for zones, outbound VNet integration or BasicV2 volume overflow; PremiumV2 is for VNet injection or more than 10 units." -f $suggested) -ForegroundColor DarkGray
     }
     Write-Host ''
     if (-not $Yes) { Show-GatewayTierPrices -Region $Location; Write-Host '' }
@@ -855,86 +853,34 @@ $devCount = if ($script:DeveloperEstimate) { $script:DeveloperEstimate } else { 
 # SKU does not move the 4,096-character named-value limit; the projection in
 # docs/adr/0011-projection-platform.md is the configuration change that moves
 # identity data out of policy configuration and into Cosmos.
-if (-not $EntitlementStore) {
-    $storeOptions = @(
-        New-ClaudeChoiceOption -Value 'named-value' -Label 'Named values' `
-            -Detail 'No extra Azure components. Holds about 93 developers in bu-members and about 110 per tier list; raising the SKU does not move it.' `
-            -Recommended:($devCount -le 93) -Reason 'fits the declared developer count'
-        New-ClaudeChoiceOption -Value 'projection' -Label 'Cosmos projection' `
-            -Detail 'Private Cosmos entitlement store plus Function resolver. Required around 100-500 developers; one deployer can populate, compare and flip after a clean comparison.' `
-            -Recommended:($devCount -gt 93) -Reason 'named values cannot hold the declared developer count'
-    )
-    if ($Yes) {
-        $EntitlementStore = if ($devCount -gt 93) { 'projection' } else { 'named-value' }
-        Write-Host ("  -EntitlementStore {0}: selected from the declared developer count under -Yes" -f $EntitlementStore) -ForegroundColor DarkGray
-    }
-    else {
-        $EntitlementStore = Select-ClaudeChoice -Parameter EntitlementStore -Question 'Entitlement store' -Options $storeOptions `
+$storeChoice = Resolve-ClaudeInstallerEntitlementStore -EntitlementStore $EntitlementStore -DeveloperCount $devCount `
+    -BuCeiling $buCeiling -ListCeiling $listCeiling -Yes:$Yes -Selector {
+        param($options)
+        Select-ClaudeChoice -Parameter EntitlementStore -Question 'Entitlement store' -Options $options `
             -WhereToFind @('docs/SCALE.md: named-value ceiling', 'docs/SECURE-PROJECTION.md: projection deployment') `
             -AmbiguousMessage 'Choose named-value or projection explicitly for unattended runs.' `
             -Interactive $true
     }
+$EntitlementStore = $storeChoice.Store
+if ($EntitlementStore -eq 'projection') { $DeployProjection = $true }
+if ($Yes -and -not $PSBoundParameters.ContainsKey('EntitlementStore')) {
+    Write-Host '  -EntitlementStore projection: default under -Yes' -ForegroundColor DarkGray
 }
-if ($Yes -and $EntitlementStore -eq 'projection' -and -not $DeployProjection) {
-    throw 'Cannot choose projection unattended with -Yes unless -DeployProjection is also passed; projection requires a compare-gated deployer run. Nothing was created.'
+if ($EntitlementStore -eq 'projection' -and -not $WhatIfPreference) {
+    Assert-ClaudeInstallerProjectionPrerequisites
 }
-if ($DeployProjection -and -not $WhatIfPreference) {
-    . (Join-Path $root 'scripts\ClaudeProjectionChecks.ps1')
-    Assert-ClaudeProjectionPowerShell
-}
-# Named values for more developers than they hold, said where the store is chosen (P79).
-if ($EntitlementStore -eq 'named-value' -and $devCount -gt $buCeiling) {
-    Write-Host ''
-    Write-Warn2 ("Named values hold about {0} developers, and you said {1}." -f $buCeiling, $devCount)
-    Write-Host ''
-    Write-Host '      Entitlement lives in API Management named values, which cap at 4,096' -ForegroundColor DarkGray
-    Write-Host ("      characters. A tier list holds about {0} object ids; the business unit" -f $listCeiling) -ForegroundColor DarkGray
-    Write-Host ("      map holds about {0}, and it runs out first. This is a storage limit," -f $buCeiling) -ForegroundColor DarkGray
-    Write-Host '      not a licensing one, and raising the SKU does not move it - a larger' -ForegroundColor DarkGray
-    Write-Host '      tier raises how many named values exist, not how long each one may be.' -ForegroundColor DarkGray
-    Write-Host ''
-    Write-Host '      The Cosmos projection store holds them on every v2 tier: choose projection' -ForegroundColor DarkGray
-    Write-Host '      above, or pass -EntitlementStore projection (docs/SCALE.md, docs/adr/0011).' -ForegroundColor DarkGray
-    Write-Host '      Moving to it later is a configuration change rather than a redeployment.' -ForegroundColor DarkGray
-    Write-Host ("      With named values you can entitle about {0} people, not {1}, and the" -f $buCeiling, $devCount) -ForegroundColor DarkGray
-    Write-Host '      sync will refuse the rest rather than silently dropping them.' -ForegroundColor DarkGray
-    Write-Host ''
-    $goOn = Read-Default -Prompt 'Continue with named values (yes/no)' -Default 'yes' `
-        -Help ("yes deploys a gateway that serves the first ~{0} and refuses to add more." -f $buCeiling) -Validate {
-            param($x)
-            if ($x -in @('yes','no')) { return $true }
-            Write-Warn2 'Must be yes or no.'
-            return $false
-        }
-    if ($goOn -eq 'no') { throw 'Stopped before deploying. Nothing was created. Rerun and choose projection, or pass -EntitlementStore projection.' }
-}
-$ResolverInboundAccess = if ($ResolverInboundAccess) { $ResolverInboundAccess }
-elseif ($EntitlementStore -eq 'projection') {
-    switch ($Sku) {
-        'BasicV2' { 'public' }
-        'StandardV2' { 'private' }
-        'PremiumV2' { 'private' }
-        default { 'private' }
-    }
-}
-else { 'private' }
+$resolverChoice = Resolve-ClaudeInstallerResolverInboundAccess -Sku $Sku -EntitlementStore $EntitlementStore -Requested $ResolverInboundAccess
+$ResolverInboundAccess = $resolverChoice.Access
 
 if ($EntitlementStore -eq 'projection') {
-    if ($Sku -eq 'BasicV2' -and $ResolverInboundAccess -ne 'public') {
-        throw 'BasicV2 cannot use a private resolver because Basic v2 has no outbound VNet integration. Use -ResolverInboundAccess public or choose StandardV2/PremiumV2. Nothing was created.'
-    }
-    if ($Sku -in @('StandardV2','PremiumV2') -and $ResolverInboundAccess -ne 'private') {
-        Write-Warn2 "$Sku can reach a private resolver; public resolver was requested explicitly."
-    }
     Write-Host ''
     if ($ResolverInboundAccess -eq 'public') {
         Write-Host '  Projection resolver: public, Entra-authenticated resolver.' -ForegroundColor Yellow
-        Write-Host '    Basic v2 cannot reach private backends. The resolver allows only the gateway managed identity token, pins tenant and audience, and keeps Cosmos private.' -ForegroundColor DarkGray
-        Write-Host '    APIM v2 outbound IP addresses are not a stable security boundary, so IP restrictions are optional defense-in-depth, not the primary control.' -ForegroundColor DarkGray
+        Write-Host '    The resolver allows only the gateway managed identity token, pins tenant and audience, and keeps Cosmos private.' -ForegroundColor DarkGray
     }
     else {
         Write-Host '  Projection resolver: private endpoint.' -ForegroundColor Green
-        Write-Host '    Standard v2 and Premium v2 reach it through outbound VNet integration; Cosmos remains private.' -ForegroundColor DarkGray
+        Write-Host '    Requires gateway outbound VNet integration into the projection network; Microsoft Learn integrate-vnet-outbound, updated 2025-12-04.' -ForegroundColor DarkGray
     }
     try {
         $cost100 = & (Join-Path $PSScriptRoot 'scripts/Measure-ClaudeProjectionCost.ps1') -Developers 100 -AsJson 2>$null 6>$null | Out-String | ConvertFrom-Json
@@ -1617,31 +1563,26 @@ foreach ($g in @($StandardGroup, $PremiumGroup)) {
 }
 
 Write-Step 'Sync entitlement'
-& (Join-Path $root 'scripts/Sync-ClaudeAccess.ps1') -ApimName $apimName -ResourceGroup $ResourceGroup `
-    -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup
+if (Test-ClaudeInstallerShouldSyncNamedValues -EntitlementStore $EntitlementStore -NewGateway (-not $ExistingApim)) {
+    & (Join-Path $root 'scripts/Sync-ClaudeAccess.ps1') -ApimName $apimName -ResourceGroup $ResourceGroup `
+        -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup
+}
+else {
+    Write-Note 'Projection is the default store for this new gateway; skipping named-value list population.'
+}
 
-if ($EntitlementStore -eq 'projection' -and $DeployProjection) {
+if ($EntitlementStore -eq 'projection') {
     Write-Step 'Projection deployment'
-    $projectionArgs = @(
-        '-ResourceGroup', $ResourceGroup,
-        '-ApimName', $apimName,
-        '-NamePrefix', $NamePrefix,
-        '-Location', $Location,
-        '-Sku', $Sku,
-        '-ResolverInboundAccess', $ResolverInboundAccess,
-        '-StandardGroup', $StandardGroup,
-        '-PremiumGroup', $PremiumGroup
-    )
-    if ($ProjectionResolverAppId) { $projectionArgs += @('-ResolverAppId', $ProjectionResolverAppId) }
-    $projectionArgs += @('-SubscriptionId', $SubscriptionId)
-    if ($FlipProjectionAfterCleanCompare) { $projectionArgs += '-FlipAfterCleanCompare' }
-    if ($ProjectionReconcilerResourceId) { $projectionArgs += @('-ReconcilerResourceId', $ProjectionReconcilerResourceId) }
-    if ($ProjectionRenewalImageDigest) { $projectionArgs += @('-RenewalImageDigest', $ProjectionRenewalImageDigest) }
-    if ($ProjectionRenewalEntryPoint) { $projectionArgs += @('-RenewalEntryPoint', $ProjectionRenewalEntryPoint) }
-    if ($ProjectionRenewalActionGroupResourceId) { $projectionArgs += @('-RenewalActionGroupResourceId', $ProjectionRenewalActionGroupResourceId) }
-    if ($WhatIfPreference) { $projectionArgs += '-WhatIf' }
-    & (Join-Path $root 'scripts/Deploy-ClaudeProjection.ps1') @projectionArgs
-    if ($LASTEXITCODE -ne 0) { throw 'Projection deployment failed. The gateway was not flipped.' }
+    if ($WhatIfPreference) {
+        $plan = Get-ClaudeInstallerProjectionPlan -WhatIf -DeploySyncJob:$DeploySyncJob
+        foreach ($step in $plan.Steps) { Write-Note "WhatIf: would $step." }
+    }
+    Invoke-ClaudeInstallerProjectionDeployment -Root $root -ResourceGroup $ResourceGroup -ApimName $apimName -NamePrefix $NamePrefix `
+        -Location $Location -Sku $Sku -ResolverInboundAccess $ResolverInboundAccess -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup `
+        -SubscriptionId $SubscriptionId -ProjectionResolverAppId $ProjectionResolverAppId -WhatIf:$WhatIfPreference | Out-Null
+    if ($DeploySyncJob -and -not $WhatIfPreference) {
+        Invoke-ClaudeInstallerSyncJobDeployment -Root $root -ResourceGroup $ResourceGroup -ApimName $apimName -NamePrefix $NamePrefix -SubscriptionId $SubscriptionId
+    }
 }
 
 # ------------------------------------------------------- 7b. business units
@@ -1803,16 +1744,21 @@ if ($addressMode -eq 'custom') {
         '        A later address change is .\Start-ClaudeGateway.ps1 -Action Change -Change address.'
     ) })
 }
-$nextSteps.Add([pscustomobject]@{ Title = 'Entitle a developer'; Warn = $false; Detail = @(
-    "        ./scripts/Set-ClaudeDeveloper.ps1 -User dev@contoso.com -Tier standard ``"
-    "            -ApimName $apimName -ResourceGroup $ResourceGroup"
-    '      Takes an email, a UPN or an object id, adds them to the group and'
-    '      publishes in one step. The raw route needs an object id, not an email:'
-    '        $oid = az ad user show --id dev@contoso.com --query id -o tsv'
-    "        az ad group member add --group $StandardGroup --member-id `$oid"
-    "        ./scripts/Sync-ClaudeAccess.ps1 -ApimName $apimName -ResourceGroup $ResourceGroup"
-    '      Portal route: docs/ONBOARDING.md section 2'
-) })
+if ($EntitlementStore -eq 'projection') {
+    $nextSteps.Add([pscustomobject]@{ Title = 'Add or remove a developer in the projection'; Warn = $false; Detail = (Get-ClaudeInstallerProjectionNextSteps -ResourceGroup $ResourceGroup -ApimName $apimName -DeploySyncJob:$DeploySyncJob) })
+}
+else {
+    $nextSteps.Add([pscustomobject]@{ Title = 'Entitle a developer'; Warn = $false; Detail = @(
+        "        ./scripts/Set-ClaudeDeveloper.ps1 -User dev@contoso.com -Tier standard ``"
+        "            -ApimName $apimName -ResourceGroup $ResourceGroup"
+        '      Takes an email, a UPN or an object id, adds them to the group and'
+        '      publishes in one step. The raw route needs an object id, not an email:'
+        '        $oid = az ad user show --id dev@contoso.com --query id -o tsv'
+        "        az ad group member add --group $StandardGroup --member-id `$oid"
+        "        ./scripts/Sync-ClaudeAccess.ps1 -ApimName $apimName -ResourceGroup $ResourceGroup"
+        '      Portal route: docs/ONBOARDING.md section 2'
+    ) })
+}
 $nextSteps.Add([pscustomobject]@{ Title = 'Send them the setup'; Warn = $false; Detail = @(
     "        ./scripts/New-OnboardingEmail.ps1 -ConfigPath $configPath -To dev@contoso.com"
 ) })

@@ -277,6 +277,9 @@ Invoke-Check 'Projection sync package and its import closure' 'Test-ProjectionPa
 Invoke-Check 'Projection renewal templates and deploy script' 'Test-ProjectionRenewal.ps1'
 Invoke-Check 'Projection renewal runs reach admission offline' 'Test-ProjectionRenewalRuns.ps1'
 Invoke-Check 'Projection switch admission and switch function' 'Test-ProjectionSwitch.ps1'
+Invoke-Check 'Projection installer contract' 'Test-ProjectionInstaller.ps1'
+Invoke-Check 'Installer projection defaults and live verifier' 'Test-ClaudeInstallProjection.ps1'
+Invoke-Check 'Live projection verifier validation and order' 'Test-ClaudeLiveProjection.ps1'
     Invoke-Check 'Claude Desktop sign-in choice'             'Test-DesktopSignIn.ps1'
     Invoke-Check 'Workstation clients read what setup writes' 'Test-WorkstationClients.ps1' -SerialLane
     Invoke-Check 'Workstation model retirement agrees across shells' 'Test-WorkstationModels.ps1'

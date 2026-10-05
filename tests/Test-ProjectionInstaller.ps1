@@ -1,67 +1,53 @@
+$ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $fail = 0
+$count = 0
 function Assert($label, $condition, $detail = '') {
+    $script:count++
     if ($condition) { Write-Host "  [OK]   $label" -ForegroundColor Green }
     else { Write-Host "  [FAIL] $label$(if ($detail) { " - $detail" })" -ForegroundColor Red; $script:fail++ }
 }
-
-Write-Host ''
-Write-Host 'Projection installer - Basic v2 and projection choice' -ForegroundColor Cyan
-
-$installer = Get-Content (Join-Path $root 'Install-ClaudeGateway.ps1') -Raw
-$deployerPath = Join-Path $root 'scripts\Deploy-ClaudeProjection.ps1'
-$cost = Get-Content (Join-Path $root 'scripts\Measure-ClaudeProjectionCost.ps1') -Raw
-$secure = Get-Content (Join-Path $root 'tests\Test-SecureProjection.ps1') -Raw
-
-Assert 'installer has an entitlement store parameter' ($installer -match '\[ValidateSet\(''named-value'',''projection''\)\]\s*\[string\]\$EntitlementStore')
-Assert 'installer asks for the entitlement store as a choice' ($installer -match 'Select-ClaudeChoice' -and $installer -match 'Entitlement store')
-Assert 'installer chooser works under redirected wizard tests' ($installer -match 'Select-ClaudeChoice[\s\S]+-Interactive \$true')
-Assert 'named values state the measured ceiling' ($installer -match '93 developer' -and $installer -match '110')
-Assert 'projection choice is costed at the operator count' ($installer -match 'Measure-ClaudeProjectionCost\.ps1' -and $installer -match '-Developers \$devCount')
-Assert 'BasicV2 projection selects the public resolver shape' ($installer -match "'BasicV2'\s*\{\s*'public'")
-Assert 'StandardV2 projection selects the private resolver shape' ($installer -match "'StandardV2'\s*\{\s*'private'")
-Assert 'PremiumV2 projection selects the private resolver shape' ($installer -match "'PremiumV2'\s*\{\s*'private'")
-Assert 'Basic public shape names the Entra-only risk' ($installer -match 'public, Entra-authenticated resolver' -and $installer -match 'APIM v2 outbound IP')
-Assert 'installer persists projection settings into claude-gateway.json' ($installer -match 'entitlementStore\s*=' -and $installer -match 'resolverInboundAccess\s*=' -and $installer -match 'projectionDeployer\s*=')
-Assert 'installer invokes the one-command deployer and gates the flip flag' ($installer -match 'Deploy-ClaudeProjection\.ps1' -and $installer -match 'if \(\$FlipProjectionAfterCleanCompare\).*''-FlipAfterCleanCompare''')
-Assert 'non-interactive projection refuses ambiguity' ($installer -match 'Projection requires .* -Yes' -or $installer -match 'Cannot choose projection unattended')
-Assert '-Yes chooses the deterministic entitlement store default' ($installer -match 'selected from the declared developer count under -Yes')
-Assert 'unattended projection always requires the deployer' ($installer.Contains('$Yes -and $EntitlementStore -eq ''projection'' -and -not $DeployProjection'))
-Assert 'flip requires P86 renewal admission inputs' ($installer -match 'ProjectionRenewalImageDigest' -and $installer -match 'ProjectionRenewalActionGroupResourceId' -and $installer -match 'P86 admission requires')
-
-Write-Host ''
-Write-Host 'Projection deployer - compare-gated flip' -ForegroundColor Cyan
-
-Assert 'one-command deployer ships' (Test-Path $deployerPath)
-if (Test-Path $deployerPath) {
-    $deployer = Get-Content $deployerPath -Raw
-    Assert 'deployer supports WhatIf' ($deployer -match 'SupportsShouldProcess')
-    Assert 'deployer validates SKU and inbound shape' ($deployer -match "\[ValidateSet\('BasicV2','StandardV2','PremiumV2'\)\]" -and $deployer -match "(?s)BasicV2.*public")
-    Assert 'deployer deploys the private Cosmos projection' ($deployer -match 'projection\.bicep' -and $deployer -match "networkAccess='private-only'")
-    Assert 'deployer deploys the resolver with selected inbound access' ($deployer -match 'resolver\.bicep' -and $deployer -match 'inboundAccess=')
-    Assert 'deployer passes resolver identity allow lists through a parameter file' ($deployer -match 'allowedCallerAppIds = @\{ value = @\(\$gatewayAppId\) \}' -and $deployer -match 'allowedCallerObjectIds = @\{ value = @\(\$gatewayObjectId\) \}' -and $deployer -match '--parameters "@\$resolverParamFile"')
-    Assert 'deployer publishes resolver code' ($deployer -match 'functionapp deployment source config-zip' -and $deployer -match 'resolver\.zip')
-    Assert 'deployer uses an in-network runner for private Cosmos writes' ($deployer -match 'runnerEnabled=true' -and $deployer -match 'Send-RunnerFile' -and $deployer -match 'Invoke-RunnerCommand')
-    Assert 'deployer grants the runner data contributor on one container' ($deployer -match 'cosmosdb sql role assignment create' -and $deployer -match '00000000-0000-0000-0000-000000000002' -and $deployer -match '/dbs/claude/colls/entitlement')
-    Assert 'deployer populates from Entra' ($deployer -match 'Sync-ClaudeProjection\.ps1' -and $deployer -match 'apply-projection\.mjs')
-    Assert 'deployer exports gateway decisions' ($deployer -match 'Compare-ClaudeEntitlement\.ps1' -and $deployer -match '-ExportGatewayPath')
-    Assert 'deployer runs projection comparison' ($deployer -match 'apply-projection\.mjs' -and $deployer -match '--compare')
-    Assert 'deployer refuses drift before flip' ($deployer -match 'Refusing to flip' -and $deployer -match 'drift')
-    $switchText = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'scripts\ClaudeProjectionSwitch.ps1') -Raw
-    Assert 'deployer switches only through the shared switch, which writes after P86 scheduled-renewal admission' ($deployer -match 'Invoke-ClaudeProjectionSwitch' -and $deployer -notmatch "Set-ApimNamedValue[^\r\n]*-Id 'entitlement-source'" -and
-        $deployer -match 'RenewalActionGroupResourceId' -and $switchText -match "(?s)Assert-ClaudeProjectionAdmission.*Set-ApimNamedValue[^\r\n]*-Id 'entitlement-source'")
-    Assert 'deployer has bounded retries' ($deployer -match '\[ValidateRange\(1,10\)\]\[int\]\$RetryCount' -and $deployer -match 'Start-Sleep')
+function Capture([scriptblock]$Block) {
+    $script:Failure = ''
+    $script:Result = $null
+    try { $script:Result = & $Block }
+    catch { $script:Failure = $_.Exception.Message }
 }
 
-Write-Host ''
-Write-Host 'Projection cost and security contract' -ForegroundColor Cyan
-
-Assert 'cost model has an explicit P61 scenario mode' ($cost -match '\[switch\]\$P61Scenarios')
-Assert 'cost model emits 100 and 500 developer rows' ($cost -match '100,500' -and $cost -match 'BasicV2 public resolver')
-Assert 'secure tests cover public resolver authentication' ($secure -match 'public resolver is still Entra authenticated' -and $secure -match 'requireAuthentication: true')
-Assert 'secure tests keep Cosmos private for the Basic public resolver' ($secure -match 'Cosmos stays private' -or $secure -match 'Cosmos remains private')
+. (Join-Path $root 'scripts\ClaudeChoice.ps1')
+. (Join-Path $root 'scripts\ClaudeInstallProjection.ps1')
 
 Write-Host ''
-if ($fail) { Write-Host "$fail assertion(s) failed." -ForegroundColor Red; exit 1 }
-Write-Host 'Projection installer contract holds.' -ForegroundColor Green
-exit 0
+Write-Host 'Projection installer - P98 contract behaviour' -ForegroundColor Cyan
+
+$small = Resolve-ClaudeInstallerEntitlementStore -DeveloperCount 25 -BuCeiling 93 -ListCeiling 110 -Yes
+$large = Resolve-ClaudeInstallerEntitlementStore -DeveloperCount 500 -BuCeiling 93 -ListCeiling 110 -Yes
+Assert 'Cosmos projection is the unattended default for small and large teams' ($small.Store -eq 'projection' -and $large.Store -eq 'projection')
+Assert 'projection is offered first and recommended; named values are the small-team fallback' ($small.Options[0].Value -eq 'projection' -and $small.Options[0].Recommended -and $small.Options[1].Value -eq 'named-value') ($small.Options | ConvertTo-Json -Depth 4)
+
+Capture { Resolve-ClaudeInstallerEntitlementStore -EntitlementStore named-value -DeveloperCount 500 -BuCeiling 93 -ListCeiling 110 -Yes }
+Assert 'named values above the measured ceiling are refused with the capacity reason' ($Failure -match '4,096-character' -and $Failure -match 'Choose projection') $Failure
+
+foreach ($sku in 'BasicV2','StandardV2','PremiumV2') {
+    $choice = Resolve-ClaudeInstallerResolverInboundAccess -Sku $sku -EntitlementStore projection
+    Assert "resolver defaults to public on $sku" ($choice.Access -eq 'public') ($choice | ConvertTo-Json -Depth 4)
+}
+$private = Resolve-ClaudeInstallerResolverInboundAccess -Sku PremiumV2 -EntitlementStore projection -Requested private
+Assert 'private resolver remains available with the outbound VNet prerequisite' ($private.Access -eq 'private' -and $private.Message -match 'outbound VNet integration' -and $private.Message -match 'updated 2025-12-04') $private.Message
+
+$calls = [System.Collections.Generic.List[object]]::new()
+Invoke-ClaudeInstallerProjectionDeployment -Root $root -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 `
+    -Location eastus2 -Sku BasicV2 -ResolverInboundAccess public -StandardGroup standard -PremiumGroup premium `
+    -InvokeScript { param($Path, [string[]]$Arguments) $calls.Add([pscustomobject]@{ Path = $Path; Args = $Arguments }); 0 } | Out-Null
+Assert 'choosing projection invokes the projection deployer and switch without renewal inputs' (
+    $calls.Count -eq 1 -and
+    ($calls[0].Args -contains '-FlipAfterCleanCompare') -and
+    -not @($calls[0].Args | Where-Object { $_ -like '*Renewal*' -or $_ -eq '-ReconcilerResourceId' }).Count
+) ($calls | ConvertTo-Json -Depth 5)
+
+Assert 'new projection gateways do not populate named-value entitlement lists' (-not (Test-ClaudeInstallerShouldSyncNamedValues -EntitlementStore projection -NewGateway $true))
+Assert 'named-value gateways still populate named-value entitlement lists' (Test-ClaudeInstallerShouldSyncNamedValues -EntitlementStore named-value -NewGateway $true)
+
+Write-Host ''
+if ($fail) { Write-Host "$fail of $count assertion(s) failed." -ForegroundColor Red; exit 1 }
+Write-Host "$count projection installer assertion(s) passed." -ForegroundColor Green

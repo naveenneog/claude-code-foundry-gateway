@@ -77,7 +77,6 @@ function New-RefusalCase([string]$Id, [hashtable]$Extra, [string]$Expect) {
     [pscustomobject]@{ id = $Id; factors = $null; params = $p; expect = $Expect }
 }
 $refusals = @(
-    New-RefusalCase 'refuse-projection-without-deployer' @{ Sku = 'StandardV2'; EntitlementStore = 'projection' } 'unless -DeployProjection'
     New-RefusalCase 'refuse-basic-private-resolver' @{ Sku = 'BasicV2'; EntitlementStore = 'projection'; DeployProjection = $true; ResolverInboundAccess = 'private' } 'BasicV2 cannot use a private resolver'
     New-RefusalCase 'refuse-external-without-client-with-authmode' @{ Sku = 'BasicV2'; EntitlementStore = 'named-value'; AuthMode = 'device'; DesktopSignInKind = 'external-idp-browser' } '-DesktopEntraClientId'
     New-RefusalCase 'refuse-external-without-client' @{ Sku = 'BasicV2'; EntitlementStore = 'named-value'; DesktopSignInKind = 'external-idp-broker' } '-DesktopEntraClientId'
@@ -183,7 +182,7 @@ try {
             if (-not $r.reachedSummary -or -not $r.sawSummary -or $r.failure) { Add-Bad 'reaches the summary and stops at -WhatIf' $c.id $r.failure; continue }
             if (@($r.unexpected).Count) { Add-Bad 'makes only the Azure CLI reads the stub knows' $c.id (@($r.unexpected) -join '; ') }
             if ((Get-Row $r 'API Management') -notmatch ('^apim-p72perm\s+\(' + $f.tier + '\)\s+new$')) { Add-Bad 'the summary names the new gateway and its tier' $c.id (Get-Row $r 'API Management') }
-            $resolver = if ($f.tier -eq 'BasicV2') { 'public' } else { 'private' }
+            $resolver = 'public'
             $store = if ($f.store -eq 'projection') { "projection, resolver $resolver" } else { 'named-value' }
             if ((Get-Row $r 'Entitlement store') -ne $store) { Add-Bad 'the summary names the entitlement store' $c.id "want '$store', got '$(Get-Row $r 'Entitlement store')'" }
             $auth = if ($f.auth) { $f.auth } else { 'interactive' }
