@@ -219,8 +219,8 @@ the resolver's outputs, exports named-value decisions, populates from Entra, com
 projection against those decisions and leaves `entitlement-source` unchanged. On a gateway whose
 `entitlement-source` is already `projection`, the run redeploys the resolver the gateway calls, so it
 stops after the preflight and before any write, `-PreflightOnly` and `-WhatIf` included, unless the
-deployment `projection-resolver-<prefix>` serves the gateway's `entitlement-resolver-url` and the run's
-resolver app is the one in its `entitlement-resolver-audience` (`scripts/ClaudeProjectionChecks.ps1:201-221`).
+site `func-resolver-<prefix>` that the run redeploys serves the gateway's `entitlement-resolver-url` and the run's
+resolver app is the one in its `entitlement-resolver-audience` (`scripts/ClaudeProjectionChecks.ps1:201-227`).
 This one-command
 path uses the gateway resource group for its projection resources. With `-FlipAfterCleanCompare`
 the command deploys nothing: it reads the renewal receipt and runs the

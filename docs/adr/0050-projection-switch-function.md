@@ -7,7 +7,7 @@
   [ADR-0045](0045-scheduled-projection-renewal.md)
 - **Revised:** 2026-10-05 after council round 1 ([P95 status](../status/P95.md#council)): decisions
   1-3, 5 and 6 changed, 7-9 and options 5-6 added; after round 2, decisions 3, 8 and 9 changed; after
-  round 3, decisions 3, 8 and 9 and the consequences changed
+  round 3, decisions 3, 8 and 9 and the consequences changed; after round 4, decision 8 changed
 
 ## Context
 
@@ -95,9 +95,10 @@ Admission accepts any action-group id and does not bind the job's settings to it
    receipt's account, `claude`, `entitlement` and tenant. The deployer's normal run points the
    gateway at the resolver it deployed. That run redeploys the resolver site of `-NamePrefix` and its
    sign-in settings first, so on a gateway already on the projection it refuses after the preflight
-   and before any write, `-PreflightOnly` and `-WhatIf` included, unless `projection-resolver-<prefix>`
-   serves the gateway's `entitlement-resolver-url` and the run's resolver app is the one in its
-   `entitlement-resolver-audience`.
+   and before any write, `-PreflightOnly` and `-WhatIf` included, unless that site,
+   `func-resolver-<prefix>`, read live, serves the gateway's `entitlement-resolver-url` and the run's
+   resolver app is the one in its `entitlement-resolver-audience`. The site is read rather than the
+   deployment record, whose outputs a failed deployment leaves empty.
 9. Other writers of `entitlement-source`: `scripts/Restore-ClaudeGateway.ps1` does not move it to
    `projection`, and names the switch instead; `infra/main.bicep` receives the live value from the
    installer, which reads it, and the two resolver values, fail-closed on an existing gateway, and

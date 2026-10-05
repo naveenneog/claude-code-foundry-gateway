@@ -1220,6 +1220,13 @@ exact streaming cache-creation detail remains **U13**.
   and list writes the step does not make and a rollback without the refresh and compare. A resource
   group name with parentheses was asked for again in the same form. Refusals without a remedy now
   name one. Each is corrected with a test ([P95 council](docs/status/P95.md#council)).
+- **P95 council round 4.** The deployer's projection check compared the gateway's URL with the last
+  resolver deployment record, whose outputs a failed deployment leaves empty, so one failed resolver
+  redeploy blocked every rerun; it now reads the site the run redeploys. The refusal said nothing had
+  changed when the installer had already deployed the gateway, and named only the deployer's
+  `-ResolverAppId`; it now says what this run did not write and names the installer's
+  `-ProjectionResolverAppId` too. Each guided Entitlement direction names the rights its own step
+  uses ([P95 council](docs/status/P95.md#council)).
 - **P94 the renewal job could not be deployed or run as merged.** The image and the runner archive
   missed `resolver/src/entitlement.mjs`, which `sync/src/plan.mjs` imports, so the job, the runner
   apply and compare, and admission stopped with a missing module; the runner archive now holds the

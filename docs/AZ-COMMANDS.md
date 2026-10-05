@@ -1513,7 +1513,7 @@ p95_resolver_named_values() {
 p95_resolver_named_values
 ```
 
-Expected result: resolver URL and audience are the resolver deployment's outputs, while `entitlement-source` remains `named-value`; on a gateway already on the projection, a value that differs makes the function write neither value and return 1, and values that already match are not written again (return 0). A failed read also returns 1 before any write. The switch requires these two values to be the outputs of `projection-resolver-${NAME_PREFIX}` ([SECURE-PROJECTION](SECURE-PROJECTION.md#switch-to-the-projection-p95)). This mirrors `scripts/Deploy-ClaudeProjection.ps1:217-233`; the deployer also refuses such a gateway before any write unless the run redeploys the resolver it calls (`scripts/ClaudeProjectionChecks.ps1:201-221`).
+Expected result: resolver URL and audience are the resolver deployment's outputs, while `entitlement-source` remains `named-value`; on a gateway already on the projection, a value that differs makes the function write neither value and return 1, and values that already match are not written again (return 0). A failed read also returns 1 before any write. The switch requires these two values to be the outputs of `projection-resolver-${NAME_PREFIX}` ([SECURE-PROJECTION](SECURE-PROJECTION.md#switch-to-the-projection-p95)). This mirrors `scripts/Deploy-ClaudeProjection.ps1:217-233`; the deployer also refuses such a gateway before any write unless the run redeploys the resolver it calls (`scripts/ClaudeProjectionChecks.ps1:201-227`).
 
 Populate and compare the projection through an in-VNet runner container.
 
