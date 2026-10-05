@@ -516,14 +516,17 @@ test('S7 progress file reads are chunked to 64 KiB', async () => {
 });
 
 test('S7 oversized progress lines become one error and later progress still arrives', async () => {
-  const app = await start({ env: { P93_INSTALLER_UI_STUB_PROGRESS_LONG_LINE: '70000' } });
-  try {
-    const result = await stream(app, { steps: ['resource-group'] });
-    assert.equal(result.response.status, 200);
-    assert.equal(result.events.filter((event) => event.type === 'error' && /progress line exceeded/.test(event.message)).length, 1);
-    assert.ok(result.events.some((event) => event.type === 'progress' && event.event === 'completed' && event.message === 'after long progress'));
-  } finally {
-    await app.close();
+  // 70000 bytes pass the 64 KiB cap once before the newline arrives; 200000 bytes pass it again while the line is still discarded.
+  for (const length of ['70000', '200000']) {
+    const app = await start({ env: { P93_INSTALLER_UI_STUB_PROGRESS_LONG_LINE: length } });
+    try {
+      const result = await stream(app, { steps: ['resource-group'] });
+      assert.equal(result.response.status, 200);
+      assert.equal(result.events.filter((event) => event.type === 'error' && /progress line exceeded/.test(event.message)).length, 1, `one error for a ${length}-byte line`);
+      assert.ok(result.events.some((event) => event.type === 'progress' && event.event === 'completed' && event.message === 'after long progress'));
+    } finally {
+      await app.close();
+    }
   }
 });
 

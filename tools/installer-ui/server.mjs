@@ -182,8 +182,9 @@ async function runInstallerStreaming(kind, args, options, onEvent, progressPath,
     }
     if (Buffer.byteLength(progressCarry) > consoleLineCapBytes) {
       progressCarry = '';
+      // A line that is already being discarded has had its one error event.
+      if (!progressDiscarding) await enqueue({ type: 'error', message: `progress line exceeded the ${consoleLineCapBytes} byte cap` });
       progressDiscarding = true;
-      await enqueue({ type: 'error', message: `progress line exceeded the ${consoleLineCapBytes} byte cap` });
     }
   };
   const progressState = { offset: 0, decoder: progressDecoder };
