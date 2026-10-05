@@ -2,7 +2,7 @@
   "use strict";
 
   function createRunHost(deps) {
-    const { byId, csrfToken, getJson, hasBlockingProblems, onIdentityStale, postJson, readIdentityAfterRun, setErrorText, setStatusText, updateRunAdmission } = deps;
+    const { byId, csrfToken, getJson, hasBlockingProblems, onPreflightStale, postJson, readIdentityAfterRun, setErrorText, setStatusText, updateRunAdmission } = deps;
     const maxRunOutputLines = 2000;
     let activeRunId = "";
     let activeStepId = "";
@@ -173,7 +173,7 @@
           updateRunAdmission();
           const error = new Error(status.admission.error || "run refused");
           error.data = { error: error.message, reason: status.admission.reason };
-          if (["identity-changed", "preflight-required"].includes(error.data.reason) && typeof onIdentityStale === "function") onIdentityStale(error.message);
+          if (["identity-changed", "preflight-required"].includes(error.data.reason) && typeof onPreflightStale === "function") onPreflightStale(error.message);
           throw error;
         }
         if (status?.id && status.state === "running") return followRun(async () => null);
@@ -216,7 +216,7 @@
         runActive = false;
         updateRunAdmission();
         const error = await responseError(res, "run failed");
-        if (["identity-changed", "preflight-required"].includes(error.data?.reason) && typeof onIdentityStale === "function") onIdentityStale(error.message);
+        if (["identity-changed", "preflight-required"].includes(error.data?.reason) && typeof onPreflightStale === "function") onPreflightStale(error.message);
         throw error;
       }
       return followRun(() => readRunStream(res));

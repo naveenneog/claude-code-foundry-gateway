@@ -64,31 +64,45 @@ async function passPreflight(page) {
   await page.locator('#preflight-state').getByText(/Passing preflight/).waitFor();
 }
 
-test('R3-1 delayed preflight answer edits show stale state without installing the fingerprint', async () => {
+async function withDelayedPreflight(page, edit) {
+  let releasePreflight;
+  const release = new Promise((resolve) => { releasePreflight = resolve; });
+  let intercepted;
+  const interceptedRequest = new Promise((resolve) => { intercepted = resolve; });
+  await page.route('**/api/preflight', async (route) => {
+    intercepted();
+    await release;
+    const response = await route.fetch();
+    await route.fulfill({ response });
+  });
+  const preflight = page.getByRole('button', { name: 'Run preflight' }).click();
+  await interceptedRequest;
+  await edit();
+  releasePreflight();
+  await preflight;
+}
+
+test('R3-1 delayed preflight text edits show stale state without installing the fingerprint', async () => {
   const app = await start();
   const { browser, page, pageErrors } = await openPage(app);
   try {
     await page.locator('[name="SubscriptionId"]').fill('00000000-0000-4000-8000-000000000093');
-    let releasePreflight;
-    const release = new Promise((resolve) => { releasePreflight = resolve; });
-    const intercepted = new Promise((resolve) => {
-      page.route('**/api/preflight', async (route) => {
-        resolve();
-        await release;
-        const response = await route.fetch();
-        await route.fulfill({ response });
-      });
-    });
-    const preflight = page.getByRole('button', { name: 'Run preflight' }).click();
-    await intercepted;
-    await page.locator('[name="ResourceGroup"]').fill('rg-changed-during-preflight');
-    const select = page.locator('select').first();
-    if (await select.count()) {
-      const values = await select.locator('option').evaluateAll((options) => options.map((option) => option.value).filter(Boolean));
-      if (values.length) await select.selectOption(values.at(-1));
-    }
-    releasePreflight();
-    await preflight;
+    await withDelayedPreflight(page, () => page.locator('[name="ResourceGroup"]').fill('rg-changed-during-preflight'));
+    await page.locator('#preflight-state').getByText(/answers changed while the preflight ran/i).waitFor();
+    await assert.equal(await page.getByRole('button', { name: 'Run selected steps' }).isDisabled(), true);
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
+test('R3-1 delayed preflight Sku edits show stale state without installing the fingerprint', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await page.locator('[name="SubscriptionId"]').fill('00000000-0000-4000-8000-000000000093');
+    await withDelayedPreflight(page, () => page.locator('[name="Sku"]').selectOption('BasicV2'));
     await page.locator('#preflight-state').getByText(/answers changed while the preflight ran/i).waitFor();
     await assert.equal(await page.getByRole('button', { name: 'Run selected steps' }).isDisabled(), true);
     await assertClean(page, pageErrors);

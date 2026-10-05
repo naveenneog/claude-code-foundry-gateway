@@ -608,7 +608,7 @@
       getJson,
       hasBlockingProblems,
       postJson,
-      onIdentityStale: markIdentityStale,
+      onPreflightStale: markIdentityStale,
       readIdentityAfterRun: refreshIdentityAfterRun,
       setErrorText: setActionError,
       setStatusText: setActionText,

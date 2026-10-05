@@ -60,7 +60,7 @@
     "find": "          startedRevision === answerRevision ? {} : { staleReason: \"The answers changed while the preflight ran. Run preflight again.\" },\n",
     "replace": "          {},\n",
     "testFile": "tests/installer-ui-g8b.test.mjs",
-    "test": "R3-1 delayed preflight answer edits show stale state without installing the fingerprint"
+    "test": "R3-1 delayed preflight text edits show stale state without installing the fingerprint"
   },
   {
     "id": "r3-4-1",

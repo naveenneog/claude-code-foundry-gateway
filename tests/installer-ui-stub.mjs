@@ -121,7 +121,7 @@ if (args.includes('-Preflight')) {
     finish(2);
   }
   if (process.env.P93_INSTALLER_UI_STUB_BAD_PREFLIGHT_ON_SECOND) {
-    const counterPath = `${process.env.P93_INSTALLER_UI_STUB_BAD_PREFLIGHT_ON_SECOND}.count`;
+    const counterPath = process.env.P93_INSTALLER_UI_STUB_BAD_PREFLIGHT_ON_SECOND_COUNTER || `${process.env.P93_INSTALLER_UI_STUB_BAD_PREFLIGHT_ON_SECOND}.count`;
     let count = 0;
     try { count = Number(readFileSync(counterPath, 'utf8')); } catch { count = 0; }
     writeFileSync(counterPath, String(count + 1));

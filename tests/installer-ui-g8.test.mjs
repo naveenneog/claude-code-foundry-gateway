@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { mkdir, readFile, rm } from 'node:fs/promises';
+import { access, mkdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -278,36 +278,34 @@ test('R3-1 an identity-read failure clears an earlier pass for the same answers'
 });
 
 test('R3-1 malformed preflight output clears an earlier pass for the same answers', async () => {
-  const malformedApp = await start({ env: { P93_INSTALLER_UI_STUB_BAD_PREFLIGHT_ON_SECOND: 'type' } });
+  const counterPath = join(tmpdir(), `p93-r3-1-bad-preflight-${process.pid}-${Date.now()}.count`);
+  await rm(counterPath, { force: true });
+  await rm('type.count', { force: true });
+  const malformedApp = await start({ env: { P93_INSTALLER_UI_STUB_BAD_PREFLIGHT_ON_SECOND: 'type', P93_INSTALLER_UI_STUB_BAD_PREFLIGHT_ON_SECOND_COUNTER: counterPath } });
   try {
     const pass = await passingPreflight(malformedApp);
     const failed = await malformedApp.fetch('/api/preflight', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'] }) });
     assert.equal(failed.status, 502, 'malformed');
+    await assert.rejects(() => access('type.count'));
     const run = await malformedApp.fetch('/api/run/stream', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'], fingerprint: pass.fingerprint }) });
     assert.equal(run.status, 409, 'malformed');
     assert.equal((await run.json()).reason, 'preflight-required', 'malformed');
   } finally {
     await malformedApp.close();
+    await rm(counterPath, { force: true });
     await rm('type.count', { force: true });
   }
 });
 
 test('R3-1 a preflight timeout clears an earlier pass for the same answers', async () => {
-  const timeoutMarker = `p93-r3-1-timeout-${process.pid}-${Date.now()}.marker`;
-  await rm(timeoutMarker, { force: true });
-  const timeoutApp = await start({ env: { P93_INSTALLER_UI_STUB_PREFLIGHT_DELAY_MARKER: timeoutMarker, P93_INSTALLER_UI_STUB_PREFLIGHT_DELAY_MARKER_MS: '3000' }, readOnlyTimeoutMs: 1000 });
+  const timeoutCounter = join(tmpdir(), `p93-r3-1-timeout-${process.pid}-${Date.now()}.count`);
+  await rm(timeoutCounter, { force: true });
+  const timeoutApp = await start({ env: { P93_INSTALLER_UI_STUB_PREFLIGHT_HANG_ON_SECOND: timeoutCounter }, readOnlyTimeoutMs: 3000 });
   try {
-    await rm(timeoutMarker, { force: true });
-    let response = await timeoutApp.fetch('/api/preflight', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'] }) });
-    if (response.status !== 200) {
-      await response.text();
-      await rm(timeoutMarker, { force: true });
-      response = await timeoutApp.fetch('/api/preflight', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'] }) });
-    }
+    const response = await timeoutApp.fetch('/api/preflight', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'] }) });
     const pass = await response.json();
     assert.equal(response.status, 200, JSON.stringify(pass));
     assert.match(pass.fingerprint, /^[0-9a-f]{64}$/);
-    await import('node:fs/promises').then(({ writeFile }) => writeFile(timeoutMarker, 'delay', 'utf8'));
     const failed = await timeoutApp.fetch('/api/preflight', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'] }) });
     assert.equal(failed.status, 504, 'timeout');
     const run = await timeoutApp.fetch('/api/run/stream', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'], fingerprint: pass.fingerprint }) });
@@ -315,7 +313,7 @@ test('R3-1 a preflight timeout clears an earlier pass for the same answers', asy
     assert.equal((await run.json()).reason, 'preflight-required', 'timeout');
   } finally {
     await timeoutApp.close();
-    await rm(timeoutMarker, { force: true });
+    await rm(timeoutCounter, { force: true });
   }
 });
 
