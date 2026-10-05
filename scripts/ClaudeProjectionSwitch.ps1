@@ -177,7 +177,28 @@ function Invoke-ClaudeProjectionSwitch {
     $gatewayUrl = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-url' -FailOnError
     $gatewayAudience = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-audience' -FailOnError
     if (-not $resolverUrl -or $gatewayUrl -ne $resolverUrl -or $gatewayAudience -ne $resolverAudience) {
-        throw "Projection switch refused: the gateway calls entitlement-resolver-url '$gatewayUrl' with audience '$gatewayAudience', not $resolverUrl with $resolverAudience from $resolverDeployment; after the switch every request would go to the first. Remedy: set both named values to the outputs of $resolverDeployment (docs/SECURE-PROJECTION.md, section 9), or rerun scripts/Deploy-ClaudeProjection.ps1 -NamePrefix $($Renewal.namePrefix) without -FlipAfterCleanCompare, which sets them, then rerun."
+        throw "Projection switch refused: the gateway's entitlement-resolver-url is '$gatewayUrl' and its entitlement-resolver-audience is '$gatewayAudience', not $resolverUrl and $resolverAudience from $resolverDeployment; after the switch every request would use the gateway's values. Remedy: set both named values to the outputs of $resolverDeployment (docs/SECURE-PROJECTION.md, section 9), or rerun scripts/Deploy-ClaudeProjection.ps1 -NamePrefix $($Renewal.namePrefix) without -FlipAfterCleanCompare, which sets them, then rerun."
+    }
+    # The deployment record names the site; the site's live host name and settings are what the gateway
+    # reaches and what the resolver reads (COSMOS_* in infra/resolver.bicep), whatever was redeployed since.
+    $siteName = [string]$resolver.outputs.siteName.value
+    if ($siteName -notmatch '^[A-Za-z0-9][A-Za-z0-9-]{0,58}[A-Za-z0-9]$') {
+        throw "Projection switch refused: the resolver deployment $resolverDeployment names no site ('$siteName'). Remedy: redeploy the projection with scripts/Deploy-ClaudeProjection.ps1 -NamePrefix $($Renewal.namePrefix), then rerun."
+    }
+    $siteUrl = "https://management.azure.com/subscriptions/$(($gatewayId -split '/')[2])/resourceGroups/$($Renewal.resourceGroup)/providers/Microsoft.Web/sites/$siteName"
+    try {
+        $site = Invoke-ClaudeNetworkAz @('rest', '--method', 'get', '--url', "${siteUrl}?api-version=2024-04-01")
+        $siteSettings = Invoke-ClaudeNetworkAz @('rest', '--method', 'post', '--url', "$siteUrl/config/appsettings/list?api-version=2024-04-01")
+    }
+    catch { throw "Projection switch refused: could not read the resolver site $siteName and its application settings: $($_.Exception.Message) Remedy: rerun as an account that can read the site and list its settings (Microsoft.Web/sites/config/list/action)." }
+    $siteHost = [string]$site.properties.defaultHostName
+    if ("https://$siteHost/api" -ne $gatewayUrl) {
+        throw "Projection switch refused: the gateway calls $gatewayUrl, but the resolver site $siteName serves https://$siteHost/api. Remedy: set entitlement-resolver-url to the site's address, or rerun scripts/Deploy-ClaudeProjection.ps1 -NamePrefix $($Renewal.namePrefix) without -FlipAfterCleanCompare, then rerun."
+    }
+    $live = $siteSettings.properties
+    $liveCosmos = try { ([uri][string]$live.COSMOS_ENDPOINT).Host } catch { '' }
+    if ($liveCosmos -ne "$($Renewal.cosmosAccount).documents.azure.com" -or [string]$live.COSMOS_DATABASE -ne 'claude' -or [string]$live.COSMOS_CONTAINER -ne 'entitlement' -or [string]$live.PROJECTION_TENANT_ID -ne [string]$Renewal.tenantId) {
+        throw "Projection switch refused: the resolver site $siteName reads Cosmos account $liveCosmos (database '$($live.COSMOS_DATABASE)', container '$($live.COSMOS_CONTAINER)', tenant '$($live.PROJECTION_TENANT_ID)'), not $($Renewal.cosmosAccount).documents.azure.com (claude, entitlement, $($Renewal.tenantId)), which the renewal job renews. Remedy: redeploy the projection and the renewal job with one -NamePrefix, then rerun."
     }
     $token = if ($StandardGroup -notmatch '^[0-9a-fA-F-]{36}$' -or ($PremiumGroup -ne 'none' -and $PremiumGroup -notmatch '^[0-9a-fA-F-]{36}$')) { Get-GraphToken } else { $null }
     $standardId = Resolve-ClaudeProjectionTierGroupId -Group $StandardGroup -Tier standard -Token $token

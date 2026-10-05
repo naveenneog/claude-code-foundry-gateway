@@ -308,6 +308,10 @@ foreach ($case in @(
         @{ Name = 'a gateway that calls another resolver'; Fixture = 'resolver-other-url'; Expect = 'entitlement-resolver-url' }
         @{ Name = 'a resolver that reads another Cosmos account'; Fixture = 'resolver-other-cosmos'; Expect = 'reads Cosmos account cosmos-other' }
         @{ Name = 'no resolver deployment for the receipt'; Fixture = 'resolver-missing'; Expect = 'could not read the resolver deployment projection-resolver-p84fixture' }
+        @{ Name = 'a gateway that asks for another token audience'; Fixture = 'resolver-other-audience'; Expect = 'entitlement-resolver-audience' }
+        @{ Name = 'a resolver site whose live settings read another Cosmos account'; Fixture = 'resolver-live-cosmos'; Expect = 'reads Cosmos account cosmos-other.documents.azure.com' }
+        @{ Name = 'a resolver site that serves another host name'; Fixture = 'resolver-live-host'; Expect = 'func-resolver-p84fixture-a1b2.eastus2-01.azurewebsites.net' }
+        @{ Name = 'resolver settings that cannot be read'; Fixture = 'resolver-settings-error'; Expect = 'Microsoft.Web/sites/config/list/action' }
     )) {
     Reset-ProjectionFixture $case.Fixture
     Set-GoodRenewalJob

@@ -58,7 +58,7 @@ function Reset-ProjectionFixture {
         'resolver-other-url' { 'https://func-resolver-other.azurewebsites.net/api' }
         default { 'https://func-resolver-p84fixture.azurewebsites.net/api' }
     }
-    $global:FixtureResolverAudience = "api://$FixtureApp"
+    $global:FixtureResolverAudience = if ($Case -eq 'resolver-other-audience') { 'api://00000000-0000-4000-8000-0000000000dd' } else { "api://$FixtureApp" }
     $global:FixtureActionGroupId = "$FixtureRgId/providers/Microsoft.Insights/actionGroups/ag-projection-renewal"
     $global:FixtureActionGroup = [pscustomobject]@{
         id = $FixtureActionGroupId; type = 'Microsoft.Insights/ActionGroups'
@@ -113,11 +113,21 @@ function az {
             $cosmos = if ($FixtureCase -eq 'resolver-other-cosmos') { 'cosmos-other' } else { 'cosmos-p84fixture' }
             return (@{
                     parameters = @{ cosmosAccountName = @{ type = 'String'; value = $cosmos } }
-                    outputs = @{ resolverUrl = @{ type = 'String'; value = 'https://func-resolver-p84fixture.azurewebsites.net/api' }; resolverAudience = @{ type = 'String'; value = "api://$FixtureApp" } }
+                    outputs = @{ siteName = @{ type = 'String'; value = 'func-resolver-p84fixture' }; resolverUrl = @{ type = 'String'; value = 'https://func-resolver-p84fixture.azurewebsites.net/api' }; resolverAudience = @{ type = 'String'; value = "api://$FixtureApp" } }
                 } | ConvertTo-Json -Depth 5 -Compress)
         }
         $global:LASTEXITCODE = 3
         return "ERROR: (DeploymentNotFound) Deployment '$name' could not be found."
+    }
+    # The resolver site and its live application settings (Web Apps - Get; Web Apps - List Application Settings).
+    if ($line -match '^rest --method (get|post) --url https://management\.azure\.com/subscriptions/[^/]+/resourceGroups/rg-p84/providers/Microsoft\.Web/sites/func-resolver-p84fixture(/config/appsettings/list)?\?api-version=') {
+        if ($Matches[2]) {
+            if ($FixtureCase -eq 'resolver-settings-error') { $global:LASTEXITCODE = 1; return 'ERROR: (AuthorizationFailed) The client does not have authorization to perform action Microsoft.Web/sites/config/list/action.' }
+            $endpoint = if ($FixtureCase -eq 'resolver-live-cosmos') { 'https://cosmos-other.documents.azure.com:443/' } else { 'https://cosmos-p84fixture.documents.azure.com:443/' }
+            return (@{ name = 'appsettings'; properties = @{ COSMOS_ENDPOINT = $endpoint; COSMOS_DATABASE = 'claude'; COSMOS_CONTAINER = 'entitlement'; PROJECTION_TENANT_ID = $FixtureTenant; APPLICATIONINSIGHTS_CONNECTION_STRING = 'InstrumentationKey=00000000-0000-4000-8000-0000000000ee' } } | ConvertTo-Json -Depth 4 -Compress)
+        }
+        $hostName = if ($FixtureCase -eq 'resolver-live-host') { 'func-resolver-p84fixture-a1b2.eastus2-01.azurewebsites.net' } else { 'func-resolver-p84fixture.azurewebsites.net' }
+        return (@{ name = 'func-resolver-p84fixture'; properties = @{ defaultHostName = $hostName; state = 'Running' } } | ConvertTo-Json -Depth 4 -Compress)
     }
     if ($line -like 'apim nv update*' -or $line -like 'apim nv create*') {
         return ''
