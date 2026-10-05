@@ -29,7 +29,56 @@
     Invoke-RunnerCommand -ResourceGroup rg -Name aci-projtest-x -Command 'node --version'
 #>
 
-function Invoke-RunnerCommand {
+    function Assert-ClaudeRunnerAzName {
+        param([AllowEmptyString()][string]$Value)
+        if ($Value -and $Value -notmatch '^[A-Za-z0-9._-]+$') { throw "Runner command refused: '$Value' is not a name of letters, digits, '.', '_' or '-'." }
+    }
+
+    function Start-ClaudeProjectionRunner {
+        param(
+            [Parameter(Mandatory)][string]$ResourceGroup,
+            [Parameter(Mandatory)][string]$Name,
+            [string]$SubscriptionId,
+            [int]$WaitTimeoutSeconds = 600,
+            [int]$PollSeconds = 10
+        )
+        foreach ($target in @($ResourceGroup, $Name, $SubscriptionId)) { Assert-ClaudeRunnerAzName $target }
+        if ($WaitTimeoutSeconds -lt 1 -or $WaitTimeoutSeconds -gt 3600) { throw 'Runner wait timeout must be between 1 and 3600 seconds.' }
+        if ($PollSeconds -lt 1 -or $PollSeconds -gt 120) { throw 'Runner poll interval must be between 1 and 120 seconds.' }
+        $subscriptionArgs = @()
+        if ($SubscriptionId) { $subscriptionArgs = @('--subscription', $SubscriptionId) }
+        function ReadRunnerState {
+            $saved = $ErrorActionPreference
+            try {
+                $ErrorActionPreference = 'Continue'
+                $global:LASTEXITCODE = 0
+                $out = @(az container show -g $ResourceGroup -n $Name --query instanceView.state -o tsv @subscriptionArgs 2>&1)
+                $code = $LASTEXITCODE
+            } finally { $ErrorActionPreference = $saved }
+            if ($code -ne 0) { throw "Could not read runner '$Name' in '$ResourceGroup' (az exit $code). Remedy: redeploy with scripts/Deploy-ClaudeProjection.ps1 and verify the operator can read the container group." }
+            return (($out | Where-Object { $_ -isnot [Management.Automation.ErrorRecord] } | Select-Object -Last 1) -as [string]).Trim()
+        }
+        $state = ReadRunnerState
+        if ($state -eq 'Running') { return [pscustomobject]@{ ResourceGroup=$ResourceGroup; Name=$Name; State=$state } }
+        $saved = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'
+            $global:LASTEXITCODE = 0
+            $out = @(az container start -g $ResourceGroup -n $Name @subscriptionArgs 2>&1)
+            $code = $LASTEXITCODE
+        } finally { $ErrorActionPreference = $saved }
+        if ($code -ne 0) { throw "Could not start runner '$Name' (az exit $code). Remedy: redeploy with scripts/Deploy-ClaudeProjection.ps1, then rerun the sync." }
+        $waited = 0
+        while ($waited -lt $WaitTimeoutSeconds) {
+            Start-Sleep -Seconds $PollSeconds
+            $waited += $PollSeconds
+            $state = ReadRunnerState
+            if ($state -eq 'Running') { return [pscustomobject]@{ ResourceGroup=$ResourceGroup; Name=$Name; State=$state } }
+        }
+        throw "Runner '$Name' did not reach Running within $WaitTimeoutSeconds seconds (last state '$state'). Remedy: inspect 'az container show -g $ResourceGroup -n $Name', or redeploy with scripts/Deploy-ClaudeProjection.ps1."
+    }
+
+    function Invoke-RunnerCommand {
     param(
         [Parameter(Mandatory)][string]$ResourceGroup,
         [Parameter(Mandatory)][string]$Name,
@@ -42,9 +91,7 @@ function Invoke-RunnerCommand {
     if ($Command -match '["%+&|<>^\r\n]') {
         throw 'Runner command refused: it holds a quote, +, %, &, |, <, >, ^ or a line break, which the runner or cmd.exe would change.'
     }
-    foreach ($target in @($ResourceGroup, $Name, $Container, $SubscriptionId)) {
-        if ($target -and $target -notmatch '^[A-Za-z0-9._-]+$') { throw "Runner command refused: '$target' is not a name of letters, digits, '.', '_' or '-'." }
-    }
+    foreach ($target in @($ResourceGroup, $Name, $Container, $SubscriptionId)) { Assert-ClaudeRunnerAzName $target }
     $arguments = @('container','exec','-g',$ResourceGroup,'-n',$Name,'--container-name',$Container,'--exec-command',$Command)
     if ($SubscriptionId) { $arguments += @('--subscription',$SubscriptionId) }
     $saved = $ErrorActionPreference

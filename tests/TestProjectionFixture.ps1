@@ -167,6 +167,7 @@ function az {
         return (@{ appId = $FixtureApp } | ConvertTo-Json -Compress)
     }
     if ($line -like 'ad app update*') { return '{}' }
+    if ($line -like 'ad sp create*') { return (@{ appId = $FixtureApp } | ConvertTo-Json -Compress) }
     if ($line -like 'provider list*') {
         $providers = foreach ($name in @('Microsoft.App','Microsoft.DocumentDB','Microsoft.Web','Microsoft.ContainerInstance','Microsoft.Network','Microsoft.Storage','Microsoft.OperationalInsights','Microsoft.Insights','Microsoft.Authorization')) {
             @{ namespace = $name; registrationState = $(if ($FixtureCase -eq "provider:$name") { 'NotRegistered' } else { 'Registered' }) }
@@ -190,7 +191,7 @@ function az {
     if ($line -like 'resource list*') {
         if ($FixtureCase -eq 'owned-names') {
             return (@(
-                @{ id = $FixtureCosmosId; type = 'Microsoft.DocumentDB/databaseAccounts'; name = 'cosmos-p84fixture' }
+                @{ id = $FixtureCosmosId; type = 'Microsoft.DocumentDB/databaseAccounts'; name = 'cosmos-p84fixture'; location = 'eastus2' }
                 @{ id = "$FixtureRgId/providers/Microsoft.Storage/storageAccounts/stres52p2c4jfs43ig"; type = 'Microsoft.Storage/storageAccounts'; name = 'stres52p2c4jfs43ig' }
                 @{ id = "$FixtureRgId/providers/Microsoft.Web/sites/func-resolver-p84fixture"; type = 'Microsoft.Web/sites'; name = 'func-resolver-p84fixture' }
             ) | ConvertTo-Json -Compress)
