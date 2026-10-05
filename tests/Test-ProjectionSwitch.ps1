@@ -627,6 +627,35 @@ Assert "the installer's entitlement reads on an existing gateway fail closed" ($
 Reset-ProjectionFixture 'nv-read-error'
 Capture { Get-ApimNamedValue -ResourceGroup rg-p84 -ApimName apim-p84 -Id 'entitlement-source' -FailOnError }
 Assert 'a named-value read that fails throws instead of reading as absent' ($Failure -match "Could not read named value 'entitlement-source'") $Failure
+# Council round 3 (Architect): whether the gateway exists decides whether the installer reads its live values back.
+# Only Azure's not-found answer reads as a new gateway; any other failed read stops, because the template would
+# otherwise write its defaults (named-value, the placeholder resolver) over a gateway on the projection. The az
+# here is a native process, so stderr crosses the same boundary as the real az.cmd.
+$probeOutcomes = @(foreach ($case in @(
+            @{ Name = 'an existing gateway'; Native = "process.stdout.write('$FixtureGatewayId\n')"; Expect = "id:$FixtureGatewayId" }
+            @{ Name = 'a gateway Azure reports missing'; Native = "process.stderr.write('ERROR: (ResourceNotFound) The Resource Microsoft.ApiManagement/service/apim-p84 under resource group rg-p84 was not found.\n');process.exit(3)"; Expect = 'none' }
+            @{ Name = 'a resource group Azure reports missing'; Native = "process.stderr.write('ERROR: (ResourceGroupNotFound) Resource group rg-p84 could not be found.\n');process.exit(3)"; Expect = 'none' }
+            @{ Name = 'a read without authorization'; Native = "process.stderr.write('ERROR: (AuthorizationFailed) The client does not have authorization to perform action Microsoft.ApiManagement/service/read.\n');process.exit(1)"; Expect = 'throw' }
+            @{ Name = 'a read that times out'; Native = "process.stderr.write('ERROR: The operation timed out.\n');process.exit(1)"; Expect = 'throw' }
+            @{ Name = 'a read that returns no id'; Native = 'process.exit(0)'; Expect = 'throw' }
+        )) {
+        $outcome = & {
+            . (Join-Path $root 'scripts\ApimNamedValue.ps1')
+            $nativeScript = $case.Native
+            function az { & node --eval $nativeScript }
+            try { $probeId = Get-ApimServiceId -ResourceGroup rg-p84 -ApimName apim-p84; if ($probeId) { "id:$probeId" } else { 'none' } }
+            catch { "throw:$($_.Exception.Message)" }
+        }
+        $ok = if ($case.Expect -eq 'throw') { $outcome -match "^throw:Could not tell whether API Management 'apim-p84' exists in 'rg-p84'" } else { $outcome -ceq $case.Expect }
+        if (-not $ok) { "$($case.Name): $outcome" }
+    })
+Assert "the installer's gateway probe reads absence only from Azure's not-found answer and stops on any other failed read" (-not $probeOutcomes.Count) ($probeOutcomes -join ' || ')
+$probeAt = $installerText.IndexOf('$liveApimId = Get-ApimServiceId -ResourceGroup $ResourceGroup -ApimName $apimName')
+$readsAt = $installerText.IndexOf('if ($ExistingApim -or $liveApimId) {')
+$networkAt = $installerText.IndexOf('$liveId = $liveApimId')
+$deployAt = $installerText.IndexOf('az deployment group create')
+Assert 'the installer decides both read-backs, entitlement and network, from that probe before the template deploys' ($probeAt -ge 0 -and $probeAt -lt $readsAt -and $readsAt -lt $networkAt -and
+    $networkAt -lt $deployAt -and $installerText -notmatch 'Invoke-AzOptional \{ az apim show -g \$ResourceGroup -n \$apimName') "probe $probeAt, reads $readsAt, network $networkAt, deploy $deployAt"
 # Restore-ClaudeGateway.ps1 puts back every named value it changed; entitlement-source=projection waits for the switch.
 $restoreScript = Join-Path $root 'scripts\Restore-ClaudeGateway.ps1'
 foreach ($case in @(

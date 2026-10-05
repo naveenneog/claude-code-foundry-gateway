@@ -1414,7 +1414,13 @@ $buMem = ''
 $buPar = ''
 $usdBudgets = ''
 $usdBudgetState = ''
-if ($ExistingApim -or (Invoke-AzOptional { az apim show -g $ResourceGroup -n $apimName --query name -o tsv })) {
+# Whether the gateway already exists decides whether its live values are read back before the template
+# deploys, here and for its network settings below. Only Azure's not-found answer means a new gateway; any
+# other failed read stops the run, because the template would otherwise write its defaults over an existing
+# gateway's entitlement source, lists, business units and network settings (P95 council round 3).
+. (Join-Path $root 'scripts/ApimNamedValue.ps1')
+$liveApimId = Get-ApimServiceId -ResourceGroup $ResourceGroup -ApimName $apimName
+if ($ExistingApim -or $liveApimId) {
     . (Join-Path $PSScriptRoot 'scripts\ClaudeUsdBudgets.ps1')
     $usdSavedValues = Get-ClaudeUsdNamedValues -ResourceGroup $ResourceGroup -ApimName $apimName
     $usdBudgets = $usdSavedValues['usd-budgets']
@@ -1438,7 +1444,6 @@ if ($ExistingApim -or (Invoke-AzOptional { az apim show -g $ResourceGroup -n $ap
     # lists stopped being maintained the moment they migrated. The developer
     # population would shrink to whatever was last written to them, with no
     # error anywhere. Same failure mode as the business unit registry above, so these three reads stop the run.
-    . (Join-Path $root 'scripts/ApimNamedValue.ps1')
     $entSrc = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $apimName -Id 'entitlement-source' -FailOnError
     $entUrl = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $apimName -Id 'entitlement-resolver-url' -FailOnError
     $entAud = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $apimName -Id 'entitlement-resolver-audience' -FailOnError
@@ -1482,7 +1487,7 @@ $deployName = "claude-gw-$(Get-Date -Format 'yyyyMMddHHmmss')"
 # fields, and passed as a parameter file because customProperties is an object
 # and an inline JSON argument does not survive the az.cmd shim.
 $preserveArgs = @()
-$liveId = Invoke-AzOptional { az apim show -g $ResourceGroup -n $apimName --query id -o tsv }
+$liveId = $liveApimId
 if ($liveId) {
     $armToken = az account get-access-token --resource https://management.azure.com --query accessToken -o tsv 2>$null
     $live = $null

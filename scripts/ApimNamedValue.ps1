@@ -122,6 +122,42 @@ function Get-ApimNamedValue {
     return $v
 }
 
+function Get-ApimServiceId {
+    <#
+    .SYNOPSIS
+        Reads an API Management instance's resource id, returning $null only when Azure reports it missing.
+
+    .DESCRIPTION
+        For a caller that treats absence as a new gateway, as Install-ClaudeGateway.ps1 does before it
+        deploys the template's defaults. A failed read that returned $null would let such a caller write
+        those defaults over an existing gateway's entitlement source, lists and network settings, so only
+        Azure's ResourceNotFound or ResourceGroupNotFound answer returns $null (the rule
+        scripts/flow/Discovery.ps1 applies to the same read), and any other failure throws.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$ResourceGroup,
+        [Parameter(Mandatory = $true)][string]$ApimName
+    )
+    $previousPreference = $ErrorActionPreference
+    try {
+        # PS 5.1 turns native stderr into ErrorRecords; collect them before reading the exit code.
+        $ErrorActionPreference = 'Continue'
+        $global:LASTEXITCODE = 0
+        $output = @(az apim show -g $ResourceGroup -n $ApimName --query id -o tsv --only-show-errors 2>&1)
+        $code = $LASTEXITCODE
+    }
+    finally { $ErrorActionPreference = $previousPreference }
+    $cannotTell = "Could not tell whether API Management '$ApimName' exists in '$ResourceGroup'"
+    if ($code -eq 0) {
+        $ids = @($output | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] } | ForEach-Object { "$_".Trim() } | Where-Object { $_ })
+        if ($ids.Count -eq 1 -and $ids[0] -match '^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\.ApiManagement/service/[^/]+$') { return $ids[0] }
+        throw "$cannotTell`: az apim show returned no resource id. Nothing was deployed. Check the Azure CLI sign-in and read access to the gateway, then rerun."
+    }
+    if (($output | Out-String) -match '\((ResourceNotFound|ResourceGroupNotFound)\)') { return $null }
+    throw "$cannotTell (az exit $code). A redeploy that took it for a new gateway would write the template's defaults over its entitlement source, lists and network settings, so nothing was deployed. Check the Azure CLI sign-in, read access to the gateway and connectivity, then rerun."
+}
+
 function Set-ApimNamedValue {
     <#
     .SYNOPSIS
