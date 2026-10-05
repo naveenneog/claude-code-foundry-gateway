@@ -174,7 +174,9 @@ own first event (`tools/installer-ui/installer-ui-run.js:151-181`).
 Read-only child routes use per-route timeouts: step list 60 seconds, identity 120 seconds, prefill
 120 seconds and preflight 600 seconds, with the test override `readOnlyTimeoutMs`
 (`tools/installer-ui/server.mjs:246`). Idle shutdown is armed only when no tracked read-only job or
-run is active (`tools/installer-ui/server.mjs:261-285`).
+run is active, and authenticated requests count as in flight before their body is read so admission
+cannot be closed by the idle timer (`tools/installer-ui/server.mjs:261-285`;
+`tools/installer-ui/server.mjs:414-425`; `tools/installer-ui/server.mjs:612-615`).
 Read-only output is decoded with UTF-8 decoders and capped at 1 MiB across stdout and stderr by
 default. Progress file reads use 64 KiB chunks, and a progress line over 64 KiB becomes one stream
 error while later valid progress lines still arrive (`tools/installer-ui/child-output.mjs:3-60`;

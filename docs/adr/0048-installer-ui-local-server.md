@@ -68,6 +68,9 @@ offset, serialized console line handling, a 4 MiB console-output cap, a 64 KiB c
 backpressure-aware NDJSON writes. Slow or disconnected clients do not hold back the run record or
 child completion (`tools/installer-ui/run-transport.mjs:5-91`; `tools/installer-ui/server.mjs:37-38`;
 `tools/installer-ui/server.mjs:124-213`; `tools/installer-ui/run-record.mjs:51-75`; `tools/installer-ui/run-record.mjs:77-126`).
+Authenticated requests count as in flight before their JSON body is read, so idle shutdown cannot
+close the server while a run request is still being admitted
+(`tools/installer-ui/server.mjs:414-425`; `tools/installer-ui/server.mjs:612-615`).
 
 Versioned adapters validate `-ListSteps -Json`, `-Preflight -Json` and progress NDJSON before the UI
 uses them. They require `schemaVersion: 1`, required fields, allowed step states, allowed preflight

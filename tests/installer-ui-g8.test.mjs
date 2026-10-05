@@ -22,7 +22,7 @@ async function start(extra = {}) {
     token: 'g8-token-with-at-least-32-bytes-0000',
     csrfToken: 'g8-csrf-token-with-at-least-32-bytes',
     stubInstaller: extra.stubInstaller || stubInstaller,
-    idleMs: 60_000,
+    idleMs: extra.idleMs || 60_000,
     env: extra.env || {},
     readIdentity: extra.readIdentity ?? (async () => identityOne),
     readOnlyTimeoutMs: extra.readOnlyTimeoutMs,
@@ -36,6 +36,9 @@ async function start(extra = {}) {
   return {
     server,
     scratch,
+    base,
+    cookie,
+    csrfToken,
     async fetch(path, options = {}) {
       const headers = { cookie, ...(options.headers || {}) };
       if (options.method === 'POST') headers['x-csrf-token'] ??= csrfToken;
@@ -80,6 +83,41 @@ test('R3-3 preflight adapter requires the producer check set and recomputes resu
   assert.throws(() => validatePreflight(payload([{ ...allPass[0], result: 'NOT-RUN', reason: undefined }, ...allPass.slice(1)]), { expectedCheckIds }), /NOT-RUN check .* reason/);
   assert.throws(() => validatePreflight(payload([{ ...allPass[0], result: 'NOT-RUN', reason: 'new-reason' }, ...allPass.slice(1)]), { expectedCheckIds }), /unsupported reason/);
   assert.throws(() => validatePreflight(payload([{ ...allPass[0], reason: 'not-signed-in' }, ...allPass.slice(1)]), { expectedCheckIds }), /PASS check .* reason/);
+});
+
+test('R3-5 idle shutdown waits for an authenticated run request body being admitted', async () => {
+  const app = await start({ idleMs: 200 });
+  try {
+    const { request: httpRequest } = await import('node:http');
+    let req;
+    const responsePromise = new Promise((resolve, reject) => {
+      const url = new URL(`${app.base}/api/run/stream`);
+      req = httpRequest(url, {
+        method: 'POST',
+        headers: {
+          cookie: app.cookie,
+          'x-csrf-token': app.csrfToken,
+          'content-type': 'application/json',
+          'transfer-encoding': 'chunked',
+        },
+      }, (res) => {
+        let text = '';
+        res.on('data', (chunk) => { text += chunk.toString('utf8'); });
+        res.on('end', () => resolve({ status: res.statusCode, text }));
+      });
+      req.on('error', reject);
+      req.flushHeaders();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    const session = await fetch(`${app.base}/api/session`, { headers: { cookie: app.cookie } });
+    assert.equal(session.status, 200, 'server is still listening while it awaits the request body');
+    req.end(JSON.stringify({ answers: passingAnswers, steps: ['resource-group'], fingerprint: '0'.repeat(64) }));
+    const response = await responsePromise;
+    assert.equal(response.status, 409, response.text);
+    await once(app.server, 'installer-ui-stopped');
+  } finally {
+    await app.close().catch(() => {});
+  }
 });
 
 test('R3-3 progress adapter rejects empty step ids on per-step events only', () => {

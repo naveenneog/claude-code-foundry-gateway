@@ -108,7 +108,8 @@ exact streaming cache-creation detail remains **U13**.
   passing identity snapshot, and the page drops stale fingerprints when answers change during a
   preflight, when re-preflight fails or when a run is refused as preflight-required. Shutdown now
   closes the Azure lease before cleanup, refusing queued Azure reads before they can start another
-  child.
+  child. Authenticated requests now keep idle shutdown disarmed while a run request body is still
+  being admitted.
 - **Installers read an answers file, check it before any change, run selected steps and write a progress stream (P92, phase 0).**
   One answers file, described by `schemas/claude-gateway.answers.schema.json`, feeds
   `Install-ClaudeGateway.ps1 -AnswersPath`, `install-claude-gateway.sh --answers-file` and

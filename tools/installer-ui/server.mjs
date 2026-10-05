@@ -386,6 +386,7 @@ export async function createInstallerUiServer(options = {}) {
   };
 
   const server = createHttpServer(async (req, res) => {
+    let requestCounted = false;
     try {
       if (!isAllowedHost(req.headers.host, port, extraHosts)) {
         log(`Refused Host: host=${req.headers.host || ''}; x-forwarded-host=${req.headers['x-forwarded-host'] || ''}; x-forwarded-proto=${req.headers['x-forwarded-proto'] || ''}; x-forwarded-prefix=${req.headers['x-forwarded-prefix'] || ''}`);
@@ -413,6 +414,9 @@ export async function createInstallerUiServer(options = {}) {
         return;
       }
       if (!sessionAuth.accepts(cookieToken)) return send(res, 401, { error: 'installer token is required' });
+      requestCounted = true;
+      inFlight++;
+      if (idleTimer) clearTimeout(idleTimer);
       const setCookie = {};
       if (req.method === 'GET' && url.pathname === '/api/session') return send(res, 200, { schemaVersion: 1, csrfToken, mode: liveMode.ok ? 'live' : 'static', reason: liveMode.reason || undefined }, setCookie);
       if (req.method === 'POST') {
@@ -607,6 +611,7 @@ export async function createInstallerUiServer(options = {}) {
       }
       return send(res, error.status, error.field ? { schemaVersion: 1, field: error.field, error: error.message, remedy: error.remedy } : { error: error.message, reason: error.reason, operation: error.operation, detail: error.detail, exitCode: error.exitCode });
     } finally {
+      if (requestCounted) inFlight--;
       if (!activeRun?.state || activeRun.state !== 'running') armIdle();
     }
   });
