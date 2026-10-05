@@ -515,7 +515,6 @@
 
   function validateEffectiveAddressDefaults(schema, answers) {
     if (!isPlainObject(answers)) return [];
-    const effective = Object.fromEntries(withEffectiveAddressDefaults(answers));
     const out = [];
     if (answers.AddressMode === "custom" && !answers.AddressCertificateSource && !answers.AddressKeyVaultCertificateId) {
       out.push(problem("address.inputs", "AddressKeyVaultCertificateId", "AddressKeyVaultCertificateId is required because the installer uses Key Vault when no certificate source is given", "Give the Key Vault certificate URL, or choose Pfx and give the PFX path."));

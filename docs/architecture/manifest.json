@@ -611,7 +611,7 @@
         "tools/installer-ui/server.mjs": "86d37db2c9ad7fb1303703ddb3bbb898119d93379d38e7570bc74d5ee3c78fc5",
         "tools/installer-ui/session-auth.mjs": "8772b05264d7baed857672c6934c9f149e16470288b9fb2e90e4159f31aac7c9",
         "tools/installer-ui/step-scope.mjs": "2e06c641c5d9292232d75bc38b877da0e883dc238785eb354e09e95790b0e7fd",
-        "tools/installer-ui/ui-model.js": "abe430c06a79b353ca5ebe5a22a081f7e37aab62b553029ead57b1ab9673f387"
+        "tools/installer-ui/ui-model.js": "6445171b2dab81127a5ec9cac0063f3e1a9f3d450b416850cfc5da036eec7864"
       },
       "outputs": [
         {
