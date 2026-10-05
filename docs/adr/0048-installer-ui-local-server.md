@@ -120,7 +120,7 @@ The server never spawns `az`. Azure reads go through repository PowerShell seams
 goes through `Install-ClaudeGateway.ps1`. The direct child allowlist is PowerShell, `process.execPath`
 for the test stub and `taskkill.exe` for Windows tree stop. Prefill validates the read kind and text
 parameters before PowerShell starts (`tools/installer-ui/server.mjs:52-57`; `tools/installer-ui/server.mjs:59-69`;
-`tools/installer-ui/server.mjs:75-88`; `tools/installer-ui/server.mjs:96-104`; `tools/installer-ui/server.mjs:441-446`;
+`tools/installer-ui/server.mjs:75-88`; `tools/installer-ui/server.mjs:96-103`; `tools/installer-ui/server.mjs:441-446`;
 `tools/installer-ui/server-model.mjs:62-75`; `tests/installer-ui-structure.test.mjs:67-93`). The prefill seam refuses parentheses when `az` resolves to a Windows
 `.cmd` or `.bat` shim (`scripts/Get-ClaudeInstallerUiPrefill.ps1:28-32`;
 `tests/installer-ui.test.mjs:380-385`).
