@@ -107,6 +107,9 @@ if ($FlipAfterCleanCompare) {
 $preflight = Invoke-ClaudeProjectionPreflight -ResourceGroup $ResourceGroup -ApimName $ApimName -NamePrefix $NamePrefix `
     -SubscriptionId $SubscriptionId -Location $Location -Sku $Sku -ResolverInboundAccess $ResolverInboundAccess `
     -ResolverAppId $ResolverAppId -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup
+# Before any write, and for -PreflightOnly and -WhatIf too: on a gateway that serves from the projection, this run
+# continues only when it redeploys the resolver the gateway calls, with the app its tokens are for.
+Assert-ClaudeProjectionResolverRedeploy -ResourceGroup $ResourceGroup -ApimName $ApimName -NamePrefix $NamePrefix -ResolverAppId ([string]$preflight.ResolverAppId)
 if ($PreflightOnly) { return }
 if ($WhatIfPreference) {
     Note 'WhatIf: app registration if needed; private Cosmos/network; resolver publish; gateway resolver named values; fresh snapshot/apply/compare. No Azure writes or projection switch.'
@@ -219,7 +222,7 @@ $liveSource = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimNa
 $pointed = (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-url' -FailOnError) -eq $resolverUrl -and
     (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-audience' -FailOnError) -eq $resolverAudience
 if ($liveSource -eq 'projection' -and -not $pointed) {
-    throw "Refusing to point the gateway at $resolverUrl`: entitlement-source is projection, so every request would go to this resolver before its Cosmos account is populated and renewed. Remedy: return the gateway to named values first (refresh the lists with scripts/Sync-ClaudeAccess.ps1, check them with scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift, then set entitlement-source to named-value), then rerun."
+    throw "Refusing to point the gateway at $resolverUrl and $resolverAudience`: entitlement-source is projection, so every request would move to them at once, without the switch's checks. Remedy: return the gateway to named values first (refresh the lists with scripts/Sync-ClaudeAccess.ps1, check them with scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift, then set entitlement-source to named-value), then rerun."
 }
 if ($PSCmdlet.ShouldProcess($ApimName, 'set entitlement-resolver-url and entitlement-resolver-audience to the deployed resolver')) {
     if (-not $pointed) {

@@ -127,7 +127,7 @@ function Assert-ClaudeProjectionActionGroup {
     # U119: ARM reports each receiver's status; receivers that are not Enabled receive nothing, and a
     # disabled group sends to none of its receivers.
     param([Parameter(Mandatory)]$ActionGroup, [Parameter(Mandatory)][string]$ActionGroupResourceId)
-    $redeploy = 'Remedy: confirm the alert address from the Azure Monitor email, or redeploy the renewal job with scripts/Deploy-ClaudeProjectionRenewal.ps1 -AlertEmail, then rerun.'
+    $redeploy = 'Remedy: confirm the alert address from the Azure Monitor email, or redeploy the renewal job with scripts/Deploy-ClaudeProjectionRenewal.ps1 -AlertEmail <address>, then rerun.'
     if (-not $ActionGroup.properties -or $ActionGroup.properties.enabled -ne $true) {
         throw "Projection switch refused: the renewal alerts' action group $ActionGroupResourceId is disabled, so no receiver gets an alert. Remedy: enable it under Monitor > Action groups, then rerun."
     }
@@ -182,17 +182,42 @@ function Assert-ClaudeProjectionJobBinding {
 
 function Get-ClaudeProjectionArmUrl {
     # The management token goes with this request: the id must be an ARM resource id whose URL stays on
-    # management.azure.com ('@', '#', '?', '%' or '\' would move or cut it).
-    param([Parameter(Mandatory)][AllowEmptyString()][string]$ResourceId, [Parameter(Mandatory)][string]$ApiVersion)
+    # management.azure.com ('@', '#', '?', '%' or '\' would move or cut it). A sub-path, such as
+    # config/appsettings/list, is letters in segments under that resource.
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$ResourceId, [Parameter(Mandatory)][string]$ApiVersion,
+        [ValidatePattern('^[A-Za-z]+(/[A-Za-z]+)*$')][string]$SubPath)
     if ($ResourceId -notmatch '^/subscriptions/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/resourceGroups/[A-Za-z0-9._-]{1,90}/providers/[A-Za-z0-9.]{1,64}(/[A-Za-z0-9._-]{1,260}){2}$') {
         throw "Projection switch refused: '$ResourceId' is not an Azure resource id, so the management token is not sent for it. Remedy: use the ids from the renewal receipt that scripts/Deploy-ClaudeProjectionRenewal.ps1 wrote."
     }
-    $url = "https://management.azure.com${ResourceId}?api-version=$ApiVersion"
+    $path = if ($SubPath) { "$ResourceId/$SubPath" } else { $ResourceId }
+    $url = "https://management.azure.com${path}?api-version=$ApiVersion"
     $uri = [uri]$url
-    if ($uri.Host -ne 'management.azure.com' -or $uri.UserInfo -or $uri.AbsolutePath -ne $ResourceId) {
-        throw "Projection switch refused: '$ResourceId' does not stay on management.azure.com, so the management token is not sent for it."
+    if ($uri.Host -ne 'management.azure.com' -or $uri.UserInfo -or $uri.AbsolutePath -ne $path) {
+        throw "Projection switch refused: '$path' does not stay on management.azure.com, so the management token is not sent for it."
     }
     return $url
+}
+
+function Assert-ClaudeProjectionResolverRedeploy {
+    # A gateway that serves from the projection sends every request to entitlement-resolver-url with a token
+    # for entitlement-resolver-audience. The deployer's normal run redeploys the resolver site of -NamePrefix
+    # and its sign-in settings (infra/resolver.bicep) before it points the gateway anywhere, so on such a
+    # gateway it continues only when that site is the one the gateway calls and the run keeps the app the
+    # gateway's tokens are for. Read-only, and run before the deployer's first write (P95 council round 3).
+    param([Parameter(Mandatory)][string]$ResourceGroup, [Parameter(Mandatory)][string]$ApimName,
+        [Parameter(Mandatory)][string]$NamePrefix, [AllowEmptyString()][string]$ResolverAppId)
+    if ((Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-source' -FailOnError) -ne 'projection') { return }
+    $gatewayUrl = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-url' -FailOnError
+    $gatewayAudience = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-audience' -FailOnError
+    $deployment = "projection-resolver-$NamePrefix"
+    $deployedUrl = ''
+    $readProblem = ''
+    try { $deployedUrl = [string](Invoke-ClaudeNetworkAz @('deployment', 'group', 'show', '-g', $ResourceGroup, '-n', $deployment, '--query', 'properties')).outputs.resolverUrl.value }
+    catch { $readProblem = " The deployment $deployment could not be read: $($_.Exception.Message)" }
+    if ($ResolverAppId -and "api://$ResolverAppId" -eq $gatewayAudience -and $deployedUrl -and $deployedUrl -eq $gatewayUrl) { return }
+    $runApp = if ($ResolverAppId) { "the app $ResolverAppId (api://$ResolverAppId)" } else { 'a new app registration' }
+    $runSite = if ($deployedUrl) { $deployedUrl } else { 'a site the gateway does not call' }
+    throw "Refusing to redeploy the resolver for -NamePrefix ${NamePrefix}: entitlement-source is projection, so every request goes to $gatewayUrl with a token for $gatewayAudience, and this run would redeploy $deployment ($runSite) to accept $runApp.$readProblem Nothing was changed. Remedy: rerun with the -NamePrefix of the resolver at $gatewayUrl and -ResolverAppId $($gatewayAudience -replace '^api://', ''), or return the gateway to named values first (refresh the lists with scripts/Sync-ClaudeAccess.ps1, check them with scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift, then set entitlement-source to named-value)."
 }
 
 function Assert-ClaudeProjectionAdmission {
@@ -221,7 +246,7 @@ function Assert-ClaudeProjectionAdmission {
     $groupUrl = Get-ClaudeProjectionArmUrl -ResourceId $ActionGroupResourceId -ApiVersion '2023-01-01'
     $jobUrl = Get-ClaudeProjectionArmUrl -ResourceId $ReconcilerResourceId -ApiVersion '2024-03-01'
     $token = Invoke-ClaudeNetworkAz @('account','get-access-token','--resource','https://management.azure.com')
-    if (-not $token.accessToken) { throw 'Projection switch refused: could not get a management-plane token to read the renewal job definition.' }
+    if (-not $token.accessToken) { throw 'Projection switch refused: could not get a management-plane token to read the renewal job definition. Remedy: sign in with az login to the tenant of the gateway, then rerun.' }
     $headers = @{ Authorization = "Bearer $($token.accessToken)" }
     try { $group = Invoke-RestMethod -Method Get -Headers $headers -Uri $groupUrl -ErrorAction Stop }
     catch { throw "Projection switch refused: could not read the renewal alerts' action group ${ActionGroupResourceId}: $($_.Exception.Message) Remedy: check the receipt's action group id and the signed-in account's read access, then rerun." }

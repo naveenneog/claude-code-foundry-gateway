@@ -71,6 +71,14 @@ Set-GoodRenewalJob
 Capture { Invoke-Admission }
 Assert 'a renewal job that cannot be read refuses with the job id and the remedy, before the runner' ($Failure -match '^Projection switch refused: could not read the renewal job' -and
     $Failure -match [regex]::Escape($FixtureJobId) -and $Failure -match 'Remedy: .*Deploy-ClaudeProjectionRenewal\.ps1' -and (($FixtureCalls -join "`n") -notmatch 'container exec')) $Failure
+# Council round 3 (UX): every admission refusal names a remedy, and the renewal deployer's alert parameter with its value.
+Reset-ProjectionFixture 'token-empty'
+Set-GoodRenewalJob
+Capture { Invoke-Admission }
+Assert 'admission without a management token refuses with the sign-in as the remedy, before the runner' ($Failure -match '^Projection switch refused: could not get a management-plane token' -and
+    $Failure -match 'Remedy: .*az login' -and (($FixtureCalls -join "`n") -notmatch 'container exec')) $Failure
+Capture { Assert-ClaudeProjectionActionGroup -ActionGroup (& $groupOf $true @()) -ActionGroupResourceId $FixtureActionGroupId }
+Assert 'the alert remedy names the renewal deployer''s -AlertEmail with its value' ($Failure -match 'Deploy-ClaudeProjectionRenewal\.ps1 -AlertEmail <address>') $Failure
 
 Write-Host ''
 Write-Host 'Projection switch - admission binds the evidence to the job settings' -ForegroundColor Cyan
@@ -300,6 +308,17 @@ $callerRefusals = @(foreach ($case in @(@{ ResourceGroup = 'rg-p84&whoami' }, @{
         if (-not ($Failure -match '^Projection switch refused' -and $FixtureCalls.Count -eq 0)) { "$(@($case.Values)[0]) (calls $($FixtureCalls.Count): $Failure)" }
     })
 Assert "the switch's own resource group and gateway name are checked before any call" (-not $callerRefusals.Count) ($callerRefusals -join ' || ')
+# Council round 3 (UX): Azure allows parentheses in resource group names, which the switch does not pass to az.cmd;
+# its refusal states that limitation instead of asking for the portal's spelling, which would be refused again.
+Reset-ProjectionFixture
+Capture { Invoke-Switch @{ ResourceGroup = 'rg-claude(prod)' } }
+$groupRefusal = $Failure
+Reset-ProjectionFixture
+Capture { Invoke-Switch @{ ApimName = 'apim_p84' } }
+$nameRefusal = $Failure
+Assert 'a resource group the switch cannot pass to az.cmd is refused as a stated limitation, and a gateway name as not an API Management name' (
+    $groupRefusal -match "^Projection switch refused: resource group 'rg-claude\(prod\)' holds " -and $groupRefusal -match 'ADR-0050' -and $groupRefusal -match 'Remedy: ' -and
+    $groupRefusal -notmatch 'as the Azure portal shows' -and $nameRefusal -match "^Projection switch refused: 'apim_p84' is not an API Management name" -and $nameRefusal -match 'Remedy: ') "$groupRefusal || $nameRefusal"
 
 Write-Host ''
 Write-Host 'Projection switch - the gateway calls the resolver that reads the renewed Cosmos account (council round 1)' -ForegroundColor Cyan
@@ -312,6 +331,9 @@ foreach ($case in @(
         @{ Name = 'a resolver site whose live settings read another Cosmos account'; Fixture = 'resolver-live-cosmos'; Expect = 'reads Cosmos account cosmos-other.documents.azure.com' }
         @{ Name = 'a resolver site that serves another host name'; Fixture = 'resolver-live-host'; Expect = 'func-resolver-p84fixture-a1b2.eastus2-01.azurewebsites.net' }
         @{ Name = 'resolver settings that cannot be read'; Fixture = 'resolver-settings-error'; Expect = 'Microsoft.Web/sites/config/list/action' }
+        @{ Name = 'a resolver site whose live settings read another database'; Fixture = 'resolver-live-database'; Expect = "database 'claude-old'" }
+        @{ Name = 'a resolver site whose live settings read another container'; Fixture = 'resolver-live-container'; Expect = "container 'entitlement-old'" }
+        @{ Name = 'a resolver site whose live settings accept another tenant'; Fixture = 'resolver-live-tenant'; Expect = "tenant '00000000-0000-4000-8000-0000000000ff'" }
     )) {
     Reset-ProjectionFixture $case.Fixture
     Set-GoodRenewalJob
@@ -320,6 +342,18 @@ foreach ($case in @(
     Assert "the switch refuses $($case.Name), before the drift check" ($Failure -match '^Projection switch refused' -and $Failure -match [regex]::Escape($case.Expect) -and $Failure -match 'Remedy' -and
         (Get-CallAt '^compare-stub') -lt 0 -and (Get-Writes).Count -eq 0 -and (Get-Backups).Count -eq 0) "$Failure | compare at $(Get-CallAt '^compare-stub')"
 }
+# Council round 3 (Security note): the management token goes only to URLs that Get-ClaudeProjectionArmUrl builds
+# and checks; a sub-path stays under the resource it names.
+$siteId = "$FixtureRgId/providers/Microsoft.Web/sites/func-resolver-p84fixture"
+Capture { Get-ClaudeProjectionArmUrl -ResourceId $siteId -ApiVersion '2024-04-01' -SubPath 'config/appsettings/list' }
+$settingsUrl = $Result
+$looseSubPaths = @(foreach ($subPath in '../../providers/x', 'config/appsettings/list?x=1', '@attacker.example', 'config//list', '/config') {
+        Capture { Get-ClaudeProjectionArmUrl -ResourceId $siteId -ApiVersion '2024-04-01' -SubPath $subPath }
+        if (-not $Failure) { $subPath }
+    })
+Assert 'the switch builds every management URL through Get-ClaudeProjectionArmUrl, whose sub-path stays under the resource' (
+    (Get-Content -LiteralPath $switchModule -Raw) -notmatch 'https://management\.azure\.com' -and
+    $settingsUrl -ceq "https://management.azure.com$siteId/config/appsettings/list?api-version=2024-04-01" -and -not $looseSubPaths.Count) "url '$settingsUrl'; accepted: $($looseSubPaths -join ', ')"
 
 # The real scripts/Compare-ClaudeEntitlement.ps1 against chosen gateway lists. The fixture directory has
 # one standard member and no group named 'none'. 'clean' lists hold that member; 'drift' lists do not.
@@ -400,7 +434,7 @@ Assert 'a tier group that Microsoft Graph does not find refuses before the drift
 Reset-ProjectionFixture 'apim-empty'
 Set-GoodRenewalJob
 Capture { Invoke-Switch }
-Assert 'a gateway read that returns no id refuses before anything else is read' ($Failure -match '^Projection switch refused: API Management apim-p84 in rg-p84 could not be read' -and $FixtureCalls.Count -eq 1) "$Failure | calls $($FixtureCalls.Count)"
+Assert 'a gateway read that returns no id refuses before anything else is read' ($Failure -match '^Projection switch refused: API Management apim-p84 in rg-p84 could not be read' -and $Failure -match 'Remedy: ' -and $FixtureCalls.Count -eq 1) "$Failure | calls $($FixtureCalls.Count)"
 # Council round 1: the deployer's normal run points the gateway at the resolver it deployed, which the
 # switch then requires (entitlement-source stays named-value, so the gateway does not call it yet).
 $deploySource = Get-Content -LiteralPath $deployer -Raw
@@ -430,12 +464,13 @@ $stepText = $stepText.Replace("`$PSCmdlet.ShouldProcess(`$ApimName, 'set entitle
 $pointRefusals = @(foreach ($case in @(
             @{ Name = 'a projection gateway is not pointed at another resolver'; Fixture = 'source-projection'; Url = 'https://func-resolver-other.azurewebsites.net/api'; Expect = 'Refusing'; Writes = 0 }
             @{ Name = 'a projection gateway already on this resolver is left as it is'; Fixture = 'source-projection'; Url = 'https://func-resolver-p84fixture.azurewebsites.net/api'; Expect = ''; Writes = 0 }
+            @{ Name = 'a projection gateway on this resolver URL is not given another audience'; Fixture = 'source-projection'; Url = 'https://func-resolver-p84fixture.azurewebsites.net/api'; Audience = 'api://00000000-0000-4000-8000-0000000000dd'; Expect = 'Refusing'; Writes = 0 }
             @{ Name = 'a named-value gateway is pointed at the new resolver'; Fixture = 'healthy'; Url = 'https://func-resolver-other.azurewebsites.net/api'; Expect = ''; Writes = 2 }
         )) {
         Reset-ProjectionFixture $case.Fixture
         $stepOutcome = & {
             function Step { }
-            $ResourceGroup = 'rg-p84'; $ApimName = 'apim-p84'; $resolverUrl = $case.Url; $resolverAudience = "api://$FixtureApp"
+            $ResourceGroup = 'rg-p84'; $ApimName = 'apim-p84'; $resolverUrl = $case.Url; $resolverAudience = $(if ($case.Audience) { $case.Audience } else { "api://$FixtureApp" })
             try { & ([scriptblock]::Create($stepText)) | Out-Null; '' } catch { $_.Exception.Message }
         }
         $writes = @($FixtureCalls | Where-Object { $_ -match '^az apim nv update' }).Count
@@ -443,6 +478,25 @@ $pointRefusals = @(foreach ($case in @(
         if (-not $ok) { "$($case.Name): writes $writes, outcome '$stepOutcome'" }
     })
 Assert "the deployer's resolver step never redirects a gateway that serves from the projection" ($stepText -and -not $pointRefusals.Count) ($pointRefusals -join ' || ')
+# Council round 3 (Coder): the deployer redeploys the resolver site of -NamePrefix and its sign-in settings before the
+# point step. On a gateway that serves from the projection it refuses before any write, -WhatIf included, unless that
+# site is the one the gateway calls and the run keeps the app in the gateway's audience.
+$earlyRefusals = @(foreach ($case in @(
+            @{ Name = 'no -ResolverAppId and no app by name, so the run would create one'; Fixture = 'source-projection'; Params = @{}; Refuse = $true }
+            @{ Name = 'another resolver audience on the gateway'; Fixture = 'source-projection-other-audience'; Params = @{ ResolverAppId = $FixtureApp }; Refuse = $true }
+            @{ Name = 'another resolver URL on the gateway'; Fixture = 'source-projection-other-url'; Params = @{ ResolverAppId = $FixtureApp }; Refuse = $true }
+            @{ Name = 'a preview with another resolver audience on the gateway'; Fixture = 'source-projection-other-audience'; Params = @{ ResolverAppId = $FixtureApp; WhatIf = $true }; Refuse = $true }
+            @{ Name = 'a preview of the resolver the gateway calls, with its app'; Fixture = 'source-projection'; Params = @{ ResolverAppId = $FixtureApp; WhatIf = $true }; Refuse = $false }
+        )) {
+        Reset-ProjectionFixture $case.Fixture
+        $deployParams = @{ ResourceGroup = 'rg-p84'; ApimName = 'apim-p84'; NamePrefix = 'p84fixture'; SubscriptionId = $FixtureSubscription; Sku = 'BasicV2'; ResolverInboundAccess = 'public' }
+        foreach ($key in $case.Params.Keys) { $deployParams[$key] = $case.Params[$key] }
+        Capture { & $deployer @deployParams }
+        $earlyWrites = @($FixtureCalls | Where-Object { $_ -match '^az (ad app (create|update)|deployment group create|apim nv (create|update)|functionapp|.*role assignment create)' })
+        $ok = if ($case.Refuse) { $Failure -match '^Refusing to redeploy the resolver' -and $Failure -match 'Remedy: ' -and -not $earlyWrites.Count } else { -not $Failure -and -not $earlyWrites.Count }
+        if (-not $ok) { "$($case.Name): '$Failure' | writes $($earlyWrites -join '; ')" }
+    })
+Assert 'on a gateway that serves from the projection, the deployer refuses before any write unless it redeploys the resolver the gateway calls, with its app' (-not $earlyRefusals.Count) ($earlyRefusals -join ' || ')
 Reset-ProjectionFixture
 Capture { @(1..2 | ForEach-Object { Save-ClaudeProjectionSwitchBackup -ResourceGroup rg-p84 -ApimName apim-p84 -GatewayResourceId $FixtureGatewayId -Directory $backupDir }) }
 Assert 'two backups in the same second are two files; neither overwrites the other' (-not $Failure -and @($Result | Select-Object -Unique).Count -eq 2 -and @($Result | Where-Object { Test-Path -LiteralPath $_ }).Count -eq 2) "$Failure"

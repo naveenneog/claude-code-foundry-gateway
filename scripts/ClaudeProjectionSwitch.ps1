@@ -141,8 +141,11 @@ function Invoke-ClaudeProjectionSwitch {
         [scriptblock]$Backup,
         [string]$CompareScript = (Join-Path $PSScriptRoot 'Compare-ClaudeEntitlement.ps1')
     )
-    if ($ResourceGroup -notmatch '^[A-Za-z0-9._-]{1,90}$' -or $ApimName -notmatch '^[A-Za-z][A-Za-z0-9-]{0,49}$') {
-        throw "Projection switch refused: resource group '$ResourceGroup' or gateway name '$ApimName' holds characters other than letters, digits, '.', '_' or '-', which az.cmd hands to cmd.exe. Remedy: pass the names as the Azure portal shows them."
+    if ($ApimName -notmatch '^[A-Za-z][A-Za-z0-9-]{0,49}$') {
+        throw "Projection switch refused: '$ApimName' is not an API Management name, which holds 1-50 letters, digits and hyphens and starts with a letter. Remedy: pass the gateway name as the Azure portal shows it."
+    }
+    if ($ResourceGroup -notmatch '^[A-Za-z0-9._-]{1,90}$') {
+        throw "Projection switch refused: resource group '$ResourceGroup' holds characters other than letters, digits, '.', '_' or '-'. Azure allows some of them, such as parentheses, but az.cmd hands them to cmd.exe, so this switch does not pass them (ADR-0050). Remedy: switch a gateway in a resource group named with those characters only; Azure moves an API Management instance between resource groups, except on the Consumption tier (https://learn.microsoft.com/azure/azure-resource-manager/management/move-support-resources)."
     }
     Assert-ClaudeProjectionRenewalEvidence -Renewal $Renewal
     # -WhatIf previews the backup and the write only: the reads, the runner compare and admission run,
@@ -154,7 +157,7 @@ function Invoke-ClaudeProjectionSwitch {
     $ConfirmPreference = 'None'
     $apim = Invoke-ClaudeNetworkAz @('apim', 'show', '-g', $ResourceGroup, '-n', $ApimName)
     $gatewayId = [string]$apim.id
-    if (-not $gatewayId) { throw "Projection switch refused: API Management $ApimName in $ResourceGroup could not be read." }
+    if (-not $gatewayId) { throw "Projection switch refused: API Management $ApimName in $ResourceGroup could not be read. Remedy: check the names, the Azure CLI sign-in (az account show) and read access to the gateway, then rerun." }
     if ([string]$Renewal.gatewayResourceId -ne $gatewayId) {
         throw "Projection switch refused: the renewal receipt is for gateway $($Renewal.gatewayResourceId), not $gatewayId. Remedy: pass the receipt written for this gateway's renewal job."
     }
@@ -185,10 +188,12 @@ function Invoke-ClaudeProjectionSwitch {
     if ($siteName -notmatch '^[A-Za-z0-9][A-Za-z0-9-]{0,58}[A-Za-z0-9]$') {
         throw "Projection switch refused: the resolver deployment $resolverDeployment names no site ('$siteName'). Remedy: redeploy the projection with scripts/Deploy-ClaudeProjection.ps1 -NamePrefix $($Renewal.namePrefix), then rerun."
     }
-    $siteUrl = "https://management.azure.com/subscriptions/$(($gatewayId -split '/')[2])/resourceGroups/$($Renewal.resourceGroup)/providers/Microsoft.Web/sites/$siteName"
+    $siteId = "/subscriptions/$(($gatewayId -split '/')[2])/resourceGroups/$($Renewal.resourceGroup)/providers/Microsoft.Web/sites/$siteName"
+    $siteUrl = Get-ClaudeProjectionArmUrl -ResourceId $siteId -ApiVersion '2024-04-01'
+    $settingsUrl = Get-ClaudeProjectionArmUrl -ResourceId $siteId -ApiVersion '2024-04-01' -SubPath 'config/appsettings/list'
     try {
-        $site = Invoke-ClaudeNetworkAz @('rest', '--method', 'get', '--url', "${siteUrl}?api-version=2024-04-01")
-        $siteSettings = Invoke-ClaudeNetworkAz @('rest', '--method', 'post', '--url', "$siteUrl/config/appsettings/list?api-version=2024-04-01")
+        $site = Invoke-ClaudeNetworkAz @('rest', '--method', 'get', '--url', $siteUrl)
+        $siteSettings = Invoke-ClaudeNetworkAz @('rest', '--method', 'post', '--url', $settingsUrl)
     }
     catch { throw "Projection switch refused: could not read the resolver site $siteName and its application settings: $($_.Exception.Message) Remedy: rerun as an account that can read the site and list its settings (Microsoft.Web/sites/config/list/action)." }
     $siteHost = [string]$site.properties.defaultHostName

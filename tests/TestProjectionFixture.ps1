@@ -56,9 +56,10 @@ function Reset-ProjectionFixture {
     $global:FixtureResolverUrl = switch ($Case) {
         'resolver-placeholder' { 'https://resolver-not-deployed.invalid' }
         'resolver-other-url' { 'https://func-resolver-other.azurewebsites.net/api' }
+        'source-projection-other-url' { 'https://func-resolver-other.azurewebsites.net/api' }
         default { 'https://func-resolver-p84fixture.azurewebsites.net/api' }
     }
-    $global:FixtureResolverAudience = if ($Case -eq 'resolver-other-audience') { 'api://00000000-0000-4000-8000-0000000000dd' } else { "api://$FixtureApp" }
+    $global:FixtureResolverAudience = if ($Case -in 'resolver-other-audience', 'source-projection-other-audience') { 'api://00000000-0000-4000-8000-0000000000dd' } else { "api://$FixtureApp" }
     $global:FixtureActionGroupId = "$FixtureRgId/providers/Microsoft.Insights/actionGroups/ag-projection-renewal"
     $global:FixtureActionGroup = [pscustomobject]@{
         id = $FixtureActionGroupId; type = 'Microsoft.Insights/ActionGroups'
@@ -105,7 +106,7 @@ function az {
             return (@{ name = $id; value = $resolverValues[$id]; secret = $false } | ConvertTo-Json -Compress)
         }
         if ($line -match '--query name') { return 'entitlement-source' }
-        if ($FixtureCase -eq 'source-projection' -and $id -eq 'entitlement-source' -and $line -match '--query value') { return 'projection' }
+        if ($FixtureCase -like 'source-projection*' -and $id -eq 'entitlement-source' -and $line -match '--query value') { return 'projection' }
         if ($line -match '--query value') { return 'named-value' }
         return (@{ name='entitlement-source'; value='named-value'; secret=$false } | ConvertTo-Json -Compress)
     }
@@ -126,7 +127,10 @@ function az {
         if ($Matches[2]) {
             if ($FixtureCase -eq 'resolver-settings-error') { $global:LASTEXITCODE = 1; return 'ERROR: (AuthorizationFailed) The client does not have authorization to perform action Microsoft.Web/sites/config/list/action.' }
             $endpoint = if ($FixtureCase -eq 'resolver-live-cosmos') { 'https://cosmos-other.documents.azure.com:443/' } else { 'https://cosmos-p84fixture.documents.azure.com:443/' }
-            return (@{ name = 'appsettings'; properties = @{ COSMOS_ENDPOINT = $endpoint; COSMOS_DATABASE = 'claude'; COSMOS_CONTAINER = 'entitlement'; PROJECTION_TENANT_ID = $FixtureTenant; APPLICATIONINSIGHTS_CONNECTION_STRING = 'InstrumentationKey=00000000-0000-4000-8000-0000000000ee' } } | ConvertTo-Json -Depth 4 -Compress)
+            $database = if ($FixtureCase -eq 'resolver-live-database') { 'claude-old' } else { 'claude' }
+            $container = if ($FixtureCase -eq 'resolver-live-container') { 'entitlement-old' } else { 'entitlement' }
+            $tenant = if ($FixtureCase -eq 'resolver-live-tenant') { '00000000-0000-4000-8000-0000000000ff' } else { $FixtureTenant }
+            return (@{ name = 'appsettings'; properties = @{ COSMOS_ENDPOINT = $endpoint; COSMOS_DATABASE = $database; COSMOS_CONTAINER = $container; PROJECTION_TENANT_ID = $tenant; APPLICATIONINSIGHTS_CONNECTION_STRING = 'InstrumentationKey=00000000-0000-4000-8000-0000000000ee' } } | ConvertTo-Json -Depth 4 -Compress)
         }
         $hostName = if ($FixtureCase -eq 'resolver-live-host') { 'func-resolver-p84fixture-a1b2.eastus2-01.azurewebsites.net' } else { 'func-resolver-p84fixture.azurewebsites.net' }
         return (@{ name = 'func-resolver-p84fixture'; properties = @{ defaultHostName = $hostName; state = 'Running' } } | ConvertTo-Json -Depth 4 -Compress)
