@@ -194,7 +194,11 @@ test('S3 queued preflights do not overlap', async () => {
     ]);
     assert.equal(one.status, 200);
     assert.equal(two.status, 200);
-    const calls = app.stubCalls().filter((call) => call.mode === 'powershell' && call.args.includes('-Preflight'));
+    const endTimes = new Map(readFileSync(`${app.log}.times`, 'utf8').trim().split(/\r?\n/).filter(Boolean).map((line) => {
+      const entry = JSON.parse(line);
+      return [entry.pid, entry.endedAt];
+    }));
+    const calls = app.stubCalls().filter((call) => call.mode === 'powershell' && call.args.includes('-Preflight')).map((call) => ({ ...call, endedAt: endTimes.get(call.pid) }));
     assert.equal(calls.length, 2);
     assert.ok(calls[0].endedAt <= calls[1].startedAt, JSON.stringify(calls));
   } finally {
@@ -482,6 +486,7 @@ test('S7 read-only output over the cap kills a child that keeps writing', async 
     const response = await app.fetch('/api/preflight', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers }) });
     assert.equal(response.status, 502);
     assert.match((await response.json()).error, /preflight output exceeded the 4096 byte cap/);
+    assert.equal(app.stubCalls().filter((call) => call.args.includes('-Preflight')).length, 1);
     const pid = Number(await readFile(pidFile, 'utf8'));
     for (let i = 0; i < 20 && alive(pid); i++) await sleep(50);
     assert.equal(alive(pid), false, `pid ${pid} should be gone`);

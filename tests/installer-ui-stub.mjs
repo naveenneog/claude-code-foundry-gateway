@@ -3,11 +3,11 @@ import { spawn } from 'node:child_process';
 
 const [, , mode, ...args] = process.argv;
 const log = process.env.P93_INSTALLER_UI_STUB_LOG;
-const callRecord = { mode, args };
+const callRecord = { pid: process.pid, mode, args };
 if (process.env.P93_INSTALLER_UI_STUB_TIMES) callRecord.startedAt = Date.now();
-if (log && !process.env.P93_INSTALLER_UI_STUB_TIMES) appendFileSync(log, JSON.stringify(callRecord) + '\n');
+if (log) appendFileSync(log, JSON.stringify(callRecord) + '\n');
 const finish = (code) => {
-  if (log && process.env.P93_INSTALLER_UI_STUB_TIMES) appendFileSync(log, JSON.stringify({ ...callRecord, endedAt: Date.now() }) + '\n');
+  if (log && process.env.P93_INSTALLER_UI_STUB_TIMES) appendFileSync(`${log}.times`, JSON.stringify({ pid: process.pid, endedAt: Date.now() }) + '\n');
   process.exit(code);
 };
 
