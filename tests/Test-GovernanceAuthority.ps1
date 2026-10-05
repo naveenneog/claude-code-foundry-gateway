@@ -277,6 +277,19 @@ Reset-Gateway $local
 $gateway.Values['bu-registry'] = $legacyRegistry
 $m = Invoke-Set 'Set-ClaudeBusinessUnit' @{ Id = 'sales'; Parent = 'Legacy-Unit' }
 Assert 'a unit the registry holds with capitals can still be a parent' (-not $m -and $gateway.Values['bu-parents'] -ceq ',sales=Legacy-Unit,') "$m | parents $($gateway.Values['bu-parents'])"
+# Council round 1 (Architect): the same identifier in another case is not the stored unit. Changing, removing or
+# naming it as a parent through that spelling is refused before any write, rather than acting on 'Legacy-Unit'.
+foreach ($case in @(
+        @{ Name = 'a change of group'; P = @{ Id = 'legacy-unit'; Group = 'Legacy Renamed' } }
+        @{ Name = 'a removal'; P = @{ Id = 'legacy-unit'; Remove = $true } }
+        @{ Name = 'a parent'; P = @{ Id = 'sales'; Parent = 'legacy-unit' } }
+    )) {
+    Reset-Gateway $local
+    $gateway.Values['bu-registry'] = $legacyRegistry
+    $m = Invoke-Set 'Set-ClaudeBusinessUnit' $case.P
+    Assert "the lower-case spelling of a unit stored with capitals is refused for $($case.Name), before any write" ($m -match 'differs only in case' -and $m.Contains("'Legacy-Unit'") -and
+        $gateway.Writes.Count -eq 0) "$m | writes $($gateway.Writes -join ',') | registry $($gateway.Values['bu-registry'])"
+}
 
 function Invoke-Bridge([hashtable]$Request) {
     $file = Join-Path ([IO.Path]::GetTempPath()) ('p96-bridge-' + [guid]::NewGuid().ToString('N') + '.json')
@@ -302,6 +315,14 @@ Assert 'the AUM catalog keeps a unit the registry holds with capitals' (-not $m 
 Reset-Gateway $local
 $m = Invoke-Bridge @{ action = 'catalog'; body = @{ organizations = @((New-BridgeUnit 'sales' 'Sales'), (New-BridgeUnit 'platform' 'Platform'), (New-BridgeUnit 'NewUnit' 'New Unit')); departments = @() } }
 Assert 'the AUM catalog refuses a new identifier with a capital before any write' ($m -match "'NewUnit' is not a valid business unit identifier" -and $gateway.Writes.Count -eq 0) "$m | writes $($gateway.Writes -join ',')"
+Reset-Gateway $local
+$gateway.Values['bu-registry'] = $legacyRegistry
+$m = Invoke-Bridge @{ action = 'budget'; parameters = @{ scope_type = 'organization'; scope_id = 'legacy-unit' }; body = @{ token_limit = 4000 } }
+Assert 'the AUM bridge refuses the lower-case spelling of a unit stored with capitals before any write' ($m -match 'differs only in case' -and $gateway.Writes.Count -eq 0) "$m | writes $($gateway.Writes -join ',')"
+Reset-Gateway $local
+$gateway.Values['bu-registry'] = $legacyRegistry
+$m = Invoke-Bridge @{ action = 'catalog'; body = @{ organizations = @((New-BridgeUnit 'sales' 'Sales'), (New-BridgeUnit 'legacy-unit' 'Legacy')); departments = @() } }
+Assert 'the AUM catalog does not rename a unit stored with capitals to another spelling' ($m -match 'differs only in case' -and $gateway.Writes.Count -eq 0) "$m | writes $($gateway.Writes -join ',') | registry $($gateway.Values['bu-registry'])"
 
 # personBudgets mirrors daily tier ceilings TO Turnstile. Neither apply path
 # writes quota-overrides, and neither edits Entra membership.

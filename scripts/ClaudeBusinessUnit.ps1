@@ -100,7 +100,9 @@ function Test-ClaudeBuId {
         A new identifier is lower-case, because the dollar budget uses it as its scope and accepts only
         lower-case (ClaudeUsdBudgets.ps1). Before P96 this check ignored case, so a registry can hold an
         identifier with capitals. An identifier that -Registry lists with the same spelling, or one read
-        from the registry (-Stored), keeps only the map rule.
+        from the registry (-Stored), keeps only the map rule. An identifier that matches a registry entry
+        only when case is ignored is refused, because the callers compare identifiers without case and
+        would change, rename or remove the stored unit through it.
     #>
     [CmdletBinding()]
     param(
@@ -119,6 +121,13 @@ function Test-ClaudeBuId {
         throw ("'$Id' is not a valid business unit identifier. Use lower-case letters, digits and " +
                "hyphens, starting with a letter or digit - for example 'finance-emea'. " +
                "It becomes a counter key and a map key, so it cannot contain a space, comma, equals or colon.")
+    }
+    if (-not $known) {
+        $spelling = @(@($Registry) | Where-Object { $_ -eq $Id })
+        if ($spelling.Count) {
+            throw ("Business unit '$Id' differs only in case from '$($spelling[0])' in the registry. " +
+                   "Use '$($spelling[0])' to change that unit, or another identifier for a new unit.")
+        }
     }
 }
 

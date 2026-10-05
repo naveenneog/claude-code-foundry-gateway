@@ -88,6 +88,9 @@ if (Test-Path $helper) {
         $respelt = ''
         try { Test-ClaudeBuId 'Sales' -Registry @('sales', 'platform') } catch { $respelt = $_.Exception.Message }
         Assert "'Sales' is refused when the registry holds 'sales', rather than taken as that unit" ($respelt -match 'lower-case letters') $respelt
+        $inverse = ''
+        try { Test-ClaudeBuId 'legacy-unit' -Registry @('finance', 'Legacy-Unit') } catch { $inverse = $_.Exception.Message }
+        Assert "'legacy-unit' is refused when the registry holds 'Legacy-Unit', naming the stored spelling" ($inverse -match 'differs only in case' -and $inverse.Contains("'Legacy-Unit'")) $inverse
         $legacy = 'not run'
         try { Test-ClaudeBuId 'Legacy-Unit' -Registry @('finance', 'Legacy-Unit'); $legacy = '' } catch { $legacy = $_.Exception.Message }
         Assert 'an identifier the registry holds with capitals stays usable' (-not $legacy) $legacy
