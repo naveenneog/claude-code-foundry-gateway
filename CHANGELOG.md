@@ -100,7 +100,9 @@ exact streaming cache-creation detail remains **U13**.
   treats invalid business-unit JSON as a blocking draft, accepts decimal business-unit budgets, marks
   preflights stale when identity changes, enforces preflight step scope on run buttons, applies custom
   address defaults for validation, scopes deployment choices to the current account and focuses nested
-  problem paths on their exact controls.
+  problem paths on their exact controls. A run request that fails before the server answers no longer
+  leaves the run controls disabled: the page reattaches to a run that started, or reports that none is
+  active.
 - **Installers read an answers file, check it before any change, run selected steps and write a progress stream (P92, phase 0).**
   One answers file, described by `schemas/claude-gateway.answers.schema.json`, feeds
   `Install-ClaudeGateway.ps1 -AnswersPath`, `install-claude-gateway.sh --answers-file` and
