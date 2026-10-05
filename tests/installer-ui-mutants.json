@@ -81,6 +81,15 @@
     "test": "R3-4 shutdown closes the Azure lease before queued reads can spawn children"
   },
   {
+    "id": "r3-4-3",
+    "why": "The child spawn guard must refuse a run that already holds the lease when shutdown starts before the installer child is spawned.",
+    "file": "tools/installer-ui/server.mjs",
+    "find": "  if (options._stopping?.()) {\n    const error = new Error('Installer UI is stopping.');\n    error.status = 503;\n    error.reason = 'installer-ui-stopping';\n    throw error;\n  }\n",
+    "replace": "",
+    "testFile": "tests/installer-ui-g8.test.mjs",
+    "test": "R3-4 shutdown spawn guard refuses work that held the run lease before spawn"
+  },
+  {
     "id": "r3-5-1",
     "why": "Authenticated requests must count as in flight before their body has been read so idle shutdown cannot close the server during admission.",
     "file": "tools/installer-ui/server.mjs",

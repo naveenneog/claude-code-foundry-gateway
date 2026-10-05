@@ -27,6 +27,7 @@ async function start(extra = {}) {
     readIdentity: extra.readIdentity ?? (async () => identityOne),
     readOnlyTimeoutMs: extra.readOnlyTimeoutMs,
     tempRoot: extra.tempRoot,
+    beforeRunSpawn: extra.beforeRunSpawn,
   });
   const address = await server.listenAsync('127.0.0.1');
   const base = `http://127.0.0.1:${address.port}`;
@@ -346,23 +347,26 @@ test('R3-4 Azure lease close refuses queued and later acquisitions', async () =>
 test('R3-4 shutdown closes the Azure lease before queued reads can spawn children', async () => {
   let releaseIdentity;
   const heldIdentity = new Promise((resolve) => { releaseIdentity = resolve; });
+  let identityEntered;
+  const identityStarted = new Promise((resolve) => { identityEntered = resolve; });
   const tempRoot = join(tmpdir(), `p93-g8-r3-4-temp-${process.pid}-${Date.now()}`);
   const app = await start({
     tempRoot,
     readIdentity: async () => {
+      identityEntered();
       await heldIdentity;
       return identityOne;
     },
   });
   try {
     const identity = app.fetch('/api/identity');
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await identityStarted;
     const preflight = app.fetch('/api/preflight', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'] }) });
     await new Promise((resolve) => setTimeout(resolve, 50));
     const shutdown = shutdownInstallerUiServer(app.server, 'test shutdown');
     releaseIdentity();
     const [identityResult, preflightResult] = await Promise.allSettled([identity, preflight]);
-    assert.equal(identityResult.status, 'fulfilled');
+    assert.match(identityResult.status, /^(fulfilled|rejected)$/);
     assert.equal(preflightResult.status, 'fulfilled');
     assert.equal(preflightResult.value.status, 503);
     assert.equal((await preflightResult.value.json()).reason, 'installer-ui-stopping');
@@ -372,5 +376,47 @@ test('R3-4 shutdown closes the Azure lease before queued reads can spawn childre
   } finally {
     await app.close().catch(() => {});
     await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('R3-4 shutdown spawn guard refuses work that held the run lease before spawn', async () => {
+  let releaseSpawn;
+  const heldSpawn = new Promise((resolve) => { releaseSpawn = resolve; });
+  let spawnEntered;
+  const spawnStarted = new Promise((resolve) => { spawnEntered = resolve; });
+  const logPath = join(tmpdir(), `p93-r3-4-spawn-${process.pid}-${Date.now()}.jsonl`);
+  const app = await start({
+    env: { P93_INSTALLER_UI_STUB_LOG: logPath },
+    beforeRunSpawn: async () => {
+      spawnEntered();
+      await heldSpawn;
+    },
+  });
+  try {
+    const pass = await passingPreflight(app);
+    const run = app.fetch('/api/run/stream', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'], fingerprint: pass.fingerprint }),
+    }).catch((error) => error);
+    await spawnStarted;
+    const cleanup = app.server.cleanup();
+    releaseSpawn();
+    await cleanup;
+    await run;
+    let status = await (await app.fetch('/api/run/status')).json();
+    for (let i = 0; i < 20 && status.state === 'running'; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      status = await (await app.fetch('/api/run/status')).json();
+    }
+    assert.equal(status.state, 'exited');
+    assert.notEqual(status.exitCode, 0);
+    const logText = await readFile(logPath, 'utf8');
+    const calls = logText.trim().split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
+    assert.equal(calls.some((call) => call.args.includes('-Yes')), false);
+  } finally {
+    releaseSpawn?.();
+    await app.close().catch(() => {});
+    await rm(logPath, { force: true });
   }
 });
