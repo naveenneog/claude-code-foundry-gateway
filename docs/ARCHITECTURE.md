@@ -78,7 +78,7 @@ CSRF, same-origin and JSON-body helpers (`tools/installer-ui/http-helpers.mjs:13
 against `scripts/ClaudeGatewayAddressInput.ps1`; the static page serves the same `index.html` bytes
 as the live server (`tools/installer-ui/installer-ui-render.js:7-115`;
 `tools/installer-ui/ui-model.js:155-161`;
-`scripts/ClaudeGatewayAddressInput.ps1:27-28`; `tools/installer-ui/server.mjs:414`;
+`scripts/ClaudeGatewayAddressInput.ps1:27-28`; `tools/installer-ui/server.mjs:337-344`;
 `tools/installer-ui/server-model.mjs:77-91`; `tests/installer-ui-structure.test.mjs:28-29`).
 
 The first page load consumes the URL token and `tools/installer-ui/session-auth.mjs` issues a
@@ -989,3 +989,4 @@ Review behavior against the implementation whenever a feature changes a componen
 flow, identity, schedule or network path. PNGs are repeatable with the same locked
 Playwright/browser and installed fonts; cross-platform font rasterization can differ
 without changing the architecture.
+
