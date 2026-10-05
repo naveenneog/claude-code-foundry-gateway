@@ -182,10 +182,6 @@
         refreshIdentityAfterRun();
         return result;
       } catch (error) {
-        if (error.data?.reason === "run-replaced") {
-          clearForReplacedRun();
-          throw replacedRunError();
-        }
         if (!error.data?.runSummary) {
           try {
             const recovered = await reconcileBrokenStream();
