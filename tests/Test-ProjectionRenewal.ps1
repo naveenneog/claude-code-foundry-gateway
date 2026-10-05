@@ -399,39 +399,18 @@ try {
     Remove-Item Function:\Invoke-RestMethod -ErrorAction SilentlyContinue
 
     Write-Host ''
-    Write-Host 'Projection renewal - admission refuses a job without these settings' -ForegroundColor Cyan
-    . (Join-Path $root 'scripts\ClaudeProjectionChecks.ps1')
-    $digest = 'sha256:' + ('c' * 64)
-    function New-JobDefinition([hashtable]$Settings) {
-        $jobContainer = @{
-            name = 'projection-renewal'; image = "acr.example.invalid/claude-projection-sync@$digest"; command = @(); args = @()
-            env = @($Settings.GetEnumerator() | Sort-Object Key | ForEach-Object { @{ name = $_.Key; value = $_.Value } })
-        }
-        return (@{ properties = @{ template = @{ containers = @($jobContainer) } } } | ConvertTo-Json -Depth 10 | ConvertFrom-Json)
-    }
-    $goodSettings = @{
-        AZURE_CLIENT_ID = '40000000-0000-4000-8000-000000000001'
-        PROJECTION_STANDARD_GROUP_ID = '10000000-0000-4000-8000-000000000001'
-        PROJECTION_PREMIUM_GROUP_ID = 'none'
-        PROJECTION_GATEWAY_RESOURCE_ID = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-p94/providers/Microsoft.ApiManagement/service/apim-p94'
-    }
-    $verdict = try { Assert-ClaudeProjectionJobDefinition -Job (New-JobDefinition $goodSettings) -ImageDigest $digest } catch { $_.Exception.Message }
-    Assert 'a job with its client id, tier groups and gateway is accepted' ($verdict -eq $true) "$verdict"
-    foreach ($case in @(
-            @{ Name = 'no client id'; Change = @{ AZURE_CLIENT_ID = $null }; Names = 'AZURE_CLIENT_ID' }
-            @{ Name = 'no standard group'; Change = @{ PROJECTION_STANDARD_GROUP_ID = $null }; Names = 'PROJECTION_STANDARD_GROUP_ID' }
-            @{ Name = 'a standard group name instead of an id'; Change = @{ PROJECTION_STANDARD_GROUP_ID = 'claude-code-standard' }; Names = 'PROJECTION_STANDARD_GROUP_ID' }
-            @{ Name = 'no premium setting'; Change = @{ PROJECTION_PREMIUM_GROUP_ID = $null }; Names = 'PROJECTION_PREMIUM_GROUP_ID' }
-            @{ Name = 'an empty premium setting'; Change = @{ PROJECTION_PREMIUM_GROUP_ID = '' }; Names = 'PROJECTION_PREMIUM_GROUP_ID' }
-            @{ Name = 'no gateway'; Change = @{ PROJECTION_GATEWAY_RESOURCE_ID = $null }; Names = 'PROJECTION_GATEWAY_RESOURCE_ID' }
-            @{ Name = 'a gateway that is not API Management'; Change = @{ PROJECTION_GATEWAY_RESOURCE_ID = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-p94/providers/Microsoft.Storage/storageAccounts/stp94' }; Names = 'PROJECTION_GATEWAY_RESOURCE_ID' }
-            @{ Name = 'one group for both tiers'; Change = @{ PROJECTION_PREMIUM_GROUP_ID = '10000000-0000-4000-8000-000000000001' }; Names = 'PROJECTION_PREMIUM_GROUP_ID' }
-        )) {
-        $settings = $goodSettings.Clone()
-        foreach ($key in $case.Change.Keys) { if ($null -eq $case.Change[$key]) { $settings.Remove($key) } else { $settings[$key] = $case.Change[$key] } }
-        $verdict = try { $null = Assert-ClaudeProjectionJobDefinition -Job (New-JobDefinition $settings) -ImageDigest $digest; 'accepted' } catch { $_.Exception.Message }
-        Assert "admission refuses a job with $($case.Name)" ($verdict -ne 'accepted' -and $verdict -match [regex]::Escape($case.Names) -and $verdict -match 'Remedy') "$verdict"
-    }
+    Write-Host 'Projection renewal - switch evidence no longer depends on the optional job definition' -ForegroundColor Cyan
+    $checks = [IO.File]::ReadAllText((Join-Path $root 'scripts\ClaudeProjectionChecks.ps1'))
+    $renewalSource = [IO.File]::ReadAllText((Join-Path $root 'infra\projection-renewal.bicep'))
+    Assert 'switch admission has no job-definition validator to accept or refuse' ($checks -notmatch 'Assert-ClaudeProjectionJobDefinition') ''
+    Assert 'switch admission has no image digest input' ($checks -notmatch 'ImageDigest') ''
+    Assert 'switch admission has no action group input' ($checks -notmatch 'ActionGroup') ''
+    Assert 'switch admission has no tier group setting input' ($checks -notmatch 'standard-group-id|premium-group-id') ''
+    Assert 'switch admission has no gateway-resource-id setting input' ($checks -notmatch 'gateway-resource-id') ''
+    Assert 'the optional job still carries AZURE_CLIENT_ID for Graph and not for admission' ($renewalSource -match 'AZURE_CLIENT_ID' -and $checks -notmatch 'AZURE_CLIENT_ID') ''
+    Assert 'the optional job still carries tier group settings for graph sync and not for admission' ($renewalSource -match 'PROJECTION_STANDARD_GROUP_ID' -and $renewalSource -match 'PROJECTION_PREMIUM_GROUP_ID' -and $checks -notmatch 'PROJECTION_STANDARD_GROUP_ID|PROJECTION_PREMIUM_GROUP_ID') ''
+    Assert 'the optional job still carries gatewayResourceId for unit reads and not for admission' ($renewalSource -match 'PROJECTION_GATEWAY_RESOURCE_ID' -and $checks -notmatch 'PROJECTION_GATEWAY_RESOURCE_ID') ''
+    Assert 'the optional job is manual by default while scheduled stale-success evidence stays conditional' ($renewalTemplate.parameters.cronExpression.defaultValue -eq '' -and $renewalSource -match "resource noSuccessAlert 'Microsoft\.Insights/scheduledQueryRules@2023-12-01' = if \(isScheduled\)") ''
 }
 finally { Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue }
 
