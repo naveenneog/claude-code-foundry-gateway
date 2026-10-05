@@ -222,8 +222,8 @@ test('reattach after a disconnect receives the events emitted while detached, in
     const first = new TextDecoder().decode((await response.body.getReader().read()).value);
     const last = Math.max(...first.trim().split(/\r?\n/).map((line) => JSON.parse(line).seq));
     controller.abort();
-    await waitForStatus(app, (status) => status.state === 'exited');
-    const events = (await (await app.fetch(`/api/run/attach?after=${last}`)).text()).trim().split(/\r?\n/).map((line) => JSON.parse(line));
+    const status = await waitForStatus(app, (runStatus) => runStatus.state === 'exited');
+    const events = (await (await app.fetch(`/api/run/attach?after=${last}&run=${status.id}`)).text()).trim().split(/\r?\n/).map((line) => JSON.parse(line));
     assert.deepEqual(events.map((event) => event.seq), Array.from({ length: events.length }, (_, i) => last + 1 + i));
     assert.ok(events.filter((event) => event.type === 'progress').length >= 4, 'events emitted while detached are replayed');
     assert.equal(events.at(-1).type, 'summary');

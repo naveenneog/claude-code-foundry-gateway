@@ -544,7 +544,7 @@ test('U1 fix run-starting buttons are disabled while a run is active', async () 
     await page.locator('#rerun-status').getByText(/Re-running failed step/).waitFor();
     assert.equal(await page.locator('#run').isDisabled(), true);
     assert.equal(await page.locator('#full-run').isDisabled(), true);
-    assert.equal(await page.locator('#stop-run').isEnabled(), true);
+    assert.equal(await page.locator('#stop-run').isDisabled(), true);
     release();
     await page.locator('#rerun-error[role="alert"]').getByText(/Installer run failed with exit code 1/).waitFor();
     await page.unroute('**/api/run/stream');
@@ -559,7 +559,7 @@ test('U1 fix run-starting buttons are disabled while a run is active', async () 
     await page.locator('#run-status').getByText(/Running selected steps/).waitFor();
     assert.equal(await page.locator('#rerun').isDisabled(), true);
     assert.equal(await page.locator('#full-run').isDisabled(), true);
-    assert.equal(await page.locator('#stop-run').isEnabled(), true);
+    assert.equal(await page.locator('#stop-run').isDisabled(), true);
     releaseSelected();
     await page.locator('#run-status').getByText(/Run finished/).waitFor();
     await assertClean(page, pageErrors);
@@ -595,7 +595,7 @@ test('U1 fix a reattach stream that ends without a summary clears run activity',
   const { browser, page, pageErrors } = await openPage(app);
   try {
     await page.route('**/api/run/status', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'reattach-run', state: 'running', currentStepId: 'resource-group', steps: ['resource-group'] }) }));
-    await page.route('**/api/run/attach?after=*', (route) => route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: route.request().url().endsWith('after=0') ? '{"seq":1,"type":"progress","stepId":"resource-group","event":"started","message":"reattached"}\n' : '' }));
+    await page.route('**/api/run/attach?after=*&run=*', (route) => route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: route.request().url().includes('after=0&') ? '{"seq":1,"type":"progress","stepId":"resource-group","event":"started","message":"reattached"}\n' : '' }));
     await page.reload();
     await page.waitForSelector('[name="SubscriptionId"]');
     await page.getByText(/reattached/).waitFor();

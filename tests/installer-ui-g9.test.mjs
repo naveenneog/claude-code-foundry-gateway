@@ -63,6 +63,15 @@ function runWith(app, fingerprint) {
   return app.fetch('/api/run/stream', { method: 'POST', body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'], fingerprint }) });
 }
 
+async function readRunResponse(response) {
+  assert.equal(response.status, 200);
+  const runId = response.headers.get('x-installer-run-id');
+  assert.match(runId || '', /^[0-9a-f]{32}$/);
+  const text = await response.text();
+  assert.match(text, /"type":"summary"/);
+  return { runId, text };
+}
+
 async function assertPreflightRequired(response, label) {
   const text = await response.text();
   assert.equal(response.status, 409, `${label}: ${text.slice(0, 300)}`);
@@ -172,5 +181,60 @@ test('R4-1 a pass stored while a later attempt waits for Azure CLI does not outl
     await app.close();
     await rm(counter, { force: true });
     await rm(log, { force: true });
+  }
+});
+
+test('R4-2 attach names a run and refuses a replaced record', async () => {
+  const app = await start();
+  try {
+    const pass = await passingPreflight(app);
+    const first = await readRunResponse(await runWith(app, pass.fingerprint));
+    const second = await readRunResponse(await runWith(app, pass.fingerprint));
+    assert.notEqual(first.runId, second.runId);
+
+    const status = await (await app.fetch('/api/run/status')).json();
+    assert.equal(status.id, second.runId);
+
+    const missing = await app.fetch('/api/run/attach?after=0');
+    assert.equal(missing.status, 400);
+    assert.match((await missing.json()).error, /run/);
+
+    const malformed = await app.fetch('/api/run/attach?after=0&run=not-a-run');
+    assert.equal(malformed.status, 400);
+    assert.match((await malformed.json()).error, /run/);
+
+    const replaced = await app.fetch(`/api/run/attach?after=0&run=${first.runId}`);
+    const replacedJson = await replaced.json();
+    assert.equal(replaced.status, 409, JSON.stringify(replacedJson));
+    assert.equal(replacedJson.reason, 'run-replaced');
+
+    const attached = await app.fetch(`/api/run/attach?after=0&run=${second.runId}`);
+    assert.equal(attached.headers.get('x-installer-run-id'), second.runId);
+    assert.match(await attached.text(), /"type":"summary"/);
+  } finally {
+    await app.close();
+  }
+});
+
+test('R4-2 run headers are flushed before the installer child starts', async () => {
+  let releaseRun;
+  let runEntered;
+  const held = new Promise((resolve) => { releaseRun = resolve; });
+  const runHeld = new Promise((resolve) => { runEntered = resolve; });
+  const app = await start({ beforeRunSpawn: async () => { runEntered(); await held; } });
+  let runResponse;
+  try {
+    const pass = await passingPreflight(app);
+    runResponse = runWith(app, pass.fingerprint);
+    await within(runHeld, 'The run reaching the point before its installer child');
+    const response = await within(runResponse, 'The run response headers arriving while the child is held');
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('x-installer-run-id') || '', /^[0-9a-f]{32}$/);
+    releaseRun();
+    assert.match(await response.text(), /"type":"summary"/);
+  } finally {
+    releaseRun?.();
+    await runResponse?.then((response) => response.body?.cancel()).catch(() => {});
+    await app.close();
   }
 });

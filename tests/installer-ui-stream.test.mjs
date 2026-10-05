@@ -104,7 +104,8 @@ test('finished-run attach replays the bounded tail contiguously and once', async
   try {
     const run = await streamRun(app, { answers: {}, steps: ['resource-group'] });
     assertStreamInvariant(run);
-    const attachedResponse = await app.fetch('/api/run/attach?after=0');
+    const status = await (await app.fetch('/api/run/status')).json();
+    const attachedResponse = await app.fetch(`/api/run/attach?after=0&run=${status.id}`);
     const attached = (await attachedResponse.text()).trim().split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
     assert.equal(attachedResponse.status, 200);
     assertStreamInvariant(attached);
@@ -120,8 +121,9 @@ test('attach refuses a negative or non-integer cursor before streaming', async (
   const app = await start({ P93_INSTALLER_UI_STUB_MANY_LINES: '1' });
   try {
     await streamRun(app, { answers: {}, steps: ['resource-group'] });
+    const status = await (await app.fetch('/api/run/status')).json();
     for (const value of ['-1', '1.5', 'NaN', '999999']) {
-      const response = await app.fetch(`/api/run/attach?after=${encodeURIComponent(value)}`);
+      const response = await app.fetch(`/api/run/attach?after=${encodeURIComponent(value)}&run=${status.id}`);
       assert.equal(response.status, 400);
       assert.match((await response.json()).error, /after must be a non-negative integer no greater than the last event/);
     }

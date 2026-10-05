@@ -120,6 +120,10 @@ exact streaming cache-creation detail remains **U13**.
   earlier pass for its answers as soon as the server has read the request, so a retry that fails while
   listing steps or is refused while a run uses Azure CLI leaves no fingerprint that can start a run.
   The run admission record is now an architecture source, drawn in the run record card.
+  Run attach now requires the followed run id, reports replaced records with `run-replaced`, and sends
+  the run id header as soon as the stream response is attached.
+  Stop run is now disabled during admission and while an accepted stop is waiting for the stopped
+  summary.
 - **Installers read an answers file, check it before any change, run selected steps and write a progress stream (P92, phase 0).**
   One answers file, described by `schemas/claude-gateway.answers.schema.json`, feeds
   `Install-ClaudeGateway.ps1 -AnswersPath`, `install-claude-gateway.sh --answers-file` and

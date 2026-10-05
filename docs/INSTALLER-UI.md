@@ -143,9 +143,11 @@ cleanup begins (`tools/installer-ui/azure-lease.mjs:6-11`; `tools/installer-ui/a
 it returns `404` through the fixed-route fallback (`tools/installer-ui/server.mjs:531`). A run writes its answers and progress file to a per-run
 temporary directory and removes that directory after the child exits (`tools/installer-ui/server.mjs:272-276`;
 `tools/installer-ui/server.mjs:499-510`). A disconnected browser does not kill the child. `GET
-/api/run/status` reports the active or last run without the tail, and `GET /api/run/attach?after=<seq>`
-streams prior and live events from the bounded tail (`tools/installer-ui/server.mjs:357-367`;
-`tools/installer-ui/run-record.mjs:10-127`).
+/api/run/status` reports the active or last run without the tail. `GET
+/api/run/attach?after=<seq>&run=<id>` streams prior and live events only when the active or last run
+has that id; another id returns `409` with `reason: run-replaced`. Run and attach streams carry
+`x-installer-run-id` when the response is attached (`tools/installer-ui/server.mjs:357-370`;
+`tools/installer-ui/run-record.mjs:10-130`).
 
 The run tail keeps the latest 8 MiB or 50,000 events, and each client reads at its own pace. A stream
 whose position leaves the tail receives one notice with the number of events it missed
@@ -158,8 +160,9 @@ notice, a console line above 64 KiB is truncated with ` [line truncated]`, and t
 `tools/installer-ui/installer-ui-run.js:6`; `tools/installer-ui/installer-ui-run.js:44-54`).
 
 The run output is a labelled log region (`tools/installer-ui/index.html:34`). The Stop run button is
-enabled only while a run is active, confirms the running step name and then stops the process tree
-(`tools/installer-ui/installer-ui.js:443-444`; `tools/installer-ui/installer-ui.js:652-654`; `tools/installer-ui/installer-ui-run.js:313-322`). Windows
+enabled only while the page follows a run whose id is known and the run is not stopping; an accepted
+stop sets the page state to stopping until the summary arrives
+(`tools/installer-ui/installer-ui.js:443-444`; `tools/installer-ui/installer-ui.js:650-652`; `tools/installer-ui/installer-ui-run.js:344-360`). Windows
 uses `taskkill.exe /PID <pid> /T /F`; POSIX children run in a detached process group so the group can
 be signalled (`tools/installer-ui/server.mjs:60-63`; `tools/installer-ui/server.mjs:85`; `tools/installer-ui/server.mjs:65-67`). The stop
 response and stream say that the install checkpoint resumes when the same steps run again

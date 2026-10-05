@@ -109,8 +109,9 @@ step lists and preflight payloads fail closed and malformed progress events beco
 `tools/installer-ui/installer-stream.mjs:61-68`).
 
 Run state lives in `tools/installer-ui/run-record.mjs`, not in a browser connection. `GET
-/api/run/status` reports the active or last run, `GET /api/run/attach?after=<seq>` replays the tail
-and follows live events, and `POST /api/run/stop` stops the child process tree.
+/api/run/status` reports the active or last run, `GET /api/run/attach?after=<seq>&run=<id>` replays
+the tail and follows live events for that run id, a replaced record returns `409` with
+`reason: run-replaced`, and `POST /api/run/stop` stops the followed child process tree.
 `tools/installer-ui/run-admission.mjs` keeps the admission of the last 20 run requests by client
 request id (`admitting`, then `started` with the run id or `refused` with the error and reason), and
 `GET /api/run/status?request=<id>` adds that record to the status
@@ -995,4 +996,3 @@ Review behavior against the implementation whenever a feature changes a componen
 flow, identity, schedule or network path. PNGs are repeatable with the same locked
 Playwright/browser and installed fonts; cross-platform font rasterization can differ
 without changing the architecture.
-

@@ -59,10 +59,12 @@ including the split renderer page script (`tools/installer-ui/index.html:8-16`;
 
 The run record is server-side. It stores the active or last run id, selected steps, state, current
 step, failed step, resume command, exit code, start time and a bounded tail. `GET /api/run/status`
-returns the run without the tail. `GET /api/run/attach?after=<seq>` streams tail and live events.
-`POST /api/run/stop` kills the process tree and reports checkpoint-based resume semantics
-(`tools/installer-ui/run-record.mjs:10-41`; `tools/installer-ui/run-record.mjs:78-127`; `tools/installer-ui/server.mjs:357-367`;
-`tools/installer-ui/server.mjs:526-529`).
+returns the run without the tail. `GET /api/run/attach?after=<seq>&run=<id>` streams tail and live
+events only for that run id and returns `409` with `reason: run-replaced` when the active or last
+record has another id. Run and attach streams carry `x-installer-run-id` when the response is
+attached. `POST /api/run/stop` kills the followed process tree and reports checkpoint-based resume semantics
+(`tools/installer-ui/run-record.mjs:10-41`; `tools/installer-ui/run-record.mjs:78-130`; `tools/installer-ui/server.mjs:357-370`;
+`tools/installer-ui/server.mjs:531-535`).
 Run requests also carry a browser-generated client request id. The server records a small admission
 history for that id before reading the body, then marks it `started` with the run id or `refused`
 with the response reason; `GET /api/run/status?request=<id>` includes that record. The page uses it

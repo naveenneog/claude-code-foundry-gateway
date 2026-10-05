@@ -441,7 +441,7 @@
       if (button && button.dataset.actionBusy !== "true") button.disabled = hasBlockingProblems() || (id === "preflight" && (azureBusy || activeRun));
     }
     const stop = byId("stop-run");
-    if (stop && stop.dataset.actionBusy !== "true") stop.disabled = !runHost?.isActive() || Boolean(runHost?.isStopping?.());
+    if (stop && stop.dataset.actionBusy !== "true") stop.disabled = !runHost?.canStop?.();
     const state = byId("preflight-state");
     if (!state) return;
     if (hasBlockingProblems()) state.textContent = `${preflightStale ? "Preflight is stale. " : ""}Validation problems block download, preflight, run and command copying.`;

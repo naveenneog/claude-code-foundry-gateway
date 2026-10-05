@@ -88,7 +88,9 @@ export function attachSubscriber(run, res, after) {
     'cache-control': 'no-store',
     'content-security-policy': contentSecurityPolicy(),
     'x-content-type-options': 'nosniff',
+    'x-installer-run-id': run.id,
   });
+  res.flushHeaders();
   let closed = false;
   const subscriber = {
     cursor: after,

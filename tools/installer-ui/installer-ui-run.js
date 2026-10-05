@@ -30,6 +30,10 @@
       return runStopping;
     }
 
+    function canStop() {
+      return Boolean(runActive && activeRunId && !runStopping);
+    }
+
     function resetActiveRun() {
       activeRunId = "";
       activeClientRequestId = "";
@@ -53,8 +57,7 @@
       output.textContent = `${shown.join("\n")}\n`;
     }
 
-    function resetOutputIfNewRun() {
-      if (activeRunId) return;
+    function clearRunOutput() {
       byId("run-output").textContent = "";
       runOutputLines = [];
       removedRunOutputLines = 0;
@@ -88,7 +91,6 @@
     }
 
     async function readRunStream(res) {
-      resetOutputIfNewRun();
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
@@ -118,6 +120,21 @@
       return res;
     }
 
+    function attachPath(after) {
+      return `./api/run/attach?after=${after}&run=${encodeURIComponent(activeRunId)}`;
+    }
+
+    function replacedRunError() {
+      return new Error("The run this page followed finished, and a later run replaced its record. Reloading the page shows the latest run.");
+    }
+
+    function clearForReplacedRun() {
+      runActive = false;
+      runStopping = false;
+      resetActiveRun();
+      updateRunAdmission();
+    }
+
     async function responseError(res, fallback) {
       let data = {};
       try {
@@ -140,7 +157,7 @@
         activeRunId = status.id;
         activeStepId = status.currentStepId || status.steps?.[0] || "";
         const before = lastRunSeq;
-        const result = await readRunStream(await fetchRunStream(`./api/run/attach?after=${lastRunSeq}`));
+        const result = await readRunStream(await fetchRunStream(attachPath(lastRunSeq)));
         if (result) return result;
         if (status.state !== "running" && status.state !== "stopping") {
           runActive = false;
@@ -152,6 +169,8 @@
         return recoverMissingSummary(reattachCount + 1, before === lastRunSeq ? quietCount + 1 : 0);
       }
       runActive = false;
+      runStopping = false;
+      resetActiveRun();
       updateRunAdmission();
       const state = status.state || "unknown";
       throw new Error(`The run stream ended without a summary; the server reports state ${state}.`);
@@ -163,6 +182,10 @@
         refreshIdentityAfterRun();
         return result;
       } catch (error) {
+        if (error.data?.reason === "run-replaced") {
+          clearForReplacedRun();
+          throw replacedRunError();
+        }
         if (!error.data?.runSummary) {
           try {
             const recovered = await reconcileBrokenStream();
@@ -190,14 +213,21 @@
 
     async function reconcileBrokenStream() {
       const status = await getJson(activeClientRequestId ? `./api/run/status?request=${encodeURIComponent(activeClientRequestId)}` : "./api/run/status");
-      const run = status?.admission?.state === "started" ? { ...status, id: status.admission.runId || status.id } : status;
-      if (!sameRun(run)) return null;
+      const followedRunId = activeRunId || (status?.admission?.state === "started" ? status.admission.runId || "" : "");
+      const run = status;
+      if (!run?.id || run.id !== followedRunId) {
+        if (followedRunId && run?.id && run.id !== followedRunId) {
+          clearForReplacedRun();
+          throw replacedRunError();
+        }
+        return null;
+      }
       activeRunId = run.id;
       activeStepId = run.currentStepId || run.steps?.[0] || activeStepId;
       runActive = true;
       runStopping = false;
       updateRunAdmission();
-      return (await readRunStream(await fetchRunStream(`./api/run/attach?after=${lastRunSeq}`))) || (await recoverMissingSummary());
+      return (await readRunStream(await fetchRunStream(attachPath(lastRunSeq)))) || (await recoverMissingSummary());
     }
 
     async function recoverLostRequest(requestError) {
@@ -223,10 +253,10 @@
             runActive = false;
             runStopping = false;
             updateRunAdmission();
-            throw new Error("The run for this request finished, and a later run replaced its record. Reload the page to see the latest run.");
+            throw replacedRunError();
           }
           activeRunId = admittedRunId || status.id || "";
-          return followRun(() => fetchRunStream(`./api/run/attach?after=0`).then(readRunStream));
+          return followRun(() => fetchRunStream(attachPath(0)).then(readRunStream));
         }
         if (status?.admission?.state === "refused") {
           runActive = false;
@@ -279,11 +309,15 @@
       }
       if (!res.ok) {
         runActive = false;
+        resetActiveRun();
         updateRunAdmission();
         const error = await responseError(res, "run failed");
         if (["identity-changed", "preflight-required"].includes(error.data?.reason) && typeof onPreflightStale === "function") onPreflightStale(error.message);
         throw error;
       }
+      activeRunId = res.headers.get("x-installer-run-id") || "";
+      clearRunOutput();
+      updateRunAdmission();
       return followRun(() => readRunStream(res));
     }
 
@@ -299,7 +333,7 @@
         if (runStopping) setStatusText("run", `Stopping at ${activeStepId || "the current step"}.`);
         updateRunAdmission();
         try {
-          const result = (await readRunStream(await fetchRunStream(`./api/run/attach?after=${lastRunSeq}`))) || (await recoverMissingSummary());
+          const result = (await readRunStream(await fetchRunStream(attachPath(lastRunSeq)))) || (await recoverMissingSummary());
           if (result?.statusText) setStatusText("run", result.statusText);
           refreshIdentityAfterRun();
           return result;
@@ -312,12 +346,17 @@
 
     async function stopRun() {
       const status = await getJson("./api/run/status");
-      const runId = status.id || activeRunId;
-      const step = status.currentStepId || activeStepId || "the current step";
+      const runId = activeRunId;
+      const step = status.id === activeRunId ? status.currentStepId || status.steps?.[0] || activeStepId || "the current step" : activeStepId || "the current step";
       if (!runId) return { statusText: "No run is active, so nothing was stopped." };
       if (!globalThis.confirm(`Stop run at ${step}? Running the same steps again resumes from the install checkpoint.`)) return { statusText: "No stop was requested." };
       const result = await postJson("./api/run/stop", { runId });
       appendRunLine(`stopped: ${result.message}`);
+      if (runActive && activeRunId === runId) {
+        runStopping = true;
+        setStatusText("run", `Stopping at ${step}.`);
+        updateRunAdmission();
+      }
       return { statusText: "Stop requested." };
     }
 
@@ -329,7 +368,7 @@
       void readIdentityAfterRun().catch(() => {});
     }
 
-    return { appendRunLine, currentStep, failedStep, handleAttachError, isActive, isStopping, resetActiveRun, streamRun, stopRun, refreshRunStatus };
+    return { appendRunLine, canStop, currentStep, failedStep, handleAttachError, isActive, isStopping, resetActiveRun, streamRun, stopRun, refreshRunStatus };
   }
 
   globalThis.ClaudeInstallerRun = { create: createRunHost };

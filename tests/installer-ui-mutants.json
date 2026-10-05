@@ -201,7 +201,7 @@
     "id": "r3-2-6",
     "why": "Lost-request recovery must attach a run that has already started and read the real summary from the server.",
     "file": "tools/installer-ui/installer-ui-run.js",
-    "find": "        if (status?.admission?.state === \"started\") {\n          const admittedRunId = status.admission.runId || \"\";\n          if (status.id && admittedRunId && status.id !== admittedRunId) {\n            runActive = false;\n            runStopping = false;\n            updateRunAdmission();\n            throw new Error(\"The run for this request finished, and a later run replaced its record. Reload the page to see the latest run.\");\n          }\n          activeRunId = admittedRunId || status.id || \"\";\n          return followRun(() => fetchRunStream(`./api/run/attach?after=0`).then(readRunStream));\n        }\n",
+    "find": "        if (status?.admission?.state === \"started\") {\n          const admittedRunId = status.admission.runId || \"\";\n          if (status.id && admittedRunId && status.id !== admittedRunId) {\n            runActive = false;\n            runStopping = false;\n            updateRunAdmission();\n            throw replacedRunError();\n          }\n          activeRunId = admittedRunId || status.id || \"\";\n          return followRun(() => fetchRunStream(attachPath(0)).then(readRunStream));\n        }\n",
     "replace": "        if (status?.admission?.state === \"started\") {\n          break;\n        }\n",
     "testFile": "tests/installer-ui-g8b.test.mjs",
     "test": "R3-2 real server recovery follows an aborted successful run to its summary"
@@ -210,8 +210,8 @@
     "id": "r3-2-7",
     "why": "Broken-stream recovery must continue into the bounded missing-summary loop when the first reattach also has no summary.",
     "file": "tools/installer-ui/installer-ui-run.js",
-    "find": "      return (await readRunStream(await fetchRunStream(`./api/run/attach?after=${lastRunSeq}`))) || (await recoverMissingSummary());\n",
-    "replace": "      return (await readRunStream(await fetchRunStream(`./api/run/attach?after=${lastRunSeq}`))) || null;\n",
+    "find": "      return (await readRunStream(await fetchRunStream(attachPath(lastRunSeq)))) || (await recoverMissingSummary());\n",
+    "replace": "      return (await readRunStream(await fetchRunStream(attachPath(lastRunSeq)))) || null;\n",
     "testFile": "tests/installer-ui-g8b.test.mjs",
     "test": "R3-2 broken stream recovery says a running server run can be reattached after reload"
   },
@@ -219,7 +219,7 @@
     "id": "r3-2-8",
     "why": "Lost-request recovery must not attach a later run when a different latest run replaced the admitted run record.",
     "file": "tools/installer-ui/installer-ui-run.js",
-    "find": "          if (status.id && admittedRunId && status.id !== admittedRunId) {\n            runActive = false;\n            runStopping = false;\n            updateRunAdmission();\n            throw new Error(\"The run for this request finished, and a later run replaced its record. Reload the page to see the latest run.\");\n          }\n",
+    "find": "          if (status.id && admittedRunId && status.id !== admittedRunId) {\n            runActive = false;\n            runStopping = false;\n            updateRunAdmission();\n            throw replacedRunError();\n          }\n",
     "replace": "",
     "testFile": "tests/installer-ui-g8b.test.mjs",
     "test": "R3-2 lost request does not attach a later run that replaced the admitted record"
@@ -801,10 +801,10 @@
     "id": "lead-U14",
     "why": "Stop run state is not owned by run activity",
     "file": "tools/installer-ui/installer-ui.js",
-    "find": "if (stop && stop.dataset.actionBusy !== \"true\") stop.disabled = !runHost?.isActive() || Boolean(runHost?.isStopping?.());",
-    "replace": "",
-    "testFile": "tests/installer-ui-g4.test.mjs",
-    "test": "U1 fix Stop run is disabled after the run ends even when the stop response arrives after the summary"
+    "find": "if (stop && stop.dataset.actionBusy !== \"true\") stop.disabled = !runHost?.canStop?.();",
+    "replace": "if (stop && stop.dataset.actionBusy !== \"true\") stop.disabled = !runHost?.isActive() || Boolean(runHost?.isStopping?.());",
+    "testFile": "tests/installer-ui-g9b.test.mjs",
+    "test": "R4-3 Stop is disabled during admission and while an accepted stop is pending summary"
   },
   {
     "id": "lead-U16",
@@ -1359,7 +1359,7 @@
     "id": "g7b-F03",
     "why": "lead fix: a lost run request whose run started is not reattached",
     "file": "tools/installer-ui/installer-ui-run.js",
-    "find": "        if (status?.admission?.state === \"started\") {\n          const admittedRunId = status.admission.runId || \"\";\n          if (status.id && admittedRunId && status.id !== admittedRunId) {\n            runActive = false;\n            runStopping = false;\n            updateRunAdmission();\n            throw new Error(\"The run for this request finished, and a later run replaced its record. Reload the page to see the latest run.\");\n          }\n          activeRunId = admittedRunId || status.id || \"\";\n          return followRun(() => fetchRunStream(`./api/run/attach?after=0`).then(readRunStream));\n        }\n",
+    "find": "        if (status?.admission?.state === \"started\") {\n          const admittedRunId = status.admission.runId || \"\";\n          if (status.id && admittedRunId && status.id !== admittedRunId) {\n            runActive = false;\n            runStopping = false;\n            updateRunAdmission();\n            throw replacedRunError();\n          }\n          activeRunId = admittedRunId || status.id || \"\";\n          return followRun(() => fetchRunStream(attachPath(0)).then(readRunStream));\n        }\n",
     "replace": "",
     "testFile": "tests/installer-ui-g7b-r2.test.mjs",
     "test": "lead: a run request that fails after the server started the run reattaches to that run"
@@ -1381,5 +1381,59 @@
     "replace": "",
     "testFile": "tests/installer-ui-g9.test.mjs",
     "test": "R4-1 a preflight retry whose step list fails clears the earlier pass for the same answers"
+  },
+  {
+    "id": "r4-2-1",
+    "why": "R4-2: attach refuses a run id that does not match the active or last run record.",
+    "file": "tools/installer-ui/server.mjs",
+    "find": "        if (run.id !== runId) return send(res, 409, { error: 'The requested run record was replaced by a later installer run.', reason: 'run-replaced' }, setCookie);\n",
+    "replace": "",
+    "testFile": "tests/installer-ui-g9.test.mjs",
+    "test": "R4-2 attach names a run and refuses a replaced record"
+  },
+  {
+    "id": "r4-2-2",
+    "why": "R4-2: run and attach response headers are flushed as soon as the response is attached.",
+    "file": "tools/installer-ui/run-record.mjs",
+    "find": "  res.flushHeaders();\n",
+    "replace": "",
+    "testFile": "tests/installer-ui-g9.test.mjs",
+    "test": "R4-2 run headers are flushed before the installer child starts"
+  },
+  {
+    "id": "r4-2-3",
+    "why": "R4-2: page attach requests include the run id being followed.",
+    "file": "tools/installer-ui/installer-ui-run.js",
+    "find": "      return `./api/run/attach?after=${after}&run=${encodeURIComponent(activeRunId)}`;\n",
+    "replace": "      return `./api/run/attach?after=${after}`;\n",
+    "testFile": "tests/installer-ui-g8b.test.mjs",
+    "test": "R3-2 malformed stream line reattaches to the same run and finishes"
+  },
+  {
+    "id": "r4-2-4",
+    "why": "R4-2: broken-stream reconciliation must not copy an admission run id onto a status snapshot for another run.",
+    "file": "tools/installer-ui/installer-ui-run.js",
+    "find": "      const followedRunId = activeRunId || (status?.admission?.state === \"started\" ? status.admission.runId || \"\" : \"\");\n      const run = status;\n      if (!run?.id || run.id !== followedRunId) {\n        if (followedRunId && run?.id && run.id !== followedRunId) {\n          clearForReplacedRun();\n          throw replacedRunError();\n        }\n        return null;\n      }\n",
+    "replace": "      const run = status?.admission?.state === \"started\" ? { ...status, id: status.admission.runId || status.id } : status;\n      if (!sameRun(run)) return null;\n",
+    "testFile": "tests/installer-ui-g9b.test.mjs",
+    "test": "R4-2 broken stream reports a replaced run record and does not attach"
+  },
+  {
+    "id": "r4-3-1",
+    "why": "R4-3: Stop is disabled until the page knows the followed run id.",
+    "file": "tools/installer-ui/installer-ui-run.js",
+    "find": "      return Boolean(runActive && activeRunId && !runStopping);\n",
+    "replace": "      return Boolean(runActive && !runStopping);\n",
+    "testFile": "tests/installer-ui-g9b.test.mjs",
+    "test": "R4-3 Stop is disabled during admission and while an accepted stop is pending summary"
+  },
+  {
+    "id": "r4-3-2",
+    "why": "R4-3: an accepted stop marks the followed run as stopping on the page until its summary arrives.",
+    "file": "tools/installer-ui/installer-ui-run.js",
+    "find": "      if (runActive && activeRunId === runId) {\n        runStopping = true;\n        setStatusText(\"run\", `Stopping at ${step}.`);\n        updateRunAdmission();\n      }\n",
+    "replace": "",
+    "testFile": "tests/installer-ui-g9b.test.mjs",
+    "test": "R4-3 Stop is disabled during admission and while an accepted stop is pending summary"
   }
 ]

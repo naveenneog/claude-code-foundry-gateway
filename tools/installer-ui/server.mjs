@@ -362,6 +362,9 @@ export async function createInstallerUiServer(options = {}) {
       if (req.method === 'GET' && url.pathname === '/api/run/attach') {
         const run = activeRun || lastRun;
         if (!run) return send(res, 404, { error: 'no installer run is available' }, setCookie);
+        const runId = url.searchParams.get('run') || '';
+        if (!/^[0-9a-f]{32}$/.test(runId)) return send(res, 400, { error: 'run parameter must be a 32-character lower-case hexadecimal run id' }, setCookie);
+        if (run.id !== runId) return send(res, 409, { error: 'The requested run record was replaced by a later installer run.', reason: 'run-replaced' }, setCookie);
         await attachRun(run, res, Number(url.searchParams.get('after') || 0));
         return;
       }

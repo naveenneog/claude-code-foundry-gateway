@@ -198,7 +198,7 @@ test('P1 cancelled full run and stop explain that nothing was started or stopped
     await page.getByRole('button', { name: 'Full run' }).click();
     await page.locator('#full-run-status').getByText(/No full run was started/).waitFor();
     await page.route('**/api/run/status', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'reattach-run', state: 'running', currentStepId: 'resource-group', steps: ['resource-group'] }) }));
-    await page.route('**/api/run/attach?after=0', (route) => route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"progress","stepId":"resource-group","event":"started","message":"running"}\n' }));
+    await page.route('**/api/run/attach?after=0&run=*', (route) => route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"progress","stepId":"resource-group","event":"started","message":"running"}\n' }));
     await page.reload();
     await page.waitForSelector('[name="SubscriptionId"]');
     await page.locator('#run-output').getByText(/running/).waitFor();
@@ -217,7 +217,7 @@ test('G7B-4 load-time reattach errors are reported in the run alert region', asy
   const { browser, page, pageErrors } = await openPage(app);
   try {
     await page.route('**/api/run/status', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'run-1', state: 'running', currentStepId: 'resource-group', steps: ['resource-group'] }) }));
-    await page.route('**/api/run/attach?after=0', (route) => route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'attach failed for test' }) }));
+    await page.route('**/api/run/attach?after=0&run=*', (route) => route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'attach failed for test' }) }));
     await page.reload();
     await page.waitForSelector('[name="SubscriptionId"]');
     await page.locator('#run-error[role="alert"]').getByText(/attach failed for test/).waitFor();
@@ -243,7 +243,7 @@ test('R2-2 account is reread after a failed reattached run summary', async () =>
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ signedIn: true, user: 'after@example.test', tenantId: 'tenant-1', subscriptionName: 'Sub One', subscriptionId: '00000000-0000-4000-8000-000000000093' }) });
     });
     await page.route('**/api/run/status', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'reattach-run', state: 'running', currentStepId: 'resource-group', steps: ['resource-group'] }) }));
-    await page.route('**/api/run/attach?after=0', (route) => route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"summary","exitCode":7,"failedStepId":"resource-group","resumeCommand":"./Install-ClaudeGateway.ps1 -Steps resource-group","state":"exited","message":""}\n' }));
+    await page.route('**/api/run/attach?after=0&run=*', (route) => route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"summary","exitCode":7,"failedStepId":"resource-group","resumeCommand":"./Install-ClaudeGateway.ps1 -Steps resource-group","state":"exited","message":""}\n' }));
     await page.reload();
     await page.waitForSelector('[name="SubscriptionId"]');
     await page.locator('#identity').getByText(/installer run is using Azure CLI/i).waitFor();
@@ -315,10 +315,10 @@ test('G7B-5 reattached runs disable Azure controls until the summary refreshes a
     let releaseAttach;
     const attachPending = new Promise((resolve) => { releaseAttach = resolve; });
     await page.route('**/api/run/status', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'run-reattach', state: 'running', currentStepId: 'resource-group', steps: ['resource-group'] }) }));
-    await page.route('**/api/run/attach?after=0', async (route) => {
+    await page.route('**/api/run/attach?after=0&run=*', async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"progress","stepId":"resource-group","event":"started","message":"reattached"}\n' });
     });
-    await page.route('**/api/run/attach?after=1', async (route) => {
+    await page.route('**/api/run/attach?after=1&run=*', async (route) => {
       await attachPending;
       await route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":2,"type":"summary","exitCode":0,"failedStepId":"","resumeCommand":"","state":"exited","message":""}\n' });
     });
@@ -374,7 +374,7 @@ test('R2-7 summary-less stream reattaches to a running run and finishes', async 
       return route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"progress","stepId":"resource-group","event":"started","message":"started"}\n' });
     });
     await page.route('**/api/run/status', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'run-1', clientRequestId: requestId, state: 'running', currentStepId: 'resource-group', steps: ['resource-group'] }) }));
-    await page.route('**/api/run/attach?after=1', (route) => route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":2,"type":"summary","exitCode":0,"failedStepId":"","resumeCommand":"","state":"exited","message":""}\n' }));
+    await page.route('**/api/run/attach?after=1&run=*', (route) => route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":2,"type":"summary","exitCode":0,"failedStepId":"","resumeCommand":"","state":"exited","message":""}\n' }));
     await page.getByRole('button', { name: 'Run selected steps' }).click();
     await page.locator('#run-status').getByText(/Run finished/).waitFor();
     await assertClean(page, pageErrors);

@@ -515,6 +515,7 @@ setTimeout(() => { console.log('done'); process.exit(0); }, 500);
     });
     const responses = await Promise.all([first, second]);
     assert.deepEqual(responses.map((response) => response.status).sort(), [200, 409]);
+    await Promise.all(responses.filter((response) => response.status === 200).map((response) => response.text()));
     const log = (await readFile(slow.log, 'utf8')).trim().split(/\r?\n/).filter(Boolean).map(JSON.parse);
     assert.equal(log.filter((entry) => entry.args.includes('-Yes')).length, 1);
   } finally {
@@ -626,7 +627,7 @@ test('run lifecycle survives disconnect, reports status, supports reattach and s
     const status = await (await app.fetch('/api/run/status')).json();
     assert.equal(status.state, 'exited');
     assert.equal(status.exitCode, 0);
-    const attach = await (await app.fetch('/api/run/attach?after=0')).text();
+    const attach = await (await app.fetch(`/api/run/attach?after=0&run=${status.id}`)).text();
     assert.match(attach, /"type":"summary"/);
     const log = (await readFile(app.log, 'utf8')).trim().split(/\r?\n/).filter(Boolean).map(JSON.parse);
     assert.equal(log.filter((entry) => entry.args.includes('-Yes')).length, 1);
