@@ -104,6 +104,53 @@ function within(promise, ms, what) {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
+async function pageApiAuth(page) {
+  const cookie = (await page.context().cookies()).map((item) => `${item.name}=${item.value}`).join('; ');
+  const csrfToken = (await (await fetch(`${new URL(page.url()).origin}/api/session`, { headers: { cookie } })).json()).csrfToken;
+  return { cookie, csrfToken };
+}
+
+function forwardRunThenAbortBrowser(route, serverReceived) {
+  const request = route.request();
+  const requestHeaders = request.headers();
+  const headers = {};
+  for (const name of ['cookie', 'x-csrf-token', 'x-client-request-id', 'content-type']) {
+    if (requestHeaders[name]) headers[name] = requestHeaders[name];
+  }
+  const forwarded = fetch(request.url(), {
+    method: request.method(),
+    headers,
+    body: request.postData(),
+  });
+  const abort = () => route.abort('failed');
+  return { aborted: serverReceived.then(abort, abort), forwarded };
+}
+
+async function nodePreflight(app, auth, steps) {
+  const response = await fetch(`${app.base}/api/preflight`, {
+    method: 'POST',
+    headers: { cookie: auth.cookie, 'x-csrf-token': auth.csrfToken, 'content-type': 'application/json' },
+    body: JSON.stringify({ answers: { schemaVersion: 1, SubscriptionId: '00000000-0000-4000-8000-000000000093' }, steps }),
+  });
+  const body = await response.json();
+  assert.equal(response.status, 200, JSON.stringify(body));
+  assert.match(body.fingerprint, /^[0-9a-f]{64}$/);
+  return body.fingerprint;
+}
+
+function runFromNode(app, auth, fingerprint, steps) {
+  return fetch(`${app.base}/api/run/stream`, {
+    method: 'POST',
+    headers: {
+      cookie: auth.cookie,
+      'x-csrf-token': auth.csrfToken,
+      'content-type': 'application/json',
+      'x-client-request-id': 'node-run-b-0000000000000000000000',
+    },
+    body: JSON.stringify({ answers: { schemaVersion: 1, SubscriptionId: '00000000-0000-4000-8000-000000000093' }, steps, fingerprint }),
+  });
+}
+
 test('R4-2 broken stream reports a replaced run record and does not attach', async () => {
   const app = await start();
   const { browser, page, pageErrors } = await openPage(app);
@@ -134,6 +181,59 @@ test('R4-2 broken stream reports a replaced run record and does not attach', asy
     await app.close();
   }
 });
+
+test('L6-2 real recovery refuses a later failed run that replaces the followed record', async () => {
+  const app = await start({ env: { P93_INSTALLER_UI_STUB_FAIL_STEP: 'gateway-deployment' } });
+  const { browser, page, pageErrors } = await openPage(app);
+  let forwardedRun;
+  let forwardedText;
+  let runBResponse;
+  try {
+    await passPreflight(page);
+    const auth = await pageApiAuth(page);
+    await page.route('**/api/run/stream', async (route) => {
+      const request = route.request();
+      const requestHeaders = request.headers();
+      const headers = {};
+      for (const name of ['cookie', 'x-csrf-token', 'x-client-request-id', 'content-type']) {
+        if (requestHeaders[name]) headers[name] = requestHeaders[name];
+      }
+      forwardedRun = fetch(request.url(), {
+        method: request.method(),
+        headers,
+        body: request.postData(),
+      });
+      forwardedText = forwardedRun.then((response) => response.text());
+      await forwardedText;
+      await route.abort('failed');
+    });
+    await page.route('**/api/run/attach?after=*&run=*', async (route) => {
+      await page.unroute('**/api/run/stream');
+      const fingerprint = await within(nodePreflight(app, auth, ['gateway-deployment']), 30_000, 'Node preflight for run B');
+      runBResponse = await within(runFromNode(app, auth, fingerprint, ['gateway-deployment']), 30_000, 'Run B response headers');
+      assert.equal(runBResponse.status, 200);
+      assert.match(runBResponse.headers.get('x-installer-run-id') || '', /^[0-9a-f]{32}$/);
+      await route.continue();
+    });
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await page.locator('#run-error').getByText(/later run replaced its record/i).waitFor();
+    await expectNoText(page, /Installer run failed with exit code 7/);
+    await expectNoText(page, /Failed step: gateway-deployment/);
+    await expectNoText(page, /Install-ClaudeGateway\.ps1 -Steps gateway-deployment/);
+    assert.doesNotMatch(await page.locator('#run-output').textContent(), /gateway-deployment/);
+    assert.match(await within(runBResponse.text(), 30_000, 'Run B stream ending'), /"type":"summary"/);
+    await assertClean(page, pageErrors);
+  } finally {
+    await forwardedRun?.then((response) => response.body?.cancel()).catch(() => {});
+    await runBResponse?.body?.cancel().catch(() => {});
+    await browser.close();
+    await app.close();
+  }
+});
+
+async function expectNoText(page, pattern) {
+  assert.equal(await page.getByText(pattern).count(), 0);
+}
 
 test('L6-1 page-load reattach run-replaced clears run state and controls', async () => {
   const app = await start();

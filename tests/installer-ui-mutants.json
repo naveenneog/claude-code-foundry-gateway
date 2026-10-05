@@ -1444,5 +1444,14 @@
     "replace": "",
     "testFile": "tests/installer-ui-g9b.test.mjs",
     "test": "L6-1 page-load reattach run-replaced clears run state and controls"
+  },
+  {
+    "id": "l6-2-1",
+    "why": "L6-2: the server attach id check prevents the page from reading a later failed run as the followed run during real lost-request recovery.",
+    "file": "tools/installer-ui/server.mjs",
+    "find": "        if (run.id !== runId) return send(res, 409, { error: 'The requested run record was replaced by a later installer run.', reason: 'run-replaced' }, setCookie);\n",
+    "replace": "",
+    "testFile": "tests/installer-ui-g9b.test.mjs",
+    "test": "L6-2 real recovery refuses a later failed run that replaces the followed record"
   }
 ]
