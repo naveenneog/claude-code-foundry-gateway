@@ -123,6 +123,16 @@ test("F1 drift covers every Install-ClaudeGateway answer and rejects Start-only 
     "x-appliedBy": ["Install-ClaudeGateway.ps1"],
   };
   assert.deepEqual(JSON.parse(JSON.stringify(model.checkFieldGroupDrift(copied).missing)), ["P93Missing"]);
+  const startOnly = structuredClone(schema);
+  startOnly.properties.ResourceGroup["x-appliedBy"] = ["Start-ClaudeGateway.ps1"];
+  const startOnlyDrift = JSON.parse(JSON.stringify(model.checkFieldGroupDrift(startOnly)));
+  assert.equal(startOnlyDrift.ok, false);
+  assert.deepEqual(startOnlyDrift.startOnly, ["ResourceGroup"]);
+  const removedFromSchema = structuredClone(schema);
+  delete removedFromSchema.properties.ResourceGroup;
+  const unknownDrift = JSON.parse(JSON.stringify(model.checkFieldGroupDrift(removedFromSchema)));
+  assert.equal(unknownDrift.ok, false);
+  assert.deepEqual(unknownDrift.unknown, ["ResourceGroup"]);
 });
 
 test("F1 browser collects Azure DNS, existing APIM, Desktop access token and pending deployment JSON exactly", async () => {
