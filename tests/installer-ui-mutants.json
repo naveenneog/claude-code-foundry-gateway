@@ -117,6 +117,15 @@
     "test": "R3-2 browser sends a client request id with each run request"
   },
   {
+    "id": "r3-2-3",
+    "why": "Run admissions must be marked refused when any pre-start failure occurs after the admitting record is created.",
+    "file": "tools/installer-ui/server.mjs",
+    "find": "          if (clientRequestId) runAdmissions.refused(clientRequestId, error.status ? error.message : 'request failed', error.reason);\n",
+    "replace": "",
+    "testFile": "tests/installer-ui-g8.test.mjs",
+    "test": "R3-2 refused admissions are recorded for every pre-start failure path"
+  },
+  {
     "id": "T1-fail-once-disabled",
     "why": "The T1 journey must fail when the stub no longer fails the first selected gateway-deployment run.",
     "file": "tests/installer-ui-stub.mjs",
@@ -855,8 +864,8 @@
     "id": "g7a-A03",
     "why": "S3: a run refused at admission keeps the Azure lease",
     "file": "tools/installer-ui/server.mjs",
-    "find": "        } catch (error) {\n          lease.release();\n          if (clientRequestId) runAdmissions.refused(clientRequestId, error.message, error.reason);\n          throw error;\n        }\n        const run = createRun(steps);",
-    "replace": "        } catch (error) {\n          if (clientRequestId) runAdmissions.refused(clientRequestId, error.message, error.reason);\n          throw error;\n        }\n        const run = createRun(steps);",
+    "find": "        } catch (error) {\n          lease?.release();\n          if (clientRequestId) runAdmissions.refused(clientRequestId, error.status ? error.message : 'request failed', error.reason);\n          throw error;\n        }\n        const run = createRun(steps);",
+    "replace": "        } catch (error) {\n          if (clientRequestId) runAdmissions.refused(clientRequestId, error.status ? error.message : 'request failed', error.reason);\n          throw error;\n        }\n        const run = createRun(steps);",
     "testFile": "tests/installer-ui-g7.test.mjs",
     "test": "S3 run-admission refusals release the Azure lease"
   },

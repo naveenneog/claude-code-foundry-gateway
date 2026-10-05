@@ -424,16 +424,22 @@ export async function createInstallerUiServer(options = {}) {
           return send(res, status, body, setCookie);
         };
         if (activeRun?.state === 'running' || activeRun?.state === 'stopping') return refuseAdmission(409, { error: 'an installer run is already active', reason: 'azure-busy', operation: 'run' });
-        const body = await readJsonBody(req);
-        const steps = await validateRunRequest(body, () => listSteps(options));
-        if (body.answers?.AddressMode === 'custom' && body.answers?.AddressCertificateSource === 'Pfx') {
-          return refuseAdmission(409, { error: 'A PFX certificate is installed from a terminal because the installer asks for the PFX password only when it runs without -Yes.', reason: 'pfx-needs-terminal' });
-        }
-        const scope = scopeFromBody(body, steps);
-        const digest = answersDigest(body.answers || {});
-        const lease = await azureLease.acquire('run', 'run', 0);
-        const record = preflightPasses.lookup(body.fingerprint);
+        let body;
+        let steps;
+        let lease;
         try {
+          body = await readJsonBody(req);
+          steps = await validateRunRequest(body, () => listSteps(options));
+          if (body.answers?.AddressMode === 'custom' && body.answers?.AddressCertificateSource === 'Pfx') {
+            const error = new Error('A PFX certificate is installed from a terminal because the installer asks for the PFX password only when it runs without -Yes.');
+            error.status = 409;
+            error.reason = 'pfx-needs-terminal';
+            throw error;
+          }
+          const scope = scopeFromBody(body, steps);
+          const digest = answersDigest(body.answers || {});
+          lease = await azureLease.acquire('run', 'run', 0);
+          const record = preflightPasses.lookup(body.fingerprint);
           if (!record) throw preflightRequired('No passing preflight matched this run. Run preflight again before starting the installer.');
           if (record.engine !== 'pwsh' || record.answersDigest !== digest || !scopeCovers(record.scope, scope)) {
             throw preflightRequired('The answers or selected steps changed since the last passing preflight. Run preflight again.');
@@ -447,8 +453,8 @@ export async function createInstallerUiServer(options = {}) {
             throw error;
           }
         } catch (error) {
-          lease.release();
-          if (clientRequestId) runAdmissions.refused(clientRequestId, error.message, error.reason);
+          lease?.release();
+          if (clientRequestId) runAdmissions.refused(clientRequestId, error.status ? error.message : 'request failed', error.reason);
           throw error;
         }
         const run = createRun(steps);

@@ -124,9 +124,12 @@ test('R3-5 idle shutdown waits for an authenticated run request body being admit
 test('R3-2 server records run admission states by client request id', async () => {
   let releaseIdentity;
   const heldIdentity = new Promise((resolve) => { releaseIdentity = resolve; });
+  let identityEntered;
+  const identityStarted = new Promise((resolve) => { identityEntered = resolve; });
   let holdIdentity = false;
   const app = await start({
     readIdentity: async () => {
+      identityEntered?.();
       if (holdIdentity) await heldIdentity;
       return identityOne;
     },
@@ -140,7 +143,7 @@ test('R3-2 server records run admission states by client request id', async () =
       headers: { 'content-type': 'application/json', 'x-client-request-id': requestId },
       body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'], fingerprint: preflight.fingerprint }),
     });
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await identityStarted;
     let status = await (await app.fetch(`/api/run/status?request=${requestId}`)).json();
     assert.equal(status.admission.state, 'admitting');
     releaseIdentity();
@@ -167,6 +170,84 @@ test('R3-2 server records run admission states by client request id', async () =
   } finally {
     releaseIdentity?.();
     await app.close();
+  }
+});
+
+test('R3-2 refused admissions are recorded for every pre-start failure path', async () => {
+  const app = await start();
+  try {
+    async function assertRefused(requestId, response, expectedStatus) {
+      assert.equal(response.status, expectedStatus);
+      const body = await response.json().catch(() => ({}));
+      const status = await (await app.fetch(`/api/run/status?request=${requestId}`)).json();
+      assert.equal(status.admission.state, 'refused');
+      assert.equal(status.admission.error, body.error);
+      assert.equal(status.admission.reason, body.reason);
+    }
+
+    await assertRefused('r3-2-bad-body-0001', await app.fetch('/api/run/stream', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-client-request-id': 'r3-2-bad-body-0001' },
+      body: '{',
+    }), 400);
+
+    await assertRefused('r3-2-unknown-step-0001', await app.fetch('/api/run/stream', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-client-request-id': 'r3-2-unknown-step-0001' },
+      body: JSON.stringify({ answers: passingAnswers, steps: ['not-a-real-step'], fingerprint: '0'.repeat(64) }),
+    }), 400);
+  } finally {
+    await app.close();
+  }
+
+  const badList = await start({ env: { P93_INSTALLER_UI_STUB_BAD_LIST: 'type' } });
+  try {
+    await (async () => {
+      const response = await badList.fetch('/api/run/stream', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-client-request-id': 'r3-2-bad-list-0001' },
+        body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'], fingerprint: '0'.repeat(64) }),
+      });
+      assert.equal(response.status, 502);
+      const body = await response.json();
+      const status = await (await badList.fetch('/api/run/status?request=r3-2-bad-list-0001')).json();
+      assert.equal(status.admission.state, 'refused');
+      assert.equal(status.admission.error, body.error);
+    })();
+  } finally {
+    await badList.close();
+  }
+
+  let releaseIdentity;
+  const heldIdentity = new Promise((resolve) => { releaseIdentity = resolve; });
+  let identityEntered;
+  const identityStarted = new Promise((resolve) => { identityEntered = resolve; });
+  const busy = await start({
+    readIdentity: async () => {
+      identityEntered();
+      await heldIdentity;
+      return identityOne;
+    },
+  });
+  try {
+    const identity = busy.fetch('/api/identity').catch(() => {});
+    await identityStarted;
+    const response = await busy.fetch('/api/run/stream', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-client-request-id': 'r3-2-lease-busy-0001' },
+      body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'], fingerprint: '0'.repeat(64) }),
+    });
+    assert.equal(response.status, 409);
+    const body = await response.json();
+    const status = await (await busy.fetch('/api/run/status?request=r3-2-lease-busy-0001')).json();
+    assert.equal(status.admission.state, 'refused');
+    assert.equal(status.admission.error, body.error);
+    assert.equal(status.admission.reason, 'azure-busy');
+    releaseIdentity();
+    await identity;
+  } finally {
+    releaseIdentity?.();
+    await busy.close();
   }
 });
 
