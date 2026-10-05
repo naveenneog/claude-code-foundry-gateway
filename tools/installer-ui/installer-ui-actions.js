@@ -35,6 +35,7 @@
       pieces.push(formatError(data, error));
       if (data.reason === "preflight-required") pieces.push("Run the preflight again, then retry this action.");
       else if (data.reason === "azure-busy") pieces.push("Wait for it to finish, then try again.");
+      else if (data.runSummary) pieces.push("Fix the cause shown in the run output, then use Re-run failed step or the resume command.");
       else if (data.remedy) pieces.push(data.remedy);
       else pieces.push("Check the values above and try again.");
       return pieces.join(" ");

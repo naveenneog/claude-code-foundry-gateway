@@ -124,6 +124,24 @@ test('R2-3 failed run clears the busy status text', async () => {
   }
 });
 
+test('R2-4 run failure alert gives run-output recovery instead of generic form advice', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await passPreflight(page);
+    await page.route('**/api/run/stream', (route) => route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"summary","exitCode":9,"failedStepId":"resource-group","resumeCommand":"./Install-ClaudeGateway.ps1 -Steps resource-group","state":"exited","message":""}\n' }));
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await page.locator('#run-error[role="alert"]').getByText(/exit code 9/).waitFor();
+    const text = await page.locator('#run-error[role="alert"]').textContent();
+    assert.match(text, /Fix the cause shown in the run output, then use Re-run failed step or the resume command/);
+    assert.doesNotMatch(text, /Check the values above and try again/);
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
 test('P1 stopped run reports stopped status rather than an error', async () => {
   const app = await start();
   const { browser, page, pageErrors } = await openPage(app);
