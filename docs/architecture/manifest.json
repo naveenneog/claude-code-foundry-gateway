@@ -22,8 +22,8 @@
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "resolver/src/index.mjs": "b6b755fbbc56ef62e7b535a4bde2756111c2b5fc9913c16a893b45cb6dce33a3",
         "scripts/ClaudeDesktopSignIn.ps1": "00f6f2b38f15b589d47ec8cb048391910fed44131085fa4a865e0e802df7fe3e",
-        "scripts/ClaudeTurnstileApply.ps1": "f5b47f344eacd8c8a7a4e5d73e9641c1eefedf61436093c6e5ec6f7fcced1b84",
-        "scripts/ClaudeTurnstileGovernance.ps1": "0a21b00f97dd1a55fae67781f0093cbfdcf0ab080d09c67337e0c1a6e098a422",
+        "scripts/ClaudeTurnstileApply.ps1": "5d04d8fdef08605ebd81caa985759920a42eaa09a6f0aa1823a184aee19edc28",
+        "scripts/ClaudeTurnstileGovernance.ps1": "e0153a479a9bd3f5c17b5a9a9fc043177ea822469da73478a452c1e2428a4f7a",
         "scripts/Connect-ClaudeTurnstile.ps1": "cc4e2c094aaab8ce75856a3ba770d844bd32333d4f8b42f53f91cabdd1129201",
         "scripts/Export-ClaudeTurnstileUsage.ps1": "d68e00c953f4bb47492b39862b263377d33ccdf39f15c0e26bb2fbfa783efdb6",
         "scripts/Grant-ClaudeGovernanceGraphAccess.ps1": "2313313010eef6867f730bbb1803b7a0a68113a3ad961f798627e274aff56b1a",
@@ -89,13 +89,13 @@
         "infra/turnstile-schedule.bicep": "54d4b2d5897a14fd580887113f697fafc3cb2993b70b5cf7368adead956a9e36",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "scripts/ApimNamedValue.ps1": "cdab947026b92c4df235fcc5ca40d02a41fcb68ab44d66bb2200a1a148c8695a",
-        "scripts/ClaudeTurnstileApply.ps1": "f5b47f344eacd8c8a7a4e5d73e9641c1eefedf61436093c6e5ec6f7fcced1b84",
+        "scripts/ClaudeTurnstileApply.ps1": "5d04d8fdef08605ebd81caa985759920a42eaa09a6f0aa1823a184aee19edc28",
         "scripts/Connect-ClaudeTurnstile.ps1": "cc4e2c094aaab8ce75856a3ba770d844bd32333d4f8b42f53f91cabdd1129201",
         "scripts/Grant-ClaudeGovernanceGraphAccess.ps1": "2313313010eef6867f730bbb1803b7a0a68113a3ad961f798627e274aff56b1a",
         "scripts/Invoke-ClaudeTurnstileSchedule.ps1": "9a1d8c6dcd25615b2bf9bd11c62306de517c08e0529aee924d5212c758f1d0b9",
         "scripts/Sync-ClaudeAccess.ps1": "f4f5896df08c22bbfa9702ac0afa532e4cc4c4c990a82a4d7d4676b43e8c0c84",
         "scripts/Sync-ClaudeProjection.ps1": "0a30b7b4178700d9eb4879d4cb78c01bacf932e21b0856f0f532e38a06a24ca7",
-        "scripts/Sync-ClaudeTurnstileGovernance.ps1": "ad325ee9514a9cb5d7ac6895018fe2758c1eb12c12dfd01b6a8567f1799bf74f"
+        "scripts/Sync-ClaudeTurnstileGovernance.ps1": "42756e7b6d6689168226d4ebbddf4ce9bf51937d67b2b00319b72a9afc265bf2"
       },
       "outputs": [
         {
@@ -280,8 +280,8 @@
         "infra/policy.xml": "afa3bf916dd99e837d0ac190aa7e2f4cdccb08877221f44f853ce1885e257105",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "scripts/ClaudeBudgetModes.ps1": "fd119b3732c78f565ffd22126693f653c939330e4754f33b6c0769dec99cc231",
-        "scripts/ClaudeTurnstileApply.ps1": "f5b47f344eacd8c8a7a4e5d73e9641c1eefedf61436093c6e5ec6f7fcced1b84",
-        "scripts/ClaudeTurnstileGovernance.ps1": "0a21b00f97dd1a55fae67781f0093cbfdcf0ab080d09c67337e0c1a6e098a422",
+        "scripts/ClaudeTurnstileApply.ps1": "5d04d8fdef08605ebd81caa985759920a42eaa09a6f0aa1823a184aee19edc28",
+        "scripts/ClaudeTurnstileGovernance.ps1": "e0153a479a9bd3f5c17b5a9a9fc043177ea822469da73478a452c1e2428a4f7a",
         "scripts/Set-ClaudeBusinessUnit.ps1": "288084ea27e12a005b36a1db659f70b2c2a00942c85905a5cf85625261622b0f"
       },
       "outputs": [
@@ -512,7 +512,7 @@
         "scripts/ClaudeModelLifecycle.ps1": "58dfc8b64dbd890093851cc113a3a43dc84694720998398f690918dfd907c53b",
         "scripts/ClaudeModelPrices.ps1": "7c70c71e0505e53f3bf8b6b6ae5b3fc8deb0482c55a9b76c29cdb75ad56deffe",
         "scripts/ClaudeModelProfiles.ps1": "4a032924987f56f118e2deefe21673bfa5583c06dd56164a753b151c9d2a1549",
-        "scripts/ClaudeTurnstileGovernance.ps1": "0a21b00f97dd1a55fae67781f0093cbfdcf0ab080d09c67337e0c1a6e098a422",
+        "scripts/ClaudeTurnstileGovernance.ps1": "e0153a479a9bd3f5c17b5a9a9fc043177ea822469da73478a452c1e2428a4f7a",
         "scripts/New-ClaudeCodePolicy.ps1": "28caaf2a489f4645ff0f7f9e883dddc695e4695c5bd9161143daa51fd655f004",
         "scripts/Show-Banner.ps1": "03aa9c855b2aade332ba6810887c86700fa39dfc6bf04dfc8bc4057a4ad5db41",
         "scripts/Sync-ClaudeModels.ps1": "1afdc91387e87f10388e088060d530f5cca37ffb9c8a4d7ff97b82e9b7b73510",
