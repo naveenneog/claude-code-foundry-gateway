@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -223,7 +224,6 @@ test('P6 one-step preflight admits selected scope but blocks full run', async ()
 });
 
 test('P7 omitted custom certificate source behaves as KeyVault without changing submitted answers', async () => {
-  const { readFile } = await import('node:fs/promises');
   const source = await readFile(new URL('../tools/installer-ui/ui-model.js', import.meta.url), 'utf8');
   const context = { globalThis: {} };
   (await import('node:vm')).runInNewContext(source, context);
@@ -233,6 +233,47 @@ test('P7 omitted custom certificate source behaves as KeyVault without changing 
   const schema = { properties: { AddressMode: { 'x-appliedBy': ['Install-ClaudeGateway.ps1'], type: 'string' }, AddressCertificateSource: { 'x-appliedBy': ['Install-ClaudeGateway.ps1'], type: 'string' }, AddressKeyVaultCertificateId: { 'x-appliedBy': ['Install-ClaudeGateway.ps1'], type: 'string', requires: [{ answer: 'AddressCertificateSource', equals: 'KeyVault' }] } } };
   const answers = model.collectAnswersFromEntries(schema, new Map([['AddressMode', 'custom']]), '');
   assert.equal(answers.AddressCertificateSource, undefined);
+});
+
+test('G7B-1 validateAnswers stays in parity while effective custom-address defaults are page-only', async () => {
+  const source = await readFile(new URL('../tools/installer-ui/ui-model.js', import.meta.url), 'utf8');
+  const context = { globalThis: {} };
+  (await import('node:vm')).runInNewContext(source, context);
+  const model = context.globalThis.ClaudeInstallerUiModel;
+  const schema = JSON.parse(await readFile(new URL('../schemas/claude-gateway.answers.schema.json', import.meta.url), 'utf8'));
+  const answers = {
+    schemaVersion: 1,
+    SubscriptionId: '00000000-0000-4000-8000-000000000093',
+    AddressMode: 'custom',
+    AddressHostname: 'claude.example.test',
+  };
+  const scratch = join(tmpdir(), `p93-g7b-parity-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+  await mkdir(scratch, { recursive: true });
+  const answersPath = join(scratch, 'answers.json');
+  const runner = join(scratch, 'validate.ps1');
+  await writeFile(answersPath, JSON.stringify(answers, null, 2), 'utf8');
+  await writeFile(runner, `
+$ErrorActionPreference = 'Stop'
+. '${fileURLToPath(new URL('../scripts/ClaudeInstallerAnswers.ps1', import.meta.url)).replace(/'/g, "''")}'
+$problems = @(Test-ClaudeInstallerAnswersFile -Path '${answersPath.replace(/'/g, "''")}' -Consumer 'Install-ClaudeGateway.ps1')
+$problems | ConvertTo-Json -Depth 10
+`, 'utf8');
+  try {
+    const ps = spawn('pwsh', ['-NoProfile', '-File', runner], { shell: false });
+    let stdout = '';
+    let stderr = '';
+    ps.stdout.on('data', (chunk) => { stdout += chunk; });
+    ps.stderr.on('data', (chunk) => { stderr += chunk; });
+    const code = await new Promise((resolve) => ps.on('close', resolve));
+    assert.equal(code, 0, stderr);
+    const powerShellProblems = stdout.trim() ? JSON.parse(stdout) : [];
+    const jsProblems = model.validateAnswers(schema, answers, 'Install-ClaudeGateway.ps1');
+    assert.equal(JSON.stringify(jsProblems.map((p) => p.path).sort()), JSON.stringify(powerShellProblems.map((p) => p.path).sort()));
+    const effective = model.validateEffectiveAddressDefaults(schema, answers);
+    assert.ok(effective.some((p) => p.path === 'AddressKeyVaultCertificateId' && /uses Key Vault/.test(p.message)));
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
 });
 
 test('P8 switching accounts replaces deployment choices while preserving typed custom names', async () => {

@@ -457,13 +457,12 @@
       if (dupes.length) return [problem("answers.schema", "", `the answers file names properties that differ only in case or repeat: ${dupes.join(", ")}`, "Keep one spelling of each name.")];
     }
     if (!isPlainObject(answers)) return [problem("answers.schema", "", "the answers file is not a JSON object", "Write the answers as one JSON object.")];
-    const effectiveAnswers = Object.fromEntries(withEffectiveAddressDefaults(answers));
     const out = [];
     const canon = new Map();
     const keyOf = new Map();
     const props = schema.properties || {};
     const aliases = new Map(Object.entries(props).flatMap(([name, prop]) => (prop["x-flowKeys"] || []).map((alias) => [alias, name])));
-    for (const [key, value] of Object.entries(effectiveAnswers)) {
+    for (const [key, value] of Object.entries(answers)) {
       const add = (message, remedy) => out.push(problem("answers.schema", key, message, remedy));
       const matchingPattern = Object.entries(schema.patternProperties || {}).find(([pattern]) => new RegExp(pattern).test(key));
       if (schema["x-secrets"]?.[key]) {
@@ -511,6 +510,19 @@
       }
     }
     if (canon.has("BusinessUnits")) out.push(...validateBusinessUnitProblems(canon.get("BusinessUnits")));
+    return out;
+  }
+
+  function validateEffectiveAddressDefaults(schema, answers) {
+    if (!isPlainObject(answers)) return [];
+    const effective = Object.fromEntries(withEffectiveAddressDefaults(answers));
+    const out = [];
+    if (answers.AddressMode === "custom" && !answers.AddressCertificateSource && !answers.AddressKeyVaultCertificateId) {
+      out.push(problem("address.inputs", "AddressKeyVaultCertificateId", "AddressKeyVaultCertificateId is required because the installer uses Key Vault when no certificate source is given", "Give the Key Vault certificate URL, or choose Pfx and give the PFX path."));
+    }
+    if (effective.AddressMode === "custom" && effective.AddressCertificateSource === "Pfx" && !answers.AddressPfxPath) {
+      out.push(problem("address.inputs", "AddressPfxPath", "AddressPfxPath is required when AddressCertificateSource is Pfx", "Give the path of the PFX file."));
+    }
     return out;
   }
 
@@ -655,5 +667,6 @@
     specialEditors,
     validateAnswers,
     validateBusinessUnits,
+    validateEffectiveAddressDefaults,
   };
 })();

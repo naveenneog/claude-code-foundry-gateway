@@ -1,6 +1,6 @@
 (function () {
   "use strict";
-  const { buildPortableCommands, collectAnswersFromEntries, fieldGroups, fieldsByCheckId, isFieldActive, validateAnswers, validateBusinessUnits, isPlainObject, withEffectiveAddressDefaults } = globalThis.ClaudeInstallerUiModel;
+  const { buildPortableCommands, collectAnswersFromEntries, fieldGroups, fieldsByCheckId, isFieldActive, validateAnswers, validateBusinessUnits, validateEffectiveAddressDefaults, isPlainObject, withEffectiveAddressDefaults } = globalThis.ClaudeInstallerUiModel;
   let schema;
   let identity = {};
   let runHost;
@@ -266,7 +266,7 @@
       renderValidationProblems();
       return validationProblems;
     }
-    validationProblems = validateAnswers(schema, answers, "Install-ClaudeGateway.ps1");
+    validationProblems = [...validateAnswers(schema, answers, "Install-ClaudeGateway.ps1"), ...validateEffectiveAddressDefaults(schema, answers)];
     renderValidationProblems();
     return validationProblems;
   }
