@@ -189,6 +189,34 @@ test('G7B-4 load-time reattach errors are reported in the run alert region', asy
   }
 });
 
+test('R2-2 account is reread after a failed reattached run summary', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    let identityCalls = 0;
+    let releaseIdentity;
+    const identityRelease = new Promise((resolve) => { releaseIdentity = resolve; });
+    await page.route('**/api/identity', async (route) => {
+      identityCalls += 1;
+      if (identityCalls === 1) return route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'Azure CLI work is already active.', reason: 'azure-busy', operation: 'run' }) });
+      await identityRelease;
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ signedIn: true, user: 'after@example.test', tenantId: 'tenant-1', subscriptionName: 'Sub One', subscriptionId: '00000000-0000-4000-8000-000000000093' }) });
+    });
+    await page.route('**/api/run/status', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'reattach-run', state: 'running', currentStepId: 'resource-group', steps: ['resource-group'] }) }));
+    await page.route('**/api/run/attach?after=0', (route) => route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"summary","exitCode":7,"failedStepId":"resource-group","resumeCommand":"./Install-ClaudeGateway.ps1 -Steps resource-group","state":"exited","message":""}\n' }));
+    await page.reload();
+    await page.waitForSelector('[name="SubscriptionId"]');
+    await page.locator('#identity').getByText(/installer run is using Azure CLI/i).waitFor();
+    await page.locator('#run-error[role="alert"]').getByText(/exit code 7/).waitFor();
+    releaseIdentity();
+    await page.locator('#identity').getByText(/after@example\.test/).waitFor();
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
 test('P2 azure-busy response names the operation that holds Azure CLI', async () => {
   const app = await start();
   const { browser, page, pageErrors } = await openPage(app);

@@ -64,7 +64,7 @@
       if (lastFailedStep) pieces.push(`Failed step: ${lastFailedStep}.`);
       if (summary.resumeCommand) pieces.push(`Resume with: ${summary.resumeCommand}`);
       const error = new Error(pieces.join(" "));
-      error.data = { error: error.message };
+      error.data = { error: error.message, runSummary: true };
       throw error;
     }
 
@@ -161,6 +161,7 @@
       } catch (error) {
         runActive = false;
         updateRunAdmission();
+        if (error.data?.runSummary) refreshIdentityAfterRun();
         throw error;
       }
     }
@@ -173,9 +174,14 @@
         activeStepId = status.currentStepId || status.steps?.[0] || "";
         runActive = true;
         updateRunAdmission();
-        const result = (await readRunStream(await fetchRunStream(`./api/run/attach?after=${lastRunSeq}`))) || (await recoverMissingSummary());
-        refreshIdentityAfterRun();
-        return result;
+        try {
+          const result = (await readRunStream(await fetchRunStream(`./api/run/attach?after=${lastRunSeq}`))) || (await recoverMissingSummary());
+          refreshIdentityAfterRun();
+          return result;
+        } catch (error) {
+          if (error.data?.runSummary) refreshIdentityAfterRun();
+          throw error;
+        }
       }
     }
 
