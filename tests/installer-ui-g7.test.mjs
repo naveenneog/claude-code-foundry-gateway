@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { validatePreflight, validateProgressEvent, validateStepList } from '../tools/installer-ui/installer-contract.mjs';
+import { createAzureLease } from '../tools/installer-ui/azure-lease.mjs';
 import { createInstallerUiServer } from '../tools/installer-ui/server.mjs';
 
 const stubInstaller = fileURLToPath(new URL('./installer-ui-stub.mjs', import.meta.url));
@@ -174,6 +175,46 @@ test('S3 queued preflights do not overlap', async () => {
   }
 });
 
+test('S3 Azure lease serves queued reads in arrival order and refuses run conflicts', async () => {
+  const lease = createAzureLease();
+  const read = await lease.acquire('identity', 'read', 1000);
+  const served = [];
+  const a = lease.acquire('prefill', 'read', 1000).then((entry) => {
+    served.push(entry.operation);
+    return entry;
+  });
+  const b = lease.acquire('preflight', 'read', 1000).then((entry) => {
+    served.push(entry.operation);
+    return entry;
+  });
+  await assert.rejects(() => lease.acquire('run', 'run', 1000), { status: 409, operation: 'identity' });
+  read.release();
+  const leaseA = await a;
+  assert.deepEqual(served, ['prefill']);
+  read.release();
+  assert.deepEqual(served, ['prefill']);
+  leaseA.release();
+  const leaseB = await b;
+  assert.deepEqual(served, ['prefill', 'preflight']);
+  leaseB.release();
+
+  const run = await lease.acquire('run', 'run', 0);
+  await assert.rejects(() => lease.acquire('identity', 'read', 1000), { status: 409, operation: 'run' });
+  await assert.rejects(() => lease.acquire('run', 'run', 0), { status: 409, operation: 'run' });
+  run.release();
+});
+
+test('S3 Azure lease drops timed-out queued reads instead of serving them later', async () => {
+  const lease = createAzureLease();
+  const holder = await lease.acquire('identity', 'read', 1000);
+  const queued = lease.acquire('preflight', 'read', 20);
+  await assert.rejects(() => queued, { status: 504 });
+  holder.release();
+  const next = await lease.acquire('prefill', 'read', 1000);
+  assert.equal(next.operation, 'prefill');
+  next.release();
+});
+
 test('S3 reads are refused while a run holds the Azure lease', async () => {
   const app = await start({ env: { P93_INSTALLER_UI_STUB_DELAY_MS: '3000' } });
   try {
@@ -213,15 +254,38 @@ test('S3 a run is refused while a preflight holds the Azure lease', async () => 
 });
 
 test('S3 a queued read that times out while waiting starts no child', async () => {
-  const app = await start({ env: { P93_INSTALLER_UI_STUB_PREFLIGHT_DELAY_MS: '500' }, readOnlyTimeoutMs: 100 });
+  let releaseIdentity;
+  const identityGate = new Promise((resolve) => { releaseIdentity = resolve; });
+  const app = await start({ readOnlyTimeoutMs: 100, readIdentity: async () => { await identityGate; return identityOne; } });
   try {
-    const first = app.fetch('/api/preflight', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'] }) });
+    const first = app.fetch('/api/identity');
     await sleep(25);
     const second = await app.fetch('/api/preflight', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers, steps: ['gateway-deployment'] }) });
     assert.equal(second.status, 504);
     assert.match((await second.json()).error, /preflight timed out after 100 ms/);
-    await first;
-    assert.equal(app.stubCalls().filter((call) => call.args.includes('-Preflight')).length, 1);
+    assert.equal(app.stubCalls().filter((call) => call.args.includes('-Preflight')).length, 0);
+    releaseIdentity();
+    assert.equal((await first).status, 200);
+  } finally {
+    await app.close();
+  }
+});
+
+test('S3 run-admission refusals release the Azure lease', async () => {
+  let identity = identityOne;
+  const app = await start({ readIdentity: async () => identity });
+  try {
+    const preflight = await passingPreflight(app);
+    identity = { ...identityOne, tenantId: 'tenant-2' };
+    const changed = await app.fetch('/api/run/stream', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'], fingerprint: preflight.fingerprint }) });
+    assert.equal(changed.status, 409);
+    assert.equal((await changed.json()).reason, 'identity-changed');
+    assert.equal((await app.fetch('/api/identity')).status, 200);
+
+    const missing = await app.fetch('/api/run/stream', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'], fingerprint: '0'.repeat(64) }) });
+    assert.equal(missing.status, 409);
+    assert.equal((await missing.json()).reason, 'preflight-required');
+    assert.equal((await app.fetch('/api/identity')).status, 200);
   } finally {
     await app.close();
   }
