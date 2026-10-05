@@ -278,19 +278,23 @@ choice that needs a new instance takes the export and then stops before any Azur
 backup that the move restores ([Tier](UPDATE-AND-CHANGE.md#2-change-the-api-management-tier)).
 
 The Entitlement step switches to the projection only through `Invoke-ClaudeProjectionSwitch`
-([ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md)). Discovery
-(`scripts/flow/Discovery.ps1`) reads the gateway named value `entitlement-projection-prefix`, and the
-switch runs with `-ResourceGroup -ApimName -NamePrefix`. It checks the resolver deployment and service
-principal, the gateway's resolver values and the live resolver site's settings, then runs the drift
-check, the runner compare and switch evidence before its one write. The step's snapshot,
-`backups/before-entitlement-<apim>-<UTC time>.json`, is its backup and is taken at the write.
+([ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md)). The step reads the gateway named
+value `entitlement-projection-prefix` (`scripts/flow/Entitlement.ps1`), and the switch runs with
+`-ResourceGroup -ApimName -NamePrefix`. It checks the resolver deployment and service principal, the
+gateway's resolver values and the live resolver site's settings, then runs the drift check, the runner
+compare and switch evidence before its one write. In the guided flow the step's snapshot,
+`backups/before-entitlement-<apim>-<UTC time>.json`, is the switch's backup and is taken at the write.
+The standalone switch, `scripts/Deploy-ClaudeProjection.ps1 -FlipAfterCleanCompare`, writes its backup
+to `onboarding/projection-switch-<apim>-<UTC time>-<8 hex>.json` (`scripts/ClaudeProjectionSwitch.ps1`).
 Projection records persist until a sync removes or changes the person.
 
 The standalone deployer can preflight, populate and compare without switching (normally 30-90
 seconds for preflight, including a 25-second Graph pause). PowerShell 7 is required for
 projection deployment/sync. [ADR-0040](adr/0040-projection-preflight-and-switch.md) describes
-the rejected ARM-only check, and [ADR-0045](adr/0045-scheduled-projection-renewal.md), accepted with
-P86, the Cosmos renewal evidence, tested image and alerts.
+the rejected ARM-only check. [ADR-0045](adr/0045-scheduled-projection-renewal.md) (P86) introduced
+scheduled renewal with a two-hour lease; ADR-0051 replaces the lease and its admission with persistent
+records, on-demand sync and switch evidence from a recent full sync, and makes the sync job optional,
+for very large directories.
 
 ### Change the company address
 

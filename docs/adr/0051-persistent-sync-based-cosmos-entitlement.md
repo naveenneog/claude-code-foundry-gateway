@@ -104,3 +104,10 @@ rescan the whole directory.
 - **Superseded tests change.** Tests that asserted the lease, the three-generation admission, the
   45-minute newest run and the 60-minute margin now assert these decisions. Each change is named in
   its commit.
+- **The prefix is script-owned.** `entitlement-projection-prefix` is written by the projection deployer
+  (and by hand in [AZ-COMMANDS](../AZ-COMMANDS.md)). `infra/main.bicep` does not declare it, so a
+  gateway redeploy keeps it. The guide check in `tests/Test-AzCommandsGuide.ps1` therefore accepts a
+  named-value id that an in-scope script writes, as well as those the templates and the policy declare.
+- **Legacy records and retired rules.** A record that still carries an `expiresAt` from before this
+  decision is not served once that time passes; the first full sync rewrites it without one. A redeploy
+  of the optional job removes the expiry-margin alert rule, and, for a manual job, the no-success rule.

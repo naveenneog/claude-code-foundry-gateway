@@ -70,7 +70,7 @@ resolver therefore cannot change who is entitled.
 | Region capacity | Cosmos regional capacity cannot be checked in advance or reserved by preflight. Measured: Canada Central and Canada East both refused with `ServiceUnavailable ... high demand ... To request region access for your subscription, please follow this link https://aka.ms/cosmosdbquota`. A private endpoint can point at an account in another region, so a Cosmos DB account elsewhere still stays private in the VNet. |
 | Subnets | See the next table. In most enterprises the network team creates them and hands over the resource IDs. |
 | Tools | PowerShell **7 or later** for `Deploy-ClaudeProjection.ps1` and `Sync-ClaudeProjection.ps1`; Azure CLI/Bicep, Node/npm and a ZIP-capable `tar`. Bicep `build-params` with `using none` evaluates the existing storage name locally. Shared Graph membership callers that manage named values still support Windows PowerShell 5.1. |
-| Rollout approval | P86 admits automated switching only after destination-bound Cosmos evidence from the in-VNet runner and a pinned no-override Container Apps job definition both pass. Owner approval is still required before merge. |
+| Switch evidence | The switch writes `entitlement-source` only after the resolver checks, a clean compare and a successful full sync within 24 hours for this Cosmos account and tenant, with no record the resolver would refuse ([ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md)). A full sync through the runner is enough; the sync job is optional. |
 
 | Subnet | Size | Delegation | Notes |
 |---|---|---|---|
@@ -103,9 +103,18 @@ existing access. Removing a person takes effect after the sync plus at most the 
 lasts 60 to 90 minutes (Microsoft Learn, updated 2026-07-17:
 https://learn.microsoft.com/entra/identity-platform/access-tokens).
 
-`scripts/Deploy-ClaudeProjectionRenewal.ps1` now deploys the optional sync job for very large
-directories. Its trigger is Manual by default; `-CronExpression '<five fields>'` adds a schedule. A
-manual run starts with `az containerapp job start`. The job needs Microsoft Graph application
+`scripts/Deploy-ClaudeProjectionRenewal.ps1` deploys the optional sync job for very large
+directories:
+
+```powershell
+.\scripts\Deploy-ClaudeProjectionRenewal.ps1 -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> -AlertEmail <address>
+```
+
+It deploys the registry and the job's identity, builds the image with `az acr build` from the sync package, which
+holds `sync/` and `resolver/src/entitlement.mjs` at their repository paths, reads the image digest back
+with `az acr manifest show-metadata`, then deploys the job with that digest
+([ADR-0049](adr/0049-projection-renewal-deployment.md)). Its trigger is Manual by default;
+`-CronExpression '<five fields>'` adds a schedule. A manual run starts with `az containerapp job start`. The job needs Microsoft Graph application
 permission `GroupMember.Read.All`, granted by a Privileged Role Administrator or Global Administrator
 through `scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1`. Large full syncs through the runner
 are slow because `scripts/ClaudeRunner.ps1` sends files through `az container exec` in chunks under
@@ -262,6 +271,13 @@ or creation failures still stop the run rather than claiming success.
 | Gateway service principal; existing resolver app/id URI | Graph application/service-principal read permission, such as `Application.Read.All`, and applicable user/role access |
 | Default app-registration policy, only when no existing app is selected | `Policy.Read.All`; unreadable policy produces WARN, and `-ResolverAppId` avoids this read |
 | Switch (`-FlipAfterCleanCompare`) | API Management named-value read and write; ARM read of the resolver deployment and resolver site; the list action on the site's application settings (`Microsoft.Web/sites/config/list/action`, which the Reader role does not include); Graph read for the drift check; and Cosmos data read through the runner ([ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md)) |
+| Projection sync (`Sync-ClaudeAccess.ps1`) | API Management named-value read; delegated Graph `GroupMember.Read.All` for a full sync, plus `User.ReadBasic.All` for `-User`; and, on `aci-projtest-<prefix>`, container group read, `Microsoft.ContainerInstance/containerGroups/start/action` and `Microsoft.ContainerInstance/containerGroups/containers/exec/action` |
+
+A command run through `az container exec` runs as the runner's managed identity, which holds
+Cosmos DB Built-in Data Contributor on `claude/entitlement`. Anyone who can run a projection sync can
+therefore write any entitlement record, and the status record that switch evidence reads. That is the
+same trust as write access to the named values `allow-standard`, `allow-premium` and `bu-members`,
+so the runner's exec permission is an entitlement-write permission.
 
 Sources, accessed 2026-09-29: [user GET](https://learn.microsoft.com/graph/api/user-get?view=graph-rest-1.0),
 [group list](https://learn.microsoft.com/graph/api/group-list?view=graph-rest-1.0),
@@ -281,7 +297,14 @@ $appId = az ad app create --display-name claude-projection-resolver-<prefix> `
 if ($LASTEXITCODE -ne 0 -or -not $appId) { throw 'Resolver registration failed; no update attempted.' }
 az ad app update --id $appId --identifier-uris "api://$appId"
 if ($LASTEXITCODE -ne 0) { throw 'Resolver identifier URI update failed.' }
+az ad sp create --id $appId
+if ($LASTEXITCODE -ne 0) { throw 'Resolver service principal creation failed.' }
 ```
+
+Microsoft Entra ID issues no token for an application that has no service principal in the tenant
+(AADSTS500011; [application and service principal objects](https://learn.microsoft.com/entra/identity-platform/app-objects-and-service-principals)).
+A registration made in the portal gets one; `az ad app create` does not. The deployer creates the
+service principal when it is missing, and the switch refuses without it.
 
 The operator's deployment uses `-ResolverAppId $appId`. Azure subscription Owner is not an Entra
 application-registration role. The deployer reports an actual creation failure, including
