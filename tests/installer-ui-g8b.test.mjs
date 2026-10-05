@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -402,6 +402,22 @@ test('R3-8 review buttons keep first pointer clicks after validation blur rerend
     await browser.close();
     await app.close();
   }
+});
+
+test('R3-7 effective address defaults match the installer address script', async () => {
+  const script = await readFile(new URL('../scripts/ClaudeGatewayAddressInput.ps1', import.meta.url), 'utf8');
+  const certificateSource = script.match(/AddressCertificateSource = '([^']+)'/)?.[1];
+  const dnsModes = [...script.matchAll(/AddressDnsMode(?: = if \(\$result\.AddressDnsZoneResourceId\) \{ '([^']+)' \} else \{ '([^']+)' \}| -notin @\('([^']+)','([^']+)'\))/g)];
+  const source = await readFile(new URL('../tools/installer-ui/ui-model.js', import.meta.url), 'utf8');
+  const context = { globalThis: {}, console };
+  (await import('node:vm')).runInNewContext(source, context);
+  const model = context.globalThis.ClaudeInstallerUiModel;
+  const withoutZone = Object.fromEntries(model.withEffectiveAddressDefaults({ AddressMode: 'custom' }));
+  const withZone = Object.fromEntries(model.withEffectiveAddressDefaults({ AddressMode: 'custom', AddressDnsZoneResourceId: '/subscriptions/00000000-0000-4000-8000-000000000093/resourceGroups/rg/providers/Microsoft.Network/dnsZones/example.test' }));
+  assert.equal(withoutZone.AddressCertificateSource, certificateSource);
+  assert.equal(withoutZone.AddressDnsMode, dnsModes[0]?.[2]);
+  assert.equal(withZone.AddressDnsMode, dnsModes[0]?.[1]);
+  assert.deepEqual(new Set([dnsModes[0]?.[1], dnsModes[0]?.[2]]), new Set([dnsModes[1]?.[3], dnsModes[1]?.[4]]));
 });
 
 test('R3-9 page load attaches to a stopping run with controls disabled until summary', async () => {

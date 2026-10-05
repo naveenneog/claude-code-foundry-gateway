@@ -18,6 +18,24 @@
     "test": "R3-8 review buttons keep first pointer clicks after validation blur rerenders"
   },
   {
+    "id": "r3-7-1",
+    "why": "The drift detector must fail if the installer address script changes the omitted certificate-source default.",
+    "file": "scripts/ClaudeGatewayAddressInput.ps1",
+    "find": "    if (-not $result.AddressCertificateSource) { $result.AddressCertificateSource = 'KeyVault' }\n",
+    "replace": "    if (-not $result.AddressCertificateSource) { $result.AddressCertificateSource = 'Pfx' }\n",
+    "testFile": "tests/installer-ui-g8b.test.mjs",
+    "test": "R3-7 effective address defaults match the installer address script"
+  },
+  {
+    "id": "r3-7-2",
+    "why": "The UI model must keep its copied omitted certificate-source default equal to the installer address script.",
+    "file": "tools/installer-ui/ui-model.js",
+    "find": "    if (out.get(\"AddressMode\") === \"custom\" && !out.get(\"AddressCertificateSource\")) out.set(\"AddressCertificateSource\", \"KeyVault\");\n",
+    "replace": "    if (out.get(\"AddressMode\") === \"custom\" && !out.get(\"AddressCertificateSource\")) out.set(\"AddressCertificateSource\", \"Pfx\");\n",
+    "testFile": "tests/installer-ui-g8b.test.mjs",
+    "test": "R3-7 effective address defaults match the installer address script"
+  },
+  {
     "id": "r3-3-1",
     "why": "The preflight adapter must reject a top-level PASS when a blocking NOT-RUN or FAIL check recomputes to FAIL.",
     "file": "tools/installer-ui/installer-contract.mjs",
