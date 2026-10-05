@@ -85,10 +85,7 @@ function Initialize-ClaudeFlowStep {
     # snapshot the write gate takes, as scripts/Update-ClaudeGateway.ps1 does for its migrations; the
     # snapshot itself is taken at the write, so a refused switch leaves none.
     param([Parameter(Mandatory = $true)]$Record, [Parameter(Mandatory = $true)]$Plan)
-    if ((Test-ClaudeFlowPlanIsNoop $Plan) -or $Plan.Data.SnapshotPath) { return }
-    $name = 'before-entitlement-{0}-{1}.json' -f $Plan.Data.Target.ApimName, [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ')
-    $Plan.Data.SnapshotPath = Join-Path (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'backups') $name
-    $Plan.Data.SnapshotTaken = $false
+    Initialize-ClaudeFlowLifecycleSnapshotPath -Plan $Plan -Step entitlement
 }
 
 function Invoke-ClaudeFlowStep {

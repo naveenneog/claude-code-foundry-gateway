@@ -137,6 +137,39 @@ $desktopQuestions = @(Get-ClaudeFlowStepQuestions -Record $desktopRecord -Discov
 Assert 'desktop question uses orchestrator property names' ($desktopQuestions[0].Key -eq 'desktopSignIn' -and $desktopQuestions[0].AcceptRecommendedWithoutConsole)
 
 Write-Host ''
+Write-Host 'P96 - the Tier and Desktop sign-in changes name their snapshot as Start prepares them' -ForegroundColor Cyan
+# Start-ClaudeGateway.ps1 removes the step functions, dot-sources each module and keeps its Initialize-ClaudeFlowStep
+# as Prepare (Start-ClaudeGateway.ps1:154-176). A module without one gets none, and its write gate then stops with
+# "A named-value snapshot path is required". The same sequence here, with a repository root whose
+# Backup-ClaudeGateway.ps1 writes the snapshot file.
+$stubRoot = Join-Path ([IO.Path]::GetTempPath()) ('p96-flow-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Force -Path (Join-Path $stubRoot 'scripts') | Out-Null
+[IO.File]::WriteAllText((Join-Path $stubRoot 'scripts\Backup-ClaudeGateway.ps1'), "param([string]`$ResourceGroup, [string]`$ApimName, [string]`$Path, [string]`$SubscriptionId)`nNew-Item -ItemType Directory -Force -Path (Split-Path `$Path -Parent) | Out-Null`n[IO.File]::WriteAllText(`$Path, '{}')`nexit 0`n")
+$prepared = @(foreach ($case in @(
+            @{ Module = 'Tier.ps1'; Record = $tierRecord; Discovery = $tierDiscovery; Prefix = 'before-tier-apim-contoso-' }
+            @{ Module = 'DesktopSignIn.ps1'; Record = $desktopRecord; Discovery = $desktopDiscovery; Prefix = 'before-desktop-sign-in-apim-contoso-' }
+        )) {
+        foreach ($name in 'Get-ClaudeFlowStepPlan', 'Initialize-ClaudeFlowStep', 'Invoke-ClaudeFlowStep') { Remove-Item "function:\$name" -Force -ErrorAction SilentlyContinue }
+        . (Join-Path $root "scripts\flow\$($case.Module)")
+        $prepare = if (Get-Command Initialize-ClaudeFlowStep -ErrorAction SilentlyContinue) { (Get-Command Initialize-ClaudeFlowStep).ScriptBlock } else { $null }
+        $plan = Get-ClaudeFlowStepPlan -Record $case.Record -Discovery $case.Discovery
+        $realRoot = ${function:Get-ClaudeFlowLifecycleRepoRoot}
+        Set-Item -Path function:global:Get-ClaudeFlowLifecycleRepoRoot -Value ([scriptblock]::Create("'$stubRoot'"))
+        try {
+            if ($prepare) { & $prepare -Record $case.Record -Plan $plan | Out-Null }
+            $gate = Get-Thrown { Assert-ClaudeFlowLifecycleSnapshotBeforeWrite -Plan $plan }
+        }
+        finally { Set-Item -Path function:global:Get-ClaudeFlowLifecycleRepoRoot -Value $realRoot }
+        $path = [string]$plan.Data.SnapshotPath
+        if (-not ($prepare -and -not $gate -and $path -and (Split-Path $path -Leaf).StartsWith($case.Prefix) -and (Split-Path (Split-Path $path -Parent) -Leaf) -eq 'backups' -and
+                (Test-Path -LiteralPath $path) -and $plan.Data.SnapshotTaken -eq $true)) {
+            "$($case.Module): prepare $([bool]$prepare), gate '$gate', path '$path'"
+        }
+    })
+Assert 'Tier and Desktop sign-in name their snapshot under backups/ when Start prepares them, and the write gate takes it' (-not $prepared.Count) ($prepared -join ' || ')
+Remove-Item -LiteralPath $stubRoot -Recurse -Force -ErrorAction SilentlyContinue
+
+Write-Host ''
 Write-Host 'P66 lifecycle - plans write nothing' -ForegroundColor Cyan
 $updateScript = Get-Content (Join-Path $root 'scripts\Update-ClaudeGateway.ps1') -Raw
 $rootUpdateScript = Get-Content (Join-Path $root 'Update-ClaudeGateway.ps1') -Raw
