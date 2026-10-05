@@ -11,28 +11,28 @@ $mutations = @(
     @{ Name='response continuation is discarded'; File='scripts\Sync-ClaudeProjection.ps1'; From="Continuation = [string]`$response.Headers['x-ms-continuation']"; To="Continuation = ''"; Suite=$rules }
     @{ Name='query is no longer paged'; File='scripts\Sync-ClaudeProjection.ps1'; From='$existing = Get-ClaudeProjectionExisting -ReadPage'; To='$existing = &'; Suite=$rules }
     @{ Name='continuation header is not forwarded'; File='scripts\Sync-ClaudeProjection.ps1'; From="`$headers['x-ms-continuation'] = `$continuation"; To="`$headers['wrong-header'] = `$continuation"; Suite=$rules }
-    @{ Name='PowerShell omits document expiry'; File='scripts\Sync-ClaudeProjection.ps1'; From='expiresAt      = $expiresAt'; To='expiresAt      = 0'; Suite=$rules }
-    @{ Name='PowerShell restarts the lease after scanning'; File='scripts\Sync-ClaudeProjection.ps1'; From='$expiresAt = $scanStarted.ToUnixTimeSeconds() + $MaxAgeSeconds'; To='$expiresAt = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() + $MaxAgeSeconds'; Suite=$rules }
-    @{ Name='PowerShell accepts a longer maximum lease'; File='scripts\Sync-ClaudeProjection.ps1'; From='[ValidateRange(60,7200)]'; To='[ValidateRange(60,86400)]'; Suite=$rules }
-    @{ Name='PowerShell never renews unchanged members'; File='scripts\Sync-ClaudeProjection.ps1'; From='{ $unchanged++ }'; To='{ $unchanged++; continue }'; Suite=$rules }
+    @{ Name='PowerShell writes expiresAt on records'; File='scripts\Sync-ClaudeProjection.ps1'; From='lastVerifiedAt = $verifiedAt'; To="lastVerifiedAt = `$verifiedAt`n        expiresAt      = `$expiresAt"; Suite=$rules }
+    @{ Name='PowerShell verifies records at apply time'; File='scripts\Sync-ClaudeProjection.ps1'; From='$verifiedAt = $scanStarted.ToString(''yyyy-MM-ddTHH:mm:ss.fffZ'')'; To='$verifiedAt = [DateTimeOffset]::UtcNow.ToString(''yyyy-MM-ddTHH:mm:ss.fffZ'')'; Suite=$rules }
+    @{ Name='PowerShell accepts a longer snapshot apply-by'; File='scripts\Sync-ClaudeProjection.ps1'; From='[ValidateRange(60,7200)]'; To='[ValidateRange(60,86400)]'; Suite=$rules }
+    @{ Name='PowerShell rewrites unchanged members'; File='scripts\Sync-ClaudeProjection.ps1'; From='{ $unchanged++; continue }'; To='{ $unchanged++ }'; Suite=$rules }
     @{ Name='PowerShell failed revocation reports success'; File='scripts\Sync-ClaudeProjection.ps1'; From='catch { $failed++; Write-Warning "  could not remove'; To='catch { Write-Warning "  could not remove'; Suite=$rules }
-    @{ Name='PowerShell expired apply is not reported'; File='scripts\Sync-ClaudeProjection.ps1'; From='Projection expired during apply'; To='Apply done'; Suite=$rules }
-    @{ Name='Node apply omits refresh'; File='sync\src\apply-projection.mjs'; From=', refresh: true'; To=', refresh: false'; Suite=$rules }
-    @{ Name='Node apply omits scan lease'; File='sync\src\apply-projection.mjs'; From='toDocument(r, { tenantId, mappingVersion, reconciliation })'; To='toDocument(r, { tenantId, mappingVersion })'; Suite=$rules }
-    @{ Name='Node expired apply reports success'; File='sync\src\apply-projection.mjs'; From='summary.ok = summary.ok && !expired;'; To=''; Suite=$rules }
-    @{ Name='Node expired apply exits zero'; File='sync\src\apply-projection.mjs'; From=' || expired ? 3 : 0'; To=' ? 3 : 0'; Suite=$rules }
+    @{ Name='PowerShell omits snapshot apply-by'; File='scripts\Sync-ClaudeProjection.ps1'; From='expiresAt      = $expiresAt'; To='expiresAt      = $null'; Suite=$rules }
+    @{ Name='Node apply rewrites unchanged records'; File='sync\src\apply-projection.mjs'; From=', refresh: false'; To=', refresh: true'; Suite=$rules }
+    @{ Name='Node apply omits reconciliation metadata'; File='sync\src\apply-projection.mjs'; From='toDocument(r, { tenantId, mappingVersion, reconciliation })'; To='toDocument(r, { tenantId, mappingVersion })'; Suite=$rules }
+    @{ Name='Node status failures report success'; File='sync\src\apply-projection.mjs'; From='summary.ok = statusWrite.failed === 0;'; To='summary.ok = true;'; Suite=$rules }
+    @{ Name='Node failed summary exits zero'; File='sync\src\apply-projection.mjs'; From='if (!summary.ok) process.exit(3);'; To=''; Suite=$rules }
     @{ Name='Node operation failures report success'; File='sync\src\apply-projection.mjs'; From='ok: !(writes.failed || deletes.failed), '; To=''; Suite=$rules }
-    @{ Name='generation is omitted from documents'; File='sync\src\plan.mjs'; From='    ...reconciliation,'; To=''; Suite=$node }
+    @{ Name='generation is omitted from documents'; File='sync\src\plan.mjs'; From='reconciliationGeneration: reconciliation?.reconciliationGeneration,'; To=''; Suite=$node }
     @{ Name='renewal skips unchanged members'; File='sync\src\plan.mjs'; From='if (!refresh) continue;'; To='continue;'; Suite=$node }
     @{ Name='lease starts at apply instead of scan'; File='sync\src\plan.mjs'; From='Math.floor(start / 1000) + maxAgeSeconds'; To='Math.floor(now.getTime() / 1000) + maxAgeSeconds'; Suite=$node }
     @{ Name='expired snapshots may be replayed'; File='sync\src\plan.mjs'; From="problems.push('snapshot expired; resolve the directory again')"; To="void 0"; Suite=$node }
-    @{ Name='comparison approves expired records'; File='sync\src\plan.mjs'; From=' || freshnessProblems(r, now).length'; To=''; Suite=$node }
-    @{ Name='expired record authorizes'; File='resolver\src\entitlement.mjs'; From='if (doc.expiresAt <= Math.floor(now.getTime() / 1000))'; To='if (false)'; Suite=$node }
+    @{ Name='comparison approves expired snapshots'; File='sync\src\plan.mjs'; From='if (problems.length) return { refused: true, problems };'; To='if (false) return { refused: true, problems };'; Suite=$node }
+    @{ Name='missing verification authorizes'; File='resolver\src\entitlement.mjs'; From='!Number.isFinite(verified) || '; To=''; Suite=$node }
     @{ Name='missing generation authorizes'; File='resolver\src\entitlement.mjs'; From='!isObjectId(doc.reconciliationGeneration) || '; To=''; Suite=$node }
-    @{ Name='future verification authorizes'; File='resolver\src\entitlement.mjs'; From='verified > now.getTime() || '; To=''; Suite=$node }
-    @{ Name='unbounded lease authorizes'; File='resolver\src\entitlement.mjs'; From='doc.expiresAt > Math.floor(verified / 1000) + 7200'; To='false'; Suite=$node }
+    @{ Name='future verification authorizes'; File='resolver\src\entitlement.mjs'; From=' || verified > now.getTime()'; To=''; Suite=$node }
+    @{ Name='legacy expiry refuses access'; File='resolver\src\entitlement.mjs'; From='if (doc.effectiveFrom) {'; To="if (doc.expiresAt <= Math.floor(now.getTime() / 1000)) { return { ok: false, status: 503, reason: 'projection record expired' }; }`n`n  if (doc.effectiveFrom) {"; Suite=$node }
     @{ Name='missing tenant authorizes'; File='resolver\src\entitlement.mjs'; From='if (!tenantId || doc.tenantId !== tenantId)'; To='if (tenantId && doc.tenantId && doc.tenantId !== tenantId)'; Suite=$node }
-    @{ Name='resolver drops expiry in response'; File='resolver\src\entitlement.mjs'; From='expiresAt: doc.expiresAt,'; To=''; Suite=$node }
+    @{ Name='resolver exposes legacy expiry'; File='resolver\src\entitlement.mjs'; From='reconciliationGeneration: doc.reconciliationGeneration,'; To="reconciliationGeneration: doc.reconciliationGeneration,`n      expiresAt: doc.expiresAt,"; Suite=$node }
     @{ Name='tenant-free cache key'; File='infra\policy.xml'; From='ent:v2:{{tenant-id}}:'; To='ent:'; Suite=$rules }
     @{ Name='positive cache is clipped to a lease'; File='infra\policy.xml'; From='duration="@(int.Parse("{{entitlement-cache-seconds}}"))"'; To='duration="@{ var rec = JObject.Parse((string)context.Variables[""entRecord""]); var expires = (long?)rec[""expiresAt""] ?? 0; var now = (long)(DateTime.UtcNow - new DateTime(1970, 1, 1)).TotalSeconds; return (int)Math.Max(0, Math.Min(int.Parse(""{{entitlement-cache-seconds}}""), expires - now)); }"'; Suite=$rules }
     @{ Name='cache hit skips generation'; File='infra\policy.xml'; From='return !string.IsNullOrEmpty((string)rec["reconciliationGeneration"]);'; To='return true;'; Suite=$rules }

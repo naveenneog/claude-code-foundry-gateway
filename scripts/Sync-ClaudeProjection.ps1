@@ -271,11 +271,11 @@ Ok "$($resolved.Count) entitled identity(ies) resolved"
 $generation = [guid]::NewGuid().ToString()
 $verifiedAt = $scanStarted.ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
 $expiresAt = $scanStarted.ToUnixTimeSeconds() + $MaxAgeSeconds
-if ($expiresAt -le [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) {
-    throw 'Directory scan outlived the projection lease. Nothing published; resolve again.'
-}
 
 if ($ExportPath) {
+    if ($expiresAt -le [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) {
+        throw 'Directory scan outlived the snapshot apply-by limit. Nothing exported; resolve again.'
+    }
     Step 'Writing the snapshot'
     $snapshot = [ordered]@{
         kind           = 'claude-entitlement-snapshot'
@@ -394,7 +394,7 @@ foreach ($r in $resolved) {
         # No ?? here: Windows PowerShell 5.1 is what an admin's box runs.
         $curBu = ''
         if ($cur.businessUnit) { $curBu = $cur.businessUnit }
-        if ($cur.tier -eq $r.Tier -and $curBu -eq $r.BusinessUnit) { $unchanged++ }
+        if ($cur.tier -eq $r.Tier -and $curBu -eq $r.BusinessUnit) { $unchanged++; continue }
     }
     $toWrite.Add($r)
 }
@@ -425,7 +425,6 @@ if ($WhatIfPreference) {
 
 # ---------------------------------------------------------------- 5. write
 Step 'Writing'
-if ($expiresAt -le [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) { throw 'Projection expired before writing; resolve again.' }
 $written = 0; $failed = 0
 foreach ($r in $toWrite) {
     $doc = @{
@@ -438,7 +437,6 @@ foreach ($r in $toWrite) {
         effectiveFrom  = $null
         reconciliationGeneration = $generation
         lastVerifiedAt = $verifiedAt
-        expiresAt      = $expiresAt
     } | ConvertTo-Json -Compress
     try {
         Invoke-Cosmos -Method POST -Path "/dbs/$Database/colls/$Container/docs" `
@@ -465,15 +463,11 @@ if ($orphans.Count -gt 0 -and -not $KeepOrphans) {
 }
 elseif ($orphans.Count -gt 0) {
     Write-Host "  [WARN] $($orphans.Count) orphan(s) kept (-KeepOrphans)" -ForegroundColor Yellow
-    Note 'Their existing lease is not renewed. They lose access at its absolute expiry.'
+    Note 'They keep their existing access until a later sync deletes or changes them.'
 }
 
 Write-Host ''
-if ($expiresAt -le [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) {
-    $failed++
-    Write-Warning 'Projection expired during apply; resolve again and investigate scan/apply duration.'
-}
-Write-Host "$written entitled identity(ies) refreshed; $failed failure(s)." -ForegroundColor Green
+Write-Host "$written entitled identity(ies) written; $unchanged unchanged; $failed failure(s)." -ForegroundColor Green
 Note "mappingVersion $mappingVersion - a cached answer can be traced to this run."
 Write-Host ''
 if ($failed) { exit 1 }
