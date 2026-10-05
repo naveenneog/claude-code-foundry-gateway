@@ -22,8 +22,9 @@ minutes without interactive activity
 
 The implemented UI includes static mode, PowerShell live-mode detection, Azure identity and prefill
 seams, preflight fingerprints, stream reattachment and stop, a single browser/server/test model file
-and versioned installer-interface adapters (`tools/installer-ui/server.mjs:424-480`; `tools/installer-ui/server.mjs:124-190`;
-`tools/installer-ui/ui-model.js:561-644`; `tools/installer-ui/installer-contract.mjs:29-89`).
+and versioned installer-interface adapters (`tools/installer-ui/server.mjs:414-439`; `tools/installer-ui/server.mjs:441-486`;
+`tools/installer-ui/server.mjs:572-583`; `tools/installer-ui/server.mjs:124-190`;
+`tools/installer-ui/ui-model.js:579-645`; `tools/installer-ui/installer-contract.mjs:29-90`).
 
 ## Decision
 
@@ -36,30 +37,30 @@ node ./tools/installer-ui/server.mjs
 The server uses Node's built-in `http` module and no packages. It binds `127.0.0.1` by default and
 prints a token URL. A non-loopback bind requires `--allow-host <host[:port]>`; refused Host requests
 log the Host and `X-Forwarded-*` shape to the terminal, while the HTTP response stays generic
-(`tools/installer-ui/server.mjs:382-383`; `tools/installer-ui/server.mjs:630-650`).
+(`tools/installer-ui/server.mjs:382-383`; `tools/installer-ui/server.mjs:636-647`).
 
 The bootstrap token is accepted on the initial top-level page request, then the server sets an
 `HttpOnly; SameSite=Strict` cookie to a new session secret and redirects to a tokenless URL. The
 bootstrap URL token is never accepted as the session cookie (`tools/installer-ui/session-auth.mjs:4-13`;
-`tools/installer-ui/server.mjs:385-405`). `GET /api/session` returns the
+`tools/installer-ui/server.mjs:390-408`). `GET /api/session` returns the
 CSRF token and `live` or `static` mode. JSON POST routes require `Content-Type: application/json`,
 state-changing routes require `x-csrf-token`, child-spawning routes check Origin and Fetch Metadata,
-the server sends no CORS header, and `OPTIONS` is refused (`tools/installer-ui/server.mjs:393-418`;
+the server sends no CORS header, and `OPTIONS` is refused (`tools/installer-ui/server.mjs:385`; `tools/installer-ui/server.mjs:409-422`;
 `tools/installer-ui/server.mjs:321-328`; `tools/installer-ui/http-helpers.mjs:23-53`;
 `tools/installer-ui/http-helpers.mjs:80-112`).
 
 The server exposes fixed routes. The page uses classic deferred scripts so the same
 `tools/installer-ui/index.html` works from `file://` and from the server. The server serves `/` and
 `/index.html` byte for byte from that file and serves only the declared script and CSS routes
-(`tools/installer-ui/index.html:8-14`; `tools/installer-ui/server.mjs:363-418`;
+(`tools/installer-ui/index.html:8-14`; `tools/installer-ui/server.mjs:414`;
 `tests/installer-ui-structure.test.mjs:55-65`).
 
 The run record is server-side. It stores the active or last run id, selected steps, state, current
 step, failed step, resume command, exit code, start time and a bounded tail. `GET /api/run/status`
 returns the run without the tail. `GET /api/run/attach?after=<seq>` streams tail and live events.
 `POST /api/run/stop` kills the process tree and reports checkpoint-based resume semantics
-(`tools/installer-ui/run-record.mjs:10-126`; `tools/installer-ui/server.mjs:429-434`;
-`tools/installer-ui/server.mjs:570-578`).
+(`tools/installer-ui/run-record.mjs:10-126`; `tools/installer-ui/server.mjs:434-439`;
+`tools/installer-ui/server.mjs:580-583`).
 
 The run transport uses per-source UTF-8 decoders, line carry, final flush, a progress-file byte
 offset, serialized console line handling, a 4 MiB console-output cap, a 64 KiB console-line cap and
@@ -71,8 +72,8 @@ Versioned adapters validate `-ListSteps -Json`, `-Preflight -Json` and progress 
 uses them. They require `schemaVersion: 1`, required fields, allowed step states, allowed preflight
 results and allowed progress events. Malformed step lists and preflight results fail closed as
 `502`; malformed progress events become redacted stream error events
-(`tools/installer-ui/installer-contract.mjs:29-89`; `tools/installer-ui/server.mjs:164-177`;
-`tools/installer-ui/server.mjs:164-177`; `tools/installer-ui/server.mjs:458-491`).
+(`tools/installer-ui/installer-contract.mjs:29-90`; `tools/installer-ui/server.mjs:164-177`;
+`tools/installer-ui/server.mjs:467-486`).
 
 Preflight fingerprints are lower-case SHA-256 values over a canonical JSON object containing schema
 version, engine, sorted answers and a sorted step scope or `full`. The server stores at most 20
@@ -81,12 +82,12 @@ snapshot. A later fail or exit-code failure for the same answers and engine clea
 run is admitted only when the submitted fingerprint exists, the answers digest matches, the engine is
 `pwsh`, the stored scope covers the requested run scope and the current identity snapshot matches
 the passing preflight (`tools/installer-ui/preflight-record.mjs:2-46`;
-`tools/installer-ui/server.mjs:464-508`).
+`tools/installer-ui/server.mjs:465-486`; `tools/installer-ui/server.mjs:499-513`).
 
 One Azure CLI lease covers identity, prefill, preflight and run work. Reads wait behind reads in
 arrival order, wait time counts against the read timeout, runs are refused while a read holds the
 lease, and reads or second runs are refused while a run holds it (`tools/installer-ui/azure-lease.mjs:1-64`;
-`tools/installer-ui/server.mjs:287-289`; `tools/installer-ui/server.mjs:483-516`).
+`tools/installer-ui/server.mjs:287-290`; `tools/installer-ui/server.mjs:499-513`).
 
 The server refuses a live run with `AddressMode = custom` and `AddressCertificateSource = Pfx`
 before creating a run because the page does not collect the PFX password and the installer asks for
@@ -101,13 +102,13 @@ the installer defaults for visibility and validation only (`tools/installer-ui/i
 Live mode uses the configured PowerShell command, `pwsh` by default. `listenAsync` checks PowerShell
 once and requires major version 7 or newer. If that check fails, `/api/session` reports static mode
 and live child-spawning routes return `503`. The browser also has a `file://` static path
-(`tools/installer-ui/server.mjs:404-427`; `tools/installer-ui/server.mjs:419-427`;
-`tools/installer-ui/installer-ui.js:576-582`).
+(`tools/installer-ui/server.mjs:331-335`; `tools/installer-ui/server.mjs:408`;
+`tools/installer-ui/server.mjs:424-427`; `tools/installer-ui/installer-ui.js:564-573`).
 
 The page and server share one model file, `tools/installer-ui/ui-model.js`. The page loads it as a
 classic script, the server loads it through `node:vm`, and tests use the same file. It owns field
 groups, browser validation, installer argument generation, portable command rendering and the bash
-step list (`tools/installer-ui/ui-model.js:7-78`; `tools/installer-ui/ui-model.js:439-644`;
+step list (`tools/installer-ui/ui-model.js:6-78`; `tools/installer-ui/ui-model.js:447-645`;
 `tools/installer-ui/server-model.mjs:77-91`). It also owns `x-checkId` field mapping
 (`tools/installer-ui/ui-model.js:192-203`;
 `tests/installer-ui-structure.test.mjs:9-87`).
@@ -115,14 +116,14 @@ step list (`tools/installer-ui/ui-model.js:7-78`; `tools/installer-ui/ui-model.j
 The server never spawns `az`. Azure reads go through repository PowerShell seams, and installer work
 goes through `Install-ClaudeGateway.ps1`. The direct child allowlist is PowerShell, `process.execPath`
 for the test stub and `taskkill.exe` for Windows tree stop. Prefill validates the read kind and text
-parameters before PowerShell starts (`tools/installer-ui/server.mjs:436-447`;
-`tools/installer-ui/server.mjs:458-508`). The prefill seam refuses parentheses when `az` resolves to a Windows
+parameters before PowerShell starts (`tools/installer-ui/server.mjs:441-446`;
+`tools/installer-ui/server.mjs:456-486`; `tools/installer-ui/server.mjs:493-513`). The prefill seam refuses parentheses when `az` resolves to a Windows
 `.cmd` or `.bat` shim (`scripts/Get-ClaudeInstallerUiPrefill.ps1:28-32`;
 `tests/installer-ui-structure.test.mjs:67-87`).
 
 Bash remains a static command-rendering option only when the current answers and selected steps are
 all applied by the bash installer. The Node server does not run the bash installer
-(`tools/installer-ui/ui-model.js:561-604`; `tools/installer-ui/installer-ui.js:319-338`).
+(`tools/installer-ui/ui-model.js:579-645`; `tools/installer-ui/installer-ui.js:441-477`).
 
 ## Consequences
 
@@ -132,7 +133,7 @@ check records loopback reachability, Host forwarding, URL prefix and cookie-path
 
 Static mode is a supported fallback rather than a second product path. It can validate answers, write
 `answers.json` and render portable commands, but it cannot read Azure or start installer work
-(`tools/installer-ui/installer-ui.js:319-338`; `tools/installer-ui/installer-ui.js:675-679`).
+(`tools/installer-ui/installer-ui.js:441-477`; `tools/installer-ui/installer-ui.js:714-715`).
 
 The bootstrap URL authenticates only the first page load. After that load, API access depends on the
 separate session cookie secret and the CSRF token, so copying the original URL token into a cookie
@@ -142,12 +143,12 @@ does not authenticate later requests (`tools/installer-ui/session-auth.mjs:4-13`
 Azure reads are serialized with other Azure CLI work. A read waits behind another read and can time
 out while waiting; a read sent during a run is refused immediately with `azure-busy`, and a run sent
 during a read is refused with the read operation named (`tools/installer-ui/azure-lease.mjs:1-64`;
-`tools/installer-ui/server.mjs:287-289`; `tools/installer-ui/server.mjs:483-516`).
+`tools/installer-ui/server.mjs:287-290`; `tools/installer-ui/server.mjs:499-513`).
 
 A passing preflight reads identity once after the installer preflight passes, and run admission reads
 identity once again before creating the run. Those reads add one PowerShell/`az account show` path to each passing preflight and admitted run. A changed tenant, user or
 subscription requires a new preflight (`scripts/Get-ClaudeInstallerUiIdentity.ps1:8-18`;
-`tools/installer-ui/server.mjs:300-318`; `tools/installer-ui/server.mjs:474-511`).
+`tools/installer-ui/server.mjs:301-309`; `tools/installer-ui/server.mjs:478-513`).
 
 A PFX certificate run from the page is refused. Installing a PFX certificate remains a terminal
 operation because the installer asks for the PFX password only when it is not running with `-Yes`
@@ -165,7 +166,7 @@ installer checkpoint remains the resume authority for a later installer run
 
 PowerShell is the live engine for the Node server. Bash parity stays visible through generated
 commands only when the bash installer applies the selected answers and steps
-(`tools/installer-ui/ui-model.js:561-604`; `tools/installer-ui/installer-ui.js:319-338`).
+(`tools/installer-ui/ui-model.js:579-645`; `tools/installer-ui/installer-ui.js:441-477`).
 
 The charter treats `tools/installer-ui/**` and `scripts/Get-ClaudeInstallerUi*.ps1` as
 architecture-significant paths. Those files hold the local HTTP server, browser model, PowerShell
