@@ -282,7 +282,7 @@ switch ([string]$request.action) {
             break
         }
         $id = [string]$request.parameters.scope_id
-        Test-ClaudeBuId $id
+        Test-ClaudeBuId $id -Registry @($registry | ForEach-Object Id)
         if ($request.parameters.scope_type -notin 'organization', 'department') { throw 'Only unit and team budgets are direct gateway limits.' }
         $row = @($registry | Where-Object Id -eq $id)
         if ($row.Count -ne 1) { throw 'Scope not found in the gateway registry.' }
@@ -360,7 +360,7 @@ switch ([string]$request.action) {
         $nextParents = [ordered]@{}
         $seen = @{}
         foreach ($item in $wanted) {
-            Test-ClaudeBuId ([string]$item.id)
+            Test-ClaudeBuId ([string]$item.id) -Registry @($registry | ForEach-Object Id)
             if ($seen.ContainsKey([string]$item.id)) { throw 'Duplicate scope identifier.' }
             $seen[[string]$item.id] = $true
             if ([string]$item.external_ref -notlike 'entra-group:*') { throw 'Every direct scope needs an Entra group.' }

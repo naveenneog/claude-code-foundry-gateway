@@ -252,6 +252,57 @@ Reset-Gateway $full
 $m = Invoke-Set 'Set-ClaudeBusinessUnit' @{ Id = 'absent'; Remove = $true }
 Assert 'removing an absent unit remains a no-op' (-not $m -and $gateway.Writes.Count -eq 0) $m
 
+# P96: a new identifier with a capital passed the business-unit check and then stopped at the dollar budget
+# with "Invalid USD scope identifier." (scripts/ClaudeUsdBudgets.ps1:42). It is refused with the rule, before
+# any write, and a capitalised spelling of a stored identifier is not taken as that unit.
+Write-Host 'Business unit identifiers - a new identifier is lower-case (P96)' -ForegroundColor Cyan
+Reset-Gateway $local
+$m = Invoke-Set 'Set-ClaudeBusinessUnit' @{ Id = 'Platform-Two'; Group = 'Platform Two'; MonthlyBudgetUsd = 1 }
+Assert 'a new identifier with a capital is refused with the lower-case rule, before any write' ($m -match "'Platform-Two' is not a valid business unit identifier" -and $m -match 'lower-case letters' -and
+    $gateway.Writes.Count -eq 0 -and $gateway.GroupWrites.Count -eq 0) "$m | writes $($gateway.Writes -join ',')"
+Reset-Gateway $local
+$m = Invoke-Set 'Set-ClaudeBusinessUnit' @{ Id = 'Sales'; MonthlyBudgetUsd = 1 }
+Assert 'a capitalised spelling of a stored identifier is refused, not used to change that unit' ($m -match "'Sales' is not a valid business unit identifier" -and $gateway.Writes.Count -eq 0) "$m | writes $($gateway.Writes -join ',')"
+Reset-Gateway $local
+$m = Invoke-Set 'Set-ClaudeBusinessUnit' @{ Id = 'sales'; Parent = 'Platform' }
+Assert 'a capitalised spelling of a stored parent is refused, not written as the parent' ($m -match "'Platform' is not a valid business unit identifier" -and $gateway.Writes.Count -eq 0) "$m | writes $($gateway.Writes -join ',')"
+# Before P96 the check ignored case, so a registry can hold an identifier with capitals. Changes that do not
+# touch its dollar budget keep working when the registry holds that exact spelling.
+$legacyRegistry = ',sales=Sales:1000,Legacy-Unit=Legacy:3000,'
+Reset-Gateway $local
+$gateway.Values['bu-registry'] = $legacyRegistry
+$m = Invoke-Set 'Set-ClaudeBusinessUnit' @{ Id = 'Legacy-Unit'; Group = 'Legacy Renamed' }
+Assert 'a unit the registry holds with capitals can still change its group' (-not $m -and $gateway.Values['bu-registry'] -ceq ',sales=Sales:1000,Legacy-Unit=Legacy Renamed:3000,') "$m | registry $($gateway.Values['bu-registry'])"
+Reset-Gateway $local
+$gateway.Values['bu-registry'] = $legacyRegistry
+$m = Invoke-Set 'Set-ClaudeBusinessUnit' @{ Id = 'sales'; Parent = 'Legacy-Unit' }
+Assert 'a unit the registry holds with capitals can still be a parent' (-not $m -and $gateway.Values['bu-parents'] -ceq ',sales=Legacy-Unit,') "$m | parents $($gateway.Values['bu-parents'])"
+
+function Invoke-Bridge([hashtable]$Request) {
+    $file = Join-Path ([IO.Path]::GetTempPath()) ('p96-bridge-' + [guid]::NewGuid().ToString('N') + '.json')
+    try {
+        $Request | ConvertTo-Json -Depth 10 -Compress | Set-Content -LiteralPath $file -Encoding UTF8
+        $json = & (Join-Path $root 'scripts\Invoke-ClaudeFinOps.ps1') -InputFile $file -ResourceGroup rg-test -ApimName apim-test 6>$null
+        return [string](($json | ConvertFrom-Json).error)
+    }
+    finally { Remove-Item -LiteralPath $file -ErrorAction SilentlyContinue }
+}
+function New-BridgeUnit([string]$Id, [string]$Group) { @{ id = $Id; external_ref = "entra-group:$Group"; attributes = @{} } }
+Reset-Gateway $local
+$gateway.Values['bu-registry'] = $legacyRegistry
+$m = Invoke-Bridge @{ action = 'budget'; parameters = @{ scope_type = 'organization'; scope_id = 'Legacy-Unit' }; body = @{ token_limit = 4000 } }
+Assert 'the AUM bridge still sets the budget of a unit the registry holds with capitals' (-not $m -and $gateway.Values['bu-registry'] -ceq ',sales=Sales:1000,Legacy-Unit=Legacy:4000,') "$m | registry $($gateway.Values['bu-registry'])"
+Reset-Gateway $local
+$m = Invoke-Bridge @{ action = 'budget'; parameters = @{ scope_type = 'organization'; scope_id = 'Sales' }; body = @{ token_limit = 4000 } }
+Assert 'the AUM bridge refuses a capitalised spelling of a stored unit before any write' ($m -match "'Sales' is not a valid business unit identifier" -and $gateway.Writes.Count -eq 0) "$m | writes $($gateway.Writes -join ',')"
+Reset-Gateway $local
+$gateway.Values['bu-registry'] = $legacyRegistry
+$m = Invoke-Bridge @{ action = 'catalog'; body = @{ organizations = @((New-BridgeUnit 'sales' 'Sales'), (New-BridgeUnit 'Legacy-Unit' 'Legacy Renamed')); departments = @() } }
+Assert 'the AUM catalog keeps a unit the registry holds with capitals' (-not $m -and $gateway.Values['bu-registry'] -ceq ',sales=Sales:1000,Legacy-Unit=Legacy Renamed:3000,') "$m | registry $($gateway.Values['bu-registry'])"
+Reset-Gateway $local
+$m = Invoke-Bridge @{ action = 'catalog'; body = @{ organizations = @((New-BridgeUnit 'sales' 'Sales'), (New-BridgeUnit 'platform' 'Platform'), (New-BridgeUnit 'NewUnit' 'New Unit')); departments = @() } }
+Assert 'the AUM catalog refuses a new identifier with a capital before any write' ($m -match "'NewUnit' is not a valid business unit identifier" -and $gateway.Writes.Count -eq 0) "$m | writes $($gateway.Writes -join ',')"
+
 # personBudgets mirrors daily tier ceilings TO Turnstile. Neither apply path
 # writes quota-overrides, and neither edits Entra membership.
 foreach ($integration in '', $local, $full, $budgetOnly, $full.Replace('false', 'true'), $budgetOnly.Replace('false', 'true')) {

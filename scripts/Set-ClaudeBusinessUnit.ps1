@@ -182,7 +182,7 @@ if ($List) {
     exit 0
 }
 
-Test-ClaudeBuId $Id
+Test-ClaudeBuId $Id -Registry @($registry | ForEach-Object Id)
 $existing = @($registry | Where-Object { $_.Id -eq $Id })
 $before = $registry.Count
 $originalUsdKind = if ($parents[$Id]) { 'department' } else { 'organization' }
@@ -252,7 +252,7 @@ else {
             $parentAction = 'no parent - this is now a top-level business unit'
         }
         else {
-            Test-ClaudeBuId $Parent
+            Test-ClaudeBuId $Parent -Registry @($registry | ForEach-Object Id)
             if ($Parent -eq $Id) { throw "A business unit cannot be its own parent." }
             if (-not @($registry | Where-Object { $_.Id -eq $Parent }).Count) {
                 throw ("There is no business unit '$Parent' to be a parent. Create it first, then set -Parent on '$Id'. " +

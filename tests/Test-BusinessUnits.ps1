@@ -77,6 +77,26 @@ if (Test-Path $helper) {
         $ok = $true
         try { Test-ClaudeBuId 'finance-emea' } catch { $ok = $false }
         Assert "'finance-emea' is accepted" $ok
+
+        # P96: the dollar budget uses the identifier as its scope and accepts only lower-case
+        # (scripts/ClaudeUsdBudgets.ps1:42), so a new identifier with a capital is refused here, with the
+        # rule. Units created from 2026-09-15 to 2026-09-25 could store capitals; an identifier the registry
+        # holds with that exact spelling stays usable, and the registry with it can still be written.
+        $caseRefusal = ''
+        try { Test-ClaudeBuId 'Platform' } catch { $caseRefusal = $_.Exception.Message }
+        Assert "a new identifier with a capital, 'Platform', is refused with the lower-case rule" ($caseRefusal -match 'lower-case letters') $caseRefusal
+        $respelt = ''
+        try { Test-ClaudeBuId 'Sales' -Registry @('sales', 'platform') } catch { $respelt = $_.Exception.Message }
+        Assert "'Sales' is refused when the registry holds 'sales', rather than taken as that unit" ($respelt -match 'lower-case letters') $respelt
+        $legacy = 'not run'
+        try { Test-ClaudeBuId 'Legacy-Unit' -Registry @('finance', 'Legacy-Unit'); $legacy = '' } catch { $legacy = $_.Exception.Message }
+        Assert 'an identifier the registry holds with capitals stays usable' (-not $legacy) $legacy
+        $unsafe = ''
+        try { Test-ClaudeBuId 'Has Space' -Registry @('Has Space') } catch { $unsafe = $_.Exception.Message }
+        Assert 'a stored identifier is still refused when it could break the map' ($unsafe -match 'not a valid business unit identifier') $unsafe
+        $written = ''
+        try { $written = ConvertTo-ClaudeBuRegistry @([pscustomobject]@{ Id = 'Legacy-Unit'; Group = 'Claude BU Legacy'; TokensPerMonth = 5 }) } catch { $written = "threw: $($_.Exception.Message)" }
+        Assert 'a registry that holds a stored identifier with capitals is still written' ($written -eq ',Legacy-Unit=Claude BU Legacy:5,') $written
     }
     else { Assert 'it validates an identifier' $false 'Test-ClaudeBuId missing' }
 }

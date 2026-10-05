@@ -195,7 +195,7 @@
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "scripts/ApimNamedValue.ps1": "cdab947026b92c4df235fcc5ca40d02a41fcb68ab44d66bb2200a1a148c8695a",
         "scripts/ClaudeAumDirectWrites.ps1": "3f6ba0af2f5e52e80156119d6102e86f4d63a6b39241d7043023a0b5a0981a79",
-        "scripts/Invoke-ClaudeFinOps.ps1": "dda18168c2b04781fac3427fb46a70f9809324191ffd63631ddad8b6d6165221",
+        "scripts/Invoke-ClaudeFinOps.ps1": "64a6466c7a1fbea200bd070fd3a77980a087a28db14c12f2aa04a6fec03e1d1b",
         "scripts/New-ClaudeAumEntraApp.ps1": "489aa5051af325ca4d96e5b9123d29577195f08318976898a8a592aeea2a05fe",
         "scripts/New-ClaudeTurnstileEntraApp.ps1": "0262606c6f2b747ae4dff7534c15d113099ff6fae06b40580eb62daffaf1db1d",
         "scripts/Set-ClaudeBudget.ps1": "6959bf18332942c6b3d7df65fb589c9affb4efb37f1b779d011289c31417d76c",
@@ -282,7 +282,7 @@
         "scripts/ClaudeBudgetModes.ps1": "d27db15c9e257e2e923355978896737bb07cd2227135fa29625b003655f70946",
         "scripts/ClaudeTurnstileApply.ps1": "f5b47f344eacd8c8a7a4e5d73e9641c1eefedf61436093c6e5ec6f7fcced1b84",
         "scripts/ClaudeTurnstileGovernance.ps1": "cfb6d0022abcb1c601cae573e6dc1dd9033d95b2585512e2675d1a7bbd876916",
-        "scripts/Set-ClaudeBusinessUnit.ps1": "c6f2cc8a385365a5b709ec4c58b109dc3de06a84bace5934d51ed0f309098f49"
+        "scripts/Set-ClaudeBusinessUnit.ps1": "02d44f3d0941a8a87db3cb3182d40ac6ada3c6e84f0afed8d2dd1484ba86bdd2"
       },
       "outputs": [
         {
@@ -453,7 +453,7 @@
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
-        "scripts/Invoke-ClaudeFinOps.ps1": "dda18168c2b04781fac3427fb46a70f9809324191ffd63631ddad8b6d6165221"
+        "scripts/Invoke-ClaudeFinOps.ps1": "64a6466c7a1fbea200bd070fd3a77980a087a28db14c12f2aa04a6fec03e1d1b"
       },
       "outputs": [
         {
