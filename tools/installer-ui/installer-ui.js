@@ -367,6 +367,7 @@
   function azureControls() {
     return [
       ...document.querySelectorAll("[data-prefill-kind]"),
+      ...document.querySelectorAll("[data-prefill-select]"),
       byId("refresh-identity"),
       byId("preflight"),
       byId("run"),

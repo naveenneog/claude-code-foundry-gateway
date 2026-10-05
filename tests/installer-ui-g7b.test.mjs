@@ -330,6 +330,36 @@ test('G7B-5 reattached runs disable Azure controls until the summary refreshes a
   }
 });
 
+test('R2-6 prefill selects are disabled during a deployments read', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    let releaseDeployments;
+    const deploymentsPending = new Promise((resolve) => { releaseDeployments = resolve; });
+    await page.route('**/api/prefill', async (route) => {
+      const body = route.request().postDataJSON();
+      if (body.kind === 'foundryAccounts') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ foundryAccounts: [{ name: 'one', resourceGroup: 'rg-one' }, { name: 'two', resourceGroup: 'rg-two' }] }) });
+      if (body.kind === 'deployments') {
+        await deploymentsPending;
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ deployments: [{ name: 'account-one' }] }) });
+      }
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+    await page.locator('[name="SubscriptionId"]').fill('00000000-0000-4000-8000-000000000093');
+    await page.getByRole('button', { name: 'Read Foundry accounts' }).click();
+    await page.locator('[data-prefill-select="FoundryAccount"]').selectOption('one');
+    await page.locator('[data-prefill-kind="foundryAccounts"]').getByText(/Reading Azure/).waitFor();
+    assert.equal(await page.locator('[data-prefill-select="FoundryAccount"]').isDisabled(), true);
+    releaseDeployments();
+    await page.locator('[data-model-select="StandardModels"] option', { hasText: 'account-one' }).waitFor();
+    assert.equal(await page.locator('[data-prefill-select="FoundryAccount"]').isEnabled(), true);
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
 test('P3 PFX answers disable page runs and render a terminal command without -Yes', async () => {
   const app = await start();
   const { browser, page, pageErrors } = await openPage(app);
