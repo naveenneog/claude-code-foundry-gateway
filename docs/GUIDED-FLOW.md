@@ -272,12 +272,13 @@ cost and caller impact before applying.
 | `deviceProfiles` | `DeviceProfiles.ps1` | Per-tier MDM payloads | [MDM](MDM.md) |
 
 The Entitlement step switches to the projection only through `Invoke-ClaudeProjectionSwitch`
-([ADR-0050](adr/0050-projection-switch-function.md)). Live discovery supplies the renewal receipt
-whose gateway is the discovered one (`scripts/flow/lib/LifecycleCommon.ps1`), and the switch runs
-the drift check, the compare and admission before its one write, with the flow's snapshot as its
-backup. No receipt, two receipts for the gateway, or an unknown gateway refuse with the reason.
-Records expire at most two hours after scan start; without renewal every developer receives 503
-after expiry.
+([ADR-0050](adr/0050-projection-switch-function.md)). Discovery (`scripts/flow/Discovery.ps1`)
+supplies the renewal receipt beside the decision record whose gateway is the discovered one, and the
+switch checks the receipt and the gateway's resolver, then runs the drift check, the compare and
+admission before its one write. The step's snapshot, `backups/before-entitlement-<apim>-<UTC time>.json`,
+is its backup and is taken at the write. No receipt, two receipts for the gateway, or an unknown
+gateway refuse with the reason. Records expire at most two hours after scan start; without renewal
+every developer receives 503 after expiry.
 
 The standalone deployer can preflight, populate and compare without switching (normally 30-90
 seconds for preflight, including a 25-second Graph pause). PowerShell 7 is required for

@@ -30,15 +30,20 @@ exact streaming cache-creation detail remains **U13**.
 ### Added
 
 - **P95 the projection switch runs end to end.** `Invoke-ClaudeProjectionSwitch`
-  (`scripts/ClaudeProjectionSwitch.ps1`) takes the renewal receipt, runs the drift check with
+  (`scripts/ClaudeProjectionSwitch.ps1`) takes the renewal receipt and checks every value in it
+  before any call, requires the gateway's `entitlement-resolver-url` to be the resolver deployed with
+  the projection, which reads the Cosmos account the job renews, runs the drift check with
   `scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift` and a read-only compare in the runner, runs
-  admission, writes the entitlement named values to `onboarding/projection-switch-<apim>-<time>.json`
-  and sets `entitlement-source` to `projection`, then prints the rollback. The deployer's
-  `-FlipAfterCleanCompare`, the installer through it, and the guided Entitlement step use it and
-  deploy, publish and apply nothing; `-WhatIf` stops before the backup. Admission reads the action
-  group and requires an email receiver whose status is `Enabled`, and counts only status records
-  the job wrote under its current settings, which must name the gateway, the compared tier groups
-  and the receipt's identity. `docs/SECURE-PROJECTION.md` lists the owner-attended live run.
+  admission, writes the entitlement named values to
+  `onboarding/projection-switch-<apim>-<UTC time>-<8 hex digits>.json` and sets `entitlement-source`
+  to `projection`, then prints the rollback. The deployer's `-FlipAfterCleanCompare`, the installer
+  through it, and the guided Entitlement step use it; the deployer deploys, publishes and applies
+  nothing in switch mode, and `-WhatIf` stops before the backup. The deployer's normal run points
+  the gateway at the resolver. Admission reads the action group and requires an email receiver whose
+  status is `Enabled`, and counts only status records the job wrote under its current settings,
+  which must name the gateway, the compared tier groups, the receipt's identity and the Cosmos
+  account and tenant admission reads. A restore does not switch to the projection.
+  `docs/SECURE-PROJECTION.md` lists the owner-attended live run.
   [ADR-0050](docs/adr/0050-projection-switch-function.md).
 - **P94 the projection renewal job deploys and renews.** `scripts/Deploy-ClaudeProjectionRenewal.ps1`
   deploys `infra/projection-registry.bicep` (registry, job identity, AcrPull), builds the image
@@ -1188,6 +1193,16 @@ exact streaming cache-creation detail remains **U13**.
   settings. README, six guides, the deployer synopsis and the preflight refusal said the switch
   was unavailable or later work. Each is corrected with tests
   ([P95 status](docs/status/P95.md#p95-the-projection-switch-over-runs-end-to-end-2026-10-05)).
+- **P95 council round 1.** The guided flow's real entry point (`Get-ClaudeFlowDiscovery`) carried no
+  receipt and gave the Entitlement plan no snapshot path, so it refused every switch. Admission's
+  command quoted the entry point, which `az.cmd` and the runner split, so every live admission
+  would have failed. No script set `entitlement-resolver-url` after P84, so a scripted switch would
+  have pointed every request at the placeholder resolver. Receipt values reached `az.cmd`, the
+  runner and ARM URLs unchecked, so a planted receipt could run commands or send the management
+  token to another host. A restore could set `entitlement-source` to `projection`. A failed runner
+  compare read as a projection mismatch, an unreadable job gave the raw ARM error, `-Confirm`
+  prompted for working files first, and `-RenewalEntryPoint` was ignored. Each is corrected with a
+  test ([P95 council](docs/status/P95.md#council)).
 - **P94 the renewal job could not be deployed or run as merged.** The image and the runner archive
   missed `resolver/src/entitlement.mjs`, which `sync/src/plan.mjs` imports, so the job, the runner
   apply and compare, and admission stopped with a missing module; the runner archive now holds the

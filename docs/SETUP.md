@@ -656,7 +656,9 @@ account and resource group, as the PowerShell installer's record does.
 
 The interactive installer's projection flags are separate from `deploy.ps1`:
 `-DeployProjection` runs the checked projection deployer and requires PowerShell 7 for apply.
-`-FlipProjectionAfterCleanCompare` runs the deployer's switch mode, which deploys nothing; it
+`-FlipProjectionAfterCleanCompare`, with `-EntitlementStore projection -DeployProjection`, runs the
+installer's gateway deployment and list refresh, then the deployer's switch mode, which deploys
+nothing in place of the projection deployment; without `-DeployProjection` it has no effect. It
 requires `-ProjectionReconcilerResourceId`, `-ProjectionRenewalImageDigest` and
 `-ProjectionRenewalActionGroupResourceId` before discovery or writes, and the deployer refuses
 values that differ from the renewal receipt. An admin-created resolver registration is supplied as

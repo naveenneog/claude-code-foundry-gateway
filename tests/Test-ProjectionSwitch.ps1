@@ -625,9 +625,9 @@ Assert 'no guide, diagram or script says the switch is unavailable or later work
 
 $secure = [IO.File]::ReadAllText((Join-Path $root 'docs\SECURE-PROJECTION.md'))
 $section = [regex]::Match($secure, '(?ms)^### Switch to the projection \(P95\)\r?\n(.*?)(?=^### )').Groups[1].Value
-$steps = @('^1\. .*Compare-ClaudeEntitlement\.ps1 -FailOnDrift', '^2\. .*--compare', '^3\. Admission ', '^4\. .*onboarding/projection-switch-', '^5\. `entitlement-source` is set to `projection`')
+$steps = @('^1\. The receipt''s values are checked before any call', '^2\. .*projection-resolver-<prefix>.*entitlement-resolver-url', '^3\. .*Compare-ClaudeEntitlement\.ps1 -FailOnDrift', '^4\. .*--compare', '^5\. Admission ', '^6\. .*onboarding/projection-switch-', '^7\. `entitlement-source` is set to `projection`')
 $at = @($steps | ForEach-Object { $m = [regex]::Match($section, "(?m)$_"); if ($m.Success) { $m.Index } else { -1 } })
-Assert 'the switch section lists the drift check, the compare, admission, the backup and the one write, in that order' ($section -and $at -notcontains -1 -and (($at | Sort-Object) -join ',') -eq ($at -join ',')) "positions $($at -join ',')"
+Assert 'the switch section lists the receipt and resolver checks, the drift check, the compare, admission, the backup and the one write, in that order' ($section -and $at -notcontains -1 -and (($at | Sort-Object) -join ',') -eq ($at -join ',')) "positions $($at -join ',')"
 Assert 'the switch section names the backup and the rollback through a refresh and a compare' ($section -match 'Sync-ClaudeAccess\.ps1' -and $section -match 'Compare-ClaudeEntitlement\.ps1 -FailOnDrift' -and $section -match 'back to `named-value`')
 $unknowns = [IO.File]::ReadAllText((Join-Path $root 'docs\UNKNOWNS.md'))
 $rows = @([regex]::Matches($section, '(?m)^\| (\d)\. ') | ForEach-Object { $_.Groups[1].Value })

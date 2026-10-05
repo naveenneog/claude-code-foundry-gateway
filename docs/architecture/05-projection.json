@@ -390,7 +390,7 @@
         "az acr build from the sync package; sha256 digest read back",
         "[[renewal-template]]: [[cae-env]], [[cae-job]], [[cosmos-writer]]",
         "[[unit-reader]] for each [[unit-read]]; [[renewal-logs]]; [[renewal-alerts]]",
-        "[[switch]]: drift check, runner compare, [[admission-check]], backup, one write"
+        "[[switch]]: receipt and resolver checks, drift check, runner compare, [[admission-check]], backup, one write"
       ]
     }
   ],

@@ -127,7 +127,7 @@
       "id": "projection-freshness",
       "source": "docs/architecture/05-projection.json",
       "inputs": {
-        "docs/architecture/05-projection.json": "75d852a37d5c1baaa2aca27ecb40dcacb90dc5a8a5336e537b122c0f4f01cef7",
+        "docs/architecture/05-projection.json": "37ad9e1248871a8ac4a94fb945565717673cd58156cdabccfa5f05cd1243f97f",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
@@ -142,13 +142,13 @@
         "resolver/src/entitlement.mjs": "6dc82d9372ddb81b199ae5c6ce099f3a0da315d075524f57e2582caff363e1bf",
         "resolver/src/index.mjs": "b6b755fbbc56ef62e7b535a4bde2756111c2b5fc9913c16a893b45cb6dce33a3",
         "resolver/src/lookup.mjs": "d04392c5eb24a8a084d72f1e5dc72a61fd385992039118aba510c266c3027c3b",
-        "scripts/ClaudeProjectionSwitch.ps1": "13987ecb9bcdbbfb7078c457e4512db9fd4d50ca8407f043fd3e931ff113e124",
+        "scripts/ClaudeProjectionSwitch.ps1": "ce8efa8da5b1e590b848b568d383d380bb4f6f41618c1ba1a03084797e4c42bd",
         "scripts/Deploy-ClaudeProjectionRenewal.ps1": "7ed4535d5463c25696e5add082d776ff0bc93a4b6e32169b252455af772bf3e5",
         "scripts/Sync-ClaudeProjection.ps1": "0a30b7b4178700d9eb4879d4cb78c01bacf932e21b0856f0f532e38a06a24ca7",
         "sync/Dockerfile": "80ab80a331c8b97f903c30cf714cedfcc9969b8d8c24be0c58777ac7c7f3b382",
         "sync/src/apply-projection.mjs": "58bbd804e8c54f03c839e51e2bf89cd3e181c9cc6b7c9d74fc8300405491c399",
         "sync/src/business-units.mjs": "45df91c836676e6ad32a2d1b7f730c51b01e4210a22b716ce118c8bc6298ff31",
-        "sync/src/check-admission.mjs": "599c23540e7381984c05fa29d4790f16c48736426a62d5032a715bf9adfc3ef3",
+        "sync/src/check-admission.mjs": "5e7532b1f7a039de189198285012a34871249ba09a28701f355f09a28920c662",
         "sync/src/events.mjs": "4e2fae2fb8370d83c3bb798d8bd6f22d9db501c3a8730f8283bdab30bcb9db3f",
         "sync/src/graph.mjs": "de6c2dc421d1882a26d456dcfc1e6d908b32d17c3435663ebb513892b7c1f8ab",
         "sync/src/plan.mjs": "5c37ce81ffdcf9d79e4b445516d17273296d75f4793e9d7ef0321387c599118a"
@@ -156,7 +156,7 @@
       "outputs": [
         {
           "path": "docs/images/architecture/projection-freshness.png",
-          "sha256": "7a65c6003c9a926b4887b6cefe53f96529328b37e2382a422b574c800d066743"
+          "sha256": "594468f39806a21c89ab9b703c10b85938f97cb5e8761a369bf21d9944e99b72"
         }
       ]
     },
@@ -482,7 +482,7 @@
         "scripts/ClaudeGatewayCertificate.ps1": "eb3895a08d7ad19d1d307f4116d6ec80260629402c253cf98219bc0508566d98",
         "scripts/ClaudeNetwork.ps1": "5709a3e94dfc7ca71e75429ea4d278b7737198a5488e07556fccc28cda9d00f9",
         "scripts/flow/Address.ps1": "88b0499d3eaf5423f98f4e6cb1ca1b2f221c4a44d4b8677a790ada807e495869",
-        "scripts/flow/Discovery.ps1": "42af4fad6cb875d2ff4618c3d5f9f0b45eb11ce02123ccf960a10928385c9c67",
+        "scripts/flow/Discovery.ps1": "812f7a46122aa4c5692cddd41e6b5ddc2fb455a522ab1429732e5b8ec1849547",
         "scripts/flow/FlowContract.ps1": "5fe01f9f68710671039ba8d1fd4a303ccd3547d7f29096e23d87c58dae1b8bf8",
         "scripts/flow/Foundation.ps1": "fb0d43ee4fbe00a140410bf3f9594b1a6d43bc4f226748f8231c6f23743c7ed4"
       },

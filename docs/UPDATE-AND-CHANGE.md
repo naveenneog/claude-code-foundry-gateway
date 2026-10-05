@@ -116,10 +116,11 @@ Manual equivalent:
 ```
 
 `-FlipAfterCleanCompare` deploys, publishes and applies nothing. It reads
-`onboarding/projection-renewal-<prefix>.json`, runs `scripts/Compare-ClaudeEntitlement.ps1
--FailOnDrift`, the read-only compare in the runner and admission, writes the entitlement named
-values to `onboarding/projection-switch-<apim>-<time>.json`, and sets `entitlement-source` to
-`projection`; `-WhatIf` stops before the backup ([ADR-0050](adr/0050-projection-switch-function.md)).
+`onboarding/projection-renewal-<prefix>.json`, checks the receipt's values and that the gateway
+calls the resolver deployed with it, runs `scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift`, the
+read-only compare in the runner and admission, writes the entitlement named values to
+`onboarding/projection-switch-<apim>-<UTC time>-<8 hex digits>.json`, and sets `entitlement-source`
+to `projection`; `-WhatIf` stops before the backup ([ADR-0050](adr/0050-projection-switch-function.md)).
 
 Reverse path: `entitlement-source` returns to `named-value` after the lists are refreshed with
 `scripts/Sync-ClaudeAccess.ps1` and checked with `scripts/Compare-ClaudeEntitlement.ps1

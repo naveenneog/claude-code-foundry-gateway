@@ -452,13 +452,18 @@ that includes `resolver/src/entitlement.mjs`.
 
 P95 adds the switch ([ADR-0050](adr/0050-projection-switch-function.md)).
 `Invoke-ClaudeProjectionSwitch` in `scripts/ClaudeProjectionSwitch.ps1` takes the receipt that
-`scripts/Deploy-ClaudeProjectionRenewal.ps1` writes. It runs `scripts/Compare-ClaudeEntitlement.ps1
+`scripts/Deploy-ClaudeProjectionRenewal.ps1` writes and checks its values before any call. It
+requires the gateway to call the resolver deployed as `projection-resolver-<prefix>`, which reads the
+receipt's Cosmos account; the deployer's normal run sets the gateway's `entitlement-resolver-url` and
+`entitlement-resolver-audience` to that resolver. It runs `scripts/Compare-ClaudeEntitlement.ps1
 -FailOnDrift` and a read-only `apply-projection.mjs --compare` in the runner, reads the action group
 and the job definition through ARM, and runs admission over the status records the job wrote under
 its current settings. It then writes the entitlement named values to a backup file and sets
-`entitlement-source` to `projection`. The deployer's `-FlipAfterCleanCompare`, the installer through
-the deployer, and the guided Entitlement step call it, and none of them deploys, publishes or applies
-in switch mode.
+`entitlement-source` to `projection`. The deployer's `-FlipAfterCleanCompare` and the guided
+Entitlement step call it; the deployer deploys, publishes and applies nothing in switch mode. The
+installer's `-FlipProjectionAfterCleanCompare` runs its own gateway deployment and list refresh,
+then the deployer's switch mode. `scripts/Restore-ClaudeGateway.ps1` does not move
+`entitlement-source` to `projection`.
 
 Before a resolver call, APIM limits `entitlement-misses` to 200 per second and 100
 concurrent. Excess returns retryable 429. These approximate distributed controls bound

@@ -46,11 +46,14 @@ fails the release stage while any remain. Detail for each one follows below.
 
 ## P95 research before implementation
 
-Researched 2026-10-05, before any P95 code.
+Researched 2026-10-05, before any P95 code. U120 and U121 were added at council round 1
+([P95 council](status/P95.md#council)).
 
 | ID | State | Question | Blocks |
 |---|---|---|---|
 | U119 | CLOSED | Does ARM say whether an action group's email receiver receives alerts? Yes: `GET .../Microsoft.Insights/actionGroups/<name>` returns `properties.enabled` and, for each `emailReceivers` entry, `status` `NotSpecified`, `Enabled` or `Disabled`; "Receivers that are not Enabled will not receive any communications", and a disabled group sends to none of its receivers ([Action Groups - Get](https://learn.microsoft.com/rest/api/monitor/action-groups/get?view=rest-monitor-2021-09-01), updated 2026-03-17, read 2026-10-05). Whether a receiver that has not confirmed its passcode reads `Enabled` is not documented; U116 stays an assumption with the live test notification as its detector. | P95 admission |
+| U120 | CLOSED | Does a deployment read return the parameter values and outputs of a deployment made with a parameter file? Yes: Deployments - Get returns `properties.parameters` ("Deployment parameters") and `properties.outputs` ("Key/value pairs that represent deployment output") ([Deployments - Get, 2025-04-01](https://learn.microsoft.com/rest/api/resources/deployments/get?view=rest-resources-2025-04-01), updated 2026-08-27, read 2026-10-05). The switch reads the string parameter `cosmosAccountName` and the outputs `resolverUrl` and `resolverAudience` of `projection-resolver-<prefix>`; a secure parameter would not be returned, and none of these is one. | P95 resolver check |
+| U121 | CLOSED | Does an exec command with embedded double quotes reach the runner intact? No. Measured 2026-10-05 in council round 1 with the real `az.cmd` and a logged-out isolated profile: `--entrypoint "node /app/sync/src/apply-projection.mjs"` inside `--exec-command` gave "ERROR: unrecognized arguments: /app/sync/src/apply-projection.mjs ..."; without the quotes the command parsed and stopped at sign-in. The runner also splits on spaces with no quoting and URL-decodes the command (`scripts/ClaudeRunner.ps1`, measured 2026-09-23). The entry point now travels base64url-encoded, and `Invoke-RunnerCommand` refuses a quote, `+`, `%` or a `cmd.exe` metacharacter. | P95 admission command |
 
 ---
 

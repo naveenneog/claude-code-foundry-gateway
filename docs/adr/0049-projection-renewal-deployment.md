@@ -1,6 +1,7 @@
 # ADR-0049: The projection renewal job deploys in three phases from one sync package
 
-- **Status:** Proposed for P94
+- **Status:** Proposed for P94; the flow sentence of decision 7 is refined by
+  [ADR-0050](0050-projection-switch-function.md) decision 3 (the ARM confirmation runs in admission)
 - **Date:** 2026-10-04
 - **Packet:** P94 (P95 for the switch sections)
 - **Refines:** [ADR-0045](0045-scheduled-projection-renewal.md)
