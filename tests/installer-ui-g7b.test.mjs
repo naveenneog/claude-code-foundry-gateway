@@ -441,6 +441,29 @@ test('P6 one-step preflight admits selected scope but blocks full run', async ()
   }
 });
 
+test('G7B-8 full-scope preflight enables Full run and out-of-scope failed steps cannot rerun', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await page.locator('[name="SubscriptionId"]').fill('00000000-0000-4000-8000-000000000093');
+    await page.getByRole('button', { name: 'List steps' }).click();
+    await page.getByRole('button', { name: 'Run preflight' }).click();
+    await page.locator('#preflight-output').getByText(/answers\.schema/).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Full run' }).isEnabled(), true);
+    await page.locator('#step-list input[value="resource-group"]').check();
+    await page.getByRole('button', { name: 'Run preflight' }).click();
+    await page.locator('#preflight-state').getByText(/Full run needs a preflight with no step selected/).waitFor();
+    await page.route('**/api/run/stream', (route) => route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"summary","exitCode":1,"failedStepId":"gateway-deployment","resumeCommand":"./Install-ClaudeGateway.ps1 -Steps gateway-deployment","state":"exited","message":""}\n' }));
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await page.locator('#run-error[role="alert"]').getByText(/gateway-deployment/).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Re-run failed step' }).isDisabled(), true);
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
 test('P7 omitted custom certificate source behaves as KeyVault without changing submitted answers', async () => {
   const source = await readFile(new URL('../tools/installer-ui/ui-model.js', import.meta.url), 'utf8');
   const context = { globalThis: {} };
