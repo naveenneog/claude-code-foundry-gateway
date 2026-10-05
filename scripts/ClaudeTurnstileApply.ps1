@@ -48,10 +48,10 @@ function ConvertFrom-ClaudeTurnstileGovernance {
         throw "Turnstile's catalog is its seeded demonstration set. Add business units on Turnstile's Gateway governance page first; nothing was applied."
     }
     $problems = New-Object System.Collections.Generic.List[string]
-    $modes = [ordered]@{}
+    $modes = [System.Collections.Specialized.OrderedDictionary]::new([System.StringComparer]::Ordinal)
     $invalidModes = $false
     foreach ($entity in @($Catalog.organizations) + @($Catalog.departments)) {
-        if ($entity.id -eq 'unassigned' -or $entity.parent_id -eq 'unassigned' -or $entity.id -eq $entity.parent_id) { continue }
+        if ($entity.id -ceq 'unassigned' -or $entity.parent_id -ceq 'unassigned' -or [string]::Equals([string]$entity.id, [string]$entity.parent_id, [System.StringComparison]::Ordinal)) { continue }
         try {
             $attributes = @{}
             if ($entity.attributes -is [System.Collections.IDictionary]) { $attributes = $entity.attributes }
@@ -66,7 +66,8 @@ function ConvertFrom-ClaudeTurnstileGovernance {
         }
         catch { $invalidModes = $true; $problems.Add("'$($entity.id)': $($_.Exception.Message)") }
     }
-    $limits = @{}
+    # Scope ids compare by exact spelling: a budget for 'Sales' is not the budget of the unit 'sales' (P96, round 5).
+    $limits = [hashtable]::new([System.StringComparer]::Ordinal)
     foreach ($b in @($BudgetItems)) {
         if ($b -and [string]$b.scope_type -in @('organization', 'department') -and $null -ne $b.token_limit) {
             $limits["$($b.scope_type)/$($b.scope_id)"] = [long]$b.token_limit
@@ -82,27 +83,27 @@ function ConvertFrom-ClaudeTurnstileGovernance {
     # again: a registry separator or a shell character in a name from the catalog would change either (P96, round 4).
     $registryUnsafe = '[,:=&|<>^%!"\r\n]'
     $shellUnsafe = '[&|<>^%!"\r\n]'
-    $unsafeNote = 'its Entra group name holds a character the registry or the Azure CLI cannot carry (, : = & | < > ^ % ! " or a line break)'
+    $unsafeNote = 'its Entra group name holds a character the registry or the Azure CLI cannot carry (, : = & | < > ^ % ! " or a line break). Rename the group in Turnstile''s catalog or in Microsoft Entra ID, then run the sync again'
 
     $units = New-Object System.Collections.Generic.List[object]
     foreach ($org in @($Catalog.organizations)) {
         $id = [string]$org.id
         if ($id -eq 'unassigned') { continue }
-        if ($id -cnotmatch '^[a-z0-9][a-z0-9-]*$') { $problems.Add("business unit '$id': not a valid gateway id (lower-case letters, digits and hyphens)"); continue }
+        if ($id -cnotmatch '^[a-z0-9][a-z0-9-]*\z') { $problems.Add("business unit '$id': not a valid gateway id (lower-case letters, digits and hyphens)"); continue }
         $group = & $groupOf $org
         if (-not $group) { $problems.Add("business unit '$id': names no Entra group, so it could have no members"); continue }
         if ($group -match $registryUnsafe) { $problems.Add("business unit '$id': $unsafeNote"); continue }
         $tokens = if ($limits.ContainsKey("organization/$id")) { $limits["organization/$id"] } else { [long]0 }
         $units.Add([pscustomobject]@{ Id = $id; Group = $group; TokensPerMonth = [long]$tokens })
     }
-    $unitIds = @($units | ForEach-Object { $_.Id })
-    $parents = [ordered]@{}
+    $unitIds = [System.Collections.Generic.HashSet[string]]::new([string[]]@($units | ForEach-Object { [string]$_.Id }), [System.StringComparer]::Ordinal)
+    $parents = [System.Collections.Specialized.OrderedDictionary]::new([System.StringComparer]::Ordinal)
     foreach ($dept in @($Catalog.departments)) {
         $id = [string]$dept.id
         $parent = [string]$dept.parent_id
-        if (-not $parent -or $id -eq $parent -or $parent -eq 'unassigned') { continue }
-        if ($unitIds -notcontains $parent) { $problems.Add("team '$id': its business unit '$parent' was not applied"); continue }
-        if ($id -cnotmatch '^[a-z0-9][a-z0-9-]*$') { $problems.Add("team '$id': not a valid gateway id (lower-case letters, digits and hyphens)"); continue }
+        if (-not $parent -or [string]::Equals($id, $parent, [System.StringComparison]::Ordinal) -or $parent -ceq 'unassigned') { continue }
+        if (-not $unitIds.Contains($parent)) { $problems.Add("team '$id': its business unit '$parent' was not applied"); continue }
+        if ($id -cnotmatch '^[a-z0-9][a-z0-9-]*\z') { $problems.Add("team '$id': not a valid gateway id (lower-case letters, digits and hyphens)"); continue }
         $group = & $groupOf $dept
         if (-not $group) { $problems.Add("team '$id': names no Entra group"); continue }
         if ($group -match $registryUnsafe) { $problems.Add("team '$id': $unsafeNote"); continue }
@@ -120,7 +121,13 @@ function ConvertFrom-ClaudeTurnstileGovernance {
             continue
         }
         if (([string]$tier.entra_group).Trim() -match $shellUnsafe) {
-            $problems.Add("tier '$id': its Entra group name holds a character the Azure CLI cannot carry (& | < > ^ % ! "" or a line break)")
+            $problems.Add("tier '$id': its Entra group name holds a character the Azure CLI cannot carry (& | < > ^ % ! "" or a line break). Rename the group in Turnstile or in Microsoft Entra ID, then run the sync again")
+            continue
+        }
+        # Each model name is written into models-<tier>, which reaches az.cmd (P96, round 5): only a deployment name passes.
+        $badModels = @(@($tier.models) | Where-Object { $_ } | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ -cnotmatch '^[A-Za-z0-9][A-Za-z0-9._-]*\z' })
+        if ($badModels.Count) {
+            $problems.Add("tier '$id': model '$($badModels[0])' is not a deployment name (letters, digits, '.', '_' and '-'), so this tier's limits were not applied. Correct it in Turnstile, then run the sync again")
             continue
         }
         $tierSettings.Add([pscustomobject]@{
@@ -170,11 +177,14 @@ function Get-ClaudeGatewayGovernanceChanges {
     $canonical = {
         param([string]$Value)
         if ($Value -notmatch '^,.*,$') { return $Value }
-        ',' + ((@($Value.Trim(',') -split ',' | Where-Object { $_ }) | Sort-Object) -join ',') + ','
+        # Ordinal order and comparison: 'Sales' in the gateway against 'sales' from Turnstile is a change (P96, round 5).
+        $parts = [string[]]@($Value.Trim(',') -split ',' | Where-Object { $_ })
+        [Array]::Sort($parts, [System.StringComparer]::Ordinal)
+        ',' + ($parts -join ',') + ','
     }
     foreach ($id in $want.Keys) {
         $was = if ($Current.Contains($id)) { [string]$Current[$id] } else { '' }
-        if ((& $canonical $was) -ne (& $canonical ([string]$want[$id]))) { $changes.Add([pscustomobject]@{ Id = $id; Was = $was; Now = [string]$want[$id] }) }
+        if (-not [string]::Equals((& $canonical $was), (& $canonical ([string]$want[$id])), [System.StringComparison]::Ordinal)) { $changes.Add([pscustomobject]@{ Id = $id; Was = $was; Now = [string]$want[$id] }) }
     }
     return , $changes.ToArray()
 }
@@ -225,7 +235,7 @@ function Test-ClaudeEntraGroup {
     # az is az.cmd on Windows, and cmd.exe reads its arguments again: a name from the Turnstile catalog with a shell
     # character would run as a command (P96, round 4).
     if ($Group -match '[&|<>^%!"\r\n]') {
-        throw "The Entra group name '$Group' holds a character that cmd.exe reads again when the Azure CLI runs (& | < > ^ % ! "" or a line break), so it is not passed to the Azure CLI."
+        throw "The Entra group name '$Group' holds a character that cmd.exe reads again when the Azure CLI runs (& | < > ^ % ! "" or a line break), so it is not passed to the Azure CLI. Rename the group in Turnstile's catalog or in Microsoft Entra ID, then run the sync again."
     }
     $raw = az ad group show --group $Group --query id -o tsv 2>&1 | Out-String
     if ($LASTEXITCODE -eq 0 -and $raw.Trim() -match '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$') { return 'exists' }
@@ -271,14 +281,15 @@ function Select-ClaudeGovernanceWithGroups {
         }
     }
     $kept = @($Desired.Registry | Where-Object { & $accept "'$($_.Id)'" $_.Group })
-    $keptIds = @($kept | ForEach-Object { $_.Id })
-    $parents = [ordered]@{}
+    $keptIds = [System.Collections.Generic.HashSet[string]]::new([string[]]@($kept | ForEach-Object { [string]$_.Id }), [System.StringComparer]::Ordinal)
+    $parents = [System.Collections.Specialized.OrderedDictionary]::new([System.StringComparer]::Ordinal)
     foreach ($team in @($Desired.Parents.Keys)) {
-        if ($keptIds -contains $team -and $keptIds -contains $Desired.Parents[$team]) { $parents[$team] = $Desired.Parents[$team] }
-        elseif ($keptIds -contains $team) { $problems.Add("team '$team': its business unit was not applied") }
+        if ($keptIds.Contains([string]$team) -and $keptIds.Contains([string]$Desired.Parents[$team])) { $parents[$team] = $Desired.Parents[$team] }
+        elseif ($keptIds.Contains([string]$team)) { $problems.Add("team '$team': its business unit was not applied") }
     }
-    $kept = @($kept | Where-Object { -not $Desired.Parents.Contains($_.Id) -or $parents.Contains($_.Id) })
-    $modes = [ordered]@{}
+    $teamKeys = [System.Collections.Generic.HashSet[string]]::new([string[]]@(@($Desired.Parents.Keys) | ForEach-Object { [string]$_ }), [System.StringComparer]::Ordinal)
+    $kept = @($kept | Where-Object { -not $teamKeys.Contains([string]$_.Id) -or $parents.Contains([string]$_.Id) })
+    $modes = [System.Collections.Specialized.OrderedDictionary]::new([System.StringComparer]::Ordinal)
     foreach ($unit in $kept) {
         if ($Desired.Modes -and $Desired.Modes.Contains($unit.Id)) { $modes[$unit.Id] = $Desired.Modes[$unit.Id] }
     }
@@ -429,7 +440,11 @@ function Invoke-ClaudeGatewayGovernanceApply {
             break
         }
     }
+    $problemsReported = $false
     if ($Apply) {
+        # What is not applied is on screen before the first write, not after it (P96, round 5).
+        foreach ($p in @($problems)) { Write-Host "  not applied - $p" }
+        $problemsReported = [bool]@($problems).Count
         foreach ($c in $changes) {
             Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id $c.Id -Value $c.Now
             if ([string](Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id $c.Id) -ne $c.Now) {
@@ -471,6 +486,7 @@ function Invoke-ClaudeGatewayGovernanceApply {
         Applied    = $(if ($Apply) { @($changes).Count } else { 0 })
         Membership = $membership
         Problems   = $problems
+        ProblemsReported = $problemsReported
         Freshness  = $freshness
         Reconciliations = $reconciliations
         SourceReads = $sourceReads.ToArray()
