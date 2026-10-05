@@ -73,8 +73,6 @@ function Get-ClaudeFlowDiscovery {
             gateway = $null
             Region = $null
             comparison = [pscustomobject]@{ status = 'skipped'; differences = @(); reason = 'CLAUDE_FLOW_SKIP_AZ_DISCOVERY=1' }
-            renewal = $null
-            renewalProblem = 'discovery was skipped (CLAUDE_FLOW_SKIP_AZ_DISCOVERY=1), so no gateway was read to match a renewal receipt to.'
         }
     }
 
@@ -151,19 +149,12 @@ function Get-ClaudeFlowDiscovery {
         $recovery = Get-ClaudeAddressRecovery -Record $Record -Gateway $gateway
     }
     $region = if ($gateway -and $gateway.location) { $gateway.location } else { ConvertTo-ClaudeArmRegionName $recordedRegion }
-    # ADR-0051: the Entitlement step discovers the deployed projection prefix from the gateway named value.
-    $projectionPrefix = ''
-    if ($gateway -and $gateway.PSObject.Properties.Name -contains 'namedValues') {
-        $nv = Get-ClaudeFlowLifecycleNamedValueMap -Discovery ([pscustomobject]@{ namedValues = $gateway.namedValues })
-        if ($nv.ContainsKey('entitlement-projection-prefix')) { $projectionPrefix = [string]$nv['entitlement-projection-prefix'] }
-    }
     [pscustomobject][ordered]@{
         record = $Record
         gateway = $gateway
         addressRecovery = $recovery
         Region = $(if ($region) { $region } else { $null })
+        # The Entitlement step reads entitlement-projection-prefix itself when it switches (ADR-0051).
         comparison = [pscustomobject]@{ status = $status; differences = @($differences); reason = $reason }
-        projectionPrefix = $projectionPrefix
-        projectionPrefixProblem = $(if ($projectionPrefix) { $null } else { 'entitlement-projection-prefix is missing. Remedy: deploy the projection with scripts/Deploy-ClaudeProjection.ps1.' })
     }
 }

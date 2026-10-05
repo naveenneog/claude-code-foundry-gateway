@@ -93,9 +93,16 @@ function Invoke-ClaudeFlowStep {
     $target = $Plan.Data.Target
     if ($Plan.Data.Desired -eq 'projection') {
         $prefix = [string]$Plan.Data.ProjectionPrefix
+        # ADR-0051: the switch runs against the projection the gateway records. The guided flow's discovery
+        # reads only the gateway, so the prefix is read here unless discovery already read it.
+        if (-not $prefix -and -not $Plan.Data.ProjectionPrefixProblem) {
+            . (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'scripts\ApimNamedValue.ps1')
+            $prefix = [string](Get-ApimNamedValue -ResourceGroup $target.ResourceGroup -ApimName $target.ApimName -Id 'entitlement-projection-prefix' -FailOnError)
+        }
         if (-not $prefix) {
-            $why = if ($Plan.Data.ProjectionPrefixProblem) { " $($Plan.Data.ProjectionPrefixProblem)" } else { '' }
-            throw "Projection switch refused: the gateway has no entitlement-projection-prefix named value.$why Remedy: deploy the projection with scripts/Deploy-ClaudeProjection.ps1, then rerun."
+            # Discovery's reason without its own remedy, so the refusal names one remedy.
+            $why = if ($Plan.Data.ProjectionPrefixProblem) { ([string]$Plan.Data.ProjectionPrefixProblem -split '\s+Remedy:')[0].Trim() } else { 'the gateway has no entitlement-projection-prefix named value.' }
+            throw "Projection switch refused: $why Remedy: deploy the projection with scripts/Deploy-ClaudeProjection.ps1, then rerun this step."
         }
         . (Join-Path (Split-Path $PSScriptRoot -Parent) 'ClaudeProjectionSwitch.ps1')
         $flowPlan = $Plan
