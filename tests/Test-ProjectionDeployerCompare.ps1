@@ -62,6 +62,10 @@ try {
     $deployer = [IO.File]::ReadAllText((Join-Path $root 'scripts\Deploy-ClaudeProjection.ps1'))
     Assert 'the deployer compares only through Invoke-ClaudeProjectionDeployerCompare, inside its ShouldProcess' ($deployer -match "(?s)ShouldProcess\(\`$ApimName, 'export gateway decisions and compare projection'\)\) \{\s*\`$compare = Invoke-ClaudeProjectionDeployerCompare" -and
         $deployer -notmatch '--compare /work/gateway-decisions\.json')
+    # A full sync counts as switch evidence only when its status names this Cosmos account (council round 1, Architect).
+    Assert 'the deployer''s populate apply stamps the Cosmos account resource id, so its full sync counts as switch evidence' (
+        $deployer -match '(?m)^\$accountResourceId = "/subscriptions/\$\(\(\[string\]\$apim\.id -split ''/''\)\[2\]\)/resourceGroups/\$ResourceGroup/providers/Microsoft\.DocumentDB/databaseAccounts/\$cosmosAccount"' -and
+        $deployer -match 'apply-projection\.mjs --cosmos https://\$cosmosAccount\.documents\.azure\.com:443/ --tenant \$\(\$apim\.identity\.tenantId\) --account-resource-id \$accountResourceId --snapshot /work/snapshot\.json')
 }
 finally { Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue }
 

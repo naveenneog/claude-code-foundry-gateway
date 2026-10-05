@@ -277,7 +277,9 @@ Invoke-Check 'Projection sync package and its import closure' 'Test-ProjectionPa
 Invoke-Check 'Projection renewal templates and deploy script' 'Test-ProjectionRenewal.ps1'
 Invoke-Check 'Projection renewal runs reach admission offline' 'Test-ProjectionRenewalRuns.ps1'
 Invoke-Check 'Projection switch evidence and switch function' 'Test-ProjectionSwitchEvidence.ps1'
-Invoke-Check 'Projection deployer and installer switch wiring' 'Test-ProjectionDeployerInstallerWiring.ps1'
+# Exclusive: it counts the switch backups that a run adds to the repository's onboarding folder, which
+# the council suite's deployer flip also writes into.
+Invoke-Check 'Projection deployer and installer switch wiring' 'Test-ProjectionDeployerInstallerWiring.ps1' -SerialLane
 Invoke-Check 'Projection deployer compare before any switch' 'Test-ProjectionDeployerCompare.ps1'
 Invoke-Check 'Projection guided flow switch wiring' 'Test-ProjectionFlowSwitch.ps1'
     Invoke-Check 'Claude Desktop sign-in choice'             'Test-DesktopSignIn.ps1'
