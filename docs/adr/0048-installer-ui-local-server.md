@@ -64,9 +64,11 @@ returns the run without the tail. `GET /api/run/attach?after=<seq>` streams tail
 `tools/installer-ui/server.mjs:580-583`).
 Run requests also carry a browser-generated client request id. The server records a small admission
 history for that id before reading the body, then marks it `started` with the run id or `refused`
-with the response reason; `GET /api/run/status?request=<id>` includes that record
+with the response reason; `GET /api/run/status?request=<id>` includes that record. The page uses it
+to wait through admission, attach only the admitted run, and report when a later run replaced the
+admitted run record
 (`tools/installer-ui/run-admission.mjs:1-29`; `tools/installer-ui/server.mjs:451-470`;
-`tools/installer-ui/server.mjs:505-540`; `tools/installer-ui/installer-ui-run.js:153-190`).
+`tools/installer-ui/server.mjs:505-540`; `tools/installer-ui/installer-ui-run.js:203-246`).
 
 The run transport uses per-source UTF-8 decoders, line carry, final flush, a progress-file byte
 offset, serialized console line handling, a 4 MiB console-output cap, a 64 KiB console-line cap and

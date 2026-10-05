@@ -337,6 +337,51 @@ test('R3-2 malformed stream line reattaches to the same run and finishes', async
   }
 });
 
+test('R3-2 broken stream recovery says a running server run can be reattached after reload', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await passPreflight(page);
+    let requestId = '';
+    await page.route('**/api/run/stream', (route) => {
+      requestId = route.request().headers()['x-client-request-id'];
+      return route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"progress","stepId":"resource-group","event":"started","message":"started"}\nnot-json\n' });
+    });
+    await page.route('**/api/run/status?request=*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'same-run', clientRequestId: requestId, state: 'running', currentStepId: 'resource-group', steps: ['resource-group'], admission: { state: 'started', runId: 'same-run' } }) }));
+    await page.route('**/api/run/status', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'same-run', state: 'running', currentStepId: 'resource-group', steps: ['resource-group'] }) }));
+    await page.route('**/api/run/attach?after=*', (route) => route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '' }));
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await page.locator('#run-error').getByText(/run continues on the server/i).waitFor();
+    await page.locator('#run-error').getByText(/reloading the page reattaches/i).waitFor();
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
+test('R3-2 lost request does not attach a later run that replaced the admitted record', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await passPreflight(page);
+    let attachCount = 0;
+    await page.route('**/api/run/stream', (route) => route.abort('failed'));
+    await page.route('**/api/run/status?request=*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'later-run', state: 'running', currentStepId: 'gateway-deployment', steps: ['gateway-deployment'], admission: { state: 'started', runId: 'original-run' } }) }));
+    await page.route('**/api/run/attach?after=*', (route) => {
+      attachCount++;
+      return route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"summary","exitCode":0,"failedStepId":"","resumeCommand":"","state":"exited","message":""}\n' });
+    });
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await page.locator('#run-error').getByText(/finished, and a later run replaced its record/i).waitFor();
+    assert.equal(attachCount, 0);
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
 test('R3-9 page load attaches to a stopping run with controls disabled until summary', async () => {
   const app = await start();
   const { chromium } = await import('playwright');

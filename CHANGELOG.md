@@ -110,7 +110,9 @@ exact streaming cache-creation detail remains **U13**.
   closes the Azure lease before cleanup, refusing queued Azure reads before they can start another
   child. Authenticated requests now keep idle shutdown disarmed while a run request body is still
   being admitted. Run requests now carry a client request id so the server can report admitting,
-  started or refused admission state through run status for lost-request recovery.
+  started or refused admission state through run status for lost-request recovery. Broken streams now
+  continue into bounded summary recovery, and lost-request recovery refuses to display a later run as
+  the admitted request's result.
 - **Installers read an answers file, check it before any change, run selected steps and write a progress stream (P92, phase 0).**
   One answers file, described by `schemas/claude-gateway.answers.schema.json`, feeds
   `Install-ClaudeGateway.ps1 -AnswersPath`, `install-claude-gateway.sh --answers-file` and

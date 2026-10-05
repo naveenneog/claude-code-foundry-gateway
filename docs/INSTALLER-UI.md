@@ -165,14 +165,16 @@ If Stop run arrives after a run record exists but before the installer child is 
 records the stop request and skips the spawn; if the child appears after the request, it is killed
 immediately (`tools/installer-ui/server.mjs:534-541`; `tools/installer-ui/server.mjs:577-578`).
 The browser run script reports non-zero summaries as alerts with the exit code, failed step and
-resume command, reports stopped summaries as status, and bounds reattaches for streams that end
-without a summary (`tools/installer-ui/installer-ui-run.js:50-136`). A run request that fails before
-the server answers is followed by a status read: a run that started is reattached, otherwise the page
-clears its run state and reports that the server has no active run. Each run request carries a
-32-hex client request id; the server records `admitting`, `started` and `refused` admission states,
-and `GET /api/run/status?request=<id>` returns that admission record for lost-request recovery
-(`tools/installer-ui/run-admission.mjs:1-29`; `tools/installer-ui/server.mjs:451-470`;
-`tools/installer-ui/server.mjs:505-540`; `tools/installer-ui/installer-ui-run.js:153-190`).
+resume command, reports stopped summaries as status, bounds reattaches for streams that end without
+a summary and tells the operator when the run continues on the server for reload reattachment
+(`tools/installer-ui/installer-ui-run.js:50-152`). A run request that fails before the server answers
+is followed by a status read: the admitted run is reattached, a later replacement run is not shown as
+that request's result, and a missing admission record is reported as no record of the request. Each
+run request carries a 32-hex client request id; the server records `admitting`, `started` and
+`refused` admission states, and `GET /api/run/status?request=<id>` returns that admission record for
+lost-request recovery (`tools/installer-ui/run-admission.mjs:1-29`;
+`tools/installer-ui/server.mjs:451-470`; `tools/installer-ui/server.mjs:505-540`;
+`tools/installer-ui/installer-ui-run.js:203-246`).
 Each new run reattaches from its own first event (`tools/installer-ui/installer-ui-run.js:151-181`).
 
 Read-only child routes use per-route timeouts: step list 60 seconds, identity 120 seconds, prefill

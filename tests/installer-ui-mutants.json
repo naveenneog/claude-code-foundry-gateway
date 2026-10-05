@@ -156,10 +156,28 @@
     "id": "r3-2-6",
     "why": "Lost-request recovery must attach a run that has already started and read the real summary from the server.",
     "file": "tools/installer-ui/installer-ui-run.js",
-    "find": "        if (status?.admission?.state === \"started\") {\n          activeRunId = status.admission.runId || status.id || \"\";\n          return followRun(() => fetchRunStream(`./api/run/attach?after=0`).then(readRunStream));\n        }\n",
+    "find": "        if (status?.admission?.state === \"started\") {\n          const admittedRunId = status.admission.runId || \"\";\n          if (status.id && admittedRunId && status.id !== admittedRunId) {\n            runActive = false;\n            runStopping = false;\n            updateRunAdmission();\n            throw new Error(\"The run for this request finished, and a later run replaced its record. Reload the page to see the latest run.\");\n          }\n          activeRunId = admittedRunId || status.id || \"\";\n          return followRun(() => fetchRunStream(`./api/run/attach?after=0`).then(readRunStream));\n        }\n",
     "replace": "        if (status?.admission?.state === \"started\") {\n          break;\n        }\n",
     "testFile": "tests/installer-ui-g8b.test.mjs",
     "test": "R3-2 real server recovery follows an aborted successful run to its summary"
+  },
+  {
+    "id": "r3-2-7",
+    "why": "Broken-stream recovery must continue into the bounded missing-summary loop when the first reattach also has no summary.",
+    "file": "tools/installer-ui/installer-ui-run.js",
+    "find": "      return (await readRunStream(await fetchRunStream(`./api/run/attach?after=${lastRunSeq}`))) || (await recoverMissingSummary());\n",
+    "replace": "      return (await readRunStream(await fetchRunStream(`./api/run/attach?after=${lastRunSeq}`))) || null;\n",
+    "testFile": "tests/installer-ui-g8b.test.mjs",
+    "test": "R3-2 broken stream recovery says a running server run can be reattached after reload"
+  },
+  {
+    "id": "r3-2-8",
+    "why": "Lost-request recovery must not attach a later run when a different latest run replaced the admitted run record.",
+    "file": "tools/installer-ui/installer-ui-run.js",
+    "find": "          if (status.id && admittedRunId && status.id !== admittedRunId) {\n            runActive = false;\n            runStopping = false;\n            updateRunAdmission();\n            throw new Error(\"The run for this request finished, and a later run replaced its record. Reload the page to see the latest run.\");\n          }\n",
+    "replace": "",
+    "testFile": "tests/installer-ui-g8b.test.mjs",
+    "test": "R3-2 lost request does not attach a later run that replaced the admitted record"
   },
   {
     "id": "T1-fail-once-disabled",
@@ -1305,7 +1323,7 @@
     "id": "g7b-F03",
     "why": "lead fix: a lost run request whose run started is not reattached",
     "file": "tools/installer-ui/installer-ui-run.js",
-    "find": "        if (status?.admission?.state === \"started\") {\n          activeRunId = status.admission.runId || status.id || \"\";\n          return followRun(() => fetchRunStream(`./api/run/attach?after=0`).then(readRunStream));\n        }\n",
+    "find": "        if (status?.admission?.state === \"started\") {\n          const admittedRunId = status.admission.runId || \"\";\n          if (status.id && admittedRunId && status.id !== admittedRunId) {\n            runActive = false;\n            runStopping = false;\n            updateRunAdmission();\n            throw new Error(\"The run for this request finished, and a later run replaced its record. Reload the page to see the latest run.\");\n          }\n          activeRunId = admittedRunId || status.id || \"\";\n          return followRun(() => fetchRunStream(`./api/run/attach?after=0`).then(readRunStream));\n        }\n",
     "replace": "",
     "testFile": "tests/installer-ui-g7b-r2.test.mjs",
     "test": "lead: a run request that fails after the server started the run reattaches to that run"

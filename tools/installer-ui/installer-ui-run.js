@@ -135,7 +135,7 @@
           runActive = false;
           runStopping = false;
           updateRunAdmission();
-          throw new Error("The run stream keeps ending without new events. Reloading the page reattaches to the run.");
+          throw new Error("The run continues on the server, but the stream keeps ending without new events. Reloading the page reattaches to the run.");
         }
         activeRunId = status.id;
         activeStepId = status.currentStepId || status.steps?.[0] || "";
@@ -164,10 +164,16 @@
         return result;
       } catch (error) {
         if (!error.data?.runSummary) {
-          const recovered = await reconcileBrokenStream().catch(() => null);
-          if (recovered) {
-            refreshIdentityAfterRun();
-            return recovered;
+          try {
+            const recovered = await reconcileBrokenStream();
+            if (recovered) {
+              refreshIdentityAfterRun();
+              return recovered;
+            }
+          } catch (recoveryError) {
+            runActive = false;
+            updateRunAdmission();
+            throw recoveryError;
           }
         }
         runActive = false;
@@ -191,7 +197,7 @@
       runActive = true;
       runStopping = false;
       updateRunAdmission();
-      return (await readRunStream(await fetchRunStream(`./api/run/attach?after=${lastRunSeq}`))) || null;
+      return (await readRunStream(await fetchRunStream(`./api/run/attach?after=${lastRunSeq}`))) || (await recoverMissingSummary());
     }
 
     async function recoverLostRequest(requestError) {
@@ -212,7 +218,14 @@
           continue;
         }
         if (status?.admission?.state === "started") {
-          activeRunId = status.admission.runId || status.id || "";
+          const admittedRunId = status.admission.runId || "";
+          if (status.id && admittedRunId && status.id !== admittedRunId) {
+            runActive = false;
+            runStopping = false;
+            updateRunAdmission();
+            throw new Error("The run for this request finished, and a later run replaced its record. Reload the page to see the latest run.");
+          }
+          activeRunId = admittedRunId || status.id || "";
           return followRun(() => fetchRunStream(`./api/run/attach?after=0`).then(readRunStream));
         }
         if (status?.admission?.state === "refused") {
