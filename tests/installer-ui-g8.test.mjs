@@ -446,8 +446,7 @@ test('R3-4 shutdown closes the Azure lease before queued reads can spawn childre
     await new Promise((resolve) => setTimeout(resolve, 50));
     const shutdown = shutdownInstallerUiServer(app.server, 'test shutdown');
     releaseIdentity();
-    const [identityResult, preflightResult] = await Promise.allSettled([identity, preflight]);
-    assert.match(identityResult.status, /^(fulfilled|rejected)$/);
+    const [, preflightResult] = await Promise.allSettled([identity, preflight]);
     assert.equal(preflightResult.status, 'fulfilled');
     assert.equal(preflightResult.value.status, 503);
     assert.equal((await preflightResult.value.json()).reason, 'installer-ui-stopping');
