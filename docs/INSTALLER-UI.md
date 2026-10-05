@@ -121,8 +121,8 @@ answers and a covering scope; failing preflight or an exit-code failure clears t
 (`tools/installer-ui/preflight-record.mjs:2-54`; `tools/installer-ui/server.mjs:458-508`).
 The passing preflight also stores the signed-in state, user, tenant and subscription snapshot; run
 admission reads identity again under the Azure lease and refuses changed identity with `409`
-(`tools/installer-ui/server.mjs:265-278`; `tools/installer-ui/server.mjs:464-480`;
-`tools/installer-ui/server.mjs:501-508`).
+(`tools/installer-ui/server.mjs:300-318`; `tools/installer-ui/server.mjs:474-483`;
+`tools/installer-ui/server.mjs:504-511`).
 
 One Azure CLI lease covers identity, prefill, preflight and a run from admission through its summary.
 Reads queue behind reads, reads and runs are refused while a run holds the lease, and runs are

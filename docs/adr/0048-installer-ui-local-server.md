@@ -142,7 +142,7 @@ during a read is refused with the read operation named (`tools/installer-ui/azur
 A passing preflight reads identity once after the installer preflight passes, and run admission reads
 identity once again before creating the run. Those reads add one PowerShell/`az account show` path to each passing preflight and admitted run. A changed tenant, user or
 subscription requires a new preflight (`scripts/Get-ClaudeInstallerUiIdentity.ps1:8-18`;
-`tools/installer-ui/server.mjs:265-278`; `tools/installer-ui/server.mjs:464-508`).
+`tools/installer-ui/server.mjs:300-318`; `tools/installer-ui/server.mjs:474-511`).
 
 A PFX certificate run from the page is refused. Installing a PFX certificate remains a terminal
 operation because the installer asks for the PFX password only when it is not running with `-Yes`
