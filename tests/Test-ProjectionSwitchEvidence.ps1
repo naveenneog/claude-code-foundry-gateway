@@ -51,8 +51,8 @@ exit 0
 '@)
 $syncStub = Join-Path $work 'sync-stub.ps1'
 [IO.File]::WriteAllText($syncStub, @'
-param([string]$ApimName, [string]$ResourceGroup, [string]$StandardGroup, [string]$PremiumGroup, [string]$ExportPath)
-$global:FixtureCalls.Add("sync-export $ResourceGroup $ApimName $StandardGroup $PremiumGroup")
+param([string]$Account, [string]$ApimName, [string]$ResourceGroup, [string]$StandardGroup, [string]$PremiumGroup, [string]$ExportPath)
+$global:FixtureCalls.Add("sync-export $ResourceGroup $ApimName $StandardGroup $PremiumGroup account=$Account")
 [IO.File]::WriteAllText($ExportPath, '{"scope":"full","records":[]}')
 exit 0
 '@)
@@ -109,7 +109,7 @@ Reset-ProjectionFixture 'new-gateway'
 Get-ChildItem -LiteralPath $backupDir -Filter '*.json' -ErrorAction SilentlyContinue | Remove-Item -Force
 Capture { Invoke-Switch }
 $calls = $FixtureCalls -join "`n"
-Assert 'new gateway skips drift export and uses compare-snapshot against a fresh full snapshot' (-not $Failure -and $calls -notmatch '(?m)^compare-stub' -and $calls -match '(?m)^sync-export rg-p84 apim-p84' -and $calls -match '--compare-snapshot /work/snapshot\.json') "$Failure | $calls"
+Assert 'new gateway passes the Cosmos account, skips drift export and uses compare-snapshot against a fresh full snapshot' (-not $Failure -and $calls -notmatch '(?m)^compare-stub' -and $calls -match '(?m)^sync-export rg-p84 apim-p84 .* account=cosmos-p84fixture' -and $calls -match '--account-resource-id /subscriptions/00000000-0000-4000-8000-000000000084/resourceGroups/rg-p84/providers/Microsoft\.DocumentDB/databaseAccounts/cosmos-p84fixture --compare-snapshot /work/snapshot\.json') "$Failure | $calls"
 
 Reset-ProjectionFixture 'sp-missing'
 Get-ChildItem -LiteralPath $backupDir -Filter '*.json' -ErrorAction SilentlyContinue | Remove-Item -Force

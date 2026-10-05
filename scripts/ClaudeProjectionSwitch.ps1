@@ -130,7 +130,7 @@ function Invoke-ClaudeProjectionSwitch {
         }
         else {
             Write-Host "`n==> New gateway: no named-value members; compare projection with a fresh Entra snapshot" -ForegroundColor Cyan
-            & $SyncProjectionScript -ApimName $ApimName -ResourceGroup $ResourceGroup -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -ExportPath $snapshot
+            & $SyncProjectionScript -Account $cosmosAccount -ApimName $ApimName -ResourceGroup $ResourceGroup -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -ExportPath $snapshot
             if ($LASTEXITCODE -ne 0) { throw 'Projection switch refused: snapshot export failed; no compare or switch was attempted.' }
         }
         Write-Host '==> Compare: the projection through the in-VNet runner (read-only)' -ForegroundColor Cyan
@@ -140,11 +140,11 @@ function Invoke-ClaudeProjectionSwitch {
         Invoke-RunnerCommand -ResourceGroup $runnerGroup -Name $runner -Command 'npm --prefix /work/sync ci --omit=dev --ignore-scripts --no-audit --fund=false' | Out-Null
         if ($hasNamedMembers) {
             Send-RunnerFile -ResourceGroup $runnerGroup -Name $runner -Path $gateway -Destination /work/gateway-decisions.json | Out-Null
-            $compareRaw = Invoke-RunnerCommand -ResourceGroup $runnerGroup -Name $runner -Command "node /work/sync/src/apply-projection.mjs --cosmos https://$cosmosAccount.documents.azure.com:443/ --tenant $tenantId --compare /work/gateway-decisions.json"
+            $compareRaw = Invoke-RunnerCommand -ResourceGroup $runnerGroup -Name $runner -Command "node /work/sync/src/apply-projection.mjs --cosmos https://$cosmosAccount.documents.azure.com:443/ --tenant $tenantId --account-resource-id $accountResourceId --compare /work/gateway-decisions.json"
         }
         else {
             Send-RunnerFile -ResourceGroup $runnerGroup -Name $runner -Path $snapshot -Destination /work/snapshot.json | Out-Null
-            $compareRaw = Invoke-RunnerCommand -ResourceGroup $runnerGroup -Name $runner -Command "node /work/sync/src/apply-projection.mjs --cosmos https://$cosmosAccount.documents.azure.com:443/ --tenant $tenantId --compare-snapshot /work/snapshot.json"
+            $compareRaw = Invoke-RunnerCommand -ResourceGroup $runnerGroup -Name $runner -Command "node /work/sync/src/apply-projection.mjs --cosmos https://$cosmosAccount.documents.azure.com:443/ --tenant $tenantId --account-resource-id $accountResourceId --compare-snapshot /work/snapshot.json"
         }
         $summaryLine = @(([string]$compareRaw).TrimEnd("`r", "`n") -split '\r?\n' | Select-Object -Last 1)[0]
         $compare = try { $summaryLine | ConvertFrom-Json -ErrorAction Stop } catch { $null }

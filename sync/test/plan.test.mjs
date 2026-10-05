@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mergeMembership, planChanges, oldestRetainedExpiry, toDocument, validateSnapshot, validateTargetedSnapshot, compareWithSnapshot, createReconciliation } from '../src/plan.mjs';
+import { mergeMembership, planChanges, toDocument, validateSnapshot, validateTargetedSnapshot, compareWithSnapshot, createReconciliation } from '../src/plan.mjs';
 const lease = createReconciliation({ verifiedAt: new Date() });
 
 const A = '11111111-1111-1111-1111-111111111111';
@@ -69,12 +69,12 @@ test('orphans are kept only when asked, and reported', () => {
   assert.deepEqual(plan.keptOrphans, [C]);
 });
 
-test('the oldest retained expiry holds for a directory of 300,000 entitled identities', () => {
-  const toWrite = Array.from({ length: 300000 }, (_, i) => ({ oid: `w${i}` }));
-  const existing = new Map([[C, { tier: 'premium', expiresAt: 100 }]]);
-  assert.equal(oldestRetainedExpiry({ toWrite, keptOrphans: [C] }, existing, 500), 100, 'a kept orphan that expires first');
-  assert.equal(oldestRetainedExpiry({ toWrite, keptOrphans: [] }, existing, 500), 500, 'only this run\'s lease');
-  assert.equal(oldestRetainedExpiry({ toWrite: [], keptOrphans: [] }, existing, 500), 500, 'nothing retained');
+test('planning a directory of 300,000 persistent identities does not depend on retained expiry', () => {
+  const resolved = Array.from({ length: 300000 }, (_, i) => ({ oid: `w${i}`, tier: 'standard' }));
+  const plan = planChanges(resolved, new Map([[C, { tier: 'premium', expiresAt: 100 }]]), { keepOrphans: true });
+  assert.equal(plan.toWrite.length, 300000);
+  assert.deepEqual(plan.keptOrphans, [C]);
+  assert.equal('oldestExpiresAt' in plan, false);
 });
 
 test('the document is a point-read shape: id and partition key are the oid', () => {

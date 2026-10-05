@@ -103,8 +103,9 @@ existing access. Removing a person takes effect after the sync plus at most the 
 lasts 60 to 90 minutes (Microsoft Learn, updated 2026-07-17:
 https://learn.microsoft.com/entra/identity-platform/access-tokens).
 
-`scripts/Deploy-ClaudeProjectionRenewal.ps1` now deploys the optional sync job for very large
-directories. Its trigger is Manual by default; `-CronExpression '<five fields>'` adds a schedule. A
+`scripts\Deploy-ClaudeProjectionRenewal.ps1` now deploys the optional sync job for very large
+directories. It runs `az acr build` from the sync package so the image and runner use the same files.
+Its trigger is Manual by default; `-CronExpression '<five fields>'` adds a schedule. A
 manual run starts with `az containerapp job start`. The job needs Microsoft Graph application
 permission `GroupMember.Read.All`, granted by a Privileged Role Administrator or Global Administrator
 through `scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1`. Large full syncs through the runner

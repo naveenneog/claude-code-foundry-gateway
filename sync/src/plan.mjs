@@ -105,21 +105,6 @@ export function planChanges(resolved, existing, { allowEmpty = false, keepOrphan
 }
 
 /**
- * The earliest expiry among the records a run leaves behind: every record it wrote, which expire
- * with this run's lease, and every orphan it kept. With neither, the run's own lease.
- */
-export function oldestRetainedExpiry({ toWrite = [], keptOrphans = [] } = {}, existing = new Map(), expiresAt) {
-  // A loop, not Math.min(...list): spreading one argument per record overflows the stack near
-  // 125,000 records, and a run writes every entitled identity.
-  let oldest = toWrite.length ? expiresAt : Infinity;
-  for (const oid of keptOrphans) {
-    const kept = existing.get(oid)?.expiresAt;
-    if (Number.isFinite(kept) && kept < oldest) oldest = kept;
-  }
-  return Number.isFinite(oldest) ? oldest : expiresAt;
-}
-
-/**
  * The stored document. Same shape the PowerShell sync writes and the resolver
  * reads: id and partition key are both the object id, so a lookup is a point
  * read.
@@ -219,11 +204,6 @@ export function normalizeJobSettings(settings = {}) {
   const values = SETTING_KEYS.map((key) => settings?.[key]);
   if (values.some((value) => typeof value !== 'string' || !value.trim())) return null;
   return Object.fromEntries(SETTING_KEYS.map((key, i) => [key, values[i].trim().toLowerCase()]));
-}
-
-function sameSettings(recorded, expected) {
-  const normalized = normalizeJobSettings(recorded ?? {});
-  return Boolean(normalized && expected) && SETTING_KEYS.every((key) => normalized[key] === expected[key]);
 }
 
 const GUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
@@ -377,17 +357,6 @@ function switchEvidence(ok, newestFullSync, invalidCount, reason) {
 
 function digest(value) {
   return createHash('sha256').update(String(value)).digest('hex').slice(0, 12);
-}
-
-function normalizeCounts(counts) {
-  return Object.fromEntries(Object.entries(counts)
-    .filter(([, value]) => Number(value) > 0)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, value]) => [key, Number(value)]));
-}
-
-function refuse(reason) {
-  return { ok: false, reason, remedy: reason };
 }
 
 /**

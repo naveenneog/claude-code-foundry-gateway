@@ -33,8 +33,6 @@
  *        [--whatif] [--allow-empty] [--keep-orphans]
  */
 import { readFileSync } from 'node:fs';
-import { CosmosClient } from '@azure/cosmos';
-import { DefaultAzureCredential } from '@azure/identity';
 import { mergeMembership, planChanges, toDocument, toStatusDocument, validateSnapshot, validateTargetedSnapshot, compareWithGateway, compareWithSnapshot, createReconciliation, normalizeJobSettings } from './plan.mjs';
 import { resolveGroupId, getTransitiveMembers } from './graph.mjs';
 import { readGatewayUnits, sortUnitsByDepth } from './business-units.mjs';
@@ -49,10 +47,12 @@ const endpoint = opt('--cosmos', process.env.COSMOS_ENDPOINT);
 const databaseName = opt('--database', 'claude');
 const containerName = opt('--container', 'entitlement');
 const tenantId = opt('--tenant', process.env.PROJECTION_TENANT_ID);
+const accountResourceIdFlag = opt('--account-resource-id');
 const whatIf = flag('--whatif');
 const renewal = flag('--graph');
 const userOid = opt('--user');
 const GUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+const COSMOS_ACCOUNT_RESOURCE_ID = /^\/subscriptions\/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\/resourceGroups\/([^/]+)\/providers\/Microsoft\.DocumentDB\/databaseAccounts\/([^/]+)$/i;
 const log = (m) => console.log(m);
 
 function fail(message, code = 1, stage = 'config') {
@@ -71,7 +71,10 @@ async function step(stage, work) {
 
 if (!endpoint) fail('--cosmos is required');
 if (!tenantId) fail('--tenant is required: every record is stamped with it and the resolver refuses another');
+const accountResourceId = resolveAccountResourceId({ endpoint, flagValue: accountResourceIdFlag, envValue: process.env.PROJECTION_ACCOUNT_RESOURCE_ID });
 
+const { DefaultAzureCredential } = await import('@azure/identity');
+const { CosmosClient } = await import('@azure/cosmos');
 const credential = new DefaultAzureCredential();
 
 // Tier groups: --standard/--premium, else the job's PROJECTION_*_GROUP_ID settings (object ids,
@@ -242,7 +245,7 @@ if (summary.ok) {
   if (explicitExecutor && !['job', 'runner'].includes(explicitExecutor)) fail('--executor must be job or runner', 2, 'config');
   const status = toStatusDocument({
     tenantId,
-    accountResourceId: process.env.PROJECTION_ACCOUNT_RESOURCE_ID ?? '',
+    accountResourceId,
     databaseName,
     containerName,
     runId: process.env.CONTAINER_APP_JOB_EXECUTION_NAME ?? process.env.PROJECTION_RUN_ID ?? `local-${started}`,
@@ -277,3 +280,26 @@ if (renewal) {
 console.log(JSON.stringify(summary));
 if (!summary.ok) process.exit(3);
 process.exit(writes.failed || deletes.failed ? 3 : 0);
+
+function resolveAccountResourceId({ endpoint, flagValue, envValue }) {
+  const chosen = flagValue ?? envValue ?? '';
+  if (flagValue && envValue && flagValue !== envValue) {
+    fail('--account-resource-id differs from PROJECTION_ACCOUNT_RESOURCE_ID');
+  }
+  if (!chosen) return '';
+  const match = COSMOS_ACCOUNT_RESOURCE_ID.exec(chosen);
+  if (!match) fail('--account-resource-id must be an ARM id: /subscriptions/<guid>/resourceGroups/<rg>/providers/Microsoft.DocumentDB/databaseAccounts/<name>');
+  let accountName = '';
+  try {
+    const url = new URL(endpoint);
+    const hostMatch = /^([a-z0-9-]+)\.documents\.azure\.com$/i.exec(url.hostname);
+    if (url.protocol !== 'https:' || !hostMatch) fail('--cosmos must be an https Cosmos DB endpoint URL');
+    accountName = hostMatch[1];
+  } catch {
+    fail('--cosmos must be an https Cosmos DB endpoint URL');
+  }
+  if (match[3].toLowerCase() !== accountName.toLowerCase()) {
+    fail(`--account-resource-id names Cosmos account '${match[3]}', but --cosmos is for '${accountName}'`);
+  }
+  return chosen;
+}
