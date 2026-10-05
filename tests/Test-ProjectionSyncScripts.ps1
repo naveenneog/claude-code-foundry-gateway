@@ -94,10 +94,10 @@ Assert 'targeted export uses an object id as-is' (($byId.Calls -join "`n") -notm
 
 $units = @(1..45 | ForEach-Object { "u$_=Unit$_" })
 $batched = Invoke-TargetedExportFixture -User $oid -BusinessUnitGroups $units
-Assert 'targeted export batches checkMemberGroups at no more than twenty ids' (@($batched.Batches | Where-Object { $_ -gt 20 }).Count -eq 0 -and @($batched.Batches).Count -ge 3) ($batched.Batches -join ',')
+Assert 'targeted export uses Graph checkMemberGroups batches' (@($batched.Batches | Where-Object { $_ -gt 20 }).Count -eq 0 -and ((@($batched.Batches) | Measure-Object -Sum).Sum -eq 47) -and @($batched.Batches).Count -ge 3) ($batched.Batches -join ',')
 
 $both = Invoke-TargetedExportFixture -User 'both@contoso.com'
-Assert 'targeted export gives premium precedence over standard for one user' (@($both.Snapshot.records).Count -eq 1 -and $both.Snapshot.records[0].tier -eq 'premium') ($both.Snapshot | ConvertTo-Json -Compress)
+Assert 'targeted export writes user-scoped snapshots' (@($both.Snapshot.records).Count -eq 1 -and $both.Snapshot.records[0].tier -eq 'premium' -and $both.Snapshot.scope -eq 'user') ($both.Snapshot | ConvertTo-Json -Compress)
 
 . (Join-Path $PSScriptRoot 'TestProjectionFixture.ps1')
 function pwsh {
@@ -127,12 +127,14 @@ function pwsh {
 Reset-ProjectionFixture
 Capture { & (Join-Path $root 'scripts\Sync-ClaudeAccess.ps1') -ApimName apim-p84 -ResourceGroup rg-p84 -Store named-value -User dev@contoso.com }
 Assert 'Sync-ClaudeAccess refuses targeted named-value sync before Azure calls' ($CapturedError -match '-User cannot be used with -Store named-value' -and $FixtureCalls.Count -eq 0) "$CapturedError | $($FixtureCalls -join ' | ')"
+Assert 'named-value refuses targeted user' ($CapturedError -match '-User cannot be used with -Store named-value' -and $FixtureCalls.Count -eq 0) "$CapturedError | $($FixtureCalls -join ' | ')"
 
 Reset-ProjectionFixture 'source-projection'
 Capture { & (Join-Path $root 'scripts\Sync-ClaudeAccess.ps1') -ApimName apim-p84 -ResourceGroup rg-p84 -Store auto -AllowEmpty }
 $accessCalls = $FixtureCalls -join "`n"
 Assert 'Sync-ClaudeAccess -Store auto follows a projection gateway and forwards --allow-empty plus account id' (-not $CapturedError -and $accessCalls -match 'apply-projection\.mjs .*--account-resource-id /subscriptions/00000000-0000-4000-8000-000000000084/resourceGroups/rg-p84/providers/Microsoft\.DocumentDB/databaseAccounts/cosmos-p84fixture .*--allow-empty') "$CapturedError | $accessCalls"
 Assert 'Sync-ClaudeAccess projection runner installs production dependencies with safe npm ci flags' ($accessCalls -match 'npm --prefix /work/sync ci --omit=dev --ignore-scripts --no-audit --fund=false') $accessCalls
+Assert 'projection access path starts runner and applies contract CLI' (-not $CapturedError -and $accessCalls -match 'container show .*aci-projtest-p84fixture' -and $accessCalls -match 'npm --prefix /work/sync ci --omit=dev --ignore-scripts --no-audit --fund=false' -and $accessCalls -match 'apply-projection\.mjs .*--account-resource-id .*--snapshot /work/projection-snapshot\.json') "$CapturedError | $accessCalls"
 
 Reset-ProjectionFixture 'node-modules-present'
 Capture { & (Join-Path $root 'scripts\Sync-ClaudeAccess.ps1') -ApimName apim-p84 -ResourceGroup rg-p84 -Store projection }
