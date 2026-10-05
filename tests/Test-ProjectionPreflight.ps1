@@ -294,11 +294,14 @@ Expect-Failure 'failed Cosmos role assignment stops before runner apply' {
 
 . (Join-Path $root 'scripts\flow\Entitlement.ps1')
 $entRecord = [pscustomobject]@{ schemaVersion=2; decisions=[pscustomobject]@{ entitlementStore=[pscustomobject]@{ target='projection' } }; history=@() }
-$entDiscovery = [pscustomobject]@{ resourceGroup='rg-p84'; apimName='apim-p84'; location='eastus2'; sku='BasicV2'; subscriptionId=$FixtureSubscription; namedValues=@{ 'entitlement-source'='named-value' }; cleanComparison=$true }
+$entDiscovery = [pscustomobject]@{ resourceGroup='rg-p84'; apimName='apim-p84'; location='eastus2'; sku='BasicV2'; subscriptionId=$FixtureSubscription; namedValues=@{ 'entitlement-source'='named-value' } }
 $plan = Get-ClaudeFlowStepPlan -Record $entRecord -Discovery $entDiscovery
-Expect-Failure 'actual Entitlement refuses a clean compare with no renewal evidence before backup' { Invoke-ClaudeFlowStep -Record $entRecord -Plan $plan } 'P86 admission needs renewal runner'
-$plan.Data.CleanComparison = $false
-Expect-Failure 'actual Entitlement also refuses a dirty comparison without renewal evidence' { Invoke-ClaudeFlowStep -Record $entRecord -Plan $plan } 'P86 admission needs renewal runner'
+Expect-Failure 'actual Entitlement refuses without renewal evidence before backup' { Invoke-ClaudeFlowStep -Record $entRecord -Plan $plan } 'P86 admission needs renewal runner'
+# P95 removed the flow's clean-comparison flag (the shared switch runs the compare); the refusal now
+# carries the reason discovery gives.
+$entDiscovery | Add-Member renewalProblem 'no renewal receipt under onboarding/ names gateway apim-p84.' -Force
+$plan = Get-ClaudeFlowStepPlan -Record $entRecord -Discovery $entDiscovery
+Expect-Failure 'actual Entitlement names the reason discovery found no renewal evidence' { Invoke-ClaudeFlowStep -Record $entRecord -Plan $plan } 'no renewal receipt under onboarding/ names gateway apim-p84'
 $entRecord.decisions.entitlementStore | Add-Member reconcilerResourceId $FixtureJobId
 $plan = Get-ClaudeFlowStepPlan -Record $entRecord -Discovery $entDiscovery
 Assert 'flow plan explains evidence-gated admission rather than preserving an approving id' (($plan.Implications -join ' ') -match 'Cosmos evidence')
