@@ -84,3 +84,97 @@ test('lead: the account read after a run marks a passing preflight stale when th
     await rm(scratch, { recursive: true, force: true });
   }
 });
+
+async function startLeadPage() {
+  const scratch = join(tmpdir(), `p93-g7b-lead-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+  await mkdir(scratch, { recursive: true });
+  const server = await createInstallerUiServer({
+    token: 'g7b-lead-page-token-with-at-least-32-bytes',
+    stubInstaller,
+    idleMs: 60_000,
+    env: { P93_INSTALLER_UI_STUB_LOG: join(scratch, 'stub.ndjson') },
+    readIdentity: async () => ({ signedIn: true, user: 'one@example.test', tenantId: 'tenant-1', subscriptionId: '00000000-0000-4000-8000-000000000093' }),
+  });
+  const address = await server.listenAsync('127.0.0.1');
+  const { chromium } = await import('playwright');
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+  await page.goto(`http://127.0.0.1:${address.port}/?token=${encodeURIComponent(server.token)}`);
+  await page.waitForSelector('[name="SubscriptionId"]');
+  await page.locator('[name="SubscriptionId"]').fill('00000000-0000-4000-8000-000000000093');
+  await page.getByRole('button', { name: 'List steps' }).click();
+  await page.locator('#step-list input[value="resource-group"]').check();
+  await page.getByRole('button', { name: 'Run preflight' }).click();
+  await page.locator('#preflight-state').getByText(/Passing preflight [0-9a-f]{12} is current/).waitFor();
+  return {
+    page,
+    pageErrors,
+    async close() {
+      await browser.close();
+      await server.cleanup();
+      server.close();
+      await once(server, 'close').catch(() => {});
+      await rm(scratch, { recursive: true, force: true });
+    },
+  };
+}
+
+test('lead: a run request that fails at the network level restores the run controls', async () => {
+  const app = await startLeadPage();
+  try {
+    const { page } = app;
+    await page.route('**/api/run/stream', (route) => route.abort('failed'));
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    const alert = page.locator('#run-error[role="alert"]');
+    await alert.getByText(/run request failed before the server answered .*and the installer UI server reports no active run/).waitFor();
+    assert.match(await alert.textContent(), /still running in its terminal/);
+    assert.equal(await page.getByRole('button', { name: 'Run selected steps' }).isEnabled(), true);
+    assert.equal(await page.getByRole('button', { name: 'Stop run' }).isDisabled(), true);
+    assert.equal(await page.getByRole('button', { name: 'Refresh account' }).isEnabled(), true);
+    assert.deepEqual(app.pageErrors, []);
+  } finally {
+    await app.close();
+  }
+});
+
+test('lead: a later run whose stream ends before any event reattaches from the start of that run', async () => {
+  const app = await startLeadPage();
+  try {
+    const { page } = app;
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await page.locator('#run-status').getByText('Run finished.').waitFor();
+    // The second run's stream ends before any event; the server still reports that run as running.
+    const attachUrls = [];
+    await page.route('**/api/run/stream', (route) => route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '' }));
+    await page.route('**/api/run/status', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'second-run', state: 'running', currentStepId: 'resource-group', steps: ['resource-group'] }) }));
+    await page.route('**/api/run/attach?after=*', (route) => {
+      attachUrls.push(new URL(route.request().url()).search);
+      return route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"summary","exitCode":0,"failedStepId":"","resumeCommand":"","state":"exited","message":""}\n' });
+    });
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await page.locator('#run-status').getByText('Run finished.').waitFor();
+    assert.deepEqual(attachUrls, ['?after=0']);
+    assert.deepEqual(app.pageErrors, []);
+  } finally {
+    await app.close();
+  }
+});
+
+test('lead: a run request that fails after the server started the run reattaches to that run', async () => {
+  const app = await startLeadPage();
+  try {
+    const { page } = app;
+    await page.route('**/api/run/stream', (route) => route.abort('connectionreset'));
+    await page.route('**/api/run/status', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'started-run', state: 'running', currentStepId: 'resource-group', steps: ['resource-group'] }) }));
+    await page.route('**/api/run/attach?after=0', (route) => route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"progress","stepId":"resource-group","event":"started","message":"reattached after the lost request"}\n{"seq":2,"type":"summary","exitCode":0,"failedStepId":"","resumeCommand":"","state":"exited","message":""}\n' }));
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await page.locator('#run-status').getByText('Run finished.').waitFor();
+    assert.match(await page.locator('#run-output').textContent(), /reattached after the lost request/);
+    assert.equal(await page.locator('#run-error').textContent(), '');
+    assert.deepEqual(app.pageErrors, []);
+  } finally {
+    await app.close();
+  }
+});

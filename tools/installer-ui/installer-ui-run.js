@@ -135,27 +135,9 @@
       throw new Error(`The run stream ended without a summary; the server reports state ${state}.`);
     }
 
-    async function streamRun(body) {
-      if (hasBlockingProblems()) return undefined;
-      runActive = true;
-      updateRunAdmission();
-      const res = await fetch("./api/run/stream", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-csrf-token": csrfToken(),
-        },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        runActive = false;
-        updateRunAdmission();
-        const error = await responseError(res, "run failed");
-        if (error.data?.reason === "identity-changed" && typeof onIdentityStale === "function") onIdentityStale(error.message);
-        throw error;
-      }
+    async function followRun(read) {
       try {
-        const result = (await readRunStream(res)) || (await recoverMissingSummary());
+        const result = (await read()) || (await recoverMissingSummary());
         refreshIdentityAfterRun();
         return result;
       } catch (error) {
@@ -164,6 +146,47 @@
         if (error.data?.runSummary) refreshIdentityAfterRun();
         throw error;
       }
+    }
+
+    async function recoverLostRequest(requestError) {
+      // The request may have reached the server before the connection failed: a run that started is reattached.
+      const status = await getJson("./api/run/status").catch(() => null);
+      if (status?.id && status.state === "running") return followRun(async () => null);
+      runActive = false;
+      updateRunAdmission();
+      const server = status ? "the installer UI server reports no active run" : "the installer UI server did not answer";
+      const error = new Error(`The run request failed before the server answered (${requestError.message}), and ${server}.`);
+      error.data = { error: error.message, remedy: "Check that the installer UI server is still running in its terminal, then try again." };
+      throw error;
+    }
+
+    async function streamRun(body) {
+      if (hasBlockingProblems()) return undefined;
+      runActive = true;
+      // A new run's events start at 1; a reattach of this run must not use the previous run's cursor.
+      lastRunSeq = 0;
+      updateRunAdmission();
+      let res;
+      try {
+        res = await fetch("./api/run/stream", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-csrf-token": csrfToken(),
+          },
+          body: JSON.stringify(body),
+        });
+      } catch (error) {
+        return recoverLostRequest(error);
+      }
+      if (!res.ok) {
+        runActive = false;
+        updateRunAdmission();
+        const error = await responseError(res, "run failed");
+        if (error.data?.reason === "identity-changed" && typeof onIdentityStale === "function") onIdentityStale(error.message);
+        throw error;
+      }
+      return followRun(() => readRunStream(res));
     }
 
     async function refreshRunStatus() {
