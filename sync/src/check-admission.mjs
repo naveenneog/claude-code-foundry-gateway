@@ -1,6 +1,4 @@
 #!/usr/bin/env node
-import { CosmosClient } from '@azure/cosmos';
-import { DefaultAzureCredential } from '@azure/identity';
 import { evaluateProjectionAdmission } from './plan.mjs';
 
 const argv = process.argv.slice(2);
@@ -29,6 +27,9 @@ if (!isGuid(tenantId)) fail('--tenant must be a guid');
 if (!isCosmosAccountResourceId(accountResourceId)) fail('--account-resource-id must be a Cosmos DB database account resource id');
 if (!Number.isFinite(maxEvidenceAgeSeconds) || maxEvidenceAgeSeconds <= 0) fail('--max-evidence-age-seconds must be positive');
 
+// The Azure SDKs load only after the arguments pass, so a refused call needs no installed dependency.
+const { CosmosClient } = await import('@azure/cosmos');
+const { DefaultAzureCredential } = await import('@azure/identity');
 const credential = new DefaultAzureCredential();
 const container = new CosmosClient({ endpoint, aadCredentials: credential })
   .database(databaseName)
