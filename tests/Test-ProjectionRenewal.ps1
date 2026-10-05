@@ -174,7 +174,7 @@ try {
 
         $definitions = @($renewalTemplate.variables.alertDefinitions)
         $base = [string]$renewalTemplate.variables.renewalLogs
-        Assert 'there are three renewal alerts' ((($definitions | ForEach-Object name) -join ',') -eq 'no-success-45m,expiry-margin-60m,renewal-failed') (($definitions | ForEach-Object name) -join ',')
+        Assert 'there are failed-run and Graph-read-denied alerts by default' ((($definitions | ForEach-Object name) -join ',') -eq 'graph-read-denied,renewal-failed') (($definitions | ForEach-Object name) -join ',')
         Assert 'each query reads the job''s console table through a fuzzy union with an empty table' ($base -match '(?m)^union isfuzzy=true \(datatable\(TimeGenerated: datetime, JobName: string, Log: string\) \[\]\), ContainerAppConsoleLogs\s*$') $base
         Assert 'each query keeps only the job''s own lines' ($base -match 'JobName == "\{jobName\}"') $base
         $rule = $res | Where-Object { $_.type -eq 'Microsoft.Insights/scheduledQueryRules' } | Select-Object -First 1
@@ -191,11 +191,11 @@ try {
             Assert "$($definition.name): no legacy table or column" ($query -notmatch '_CL\b|Log_s\b')
             Assert "$($definition.name): no summarize that always returns a row" ($query -notmatch 'summarize' -or $lines[-1] -match '^\| where ') $lines[-1]
             Assert "$($definition.name): no datetime passed as epoch seconds" ($query -notmatch 'unixtime_seconds_todatetime\(now\(\)\)')
-            $expected = if ($definition.name -eq 'renewal-failed') { $failedEvent } else { $succeeded }
+            $expected = if ($definition.name -in 'renewal-failed','graph-read-denied') { $failedEvent } else { $succeeded }
             Assert "$($definition.name): it matches the job's $expected line" ($expected -and $query.Contains("'`"event`":`"$expected`"'")) $query
         }
-        $expiry = [string]($definitions | Where-Object name -eq 'expiry-margin-60m').query
-        Assert 'the expiry rule reads the newest success and its remaining lease' ($expiry -match 'top 1 by TimeGenerated desc' -and $expiry -match "unixtime_seconds_todatetime\(todouble\(extract\('`"oldestExpiresAt`":\(\[0-9\]\+\)', 1, Log\)\)\)" -and $expiry -match '- now\(\) < 1h') $expiry
+        Assert 'the expiry-margin alert is removed because records persist until sync changes them' (-not (($definitions | ForEach-Object name) -contains 'expiry-margin-60m')) (($definitions | ForEach-Object name) -join ',')
+        Assert 'the stale-success alert is conditional on a schedule' ([IO.File]::ReadAllText((Join-Path $root 'infra\projection-renewal.bicep')) -match "resource noSuccessAlert 'Microsoft\.Insights/scheduledQueryRules@2023-12-01' = if \(isScheduled\)" -and $renewalTemplate.parameters.cronExpression.defaultValue -eq '')
     }
 
     Write-Host ''
@@ -324,7 +324,7 @@ try {
     Assert 'the job gets the tier group ids and the gateway' ((& $value 'standardGroupId') -eq $standard -and (& $value 'premiumGroupId') -eq $premium -and (& $value 'gatewayResourceId') -match 'Microsoft\.ApiManagement/service/apim-p94$')
     Assert 'the job deploys in the network region and the signed-in tenant' ((& $value 'location') -eq 'eastus2' -and (& $value 'tenantId') -eq $tenant)
     Assert 'the tenant administrator step names the job identity' ($run.Output -match 'Grant-ClaudeProjectionRenewalGraphAccess\.ps1 -PrincipalId 40000000-0000-4000-8000-000000000002')
-    Assert 'the output names the email confirmation and the evidence wait' ($run.Output -match 'confirmation from Azure Monitor' -and $run.Output -match '60-90 minutes')
+    Assert 'the output names optional on-demand operation without admission-wait text' ($run.Output -match 'optional sync job' -and $run.Output -match 'az containerapp job start' -and $run.Output -notmatch '60-90 minutes|three successful runs')
     $receipt = $run.Receipt
     Assert 'the receipt records what the switch needs' ($receipt -and $receipt.kind -eq 'claude-projection-renewal-receipt' -and $receipt.reconcilerResourceId -match '/Microsoft\.App/jobs/caj-renew-p94$' -and
         $receipt.imageDigest -ceq $digestBuilt -and $receipt.runnerName -eq 'aci-projtest-p94fixture' -and $receipt.cosmosAccount -eq 'cosmos-p94fixture' -and
@@ -332,6 +332,7 @@ try {
         $receipt.actionGroupResourceId -match '/actionGroups/')
     Assert 'the receipt records the settings the job runs with' ($receipt -and $receipt.standardGroupId -ceq $standard -and $receipt.premiumGroupId -ceq $premium -and
         $receipt.gatewayResourceId -match 'Microsoft\.ApiManagement/service/apim-p94$' -and $receipt.identityClientId -eq '40000000-0000-4000-8000-000000000001') ($receipt | ConvertTo-Json -Compress)
+    Assert 'the receipt records a manual trigger by default' ($receipt -and $receipt.triggerType -eq 'Manual' -and $receipt.cronExpression -eq '') ($receipt | ConvertTo-Json -Compress)
     Assert 'the receipt holds no secret' ($receipt -and -not (($receipt | ConvertTo-Json) -match '(?i)token|password|secret|key"'))
     Assert 'no Graph call when both groups are object ids' (-not ($run.Calls -match 'get-access-token'))
 
