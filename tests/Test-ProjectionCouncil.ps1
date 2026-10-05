@@ -121,9 +121,10 @@ Assert 'real installer has no renewal digest/action group gate before discovery'
 $record=[pscustomobject]@{schemaVersion=2;decisions=[pscustomobject]@{entitlementStore=[pscustomobject]@{target='projection';reconcilerResourceId=$FixtureJobId}};history=@()}
 $discovery=[pscustomobject]@{resourceGroup='rg-p84';apimName='apim-p84';sku='BasicV2';namedValues=@{'entitlement-source'='named-value'};cleanComparison=$true}
 $plan=Get-ClaudeFlowStepPlan -Record $record -Discovery $discovery
-Reset-ProjectionFixture
+# ADR-0051: discovery did not read the prefix, so the step reads it from the gateway; this gateway has none.
+Reset-ProjectionFixture 'prefix-missing'
 Capture { Invoke-ClaudeFlowStep -Record $record -Plan $plan }
-Assert 'real Entitlement refuses missing projection prefix with deploy remedy' ($Failure -and $Output -match 'entitlement-projection-prefix' -and $Output -match 'Deploy-ClaudeProjection\.ps1' -and $FixtureCalls.Count -eq 0)
+Assert 'real Entitlement refuses missing projection prefix with deploy remedy, after reading only that named value' ($Failure -and $Output -match 'entitlement-projection-prefix' -and $Output -match 'Deploy-ClaudeProjection\.ps1' -and @($FixtureCalls).Count -eq 1 -and $FixtureCalls[0] -match 'apim nv show .*--named-value-id entitlement-projection-prefix') ($FixtureCalls -join ' | ')
 
 $discoveryGood=[pscustomobject]@{
     resourceGroup='rg-p84';apimName='apim-p84';sku='BasicV2';namedValues=@{'entitlement-source'='named-value';'entitlement-projection-prefix'='p84fixture'};cleanComparison=$true
@@ -195,7 +196,7 @@ foreach ($step in $switchSteps) {
     Assert "declined switch aborts: $($step.Clauses[0].Item1.Extent.Text)" ($Failure -and $Output -match 'declined after evidence' -and $Output -match 'unchanged') $Failure
 }
 Assert 'the switch decision is exercised' ($switchSteps.Count -eq 1)
-Assert 'deployer binds the comparison Boolean rather than an absent switch value' ($source -match '-FailOnDrift:\$true')
+Assert 'deployer binds the comparison Boolean rather than an absent switch value' ($source -match 'Invoke-ClaudeProjectionDeployerCompare' -and $switchSource -match 'Compare-ClaudeEntitlement[\s\S]*?-FailOnDrift:\$true')
 }
 
 $scratch=Join-Path ([IO.Path]::GetTempPath()) ('p84-council-'+[guid]::NewGuid().ToString('N'))

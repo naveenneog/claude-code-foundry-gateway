@@ -156,6 +156,31 @@ function Assert-ClaudeProjectionAdmission {
     return (ConvertFrom-ClaudeProjectionAdmissionResult -RawOutput $raw)
 }
 
+# The gateway reads entitlement-resolver-url and -audience only while entitlement-source is projection
+# (ADR-0050). On a gateway that serves from the projection, a change to them moves every request to
+# another resolver at once, without the switch's checks, so it is refused. SECURE-PROJECTION section 9
+# gives the same step by hand.
+function Set-ClaudeProjectionGatewayResolver {
+    param([Parameter(Mandatory)][string]$ResourceGroup, [Parameter(Mandatory)][string]$ApimName,
+        [Parameter(Mandatory)][string]$NamePrefix, [Parameter(Mandatory)][string]$ResolverUrl,
+        [Parameter(Mandatory)][string]$ResolverAudience)
+    $liveSource = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-source' -FailOnError
+    $pointed = (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-url' -FailOnError) -eq $ResolverUrl -and
+        (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-audience' -FailOnError) -eq $ResolverAudience
+    if ($liveSource -eq 'projection' -and -not $pointed) {
+        throw "Refusing to point the gateway at $ResolverUrl and $ResolverAudience`: entitlement-source is projection, so every request would move to them at once, without the switch's checks. Remedy: return the gateway to named values first (refresh the lists with scripts/Sync-ClaudeAccess.ps1, check them with scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift, then set entitlement-source to named-value), then rerun."
+    }
+    if (-not $pointed) {
+        Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-url' -Value $ResolverUrl
+        Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-audience' -Value $ResolverAudience
+    }
+    # The prefix records which projection the gateway uses; the switch and the sync read it, and no request
+    # path changes with it. A gateway that served from a projection before ADR-0051 has none yet.
+    if ((Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-projection-prefix' -FailOnError) -cne $NamePrefix) {
+        Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-projection-prefix' -Value $NamePrefix
+    }
+}
+
 function Assert-ClaudeProjectionResolverRedeploy {
     param([Parameter(Mandatory)][string]$ResourceGroup, [Parameter(Mandatory)][string]$ApimName,
         [Parameter(Mandatory)][string]$NamePrefix, [Parameter(Mandatory)][string]$SubscriptionId,

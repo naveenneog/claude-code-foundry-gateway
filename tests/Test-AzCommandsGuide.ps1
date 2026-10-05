@@ -1,4 +1,4 @@
-﻿param(
+param(
     [switch]$SkipAzHelp,
     [string]$Shard = ''
 )
@@ -151,8 +151,6 @@ foreach ($m in [regex]::Matches($markdown, '--named-value-id\s+([A-Za-z0-9-]+)')
 foreach ($m in [regex]::Matches($markdown, '`([A-Za-z][A-Za-z0-9]+-[A-Za-z0-9-]+)`')) {
     if ($declaredNamedValues.Contains($m.Groups[1].Value)) { [void]$guideNamedValues.Add($m.Groups[1].Value) }
 }
-$unknownNamedValues = @($guideNamedValues | Where-Object { -not $declaredNamedValues.Contains($_) } | Sort-Object)
-Assert 'every guide named-value id is in the gateway Bicep or policy XML' ($unknownNamedValues.Count -eq 0) ($unknownNamedValues -join ', ')
 
 $scriptNamedValues = New-Object Collections.Generic.HashSet[string]
 $inScope = @(
@@ -185,6 +183,11 @@ $notCovered = @()
 foreach ($m in [regex]::Matches($markdown, '(?m)^- `([A-Za-z0-9-]+)` — not covered:')) { $notCovered += $m.Groups[1].Value }
 $missingParity = @($scriptNamedValues | Where-Object { $_ -and -not $guideNamedValues.Contains($_) -and $_ -notin $notCovered } | Sort-Object)
 Assert 'every in-scope script-written named value appears in the guide or not-covered list' ($missingParity.Count -eq 0) ($missingParity -join ', ')
+# A named value that only a script writes is defined by that script, not by the gateway template:
+# entitlement-projection-prefix is written by the projection deployer and left out of main.bicep, so a gateway
+# redeploy keeps it (ADR-0051). A guide id that neither the templates nor an in-scope script define is still refused.
+$unknownNamedValues = @($guideNamedValues | Where-Object { -not $declaredNamedValues.Contains($_) -and -not $scriptNamedValues.Contains($_) } | Sort-Object)
+Assert 'every guide named-value id is in the gateway Bicep, the policy XML or an in-scope script''s writes' ($unknownNamedValues.Count -eq 0) ($unknownNamedValues -join ', ')
 
 $bicepParams = @{}
 foreach ($file in 'infra\main.bicep','infra\projection-network.bicep','infra\projection.bicep','infra\resolver.bicep','infra\projection-registry.bicep','infra\projection-renewal.bicep') {

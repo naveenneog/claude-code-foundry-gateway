@@ -101,7 +101,7 @@ function az {
         if ($FixtureCase -eq 'nv-read-error') { $global:LASTEXITCODE = 1; return 'ERROR: (AuthorizationFailed) The client does not have authorization to perform action Microsoft.ApiManagement/service/namedValues/read.' }
         $id = [string]$words[[array]::IndexOf($words, '--named-value-id') + 1]
         # A gateway that never had the projection deployed: az exits 3 with this message (measured, ApimNamedValue.ps1).
-        if ($FixtureCase -eq 'prefix-missing' -and $id -eq 'entitlement-projection-prefix') { $global:LASTEXITCODE = 3; return 'ERROR: (ResourceNotFound) NamedValue not found.' }
+        if ($FixtureCase -in 'prefix-missing', 'source-projection-no-prefix' -and $id -eq 'entitlement-projection-prefix') { $global:LASTEXITCODE = 3; return 'ERROR: (ResourceNotFound) NamedValue not found.' }
         $resolverValues = @{ 'entitlement-resolver-url' = $FixtureResolverUrl; 'entitlement-resolver-audience' = $FixtureResolverAudience; 'entitlement-projection-prefix' = 'p84fixture'; 'allow-standard' = $(if ($FixtureCase -eq 'new-gateway') { ',' } else { ",$FixtureApp," }); 'allow-premium' = ','; 'bu-members' = ',' }
         if ($resolverValues.ContainsKey($id)) {
             if ($line -match '--query name') { return $id }

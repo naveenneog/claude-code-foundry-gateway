@@ -44,9 +44,11 @@ if (Test-Path $deployerPath) {
     Assert 'deployer uses an in-network runner for private Cosmos writes' ($deployer -match 'runnerEnabled=true' -and $deployer -match 'Send-RunnerFile' -and $deployer -match 'Invoke-RunnerCommand')
     Assert 'deployer grants the runner data contributor on one container' ($deployer -match 'cosmosdb sql role assignment create' -and $deployer -match '00000000-0000-0000-0000-000000000002' -and $deployer -match '/dbs/claude/colls/entitlement')
     Assert 'deployer populates from Entra' ($deployer -match 'Sync-ClaudeProjection\.ps1' -and $deployer -match 'apply-projection\.mjs')
-    Assert 'deployer exports gateway decisions' ($deployer -match 'Compare-ClaudeEntitlement\.ps1' -and $deployer -match '-ExportGatewayPath')
-    Assert 'deployer runs projection comparison' ($deployer -match 'apply-projection\.mjs' -and $deployer -match '--compare')
-    Assert 'deployer refuses drift before flip' ($deployer -match 'Refusing to flip' -and $deployer -match 'drift')
+    # The compare moved into Invoke-ClaudeProjectionDeployerCompare (tests/Test-ProjectionDeployerCompare.ps1 runs it).
+    $compareText = [IO.File]::ReadAllText((Join-Path $root 'scripts\ClaudeProjectionSwitch.ps1'))
+    Assert 'deployer exports gateway decisions' ($deployer -match 'Invoke-ClaudeProjectionDeployerCompare' -and $compareText -match 'Compare-ClaudeEntitlement\.ps1' -and $compareText -match '-ExportGatewayPath')
+    Assert 'deployer runs projection comparison' ($deployer -match 'apply-projection\.mjs' -and $compareText -match '--compare /work/gateway-decisions\.json' -and $compareText -match '--compare-snapshot /work/snapshot\.json')
+    Assert 'deployer refuses drift before flip' ($compareText -match 'Refusing to flip' -and $compareText -match 'drift from Entra')
     $switchText = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'scripts\ClaudeProjectionSwitch.ps1') -Raw
     Assert 'deployer switches only through the shared switch, which writes after sync switch evidence' ($deployer -match 'Invoke-ClaudeProjectionSwitch' -and $deployer -notmatch "Set-ApimNamedValue[^\r\n]*-Id 'entitlement-source'" -and
         $deployer -match '-NamePrefix \$NamePrefix' -and $switchText -match "(?s)Assert-ClaudeProjectionAdmission.*Set-ApimNamedValue[^\r\n]*-Id 'entitlement-source'" -and $switchText -notmatch 'RenewalActionGroupResourceId|image-digest|entrypoint')

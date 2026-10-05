@@ -252,7 +252,7 @@ Assert 'deployer checks before its first Azure write' ($deploy -match '(?s)Invok
 $switchText = Get-Content (Join-Path $root 'scripts\ClaudeProjectionSwitch.ps1') -Raw
 Assert 'deployer switches only through the shared switch, which writes after sync switch evidence' ($deploy -match 'Invoke-ClaudeProjectionSwitch' -and $deploy -notmatch "Set-ApimNamedValue[^\r\n]*-Id 'entitlement-source'" -and
     $deploy -match '-NamePrefix \$NamePrefix' -and $deploy -notmatch 'RenewalActionGroupResourceId' -and $switchText -match "(?s)Assert-ClaudeProjectionAdmission.*Set-ApimNamedValue[^\r\n]*-Id 'entitlement-source'")
-Assert 'both runner steps use the checked result parser' ([regex]::Matches($deploy, 'ConvertFrom-ClaudeRunnerResult').Count -eq 2)
+Assert 'both runner steps use the checked result parser: the apply in the deployer, the compare in Invoke-ClaudeProjectionDeployerCompare' ([regex]::Matches($deploy, 'ConvertFrom-ClaudeRunnerResult').Count -eq 1 -and $switchText -match '(?s)function Invoke-ClaudeProjectionDeployerCompare.*?ConvertFrom-ClaudeRunnerResult -RawOutput \$raw -Step ''Refusing to flip because projection drift remains''')
 Assert 'projection sync rejects PS 5.1 explicitly' ($sync -match 'Assert-ClaudeProjectionPowerShell|PSVersion.*-lt 7' -and $sync -match 'pwsh|ClaudeProjectionChecks')
 $installerModule = Join-Path $root 'scripts\ClaudeInstallProjection.ps1'
 $installerAll = $installer + $(if (Test-Path -LiteralPath $installerModule) { Get-Content -LiteralPath $installerModule -Raw } else { '' })
@@ -265,7 +265,7 @@ Assert 'projection sync uses the checked Graph token helper' ($sync -match '\$gr
 Assert 'per-run deploy files are not keyed by PID alone' ($deploy -notmatch '\$NamePrefix-\$PID' -and $deploy -match 'NewGuid')
 Assert 'ARM-only admission and its locale-sensitive timestamp parsing are removed' ((Get-Content $checksPath -Raw) -notmatch 'function Assert-ClaudeProjectionReconciler|Get-ClaudeProjectionContainerSignature|DateTimeOffset\]::TryParse')
 Assert "flow's projection write happens inside the shared switch, after admission" ($flow -match 'Invoke-ClaudeProjectionSwitch' -and $switchText -match "(?s)Assert-ClaudeProjectionAdmission.*Set-ApimNamedValue[^\r\n]*-Id 'entitlement-source'")
-Assert 'the Entra comparison explicitly fails on drift' ($deploy -match 'Compare-ClaudeEntitlement.ps1[\s\S]+?-ExportGatewayPath \$gateway -FailOnDrift:\$true')
+Assert 'the Entra comparison explicitly fails on drift' ($deploy -match 'Invoke-ClaudeProjectionDeployerCompare' -and $switchText -match 'Compare-ClaudeEntitlement.ps1[\s\S]+?-ExportGatewayPath \$GatewayPath -FailOnDrift:\$true')
 $parseErrors = $null; $tokens = $null
 $deployAst = [Management.Automation.Language.Parser]::ParseInput($deploy, [ref]$tokens, [ref]$parseErrors)
 $roleGuard = $deployAst.Find({ param($node) $node -is [Management.Automation.Language.IfStatementAst] -and $node.Clauses[0].Item1.Extent.Text -eq '$LASTEXITCODE -ne 0' -and $node.Extent.Text -match "throw 'Runner Cosmos role assignment failed" }, $true)

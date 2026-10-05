@@ -174,3 +174,31 @@ function Invoke-ClaudeProjectionSwitch {
     }
     finally { Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue -Confirm:$false }
 }
+# The deployer's compare before any switch (ADR-0051 D10, as in the switch): a gateway whose named values
+# hold members is drift-checked against Entra and compared with those lists; a new gateway, with none, is
+# compared with the snapshot the deployer has just applied, already on the runner at /work/snapshot.json.
+function Invoke-ClaudeProjectionDeployerCompare {
+    param(
+        [Parameter(Mandatory)][string]$ResourceGroup, [Parameter(Mandatory)][string]$ApimName,
+        [Parameter(Mandatory)][string]$RunnerName, [Parameter(Mandatory)][string]$CosmosAccount,
+        [Parameter(Mandatory)][string]$TenantId, [Parameter(Mandatory)][string]$GatewayPath,
+        [string]$StandardGroup = 'claude-code-standard', [string]$PremiumGroup = 'claude-code-premium',
+        [string]$CompareScript = (Join-Path $PSScriptRoot 'Compare-ClaudeEntitlement.ps1')
+    )
+    $hasNamedMembers = Test-ClaudeProjectionHasNamedValueMembers `
+        -AllowStandard (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'allow-standard' -FailOnError) `
+        -AllowPremium (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'allow-premium' -FailOnError) `
+        -BuMembers (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-members' -FailOnError)
+    $apply = "node /work/sync/src/apply-projection.mjs --cosmos https://$CosmosAccount.documents.azure.com:443/ --tenant $TenantId"
+    if ($hasNamedMembers) {
+        & $CompareScript -ResourceGroup $ResourceGroup -ApimName $ApimName -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -ExportGatewayPath $GatewayPath -FailOnDrift:$true
+        if ($LASTEXITCODE -ne 0) { throw 'named-value lists drift from Entra; refusing projection comparison and flip.' }
+        Send-RunnerFile -ResourceGroup $ResourceGroup -Name $RunnerName -Path $GatewayPath -Destination /work/gateway-decisions.json | Out-Null
+        $raw = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $RunnerName -Command "$apply --compare /work/gateway-decisions.json"
+    }
+    else {
+        Write-Host '    New gateway: no named-value members, so the projection is compared with the snapshot just applied.' -ForegroundColor DarkGray
+        $raw = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $RunnerName -Command "$apply --compare-snapshot /work/snapshot.json"
+    }
+    return (ConvertFrom-ClaudeRunnerResult -RawOutput $raw -Step 'Refusing to flip because projection drift remains')
+}
