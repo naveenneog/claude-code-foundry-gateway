@@ -55,25 +55,25 @@ Assert '-WhatIf lists projection deployment, populate, compare, switch and optio
 ) ($whatIf | ConvertTo-Json -Depth 4)
 
 $calls = [System.Collections.Generic.List[object]]::new()
-$record = { param($ScriptPath, [string[]]$Arguments) $calls.Add([pscustomobject]@{ Path = $ScriptPath; Args = $Arguments }); 0 }
+$record = { param($ScriptPath, $Arguments) $calls.Add([pscustomobject]@{ Path = $ScriptPath; Args = $Arguments }); 0 }
 $ok = Invoke-ClaudeInstallerProjectionDeployment -Root $root -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 `
     -Location eastus2 -Sku BasicV2 -ResolverInboundAccess public -StandardGroup std -PremiumGroup prem -SubscriptionId 00000000-0000-4000-8000-000000000001 `
     -InvokeScript $record
-$named = { param($Call, $Name) $i = [array]::IndexOf([string[]]$Call.Args, $Name); if ($i -ge 0) { [string]$Call.Args[$i + 1] } }
+$named = { param($Call, $Name) $key = $Name.TrimStart('-'); if ($Call.Args.Contains($key)) { @($Call.Args[$key]) -join ',' } }
 Assert 'choosing projection deploys, populates and compares first, then switches in a second run of the deployer' (
     $ok -and $calls.Count -eq 2 -and
     ($calls[0].Path -match 'Deploy-ClaudeProjection\.ps1$') -and ($calls[1].Path -match 'Deploy-ClaudeProjection\.ps1$') -and
-    ($calls[0].Args -notcontains '-FlipAfterCleanCompare') -and ($calls[1].Args -contains '-FlipAfterCleanCompare') -and
+    (-not $calls[0].Args.Contains('FlipAfterCleanCompare')) -and $calls[1].Args.Contains('FlipAfterCleanCompare') -and
     (& $named $calls[0] '-Sku') -eq 'BasicV2' -and (& $named $calls[0] '-ResolverInboundAccess') -eq 'public' -and (& $named $calls[0] '-Location') -eq 'eastus2' -and
     (& $named $calls[1] '-NamePrefix') -eq 'p98' -and (& $named $calls[1] '-StandardGroup') -eq 'std' -and (& $named $calls[1] '-PremiumGroup') -eq 'prem' -and
-    -not @($calls | ForEach-Object { $_.Args } | Where-Object { $_ -match 'Renewal|^-ReconcilerResourceId$' }).Count
+    -not @($calls | ForEach-Object { $_.Args.Keys } | Where-Object { $_ -match 'Renewal|^ReconcilerResourceId$' }).Count
 ) ($calls | ConvertTo-Json -Depth 5)
 
 $calls.Clear()
 Capture {
     Invoke-ClaudeInstallerProjectionDeployment -Root $root -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 `
         -Location eastus2 -Sku BasicV2 -ResolverInboundAccess public -StandardGroup std -PremiumGroup prem `
-        -InvokeScript { param($ScriptPath, [string[]]$Arguments) $calls.Add([pscustomobject]@{ Path = $ScriptPath; Args = $Arguments }); 7 }
+        -InvokeScript { param($ScriptPath, $Arguments) $calls.Add([pscustomobject]@{ Path = $ScriptPath; Args = $Arguments }); 7 }
 }
 Assert 'a failed deployment runs no switch and names the deployment rerun; named values keep serving' ($calls.Count -eq 1 -and $Failure -match 'Deploy-ClaudeProjection\.ps1 -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98' -and $Failure -notmatch '-FlipAfterCleanCompare' -and $Failure -match 'named values keep serving') "$Failure | calls $($calls.Count)"
 
@@ -81,20 +81,28 @@ $calls.Clear()
 Capture {
     Invoke-ClaudeInstallerProjectionDeployment -Root $root -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 `
         -Location eastus2 -Sku BasicV2 -ResolverInboundAccess public -StandardGroup std -PremiumGroup prem `
-        -InvokeScript { param($ScriptPath, [string[]]$Arguments) $calls.Add([pscustomobject]@{ Path = $ScriptPath; Args = $Arguments }); if ($Arguments -contains '-FlipAfterCleanCompare') { 42 } else { 0 } }
+        -InvokeScript { param($ScriptPath, $Arguments) $calls.Add([pscustomobject]@{ Path = $ScriptPath; Args = $Arguments }); if ($Arguments.Contains('FlipAfterCleanCompare')) { 42 } else { 0 } }
 }
 Assert 'a refused switch reports the rerun command and leaves named values serving' ($calls.Count -eq 2 -and $Failure -match 'Deploy-ClaudeProjection.ps1' -and $Failure -match '-FlipAfterCleanCompare' -and $Failure -match 'named values keep serving') $Failure
 
 $calls.Clear()
 $null = Invoke-ClaudeInstallerProjectionDeployment -Root $root -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 `
     -Location eastus2 -Sku BasicV2 -ResolverInboundAccess public -StandardGroup std -PremiumGroup prem -WhatIf -InvokeScript $record
-Assert '-WhatIf previews the deployment only: the switch reads resources that a preview does not create' ($calls.Count -eq 1 -and ($calls[0].Args -contains '-WhatIf') -and ($calls[0].Args -notcontains '-FlipAfterCleanCompare')) ($calls | ConvertTo-Json -Depth 5)
+Assert '-WhatIf previews the deployment only: the switch reads resources that a preview does not create' ($calls.Count -eq 1 -and $calls[0].Args.Contains('WhatIf') -and (-not $calls[0].Args.Contains('FlipAfterCleanCompare'))) ($calls | ConvertTo-Json -Depth 5)
 
 $calls.Clear()
 Invoke-ClaudeInstallerSyncJobDeployment -Root $root -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 -StandardGroup std -PremiumGroup prem `
     -AlertEmail 'ops@contoso.example' -SubscriptionId 00000000-0000-4000-8000-000000000001 -InvokeScript $record 6>$null | Out-Null
 Assert 'the optional sync job gets its alert address, the tier groups and the prefix' ($calls.Count -eq 1 -and $calls[0].Path -match 'Deploy-ClaudeProjectionRenewal\.ps1$' -and
     (& $named $calls[0] '-AlertEmail') -eq 'ops@contoso.example' -and (& $named $calls[0] '-StandardGroup') -eq 'std' -and (& $named $calls[0] '-PremiumGroup') -eq 'prem' -and (& $named $calls[0] '-NamePrefix') -eq 'p98') ($calls | ConvertTo-Json -Depth 5)
+# The live run of 2026-10-06 failed here: a string array splatted into a script binds by position, so the
+# deployer received the name prefix as -Sku. This runs the real helper against a real script.
+$probe = Join-Path ([IO.Path]::GetTempPath()) ('installer-probe-' + [guid]::NewGuid().ToString('N') + '.ps1')
+[IO.File]::WriteAllText($probe, 'param($ResourceGroup, $ApimName, $NamePrefix, [ValidateSet(''BasicV2'',''StandardV2'',''PremiumV2'')][string]$Sku, [switch]$FlipAfterCleanCompare, [string[]]$AlertEmail) $global:InstallerProbe = "$ResourceGroup|$ApimName|$NamePrefix|$Sku|$FlipAfterCleanCompare|$($AlertEmail -join '','')"')
+$global:InstallerProbe = ''
+$probeCode = Invoke-ClaudeInstallerScript -ScriptPath $probe -Parameters ([ordered]@{ ResourceGroup = 'rg-p98'; ApimName = 'apim-p98'; NamePrefix = 'p98'; Sku = 'BasicV2'; FlipAfterCleanCompare = $true; AlertEmail = @('ops@contoso.example') }) 6>$null
+Remove-Item -LiteralPath $probe -Force
+Assert 'the installer binds each script parameter by name when it runs the real script' ($probeCode -eq 0 -and $global:InstallerProbe -eq 'rg-p98|apim-p98|p98|BasicV2|True|ops@contoso.example') "$probeCode | $global:InstallerProbe"
 $installerText = [IO.File]::ReadAllText((Join-Path $root 'Install-ClaudeGateway.ps1'))
 $tokens = $null; $parseErrors = $null
 $installerAst = [Management.Automation.Language.Parser]::ParseInput($installerText, [ref]$tokens, [ref]$parseErrors)

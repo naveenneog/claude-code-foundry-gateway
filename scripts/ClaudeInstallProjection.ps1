@@ -97,10 +97,13 @@ function Get-ClaudeInstallerProjectionPlan {
 
 # Runs one repository script the way the installer does: its output goes to the console, a thrown
 # refusal becomes exit 1 with its message shown. Tests pass -InvokeScript to record the call instead.
+# The parameters are a dictionary: a string array splatted into a script binds by position, so
+# '-ResourceGroup','rg' would arrive as two positional values (measured in the P98 live run, where the
+# name prefix reached -Sku).
 function Invoke-ClaudeInstallerScript {
-    param([Parameter(Mandatory)][string]$ScriptPath, [Parameter(Mandatory)][string[]]$Arguments, [scriptblock]$InvokeScript)
-    if ($InvokeScript) { return [int](& $InvokeScript $ScriptPath $Arguments) }
-    try { & $ScriptPath @Arguments | Out-Host; return 0 }
+    param([Parameter(Mandatory)][string]$ScriptPath, [Parameter(Mandatory)][System.Collections.IDictionary]$Parameters, [scriptblock]$InvokeScript)
+    if ($InvokeScript) { return [int](& $InvokeScript $ScriptPath $Parameters) }
+    try { & $ScriptPath @Parameters | Out-Host; return 0 }
     catch { Write-Host "    $($_.Exception.Message)" -ForegroundColor Red; return 1 }
 }
 
@@ -124,22 +127,27 @@ function Invoke-ClaudeInstallerProjectionDeployment {
         [scriptblock]$InvokeScript
     )
     $scriptPath = Join-Path $Root 'scripts\Deploy-ClaudeProjection.ps1'
-    $common = @('-ResourceGroup', $ResourceGroup, '-ApimName', $ApimName, '-NamePrefix', $NamePrefix, '-StandardGroup', $StandardGroup, '-PremiumGroup', $PremiumGroup)
-    if ($SubscriptionId) { $common += @('-SubscriptionId', $SubscriptionId) }
-    $deployArguments = $common + @('-Location', $Location, '-Sku', $Sku, '-ResolverInboundAccess', $ResolverInboundAccess)
-    if ($ProjectionResolverAppId) { $deployArguments += @('-ResolverAppId', $ProjectionResolverAppId) }
+    $common = [ordered]@{ ResourceGroup = $ResourceGroup; ApimName = $ApimName; NamePrefix = $NamePrefix; StandardGroup = $StandardGroup; PremiumGroup = $PremiumGroup }
+    if ($SubscriptionId) { $common['SubscriptionId'] = $SubscriptionId }
+    $deployParameters = [ordered]@{} + $common
+    $deployParameters['Location'] = $Location; $deployParameters['Sku'] = $Sku; $deployParameters['ResolverInboundAccess'] = $ResolverInboundAccess
+    if ($ProjectionResolverAppId) { $deployParameters['ResolverAppId'] = $ProjectionResolverAppId }
+    $switchParameters = [ordered]@{} + $common
+    $switchParameters['FlipAfterCleanCompare'] = $true
     if ($WhatIf) {
-        if ((Invoke-ClaudeInstallerScript -ScriptPath $scriptPath -Arguments ($deployArguments + '-WhatIf') -InvokeScript $InvokeScript) -ne 0) {
+        $previewParameters = [ordered]@{} + $deployParameters
+        $previewParameters['WhatIf'] = $true
+        if ((Invoke-ClaudeInstallerScript -ScriptPath $scriptPath -Parameters $previewParameters -InvokeScript $InvokeScript) -ne 0) {
             throw 'The projection deployment preview failed; nothing was created.'
         }
         Write-Host '    WhatIf: the switch follows the deployment; it reads the deployed resolver and Cosmos account, so a preview does not run it.' -ForegroundColor DarkGray
         return $true
     }
     $deployRerun = ".\scripts\Deploy-ClaudeProjection.ps1 -ResourceGroup $ResourceGroup -ApimName $ApimName -NamePrefix $NamePrefix -Location $Location -Sku $Sku -ResolverInboundAccess $ResolverInboundAccess -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup"
-    if ((Invoke-ClaudeInstallerScript -ScriptPath $scriptPath -Arguments $deployArguments -InvokeScript $InvokeScript) -ne 0) {
+    if ((Invoke-ClaudeInstallerScript -ScriptPath $scriptPath -Parameters $deployParameters -InvokeScript $InvokeScript) -ne 0) {
         throw "Projection deployment failed; named values keep serving and nothing was switched. Rerun after fixing the reason with: $deployRerun"
     }
-    if ((Invoke-ClaudeInstallerScript -ScriptPath $scriptPath -Arguments ($common + '-FlipAfterCleanCompare') -InvokeScript $InvokeScript) -ne 0) {
+    if ((Invoke-ClaudeInstallerScript -ScriptPath $scriptPath -Parameters $switchParameters -InvokeScript $InvokeScript) -ne 0) {
         throw "Projection switch refused; named values keep serving. Rerun after fixing the reason with: .\scripts\Deploy-ClaudeProjection.ps1 -ResourceGroup $ResourceGroup -ApimName $ApimName -NamePrefix $NamePrefix -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -FlipAfterCleanCompare"
     }
     return $true
@@ -159,11 +167,11 @@ function Invoke-ClaudeInstallerSyncJobDeployment {
         [string]$SubscriptionId,
         [scriptblock]$InvokeScript
     )
-    $jobArguments = @('-ResourceGroup', $ResourceGroup, '-ApimName', $ApimName, '-NamePrefix', $NamePrefix,
-        '-StandardGroup', $StandardGroup, '-PremiumGroup', $PremiumGroup, '-AlertEmail', $AlertEmail)
-    if ($SubscriptionId) { $jobArguments += @('-SubscriptionId', $SubscriptionId) }
+    $jobParameters = [ordered]@{ ResourceGroup = $ResourceGroup; ApimName = $ApimName; NamePrefix = $NamePrefix
+        StandardGroup = $StandardGroup; PremiumGroup = $PremiumGroup; AlertEmail = @($AlertEmail) }
+    if ($SubscriptionId) { $jobParameters['SubscriptionId'] = $SubscriptionId }
     $scriptPath = Join-Path $Root 'scripts\Deploy-ClaudeProjectionRenewal.ps1'
-    if ((Invoke-ClaudeInstallerScript -ScriptPath $scriptPath -Arguments $jobArguments -InvokeScript $InvokeScript) -ne 0) {
+    if ((Invoke-ClaudeInstallerScript -ScriptPath $scriptPath -Parameters $jobParameters -InvokeScript $InvokeScript) -ne 0) {
         Write-Warning "The optional sync job was not deployed; the projection and the switch are unaffected. Rerun: .\scripts\Deploy-ClaudeProjectionRenewal.ps1 -ResourceGroup $ResourceGroup -ApimName $ApimName -NamePrefix $NamePrefix -AlertEmail $AlertEmail"
         return $false
     }

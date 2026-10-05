@@ -98,11 +98,11 @@ Assert 'private resolver remains available with the outbound VNet prerequisite' 
 $calls = [System.Collections.Generic.List[object]]::new()
 Invoke-ClaudeInstallerProjectionDeployment -Root $root -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 `
     -Location eastus2 -Sku BasicV2 -ResolverInboundAccess public -StandardGroup standard -PremiumGroup premium `
-    -InvokeScript { param($Path, [string[]]$Arguments) $calls.Add([pscustomobject]@{ Path = $Path; Args = $Arguments }); 0 } | Out-Null
+    -InvokeScript { param($Path, $Arguments) $calls.Add([pscustomobject]@{ Path = $Path; Args = $Arguments }); 0 } | Out-Null
 Assert 'choosing projection invokes the projection deployer, then the switch, without renewal inputs' (
     $calls.Count -eq 2 -and
-    ($calls[0].Args -notcontains '-FlipAfterCleanCompare') -and ($calls[1].Args -contains '-FlipAfterCleanCompare') -and
-    -not @($calls | ForEach-Object { $_.Args } | Where-Object { $_ -like '*Renewal*' -or $_ -eq '-ReconcilerResourceId' }).Count
+    (-not $calls[0].Args.Contains('FlipAfterCleanCompare')) -and $calls[1].Args.Contains('FlipAfterCleanCompare') -and
+    -not @($calls | ForEach-Object { $_.Args.Keys } | Where-Object { $_ -like '*Renewal*' -or $_ -eq 'ReconcilerResourceId' }).Count
 ) ($calls | ConvertTo-Json -Depth 5)
 
 Assert 'new projection gateways do not populate named-value entitlement lists' (-not (Test-ClaudeInstallerShouldSyncNamedValues -EntitlementStore projection -NewGateway $true))
