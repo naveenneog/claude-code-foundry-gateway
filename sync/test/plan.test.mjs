@@ -50,6 +50,12 @@ test('unchanged records are not rewritten', () => {
   assert.equal(plan.toWrite.length, 0);
 });
 
+test('unchanged legacy records with expiresAt are rewritten without expiresAt', () => {
+  const plan = planChanges([{ oid: A, tier: 'standard', businessUnit: '' }], new Map([[A, { tier: 'standard', businessUnit: '', expiresAt: 1791200000 }]]));
+  assert.equal(plan.unchanged, 0);
+  assert.deepEqual(plan.toWrite.map((r) => r.oid), [A]);
+});
+
 test('a tier or unit change is rewritten', () => {
   const existing = new Map([[A, { tier: 'standard', businessUnit: '' }], [B, { tier: 'standard', businessUnit: 'x' }]]);
   const plan = planChanges([{ oid: A, tier: 'premium', businessUnit: '' }, { oid: B, tier: 'standard', businessUnit: 'y' }], existing);

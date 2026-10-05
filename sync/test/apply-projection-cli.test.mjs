@@ -88,3 +88,138 @@ test('targeted snapshots must name one matching user record or no record; status
   assert.equal(status.accountResourceId, account);
   assert.equal(docs.find((d) => d.oid === otherUser).tier, 'standard');
 });
+
+function runApplyWithFake({ name, docs = {}, snapshot, args = [] }) {
+  const dir = join(work, name.replace(/[^a-z0-9]+/gi, '-'));
+  rmSync(dir, { recursive: true, force: true });
+  mkdirSync(dir, { recursive: true });
+  const store = join(dir, 'cosmos.json');
+  const log = join(dir, 'cosmos.log');
+  const snapshotPath = join(dir, 'snapshot.json');
+  writeFileSync(store, JSON.stringify({ docs }));
+  writeFileSync(log, '');
+  writeFileSync(snapshotPath, JSON.stringify(snapshot));
+  const result = spawnSync(process.execPath, [
+    '--loader', loaderUrl, script,
+    '--cosmos', cosmos, '--tenant', tenant, '--account-resource-id', account,
+    '--snapshot', snapshotPath, ...args,
+  ], {
+    encoding: 'utf8',
+    env: { ...process.env, FAKE_COSMOS_STORE: store, FAKE_COSMOS_LOG: log, PROJECTION_ACCOUNT_RESOURCE_ID: '' },
+  });
+  const summary = JSON.parse(result.stdout.trim().split(/\r?\n/).filter((line) => line.startsWith('{')).at(-1));
+  return { result, summary, store, log };
+}
+
+function fullSnapshot({ verifiedAt, records }) {
+  return {
+    kind: 'claude-entitlement-snapshot',
+    tenantId: tenant,
+    generatedAt: new Date(verifiedAt).toISOString(),
+    reconciliationGeneration: '66666666-6666-4666-8666-666666666666',
+    lastVerifiedAt: new Date(verifiedAt).toISOString(),
+    expiresAt: Math.floor(new Date(verifiedAt).getTime() / 1000) + 7200,
+    mappingVersion: Math.floor(new Date(verifiedAt).getTime() / 1000),
+    records,
+  };
+}
+
+function statusDoc({ generation, mode, user, finishedAt }) {
+  return {
+    id: `projection-status::${tenant}::${generation}`,
+    oid: `projection-status::${tenant}`,
+    type: 'projection-reconciliation-status',
+    ttl: 604800,
+    tenantId: tenant,
+    accountResourceId: account,
+    databaseName: 'claude',
+    containerName: 'entitlement',
+    ok: true,
+    mode,
+    executor: 'runner',
+    user,
+    reconciliationGeneration: generation,
+    lastVerifiedAt: new Date(finishedAt).toISOString(),
+    startedAt: new Date(finishedAt).toISOString(),
+    finishedAt: new Date(finishedAt).toISOString(),
+  };
+}
+
+test('a newer targeted status makes a stale full snapshot exclude that user from its plan', () => {
+  const target = '33333333-3333-4333-8333-333333333333';
+  const otherUser = '44444444-4444-4444-8444-444444444444';
+  const snapshotTime = new Date(Date.now() - 120_000).toISOString();
+  const newerTime = new Date(Date.now() - 60_000).toISOString();
+  const snap = fullSnapshot({
+    verifiedAt: snapshotTime,
+    records: [
+      { oid: target, tier: 'standard', businessUnit: '' },
+      { oid: otherUser, tier: 'standard', businessUnit: '' },
+    ],
+  });
+  const newerUserStatus = statusDoc({
+    generation: '77777777-7777-4777-8777-777777777777',
+    mode: 'user',
+    user: target,
+    finishedAt: newerTime,
+  });
+  const { result, summary, store } = runApplyWithFake({
+    name: 'stale full excludes newer targeted user',
+    docs: { [`${newerUserStatus.id}|${newerUserStatus.oid}`]: newerUserStatus },
+    snapshot: snap,
+  });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(summary.excludedByNewerTargetedSync, 1);
+  const docs = Object.values(JSON.parse(readFileSync(store, 'utf8')).docs);
+  assert.equal(docs.some((d) => d.oid === target && d.type !== 'projection-reconciliation-status'), false);
+  assert.equal(docs.find((d) => d.oid === otherUser).tier, 'standard');
+});
+
+test('a newer full status refuses a stale full snapshot before it writes', () => {
+  const target = '33333333-3333-4333-8333-333333333333';
+  const snapshotTime = new Date(Date.now() - 120_000).toISOString();
+  const newerTime = new Date(Date.now() - 60_000).toISOString();
+  const snap = fullSnapshot({
+    verifiedAt: snapshotTime,
+    records: [{ oid: target, tier: 'standard', businessUnit: '' }],
+  });
+  const newerFullStatus = statusDoc({
+    generation: '88888888-8888-4888-8888-888888888888',
+    mode: 'full',
+    finishedAt: newerTime,
+  });
+  const { result, summary, store } = runApplyWithFake({
+    name: 'stale full refused by newer full',
+    docs: { [`${newerFullStatus.id}|${newerFullStatus.oid}`]: newerFullStatus },
+    snapshot: snap,
+  });
+  assert.equal(result.status, 2, result.stdout + result.stderr);
+  assert.match(summary.error, /newer full sync finished after this snapshot was taken/);
+  const docs = Object.values(JSON.parse(readFileSync(store, 'utf8')).docs);
+  assert.equal(docs.some((d) => d.oid === target && d.type !== 'projection-reconciliation-status'), false);
+});
+
+test('a targeted status older than the full snapshot excludes nothing', () => {
+  const target = '33333333-3333-4333-8333-333333333333';
+  const snapshotTime = new Date(Date.now() - 120_000).toISOString();
+  const olderTime = new Date(Date.now() - 180_000).toISOString();
+  const snap = fullSnapshot({
+    verifiedAt: snapshotTime,
+    records: [{ oid: target, tier: 'standard', businessUnit: '' }],
+  });
+  const olderUserStatus = statusDoc({
+    generation: '99999999-9999-4999-8999-999999999999',
+    mode: 'user',
+    user: target,
+    finishedAt: olderTime,
+  });
+  const { result, summary, store } = runApplyWithFake({
+    name: 'older target status ignored',
+    docs: { [`${olderUserStatus.id}|${olderUserStatus.oid}`]: olderUserStatus },
+    snapshot: snap,
+  });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(summary.excludedByNewerTargetedSync, 0);
+  const docs = Object.values(JSON.parse(readFileSync(store, 'utf8')).docs);
+  assert.equal(docs.find((d) => d.oid === target).tier, 'standard');
+});

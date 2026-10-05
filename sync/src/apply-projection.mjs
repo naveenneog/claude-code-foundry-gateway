@@ -159,7 +159,11 @@ async function readExisting(container) {
   const iterator = container.items.query("SELECT c.id, c.tier, c.businessUnit, c.expiresAt FROM c WHERE NOT IS_DEFINED(c.type) OR c.type != 'projection-reconciliation-status'", { maxItemCount: 1000 });
   while (iterator.hasMoreResults()) {
     const { resources } = await iterator.fetchNext();
-    for (const d of resources ?? []) existing.set(d.id, { tier: d.tier, businessUnit: d.businessUnit ?? '', expiresAt: d.expiresAt });
+    for (const d of resources ?? []) {
+      const current = { tier: d.tier, businessUnit: d.businessUnit ?? '' };
+      if (Object.hasOwn(d, 'expiresAt')) current.expiresAt = d.expiresAt;
+      existing.set(d.id, current);
+    }
   }
   return existing;
 }
@@ -176,6 +180,27 @@ async function readExistingUser(container, oid) {
     existing.set(resource.id, { tier: resource.tier, businessUnit: resource.businessUnit ?? '' });
   }
   return existing;
+}
+
+async function readSuccessfulStatusesAfter(container, snapshotVerifiedAt) {
+  const cutoff = Date.parse(snapshotVerifiedAt);
+  if (!Number.isFinite(cutoff)) return [];
+  const query = {
+    query: "SELECT c.id, c.oid, c.type, c.tenantId, c.accountResourceId, c.databaseName, c.containerName, c.ok, c.mode, c.user, c.finishedAt FROM c WHERE c.type = 'projection-reconciliation-status' AND c.tenantId = @tenantId AND c.accountResourceId = @accountResourceId AND c.databaseName = @databaseName AND c.containerName = @containerName",
+    parameters: [
+      { name: '@tenantId', value: tenantId },
+      { name: '@accountResourceId', value: accountResourceId },
+      { name: '@databaseName', value: databaseName },
+      { name: '@containerName', value: containerName },
+    ],
+  };
+  const statuses = [];
+  const iterator = container.items.query(query, { maxItemCount: 1000 });
+  while (iterator.hasMoreResults()) {
+    const { resources } = await iterator.fetchNext();
+    statuses.push(...(resources ?? []));
+  }
+  return statuses.filter((s) => s.ok === true && Date.parse(s.finishedAt) > cutoff);
 }
 
 async function bulk(container, operations) {
@@ -221,15 +246,31 @@ if (opt('--compare-snapshot')) {
   process.exit(comparison.differences.length ? 4 : 0);
 }
 
-const { records, mappingVersion, source, reconciliation, scope = 'full' } = await resolveMembership();
+let { records, mappingVersion, source, reconciliation, scope = 'full' } = await resolveMembership();
 const container = containerRef();
-const existing = await step('cosmos-read', () => userOid ? readExistingUser(container, userOid) : readExisting(container));
+let existing = await step('cosmos-read', () => userOid ? readExistingUser(container, userOid) : readExisting(container));
+let excludedByNewerTargetedSync = 0;
+if (!userOid && scope === 'full' && opt('--snapshot')) {
+  const newerStatuses = await step('status-read', () => readSuccessfulStatusesAfter(container, reconciliation.lastVerifiedAt));
+  if (newerStatuses.some((s) => s.mode === 'full')) {
+    fail('a newer full sync finished after this snapshot was taken; export a fresh snapshot', 2, 'plan');
+  }
+  const excluded = new Set(newerStatuses
+    .filter((s) => s.mode === 'user' && GUID.test(s.user ?? ''))
+    .map((s) => s.user));
+  excludedByNewerTargetedSync = excluded.size;
+  if (excluded.size) {
+    records = records.filter((r) => !excluded.has(r.oid));
+    existing = new Map([...existing.entries()].filter(([oid]) => !excluded.has(oid)));
+  }
+}
 const plan = planChanges(records, existing, { allowEmpty: userOid ? true : flag('--allow-empty'), keepOrphans: userOid ? false : flag('--keep-orphans'), refresh: false });
 if (plan.refused) fail(plan.reason, 2, 'plan');
 
 const summary = {
   ok: true, source, whatIf, resolved: records.length, existing: existing.size,
   toWrite: plan.toWrite.length, toDelete: plan.toDelete.length, keptOrphans: plan.keptOrphans.length, unchanged: plan.unchanged,
+  excludedByNewerTargetedSync,
 };
 if (whatIf) { console.log(JSON.stringify(summary)); process.exit(0); }
 
@@ -261,6 +302,7 @@ if (summary.ok) {
     finishedAt: new Date().toISOString(),
     mode: scope === 'user' ? 'user' : 'full',
     executor: explicitExecutor ?? (renewal ? 'job' : 'runner'),
+    user: userOid || null,
     // The job's settings, which admission binds this evidence to (ADR-0050). A runner run has none.
     settings: renewal ? normalizeJobSettings({
       clientId: process.env.AZURE_CLIENT_ID,

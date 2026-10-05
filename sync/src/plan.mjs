@@ -87,6 +87,10 @@ export function planChanges(resolved, existing, { allowEmpty = false, keepOrphan
     wanted.add(r.oid);
     const cur = existing.get(r.oid);
     if (cur && cur.tier === r.tier && (cur.businessUnit ?? '') === (r.businessUnit ?? '')) {
+      if (Object.hasOwn(cur, 'expiresAt')) {
+        toWrite.push(r);
+        continue;
+      }
       unchanged++;
       if (!refresh) continue;
     }
@@ -160,6 +164,7 @@ export function toStatusDocument({
   executor = 'runner',
   ok = true,
   settings = null,
+  user = null,
 }) {
   if (!reconciliation || !GUID.test(reconciliation.reconciliationGeneration ?? '')) {
     throw new Error('status requires a reconciliation generation');
@@ -183,6 +188,7 @@ export function toStatusDocument({
     ok: Boolean(ok),
     mode,
     executor,
+    ...(user ? { user } : {}),
     memberCounts,
     writeCounts,
     startedAt,

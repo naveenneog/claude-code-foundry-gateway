@@ -65,6 +65,22 @@ test('every known tier is accepted', () => {
   }
 });
 
+test('a legacy expiresAt grants only until that legacy deadline passes', () => {
+  const legacyExpiresAt = Date.parse('2026-10-05T11:00:00.000Z') / 1000;
+  const beforeExpiry = toEntitlement(
+    { id: OID, tenantId: TENANT, tier: 'standard', expiresAt: legacyExpiresAt, lastVerifiedAt: '2026-10-05T09:00:00.000Z' },
+    { tenantId: TENANT, now: new Date('2026-10-05T10:00:00.000Z') });
+  assert.equal(beforeExpiry.ok, true);
+  assert.equal('expiresAt' in beforeExpiry.record, false);
+
+  const afterExpiry = toEntitlement(
+    { id: OID, tenantId: TENANT, tier: 'standard', expiresAt: legacyExpiresAt, lastVerifiedAt: '2026-10-05T09:00:00.000Z' },
+    { tenantId: TENANT, now: new Date('2026-10-05T12:00:00.000Z') });
+  assert.equal(afterExpiry.ok, false);
+  assert.equal(afterExpiry.status, 404);
+  assert.match(afterExpiry.reason, /legacy projection record expired/);
+});
+
 test('a record that is not effective yet does not grant access', () => {
   // This is what lets a population be staged before a cutover without granting
   // anyone access early - ADR-0009 phase 1.

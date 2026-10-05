@@ -75,8 +75,8 @@ function Invoke-ClaudeProjectionAccessSync {
     $subscriptionId = @([string]$apim.id -split '/')[2]
     if ($subscriptionId -notmatch '^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$') { throw 'APIM resource id did not contain a subscription GUID.' }
     $accountResourceId = "/subscriptions/$subscriptionId/resourceGroups/$ResourceGroup/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-$prefix"
-    $work = Join-Path (Get-Location) '.claude-projection-sync'
-    if (Test-Path -LiteralPath $work) { Remove-Item -LiteralPath $work -Recurse -Force -WhatIf:$false }
+    $work = Join-Path ([IO.Path]::GetTempPath()) ('claude-projection-sync-' + [guid]::NewGuid().ToString('N'))
+    $runner = $null
     $null = New-Item -ItemType Directory -Path $work -Force
     try {
         $snapshot = Join-Path $work 'projection-snapshot.json'
@@ -116,6 +116,11 @@ function Invoke-ClaudeProjectionAccessSync {
         Write-Host ("Projection sync complete: written={0} deleted={1} unchanged={2}" -f ([int]$result.written), ([int]$result.deleted), ([int]$result.unchanged)) -ForegroundColor Green
     }
     finally {
+        if ($runner) {
+            try {
+                $null = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $runner -Command "node -e f=require('fs');f.rmSync('/work/projection-snapshot.json',{force:true});f.rmSync('/work/gateway-decisions.json',{force:true})"
+            } catch { }
+        }
         if (Test-Path -LiteralPath $work) { Remove-Item -LiteralPath $work -Recurse -Force -WhatIf:$false -ErrorAction SilentlyContinue }
     }
 }
