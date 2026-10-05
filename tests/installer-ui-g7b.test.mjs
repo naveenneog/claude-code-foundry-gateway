@@ -304,6 +304,44 @@ test('G7B-6 pfx-needs-terminal server refusal is shown with its sentence', async
   }
 });
 
+test('G7B-7 refreshed identity changes make the preflight stale and same identity keeps it current', async () => {
+  let identity = { signedIn: true, user: 'one@example.test', tenantId: 'tenant-1', subscriptionId: '00000000-0000-4000-8000-000000000093' };
+  const app = await start({ readIdentity: async () => identity });
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await passPreflight(page);
+    assert.equal(await page.getByRole('button', { name: 'Run selected steps' }).isEnabled(), true);
+    await page.getByRole('button', { name: 'Refresh account' }).click();
+    await page.locator('#refresh-identity-status').getByText(/Account refreshed/).waitFor();
+    await page.getByText(/Passing preflight/).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Run selected steps' }).isEnabled(), true);
+    identity = { ...identity, subscriptionId: '00000000-0000-4000-8000-000000000094' };
+    await page.getByRole('button', { name: 'Refresh account' }).click();
+    await page.locator('#preflight-state').getByText(/subscription/).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Run selected steps' }).isDisabled(), true);
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
+test('G7B-7 identity-changed run refusal makes preflight stale with the server sentence', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await passPreflight(page);
+    await page.route('**/api/run/stream', (route) => route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'The Azure identity subscription changed since preflight. Run preflight again.', reason: 'identity-changed' }) }));
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await page.locator('#run-error[role="alert"]').getByText(/identity subscription changed/).waitFor();
+    await page.getByText(/Preflight is stale/).waitFor();
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
 test('P4 invalid business-unit JSON blocks download and keeps the draft text', async () => {
   const app = await start();
   const { browser, page, pageErrors } = await openPage(app);
