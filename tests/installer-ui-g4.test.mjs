@@ -86,8 +86,10 @@ test('U1 action wrapper shows busy text and blocks a duplicate preflight click',
     });
     await expectPollEnabled(page, 'Run preflight');
     await page.evaluate(() => {
-      document.getElementById('preflight').click();
-      document.getElementById('preflight').click();
+      const button = document.getElementById('preflight');
+      button.click();
+      // A disabled button ignores real clicks, but a dispatched click event still reaches its handler.
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     await page.locator('#preflight-status').getByText(/Running preflight/).waitFor();
     assert.equal(await page.getByRole('button', { name: /Running preflight/ }).isDisabled(), true);
