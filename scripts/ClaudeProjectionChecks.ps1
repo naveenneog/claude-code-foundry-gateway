@@ -103,10 +103,6 @@ function Format-ClaudeProjectionChecks {
     return ($lines -join "`n").TrimEnd()
 }
 
-function Stop-ClaudeProjectionSwitch {
-    throw 'Projection switch refused: the deployment preflight does not switch. Deploy the projection, run a clean full sync, then run scripts/Deploy-ClaudeProjection.ps1 -FlipAfterCleanCompare (ADR-0051).'
-}
-
 function Get-ClaudeProjectionArmUrl {
     # The management token goes with this request: the id must be an ARM resource id whose URL stays on
     # management.azure.com. A sub-path, such as config/appsettings/list, is letters in segments under
@@ -184,8 +180,7 @@ function Invoke-ClaudeProjectionPreflight {
         [string]$ResourceGroup, [string]$ApimName, [string]$NamePrefix, [string]$SubscriptionId,
         [string]$Location, [string]$Sku = 'BasicV2', [string]$ResolverInboundAccess,
         [string]$ResolverAppId, [string]$StandardGroup = 'claude-code-standard',
-        [string]$PremiumGroup = 'claude-code-premium', [switch]$FlipAfterCleanCompare,
-        [string]$ReconcilerResourceId
+        [string]$PremiumGroup = 'claude-code-premium'
     )
     Write-Host 'Projection preflight (about 30-90 s, including a 25 s Graph pause). No Azure writes.'
     $checks = [Collections.Generic.List[object]]::new()
