@@ -84,7 +84,7 @@ Write-Host ''
 Write-Host 'Secure projection - the writer runs inside the network' -ForegroundColor Cyan
 
 $sp = Get-Content (Join-Path $root 'scripts/Sync-ClaudeProjection.ps1') -Raw
-Assert 'membership can be exported instead of written' ($sp -match '(?m)\[string\]\$ExportPath\s*$')
+Assert 'membership can be exported instead of written' ($sp -match '(?m)\[string\]\$ExportPath,?\s*$')
 Assert 'an export needs no Cosmos token'          ($sp -match '(?s)if \(-not \$ExportPath\) \{\s*\$cosmosToken = az account get-access-token')
 Assert 'and is written without a byte-order mark' ($sp -match 'UTF8Encoding\(\$false\)')
 Assert 'the importer exists'                      (Test-Path (Join-Path $root 'sync/src/apply-projection.mjs'))
