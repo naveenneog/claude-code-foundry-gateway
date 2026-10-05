@@ -104,6 +104,7 @@ function az {
             return (@{ name = $id; value = $resolverValues[$id]; secret = $false } | ConvertTo-Json -Compress)
         }
         if ($line -match '--query name') { return 'entitlement-source' }
+        if ($FixtureCase -eq 'source-projection' -and $id -eq 'entitlement-source' -and $line -match '--query value') { return 'projection' }
         if ($line -match '--query value') { return 'named-value' }
         return (@{ name='entitlement-source'; value='named-value'; secret=$false } | ConvertTo-Json -Compress)
     }

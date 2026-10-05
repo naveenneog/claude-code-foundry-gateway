@@ -213,10 +213,19 @@ if ($PSCmdlet.ShouldProcess($resolver.siteName, 'package and publish resolver co
 
 Step 'Point the gateway at the resolver'
 # The gateway reads these two only while entitlement-source is projection; the switch requires them to
-# name this resolver (ADR-0050). SECURE-PROJECTION section 9 gives the same step by hand.
+# name this resolver (ADR-0050). SECURE-PROJECTION section 9 gives the same step by hand. On a gateway
+# that already serves from the projection, a change would send every request to this resolver at once.
+$liveSource = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-source' -FailOnError
+$pointed = (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-url' -FailOnError) -eq $resolverUrl -and
+    (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-audience' -FailOnError) -eq $resolverAudience
+if ($liveSource -eq 'projection' -and -not $pointed) {
+    throw "Refusing to point the gateway at $resolverUrl`: entitlement-source is projection, so every request would go to this resolver before its Cosmos account is populated and renewed. Remedy: return the gateway to named values first (refresh the lists with scripts/Sync-ClaudeAccess.ps1, check them with scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift, then set entitlement-source to named-value), then rerun."
+}
 if ($PSCmdlet.ShouldProcess($ApimName, 'set entitlement-resolver-url and entitlement-resolver-audience to the deployed resolver')) {
-    Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-url' -Value $resolverUrl
-    Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-audience' -Value $resolverAudience
+    if (-not $pointed) {
+        Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-url' -Value $resolverUrl
+        Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-audience' -Value $resolverAudience
+    }
 } else { throw 'Pointing the gateway at the resolver was declined; no further steps run.' }
 Ok "entitlement-resolver-url is $resolverUrl; entitlement-source is unchanged"
 $work = Join-Path ([IO.Path]::GetTempPath()) ("claude-projection-" + [guid]::NewGuid().ToString('N'))

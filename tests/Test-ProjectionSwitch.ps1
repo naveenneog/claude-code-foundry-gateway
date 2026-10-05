@@ -420,6 +420,29 @@ if ($pointStep.Count -eq 1) {
         $pointCalls -match [regex]::Escape("--named-value-id entitlement-resolver-url --value $resolverUrl") -and $pointCalls -match [regex]::Escape("--named-value-id entitlement-resolver-audience --value $resolverAudience")) "$Failure | $pointCalls"
     Remove-Variable ResourceGroup, ApimName, resolverUrl, resolverAudience -ErrorAction SilentlyContinue
 }
+# Council round 2: on a gateway that serves from the projection, the gateway calls these values for every
+# request, so the deployer's normal run must not point it at another resolver. The whole step runs from the
+# deployer's own text, with its decision taken as yes.
+$stepStart = $deploySource.IndexOf("Step 'Point the gateway at the resolver'")
+$stepEnd = $deploySource.IndexOf('Ok "entitlement-resolver-url is')
+$stepText = if ($stepStart -ge 0 -and $stepEnd -gt $stepStart) { $deploySource.Substring($stepStart, $stepEnd - $stepStart) } else { '' }
+$stepText = $stepText.Replace("`$PSCmdlet.ShouldProcess(`$ApimName, 'set entitlement-resolver-url and entitlement-resolver-audience to the deployed resolver')", '$true')
+$pointRefusals = @(foreach ($case in @(
+            @{ Name = 'a projection gateway is not pointed at another resolver'; Fixture = 'source-projection'; Url = 'https://func-resolver-other.azurewebsites.net/api'; Expect = 'Refusing'; Writes = 0 }
+            @{ Name = 'a projection gateway already on this resolver is left as it is'; Fixture = 'source-projection'; Url = 'https://func-resolver-p84fixture.azurewebsites.net/api'; Expect = ''; Writes = 0 }
+            @{ Name = 'a named-value gateway is pointed at the new resolver'; Fixture = 'healthy'; Url = 'https://func-resolver-other.azurewebsites.net/api'; Expect = ''; Writes = 2 }
+        )) {
+        Reset-ProjectionFixture $case.Fixture
+        $stepOutcome = & {
+            function Step { }
+            $ResourceGroup = 'rg-p84'; $ApimName = 'apim-p84'; $resolverUrl = $case.Url; $resolverAudience = "api://$FixtureApp"
+            try { & ([scriptblock]::Create($stepText)) | Out-Null; '' } catch { $_.Exception.Message }
+        }
+        $writes = @($FixtureCalls | Where-Object { $_ -match '^az apim nv update' }).Count
+        $ok = $stepText -and $writes -eq $case.Writes -and $(if ($case.Expect) { $stepOutcome -match "^$($case.Expect)" -and $stepOutcome -match 'Sync-ClaudeAccess\.ps1' } else { -not $stepOutcome })
+        if (-not $ok) { "$($case.Name): writes $writes, outcome '$stepOutcome'" }
+    })
+Assert "the deployer's resolver step never redirects a gateway that serves from the projection" ($stepText -and -not $pointRefusals.Count) ($pointRefusals -join ' || ')
 Reset-ProjectionFixture
 Capture { @(1..2 | ForEach-Object { Save-ClaudeProjectionSwitchBackup -ResourceGroup rg-p84 -ApimName apim-p84 -GatewayResourceId $FixtureGatewayId -Directory $backupDir }) }
 Assert 'two backups in the same second are two files; neither overwrites the other' (-not $Failure -and @($Result | Select-Object -Unique).Count -eq 2 -and @($Result | Where-Object { Test-Path -LiteralPath $_ }).Count -eq 2) "$Failure"
