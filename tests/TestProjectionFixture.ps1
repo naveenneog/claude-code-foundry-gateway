@@ -99,7 +99,7 @@ function az {
     if ($line -like 'apim nv show*') {
         if ($FixtureCase -eq 'nv-read-error') { $global:LASTEXITCODE = 1; return 'ERROR: (AuthorizationFailed) The client does not have authorization to perform action Microsoft.ApiManagement/service/namedValues/read.' }
         $id = [string]$words[[array]::IndexOf($words, '--named-value-id') + 1]
-        $resolverValues = @{ 'entitlement-resolver-url' = $FixtureResolverUrl; 'entitlement-resolver-audience' = $FixtureResolverAudience }
+        $resolverValues = @{ 'entitlement-resolver-url' = $FixtureResolverUrl; 'entitlement-resolver-audience' = $FixtureResolverAudience; 'entitlement-projection-prefix' = 'p84fixture'; 'allow-standard' = $(if ($FixtureCase -eq 'new-gateway') { ',' } else { ",$FixtureApp," }); 'allow-premium' = ','; 'bu-members' = ',' }
         if ($resolverValues.ContainsKey($id)) {
             if ($line -match '--query name') { return $id }
             if ($line -match '--query value') { return $resolverValues[$id] }
@@ -115,7 +115,7 @@ function az {
         if ($name -eq 'projection-resolver-p84fixture' -and $FixtureCase -notin 'resolver-missing', 'source-projection-failed-deployment') {
             $cosmos = if ($FixtureCase -eq 'resolver-other-cosmos') { 'cosmos-other' } else { 'cosmos-p84fixture' }
             return (@{
-                    parameters = @{ cosmosAccountName = @{ type = 'String'; value = $cosmos } }
+                    parameters = @{ cosmosAccountName = @{ type = 'String'; value = $cosmos }; resolverAppId = @{ type = 'String'; value = $FixtureApp } }
                     outputs = @{ siteName = @{ type = 'String'; value = 'func-resolver-p84fixture' }; resolverUrl = @{ type = 'String'; value = 'https://func-resolver-p84fixture.azurewebsites.net/api' }; resolverAudience = @{ type = 'String'; value = "api://$FixtureApp" } }
                 } | ConvertTo-Json -Depth 5 -Compress)
         }
@@ -238,8 +238,9 @@ function az {
         if ($FixtureCase -eq 'compare-error' -and $command -match 'apply-projection\.mjs .*--compare ') { $global:LASTEXITCODE = 0; return '{"ok":false,"error":"Cosmos read failed: 403 Forbidden"}' }
         if ($FixtureCase -eq 'compare-no-mode' -and $command -match 'apply-projection\.mjs .*--compare ') { return '{"ok":true}' }
         # The summaries the real scripts print last (sync/src/apply-projection.mjs, sync/src/check-admission.mjs).
+        if ($command -match 'apply-projection\.mjs .*--compare-snapshot ') { return '{"ok":true,"mode":"compare-snapshot","compared":1,"differences":0,"byKind":{},"sample":[]}' }
         if ($command -match 'apply-projection\.mjs .*--compare ') { return '{"ok":true,"mode":"compare","gateway":"apim-p84","compared":1,"projectionRecords":1,"differences":0,"byKind":{},"sample":[]}' }
-        if ($command -match 'check-admission\.mjs ') { return '{"ok":true,"newestFinishedAt":"2026-10-05T11:00:00.000Z","oldestExpiresAt":1791205200,"generations":3,"mode":"projection-admission","statuses":3,"entitlementRecords":1}' }
+        if ($command -match 'check-admission\.mjs ') { return '{"ok":true,"mode":"switch-evidence","newestFullSync":{"finishedAt":"2026-10-05T11:00:00.000Z","executor":"runner","generation":"00000000-0000-4000-8000-000000000099"},"invalidCount":0}' }
         return '{"ok":true}'
     }
     throw "UNEXPECTED AZURE CALL (offline fixture): $line"
@@ -337,3 +338,6 @@ function Invoke-RestMethod {
     }
     throw "UNEXPECTED HTTP CALL (offline fixture): $Method $url"
 }
+
+function Start-ClaudeProjectionRunner { param([string]$ResourceGroup, [string]$Name, [string]$SubscriptionId) $global:FixtureCalls.Add("start-runner $ResourceGroup $Name") }
+function Confirm-ClaudeProjectionResolverServicePrincipal { param([string]$AppId) $global:FixtureCalls.Add("confirm-sp $AppId"); if ($global:FixtureCase -eq 'sp-missing') { throw "Projection switch refused: resolver app $AppId has no service principal." }; return $true }

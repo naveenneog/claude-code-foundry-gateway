@@ -61,10 +61,6 @@ param(
     [string]$ResolverInboundAccess,
     [switch]$DeployProjection,
     [switch]$FlipProjectionAfterCleanCompare,
-    [string]$ProjectionReconcilerResourceId,
-    [string]$ProjectionRenewalImageDigest,
-    [string]$ProjectionRenewalEntryPoint = 'node /app/sync/src/apply-projection.mjs',
-    [string]$ProjectionRenewalActionGroupResourceId,
     [string]$ProjectionResolverAppId,
 
     [int]$TpmStandard,
@@ -122,11 +118,6 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
-if ($FlipProjectionAfterCleanCompare) {
-    if (-not $ProjectionReconcilerResourceId -or -not $ProjectionRenewalImageDigest -or -not $ProjectionRenewalActionGroupResourceId) {
-        throw 'Projection switch refused: P86 admission requires -ProjectionReconcilerResourceId, -ProjectionRenewalImageDigest and -ProjectionRenewalActionGroupResourceId. Expected wait after deploying the 30-minute reconciler is about 60-90 minutes.'
-    }
-}
 $desktopSignInHelper = Join-Path $root 'scripts/ClaudeDesktopSignIn.ps1'
 if (Test-Path $desktopSignInHelper) { . $desktopSignInHelper }
 
@@ -1635,10 +1626,6 @@ if ($EntitlementStore -eq 'projection' -and $DeployProjection) {
     if ($ProjectionResolverAppId) { $projectionArgs += @('-ResolverAppId', $ProjectionResolverAppId) }
     $projectionArgs += @('-SubscriptionId', $SubscriptionId)
     if ($FlipProjectionAfterCleanCompare) { $projectionArgs += '-FlipAfterCleanCompare' }
-    if ($ProjectionReconcilerResourceId) { $projectionArgs += @('-ReconcilerResourceId', $ProjectionReconcilerResourceId) }
-    if ($ProjectionRenewalImageDigest) { $projectionArgs += @('-RenewalImageDigest', $ProjectionRenewalImageDigest) }
-    if ($ProjectionRenewalEntryPoint) { $projectionArgs += @('-RenewalEntryPoint', $ProjectionRenewalEntryPoint) }
-    if ($ProjectionRenewalActionGroupResourceId) { $projectionArgs += @('-RenewalActionGroupResourceId', $ProjectionRenewalActionGroupResourceId) }
     if ($WhatIfPreference) { $projectionArgs += '-WhatIf' }
     & (Join-Path $root 'scripts/Deploy-ClaudeProjection.ps1') @projectionArgs
     if ($LASTEXITCODE -ne 0) { throw 'Projection deployment failed. The gateway was not flipped.' }

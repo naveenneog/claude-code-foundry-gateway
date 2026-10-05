@@ -27,7 +27,7 @@ Assert 'installer invokes the one-command deployer and gates the flip flag' ($in
 Assert 'non-interactive projection refuses ambiguity' ($installer -match 'Projection requires .* -Yes' -or $installer -match 'Cannot choose projection unattended')
 Assert '-Yes chooses the deterministic entitlement store default' ($installer -match 'selected from the declared developer count under -Yes')
 Assert 'unattended projection always requires the deployer' ($installer.Contains('$Yes -and $EntitlementStore -eq ''projection'' -and -not $DeployProjection'))
-Assert 'flip requires P86 renewal admission inputs' ($installer -match 'ProjectionRenewalImageDigest' -and $installer -match 'ProjectionRenewalActionGroupResourceId' -and $installer -match 'P86 admission requires')
+Assert 'flip no longer requires renewal admission inputs' ($installer -match 'FlipProjectionAfterCleanCompare' -and $installer -notmatch 'ProjectionRenewalImageDigest|ProjectionRenewalActionGroupResourceId|P86 admission requires')
 
 Write-Host ''
 Write-Host 'Projection deployer - compare-gated flip' -ForegroundColor Cyan
@@ -48,8 +48,8 @@ if (Test-Path $deployerPath) {
     Assert 'deployer runs projection comparison' ($deployer -match 'apply-projection\.mjs' -and $deployer -match '--compare')
     Assert 'deployer refuses drift before flip' ($deployer -match 'Refusing to flip' -and $deployer -match 'drift')
     $switchText = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'scripts\ClaudeProjectionSwitch.ps1') -Raw
-    Assert 'deployer switches only through the shared switch, which writes after P86 scheduled-renewal admission' ($deployer -match 'Invoke-ClaudeProjectionSwitch' -and $deployer -notmatch "Set-ApimNamedValue[^\r\n]*-Id 'entitlement-source'" -and
-        $deployer -match 'RenewalActionGroupResourceId' -and $switchText -match "(?s)Assert-ClaudeProjectionAdmission.*Set-ApimNamedValue[^\r\n]*-Id 'entitlement-source'")
+    Assert 'deployer switches only through the shared switch, which writes after sync switch evidence' ($deployer -match 'Invoke-ClaudeProjectionSwitch' -and $deployer -notmatch "Set-ApimNamedValue[^\r\n]*-Id 'entitlement-source'" -and
+        $deployer -match '-NamePrefix \$NamePrefix' -and $switchText -match "(?s)Assert-ClaudeProjectionAdmission.*Set-ApimNamedValue[^\r\n]*-Id 'entitlement-source'" -and $switchText -notmatch 'RenewalActionGroupResourceId|image-digest|entrypoint')
     Assert 'deployer has bounded retries' ($deployer -match '\[ValidateRange\(1,10\)\]\[int\]\$RetryCount' -and $deployer -match 'Start-Sleep')
 }
 
