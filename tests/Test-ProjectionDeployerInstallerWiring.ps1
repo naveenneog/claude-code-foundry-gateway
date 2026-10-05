@@ -73,6 +73,9 @@ Assert 'a projection gateway that calls another resolver is not redirected, and 
 Reset-ProjectionFixture
 Capture { Set-ClaudeProjectionGatewayResolver -ResourceGroup rg-p84 -ApimName apim-p84 -NamePrefix p84new -ResolverUrl 'https://func-resolver-p84new.azurewebsites.net/api' -ResolverAudience $FixtureResolverAudience }
 Assert 'a named-value gateway is pointed at a new resolver: url, audience, then prefix' (-not $Failure -and ((WrittenIds) -join ',') -eq 'entitlement-resolver-url,entitlement-resolver-audience,entitlement-projection-prefix') "$Failure | writes: $((WrittenIds) -join ', ')"
+Reset-ProjectionFixture 'source-projection-no-prefix'
+Capture { Set-ClaudeProjectionGatewayResolver -ResourceGroup rg-p84 -ApimName apim-p84 -NamePrefix p84fixture -ResolverUrl $FixtureResolverUrl -ResolverAudience $FixtureResolverAudience }
+Assert 'D9C: the deployer records entitlement-projection-prefix for switch and sync discovery' (-not $Failure -and ((WrittenIds) -join ',') -eq 'entitlement-projection-prefix') "$Failure | writes: $((WrittenIds) -join ', ')"
 $deployText = [IO.File]::ReadAllText($deployer)
 Assert 'the deployer points the gateway only through Set-ClaudeProjectionGatewayResolver, inside its ShouldProcess' ($deployText -match "(?s)ShouldProcess\(\`$ApimName, 'set resolver named values and entitlement-projection-prefix[^']*'\)\) \{\s*\`$null = Set-ClaudeProjectionGatewayResolver" -and $deployText -notmatch "Set-ApimNamedValue[^\r\n]*-Id 'entitlement-resolver-url'")
 Write-Host ''

@@ -257,7 +257,7 @@ let { records, mappingVersion, source, reconciliation, scope = 'full' } = await 
 const container = containerRef();
 let existing = await step('cosmos-read', () => userOid ? readExistingUser(container, userOid) : readExisting(container));
 let excludedByNewerTargetedSync = 0;
-if (!userOid && scope === 'full' && opt('--snapshot')) {
+if (!userOid && scope === 'full') {
   const newerStatuses = await step('status-read', () => readSuccessfulStatusesAfter(container, reconciliation.lastVerifiedAt));
   if (newerStatuses.some((s) => s.mode === 'full')) {
     fail('a newer full sync finished after this snapshot was taken; export a fresh snapshot', 2, 'plan');
