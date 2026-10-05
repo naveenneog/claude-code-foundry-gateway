@@ -7,6 +7,7 @@
     let activeRunId = "";
     let activeStepId = "";
     let runActive = false;
+    let runStopping = false;
     let lastRunSeq = 0;
     let lastFailedStep = "";
     let activeClientRequestId = "";
@@ -23,6 +24,10 @@
 
     function currentStep() {
       return activeStepId;
+    }
+
+    function isStopping() {
+      return runStopping;
     }
 
     function resetActiveRun() {
@@ -60,6 +65,7 @@
       activeRunId = "";
       activeStepId = "";
       runActive = false;
+      runStopping = false;
       lastFailedStep = summary.failedStepId || "";
       updateRunAdmission();
       if (summary.resumeCommand) appendRunLine(`Resume: ${summary.resumeCommand}`);
@@ -127,6 +133,7 @@
       if (sameRun(status)) {
         if (quietCount >= 3) {
           runActive = false;
+          runStopping = false;
           updateRunAdmission();
           throw new Error("The run stream keeps ending without new events. Reloading the page reattaches to the run.");
         }
@@ -137,6 +144,7 @@
         if (result) return result;
         if (status.state !== "running" && status.state !== "stopping") {
           runActive = false;
+          runStopping = false;
           updateRunAdmission();
           const state = status.state || "unknown";
           throw new Error(`The run stream ended without a summary; the server reports state ${state}.`);
@@ -181,6 +189,7 @@
       activeRunId = run.id;
       activeStepId = run.currentStepId || run.steps?.[0] || activeStepId;
       runActive = true;
+      runStopping = false;
       updateRunAdmission();
       return (await readRunStream(await fetchRunStream(`./api/run/attach?after=${lastRunSeq}`))) || null;
     }
@@ -208,6 +217,7 @@
         }
         if (status?.admission?.state === "refused") {
           runActive = false;
+          runStopping = false;
           updateRunAdmission();
           const error = new Error(status.admission.error || "run refused");
           error.data = { error: error.message, reason: status.admission.reason };
@@ -216,6 +226,7 @@
         }
         if (!status?.admission) {
           runActive = false;
+          runStopping = false;
           updateRunAdmission();
           const error = new Error(`The run request failed before the server answered (${requestError.message}), and the installer UI server has no record of that request.`);
           error.data = { error: error.message, remedy: "Check that the installer UI server is still running in its terminal, then try again." };
@@ -234,6 +245,7 @@
     async function streamRun(body) {
       if (hasBlockingProblems()) return undefined;
       runActive = true;
+      runStopping = false;
       activeClientRequestId = clientRequestId();
       // A new run's events start at 1; a reattach of this run must not use the previous run's cursor.
       lastRunSeq = 0;
@@ -270,9 +282,12 @@
         activeClientRequestId = status.clientRequestId || "";
         activeStepId = status.currentStepId || status.steps?.[0] || "";
         runActive = true;
+        runStopping = status.state === "stopping";
+        if (runStopping) setStatusText("run", `Stopping at ${activeStepId || "the current step"}.`);
         updateRunAdmission();
         try {
           const result = (await readRunStream(await fetchRunStream(`./api/run/attach?after=${lastRunSeq}`))) || (await recoverMissingSummary());
+          if (result?.statusText) setStatusText("run", result.statusText);
           refreshIdentityAfterRun();
           return result;
         } catch (error) {
@@ -301,7 +316,7 @@
       void readIdentityAfterRun().catch(() => {});
     }
 
-    return { appendRunLine, currentStep, failedStep, handleAttachError, isActive, resetActiveRun, streamRun, stopRun, refreshRunStatus };
+    return { appendRunLine, currentStep, failedStep, handleAttachError, isActive, isStopping, resetActiveRun, streamRun, stopRun, refreshRunStatus };
   }
 
   globalThis.ClaudeInstallerRun = { create: createRunHost };

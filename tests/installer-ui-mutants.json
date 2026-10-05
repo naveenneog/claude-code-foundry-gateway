@@ -1,5 +1,14 @@
 [
   {
+    "id": "r3-9-1",
+    "why": "A page loaded while a run is stopping must attach and keep stop disabled until the stopped summary arrives.",
+    "file": "tools/installer-ui/installer-ui-run.js",
+    "find": "        if (runStopping) setStatusText(\"run\", `Stopping at ${activeStepId || \"the current step\"}.`);\n",
+    "replace": "",
+    "testFile": "tests/installer-ui-g8b.test.mjs",
+    "test": "R3-9 page load attaches to a stopping run with controls disabled until summary"
+  },
+  {
     "id": "r3-3-1",
     "why": "The preflight adapter must reject a top-level PASS when a blocking NOT-RUN or FAIL check recomputes to FAIL.",
     "file": "tools/installer-ui/installer-contract.mjs",
@@ -720,7 +729,7 @@
     "id": "lead-U14",
     "why": "Stop run state is not owned by run activity",
     "file": "tools/installer-ui/installer-ui.js",
-    "find": "if (stop && stop.dataset.actionBusy !== \"true\") stop.disabled = !runHost?.isActive();",
+    "find": "if (stop && stop.dataset.actionBusy !== \"true\") stop.disabled = !runHost?.isActive() || Boolean(runHost?.isStopping?.());",
     "replace": "",
     "testFile": "tests/installer-ui-g4.test.mjs",
     "test": "U1 fix Stop run is disabled after the run ends even when the stop response arrives after the summary"
@@ -765,7 +774,7 @@
     "id": "lead-G02",
     "why": "a reattach stream that ends leaves run activity set",
     "file": "tools/installer-ui/installer-ui-run.js",
-    "find": "        if (quietCount >= 3) {\n          runActive = false;\n          updateRunAdmission();\n          throw",
+    "find": "        if (quietCount >= 3) {\n          runActive = false;\n          runStopping = false;\n          updateRunAdmission();\n          throw",
     "replace": "        if (quietCount >= 3) {\n          throw",
     "testFile": "tests/installer-ui-g4.test.mjs",
     "test": "U1 fix a reattach stream that ends without a summary clears run activity"

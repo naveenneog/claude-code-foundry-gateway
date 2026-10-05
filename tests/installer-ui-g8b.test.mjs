@@ -242,3 +242,40 @@ test('R3-2 malformed stream line reattaches to the same run and finishes', async
     await app.close();
   }
 });
+
+test('R3-9 page load attaches to a stopping run with controls disabled until summary', async () => {
+  const app = await start();
+  const { chromium } = await import('playwright');
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+  await page.addInitScript(() => {
+    window.__p93Unhandled = [];
+    window.addEventListener('unhandledrejection', (event) => {
+      window.__p93Unhandled.push(String(event.reason?.message || event.reason));
+    });
+  });
+  let releaseAttach;
+  const attachReleased = new Promise((resolve) => { releaseAttach = resolve; });
+  try {
+    await page.route('**/api/run/status', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'stopping-run', state: 'stopping', currentStepId: 'resource-group', steps: ['resource-group'] }) }));
+    await page.route('**/api/run/attach?after=*', async (route) => {
+      await attachReleased;
+      return route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"summary","exitCode":null,"failedStepId":"","resumeCommand":"","state":"stopped","stepId":"resource-group","message":"Stopped installer run at resource-group."}\n' });
+    });
+    await page.goto(`${app.base}/?token=${encodeURIComponent(app.token)}`);
+    await page.waitForSelector('[name="SubscriptionId"]');
+    await page.locator('#run-status').getByText('Stopping at resource-group.').waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Refresh account' }).isDisabled(), true);
+    assert.equal(await page.getByRole('button', { name: 'Run preflight' }).isDisabled(), true);
+    assert.equal(await page.getByRole('button', { name: 'Stop run' }).isDisabled(), true);
+    releaseAttach();
+    await page.locator('#run-status').getByText('Run stopped at resource-group.').waitFor();
+    await assertClean(page, pageErrors);
+  } finally {
+    releaseAttach?.();
+    await browser.close();
+    await app.close();
+  }
+});
