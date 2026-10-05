@@ -32,7 +32,7 @@ fetched 2026-10-05; ms.date 2026-08-07). It does not state whether Web preview r
 bound to loopback, which Host header it forwards, whether it adds a URL prefix or how a cookie with
 `Path=/` behaves. Those facts remain unverified until the owner-attended Web preview check (U100,
 U101). The server has `--allow-host <host[:port]>` for that check, and refused Host requests log the
-Host and `X-Forwarded-*` shape to the terminal only (`tools/installer-ui/server.mjs:377-379`;
+Host and `X-Forwarded-*` shape to the terminal only (`tools/installer-ui/server.mjs:382-383`;
 `tools/installer-ui/server.mjs:630-650`). Microsoft Learn states that Cloud Shell sessions time out
 after 20 minutes without interactive activity
 ([Cloud Shell FAQ](https://learn.microsoft.com/en-us/azure/cloud-shell/faq-troubleshooting), fetched
@@ -87,8 +87,8 @@ The bootstrap token is one-use and the session cookie is a separate random secre
 hash in the server process (`tools/installer-ui/session-auth.mjs:4-13`;
 `tools/installer-ui/server.mjs:385-405`). The session cookie and `x-csrf-token` header protect JSON `POST` routes. JSON POST routes require
 `Content-Type: application/json`; child-spawning POST routes also check Origin and Fetch Metadata,
-and child-spawning GET routes refuse cross-site Fetch Metadata (`tools/installer-ui/server.mjs:405-408`;
-`tools/installer-ui/server.mjs:318-324`; `tools/installer-ui/http-helpers.mjs:80-96`). Prefill accepts
+and child-spawning GET routes refuse cross-site Fetch Metadata (`tools/installer-ui/server.mjs:410-411`;
+`tools/installer-ui/server.mjs:321-328`; `tools/installer-ui/http-helpers.mjs:80-96`). Prefill accepts
 only the three known read kinds and text parameters (`tools/installer-ui/server-model.mjs:62-75`;
 `tools/installer-ui/server.mjs:436-447`). When Azure CLI resolves to a Windows `.cmd` or `.bat` shim,
 the prefill seam refuses parentheses in the Foundry resource group before any `az` call
@@ -114,10 +114,10 @@ secret and the page renders non-secret installer answers only
 certificate password unless it is supplied on the command line
 (`Install-ClaudeGateway.ps1:1164-1166`; `Install-ClaudeGateway.ps1:1178-1179`).
 The live server refuses that run shape with `409` and `reason: pfx-needs-terminal` before creating a
-run (`tools/installer-ui/server.mjs:489-491`).
+run (`tools/installer-ui/server.mjs:493-495`).
 The page also disables run buttons for a PFX custom address, keeps preflight available and renders
 the PowerShell run command without `-Yes`, so the installer asks for the PFX password in the terminal
-(`tools/installer-ui/installer-ui.js:305-312`; `tools/installer-ui/ui-model.js:582-620`).
+(`tools/installer-ui/installer-ui.js:396-426`; `tools/installer-ui/ui-model.js:582-620`).
 
 ## Run lifecycle and limits
 
@@ -133,7 +133,7 @@ admission reads identity again under the Azure lease and refuses changed identit
 One Azure CLI lease covers identity, prefill, preflight and a run from admission through its summary.
 Reads queue behind reads, reads and runs are refused while a run holds the lease, and runs are
 refused while a read holds it (`tools/installer-ui/azure-lease.mjs:1-64`;
-`tools/installer-ui/server.mjs:285-289`; `tools/installer-ui/server.mjs:483-516`). One installer run can be active. A second run receives `409`, and `POST /api/run` is not a route, so
+`tools/installer-ui/server.mjs:287-289`; `tools/installer-ui/server.mjs:483-516`). One installer run can be active. A second run receives `409`, and `POST /api/run` is not a route, so
 it returns `404` through the fixed-route fallback (`tools/installer-ui/server.mjs:483-516`;
 `tools/installer-ui/server.mjs:580-581`). A run writes its answers and progress file to a per-run
 temporary directory and removes that directory after the child exits (`tools/installer-ui/server.mjs:346-365`;
@@ -168,7 +168,7 @@ without a summary (`tools/installer-ui/installer-ui-run.js:50-129`).
 
 Read-only child routes use per-route timeouts: step list 60 seconds, identity 120 seconds, prefill
 120 seconds and preflight 600 seconds, with the test override `readOnlyTimeoutMs`
-(`tools/installer-ui/server.mjs:244`). Idle shutdown is armed only when no tracked read-only job or
+(`tools/installer-ui/server.mjs:246`). Idle shutdown is armed only when no tracked read-only job or
 run is active (`tools/installer-ui/server.mjs:253-282`).
 Read-only output is decoded with UTF-8 decoders and capped at 1 MiB across stdout and stderr by
 default. Progress file reads use 64 KiB chunks, and a progress line over 64 KiB becomes one stream
