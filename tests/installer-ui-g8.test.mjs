@@ -188,7 +188,31 @@ test('R3-3 impossible PASS with blocking NOT-RUN returns 502 and stores no finge
     });
     assert.equal(response.status, 502);
     assert.match((await response.json()).error, /result PASS does not match recomputed FAIL/);
-    const fingerprint = preflightFingerprint({ answers: passingAnswers, scope: ['resource-group'], engine: 'pwsh' });
+    const fingerprint = preflightFingerprint({ answers: passingAnswers, scope: ['resource-group'], engine: 'pwsh', identity: identityOne });
+    const run = await app.fetch('/api/run/stream', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'], fingerprint }),
+    });
+    assert.equal(run.status, 409);
+    assert.equal((await run.json()).reason, 'preflight-required');
+  } finally {
+    await app.close();
+  }
+});
+
+test('R3-3 server passes the expected preflight check set into validation', async () => {
+  const app = await start({ env: { P93_INSTALLER_UI_STUB_PREFLIGHT_OMIT_CHECK: 'address.inputs' } });
+  try {
+    const response = await app.fetch('/api/preflight', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'] }),
+    });
+    const body = await response.json();
+    assert.equal(response.status, 502);
+    assert.match(body.error, /missing expected check address\.inputs/);
+    const fingerprint = preflightFingerprint({ answers: passingAnswers, scope: ['resource-group'], engine: 'pwsh', identity: identityOne });
     const run = await app.fetch('/api/run/stream', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

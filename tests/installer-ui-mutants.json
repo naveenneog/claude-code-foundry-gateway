@@ -27,6 +27,15 @@
     "test": "R3-3 installer stub emits every schema preflight check id exactly once"
   },
   {
+    "id": "r3-3-4",
+    "why": "The server must pass the schema expected preflight check set into validation so a missing producer check is refused and no fingerprint is stored.",
+    "file": "tools/installer-ui/server.mjs",
+    "find": "          try { parsed = validatePreflight(JSON.parse(result.stdout), { expectedCheckIds }); } catch (error) {\n",
+    "replace": "          try { parsed = validatePreflight(JSON.parse(result.stdout)); } catch (error) {\n",
+    "testFile": "tests/installer-ui-g8.test.mjs",
+    "test": "R3-3 server passes the expected preflight check set into validation"
+  },
+  {
     "id": "r3-1-1",
     "why": "A new preflight attempt must clear the previous pass for the same answers before later failures.",
     "file": "tools/installer-ui/server.mjs",

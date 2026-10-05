@@ -179,6 +179,7 @@ if (args.includes('-Preflight')) {
     : noCurrentSubscription
       ? { id: 'target.subscription', result: 'FAIL', reason: null, message: 'the current subscription could not be read (az account show returned no subscription id)', remedy: 'Check az account show, or answer SubscriptionId, then run the preflight again.', problems: [{ message: 'the current subscription could not be read (az account show returned no subscription id)', remedy: 'Check az account show, or answer SubscriptionId, then run the preflight again.' }] }
       : { id: 'target.subscription', result: 'PASS', reason: null, message: 'SubscriptionId is not answered; the run uses the current subscription Capture subscription (00000000-0000-4000-8000-000000000093)', remedy: '', problems: [] };
+  const omitCheckId = process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_OMIT_CHECK || '';
   const checks = [
     { id: 'answers.schema', result: fail ? 'FAIL' : 'PASS', reason: null, message: fail ? 'stub requested answers.schema failure' : 'the answers match the answers schema, version 1', remedy: fail ? 'Fix the stub-requested failure.' : '', problems: fail ? [{ message: 'stub requested answers.schema failure', remedy: 'Fix the stub-requested failure.' }] : [] },
     { id: 'answers.crossField', result: 'PASS', reason: null, message: 'the answers that depend on each other agree', remedy: '', problems: [] },
@@ -194,7 +195,7 @@ if (args.includes('-Preflight')) {
     { id: 'businessUnits.ids', result: 'PASS', reason: null, message: 'business unit ids are lower-case and unique', remedy: '', problems: [] },
     { id: 'businessUnits.depth', result: 'PASS', reason: null, message: 'business units have at most two levels', remedy: '', problems: [] },
     { id: 'address.inputs', result: 'PASS', reason: null, message: 'company address inputs are complete', remedy: '', problems: [] },
-  ];
+  ].filter((check) => check.id !== omitCheckId);
   const overallFail = checks.some(blocks);
   console.log(JSON.stringify({
     schemaVersion: 1,
