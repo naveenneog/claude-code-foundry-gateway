@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { validatePreflight, validateProgressEvent, validateStepList } from '../tools/installer-ui/installer-contract.mjs';
 import { createAzureLease } from '../tools/installer-ui/azure-lease.mjs';
 import { createInstallerUiServer } from '../tools/installer-ui/server.mjs';
+import { preflightFingerprint } from '../tools/installer-ui/preflight-record.mjs';
 
 const stubInstaller = fileURLToPath(new URL('./installer-ui-stub.mjs', import.meta.url));
 const passingAnswers = { schemaVersion: 1, SubscriptionId: '00000000-0000-4000-8000-000000000093' };
@@ -23,6 +24,20 @@ async function start(extra = {}) {
   const log = join(scratch, 'stub.ndjson');
   const logs = [];
   const env = { P93_INSTALLER_UI_STUB_LOG: log, ...(extra.env || {}) };
+  if (extra.az) {
+    const az = join(scratch, 'az.cmd');
+    const accountFile = join(scratch, 'account.json');
+    await writeFile(accountFile, JSON.stringify({ id: identityOne.subscriptionId, name: 'Sub One', tenantId: identityOne.tenantId, user: { name: identityOne.user } }), 'utf8');
+    await writeFile(az, `@echo off\r\nnode "${az.replace(/\\/g, '\\\\')}.mjs" %*\r\n`, 'utf8');
+    await writeFile(`${az}.mjs`, `
+import { readFileSync } from 'node:fs';
+const joined = process.argv.slice(2).join(' ');
+if (joined.startsWith('account show')) { console.log(readFileSync(process.env.P93_G7_ACCOUNT_FILE, 'utf8')); process.exit(0); }
+console.error('unexpected az ' + joined); process.exit(2);
+`, 'utf8');
+    env.PATH = `${scratch};${process.env.PATH}`;
+    env.P93_G7_ACCOUNT_FILE = accountFile;
+  }
   const server = await createInstallerUiServer({
     token: 'g7-token-with-at-least-32-bytes-0000',
     csrfToken: 'g7-csrf-token-with-at-least-32-bytes',
@@ -30,7 +45,7 @@ async function start(extra = {}) {
     idleMs: 60_000,
     env,
     log: (line) => logs.push(line),
-    readIdentity: extra.readIdentity ?? (async () => identityOne),
+    readIdentity: extra.az ? extra.readIdentity : (extra.readIdentity ?? (async () => identityOne)),
     beforeRunSpawn: extra.beforeRunSpawn,
     readOnlyTimeoutMs: extra.readOnlyTimeoutMs,
     readOnlyOutputCapBytes: extra.readOnlyOutputCapBytes,
@@ -47,6 +62,7 @@ async function start(extra = {}) {
     log,
     logs,
     scratch,
+    accountFile: env.P93_G7_ACCOUNT_FILE,
     server,
     async fetch(path, options = {}) {
       const headers = { cookie, ...(options.headers || {}) };
@@ -330,6 +346,53 @@ test('S5 passing preflight returns identity and scope and the same identity is a
     const run = await stream(app, { steps: ['resource-group'], fingerprint: preflight.fingerprint });
     assert.equal(run.response.status, 200);
     assert.equal(run.events.at(-1).type, 'summary');
+  } finally {
+    await app.close();
+  }
+});
+
+test('S5 failing preflight carries neither identity nor scope', async () => {
+  const app = await start({ env: { P93_INSTALLER_UI_STUB_PREFLIGHT_FAIL: '1' } });
+  try {
+    const response = await app.fetch('/api/preflight', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'] }) });
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.preflight.result, 'FAIL');
+    assert.equal(body.identity, undefined);
+    assert.equal(body.scope, undefined);
+  } finally {
+    await app.close();
+  }
+});
+
+test('S5 identity read failure after PASS prevents recording a preflight pass', async () => {
+  const identityError = new Error('identity read timed out for test');
+  identityError.status = 504;
+  const app = await start({ readIdentity: async () => { throw identityError; } });
+  try {
+    const response = await app.fetch('/api/preflight', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'] }) });
+    const body = await response.json();
+    assert.equal(response.status, 504);
+    assert.match(body.error, /identity read timed out for test/);
+    const wouldBeFingerprint = preflightFingerprint({ answers: passingAnswers, scope: ['resource-group'], engine: 'pwsh' });
+    const run = await app.fetch('/api/run/stream', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'], fingerprint: wouldBeFingerprint }) });
+    assert.equal(run.status, 409);
+    assert.equal((await run.json()).reason, 'preflight-required');
+  } finally {
+    await app.close();
+  }
+});
+
+test('S5 default identity script detects tenant changes through fake az', async () => {
+  const app = await start({ az: true });
+  try {
+    const preflight = await passingPreflight(app);
+    await writeFile(app.accountFile, JSON.stringify({ id: identityOne.subscriptionId, name: 'Sub One', tenantId: 'tenant-2', user: { name: identityOne.user } }), 'utf8');
+    const response = await app.fetch('/api/run/stream', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'], fingerprint: preflight.fingerprint }) });
+    assert.equal(response.status, 409);
+    const body = await response.json();
+    assert.equal(body.reason, 'identity-changed');
+    assert.match(body.error, /tenant changed/);
   } finally {
     await app.close();
   }

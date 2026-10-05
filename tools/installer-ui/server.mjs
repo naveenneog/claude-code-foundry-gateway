@@ -284,7 +284,7 @@ export async function createInstallerUiServer(options = {}) {
 
   const withAzureRead = async (operation, fn) => withJob(async () => {
     const lease = await azureLease.acquire(operation, 'read', timeoutFor(operation));
-    try { return await fn(lease.remainingTimeout()); }
+    try { return await fn(lease); }
     finally { lease.release(); }
   });
 
@@ -424,7 +424,7 @@ export async function createInstallerUiServer(options = {}) {
       if (req.method === 'GET' && url.pathname === '/api/identity') {
         requireLive();
         assertFetchMetadataForChildGet(req);
-        return send(res, 200, await withAzureRead('identity', (timeoutMs) => readIdentityPayload(timeoutMs)), setCookie);
+        return send(res, 200, await withAzureRead('identity', (lease) => readIdentityPayload(lease.remainingTimeout())), setCookie);
       }
       if (req.method === 'GET' && url.pathname === '/api/run/status') return send(res, 200, { schemaVersion: 1, ...(publicRun(activeRun || lastRun) || {}) }, setCookie);
       if (req.method === 'GET' && url.pathname === '/api/run/attach') {
@@ -438,7 +438,7 @@ export async function createInstallerUiServer(options = {}) {
         assertSameOrigin(req, logRequestRefusal);
         const body = await readJsonBody(req);
         const args = prefillArguments(body);
-        const result = await withAzureRead('prefill', (timeoutMs) => runPowerShell(prefillScript, args, options, { redactStdout: false, timeoutMs, readName: 'prefill', outputCapBytes: outputCapFor() }));
+        const result = await withAzureRead('prefill', (lease) => runPowerShell(prefillScript, args, options, { redactStdout: false, timeoutMs: lease.remainingTimeout(), readName: 'prefill', outputCapBytes: outputCapFor() }));
         if (!result.stdout.trim()) {
           log(`Prefill returned no JSON (exit ${result.code}): ${scrubLocalPaths(result.stderr)}`);
           return send(res, 500, { schemaVersion: 1, error: 'The prefill read returned no result. The terminal that started the installer UI shows the details.' }, setCookie);
@@ -455,9 +455,9 @@ export async function createInstallerUiServer(options = {}) {
         const scope = scopeFromBody(body, requestedSteps);
         const digest = answersDigest(body.answers || {});
         const engine = 'pwsh';
-        return send(res, 200, await withAzureRead('preflight', (timeoutMs) => withRunDirectory(async (dir) => {
+        return send(res, 200, await withAzureRead('preflight', (lease) => withRunDirectory(async (dir) => {
           const answers = await writeAnswers(dir, body.answers || {});
-          const result = await runInstaller('powershell', await installerArguments({ engine: 'pwsh', action: 'preflight', answersPath: answers }), options, { timeoutMs, readName: 'preflight', outputCapBytes: outputCapFor() });
+          const result = await runInstaller('powershell', await installerArguments({ engine: 'pwsh', action: 'preflight', answersPath: answers }), options, { timeoutMs: lease.remainingTimeout(), readName: 'preflight', outputCapBytes: outputCapFor() });
           let parsed;
           try { parsed = validatePreflight(JSON.parse(result.stdout)); } catch (error) {
             if (error.status === 502) throw error;
@@ -471,7 +471,7 @@ export async function createInstallerUiServer(options = {}) {
           let fingerprint = '';
           let identity;
           if (parsed.result === 'PASS' && result.code === 0) {
-            identity = await readIdentitySnapshot(timeoutMs);
+            identity = await readIdentitySnapshot(lease.remainingTimeout());
             fingerprint = preflightFingerprint({ answers: body.answers || {}, scope, engine });
             preflightPasses.replaceForAnswers({ fingerprint, answersDigest: digest, engine, scope, time: new Date().toISOString(), identity });
           } else {
