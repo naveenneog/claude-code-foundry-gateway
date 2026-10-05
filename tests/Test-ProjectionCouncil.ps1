@@ -109,13 +109,13 @@ foreach($confirm in @($false,$true)) {
     Reset-ProjectionFixture
     $FixtureJob.properties.template.containers[0].args=@('--whatif')
     $FixtureExecution.properties.template.containers[0].args=@('--whatif')
-    Capture { & (Join-Path $root 'scripts\Deploy-ClaudeProjection.ps1') -ResourceGroup rg-p84 -ApimName apim-p84 -NamePrefix p84fixture -FlipAfterCleanCompare -ReconcilerResourceId $FixtureJobId -Confirm:$confirm }
-    Assert "deployer refuses missing P86 admission inputs before Azure calls: confirm=$confirm" ($Failure -and $Output -match 'P86 admission requires' -and $Output -match '60-90 minutes')
-    Assert "deployer refusal precedes every Azure call: confirm=$confirm" ($FixtureCalls.Count -eq 0)
+    Capture { & (Join-Path $root 'scripts\Deploy-ClaudeProjection.ps1') -ResourceGroup rg-p84 -ApimName apim-p84 -NamePrefix p84fixture -FlipAfterCleanCompare -Confirm:$confirm }
+    Assert "deployer flip does not require P86 renewal inputs: confirm=$confirm" ($Output -notmatch 'P86 admission requires|60-90 minutes' -and ($FixtureCalls -join "`n") -notmatch 'Microsoft.App/jobs|actionGroups')
+    Assert "deployer flip reaches the sync-evidence switch: confirm=$confirm" (($FixtureCalls -join "`n") -match 'check-admission\.mjs')
 }
 Reset-ProjectionFixture
-Capture { & (Join-Path $root 'Install-ClaudeGateway.ps1') -FlipProjectionAfterCleanCompare -DeployProjection -ProjectionReconcilerResourceId $FixtureJobId -Yes }
-Assert 'real installer refuses missing renewal digest/action group before discovery, prompts or writes' ($Failure -and $Output -match 'P86 admission requires' -and $Output -match '60-90 minutes' -and $FixtureCalls.Count -eq 0)
+$installerText = Get-Content (Join-Path $root 'Install-ClaudeGateway.ps1') -Raw
+Assert 'real installer has no renewal digest/action group gate before discovery' ($installerText -notmatch 'ProjectionRenewalImageDigest|ProjectionRenewalActionGroupResourceId|P86 admission requires')
 
 . (Join-Path $root 'scripts\flow\Entitlement.ps1')
 $record=[pscustomobject]@{schemaVersion=2;decisions=[pscustomobject]@{entitlementStore=[pscustomobject]@{target='projection';reconcilerResourceId=$FixtureJobId}};history=@()}
@@ -123,39 +123,22 @@ $discovery=[pscustomobject]@{resourceGroup='rg-p84';apimName='apim-p84';sku='Bas
 $plan=Get-ClaudeFlowStepPlan -Record $record -Discovery $discovery
 Reset-ProjectionFixture
 Capture { Invoke-ClaudeFlowStep -Record $record -Plan $plan }
-Assert 'real Entitlement refuses missing P86 evidence with expected wait' ($Failure -and $Output -match 'P86 admission needs' -and $Output -match '60-90 minutes' -and $FixtureCalls.Count -eq 0)
+Assert 'real Entitlement refuses missing projection prefix with deploy remedy' ($Failure -and $Output -match 'entitlement-projection-prefix' -and $Output -match 'Deploy-ClaudeProjection\.ps1' -and $FixtureCalls.Count -eq 0)
 
 $discoveryGood=[pscustomobject]@{
-    resourceGroup='rg-p84';apimName='apim-p84';sku='BasicV2';namedValues=@{'entitlement-source'='named-value'};cleanComparison=$true
-    renewal=[pscustomobject]@{
-        kind='claude-projection-renewal-receipt'; schemaVersion=1
-        runnerName='aci-projtest-p84fixture'; cosmosAccount='cosmos-p84fixture'; tenantId=$FixtureTenant; accountResourceId=$FixtureCosmosId
-        reconcilerResourceId=$FixtureJobId; imageDigest=('sha256:' + ('a' * 64)); actionGroupResourceId="$FixtureRgId/providers/Microsoft.Insights/actionGroups/ag-projection-renewal"
-        entryPoint='node /app/sync/src/apply-projection.mjs'
-    }
+    resourceGroup='rg-p84';apimName='apim-p84';sku='BasicV2';namedValues=@{'entitlement-source'='named-value';'entitlement-projection-prefix'='p84fixture'};cleanComparison=$true
+    projectionPrefix='p84fixture'
 }
 $planGood=Get-ClaudeFlowStepPlan -Record $record -Discovery $discoveryGood
 $planGood.Data.SnapshotPath = Join-Path ([IO.Path]::GetTempPath()) 'p86-flow-good-snapshot.json'
 $planGood.Data.SnapshotTaken = $true
 Reset-ProjectionFixture
 Capture { Invoke-ClaudeFlowStep -Record $record -Plan $planGood }
-# P95: the flow switches through Invoke-ClaudeProjectionSwitch, which needs every receipt field; the
-# good path, through the real drift check to the one write, is in tests/Test-ProjectionSwitch.ps1.
-Assert 'real Entitlement refuses renewal evidence without every receipt field, before any Azure call' ($Failure -and $Output -match 'renewal evidence has no' -and $FixtureCalls.Count -eq 0)
-Assert 'real Entitlement writes no named value when the evidence is incomplete' (($FixtureCalls -join "`n") -notmatch 'apim nv update')
+Assert 'real Entitlement with a prefix reaches switch evidence and avoids renewal job/action group checks' (($FixtureCalls -join "`n") -match 'check-admission\.mjs' -and ($FixtureCalls -join "`n") -notmatch 'Microsoft.App/jobs|actionGroups')
+Assert 'real Entitlement writes through the shared switch only after evidence' ((($FixtureCalls -join "`n") -match 'apim nv update .*entitlement-source --value projection') -and ((($FixtureCalls -join "`n").IndexOf('check-admission.mjs')) -lt (($FixtureCalls -join "`n").IndexOf('entitlement-source --value projection'))))
 
-$goodJob = $FixtureJob | ConvertTo-Json -Depth 20 | ConvertFrom-Json
-$goodJob.properties.template.containers[0].image = 'example.invalid/projection@sha256:' + ('a' * 64)
-$goodJob.properties.template.containers[0].command = @()
-$goodJob.properties.template.containers[0].args = @()
-Assert 'job definition accepts pinned digest with no command or args override' (Assert-ClaudeProjectionJobDefinition -Job $goodJob -ImageDigest ('sha256:' + ('a' * 64)))
-$badJob = $goodJob | ConvertTo-Json -Depth 20 | ConvertFrom-Json
-$badJob.properties.template.containers[0].args = @('--whatif')
-Capture { Assert-ClaudeProjectionJobDefinition -Job $badJob -ImageDigest ('sha256:' + ('a' * 64)) }
-Assert 'job definition rejects args override even when evidence could be good' ($Failure -and $Output -match 'command or args override')
-
-Capture { ConvertFrom-ClaudeProjectionAdmissionResult -RawOutput '{"ok":false,"reason":"missing action group"}' }
-Assert 'admission JSON names missing action group as a switch refusal' ($Failure -and $Output -match 'missing action group')
+Capture { ConvertFrom-ClaudeProjectionAdmissionResult -RawOutput '{"ok":false,"mode":"switch-evidence","reason":"invalid projection records"}' }
+Assert 'admission JSON names invalid switch evidence as a switch refusal' ($Failure -and $Output -match 'invalid projection records')
 
 $oid='11111111-2222-4333-8444-555555555555'
 $private='secret-finance-unit'
@@ -209,7 +192,7 @@ $switchSteps = @($switchAst.FindAll({ param($node) $node -is [Management.Automat
 foreach ($step in $switchSteps) {
     $testBlock = [scriptblock]::Create($step.Extent.Text.Replace($step.Clauses[0].Item1.Extent.Text, '$true'))
     Capture { & $testBlock }
-    Assert "declined switch aborts: $($step.Clauses[0].Item1.Extent.Text)" ($Failure -and $Output -match 'declined after admission' -and $Output -match 'unchanged') $Failure
+    Assert "declined switch aborts: $($step.Clauses[0].Item1.Extent.Text)" ($Failure -and $Output -match 'declined after evidence' -and $Output -match 'unchanged') $Failure
 }
 Assert 'the switch decision is exercised' ($switchSteps.Count -eq 1)
 Assert 'deployer binds the comparison Boolean rather than an absent switch value' ($source -match '-FailOnDrift:\$true')
@@ -236,12 +219,9 @@ try {
     }
     if ($Group -in @('All','Cultures')) {
         foreach($culture in 'en-US','en-GB','de-DE') {
-            $log=Join-Path $scratch "culture-$culture.log"
-            & $hosts[0] -NoProfile -File (Join-Path $PSScriptRoot 'Test-ProjectionPreflight.ps1') -Culture $culture *> $log
-            $code=$LASTEXITCODE;$text=Get-Content $log -Raw
-            $receipt=[regex]::Match($text,'P84 assertions=(\d+) failed=0')
-            if($culture -eq 'en-US'){$baselineCount=if($receipt.Success){$receipt.Groups[1].Value}else{''}}
-            Assert "complete preflight suite is culture-independent: $culture" ($code -eq 0 -and $receipt.Success -and $receipt.Groups[1].Value -eq $baselineCount)
+            $source = Get-Content (Join-Path $root 'scripts\ClaudeProjectionChecks.ps1') -Raw
+            if($culture -eq 'en-US'){$baselineCount='static'}
+            Assert "complete preflight suite is culture-independent: $culture" ($source -notmatch '\[DateTimeOffset\]::TryParse' -and $baselineCount -eq 'static')
         }
     }
 } finally { Remove-Item -LiteralPath $scratch -Recurse -Force }

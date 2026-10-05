@@ -5,11 +5,13 @@
 .DESCRIPTION
     One idempotent command for P61. It deploys a private Cosmos projection,
     creates the private network endpoints that the resolver needs to reach it,
-    current named-value decisions when they exist, populates the projection from
-    Entra, compares the resolver records against those decisions or a fresh
-    snapshot for a new gateway, then switches entitlement-source to projection.
-    With -FlipAfterCleanCompare it runs Invoke-ClaudeProjectionSwitch by
-    -ResourceGroup, -ApimName and -NamePrefix. PreflightOnly runs the checks alone.
+    deploys the resolver with SKU-valid inbound access, exports the gateway's
+    current named-value decisions, populates the projection from Entra, compares
+    the resolver records against those decisions, and leaves named values
+    authoritative. With -FlipAfterCleanCompare it deploys, publishes and applies
+    nothing: it runs Invoke-ClaudeProjectionSwitch (ADR-0050) with the projection
+    prefix and switch evidence. PreflightOnly
+    runs the checks alone.
 
     BasicV2 must use a public resolver endpoint because Basic v2 has no
     outbound VNet integration. The public endpoint is not anonymous: App Service
@@ -73,6 +75,11 @@ if (-not $ResolverInboundAccess) {
         'StandardV2' { 'private' }
         'PremiumV2' { 'private' }
     }
+}
+if ($FlipAfterCleanCompare) {
+    . (Join-Path $PSScriptRoot 'ClaudeProjectionSwitch.ps1')
+    $null = Invoke-ClaudeProjectionSwitch -ResourceGroup $ResourceGroup -ApimName $ApimName -NamePrefix $NamePrefix -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup
+    return
 }
 $preflight = Invoke-ClaudeProjectionPreflight -ResourceGroup $ResourceGroup -ApimName $ApimName -NamePrefix $NamePrefix `
     -SubscriptionId $SubscriptionId -Location $Location -Sku $Sku -ResolverInboundAccess $ResolverInboundAccess `
@@ -185,23 +192,25 @@ if ($PSCmdlet.ShouldProcess($resolver.siteName, 'package and publish resolver co
 } else { throw 'Resolver publication was declined; no further steps run.' }
 
 Step 'Point the gateway at the resolver'
+Confirm-ClaudeProjectionResolverServicePrincipal -AppId $ResolverAppId | Out-Null
 # The gateway reads these two only while entitlement-source is projection; the switch requires them to
 # name this resolver (ADR-0050). SECURE-PROJECTION section 9 gives the same step by hand. On a gateway
 # that already serves from the projection, a change would send every request to this resolver at once.
 $liveSource = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-source' -FailOnError
 $pointed = (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-url' -FailOnError) -eq $resolverUrl -and
-    (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-audience' -FailOnError) -eq $resolverAudience
+    (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-audience' -FailOnError) -eq $resolverAudience -and
+    (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-projection-prefix') -eq $NamePrefix
 if ($liveSource -eq 'projection' -and -not $pointed) {
     throw "Refusing to point the gateway at $resolverUrl and $resolverAudience`: entitlement-source is projection, so every request would move to them at once, without the switch's checks. Remedy: return the gateway to named values first (refresh the lists with scripts/Sync-ClaudeAccess.ps1, check them with scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift, then set entitlement-source to named-value), then rerun."
 }
-if ($PSCmdlet.ShouldProcess($ApimName, 'set entitlement-resolver-url and entitlement-resolver-audience to the deployed resolver')) {
+if ($PSCmdlet.ShouldProcess($ApimName, 'set resolver named values and entitlement-projection-prefix to the deployed resolver')) {
     if (-not $pointed) {
         Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-url' -Value $resolverUrl
         Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-audience' -Value $resolverAudience
+        Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-projection-prefix' -Value $NamePrefix
     }
-    Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-projection-prefix' -Value $NamePrefix
 } else { throw 'Pointing the gateway at the resolver was declined; no further steps run.' }
-Ok "entitlement-resolver-url is $resolverUrl; entitlement-source is unchanged"
+Ok "entitlement-resolver-url is $resolverUrl; entitlement-projection-prefix is $NamePrefix; entitlement-source is unchanged"
 $work = Join-Path ([IO.Path]::GetTempPath()) ("claude-projection-" + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force -Path $work | Out-Null
 $snapshot = Join-Path $work 'snapshot.json'
@@ -220,6 +229,7 @@ try {
             --role-definition-id 00000000-0000-0000-0000-000000000002 -o none 2>$null
         if ($LASTEXITCODE -ne 0) { throw 'Runner Cosmos role assignment failed; projection apply was not attempted.' }
         $null = New-ClaudeProjectionSyncArchive -Path $syncArchive -Root $root
+        Start-ClaudeProjectionRunner -ResourceGroup $ResourceGroup -Name $($network.runnerName) -SubscriptionId $SubscriptionId | Out-Null
         Send-RunnerFile -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Path $syncArchive -Destination /work/sync-source.tar.gz | Out-Null
         Send-RunnerFile -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Path $snapshot -Destination /work/snapshot.json | Out-Null
         Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command "node -e require('fs').mkdirSync('/work',{recursive:true})" | Out-Null
@@ -239,15 +249,7 @@ try {
         $compare = ConvertFrom-ClaudeRunnerResult -RawOutput $compareRaw -Step 'Refusing to flip because projection drift remains'
         Ok "clean comparison: $($compare.compared) identities"
     } else { throw 'Projection comparison was declined; no further steps run.' }
-    if ($FlipAfterCleanCompare) {
-        Step 'Switch gateway to projection'
-        . (Join-Path $PSScriptRoot 'ClaudeProjectionSwitch.ps1')
-        $null = Invoke-ClaudeProjectionSwitch -ResourceGroup $ResourceGroup -ApimName $ApimName -NamePrefix $NamePrefix -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup
-        Ok 'entitlement-source is projection'
-    }
-    else {
-        Note 'Clean comparison complete; rerun with -FlipAfterCleanCompare to switch entitlement-source to projection.'
-    }
+    Note 'Clean comparison complete; named values remain authoritative. To switch now, rerun with -FlipAfterCleanCompare.'
 }
 finally {
     Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue

@@ -276,7 +276,9 @@ Invoke-Check 'Projection sync scripts' 'Test-ProjectionSyncScripts.ps1'
 Invoke-Check 'Projection sync package and its import closure' 'Test-ProjectionPackage.ps1'
 Invoke-Check 'Projection renewal templates and deploy script' 'Test-ProjectionRenewal.ps1'
 Invoke-Check 'Projection renewal runs reach admission offline' 'Test-ProjectionRenewalRuns.ps1'
-Invoke-Check 'Projection switch admission and switch function' 'Test-ProjectionSwitch.ps1'
+Invoke-Check 'Projection switch evidence and switch function' 'Test-ProjectionSwitchEvidence.ps1'
+Invoke-Check 'Projection deployer and installer switch wiring' 'Test-ProjectionDeployerInstallerWiring.ps1'
+Invoke-Check 'Projection guided flow switch wiring' 'Test-ProjectionFlowSwitch.ps1'
 Invoke-Check 'Projection installer contract' 'Test-ProjectionInstaller.ps1'
 Invoke-Check 'Installer projection defaults and live verifier' 'Test-ClaudeInstallProjection.ps1'
 Invoke-Check 'Live projection verifier validation and order' 'Test-ClaudeLiveProjection.ps1'
@@ -435,3 +437,4 @@ $failed = @($reported | Where-Object Result -eq 'FAIL').Count
 if ($failed) { Write-Host "$failed check(s) failed." -ForegroundColor Red; exit 1 }
 Write-Host 'All checks passed.' -ForegroundColor Green
 exit 0
+

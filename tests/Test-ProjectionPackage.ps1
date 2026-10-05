@@ -103,7 +103,7 @@ try {
     $apply = Invoke-Entrypoint (Join-Path $unpacked 'sync\src\apply-projection.mjs')
     Assert 'apply-projection.mjs starts outside the repository and asks for its endpoint' ($apply.Code -eq 1 -and $apply.Json -and $apply.Json.error -eq '--cosmos is required') $apply.Output.Trim()
     $admission = Invoke-Entrypoint (Join-Path $unpacked 'sync\src\check-admission.mjs')
-    Assert 'check-admission.mjs starts outside the repository and asks for its endpoint' ($admission.Code -eq 1 -and $admission.Json -and (($admission.Json.error -eq '--cosmos is required') -or ($admission.Json.reason -eq '--cosmos is required'))) $admission.Output.Trim()
+    Assert 'check-admission.mjs starts outside the repository and asks for its endpoint' ($admission.Code -eq 1 -and $admission.Json -and $admission.Json.error -eq '--cosmos is required') $admission.Output.Trim()
 
     # Negative control: the same start fails when the package misses a module, so the two
     # assertions above cannot pass on a layout that stops with a missing import.

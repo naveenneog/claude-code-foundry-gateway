@@ -167,7 +167,7 @@ $expectedPortalSteps = [ordered]@{
         'Deploy the resolver with Standard v2 outbound VNet integration and upload code'
         'Set resolver named values without switching entitlement'
         'Populate and compare the projection through an in-VNet runner container'
-        'Deploy the scheduled renewal job, its registry and its alerts'
+        'Deploy the optional sync job, its registry and its alerts'
     )
     '11' = @(
         'Resolve the gateway URL and run an entitled request'
@@ -247,7 +247,7 @@ $azPortalMapping = [ordered]@{
         @{ portal = 'Deploy the resolver with Standard v2 outbound VNet integration and upload code'; az = @('Deploy the resolver with Standard v2 outbound VNet integration and upload code.') }
         @{ portal = 'Set resolver named values without switching entitlement'; az = @('Set resolver named values without switching entitlement.') }
         @{ portal = 'Populate and compare the projection through an in-VNet runner container'; az = @('Populate and compare the projection through an in-VNet runner container.') }
-        @{ portal = 'Deploy the scheduled renewal job, its registry and its alerts'; az = @('Deploy the scheduled renewal job, its registry and its alerts.') }
+        @{ portal = 'Deploy the optional sync job, its registry and its alerts'; az = @('Deploy the optional sync job, its registry and its alerts.') }
         @{ none = 'Projection switch status is read-only and intentionally has no portal step.'; az = @('Projection switch status.') }
     )
     '11' = @(

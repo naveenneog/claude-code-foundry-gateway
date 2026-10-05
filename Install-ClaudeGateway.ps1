@@ -877,6 +877,7 @@ if ($EntitlementStore -eq 'projection') {
     if ($ResolverInboundAccess -eq 'public') {
         Write-Host '  Projection resolver: public, Entra-authenticated resolver.' -ForegroundColor Yellow
         Write-Host '    The resolver allows only the gateway managed identity token, pins tenant and audience, and keeps Cosmos private.' -ForegroundColor DarkGray
+        Write-Host '    APIM v2 outbound IP addresses are not a stable security boundary, so IP restrictions are optional defense-in-depth, not the primary control.' -ForegroundColor DarkGray
     }
     else {
         Write-Host '  Projection resolver: private endpoint.' -ForegroundColor Green

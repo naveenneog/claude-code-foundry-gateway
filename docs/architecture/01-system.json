@@ -118,7 +118,7 @@
       "Database claude; container entitlement; partition /oid",
       "Private endpoint + private DNS",
       "Key auth disabled",
-      "Records expire absolutely."
+      "Persistent entitlement records."
     ] },
     { "id": "network", "x": 666, "y": 1146, "w": 280, "h": 202, "tone": "teal", "compact": true, "title": "Network and host services", "lines": [
       "VNet integration + private endpoints and DNS links",

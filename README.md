@@ -20,16 +20,17 @@ Start with [Setup](docs/SETUP.md) for deployment or
 > **not 500,000 concurrent developers** or a completed directory scan.
 >
 > Projection deployment requires PowerShell 7. Its [read-only preflight](docs/SECURE-PROJECTION.md#one-command-deployment)
-> runs before Azure writes. Records expire within two hours, and without renewal every developer
-> receives 503, so a switch to the projection is admitted only over the renewal job's evidence:
-> `scripts/Deploy-ClaudeProjectionRenewal.ps1` deploys the job ([ADR-0049](docs/adr/0049-projection-renewal-deployment.md)),
-> and `scripts/Deploy-ClaudeProjection.ps1 -FlipAfterCleanCompare` switches without deploying
-> anything, after a drift check, a compare and admission ([ADR-0050](docs/adr/0050-projection-switch-function.md)).
+> runs before Azure writes. Projection records persist until a sync deletes or changes them,
+> so a sync-job outage does not stop developers. `scripts/Sync-ClaudeAccess.ps1 -User`
+> refreshes one developer through the in-VNet runner; without `-User` it refreshes everyone.
+> `scripts/Deploy-ClaudeProjection.ps1 -FlipAfterCleanCompare` switches without deploying
+> anything, after resolver checks, drift check, runner compare and Cosmos switch evidence
+> ([ADR-0051](docs/adr/0051-persistent-sync-based-cosmos-entitlement.md)).
 >
 > The current two-always-ready-instance profile costs **$91.56/month at rest**.
-> Hourly lease renewal at 500,000 members adds about **365 million writes/month**,
-> about **$538/month** at the measured create RU charge and stated list price
-> (derived, not a measured scheduled-sync bill). APIM, Foundry and other usage
+> Projection writes now follow directory churn. The older 500,000-member renewal estimate was
+> about **365 million writes/month** and **$538/month** at the measured create RU charge and
+> stated list price; it is historical, not the current operating model. APIM, Foundry and other usage
 > costs are additional. See the [dated P19 record](docs/status/P19.md#where-p19-stands-2026-09-24),
 > [Scale](docs/SCALE.md) and [private deployment](docs/SECURE-PROJECTION.md).
 >
