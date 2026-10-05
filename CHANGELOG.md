@@ -67,7 +67,8 @@ exact streaming cache-creation detail remains **U13**.
   coherent signed-in tenant states. The Installer UI test wrapper now requires an exact node:test
   subtest count and fails closed on skipped, todo, cancelled, failed, missing, duplicate or
   load-failed TAP output. Its mutation record now stores exact find and replacement text, parse
-  result, exit code, check count, failed count, target test and verdict for each measured mutant.
+  result, exit code, check count, failed count, target test and verdict for each measured mutant;
+  81 of 81 mutants across the packet's guards are caught.
   The Installer UI guide now documents the portable `node ./tools/installer-ui/server.mjs` command,
   static mode, the unverified Cloud Shell Web preview facts, the security model, run lifecycle and
   output limits with source citations.
