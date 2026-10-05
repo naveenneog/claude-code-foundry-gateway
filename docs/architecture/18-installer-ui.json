@@ -12,6 +12,7 @@
   "sources": [
     "tools/installer-ui/server.mjs",
     "tools/installer-ui/run-record.mjs",
+    "tools/installer-ui/run-admission.mjs",
     "tools/installer-ui/installer-stream.mjs",
     "tools/installer-ui/run-transport.mjs",
     "tools/installer-ui/installer-contract.mjs",
@@ -60,6 +61,7 @@
     "fingerprint": { "label": "preflight-record.mjs", "source": "tools/installer-ui/preflight-record.mjs", "match": "preflightFingerprint" },
     "contract": { "label": "installer-contract.mjs", "source": "tools/installer-ui/installer-contract.mjs", "match": "validateProgressEvent" },
     "record": { "label": "run-record.mjs", "source": "tools/installer-ui/run-record.mjs", "match": "createRunRecord" },
+    "admission": { "label": "run-admission.mjs", "source": "tools/installer-ui/run-admission.mjs", "match": "createRunAdmissions" },
     "installer-stream": { "label": "installer-stream.mjs", "source": "tools/installer-ui/installer-stream.mjs", "match": "runInstallerStreaming" },
     "transport": { "label": "run-transport.mjs", "source": "tools/installer-ui/run-transport.mjs", "match": "createLineHandler" },
     "installer": { "label": "Install-ClaudeGateway.ps1", "source": "Install-ClaudeGateway.ps1", "match": "$ProgressPath" },
@@ -82,9 +84,9 @@
     { "id": "preflight", "x": 748, "y": 422, "w": 320, "h": 190, "tone": "blue", "title": "7 - Versioned preflight", "lines": ["[[preflight-producer]] -Preflight -Json is checked by [[contract]].", "Field links use problem paths and x-checkId metadata."] },
     { "id": "fingerprint", "x": 1110, "y": 422, "w": 306, "h": 190, "tone": "blue", "title": "8 - Fingerprint gate", "lines": ["[[fingerprint]] binds answers, engine, scope and identity.", "[[step-scope]] validates selected steps."] },
     { "id": "run", "x": 24, "y": 748, "w": 320, "h": 260, "tone": "teal", "title": "9 - Streamed run", "lines": ["[[browser-run]] reports run summaries.", "[[server]] starts [[installer]] only through pwsh or node stub.", "[[steps-producer]] writes progress NDJSON."] },
-    { "id": "record", "x": 386, "y": 768, "w": 320, "h": 220, "tone": "teal", "title": "10 - Run record", "lines": ["[[record]] stores active or last run state and tail.", "Status and attach routes survive browser disconnect."] },
-    { "id": "transport", "x": 748, "y": 768, "w": 320, "h": 220, "tone": "teal", "title": "11 - Transport limits", "lines": ["[[installer-stream]] streams installer output through [[transport]].", "[[child-output]] caps read-only output; console output has a 4 MiB cap."] },
-    { "id": "stop", "x": 1110, "y": 768, "w": 306, "h": 220, "tone": "teal", "title": "12 - Stop and redaction", "lines": ["Stop uses taskkill.exe on Windows or a POSIX process group.", "server-model.mjs applies [[redact]] rules."] }
+    { "id": "record", "x": 386, "y": 768, "w": 320, "h": 240, "tone": "teal", "title": "10 - Run record", "lines": ["[[record]] stores active or last run state and tail.", "[[admission]] records each run request for status.", "Status and attach routes survive browser disconnect."] },
+    { "id": "transport", "x": 748, "y": 768, "w": 320, "h": 240, "tone": "teal", "title": "11 - Transport limits", "lines": ["[[installer-stream]] streams installer output through [[transport]].", "[[child-output]] caps read-only output; console output has a 4 MiB cap."] },
+    { "id": "stop", "x": 1110, "y": 768, "w": 306, "h": 240, "tone": "teal", "title": "12 - Stop and redaction", "lines": ["Stop uses taskkill.exe on Windows or a POSIX process group.", "server-model.mjs applies [[redact]] rules."] }
   ],
   "edges": [
     { "from": "launch", "to": "form", "kind": "data", "points": [[344,170],[386,170]] },
@@ -98,6 +100,6 @@
     { "from": "run", "to": "record", "kind": "data", "points": [[344,878],[386,878]] },
     { "from": "record", "to": "transport", "kind": "data", "points": [[706,878],[748,878]] },
     { "from": "transport", "to": "stop", "kind": "control", "points": [[1068,878],[1110,878]] },
-    { "from": "stop", "to": "record", "kind": "control", "points": [[1263,988],[1263,1032],[546,1032],[546,988]] }
+    { "from": "stop", "to": "record", "kind": "control", "points": [[1263,1008],[1263,1044],[546,1044],[546,1008]] }
   ]
 }

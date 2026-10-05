@@ -110,7 +110,13 @@ step lists and preflight payloads fail closed and malformed progress events beco
 
 Run state lives in `tools/installer-ui/run-record.mjs`, not in a browser connection. `GET
 /api/run/status` reports the active or last run, `GET /api/run/attach?after=<seq>` replays the tail
-and follows live events, and `POST /api/run/stop` stops the child process tree. `tools/installer-ui/run-transport.mjs`
+and follows live events, and `POST /api/run/stop` stops the child process tree.
+`tools/installer-ui/run-admission.mjs` keeps the admission of the last 20 run requests by client
+request id (`admitting`, then `started` with the run id or `refused` with the error and reason), and
+`GET /api/run/status?request=<id>` adds that record to the status
+(`tools/installer-ui/run-admission.mjs:1-30`; `tools/installer-ui/server.mjs:357-361`;
+`tools/installer-ui/server.mjs:424-430`; `tools/installer-ui/server.mjs:462`; `tools/installer-ui/server.mjs:471`).
+`tools/installer-ui/run-transport.mjs`
 handles UTF-8 carries, progress-file offsets, NDJSON writes and backpressure. The server caps console
 bytes and line bytes before publishing output (`tools/installer-ui/run-record.mjs:10-127`;
 `tools/installer-ui/server.mjs:357-367`; `tools/installer-ui/server.mjs:517-530`;

@@ -582,7 +582,7 @@
       "source": "docs/architecture/18-installer-ui.json",
       "inputs": {
         "Install-ClaudeGateway.ps1": "fbc1ad44ddc5d7f3a318b4d8050f410ebb28a3f901dc89d2a9b65457f6de6057",
-        "docs/architecture/18-installer-ui.json": "912db3bb679473ef0e24eba820dc1d8795351b4a2509c6c570c8e475d48100fc",
+        "docs/architecture/18-installer-ui.json": "8136106764ed520155b4833e6adcb2c52b3879db46c98ae35e34bfeaa52b7300",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
@@ -608,6 +608,7 @@
         "tools/installer-ui/installer-ui-run.js": "11a71c7ebbc9cf9601a0f7de27f74664ef278aa52b7d9eb8c196e72c25d126a6",
         "tools/installer-ui/installer-ui.js": "f9dc6db7aa6904a6cbdcb3416cbcf96230a4b305bab2c1ec83c7294f433a990c",
         "tools/installer-ui/preflight-record.mjs": "50378c92002189ed02bde633f426443adf7fedb327fef8de600a54cbae18e76b",
+        "tools/installer-ui/run-admission.mjs": "ede68016227f46fa779205d2106ff01d5b0aae4c5c663090c86b53a09a41e47e",
         "tools/installer-ui/run-record.mjs": "d05718d58e41a7bd49c74f248408c5a9e1f7ae913a7577add9cffd9f1d0e6c7d",
         "tools/installer-ui/run-transport.mjs": "58f692b682466303be1bf9c1f88c9f90c09af92ec1f95d429117f70ced2f8253",
         "tools/installer-ui/server-model.mjs": "8f9c26952ea0fd6b226e264b43837898a00ac3c2b95a60a9f39be1f56a611407",
@@ -619,7 +620,7 @@
       "outputs": [
         {
           "path": "docs/images/architecture/installer-ui.png",
-          "sha256": "c15f07871adacd54169b077cb81d8d7e2b72d38f39e29bd0d936626762ba8d73"
+          "sha256": "cd1f8a6836fecd3b14d2b386b27b1786011e723eeb2556b0f728fa806b22720f"
         }
       ]
     }
