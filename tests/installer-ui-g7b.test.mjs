@@ -129,6 +129,23 @@ test('P1 stopped run reports stopped status rather than an error', async () => {
   }
 });
 
+test('R2-1 stopped run names the step from progress and summary message', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await passPreflight(page);
+    await page.route('**/api/run/stream', (route) => route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"seq":1,"type":"progress","stepId":"resource-group","event":"started","message":"started"}\n{"seq":2,"type":"summary","exitCode":null,"failedStepId":"","resumeCommand":"","state":"stopped","message":"Stopped installer run at resource-group. The install checkpoint resumes when the same steps run again."}\n' }));
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await page.locator('#run-status').getByText(/Run stopped at resource-group/).waitFor();
+    assert.doesNotMatch(await page.locator('#run-status').textContent(), /current step/);
+    assert.equal(await page.locator('#run-error').textContent(), '');
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
 test('P1 cancelled full run and stop explain that nothing was started or stopped', async () => {
   const app = await start({ env: { P93_INSTALLER_UI_STUB_DELAY_MS: '1200' } });
   const { browser, page, pageErrors } = await openPage(app);

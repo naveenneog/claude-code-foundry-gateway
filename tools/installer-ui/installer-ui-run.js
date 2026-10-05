@@ -48,6 +48,7 @@
     }
 
     function finishRun(summary) {
+      const stoppedStep = summary.stepId || activeStepId || parseStoppedStep(summary.message) || summary.failedStepId || lastFailedStep || "the current step";
       activeRunId = "";
       activeStepId = "";
       runActive = false;
@@ -55,7 +56,7 @@
       updateRunAdmission();
       if (summary.resumeCommand) appendRunLine(`Resume: ${summary.resumeCommand}`);
       if (summary.state === "stopped") {
-        return { statusText: `Run stopped at ${summary.stepId || activeStepId || lastFailedStep || "the current step"}.` };
+        return { statusText: `Run stopped at ${stoppedStep}.` };
       }
       if (summary.state === "exited" && summary.exitCode === 0) return {};
       const code = summary.exitCode === null || summary.exitCode === undefined ? "unknown" : String(summary.exitCode);
@@ -65,6 +66,11 @@
       const error = new Error(pieces.join(" "));
       error.data = { error: error.message };
       throw error;
+    }
+
+    function parseStoppedStep(message) {
+      const match = String(message || "").match(/Stopped installer run at ([^.]+)\./);
+      return match?.[1] || "";
     }
 
     async function readRunStream(res) {
