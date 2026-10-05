@@ -1270,6 +1270,12 @@ foreach ($k in $rows.Keys) {
     if ([string]::IsNullOrWhiteSpace($k)) { Write-Host '' ; continue }
     Write-Host ("  {0,-24} {1}" -f $k, $rows[$k])
 }
+if ($EntitlementStore -eq 'projection') {
+    # Choosing projection deploys and switches it (ADR-0052); the summary is the approval, so it names the steps.
+    Write-Host ''
+    Write-Host '  After the gateway, the Cosmos projection:' -ForegroundColor DarkGray
+    foreach ($step in (Get-ClaudeInstallerProjectionPlan -DeploySyncJob:$DeploySyncJob).Steps) { Write-Host "    - $step" -ForegroundColor DarkGray }
+}
 Write-Host ''
 if ($ExistingApim) {
     Write-Host "  Reusing $apimName - no new API Management, no new bill." -ForegroundColor Green
@@ -1574,10 +1580,6 @@ else {
 
 if ($EntitlementStore -eq 'projection') {
     Write-Step 'Projection deployment'
-    if ($WhatIfPreference) {
-        $plan = Get-ClaudeInstallerProjectionPlan -WhatIf -DeploySyncJob:$DeploySyncJob
-        foreach ($step in $plan.Steps) { Write-Note "WhatIf: would $step." }
-    }
     Invoke-ClaudeInstallerProjectionDeployment -Root $root -ResourceGroup $ResourceGroup -ApimName $apimName -NamePrefix $NamePrefix `
         -Location $Location -Sku $Sku -ResolverInboundAccess $ResolverInboundAccess -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup `
         -SubscriptionId $SubscriptionId -ProjectionResolverAppId $ProjectionResolverAppId -WhatIf:$WhatIfPreference | Out-Null
