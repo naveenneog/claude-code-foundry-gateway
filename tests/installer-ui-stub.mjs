@@ -36,6 +36,15 @@ const realSteps = [
 ];
 const stepTitle = (id) => realSteps.find(([stepId]) => stepId === id)?.[1] || id;
 
+// The installer's own children (pwsh starting az) outlive it unless the whole tree is stopped. A Node child that is not
+// detached ends with its Node parent on Windows (libuv UV_PROCESS_DETACHED, docs.libuv.org/en/v1.x/process.html), so the
+// heartbeat grandchild is detached there and only a tree kill (taskkill /T) ends it. It still exits 10 s after its parent
+// is gone, well after the tests' 500 ms check, so a missed tree kill fails the test without leaving a process behind.
+function startHeartbeatGrandchild(heartbeat) {
+  const script = "const {appendFileSync}=require('fs'); const parent=Number(process.argv[2]); let goneSince=0; setInterval(()=>{ appendFileSync(process.argv[1], Date.now()+'\\n'); try { process.kill(parent, 0); goneSince=0; } catch { goneSince=goneSince||Date.now(); if (Date.now()-goneSince>10000) process.exit(0); } },100);";
+  return spawn(process.execPath, ['-e', script, heartbeat, String(process.pid)], { stdio: 'ignore', detached: process.platform === 'win32', windowsHide: true });
+}
+
 if (args.includes('-ListSteps')) {
   if (process.env.P93_INSTALLER_UI_STUB_BAD_LIST === 'version') {
     console.log(JSON.stringify({ schemaVersion: 2, installer: 'pwsh', checkpoint: null, runId: null, steps: [] }));
@@ -78,7 +87,7 @@ const answers = answersPath ? JSON.parse(readFileSync(answersPath, 'utf8')) : {}
 if (args.includes('-Preflight')) {
   if (process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_HANG) {
     const heartbeat = process.env.P93_INSTALLER_UI_STUB_PREFLIGHT_HANG;
-    const child = spawn(process.execPath, ['-e', `const {appendFileSync}=require('fs'); setInterval(()=>appendFileSync(process.argv[1], Date.now()+"\\n"),100);`, heartbeat], { stdio: 'ignore', detached: false });
+    const child = startHeartbeatGrandchild(heartbeat);
     appendFileSync(`${heartbeat}.pid`, `${process.pid}\n${child.pid}\n`);
     await new Promise(() => {});
   }
@@ -153,7 +162,7 @@ if (args.includes('-Yes')) {
   }
   if (process.env.P93_INSTALLER_UI_STUB_GRANDCHILD_HEARTBEAT) {
     const heartbeat = process.env.P93_INSTALLER_UI_STUB_GRANDCHILD_HEARTBEAT;
-    const child = spawn(process.execPath, ['-e', `const {appendFileSync}=require('fs'); setInterval(()=>appendFileSync(process.argv[1], Date.now()+"\\n"),100);`, heartbeat], { stdio: 'ignore', detached: false });
+    const child = startHeartbeatGrandchild(heartbeat);
     appendFileSync(`${heartbeat}.pid`, `${process.pid}\n${child.pid}\n`);
     if (progressPath) appendFileSync(progressPath, progressLine({ stepId: steps[0], event: 'started', message: 'started' }) + '\n');
     setInterval(() => {}, 1000);
