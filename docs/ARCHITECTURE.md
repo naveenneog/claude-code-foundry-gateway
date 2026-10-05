@@ -89,14 +89,14 @@ The Node server starts only the configured PowerShell command, a Node test stub 
 `tests/installer-ui-structure.test.mjs:67-87`).
 `tools/installer-ui/azure-lease.mjs` serializes identity, prefill, preflight and run admission so the
 server has one Azure CLI-producing operation at a time (`tools/installer-ui/azure-lease.mjs:1-64`;
-`tools/installer-ui/server.mjs:285-289`).
+`tools/installer-ui/server.mjs:287-289`).
 
 Preflight admission is fingerprinted by `tools/installer-ui/preflight-record.mjs`; a run needs a
 stored PASS for the same answers, a covering step scope and the same identity snapshot
 (`tools/installer-ui/preflight-record.mjs:28-54`; `tools/installer-ui/server.mjs:464-508`).
 `tools/installer-ui/step-scope.mjs` validates selected step ids against the producer step list before
 the Azure lease is requested (`tools/installer-ui/step-scope.mjs:1-35`;
-`tools/installer-ui/server.mjs:450-456`; `tools/installer-ui/server.mjs:486-488`).
+`tools/installer-ui/server.mjs:455-463`; `tools/installer-ui/server.mjs:488-499`).
 Versioned installer-interface checks live in `tools/installer-ui/installer-contract.mjs`, so malformed
 step lists and preflight payloads fail closed and malformed progress events become stream errors
 (`tools/installer-ui/installer-contract.mjs:29-89`).
