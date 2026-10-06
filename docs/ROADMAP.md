@@ -100,7 +100,7 @@ deployment by hand fails ([P94 status](status/P94.md#p94-the-p86-renewal-job-dep
 |---|---|---|
 | P94 | Merged (`ce8b084`) with the owner's approval on 2026-10-05, after council round 3 and the packet gate at `5320b17` | The P86 renewal job deploys and renews: one sync package for the image and the runner (the image and runner currently miss `resolver/src/entitlement.mjs`), a renewal subnet in the projection network, a registry template deployed before the image build, the job's client id, tier group ids and per-run business units, working log routing and alerts, `scripts/Deploy-ClaudeProjectionRenewal.ps1`, an offline renewal simulation that reaches admission, and the guide and its guard ([ADR-0049](adr/0049-projection-renewal-deployment.md)). |
 | P95 | Merged (`4e5ad2f`) with the owner's approval on 2026-10-05, after P94, council round 5 and the packet gate at `8c13d79` | The switch-over runs end to end: a switch never repopulates; one switch function for the deployer, installer and guided flow (receipt and resolver checks, drift check, compare, admission, backup, one named-value write); the guided flow reads the renewal receipt from its decision record's folder or the repository's `onboarding/`; every receipt value is checked before any call; the gateway must call the resolver that reads the renewed Cosmos account, read from the live site and its settings, and the deployer's normal run points it there, but on a gateway already on the projection stops before any write unless it redeploys the resolver the gateway calls; the installer reads `entitlement-source` and the resolver values fail-closed and takes a gateway for new only when Azure reports it missing; the guided flow's plan lists its one write and the documented rollback; admission requires an email receiver on the action group; admission binds the job's tier group ids, gateway, identity, Cosmos account and tenant to the evidence it accepts and to the compared gateway, so a renewal redeploy that changes them needs fresh runs; a restore does not switch to the projection; P84 text replaced; an owner-attended live runbook. |
-| P96 | On `p96-field-fixes`, based on `main` `ee7b486`; the owner approved its merge on 2026-10-05, after its council and packet gate | Fixes from a live deployment: a new business unit identifier with a capital is refused with the lower-case rule before any write, by `Set-ClaudeBusinessUnit.ps1`, the AUM bridge and the manager's prompt; another spelling of a stored unit is refused with the stored spelling, the writers compare identifiers by their characters and keep each spelling's mode and parent entry, and a budget mode is refused for an identifier with capitals, while a unit the registry already holds with capitals keeps working; the guided flow's Tier and Desktop sign-in changes name their snapshot before their write ([P96 status](status/P96.md#p96-fixes-from-a-live-deployment-2026-10-05)). |
+| P96 | Merged (`755845c`) on 2026-10-06 with the owner's approval of 2026-10-05, after council round 7 and the packet gate at `c7f93d4` | Fixes from a live deployment: a new business unit identifier with a capital is refused with the lower-case rule before any write, by `Set-ClaudeBusinessUnit.ps1`, the AUM bridge and the manager's prompt; another spelling of a stored unit is refused with the stored spelling, the writers compare identifiers by their characters and keep each spelling's mode and parent entry, and a budget mode is refused for an identifier with capitals, while a unit the registry already holds with capitals keeps working; the guided flow's Tier and Desktop sign-in changes name their snapshot before their write ([P96 status](status/P96.md#p96-fixes-from-a-live-deployment-2026-10-05)). |
 
 Follow-ups from the P94 council, not yet packets: `sync/package-lock.json` carries `sha1` integrity
 for 50 of its 53 packages because this workstation reaches npm only through a feed whose metadata
@@ -163,6 +163,12 @@ snapshot path. Follow-ups from P96, not yet packets
   job treat them as one team; the writers read exact keys since P96. Exact keys for the readers and the
   job, with the parity test in `tests/Test-ProjectionRenewalRuns.ps1` kept, is a decision about the
   job's ordering as well.
+- `tests/Test-FlowPermutations.ps1` reads each run's output with `ReadToEndAsync` and waits 5 seconds
+  for it after the run exits (`Invoke-Runs`). On a hosted runner the Status run for a signed-out Azure CLI
+  exited 0 with output that did not hold its comparison line (pull request #5, attempt 1); the suite passes
+  locally and passed on attempt 3. The cause is not confirmed: each pipe read blocks a thread-pool thread,
+  six runs at a time. Waiting for the read until the run's timeout, and failing with "output not captured"
+  instead of matching empty text, would separate a capture failure from a wrong answer.
 
 M0 is shipped. The table below is the queue; the checklist under it is what the gate tracks.
 
@@ -585,7 +591,7 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       requires an email receiver; admission refuses evidence produced under other tier group ids,
       another gateway or another identity than the job and the comparison now name; P84 text is
       replaced; the live runbook is written for the owner
-- [ ] P96 Fixes from a live deployment — acceptance: a new business unit identifier with a capital is
+- [x] P96 Fixes from a live deployment — acceptance: a new business unit identifier with a capital is
       refused with the lower-case rule before any write by `Set-ClaudeBusinessUnit.ps1`, the AUM
       bridge and the manager's prompt; a spelling that differs only in case from a stored unit is
       refused with the stored spelling, and two stored spellings stay two units with their own mode
