@@ -12,8 +12,17 @@ retention and access controls. See [Architecture](ARCHITECTURE.md) and
 [Authentication](AUTHENTICATION.md) before relying on a security claim.
 
 ---
+## Quickstart
+
+This comparison is a reference lookup for choosing between Claude Enterprise, this Azure gateway and direct Foundry access.
+
+**Expected result:** the selected path names its control plane, budget model, data boundary and operational owner before deployment starts.
 
 ## The three options
+
+<details>
+
+<summary>Comparison details</summary>
 
 | | **A. Anthropic direct** | **B. Foundry direct** | **C. Foundry + gateway** |
 |---|---|---|---|
@@ -31,7 +40,12 @@ and a good debugging isolation point — nothing more. This accelerator builds C
 
 ---
 
+</details>
 ## What actually changes
+
+<details>
+
+<summary>Comparison details</summary>
 
 ### 1. There is no API key to leak
 
@@ -143,7 +157,12 @@ That is worth more than any single feature in these tables.
 
 ---
 
+</details>
 ## What you give up
+
+<details>
+
+<summary>Comparison details</summary>
 
 An honest architecture review has to cover this side too.
 
@@ -160,7 +179,12 @@ An honest architecture review has to cover this side too.
 
 ---
 
+</details>
 ## How to choose
+
+<details>
+
+<summary>Comparison details</summary>
 
 ```text
 Do you need per-developer budgets or chargeback?
@@ -191,7 +215,12 @@ small, tightly-held direct account for evaluating new releases.
 
 ---
 
+</details>
 ## Verified technical differences
+
+<details>
+
+<summary>Comparison details</summary>
 
 Established empirically against a live deployment while building this, not read
 from documentation:
@@ -210,6 +239,7 @@ from documentation:
 
 ---
 
+</details>
 ## Next
 
 | Task | Guide |

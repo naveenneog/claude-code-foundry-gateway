@@ -15,8 +15,17 @@ Sources, in the order they were trusted:
    and [Govern, secure, and operate](https://learn.microsoft.com/azure/api-management/ai-gateway-govern-secure-assets).
 4. The deployment shape in
    [Azure-Samples/simple-foundry-hosted-agent-python-aigateway](https://github.com/Azure-Samples/simple-foundry-hosted-agent-python-aigateway).
+## Quickstart
+
+This page records the AI Gateway tier evaluation. It is reference material, not a deployment path for the current governed gateway.
+
+**Expected result:** readers can see why the repository uses API Management v2 for the shipped path and what remains unverified for the AI Gateway tier.
 
 ## Side by side
+
+<details>
+
+<summary>AI Gateway tier details</summary>
 
 | | AI Gateway tier (preview) | This gateway |
 |---|---|---|
@@ -34,7 +43,12 @@ Sources, in the order they were trusted:
 Learn says governance policies are operational controls, and that financial reporting should use
 provider billing or Azure Cost Management. That page predates the cost limits.
 
+</details>
 ## How it is deployed
+
+<details>
+
+<summary>AI Gateway tier details</summary>
 
 Measured: the gateway, its connector gateway, monitoring, a managed-identity Foundry provider and a
 runtime key deployed in **133 s**.
@@ -63,7 +77,12 @@ A `counterKey` given as a string, as in the sample and the documentation's examp
 measured, `Invalid field 'counterKey' specified`. Per-key overrides go in an `overrides` array on
 the cost limit; their shape was not tested.
 
+</details>
 ## What happened with Claude
+
+<details>
+
+<summary>AI Gateway tier details</summary>
 
 The runtime did not serve a model. Its health endpoint returned 200, but every model route returned
 404 `Resource not found`, with or without a key, from provisioning until the last check more than
@@ -77,7 +96,12 @@ Not diagnosed. The portal is the supported way to create a gateway and was not u
 sign-in asked for a fresh multifactor approval that could not be given unattended. The deployment
 followed the published sample's shape, which expects its model route within a minute.
 
+</details>
 ## Which to use
+
+<details>
+
+<summary>AI Gateway tier details</summary>
 
 | You need | Use |
 |---|---|
@@ -87,3 +111,5 @@ followed the published sample's shape, which expects its model route within a mi
 
 Revisit when the tier enforces budgets per Entra principal, which its release notes announce as
 coming: that removes the main reason to keep identity in front of it.
+
+</details>
