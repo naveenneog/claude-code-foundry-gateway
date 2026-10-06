@@ -57,7 +57,7 @@ blocks appear only when every current answer has an `x-appliedBy` entry for
 the model owns that list and a test keeps it equal to `scripts/install-checkpoint.sh`
 (`tools/installer-ui/ui-model.js:582-583`; `tools/installer-ui/ui-model.js:614-651`; `tests/installer-ui-g2.test.mjs:350-356`). Static mode
 does not read Azure and does not start the installer. The page hides live action and prefill controls
-in static mode (`tools/installer-ui/installer-ui.js:677-678`). The Cloud Shell handoff displayed by
+in static mode (`tools/installer-ui/installer-ui.js:680-681`). The Cloud Shell handoff displayed by
 the page is download, **Manage files > Upload**, then the generated command
 (`tools/installer-ui/installer-ui-render.js:15-16`; `tools/installer-ui/ui-model.js:648`).
 
@@ -65,7 +65,7 @@ The browser validator uses the same answer names, schema subset and cross-field 
 PowerShell validator for `Install-ClaudeGateway.ps1`; the P92 corpus parity test compares check ids
 and paths (`tools/installer-ui/ui-model.js:292-405`; `tools/installer-ui/ui-model.js:451-518`; `tests/installer-ui-g3.test.mjs:282-309`). It
 marks invalid fields and withholds download, preflight, run and command text while a problem remains
-(`tools/installer-ui/installer-ui.js:257-314`; `tools/installer-ui/installer-ui.js:418-456`).
+(`tools/installer-ui/installer-ui.js:257-314`; `tools/installer-ui/installer-ui.js:418-459`).
 Action buttons show a busy label while a request is in flight, restore their controls afterward and
 place failures next to the action as an alert with a recovery sentence
 (`tools/installer-ui/installer-ui-actions.js:32-94`). When a focused busy button is disabled, the page
@@ -123,7 +123,7 @@ The live server refuses that run shape with `409` and `reason: pfx-needs-termina
 run (`tools/installer-ui/server.mjs:456-461`).
 The page also disables run buttons for a PFX custom address, keeps preflight available and renders
 the PowerShell run command without `-Yes`, so the installer asks for the PFX password in the terminal
-(`tools/installer-ui/installer-ui.js:329-336`; `tools/installer-ui/installer-ui.js:418-456`; `tools/installer-ui/ui-model.js:585-605`; `tools/installer-ui/ui-model.js:614-651`).
+(`tools/installer-ui/installer-ui.js:329-336`; `tools/installer-ui/installer-ui.js:418-459`; `tools/installer-ui/ui-model.js:585-605`; `tools/installer-ui/ui-model.js:614-651`).
 
 ## Run lifecycle and limits
 
@@ -135,7 +135,7 @@ answers without a fingerprint and with `superseded: true`, and the page shows it
 preflight. A failure at any stage (step list, Azure CLI busy, malformed output, timeout or identity
 read) leaves no reusable old pass (`tools/installer-ui/preflight-record.mjs:28-30`;
 `tools/installer-ui/preflight-record.mjs:46-82`; `tools/installer-ui/server.mjs:402-408`;
-`tools/installer-ui/server.mjs:424-436`; `tools/installer-ui/installer-ui.js:462-481`).
+`tools/installer-ui/server.mjs:424-436`; `tools/installer-ui/installer-ui.js:465-484`).
 The passing preflight also stores the signed-in state, user, tenant and subscription snapshot; run
 admission reads identity again under the Azure lease and refuses changed identity with `409`
 (`tools/installer-ui/server.mjs:231-249`; `tools/installer-ui/server.mjs:427-435`;
@@ -170,7 +170,7 @@ notice, a console line above 64 KiB is truncated with ` [line truncated]`, and t
 The run output is a labelled log region (`tools/installer-ui/index.html:34`). The Stop run button is
 enabled only while the page follows a run whose id is known and that the server reports as running;
 an accepted stop sets the page state to stopping until the summary arrives
-(`tools/installer-ui/installer-ui.js:443-444`; `tools/installer-ui/installer-ui.js:651-653`; `tools/installer-ui/installer-ui-run.js:363-383`).
+(`tools/installer-ui/installer-ui.js:443-447`; `tools/installer-ui/installer-ui.js:654-656`; `tools/installer-ui/installer-ui-run.js:363-383`).
 A run that the page attaches after a lost run request, after a broken stream, after a stream that
 ends without its summary or on page load takes its state from status: a stopping run shows
 `Stopping at <step>.` and offers no Stop, and a run that has already ended shows
@@ -222,13 +222,13 @@ error while later valid progress lines still arrive (`tools/installer-ui/child-o
 
 | Section | Source and behaviour |
 |---|---|
-| Account | Shows user, tenant id, subscription name and subscription id from the Azure CLI account through repository PowerShell. A button shows `az login --use-device-code` when sign-in is needed (`scripts/Get-ClaudeInstallerUiIdentity.ps1:1-29`; `tools/installer-ui/installer-ui.js:504-518`; `tools/installer-ui/installer-ui.js:572-574`). |
-| First install | Renders the subscription, Foundry account, gateway resource group, region, publisher, tier, initial groups, quotas and model deployment fields (`tools/installer-ui/ui-model.js:7-32`; `tools/installer-ui/installer-ui.js:118-148`). Server mode can read subscriptions, Foundry accounts and deployment names through `POST /api/prefill`; static mode hides those read actions (`tools/installer-ui/installer-ui-prefill.js:16-70`; `tools/installer-ui/installer-ui.js:677-678`). |
+| Account | Shows user, tenant id, subscription name and subscription id from the Azure CLI account through repository PowerShell. A button shows `az login --use-device-code` when sign-in is needed (`scripts/Get-ClaudeInstallerUiIdentity.ps1:1-29`; `tools/installer-ui/installer-ui.js:507-521`; `tools/installer-ui/installer-ui.js:575-577`). |
+| First install | Renders the subscription, Foundry account, gateway resource group, region, publisher, tier, initial groups, quotas and model deployment fields (`tools/installer-ui/ui-model.js:7-32`; `tools/installer-ui/installer-ui.js:118-148`). Server mode can read subscriptions, Foundry accounts and deployment names through `POST /api/prefill`; static mode hides those read actions (`tools/installer-ui/installer-ui-prefill.js:16-70`; `tools/installer-ui/installer-ui.js:680-681`). |
 | Optional parts | Renders company-address, existing-APIM reuse, Desktop sign-in, projection toggle, entitlement-store and business-unit answers that `Install-ClaudeGateway.ps1` applies. Fields with declarative conditions are hidden until their condition holds and hidden fields are not written to `answers.json`. The PFX password is not an answer, and the installer prompt behaviour is the one stated above (`tools/installer-ui/ui-model.js:33-58`; `tools/installer-ui/ui-model.js:147-198`; `tools/installer-ui/installer-ui.js:226-255`; `Install-ClaudeGateway.ps1:1164-1179`). |
 | Advanced | Renders projection renewal, resolver app, organisation quota, developer estimate, revocation window, model-organisation metadata, team-budget behaviour, unassigned-developer behaviour and the optional pending Claude deployment object (`tools/installer-ui/ui-model.js:59-76`; `tools/installer-ui/installer-ui.js:176-210`). |
 | Business units | Provides a two-level editor: add a unit, add a team under a unit, remove either, then serialize units before teams. Add unit and Add team focus the new row's first field. Remove focuses the row that takes the removed row's place, else the previous row, else Add unit. Fields are id, Entra group, monthly USD budget, mode and percent only for `Allowance`. Ids are lower-case letters, digits and hyphens, max 64; ids are unique; group names exclude `'`, `,` and `:`; `Allowance` requires percent 1-100; teams name one parent unit. The JSON view round-trips through the same validation (`tools/installer-ui/installer-ui-business-units.js:9-37`; `tools/installer-ui/installer-ui-business-units.js:66-177`; `tools/installer-ui/ui-model.js:226-254`; `tools/installer-ui/ui-model.js:529-573`). |
 | Review | Runs installer preflight and shows check, result, message, remedy and field links when a problem names or maps to an answer path. A passing preflight returns a 64-character SHA-256 fingerprint over canonical answers, engine and step scope. Failing checks mark fields through a problem path when present, otherwise through the schema's `x-checkId` mapping. Review buttons keep their target on the first pointer click even when validation rerenders the problem list. Non-JSON preflight output returns a visible error with the exit code and a short redacted, path-scrubbed output tail (`tools/installer-ui/installer-ui.js:278-314`; `tools/installer-ui/installer-ui-problems.js:40-51`; `tools/installer-ui/preflight-record.mjs:28-30`; `tools/installer-ui/server.mjs:415-423`). |
-| Run | Lists installer step ids, streams selected-step output as it arrives, shows a failed step with a rerun action and resume command, reattaches to an active run after reload and keeps a full run as a separate confirmed action (`tools/installer-ui/installer-ui-render.js:95-108`; `tools/installer-ui/installer-ui-run.js:79-361`; `tools/installer-ui/installer-ui.js:618-641`). A run starts only when its fingerprint matches a stored passing preflight for the same answers and a covering scope. Displayed commands use `./Install-ClaudeGateway.ps1` and `./install-claude-gateway.sh` (`tools/installer-ui/installer-ui-render.js:7-50`; `tools/installer-ui/ui-model.js:607-651`). |
+| Run | Lists installer step ids, streams selected-step output as it arrives, shows a failed step with a rerun action and resume command, reattaches to an active run after reload and keeps a full run as a separate confirmed action (`tools/installer-ui/installer-ui-render.js:95-108`; `tools/installer-ui/installer-ui-run.js:79-361`; `tools/installer-ui/installer-ui.js:621-644`). A run starts only when its fingerprint matches a stored passing preflight for the same answers and a covering scope. Displayed commands use `./Install-ClaudeGateway.ps1` and `./install-claude-gateway.sh` (`tools/installer-ui/installer-ui-render.js:7-50`; `tools/installer-ui/ui-model.js:607-651`). |
 
 Invalid business-unit JSON stays in the textarea as a blocking validation problem until it becomes a
 JSON array of objects again, and monthly USD budgets accept finite decimals in the schema range
@@ -237,7 +237,7 @@ JSON array of objects again, and monthly USD budgets accept finite decimals in t
 The First install prefill choices are scoped to the current account's read and preserve typed
 deployment names in the answer inputs (`tools/installer-ui/installer-ui-prefill.js:72-141`). Review
 uses the passing preflight's scope and identity to decide which run buttons are admitted
-(`tools/installer-ui/installer-ui.js:418-456`). Run summaries are interpreted by
+(`tools/installer-ui/installer-ui.js:418-459`). Run summaries are interpreted by
 `installer-ui-run.js`: non-zero summaries are alerts, stopped summaries are status text and
 reattach failures use the run alert region (`tools/installer-ui/installer-ui-run.js:79-198`;
 `tools/installer-ui/installer-ui-run.js:385-387`).

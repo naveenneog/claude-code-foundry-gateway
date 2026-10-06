@@ -111,7 +111,7 @@ run is admitted only when the submitted fingerprint exists, the answers digest m
 `pwsh`, the stored scope covers the requested run scope and the current identity snapshot matches
 the passing preflight (`tools/installer-ui/preflight-record.mjs:3-37`; `tools/installer-ui/preflight-record.mjs:46-82`;
 `tools/installer-ui/server.mjs:156`; `tools/installer-ui/server.mjs:402-437`; `tools/installer-ui/server.mjs:464-477`;
-`tools/installer-ui/installer-ui.js:462-481`).
+`tools/installer-ui/installer-ui.js:465-484`).
 
 One Azure CLI lease covers identity, prefill, preflight and run work. Reads wait behind reads in
 arrival order, wait time counts against the read timeout, runs are refused while a read holds the
@@ -131,14 +131,14 @@ that password only when it runs without `-Yes` (`tools/installer-ui/server.mjs:4
 The page mirrors the same decision: PFX custom-address answers disable browser run buttons and render
 the PowerShell run command without `-Yes`, while omitted custom-address certificate and DNS modes use
 the installer defaults for visibility and validation only (`tools/installer-ui/installer-ui.js:329-336`;
-`tools/installer-ui/installer-ui.js:418-456`; `tools/installer-ui/ui-model.js:155-161`; `tools/installer-ui/ui-model.js:172-181`;
+`tools/installer-ui/installer-ui.js:418-459`; `tools/installer-ui/ui-model.js:155-161`; `tools/installer-ui/ui-model.js:172-181`;
 `tools/installer-ui/ui-model.js:520-527`; `tools/installer-ui/ui-model.js:585-605`; `tools/installer-ui/ui-model.js:614-651`).
 
 Live mode uses the configured PowerShell command, `pwsh` by default. `listenAsync` checks PowerShell
 once and requires major version 7 or newer. If that check fails, `/api/session` reports static mode
 and live child-spawning routes return `503`. The browser also has a `file://` static path
 (`tools/installer-ui/server.mjs:106-127`; `tools/installer-ui/server.mjs:576-578`; `tools/installer-ui/server.mjs:261-267`;
-`tools/installer-ui/server.mjs:344`; `tools/installer-ui/installer-ui.js:564-569`).
+`tools/installer-ui/server.mjs:344`; `tools/installer-ui/installer-ui.js:567-572`).
 
 The page and server share one model file, `tools/installer-ui/ui-model.js`. The page loads it as a
 classic script, the server loads it through `node:vm`, and tests use the same file. It owns field
@@ -170,8 +170,8 @@ check records loopback reachability, Host forwarding, URL prefix and cookie-path
 
 Static mode is a supported fallback rather than a second product path. It can validate answers, write
 `answers.json` and render portable commands, but it cannot read Azure or start installer work
-(`tools/installer-ui/installer-ui.js:257-276`; `tools/installer-ui/installer-ui.js:654-662`; `tools/installer-ui/installer-ui-render.js:14-25`;
-`tools/installer-ui/installer-ui.js:677-678`).
+(`tools/installer-ui/installer-ui.js:257-276`; `tools/installer-ui/installer-ui.js:657-665`; `tools/installer-ui/installer-ui-render.js:14-25`;
+`tools/installer-ui/installer-ui.js:680-681`).
 
 The bootstrap URL authenticates only the first page load. After that load, API access depends on the
 separate session cookie secret and the CSRF token, so copying the original URL token into a cookie
