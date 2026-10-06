@@ -209,7 +209,9 @@ async function readExistingUser(container, oid) {
     if (error?.code !== 404 && error?.statusCode !== 404) throw error;
   }
   if (resource && !resource.type) {
-    existing.set(resource.id, { tier: resource.tier, businessUnit: resource.businessUnit ?? '' });
+    const current = { tier: resource.tier, businessUnit: resource.businessUnit ?? '' };
+    if (Object.hasOwn(resource, 'expiresAt')) current.expiresAt = resource.expiresAt;
+    existing.set(resource.id, current);
   }
   return existing;
 }
@@ -418,3 +420,4 @@ function createLockClock() {
     return new Date(current);
   };
 }
+

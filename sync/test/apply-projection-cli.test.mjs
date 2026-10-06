@@ -1,7 +1,8 @@
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -14,7 +15,14 @@ const loader = fileURLToPath(new URL('./fake-azure-loader.mjs', import.meta.url)
 const loaderUrl = pathToFileURL(loader).href;
 const graphPreload = fileURLToPath(new URL('./fake-graph-preload.mjs', import.meta.url));
 const graphPreloadUrl = pathToFileURL(graphPreload).href;
-const work = fileURLToPath(new URL('../.test-work/apply-cli/', import.meta.url));
+const work = mkdtempSync(join(tmpdir(), 'apply-cli-'));
+const cleanupWork = () => rmSync(work, { recursive: true, force: true });
+after(cleanupWork);
+process.on('exit', cleanupWork);
+
+test('apply CLI tests keep their scratch directory outside the repository', () => {
+  assert.equal(work.toLowerCase().includes(`${'sync'}\\.test-work`), false);
+});
 
 function run(args = [], env = {}) {
   const result = spawnSync(process.execPath, [script, ...args], {
@@ -123,6 +131,37 @@ test('targeted snapshots must name one matching user record or no record; status
   assert.equal(status.executor, 'runner');
   assert.equal(status.accountResourceId, account.toLowerCase());
   assert.equal(docs.find((d) => d.oid === otherUser).tier, 'standard');
+});
+
+test('a targeted apply rewrites a same-tier legacy record to remove expiresAt', () => {
+  const target = '33333333-3333-4333-8333-333333333333';
+  const verifiedAt = new Date(Date.now() - 60_000).toISOString();
+  const snap = {
+    ...fullSnapshot({ verifiedAt, records: [{ oid: target, tier: 'standard', businessUnit: '' }] }),
+    scope: 'user',
+    user: target,
+  };
+  const { result, summary, store, log } = runApplyWithFake({
+    name: 'targeted legacy expiry rewrite',
+    docs: {
+      [`${target}|${target}`]: {
+        id: target,
+        oid: target,
+        tenantId: tenant,
+        tier: 'standard',
+        businessUnit: '',
+        expiresAt: Math.floor(Date.now() / 1000) - 3600,
+      },
+    },
+    snapshot: snap,
+    args: ['--user', target],
+  });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(summary.toWrite, 1);
+  assert.match(readFileSync(log, 'utf8'), new RegExp(`bulk Upsert ${target}`));
+  const written = JSON.parse(readFileSync(store, 'utf8')).docs[`${target}|${target}`];
+  assert.equal(written.tier, 'standard');
+  assert.equal('expiresAt' in written, false);
 });
 
 function runApplyWithFake({ name, docs = {}, snapshot, args = [], env = {} }) {
@@ -310,6 +349,7 @@ test('a full apply reads every existing-record page and deletes an orphan on the
   assert.equal(summary.existing, 2);
   assert.match(readFileSync(log, 'utf8'), /fetch-page 0 rows=1/);
   assert.match(readFileSync(log, 'utf8'), /fetch-page 1 rows=1/);
+  assert.match(readFileSync(log, 'utf8'), new RegExp(`bulk Delete ${orphan}`));
   const docs = Object.values(JSON.parse(readFileSync(store, 'utf8')).docs);
   assert.equal(docs.some((d) => d.oid === orphan), false);
 });
