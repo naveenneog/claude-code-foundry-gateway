@@ -557,6 +557,7 @@ test('R6-1 a broken stream of a run that is stopping does not offer Stop again',
     await app.close();
   }
 });
+
 // The run response names the run and its stream then ends cleanly without a summary; plain status reports the run in the given state.
 async function endStreamWithoutSummary(page, state) {
   await page.route('**/api/run/stream', (route) => route.fulfill({
