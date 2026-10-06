@@ -224,7 +224,11 @@ try {
         Wait-GatewayStatus $url $Model 200 'entitled request on named values'
 
         Write-Host "`n==> Update: the plan, then its apply" -ForegroundColor Cyan
-        $plan = & $UpdatePath -ResourceGroup $ResourceGroup -ApimName $apimName
+        # The plan's review text comes back on the output stream with the result; printed, it keeps the planned
+        # resources, cost and time in the run's log.
+        $planOutput = @(& $UpdatePath -ResourceGroup $ResourceGroup -ApimName $apimName)
+        foreach ($text in @($planOutput | Where-Object { $_ -is [string] })) { Write-Host $text }
+        $plan = @($planOutput | Where-Object { $_ -isnot [string] -and $_.PSObject.Properties['Fingerprint'] })[0]
         $move = @(@($plan.Plans) | Where-Object { $_.Step -eq '0004-entitlement-projection' })[0]
         $fingerprint = [string]$plan.Fingerprint
         if (-not $move -or -not @($move.Actions).Count -or $move.Data.Blocked -or $fingerprint -notmatch '\A[0-9a-f]{64}\z') {

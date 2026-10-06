@@ -488,7 +488,7 @@
         "scripts/ClaudeNetwork.ps1": "5709a3e94dfc7ca71e75429ea4d278b7737198a5488e07556fccc28cda9d00f9",
         "scripts/flow/Address.ps1": "88b0499d3eaf5423f98f4e6cb1ca1b2f221c4a44d4b8677a790ada807e495869",
         "scripts/flow/Discovery.ps1": "6e3832eb6250c747bf7ffbd78595ca48a5359dc45381363a2a6cc0a757b2aad3",
-        "scripts/flow/FlowContract.ps1": "cd228eaf9364810c6f1b994e1e3b6c042fee7009cfe507fbc32260c80ae2a0b2",
+"scripts/flow/FlowContract.ps1": "548dd10f00884248ccb70a37529b2050f15a7870803e7fd2130e1479e1c65bf3",
         "scripts/flow/Foundation.ps1": "fb0d43ee4fbe00a140410bf3f9594b1a6d43bc4f226748f8231c6f23743c7ed4"
       },
       "outputs": [
@@ -522,7 +522,7 @@
         "scripts/Show-Banner.ps1": "03aa9c855b2aade332ba6810887c86700fa39dfc6bf04dfc8bc4057a4ad5db41",
         "scripts/Sync-ClaudeModels.ps1": "1afdc91387e87f10388e088060d530f5cca37ffb9c8a4d7ff97b82e9b7b73510",
         "scripts/flow/DeviceProfiles.ps1": "7f3925af5eab6f23599031b118834d1faeb657a960b20af505788ceb6097fbc4",
-        "scripts/flow/FlowContract.ps1": "cd228eaf9364810c6f1b994e1e3b6c042fee7009cfe507fbc32260c80ae2a0b2",
+"scripts/flow/FlowContract.ps1": "548dd10f00884248ccb70a37529b2050f15a7870803e7fd2130e1479e1c65bf3",
         "scripts/flow/Models.ps1": "25d480b8b0c4d48e22fb5e1f2f7f273aa3aa735b4dafe8db60a35d7f6e6d6503",
         "scripts/setup-claude-workstation.sh": "1956dd1986603ad1399e92a44aac5562b3c2baee5fb9af17fb1bbb1cf8ffa6b7"
       },
@@ -535,3 +535,4 @@
     }
   ]
 }
+

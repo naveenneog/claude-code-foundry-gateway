@@ -29,6 +29,22 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P100 the update moves a named-value gateway to the Cosmos projection.** `Update-ClaudeGateway.ps1
+  -ResourceGroup <rg> -ApimName <apim>` plans migration `0004-entitlement-projection`
+  ([ADR-0054](docs/adr/0054-update-flow-entitlement-migration.md)), with or without the decision record. The
+  plan reuses the gateway's tier groups (parameters, then the new `entitlement-groups` named value, then the
+  decision record, then the default names, each read from Microsoft Graph) and counts the developers who would
+  gain or lose access. It also reuses the business units, name prefix, region and tier. It lists the
+  readiness checks with remedies, covering region availability, usage against limits, the right to create role
+  assignments and template validation. It also lists the resources, network, identities, monthly cost and time.
+  A FAIL blocks the plan: no apply command is printed, and `-Apply` refuses before the backup. The apply records
+  the tier groups in `entitlement-groups` first, then runs the installer's refresh, deployment, population,
+  comparison and switch, and verifies the switch, the prefix and the groups. A failed step leaves named values
+  serving and prints the update that resumes with the resolved values. `-PremiumGroup none` passes `none`, and
+  the group name `none` is no group in every Graph lookup. `-KeepNamedValues` keeps named values; in Windows
+  PowerShell 5.1 no move is planned. `Invoke-ClaudeProjectionPreflight -PassThru` returns its checks without
+  printing or throwing.
+
 - **P102 Azure AI Content Safety request screening.** The gateway can opt into an Azure AI Content Safety account and APIM policy fragment that screens the system prompt plus the newest user turn before Foundry. `content-safety-mode` supports `off`, `audit` and `block`; existing deployments default to `off` and create no Content Safety account. The offline policy tests cover benign, harmful, jailbreak, image-only, streaming, long-context and fabricated-history cases, failure modes and safe trace metadata. Deployment tests cover the Content Safety account, named values, role assignment, fragment wiring and region readiness. `scripts/Test-ClaudeLiveContentSafety.ps1` is the owner-run disposable live proof and teardown script.
 - **P98 the installer deploys the Cosmos projection by default.** `Install-ClaudeGateway.ps1` offers
   the projection first, as recommended, for every size; `-Yes` chooses it, and named values above their
@@ -2271,4 +2287,5 @@ Initial release.
 [1.2.0]: https://github.com/naveenneog/claude-code-foundry-gateway/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/naveenneog/claude-code-foundry-gateway/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/naveenneog/claude-code-foundry-gateway/releases/tag/v1.0.0
+
 

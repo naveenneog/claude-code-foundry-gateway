@@ -48,6 +48,11 @@ portal route.
 > `scripts/Deploy-ClaudeProjection.ps1 -FlipAfterCleanCompare` switches without deploying
 > anything, after resolver checks, drift check, runner compare and Cosmos switch evidence
 > ([ADR-0051](docs/adr/0051-persistent-sync-based-cosmos-entitlement.md)).
+> `.\Update-ClaudeGateway.ps1 -ResourceGroup <rg> -ApimName <apim>` plans the move of a named-value
+> gateway to the projection. The plan reuses the gateway's tier groups, checks quotas and prerequisites, and
+> lists the resources, network and monthly cost before `-Apply` writes anything
+> ([Update and change](docs/UPDATE-AND-CHANGE.md#move-a-named-value-gateway-with-the-update),
+> [ADR-0054](docs/adr/0054-update-flow-entitlement-migration.md)).
 >
 > The current two-always-ready-instance profile costs **$91.56/month at rest**.
 > Projection writes now follow directory churn. The older 500,000-member renewal estimate was
