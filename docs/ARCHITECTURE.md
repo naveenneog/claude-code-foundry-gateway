@@ -70,7 +70,7 @@ Source: [18-installer-ui.json](architecture/18-installer-ui.json);
 The installer UI adds an operator-side local server and static page. It adds no Azure resource and no
 hosted control plane. `tools/installer-ui/server.mjs` owns the HTTP routes, local session controls,
 PowerShell child process calls and idle lifecycle (`tools/installer-ui/server.mjs:51-127`;
-`tools/installer-ui/server.mjs:179-203`; `tools/installer-ui/server.mjs:297-553`). `tools/installer-ui/http-helpers.mjs` owns Host, cookie,
+`tools/installer-ui/server.mjs:179-203`; `tools/installer-ui/server.mjs:297-554`). `tools/installer-ui/http-helpers.mjs` owns Host, cookie,
 CSRF, same-origin and JSON-body helpers (`tools/installer-ui/http-helpers.mjs:13-30`;
 `tools/installer-ui/http-helpers.mjs:61-119`). The browser, server and tests share `tools/installer-ui/ui-model.js` through
 `tools/installer-ui/server-model.mjs`, command and preflight rendering is split into
@@ -94,15 +94,15 @@ The Node server starts only the configured PowerShell command, a Node test stub 
 `tests/installer-ui-structure.test.mjs:69-96`).
 `tools/installer-ui/azure-lease.mjs` serializes identity, prefill, preflight and run admission so the
 server has one Azure CLI-producing operation at a time (`tools/installer-ui/azure-lease.mjs:1-89`;
-`tools/installer-ui/server.mjs:205-209`; `tools/installer-ui/server.mjs:449`).
+`tools/installer-ui/server.mjs:205-209`; `tools/installer-ui/server.mjs:450`).
 
 Preflight admission is fingerprinted by `tools/installer-ui/preflight-record.mjs`; a run needs a
 stored PASS for the same answers, a covering step scope and the same identity snapshot
-(`tools/installer-ui/preflight-record.mjs:28-37`; `tools/installer-ui/preflight-record.mjs:46-64`;
-`tools/installer-ui/server.mjs:412-420`; `tools/installer-ui/server.mjs:449-462`).
+(`tools/installer-ui/preflight-record.mjs:28-37`; `tools/installer-ui/preflight-record.mjs:46-82`;
+`tools/installer-ui/server.mjs:410-421`; `tools/installer-ui/server.mjs:450-463`).
 `tools/installer-ui/step-scope.mjs` validates selected step ids against the producer step list before
 the Azure lease is requested (`tools/installer-ui/step-scope.mjs:1-37`;
-`tools/installer-ui/server.mjs:393-395`; `tools/installer-ui/server.mjs:440-449`).
+`tools/installer-ui/server.mjs:393-395`; `tools/installer-ui/server.mjs:441-450`).
 Versioned installer-interface checks live in `tools/installer-ui/installer-contract.mjs`, so malformed
 step lists and preflight payloads fail closed and malformed progress events become stream errors
 (`tools/installer-ui/installer-contract.mjs:12-17`; `tools/installer-ui/installer-contract.mjs:31-116`;
@@ -116,11 +116,11 @@ the tail and follows live events for that run id, a replaced record returns `409
 request id (`admitting`, then `started` with the run id or `refused` with the error and reason), and
 `GET /api/run/status?request=<id>` adds that record to the status
 (`tools/installer-ui/run-admission.mjs:1-30`; `tools/installer-ui/server.mjs:357-361`;
-`tools/installer-ui/server.mjs:427-433`; `tools/installer-ui/server.mjs:465`; `tools/installer-ui/server.mjs:474`).
+`tools/installer-ui/server.mjs:428-434`; `tools/installer-ui/server.mjs:466`; `tools/installer-ui/server.mjs:475`).
 `tools/installer-ui/run-transport.mjs`
 handles UTF-8 carries, progress-file offsets, NDJSON writes and backpressure. The server caps console
 bytes and line bytes before publishing output (`tools/installer-ui/run-record.mjs:10-129`;
-`tools/installer-ui/server.mjs:357-370`; `tools/installer-ui/server.mjs:523-536`;
+`tools/installer-ui/server.mjs:357-370`; `tools/installer-ui/server.mjs:524-537`;
 `tools/installer-ui/run-transport.mjs:5-91`; `tools/installer-ui/installer-stream.mjs:6-7`;
 `tools/installer-ui/installer-stream.mjs:23-38`; `tools/installer-ui/installer-stream.mjs:57-60`; `tools/installer-ui/installer-stream.mjs:70-74`).
 Read-only children use `tools/installer-ui/child-output.mjs` for UTF-8 decoding and a 1 MiB
