@@ -44,6 +44,20 @@ fails the release stage while any remain. Detail for each one follows below.
 
 ---
 
+## P100 research before implementation
+
+Researched 2026-10-06 for [ADR-0054](adr/0054-update-flow-entitlement-migration.md), before any P100 code. U131-U134 belong to P99.
+
+| ID | State | Question | Blocks |
+|---|---|---|---|
+| U135 | CLOSED | Which limits can the projection's resources hit, and how are they read without writing? Read 2026-10-06 and tested read-only against the reference subscription: Cosmos DB accounts, 250 per subscription ([Cosmos DB limits](https://learn.microsoft.com/azure/cosmos-db/concepts-limits), updated 2026-08-25), counted with `az cosmosdb list`; container groups and cores, 100 each per region ([ACI quotas](https://learn.microsoft.com/azure/container-instances/container-instances-resource-and-quota-limits), updated 2026-07-26), read from `Microsoft.ContainerInstance/locations/<region>/usages`; storage accounts, 250 per region, from `az storage account show-usage --location`, which returns one object rather than a list; virtual networks, 1,000 per region, from `az network list-usages --location`, whose values are strings; private DNS zones, 1,000 per subscription, counted with `az network private-dns zone list`; Container Apps environments, 50 per region ([Container Apps quotas](https://learn.microsoft.com/azure/container-apps/quotas), updated 2026-09-24), from `Microsoft.App/locations/<region>/usages`. Limits from [subscription and service limits](https://learn.microsoft.com/azure/azure-resource-manager/management/azure-subscription-service-limits) (updated 2026-09-29). The `Microsoft.Quota` provider was not registered in the reference subscription, so the checks use each provider's own usages. | P100 readiness checks |
+| U136 | ASSUMED | Can Cosmos DB regional capacity be checked before deploying? No method is documented, and [SECURE-PROJECTION](SECURE-PROJECTION.md) records it as a deployment-time failure. Assumption: the plan shows it as a note. Blast radius: the deployment stops at the Cosmos account, before the switch, and named values keep serving; the remedy is another region. Detector: the deployment's error. | P100 readiness checks |
+| U137 | ASSUMED | Does template validation report an Azure Policy denial before any write? A deny assignment stops a matching request before the resource provider receives it ([deny effect](https://learn.microsoft.com/azure/governance/policy/concepts/effect-deny), updated 2025-12-01); the page does not say that `az deployment group validate` evaluates it. Assumption: validation of the projection and network templates reports a `RequestDisallowedByPolicy` denial. Blast radius: a denial that validation misses fails the deployment before the switch. Detector: such a failure after a plan that passed. | P100 readiness checks |
+| U138 | CLOSED | Can the plan tell whether the operator may create role assignments, without creating one? Yes: `GET <resource-group>/providers/Microsoft.Authorization/permissions?api-version=2022-04-01` returns the caller's own actions and not-actions, tested 2026-10-06. Contributor excludes `Microsoft.Authorization/*/Write` ([privileged built-in roles](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/privileged), updated 2026-07-01), so Contributor alone fails the check. | P100 readiness checks |
+| U139 | CLOSED | How does the plan check region availability? `az provider show -n <namespace>` lists each resource type's locations, tested 2026-10-06 for `Microsoft.DocumentDB/databaseAccounts`, `Microsoft.ContainerInstance/containerGroups` and `Microsoft.App/managedEnvironments`; `az functionapp list-flexconsumption-locations` lists the Flex Consumption regions (52 on 2026-10-06, East US 2 among them). No narrower region list for Cosmos DB serverless was found ([serverless](https://learn.microsoft.com/azure/cosmos-db/serverless), updated 2026-04-27). | P100 readiness checks |
+
+---
+
 ## P99 research before implementation
 
 Researched and measured on 2026-10-06 for [ADR-0053](adr/0053-parallel-compressed-runner-transfer.md), before any P99 code.

@@ -107,7 +107,9 @@ function Invoke-ClaudeFlowStep {
         . (Join-Path (Split-Path $PSScriptRoot -Parent) 'ClaudeProjectionSwitch.ps1')
         $flowPlan = $Plan
         $snapshotGate = { Assert-ClaudeFlowLifecycleSnapshotBeforeWrite -Plan $flowPlan | Out-Null; [string]$flowPlan.Data.SnapshotPath }.GetNewClosure()
-        $null = Invoke-ClaudeProjectionSwitch -ResourceGroup $target.ResourceGroup -ApimName $target.ApimName -NamePrefix $prefix -Backup $snapshotGate
+        # The switch acts in the subscription discovery read the gateway in; an ID only, because az.cmd re-reads other text.
+        $switchScope = if (Test-ClaudeFlowSubscriptionId ([string]$target.SubscriptionId)) { @{ SubscriptionId = [string]$target.SubscriptionId } } else { @{} }
+        $null = Invoke-ClaudeProjectionSwitch -ResourceGroup $target.ResourceGroup -ApimName $target.ApimName -NamePrefix $prefix -Backup $snapshotGate @switchScope
     }
     else {
         Assert-ClaudeFlowLifecycleSnapshotBeforeWrite -Plan $Plan

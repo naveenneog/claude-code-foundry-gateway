@@ -18,6 +18,13 @@
       7. Removes the user from the group, runs Sync-ClaudeAccess.ps1 -User, and expects 403.
       8. Adds the user back, runs Sync-ClaudeAccess.ps1 -User, and expects 200.
 
+    With -MigrateWithUpdate (ADR-0054), step 3 installs with -EntitlementStore named-value, and before step 4:
+      a. Checks that entitlement-source is named-value and sends a request that expects 200.
+      b. Runs Update-ClaudeGateway.ps1 -ResourceGroup -ApimName, and stops unless its plan for
+         0004-entitlement-projection has actions and is not blocked.
+      c. Runs the same command with -Apply -ApprovedPlanFingerprint <the plan's fingerprint>.
+    After step 4 it checks that entitlement-groups holds the object ids of the run's two tier groups.
+
     With -Teardown, whatever happened: deletes only objects this run can prove it created: the gateway
     identity's role assignments on the Foundry account and resolver app only when the disposable resource
     group was created by this run, the resource group, and the tier groups this run created.
@@ -40,15 +47,18 @@ param(
     [ValidateRange(1, 60)][int]$PollSeconds = 15,
     [switch]$UseCurrentAzLogin,
     [switch]$Teardown,
+    [switch]$MigrateWithUpdate,
     # Tests point these at stubs; a live run uses the repository's scripts.
     [Parameter(DontShow)][string]$InstallerPath,
-    [Parameter(DontShow)][string]$SyncAccessPath
+    [Parameter(DontShow)][string]$SyncAccessPath,
+    [Parameter(DontShow)][string]$UpdatePath
 )
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 if (-not $InstallerPath) { $InstallerPath = Join-Path $root 'Install-ClaudeGateway.ps1' }
 if (-not $SyncAccessPath) { $SyncAccessPath = Join-Path $root 'scripts\Sync-ClaudeAccess.ps1' }
+if (-not $UpdatePath) { $UpdatePath = Join-Path $root 'Update-ClaudeGateway.ps1' }
 $results = [System.Collections.Generic.List[object]]::new()
 function Add-Result([string]$Step, [bool]$Ok, [string]$Detail = '') {
     $results.Add([pscustomobject]@{ step = $Step; ok = $Ok; detail = $Detail })
@@ -190,19 +200,14 @@ try {
     Wait-Membership $groupIds[$StandardGroup] $userId 'true'
     Add-Result 'groups' $true "$StandardGroup holds $userId; created: $($createdGroups.Count)"
 
-    Write-Host "`n==> Installer with the Cosmos projection default" -ForegroundColor Cyan
+    Write-Host "`n==> Installer with $(if ($MigrateWithUpdate) { 'named values' } else { 'the Cosmos projection default' })" -ForegroundColor Cyan
+    $installerArgs = @{ SubscriptionId = $SubscriptionId; FoundryAccount = $FoundryAccount; FoundryResourceGroup = $FoundryResourceGroup
+        ResourceGroup = $ResourceGroup; Location = $Location; NamePrefix = $NamePrefix; Sku = 'BasicV2'; Yes = $true; StandardGroup = $StandardGroup; PremiumGroup = $PremiumGroup }
+    if ($MigrateWithUpdate) { $installerArgs.EntitlementStore = 'named-value' }
     $installerStarted = $true
-    & $InstallerPath -SubscriptionId $SubscriptionId -FoundryAccount $FoundryAccount -FoundryResourceGroup $FoundryResourceGroup `
-        -ResourceGroup $ResourceGroup -Location $Location -NamePrefix $NamePrefix -Sku BasicV2 -Yes `
-        -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup
+    & $InstallerPath @installerArgs
     $resourceGroupCreated = $true
     Add-Result 'installer' $true $apimName
-
-    $source = Invoke-Az @('apim', 'nv', 'show', '-g', $ResourceGroup, '--service-name', $apimName, '--named-value-id', 'entitlement-source', '--query', 'value', '-o', 'tsv', '--subscription', $SubscriptionId)
-    $prefix = Invoke-Az @('apim', 'nv', 'show', '-g', $ResourceGroup, '--service-name', $apimName, '--named-value-id', 'entitlement-projection-prefix', '--query', 'value', '-o', 'tsv', '--subscription', $SubscriptionId)
-    if ($source -ne 'projection' -or $prefix -ne $NamePrefix) { Add-Result 'switch' $false "entitlement-source '$source', prefix '$prefix'"; throw 'The installer did not leave the gateway on the projection.' }
-    Add-Result 'switch' $true "entitlement-source projection, prefix $prefix"
-    Invoke-Az @('apim', 'nv', 'update', '-g', $ResourceGroup, '--service-name', $apimName, '--named-value-id', 'entitlement-cache-seconds', '--value', '60', '--subscription', $SubscriptionId) | Out-Null
 
     if (-not $Model) {
         $models = Invoke-Az @('apim', 'nv', 'show', '-g', $ResourceGroup, '--service-name', $apimName, '--named-value-id', 'models-standard', '--query', 'value', '-o', 'tsv', '--subscription', $SubscriptionId)
@@ -211,6 +216,41 @@ try {
     }
     $gatewayUrl = Invoke-Az @('apim', 'show', '-g', $ResourceGroup, '-n', $apimName, '--query', 'gatewayUrl', '-o', 'tsv', '--subscription', $SubscriptionId)
     $url = "$($gatewayUrl.TrimEnd('/'))/claude/v1/messages"
+
+    if ($MigrateWithUpdate) {
+        $source = Invoke-Az @('apim', 'nv', 'show', '-g', $ResourceGroup, '--service-name', $apimName, '--named-value-id', 'entitlement-source', '--query', 'value', '-o', 'tsv', '--subscription', $SubscriptionId)
+        if ($source -ne 'named-value') { Add-Result 'named values' $false "entitlement-source '$source'"; throw 'The installer did not leave the gateway on named values.' }
+        Add-Result 'named values' $true 'entitlement-source named-value'
+        Wait-GatewayStatus $url $Model 200 'entitled request on named values'
+
+        Write-Host "`n==> Update: the plan, then its apply" -ForegroundColor Cyan
+        # The plan's review text comes back on the output stream with the result; printed, it keeps the planned
+        # resources, cost and time in the run's log.
+        $planOutput = @(& $UpdatePath -ResourceGroup $ResourceGroup -ApimName $apimName)
+        foreach ($text in @($planOutput | Where-Object { $_ -is [string] })) { Write-Host $text }
+        $plan = @($planOutput | Where-Object { $_ -isnot [string] -and $_.PSObject.Properties['Fingerprint'] })[0]
+        $move = @(@($plan.Plans) | Where-Object { $_.Step -eq '0004-entitlement-projection' })[0]
+        $fingerprint = [string]$plan.Fingerprint
+        if (-not $move -or -not @($move.Actions).Count -or $move.Data.Blocked -or $fingerprint -notmatch '\A[0-9a-f]{64}\z') {
+            Add-Result 'update plan' $false "move planned: $([bool]$move); actions: $(@($move.Actions).Count); blocked: $([bool]$move.Data.Blocked); fingerprint '$fingerprint'"
+            throw 'The update did not plan an unblocked move to the projection.'
+        }
+        Add-Result 'update plan' $true "fingerprint $fingerprint, $(@($move.Actions).Count) action(s)"
+        & $UpdatePath -ResourceGroup $ResourceGroup -ApimName $apimName -Apply -ApprovedPlanFingerprint $fingerprint | Out-Null
+        Add-Result 'update apply' $true $fingerprint
+    }
+
+    $source = Invoke-Az @('apim', 'nv', 'show', '-g', $ResourceGroup, '--service-name', $apimName, '--named-value-id', 'entitlement-source', '--query', 'value', '-o', 'tsv', '--subscription', $SubscriptionId)
+    $prefix = Invoke-Az @('apim', 'nv', 'show', '-g', $ResourceGroup, '--service-name', $apimName, '--named-value-id', 'entitlement-projection-prefix', '--query', 'value', '-o', 'tsv', '--subscription', $SubscriptionId)
+    if ($source -ne 'projection' -or $prefix -ne $NamePrefix) { Add-Result 'switch' $false "entitlement-source '$source', prefix '$prefix'"; throw "The $(if ($MigrateWithUpdate) { 'update' } else { 'installer' }) did not leave the gateway on the projection." }
+    Add-Result 'switch' $true "entitlement-source projection, prefix $prefix"
+    if ($MigrateWithUpdate) {
+        $recordedGroups = Invoke-Az @('apim', 'nv', 'show', '-g', $ResourceGroup, '--service-name', $apimName, '--named-value-id', 'entitlement-groups', '--query', 'value', '-o', 'tsv', '--subscription', $SubscriptionId)
+        $expectedGroups = "standard=$($groupIds[$StandardGroup]),premium=$($groupIds[$PremiumGroup])".ToLowerInvariant()
+        if ($recordedGroups -ne $expectedGroups) { Add-Result 'groups recorded' $false "entitlement-groups '$recordedGroups', expected '$expectedGroups'"; throw 'The update did not record the tier groups.' }
+        Add-Result 'groups recorded' $true $recordedGroups
+    }
+    Invoke-Az @('apim', 'nv', 'update', '-g', $ResourceGroup, '--service-name', $apimName, '--named-value-id', 'entitlement-cache-seconds', '--value', '60', '--subscription', $SubscriptionId) | Out-Null
 
     Write-Host "`n==> Requests through the gateway as $userId ($Model)" -ForegroundColor Cyan
     Wait-GatewayStatus $url $Model 200 'entitled request'
