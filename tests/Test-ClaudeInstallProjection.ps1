@@ -65,7 +65,8 @@ Assert '-WhatIf lists projection deployment, populate, compare, switch and optio
 ) ($whatIf | ConvertTo-Json -Depth 4)
 
 $calls = [System.Collections.Generic.List[object]]::new()
-$record = { param($ScriptPath, $Arguments) $calls.Add([pscustomobject]@{ Path = $ScriptPath; Args = $Arguments }); 0 }
+$everyCall = [System.Collections.Generic.List[object]]::new()
+$record = { param($ScriptPath, $Arguments) $call = [pscustomobject]@{ Path = $ScriptPath; Args = $Arguments }; $calls.Add($call); $everyCall.Add($call); 0 }
 $ok = Invoke-ClaudeInstallerProjectionDeployment -Root $root -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 `
     -Location eastus2 -Sku BasicV2 -ResolverInboundAccess public -StandardGroup std -PremiumGroup prem -SubscriptionId 00000000-0000-4000-8000-000000000001 `
     -InvokeScript $record
@@ -119,6 +120,23 @@ $warnings = @(Invoke-ClaudeInstallerSyncJobDeployment -Root $root -ResourceGroup
     -AlertEmail 'ops team@contoso.example' -SubscriptionId 00000000-0000-4000-8000-000000000001 -InvokeScript { param($ScriptPath, $Arguments) $calls.Add([pscustomobject]@{ Path = $ScriptPath; Args = $Arguments }); 9 } 3>&1)
 Assert 'a failed optional sync job returns false and warns with the full quoted rerun command' (($warnings -contains $false) -and (($warnings | Out-String) -match "-StandardGroup 'std group'" -and ($warnings | Out-String) -match "-SubscriptionId 00000000-0000-4000-8000-000000000001" -and ($warnings | Out-String) -match "-AlertEmail 'ops team@contoso.example'")) (($warnings | Out-String) + ($calls | ConvertTo-Json -Depth 5))
 $failedStep = Get-ClaudeInstallerProjectionNextSteps -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 -StandardGroup 'std group' -PremiumGroup prem -SubscriptionId 00000000-0000-4000-8000-000000000001 -SyncJobStatus failed
+# Every argument the installer passes reaches a parameter of the real deployer, with a value that parameter's
+# fixed set allows. The live run of 2026-10-06 failed when the deployer's arguments bound by position, so
+# the name prefix reached -Sku; this reads the real scripts' parameter blocks, not a copy of them.
+$bindProblems = @(foreach ($call in $everyCall) {
+    $command = Get-Command -Name $call.Path -CommandType ExternalScript -ErrorAction Stop
+    foreach ($key in @($call.Args.Keys)) {
+        $parameter = $command.Parameters[$key]
+        if (-not $parameter) { "$(Split-Path $call.Path -Leaf) has no -$key"; continue }
+        foreach ($set in @($parameter.Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] })) {
+            foreach ($value in @($call.Args[$key])) { if ($set.ValidValues -notcontains [string]$value) { "$(Split-Path $call.Path -Leaf) -$key '$value' is not one of $($set.ValidValues -join ', ')" } }
+        }
+    }
+})
+$boundScripts = @($everyCall | ForEach-Object { Split-Path $_.Path -Leaf } | Sort-Object -Unique)
+Assert 'every argument the installer passes is a parameter of the real deployer, with a value its set allows' (
+    $everyCall.Count -ge 6 -and ($boundScripts -join ',') -eq 'Deploy-ClaudeProjection.ps1,Deploy-ClaudeProjectionRenewal.ps1' -and -not $bindProblems.Count
+) "$($everyCall.Count) call(s) to $($boundScripts -join ', ') | $($bindProblems -join '; ')"
 Assert 'sync-job failure next steps do not report the job as deployed and include the rerun command' ($failedStep.SyncJob.Title -match 'not deployed' -and ((@($failedStep.SyncJob.Detail) -join "`n") -match "-StandardGroup 'std group'")) ((@($failedStep.SyncJob.Detail) -join "`n"))
 # The live run of 2026-10-06 failed here: a string array splatted into a script binds by position, so the
 # deployer received the name prefix as -Sku. This runs the real helper against a real script.
