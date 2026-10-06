@@ -8,6 +8,13 @@ fails the release stage while any remain. Detail for each one follows below.
 
 | ID | State | Question | Blocks |
 |---|---|---|---|
+| U150 | ASSUMED | P103: GitHub repository Outline lists headings that live inside correctly parsed details bodies. Risk: hidden subsection discovery is weaker than expected. Detector: keep every H2 visible and verify representative rendered guides before closure. | P103 rendered review |
+| U151 | ASSUMED | P103: GitHub fragment navigation opens a closed details ancestor for H3/H4 targets in supported browsers. Risk: a linked subsection remains hidden. Detector: visible H2 anchors do not depend on it, and rendered review tests representative H3 links. | P103 rendered review |
+| U152 | ASSUMED | P103: browser find-in-page reveals matches inside closed details on the supported browser set. Risk: readers miss hidden reference text. Detector: rendered review records browser/version behavior; Quickstart contains mandatory path. | P103 rendered review |
+| U153 | ASSUMED | P103: printing from GitHub can include required content when sections are opened or raw Markdown is used. Risk: closed bodies do not appear in formatted print output. Detector: print-preview spot check and documented Raw fallback. | P103 rendered review |
+| U154 | ASSUMED | P103: native summary labels give usable disclosure semantics for screen readers. Risk: closed content or summary labels degrade navigation. Detector: labels are plain text, H2 headings stay outside summary, and accessibility review samples converted guides. | P103 accessibility review |
+| U155 | RESEARCHED | P103: GitHub supports blank-separated `details`/`summary` collapsed sections with Markdown body content. Sources read 2026-10-06: GitHub collapsed sections and GFM HTML blocks. | P103 structure test |
+| U156 | RESEARCHED | P103: visible Markdown headings preserve ordinary GitHub section links better than summary-only headings. Sources read 2026-10-06: GitHub basic writing syntax and GitHub markup pipeline. | P103 structure test |
 | U1 | CLOSED | Does a constant counter-key share one counter across callers? Yes — measured 2026-09-02 | P11 unblocked |
 | U2 | OPEN | Do emitted token counts reconcile with the Azure invoice? Blocked: this subscription exposes no cost data — measured 2026-09-03 | P12 cost figures |
 | U3 | OPEN | Does Claude in Chrome apply under a third-party provider at all? | parity matrix |
@@ -43,6 +50,18 @@ fails the release stage while any remain. Detail for each one follows below.
 | U36 | CLOSED | Can `Start-ClaudeGateway.ps1` tell a top-level run from a call by another script, on both shells? Measured 2026-09-28: `$MyInvocation.PSCommandPath` is empty at top level and names the calling script otherwise, on PowerShell 7 and 5.1 | P72 unblocked |
 
 ---
+
+## P103 documentation quickstart and disclosure assumptions
+
+Research and assumptions for [ADR-0056](adr/0056-documentation-quickstart-and-disclosures.md). Sources were read on 2026-10-06 in the read-only documentation review.
+
+- **U150 ASSUMED.** GitHub's repository-file Outline is expected to list Markdown headings that remain inside a correctly parsed details body. The primary H2 headings stay visible so main navigation does not depend on this assumption.
+- **U151 ASSUMED.** Fragment navigation to H3/H4 targets inside closed details is expected to reveal the ancestor disclosure where the browser implements the WHATWG ancestor revealing algorithm. The detector is rendered link testing on representative guides; visible H2 anchors do not depend on reveal.
+- **U152 ASSUMED.** Find-in-page reveal is expected on current supported browsers, but exact Firefox/Safari ordinary-ID versions were not established from permitted sources. The detector is browser/version recording during rendered review.
+- **U153 ASSUMED.** GitHub printing of closed details was not verified. The detector is a print preview spot check with required sections expanded and the Raw view as a complete-source fallback.
+- **U154 ASSUMED.** Native summary/disclosure semantics are expected to be usable with plain labels. The detector is accessibility review of sample converted guides; H2 headings are not placed inside summary.
+- **U155 RESEARCHED.** GitHub documents collapsed sections using `details`/`summary` with blank lines around Markdown body content, and GFM documents raw HTML block parsing boundaries.
+- **U156 RESEARCHED.** GitHub documents automatic heading links for Markdown headings and custom anchors; custom anchors are not Outline entries. ADR-0056 therefore keeps H2 Markdown headings outside disclosures.
 
 ## P97 research before implementation
 

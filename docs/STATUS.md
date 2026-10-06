@@ -6,6 +6,7 @@ Merged packet sections live under [`docs/status/`](status/), one file per packet
 
 | Packet | Section heading | Date |
 |---|---|---|
+| P103 | [P103 Quickstart first, sections as disclosures, 2026-10-07](status/P103.md#p103-quickstart-first-sections-as-disclosures) | 2026-10-07 |
 | P98 | [P98 The installer deploys the Cosmos projection by default, 2026-10-06](status/P98.md#p98-the-installer-deploys-the-cosmos-projection-by-default-2026-10-06) | 2026-10-06 |
 | P97 | [P97 Cosmos entitlement persists until a sync changes it, 2026-10-05](status/P97.md#p97-cosmos-entitlement-persists-until-a-sync-changes-it-2026-10-05) | 2026-10-05 |
 | P96 | [P96 Fixes from a live deployment, 2026-10-05](status/P96.md#p96-fixes-from-a-live-deployment-2026-10-05) | 2026-10-05 |
