@@ -73,6 +73,8 @@ Get-Facts @{ Discovery = $swapped }
 $swappedFacts = $CapturedResult
 Get-Facts @{ Discovery = (New-Discovery @{ 'bu-parents' = 'ops=eng' }) }
 Assert 'a business-unit registry or hierarchy of the same size but other content changes the facts the fingerprint covers' ((@($swappedFacts.BusinessUnitIds) -join ',') -ceq 'fin,hr' -and $CapturedResult.BusinessUnitParentsSha256 -match '^[0-9a-f]{64}$' -and $CapturedResult.BusinessUnitParentsSha256 -ne $f.BusinessUnitParentsSha256) "$(@($swappedFacts.BusinessUnitIds) -join ',') / $($CapturedResult.BusinessUnitParentsSha256) / $($f.BusinessUnitParentsSha256)"
+Get-Facts @{ Discovery = (New-Discovery @{ 'bu-registry' = 'eng=grp-other,ops=grp-ops' }) }
+Assert 'a unit that keeps its ID but maps to another group changes the facts the fingerprint covers' ($f.BusinessUnitRegistrySha256 -match '^[0-9a-f]{64}$' -and $CapturedResult.BusinessUnitRegistrySha256 -match '^[0-9a-f]{64}$' -and $CapturedResult.BusinessUnitRegistrySha256 -ne $f.BusinessUnitRegistrySha256 -and (@($CapturedResult.BusinessUnitIds) -join ',') -ceq 'eng,ops') "$($f.BusinessUnitRegistrySha256) / $($CapturedResult.BusinessUnitRegistrySha256)"
 Assert 'the prefix is the gateway name without apim-, as the installer derives it' ($f.NamePrefix -eq 'contoso' -and $f.PrefixSource -match 'apim-') "$($f.NamePrefix) / $($f.PrefixSource)"
 Assert 'region, SKU and public resolver access come from the gateway and ADR-0052' ($f.Location -eq 'eastus2' -and $f.Sku -eq 'BasicV2' -and $f.ResolverInboundAccess -eq 'public')
 Assert 'a clean, assessed gateway is not blocked' (-not $f.Blocked -and @($f.Problems).Count -eq 0) (@($f.Problems) -join '; ')
@@ -129,6 +131,13 @@ Get-Facts @{ StandardGroup = 'team-stdx' }
 Assert 'a -StandardGroup that Graph cannot find blocks the plan and names it' ($CapturedResult.Blocked -and (@($CapturedResult.Problems) -join ' ') -match 'team-stdx') (@($CapturedResult.Problems) -join '; ')
 Get-Facts @{ Discovery = (New-Discovery @{ 'entitlement-groups' = "standard=$standardId,premium=66666666-6666-4666-8666-666666666666" }) }
 Assert 'a premium group that entitlement-groups records but Graph no longer finds blocks the plan, rather than falling back' ($CapturedResult.Blocked -and (@($CapturedResult.Problems) -join ' ') -match '66666666-6666-4666-8666-666666666666') (@($CapturedResult.Problems) -join '; ')
+$global:GroupDirectory['claude-code-standard'] = @{ Id = '77777777-7777-4777-8777-777777777777'; Name = 'claude-code-standard'; Members = @($oid[0]) }
+$global:GroupDirectory['claude-code-premium'] = @{ Id = '33333333-3333-4333-8333-333333333333'; Name = 'claude-code-premium'; Members = @($oid[3]) }
+Get-Facts @{ Record = ([pscustomobject]@{ resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; standardGroup = 'team-deleted'; premiumGroup = 'team-prem' }) }
+Assert 'a standard group the decision record names but Graph no longer finds blocks the plan, rather than falling back to the default name' ($CapturedResult.Blocked -and (@($CapturedResult.Problems) -join ' ') -match 'team-deleted' -and -not $CapturedResult.Groups.Standard.Found) (@($CapturedResult.Problems) -join '; ')
+Get-Facts @{ Record = ([pscustomobject]@{ resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; standardGroup = 'team-std'; premiumGroup = 'team-prem-deleted' }) }
+Assert 'a premium group the decision record names but Graph no longer finds blocks the plan, rather than falling back to the default name' ($CapturedResult.Blocked -and (@($CapturedResult.Problems) -join ' ') -match 'team-prem-deleted' -and -not $CapturedResult.Groups.Premium.Found) (@($CapturedResult.Problems) -join '; ')
+$global:GroupDirectory.Remove('claude-code-standard'); $global:GroupDirectory.Remove('claude-code-premium')
 $global:GroupDirectory.Remove('claude-code-premium')
 
 Write-Host 'P100 readiness: the projection preflight and the readiness checks'
@@ -237,7 +246,7 @@ $global:GroupDirectory['team-std'] = @{ Id = $standardId; Name = 'team-std'; Mem
 Write-Host 'P100 the apply: record the groups, refresh, deploy and switch'
 $global:ApplyCalls = [Collections.Generic.List[string]]::new()
 $applySeams = @{
-    EntitlementSync = { param($p) $global:ApplyCalls.Add("sync Store=$($p.EntitlementStore) Live=$($p.LiveEntitlementSource) Std=$($p.StandardGroup) Prem=$($p.PremiumGroup) EmptyPremium=$([bool]$p.AllowEmptyPremium)"); [pscustomobject]@{ CompareBaseline = 'Auto'; ServingStore = 'named-value'; Reason = 'refreshed' } }
+    EntitlementSync = { param($p) $global:ApplyCalls.Add("sync Store=$($p.EntitlementStore) Live=$($p.LiveEntitlementSource) Std=$($p.StandardGroup) Prem=$($p.PremiumGroup) EmptyStandard=$([bool]$p.AllowEmptyStandard) EmptyPremium=$([bool]$p.AllowEmptyPremium)"); [pscustomobject]@{ CompareBaseline = 'Auto'; ServingStore = 'named-value'; Reason = 'refreshed' } }
     ProjectionDeployment = { param($p) $global:ApplyCalls.Add("deploy Prefix=$($p.NamePrefix) Sku=$($p.Sku) Access=$($p.ResolverInboundAccess) Baseline=$($p.CompareBaseline) Std=$($p.StandardGroup) Prem=$($p.PremiumGroup) App=$($p.ProjectionResolverAppId)"); $true }
     SetNamedValue = { param($Id, $Value) $global:ApplyCalls.Add("set $Id=$Value") }
 }
@@ -251,8 +260,15 @@ Assert 'entitlement-groups holds only object ids, in a form cmd.exe passes uncha
 $global:ApplyCalls.Clear()
 Capture { Invoke-ClaudeEntitlementMigrationApply -Facts $noPremiumFacts -Root $root @applySeams }
 $appliedNone = $global:ApplyCalls -join "`n"
-Assert 'with no premium group the refresh, the deployment and the record all say none, never the default premium name' (-not $CapturedError -and $appliedNone -match '(?m)^sync .* Prem=none EmptyPremium=True$' -and $appliedNone -match '(?m)^deploy .* Prem=none App=$' -and $appliedNone -match '(?m)^set entitlement-groups=standard=[0-9a-f-]+,premium=none$' -and $appliedNone -notmatch 'claude-code-premium') "$CapturedError | $appliedNone"
+Assert 'with no premium group the refresh, the deployment and the record all say none, never the default premium name' (-not $CapturedError -and $appliedNone -match '(?m)^sync .* Prem=none EmptyStandard=False EmptyPremium=True$' -and $appliedNone -match '(?m)^deploy .* Prem=none App=$' -and $appliedNone -match '(?m)^set entitlement-groups=standard=[0-9a-f-]+,premium=none$' -and $appliedNone -notmatch 'claude-code-premium') "$CapturedError | $appliedNone"
 Assert 'with a premium group the refresh keeps its guard against emptying allow-premium' ($applied -match '(?m)^sync .* EmptyPremium=False$') $applied
+$global:GroupDirectory['team-std'] = @{ Id = $standardId; Name = 'team-std'; Members = @() }
+Get-Facts
+$emptyStandardFacts = $CapturedResult
+$global:GroupDirectory['team-std'] = @{ Id = $standardId; Name = 'team-std'; Members = @($oid[0], $oid[1]) }
+$global:ApplyCalls.Clear()
+Capture { Invoke-ClaudeEntitlementMigrationApply -Facts $emptyStandardFacts -Root $root @applySeams }
+Assert 'a tier group with no members, whose listed developers the plan counts as leaving, lets the refresh empty that list' (-not $CapturedError -and $emptyStandardFacts.Groups.Standard.Lost -eq 2 -and ($global:ApplyCalls -join "`n") -match '(?m)^sync .* EmptyStandard=True EmptyPremium=False$') "$CapturedError | $($global:ApplyCalls -join ' ; ')"
 . (Join-Path $root 'scripts\ClaudeInstallProjection.ps1')
 $global:SyncArguments = $null
 Capture { Invoke-ClaudeInstallerEntitlementSync -Root $root -ResourceGroup rg-contoso -ApimName apim-contoso -StandardGroup $standardId -PremiumGroup none -EntitlementStore projection -LiveEntitlementSource named-value -AllowEmptyPremium -InvokeScript { param($Path, $Parameters) $global:SyncArguments = $Parameters; 0 } }
@@ -260,6 +276,9 @@ Assert 'the installer''s refresh passes -AllowEmptyPremium and none to Sync-Clau
 $global:SyncArguments = $null
 Capture { Invoke-ClaudeInstallerEntitlementSync -Root $root -ResourceGroup rg-contoso -ApimName apim-contoso -StandardGroup $standardId -PremiumGroup $premiumId -EntitlementStore projection -LiveEntitlementSource named-value -InvokeScript { param($Path, $Parameters) $global:SyncArguments = $Parameters; 0 } }
 Assert 'without it the installer''s refresh keeps Sync-ClaudeAccess''s guard' (-not $CapturedError -and $global:SyncArguments -and -not $global:SyncArguments.Contains('AllowEmptyPremium')) "$CapturedError $($global:SyncArguments | ConvertTo-Json -Compress)"
+$global:SyncArguments = $null
+Capture { Invoke-ClaudeInstallerEntitlementSync -Root $root -ResourceGroup rg-contoso -ApimName apim-contoso -StandardGroup $standardId -PremiumGroup $premiumId -EntitlementStore projection -LiveEntitlementSource named-value -AllowEmptyStandard -InvokeScript { param($Path, $Parameters) $global:SyncArguments = $Parameters; 0 } }
+Assert 'the installer''s refresh passes -AllowEmptyStandard to Sync-ClaudeAccess when the update asks for it' (-not $CapturedError -and $global:SyncArguments -and $global:SyncArguments['AllowEmptyStandard'] -eq $true -and -not $global:SyncArguments.Contains('AllowEmptyPremium')) "$CapturedError $($global:SyncArguments | ConvertTo-Json -Compress)"
 $global:ApplyCalls.Clear()
 Capture { Invoke-ClaudeEntitlementMigrationApply -Facts $pinnedFacts -Root $root @applySeams }
 Assert 'the deployment uses the resolver app the plan found' (-not $CapturedError -and ($global:ApplyCalls -join "`n") -match "(?m)^deploy .* App=$($global:ResolverApp)$") ($global:ApplyCalls -join ' ; ')
@@ -311,9 +330,13 @@ $updaterSource = [IO.File]::ReadAllText((Join-Path $root 'scripts\Update-ClaudeG
 Assert 'the updater shares the backup between migrations after each one runs' ($updaterSource -match '(?s)Invoke-ClaudeFlowMigration -Record \$record -Plan \$plan \| Out-Null\s+Sync-ClaudeFlowLifecycleSnapshotTaken -Plans \$plans') ''
 $recordCopy = [pscustomobject]@{ resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; standardGroup = 'old-std'; premiumGroup = 'old-prem' }
 Capture { Set-ClaudeEntitlementMigrationRecordGroups -Record $recordCopy -Facts $noPremiumFacts }
-Assert 'the decision record names the groups the move used, so a later Sync-ClaudeAccess reads them' (-not $CapturedError -and $recordCopy.standardGroup -eq $noPremiumFacts.Groups.Standard.Id -and $recordCopy.premiumGroup -eq 'none') "$CapturedError $($recordCopy | ConvertTo-Json -Compress)"
+Assert 'the decision record names the groups the move used, so a later Sync-ClaudeAccess reads them' (-not $CapturedError -and $CapturedResult -eq $true -and $recordCopy.standardGroup -eq $noPremiumFacts.Groups.Standard.Id -and $recordCopy.premiumGroup -eq 'none') "$CapturedError $($recordCopy | ConvertTo-Json -Compress)"
+$foreignRecordObject = [pscustomobject]@{ resourceGroup = 'rg-a'; apimName = 'apim-a'; standardGroup = 'team-a-std'; premiumGroup = 'team-a-prem' }
+$movedFacts = $noPremiumFacts.PSObject.Copy(); $movedFacts | Add-Member -NotePropertyName RecordFits -NotePropertyValue $false -Force
+Capture { Set-ClaudeEntitlementMigrationRecordGroups -Record $foreignRecordObject -Facts $movedFacts }
+Assert 'a decision record of another gateway keeps its groups: the move does not write them' (-not $CapturedError -and $CapturedResult -eq $false -and $foreignRecordObject.standardGroup -eq 'team-a-std' -and $foreignRecordObject.premiumGroup -eq 'team-a-prem') "$CapturedError $($foreignRecordObject | ConvertTo-Json -Compress)"
 $migration0004Source = [IO.File]::ReadAllText((Join-Path $root 'scripts\flow\migrations\0004-entitlement-projection.ps1'))
-Assert 'migration 0004 records the groups in the decision record after the apply succeeds' ($migration0004Source -match '(?s)Invoke-ClaudeEntitlementMigrationApply [^\r\n]+\r?\n\s+Set-ClaudeEntitlementMigrationRecordGroups -Record \$Record -Facts \$facts') ''
+Assert 'migration 0004 records the groups and the history row only in a decision record of the moved gateway, after the apply succeeds' ($migration0004Source -match '(?s)Invoke-ClaudeEntitlementMigrationApply [^\r\n]+\r?\n(\s*#[^\r\n]*\r?\n)*\s+if \(Set-ClaudeEntitlementMigrationRecordGroups -Record \$Record -Facts \$facts\) \{[^}]*Add-ClaudeDecisionHistory') ''
 Capture { Test-ClaudeFlowMigration -Record $record -Discovery (New-Discovery @{ 'entitlement-source' = 'projection'; 'entitlement-projection-prefix' = 'contoso' }) }
 Assert 'the migration verifies entitlement-source projection and the recorded prefix' ($CapturedResult.Passed) ($CapturedResult | ConvertTo-Json -Depth 4 -Compress)
 Capture { Test-ClaudeFlowMigration -Record $record -Discovery (New-Discovery) }
@@ -409,6 +432,14 @@ try {
     $said = & pwsh -NoProfile -NonInteractive -Command "try { & '$updater' -RecordPath '$missingRecord' -DiscoveryPath '$cleanPath' -ResourceGroup rg-contoso -ApimName apim-contoso -Apply -ApprovedPlanFingerprint $('0' * 64) 6>&1 | Out-Null; 'NO-THROW' } catch { 'THROWN: ' + `$_.Exception.Message }" 2>&1 | Out-String
     Assert 'a fingerprint that does not match is refused with nothing written, and names the current fingerprint and the next step' ($said -match 'THROWN: .*does not match' -and $said -match 'nothing was written' -and $said -match "-ApprovedPlanFingerprint $fp" -and -not (Test-Path -LiteralPath $missingRecord)) ($said.Trim())
     $updaterText = [IO.File]::ReadAllText($updater)
+    $foreignRecord = Join-Path $scratch 'foreign-record.json'
+    [IO.File]::WriteAllText($foreignRecord, ([ordered]@{ schemaVersion = 2; resourceGroup = 'rg-a'; apimName = 'apim-a'; standardGroup = 'team-a-std'; premiumGroup = 'team-a-prem'; release = @{ version = 'v0'; commit = 'old' }; decisions = @{} } | ConvertTo-Json -Depth 5), (New-Object Text.UTF8Encoding($false)))
+    $foreignBefore = [IO.File]::ReadAllText($foreignRecord)
+    $said = & pwsh -NoProfile -NonInteractive -Command "& '$updater' -RecordPath '$foreignRecord' -DiscoveryPath '$cleanPath' 6>&1 | Out-String" 2>&1 | Out-String
+    $foreignFp = [regex]::Match($said, 'Plan fingerprint: ([0-9a-f]{64})').Groups[1].Value
+    Assert 'a plan made with a decision record of another gateway names both gateways and the -RecordPath remedy' ($said -match 'describes rg-a/apim-a, not rg-contoso/apim-contoso' -and $said -match '-RecordPath') (($said -split "`n" | Where-Object { $_ -match 'describes' } | Select-Object -First 2) -join ' ')
+    $said = & pwsh -NoProfile -NonInteractive -Command "try { & '$updater' -RecordPath '$foreignRecord' -DiscoveryPath '$cleanPath' -Apply -ApprovedPlanFingerprint $foreignFp 6>&1 | Out-Null; 'NO-THROW' } catch { 'THROWN: ' + `$_.Exception.Message }" 2>&1 | Out-String
+    Assert 'with a decision record of another gateway the apply is refused before any write, and the record is unchanged' ($said -match 'THROWN: .*describes rg-a/apim-a' -and [IO.File]::ReadAllText($foreignRecord) -ceq $foreignBefore -and -not (Test-Path -LiteralPath (Join-Path $root 'backups\before-update-apim-contoso.json'))) ($said.Trim())
     Assert 'a migration that does not verify names the restore command with its folder' ($updaterText -match [regex]::Escape("did not verify. Roll back with .\scripts\Restore-ClaudeGateway.ps1 -Path '")) ''
     Assert 'the updater puts a record path other than the default in every plan''s data, for the resume command' ($updaterText -match '\$plan\.Data\.RecordPath = \$resumeRecordPath') ''
     $shim = [IO.File]::ReadAllText((Join-Path $root 'Update-ClaudeGateway.ps1'))

@@ -262,7 +262,8 @@ function Invoke-ClaudeInstallerEntitlementSync {
         [Parameter(Mandatory)][ValidateSet('named-value','projection')][string]$EntitlementStore,
         [AllowEmptyString()][string]$LiveEntitlementSource = '',
         [switch]$NewGateway,
-        # The update's move with no premium tier (ADR-0054): the refresh may empty allow-premium.
+        # The update's move with a tier that has no members (ADR-0054): the refresh may empty that tier's list.
+        [switch]$AllowEmptyStandard,
         [switch]$AllowEmptyPremium,
         [scriptblock]$InvokeScript
     )
@@ -274,6 +275,7 @@ function Invoke-ClaudeInstallerEntitlementSync {
         return [pscustomobject]@{ CompareBaseline = 'Auto'; ServingStore = 'named-value'; Reason = 'new-gateway' }
     }
     $parameters = [ordered]@{ ApimName = $ApimName; ResourceGroup = $ResourceGroup; StandardGroup = $StandardGroup; PremiumGroup = $PremiumGroup; Store = 'named-value' }
+    if ($AllowEmptyStandard) { $parameters['AllowEmptyStandard'] = $true }
     if ($AllowEmptyPremium) { $parameters['AllowEmptyPremium'] = $true }
     $scriptPath = Join-Path $Root 'scripts\Sync-ClaudeAccess.ps1'
     try {

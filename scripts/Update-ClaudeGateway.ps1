@@ -74,6 +74,14 @@ if (-not $SnapshotPath) {
 $defaultRecord = [IO.Path]::GetFullPath((Join-Path $root 'onboarding\claude-gateway.json'))
 $recordFullPath = [IO.Path]::GetFullPath((Resolve-ClaudeFlowFilePath $RecordPath))
 $resumeRecordPath = if ([string]::Equals($recordFullPath, $defaultRecord, [StringComparison]::OrdinalIgnoreCase)) { '' } else { $recordFullPath }
+# A decision record of another gateway is not this gateway's record: the apply writes the record, and later syncs
+# read the tier groups from it (scripts/Get-ClaudeGatewayTarget.ps1). The apply refuses it (ADR-0054).
+$recordTarget = Get-ClaudeFlowLifecycleRecordTarget -Record $record
+$recordProblem = ''
+if ($recordTarget.ApimName -and $target.ApimName -and -not ([string]::Equals($recordTarget.ApimName, $target.ApimName, [StringComparison]::OrdinalIgnoreCase) -and
+        (-not $recordTarget.ResourceGroup -or [string]::Equals($recordTarget.ResourceGroup, $target.ResourceGroup, [StringComparison]::OrdinalIgnoreCase)))) {
+    $recordProblem = "The decision record at '$recordFullPath' describes $($recordTarget.ResourceGroup)/$($recordTarget.ApimName), not $($target.ResourceGroup)/$($target.ApimName). Remedy: -RecordPath with this gateway's record, or with a new path such as .\onboarding\claude-gateway.$($target.ResourceGroup)-$($target.ApimName).json, which the apply writes."
+}
 
 # Code-point order: the migrations' order feeds the plan's fingerprint (P76).
 $migrationFiles = @(Sort-ClaudeFlowOrdinal -InputObject @(Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'flow\migrations') -Filter '*.ps1') -Key { $_.Name })
@@ -98,6 +106,9 @@ if (-not $Apply -or $WhatIfPreference) {
     if ($blocked.Count) {
         Write-Host "Plan only, and blocked in $(@($blocked | ForEach-Object Step) -join ', '): nothing can be applied until the BLOCKED items are fixed and the plan is made again.$(if (@($blocked | Where-Object Step -eq '0004-entitlement-projection').Count) { ' With -KeepNamedValues the update plans no move to the projection, and its other migrations apply.' })" -ForegroundColor Yellow
     }
+    elseif ($recordProblem) {
+        Write-Host "Plan only. $recordProblem -Apply refuses this record." -ForegroundColor Yellow
+    }
     else {
         $parts = @('.\Update-ClaudeGateway.ps1')
         foreach ($name in 'RecordPath', 'DiscoveryPath', 'ResourceGroup', 'ApimName', 'SnapshotPath', 'StandardGroup', 'PremiumGroup', 'NamePrefix', 'ResolverInboundAccess') {
@@ -111,6 +122,9 @@ if (-not $Apply -or $WhatIfPreference) {
         Write-Host ("  " + (($parts + @('-Apply', "-ApprovedPlanFingerprint $fingerprint")) -join ' '))
     }
     return [pscustomobject]@{ Plans = $plans; Fingerprint = $fingerprint; SnapshotPath = $SnapshotPath }
+}
+if ($recordProblem) {
+    throw "$recordProblem Nothing was written."
 }
 if ($blocked.Count) {
     throw "The plan is blocked in $(@($blocked | ForEach-Object Step) -join ', '); nothing was written. Fix the BLOCKED items shown above and plan again.$(if (@($blocked | Where-Object Step -eq '0004-entitlement-projection').Count) { ' With -KeepNamedValues the update plans no move to the projection, and its other migrations apply.' })"

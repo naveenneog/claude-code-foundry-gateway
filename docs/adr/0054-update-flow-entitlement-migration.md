@@ -54,8 +54,10 @@ Migration `0004-entitlement-projection` in `scripts/flow/migrations/`:
   - Tier groups, first found of: `-StandardGroup` and `-PremiumGroup`, the gateway's `entitlement-groups` named
     value, the decision record when it describes the same gateway (resource group and API Management name), the
     default names `claude-code-standard` and `claude-code-premium`. A group counts only when Microsoft Graph finds
-    it. Its transitive members are compared with `allow-standard` or `allow-premium`, and the difference is shown.
-    A record of another gateway is named in the plan and its groups are not used.
+    it. A group named by a parameter, `entitlement-groups` or the decision record that Graph cannot find blocks the
+    plan and is named in it; only the default names are a fallback. Its transitive members are compared with
+    `allow-standard` or `allow-premium`, and the difference is shown. A record of another gateway is named in the
+    plan and its groups are not used.
   - Business units: `bu-registry` and `bu-parents`, which the writer already reads from the gateway.
   - Name prefix: `entitlement-projection-prefix` when it is a valid prefix (the deployer writes it before the
     switch, so projection resources may exist under it), else `-NamePrefix`, else the API Management name without
@@ -89,7 +91,8 @@ Migration `0004-entitlement-projection` in `scripts/flow/migrations/`:
   identities and role assignments; the monthly cost from `scripts/Measure-ClaudeProjectionCost.ps1`; the time
   estimate; the switch and the rollback.
 - **What the fingerprint covers.** Every fact the plan shows and every value the apply uses: the groups' object
-  IDs, member, gained and lost counts; the business-unit IDs and a SHA-256 of `bu-parents`; the prefix, region,
+  IDs, member, gained and lost counts; the business-unit IDs and a SHA-256 of `bu-registry` and of `bu-parents`; the
+  prefix, region,
   tier and access; the resolver app the preflight found, which the apply passes to the deployment; each check's
   name, result and remedy. Evidence that changes between runs (times, usage numbers) is printed beside the plan
   and left out, so that `-Apply`, which plans again, matches.
@@ -102,10 +105,14 @@ Migration `0004-entitlement-projection` in `scripts/flow/migrations/`:
   `projection`, `entitlement-projection-prefix` is the planned prefix, `entitlement-groups` holds the planned
   groups), and the decision record gets a history row. A failed step leaves named values serving and names the
   update command that resumes: the decision record when it is not the default, the resolved groups as object
-  IDs, the prefix and the resolver access.
+  IDs, the prefix and the resolver access. A tier whose group has no members (no group, or an empty one) lets the
+  refresh empty that tier's list (`-AllowEmptyStandard`, `-AllowEmptyPremium`), because the approved plan counted
+  its listed developers as leaving it. The decision record gets the groups the move used and the history row only
+  when it describes the moved gateway.
 - **Without a decision record.** `-ResourceGroup` and `-ApimName` are enough to plan; the plan uses a record of
   those two values, and the apply writes it with the release and a history row. A record that names another
-  gateway is not a source of tier groups; the plan says so.
+  gateway is not a source of tier groups; the plan says so and prints no apply command, and `-Apply` refuses it
+  before any write, naming `-RecordPath` for this gateway's record.
 
 ## Consequences
 

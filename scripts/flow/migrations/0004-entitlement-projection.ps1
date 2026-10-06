@@ -105,9 +105,11 @@ function Invoke-ClaudeFlowMigration {
     foreach ($script in 'ApimNamedValue.ps1', 'ClaudeInstallProjection.ps1', 'ClaudeEntitlementMigration.ps1') { . (Join-Path $root "scripts\$script") }
     $facts = $Plan.Data.Facts
     $null = Invoke-ClaudeEntitlementMigrationApply -Facts $facts -Root $root -RecordPath ([string]$Plan.Data.RecordPath)
-    Set-ClaudeEntitlementMigrationRecordGroups -Record $Record -Facts $facts
-    $release = Get-ClaudeFlowReleaseInfo
-    Add-ClaudeDecisionHistory -Record $Record -Action Update -Decision entitlement -From 'named-value' -To 'projection' -Commit $release.commit
+    # A decision record of another gateway keeps its own groups and history.
+    if (Set-ClaudeEntitlementMigrationRecordGroups -Record $Record -Facts $facts) {
+        $release = Get-ClaudeFlowReleaseInfo
+        Add-ClaudeDecisionHistory -Record $Record -Action Update -Decision entitlement -From 'named-value' -To 'projection' -Commit $release.commit
+    }
     @{ entitlement = 'projection' }
 }
 

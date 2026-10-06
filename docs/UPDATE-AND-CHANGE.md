@@ -112,9 +112,9 @@ The plan prints the second command with its fingerprint, followed by any option 
 
 | Item | Where the value comes from |
 |---|---|
-| Tier groups | `-StandardGroup` and `-PremiumGroup`; else the gateway's `entitlement-groups` named value; else `standardGroup` and `premiumGroup` in the decision record, when the record names the same gateway; else `claude-code-standard` and `claude-code-premium`. Each group is read from Microsoft Graph, and the plan counts the developers who would gain or lose access compared with `allow-standard` and `allow-premium`. `-PremiumGroup none` means no premium group; the name `none` is reserved for this, so a group with that display name is passed by object ID. |
+| Tier groups | `-StandardGroup` and `-PremiumGroup`; else the gateway's `entitlement-groups` named value; else `standardGroup` and `premiumGroup` in the decision record, when the record names the same gateway; else `claude-code-standard` and `claude-code-premium`. Each group is read from Microsoft Graph, and the plan counts the developers who would gain or lose access compared with `allow-standard` and `allow-premium`. A group named by a parameter, `entitlement-groups` or the decision record that Graph cannot find blocks the plan; only the default names are a fallback. `-PremiumGroup none` means no premium group; the name `none` is reserved for this, so a group with that display name is passed by object ID. |
 | Developers | the distinct members of the two tier groups in Entra, which the move deploys and the cost and time count; the named-value lists are counted beside them |
-| Business units | the IDs in `bu-registry` and the hierarchy in `bu-parents`; the fingerprint covers both |
+| Business units | the IDs in `bu-registry` and the hierarchy in `bu-parents`; the fingerprint covers both, with a SHA-256 of each |
 | Name prefix | the gateway's `entitlement-projection-prefix` when it is a valid prefix; else `-NamePrefix`; else the API Management name without `apim-` (the installer's rule). A `-NamePrefix` that differs from a valid recorded prefix blocks the plan, because projection resources may exist under the recorded one. |
 | Region and tier | the gateway; a v2 tier is required |
 | Resolver access | `-ResolverInboundAccess`; else `public` ([ADR-0052](adr/0052-cosmos-default-installer.md)) |
@@ -132,6 +132,10 @@ The plan is BLOCKED, prints no apply command, and `-Apply` refuses it before the
 - a private resolver is asked for on Basic v2;
 - the snapshot transfer would take more than 110 minutes, since a snapshot's apply-by time is 2 hours after
   its export.
+
+A decision record that names another gateway gets the same treatment: the plan names both gateways and prints no
+apply command, and `-Apply` refuses before any write. `-RecordPath` names this gateway's record, or a new path
+that the apply writes.
 
 The readiness evidence, such as usage counts and times, is printed after the plan and is not part of the
 fingerprint. The check results are, with every value the apply uses, so a change between the plan and the

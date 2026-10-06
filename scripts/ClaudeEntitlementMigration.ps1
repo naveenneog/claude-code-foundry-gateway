@@ -40,8 +40,9 @@ function ConvertTo-ClaudeEntitlementGroups([Parameter(Mandatory)][string]$Standa
 }
 
 # The first candidate that Graph finds wins. A candidate 'none' says the tier has no group. A value the operator
-# passed or the gateway records is not replaced by a later candidate when Graph cannot find it: a typo or a deleted
-# group would otherwise select another group, such as the default name, with no sign in the plan.
+# passed, the gateway records or the gateway's decision record names is not replaced by a later candidate when
+# Graph cannot find it: a typo or a deleted group would otherwise select another group, such as the default name,
+# with no sign in the plan. Only the default names are a fallback.
 function Resolve-ClaudeMigrationGroup {
     param([Parameter(Mandatory)][string]$Tier, [object[]]$Candidates, [Parameter(Mandatory)][scriptblock]$FindGroup)
     foreach ($candidate in $Candidates) {
@@ -103,9 +104,9 @@ function Get-ClaudeEntitlementMigrationFacts {
         SubscriptionId = [string]$Discovery.subscriptionId; ResourceGroup = [string]$Discovery.resourceGroup; ApimName = [string]$Discovery.apimName
         Location = (ConvertTo-ClaudeArmRegionName ([string]$Discovery.location)); Sku = [string]$Discovery.sku
         NamePrefix = ''; PrefixSource = ''; ResolverInboundAccess = ''; AccessSource = ''
-        Groups = $null; BusinessUnits = 0; BusinessUnitIds = @(); BusinessUnitParentsSha256 = ''; Developers = 0; ListedDevelopers = 0
+        Groups = $null; BusinessUnits = 0; BusinessUnitIds = @(); BusinessUnitRegistrySha256 = ''; BusinessUnitParentsSha256 = ''; Developers = 0; ListedDevelopers = 0
         ResolverAppId = ''
-        Problems = @(); Checks = @(); Blocked = $false; RecordNote = ''
+        Problems = @(); Checks = @(); Blocked = $false; RecordNote = ''; RecordFits = $false
         Resources = $null; InventoryLines = @(); MonthlyUsd = $null; CostUnknownReason = ''; EstimatedMinutes = 0
     }
     if ($store -eq 'projection') {
@@ -167,14 +168,15 @@ function Get-ClaudeEntitlementMigrationFacts {
     if ($Record -and -not $recordFits) {
         $facts.RecordNote = "The decision record describes $(if ($Record.PSObject.Properties['apimName'] -and $Record.apimName) { "$($Record.resourceGroup)/$($Record.apimName)" } else { 'no gateway' }), not $($facts.ResourceGroup)/$($facts.ApimName); its tier groups were not used."
     }
+    $facts.RecordFits = [bool]$recordFits
     $recordStandard = if ($recordFits -and $Record.PSObject.Properties['standardGroup']) { [string]$Record.standardGroup } else { '' }
     $recordPremium = if ($recordFits -and $Record.PSObject.Properties['premiumGroup']) { [string]$Record.premiumGroup } else { '' }
     $standard = Resolve-ClaudeMigrationGroup -Tier 'standard' -FindGroup $FindGroup -Candidates @(
         @{ Value = $StandardGroup; Source = 'parameter'; Authoritative = $true }, @{ Value = $recorded['standard']; Source = 'gateway entitlement-groups'; Authoritative = $true },
-        @{ Value = $recordStandard; Source = 'decision record' }, @{ Value = 'claude-code-standard'; Source = 'default name' })
+        @{ Value = $recordStandard; Source = 'decision record'; Authoritative = $true }, @{ Value = 'claude-code-standard'; Source = 'default name' })
     $premium = Resolve-ClaudeMigrationGroup -Tier 'premium' -FindGroup $FindGroup -Candidates @(
         @{ Value = $PremiumGroup; Source = 'parameter'; Authoritative = $true }, @{ Value = $recorded['premium']; Source = 'gateway entitlement-groups'; Authoritative = $true },
-        @{ Value = $recordPremium; Source = 'decision record' }, @{ Value = 'claude-code-premium'; Source = 'default name' })
+        @{ Value = $recordPremium; Source = 'decision record'; Authoritative = $true }, @{ Value = 'claude-code-premium'; Source = 'default name' })
     $listedStandard = ConvertFrom-ClaudeEntitlementList ([string]$values['allow-standard'])
     $listedPremium = ConvertFrom-ClaudeEntitlementList ([string]$values['allow-premium'])
     if ($standard.Missing) {
@@ -214,6 +216,8 @@ function Get-ClaudeEntitlementMigrationFacts {
     $unitIds = @(([string]$values['bu-registry'] -split ',') | Where-Object { $_ -match '=' } | ForEach-Object { ($_ -split '=', 2)[0].Trim() } | Where-Object { $_ })
     $facts.BusinessUnits = $unitIds.Count
     $facts.BusinessUnitIds = @(Sort-ClaudeFlowOrdinal -InputObject $unitIds -Unique)
+    # The registry's groups and budgets, not only its IDs, decide the projection's business units.
+    $facts.BusinessUnitRegistrySha256 = Get-ClaudeFlowLifecycleStringHash -Text ([string]$values['bu-registry'])
     $facts.BusinessUnitParentsSha256 = Get-ClaudeFlowLifecycleStringHash -Text ([string]$values['bu-parents'])
 
     # Readiness: the projection preflight and the subscription checks, only once the previous values are known.
@@ -280,10 +284,10 @@ function New-ClaudeEntitlementMigrationFailure {
         SubscriptionId = [string]$Discovery.subscriptionId; ResourceGroup = [string]$Discovery.resourceGroup; ApimName = [string]$Discovery.apimName
         Location = (ConvertTo-ClaudeArmRegionName ([string]$Discovery.location)); Sku = [string]$Discovery.sku
         NamePrefix = ''; PrefixSource = ''; ResolverInboundAccess = ''; AccessSource = ''
-        Groups = $null; BusinessUnits = 0; BusinessUnitIds = @(); BusinessUnitParentsSha256 = ''; Developers = 0; ListedDevelopers = 0
+        Groups = $null; BusinessUnits = 0; BusinessUnitIds = @(); BusinessUnitRegistrySha256 = ''; BusinessUnitParentsSha256 = ''; Developers = 0; ListedDevelopers = 0
         ResolverAppId = ''
         Problems = @("The move to the projection could not be assessed: $Message Remedy: fix the cause and run the update again.")
-        Checks = @(); Blocked = $needed; RecordNote = ''
+        Checks = @(); Blocked = $needed; RecordNote = ''; RecordFits = $false
         Resources = $null; InventoryLines = @(); MonthlyUsd = $null; CostUnknownReason = 'not assessed'; EstimatedMinutes = 0
     }
 }
@@ -334,11 +338,14 @@ function Get-ClaudeEntitlementMigrationResumeCommand([Parameter(Mandatory)]$Fact
 }
 
 # The decision record names the groups the move used: until P101 reads entitlement-groups, Sync-ClaudeAccess.ps1
-# takes its groups from the record (scripts/Get-ClaudeGatewayTarget.ps1) or the default names.
+# takes its groups from the record (scripts/Get-ClaudeGatewayTarget.ps1) or the default names. A record of another
+# gateway keeps its own groups; the result says whether the record was written.
 function Set-ClaudeEntitlementMigrationRecordGroups {
     param([Parameter(Mandatory)]$Record, [Parameter(Mandatory)]$Facts)
+    if (-not ($Facts.PSObject.Properties['RecordFits'] -and $Facts.RecordFits)) { return $false }
     Set-ClaudeRecordProperty $Record 'standardGroup' ([string]$Facts.Groups.Standard.Id)
     Set-ClaudeRecordProperty $Record 'premiumGroup' $(if ($Facts.Groups.Premium.Found) { [string]$Facts.Groups.Premium.Id } else { 'none' })
+    return $true
 }
 
 # The apply (ADR-0054): record the tier groups on the gateway, then the installer's order (ADR-0052): refresh the
@@ -367,8 +374,10 @@ function Invoke-ClaudeEntitlementMigrationApply {
     try {
         $sync = & $EntitlementSync ([ordered]@{ Root = $Root; ResourceGroup = $Facts.ResourceGroup; ApimName = $Facts.ApimName; StandardGroup = $standardGroup
                 PremiumGroup = $premiumGroup; EntitlementStore = 'projection'; LiveEntitlementSource = [string]$Facts.Store
-                # With no premium tier the plan counted allow-premium's developers as leaving it; the refresh empties it.
-                AllowEmptyPremium = (-not $Facts.Groups.Premium.Found) })
+                # A tier with no members (no group, or a group that is empty) was counted in the approved plan as its
+                # listed developers leaving it; the refresh may then empty that list.
+                AllowEmptyStandard = ([int]$Facts.Groups.Standard.Members -eq 0)
+                AllowEmptyPremium = ([int]$Facts.Groups.Premium.Members -eq 0) })
         $baseline = if ($sync -and $sync.CompareBaseline) { [string]$sync.CompareBaseline } else { 'Auto' }
         $deployment = [ordered]@{ Root = $Root; ResourceGroup = $Facts.ResourceGroup; ApimName = $Facts.ApimName; NamePrefix = $Facts.NamePrefix
                 Location = $Facts.Location; Sku = $Facts.Sku; ResolverInboundAccess = $Facts.ResolverInboundAccess; StandardGroup = $standardGroup
