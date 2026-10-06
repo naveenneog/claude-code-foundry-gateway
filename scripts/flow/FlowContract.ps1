@@ -385,6 +385,14 @@ function Test-ClaudeFlowAzCmdShim {
     return [bool]($az -and $az.Source -match '\.(cmd|bat)$')
 }
 
+function ConvertTo-ClaudeFlowCommandArgument {
+    # A value in a command printed for the operator to paste into PowerShell: bare when it is plain, otherwise
+    # single-quoted with quotes doubled.
+    param([AllowEmptyString()][string]$Value)
+    if ($Value -match '^[A-Za-z0-9._:\\/-]+$') { return $Value }
+    return "'" + $Value.Replace("'", "''") + "'"
+}
+
 function Get-ClaudeFlowStepOrder {
     # Dependencies first; steps with no order between them keep the order they were given in.
     param([object[]]$Steps = @())

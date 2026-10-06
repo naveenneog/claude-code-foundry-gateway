@@ -5,6 +5,10 @@
     Dot-sourcing this file makes no Azure calls.
 #>
 
+# ConvertTo-ClaudeArmRegionName: az apim show gives 'East US 2'; ARM, the Retail Prices API and the usage
+# reads take 'eastus2' (as Install-ClaudeGateway.ps1 converts an existing gateway's region).
+. (Join-Path $PSScriptRoot 'ClaudeGatewayRegion.ps1')
+
 function Test-ClaudeMigrationGuid([AllowEmptyString()][string]$Value) {
     return ([string]$Value -match '^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$')
 }
@@ -88,7 +92,7 @@ function Get-ClaudeEntitlementMigrationFacts {
     $facts = [ordered]@{
         Assessed = $true; Store = $store; Needed = $false; Reason = ''
         SubscriptionId = [string]$Discovery.subscriptionId; ResourceGroup = [string]$Discovery.resourceGroup; ApimName = [string]$Discovery.apimName
-        Location = [string]$Discovery.location; Sku = [string]$Discovery.sku
+        Location = (ConvertTo-ClaudeArmRegionName ([string]$Discovery.location)); Sku = [string]$Discovery.sku
         NamePrefix = ''; PrefixSource = ''; ResolverInboundAccess = ''; AccessSource = ''
         Groups = $null; BusinessUnits = 0; Developers = 0
         Problems = @(); Checks = @(); Blocked = $false
@@ -203,6 +207,26 @@ function Get-ClaudeEntitlementMigrationFacts {
     return [pscustomobject]$facts
 }
 
+# When the facts cannot be read (a Graph or Azure error), the plan is blocked with the reason rather than the
+# whole update failing; a gateway already on the projection still plans no move.
+function New-ClaudeEntitlementMigrationFailure {
+    param([Parameter(Mandatory)]$Discovery, [Parameter(Mandatory)][string]$Message)
+    $values = Get-ClaudeFlowLifecycleNamedValueMap -Discovery $Discovery
+    $store = if ($values['entitlement-source']) { [string]$values['entitlement-source'] } else { 'named-value' }
+    $needed = $store -ne 'projection'
+    [pscustomobject]@{
+        Assessed = $true; Store = $store; Needed = $needed
+        Reason = $(if ($needed) { '' } else { 'The gateway already serves entitlement from the Cosmos projection.' })
+        SubscriptionId = [string]$Discovery.subscriptionId; ResourceGroup = [string]$Discovery.resourceGroup; ApimName = [string]$Discovery.apimName
+        Location = (ConvertTo-ClaudeArmRegionName ([string]$Discovery.location)); Sku = [string]$Discovery.sku
+        NamePrefix = ''; PrefixSource = ''; ResolverInboundAccess = ''; AccessSource = ''
+        Groups = $null; BusinessUnits = 0; Developers = 0
+        Problems = @("The move to the projection could not be assessed: $Message Remedy: fix the cause and run the update again.")
+        Checks = @(); Blocked = $needed
+        Resources = $null; InventoryLines = @(); MonthlyUsd = $null; CostUnknownReason = 'not assessed'; EstimatedMinutes = 0
+    }
+}
+
 # The default Graph lookup: a name or an object id, the group's display name and its transitive user members.
 function Find-ClaudeMigrationGraphGroup {
     param([Parameter(Mandatory)][string]$Value)
@@ -233,18 +257,32 @@ function Get-ClaudeMigrationMonthlyCost {
     catch { return [pscustomobject]@{ MonthlyUsd = $null; UnknownReason = "scripts/Measure-ClaudeProjectionCost.ps1 failed: $($_.Exception.Message)" } }
 }
 
+# The update that resumes a failed move. It names every resolved value: the prefix and resolver access have no
+# home on the gateway before the deployer writes them, and entitlement-groups is written after the switch, so
+# a resume that resolved them again could choose other groups or a second prefix.
+function Get-ClaudeEntitlementMigrationResumeCommand([Parameter(Mandatory)]$Facts) {
+    $premium = if ($Facts.Groups.Premium.Found) { [string]$Facts.Groups.Premium.Id } else { 'none' }
+    $parts = [ordered]@{
+        ResourceGroup = [string]$Facts.ResourceGroup; ApimName = [string]$Facts.ApimName; StandardGroup = [string]$Facts.Groups.Standard.Id
+        PremiumGroup = $premium; NamePrefix = [string]$Facts.NamePrefix; ResolverInboundAccess = [string]$Facts.ResolverInboundAccess
+    }
+    $arguments = foreach ($name in $parts.Keys) { if ($parts[$name]) { "-$name $(ConvertTo-ClaudeFlowCommandArgument $parts[$name])" } }
+    return (@('.\Update-ClaudeGateway.ps1') + @($arguments)) -join ' '
+}
+
 # The apply, in the installer's order (ADR-0052, ADR-0054): refresh the named values from Entra, deploy,
 # populate, compare and switch; then record the tier groups on the gateway.
 function Invoke-ClaudeEntitlementMigrationApply {
     param(
         [Parameter(Mandatory)]$Facts,
         [Parameter(Mandatory)][string]$Root,
-        [Parameter(Mandatory)][string]$ResumeCommand,
+        [string]$ResumeCommand,
         [scriptblock]$EntitlementSync = { param($Parameters) Invoke-ClaudeInstallerEntitlementSync @Parameters },
         [scriptblock]$ProjectionDeployment = { param($Parameters) Invoke-ClaudeInstallerProjectionDeployment @Parameters },
         [scriptblock]$SetNamedValue = { param($Id, $Value) Set-ApimNamedValue -ResourceGroup $Facts.ResourceGroup -ApimName $Facts.ApimName -Id $Id -Value $Value -SubscriptionId $Facts.SubscriptionId }
     )
     if (-not $Facts.Needed) { return $false }
+    if (-not $ResumeCommand) { $ResumeCommand = Get-ClaudeEntitlementMigrationResumeCommand -Facts $Facts }
     if ($Facts.Blocked) { throw "The move to the projection is blocked by the plan's checks; nothing was written. Fix the FAIL items and plan again: $ResumeCommand" }
     $standardGroup = [string]$Facts.Groups.Standard.Id
     $premiumGroup = if ($Facts.Groups.Premium.Found) { [string]$Facts.Groups.Premium.Id } else { 'claude-code-premium' }

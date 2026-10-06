@@ -94,8 +94,7 @@ function Invoke-ClaudeFlowMigration {
     $root = Get-ClaudeFlowLifecycleRepoRoot
     foreach ($script in 'ApimNamedValue.ps1', 'ClaudeInstallProjection.ps1', 'ClaudeEntitlementMigration.ps1') { . (Join-Path $root "scripts\$script") }
     $facts = $Plan.Data.Facts
-    $resume = ".\Update-ClaudeGateway.ps1 -ResourceGroup $($facts.ResourceGroup) -ApimName $($facts.ApimName)"
-    $null = Invoke-ClaudeEntitlementMigrationApply -Facts $facts -Root $root -ResumeCommand $resume
+    $null = Invoke-ClaudeEntitlementMigrationApply -Facts $facts -Root $root
     $release = Get-ClaudeFlowReleaseInfo
     Add-ClaudeDecisionHistory -Record $Record -Action Update -Decision entitlement -From 'named-value' -To 'projection' -Commit $release.commit
     @{ entitlement = 'projection' }

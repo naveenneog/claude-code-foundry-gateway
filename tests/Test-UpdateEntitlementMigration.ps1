@@ -101,6 +101,11 @@ Get-Facts
 $calls = $global:SeamCalls -join "`n"
 Assert 'the preflight runs with the derived prefix, groups and access' ($calls -match 'preflight .*NamePrefix=contoso' -and $calls -match "StandardGroup=$standardId" -and $calls -match 'ResolverInboundAccess=public') $calls
 Assert 'the readiness checks run for the gateway''s region and prefix' ($calls -match 'readiness .*Location=eastus2' -and $calls -match 'readiness .*NamePrefix=contoso') $calls
+$global:SeamCalls.Clear()
+$displayRegion = New-Discovery; $displayRegion.location = 'East US 2'
+$global:CostRegions = [Collections.Generic.List[string]]::new()
+Get-Facts @{ Discovery = $displayRegion; Cost = { param($Developers, $Region) $global:CostRegions.Add([string]$Region); [pscustomobject]@{ MonthlyUsd = [decimal]57.48; UnknownReason = '' } } }
+Assert 'a region that az apim show gives as a display name is used as its ARM name, as the installer does' ($CapturedResult.Location -eq 'eastus2' -and @($global:CostRegions) -contains 'eastus2' -and ($global:SeamCalls -join ' ') -match 'preflight .*Location=eastus2') "$($CapturedResult.Location) / $(@($global:CostRegions) -join ',') / $($global:SeamCalls -join ' | ')"
 $global:ReadinessChecks = @([pscustomobject]@{ Name = 'Container groups in eastus2'; Result = 'FAIL'; Evidence = '100 of 100 used'; Remedy = 'Request a quota increase.' })
 Get-Facts
 Assert 'a FAIL from the readiness checks blocks the plan' ($CapturedResult.Blocked -and @($CapturedResult.Checks | Where-Object Result -eq 'FAIL').Count -eq 1)
@@ -154,6 +159,21 @@ $onProjection = New-Discovery @{ 'entitlement-source' = 'projection' }
 $onProjection | Add-Member -NotePropertyName entitlementMigration -NotePropertyValue $CapturedResult
 Get-Plan $onProjection
 Assert 'a gateway on the projection plans no change' ((Test-ClaudeFlowPlanIsNoop $CapturedResult) -and $CapturedResult.Summary -match 'already')
+$noMovePlan = $CapturedResult
+Capture { Test-ClaudeFlowMigration -Record $record -Discovery (New-Discovery) -Plan $noMovePlan }
+Assert 'a plan with no move verifies without reading the store (-KeepNamedValues leaves named values)' ($CapturedResult.Passed) ($CapturedResult | ConvertTo-Json -Depth 4 -Compress)
+Capture { New-ClaudeEntitlementMigrationFailure -Discovery (New-Discovery) -Message 'Graph returned 403 for the group lookup.' }
+$failed = New-Discovery
+$failed | Add-Member -NotePropertyName entitlementMigration -NotePropertyValue $CapturedResult
+Get-Plan $failed
+$failedReview = if ($CapturedResult) { Format-ClaudeFlowReview -Plans @($CapturedResult) } else { '' }
+Assert 'facts that cannot be read block the plan and say why' (-not $CapturedError -and $CapturedResult.Data.Blocked -and $failedReview -match 'could not be assessed: Graph returned 403 for the group lookup\.') "$CapturedError $failedReview"
+Capture { New-ClaudeEntitlementMigrationFailure -Discovery (New-Discovery @{ 'entitlement-source' = 'projection' }) -Message 'Graph returned 403.' }
+Assert 'facts that cannot be read on a gateway already on the projection plan no move' (-not $CapturedResult.Needed -and -not $CapturedResult.Blocked)
+$global:GroupDirectory['team-std'] = @{ Id = $standardId; Name = 'team-std'; Members = @($oid[0], $oid[1], $oid[2]) }
+Get-Facts
+Assert 'a member of both groups counts as premium only, as Sync-ClaudeAccess writes the lists' ($CapturedResult.Groups.Standard.Members -eq 2 -and $CapturedResult.Groups.Standard.Gained -eq 0) ($CapturedResult.Groups.Standard | ConvertTo-Json -Compress)
+$global:GroupDirectory['team-std'] = @{ Id = $standardId; Name = 'team-std'; Members = @($oid[0], $oid[1]) }
 
 Write-Host 'P100 the apply: refresh, deploy and switch, record the groups'
 $global:ApplyCalls = [Collections.Generic.List[string]]::new()
@@ -172,6 +192,18 @@ $failing = $applySeams.Clone()
 $failing.ProjectionDeployment = { param($p) $global:ApplyCalls.Add('deploy'); throw 'Projection deployment failed; named values keep serving and nothing was switched.' }
 Capture { Invoke-ClaudeEntitlementMigrationApply -Facts $facts -Root $root -ResumeCommand '.\Update-ClaudeGateway.ps1 -ResourceGroup rg-contoso -ApimName apim-contoso' @failing }
 Assert 'a failed deployment writes no groups and names the command that resumes' ($CapturedError -match 'named values keep serving' -and $CapturedError -match 'Update-ClaudeGateway\.ps1 -ResourceGroup rg-contoso' -and ($global:ApplyCalls -join ' ') -notmatch 'entitlement-groups') $CapturedError
+$global:ApplyCalls.Clear()
+# The prefix and access have no home on the gateway before the deployer writes them, and entitlement-groups is
+# written after the switch: a resume that re-resolved them could pick other groups or a second prefix.
+Capture { Invoke-ClaudeEntitlementMigrationApply -Facts $facts -Root $root @failing }
+$expectedResume = ".\Update-ClaudeGateway.ps1 -ResourceGroup rg-contoso -ApimName apim-contoso -StandardGroup $standardId -PremiumGroup $premiumId -NamePrefix contoso -ResolverInboundAccess public"
+Assert 'the resume command carries the resolved groups, prefix and access' ($CapturedError -and $CapturedError.EndsWith($expectedResume)) $CapturedError
+$noPremium = $facts.PSObject.Copy(); $noPremium.Groups = [pscustomobject]@{ Standard = $facts.Groups.Standard; Premium = [pscustomobject]@{ Tier = 'premium'; Found = $false; Absent = $true; Id = '' } }
+$noPremium.ResourceGroup = "rg (it's prod)"
+Capture { Get-ClaudeEntitlementMigrationResumeCommand -Facts $noPremium }
+Assert 'a tier without a group resumes as -PremiumGroup none, and other values are quoted for PowerShell' ($CapturedResult -match [regex]::Escape("-ResourceGroup 'rg (it''s prod)' -ApimName apim-contoso") -and $CapturedResult -match '-PremiumGroup none -NamePrefix') "$CapturedResult $CapturedError"
+$migration0004 = [IO.File]::ReadAllText((Join-Path $root 'scripts\flow\migrations\0004-entitlement-projection.ps1'))
+Assert 'migration 0004 leaves the resume command to the apply, which knows the resolved values' ($migration0004 -notmatch 'ResumeCommand')
 $global:ApplyCalls.Clear()
 $blockedFacts = $facts.PSObject.Copy(); $blockedFacts.Blocked = $true
 Capture { Invoke-ClaudeEntitlementMigrationApply -Facts $blockedFacts -Root $root -ResumeCommand 'x' @applySeams }
@@ -197,6 +229,40 @@ Assert 'without -PassThru a failed preflight still throws' ($CapturedError -matc
 Reset-ProjectionFixture
 Capture { Invoke-ClaudeProjectionPreflight @preflightParams -PassThru }
 Assert 'with -PassThru a healthy preflight returns its checks and context' (-not $CapturedError -and @($CapturedResult.Checks).Count -ge 10 -and @($CapturedResult.Checks | Where-Object Result -eq 'FAIL').Count -eq 0 -and $CapturedResult.Context) $CapturedError
+
+Write-Host 'P100 Update-ClaudeGateway: no record, the apply command, a blocked plan'
+$scratch = Join-Path ([IO.Path]::GetTempPath()) ('p100-update-' + [guid]::NewGuid().ToString('N'))
+$null = New-Item -ItemType Directory -Force -Path $scratch
+try {
+    function Write-DiscoveryFile([string]$Name, $Facts) {
+        $d = New-Discovery
+        $d | Add-Member -NotePropertyName entitlementMigration -NotePropertyValue $Facts
+        $path = Join-Path $scratch $Name
+        [IO.File]::WriteAllText($path, ($d | ConvertTo-Json -Depth 20), (New-Object Text.UTF8Encoding($false)))
+        return $path
+    }
+    $global:ReadinessChecks = @([pscustomobject]@{ Name = 'Container groups in eastus2'; Result = 'PASS'; Evidence = '0 of 100 used'; Remedy = '' })
+    Get-Facts
+    $cleanPath = Write-DiscoveryFile 'clean.json' $CapturedResult
+    $global:ReadinessChecks = @([pscustomobject]@{ Name = 'Container groups in eastus2'; Result = 'FAIL'; Evidence = '100 of 100 used'; Remedy = 'Request a quota increase.' })
+    Get-Facts
+    $blockedPath = Write-DiscoveryFile 'blocked.json' $CapturedResult
+    $missingRecord = Join-Path $scratch 'no-record.json'
+    $updater = Join-Path $root 'scripts\Update-ClaudeGateway.ps1'
+    $said = & pwsh -NoProfile -NonInteractive -Command "& '$updater' -RecordPath '$missingRecord' -DiscoveryPath '$cleanPath' -ResourceGroup rg-contoso -ApimName apim-contoso -StandardGroup team-std 6>&1 | Out-String" 2>&1 | Out-String
+    $fp = [regex]::Match($said, 'Plan fingerprint: ([0-9a-f]{64})').Groups[1].Value
+    Assert 'without a record, -ResourceGroup and -ApimName are enough to plan' ($said -match 'No decision record at' -and $fp -and $said -match '0004-entitlement-projection') ($said -replace '\s+', ' ').Substring(0, [Math]::Min(300, ($said -replace '\s+', ' ').Length))
+    Assert 'the plan prints the apply command with its fingerprint and the given options' ($said -match [regex]::Escape("-StandardGroup team-std -Apply -ApprovedPlanFingerprint $fp") -and $said -match '-ResourceGroup rg-contoso -ApimName apim-contoso') ($said -split "`n" | Where-Object { $_ -match 'Apply' } | Select-Object -First 2)
+    $said = & pwsh -NoProfile -NonInteractive -Command "& '$updater' -RecordPath '$missingRecord' -DiscoveryPath '$blockedPath' -ResourceGroup rg-contoso -ApimName apim-contoso 6>&1 | Out-String" 2>&1 | Out-String
+    $blockedFp = [regex]::Match($said, 'Plan fingerprint: ([0-9a-f]{64})').Groups[1].Value
+    Assert 'a blocked plan prints no apply command and says why' ($said -match 'blocked in 0004-entitlement-projection' -and $said -notmatch '-ApprovedPlanFingerprint') ($said -split "`n" | Where-Object { $_ -match 'blocked|Apply' } | Select-Object -First 3)
+    $said = & pwsh -NoProfile -NonInteractive -Command "try { & '$updater' -RecordPath '$missingRecord' -DiscoveryPath '$blockedPath' -ResourceGroup rg-contoso -ApimName apim-contoso -Apply -ApprovedPlanFingerprint $blockedFp 6>&1 | Out-Null; 'NO-THROW' } catch { 'THROWN: ' + `$_.Exception.Message }" 2>&1 | Out-String
+    Assert 'a blocked plan is refused on apply even with its own fingerprint, before any backup' ($said -match 'THROWN: The plan is blocked in 0004-entitlement-projection' -and -not (Test-Path -LiteralPath (Join-Path $root 'backups\before-update-apim-contoso.json'))) ($said.Trim())
+    Assert 'no record was written by a plan' (-not (Test-Path -LiteralPath $missingRecord))
+    $shim = [IO.File]::ReadAllText((Join-Path $root 'Update-ClaudeGateway.ps1'))
+    Assert 'the root shim forwards the migration options' ($shim -match "'StandardGroup', 'PremiumGroup', 'NamePrefix', 'ResolverInboundAccess'" -and $shim -match 'KeepNamedValues = \$true')
+}
+finally { Remove-Item -LiteralPath $scratch -Recurse -Force -ErrorAction SilentlyContinue }
 
 Write-Host "P100_MIGRATION assertions=$assertions failed=$failures"
 exit ([int]($failures -gt 0))
