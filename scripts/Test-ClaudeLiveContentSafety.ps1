@@ -25,6 +25,7 @@ param(
     [ValidateRange(1, 60)][int]$LogPollSeconds = 30,
     [ValidateRange(1, 3600)][int]$DeleteWaitSeconds = 1800,
     [ValidateRange(1, 300)][int]$DeletePollSeconds = 30,
+    [ValidateRange(1, 1800)][int]$PostPurgeWaitSeconds = 360,
     [Parameter(DontShow)][string]$InstallerPath
 )
 $ErrorActionPreference = 'Stop'
@@ -74,6 +75,10 @@ function Test-P102TraceRows { param([string]$ResourceGroup, [string]$AppInsights
 }
 function Get-LatencySummary($CaseRows) { $latencies = @($CaseRows | Where-Object { $_.latencyMs -gt 0 } | ForEach-Object { [int]$_.latencyMs } | Sort-Object); if (-not $latencies.Count) { return [pscustomobject]@{ p50Ms=0; maxMs=0 } }; [pscustomobject]@{ p50Ms=$latencies[[Math]::Floor(($latencies.Count - 1) / 2)]; maxMs=$latencies[-1] } }
 function Wait-P102ResourceGroupDeleted([string]$ResourceGroupName, [string]$Sub) { $deadline = (Get-Date).AddSeconds($DeleteWaitSeconds); do { $exists = Invoke-Az @('group','exists','--name',$ResourceGroupName,'--subscription',$Sub) -AllowFailure; if ($exists -eq 'false') { return $true }; Start-Sleep -Seconds $DeletePollSeconds } while ((Get-Date) -lt $deadline); return $false }
+function Test-P102ResourceGroupEmpty([string]$ResourceGroupName, [string]$Sub) {
+    $resources = Invoke-Az @('resource','list','-g',$ResourceGroupName,'--query','[].id','-o','tsv','--subscription',$Sub) -AllowFailure
+    return @(Split-NonEmptyLines $resources).Count -eq 0
+}
 function Remove-P102Resources { param($Receipt)
     if (-not $Receipt.createdResourceGroup) { throw 'Refusing teardown: receipt does not say this run created the resource group.' }
     $left = [Collections.Generic.List[string]]::new(); $sub = [string]$Receipt.subscriptionId; $principal = [string]$Receipt.apimPrincipalId
@@ -87,6 +92,26 @@ function Remove-P102Resources { param($Receipt)
     if (-not (Wait-P102ResourceGroupDeleted ([string]$Receipt.resourceGroup) $sub)) { $left.Add("Resource group $($Receipt.resourceGroup) is still deleting. Follow up with: az apim deletedservice purge --service-name $($Receipt.apimName) --location $($Receipt.location) --subscription $sub"); $left.Add("Follow up with: az cognitiveservices account purge -g $($Receipt.resourceGroup) -n $($Receipt.contentSafetyName) -l $($Receipt.location) --subscription $sub"); throw "Teardown deleting. $($left -join ' ')" }
     Invoke-TeardownAz 'deleted APIM service' @('apim','deletedservice','purge','--service-name',[string]$Receipt.apimName,'--location',[string]$Receipt.location,'--subscription',$sub) "az apim deletedservice purge --service-name $($Receipt.apimName) --location $($Receipt.location) --subscription $sub" $left | Out-Null
     Invoke-TeardownAz 'deleted Content Safety account' @('cognitiveservices','account','purge','-g',[string]$Receipt.resourceGroup,'-n',[string]$Receipt.contentSafetyName,'-l',[string]$Receipt.location,'--subscription',$sub) "az cognitiveservices account purge -g $($Receipt.resourceGroup) -n $($Receipt.contentSafetyName) -l $($Receipt.location) --subscription $sub" $left | Out-Null
+    Start-Sleep -Seconds $PostPurgeWaitSeconds
+    $postPurgeExists = Invoke-Az @('group','exists','--name',[string]$Receipt.resourceGroup,'--subscription',$sub) -AllowFailure
+    if ($postPurgeExists -eq 'true') {
+        if (Test-P102ResourceGroupEmpty ([string]$Receipt.resourceGroup) $sub) {
+            $policyRemediation = [pscustomobject]@{
+                observed = $true
+                policyDefinitionName = 'CognitiveServices_Diagnostics_Enable'
+                action = 'empty resource group re-created after purge; deleted again'
+                observedAt = [DateTimeOffset]::UtcNow.ToString('o')
+            }
+            if ($Receipt.PSObject.Properties.Name -contains 'policyRemediationRecreatedResourceGroup') { $Receipt.policyRemediationRecreatedResourceGroup = $policyRemediation }
+            else { $Receipt | Add-Member -NotePropertyName policyRemediationRecreatedResourceGroup -NotePropertyValue $policyRemediation }
+            $Receipt | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath $ReceiptPath -Encoding UTF8
+            $script:receipt.policyRemediationRecreatedResourceGroup = $policyRemediation
+            Save-P102Receipt
+            Invoke-TeardownAz 'policy-remediation empty resource group' @('group','delete','--name',[string]$Receipt.resourceGroup,'--yes','--no-wait','--subscription',$sub) "az group delete --name $($Receipt.resourceGroup) --yes --no-wait --subscription $sub" $left | Out-Null
+        } else {
+            $left.Add("Resource group $($Receipt.resourceGroup) reappeared after purge and is not empty. Inspect it before deleting.")
+        }
+    }
     if ($left.Count) { throw "Teardown incomplete. $($left -join ' ')" }; Write-Host "Teardown complete for $($Receipt.resourceGroup), APIM $($Receipt.apimName), Content Safety $($Receipt.contentSafetyName)."
 }
 Assert-AzProfileAllowed -UseCurrentAzLogin:$UseCurrentAzLogin
@@ -117,3 +142,4 @@ try {
 catch { $failed = $true; if ($script:receipt.installerStarted -and -not $script:receipt.createdResourceGroup) { $existsAfterInstaller = Invoke-Az @('group','exists','--name',$resourceGroup,'--subscription',$SubscriptionId) -AllowFailure; if ($existsAfterInstaller -eq 'true') { $script:receipt.createdResourceGroup = $true } }; Save-P102Receipt; Add-Result 'stopped' $false $_.Exception.Message }
 finally { if ($Teardown -and $script:receiptReady) { try { Remove-P102Resources -Receipt ([pscustomobject]$script:receipt) } catch { $failed = $true; Add-Result 'teardown' $false $_.Exception.Message } }; if ($originalSubscription) { Invoke-Az @('account','set','--subscription',$originalSubscription) -AllowFailure | Out-Null } }
 if ($failed) { exit 1 }
+

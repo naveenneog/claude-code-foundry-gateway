@@ -35,6 +35,8 @@ function Reset-Live {
         InstallerFails = $false
         GroupExistsRemaining = 0
         GroupAlwaysExists = $false
+        PostPurgeRecreate = $false
+        ResourceList = ''
         ModelValue = ',claude-sonnet-5,'
         LogRows = @(
             @{ mode='block'; decision='pass'; hateSeverity=0; violenceSeverity=0; selfHarmSeverity=0; sexualSeverity=0; customDimensions=@{} }
@@ -51,6 +53,7 @@ function az {
         '^account show -o json$' { return (@{ id=$global:Live.AccountId; tenantId=$tenant; user=@{ name='operator@example.com' } } | ConvertTo-Json -Depth 5) }
         '^account set --subscription ' { return }
         '^group exists --name ' {
+            if ($global:Live.PostPurgeRecreate -and @($global:Live.Calls | Where-Object { $_ -match '^az cognitiveservices account purge' }).Count -gt 0) { return 'true' }
             if ($global:Live.GroupAlwaysExists) { return 'true' }
             if ($global:Live.GroupExistsRemaining -gt 0) { $global:Live.GroupExistsRemaining--; return 'true' }
             return $(if ($global:Live.ExistingResourceGroup) { 'true' } else { 'false' })
@@ -65,6 +68,7 @@ function az {
         '^apim show .*--query identity\.principalId' { return '00000000-0000-4000-8000-000000000301' }
         '^apim nv show .*--named-value-id models-standard' { return $global:Live.ModelValue }
         '^apim deletedservice purge ' { return }
+        '^resource list ' { return $global:Live.ResourceList }
         '^account get-access-token .*--query accessToken -o tsv$' { return 'offline-token' }
         '^cognitiveservices account show -g rg-ai -n ai-contoso --query id' { return '/subscriptions/sub/resourceGroups/rg-ai/providers/Microsoft.CognitiveServices/accounts/ai' }
         '^cognitiveservices account show .*--query id' { return '/subscriptions/sub/resourceGroups/rg-p102/providers/Microsoft.CognitiveServices/accounts/cs-p102' }
@@ -105,6 +109,7 @@ function Invoke-P102([hashtable]$Extra = @{}) {
         LogWaitSeconds = 1
         DeletePollSeconds = 1
         DeleteWaitSeconds = 1
+        PostPurgeWaitSeconds = 1
     }
     foreach ($k in $Extra.Keys) { if ($null -eq $Extra[$k]) { $params.Remove($k) } else { $params[$k] = $Extra[$k] } }
     $script:Output = ''
@@ -174,6 +179,16 @@ try {
     } | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $receiptPath -Encoding UTF8
     Invoke-P102 @{ TeardownOnly = $true; ReceiptPath = $receiptPath; SubscriptionId = $null; FoundryAccount = $null; FoundryResourceGroup = $null; PublisherEmail = $null; DeleteWaitSeconds = 1; DeletePollSeconds = 1 }
     Assert 'teardown records purge follow-ups when resource group deletion is still in progress' ($Exit -ne 0 -and $Failure -match 'az apim deletedservice purge' -and $Failure -match 'az cognitiveservices account purge' -and (At '^az apim deletedservice purge') -lt 0) "$Exit | $Failure | $($global:Live.Calls -join '; ')"
+
+    Reset-Live
+    $global:Live.GroupExistsRemaining = 1
+    $global:Live.PostPurgeRecreate = $true
+    @{
+        kind='p102-content-safety-live'; runId='abc123'; subscriptionId=$sub; resourceGroup='rg-p102-live-abc123'; location='eastus2'; namePrefix='p102live'; apimName='apim-p102live'; contentSafetyName='cs-p102live'; createdResourceGroup=$true; createdGroups=@(); contentSafetyRoleAssignmentIds=@(); apimPrincipalId='00000000-0000-4000-8000-000000000301'; contentSafetyId='/subscriptions/sub/resourceGroups/rg-p102/providers/Microsoft.CognitiveServices/accounts/cs-p102'; foundryResourceGroup='rg-ai'; foundryAccount='ai-contoso'
+    } | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $receiptPath -Encoding UTF8
+    Invoke-P102 @{ TeardownOnly = $true; ReceiptPath = $receiptPath; SubscriptionId = $null; FoundryAccount = $null; FoundryResourceGroup = $null; PublisherEmail = $null; DeleteWaitSeconds = 2; DeletePollSeconds = 1; PostPurgeWaitSeconds = 1 }
+    $policyReceipt = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json -Depth 30
+    Assert 'teardown deletes an empty resource group re-created by CognitiveServices diagnostics remediation after purge and records it' ((At '^az resource list') -gt (At '^az cognitiveservices account purge') -and @($global:Live.Calls | Where-Object { $_ -match '^az group delete --name rg-p102-live-abc123' }).Count -ge 2 -and $policyReceipt.policyRemediationRecreatedResourceGroup.policyDefinitionName -eq 'CognitiveServices_Diagnostics_Enable') ($global:Live.Calls -join '; ')
 
     Reset-Live
     Invoke-P102 @{ Teardown = $true }
