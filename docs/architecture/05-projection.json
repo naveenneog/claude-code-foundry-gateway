@@ -13,6 +13,7 @@
     "sync/src/graph.mjs",
     "sync/src/plan.mjs",
     "sync/src/apply-projection.mjs",
+    "sync/src/apply-lock.mjs",
     "resolver/src/index.mjs",
     "resolver/src/lookup.mjs",
     "resolver/src/entitlement.mjs",
@@ -77,6 +78,11 @@
       "label": "executeBulkOperations",
       "source": "sync/src/apply-projection.mjs",
       "match": "container.items.executeBulkOperations("
+    },
+    "apply-lock": {
+      "label": "projection-apply-lock",
+      "source": "sync/src/apply-lock.mjs",
+      "match": "export async function acquireApplyLock"
     },
     "lookup": {
       "label": "createLookup",
@@ -282,7 +288,7 @@
       "tone": "teal",
       "title": "2 · Reconcile changes only",
       "lines": [
-        "[[writer]]",
+        "[[writer]] acquires [[apply-lock]] before reads.",
         "Snapshot import must be before its apply-by deadline.",
         "Page existing records with [[fetch]]; write in bounded [[upsert]] batches.",
         "Write added, moved and changed records. Delete orphans on a full sync.",
