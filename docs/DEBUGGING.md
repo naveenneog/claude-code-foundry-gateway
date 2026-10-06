@@ -6,8 +6,21 @@ when you already know what broke.
 This guide is for when you do **not** — a request fails and you need to find out
 where. It bisects the path layer by layer, so each step eliminates everything
 below it.
+## Quickstart
+
+The fastest supported path is the diagnostic command. The deployment record supplies the gateway target, and the command emits redacted evidence for the failing layer.
+
+```powershell
+.\scripts\Debug-ClaudeSetup.ps1 -RecordPath .\onboarding\claude-gateway.json -NoRequest
+```
+
+**Expected result:** diagnostics identify the first failing boundary or produce a redacted support bundle. Manual steps below are for cases where the diagnostic output is incomplete or a specific layer needs proof.
 
 ## Prerequisites
+
+<details>
+
+<summary>Debugging details</summary>
 
 Developers need their supplied gateway URL, permitted model names and an Entra
 sign-in. Platform checks also need Reader access to APIM/Foundry and telemetry
@@ -23,7 +36,12 @@ and never include bearer tokens in a public report.
 
 ---
 
+</details>
 ## Step 0 — Run the diagnostics
+
+<details>
+
+<summary>Debugging details</summary>
 
 For P66 guided-flow diagnostics, start with [Diagnostics](DIAGNOSE.md). It runs
 the administrator and workstation checks, prints the exact fix and can produce a
@@ -60,7 +78,12 @@ answering from somewhere other than your gateway, which no other check catches.
 
 ---
 
+</details>
 ## The request path
+
+<details>
+
+<summary>Debugging details</summary>
 
 Every failure lives at exactly one of these hops.
 
@@ -85,7 +108,12 @@ Every failure lives at exactly one of these hops.
 
 ---
 
+</details>
 ## Everything checks out but the panel is still broken
+
+<details>
+
+<summary>Debugging details</summary>
 
 Worth its own section because it is common, it looks nothing like a
 configuration fault, and every other check passes.
@@ -125,7 +153,12 @@ survive a reload.
 
 ---
 
+</details>
 ## Step 1 — Read the response headers first
+
+<details>
+
+<summary>Debugging details</summary>
 
 Read the status, body and available headers together. Not every refusal passes
 through the same outbound/error policies, so not every header is present.
@@ -171,22 +204,32 @@ An absent header does not prove the gateway was bypassed: explicit
 
 ---
 
+</details>
 ## Step 2 — Narrow by status code
+
+<details>
+
+<summary>Debugging details</summary>
 
 | Code | Layer | Go to |
 |------|-------|-------|
 | `401` with `x-gateway-error` | identity | [Step 3](#step-3--identity) |
 | `403` | read the body: entitlement, model, unit assignment or quota | [Step 4](#step-4--entitlement-and-budget) |
 | `429` | token/request limit, miss admission or Foundry capacity | [Step 4](#step-4--entitlement-and-budget) |
-| `503` naming entitlement/projection | unavailable resolver or expired projection lease | [Private projection troubleshooting](SECURE-PROJECTION.md#troubleshooting) |
-| `401` **without** `x-gateway-error` | gateway → Foundry RBAC | [Step 5](#step-5--gateway--foundry) |
+| `503` naming entitlement/projection | unavailable resolver or unusable projection record/status | [Private projection troubleshooting](SECURE-PROJECTION.md#troubleshooting) |
+| `401` **without** `x-gateway-error` | request/log correlation needed | [Steps 3-5](#step-3--identity) |
 | `404` | wrong path or missing deployment | [Step 6](#step-6--foundry-itself) |
 | `500` | usually a missing named value | [Step 7](#step-7--policy-and-configuration) |
 | timeout / no response | network or a very long agent turn | [Step 8](#step-8--client-configuration) |
 
 ---
 
+</details>
 ## Step 3 — Identity
+
+<details>
+
+<summary>Debugging details</summary>
 
 ```powershell
 az account show --query "{tenant:tenantId, user:user.name, type:user.type}" -o table
@@ -222,7 +265,12 @@ the access token the affected process actually selected.
 
 ---
 
+</details>
 ## Step 4 — Entitlement and budget
+
+<details>
+
+<summary>Debugging details</summary>
 
 ### Is the object id entitled?
 
@@ -238,7 +286,7 @@ Not there → they are in the Entra group but the sync has not run:
 ```
 
 This checks the **named-value** path only. On a projection gateway, inspect the
-record and lease and run the [projection comparison](SCALE.md#4-run-the-comparison-until-it-reports-nothing).
+record and sync status, then run the [projection comparison](SCALE.md#4-run-the-comparison-until-it-reports-nothing).
 Absence from an old named-value list is not proof of a missing projection record.
 **Portal:** Entra > Groups > All members, then APIM > Named values or Cosmos >
 Data Explorer from an authorised private-network client. Publication is required
@@ -264,7 +312,12 @@ empty entitlement list or rely on an absent message.
 
 ---
 
+</details>
 ## Step 5 — Gateway → Foundry
+
+<details>
+
+<summary>Debugging details</summary>
 
 A `401` with **no** `x-gateway-error` means the policy accepted you and Foundry
 rejected the gateway.
@@ -294,7 +347,12 @@ account's resource group, not automatically the gateway's.
 
 ---
 
+</details>
 ## Step 6 — Foundry itself
+
+<details>
+
+<summary>Debugging details</summary>
 
 Take the gateway out of the picture entirely:
 
@@ -323,7 +381,12 @@ Two `404`s that look alike and are not:
 
 ---
 
+</details>
 ## Step 7 — Policy and configuration
+
+<details>
+
+<summary>Debugging details</summary>
 
 ```bash
 # do all referenced named values exist?
@@ -347,7 +410,12 @@ A `{{name}}` in the policy with no matching named value returns `500`.
 
 ---
 
+</details>
 ## Step 8 — Client configuration
+
+<details>
+
+<summary>Debugging details</summary>
 
 If there is no evidence the request reached the gateway, check the configured
 provider and URL, then the correct diagnostic destination. Missing headers or
@@ -385,7 +453,12 @@ which token a local client chose.
 
 ---
 
+</details>
 ## Step 9 — Is it just this person?
+
+<details>
+
+<summary>Debugging details</summary>
 
 ```powershell
 ./scripts/Show-Governance.ps1 -ApimName <apim> -ResourceGroup <rg>
@@ -398,15 +471,27 @@ If they fail, it is platform-wide. Start at Step 5.
 
 ---
 
+</details>
 ## Quick reference
+
+<details>
+
+<summary>Debugging details</summary>
 
 | Signal | Layer | Section |
 |--------|-------|---------|
 | Everything passes but the panel fails | stale extension host | [above](#everything-checks-out-but-the-panel-is-still-broken) |
 | CLI works, VS Code does not | different build or different config | [above](#everything-checks-out-but-the-panel-is-still-broken) |
 | `x-gateway-error` present | gateway error handler ran; inspect the reason | Steps 3–5 |
-| `x-gateway-error` absent, `401` | Foundry rejected the gateway | Step 5 |
+| `x-gateway-error` absent, `401` | Unattributed 401; request/log correlation needed | Steps 3-5 |
 | No `x-governed-by`, no Live metrics traffic | verify route, diagnostic destination and ingestion before concluding bypass | Step 8 |
 | `429` + `Retry-After` | working as designed | Step 4 |
 | Metrics all zero | classic APIM tier | [Monitoring §8](MONITORING.md#8-when-the-charts-are-empty) |
 | Metrics exist, no per-user split | `CustomMetricsOptedInType` | [Monitoring §8](MONITORING.md#8-when-the-charts-are-empty) |
+
+</details>
+## Next
+
+- [Diagnostics](DIAGNOSE.md) covers support bundles.
+- [Troubleshooting](TROUBLESHOOTING.md) maps known symptoms.
+- [Network](NETWORK.md) covers egress and streaming failures.
