@@ -1,0 +1,27 @@
+param([string]$RepositoryRoot)
+$ErrorActionPreference = 'Stop'
+$root = if ($RepositoryRoot) { $RepositoryRoot } else { Split-Path $PSScriptRoot -Parent }
+. (Join-Path $root 'scripts\ClaudeContentSafety.ps1')
+$script:assertions = 0; $script:failures = 0
+function Assert($Name,$Condition,$Detail='') { $script:assertions++; if ($Condition) { Write-Host "  [OK] $Name" } else { $script:failures++; Write-Host "  [FAIL] $Name $Detail" } }
+
+Write-Host 'P102 deployment contract'
+$contentSafety = Get-Content (Join-Path $root 'infra\content-safety.bicep') -Raw
+$main = Get-Content (Join-Path $root 'infra\main.bicep') -Raw
+Assert 'Content Safety module creates a ContentSafety S0 account with custom subdomain and local auth disabled' ($contentSafety -match "kind:\s*'ContentSafety'" -and $contentSafety -match "name:\s*'S0'" -and $contentSafety -match 'customSubDomainName' -and $contentSafety -match 'disableLocalAuth:\s*true')
+Assert 'Content Safety module grants Cognitive Services User to the APIM principal' ($contentSafety -match 'Cognitive Services User' -and $contentSafety -match 'roleAssignments' -and $contentSafety -match 'principalId')
+Assert 'main template defaults content safety off without creating an account' ($main -match 'param deployContentSafety bool = false' -and $main -match "param contentSafetyMode string = 'off'" -and $main -match "module contentSafety 'content-safety\.bicep' = if \(deployContentSafety\)")
+$missingNamedValues = @('content-safety-mode','content-safety-endpoint','content-safety-threshold','content-safety-timeout-seconds','content-safety-truncate-mode') | Where-Object { $main -notmatch [regex]::Escape($_) }
+Assert 'main template adds endpoint, threshold, timeout and fragment named values' (@($missingNamedValues).Count -eq 0) (@($missingNamedValues) -join ',')
+Assert 'main template creates the APIM policy fragment and the API policy depends on it' ($main -match 'service/policyFragments' -and $main -match "loadTextContent\('content-safety-screening.xml'\)" -and $main -match 'contentSafetyFragment')
+$supported = Test-ClaudeContentSafetyRegion 'East US 2'
+$unsupported = Test-ClaudeContentSafetyRegion 'antarcticacentral'
+Assert 'supported Content Safety region passes readiness' ($supported.Result -eq 'PASS' -and $supported.Location -eq 'eastus2') ($supported | ConvertTo-Json -Compress)
+Assert 'unsupported Content Safety region blocks before writes with a cited remedy' ($unsupported.Result -eq 'FAIL' -and $unsupported.Remedy -match 'Microsoft Learn' -and $unsupported.Remedy -match '2026-10-06') ($unsupported | ConvertTo-Json -Compress)
+
+Write-Host 'P102 Bicep compilation'
+$out = & az bicep build --file (Join-Path $root 'infra\main.bicep') --stdout --only-show-errors 2>&1 | Out-String
+Assert 'main.bicep compiles offline' ($LASTEXITCODE -eq 0 -and $out -match 'Microsoft.ApiManagement/service/policyFragments') $out
+
+if ($script:failures) { throw "$($script:failures) of $($script:assertions) assertions failed" }
+Write-Host "P102 content safety deployment checks passed ($script:assertions assertions)."
