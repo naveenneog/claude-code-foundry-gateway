@@ -13,21 +13,15 @@ function log(line) {
 }
 
 class Items {
-  query(query) {
+  // The entitlement container indexes only /oid (infra/projection.bicep). A filter on another path
+  // makes Cosmos scan every record, so the writer and admission send no WHERE clause and filter in the
+  // client; status reads are scoped to their own logical partition. The fake holds the code to that.
+  query(query, options = {}) {
     const text = typeof query === 'string' ? query : query.query;
-    const params = Object.fromEntries((query.parameters ?? []).map((p) => [p.name, p.value]));
-    log(`query ${text}`);
+    if (/\bWHERE\b/i.test(text)) throw new Error(`fake Cosmos: the container indexes only /oid; a WHERE clause scans every record: ${text}`);
+    log(`query ${text}${options.partitionKey !== undefined ? ` partition=${options.partitionKey}` : ''}`);
     const docs = Object.values(load().docs);
-    let rows = docs;
-    if (text.includes("c.type = 'projection-reconciliation-status'")) {
-      rows = rows.filter((d) => d.type === 'projection-reconciliation-status');
-    } else if (text.includes('NOT IS_DEFINED(c.type)')) {
-      rows = rows.filter((d) => d.type === undefined);
-    }
-    if (params['@tenantId']) rows = rows.filter((d) => d.tenantId === params['@tenantId']);
-    if (params['@accountResourceId']) rows = rows.filter((d) => d.accountResourceId === params['@accountResourceId']);
-    if (params['@databaseName']) rows = rows.filter((d) => d.databaseName === params['@databaseName']);
-    if (params['@containerName']) rows = rows.filter((d) => d.containerName === params['@containerName']);
+    const rows = options.partitionKey !== undefined ? docs.filter((d) => d.oid === options.partitionKey) : docs;
     const pages = paginate(rows);
     let page = 0;
     return {

@@ -379,6 +379,20 @@ test('a full apply reads every existing-record page and deletes an orphan on the
   assert.equal(docs.some((d) => d.oid === orphan), false);
 });
 
+test('status reads stay in the status partition, for a full and a targeted apply', () => {
+  const target = '33333333-3333-4333-8333-333333333333';
+  const snap = fullSnapshot({ verifiedAt: new Date(Date.now() - 60_000).toISOString(), records: [{ oid: target, tier: 'standard', businessUnit: '' }] });
+  const full = runApplyWithFake({ name: 'status partition full', snapshot: snap });
+  assert.equal(full.result.status, 0, full.result.stdout + full.result.stderr);
+  const fullLog = readFileSync(full.log, 'utf8');
+  assert.match(fullLog, new RegExp(`query SELECT [^\\n]*c\\.finishedAt FROM c partition=projection-status::${tenant}`));
+  const targeted = runApplyWithFake({ name: 'status partition user', snapshot: { ...snap, scope: 'user', user: target }, args: ['--user', target] });
+  assert.equal(targeted.result.status, 0, targeted.result.stdout + targeted.result.stderr);
+  assert.match(readFileSync(targeted.log, 'utf8'), new RegExp(`query SELECT [^\\n]*c\\.finishedAt FROM c partition=projection-status::${tenant}`));
+  // Entitlement enumeration reads every record by design; no query reads statuses across partitions.
+  assert.doesNotMatch(fullLog, /c\.finishedAt FROM c\n/);
+});
+
 test('a long multi-page read renews the apply lease between pages, before any write', () => {
   const oids = ['33333333-3333-4333-8333-333333333331', '33333333-3333-4333-8333-333333333332', '33333333-3333-4333-8333-333333333333', '33333333-3333-4333-8333-333333333334'];
   const snap = fullSnapshot({

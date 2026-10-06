@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { evaluateProjectionAdmission } from './plan.mjs';
+import { evaluateProjectionAdmission, statusPartitionKey, STATUS_RECORD_TYPE } from './plan.mjs';
 
 const argv = process.argv.slice(2);
 const opt = (name, fallback) => {
@@ -35,31 +35,21 @@ const container = new CosmosClient({ endpoint, aadCredentials: credential })
   .database(databaseName)
   .container(containerName);
 
-const query = {
-  query: "SELECT * FROM c WHERE c.type = 'projection-reconciliation-status' AND c.tenantId = @tenantId AND c.databaseName = @databaseName AND c.containerName = @containerName",
-  parameters: [
-    { name: '@tenantId', value: tenantId },
-    { name: '@databaseName', value: databaseName },
-    { name: '@containerName', value: containerName },
-  ],
-};
-
+// The container indexes only /oid (infra/projection.bicep): no WHERE clause, which would scan every
+// record. Statuses are read from their own partition; typed documents are skipped in the client.
 const statuses = [];
-const it = container.items.query(query, { maxItemCount: 1000 });
+const it = container.items.query('SELECT * FROM c', { maxItemCount: 1000, partitionKey: statusPartitionKey(tenantId) });
 while (it.hasMoreResults()) {
   const { resources } = await it.fetchNext();
-  statuses.push(...(resources ?? []));
+  statuses.push(...(resources ?? []).filter((s) => s.type === STATUS_RECORD_TYPE && s.tenantId === tenantId &&
+    s.databaseName === databaseName && s.containerName === containerName));
 }
 
-const entitlementQuery = {
-  query: "SELECT c.id, c.oid, c.tenantId, c.tier, c.businessUnit, c.mappingVersion, c.effectiveFrom, c.reconciliationGeneration, c.lastVerifiedAt, c.expiresAt FROM c WHERE NOT IS_DEFINED(c.type)",
-  parameters: [],
-};
 const entitlementRecords = [];
-const entitlementIterator = container.items.query(entitlementQuery, { maxItemCount: 1000 });
+const entitlementIterator = container.items.query('SELECT c.id, c.oid, c.tenantId, c.tier, c.businessUnit, c.mappingVersion, c.effectiveFrom, c.reconciliationGeneration, c.lastVerifiedAt, c.expiresAt, c.type FROM c', { maxItemCount: 1000 });
 while (entitlementIterator.hasMoreResults()) {
   const { resources } = await entitlementIterator.fetchNext();
-  entitlementRecords.push(...(resources ?? []));
+  entitlementRecords.push(...(resources ?? []).filter((r) => r.type === undefined));
 }
 
 const result = evaluateProjectionAdmission({

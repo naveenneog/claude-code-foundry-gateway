@@ -33,7 +33,7 @@
  *        [--whatif] [--allow-empty] [--keep-orphans]
  */
 import { readFileSync } from 'node:fs';
-import { mergeMembership, planChanges, toDocument, toStatusDocument, validateSnapshot, validateTargetedSnapshot, compareWithGateway, compareWithSnapshot, createReconciliation, normalizeJobSettings, validateJobSettings } from './plan.mjs';
+import { mergeMembership, planChanges, toDocument, toStatusDocument, validateSnapshot, validateTargetedSnapshot, compareWithGateway, compareWithSnapshot, createReconciliation, normalizeJobSettings, validateJobSettings, statusPartitionKey, STATUS_RECORD_TYPE } from './plan.mjs';
 import { acquireApplyLock, validateLockWait } from './apply-lock.mjs';
 import { resolveGroupId, getTransitiveMembers } from './graph.mjs';
 import { readGatewayUnits, sortUnitsByDepth } from './business-units.mjs';
@@ -186,13 +186,17 @@ async function resolveMembership() {
   return { records, mappingVersion: Math.floor(Date.now() / 1000), source: 'graph', reconciliation };
 }
 
+// The container indexes only /oid (infra/projection.bicep), so no query here has a WHERE clause: a
+// filter on another path would scan every record. Entitlement reads skip typed documents (status
+// records, the apply lock) in the client; status reads are scoped to the status partition.
 // A long read renews the lease between pages, so a large container cannot outlive it before the first write.
 async function readExisting(container, lock) {
   const existing = new Map();
-  const iterator = container.items.query("SELECT c.id, c.tier, c.businessUnit, c.expiresAt FROM c WHERE NOT IS_DEFINED(c.type)", { maxItemCount: 1000 });
+  const iterator = container.items.query('SELECT c.id, c.tier, c.businessUnit, c.expiresAt, c.type FROM c', { maxItemCount: 1000 });
   while (iterator.hasMoreResults()) {
     const { resources } = await iterator.fetchNext();
     for (const d of resources ?? []) {
+      if (d.type !== undefined) continue;
       const current = { tier: d.tier, businessUnit: d.businessUnit ?? '' };
       if (Object.hasOwn(d, 'expiresAt')) current.expiresAt = d.expiresAt;
       existing.set(d.id, current);
@@ -219,20 +223,15 @@ async function readExistingUser(container, oid) {
 }
 
 async function readSuccessfulStatuses(container, lock) {
-  const query = {
-    query: "SELECT c.id, c.oid, c.type, c.tenantId, c.accountResourceId, c.databaseName, c.containerName, c.ok, c.mode, c.user, c.finishedAt FROM c WHERE c.type = 'projection-reconciliation-status' AND c.tenantId = @tenantId",
-    parameters: [
-      { name: '@tenantId', value: tenantId },
-    ],
-  };
+  const query = 'SELECT c.id, c.oid, c.type, c.tenantId, c.accountResourceId, c.databaseName, c.containerName, c.ok, c.mode, c.user, c.finishedAt FROM c';
   const statuses = [];
-  const iterator = container.items.query(query, { maxItemCount: 1000 });
+  const iterator = container.items.query(query, { maxItemCount: 1000, partitionKey: statusPartitionKey(tenantId) });
   while (iterator.hasMoreResults()) {
     const { resources } = await iterator.fetchNext();
     statuses.push(...(resources ?? []));
     if (lock) await lock.renewIfNeeded();
   }
-  return statuses.filter((s) => s.ok === true);
+  return statuses.filter((s) => s.type === STATUS_RECORD_TYPE && s.tenantId === tenantId && s.ok === true);
 }
 
 async function bulk(container, operations, lock) {
@@ -257,8 +256,8 @@ if (opt('--compare')) {
   const gw = JSON.parse(readFileSync(opt('--compare'), 'utf8').replace(/^\uFEFF/, ''));
   if (gw.kind !== 'claude-gateway-decisions') fail("--compare expects a file written by Compare-ClaudeEntitlement.ps1 -ExportGatewayPath");
   const records = [];
-  const it = containerRef().items.query('SELECT c.id, c.oid, c.tier, c.businessUnit, c.tenantId, c.reconciliationGeneration, c.lastVerifiedAt, c.expiresAt FROM c WHERE NOT IS_DEFINED(c.type)', { maxItemCount: 1000 });
-  while (it.hasMoreResults()) { const { resources } = await it.fetchNext(); records.push(...(resources ?? [])); }
+  const it = containerRef().items.query('SELECT c.id, c.oid, c.tier, c.businessUnit, c.tenantId, c.reconciliationGeneration, c.lastVerifiedAt, c.expiresAt, c.type FROM c', { maxItemCount: 1000 });
+  while (it.hasMoreResults()) { const { resources } = await it.fetchNext(); records.push(...(resources ?? []).filter((r) => r.type === undefined)); }
   const { compared, differences } = compareWithGateway(gw, records, { tenantId });
   const byKind = differences.reduce((a, d) => ({ ...a, [d.kind]: (a[d.kind] ?? 0) + 1 }), {});
   console.log(JSON.stringify({ ok: differences.length === 0, mode: 'compare', gateway: gw.apim, compared, projectionRecords: records.length, differences: differences.length, byKind, sample: differences.slice(0, 20), seconds: (Date.now() - started) / 1000 }));
@@ -270,8 +269,8 @@ if (opt('--compare')) {
 if (opt('--compare-snapshot')) {
   const snap = JSON.parse(readFileSync(opt('--compare-snapshot'), 'utf8').replace(/^\uFEFF/, ''));
   const records = [];
-  const it = containerRef().items.query('SELECT c.id, c.oid, c.tier, c.businessUnit, c.tenantId, c.reconciliationGeneration, c.lastVerifiedAt, c.expiresAt, c.type FROM c WHERE NOT IS_DEFINED(c.type)', { maxItemCount: 1000 });
-  while (it.hasMoreResults()) { const { resources } = await it.fetchNext(); records.push(...(resources ?? [])); }
+  const it = containerRef().items.query('SELECT c.id, c.oid, c.tier, c.businessUnit, c.tenantId, c.reconciliationGeneration, c.lastVerifiedAt, c.expiresAt, c.type FROM c', { maxItemCount: 1000 });
+  while (it.hasMoreResults()) { const { resources } = await it.fetchNext(); records.push(...(resources ?? []).filter((r) => r.type === undefined)); }
   const comparison = compareWithSnapshot(snap, records, { tenantId });
   if (comparison.refused) fail(`snapshot refused: ${comparison.problems.join('; ')}. Remedy: rerun the switch or the deployer, which exports a fresh snapshot before it compares.`, 2);
   const byKind = comparison.differences.reduce((a, d) => ({ ...a, [d.kind]: (a[d.kind] ?? 0) + 1 }), {});

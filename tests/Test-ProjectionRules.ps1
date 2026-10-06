@@ -41,6 +41,8 @@ Assert 'default lookup deadline and in-flight cap fit admission' ($lookup -match
 Assert 'two instances are warm by default' ($resolver -match 'param alwaysReadyInstances int = 2\b')
 Assert 'HTTP concurrency is explicitly sized' ($resolver -match 'param httpConcurrency int = 100\b' -and $resolver -match 'perInstanceConcurrency: httpConcurrency')
 Assert 'enterprise Cosmos is private by default' ($network -match "param networkAccess string = 'private-only'")
+# Item ttl has no effect unless the container sets defaultTtl; -1 keeps records and the lock, and lets status records expire.
+Assert 'the container enables item TTL without expiring records, so status records expire after seven days' ($network -match '(?m)^\s*defaultTtl: -1\s*$')
 Assert 'explicit public and selected IP profiles remain' ($network -match "'public'" -and $network -match "'selected-ips'" -and $network -match "networkAccess == 'private-only' \? 'Disabled' : 'Enabled'")
 Assert 'load uses the validated isolated container' ($loader.Contains("client.database('claude').container(containerName)"))
 Assert 'load refuses occupied containers' ($loader.Contains("if (before[0] !== 0) throw new Error"))

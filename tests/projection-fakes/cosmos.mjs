@@ -19,29 +19,20 @@ function log(line) {
   if (process.env.FAKE_COSMOS_LOG) appendFileSync(process.env.FAKE_COSMOS_LOG, `${line}\n`);
 }
 
-function select(query, docs) {
+// The container indexes only /oid (infra/projection.bicep): a WHERE clause would scan every record, so
+// the code sends none and filters in the client; status reads are scoped to their own partition.
+function select(query, docs, partitionKey) {
   const text = typeof query === 'string' ? query : query.query;
-  const params = Object.fromEntries((query.parameters ?? []).map((p) => [p.name, p.value]));
+  if (/\bWHERE\b/i.test(text)) throw new Error(`stand-in Cosmos: the container indexes only /oid; a WHERE clause scans every record: ${text}`);
   const all = Object.values(docs);
-  if (text.includes("WHERE c.type = 'projection-reconciliation-status'")) {
-    return all.filter((d) => d.type === STATUS && d.tenantId === params['@tenantId'] &&
-      (!params['@accountResourceId'] || d.accountResourceId === params['@accountResourceId']) && d.databaseName === params['@databaseName'] &&
-      d.containerName === params['@containerName']);
-  }
-  if (text.includes('WHERE NOT IS_DEFINED(c.type)')) {
-    return all.filter((d) => d.type === undefined);
-  }
-  if (/^SELECT c\.id, c\.oid, c\.tier, c\.businessUnit, c\.tenantId, c\.reconciliationGeneration, c\.lastVerifiedAt, c\.expiresAt FROM c/.test(text)) {
-    return text.includes('WHERE NOT IS_DEFINED(c.type)') ? all.filter((d) => d.type === undefined) : all.filter((d) => d.type !== LOCK && d.type !== STATUS);
-  }
-  throw new Error(`stand-in Cosmos does not answer this query: ${text}`);
+  return partitionKey !== undefined ? all.filter((d) => d.oid === partitionKey) : all;
 }
 
 class Items {
-  query(query, { maxItemCount = 1000 } = {}) {
+  query(query, { maxItemCount = 1000, partitionKey } = {}) {
     if (process.env.FAKE_COSMOS_FAIL === 'read') throw new Error('stand-in Cosmos read failure');
-    log(`query ${typeof query === 'string' ? query : query.query}`);
-    const rows = select(query, load().docs);
+    log(`query ${typeof query === 'string' ? query : query.query}${partitionKey !== undefined ? ` partition=${partitionKey}` : ''}`);
+    const rows = select(query, load().docs, partitionKey);
     let offset = 0;
     return {
       hasMoreResults: () => offset === 0 || offset < rows.length,

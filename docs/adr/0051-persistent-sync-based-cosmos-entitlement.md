@@ -99,9 +99,9 @@ rescan the whole directory.
     it; another writer takes it over only after its lease has passed, with an `If-Match` condition on
     its ETag ([Microsoft Learn](https://learn.microsoft.com/azure/cosmos-db/database-transactions-optimistic-concurrency)).
     The lock is taken after the directory is resolved, and existing records and sync statuses are read
-    inside it, so a sync that finished while another was resolving is always seen. The holder renews the
-    300-second lease between pages of its reads and before each batch of writes; a lost lease stops the run
-    before its next write, with no status record.
+    inside it, so a sync that finished while another was resolving is always seen. The holder checks the
+    300-second lease between pages of its reads and before each batch of writes, and renews it once a third
+    of it has passed; a lost lease stops the run before its next write, with no status record.
     - A full snapshot older than a successful full sync is refused.
     - A targeted snapshot older than a successful sync that covered the same person is refused.
     - A full apply leaves out the people whose targeted sync finished after its scan, less a 300-second
@@ -109,6 +109,15 @@ rescan the whole directory.
     - Status documents are matched by type and tenant, since they live in the container they describe.
       Every apply that writes carries the Cosmos account resource id, stored in lower case.
     - Documents with a `type` (status records and the lock) are never read as entitlement records.
+    - Queries send no `WHERE` clause (council round 3). The container indexes only `/oid`
+      (`infra/projection.bicep`), and a filter on another path is evaluated by reading every record. Status
+      reads are scoped to the status partition `projection-status::<tenantId>`, so they cost the same at
+      any directory size; entitlement reads, which read every record by design, skip typed documents in
+      the client.
+    - The container sets `defaultTtl` to -1: item `ttl` takes effect only when the container sets
+      `defaultTtl` ([Microsoft Learn](https://learn.microsoft.com/azure/cosmos-db/time-to-live), updated
+      2026-04-27). Records and the lock carry no `ttl` and do not expire; status records expire after
+      seven days.
 
 ## Consequences
 

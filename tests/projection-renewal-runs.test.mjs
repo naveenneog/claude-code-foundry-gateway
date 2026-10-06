@@ -196,6 +196,7 @@ test('switch evidence is scoped to this account and only full syncs count', () =
   assert.equal(recorded.every((d) => d.ttl === 604800), true, 'status records retain seven days');
   assert.equal(recorded.some((d) => d.mode === 'full' && d.executor === 'job' && d.accountResourceId.toLowerCase() === ACCOUNT.toLowerCase()), true);
   assert.equal(admission(where, '2026-10-04T11:01:00.000Z').json.ok, true);
+  assert.match(readFileSync(join(where.dir, 'cosmos.log'), 'utf8'), new RegExp(`partition=projection-status::${TENANT}`), 'switch evidence reads statuses from the status partition only');
   const otherAccount = run(where, 'check-admission.mjs', ['--cosmos', ENDPOINT, '--tenant', TENANT, '--account-resource-id', ACCOUNT.replace('cosmos-p94fixture', 'cosmos-other')], { now: '2026-10-04T11:01:00.000Z' });
   assert.equal(otherAccount.code, 4, otherAccount.stdout + otherAccount.stderr);
   assert.match(otherAccount.json.reason, /full sync evidence/);

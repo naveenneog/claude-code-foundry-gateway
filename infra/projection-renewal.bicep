@@ -45,7 +45,7 @@ param premiumGroupId string
 @description('Resource id of the API Management gateway. The job reads its bu-registry and bu-parents named values on every run.')
 param gatewayResourceId string
 
-@description('Expected entrypoint recorded in status and checked before admission.')
+@description('Entrypoint recorded in each status record (ADR-0051: switch evidence does not check it).')
 param entrypoint string = 'node /app/sync/src/apply-projection.mjs'
 
 var databaseName = 'claude'
