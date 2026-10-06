@@ -132,6 +132,23 @@ test('a failed page of the existing-record read stops the apply before any write
   assert.equal(docs.some((d) => d.type === 'projection-apply-lock'), false, 'the lock was released');
 });
 
+test('the tenant is a GUID, stored in lower case, so its letter case cannot hide a status from the guard', () => {
+  const lettered = 'aaaaaaaa-2222-4222-8222-222222222222';
+  const target = '33333333-3333-4333-8333-333333333333';
+  const snap = { ...fullSnapshot({ verifiedAt: new Date(Date.now() - 60_000).toISOString(), records: [{ oid: target, tier: 'standard', businessUnit: '' }] }), tenantId: lettered.toUpperCase() };
+  const { result, store } = runApplyWithFake({ name: 'upper-case tenant', snapshot: snap, tenantArg: lettered.toUpperCase() });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  const docs = Object.values(JSON.parse(readFileSync(store, 'utf8')).docs);
+  const status = docs.find((d) => d.type === 'projection-reconciliation-status');
+  assert.equal(status.tenantId, lettered);
+  assert.equal(status.oid, `projection-status::${lettered}`);
+  assert.equal(docs.find((d) => d.oid === target).tenantId, lettered);
+  const bad = runApplyWithFake({ name: 'tenant not a guid', snapshot: snap, tenantArg: 'contoso.onmicrosoft.com' });
+  assert.equal(bad.result.status, 1, bad.result.stdout + bad.result.stderr);
+  assert.match(bad.summary.error, /--tenant must be the tenant id GUID/);
+  assert.match(bad.summary.remedy, /^Remedy: /);
+});
+
 test('groups that resolve to nobody are refused with the check-or-AllowEmpty remedy', () => {
   const existingOid = '33333333-3333-4333-8333-333333333333';
   const snap = fullSnapshot({ verifiedAt: new Date(Date.now() - 60_000).toISOString(), records: [] });
@@ -221,7 +238,7 @@ test('a targeted apply rewrites a same-tier legacy record to remove expiresAt', 
   assert.equal('expiresAt' in written, false);
 });
 
-function runApplyWithFake({ name, docs = {}, snapshot, args = [], env = {} }) {
+function runApplyWithFake({ name, docs = {}, snapshot, args = [], env = {}, tenantArg = tenant }) {
   const dir = join(work, name.replace(/[^a-z0-9]+/gi, '-'));
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
@@ -233,7 +250,7 @@ function runApplyWithFake({ name, docs = {}, snapshot, args = [], env = {} }) {
   writeFileSync(snapshotPath, JSON.stringify(snapshot));
   const result = spawnSync(process.execPath, [
     '--loader', loaderUrl, script,
-    '--cosmos', cosmos, '--tenant', tenant, '--account-resource-id', account,
+    '--cosmos', cosmos, '--tenant', tenantArg, '--account-resource-id', account,
     '--snapshot', snapshotPath, ...args,
   ], {
     encoding: 'utf8',

@@ -47,7 +47,8 @@ const opts = (n) => argv.flatMap((a, i) => (a === n && argv[i + 1] ? [argv[i + 1
 const endpoint = opt('--cosmos', process.env.COSMOS_ENDPOINT);
 const databaseName = opt('--database', 'claude');
 const containerName = opt('--container', 'entitlement');
-const tenantId = opt('--tenant', process.env.PROJECTION_TENANT_ID);
+// Tenant ids are GUIDs, stored in lower case: status partitions and the stale-change guard match them exactly.
+const tenantId = (opt('--tenant', process.env.PROJECTION_TENANT_ID) ?? '').toLowerCase();
 const accountResourceIdFlag = opt('--account-resource-id');
 const whatIf = flag('--whatif');
 const renewal = flag('--graph');
@@ -104,6 +105,7 @@ async function step(stage, work) {
 
 if (!endpoint) fail('--cosmos is required');
 if (!tenantId) fail('--tenant is required: every record is stamped with it and the resolver refuses another');
+if (!GUID.test(tenantId)) fail('--tenant must be the tenant id GUID. Remedy: pass the tenant id from az account show --query tenantId -o tsv, or rerun scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim>.');
 try { validateLockWait(lockWaitSeconds); } catch (error) { fail(error.message, 1, 'config'); }
 const standardOverride = opt('--standard');
 const premiumOverride = opt('--premium');
@@ -147,6 +149,7 @@ async function unitGroups() {
 async function resolveMembership() {
   if (opt('--snapshot')) {
     const snap = JSON.parse(readFileSync(opt('--snapshot'), 'utf8').replace(/^\uFEFF/, ''));
+    if (typeof snap?.tenantId === 'string') snap.tenantId = snap.tenantId.toLowerCase();
     const problems = userOid
       ? validateTargetedSnapshot(snap, userOid, { tenantId })
       : validateSnapshot(snap, { tenantId });

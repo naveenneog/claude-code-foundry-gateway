@@ -255,6 +255,7 @@ function az {
         # The summaries the real scripts print last (sync/src/apply-projection.mjs, sync/src/check-admission.mjs).
         if ($command -match 'apply-projection\.mjs .*--compare-snapshot ') { return '{"ok":true,"mode":"compare-snapshot","compared":1,"differences":0,"byKind":{},"sample":[]}' }
         if ($command -match 'apply-projection\.mjs .*--compare ') { return '{"ok":true,"mode":"compare","gateway":"apim-p84","compared":1,"projectionRecords":1,"differences":0,"byKind":{},"sample":[]}' }
+        if ($FixtureCase -eq 'apply-excluded' -and $command -match 'apply-projection\.mjs .*--snapshot ') { return '{"ok":true,"written":0,"deleted":0,"unchanged":1,"excludedByNewerTargetedSync":2}' }
         if ($command -match 'check-admission\.mjs ') {
             switch ($FixtureCase) {
                 'admission-no-full-sync' { return '{"ok":false,"mode":"switch-evidence","newestFullSync":null,"invalidCount":0,"reason":"no full sync within 24 hours for this account and tenant"}' }

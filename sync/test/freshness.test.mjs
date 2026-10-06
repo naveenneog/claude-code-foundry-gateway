@@ -46,6 +46,14 @@ test('a fresh entitlement carries its generation but no expiry through the resol
   assert.equal('expiresAt' in r.record, false);
   assert.equal(r.record.reconciliationGeneration, lease.reconciliationGeneration);
 });
+test('a document with any type property, even a falsy one, is control data and never entitlement', () => {
+  for (const type of [null, '', 0, false]) {
+    const r = toEntitlement({ ...doc, type }, { tenantId, now });
+    assert.equal(r.ok, false, JSON.stringify({ type }));
+    assert.equal(r.status, 404, JSON.stringify({ type }));
+  }
+});
+
 test('legacy future record expiry is ignored until it passes, while generation and verification freshness are service failures', () => {
   for (const changes of [
     { expiresAt: lease.expiresAt + 1 }, { expiresAt: undefined }, { expiresAt: null }, { expiresAt: 'tomorrow' },

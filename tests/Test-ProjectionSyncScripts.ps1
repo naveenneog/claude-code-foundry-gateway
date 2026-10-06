@@ -156,9 +156,15 @@ Capture { & (Join-Path $root 'scripts\Sync-ClaudeAccess.ps1') -ApimName apim-p84
 $accessCalls = $FixtureCalls -join "`n"
 Assert 'Sync-ClaudeAccess -Store auto follows a projection gateway and forwards --allow-empty plus account id' (-not $CapturedError -and $accessCalls -match 'apply-projection\.mjs .*--account-resource-id /subscriptions/00000000-0000-4000-8000-000000000084/resourceGroups/rg-p84/providers/Microsoft\.DocumentDB/databaseAccounts/cosmos-p84fixture .*--allow-empty') "$CapturedError | $accessCalls"
 Assert 'Sync-ClaudeAccess projection runner installs production dependencies with safe npm ci flags' ($accessCalls -match 'npm --prefix /work/sync ci --omit=dev --ignore-scripts --no-audit --fund=false') $accessCalls
-Assert 'projection access path starts runner and applies contract CLI' (-not $CapturedError -and $accessCalls -match 'container show .*aci-projtest-p84fixture' -and $accessCalls -match 'npm --prefix /work/sync ci --omit=dev --ignore-scripts --no-audit --fund=false' -and $accessCalls -match 'apply-projection\.mjs .*--account-resource-id .*--snapshot /work/projection-snapshot\.json') "$CapturedError | $accessCalls"
+$runSnapshot = [regex]::Match($accessCalls, 'apply-projection\.mjs .*--snapshot (/work/projection-snapshot-[0-9a-f]{32}\.json)').Groups[1].Value
+Assert 'projection access path starts runner and applies contract CLI from its own per-run snapshot path' (-not $CapturedError -and $accessCalls -match 'container show .*aci-projtest-p84fixture' -and $accessCalls -match 'npm --prefix /work/sync ci --omit=dev --ignore-scripts --no-audit --fund=false' -and $runSnapshot) "$CapturedError | $accessCalls"
 Assert 'projection access uses a temp per-run snapshot directory, not a repo .claude-projection-sync directory' (-not $CapturedError -and $accessCalls -match [regex]::Escape([IO.Path]::GetTempPath()) -and $accessCalls -notmatch '\.claude-projection-sync') "$CapturedError | $accessCalls"
-Assert 'projection access removes runner snapshot and decision files after apply' (-not $CapturedError -and $accessCalls -match "rmSync\('/work/projection-snapshot\.json'" -and $accessCalls -match "rmSync\('/work/gateway-decisions\.json'") "$CapturedError | $accessCalls"
+Assert 'projection access removes its own runner snapshot after apply' (-not $CapturedError -and $runSnapshot -and $accessCalls.Contains("rmSync('$runSnapshot'")) "$CapturedError | $accessCalls"
+
+Reset-ProjectionFixture 'apply-excluded'
+Capture { & (Join-Path $root 'scripts\Sync-ClaudeAccess.ps1') -ApimName apim-p84 -ResourceGroup rg-p84 -Store projection 6>&1 }
+$excludedText = (@($CapturedResult) | ForEach-Object { [string]$_ }) -join "`n"
+Assert 'a full sync that left out users a targeted sync changed says how many, with the remedy' (-not $CapturedError -and $excludedText -match '2 user\(s\)' -and $excludedText -match 'Remedy: rerun scripts/Sync-ClaudeAccess\.ps1') "$CapturedError | $excludedText"
 $exportCall = @($FixtureCalls | Where-Object { $_ -like 'pwsh *Sync-ClaudeProjection.ps1*' })
 $declared = @((Get-Command (Join-Path $root 'scripts\Sync-ClaudeProjection.ps1')).Parameters.Keys)
 $passed = @(if ($exportCall.Count) { ([string]$exportCall[0] -split ' ') | Select-Object -Skip 3 | Where-Object { $_ -match '^-[A-Za-z]+$' } | ForEach-Object { $_.Substring(1) } })

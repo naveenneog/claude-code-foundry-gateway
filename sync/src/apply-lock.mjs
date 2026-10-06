@@ -118,8 +118,11 @@ function lockItem(container) {
   return container.item(APPLY_LOCK_ID, APPLY_LOCK_ID);
 }
 
+// A lease time that is not a date counts as passed, so a malformed lock cannot block writers for good;
+// the takeover still needs the held document's ETag.
 function isExpired(lock, at) {
-  return Date.parse(lock?.leaseExpiresAt) <= at.getTime();
+  const lease = Date.parse(lock?.leaseExpiresAt);
+  return !Number.isFinite(lease) || lease <= at.getTime();
 }
 
 function timeoutMessage(lock) {

@@ -8,7 +8,7 @@ const opt = (name, fallback) => {
 };
 
 const endpoint = opt('--cosmos', process.env.COSMOS_ENDPOINT);
-const tenantId = opt('--tenant', process.env.PROJECTION_TENANT_ID);
+const tenantId = (opt('--tenant', process.env.PROJECTION_TENANT_ID) ?? '').toLowerCase();
 const accountResourceId = opt('--account-resource-id', process.env.PROJECTION_ACCOUNT_RESOURCE_ID);
 const databaseName = opt('--database', 'claude');
 const containerName = opt('--container', 'entitlement');

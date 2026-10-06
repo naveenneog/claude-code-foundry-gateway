@@ -187,6 +187,8 @@ Step 'Signing in'
 $acct = az account show -o json 2>$null | ConvertFrom-Json
 if (-not $acct) { Bad "Run 'az login' first."; exit 1 }
 if (-not $TenantId) { $TenantId = $acct.tenantId }
+# Tenant ids are GUIDs, stored in lower case by the writer; the snapshot carries the same form.
+$TenantId = ([string]$TenantId).ToLowerInvariant()
 Ok "$($acct.user.name)  tenant $TenantId"
 
 # The projection records the tenant on every document, and the resolver refuses

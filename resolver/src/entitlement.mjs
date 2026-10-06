@@ -33,7 +33,8 @@ export function toEntitlement(doc, { tenantId, now = new Date() } = {}) {
     return { ok: false, status: 404, reason: 'no record for this identity' };
   }
 
-  if (doc.type ||
+  // Any type property, even a falsy one, marks control data; the sync skips the same documents.
+  if (doc.type !== undefined ||
       (typeof doc.oid === 'string' && doc.oid.startsWith('projection-status::')) ||
       (typeof doc.id === 'string' && doc.id.startsWith('projection-status::'))) {
     return { ok: false, status: 404, reason: 'control record is not entitlement' };

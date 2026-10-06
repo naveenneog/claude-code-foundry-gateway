@@ -101,6 +101,22 @@ test('an expired apply lock is taken over with IfMatch and released with IfMatch
   assert.equal(options.length, 2);
 });
 
+test('a lock whose lease time is not a date is taken over, so it cannot block writers for good', async () => {
+  const held = { id: 'projection-apply-lock', oid: 'projection-apply-lock', type: 'projection-apply-lock', holder: 'other-run', mode: 'full', acquiredAt: '2026-10-06T00:00:00.000Z', leaseExpiresAt: 'not-a-date', _etag: '"held"' };
+  let replacedWith = null;
+  const container = {
+    items: { create: async () => { const error = new Error('conflict'); error.code = 409; throw error; } },
+    item: () => ({
+      read: async () => ({ resource: held, etag: '"held"' }),
+      replace: async (body, options) => { replacedWith = options?.accessCondition?.condition; return { resource: { ...body, _etag: '"mine"' }, etag: '"mine"' }; },
+      delete: async () => ({}),
+    }),
+  };
+  const lease = await acquireApplyLock(container, { runId: 'run-b', mode: 'full', waitSeconds: 0, now: () => new Date('2026-10-06T00:01:00.000Z'), sleep: async () => {} });
+  assert.ok(lease);
+  assert.equal(replacedWith, '"held"', 'taken over with If-Match on the held ETag');
+});
+
 test('a lost renewal fails at the lock stage before the caller writes more', async () => {
   let reads = 0;
   let replaced = 0;
