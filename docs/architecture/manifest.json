@@ -29,7 +29,7 @@
         "scripts/Grant-ClaudeGovernanceGraphAccess.ps1": "2313313010eef6867f730bbb1803b7a0a68113a3ad961f798627e274aff56b1a",
         "scripts/Publish-ClaudeQueries.ps1": "d54164f58a76b5d352d46d615da8f877f16df61ce9d2ecb0f3d3c1e7c6a7c72b",
         "scripts/Setup-ClaudeWorkstation.ps1": "540c547d8af1dedc264bd5ac9575e413b2c3564f2554187c55025b3cbd7e0b95",
-        "scripts/Sync-ClaudeAccess.ps1": "76ba06161ad3b8f34d959fc6086fbc0807de65e7309a5dcca4ae8cfc13de5a36",
+        "scripts/Sync-ClaudeAccess.ps1": "f6aa9f366c9e8dcb579789ca9a96b5f6fd80ee787d81117d38986f79d4b153a5",
         "scripts/Sync-ClaudeProjection.ps1": "67976f06318afec6f1e3b949e9ff6d5a4b1204201459ed0fc5f2e3e20cec2232",
         "scripts/flow/DeviceProfiles.ps1": "7f3925af5eab6f23599031b118834d1faeb657a960b20af505788ceb6097fbc4",
         "scripts/flow/Foundation.ps1": "fb0d43ee4fbe00a140410bf3f9594b1a6d43bc4f226748f8231c6f23743c7ed4",
@@ -93,7 +93,7 @@
         "scripts/Connect-ClaudeTurnstile.ps1": "cc4e2c094aaab8ce75856a3ba770d844bd32333d4f8b42f53f91cabdd1129201",
         "scripts/Grant-ClaudeGovernanceGraphAccess.ps1": "2313313010eef6867f730bbb1803b7a0a68113a3ad961f798627e274aff56b1a",
         "scripts/Invoke-ClaudeTurnstileSchedule.ps1": "9a1d8c6dcd25615b2bf9bd11c62306de517c08e0529aee924d5212c758f1d0b9",
-        "scripts/Sync-ClaudeAccess.ps1": "76ba06161ad3b8f34d959fc6086fbc0807de65e7309a5dcca4ae8cfc13de5a36",
+        "scripts/Sync-ClaudeAccess.ps1": "f6aa9f366c9e8dcb579789ca9a96b5f6fd80ee787d81117d38986f79d4b153a5",
         "scripts/Sync-ClaudeProjection.ps1": "67976f06318afec6f1e3b949e9ff6d5a4b1204201459ed0fc5f2e3e20cec2232",
         "scripts/Sync-ClaudeTurnstileGovernance.ps1": "6c05cb24ed11afd45acf62bef9d64857adc3823267fe613985222fc1c24b99e6"
       },
@@ -145,7 +145,7 @@
         "scripts/ClaudeProjectionSwitch.ps1": "9d0fe06d4bcd24ca32808af215a8d5f4ba9c592d74f60a822df2dd5ee129816f",
         "scripts/ClaudeRunner.ps1": "65cb842e592da45d2e012bc6fef21f04a8a1c1d9c05cc62772246bef442c8fc3",
         "scripts/Deploy-ClaudeProjectionRenewal.ps1": "970779ec38b1bb0d336e481e2ab9fad7b9de2cdbd271de683a331e1107dde547",
-        "scripts/Sync-ClaudeAccess.ps1": "76ba06161ad3b8f34d959fc6086fbc0807de65e7309a5dcca4ae8cfc13de5a36",
+        "scripts/Sync-ClaudeAccess.ps1": "f6aa9f366c9e8dcb579789ca9a96b5f6fd80ee787d81117d38986f79d4b153a5",
         "scripts/Sync-ClaudeProjection.ps1": "67976f06318afec6f1e3b949e9ff6d5a4b1204201459ed0fc5f2e3e20cec2232",
         "sync/Dockerfile": "80ab80a331c8b97f903c30cf714cedfcc9969b8d8c24be0c58777ac7c7f3b382",
         "sync/src/apply-lock.mjs": "c477f98ab719567b04b6981017dd4dc4c0a40b8b4a6d98145d320d958d73e9b0",
@@ -205,7 +205,7 @@
         "scripts/Set-ClaudeDeveloper.ps1": "0587578bad882f89993c347972ebf96214ef9d489dafb7e445fec1c08f30057f",
         "scripts/Set-ClaudeTier.ps1": "90d1a5eb9f9a6ec072b55187f5940a0d19d1942321a52772fe0fa627efe9da0c",
         "scripts/Sync-AumMembership.ps1": "dd156c12bf0568160c9d24e03eba1ca29439b04bbe505a57c8684bc0adddd5f6",
-        "scripts/Sync-ClaudeAccess.ps1": "76ba06161ad3b8f34d959fc6086fbc0807de65e7309a5dcca4ae8cfc13de5a36",
+        "scripts/Sync-ClaudeAccess.ps1": "f6aa9f366c9e8dcb579789ca9a96b5f6fd80ee787d81117d38986f79d4b153a5",
         "scripts/aum-cloudshell.sh": "a22627523f81596ddeeee34f0dce0ebd8db7dfd9b649d2e7f94be20658681907"
       },
       "outputs": [

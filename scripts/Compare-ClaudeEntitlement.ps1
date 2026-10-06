@@ -101,8 +101,9 @@ Write-Host 'Entitlement: gateway versus directory' -ForegroundColor Cyan
 Write-Host "  APIM : $ApimName ($ResourceGroup)"
 
 # Side one: what the gateway is enforcing right now.
-$gwPremium  = Get-ListOids 'allow-premium'
-$gwStandard = Get-ListOids 'allow-standard'
+# @() keeps a one-element or empty list an array; unrolled, the lists below concatenated into one string.
+$gwPremium  = @(Get-ListOids 'allow-premium')
+$gwStandard = @(Get-ListOids 'allow-standard')
 
 if ($ExportGatewayPath) {
     . (Join-Path $PSScriptRoot 'ClaudeBusinessUnit.ps1')

@@ -169,6 +169,9 @@ $tiers = @(
 )
 
 $seen = @{}
+# Every value is resolved and checked against the 4,096-character limit before the first write, so a list
+# that does not fit leaves every named value as it was, rather than some lists refreshed beside others stale.
+$pendingWrites = [Collections.Generic.List[object]]::new()
 $graphToken = Get-GraphToken
 
 foreach ($t in $tiers) {
@@ -220,7 +223,7 @@ foreach ($t in $tiers) {
         }
     }
 
-    Set-NamedValue -Id $t.NamedValue -Value $value
+    $pendingWrites.Add([pscustomobject]@{ Id = $t.NamedValue; Value = $value })
     Write-Host ""
 }
 
@@ -289,8 +292,8 @@ else {
         Write-Host ''
     }
     else {
-        Set-NamedValue -Id 'bu-members' -Value $buValue
-        Write-Host ("  {0} developer(s) mapped to a business unit." -f $buMap.Keys.Count) -ForegroundColor Green
+        $pendingWrites.Add([pscustomobject]@{ Id = 'bu-members'; Value = $buValue })
+        Write-Host ("  {0} developer(s) to map to a business unit." -f $buMap.Keys.Count) -ForegroundColor Green
     }
 
     $unmapped = @($seen.Keys | Where-Object { -not $buMap.Contains($_) })
@@ -300,6 +303,9 @@ else {
     }
     Write-Host ""
 }
+
+foreach ($write in $pendingWrites) { Test-ApimNamedValueLength -Id $write.Id -Value $write.Value }
+foreach ($write in $pendingWrites) { Set-NamedValue -Id $write.Id -Value $write.Value }
 
 Write-Host "Done. $($seen.Count) identity(ies) authorised." -ForegroundColor Green
 Write-Host "Anyone not listed receives HTTP 403 from the gateway." -ForegroundColor DarkGray

@@ -183,6 +183,66 @@ Capture { & (Join-Path $root 'scripts\Sync-ClaudeAccess.ps1') -ApimName apim-p84
 $presentCalls = $FixtureCalls -join "`n"
 Assert 'Sync-ClaudeAccess skips runner npm ci when node_modules is already present' (-not $CapturedError -and $presentCalls -notmatch 'npm --prefix /work/sync ci') "$CapturedError | $presentCalls"
 
+# P98 council round 2 (Architect): the named-value sync wrote allow-premium, then refused allow-standard over the
+# 4,096-character limit, so the gateway served a refreshed premium list beside a stale standard list. Every
+# value is now checked before the first write. The fixture answers Graph and az for a gateway with no business units.
+function Invoke-NamedValueSyncFixture {
+    param([int]$PremiumCount, [int]$StandardCount, [string]$GatewayStandard = '', [string]$GatewayPremium = '', [string]$Script = 'Sync-ClaudeAccess.ps1', [hashtable]$Parameters = @{ Store = 'named-value' })
+    $global:P98NvCalls = [Collections.Generic.List[string]]::new()
+    $directory = @{
+        '10000000-0000-4000-8000-000000000002' = @(1..$PremiumCount | Where-Object { $_ -gt 0 } | ForEach-Object { '40000000-0000-4000-8000-' + ([string]$_).PadLeft(12, '0') })
+        '10000000-0000-4000-8000-000000000001' = @(1..$StandardCount | Where-Object { $_ -gt 0 } | ForEach-Object { '50000000-0000-4000-8000-' + ([string]$_).PadLeft(12, '0') })
+    }
+    $gatewayLists = @{ 'allow-standard' = $GatewayStandard; 'allow-premium' = $GatewayPremium }
+    function az {
+        $words = @($args); $line = $words -join ' '; $global:P98NvCalls.Add("az $line"); $global:LASTEXITCODE = 0
+        if ($line -like 'account get-access-token*') { return '{"accessToken":"offline-token"}' }
+        if ($line -like 'account show*') { return '{"id":"00000000-0000-4000-8000-000000000001","tenantId":"00000000-0000-4000-8000-000000000085"}' }
+        if ($line -like 'apim nv show*') {
+            $id = [string]$words[[array]::IndexOf($words, '--named-value-id') + 1]
+            if ($gatewayLists.ContainsKey($id) -and $gatewayLists[$id]) {
+                if ($line -match '--query value') { return $gatewayLists[$id] }
+                return (@{ name = $id; value = $gatewayLists[$id] } | ConvertTo-Json -Compress)
+            }
+            # az prints "(ResourceNotFound) NamedValue not found" on stderr, which these reads discard.
+            $global:LASTEXITCODE = 3; return
+        }
+        if ($line -like 'apim nv update*' -or $line -like 'apim nv create*') { return '' }
+        throw "unexpected az $line"
+    }
+    function Invoke-RestMethod {
+        param($Uri, $Method, $Headers, $Body, $TimeoutSec, $ErrorAction, $ContentType)
+        $global:P98NvCalls.Add("HTTP $Method $Uri")
+        $text = [uri]::UnescapeDataString([string]$Uri)
+        if ($text -match '^https://graph\.microsoft\.com/v1\.0/groups\?') {
+            $id = if ($text -match "displayName eq 'claude-code-premium'") { '10000000-0000-4000-8000-000000000002' } elseif ($text -match "displayName eq 'claude-code-standard'") { '10000000-0000-4000-8000-000000000001' } else { '' }
+            return [pscustomobject]@{ value = @(if ($id) { [pscustomobject]@{ id = $id } }) }
+        }
+        if ($text -match '^https://graph\.microsoft\.com/v1\.0/groups/([0-9a-f-]+)/transitiveMembers/microsoft\.graph\.user') {
+            return [pscustomobject]@{ value = @($directory[$Matches[1]] | ForEach-Object { [pscustomobject]@{ id = $_; displayName = $_ } }) }
+        }
+        if ($text -match 'transitiveMembers/microsoft\.graph\.servicePrincipal') { return [pscustomobject]@{ value = @() } }
+        throw "unexpected HTTP $Method $Uri"
+    }
+    $arguments = @{ ApimName = 'apim-p98'; ResourceGroup = 'rg-p98' } + $Parameters
+    Capture { & (Join-Path $root "scripts\$Script") @arguments 6>$null }
+    $script:FixtureExit = $global:LASTEXITCODE
+}
+function Get-NamedValueWrites { @($global:P98NvCalls | Where-Object { $_ -match '^az apim nv (update|create)' -or $_ -match '^HTTP Put ' }) }
+
+Invoke-NamedValueSyncFixture -PremiumCount 5 -StandardCount 120
+$nvWrites = Get-NamedValueWrites
+Assert 'a named-value sync with a list over the limit writes no named value, not the premium list first' (
+    $CapturedError -match 'over the API Management limit' -and $nvWrites.Count -eq 0) "$CapturedError | writes: $($nvWrites -join ' | ')"
+Invoke-NamedValueSyncFixture -PremiumCount 5 -StandardCount 20
+$nvWrites = Get-NamedValueWrites
+Assert 'a named-value sync within the limit writes both lists' (
+    -not $CapturedError -and @($nvWrites -match 'allow-premium').Count -ge 1 -and @($nvWrites -match 'allow-standard').Count -ge 1) "$CapturedError | writes: $($nvWrites -join ' | ')"
+
+# P98 council round 2 (Coder note): with one object id in allow-standard and an empty allow-premium, the list reads
+# unrolled to a string, the combined list became one concatenated string, and the drift check said "In sync".
+Invoke-NamedValueSyncFixture -PremiumCount 0 -StandardCount 1 -GatewayStandard ',00000000-0000-4000-8000-0000000000aa,' -GatewayPremium ',' -Script 'Compare-ClaudeEntitlement.ps1' -Parameters @{}
+Assert 'the drift check reports a one-member list that differs from Entra' ($script:FixtureExit -eq 1 -and -not $CapturedError) "exit $($script:FixtureExit) | $CapturedError"
 Write-Host "P97_SYNC assertions=$assertions failed=$failures"
 Remove-Item -LiteralPath $script:p97SyncWork -Recurse -Force -ErrorAction SilentlyContinue
 exit ([int]($failures -gt 0))
