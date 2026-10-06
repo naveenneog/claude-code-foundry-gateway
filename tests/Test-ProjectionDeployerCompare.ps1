@@ -30,9 +30,6 @@ function Invoke-Compare {
     $params = @{ ResourceGroup = 'rg-p84'; ApimName = 'apim-p84'; RunnerName = 'aci-projtest-p84fixture'; CosmosAccount = 'cosmos-p84fixture'; TenantId = $FixtureTenant; GatewayPath = (Join-Path $work 'gateway-decisions.json'); StandardGroup = 'claude-code-standard'; PremiumGroup = 'none'; CompareScript = $compareStub }
     foreach ($key in $Extra.Keys) { $params[$key] = $Extra[$key] }
     Invoke-ClaudeProjectionDeployerCompare @params
-    <# old -ResourceGroup rg-p84 -ApimName apim-p84 -RunnerName aci-projtest-p84fixture -CosmosAccount cosmos-p84fixture `
-        -TenantId $FixtureTenant -GatewayPath (Join-Path $work 'gateway-decisions.json') -StandardGroup claude-code-standard -PremiumGroup none -CompareScript $compareStub
-#>
 }
 
 try {
