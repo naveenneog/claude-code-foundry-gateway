@@ -2443,8 +2443,8 @@ $mutations = @(
     @{ Suite = 'Test-SecureProjection.ps1'
        Name  = 'a snapshot is applied without validation'
        File  = 'sync/src/apply-projection.mjs'
-       From  = 'const problems = validateSnapshot(snap, { tenantId });'
-       To    = 'const problems = [];' }
+       From  = '      : validateSnapshot(snap, { tenantId });'
+       To    = '      : [];' }
 
     @{ Suite = 'Test-SecureProjection.ps1'
        Name  = 'a failed write is reported as ok'
