@@ -24,8 +24,22 @@ budget requests, next-level decisions, temporary boosts and warning records.
 > exclusivity. Shared-workspace Manager isolation has not been established.
 > The dollar-budget reconciler is the exception: it keeps only this gateway's
 > rows (`gateway_id` in `service/aum/aum_service/usd_reconcile.py`).
+## Quickstart
+
+The script path discovers targets, previews cost choices and deploys only after review. The service is a scoped authority; client calls still require delegated Entra tokens and assigned AUM roles.
+
+```powershell
+.\scripts\Deploy-ClaudeAumService.ps1 -DiscoveryOnly
+.\scripts\Deploy-ClaudeAumService.ps1 -WhatIf
+```
+
+**Expected result:** discovery names candidate gateway, workspace and app-registration inputs; WhatIf prints the planned service endpoint, scope, roles and resource cost without deployment. Read-only verification below proves `/me` and scoped reads after a confirmed deployment.
 
 ## Choose a FinOps tool
+
+<details>
+
+<summary>AUM service details</summary>
 
 Run the selector before creating infrastructure:
 
@@ -59,7 +73,12 @@ Turnstile owns budgets or governance, AUM service mutations return
 in AUM, or intentionally move authority with the existing Turnstile connection
 tools. Deployment does not change that setting for you.
 
+</details>
 ## Prerequisites and roles
+
+<details>
+
+<summary>AUM service details</summary>
 
 | Principal | Required access | Why |
 |---|---|---|
@@ -98,7 +117,12 @@ The budget-modes gateway version must already be deployed for mode writes.
 If `bu-modes` is absent, mode-write capability is false; missing metadata reads
 as strict. The service never rewrites the gateway policy to enable a feature.
 
+</details>
 ## Deploy with the script
+
+<details>
+
+<summary>AUM service details</summary>
 
 ### 1. Discover targets
 
@@ -200,7 +224,12 @@ explicitly enables `outboundVnetRouting.allTraffic`. Measured in this deployment
 private endpoints, DNS and data roles without it still gave OneDeploy a 403;
 the same deployment succeeded after this routing property was enabled.
 
+</details>
 ## Deploy in the Azure portal
+
+<details>
+
+<summary>AUM service details</summary>
 
 The portal route uses the same Bicep deployment translated to ARM, so identity,
 role and storage settings do not drift from the script.
@@ -319,7 +348,12 @@ Optional Insights uses a **non-secret routing connection string** and
 storage/authentication credential. `DisableLocalAuth=true` makes the routing
 string insufficient to send telemetry. With Insights off, neither setting exists.
 
+</details>
 ## Deploy with Azure CLI
+
+<details>
+
+<summary>AUM service details</summary>
 
 Use the script for app-owner reconciliation, or reproduce the preceding Graph
 manifest steps with `az rest` and JSON body files. Never put quoted JSON, `&`,
@@ -346,7 +380,12 @@ The deployer creates unique worktree-local package paths and cleans them.
 Remote build is required for Linux-compatible Python dependencies when the
 workstation runs Windows.
 
+</details>
 ## Assign roles and manager groups
+
+<details>
+
+<summary>AUM service details</summary>
 
 Role precedence is **Admin > Viewer > Manager**. A Viewer+Manager sees everything
 but cannot edit. Remove the Viewer assignment if the person should be scoped.
@@ -408,7 +447,12 @@ An overage claim grants **no group-based scope**. `/me` returns
 including an object of empty arrays for no assignments. Clients must not turn
 that empty object into unrestricted access.
 
+</details>
 ## Verify reads, writes and expiry
+
+<details>
+
+<summary>AUM service details</summary>
 
 ### Read-only verification
 
@@ -523,7 +567,12 @@ server-authenticated `/me` scope must agree before any manager-only operation.
 Privileged groups are restored before direct assignments; recreated assignment
 record IDs may differ, but principal/resource/role tuples must match the snapshot.
 
+</details>
 ## API reference
+
+<details>
+
+<summary>AUM service details</summary>
 
 The versioned contract is
 [`service/aum/openapi.yaml`](../service/aum/openapi.yaml).
@@ -551,7 +600,12 @@ entity-tag (or use the response's `ETag` header). Never automatically retry a wr
 After a timeout, read the target and audit log to establish its outcome.
 Unknown capabilities default to false in a client.
 
+</details>
 ## Cost
+
+<details>
+
+<summary>AUM service details</summary>
 
 The script fetches list-price meters from the
 [Azure Retail Prices API](https://learn.microsoft.com/rest/api/cost-management/retail-prices/azure-retail-prices).
@@ -582,7 +636,12 @@ storage. Measure consumption; never promise a free or sub-$5 service there.
 Turnstile's approximately $58-159/month examples describe its different
 architectures, not a required AUM cost. See [Turnstile costs](TURNSTILE.md#what-it-costs).
 
+</details>
 ## Limits and 500,000 developers
+
+<details>
+
+<summary>AUM service details</summary>
 
 | Boundary | What this release does |
 |---|---|
@@ -602,7 +661,12 @@ authorization; it does not remove a named-value storage ceiling or an ARM
 throttle. Large organizations must plan catalog size, individual override
 count, audit retention, query latency and manager concurrency explicitly.
 
+</details>
 ## Troubleshoot
+
+<details>
+
+<summary>AUM service details</summary>
 
 | Exact error/symptom | Cause | Action |
 |---|---|---|
@@ -637,7 +701,12 @@ count, audit retention, query latency and manager concurrency explicitly.
 | Private DNS zone deletion fails on nested resources | VNet links still exist | The removal script unlinks only recorded service VNets first; a new shared link is refused for review |
 | Portal capture reaches sign-in | Copied session expired | Stop capture and tell the lead; never open or share the original profile |
 
+</details>
 ## Test and remove
+
+<details>
+
+<summary>AUM service details</summary>
 
 ```powershell
 python -m venv .venv-aum-service
@@ -685,7 +754,12 @@ and reused resources. Do not delete a shared resource group as a shortcut.
 Tenant policy can create extra NSGs. Inspect any remainder and delete an isolated
 test group only after confirming no shared or attached resource remains.
 
+</details>
 ## Live verification receipt
+
+<details>
+
+<summary>AUM service details</summary>
 
 [Measured results and redacted API receipts](aum-service/LIVE-VERIFICATION.md)
 separate the September 24 pilot from the September 25 dedicated Basic v2 proof:
@@ -699,6 +773,7 @@ separate the September 24 pilot from the September 25 dedicated Basic v2 proof:
   screenshots**. The five Entra pictures above are captured live; the seven Function and
   storage pictures remain pending until a service is deployed again.
 
+</details>
 ## Next steps
 
 - Use an AUM build with an explicit service adapter, endpoint and scope; this
