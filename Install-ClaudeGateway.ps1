@@ -1629,6 +1629,7 @@ else {
 $syncJobStatus = 'not-requested'
 if ($EntitlementStore -eq 'projection') {
     Write-Step 'Projection deployment'
+    # The helper maps ProjectionResolverAppId to the deployer's '-ResolverAppId' parameter.
     Invoke-ClaudeInstallerProjectionDeployment -Root $root -ResourceGroup $ResourceGroup -ApimName $apimName -NamePrefix $NamePrefix `
         -Location $Location -Sku $Sku -ResolverInboundAccess $ResolverInboundAccess -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup `
         -SubscriptionId $SubscriptionId -ProjectionResolverAppId $ProjectionResolverAppId -CompareBaseline $projectionCompareBaseline -ResolverPublicByDefault:($ResolverInboundAccess -eq 'public' -and -not $PSBoundParameters.ContainsKey('ResolverInboundAccess')) -WhatIf:$WhatIfPreference | Out-Null
