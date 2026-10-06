@@ -13,8 +13,21 @@ answers and different owners:
 Every claim below was checked against Anthropic's documentation or against a
 live deployment. Where something is genuinely undocumented it says so rather
 than guessing.
+## Quickstart
+
+The cutover starts with import enablement, export, backup and a verified pilot before fleet rollout or deprovisioning. Privacy, platform and device-management owners approve those separate operations. Project attachments require a separate transfer; history import does not include them.
+
+```powershell
+.\scripts\Backup-ClaudeGateway.ps1 -ResourceGroup $rg -ApimName $apim -Path .\backups\before-cutover.json
+```
+
+**Expected result:** the backup file is private and reviewed, import limits are recorded, and a pilot developer verifies the gateway before broad policy assignment. Successful backup alone is not cutover approval.
 
 ## Prerequisites and owners
+
+<details>
+
+<summary>Migration details</summary>
 
 - Platform owner: deployed gateway, approved model/hosting choice and
   [Setup roles](SETUP.md#2-permissions-and-roles).
@@ -33,7 +46,12 @@ Plan [Scale](SCALE.md) first.
 
 ---
 
+</details>
 ## 1. History, memory and sessions
+
+<details>
+
+<summary>Migration details</summary>
 
 ### What survives
 
@@ -392,7 +410,7 @@ has to accept that audience.
 > collects: it belongs in a privacy review, and in most jurisdictions the
 > people affected have to be told.
 
-Most organisations end up with **redirected + audited**: redirection for
+Redirection and audited collection are separate options. Selection depends on continuity, retention, access and privacy requirements: redirection for
 continuity, telemetry for the compliance record. The gateway already gives you
 token counts per person for chargeback without any of this — see
 [MONITORING.md](MONITORING.md).
@@ -403,7 +421,12 @@ token counts per person for chargeback without any of this — see
 
 ---
 
+</details>
 ## 2. Mass deployment through MDM
+
+<details>
+
+<summary>Migration details</summary>
 
 Both clients are designed for this. Managed settings sit above every other
 level: no user, project, local or `--settings` value overrides them.
@@ -533,7 +556,12 @@ carry `x-governed-by`, and the call appears in Application Insights.
 
 ---
 
+</details>
 ## 3. Bulk entitlement from a CSV or an Entra group
+
+<details>
+
+<summary>Migration details</summary>
 
 Entitlement is Entra group membership. Filling those groups is the migration.
 
@@ -566,9 +594,9 @@ one a colleague typed into a spreadsheet is often none of them. This
 anonymized example illustrates the shapes to check:
 
 ```text
-userPrincipalName   alice_contoso.com#EXT#@contoso.onmicrosoft.com
-mail                alice@contoso.com
-otherMails          alice.morgan@contoso.com
+userPrincipalName   developer_contoso.com#EXT#@contoso.onmicrosoft.com
+mail                developer@contoso.com
+otherMails          developer.alias@contoso.com
 ```
 
 The sign-in address can differ from all of those attributes, and `#EXT#` is
@@ -611,7 +639,12 @@ on a schedule ([Onboarding](ONBOARDING.md#5-revoke-access)).
 
 ---
 
+</details>
 ## 4. Backing the gateway up, and putting it back
+
+<details>
+
+<summary>Migration details</summary>
 
 Two different backups, because there are two different things worth keeping and
 they carry different risk.
@@ -757,7 +790,12 @@ Both backup folders are git-ignored.
 
 <a name="4-cutover-runbook"></a>
 
+</details>
 ## 5. Cutover runbook
+
+<details>
+
+<summary>Migration details</summary>
 
 **Turn on both import switches first.** `claudeAiImport.enabled` in the Desktop
 managed configuration, and **Allow members to export their own data** on
@@ -802,7 +840,12 @@ on the Foundry account directly can skip the gateway and every budget with it.
 
 ---
 
+</details>
 ## What is still genuinely unknown
+
+<details>
+
+<summary>Migration details</summary>
 
 - **Accepted values for `forceLoginMethod`.** It restricts login to claude.ai,
   the Console, or a gateway, and would stop someone signing in to a personal
@@ -812,7 +855,12 @@ on the Foundry account directly can skip the gateway and every budget with it.
 
 ---
 
+</details>
 ## Anthropic references
+
+<details>
+
+<summary>Migration details</summary>
 
 Everything above is grounded in these. Worth checking them directly before a
 cutover date: Claude Desktop on 3P is moving quickly, and the support site
@@ -853,3 +901,10 @@ links 404 rather than redirect.
 **Cowork**
 
 - [Overview](https://claude.com/docs/cowork/overview) · [Monitoring](https://claude.com/docs/cowork/monitoring)
+
+</details>
+## Next
+
+- [Operations](OPERATIONS.md) covers backup and restore.
+- [Developer setup](../DEVELOPER.md) covers post-cutover workstation setup.
+- [Data governance](DATA-GOVERNANCE.md) covers retention and discovery.

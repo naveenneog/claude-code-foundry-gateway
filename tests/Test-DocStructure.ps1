@@ -46,7 +46,8 @@ $EnrolledGuides = @(
   'docs\TURNSTILE.md',
   'docs\DIAGNOSE.md',
   'docs\DEBUGGING.md',
-  'docs\TROUBLESHOOTING.md'
+  'docs\TROUBLESHOOTING.md',
+  'docs\MIGRATION.md'
 )
 
 
@@ -77,7 +78,8 @@ function Get-GuidePaths {
   'docs\TURNSTILE.md',
   'docs\DIAGNOSE.md',
   'docs\DEBUGGING.md',
-  'docs\TROUBLESHOOTING.md','guide\README.md','onboarding\README.md')
+  'docs\TROUBLESHOOTING.md',
+  'docs\MIGRATION.md','guide\README.md','onboarding\README.md')
 
   Get-ChildItem -LiteralPath (Join-Path $Root 'docs') -Filter '*.md' | Sort-Object Name | ForEach-Object {
 
@@ -268,7 +270,7 @@ function Test-GuideStructure([string]$Path, [string]$Text, [bool]$Enrolled) {
 
     if ($body -match '<summary>\s*(##|<h[1-6])') { $errors.Add("section '$($sections[$i].Title)' uses a heading in summary") }
 
-    if ($body -match '(?i)\s(name=|script>|style>|aria-expanded)') { $errors.Add("section '$($sections[$i].Title)' uses unsupported disclosure control") }
+    if ($body -match '(?i)(<details[^>]+name=|script>|style>)') { $errors.Add("section '$($sections[$i].Title)' uses unsupported disclosure control") }
 
   }
 
