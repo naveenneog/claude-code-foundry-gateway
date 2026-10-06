@@ -238,7 +238,7 @@ function Get-ClaudeProjectionReadiness {
         }
     }
 
-    $checks.Add((New-ReadinessCheck 'Cosmos DB regional capacity' 'NOTE' 'U136: Cosmos DB regional capacity cannot be checked in advance; a capacity failure stops deployment before the switch and named values keep serving.' 'Use another region if Cosmos DB allocation fails.'))
+    $checks.Add((New-ReadinessCheck 'Cosmos regional capacity' 'NOTE' 'U136: Cosmos DB regional capacity cannot be checked in advance; a capacity failure stops deployment before the switch and named values keep serving.' 'Use another region if Cosmos DB allocation fails.'))
 
     $projection = Join-Path (Join-Path $RepositoryRoot 'infra') 'projection.bicep'
     $networkTemplate = Join-Path (Join-Path $RepositoryRoot 'infra') 'projection-network.bicep'

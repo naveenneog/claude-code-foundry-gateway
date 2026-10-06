@@ -269,6 +269,10 @@ try {
     $rootShim = Join-Path $root 'Update-ClaudeGateway.ps1'
     $said = & pwsh -NoProfile -NonInteractive -Command "& '$rootShim' -RecordPath '$missingRecord' -DiscoveryPath '$cleanPath' -ResourceGroup rg-contoso -ApimName apim-contoso -PremiumGroup team-prem -NamePrefix contoso -ResolverInboundAccess public 6>&1 | Out-String" 2>&1 | Out-String
     Assert 'through the root shim the options reach the plan''s apply command' ($said -match '-PremiumGroup team-prem -NamePrefix contoso -ResolverInboundAccess public -Apply -ApprovedPlanFingerprint [0-9a-f]{64}') ($said -split "`n" | Where-Object { $_ -match 'Apply|rror' } | Select-Object -First 2)
+    # The root shim always passes the record path; the printed command names it only when it is not the default record.
+    $said = & pwsh -NoProfile -NonInteractive -Command "& '$rootShim' -DiscoveryPath '$cleanPath' -ResourceGroup rg-contoso -ApimName apim-contoso 6>&1 | Out-String" 2>&1 | Out-String
+    $applyLine = @($said -split "`r?`n" | Where-Object { $_ -match '-ApprovedPlanFingerprint [0-9a-f]{64}' })[0]
+    Assert 'the printed apply command leaves out the default record path' ($applyLine -and $applyLine -notmatch '-RecordPath' -and $applyLine -match '^\s*\.\\Update-ClaudeGateway\.ps1 -DiscoveryPath \S+ -ResourceGroup rg-contoso -ApimName apim-contoso -Apply') "$applyLine"
 
     # Every migration's Test runs after an apply. A gateway that stays on named values (no migration facts in
     # the discovery, or -KeepNamedValues) must verify: 0004 has nothing to verify when it planned no move.

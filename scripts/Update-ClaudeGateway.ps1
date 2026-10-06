@@ -94,8 +94,12 @@ if (-not $Apply -or $WhatIfPreference) {
     }
     else {
         $parts = @('.\Update-ClaudeGateway.ps1')
+        $defaultRecord = [IO.Path]::GetFullPath((Join-Path $root 'onboarding\claude-gateway.json'))
         foreach ($name in 'RecordPath', 'DiscoveryPath', 'ResourceGroup', 'ApimName', 'SnapshotPath', 'StandardGroup', 'PremiumGroup', 'NamePrefix', 'ResolverInboundAccess') {
-            if ($PSBoundParameters.ContainsKey($name) -and $PSBoundParameters[$name]) { $parts += "-$name $(ConvertTo-ClaudeFlowCommandArgument $PSBoundParameters[$name])" }
+            if (-not ($PSBoundParameters.ContainsKey($name) -and $PSBoundParameters[$name])) { continue }
+            # The root shim always passes the record path; the default record needs no option.
+            if ($name -eq 'RecordPath' -and [string]::Equals([IO.Path]::GetFullPath((Resolve-ClaudeFlowFilePath $RecordPath)), $defaultRecord, [StringComparison]::OrdinalIgnoreCase)) { continue }
+            $parts += "-$name $(ConvertTo-ClaudeFlowCommandArgument $PSBoundParameters[$name])"
         }
         if ($KeepNamedValues) { $parts += '-KeepNamedValues' }
         Write-Host 'Plan only. Nothing has been changed. Add -Apply with -ApprovedPlanFingerprint to write; for this plan:' -ForegroundColor Cyan

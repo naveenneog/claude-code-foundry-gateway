@@ -33,6 +33,7 @@ $updateStub = Join-Path $work 'Update-ClaudeGateway.ps1'
     'param($ResourceGroup, $ApimName, [switch]$Apply, $ApprovedPlanFingerprint)'
     'if (-not $Apply) {'
     '    $global:Live.Calls.Add("update plan $ResourceGroup $ApimName")'
+    '    ''[0004-entitlement-projection] review line from the stub'''
     '    $plan = [pscustomobject]@{ Step = ''0004-entitlement-projection''; Actions = @($global:Live.UpdateActions); Data = @{ Blocked = $global:Live.UpdateBlocked } }'
     '    return [pscustomobject]@{ Plans = @($plan); Fingerprint = (''f'' * 64); SnapshotPath = '''' }'
     '}'
@@ -115,13 +116,13 @@ function Invoke-WebRequest {
     [pscustomobject]@{ StatusCode = $(if ($global:Live.Synced) { 200 } else { 403 }) }
 }
 function Start-Sleep { param($Seconds) }
-function Invoke-Verifier([hashtable]$Extra = @{}) {
+function Invoke-Verifier([hashtable]$Extra = @{}, [switch]$WithHost) {
     $params = @{ SubscriptionId = $sub; Location = 'eastus2'; FoundryAccount = 'ai'; FoundryResourceGroup = 'rg-ai'; ResourceGroup = 'rg-p98-live'; NamePrefix = 'p98live'
         StandardGroup = 'claude-p98-std'; PremiumGroup = 'claude-p98-prm'; UseCurrentAzLogin = $true; Teardown = $true; InstallerPath = $installerStub; SyncAccessPath = $syncStub }
     foreach ($k in $Extra.Keys) { if ($null -eq $Extra[$k]) { $params.Remove($k) } else { $params[$k] = $Extra[$k] } }
     $script:Failure = ''
     $global:LASTEXITCODE = 0
-    $script:Output = try { & $scriptPath @params 6>$null | Out-String } catch { $script:Failure = $_.Exception.Message; '' }
+    $script:Output = try { if ($WithHost) { & $scriptPath @params 6>&1 | Out-String } else { & $scriptPath @params 6>$null | Out-String } } catch { $script:Failure = $_.Exception.Message; '' }
     $script:Exit = $LASTEXITCODE
 }
 function At([string]$Pattern) { for ($i = 0; $i -lt $global:Live.Calls.Count; $i++) { if ($global:Live.Calls[$i] -match $Pattern) { return $i } }; return -1 }
@@ -187,6 +188,8 @@ try {
         (At '^update apply') -lt 0 -and (At '^az group delete --name rg-p98-live') -ge 0) "$Exit | $($global:Live.Calls -join ' ; ')"
     Reset-Live -Source 'named-value'; $global:Live.UpdateActions = @(); Invoke-Verifier @{ MigrateWithUpdate = $true; UpdatePath = $updateStub }
     Assert 'with -MigrateWithUpdate a plan with no move fails the run and applies nothing' ($Exit -eq 1 -and (At '^update apply') -lt 0) "$Exit | $($global:Live.Calls -join ' ; ')"
+    Reset-Live -Source 'named-value'; Invoke-Verifier @{ MigrateWithUpdate = $true; UpdatePath = $updateStub } -WithHost
+    Assert 'with -MigrateWithUpdate the update''s plan review is printed, so the run''s log holds the resources, cost and time it planned' ($Output -match '\[0004-entitlement-projection\] review line from the stub' -and $Exit -ne 1) "$Exit | $Output"
 
     Reset-Live -ResourceGroupExists $true; Invoke-Verifier
     Assert 'an existing resource group stops the run, names the remedy, and deletes nothing' ($Exit -eq 1 -and $Output -match 'already exists' -and $Output -match 'Remedy: omit -ResourceGroup' -and

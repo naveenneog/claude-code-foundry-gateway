@@ -70,7 +70,9 @@ Capture { Invoke-Readiness -Overrides @{} -IncludeSyncJob }
 $healthy = @($CapturedResult)
 Assert 'healthy data returns checks' (-not $CapturedError -and $healthy.Count -gt 10) $CapturedError
 Assert 'healthy non-note checks pass' (@($healthy | Where-Object { $_.Result -notin @('PASS','NOTE') }).Count -eq 0) (($healthy | Where-Object { $_.Result -ne 'PASS' -and $_.Result -ne 'NOTE' } | ConvertTo-Json -Compress))
-Assert 'capacity note is present' (@($healthy | Where-Object { $_.Name -eq 'Cosmos DB regional capacity' -and $_.Result -eq 'NOTE' -and $_.Evidence -match 'U136' }).Count -eq 1)
+Assert 'capacity note is present' (@($healthy | Where-Object { $_.Name -eq 'Cosmos regional capacity' -and $_.Result -eq 'NOTE' -and $_.Evidence -match 'U136' }).Count -eq 1)
+$preflightText = [IO.File]::ReadAllText((Join-Path $root 'scripts\ClaudeProjectionChecks.ps1'))
+Assert 'the capacity note has the projection preflight''s name, so a plan that merges both lists it once' ($preflightText -match "Check='Cosmos regional capacity'; Result='NOTE'")
 Assert 'storage usage accepts a single object at the pass boundary' ((Find-Check $healthy 'Usage: storage accounts').Result -eq 'PASS')
 Assert 'network usage casts string values at the pass boundary' ((Find-Check $healthy 'Usage: virtual networks').Result -eq 'PASS')
 Assert 'IncludeSyncJob adds Container Apps region and usage checks' (@($healthy | Where-Object { $_.Name -like '*Container Apps*' }).Count -eq 2)
