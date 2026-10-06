@@ -216,6 +216,8 @@ foreach ($cmd in $commands) {
 
 $docRef = Join-Path $PSScriptRoot 'Test-DocReferences.ps1'
 Assert 'relative-link checker exists for guide links' (Test-Path -LiteralPath $docRef)
+$docMarkdown = Join-Path $PSScriptRoot 'Test-DocMarkdown.ps1'
+Assert 'markdown command checker exists for guide links' (Test-Path -LiteralPath $docMarkdown)
 
 $assignedAuthVars = New-Object 'System.Collections.Generic.HashSet[string]'
 $authorizationHeaders = New-Object Collections.Generic.List[string]
