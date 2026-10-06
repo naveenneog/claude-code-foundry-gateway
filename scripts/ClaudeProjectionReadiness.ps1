@@ -1,3 +1,6 @@
+# ConvertTo-ClaudeArmRegionName: one region key for 'East US 2' and 'eastus2'.
+. (Join-Path $PSScriptRoot 'ClaudeGatewayRegion.ps1')
+
 function Get-ClaudeProjectionReadiness {
     [CmdletBinding()]
     param(
@@ -12,9 +15,6 @@ function Get-ClaudeProjectionReadiness {
 
     function New-ReadinessCheck($Name, $Result, $Evidence, $Remedy) {
         [pscustomobject]@{ Name = $Name; Result = $Result; Evidence = $Evidence; Remedy = $Remedy }
-    }
-    function ConvertTo-LocationKey([string]$Value) {
-        return (($Value -replace '\s+', '').ToLowerInvariant())
     }
     function Add-Subscription([string[]]$Arguments) {
         return @($Arguments + @('--subscription', $SubscriptionId))
@@ -120,7 +120,7 @@ function Get-ClaudeProjectionReadiness {
             $List.Add((New-ReadinessCheck $Name 'WARN' 'The location list was missing from the Azure response.' "Run $CommandText and confirm the response shape."))
             return
         }
-        $found = @($locations | Where-Object { (ConvertTo-LocationKey $_) -eq $locationKey }).Count -gt 0
+        $found = @($locations | Where-Object { (ConvertTo-ClaudeArmRegionName $_) -eq $locationKey }).Count -gt 0
         if ($found) { $List.Add((New-ReadinessCheck $Name 'PASS' "$Location is listed." 'None')) }
         else { $List.Add((New-ReadinessCheck $Name 'FAIL' "$Location is not listed." "Choose a region that offers $Name.")) }
     }
@@ -145,7 +145,7 @@ function Get-ClaudeProjectionReadiness {
     if (-not $RepositoryRoot) { $RepositoryRoot = Split-Path $PSScriptRoot -Parent }
     if (-not $InvokeAz) { $InvokeAz = { param([string[]]$Arguments) & az @Arguments } }
 
-    $locationKey = ConvertTo-LocationKey $Location
+    $locationKey = ConvertTo-ClaudeArmRegionName $Location
     $checks = [Collections.Generic.List[object]]::new()
 
     Add-RegionCheck $checks 'Region: Cosmos DB accounts' @('provider','show','-n','Microsoft.DocumentDB','-o','json') 'databaseAccounts' 'az provider show -n Microsoft.DocumentDB -o json'

@@ -37,11 +37,13 @@ exact streaming cache-creation detail remains **U13**.
   gain or lose access. It also reuses the business units, name prefix, region and tier. It lists the
   readiness checks with remedies, covering region availability, usage against limits, the right to create role
   assignments and template validation. It also lists the resources, network, identities, monthly cost and time.
-  A FAIL blocks the plan: no apply command is printed, and `-Apply` refuses before the backup. The apply runs
-  the installer's refresh, deployment, population, comparison and switch, then records `entitlement-groups`.
-  A failed step leaves named values serving and prints the update that resumes with the resolved values.
-  `-KeepNamedValues` keeps named values. `Invoke-ClaudeProjectionPreflight -PassThru` returns its checks
-  without printing or throwing.
+  A FAIL blocks the plan: no apply command is printed, and `-Apply` refuses before the backup. The apply records
+  the tier groups in `entitlement-groups` first, then runs the installer's refresh, deployment, population,
+  comparison and switch, and verifies the switch, the prefix and the groups. A failed step leaves named values
+  serving and prints the update that resumes with the resolved values. `-PremiumGroup none` passes `none`, and
+  the group name `none` is no group in every Graph lookup. `-KeepNamedValues` keeps named values; in Windows
+  PowerShell 5.1 no move is planned. `Invoke-ClaudeProjectionPreflight -PassThru` returns its checks without
+  printing or throwing.
 
 - **P98 the installer deploys the Cosmos projection by default.** `Install-ClaudeGateway.ps1` offers
   the projection first, as recommended, for every size; `-Yes` chooses it, and named values above their

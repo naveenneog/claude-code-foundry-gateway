@@ -458,7 +458,10 @@ projection with a fresh Entra snapshot instead. Switch evidence is a successful 
 the last 24 hours for the same account, database, container and tenant, plus no live entitlement
 record the resolver would refuse. The switch writes the entitlement named values to a backup and sets
 `entitlement-source` to `projection`. The deployer's `-FlipAfterCleanCompare` and the guided
-Entitlement step call it; both deploy, publish and apply nothing in switch mode. The guided flow reads
+Entitlement step call it; both deploy, publish and apply nothing in switch mode. The update's
+migration `0004-entitlement-projection` ([ADR-0054](adr/0054-update-flow-entitlement-migration.md))
+moves a named-value gateway through the installer's functions: it records `entitlement-groups`,
+refreshes the named values, runs the deployer, then the deployer's `-FlipAfterCleanCompare`. The guided flow reads
 `entitlement-projection-prefix` from the gateway. `scripts/Restore-ClaudeGateway.ps1` does not move
 `entitlement-source` to `projection`.
 

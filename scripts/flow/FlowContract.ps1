@@ -386,11 +386,13 @@ function Test-ClaudeFlowAzCmdShim {
 }
 
 function ConvertTo-ClaudeFlowCommandArgument {
-    # A value in a command printed for the operator to paste into PowerShell: bare when it is plain, otherwise
-    # single-quoted with quotes doubled.
+    # A value in a command printed for the operator to paste into PowerShell: a plain token as it is, anything
+    # else single-quoted with every single-quote character doubled. PowerShell also reads U+2018-U+201B as single
+    # quotes, and a value that starts with '-' would bind as a parameter (the installer's
+    # Format-ClaudeInstallerCommandValue, P98 council round 2).
     param([AllowEmptyString()][string]$Value)
-    if ($Value -match '^[A-Za-z0-9._:\\/-]+$') { return $Value }
-    return "'" + $Value.Replace("'", "''") + "'"
+    if ($Value -cmatch '^[A-Za-z0-9][A-Za-z0-9._:\\/-]*$') { return $Value }
+    return "'" + [System.Management.Automation.Language.CodeGeneration]::EscapeSingleQuotedStringContent($Value) + "'"
 }
 
 function Get-ClaudeFlowStepOrder {

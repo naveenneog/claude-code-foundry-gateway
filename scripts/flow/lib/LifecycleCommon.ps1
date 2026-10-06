@@ -182,6 +182,16 @@ function global:Initialize-ClaudeFlowLifecycleSnapshotPath {
     $Plan.Data.SnapshotTaken = $false
 }
 
+function global:Sync-ClaudeFlowLifecycleSnapshotTaken {
+    # The update's migrations share one snapshot path. The first that writes takes the backup; it then counts for
+    # every plan with that path, so a later migration does not overwrite the state from before the update.
+    param([object[]]$Plans = @())
+    $taken = @($Plans | Where-Object { $_ -and $_.Data -is [hashtable] -and $_.Data.SnapshotTaken -eq $true -and $_.Data.SnapshotPath } | ForEach-Object { [string]$_.Data.SnapshotPath })
+    foreach ($plan in $Plans) {
+        if ($plan -and $plan.Data -is [hashtable] -and $plan.Data.SnapshotPath -and $taken -contains [string]$plan.Data.SnapshotPath) { $plan.Data.SnapshotTaken = $true }
+    }
+}
+
 function global:Assert-ClaudeFlowLifecycleSnapshotBeforeWrite {
     param([Parameter(Mandatory = $true)]$Plan)
     if (-not $Plan.Data -or -not $Plan.Data.SnapshotPath) { throw 'A named-value snapshot path is required before applying this lifecycle change.' }

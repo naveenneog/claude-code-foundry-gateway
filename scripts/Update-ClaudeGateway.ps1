@@ -69,6 +69,11 @@ $target = Get-ClaudeFlowLifecycleRecordTarget -Record $record -Discovery $discov
 if (-not $SnapshotPath) {
     $SnapshotPath = Join-Path $root "backups\before-update-$($target.ApimName).json"
 }
+# A decision record other than the default is named in the commands this update prints: the apply command, and the
+# resume command of a migration that fails part way (0004).
+$defaultRecord = [IO.Path]::GetFullPath((Join-Path $root 'onboarding\claude-gateway.json'))
+$recordFullPath = [IO.Path]::GetFullPath((Resolve-ClaudeFlowFilePath $RecordPath))
+$resumeRecordPath = if ([string]::Equals($recordFullPath, $defaultRecord, [StringComparison]::OrdinalIgnoreCase)) { '' } else { $recordFullPath }
 
 # Code-point order: the migrations' order feeds the plan's fingerprint (P76).
 $migrationFiles = @(Sort-ClaudeFlowOrdinal -InputObject @(Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'flow\migrations') -Filter '*.ps1') -Key { $_.Name })
@@ -79,6 +84,7 @@ foreach ($file in $migrationFiles) {
     if ($plan.Data -is [hashtable]) {
         $plan.Data.SnapshotPath = $SnapshotPath
         $plan.Data.SnapshotTaken = $false
+        $plan.Data.RecordPath = $resumeRecordPath
     }
     $plans += $plan
 }
@@ -90,15 +96,14 @@ $blocked = @($plans | Where-Object { $_.Data -is [hashtable] -and $_.Data.Blocke
 
 if (-not $Apply -or $WhatIfPreference) {
     if ($blocked.Count) {
-        Write-Host "Plan only, and blocked in $(@($blocked | ForEach-Object Step) -join ', '): nothing can be applied until the BLOCKED items are fixed and the plan is made again." -ForegroundColor Yellow
+        Write-Host "Plan only, and blocked in $(@($blocked | ForEach-Object Step) -join ', '): nothing can be applied until the BLOCKED items are fixed and the plan is made again.$(if (@($blocked | Where-Object Step -eq '0004-entitlement-projection').Count) { ' With -KeepNamedValues the update plans no move to the projection, and its other migrations apply.' })" -ForegroundColor Yellow
     }
     else {
         $parts = @('.\Update-ClaudeGateway.ps1')
-        $defaultRecord = [IO.Path]::GetFullPath((Join-Path $root 'onboarding\claude-gateway.json'))
         foreach ($name in 'RecordPath', 'DiscoveryPath', 'ResourceGroup', 'ApimName', 'SnapshotPath', 'StandardGroup', 'PremiumGroup', 'NamePrefix', 'ResolverInboundAccess') {
             if (-not ($PSBoundParameters.ContainsKey($name) -and $PSBoundParameters[$name])) { continue }
             # The root shim always passes the record path; the default record needs no option.
-            if ($name -eq 'RecordPath' -and [string]::Equals([IO.Path]::GetFullPath((Resolve-ClaudeFlowFilePath $RecordPath)), $defaultRecord, [StringComparison]::OrdinalIgnoreCase)) { continue }
+            if ($name -eq 'RecordPath' -and -not $resumeRecordPath) { continue }
             $parts += "-$name $(ConvertTo-ClaudeFlowCommandArgument $PSBoundParameters[$name])"
         }
         if ($KeepNamedValues) { $parts += '-KeepNamedValues' }
@@ -108,10 +113,10 @@ if (-not $Apply -or $WhatIfPreference) {
     return [pscustomobject]@{ Plans = $plans; Fingerprint = $fingerprint; SnapshotPath = $SnapshotPath }
 }
 if ($blocked.Count) {
-    throw "The plan is blocked in $(@($blocked | ForEach-Object Step) -join ', '); nothing was written. Fix the BLOCKED items shown above and plan again."
+    throw "The plan is blocked in $(@($blocked | ForEach-Object Step) -join ', '); nothing was written. Fix the BLOCKED items shown above and plan again.$(if (@($blocked | Where-Object Step -eq '0004-entitlement-projection').Count) { ' With -KeepNamedValues the update plans no move to the projection, and its other migrations apply.' })"
 }
 if ($ApprovedPlanFingerprint -ne $fingerprint) {
-    throw "Approved plan fingerprint does not match. Expected $fingerprint."
+    throw "Approved plan fingerprint does not match the plan made now; nothing was written. The plan printed above is the current one: review it, and to apply it rerun with -Apply -ApprovedPlanFingerprint $fingerprint."
 }
 if (-not $PSCmdlet.ShouldProcess($target.ApimName, 'apply ordered gateway update migrations')) { return }
 
@@ -119,6 +124,7 @@ foreach ($file in $migrationFiles) {
     . $file.FullName
     $plan = @($plans | Where-Object Step -eq (Get-ClaudeFlowMigrationInfo).Name)[0]
     Invoke-ClaudeFlowMigration -Record $record -Plan $plan | Out-Null
+    Sync-ClaudeFlowLifecycleSnapshotTaken -Plans $plans
     if (-not $DiscoveryPath -and -not (Test-ClaudeFlowPlanIsNoop $plan)) {
         $discovery = Get-ClaudeFlowLifecycleLiveDiscovery -ResourceGroup $target.ResourceGroup -ApimName $target.ApimName
     }
@@ -126,7 +132,7 @@ foreach ($file in $migrationFiles) {
     $check = if ((Get-Command Test-ClaudeFlowMigration).Parameters.ContainsKey('Plan')) { Test-ClaudeFlowMigration -Record $record -Discovery $discovery -Plan $plan }
         else { Test-ClaudeFlowMigration -Record $record -Discovery $discovery }
     if (-not $check.Passed) {
-        throw "Migration '$($plan.Step)' did not verify. Roll back with Restore-ClaudeGateway.ps1 -Path '$SnapshotPath' -Apply."
+        throw "Migration '$($plan.Step)' did not verify. Roll back with .\scripts\Restore-ClaudeGateway.ps1 -Path '$SnapshotPath' -Apply."
     }
 }
 $release = Get-ClaudeFlowReleaseInfo

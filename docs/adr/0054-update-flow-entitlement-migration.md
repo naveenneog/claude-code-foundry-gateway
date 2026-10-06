@@ -52,15 +52,26 @@ Migration `0004-entitlement-projection` in `scripts/flow/migrations/`:
   `Update-ClaudeGateway.ps1` keeps named values; the plan says so.
 - **Previous values, each with its source.**
   - Tier groups, first found of: `-StandardGroup` and `-PremiumGroup`, the gateway's `entitlement-groups` named
-    value, the decision record, the default names `claude-code-standard` and `claude-code-premium`. A group
-    counts only when Microsoft Graph finds it. Its transitive members are compared with `allow-standard` or
-    `allow-premium`, and the difference is shown.
+    value, the decision record when it describes the same gateway (resource group and API Management name), the
+    default names `claude-code-standard` and `claude-code-premium`. A group counts only when Microsoft Graph finds
+    it. Its transitive members are compared with `allow-standard` or `allow-premium`, and the difference is shown.
+    A record of another gateway is named in the plan and its groups are not used.
   - Business units: `bu-registry` and `bu-parents`, which the writer already reads from the gateway.
-  - Name prefix: `entitlement-projection-prefix`, else the API Management name without `apim-` (the
-    installer's rule, `Install-ClaudeGateway.ps1:585`), else `-NamePrefix`.
-  - Region and SKU: the gateway's. Resolver access: public, as ADR-0052 decided, unless `-ResolverInboundAccess
-    private`.
-  - Developers: the object IDs in `allow-standard` and `allow-premium`, for the cost and the time estimate.
+  - Name prefix: `entitlement-projection-prefix` when it is a valid prefix (the deployer writes it before the
+    switch, so projection resources may exist under it), else `-NamePrefix`, else the API Management name without
+    `apim-` (the installer's rule, `Install-ClaudeGateway.ps1:585`). A `-NamePrefix` that differs from a valid
+    recorded prefix blocks the plan; a recorded value that is not a valid prefix gives way to `-NamePrefix`.
+  - Region and SKU: the gateway's; a region that `az apim show` gives as a display name (`East US 2`) is used as
+    its ARM name (`eastus2`), as the installer does (`Install-ClaudeGateway.ps1:580`). Resolver access: public,
+    as ADR-0052 decided, unless `-ResolverInboundAccess private`.
+  - Developers: the distinct transitive members of the two tier groups in Entra, the population the refresh and
+    the snapshot carry; the transfer time and the cost use this count. The object IDs in `allow-standard` and
+    `allow-premium` are counted apart, for the drift.
+  - No premium group: `-PremiumGroup none`, `premium=none` in `entitlement-groups` or the record, or no premium
+    group found while `allow-premium` is empty. The apply then passes `none`, the convention of the switch and the
+    sync job (`scripts/ClaudeProjectionSwitch.ps1:10`, `scripts/Deploy-ClaudeProjectionRenewal.ps1:160`), never a
+    default group name, and `scripts/ClaudeGraphMembership.ps1` treats the group name `none` as no group without a
+    Graph lookup, because any user can create a Microsoft 365 group of that name.
 - **Readiness checks in the plan.** Read-only; a FAIL blocks `-Apply` and names the remedy; nothing is written.
   - The projection preflight, unchanged.
   - Region availability: Cosmos DB accounts, container groups and private endpoints from the resource
@@ -69,17 +80,32 @@ Migration `0004-entitlement-projection` in `scripts/flow/migrations/`:
     networks in the region, Cosmos DB accounts in the subscription, private DNS zones in the subscription.
   - The effective right to create role assignments in the resource group, from the permissions API.
   - Template validation of the projection and network templates; a policy denial is a FAIL.
+  - The snapshot transfer through the runner: more than 110 minutes is a FAIL, because a snapshot's apply-by time
+    is 2 hours after its export; the estimate uses the measured 6.3 seconds per 4,900-character part and about 127
+    bytes per developer (2026-10-06).
 - **What the plan shows.** The previous values and their sources; the drift between named values and Entra;
   each resource to be created (name, type, SKU, region) from an inventory that a test compares with the compiled
   templates; the network (address space, subnets, private endpoint, DNS zones, resolver access, runner); the
   identities and role assignments; the monthly cost from `scripts/Measure-ClaudeProjectionCost.ps1`; the time
   estimate; the switch and the rollback.
-- **Apply.** Backup, then the installer's functions in their order: the named-value refresh
+- **What the fingerprint covers.** Every fact the plan shows and every value the apply uses: the groups' object
+  IDs, member, gained and lost counts; the business-unit IDs and a SHA-256 of `bu-parents`; the prefix, region,
+  tier and access; the resolver app the preflight found, which the apply passes to the deployment; each check's
+  name, result and remedy. Evidence that changes between runs (times, usage numbers) is printed beside the plan
+  and left out, so that `-Apply`, which plans again, matches.
+- **Apply.** Backup; then the tier groups are recorded in `entitlement-groups` (`standard=<object ID>,premium=
+  <object ID>|none`: object IDs only, so the value passes `az.cmd` and `cmd.exe` unchanged; names are read back
+  from Graph); then the installer's functions in their order: the named-value refresh
   (`Invoke-ClaudeInstallerEntitlementSync`), then deploy, populate, compare and switch
-  (`Invoke-ClaudeInstallerProjectionDeployment`). Then the tier groups are recorded in `entitlement-groups`
-  (object IDs and names, not secret), the migration is verified, and the decision record gets a history row.
-  A failed step leaves named values serving and names the same update command to resume.
-- **Without a decision record.** `-ResourceGroup` and `-ApimName` are enough to plan; apply writes the record.
+  (`Invoke-ClaudeInstallerProjectionDeployment`). The groups come first, so a later step that fails leaves them
+  on the gateway and the switch never happens without them. The migration is verified (`entitlement-source` is
+  `projection`, `entitlement-projection-prefix` is the planned prefix, `entitlement-groups` holds the planned
+  groups), and the decision record gets a history row. A failed step leaves named values serving and names the
+  update command that resumes: the decision record when it is not the default, the resolved groups as object
+  IDs, the prefix and the resolver access.
+- **Without a decision record.** `-ResourceGroup` and `-ApimName` are enough to plan; the plan uses a record of
+  those two values, and the apply writes it with the release and a history row. A record that names another
+  gateway is not a source of tier groups; the plan says so.
 
 ## Consequences
 
@@ -88,7 +114,10 @@ Migration `0004-entitlement-projection` in `scripts/flow/migrations/`:
 - Quota, region, permission and policy failures appear in the plan, before any write. Cosmos DB regional
   capacity remains a deployment-time failure, before the switch (U136).
 - A plan takes longer: two Graph probes 25 seconds apart, usage reads and template validation.
-- `entitlement-groups` is a new named value. P101 makes `Sync-ClaudeAccess.ps1` read it.
+- `entitlement-groups` is a new named value, written only by this update in P100. Gateways installed or moved by
+  the installer do not have it; P101 makes `Sync-ClaudeAccess.ps1` read it, falling back to the decision record
+  and the default names as this plan does, and record it.
+- The group name `none` is reserved: a tier group that has this display name is passed by object ID.
 - The installer's re-run keeps its own migration; the update documentation names the update flow for existing
   gateways.
 

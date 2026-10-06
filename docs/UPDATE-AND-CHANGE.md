@@ -112,14 +112,17 @@ The plan prints the second command with its fingerprint, followed by any option 
 
 | Item | Where the value comes from |
 |---|---|
-| Tier groups | `-StandardGroup` and `-PremiumGroup`; else the gateway's `entitlement-groups` named value; else `standardGroup` and `premiumGroup` in the decision record; else `claude-code-standard` and `claude-code-premium`. Each group is read from Microsoft Graph, and the plan counts the developers who would gain or lose access compared with `allow-standard` and `allow-premium`. `-PremiumGroup none` means no premium group. |
-| Name prefix | the gateway's `entitlement-projection-prefix`; else `-NamePrefix`; else the API Management name without `apim-` (the installer's rule) |
+| Tier groups | `-StandardGroup` and `-PremiumGroup`; else the gateway's `entitlement-groups` named value; else `standardGroup` and `premiumGroup` in the decision record, when the record names the same gateway; else `claude-code-standard` and `claude-code-premium`. Each group is read from Microsoft Graph, and the plan counts the developers who would gain or lose access compared with `allow-standard` and `allow-premium`. `-PremiumGroup none` means no premium group; the name `none` is reserved for this, so a group with that display name is passed by object ID. |
+| Developers | the distinct members of the two tier groups in Entra, which the move deploys and the cost and time count; the named-value lists are counted beside them |
+| Business units | the IDs in `bu-registry` and the hierarchy in `bu-parents`; the fingerprint covers both |
+| Name prefix | the gateway's `entitlement-projection-prefix` when it is a valid prefix; else `-NamePrefix`; else the API Management name without `apim-` (the installer's rule). A `-NamePrefix` that differs from a valid recorded prefix blocks the plan, because projection resources may exist under the recorded one. |
 | Region and tier | the gateway; a v2 tier is required |
 | Resolver access | `-ResolverInboundAccess`; else `public` ([ADR-0052](adr/0052-cosmos-default-installer.md)) |
+| Resolver app registration | the existing `claude-projection-resolver-<prefix>` app that the preflight finds, which the apply uses; else the deployment creates it |
 | Readiness | the projection preflight (`scripts/ClaudeProjectionChecks.ps1`) and `scripts/ClaudeProjectionReadiness.ps1`: region availability, usage against limits, the right to create role assignments and template validation |
 | Resources, network and identities | `scripts/ClaudeProjectionInventory.ps1`; `tests/Test-ProjectionInventory.ps1` compares it with the compiled templates |
 | Monthly cost | `scripts/Measure-ClaudeProjectionCost.ps1`, from Azure Retail Prices API list prices |
-| Time | about 20 minutes of deployment, plus the snapshot transfer through the runner at 6.3 seconds per 4,900-character part (measured 2026-10-06) |
+| Time | about 35 minutes for the apply, plus the snapshot transfer through the runner at 6.3 seconds per 4,900-character part. On 2026-10-06 the plan of a Basic v2 gateway with one developer took 3 minutes and its apply 36 minutes ([P100 status](status/P100.md#live-run)). |
 
 The plan is BLOCKED, prints no apply command, and `-Apply` refuses it before the backup when:
 
@@ -131,9 +134,12 @@ The plan is BLOCKED, prints no apply command, and `-Apply` refuses it before the
   its export.
 
 The readiness evidence, such as usage counts and times, is printed after the plan and is not part of the
-fingerprint. The check results are.
+fingerprint. The check results are, with every value the apply uses, so a change between the plan and the
+apply makes `-Apply` refuse the fingerprint.
 
-The apply takes the backup. It then runs the installer's steps from `scripts/ClaudeInstallProjection.ps1`:
+The apply takes the backup and records the tier groups in `entitlement-groups`
+(`standard=<object id>,premium=<object id>|none`). It then runs the installer's steps from
+`scripts/ClaudeInstallProjection.ps1`:
 
 1. Refresh the named values from Entra.
 2. Deploy the projection.
@@ -141,10 +147,13 @@ The apply takes the backup. It then runs the installer's steps from `scripts/Cla
 4. Compare it with the named values.
 5. Switch `entitlement-source`.
 
-It then writes `entitlement-groups` (`standard=<object id>,premium=<object id>|none`) and verifies that
-`entitlement-source` is `projection`. A failed step leaves named values serving. The error ends with the
-update command that resumes, naming the resolved groups, prefix and access. A gateway already on the
-projection plans no move, and `-KeepNamedValues` plans none.
+It verifies that `entitlement-source` is `projection`, `entitlement-projection-prefix` is the planned prefix
+and `entitlement-groups` holds the planned groups. A failed step leaves named values serving, with the groups
+recorded. The error ends with the update command that resumes, naming the decision record when it is not the
+default, the resolved groups, the prefix and the access. A gateway already on the projection plans no move,
+and `-KeepNamedValues` plans none. A blocked move blocks the whole update; with `-KeepNamedValues` the other
+migrations apply. In Windows PowerShell 5.1 the update plans no move, because the deployment needs PowerShell 7
+(`pwsh`), and its other migrations apply.
 
 A gateway that served from the projection before
 [ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md) upgrades in this order.
