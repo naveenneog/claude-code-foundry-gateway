@@ -15,7 +15,7 @@ inspection, prior job history and tests still blocked or deliberately not perfor
 ## Overview
 
 API Management is the enforcement point. It validates the caller's Microsoft Entra token,
-resolves entitlement, checks model access and token budgets, and replaces the caller's
+resolves entitlement, optionally screens request text with Azure AI Content Safety, checks model access and token budgets, and replaces the caller's
 token with the gateway's managed identity before calling Foundry. The governance and
 reporting tools configure or observe that path; they do not proxy inference.
 
@@ -827,3 +827,4 @@ Review behavior against the implementation whenever a feature changes a componen
 flow, identity, schedule or network path. PNGs are repeatable with the same locked
 Playwright/browser and installed fonts; cross-platform font rasterization can differ
 without changing the architecture.
+

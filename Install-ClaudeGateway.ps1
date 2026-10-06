@@ -65,6 +65,9 @@ param(
     [switch]$FlipProjectionAfterCleanCompare,
     [switch]$DeploySyncJob,
     [string]$ProjectionResolverAppId,
+    [switch]$DeployContentSafety,
+    [ValidateSet('block','audit','off')]
+    [string]$ContentSafetyMode = 'block',
 
     [int]$TpmStandard,
     [int]$QuotaStandard,
@@ -1572,6 +1575,8 @@ az deployment group create `
         quotaPremium=$QuotaPremium `
         quotaOrg=$QuotaOrg `
         callsPerMinute=$CallsPerMinute `
+        deployContentSafety=$($DeployContentSafety.IsPresent.ToString().ToLower()) `
+        contentSafetyMode=$(if ($DeployContentSafety) { $ContentSafetyMode } else { 'off' }) `
         desktopExtraAudience=$(if ($desktopGatewayAudience) { $desktopGatewayAudience } else { 'urn:disabled:claude-extra-audience' }) `
         entitlementSource=$(if ($entSrc) { $entSrc } else { 'named-value' }) `
         entitlementResolverUrl=$(if ($entUrl) { $entUrl } else { 'https://resolver-not-deployed.invalid' }) `

@@ -8,12 +8,14 @@ function Assert($Name,$Condition,$Detail='') { $script:assertions++; if ($Condit
 Write-Host 'P102 deployment contract'
 $contentSafety = Get-Content (Join-Path $root 'infra\content-safety.bicep') -Raw
 $main = Get-Content (Join-Path $root 'infra\main.bicep') -Raw
+$installer = Get-Content (Join-Path $root 'Install-ClaudeGateway.ps1') -Raw
 Assert 'Content Safety module creates a ContentSafety S0 account with custom subdomain and local auth disabled' ($contentSafety -match "kind:\s*'ContentSafety'" -and $contentSafety -match "name:\s*'S0'" -and $contentSafety -match 'customSubDomainName' -and $contentSafety -match 'disableLocalAuth:\s*true')
 Assert 'Content Safety module grants Cognitive Services User to the APIM principal' ($contentSafety -match 'Cognitive Services User' -and $contentSafety -match 'roleAssignments' -and $contentSafety -match 'principalId')
 Assert 'main template defaults content safety off without creating an account' ($main -match 'param deployContentSafety bool = false' -and $main -match "param contentSafetyMode string = 'off'" -and $main -match "module contentSafety 'content-safety\.bicep' = if \(deployContentSafety\)")
 $missingNamedValues = @('content-safety-mode','content-safety-endpoint','content-safety-threshold','content-safety-timeout-seconds','content-safety-truncate-mode') | Where-Object { $main -notmatch [regex]::Escape($_) }
 Assert 'main template adds endpoint, threshold, timeout and fragment named values' (@($missingNamedValues).Count -eq 0) (@($missingNamedValues) -join ',')
 Assert 'main template creates the APIM policy fragment and the API policy depends on it' ($main -match 'service/policyFragments' -and $main -match "loadTextContent\('content-safety-screening.xml'\)" -and $main -match 'contentSafetyFragment')
+Assert 'installer exposes an opt-in Content Safety switch and leaves default deployments off' ($installer.Contains('[switch]$DeployContentSafety') -and $installer.Contains("contentSafetyMode=`$(if (`$DeployContentSafety) { `$ContentSafetyMode } else { 'off' })"))
 $supported = Test-ClaudeContentSafetyRegion 'East US 2'
 $unsupported = Test-ClaudeContentSafetyRegion 'antarcticacentral'
 Assert 'supported Content Safety region passes readiness' ($supported.Result -eq 'PASS' -and $supported.Location -eq 'eastus2') ($supported | ConvertTo-Json -Compress)

@@ -76,6 +76,7 @@ portal route.
 | Use a terminal FinOps console or automate reports | [AUM (Azure Usage Management)](docs/AUM.md#install) — installation, connection setup, terminal actions and scriptable commands |
 | Deploy clients and managed settings with MDM | [Fleet deployment with Intune, Jamf or Group Policy](docs/MDM.md) — profiles, apps, assignments, verification and rollback |
 | Manage a business unit or view its usage | [Turnstile: viewers and managers](docs/TURNSTILE.md#viewers-and-managers) — assigned roles and sign-in without web consent |
+| Screen Claude requests with Azure AI Content Safety | [Content Safety](docs/CONTENT-SAFETY.md) — optional Prompt Shields and harm analysis before Foundry |
 | Review security, identities or revocation | [Authentication](docs/AUTHENTICATION.md), then [Network](docs/NETWORK.md) |
 | Configure firewalls, private endpoints or VNet access | [Network](docs/NETWORK.md), then [Private projection](docs/SECURE-PROJECTION.md) |
 | Plan for 500,000 developers | [Scale](docs/SCALE.md) — measured envelope, unresolved limits and cost assumptions |
@@ -319,3 +320,4 @@ tests, the packet gate, PowerShell encoding and Windows Azure CLI quoting.
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
