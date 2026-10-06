@@ -161,6 +161,8 @@ $exportCall = @($FixtureCalls | Where-Object { $_ -like 'pwsh *Sync-ClaudeProjec
 $declared = @((Get-Command (Join-Path $root 'scripts\Sync-ClaudeProjection.ps1')).Parameters.Keys)
 $passed = @(if ($exportCall.Count) { ([string]$exportCall[0] -split ' ') | Select-Object -Skip 3 | Where-Object { $_ -match '^-[A-Za-z]+$' } | ForEach-Object { $_.Substring(1) } })
 Assert 'every parameter Sync-ClaudeAccess passes to the exporter is one the exporter declares' ($exportCall.Count -eq 1 -and $passed.Count -gt 0 -and @($passed | Where-Object { $_ -notin $declared }).Count -eq 0) "passed: $($passed -join ',') | undeclared: $(@($passed | Where-Object { $_ -notin $declared }) -join ',')"
+# Test-All refuses a dirty tree after its checks (tests/TestAll-Sharding.ps1, Get-TestAllIdentity -RequireClean).
+Assert 'the .test-work scratch folders that tests create are git-ignored at any depth' ((Get-Content -LiteralPath (Join-Path $root '.gitignore') -Raw) -match '(?m)^\.test-work/\s*$')
 
 Reset-ProjectionFixture 'node-modules-present'
 Capture { & (Join-Path $root 'scripts\Sync-ClaudeAccess.ps1') -ApimName apim-p84 -ResourceGroup rg-p84 -Store projection }

@@ -2,6 +2,8 @@
 claude-settings.json
 
 # local tooling
+# Scratch folders tests create; Test-All refuses a dirty tree after its checks.
+.test-work/
 node_modules/
 .venv-finops/
 .venv-aum-service/
