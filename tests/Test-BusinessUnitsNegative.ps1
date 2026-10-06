@@ -1579,9 +1579,9 @@ $mutations = @(
 
     @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'the declared population is never checked against the store'
-       File  = 'Install-ClaudeGateway.ps1'
-       From  = 'Named values hold about {0} developers, and you said {1}.'
-       To    = 'Sizing looks fine for {0} developers' }
+       File  = 'scripts/ClaudeInstallProjection.ps1'
+       From  = 'if ($store -eq ''named-value'' -and $DeveloperCount -gt $BuCeiling) {'
+       To    = 'if ($false) {' }
 
     @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'the ceiling becomes a pasted number in the installer'
@@ -1591,9 +1591,9 @@ $mutations = @(
 
     @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'a bigger SKU is offered as the fix for the ceiling'
-       File  = 'Install-ClaudeGateway.ps1'
-       From  = 'raising the SKU does not move it'
-       To    = 'a larger SKU raises it' }
+       File  = 'scripts/ClaudeInstallProjection.ps1'
+       From  = 'raising the API Management SKU does not increase'
+       To    = 'a larger API Management SKU increases' }
 
     @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'the revocation window goes back to being documented'
