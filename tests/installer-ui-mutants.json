@@ -800,8 +800,8 @@
   {
     "id": "lead-U14",
     "why": "Stop run state is not owned by run activity",
-    "file": "tools/installer-ui/installer-ui-run.js",
-    "find": "      return Boolean(runActive && activeRunId && !runStopping);\n",
+    "file": "tools/installer-ui/installer-ui.js",
+    "find": "if (stop && stop.dataset.actionBusy !== \"true\") stop.disabled = !runHost?.canStop?.();",
     "replace": "",
     "testFile": "tests/installer-ui-g4.test.mjs",
     "test": "U1 fix Stop run is disabled after the run ends even when the stop response arrives after the summary"
