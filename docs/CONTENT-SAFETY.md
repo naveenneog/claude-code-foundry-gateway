@@ -25,7 +25,7 @@ The default threshold is `2`, matching the first nonzero severity in `FourSeveri
 
 `infra/main.bicep` always creates the APIM policy fragment and named values so the policy shape is stable. The Azure AI Content Safety account is created only when `deployContentSafety=true`. The module `infra/content-safety.bicep` creates a Cognitive Services account with `kind: ContentSafety`, SKU `S0`, a custom subdomain, disabled local authentication, and a Cognitive Services User role assignment for the APIM managed identity. Microsoft Entra authentication for AI services requires a custom subdomain and Microsoft recommends disabling local authentication when using Entra ID ([Microsoft Learn, read 2026-10-06](https://learn.microsoft.com/en-us/azure/ai-services/authentication)).
 
-The disposable live proof script is `scripts/Test-ClaudeLiveContentSafety.ps1`. It validates inputs before any Azure CLI call, refuses the default Azure CLI profile unless `-UseCurrentAzLogin` is passed, creates run-specific tier groups, adds the signed-in user to the standard group, installs a Basic v2 named-value gateway with `-DeployContentSafety -ContentSafetyMode block`, waits for an authenticated benign request to return 200, records T1-T11 plus the AC20 and AC21 cases, checks Content Safety trace metadata, and tears down only resources recorded as created by that run.
+The disposable live proof script is `scripts/Test-ClaudeLiveContentSafety.ps1`. It validates inputs before any Azure CLI call, refuses the default Azure CLI profile unless `-UseCurrentAzLogin` is passed, writes a receipt before the first create and after each owned resource is created, creates run-specific tier groups, adds the signed-in user to the standard group, installs a Basic v2 named-value gateway with `-DeployContentSafety -ContentSafetyMode block`, reads the first `models-standard` model unless `-Model` is supplied, waits for an authenticated benign request to return 200, records T1-T11 plus the AC20 and AC21 cases, checks Content Safety trace metadata, and tears down only resources recorded as created by that run. `-Teardown` runs the proof and then tears down in `finally`; `-TeardownOnly -ReceiptPath <file>` is the crash-recovery cleanup path.
 
 Owner-run command for the reference proof:
 
@@ -39,13 +39,14 @@ $env:AZURE_CONFIG_DIR = 'C:\path\to\isolated\azure-profile'
   -RunId p102live<unique> `
   -FoundryAccount ai-contosohub530569751908 `
   -FoundryResourceGroup rg-contosohub `
-  -PublisherEmail ops@example.com
+  -PublisherEmail ops@example.com `
+  -Teardown
 ```
 
-Teardown can be re-run from the receipt:
+Crash-recovery teardown can be re-run from the receipt:
 
 ```powershell
-./scripts/Test-ClaudeLiveContentSafety.ps1 -UseCurrentAzLogin -Teardown -ReceiptPath .\p102-content-safety-live-receipt.json
+./scripts/Test-ClaudeLiveContentSafety.ps1 -UseCurrentAzLogin -TeardownOnly -ReceiptPath .\p102-content-safety-live-receipt.json
 ```
 
 ## Logging
@@ -69,4 +70,5 @@ traces
           elapsedMs=toint(customDimensions.contentSafetyElapsedMs)
 | order by timestamp desc
 ```
+
 
