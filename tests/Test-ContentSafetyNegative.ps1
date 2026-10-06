@@ -22,6 +22,7 @@ function Copy-P102Fixture($Name) {
         'scripts\Test-ClaudeLiveProjection.ps1',
         'scripts\Test-ClaudeLiveContentSafety.ps1',
         'tests\Test-ContentSafetyPolicy.ps1',
+        'tests\ContentSafetyPolicyHarness.ps1',
         'tests\Test-ContentSafetyLiveScript.ps1'
     )) {
         Copy-Item -LiteralPath (Join-Path $root $file) -Destination (Join-Path $fixture $file)
@@ -39,6 +40,16 @@ $policyPath = Join-Path $fixture 'infra\policy.xml'
 (Get-Content $policyPath -Raw).Replace('        <include-fragment fragment-id="content-safety-screening" />', '') | Set-Content -LiteralPath $policyPath -Encoding UTF8
 $r = Invoke-ExpectFailure 'tests\Test-ContentSafetyPolicy.ps1' $fixture 'policy includes the content-safety-screening fragment'
 Assert 'removing the APIM include fails the policy detector' ($r.Failed -and $r.Matched) $r.Output
+Remove-Item -LiteralPath $fixture -Recurse -Force
+
+$fixture = Copy-P102Fixture 'stub-slice'
+$fragmentPath = Join-Path $fixture 'infra\content-safety-screening.xml'
+$fragmentText = Get-Content $fragmentPath -Raw
+$fragmentText = [regex]::Replace($fragmentText, 'var sys = new System\.Text\.StringBuilder\(\);[\s\S]*?return new JObject\(', 'var newestUserSlice = ""; var sysSlice = ""; var toolSlice = ""; var truncated = false; return new JObject(', 1)
+$fragmentText = [regex]::Replace($fragmentText, 'new JProperty\("userPrompt", userPrompt\),[\s\S]*?new JProperty\("fabricatedHistoryLimit", fabricated\)', 'new JProperty("userPrompt", newestUserSlice), new JProperty("documents", new JArray(toolSlice)), new JProperty("analyzeText", sysSlice + newestUserSlice + toolSlice), new JProperty("truncated", truncated), new JProperty("emptyTextSlice", String.IsNullOrEmpty(sysSlice + newestUserSlice + toolSlice))', 1)
+Set-Content -LiteralPath $fragmentPath -Value $fragmentText -Encoding UTF8
+$r = Invoke-ExpectFailure 'tests\Test-ContentSafetyPolicy.ps1' $fixture 'block mode calls Prompt Shields and analyze once for benign strings'
+Assert 'restoring the stub empty slice fails the fragment harness' ($r.Failed -and $r.Matched) $r.Output
 Remove-Item -LiteralPath $fixture -Recurse -Force
 
 $fixture = Copy-P102Fixture 'harm-slice'

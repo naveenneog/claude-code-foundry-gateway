@@ -164,6 +164,12 @@ The first live P102 run failed while ARM created the APIM policy fragment before
 
 Gateways installed before P102 do not have the `content-safety-screening` fragment or its named values. The update-flow policy migration treats included fragments as part of the policy: it discovers `<include-fragment fragment-id="..." />` in `infra/policy.xml`, loads `infra/<fragment-id>.xml`, creates missing named values with safe off-mode defaults, creates missing fragments, and only then writes the API policy. `content-safety-mode` defaults to `off`; `content-safety-endpoint` is a placeholder host that is not called while mode is off. The standalone `Set-GatewayPolicy.ps1` follows the same order before writing policy XML.
 '
+
+### Amendment, 2026-10-07: executable fragment tests after live-run-2 stub failure
+
+Live run 2 of P102 deployed the fragment but every request returned 503 because the first fragment implementation was a stub: it parsed the request body, then set system, newest-user and tool-result slices to empty strings; its decision logic never read Prompt Shields or analyze severities. The offline tests had exercised a PowerShell model instead of the XML fragment and therefore did not prove the deployed artifact.
+
+P102 now treats `infra/content-safety-screening.xml` as the tested artifact. The policy test harness executes the fragment-derived flow for slicing, request bodies, decision, trace metadata and block/audit/off outcomes, and keeps the PowerShell model only as a parity oracle. A negative test restores the empty-slice stub and must fail. This is required evidence before any later live run can claim the gateway is screening requests.
 ## Consequences
 
 - Content Safety is enforced at the gateway before Foundry sees blocked content in `block` mode.
@@ -192,4 +198,5 @@ Gateways installed before P102 do not have the `content-safety-screening` fragme
 [send-request]: https://learn.microsoft.com/en-us/azure/api-management/send-request-policy
 [shield-prompt-rest]: https://learn.microsoft.com/en-us/rest/api/contentsafety/text-operations/shield-prompt?view=rest-contentsafety-2024-09-01
 [trace-policy]: https://learn.microsoft.com/en-us/azure/api-management/trace-policy
+
 

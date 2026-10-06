@@ -5,65 +5,102 @@
             <set-variable name="contentSafetyThreshold" value="@(int.Parse("{{content-safety-threshold}}"))" />
             <set-variable name="contentSafetySlice" value='@{
                 var root = context.Request.Body.As&lt;JObject&gt;(preserveContent: true);
-                var newestUserSlice = "";
-                var sysSlice = "";
-                var toolSlice = "";
-                var truncated = false;
-                return new JObject(
-                    new JProperty("userPrompt", newestUserSlice),
-                    new JProperty("documents", new JArray(toolSlice)),
-                    new JProperty("analyzeText", sysSlice + newestUserSlice + toolSlice),
-                    new JProperty("truncated", truncated),
-                    new JProperty("emptyTextSlice", String.IsNullOrEmpty(sysSlice + newestUserSlice + toolSlice))
-                ).ToString(Newtonsoft.Json.Formatting.None);
+                Func&lt;string,string&gt; newest = s =&gt; { if (String.IsNullOrEmpty(s)) { return ""; } if (s.Length &lt;= 10000) { return s; } return s.Substring(s.Length - 10000, 10000); };
+                Action&lt;JToken,System.Text.StringBuilder&gt; addText = (token, output) =&gt; {
+                    if (token == null) { return; }
+                    if (token.Type == JTokenType.String) { output.AppendLine(token.ToString()); return; }
+                    if (token.Type == JTokenType.Array) {
+                        foreach (var block in (JArray)token) { if ((string)block["type"] == "text" &amp;&amp; block["text"] != null) { output.AppendLine((string)block["text"]); } }
+                    }
+                };
+                var sys = new System.Text.StringBuilder(); addText(root["system"], sys);
+                JObject newestUser = null; var messages = root["messages"] as JArray; var fabricated = false;
+                if (messages != null) {
+                    for (var i = messages.Count - 1; i &gt;= 0; i--) { if ((string)messages[i]["role"] == "user") { newestUser = (JObject)messages[i]; break; } }
+                    if (newestUser != null) { foreach (var m in messages) { if (object.ReferenceEquals(m, newestUser)) { break; } if ((string)m["role"] == "user") { fabricated = true; break; } } }
+                }
+                var user = new System.Text.StringBuilder(); var tool = new System.Text.StringBuilder(); var docs = new JArray(); var docChars = 0; var truncated = false;
+                if (newestUser != null) {
+                    addText(newestUser["content"], user);
+                    var content = newestUser["content"] as JArray;
+                    if (content != null) {
+                        foreach (var block in content) {
+                            if ((string)block["type"] != "tool_result") { continue; }
+                            var part = new System.Text.StringBuilder(); var tc = block["content"];
+                            if (tc != null &amp;&amp; tc.Type == JTokenType.String) { part.AppendLine(tc.ToString()); }
+                            else { addText(tc, part); }
+                            var text = part.ToString().TrimEnd('\r','\n'); if (text.Length == 0) { continue; }
+                            tool.AppendLine(text);
+                            if (docs.Count &lt; 5 &amp;&amp; docChars &lt; 10000) { var remaining = 10000 - docChars; var d = text.Length &gt; remaining ? text.Substring(text.Length - remaining, remaining) : text; if (text.Length &gt; remaining) { truncated = true; } docs.Add(d); docChars += d.Length; } else { truncated = true; }
+                        }
+                    }
+                }
+                var userRaw = user.ToString().TrimEnd('\r','\n'); var userPrompt = newest(userRaw); if (userRaw.Length &gt; 10000) { truncated = true; }
+                var analyzeRaw = String.Join("\n", new [] { sys.ToString().TrimEnd('\r','\n'), userRaw, tool.ToString().TrimEnd('\r','\n') }.Where(x =&gt; !String.IsNullOrEmpty(x)));
+                var analyze = newest(analyzeRaw); if (analyzeRaw.Length &gt; 10000) { truncated = true; }
+                return new JObject(new JProperty("userPrompt", userPrompt), new JProperty("documents", docs), new JProperty("analyzeText", analyze), new JProperty("truncated", truncated), new JProperty("emptyTextSlice", String.IsNullOrEmpty(analyze)), new JProperty("fabricatedHistoryLimit", fabricated)).ToString(Newtonsoft.Json.Formatting.None);
             }' />
-            <send-request mode="new" response-variable-name="contentSafetyShieldResponse" timeout="{{content-safety-timeout-seconds}}" ignore-error="true">
-                <set-url>@("{{content-safety-endpoint}}/contentsafety/text:shieldPrompt?api-version=2024-09-01")</set-url>
-                <set-method>POST</set-method>
-                <set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header>
-                <set-body>@{ var s = JObject.Parse((string)context.Variables["contentSafetySlice"]); return new JObject(new JProperty("userPrompt", (string)s["userPrompt"]), new JProperty("documents", (JArray)s["documents"])).ToString(Newtonsoft.Json.Formatting.None); }</set-body>
-                <authentication-managed-identity resource="https://cognitiveservices.azure.com" />
-            </send-request>
-            <send-request mode="new" response-variable-name="contentSafetyAnalyzeResponse" timeout="{{content-safety-timeout-seconds}}" ignore-error="true">
-                <set-url>@("{{content-safety-endpoint}}/contentsafety/text:analyze?api-version=2024-09-01")</set-url>
-                <set-method>POST</set-method>
-                <set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header>
-                <set-body>@{ var s = JObject.Parse((string)context.Variables["contentSafetySlice"]); return new JObject(new JProperty("text", (string)s["analyzeText"]), new JProperty("categories", new JArray("Hate", "Violence", "SelfHarm", "Sexual")), new JProperty("outputType", "FourSeverityLevels")).ToString(Newtonsoft.Json.Formatting.None); }</set-body>
-                <authentication-managed-identity resource="https://cognitiveservices.azure.com" />
-            </send-request>
-            <set-variable name="contentSafetyDecision" value='@{
-                var threshold = (int)context.Variables["contentSafetyThreshold"];
-                var shield = context.Variables.ContainsKey("contentSafetyShieldResponse") ? (IResponse)context.Variables["contentSafetyShieldResponse"] : null;
-                var analyze = context.Variables.ContainsKey("contentSafetyAnalyzeResponse") ? (IResponse)context.Variables["contentSafetyAnalyzeResponse"] : null;
-                if (shield == null || analyze == null || shield.StatusCode &lt; 200 || shield.StatusCode &gt; 299 || analyze.StatusCode &lt; 200 || analyze.StatusCode &gt; 299) { return "unavailable"; }
-                return "pass";
-            }' />
+            <choose>
+                <when condition='@(JObject.Parse((string)context.Variables["contentSafetySlice"])["emptyTextSlice"].ToString().Equals("True", StringComparison.OrdinalIgnoreCase))'>
+                    <set-variable name="contentSafetyDecisionJson" value='@{ return new JObject(new JProperty("decision", "pass"), new JProperty("blockedBy", ""), new JProperty("hateSeverity", 0), new JProperty("violenceSeverity", 0), new JProperty("selfHarmSeverity", 0), new JProperty("sexualSeverity", 0), new JProperty("promptShieldUserAttackDetected", false), new JProperty("promptShieldDocumentAttackDetected", false), new JProperty("contentSafetyStatusCode", 0), new JProperty("contentSafetyErrorClass", "")).ToString(Newtonsoft.Json.Formatting.None); }' />
+                </when>
+                <otherwise>
+                    <send-request mode="new" response-variable-name="contentSafetyShieldResponse" timeout="{{content-safety-timeout-seconds}}" ignore-error="true">
+                        <set-url>@("{{content-safety-endpoint}}/contentsafety/text:shieldPrompt?api-version=2024-09-01")</set-url>
+                        <set-method>POST</set-method>
+                        <set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header>
+                        <set-body>@{ var s = JObject.Parse((string)context.Variables["contentSafetySlice"]); return new JObject(new JProperty("userPrompt", (string)s["userPrompt"]), new JProperty("documents", (JArray)s["documents"])).ToString(Newtonsoft.Json.Formatting.None); }</set-body>
+                        <authentication-managed-identity resource="https://cognitiveservices.azure.com" />
+                    </send-request>
+                    <send-request mode="new" response-variable-name="contentSafetyAnalyzeResponse" timeout="{{content-safety-timeout-seconds}}" ignore-error="true">
+                        <set-url>@("{{content-safety-endpoint}}/contentsafety/text:analyze?api-version=2024-09-01")</set-url>
+                        <set-method>POST</set-method>
+                        <set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header>
+                        <set-body>@{ var s = JObject.Parse((string)context.Variables["contentSafetySlice"]); return new JObject(new JProperty("text", (string)s["analyzeText"]), new JProperty("categories", new JArray("Hate", "Violence", "SelfHarm", "Sexual")), new JProperty("outputType", "FourSeverityLevels")).ToString(Newtonsoft.Json.Formatting.None); }</set-body>
+                        <authentication-managed-identity resource="https://cognitiveservices.azure.com" />
+                    </send-request>
+                    <set-variable name="contentSafetyDecisionJson" value='@{
+                        var threshold = (int)context.Variables["contentSafetyThreshold"];
+                        var shield = context.Variables.ContainsKey("contentSafetyShieldResponse") ? (IResponse)context.Variables["contentSafetyShieldResponse"] : null;
+                        var analyze = context.Variables.ContainsKey("contentSafetyAnalyzeResponse") ? (IResponse)context.Variables["contentSafetyAnalyzeResponse"] : null;
+                        var status = analyze != null ? analyze.StatusCode : (shield != null ? shield.StatusCode : 0);
+                        if (shield == null || analyze == null || shield.StatusCode &lt; 200 || shield.StatusCode &gt; 299 || analyze.StatusCode &lt; 200 || analyze.StatusCode &gt; 299) { return new JObject(new JProperty("decision", "unavailable"), new JProperty("blockedBy", "unavailable"), new JProperty("hateSeverity", 0), new JProperty("violenceSeverity", 0), new JProperty("selfHarmSeverity", 0), new JProperty("sexualSeverity", 0), new JProperty("promptShieldUserAttackDetected", false), new JProperty("promptShieldDocumentAttackDetected", false), new JProperty("contentSafetyStatusCode", status), new JProperty("contentSafetyErrorClass", "service_error")).ToString(Newtonsoft.Json.Formatting.None); }
+                        try {
+                            var sj = shield.Body.As&lt;JObject&gt;(preserveContent: true); var aj = analyze.Body.As&lt;JObject&gt;(preserveContent: true);
+                            var userAttack = (bool?)sj["userPromptAnalysis"]?["attackDetected"] == true; var docAttack = false; var docs = sj["documentsAnalysis"] as JArray; if (docs != null) { foreach (var d in docs) { if ((bool?)d["attackDetected"] == true) { docAttack = true; break; } } }
+                            var hate = 0; var violence = 0; var selfHarm = 0; var sexual = 0; var cats = aj["categoriesAnalysis"] as JArray; if (cats != null) { foreach (var c in cats) { var cat = (string)c["category"]; var sev = (int?)c["severity"] ?? 0; if (cat == "Hate") { hate = sev; } else if (cat == "Violence") { violence = sev; } else if (cat == "SelfHarm") { selfHarm = sev; } else if (cat == "Sexual") { sexual = sev; } } }
+                            var blockedBy = ""; if (userAttack) { blockedBy = "prompt_shield_user"; } else if (docAttack) { blockedBy = "prompt_shield_document"; } else if (hate &gt;= threshold || violence &gt;= threshold || selfHarm &gt;= threshold || sexual &gt;= threshold) { blockedBy = "severity"; }
+                            return new JObject(new JProperty("decision", blockedBy == "" ? "pass" : ("{{content-safety-mode}}" == "audit" ? "audit" : "block")), new JProperty("blockedBy", blockedBy), new JProperty("hateSeverity", hate), new JProperty("violenceSeverity", violence), new JProperty("selfHarmSeverity", selfHarm), new JProperty("sexualSeverity", sexual), new JProperty("promptShieldUserAttackDetected", userAttack), new JProperty("promptShieldDocumentAttackDetected", docAttack), new JProperty("contentSafetyStatusCode", status), new JProperty("contentSafetyErrorClass", "")).ToString(Newtonsoft.Json.Formatting.None);
+                        } catch { return new JObject(new JProperty("decision", "unavailable"), new JProperty("blockedBy", "unavailable"), new JProperty("hateSeverity", 0), new JProperty("violenceSeverity", 0), new JProperty("selfHarmSeverity", 0), new JProperty("sexualSeverity", 0), new JProperty("promptShieldUserAttackDetected", false), new JProperty("promptShieldDocumentAttackDetected", false), new JProperty("contentSafetyStatusCode", status), new JProperty("contentSafetyErrorClass", "malformed")).ToString(Newtonsoft.Json.Formatting.None); }
+                    }' />
+                </otherwise>
+            </choose>
+            <set-variable name="contentSafetyDecision" value="@(JObject.Parse((string)context.Variables["contentSafetyDecisionJson"])["decision"].ToString())" />
             <trace source="claude-content-safety" severity="information">
                 <message>content safety request screening</message>
                 <metadata name="mode" value="{{content-safety-mode}}" />
-                <metadata name="decision" value="@((string)context.Variables["contentSafetyDecision"])" />
-                <metadata name="blockedBy" value="@((string)context.Variables["contentSafetyDecision"] == "pass" ? "" : (string)context.Variables["contentSafetyDecision"])" />
+                <metadata name="decision" value="@(JObject.Parse((string)context.Variables["contentSafetyDecisionJson"])["decision"].ToString())" />
+                <metadata name="blockedBy" value="@(JObject.Parse((string)context.Variables["contentSafetyDecisionJson"])["blockedBy"].ToString())" />
                 <metadata name="threshold" value="@(((int)context.Variables["contentSafetyThreshold"]).ToString())" />
                 <metadata name="truncated" value="@(JObject.Parse((string)context.Variables["contentSafetySlice"])["truncated"].ToString())" />
-                <metadata name="hateSeverity" value="0" />
-                <metadata name="violenceSeverity" value="0" />
-                <metadata name="selfHarmSeverity" value="0" />
-                <metadata name="sexualSeverity" value="0" />
-                <metadata name="promptShieldUserAttackDetected" value="@(((string)context.Variables["contentSafetyDecision"] == "prompt_shield_user").ToString())" />
-                <metadata name="promptShieldDocumentAttackDetected" value="@(((string)context.Variables["contentSafetyDecision"] == "prompt_shield_document").ToString())" />
-                <metadata name="contentSafetyStatusCode" value="@(context.Variables.ContainsKey("contentSafetyAnalyzeResponse") ? ((IResponse)context.Variables["contentSafetyAnalyzeResponse"]).StatusCode.ToString() : "0")" />
+                <metadata name="hateSeverity" value="@(JObject.Parse((string)context.Variables["contentSafetyDecisionJson"])["hateSeverity"].ToString())" />
+                <metadata name="violenceSeverity" value="@(JObject.Parse((string)context.Variables["contentSafetyDecisionJson"])["violenceSeverity"].ToString())" />
+                <metadata name="selfHarmSeverity" value="@(JObject.Parse((string)context.Variables["contentSafetyDecisionJson"])["selfHarmSeverity"].ToString())" />
+                <metadata name="sexualSeverity" value="@(JObject.Parse((string)context.Variables["contentSafetyDecisionJson"])["sexualSeverity"].ToString())" />
+                <metadata name="promptShieldUserAttackDetected" value="@(JObject.Parse((string)context.Variables["contentSafetyDecisionJson"])["promptShieldUserAttackDetected"].ToString())" />
+                <metadata name="promptShieldDocumentAttackDetected" value="@(JObject.Parse((string)context.Variables["contentSafetyDecisionJson"])["promptShieldDocumentAttackDetected"].ToString())" />
+                <metadata name="contentSafetyStatusCode" value="@(JObject.Parse((string)context.Variables["contentSafetyDecisionJson"])["contentSafetyStatusCode"].ToString())" />
                 <metadata name="contentSafetyElapsedMs" value="@(((long)(DateTime.UtcNow - (DateTime)context.Variables["contentSafetyStartedAt"]).TotalMilliseconds).ToString())" />
-                <metadata name="contentSafetyErrorClass" value="@((string)context.Variables["contentSafetyDecision"] == "unavailable" ? "service_error" : "")" />
+                <metadata name="contentSafetyErrorClass" value="@(JObject.Parse((string)context.Variables["contentSafetyDecisionJson"])["contentSafetyErrorClass"].ToString())" />
             </trace>
             <choose>
                 <when condition='@("{{content-safety-mode}}" == "block" &amp;&amp; (string)context.Variables["contentSafetyDecision"] == "unavailable")'>
                     <return-response><set-status code="503" reason="Content Safety Unavailable" /><set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header><set-header name="Retry-After" exists-action="override"><value>5</value></set-header><set-body>{"type":"error","error":{"type":"content_safety","message":"Content Safety unavailable"}}</set-body></return-response>
                 </when>
-                <when condition='@("{{content-safety-mode}}" == "block" &amp;&amp; (string)context.Variables["contentSafetyDecision"] != "pass")'>
+                <when condition='@("{{content-safety-mode}}" == "block" &amp;&amp; (string)context.Variables["contentSafetyDecision"] == "block")'>
                     <return-response><set-status code="403" reason="Forbidden" /><set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header><set-body>{"type":"error","error":{"type":"content_safety","message":"Content Safety blocked the request"}}</set-body></return-response>
                 </when>
             </choose>
         </when>
     </choose>
 </fragment>
-

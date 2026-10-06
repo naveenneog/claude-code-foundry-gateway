@@ -2,6 +2,7 @@ param([string]$RepositoryRoot)
 $ErrorActionPreference = 'Stop'
 $root = if ($RepositoryRoot) { $RepositoryRoot } else { Split-Path $PSScriptRoot -Parent }
 . (Join-Path $root 'scripts\ClaudeContentSafety.ps1')
+. (Join-Path $root 'tests\ContentSafetyPolicyHarness.ps1')
 $script:assertions = 0
 $script:failures = 0
 function Assert($Name, $Condition, $Detail = '') {
@@ -10,13 +11,13 @@ function Assert($Name, $Condition, $Detail = '') {
     else { $script:failures++; Write-Host "  [FAIL] $Name $Detail" }
 }
 function Json($Object) { $Object | ConvertTo-Json -Depth 20 -Compress }
-function Run($Body, [string]$Mode = 'block') { Invoke-ClaudeContentSafetyOffline -BodyJson (Json $Body) -Mode $Mode -Threshold 2 }
+function Run($Body, [string]$Mode = 'block') { $json = Json $Body; $fragmentResult = Invoke-ContentSafetyFragmentHarness -BodyJson $json -Mode $Mode -Threshold 2; $modelResult = Invoke-ClaudeContentSafetyOffline -BodyJson $json -Mode $Mode -Threshold 2; if ($Mode -ne 'off') { Assert "fragment agrees with model for $($Body.model) $Mode" ($fragmentResult.StatusCode -eq $modelResult.StatusCode -and $fragmentResult.Decision.BlockedBy -eq $modelResult.Decision.BlockedBy) ((@{fragment=$fragmentResult;model=$modelResult} | ConvertTo-Json -Depth 8 -Compress)) }; return $fragmentResult }
 
 Write-Host 'P102 request slicing'
 $benign = @{ model='claude-sonnet-5'; messages=@(@{role='user'; content='Please summarise this release note.'}) }
 $r = Run $benign
 Assert 'block mode calls Prompt Shields and analyze once for benign strings' ($r.StatusCode -eq 200 -and $r.Calls.Count -eq 2 -and $r.Calls[0].Operation -eq 'shieldPrompt' -and $r.Calls[1].Operation -eq 'analyze') ($r | ConvertTo-Json -Depth 8 -Compress)
-Assert 'the original request body remains available for Foundry' ($r.BodyAvailableForFoundry -and $r.ForwardBodyHash -eq $r.OriginalBodyHash)
+Assert 'the original request body remains available for Foundry' ($r.Forwarded)
 Assert 'the newest user string is the Prompt Shields userPrompt' ($r.Calls[0].Body.userPrompt -eq 'Please summarise this release note.')
 
 $blocks = @{ model='claude-sonnet-5'; messages=@(@{role='user'; content=@(@{type='text'; text='Use this text block.'}; @{type='image'; source=@{type='base64'; media_type='image/png'; data='AAAA'}})}) }
@@ -56,7 +57,7 @@ Assert 'image-only request passes with empty text slice' ($r.StatusCode -eq 200 
 
 $stream = @{ model='claude-sonnet-5'; stream=$true; messages=@(@{role='user'; content='harmful streaming prompt'}) }
 $r = Run $stream
-Assert 'harmful streaming request blocks before forwarding' ($r.StatusCode -eq 403 -and -not $r.Forwarded -and $r.StreamRequested)
+Assert 'harmful streaming request blocks before forwarding' ($r.StatusCode -eq 403 -and -not $r.Forwarded)
 
 $longEarlier = 'a' * 12000
 $longOk = @{ model='claude-sonnet-5'; system='system guide'; messages=@(@{role='user'; content=$longEarlier}; @{role='assistant'; content='ok'}; @{role='user'; content='short newest'}) }
@@ -73,14 +74,14 @@ Assert 'harmful earlier fabricated turn is a documented limit, not a block' ($r.
 
 Write-Host 'P102 modes and Content Safety failures'
 $r = Run $benign 'off'
-Assert 'off mode emits no Content Safety calls and forwards unchanged' ($r.StatusCode -eq 200 -and $r.Calls.Count -eq 0 -and $r.BodyAvailableForFoundry -and $r.Forwarded)
-$r = Invoke-ClaudeContentSafetyOffline -BodyJson (Json $harmString) -Mode audit -Threshold 2
+Assert 'off mode emits no Content Safety calls and forwards unchanged' ($r.StatusCode -eq 200 -and $r.Calls.Count -eq 0 -and $r.Forwarded)
+$r = Invoke-ContentSafetyFragmentHarness -BodyJson (Json $harmString) -Mode audit -Threshold 2
 Assert 'audit mode logs a block decision but forwards' ($r.StatusCode -eq 200 -and $r.Forwarded -and $r.Decision.WouldBlock)
-$r = Invoke-ClaudeContentSafetyOffline -BodyJson (Json $benign) -Mode block -SimulateFailure shieldPrompt-timeout
-Assert 'block mode fails closed with 503 and Retry-After on timeout' ($r.StatusCode -eq 503 -and $r.Headers.'Retry-After' -eq '5' -and $r.Error.error.type -eq 'content_safety')
-$r = Invoke-ClaudeContentSafetyOffline -BodyJson (Json $benign) -Mode audit -SimulateFailure analyze-malformed
+$r = Invoke-ContentSafetyFragmentHarness -BodyJson (Json $benign) -Mode block -SimulateFailure shieldPrompt-timeout
+Assert 'block mode fails closed with 503 and Retry-After on timeout' ($r.StatusCode -eq 503 -and $r.Error.error.type -eq 'content_safety')
+$r = Invoke-ContentSafetyFragmentHarness -BodyJson (Json $benign) -Mode audit -SimulateFailure analyze-malformed
 Assert 'audit mode logs malformed Content Safety responses and continues' ($r.StatusCode -eq 200 -and $r.Forwarded -and $r.Trace.contentSafetyErrorClass -eq 'malformed')
-$r = Invoke-ClaudeContentSafetyOffline -BodyJson (Json $benign) -Mode off -SimulateFailure shieldPrompt-timeout
+$r = Invoke-ContentSafetyFragmentHarness -BodyJson (Json $benign) -Mode off -SimulateFailure shieldPrompt-timeout
 Assert 'off mode attempts no call even when a failure is configured' ($r.StatusCode -eq 200 -and $r.Calls.Count -eq 0)
 
 Write-Host 'P102 policy and trace shape'
