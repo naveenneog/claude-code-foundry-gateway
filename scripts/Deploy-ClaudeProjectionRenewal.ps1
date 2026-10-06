@@ -90,7 +90,7 @@ if ($ApimName -notmatch '^[A-Za-z0-9-]{1,50}$') { $problems.Add("-ApimName '$Api
 if ($NamePrefix -cnotmatch '^[a-z0-9](?:[a-z0-9]|-(?=[a-z0-9])){0,36}$') { $problems.Add("-NamePrefix '$NamePrefix' is not the projection prefix: 1-37 lowercase letters or digits, with single hyphens inside.") }
 if ($SubscriptionId -and $SubscriptionId -notmatch $guid) { $problems.Add('-SubscriptionId is not a subscription id.') }
 $emails = @($AlertEmail | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ } | Select-Object -Unique)
-if (-not $emails.Count) { $problems.Add('-AlertEmail needs at least one address: without one the alerts notify no one and admission refuses the switch.') }
+if (-not $emails.Count) { $problems.Add('-AlertEmail needs at least one address: without one the job alerts notify no one.') }
 foreach ($email in $emails) {
     if ($email -notmatch '^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$') { $problems.Add("-AlertEmail '$email' is not an email address.") }
 }

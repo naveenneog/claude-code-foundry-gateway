@@ -18,7 +18,7 @@ param containerAppsSubnetId string
 @description('Log Analytics workspace id for job logs and scheduled query alerts.')
 param logAnalyticsWorkspaceId string
 
-@description('Email receivers for the required action group. Admission refuses a switch if the deployed action group is missing.')
+@description('Email receivers for the action group that the job alerts notify: failed runs, denied Graph reads and, on a schedule, no recent success.')
 param actionGroupEmailReceivers array
 
 @description('Registry from infra/projection-registry.bicep that holds the sync image.')
