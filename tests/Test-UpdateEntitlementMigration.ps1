@@ -63,6 +63,9 @@ $f = $CapturedResult
 Assert 'a named-value gateway needs the move' (-not $CapturedError -and $f.Needed -and $f.Store -eq 'named-value') $CapturedError
 Assert 'the tier groups come from the decision record, found in Graph' ($f.Groups.Standard.Id -eq $standardId -and $f.Groups.Standard.Source -eq 'decision record' -and $f.Groups.Premium.Id -eq $premiumId) ($f.Groups | ConvertTo-Json -Depth 4 -Compress)
 Assert 'the Entra members are compared with the named-value lists' ($f.Groups.Standard.Gained -eq 0 -and $f.Groups.Standard.Lost -eq 0 -and $f.Groups.Premium.Gained -eq 1 -and $f.Groups.Premium.Lost -eq 0)
+$leaver = 'b0000000-0000-4000-8000-000000000009'
+Get-Facts @{ Discovery = (New-Discovery @{ 'allow-standard' = ",$($oid[0]),$($oid[1]),$leaver," }) }
+Assert 'a listed developer who left the group counts as losing access at the move' ($CapturedResult.Groups.Standard.Lost -eq 1 -and $CapturedResult.Groups.Standard.Gained -eq 0) ($CapturedResult.Groups.Standard | ConvertTo-Json -Compress)
 Assert 'developers are the distinct object ids in both lists' ($f.Developers -eq 3) "$($f.Developers)"
 Assert 'business units come from bu-registry' ($f.BusinessUnits -eq 2) "$($f.BusinessUnits)"
 Assert 'the prefix is the gateway name without apim-, as the installer derives it' ($f.NamePrefix -eq 'contoso' -and $f.PrefixSource -match 'apim-') "$($f.NamePrefix) / $($f.PrefixSource)"
@@ -212,6 +215,8 @@ Capture { Test-ClaudeFlowMigration -Record $record -Discovery (New-Discovery @{ 
 Assert 'the migration verifies entitlement-source projection and the recorded prefix' ($CapturedResult.Passed) ($CapturedResult | ConvertTo-Json -Depth 4 -Compress)
 Capture { Test-ClaudeFlowMigration -Record $record -Discovery (New-Discovery) }
 Assert 'a gateway still on named values does not verify after the move' (-not $CapturedResult.Passed)
+Capture { Test-ClaudeFlowMigration -Record $record -Discovery (New-Discovery @{ 'entitlement-source' = 'projection' }) }
+Assert 'a projection without a recorded prefix does not verify' (-not $CapturedResult.Passed) ($CapturedResult | ConvertTo-Json -Depth 4 -Compress)
 Remove-Item Function:\az
 
 Write-Host 'P100 the projection preflight returns its checks to the plan'
@@ -261,6 +266,34 @@ try {
     Assert 'no record was written by a plan' (-not (Test-Path -LiteralPath $missingRecord))
     $shim = [IO.File]::ReadAllText((Join-Path $root 'Update-ClaudeGateway.ps1'))
     Assert 'the root shim forwards the migration options' ($shim -match "'StandardGroup', 'PremiumGroup', 'NamePrefix', 'ResolverInboundAccess'" -and $shim -match 'KeepNamedValues = \$true')
+    $rootShim = Join-Path $root 'Update-ClaudeGateway.ps1'
+    $said = & pwsh -NoProfile -NonInteractive -Command "& '$rootShim' -RecordPath '$missingRecord' -DiscoveryPath '$cleanPath' -ResourceGroup rg-contoso -ApimName apim-contoso -PremiumGroup team-prem -NamePrefix contoso -ResolverInboundAccess public 6>&1 | Out-String" 2>&1 | Out-String
+    Assert 'through the root shim the options reach the plan''s apply command' ($said -match '-PremiumGroup team-prem -NamePrefix contoso -ResolverInboundAccess public -Apply -ApprovedPlanFingerprint [0-9a-f]{64}') ($said -split "`n" | Where-Object { $_ -match 'Apply|rror' } | Select-Object -First 2)
+
+    # Every migration's Test runs after an apply. A gateway that stays on named values (no migration facts in
+    # the discovery, or -KeepNamedValues) must verify: 0004 has nothing to verify when it planned no move.
+    $policyPath = Join-Path $root 'infra\policy.xml'
+    $policyValues = @{}
+    foreach ($name in @(Get-ClaudeFlowLifecyclePolicyNamedValueReferences -PolicyPath $policyPath)) { $policyValues[$name] = 'x' }
+    $policyValues['entitlement-source'] = 'named-value'
+    $current = New-Discovery $policyValues
+    $current | Add-Member -NotePropertyName policy -NotePropertyValue ([IO.File]::ReadAllText($policyPath))
+    $currentPath = Join-Path $scratch 'current.json'
+    [IO.File]::WriteAllText($currentPath, ($current | ConvertTo-Json -Depth 20), (New-Object Text.UTF8Encoding($false)))
+    $Keeping = $current.PSObject.Copy()
+    Get-Facts @{ KeepNamedValues = $true }
+    $Keeping | Add-Member -NotePropertyName entitlementMigration -NotePropertyValue $CapturedResult -Force
+    $keepingPath = Join-Path $scratch 'keeping.json'
+    [IO.File]::WriteAllText($keepingPath, ($Keeping | ConvertTo-Json -Depth 20), (New-Object Text.UTF8Encoding($false)))
+    foreach ($case in @(@{ Name = 'a discovery without migration facts'; Path = $currentPath; Extra = '' }, @{ Name = '-KeepNamedValues'; Path = $keepingPath; Extra = ' -KeepNamedValues' })) {
+        $recordFile = Join-Path $scratch ('record-' + [guid]::NewGuid().ToString('N') + '.json')
+        [IO.File]::WriteAllText($recordFile, (@{ schemaVersion = 2; resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; release = @{ version = 'v0'; commit = 'old' }; decisions = @{} } | ConvertTo-Json -Depth 5), (New-Object Text.UTF8Encoding($false)))
+        $planned = & pwsh -NoProfile -NonInteractive -Command "& '$updater' -RecordPath '$recordFile' -DiscoveryPath '$($case.Path)'$($case.Extra) 6>&1 | Out-String" 2>&1 | Out-String
+        $caseFp = [regex]::Match($planned, 'Plan fingerprint: ([0-9a-f]{64})').Groups[1].Value
+        $applied = & pwsh -NoProfile -NonInteractive -Command "try { & '$updater' -RecordPath '$recordFile' -DiscoveryPath '$($case.Path)'$($case.Extra) -Apply -ApprovedPlanFingerprint $caseFp 6>&1 | Out-String } catch { 'THROWN: ' + `$_.Exception.Message }" 2>&1 | Out-String
+        $written = Get-Content -LiteralPath $recordFile -Raw | ConvertFrom-Json
+        Assert "an update with no move applies and verifies on a gateway that keeps named values ($($case.Name))" ($caseFp -and $applied -match 'Updated\. Snapshot:' -and $applied -notmatch 'THROWN' -and $written.release.commit -ne 'old') (($applied -split "`n" | Where-Object { $_ -match 'THROWN|verify|Updated' } | Select-Object -First 2) -join ' ')
+    }
 }
 finally { Remove-Item -LiteralPath $scratch -Recurse -Force -ErrorAction SilentlyContinue }
 
