@@ -6,8 +6,22 @@ plugins are installed from.
 
 Left alone, a developer may add any marketplace and install anything in it. This
 page is how to narrow that, and — importantly — what these controls do not do.
+## Quickstart
+
+The policy profile is generated from the repository root after the approved marketplace source is known. The example below writes profiles for review; client acceptance is verified separately.
+
+```powershell
+.\scripts\New-ClaudeCodePolicy.ps1 -Tier standard
+.\scripts\New-ClaudeCodePolicy.ps1 -Tier premium
+```
+
+**Expected result:** generated policy payloads include the managed marketplace and extension controls for each tier. A client refresh and log check verify that rejected marketplaces or unsigned bundles are actually refused.
 
 ## Prerequisites
+
+<details>
+
+<summary>Plugin policy details</summary>
 
 - An approved plugin repository and review owner. Plugins execute with the
   developer's permissions; approve their tools/network access separately.
@@ -17,7 +31,12 @@ page is how to narrow that, and — importantly — what these controls do not d
 - A test device with the installed client versions and a saved prior policy.
   Run generator commands from the repository root.
 
+</details>
 ## Generate the profiles
+
+<details>
+
+<summary>Plugin policy details</summary>
 
 ```powershell
 ./scripts/New-ClaudeCodePolicy.ps1 -GatewayUrl <url> -Tier premium `
@@ -40,7 +59,12 @@ without understanding first-wins precedence in
 
 ---
 
+</details>
 ## What each switch sets
+
+<details>
+
+<summary>Plugin policy details</summary>
 
 | Switch | Claude Code | Claude Desktop |
 |---|---|---|
@@ -58,7 +82,12 @@ can sign in to claude.ai and leave the policy behind.
 
 ---
 
+</details>
 ## What these controls are not
+
+<details>
+
+<summary>Plugin policy details</summary>
 
 **They are feature-availability controls, not data boundaries.** Anthropic
 states that marketplaces already registered on a machine — including any
@@ -80,7 +109,12 @@ as something that stops a determined user.
 
 ---
 
+</details>
 ## Where the policy goes
+
+<details>
+
+<summary>Plugin policy details</summary>
 
 Claude Code and Claude Desktop read different stores. The generated files map
 onto them:
@@ -112,7 +146,12 @@ a running app notices a changed managed configuration at its next re-check
 
 ---
 
+</details>
 ## Checking it applied
+
+<details>
+
+<summary>Plugin policy details</summary>
 
 **Claude Code.** Open an interactive session and type `/status`. The
 `Setting sources` line names the source in force — `Enterprise managed settings
@@ -130,7 +169,12 @@ the plugin browser. On Linux a rejected `managed-settings.json` is logged to
 
 ---
 
+</details>
 ## Running your own marketplace
+
+<details>
+
+<summary>Plugin policy details</summary>
 
 A marketplace is a GitHub repository with a catalog file at
 `.claude-plugin/marketplace.json` listing the plugins it offers:
@@ -157,7 +201,12 @@ This accelerator does not publish a marketplace or review a plugin. Those are
 decisions about what your organisation trusts, and this page does not make them
 for you.
 
+</details>
 ## Verify the trust controls, not just the UI
+
+<details>
+
+<summary>Plugin policy details</summary>
 
 On an isolated test device, test the approved plugin, an unapproved marketplace,
 and an intentionally modified hash-pinned package. Where signed Desktop
@@ -170,6 +219,7 @@ real-client install/refusal tests have all passed. Claude Code plugins do not
 have a publisher-signing scheme; pin supported content to a commit/hash and
 review updates. Desktop `.mcpb` signing is a different mechanism.
 
+</details>
 ## Troubleshoot and next steps
 
 | Symptom | Check |
