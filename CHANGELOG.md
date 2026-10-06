@@ -29,6 +29,14 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P101 one sync command for every store.** `scripts/Sync-ClaudeAccess.ps1 -User <upn-or-object-id>` now works
+  on named-value and projection gateways. The sync resolves tier groups from parameters, then the gateway
+  `entitlement-groups` named value, then the gateway decision record, then the default group names; a missing
+  recorded group stops before writes with the `-StandardGroup`, `-PremiumGroup` and `-RecordGroups` remedy.
+  Successful syncs record `entitlement-groups` with object IDs only, and `-RecordGroups` is required to replace
+  a gateway's recorded groups. AUM Direct developer publication passes the developer object ID as `-User` and
+  returns the published tier.
+
 - **P100 the update moves a named-value gateway to the Cosmos projection.** `Update-ClaudeGateway.ps1
   -ResourceGroup <rg> -ApimName <apim>` plans migration `0004-entitlement-projection`
   ([ADR-0054](docs/adr/0054-update-flow-entitlement-migration.md)), with or without the decision record. The

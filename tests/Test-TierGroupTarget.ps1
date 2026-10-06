@@ -26,7 +26,17 @@ try {
     Assert 'another gateway does not receive the recorded groups' ((& $target StandardGroup -ForApimName apim-other) -eq '' -and (& $target PremiumGroup -ForApimName apim-other) -eq '')
     Assert 'callers that name no gateway keep the recorded groups' ((& $target StandardGroup) -eq 'grp-p66x-standard')
 
-    foreach ($script in 'Sync-ClaudeAccess.ps1', 'Compare-ClaudeEntitlement.ps1') {
+    Copy-Item -LiteralPath (Join-Path $root 'scripts\ClaudeEntitlementGroups.ps1') -Destination (Join-Path $scratch 'scripts')
+    . (Join-Path $scratch 'scripts\ClaudeEntitlementGroups.ps1')
+    $standardId = '10000000-0000-4000-8000-000000000001'
+    $premiumId = '10000000-0000-4000-8000-000000000002'
+    $resolved = Resolve-ClaudeEntitlementGroupsForSync -ResourceGroup rg-p66x -ApimName apim-p66x `
+        -GetNamedValue { param($Id) '' } `
+        -FindGroup { param($Value) [pscustomobject]@{ id = $(if ($Value -eq 'grp-p66x-standard') { $standardId } elseif ($Value -eq 'grp-p66x-premium') { $premiumId } else { '' }) } }
+    Assert 'Sync-ClaudeAccess resolver takes StandardGroup from the record for this gateway' ($resolved.Standard.Source -eq 'decision record' -and $resolved.Standard.Id -eq $standardId)
+    Assert 'Sync-ClaudeAccess resolver takes PremiumGroup from the record for this gateway' ($resolved.Premium.Source -eq 'decision record' -and $resolved.Premium.Id -eq $premiumId)
+
+    foreach ($script in 'Compare-ClaudeEntitlement.ps1') {
         $text = Get-Content -LiteralPath (Join-Path $root "scripts\$script") -Raw
         foreach ($field in 'StandardGroup', 'PremiumGroup') {
             $call = "(?m)^\s*if \(-not \`$$field\) \{ \`$$field = \[string\]\(& \(Join-Path \`$PSScriptRoot 'Get-ClaudeGatewayTarget\.ps1'\) $field -ForApimName \`$ApimName 3>\`$null\) \}"
