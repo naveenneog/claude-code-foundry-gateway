@@ -207,9 +207,12 @@ function Invoke-ClaudeProjectionPreflight {
         [string]$ResourceGroup, [string]$ApimName, [string]$NamePrefix, [string]$SubscriptionId,
         [string]$Location, [string]$Sku = 'BasicV2', [string]$ResolverInboundAccess,
         [string]$ResolverAppId, [string]$StandardGroup = 'claude-code-standard',
-        [string]$PremiumGroup = 'claude-code-premium'
+        [string]$PremiumGroup = 'claude-code-premium',
+        # Returns the checks and the context to a caller that shows them in its own plan (ADR-0054, the update
+        # flow), instead of printing the table and throwing on a FAIL.
+        [switch]$PassThru
     )
-    Write-Host 'Projection preflight (about 30-90 s, including a 25 s Graph pause). No Azure writes.'
+    if (-not $PassThru) { Write-Host 'Projection preflight (about 30-90 s, including a 25 s Graph pause). No Azure writes.' }
     $checks = [Collections.Generic.List[object]]::new()
     $context = @{ Location = $Location; ResolverAppId = $ResolverAppId }
     function Check($Name, $Who, $Remedy, [scriptblock]$Read) {
@@ -222,6 +225,7 @@ function Invoke-ClaudeProjectionPreflight {
         }
     }
     function Report {
+        if ($PassThru) { return }
         Format-ClaudeProjectionChecks -Checks $checks.ToArray() -Width $Host.UI.RawUI.WindowSize.Width | Write-Host
         $failed = @($checks | Where-Object Result -eq 'FAIL')
         if ($failed.Count) { throw "Projection preflight failed ($($failed.Count)): $(($failed | ForEach-Object { "$($_.Check): $($_.Evidence)" }) -join '; ')" }
@@ -244,7 +248,10 @@ function Invoke-ClaudeProjectionPreflight {
             "$tool found"
         }
     }
-    if (@($checks | Where-Object Result -eq 'FAIL').Count) { Report }
+    if (@($checks | Where-Object Result -eq 'FAIL').Count) {
+        Report
+        if ($PassThru) { return [pscustomobject]@{ Checks = $checks.ToArray(); Context = $null } }
+    }
     Check 'Azure sign-in' 'operator' 'az login; az account set --subscription <gateway-subscription-id>' {
         $context.Account = Invoke-ClaudeNetworkAz @('account','show')
         if (-not $context.Account -or -not $context.Account.id -or $context.Account.state -ne 'Enabled') { throw 'Azure CLI is not signed in to an enabled subscription.' }
@@ -375,5 +382,6 @@ function Invoke-ClaudeProjectionPreflight {
     })
     Report
     $context.Remove('GraphToken')
+    if ($PassThru) { return [pscustomobject]@{ Checks = $checks.ToArray(); Context = $context } }
     return $context
 }

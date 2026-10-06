@@ -271,6 +271,7 @@ Invoke-Check 'Azure CLI guide renewal block runs in order' 'Test-AzCommandsRenew
     Invoke-Check 'Network edge checks detect breakage'       'Test-NetworkEdgeNegative.ps1'
     Invoke-Check 'Projection checks detect breakage'        'Test-ProjectionNegative.ps1'
     Invoke-Check 'Projection preflight and safe switch'     'Test-ProjectionPreflight.ps1'
+    Invoke-Check 'Update flow moves named values to the projection' 'Test-UpdateEntitlementMigration.ps1'
     Invoke-Check 'Projection council corrections'           'Test-ProjectionCouncil.ps1'
 Invoke-Check 'Projection runner lifecycle' 'Test-ProjectionRunnerLifecycle.ps1'
 Invoke-Check 'Projection sync scripts' 'Test-ProjectionSyncScripts.ps1'
