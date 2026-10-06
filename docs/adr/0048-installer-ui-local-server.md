@@ -71,7 +71,7 @@ with the response reason; `GET /api/run/status?request=<id>` includes that recor
 to wait through admission, attach only the admitted run, and report when a later run replaced the
 admitted run record
 (`tools/installer-ui/run-admission.mjs:1-30`; `tools/installer-ui/server.mjs:428-434`; `tools/installer-ui/server.mjs:464-475`;
-`tools/installer-ui/server.mjs:357-361`; `tools/installer-ui/installer-ui-run.js:240-293`).
+`tools/installer-ui/server.mjs:357-361`; `tools/installer-ui/installer-ui-run.js:242-295`).
 
 The run transport uses per-source UTF-8 decoders, line carry, final flush, a progress-file byte
 offset, serialized console line handling, a 4 MiB console-output cap, a 64 KiB console-line cap and

@@ -129,6 +129,9 @@ exact streaming cache-creation detail remains **U13**.
   the run id header as soon as the stream response is attached.
   Stop run is now disabled during admission and while an accepted stop is waiting for the stopped
   summary.
+  A run that the page attaches after a lost run request, after a broken stream or on page load now
+  takes its state from status: a run that is already stopping shows the stop in progress and offers no
+  Stop, and a run that has already finished offers no Stop while its output is read.
 - **Installers read an answers file, check it before any change, run selected steps and write a progress stream (P92, phase 0).**
   One answers file, described by `schemas/claude-gateway.answers.schema.json`, feeds
   `Install-ClaudeGateway.ps1 -AnswersPath`, `install-claude-gateway.sh --answers-file` and

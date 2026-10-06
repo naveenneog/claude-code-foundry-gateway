@@ -161,12 +161,17 @@ progress lines are redacted before they leave the server (`tools/installer-ui/in
 notice, a console line above 64 KiB is truncated with ` [line truncated]`, and the browser keeps
 2,000 visible output lines with one line naming the number removed (`tools/installer-ui/installer-stream.mjs:6-7`;
 `tools/installer-ui/installer-stream.mjs:27-38`; `tools/installer-ui/run-transport.mjs:28-67`;
-`tools/installer-ui/installer-ui-run.js:6`; `tools/installer-ui/installer-ui-run.js:48-58`).
+`tools/installer-ui/installer-ui-run.js:6`; `tools/installer-ui/installer-ui-run.js:45-55`).
 
 The run output is a labelled log region (`tools/installer-ui/index.html:34`). The Stop run button is
-enabled only while the page follows a run whose id is known and the run is not stopping; an accepted
-stop sets the page state to stopping until the summary arrives
-(`tools/installer-ui/installer-ui.js:443-444`; `tools/installer-ui/installer-ui.js:651-653`; `tools/installer-ui/installer-ui-run.js:356-370`). Windows
+enabled only while the page follows a run whose id is known and that the server reports as running;
+an accepted stop sets the page state to stopping until the summary arrives
+(`tools/installer-ui/installer-ui.js:443-444`; `tools/installer-ui/installer-ui.js:651-653`; `tools/installer-ui/installer-ui-run.js:356-370`).
+A run that the page attaches after a lost run request, after a broken stream or on page load takes
+its state from status: a stopping run shows `Stopping at <step>.` and offers no Stop, and a run that
+has already finished offers no Stop while its output is read (`tools/installer-ui/installer-ui-run.js:63-68`;
+`tools/installer-ui/installer-ui-run.js:238`; `tools/installer-ui/installer-ui-run.js:267`;
+`tools/installer-ui/installer-ui-run.js:339`). Windows
 uses `taskkill.exe /PID <pid> /T /F`; POSIX children run in a detached process group so the group can
 be signalled (`tools/installer-ui/server.mjs:60-63`; `tools/installer-ui/server.mjs:85`; `tools/installer-ui/server.mjs:65-67`). The stop
 response and stream say that the install checkpoint resumes when the same steps run again
@@ -177,18 +182,18 @@ immediately (`tools/installer-ui/server.mjs:487-494`; `tools/installer-ui/server
 The browser run script reports non-zero summaries as alerts with the exit code, failed step and
 resume command, reports stopped summaries as status, bounds reattaches for streams that end without
 a summary and tells the operator when the run continues on the server for reload reattachment
-(`tools/installer-ui/installer-ui-run.js:75-188`). A run request that fails before the server answers
+(`tools/installer-ui/installer-ui-run.js:78-191`). A run request that fails before the server answers
 is followed by a status read: the admitted run is adopted as a run whose response had arrived (its
-output replaces the previous run's output, its current step comes from status and Stop becomes
-available) and is then reattached (`tools/installer-ui/installer-ui-run.js:66-73`;
-`tools/installer-ui/installer-ui-run.js:240-293`), a later replacement run is not shown as
+output replaces the previous run's output, and its current step and state come from status) and is
+then reattached (`tools/installer-ui/installer-ui-run.js:70-76`;
+`tools/installer-ui/installer-ui-run.js:242-295`), a later replacement run is not shown as
 that request's result, and a missing admission record is reported as no record of the request. Each
 run request carries a 32-hex client request id; the server records `admitting`, `started` and
 `refused` admission states, and `GET /api/run/status?request=<id>` returns that admission record for
 lost-request recovery (`tools/installer-ui/run-admission.mjs:1-30`;
 `tools/installer-ui/server.mjs:428-434`; `tools/installer-ui/server.mjs:464-475`; `tools/installer-ui/server.mjs:357-361`;
-`tools/installer-ui/installer-ui-run.js:240-293`).
-Each new run reattaches from its own first event (`tools/installer-ui/installer-ui-run.js:300-301`).
+`tools/installer-ui/installer-ui-run.js:242-295`).
+Each new run reattaches from its own first event (`tools/installer-ui/installer-ui-run.js:302-303`).
 
 Read-only child routes use per-route timeouts: step list 60 seconds, identity 120 seconds, prefill
 120 seconds and preflight 600 seconds, with the test override `readOnlyTimeoutMs`
@@ -211,7 +216,7 @@ error while later valid progress lines still arrive (`tools/installer-ui/child-o
 | Advanced | Renders projection renewal, resolver app, organisation quota, developer estimate, revocation window, model-organisation metadata, team-budget behaviour, unassigned-developer behaviour and the optional pending Claude deployment object (`tools/installer-ui/ui-model.js:59-76`; `tools/installer-ui/installer-ui.js:176-210`). |
 | Business units | Provides a two-level editor: add a unit, add a team under a unit, remove either, then serialize units before teams. Add unit and Add team focus the new row's first field. Remove focuses the row that takes the removed row's place, else the previous row, else Add unit. Fields are id, Entra group, monthly USD budget, mode and percent only for `Allowance`. Ids are lower-case letters, digits and hyphens, max 64; ids are unique; group names exclude `'`, `,` and `:`; `Allowance` requires percent 1-100; teams name one parent unit. The JSON view round-trips through the same validation (`tools/installer-ui/installer-ui-business-units.js:9-37`; `tools/installer-ui/installer-ui-business-units.js:66-177`; `tools/installer-ui/ui-model.js:226-254`; `tools/installer-ui/ui-model.js:529-573`). |
 | Review | Runs installer preflight and shows check, result, message, remedy and field links when a problem names or maps to an answer path. A passing preflight returns a 64-character SHA-256 fingerprint over canonical answers, engine and step scope. Failing checks mark fields through a problem path when present, otherwise through the schema's `x-checkId` mapping. Review buttons keep their target on the first pointer click even when validation rerenders the problem list. Non-JSON preflight output returns a visible error with the exit code and a short redacted, path-scrubbed output tail (`tools/installer-ui/installer-ui.js:278-314`; `tools/installer-ui/installer-ui-problems.js:40-51`; `tools/installer-ui/preflight-record.mjs:28-30`; `tools/installer-ui/server.mjs:401-409`). |
-| Run | Lists installer step ids, streams selected-step output as it arrives, shows a failed step with a rerun action and resume command, reattaches to an active run after reload and keeps a full run as a separate confirmed action (`tools/installer-ui/installer-ui-render.js:95-108`; `tools/installer-ui/installer-ui-run.js:75-354`; `tools/installer-ui/installer-ui.js:618-641`). A run starts only when its fingerprint matches a stored passing preflight for the same answers and a covering scope. Displayed commands use `./Install-ClaudeGateway.ps1` and `./install-claude-gateway.sh` (`tools/installer-ui/installer-ui-render.js:7-50`; `tools/installer-ui/ui-model.js:607-651`). |
+| Run | Lists installer step ids, streams selected-step output as it arrives, shows a failed step with a rerun action and resume command, reattaches to an active run after reload and keeps a full run as a separate confirmed action (`tools/installer-ui/installer-ui-render.js:95-108`; `tools/installer-ui/installer-ui-run.js:78-354`; `tools/installer-ui/installer-ui.js:618-641`). A run starts only when its fingerprint matches a stored passing preflight for the same answers and a covering scope. Displayed commands use `./Install-ClaudeGateway.ps1` and `./install-claude-gateway.sh` (`tools/installer-ui/installer-ui-render.js:7-50`; `tools/installer-ui/ui-model.js:607-651`). |
 
 Invalid business-unit JSON stays in the textarea as a blocking validation problem until it becomes a
 JSON array of objects again, and monthly USD budgets accept finite decimals in the schema range
@@ -222,7 +227,7 @@ deployment names in the answer inputs (`tools/installer-ui/installer-ui-prefill.
 uses the passing preflight's scope and identity to decide which run buttons are admitted
 (`tools/installer-ui/installer-ui.js:418-456`). Run summaries are interpreted by
 `installer-ui-run.js`: non-zero summaries are alerts, stopped summaries are status text and
-reattach failures use the run alert region (`tools/installer-ui/installer-ui-run.js:75-188`;
+reattach failures use the run alert region (`tools/installer-ui/installer-ui-run.js:78-191`;
 `tools/installer-ui/installer-ui-run.js:372-374`).
 
 ## Installer interface checks

@@ -7,6 +7,7 @@
     let activeRunId = "";
     let activeStepId = "";
     let runActive = false;
+    // The followed run is stopping or has already finished, so Stop is not offered.
     let runStopping = false;
     let lastRunSeq = 0;
     let lastFailedStep = "";
@@ -24,10 +25,6 @@
 
     function currentStep() {
       return activeStepId;
-    }
-
-    function isStopping() {
-      return runStopping;
     }
 
     function canStop() {
@@ -63,13 +60,19 @@
       removedRunOutputLines = 0;
     }
 
+    // The state the server reports for the followed run: Stop is offered only while it is running, and a stopping run says so.
+    function applyRunState(state) {
+      runStopping = state !== "running";
+      if (state === "stopping") setStatusText("run", `Stopping at ${activeStepId || "the current step"}.`);
+      updateRunAdmission();
+    }
+
     // A run the page starts following, from the run response or from the admission record of a lost request.
-    function adoptRun(runId, stepId = "") {
+    function adoptRun(runId, stepId = "", state = "running") {
       activeRunId = runId;
       activeStepId = stepId;
-      runStopping = false;
       clearRunOutput();
-      updateRunAdmission();
+      applyRunState(state);
     }
 
     function finishRun(summary) {
@@ -232,8 +235,7 @@
       activeRunId = run.id;
       activeStepId = run.currentStepId || run.steps?.[0] || activeStepId;
       runActive = true;
-      runStopping = false;
-      updateRunAdmission();
+      applyRunState(run.state);
       return (await readRunStream(await fetchRunStream(attachPath(lastRunSeq)))) || (await recoverMissingSummary());
     }
 
@@ -262,7 +264,7 @@
             updateRunAdmission();
             throw replacedRunError();
           }
-          adoptRun(admittedRunId || status.id || "", status.currentStepId || status.steps?.[0] || "");
+          adoptRun(admittedRunId || status.id || "", status.currentStepId || status.steps?.[0] || "", status.state);
           return followRun(() => fetchRunStream(attachPath(0)).then(readRunStream));
         }
         if (status?.admission?.state === "refused") {
@@ -334,9 +336,7 @@
         activeClientRequestId = status.clientRequestId || "";
         activeStepId = status.currentStepId || status.steps?.[0] || "";
         runActive = true;
-        runStopping = status.state === "stopping";
-        if (runStopping) setStatusText("run", `Stopping at ${activeStepId || "the current step"}.`);
-        updateRunAdmission();
+        applyRunState(status.state);
         try {
           const result = (await readRunStream(await fetchRunStream(attachPath(lastRunSeq)))) || (await recoverMissingSummary());
           if (result?.statusText) setStatusText("run", result.statusText);
@@ -377,7 +377,7 @@
       void readIdentityAfterRun().catch(() => {});
     }
 
-    return { appendRunLine, canStop, currentStep, failedStep, handleAttachError, isActive, isStopping, resetActiveRun, streamRun, stopRun, refreshRunStatus };
+    return { appendRunLine, canStop, currentStep, failedStep, handleAttachError, isActive, resetActiveRun, streamRun, stopRun, refreshRunStatus };
   }
 
   globalThis.ClaudeInstallerRun = { create: createRunHost };

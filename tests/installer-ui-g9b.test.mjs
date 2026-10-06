@@ -375,12 +375,12 @@ test('R5-1 a superseded preflight pass is shown as stale and does not admit a ru
 
 const recoveredRunId = '22222222222222222222222222222222';
 
-// The page's run request fails before any answer; the admission record names the recovered run.
-async function loseRunRequestToRecoveredRun(page) {
+// The page's run request fails before any answer; the admission record names the recovered run, which the server reports in the given state.
+async function loseRunRequestToRecoveredRun(page, state = 'running') {
   await page.route('**/api/run/status?request=*', (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    body: JSON.stringify({ id: recoveredRunId, state: 'running', currentStepId: 'resource-group', steps: ['resource-group'], admission: { state: 'started', runId: recoveredRunId } }),
+    body: JSON.stringify({ id: recoveredRunId, state, currentStepId: 'resource-group', steps: ['resource-group'], admission: { state: 'started', runId: recoveredRunId } }),
   }));
 }
 
@@ -453,6 +453,105 @@ test('R5-2 Stop is enabled for a run recovered after a lost request and stops th
     await assertClean(page, pageErrors);
   } finally {
     releaseAttach?.();
+    await browser.close();
+    await app.close();
+  }
+});
+
+const stoppedTail = '{"seq":1,"type":"stopped","stepId":"resource-group","message":"Stopped installer run at resource-group."}\n{"seq":2,"type":"summary","exitCode":null,"failedStepId":"","resumeCommand":"","state":"stopped","message":"Stopped installer run at resource-group."}\n';
+
+// Holds the followed run's attach until release() so the page can be read while it follows the run, and counts stop requests.
+async function holdAttachAndCountStops(page, tail) {
+  let release;
+  let requested;
+  const released = new Promise((resolve) => { release = resolve; });
+  const attachRequested = new Promise((resolve) => { requested = resolve; });
+  const held = { attachRequested, release, stopRequests: 0 };
+  await page.route('**/api/run/attach?after=*&run=*', async (route) => {
+    requested();
+    await released;
+    await route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: tail });
+  });
+  await page.route('**/api/run/stop', (route) => {
+    held.stopRequests++;
+    return route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'active run not found' }) });
+  });
+  return held;
+}
+
+test('R6-1 a run recovered while stopping is shown stopping and does not offer Stop', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  let held;
+  try {
+    await passPreflight(page);
+    await page.route('**/api/run/stream', (route) => route.abort('failed'));
+    await loseRunRequestToRecoveredRun(page, 'stopping');
+    held = await holdAttachAndCountStops(page, stoppedTail);
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await within(held.attachRequested, 30_000, 'The recovered run attach request');
+    assert.match(await page.locator('#run-status').textContent(), /Stopping at resource-group\./);
+    assert.equal(await page.getByRole('button', { name: 'Stop run' }).isDisabled(), true);
+    held.release();
+    await page.locator('#run-status').getByText(/Run stopped at resource-group\./).waitFor();
+    assert.equal(held.stopRequests, 0);
+    await assertClean(page, pageErrors);
+  } finally {
+    held?.release();
+    await browser.close();
+    await app.close();
+  }
+});
+
+test('R6-1 a run recovered after it finished does not offer Stop while its output is read', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  let held;
+  try {
+    await passPreflight(page);
+    await page.route('**/api/run/stream', (route) => route.abort('failed'));
+    await loseRunRequestToRecoveredRun(page, 'exited');
+    held = await holdAttachAndCountStops(page, '{"seq":1,"type":"progress","stepId":"resource-group","event":"completed","message":"finished-run-marker"}\n{"seq":2,"type":"summary","exitCode":0,"failedStepId":"","resumeCommand":"","state":"exited","message":""}\n');
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await within(held.attachRequested, 30_000, 'The recovered run attach request');
+    assert.equal(await page.getByRole('button', { name: 'Stop run' }).isDisabled(), true);
+    assert.doesNotMatch(await page.locator('#run-status').textContent(), /Stopping at/);
+    held.release();
+    await page.locator('#run-status').getByText(/Run finished\./).waitFor();
+    assert.match(await page.locator('#run-output').textContent(), /finished-run-marker/);
+    assert.equal(held.stopRequests, 0);
+    await assertClean(page, pageErrors);
+  } finally {
+    held?.release();
+    await browser.close();
+    await app.close();
+  }
+});
+
+test('R6-1 a broken stream of a run that is stopping does not offer Stop again', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  let held;
+  try {
+    await passPreflight(page);
+    await page.route('**/api/run/stream', (route) => route.fulfill({
+      status: 200,
+      headers: { 'x-installer-run-id': recoveredRunId },
+      contentType: 'application/x-ndjson',
+      body: '{"seq":1,"type":"progress","stepId":"resource-group","event":"started","message":"started"}\nnot-json\n',
+    }));
+    await loseRunRequestToRecoveredRun(page, 'stopping');
+    held = await holdAttachAndCountStops(page, stoppedTail);
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await within(held.attachRequested, 30_000, 'The reattach after the broken stream');
+    assert.match(await page.locator('#run-status').textContent(), /Stopping at resource-group\./);
+    assert.equal(await page.getByRole('button', { name: 'Stop run' }).isDisabled(), true);
+    held.release();
+    await page.locator('#run-status').getByText(/Run stopped at resource-group\./).waitFor();
+    assert.equal(held.stopRequests, 0);
+    await assertClean(page, pageErrors);
+  } finally {
+    held?.release();
     await browser.close();
     await app.close();
   }

@@ -3,7 +3,7 @@
     "id": "r3-9-1",
     "why": "A page loaded while a run is stopping must attach and keep stop disabled until the stopped summary arrives.",
     "file": "tools/installer-ui/installer-ui-run.js",
-    "find": "        if (runStopping) setStatusText(\"run\", `Stopping at ${activeStepId || \"the current step\"}.`);\n",
+    "find": "      if (state === \"stopping\") setStatusText(\"run\", `Stopping at ${activeStepId || \"the current step\"}.`);\n",
     "replace": "",
     "testFile": "tests/installer-ui-g8b.test.mjs",
     "test": "R3-9 page load attaches to a stopping run with controls disabled until summary"
@@ -201,7 +201,7 @@
     "id": "r3-2-6",
     "why": "Lost-request recovery must attach a run that has already started and read the real summary from the server.",
     "file": "tools/installer-ui/installer-ui-run.js",
-    "find": "        if (status?.admission?.state === \"started\") {\n          const admittedRunId = status.admission.runId || \"\";\n          if (status.id && admittedRunId && status.id !== admittedRunId) {\n            runActive = false;\n            runStopping = false;\n            updateRunAdmission();\n            throw replacedRunError();\n          }\n          adoptRun(admittedRunId || status.id || \"\", status.currentStepId || status.steps?.[0] || \"\");\n          return followRun(() => fetchRunStream(attachPath(0)).then(readRunStream));\n        }\n",
+    "find": "        if (status?.admission?.state === \"started\") {\n          const admittedRunId = status.admission.runId || \"\";\n          if (status.id && admittedRunId && status.id !== admittedRunId) {\n            runActive = false;\n            runStopping = false;\n            updateRunAdmission();\n            throw replacedRunError();\n          }\n          adoptRun(admittedRunId || status.id || \"\", status.currentStepId || status.steps?.[0] || \"\", status.state);\n          return followRun(() => fetchRunStream(attachPath(0)).then(readRunStream));\n        }\n",
     "replace": "        if (status?.admission?.state === \"started\") {\n          break;\n        }\n",
     "testFile": "tests/installer-ui-g8b.test.mjs",
     "test": "R3-2 real server recovery follows an aborted successful run to its summary"
@@ -1359,7 +1359,7 @@
     "id": "g7b-F03",
     "why": "lead fix: a lost run request whose run started is not reattached",
     "file": "tools/installer-ui/installer-ui-run.js",
-    "find": "        if (status?.admission?.state === \"started\") {\n          const admittedRunId = status.admission.runId || \"\";\n          if (status.id && admittedRunId && status.id !== admittedRunId) {\n            runActive = false;\n            runStopping = false;\n            updateRunAdmission();\n            throw replacedRunError();\n          }\n          adoptRun(admittedRunId || status.id || \"\", status.currentStepId || status.steps?.[0] || \"\");\n          return followRun(() => fetchRunStream(attachPath(0)).then(readRunStream));\n        }\n",
+    "find": "        if (status?.admission?.state === \"started\") {\n          const admittedRunId = status.admission.runId || \"\";\n          if (status.id && admittedRunId && status.id !== admittedRunId) {\n            runActive = false;\n            runStopping = false;\n            updateRunAdmission();\n            throw replacedRunError();\n          }\n          adoptRun(admittedRunId || status.id || \"\", status.currentStepId || status.steps?.[0] || \"\", status.state);\n          return followRun(() => fetchRunStream(attachPath(0)).then(readRunStream));\n        }\n",
     "replace": "",
     "testFile": "tests/installer-ui-g7b-r2.test.mjs",
     "test": "lead: a run request that fails after the server started the run reattaches to that run"
@@ -1485,7 +1485,7 @@
     "id": "r5-2-1",
     "why": "R5-2: lost-request recovery adopts the admitted run as a new run instead of only setting its id",
     "file": "tools/installer-ui/installer-ui-run.js",
-    "find": "          adoptRun(admittedRunId || status.id || \"\", status.currentStepId || status.steps?.[0] || \"\");\n",
+    "find": "          adoptRun(admittedRunId || status.id || \"\", status.currentStepId || status.steps?.[0] || \"\", status.state);\n",
     "replace": "          activeRunId = admittedRunId || status.id || \"\";\n",
     "testFile": "tests/installer-ui-g9b.test.mjs",
     "test": "R5-2 a run recovered after a lost request replaces the previous run output"
@@ -1494,8 +1494,8 @@
     "id": "r5-2-2",
     "why": "R5-2: adopting a run recomputes run admission, so Stop is enabled once the run id is known",
     "file": "tools/installer-ui/installer-ui-run.js",
-    "find": "      clearRunOutput();\n      updateRunAdmission();\n",
-    "replace": "      clearRunOutput();\n",
+    "find": "      if (state === \"stopping\") setStatusText(\"run\", `Stopping at ${activeStepId || \"the current step\"}.`);\n      updateRunAdmission();\n",
+    "replace": "      if (state === \"stopping\") setStatusText(\"run\", `Stopping at ${activeStepId || \"the current step\"}.`);\n",
     "testFile": "tests/installer-ui-g9b.test.mjs",
     "test": "R5-2 Stop is enabled for a run recovered after a lost request and stops that run"
   },
@@ -1525,5 +1525,59 @@
     "replace": "setErrorText(\"run\", error.message || String(error));",
     "testFile": "tests/installer-ui-g9b.test.mjs",
     "test": "L6-1 page-load reattach run-replaced clears run state and controls"
+  },
+  {
+    "id": "r6-1-1",
+    "why": "R6-1: lost-request recovery adopts the recovered run in the state the server reports",
+    "file": "tools/installer-ui/installer-ui-run.js",
+    "find": "          adoptRun(admittedRunId || status.id || \"\", status.currentStepId || status.steps?.[0] || \"\", status.state);\n",
+    "replace": "          adoptRun(admittedRunId || status.id || \"\", status.currentStepId || status.steps?.[0] || \"\");\n",
+    "testFile": "tests/installer-ui-g9b.test.mjs",
+    "test": "R6-1 a run recovered while stopping is shown stopping and does not offer Stop"
+  },
+  {
+    "id": "r6-1-2",
+    "why": "R6-1: a followed run that the server reports as stopping does not offer Stop",
+    "file": "tools/installer-ui/installer-ui-run.js",
+    "find": "      runStopping = state !== \"running\";\n",
+    "replace": "      runStopping = false;\n",
+    "testFile": "tests/installer-ui-g9b.test.mjs",
+    "test": "R6-1 a run recovered while stopping is shown stopping and does not offer Stop"
+  },
+  {
+    "id": "r6-1-3",
+    "why": "R6-1: a followed run that the server reports as already finished does not offer Stop while its output is read",
+    "file": "tools/installer-ui/installer-ui-run.js",
+    "find": "      runStopping = state !== \"running\";\n",
+    "replace": "      runStopping = state === \"stopping\";\n",
+    "testFile": "tests/installer-ui-g9b.test.mjs",
+    "test": "R6-1 a run recovered after it finished does not offer Stop while its output is read"
+  },
+  {
+    "id": "r6-1-4",
+    "why": "R6-1: broken-stream recovery applies the state the server reports instead of treating the run as running",
+    "file": "tools/installer-ui/installer-ui-run.js",
+    "find": "      runActive = true;\n      applyRunState(run.state);\n",
+    "replace": "      runActive = true;\n      applyRunState(\"running\");\n",
+    "testFile": "tests/installer-ui-g9b.test.mjs",
+    "test": "R6-1 a broken stream of a run that is stopping does not offer Stop again"
+  },
+  {
+    "id": "r6-1-5",
+    "why": "R6-1: the page-load attach applies the state the server reports through the same function",
+    "file": "tools/installer-ui/installer-ui-run.js",
+    "find": "        runActive = true;\n        applyRunState(status.state);\n",
+    "replace": "        runActive = true;\n        applyRunState(\"running\");\n",
+    "testFile": "tests/installer-ui-g8b.test.mjs",
+    "test": "R3-9 page load attaches to a stopping run with controls disabled until summary"
+  },
+  {
+    "id": "r6-1-6",
+    "why": "R6-1: the run response adopts a running run, which offers Stop",
+    "file": "tools/installer-ui/installer-ui-run.js",
+    "find": "    function adoptRun(runId, stepId = \"\", state = \"running\") {\n",
+    "replace": "    function adoptRun(runId, stepId = \"\", state = \"stopping\") {\n",
+    "testFile": "tests/installer-ui-g9b.test.mjs",
+    "test": "R4-3 Stop is disabled during admission and while an accepted stop is pending summary"
   }
 ]
