@@ -35,7 +35,10 @@ function az {
     $global:LASTEXITCODE = 0
     $line = $args -join ' '
     if ($line -like 'account show*') { return '00000000-0000-0000-0000-000000000000' }
-    if ($line -like 'account get-access-token*') { return 'fixture-token' }
+    if ($line -like 'account get-access-token*') {
+        if ($line -match '--query accessToken') { return 'fixture-token' }
+        return '{"accessToken":"fixture-token"}'
+    }
     if ($line -like 'ad group show*') { return $groupId }
     if ($line -like 'apim nv list*') {
         return ConvertTo-Json -InputObject @($gateway.Values.Keys | ForEach-Object {
@@ -84,6 +87,19 @@ function Invoke-RestMethod {
     }
     if ($Uri -match '/users/[^/]+\?') {
         return @{ id = $personId; displayName = 'Example Developer'; userPrincipalName = 'developer@example.com' }
+    }
+    if ($Uri -match '/groups\?') {
+        $text = [uri]::UnescapeDataString([string]$Uri)
+        $id = if ($text -match "displayName eq 'premium-group'" -or $text -match "id eq '$groupId'") { $groupId }
+            elseif ($text -match "displayName eq 'standard-group'" -or $text -match "id eq '$otherId'") { $otherId }
+            else { '' }
+        return [pscustomobject]@{ value = [object[]]@(if ($id) { [pscustomobject]@{ id = $id } }) }
+    }
+    if ($Uri -match "/groups/$groupId/transitiveMembers/") {
+        return [pscustomobject]@{ value = [object[]]@([pscustomobject]@{ id = $personId; displayName = 'Example Developer' }) }
+    }
+    if ($Uri -match "/groups/$otherId/transitiveMembers/") {
+        return [pscustomobject]@{ value = [object[]]@() }
     }
     if ($Uri -match '/groups/([^/]+)/members/' -and $Method -in 'Post', 'Delete') {
         $gateway.GroupWrites.Add("$Method $($Matches[1])")
@@ -352,6 +368,15 @@ function Invoke-Bridge([hashtable]$Request) {
     }
     finally { Remove-Item -LiteralPath $file -ErrorAction SilentlyContinue }
 }
+function Invoke-BridgeResult([hashtable]$Request) {
+    $file = Join-Path ([IO.Path]::GetTempPath()) ('p101-bridge-' + [guid]::NewGuid().ToString('N') + '.json')
+    try {
+        $Request | ConvertTo-Json -Depth 10 -Compress | Set-Content -LiteralPath $file -Encoding UTF8
+        $json = & (Join-Path $root 'scripts\Invoke-ClaudeFinOps.ps1') -InputFile $file -ResourceGroup rg-test -ApimName apim-test 6>$null
+        return ($json | ConvertFrom-Json)
+    }
+    finally { Remove-Item -LiteralPath $file -ErrorAction SilentlyContinue }
+}
 function New-BridgeUnit([string]$Id, [string]$Group) { @{ id = $Id; external_ref = "entra-group:$Group"; attributes = @{} } }
 Reset-Gateway $local
 $gateway.Values['bu-registry'] = $legacyRegistry
@@ -375,6 +400,11 @@ Reset-Gateway $local
 $gateway.Values['bu-registry'] = $legacyRegistry
 $m = Invoke-Bridge @{ action = 'catalog'; body = @{ organizations = @((New-BridgeUnit 'sales' 'Sales'), (New-BridgeUnit 'legacy-unit' 'Legacy')); departments = @() } }
 Assert 'the AUM catalog does not rename a unit stored with capitals to another spelling' ($m -match 'differs only in case' -and $gateway.Writes.Count -eq 0) "$m | writes $($gateway.Writes -join ',') | registry $($gateway.Values['bu-registry'])"
+Reset-Gateway $local
+$publish = Invoke-BridgeResult @{ action = 'developer_publish'; parameters = @{ standard_group = 'standard-group'; premium_group = 'premium-group'; user = $personId } }
+Assert 'developer_publish passes -User through the real sync and returns the published tier' (
+    -not $publish.error -and $publish.synced -eq $true -and $publish.published_tier -eq 'premium' -and
+    $gateway.Writes -contains 'allow-premium' -and $gateway.Writes -contains 'entitlement-groups') ($publish | ConvertTo-Json -Compress)
 # Council round 1 (QA): with two spellings stored, the AUM bridge acts on the exact one.
 $bridgeSpellings = ',platform=Platform:5000,sales=Lower Sales:1000,Sales=Upper Sales:2000,'
 Reset-Gateway $local
