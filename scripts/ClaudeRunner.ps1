@@ -214,14 +214,8 @@ function Get-RunnerFileDeadline {
     return [DateTimeOffset]::FromUnixTimeSeconds([long]$found.Groups[1].Value)
 }
 
-# The mean time of one exec when this many run at once, measured on 2026-10-06 against a 2-CPU runner in
-# East US 2 (ADR-0053). A parallelism between two measured values takes the higher time.
-function Get-ClaudeRunnerExecSeconds([int]$Parallel) {
-    foreach ($measured in @(@(1, 6.3), @(4, 6.9), @(8, 8.1), @(16, 10.9))) {
-        if ($Parallel -le $measured[0]) { return [double]$measured[1] }
-    }
-    return 15.6
-}
+# The transfer's time model: the measured exec times and the estimate (ADR-0053).
+. (Join-Path $PSScriptRoot 'ClaudeRunnerTransferModel.ps1')
 
 # The clock the apply-by checks read; the tests replace it.
 function Get-ClaudeRunnerNow { return [DateTimeOffset]::UtcNow }
@@ -321,7 +315,7 @@ function Send-RunnerFile {
     $effective = if ($azPath) { [Math]::Min($Parallel, $parts) } else { 1 }
     if (-not $PSBoundParameters.ContainsKey('SecondsPerExec')) { $SecondsPerExec = Get-ClaudeRunnerExecSeconds $effective }
     # The waves of parts, the directory exec and the assembly exec, at the measured time per exec.
-    $seconds = ([int][Math]::Ceiling($parts / $effective) + 2) * $SecondsPerExec
+    $seconds = Get-ClaudeRunnerTransferWaveSeconds -Parts $parts -Effective $effective -SecondsPerExec $SecondsPerExec
     $reserveMinutes = [Math]::Round($ReserveSeconds / 60)
     $applyBy = $null
     if ($null -ne $Deadline) {
@@ -420,7 +414,10 @@ function Send-RunnerFile {
                     $null = [Threading.WaitHandle]::WaitAny([Threading.WaitHandle[]]@($running | ForEach-Object { $_.Handle.AsyncWaitHandle }), 250)
                 }
                 elseif ($retry.Count -and -not $state.Late -and -not $state.Failure) {
-                    $next = $retry | Sort-Object NotBefore | Select-Object -First 1
+                    # The part whose retry is due first. A loop, not Sort-Object: the update flow's plans load this
+                    # file, and their sorts are ordinal (tests/Test-FlowOrdinalOrder.ps1).
+                    $next = $retry[0]
+                    foreach ($candidate in $retry) { if ($candidate.NotBefore -lt $next.NotBefore) { $next = $candidate } }
                     Start-Sleep -Seconds ([Math]::Max(1, [int][Math]::Ceiling(($next.NotBefore - [DateTime]::UtcNow).TotalSeconds)))
                     $next.NotBefore = [DateTime]::MinValue
                 }

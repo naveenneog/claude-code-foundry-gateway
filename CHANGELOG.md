@@ -39,7 +39,8 @@ exact streaming cache-creation detail remains **U13**.
   cannot end 10 minutes before the snapshot's apply-by time is refused before it starts, or stopped when it
   falls behind; nothing is written either way. A transfer of a minute or more prints its progress. The
   deployer's populate step, the switch's snapshot compare and full syncs use it unchanged, so the earlier
-  limit of about 40,000 developers no longer applies to them.
+  limit of about 40,000 developers no longer applies to them. The update flow's plan (P100) estimates the transfer
+  with the same model, so a move to the projection is refused for the transfer only above about 1.4 million developers.
 
 - **P100 the update moves a named-value gateway to the Cosmos projection.** `Update-ClaudeGateway.ps1
   -ResourceGroup <rg> -ApimName <apim>` plans migration `0004-entitlement-projection`

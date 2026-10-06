@@ -143,7 +143,7 @@
         "resolver/src/index.mjs": "b6b755fbbc56ef62e7b535a4bde2756111c2b5fc9913c16a893b45cb6dce33a3",
         "resolver/src/lookup.mjs": "d04392c5eb24a8a084d72f1e5dc72a61fd385992039118aba510c266c3027c3b",
         "scripts/ClaudeProjectionSwitch.ps1": "46f4c4d6bc8cef2cb253f6e8d1cf5ec7d8deee75b0bfd1d0a3957b262fca6425",
-        "scripts/ClaudeRunner.ps1": "7b1c587f10bbde9d1de571c556d2a67756ed59a9e678991067db6cbbc7008740",
+        "scripts/ClaudeRunner.ps1": "a0aa65bc68bb90f0d4c9e98a63fb282510669aab503500f3fad1758d8ec3df7a",
         "scripts/Deploy-ClaudeProjectionRenewal.ps1": "970779ec38b1bb0d336e481e2ab9fad7b9de2cdbd271de683a331e1107dde547",
         "scripts/Sync-ClaudeAccess.ps1": "8d69cfebf48431a3c7b6b8fdb41916acee824e426650f4bda77b70f8e16122fe",
         "scripts/Sync-ClaudeProjection.ps1": "67976f06318afec6f1e3b949e9ff6d5a4b1204201459ed0fc5f2e3e20cec2232",
