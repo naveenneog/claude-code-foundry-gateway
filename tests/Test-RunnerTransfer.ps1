@@ -173,6 +173,8 @@ try {
     Reset-Runner; $global:AzCalls = 0
     Capture { Send-RunnerFile -ResourceGroup rg-p99 -Name aci-projtest-p99 -Path $source -Destination '/work/a b.json' }
     Assert 'a destination with a space is refused before any exec' ($CapturedError -match 'space' -and $global:AzCalls -eq 0) $CapturedError
+    Capture { Send-RunnerFile -ResourceGroup rg-p99 -Name aci-projtest-p99 -Path $source -Destination "/work/x';process.exit();'.json" }
+    Assert 'a destination that would break out of the program''s quotes is refused before any exec' ($CapturedError -match 'absolute runner path' -and $global:AzCalls -eq 0) $CapturedError
     Capture { Send-RunnerFile -ResourceGroup rg-p99 -Name aci-projtest-p99 -Path $source -Destination /work/x.json -Parallel 25 }
     Assert 'more than 24 parts at once is refused' ($CapturedError -match '25' -and $global:AzCalls -eq 0) $CapturedError
 
@@ -181,7 +183,7 @@ try {
     $noise = New-Object byte[] 1500000; $rng.NextBytes($noise)
     [IO.File]::WriteAllText($big, '{"kind":"claude-entitlement-snapshot","expiresAt": 1,"records":["' + [Convert]::ToBase64String($noise) + '"]}')
     Reset-Runner; $global:AzCalls = 0
-    Capture { Send-RunnerFile -ResourceGroup rg-p97 -Name aci-projtest-p97 -Path $big -Destination /work/snapshot.json -Deadline ([DateTimeOffset]::UtcNow.AddMinutes(10)) }
+    Capture { Send-RunnerFile -ResourceGroup rg-p97 -Name aci-projtest-p97 -Path $big -Destination /work/snapshot.json -Deadline ([DateTimeOffset]::UtcNow.AddMinutes(10)) -ReserveSeconds 0 }
     Assert 'a transfer estimated past the apply-by time is refused before the first exec' (
         $CapturedError -match 'apply-by' -and $CapturedError -match 'was not sent' -and $global:AzCalls -eq 0) $CapturedError
     Assert 'the refusal gives the measured 500,000-developer figure, not the old bound' ($CapturedError -match '500,000' -and $CapturedError -notmatch '40,000') $CapturedError
