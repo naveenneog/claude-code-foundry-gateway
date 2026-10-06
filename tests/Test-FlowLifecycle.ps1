@@ -50,6 +50,27 @@ Assert 'derived named values include later-release values without hardcoding the
 Assert 'rollback plan names Restore-ClaudeGateway' ($policyPlan.Rollback -match 'Restore-ClaudeGateway')
 Assert 'policy migration requires a snapshot before writes' ((Get-Content (Join-Path $root 'scripts\flow\migrations\0002-policy-and-named-values.ps1') -Raw) -match 'Assert-ClaudeFlowLifecycleSnapshotBeforeWrite')
 
+# P100 council round 4: the plan's target subscription reaches every write of the policy migration, so the
+# migration writes where the update read the gateway.
+$global:Migration2AzCalls = [Collections.Generic.List[string]]::new()
+function global:az { $line = $args -join ' '; $global:Migration2AzCalls.Add($line); $global:LASTEXITCODE = 0; if ($line -match '^account get-access-token') { return 'offline-token' }; return '' }
+function global:Invoke-RestMethod { $global:Migration2AzCalls.Add("HTTP $($args -join ' ')"); $null }
+try {
+    $scopedPlan = Get-ClaudeFlowMigrationPlan -Record $record -Discovery $oldDiscovery
+    $scopedPlan.Data.Target.SubscriptionId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+    $scopedPlan.Data.SnapshotPath = 'unused.json'; $scopedPlan.Data.SnapshotTaken = $true
+    $thrown = Get-Thrown { Invoke-ClaudeFlowMigration -Record $record.PSObject.Copy() -Plan $scopedPlan | Out-Null }
+    $nvWrites = @($global:Migration2AzCalls | Where-Object { $_ -match '^apim nv (show|create|update)' })
+    Assert 'the policy migration reads and writes its named values in the plan''s subscription' (-not $thrown -and $nvWrites.Count -ge 2 -and @($nvWrites | Where-Object { $_ -notmatch '--subscription aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }).Count -eq 0) "$thrown | $($global:Migration2AzCalls -join ' ; ')"
+    $tokenCalls = @($global:Migration2AzCalls | Where-Object { $_ -match '^account get-access-token' })
+    Assert 'the policy migration takes its tokens for the plan''s subscription' ($tokenCalls.Count -ge 1 -and @($tokenCalls | Where-Object { $_ -notmatch '--subscription aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }).Count -eq 0) ($global:Migration2AzCalls -join ' ; ')
+    $global:Migration2AzCalls.Clear()
+    $scopedPlan.Data.Target.SubscriptionId = 'not-an-id&calc'
+    $thrown = Get-Thrown { Invoke-ClaudeFlowMigration -Record $record.PSObject.Copy() -Plan $scopedPlan | Out-Null }
+    Assert 'a target subscription that is not an ID is not passed to the Azure CLI by the policy migration' (@($global:Migration2AzCalls | Where-Object { $_ -match '--subscription' }).Count -eq 0) "$thrown | $($global:Migration2AzCalls -join ' ; ')"
+}
+finally { Remove-Item Function:\az, Function:\Invoke-RestMethod -ErrorAction SilentlyContinue }
+
 $allNv = @{}
 foreach ($r in $refs) { $allNv[$r] = 'x' }
 $freshDiscovery = [pscustomobject]@{

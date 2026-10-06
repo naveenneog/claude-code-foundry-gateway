@@ -139,6 +139,12 @@ before any write. `-RecordPath` names this gateway's record, or a new path that 
 the update reads the gateway in the subscription the record names; without one, in the Azure CLI's current
 subscription.
 
+The update writes in the Azure CLI's current subscription. When the record names another subscription than the
+current one, the plan prints `az account set --subscription <id>` instead of the apply command, and `-Apply`
+refuses before any write. The deployer's switch run, `Deploy-ClaudeProjection.ps1 -FlipAfterCleanCompare
+-SubscriptionId <id>`, which the installer's projection step prints as its rerun command after a refused switch,
+refuses the same way.
+
 The readiness evidence, such as usage counts and times, is printed after the plan and is not part of the
 fingerprint. The check results are, with every value the apply uses, so a change between the plan and the
 apply makes `-Apply` refuse the fingerprint.

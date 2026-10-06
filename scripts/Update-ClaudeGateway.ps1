@@ -88,6 +88,16 @@ if ($namesDiffer -or $subscriptionsDiffer) {
     $targetWhere = "$($target.ResourceGroup)/$($target.ApimName)$(if ($target.SubscriptionId) { " in subscription $($target.SubscriptionId)" })"
     $recordProblem = "The decision record at '$recordFullPath' describes $recordWhere, not $targetWhere. Remedy: -RecordPath with this gateway's record, or with a new path such as .\onboarding\claude-gateway.$($target.ResourceGroup)-$($target.ApimName).json, which the apply writes."
 }
+# Every write of the update (the backup, the migrations, the deployer and the switch) uses the Azure CLI's current
+# subscription, so with a record that names a subscription the update applies only when that one is current (ADR-0054).
+$subscriptionProblem = ''
+if (-not $recordProblem -and (Test-ClaudeFlowSubscriptionId $recordSubscription) -and ($Apply -or -not $DiscoveryPath)) {
+    $cliSubscription = ([string](az account show --query id -o tsv 2>$null)).Trim()
+    if (-not [string]::Equals($cliSubscription, $recordSubscription, [StringComparison]::OrdinalIgnoreCase)) {
+        $current = if ($cliSubscription) { $cliSubscription } else { 'not known (az account show returned none)' }
+        $subscriptionProblem = "The Azure CLI's current subscription is $current; the decision record names $recordSubscription, and the update writes in the current subscription. Remedy: az account set --subscription $recordSubscription, then rerun."
+    }
+}
 
 # Code-point order: the migrations' order feeds the plan's fingerprint (P76).
 $migrationFiles = @(Sort-ClaudeFlowOrdinal -InputObject @(Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'flow\migrations') -Filter '*.ps1') -Key { $_.Name })
@@ -115,6 +125,9 @@ if (-not $Apply -or $WhatIfPreference) {
     elseif ($recordProblem) {
         Write-Host "Plan only. $recordProblem -Apply refuses this record." -ForegroundColor Yellow
     }
+    elseif ($subscriptionProblem) {
+        Write-Host "Plan only. $subscriptionProblem" -ForegroundColor Yellow
+    }
     else {
         $parts = @('.\Update-ClaudeGateway.ps1')
         foreach ($name in 'RecordPath', 'DiscoveryPath', 'ResourceGroup', 'ApimName', 'SnapshotPath', 'StandardGroup', 'PremiumGroup', 'NamePrefix', 'ResolverInboundAccess') {
@@ -131,6 +144,9 @@ if (-not $Apply -or $WhatIfPreference) {
 }
 if ($recordProblem) {
     throw "$recordProblem Nothing was written."
+}
+if ($subscriptionProblem) {
+    throw "$subscriptionProblem Nothing was written."
 }
 if ($blocked.Count) {
     throw "The plan is blocked in $(@($blocked | ForEach-Object Step) -join ', '); nothing was written. Fix the BLOCKED items shown above and plan again.$(if (@($blocked | Where-Object Step -eq '0004-entitlement-projection').Count) { ' With -KeepNamedValues the update plans no move to the projection, and its other migrations apply.' })"
