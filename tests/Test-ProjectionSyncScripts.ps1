@@ -181,16 +181,49 @@ Capture { & (Join-Path $root 'scripts\Sync-ClaudeAccess.ps1') -ApimName apim-p84
 $presentCalls = $FixtureCalls -join "`n"
 Assert 'Sync-ClaudeAccess skips runner npm ci when node_modules is already present' (-not $CapturedError -and $presentCalls -notmatch 'npm --prefix /work/sync ci') "$CapturedError | $presentCalls"
 
+Reset-ProjectionFixture 'source-projection'
+Capture { & (Join-Path $root 'scripts\Sync-ClaudeAccess.ps1') -ApimName apim-p84 -ResourceGroup rg-p84 -Store projection }
+$projectionRecordCalls = $FixtureCalls -join "`n"
+$projectionApplyIndex = [array]::FindIndex([string[]]@($FixtureCalls), [Predicate[string]]{ param($line) $line -match 'apply-projection\.mjs .*--snapshot' })
+$projectionRecordIndex = [array]::FindIndex([string[]]@($FixtureCalls), [Predicate[string]]{ param($line) $line -match 'az apim nv (update|create) .*--named-value-id entitlement-groups' })
+Assert 'a projection sync records entitlement-groups after the successful apply' (
+    -not $CapturedError -and $projectionApplyIndex -ge 0 -and $projectionRecordIndex -gt $projectionApplyIndex) "$CapturedError | $projectionRecordCalls"
+
+Reset-ProjectionFixture 'source-projection'
+Capture { & (Join-Path $root 'scripts\Sync-ClaudeAccess.ps1') -ApimName apim-p84 -ResourceGroup rg-p84 -Store projection -WhatIf }
+$projectionWhatIfCalls = $FixtureCalls -join "`n"
+Assert 'a projection WhatIf sync does not record entitlement-groups' (
+    -not $CapturedError -and $projectionWhatIfCalls -notmatch 'az apim nv (update|create) .*--named-value-id entitlement-groups') "$CapturedError | $projectionWhatIfCalls"
+
+Reset-ProjectionFixture 'source-projection'
+Capture { & (Join-Path $root 'scripts\Sync-ClaudeAccess.ps1') -ApimName apim-p84 -ResourceGroup rg-p84 -Store projection -User missing@contoso.com }
+$missingProjectionCalls = $FixtureCalls -join "`n"
+Assert 'a projection sync for an unknown UPN stops before writes with a clear message' (
+    $CapturedError -match "Graph did not return a valid object id for user 'missing@contoso\.com'" -and
+    $missingProjectionCalls -notmatch 'apply-projection|az apim nv (update|create)') "$CapturedError | $missingProjectionCalls"
+
 # P98 council round 2 (Architect): the named-value sync wrote allow-premium, then refused allow-standard over the
 # 4,096-character limit, so the gateway served a refreshed premium list beside a stale standard list. Every
 # value is now checked before the first write. The fixture answers Graph and az for a gateway with no business units.
 function Invoke-NamedValueSyncFixture {
-    param([int]$PremiumCount, [int]$StandardCount, [string]$GatewayStandard = '', [string]$GatewayPremium = '', [string]$GatewayGroups = '', [string]$Script = 'Sync-ClaudeAccess.ps1', [hashtable]$Parameters = @{ Store = 'named-value' })
+    param([int]$PremiumCount, [int]$StandardCount, [string]$GatewayStandard = '', [string]$GatewayPremium = '', [string]$GatewayGroups = '', [string]$Script = 'Sync-ClaudeAccess.ps1', [hashtable]$Parameters = @{ Store = 'named-value' }, [switch]$FailAllowStandardWrite, [switch]$WithDecisionRecord)
     $global:P98NvCalls = [Collections.Generic.List[string]]::new()
     $script:P98NvResult = $null
+    $recordPath = Join-Path $root 'onboarding\claude-gateway.json'
+    $hadRecord = Test-Path -LiteralPath $recordPath
+    $oldRecord = if ($hadRecord) { Get-Content -LiteralPath $recordPath -Raw } else { '' }
+    if ($WithDecisionRecord) {
+        New-Item -ItemType Directory -Force -Path (Split-Path $recordPath -Parent) | Out-Null
+        @{ apimName = 'apim-p98'; resourceGroup = 'rg-p98'; standardGroup = 'record-standard'; premiumGroup = 'record-premium' } |
+            ConvertTo-Json -Compress | Set-Content -LiteralPath $recordPath -Encoding UTF8
+    }
     $directory = @{
         '10000000-0000-4000-8000-000000000002' = @(1..$PremiumCount | Where-Object { $_ -gt 0 } | ForEach-Object { '40000000-0000-4000-8000-' + ([string]$_).PadLeft(12, '0') })
         '10000000-0000-4000-8000-000000000001' = @(1..$StandardCount | Where-Object { $_ -gt 0 } | ForEach-Object { '50000000-0000-4000-8000-' + ([string]$_).PadLeft(12, '0') })
+        '10000000-0000-4000-8000-000000000003' = @(1..$StandardCount | Where-Object { $_ -gt 0 } | ForEach-Object { '51000000-0000-4000-8000-' + ([string]$_).PadLeft(12, '0') })
+        '10000000-0000-4000-8000-000000000004' = @(1..$PremiumCount | Where-Object { $_ -gt 0 } | ForEach-Object { '41000000-0000-4000-8000-' + ([string]$_).PadLeft(12, '0') })
+        '10000000-0000-4000-8000-000000000005' = @(1..$StandardCount | Where-Object { $_ -gt 0 } | ForEach-Object { '52000000-0000-4000-8000-' + ([string]$_).PadLeft(12, '0') })
+        '10000000-0000-4000-8000-000000000006' = @(1..$PremiumCount | Where-Object { $_ -gt 0 } | ForEach-Object { '42000000-0000-4000-8000-' + ([string]$_).PadLeft(12, '0') })
     }
     $gatewayLists = @{ 'allow-standard' = $GatewayStandard; 'allow-premium' = $GatewayPremium; 'bu-members' = ',' }
     if ($GatewayGroups) { $gatewayLists['entitlement-groups'] = $GatewayGroups }
@@ -209,6 +242,7 @@ function Invoke-NamedValueSyncFixture {
         }
         if ($line -like 'apim nv update*' -or $line -like 'apim nv create*') {
             $id = [string]$words[[array]::IndexOf($words, '--named-value-id') + 1]
+            if ($FailAllowStandardWrite -and $id -eq 'allow-standard') { $global:LASTEXITCODE = 9; return 'ERROR: denied' }
             $valueIndex = [array]::IndexOf($words, '--value')
             if ($valueIndex -ge 0) { $gatewayLists[$id] = [string]$words[$valueIndex + 1] }
             return ''
@@ -222,8 +256,17 @@ function Invoke-NamedValueSyncFixture {
         if ($text -match '^https://graph\.microsoft\.com/v1\.0/users/dev@contoso\.com\?\$select=id') {
             return [pscustomobject]@{ id = '50000000-0000-4000-8000-000000000001' }
         }
+        if ($text -match '^https://graph\.microsoft\.com/v1\.0/users/missing@contoso\.com\?\$select=id') {
+            return [pscustomobject]@{}
+        }
         if ($text -match '^https://graph\.microsoft\.com/v1\.0/groups\?') {
-            $id = if ($text -match "displayName eq 'claude-code-premium'" -or $text -match "id eq '10000000-0000-4000-8000-000000000002'") { '10000000-0000-4000-8000-000000000002' } elseif ($text -match "displayName eq 'claude-code-standard'" -or $text -match "id eq '10000000-0000-4000-8000-000000000001'") { '10000000-0000-4000-8000-000000000001' } else { '' }
+            $id = if ($text -match "displayName eq 'claude-code-premium'" -or $text -match "id eq '10000000-0000-4000-8000-000000000002'") { '10000000-0000-4000-8000-000000000002' }
+            elseif ($text -match "displayName eq 'claude-code-standard'" -or $text -match "id eq '10000000-0000-4000-8000-000000000001'") { '10000000-0000-4000-8000-000000000001' }
+            elseif ($text -match "displayName eq 'record-standard'" -or $text -match "id eq '10000000-0000-4000-8000-000000000003'") { '10000000-0000-4000-8000-000000000003' }
+            elseif ($text -match "displayName eq 'record-premium'" -or $text -match "id eq '10000000-0000-4000-8000-000000000004'") { '10000000-0000-4000-8000-000000000004' }
+            elseif ($text -match "displayName eq 'gateway-standard'" -or $text -match "id eq '10000000-0000-4000-8000-000000000005'") { '10000000-0000-4000-8000-000000000005' }
+            elseif ($text -match "displayName eq 'gateway-premium'" -or $text -match "id eq '10000000-0000-4000-8000-000000000006'") { '10000000-0000-4000-8000-000000000006' }
+            else { '' }
             return [pscustomobject]@{ value = @(if ($id) { [pscustomobject]@{ id = $id } }) }
         }
         if ($text -match '^https://graph\.microsoft\.com/v1\.0/groups/([0-9a-f-]+)/transitiveMembers/microsoft\.graph\.user') {
@@ -232,10 +275,18 @@ function Invoke-NamedValueSyncFixture {
         if ($text -match 'transitiveMembers/microsoft\.graph\.servicePrincipal') { return [pscustomobject]@{ value = @() } }
         throw "unexpected HTTP $Method $Uri"
     }
-    $arguments = @{ ApimName = 'apim-p98'; ResourceGroup = 'rg-p98' } + $Parameters
-    Capture { & (Join-Path $root "scripts\$Script") @arguments 6>&1 }
-    $script:P98NvResult = [pscustomobject]@{ Values = $gatewayLists; Output = (@($CapturedResult) | ForEach-Object { [string]$_ }) -join "`n" }
-    $script:FixtureExit = $global:LASTEXITCODE
+    try {
+        $arguments = @{ ApimName = 'apim-p98'; ResourceGroup = 'rg-p98' } + $Parameters
+        Capture { & (Join-Path $root "scripts\$Script") @arguments 6>&1 }
+        $script:P98NvResult = [pscustomobject]@{ Values = $gatewayLists; Output = (@($CapturedResult) | ForEach-Object { [string]$_ }) -join "`n" }
+        $script:FixtureExit = $global:LASTEXITCODE
+    }
+    finally {
+        if ($WithDecisionRecord) {
+            if ($hadRecord) { Set-Content -LiteralPath $recordPath -Value $oldRecord -NoNewline }
+            elseif (Test-Path -LiteralPath $recordPath) { Remove-Item -LiteralPath $recordPath -Force }
+        }
+    }
 }
 function Get-NamedValueWrites { @($global:P98NvCalls | Where-Object { $_ -match '^az apim nv (update|create)' -or $_ -match '^HTTP Put ' }) }
 
@@ -250,6 +301,17 @@ Assert 'a named-value sync within the limit writes both lists' (
 Assert 'a named-value sync records entitlement-groups after a successful first sync' (
     -not $CapturedError -and $script:P98NvResult.Values['entitlement-groups'] -eq 'standard=10000000-0000-4000-8000-000000000001,premium=10000000-0000-4000-8000-000000000002') "$CapturedError | groups=$($script:P98NvResult.Values['entitlement-groups']) | writes: $($nvWrites -join ' | ')"
 
+Invoke-NamedValueSyncFixture -PremiumCount 5 -StandardCount 20 -Parameters @{ Store = 'named-value'; WhatIf = $true }
+$nvWrites = Get-NamedValueWrites
+Assert 'a named-value WhatIf sync without entitlement-groups records nothing' (
+    -not $CapturedError -and -not $script:P98NvResult.Values.ContainsKey('entitlement-groups') -and $nvWrites.Count -eq 0) "$CapturedError | groups=$($script:P98NvResult.Values['entitlement-groups']) | writes: $($nvWrites -join ' | ')"
+
+Invoke-NamedValueSyncFixture -PremiumCount 5 -StandardCount 20 -FailAllowStandardWrite
+$nvWrites = Get-NamedValueWrites
+Assert 'a named-value sync whose list write fails leaves no recorded groups' (
+    $CapturedError -match "Writing named value 'allow-standard' failed" -and -not $script:P98NvResult.Values.ContainsKey('entitlement-groups') -and
+    @($nvWrites -match 'allow-premium').Count -ge 1 -and @($nvWrites -match 'allow-standard').Count -ge 1 -and @($nvWrites -match 'entitlement-groups').Count -eq 0) "$CapturedError | groups=$($script:P98NvResult.Values['entitlement-groups']) | writes: $($nvWrites -join ' | ')"
+
 Invoke-NamedValueSyncFixture -PremiumCount 1 -StandardCount 1 -Parameters @{ Store = 'named-value'; User = 'dev@contoso.com' }
 $nvWrites = Get-NamedValueWrites
 Assert 'Sync-ClaudeAccess -User on named values runs the whole refresh and reports the written tier' (
@@ -261,10 +323,34 @@ $nvWrites = Get-NamedValueWrites
 Assert 'Sync-ClaudeAccess -User -WhatIf on named values reports the would-be tier and writes nothing' (
     -not $CapturedError -and $nvWrites.Count -eq 0 -and $script:P98NvResult.Output -match 'developer tier as written: premium') "$CapturedError | output: $($script:P98NvResult.Output) | writes: $($nvWrites -join ' | ')"
 
+Invoke-NamedValueSyncFixture -PremiumCount 1 -StandardCount 1 -Parameters @{ Store = 'named-value'; User = 'missing@contoso.com' }
+$nvWrites = Get-NamedValueWrites
+Assert 'a named-value sync for an unknown UPN stops before writes with a clear message' (
+    $CapturedError -match "Graph did not return a valid object id for user 'missing@contoso\.com'" -and $nvWrites.Count -eq 0) "$CapturedError | writes: $($nvWrites -join ' | ')"
+
 Invoke-NamedValueSyncFixture -PremiumCount 1 -StandardCount 1 -GatewayGroups 'standard=10000000-0000-4000-8000-000000000001,premium=10000000-0000-4000-8000-000000000002' -Parameters @{ Store = 'named-value'; StandardGroup = 'claude-code-premium' }
 $nvWrites = Get-NamedValueWrites
 Assert 'explicit groups that differ from entitlement-groups refuse before writes and name RecordGroups' (
     $CapturedError -match '-RecordGroups' -and $nvWrites.Count -eq 0) "$CapturedError | writes: $($nvWrites -join ' | ')"
+
+Invoke-NamedValueSyncFixture -PremiumCount 1 -StandardCount 1 -GatewayGroups 'standard=10000000-0000-4000-8000-000000000001,premium=10000000-0000-4000-8000-000000000002' -Parameters @{ Store = 'named-value'; StandardGroup = 'gateway-standard'; PremiumGroup = 'gateway-premium'; RecordGroups = $true }
+$nvWrites = Get-NamedValueWrites
+$recordWrite = @($nvWrites | Where-Object { $_ -match 'entitlement-groups' } | Select-Object -Last 1)
+Assert 'with RecordGroups explicit changed groups sync and then record the new value' (
+    -not $CapturedError -and $script:P98NvResult.Values['entitlement-groups'] -eq 'standard=10000000-0000-4000-8000-000000000005,premium=10000000-0000-4000-8000-000000000006' -and
+    @($nvWrites -match 'allow-premium').Count -ge 1 -and @($nvWrites -match 'allow-standard').Count -ge 1 -and $recordWrite -and
+    [array]::IndexOf($nvWrites, $recordWrite) -gt [array]::IndexOf($nvWrites, @($nvWrites | Where-Object { $_ -match 'allow-standard' } | Select-Object -Last 1))) "$CapturedError | groups=$($script:P98NvResult.Values['entitlement-groups']) | writes: $($nvWrites -join ' | ')"
+
+Invoke-NamedValueSyncFixture -PremiumCount 1 -StandardCount 1 -WithDecisionRecord
+$nvWrites = Get-NamedValueWrites
+Assert 'Sync-ClaudeAccess uses the decision record groups before the default group names' (
+    -not $CapturedError -and $script:P98NvResult.Values['entitlement-groups'] -eq 'standard=10000000-0000-4000-8000-000000000003,premium=10000000-0000-4000-8000-000000000004') "$CapturedError | groups=$($script:P98NvResult.Values['entitlement-groups']) | writes: $($nvWrites -join ' | ')"
+
+Invoke-NamedValueSyncFixture -PremiumCount 1 -StandardCount 1 -WithDecisionRecord -GatewayGroups 'standard=10000000-0000-4000-8000-000000000005,premium=10000000-0000-4000-8000-000000000006'
+$nvWrites = Get-NamedValueWrites
+Assert 'Sync-ClaudeAccess uses entitlement-groups before a decision record of this gateway' (
+    -not $CapturedError -and @($nvWrites | Where-Object { $_ -match 'entitlement-groups' }).Count -eq 0 -and
+    $script:P98NvResult.Values['entitlement-groups'] -eq 'standard=10000000-0000-4000-8000-000000000005,premium=10000000-0000-4000-8000-000000000006') "$CapturedError | groups=$($script:P98NvResult.Values['entitlement-groups']) | writes: $($nvWrites -join ' | ')"
 
 Invoke-NamedValueSyncFixture -PremiumCount 1 -StandardCount 1 -GatewayGroups 'standard=99999999-9999-4999-8999-999999999999,premium=none' -Parameters @{ Store = 'named-value' }
 $nvWrites = Get-NamedValueWrites

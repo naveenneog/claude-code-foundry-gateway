@@ -315,6 +315,10 @@ function Invoke-RestMethod {
         if ($FixtureCase -eq 'group-null-nextlink') { return [pscustomobject]@{ value=$groups; '@odata.nextLink'=$null } }
         return [pscustomobject]@{ value = $groups }
     }
+    if ($url -like 'https://graph.microsoft.com/v1.0/users/*?$select=id') {
+        if ($url -match '/users/missing@contoso\.com\?') { return [pscustomobject]@{} }
+        return [pscustomobject]@{ id = $FixtureGroupId }
+    }
     if ($url -like 'https://graph.microsoft.com/v1.0/groups/*/transitiveMembers/*') {
         if ($FixtureCase -eq 'member-error') { throw 'Graph 403 membership denied' }
         if ($FixtureCase -eq 'member-shape') { return [pscustomobject]@{} }
