@@ -4,6 +4,7 @@
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 
 const STATUS = 'projection-reconciliation-status';
+const LOCK = 'projection-apply-lock';
 
 function load() {
   const path = process.env.FAKE_COSMOS_STORE;
@@ -24,14 +25,14 @@ function select(query, docs) {
   const all = Object.values(docs);
   if (text.includes("WHERE c.type = 'projection-reconciliation-status'")) {
     return all.filter((d) => d.type === STATUS && d.tenantId === params['@tenantId'] &&
-      d.accountResourceId === params['@accountResourceId'] && d.databaseName === params['@databaseName'] &&
+      (!params['@accountResourceId'] || d.accountResourceId === params['@accountResourceId']) && d.databaseName === params['@databaseName'] &&
       d.containerName === params['@containerName']);
   }
-  if (text.includes("WHERE NOT IS_DEFINED(c.type) OR c.type != 'projection-reconciliation-status'")) {
-    return all.filter((d) => d.type !== STATUS);
+  if (text.includes('WHERE NOT IS_DEFINED(c.type)')) {
+    return all.filter((d) => d.type === undefined);
   }
-  if (/^SELECT c\.id, c\.oid, c\.tier, c\.businessUnit, c\.tenantId, c\.reconciliationGeneration, c\.lastVerifiedAt, c\.expiresAt FROM c$/.test(text)) {
-    return all;
+  if (/^SELECT c\.id, c\.oid, c\.tier, c\.businessUnit, c\.tenantId, c\.reconciliationGeneration, c\.lastVerifiedAt, c\.expiresAt FROM c/.test(text)) {
+    return text.includes('WHERE NOT IS_DEFINED(c.type)') ? all.filter((d) => d.type === undefined) : all.filter((d) => d.type !== LOCK && d.type !== STATUS);
   }
   throw new Error(`stand-in Cosmos does not answer this query: ${text}`);
 }
@@ -58,7 +59,7 @@ class Items {
       log(`bulk ${op.operationType} ${op.id ?? op.resourceBody?.id ?? ''}`);
       if (process.env.FAKE_COSMOS_FAIL === 'write') return { statusCode: 503 };
       if (op.operationType === 'Upsert') {
-        store.docs[`${op.resourceBody.id}|${op.partitionKey}`] = op.resourceBody;
+        store.docs[`${op.resourceBody.id}|${op.partitionKey}`] = withEtag(op.resourceBody, store);
         return { statusCode: 200 };
       }
       if (op.operationType === 'Delete') {
@@ -69,6 +70,22 @@ class Items {
     });
     save(store);
     return results;
+  }
+
+  async create(body) {
+    const store = load();
+    const key = `${body.id}|${body.oid}`;
+    log(`create ${key}`);
+    if (store.docs[key]) {
+      const error = new Error('conflict');
+      error.code = 409;
+      error.statusCode = 409;
+      throw error;
+    }
+    const resource = withEtag(body, store);
+    store.docs[key] = resource;
+    save(store);
+    return { resource, etag: resource._etag };
   }
 }
 
@@ -91,9 +108,57 @@ export class CosmosClient {
             error.statusCode = 404;
             throw error;
           }
-          return { resource };
+          return { resource, etag: resource._etag };
+        },
+        replace: async (body, options = {}) => {
+          const store = load();
+          const key = `${id}|${partitionKey}`;
+          const current = store.docs[key];
+          log(`replace ${key}${options.accessCondition ? ' if-match' : ''}`);
+          if (!current) {
+            const error = new Error('not found');
+            error.code = 404;
+            error.statusCode = 404;
+            throw error;
+          }
+          if (options.accessCondition?.condition && current._etag !== options.accessCondition.condition) {
+            const error = new Error('precondition failed');
+            error.code = 412;
+            error.statusCode = 412;
+            throw error;
+          }
+          const resource = withEtag(body, store);
+          store.docs[key] = resource;
+          save(store);
+          return { resource, etag: resource._etag };
+        },
+        delete: async (options = {}) => {
+          const store = load();
+          const key = `${id}|${partitionKey}`;
+          const current = store.docs[key];
+          log(`delete ${key}${options.accessCondition ? ' if-match' : ''}`);
+          if (!current) {
+            const error = new Error('not found');
+            error.code = 404;
+            error.statusCode = 404;
+            throw error;
+          }
+          if (options.accessCondition?.condition && current._etag !== options.accessCondition.condition) {
+            const error = new Error('precondition failed');
+            error.code = 412;
+            error.statusCode = 412;
+            throw error;
+          }
+          delete store.docs[key];
+          save(store);
+          return {};
         },
       }),
     }) };
   }
+}
+
+function withEtag(doc, store) {
+  store.etagCounter = (store.etagCounter ?? 0) + 1;
+  return { ...doc, _etag: `"${store.etagCounter}"` };
 }

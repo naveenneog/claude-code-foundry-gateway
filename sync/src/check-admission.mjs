@@ -36,10 +36,9 @@ const container = new CosmosClient({ endpoint, aadCredentials: credential })
   .container(containerName);
 
 const query = {
-  query: "SELECT * FROM c WHERE c.type = 'projection-reconciliation-status' AND c.tenantId = @tenantId AND c.accountResourceId = @accountResourceId AND c.databaseName = @databaseName AND c.containerName = @containerName",
+  query: "SELECT * FROM c WHERE c.type = 'projection-reconciliation-status' AND c.tenantId = @tenantId AND c.databaseName = @databaseName AND c.containerName = @containerName",
   parameters: [
     { name: '@tenantId', value: tenantId },
-    { name: '@accountResourceId', value: accountResourceId },
     { name: '@databaseName', value: databaseName },
     { name: '@containerName', value: containerName },
   ],
@@ -53,7 +52,7 @@ while (it.hasMoreResults()) {
 }
 
 const entitlementQuery = {
-  query: "SELECT c.id, c.oid, c.tenantId, c.tier, c.businessUnit, c.mappingVersion, c.effectiveFrom, c.reconciliationGeneration, c.lastVerifiedAt, c.expiresAt FROM c WHERE NOT IS_DEFINED(c.type) OR c.type != 'projection-reconciliation-status'",
+  query: "SELECT c.id, c.oid, c.tenantId, c.tier, c.businessUnit, c.mappingVersion, c.effectiveFrom, c.reconciliationGeneration, c.lastVerifiedAt, c.expiresAt FROM c WHERE NOT IS_DEFINED(c.type)",
   parameters: [],
 };
 const entitlementRecords = [];

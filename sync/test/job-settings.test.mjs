@@ -13,6 +13,7 @@ const good = {
   PROJECTION_STANDARD_GROUP_ID: '10000000-0000-4000-8000-000000000001',
   PROJECTION_PREMIUM_GROUP_ID: 'none',
   PROJECTION_GATEWAY_RESOURCE_ID: '/subscriptions/11111111-1111-4111-8111-111111111111/resourceGroups/rg/providers/Microsoft.ApiManagement/service/apim-p97',
+  PROJECTION_ACCOUNT_RESOURCE_ID: account,
 };
 
 test('a job with its client id, tier groups and gateway is accepted', () => {
@@ -27,6 +28,7 @@ for (const { label, change, setting } of [
   { label: 'admission refuses a job with an empty premium setting', change: { PROJECTION_PREMIUM_GROUP_ID: '' }, setting: 'PROJECTION_PREMIUM_GROUP_ID' },
   { label: 'admission refuses a job with no gateway', change: { PROJECTION_GATEWAY_RESOURCE_ID: undefined }, setting: 'PROJECTION_GATEWAY_RESOURCE_ID' },
   { label: 'admission refuses a job with a gateway that is not API Management', change: { PROJECTION_GATEWAY_RESOURCE_ID: '/subscriptions/11111111-1111-4111-8111-111111111111/resourceGroups/rg/providers/Microsoft.Storage/storageAccounts/stp97' }, setting: 'PROJECTION_GATEWAY_RESOURCE_ID' },
+  { label: 'admission refuses a job with no account resource id', change: { PROJECTION_ACCOUNT_RESOURCE_ID: undefined }, setting: 'PROJECTION_ACCOUNT_RESOURCE_ID' },
   { label: 'admission refuses a job with one group for both tiers', change: { PROJECTION_PREMIUM_GROUP_ID: good.PROJECTION_STANDARD_GROUP_ID }, setting: 'PROJECTION_PREMIUM_GROUP_ID' },
 ]) {
   test(label, () => {

@@ -29,6 +29,18 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P97 round 2 projection sync hardening.** Mutating projection applies now serialize
+  through a Cosmos `projection-apply-lock` document, renew that lease with IfMatch before later
+  writes and the status write, and release it with IfMatch after success or failure. The stale-change
+  guard reads status evidence inside the lock, targets tenant-scoped status evidence rather than a
+  case-sensitive account id, applies a skew margin only to targeted exclusions, refuses stale targeted
+  applies, and skips typed control documents in compare, admission and resolver paths. Mutating applies
+  require a valid account resource id, status documents stamp it in canonical lower case, graph job
+  settings require `PROJECTION_ACCOUNT_RESOURCE_ID`, and documented manual runner applies pass the id
+  from `az cosmosdb show`. The Node writer tests now cover multi-page Cosmos query reads, including
+  an orphan on the last existing-record page, an empty page before a record, and stale-change status
+  evidence on a later page. Targeted applies now rewrite same-tier legacy records that still carry
+  `expiresAt`, and the Node apply CLI tests clean their scratch space outside the repository.
 - **P95 the projection switch runs end to end.** `Invoke-ClaudeProjectionSwitch`
   (`scripts/ClaudeProjectionSwitch.ps1`) takes the renewal receipt and checks every value in it
   before any call, requires the gateway's `entitlement-resolver-url` to be the resolver deployed with

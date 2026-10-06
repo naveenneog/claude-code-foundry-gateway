@@ -48,7 +48,7 @@ test('a fresh entitlement carries its generation but no expiry through the resol
 });
 test('legacy future record expiry is ignored until it passes, while generation and verification freshness are service failures', () => {
   for (const changes of [
-    { expiresAt: lease.expiresAt + 1 }, { expiresAt: undefined },
+    { expiresAt: lease.expiresAt + 1 }, { expiresAt: undefined }, { expiresAt: null }, { expiresAt: 'tomorrow' },
   ]) {
     const r = toEntitlement({ ...doc, ...changes }, { tenantId, now });
     assert.equal(r.ok, true, JSON.stringify(changes));
