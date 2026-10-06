@@ -1,11 +1,23 @@
 # Guided flow
 
-`Start-ClaudeGateway.ps1` is the product path for setup, later changes, status
-and the generated handover guide. It keeps the existing implementation scripts:
-each `scripts/flow/<Step>.ps1` module plans without writing, applies
-non-interactively and verifies its own work.
+This guide covers setup, updates, decision changes, diagnostics and handover through `Start-ClaudeGateway.ps1`.
+## Quickstart
+
+The commands run from the repository root in PowerShell 7 with the [Setup tools and roles](SETUP.md#1-prerequisites) and the intended Azure sign-in. A first attended run reviews the foundation in the installer, then reviews the remaining flow steps ([Attended setup](#attended-setup)).
+
+```powershell
+.\Start-ClaudeGateway.ps1 -Action Setup
+.\Start-ClaudeGateway.ps1 -Action Status
+.\Start-ClaudeGateway.ps1 -Action Guide
+```
+
+**Expected result:** completed steps are recorded in `onboarding/claude-gateway.json`; Status reports the recorded deployment; Guide writes `onboarding/HOW-TO-USE.md`. A failed verification remains a failure and retains its resume information.
 
 ## Run it
+
+<details>
+
+<summary>Details and evidence</summary>
 
 ```powershell
 .\Start-ClaudeGateway.ps1 -Action Setup
@@ -26,7 +38,12 @@ specific and git-ignored. Use `-RecordPath` to use a different record; a relativ
 path is relative to the repository, from `Start-ClaudeGateway.ps1` and the root
 `Update-ClaudeGateway.ps1` alike.
 
+</details>
 ## What the flow asks and why
+
+<details>
+
+<summary>Details and evidence</summary>
 
 Discovery reads only the gateway the record names (`az apim show`), and nothing
 when the record names none. The flow then asks the questions exposed by the step
@@ -41,7 +58,12 @@ modules present on the branch. It never invents resource names.
 | Verification | `Verify.ps1` | Runs the gateway health checks after setup or change. Manual equivalent: [Operations health](OPERATIONS.md#2-check-health-and-headroom). |
 | Guide | `Guide.ps1` | Writes `onboarding/HOW-TO-USE.md` with this tenant's names and the operator/developer/FinOps instructions. |
 
+</details>
 ## Attended setup
+
+<details>
+
+<summary>Details and evidence</summary>
 
 An attended run is `-Action Setup` in a console, without `-PlanOnly`,
 `-ApprovedPlanFingerprint` or `-WhatIf`. With no gateway in the record it has
@@ -119,7 +141,12 @@ so a test can drive an attended run through standard input
 (`tests/Test-FlowStart.ps1`). `CLAUDE_NONINTERACTIVE=1` and `-NonInteractive`
 take precedence over it.
 
+</details>
 ## Review and fingerprint
+
+<details>
+
+<summary>Details and evidence</summary>
 
 After questions, every present module returns a plan. The flow prints one review
 with actions, list-price cost where known, unknown-cost reasons, implications,
@@ -198,7 +225,12 @@ the refusal or the cancel (`System.OperationCanceledException`) as an exception
 and does not exit its caller
 ([U36](UNKNOWNS.md#u36--a-top-level-run-and-an-in-process-call--closed-2026-09-28)).
 
+</details>
 ## Resume after failure
+
+<details>
+
+<summary>Details and evidence</summary>
 
 Questions and plans use proposed decisions in memory, only for the selected
 steps. Status, Guide, discovery and drift checks read applied values. Durable
@@ -234,7 +266,12 @@ skipped. This happens only when the steps present are the recorded ones. When a
 step was added or removed since, for example a new prerequisite of a recorded
 step, the run prints that the steps differ and plans every step again.
 
+</details>
 ## Update
+
+<details>
+
+<summary>Details and evidence</summary>
 
 ```powershell
 .\Start-ClaudeGateway.ps1 -Action Update
@@ -249,7 +286,12 @@ command passes `-Apply` and that fingerprint; the updater takes a named-value
 snapshot before its first write. `-PlanOnly` never applies. See
 [Update and change](UPDATE-AND-CHANGE.md#1-update-an-older-deployment).
 
+</details>
 ## Change one decision
+
+<details>
+
+<summary>Details and evidence</summary>
 
 ```powershell
 .\Start-ClaudeGateway.ps1 -Action Change -Change sku
@@ -399,7 +441,12 @@ local generation from MDM distribution and a developer rerunning setup.
 
 ![The live Change models preview shows each deployment's model, version, SKU, capacity, record status and price status before its fingerprint.](guide/50-model-change-plan.png)
 
+</details>
 ## Diagnose
+
+<details>
+
+<summary>Details and evidence</summary>
 
 ```powershell
 .\Start-ClaudeGateway.ps1 -Action Diagnose
@@ -413,7 +460,12 @@ redacted zip under `onboarding\support\`
 the folder is git-ignored. See [Diagnostics](DIAGNOSE.md) and
 [Troubleshooting](TROUBLESHOOTING.md).
 
+</details>
 ## Status and drift
+
+<details>
+
+<summary>Details and evidence</summary>
 
 ```powershell
 .\Start-ClaudeGateway.ps1 -Action Status
@@ -436,7 +488,12 @@ binding. A removed binding, a portal-only hostname, a non-HTTPS URL or a URL
 with credentials, a query, a fragment or a different port is not accepted as
 that company gateway address.
 
+</details>
 ## Generated guide
+
+<details>
+
+<summary>Details and evidence</summary>
 
 ```powershell
 .\Start-ClaudeGateway.ps1 -Action Guide
@@ -449,7 +506,12 @@ to update, change and diagnose. It is written to `onboarding/HOW-TO-USE.md` and
 is git-ignored. Guide needs a recorded gateway: with none, it stops before
 planning and names `-Action Setup`.
 
+</details>
 ## What the tests hold
+
+<details>
+
+<summary>Details and evidence</summary>
 
 | Suite | What it runs | What it holds |
 |---|---|---|
@@ -464,7 +526,12 @@ runs the same installer cases read-only against the signed-in subscription (each
 case about 20 s, mostly Azure CLI start-up); the reuse case reads the named
 gateway.
 
+</details>
 ## Manual equivalents
+
+<details>
+
+<summary>Details and evidence</summary>
 
 | Guided step | Manual script or guide |
 |---|---|
@@ -475,7 +542,12 @@ gateway.
 | Guide | [Get started](GET-STARTED.md), [Operations](OPERATIONS.md), [Developer setup](../DEVELOPER.md), [FinOps](FINOPS.md) |
 | Status | `scripts\Get-ClaudeGatewayTarget.ps1`, `scripts\Test-ClaudeHealth.ps1`, Azure portal checks in [Operations](OPERATIONS.md) |
 
+</details>
 ## Live proof transcript excerpts
+
+<details>
+
+<summary>Details and evidence</summary>
 
 The P66 core was exercised against an isolated Basic v2 gateway in eastus2,
 using the shared Foundry account only for the gateway managed identity's
@@ -517,3 +589,10 @@ record and was declined at the installer's summary, so nothing was created. The 
 record naming the reference gateway and stopped at the fingerprint prompt with a wrong entry, so
 nothing was written. Names are redacted by `guide/render-terminal.mjs`; the raw transcripts stay
 under private evidence.
+
+</details>
+## Next
+
+- [Update and change](UPDATE-AND-CHANGE.md) covers day-2 lifecycle changes.
+- [Operations](OPERATIONS.md) covers health, backup and routine administration.
+- [Developer setup](../DEVELOPER.md) covers handover consumption.

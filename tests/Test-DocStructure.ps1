@@ -25,7 +25,8 @@ $PermanentReferenceExceptions = @{
 $EnrolledGuides = @(
   'docs\BUSINESS-UNITS.md',
   'docs\DECISIONS.md',
-  'docs\AUTHENTICATION.md'
+  'docs\AUTHENTICATION.md',
+  'docs\GUIDED-FLOW.md'
 )
 
 
