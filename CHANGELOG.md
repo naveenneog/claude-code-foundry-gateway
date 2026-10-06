@@ -29,18 +29,26 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
-- **P97 round 2 projection sync hardening.** Mutating projection applies now serialize
-  through a Cosmos `projection-apply-lock` document, renew that lease with IfMatch before later
-  writes and the status write, and release it with IfMatch after success or failure. The stale-change
-  guard reads status evidence inside the lock, targets tenant-scoped status evidence rather than a
-  case-sensitive account id, applies a skew margin only to targeted exclusions, refuses stale targeted
-  applies, and skips typed control documents in compare, admission and resolver paths. Mutating applies
-  require a valid account resource id, status documents stamp it in canonical lower case, graph job
-  settings require `PROJECTION_ACCOUNT_RESOURCE_ID`, and documented manual runner applies pass the id
-  from `az cosmosdb show`. The Node writer tests now cover multi-page Cosmos query reads, including
-  an orphan on the last existing-record page, an empty page before a record, and stale-change status
-  evidence on a later page. Targeted applies now rewrite same-tier legacy records that still carry
-  `expiresAt`, and the Node apply CLI tests clean their scratch space outside the repository.
+- **P97 Cosmos entitlement persists until a sync changes it, and syncs run on demand.** Projection
+  records no longer expire 7,200 seconds after the scan that wrote them; a sync writes only the records
+  that change ([ADR-0051](docs/adr/0051-persistent-sync-based-cosmos-entitlement.md)). The resolver
+  refuses a record with an invalid generation or verification time, and a record that still carries a
+  past `expiresAt` from before ADR-0051; the next full or targeted sync rewrites it.
+  `scripts/Sync-ClaudeAccess.ps1 -User <upn-or-object-id>` publishes one developer's change through the
+  in-VNet runner, using Microsoft Graph `checkMemberGroups`; without `-User` it syncs everyone, and
+  `-Store auto` follows the gateway's `entitlement-source`. `sync/src/apply-projection.mjs` is the one
+  Cosmos writer: every apply that writes takes a lease lock in the container, reads records and sync
+  statuses inside it, requires `--account-resource-id`, and refuses a snapshot older than a sync that
+  already covered it; a full sync leaves alone the people a newer targeted sync changed. Every refusal
+  names a remedy. `scripts/Sync-ClaudeProjection.ps1` only exports snapshots; its direct Cosmos writes,
+  `-AllowEmpty` and `-KeepOrphans` are removed. The switch (`scripts/Deploy-ClaudeProjection.ps1
+  -FlipAfterCleanCompare`) admits a gateway on a successful full sync within 24 hours for its Cosmos
+  account and tenant, with no record the resolver would refuse; it needs no job and no receipt. The sync
+  job is optional and manual unless `-CronExpression` is passed. The runner starts when it has stopped.
+  The deployer creates the resolver's service principal, refuses a `-Location` other than an existing
+  Cosmos account's, compares a new gateway with the snapshot it applied, and records
+  `entitlement-projection-prefix`, also on a gateway that served from a projection before P97
+  ([P97 status](docs/status/P97.md#p97-cosmos-entitlement-persists-until-a-sync-changes-it-2026-10-05)).
 - **P95 the projection switch runs end to end.** `Invoke-ClaudeProjectionSwitch`
   (`scripts/ClaudeProjectionSwitch.ps1`) takes the renewal receipt and checks every value in it
   before any call, requires the gateway's `entitlement-resolver-url` to be the resolver deployed with

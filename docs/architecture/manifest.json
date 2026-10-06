@@ -35,7 +35,7 @@
         "scripts/flow/Foundation.ps1": "fb0d43ee4fbe00a140410bf3f9594b1a6d43bc4f226748f8231c6f23743c7ed4",
         "scripts/flow/Guide.ps1": "73bb63882ee1726fd8528e5e3045ecf6fd57a89dfa82a32f6e190cd2494461db",
         "scripts/flow/Verify.ps1": "7a8b05c6848499a8fbc26d87c90f4f3bfaa899538eeb1e6c068dd7bedda847fa",
-        "sync/src/apply-projection.mjs": "a8224ce1fa518542cc9df12dd4e1ea2104a87947009474065e19570bd8b328c6"
+        "sync/src/apply-projection.mjs": "c8d85962af7b77ea4c397d726cfa0125008963b8332c4b1ce73c6b63c9e7c09f"
       },
       "outputs": [
         {
@@ -149,7 +149,7 @@
         "scripts/Sync-ClaudeProjection.ps1": "0c11b5be3d458586d560f455c35c6f187a7f2caf1caa44f9d0c6b90b61dee948",
         "sync/Dockerfile": "80ab80a331c8b97f903c30cf714cedfcc9969b8d8c24be0c58777ac7c7f3b382",
         "sync/src/apply-lock.mjs": "dda5ec2796f0ac646886ffba04ee195cecc4dedcc34a85a7603a59d5c182bf65",
-        "sync/src/apply-projection.mjs": "a8224ce1fa518542cc9df12dd4e1ea2104a87947009474065e19570bd8b328c6",
+        "sync/src/apply-projection.mjs": "c8d85962af7b77ea4c397d726cfa0125008963b8332c4b1ce73c6b63c9e7c09f",
         "sync/src/business-units.mjs": "45df91c836676e6ad32a2d1b7f730c51b01e4210a22b716ce118c8bc6298ff31",
         "sync/src/check-admission.mjs": "1b2d476adf8363d658a4cc7feb8165aabb1a582bd2fa2fcffca4497256905bf5",
         "sync/src/events.mjs": "4e2fae2fb8370d83c3bb798d8bd6f22d9db501c3a8730f8283bdab30bcb9db3f",
