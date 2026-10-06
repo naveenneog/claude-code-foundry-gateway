@@ -8,6 +8,7 @@
 # ConvertTo-ClaudeArmRegionName: az apim show gives 'East US 2'; ARM, the Retail Prices API and the usage
 # reads take 'eastus2' (as Install-ClaudeGateway.ps1 converts an existing gateway's region).
 . (Join-Path $PSScriptRoot 'ClaudeGatewayRegion.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeEntitlementGroups.ps1')
 
 function Test-ClaudeMigrationGuid([AllowEmptyString()][string]$Value) {
     return ([string]$Value -match '^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$')
@@ -17,26 +18,6 @@ function Test-ClaudeMigrationGuid([AllowEmptyString()][string]$Value) {
 function ConvertFrom-ClaudeEntitlementList([AllowEmptyString()][string]$Value) {
     return @(([string]$Value -split ',') | ForEach-Object { $_.Trim().ToLowerInvariant() } |
         Where-Object { Test-ClaudeMigrationGuid $_ } | Select-Object -Unique)
-}
-
-# entitlement-groups (ADR-0054): 'standard=<object id>,premium=<object id>|none'. Only object ids, so the
-# value passes az.cmd and cmd.exe unchanged; names are read back from Graph.
-function ConvertFrom-ClaudeEntitlementGroups([AllowEmptyString()][string]$Value) {
-    $result = @{}
-    foreach ($pair in ([string]$Value -split ',')) {
-        if ($pair -match '^\s*(standard|premium)=([0-9a-fA-F-]{36}|none)\s*$') {
-            $id = $Matches[2].ToLowerInvariant()
-            if ($id -eq 'none' -or (Test-ClaudeMigrationGuid $id)) { $result[$Matches[1]] = $id }
-        }
-    }
-    return $result
-}
-
-function ConvertTo-ClaudeEntitlementGroups([Parameter(Mandatory)][string]$StandardId, [AllowEmptyString()][string]$PremiumId) {
-    if (-not (Test-ClaudeMigrationGuid $StandardId)) { throw "entitlement-groups needs the standard group's object id, not '$StandardId'." }
-    $premium = if ($PremiumId) { $PremiumId } else { 'none' }
-    if ($premium -ne 'none' -and -not (Test-ClaudeMigrationGuid $premium)) { throw "entitlement-groups needs the premium group's object id or none, not '$PremiumId'." }
-    return "standard=$($StandardId.ToLowerInvariant()),premium=$($premium.ToLowerInvariant())"
 }
 
 # The first candidate that Graph finds wins. A candidate 'none' says the tier has no group. A value the operator

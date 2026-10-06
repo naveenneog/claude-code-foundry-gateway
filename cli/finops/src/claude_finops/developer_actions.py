@@ -121,7 +121,7 @@ def developer_change(engine, config, target, *, tier=None, unit=None, remove=Fal
             plan["publication_path"] = "Turnstile delegated publish-as-admin"
         else:
             plan["publication"] = bridge._bridge("developer_publish", standard_group=tiers["standard"],
-                                                 premium_group=tiers["premium"], **allow_empty)
+                                                 premium_group=tiers["premium"], user=person["id"], **allow_empty)
             plan["publication_path"] = "Direct selected-scope membership refresh and tier allow-list sync"
         plan["preview"] = False
         plan["gateway_ready"] = "The developer can call the gateway after APIM named-value publication and gateway cache propagation."

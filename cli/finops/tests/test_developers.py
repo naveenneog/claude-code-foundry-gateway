@@ -208,9 +208,28 @@ def remove_with(client):
 
 def test_removal_of_one_of_several_tier_members_publishes_without_allow_empty():
     _, publish, _ = remove_with(FakeDeveloperClient(direct={STANDARD}, group_members={STANDARD: {USER, "other-user"}}))
+    assert publish["user"] == USER
     assert "allow_empty_standard" not in publish
     assert "allow_empty_premium" not in publish
     assert "allow_empty" not in publish
+
+
+def test_direct_developer_publication_keeps_published_tier():
+    from claude_finops.developer_actions import developer_change
+    client = FakeDeveloperClient()
+    engine = FakeDeveloperEngine(client)
+    original = engine.backend._bridge
+
+    def bridge(action, body=None, **params):
+        result = original(action, body=body, **params)
+        if action == "developer_publish":
+            result["published_tier"] = "premium"
+        return result
+
+    engine.backend._bridge = bridge
+    result = developer_change(engine, object(), "dev@contoso.com", tier="premium", apply=True)
+    assert result["publication"]["published_tier"] == "premium"
+    assert engine.backend.calls[-1][1]["user"] == USER
 
 
 def test_removal_of_last_member_of_changed_tier_publishes_scoped_allow_empty():

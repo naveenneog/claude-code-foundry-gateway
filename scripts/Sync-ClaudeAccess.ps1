@@ -40,21 +40,16 @@ param(
     [switch]$AllowEmptyPremium,
     [switch]$WhatIf,
     [ValidateSet('auto','named-value','projection')][string]$Store = 'auto',
-    [string]$User
+    [string]$User,
+    [switch]$RecordGroups
 )
 
 $ErrorActionPreference = 'Stop'
 
-# The groups recorded for this gateway, then the default names. A fixed default published the
-# tenant's claude-code-* groups to a gateway installed with other group names.
-if (-not $StandardGroup) { $StandardGroup = [string](& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') StandardGroup -ForApimName $ApimName 3>$null) }
-if (-not $PremiumGroup) { $PremiumGroup = [string](& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') PremiumGroup -ForApimName $ApimName 3>$null) }
-if (-not $StandardGroup) { $StandardGroup = 'claude-code-standard' }
-if (-not $PremiumGroup) { $PremiumGroup = 'claude-code-premium' }
-
 . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
 
 . (Join-Path $PSScriptRoot 'ClaudeGraphMembership.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeEntitlementGroups.ps1')
 
 function Invoke-ClaudeProjectionAccessSync {
     param(
@@ -137,9 +132,46 @@ if ($selectedStore -eq 'auto') {
     $source = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-source' -FailOnError
     $selectedStore = if ($source -eq 'projection') { 'projection' } else { 'named-value' }
 }
-if ($User -and $selectedStore -eq 'named-value') { throw '-User cannot be used with -Store named-value because named values are rewritten whole.' }
+
+$graphToken = Get-GraphToken
+$groupResolution = Resolve-ClaudeEntitlementGroupsForSync -ResourceGroup $ResourceGroup -ApimName $ApimName -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup `
+    -GetNamedValue { param($Id) Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id $Id -FailOnError } `
+    -FindGroup { param($Value) Get-ClaudeGraphGroup -GroupName $Value -Token $graphToken }
+
+function Assert-RecordGroupChangeAllowed {
+    param([string]$Tier, [string]$Explicit, [string]$Recorded, [string]$Resolved)
+    if (-not $Explicit -or -not $Recorded) { return }
+    if ([string]::Equals($Recorded, $Resolved, [StringComparison]::OrdinalIgnoreCase)) { return }
+    if ($RecordGroups) { return }
+    $switch = if ($Tier -eq 'standard') { '-StandardGroup' } else { '-PremiumGroup' }
+    throw "The gateway records $Tier group '$Recorded' in entitlement-groups, but $switch resolved to '$Resolved'. Remedy: rerun with -RecordGroups to replace entitlement-groups after a successful sync. Nothing was written."
+}
+Assert-RecordGroupChangeAllowed -Tier standard -Explicit $StandardGroup -Recorded ([string]$groupResolution.Recorded['standard']) -Resolved ([string]$groupResolution.Standard.Id)
+Assert-RecordGroupChangeAllowed -Tier premium -Explicit $PremiumGroup -Recorded ([string]$groupResolution.Recorded['premium']) -Resolved ([string]$groupResolution.Premium.Id)
+
+$StandardGroup = [string]$groupResolution.Standard.Argument
+$PremiumGroup = [string]$groupResolution.Premium.Argument
+$targetUserOid = if ($User) { Resolve-ClaudeGraphUserObjectId -Identity $User -Token $graphToken } else { '' }
+
+function Get-ClaudeNamedValueTierForUser {
+    param([string]$UserObjectId, [string]$StandardList, [string]$PremiumList)
+    $needle = ",$($UserObjectId.ToLowerInvariant()),"
+    if (([string]$PremiumList).ToLowerInvariant().Contains($needle)) { return 'premium' }
+    if (([string]$StandardList).ToLowerInvariant().Contains($needle)) { return 'standard' }
+    return 'none'
+}
+
+function Set-ClaudeEntitlementGroupsIfNeeded {
+    if ($WhatIf) { return }
+    $wanted = ConvertTo-ClaudeEntitlementGroups -StandardId ([string]$groupResolution.Standard.Id) -PremiumId ([string]$groupResolution.Premium.Id)
+    if ($RecordGroups -or -not $groupResolution.Raw -or $groupResolution.Raw -ne $wanted) {
+        Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-groups' -Value $wanted
+    }
+}
+
 if ($selectedStore -eq 'projection') {
     Invoke-ClaudeProjectionAccessSync -ApimName $ApimName -ResourceGroup $ResourceGroup -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -User $User -AllowEmpty:$AllowEmpty -WhatIf:$WhatIf
+    Set-ClaudeEntitlementGroupsIfNeeded
     return
 }
 
@@ -172,8 +204,6 @@ $seen = @{}
 # Every value is resolved and checked against the 4,096-character limit before the first write, so a list
 # that does not fit leaves every named value as it was, rather than some lists refreshed beside others stale.
 $pendingWrites = [Collections.Generic.List[object]]::new()
-$graphToken = Get-GraphToken
-
 foreach ($t in $tiers) {
     $members = @(Get-GroupMemberOids -GroupName $t.Group -Token $graphToken)
 
@@ -306,6 +336,16 @@ else {
 
 foreach ($write in $pendingWrites) { Test-ApimNamedValueLength -Id $write.Id -Value $write.Value }
 foreach ($write in $pendingWrites) { Set-NamedValue -Id $write.Id -Value $write.Value }
+Set-ClaudeEntitlementGroupsIfNeeded
+
+if ($targetUserOid) {
+    $standardList = if ($WhatIf) { [string]@($pendingWrites | Where-Object Id -eq 'allow-standard' | Select-Object -First 1).Value } else { Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'allow-standard' -FailOnError }
+    $premiumList = if ($WhatIf) { [string]@($pendingWrites | Where-Object Id -eq 'allow-premium' | Select-Object -First 1).Value } else { Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'allow-premium' -FailOnError }
+    $publishedTier = Get-ClaudeNamedValueTierForUser -UserObjectId $targetUserOid -StandardList $standardList -PremiumList $premiumList
+    Write-Host "Developer tier as written: $publishedTier" -ForegroundColor Green
+    if ($publishedTier -eq 'none') { Write-Host 'Graph membership changes can take time to appear in reads, so a just-changed user may report none until Graph catches up.' -ForegroundColor DarkGray }
+    [pscustomobject]@{ published_tier = $publishedTier; user = $targetUserOid }
+}
 
 Write-Host "Done. $($seen.Count) identity(ies) authorised." -ForegroundColor Green
 Write-Host "Anyone not listed receives HTTP 403 from the gateway." -ForegroundColor DarkGray
