@@ -62,7 +62,16 @@ function Run-Suite($suite) {
     Push-Location $sandbox
     try {
         if ($suite -eq 'node') {
-            node --test --test-timeout=1500 --test-reporter=tap resolver/test/*.test.mjs sync/test/*.test.mjs *> $suiteLog
+            # Unit tests keep the short timeout that catches a mutant that hangs. The two CLI files start a
+            # process per case; Node 22 (the hosted runner) applies the timeout to a whole file, so they run
+            # second with room for that, and --test-force-exit still stops a mutant that leaves a handle open.
+            $cli = @('apply-projection-cli.test.mjs', 'check-admission-cli.test.mjs')
+            $unit = @(Get-ChildItem -LiteralPath 'resolver/test', 'sync/test' -Filter '*.test.mjs' -File | Where-Object { $_.Name -notin $cli } | ForEach-Object { $_.FullName })
+            node --test --test-timeout=1500 --test-reporter=tap @unit *> $suiteLog
+            $code = $LASTEXITCODE
+            node --test --test-timeout=120000 --test-force-exit --test-reporter=tap sync/test/apply-projection-cli.test.mjs sync/test/check-admission-cli.test.mjs *>> $suiteLog
+            if ($LASTEXITCODE) { $code = $LASTEXITCODE }
+            return $code
         } else { pwsh -NoProfile -File tests\Test-ProjectionRules.ps1 *> $suiteLog }
         return $LASTEXITCODE
     } finally { Pop-Location }
