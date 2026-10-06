@@ -6,8 +6,23 @@ unit is the owner of that budget.
 This page covers adding one, setting and changing its budget, moving people
 between them, and removing one. The decision behind the design is in
 [ADR-0007](adr/0007-business-unit-model.md).
+## Quickstart
+
+The commands run from the repository root in PowerShell 7. The operator has the gateway governance authority described in [Choose where changes are authored](#choose-where-changes-are-authored). The example below uses `platform` as the lower-case business-unit identifier and `claude-code-standard` as the Entra security group.
+
+```powershell
+.\scripts\Set-ClaudeBusinessUnit.ps1 -List
+.\scripts\Set-ClaudeBusinessUnit.ps1 -Id platform -Group 'claude-code-standard' -MonthlyBudgetUsd 5000
+.\scripts\Sync-ClaudeAccess.ps1
+```
+
+**Expected result:** the list shows the current registry; the add command records the unit and token budget; the sync publishes current membership to the gateway's active store. A fresh entitled request and [spend report](#seeing-what-has-been-spent) verify the applied mapping.
 
 ## What a business unit is
+
+<details>
+
+<summary>Definition and registry fields</summary>
 
 An **Entra security group** with a **monthly budget**.
 
@@ -21,7 +36,12 @@ Membership comes from the group, so moving a developer between business units is
 done in Entra and picked up by the sync. There is no separate roster to keep in
 step.
 
+</details>
 ## Choose where changes are authored
+
+<details>
+
+<summary>Governance authority rules</summary>
 
 `Set-ClaudeBusinessUnit.ps1` reads the gateway's `turnstile-integration` before
 mutating it. If Turnstile owns governance, creates, updates and removals are
@@ -45,7 +65,12 @@ Both switches are needed to return both authorities; Connect otherwise preserves
 the existing budget authority. Raw portal or Azure CLI writes are not guarded
 and can still be overwritten.
 
+</details>
 ## Budget modes
+
+<details>
+
+<summary>Enforcement modes and measured limits</summary>
 
 The platform admin chooses an enforcement mode for each unit or team. A missing
 mode means **strict**, preserving the existing behavior. A zero-token budget
@@ -138,7 +163,12 @@ admission above base and refusal above the effective quota, not a zero-overshoot
 non-blocking scope follows from skipping the limiter, which both policy
 expressions and mutation tests exercise.
 
+</details>
 ## Teams, and how they relate to tiers
+
+<details>
+
+<summary>Teams, tiers and Entra hierarchy</summary>
 
 A **team** is a business unit that names a parent. A request is charged to the
 team **and** to the business unit above it — two counters, both monthly, both
@@ -155,14 +185,14 @@ Both are expressed the same way: **one Entra group nested inside another**.
 ```
 claude-bu-mcaps                     business unit, budget
 ├── claude-team-ites-1              team, own budget, charged to MCAPS too
-│   ├── Naveen Gopalakrishna
-│   └── Saurabh Seth
+│   ├── developer-one@contoso.com
+│   └── developer-two@contoso.com
 └── claude-team-ites-2              team, own budget, charged to MCAPS too
-    ├── Nived Velayudhan
-    └── Vraja Kishore Mudumbai
+    ├── developer-three@contoso.com
+    └── developer-four@contoso.com
 
 claude-bu-gbb                       business unit with direct members, no team
-└── Somnath Banerjee
+└── developer-five@contoso.com
 
 claude-code-standard                tier: which models, personal budget
 ├── claude-team-ites-1              → everyone in ITES 1 is standard
@@ -233,7 +263,7 @@ through the team, and a person added to the tier row gets it directly.
 
 `claude-code-premium` holds one team and one service principal:
 
-![The claude-code-premium group, Members tab, showing two members: claude-team-ites-2 of type Group and claude-code-dev-bob of type Service principal](guide/entra-8-tier-premium-members.png)
+![The claude-code-premium group, Members tab, showing two members: claude-team-ites-2 of type Group and claude-code-dev-sp of type Service principal](guide/entra-8-tier-premium-members.png)
 
 That second row is a workload identity, not a person, so its name is not masked.
 A build agent or scheduled job authenticates as a service principal and needs a
@@ -345,7 +375,12 @@ empty parent:
 Removing a business unit promotes its teams to top level rather than leaving them
 pointing at something that is gone.
 
+</details>
 ## Read this before you quote a number
+
+<details>
+
+<summary>Measurement and pricing limits</summary>
 
 The budget is a **spend guide, not an accounting figure**, and there are two
 measured reasons why.
@@ -391,7 +426,12 @@ that conversion, so none of this reconciles to an invoice. See `U2` in
 Every command repeats these caveats in its own output, so nobody reads a number
 without them.
 
+</details>
 ## Managing it all in one place
+
+<details>
+
+<summary>AUM and pipeline entry points</summary>
 
 Most chargeback work is a short session — add a team, move two people into it,
 check the budget — and doing that as five separate commands means remembering
@@ -431,7 +471,12 @@ sync on the way out.
 For pipelines, call the commands directly — the console refuses cleanly when
 there is no terminal and names the command for each option.
 
+</details>
 ## Adding a business unit
+
+<details>
+
+<summary>Create command and identifier rules</summary>
 
 The installer offers to create your first ones at the end of a run, once the
 Entra groups exist. It creates the group for you and then calls the same command
@@ -475,7 +520,12 @@ that spend still stops.
 Creating one needs both `-Group` and `-MonthlyBudgetUsd`. After that, either can
 be changed on its own.
 
+</details>
 ## Listing them
+
+<details>
+
+<summary>List command and output</summary>
 
 ```powershell
 ./scripts/Set-ClaudeBusinessUnit.ps1 -List
@@ -483,7 +533,12 @@ be changed on its own.
 
 ![Listing business units with their groups, token budgets and approximate dollar value](guide/bu-2-list.png)
 
+</details>
 ## Changing a budget
+
+<details>
+
+<summary>Budget and group edits</summary>
 
 Pass the identifier and the new figure. The group is left alone.
 
@@ -499,7 +554,12 @@ by mistake is visible in the terminal rather than only in the audit log.
 To point a unit at a different Entra group, pass `-Group` instead. To change
 both, pass both.
 
+</details>
 ## Moving people between business units
+
+<details>
+
+<summary>Membership sync behavior</summary>
 
 Membership is group membership. Add or remove the developer in Entra, then run
 the sync:
@@ -521,7 +581,12 @@ sync **refuses to overwrite it** and says so. That guard exists because the
 entitlement lists were once silently emptied by exactly this, and the symptom —
 spend landing on no budget — is invisible until someone reconciles a report.
 
+</details>
 ## Seeing what has been spent
+
+<details>
+
+<summary>Spend report source</summary>
 
 ```powershell
 ./scripts/Get-ClaudeBusinessUnit.ps1
@@ -533,7 +598,12 @@ Spend comes from the [chargeback ledger](adr/0006-ledger-is-the-llm-log.md), whi
 is the built-in API Management LLM log joined to the caller. `-AsJson` gives the
 same data for a dashboard, and `-Days` overrides the default of month-to-date.
 
+</details>
 ## Developers with no business unit
+
+<details>
+
+<summary>Unassigned behavior</summary>
 
 Anyone entitled but not in a business-unit group is **unassigned**. What happens
 to them is set by `bu-unassigned`, one of the gateway's named values — API
@@ -555,7 +625,12 @@ az apim nv update -g <rg> --service-name <apim> `
     --named-value-id bu-unassigned --value deny
 ```
 
+</details>
 ## Removing one
+
+<details>
+
+<summary>Removal behavior</summary>
 
 ```powershell
 ./scripts/Set-ClaudeBusinessUnit.ps1 -Id research -Remove
@@ -567,7 +642,12 @@ Its members become unassigned at the next sync. Their history in the ledger keep
 the identifier they spent under, because the ledger records the unit that was in
 force at the time rather than looking it up later.
 
+</details>
 ## When a budget runs out
+
+<details>
+
+<summary>Refusal response and soft cap</summary>
 
 The gateway returns `403` in Anthropic's error shape, naming the business unit:
 
@@ -588,7 +668,12 @@ requests can temporarily exceed a configured limit, so it bounds spend rather
 than guaranteeing it. Combined with the cache blind spot above, it should not be
 described to a budget holder as a hard stop.
 
+</details>
 ## Limits worth knowing
+
+<details>
+
+<summary>Store and reporting limits</summary>
 
 | | |
 |---|---|
@@ -600,6 +685,7 @@ described to a budget holder as a hard stop.
 The membership ceiling is the same one entitlement already has, and
 [ROADMAP.md](ROADMAP.md) `P19` replaces the store.
 
+</details>
 ## Related
 
 - [ADR-0007](adr/0007-business-unit-model.md) — why a group rather than a directory attribute

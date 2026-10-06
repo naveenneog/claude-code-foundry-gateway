@@ -23,7 +23,7 @@ $PermanentReferenceExceptions = @{
 }
 
 $EnrolledGuides = @(
-
+  'docs\BUSINESS-UNITS.md'
 )
 
 
