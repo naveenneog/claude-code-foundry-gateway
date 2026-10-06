@@ -84,23 +84,34 @@ Option 1. It is the only option that adds no resource and no credential path.
   as base64url, and splits it into parts that fit one exec command under 5,000 characters.
 - **Parts.** Each part is written to its own file in a new directory, `.xfer-<16 hex>`, next to the
   destination, with `writeFileSync`. A retry rewrites the same file. A part counts as written only when
-  its exec prints `ok <index> <length>`, with the part's own index and length.
+  its exec prints `ok <index> <length>`, with the part's own index and length. The length is printed as a
+  string and the check ignores terminal colour codes: the runner runs each exec in a terminal, where
+  `console.log` colours a number. The first live run (2026-10-06) failed every part on that colouring.
 - **Parallelism.** At most 16 parts are in flight at once (`-Parallel`, 1 to 24). Each part is its own
   `az container exec` process, started from a runspace pool. The measured throughput levels off between
-  16 and 24.
+  16 and 24. An exec that has not returned after 120 seconds (`-ExecTimeoutSeconds`) is stopped and
+  its part retried.
 - **Retries.** A failed part is retried, for at most 3 attempts. The waits are 2 seconds, then 4 seconds.
-  A part that fails 3 times stops the transfer. The part directory is removed, and nothing is assembled.
+  A part that fails 3 times stops the transfer. The execs still in flight are stopped, the part directory
+  is removed, and nothing is assembled.
 - **Assembly.** One exec reads the parts in name order and checks their count and total length. It decodes
   and decompresses them, writes the destination, removes the part directory, and prints the SHA-256 of what
   it wrote. The caller compares that hash with the local file's SHA-256, as before.
 - **Deadline.** Before the first exec, the transfer is estimated as (waves + 2) times the measured mean
   time per exec at the chosen parallelism (10.9 s at 16). A wave is the number of parts divided by the
-  parallelism, rounded up. A transfer estimated to end after the apply-by time is refused.
-  During the transfer, the measured rate projects the end after each completed wave. If the projected end
-  falls after the apply-by time, the transfer stops: the part directory is removed and nothing is written.
+  parallelism, rounded up. Ten minutes before the apply-by time are kept for the steps after the
+  transfer (`-ReserveSeconds 600`): unpacking, installing, and the writer's read of the projection, after
+  which it checks the apply-by time before its first write. A transfer estimated to end inside those ten
+  minutes is refused. During the transfer, the projected end is checked about four times a second: from
+  the measured rate after the first wave, and from the measured time per exec before it, so a stalled
+  transfer is also caught. If the projected end falls inside the ten minutes, the transfer stops: the
+  execs in flight are stopped, the part directory is removed and nothing is written.
+- **Progress.** A transfer estimated at a minute or more prints its parts and minutes before it starts,
+  and its progress about once a minute. A shorter transfer prints nothing.
 - **In-process fallback.** When `az` resolves to a PowerShell function or alias, as in the offline tests,
   runspaces cannot see it. Parts are then sent one at a time in-process, with the same protocol, checks and
-  retries.
+  retries. This path has no exec timeout: a call into a PowerShell function cannot be stopped from the same
+  thread.
 - **Command characters.** Every command follows the existing rules: no space inside the program, and no
   `"`, `%`, `+`, `&`, `|`, `<`, `>` or `^`. The programs also contain no `!`, which `cmd.exe` changes when
   delayed expansion is on.

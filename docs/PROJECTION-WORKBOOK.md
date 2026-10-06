@@ -208,7 +208,7 @@ pwsh -NoProfile -File .\scripts\Deploy-ClaudeProjection.ps1 `
   -FlipAfterCleanCompare -CompareBaseline Snapshot
 ```
 
-A rollback to named values cannot hold this population. The snapshot travels through the runner at about 1 KB a second: about 40,000 developers fit in its 2-hour apply-by time, and a larger transfer is refused before it starts. ROADMAP packet P99 plans a directory-scale transfer.
+A rollback to named values cannot hold this population. The snapshot travels to the runner gzip-compressed, in parts sent 16 at a time ([ADR-0053](adr/0053-parallel-compressed-runner-transfer.md)); the 500,000-developer measurement is in [P99 status](status/P99.md#live-run). A transfer that cannot end 10 minutes before the snapshot's 2-hour apply-by time is refused before it starts.
 
 Sources: [ADR-0052](adr/0052-cosmos-default-installer.md), `scripts/ClaudeProjectionSwitch.ps1`, `scripts/ClaudeRunner.ps1`.
 

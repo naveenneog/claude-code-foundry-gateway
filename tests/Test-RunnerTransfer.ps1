@@ -43,6 +43,11 @@ if ($part -and $fault -match "^transient:${part}:(\d+)$") {
     $seen = if (Test-Path -LiteralPath $counter) { [int](Get-Content -LiteralPath $counter -Raw) } else { 0 }
     if ($seen -lt [int]$Matches[1]) { Set-Content -LiteralPath $counter -Value ($seen + 1); Done 'ERROR: simulated transient failure' 1 }
 }
+# An exec that never returns: the first attempt of this part waits far longer than the test's exec timeout.
+if ($part -and $fault -eq "hang:$part") {
+    $counter = Join-Path $LogDir "hang-$part.count"
+    if (-not (Test-Path -LiteralPath $counter)) { Set-Content -LiteralPath $counter -Value 1; [Threading.Thread]::Sleep(60000) }
+}
 if ($part -and $fault -eq "always:$part") { Done 'ERROR: simulated failure' 1 }
 if ($part -and $fault -eq "noack:$part") { Done '' 0 }
 if ($part -and $fault -eq "drop:$part" -and $Command -match "f\.writeFileSync\(p,'([A-Za-z0-9_-]*)'\)") { Done "ok $part $($Matches[1].Length)" 0 }
@@ -283,6 +288,20 @@ exit 97
         Assert 'in parallel a part that fails 3 times stops the transfer with nothing assembled' (
             $CapturedError -match 'part 2 of \d+' -and @($records | Where-Object { $_.command -match 'gunzipSync' }).Count -eq 0 -and
             @(Get-ChildItem -LiteralPath $work -Force -Filter '.xfer-*').Count -eq 0) $CapturedError
+        Reset-Runner
+        $env:P99_FAULT = 'hang:000002'
+        $timer = [Diagnostics.Stopwatch]::StartNew()
+        Capture { Send-RunnerFile -ResourceGroup rg-p99 -Name aci-projtest-p99 -Path $source -Destination /work/snapshot.json -ChunkSize 1200 -Parallel 4 -ExecTimeoutSeconds 10 }
+        $timer.Stop()
+        Assert 'an exec that does not return within the exec timeout is stopped and its part retried' (
+            -not $CapturedError -and $CapturedResult.Retries -ge 1 -and $timer.Elapsed.TotalSeconds -lt 55 -and
+            (Get-Sha256 ([IO.File]::ReadAllBytes((Join-Path $work 'snapshot.json')))) -eq $sourceSha) "$CapturedError retries=$($CapturedResult.Retries) seconds=$([int]$timer.Elapsed.TotalSeconds)"
+        Reset-Runner
+        $env:P99_FAULT = 'hang:000001'
+        $stallStart = [DateTimeOffset]::UtcNow
+        Capture { Send-RunnerFile -ResourceGroup rg-p99 -Name aci-projtest-p99 -Path $source -Destination /work/snapshot.json -ChunkSize 1200 -Parallel 1 -ExecTimeoutSeconds 40 -Deadline $stallStart.AddSeconds(25) -ReserveSeconds 0 -SecondsPerExec 0.5 }
+        Assert 'a transfer that stalls is stopped when its apply-by time comes into reach, without waiting for the stalled exec' (
+                $CapturedError -match 'Stopped sending' -and ([DateTimeOffset]::UtcNow - $stallStart).TotalSeconds -lt 35) "$CapturedError seconds=$([int]([DateTimeOffset]::UtcNow - $stallStart).TotalSeconds)"
     }
     finally { $env:PATH = $savedPath; $env:P99_WORK = ''; $env:P99_LOGDIR = '' }
 

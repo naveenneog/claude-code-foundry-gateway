@@ -261,6 +261,17 @@ function ConvertTo-ClaudeRunnerGzip([byte[]]$Bytes) {
     return ,$buffer.ToArray()
 }
 
+# Ends the processes of one exec. The part's file path is unique to the transfer and the part, and every
+# process of the exec (cmd.exe, the Azure CLI's python, a test's fake) carries it on its command line.
+# PowerShell's Stop() alone waits for a child process that still holds the output pipe.
+function Stop-ClaudeRunnerExecProcess([string]$Needle) {
+    $ids = if ($IsWindows -or $PSVersionTable.PSEdition -eq 'Desktop') {
+        @(Get-CimInstance Win32_Process -Filter ("CommandLine LIKE '%{0}%'" -f $Needle) -ErrorAction SilentlyContinue | ForEach-Object { $_.ProcessId })
+    }
+    else { @(Get-Process | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($Needle) } | ForEach-Object { $_.Id }) }
+    foreach ($id in $ids) { if ($id -ne $PID) { Stop-Process -Id $id -Force -ErrorAction SilentlyContinue } }
+}
+
 function Send-RunnerFile {
     param(
         [Parameter(Mandatory)][string]$ResourceGroup,
@@ -277,6 +288,8 @@ function Send-RunnerFile {
         [ValidateRange(0, 3600)][int]$ReserveSeconds = 600,
         [ValidateRange(1, 24)][int]$Parallel = 16,
         [ValidateRange(1, 5)][int]$Attempts = 3,
+        # An exec that has not returned after this long is stopped and its part retried (parallel path only).
+        [ValidateRange(10, 3600)][int]$ExecTimeoutSeconds = 120,
         # The mean time of one exec at the parallelism used; by default the measured value.
         [double]$SecondsPerExec
     )
@@ -340,13 +353,20 @@ function Send-RunnerFile {
             [int][Math]::Floor(100 * $state.Done / $parts), [Math]::Ceiling(($parts - $state.Done) / $rate / 60), $rate)
         $state.ReportedAt = $now
     }
-    # After the first wave, the measured rate projects the end of the transfer.
+    # The measured rate projects the end of the transfer. Until the first wave has finished there is no rate,
+    # so the remaining waves are counted at the measured time per exec, as the estimate before the first exec.
     $pace = {
-        if ($null -eq $applyBy -or $state.Done -lt $effective) { return }
+        if ($null -eq $applyBy) { return }
         $now = Get-ClaudeRunnerNow
         $elapsed = [Math]::Max(($now - $partsStarted).TotalSeconds, 0.001)
-        $state.Rate = $state.Done / $elapsed
-        $state.End = $now.AddSeconds(($parts - $state.Done) / $state.Rate + $elapsed / $state.Done * $effective)
+        if ($state.Done -lt $effective) {
+            $state.Rate = $state.Done / $elapsed
+            $state.End = $now.AddSeconds(([int][Math]::Ceiling(($parts - $state.Done) / $effective) + 1) * $SecondsPerExec)
+        }
+        else {
+            $state.Rate = $state.Done / $elapsed
+            $state.End = $now.AddSeconds(($parts - $state.Done) / $state.Rate + $elapsed / $state.Done * $effective)
+        }
         if ($state.End.AddSeconds($ReserveSeconds) -gt $applyBy) { $state.Late = $true }
     }
     if (-not $azPath) {
@@ -374,6 +394,12 @@ function Send-RunnerFile {
         $running = [Collections.Generic.List[object]]::new()
         $pool = [runspacefactory]::CreateRunspacePool(1, $effective)
         $pool.Open()
+        $stopShell = {
+            param($Item)
+            Stop-ClaudeRunnerExecProcess -Needle ("$partDir/" + $Item.Index.ToString('000000'))
+            try { $null = $Item.Shell.Stop() } catch { $null = $_ }
+            $Item.Shell.Dispose()
+        }
         try {
             while ((-not $state.Late -and -not $state.Failure -and ($fresh.Count -or $retry.Count)) -or $running.Count) {
                 while (-not $state.Late -and -not $state.Failure -and $running.Count -lt $effective) {
@@ -388,7 +414,7 @@ function Send-RunnerFile {
                     $shell = [powershell]::Create()
                     $shell.RunspacePool = $pool
                     $null = $shell.AddScript($worker).AddArgument($azPath).AddArgument((& $execArguments $command))
-                    $running.Add([pscustomobject]@{ Index = $index; Length = $payload.Length; Shell = $shell; Handle = $shell.BeginInvoke() })
+                    $running.Add([pscustomobject]@{ Index = $index; Length = $payload.Length; Shell = $shell; Handle = $shell.BeginInvoke(); Started = [DateTime]::UtcNow })
                 }
                 if ($running.Count) {
                     $null = [Threading.WaitHandle]::WaitAny([Threading.WaitHandle[]]@($running | ForEach-Object { $_.Handle.AsyncWaitHandle }), 250)
@@ -398,13 +424,22 @@ function Send-RunnerFile {
                     Start-Sleep -Seconds ([Math]::Max(1, [int][Math]::Ceiling(($next.NotBefore - [DateTime]::UtcNow).TotalSeconds)))
                     $next.NotBefore = [DateTime]::MinValue
                 }
-                foreach ($item in @($running | Where-Object { $_.Handle.IsCompleted })) {
+                foreach ($item in @($running)) {
+                    $timedOut = -not $item.Handle.IsCompleted -and ([DateTime]::UtcNow - $item.Started).TotalSeconds -gt $ExecTimeoutSeconds
+                    if (-not $item.Handle.IsCompleted -and -not $timedOut) { continue }
                     $null = $running.Remove($item)
-                    try { $result = @($item.Shell.EndInvoke($item.Handle))[0] }
-                    catch { $result = [pscustomobject]@{ ExitCode = -1; Output = $_.Exception.Message } }
-                    finally { $item.Shell.Dispose() }
-                    $problem = Get-ClaudeRunnerPartProblem -Result $result -Index $item.Index -Length $item.Length
-                    if (-not $problem) { $state.Done++; & $pace; & $progress; continue }
+                    if ($timedOut) {
+                        & $stopShell $item
+                        $result = [pscustomobject]@{ ExitCode = -1; Output = '' }
+                        $problem = "no answer within $ExecTimeoutSeconds seconds"
+                    }
+                    else {
+                        try { $result = @($item.Shell.EndInvoke($item.Handle))[0] }
+                        catch { $result = [pscustomobject]@{ ExitCode = -1; Output = $_.Exception.Message } }
+                        finally { $item.Shell.Dispose() }
+                        $problem = Get-ClaudeRunnerPartProblem -Result $result -Index $item.Index -Length $item.Length
+                    }
+                    if (-not $problem) { $state.Done++; & $progress; continue }
                     if ($attemptsOf[$item.Index] -ge $Attempts) {
                         if (-not $state.Failure) { $state.Failure = $problem; $state.FailedPart = $item.Index; $state.LastOutput = [string]$result.Output }
                         continue
@@ -412,10 +447,17 @@ function Send-RunnerFile {
                     $state.Retries++
                     $retry.Add([pscustomobject]@{ Index = $item.Index; NotBefore = [DateTime]::UtcNow.AddSeconds([Math]::Pow(2, $attemptsOf[$item.Index])) })
                 }
+                # Checked on every pass, so a transfer whose execs stall is still stopped before its apply-by time.
+                & $pace
+                # A late transfer, or a part that failed for good, ends now: the parts in flight would be removed.
+                if ($state.Late -or $state.Failure) {
+                    foreach ($item in @($running)) { & $stopShell $item }
+                    $running.Clear()
+                }
             }
         }
         finally {
-            foreach ($item in $running) { try { $null = $item.Shell.Stop() } catch { $null = $_ }; $item.Shell.Dispose() }
+            foreach ($item in $running) { & $stopShell $item }
             $pool.Close()
             $pool.Dispose()
         }
@@ -425,7 +467,8 @@ function Send-RunnerFile {
         $cleanup = & $removeParts
         $partsNote = if ($cleanup.ExitCode -eq 0 -and $cleanup.Output -notmatch 'ERROR') { 'The parts were removed' } else { "The part directory $partDir could not be removed; the runner's next start clears it" }
         if ($state.Late) {
-            throw ("Stopped sending $Path to runner $Name after $($state.Done) of $parts parts: at the measured $([Math]::Round($state.Rate, 2)) parts a second it would end at " +
+            $paceText = if ($state.Done -ge $effective) { "at the measured $([Math]::Round($state.Rate, 2)) parts a second" } else { "with $($state.Done) of $parts parts finished so far" }
+            throw ("Stopped sending $Path to runner $Name after $($state.Done) of $parts parts: $paceText it would end at " +
                 "$($state.End.UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ssZ')), and with the $reserveMinutes minutes kept for the steps after it, that passes the snapshot's apply-by time " +
                 "$($applyBy.UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ssZ')). $partsNote, and nothing was written. " + (Get-ClaudeRunnerTransferRemedy -ResourceGroup $ResourceGroup -Name $Name))
         }
