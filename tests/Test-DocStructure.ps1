@@ -38,7 +38,8 @@ $EnrolledGuides = @(
   'docs\FINOPS.md',
   'docs\MONITORING.md',
   'docs\MDM.md',
-  'docs\NETWORK.md'
+  'docs\NETWORK.md',
+  'docs\NETWORK-ENTERPRISE.md'
 )
 
 
@@ -61,7 +62,8 @@ function Get-GuidePaths {
   'docs\FINOPS.md',
   'docs\MONITORING.md',
   'docs\MDM.md',
-  'docs\NETWORK.md','guide\README.md','onboarding\README.md')
+  'docs\NETWORK.md',
+  'docs\NETWORK-ENTERPRISE.md','guide\README.md','onboarding\README.md')
 
   Get-ChildItem -LiteralPath (Join-Path $Root 'docs') -Filter '*.md' | Sort-Object Name | ForEach-Object {
 
@@ -230,18 +232,15 @@ function Test-GuideStructure([string]$Path, [string]$Text, [bool]$Enrolled) {
   $terminalNames = @('Next','Next steps','Related','See also','Verify and next steps','9. Next')
 
   $terminalIndex = -1
-
   for ($i=0; $i -lt $sections.Count; $i++) { if ($terminalNames -contains $sections[$i].Title) { $terminalIndex = $i } }
-
   if ($terminalIndex -lt 0) { $errors.Add('missing visible terminal Next/Related section') }
-
   elseif ($sections[$terminalIndex].Body -match '(?s)<details>') { $errors.Add('terminal navigation section is hidden in details') }
 
 
 
   for ($i = 1; $i -lt $sections.Count; $i++) {
 
-    if ($i -eq $terminalIndex) { continue }
+    if ($terminalNames -contains $sections[$i].Title) { continue }
 
     if ($PermanentReferenceExceptions.ContainsKey($Path)) { continue }
 
