@@ -39,7 +39,8 @@ $EnrolledGuides = @(
   'docs\MONITORING.md',
   'docs\MDM.md',
   'docs\NETWORK.md',
-  'docs\NETWORK-ENTERPRISE.md'
+  'docs\NETWORK-ENTERPRISE.md',
+  'docs\FINOPS-TOOLS.md'
 )
 
 
@@ -63,7 +64,8 @@ function Get-GuidePaths {
   'docs\MONITORING.md',
   'docs\MDM.md',
   'docs\NETWORK.md',
-  'docs\NETWORK-ENTERPRISE.md','guide\README.md','onboarding\README.md')
+  'docs\NETWORK-ENTERPRISE.md',
+  'docs\FINOPS-TOOLS.md','guide\README.md','onboarding\README.md')
 
   Get-ChildItem -LiteralPath (Join-Path $Root 'docs') -Filter '*.md' | Sort-Object Name | ForEach-Object {
 
@@ -229,7 +231,7 @@ function Test-GuideStructure([string]$Path, [string]$Text, [bool]$Enrolled) {
 
 
 
-  $terminalNames = @('Next','Next steps','Related','See also','Verify and next steps','9. Next')
+  $terminalNames = @('Next','Next steps','Related','See also','Verify and next steps','9. Next','Related guides')
 
   $terminalIndex = -1
   for ($i=0; $i -lt $sections.Count; $i++) { if ($terminalNames -contains $sections[$i].Title) { $terminalIndex = $i } }

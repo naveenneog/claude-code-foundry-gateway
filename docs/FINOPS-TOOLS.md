@@ -18,8 +18,21 @@ for your own region and deployment; run it rather than reusing these numbers.
 > gateway's `turnstile-integration` named value records whether Turnstile owns them. The AUM
 > service answers `other_authority`, and the terminal's Direct mode refuses to write, while
 > Turnstile owns a gateway. That way two tools never overwrite each other.
+## Quickstart
+
+The selector previews the available tools, prices, roles and prerequisites. `eastus2` is an example gateway region; the selected deployment's API Management Overview supplies the actual region.
+
+```powershell
+.\scripts\Select-ClaudeFinOpsTooling.ps1 -Region eastus2 -WhatIf
+```
+
+**Expected result:** the selector prints a priced choice summary and its required access, without deployment. The selected tool's guide below supplies its setup and verification path.
 
 ## The tools at a glance
+
+<details>
+
+<summary>FinOps tooling details</summary>
 
 | Tool | What it is for | Who uses it | Writes budgets? | Added Azure resources | Standing cost, list |
 |---|---|---|---|---|---|
@@ -38,7 +51,12 @@ alias for one release.
 
 ![Terminal FinOps: one engine, a terminal and scriptable commands, and three backends](images/architecture/terminal-finops.png)
 
+</details>
 ## Which one to choose
+
+<details>
+
+<summary>FinOps tooling details</summary>
 
 - **Nobody needs a console:** publish the saved queries and workbooks ([flow 1](#flow-1-reports-with-no-console-and-no-added-cost))
   and run the scripts ([flow 2](#flow-2-budgets-from-scripts)). This adds no cost.
@@ -74,7 +92,12 @@ the place of the offer. [AUM service: choose a FinOps tool](AUM-SERVICE.md#choos
 has the full
 comparison.
 
+</details>
 ## Sign-in
+
+<details>
+
+<summary>FinOps tooling details</summary>
 
 ### Who signs in to what
 
@@ -114,7 +137,12 @@ again after a change. On Windows the account broker can keep serving the old tok
 renews it without deleting any cache. How long Entra, Turnstile and the AUM service take to
 reflect a change on their own is still open (**U21**, [Unknowns](UNKNOWNS.md)).
 
+</details>
 ## End-to-end flows
+
+<details>
+
+<summary>FinOps tooling details</summary>
 
 Every flow starts from a deployed gateway (`Install-ClaudeGateway.ps1`) and `az login`. Scripts
 that are not given a value ask for it: they list what they found in Azure, the recommended one
@@ -337,7 +365,12 @@ are explicit. Stale enforced snapshots fail closed after 15 minutes.
 
 ![Budget enforcement modes: strict, allowance and notify](images/architecture/budget-modes.png)
 
+</details>
 ## Bill of materials and pricing
+
+<details>
+
+<summary>FinOps tooling details</summary>
 
 ### How the numbers are worked out
 
@@ -425,7 +458,12 @@ Read with the commands above on 2026-09-25:
   $21.90, PostgreSQL $18.18 with storage, the API plan $13.14 and five private endpoints $36.50.
 - The chargeback reports deployment: about $29.70/month standing.
 
+</details>
 ## Limits worth knowing
+
+<details>
+
+<summary>FinOps tooling details</summary>
 
 - Direct mode is an administrative connection. Anyone who can write the gateway's named values
   can write any unit's budget.
@@ -444,6 +482,7 @@ Read with the commands above on 2026-09-25:
   only), P48's single queue-driven writer at 500,000 people, the viewer-only evidence, and the
   portal pictures, which need one owner sign-in.
 
+</details>
 ## Related guides
 
 - [FinOps reporting](FINOPS.md): the monthly close, step by step.
