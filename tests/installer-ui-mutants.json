@@ -1658,7 +1658,7 @@
     "file": "tools/installer-ui/installer-ui.js",
     "find": "      if (!runHost?.canStop?.()) actions?.keepFocusWhenDisabled(stop, byId(\"run\"));\n",
     "replace": "",
-    "testFile": "tests/installer-ui-g9b.test.mjs",
+    "testFile": "tests/installer-ui-g10b.test.mjs",
     "test": "R8-1 a stop from another client moves keyboard focus from Stop to the run status"
   },
   {
@@ -1667,7 +1667,7 @@
     "file": "tools/installer-ui/installer-ui-actions.js",
     "find": "      status.tabIndex = -1;\n",
     "replace": "",
-    "testFile": "tests/installer-ui-g9b.test.mjs",
+    "testFile": "tests/installer-ui-g10b.test.mjs",
     "test": "R8-1 after a reload a stop from another client moves keyboard focus from Stop to the run status"
   },
   {
@@ -1676,7 +1676,25 @@
     "file": "tools/installer-ui/installer-ui-actions.js",
     "find": "      if (!control || !owner || document.activeElement !== control) return;\n",
     "replace": "      if (!control || !owner) return;\n",
-    "testFile": "tests/installer-ui-g9b.test.mjs",
+    "testFile": "tests/installer-ui-g10b.test.mjs",
     "test": "R8-1 a run that ends while keyboard focus is in a field leaves the focus there"
+  },
+  {
+    "id": "r9-1-1",
+    "why": "R9-1: the run output log is in the tab order, so Tab from a run or Stop status during a stop stays in the Run section",
+    "file": "tools/installer-ui/index.html",
+    "find": " aria-label=\"Run output\" tabindex=\"0\"></pre>",
+    "replace": " aria-label=\"Run output\"></pre>",
+    "testFile": "tests/installer-ui-g10b.test.mjs",
+    "test": "R9-1 Tab from the run status after a stop from another client reaches the run output"
+  },
+  {
+    "id": "r9-1-2",
+    "why": "R9-1: static mode hides the run output, which a static page never fills, so it is not an empty tab stop",
+    "file": "tools/installer-ui/installer-ui.js",
+    "find": "\"stop-run\", \"run-output\", \"refresh-identity\"",
+    "replace": "\"stop-run\", \"refresh-identity\"",
+    "testFile": "tests/installer-ui-g2.test.mjs",
+    "test": "E1 missing pwsh puts the server and page in static mode without spawning children"
   }
 ]

@@ -60,6 +60,8 @@ does not read Azure and does not start the installer. The page hides live action
 in static mode (`tools/installer-ui/installer-ui.js:680-681`). The Cloud Shell handoff displayed by
 the page is download, **Manage files > Upload**, then the generated command
 (`tools/installer-ui/installer-ui-render.js:15-16`; `tools/installer-ui/ui-model.js:648`).
+Static mode also hides the run output, which a static page never fills
+(`tools/installer-ui/installer-ui.js:680`).
 
 The browser validator uses the same answer names, schema subset and cross-field rules as the
 PowerShell validator for `Install-ClaudeGateway.ps1`; the P92 corpus parity test compares check ids
@@ -76,6 +78,8 @@ reaches Stop run (`tools/installer-ui/installer-ui-actions.js:58-102`;
 When Stop run is disabled while it has keyboard focus, for example after a stop from another tab or
 when the run ends, the focus moves to the run status line, which says why Stop is no longer offered
 (`tools/installer-ui/installer-ui-actions.js:104-110`; `tools/installer-ui/installer-ui.js:443-447`).
+The run output log is in the tab order, so Tab from the run status line or the Stop status line
+reaches it while the later run buttons are disabled (`tools/installer-ui/index.html:34`).
 Account refresh, prefill, preflight and run actions share a page-level Azure-busy state. A 409
 `azure-busy` response is shown beside the used control with the operation that holds Azure CLI
 (`tools/installer-ui/installer-ui-actions.js:32-56`; `tools/installer-ui/installer-ui.js:388-416`).
