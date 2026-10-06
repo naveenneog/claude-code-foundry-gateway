@@ -388,14 +388,12 @@ export async function createInstallerUiServer(options = {}) {
         const body = await readJsonBody(req);
         const engine = 'pwsh';
         const digest = answersDigest(body?.answers || {});
-        // A preflight attempt invalidates the earlier pass for its answers before any step that can fail.
-        preflightPasses.clearForAnswers(digest, engine);
+        // The attempt clears the earlier pass for its answers before any step that can fail; only the latest attempt stores one.
+        const attempt = preflightPasses.beginAttempt(digest, engine);
         const requestedSteps = await withJob(() => validateStepScope(body, () => listSteps(options)));
         const scope = scopeFromBody(body, requestedSteps);
         return send(res, 200, await withAzureRead('preflight', (lease) => withRunDirectory(async (dir) => {
           const answers = await writeAnswers(dir, body.answers || {});
-          // A pass that an earlier attempt stored while this attempt waited for the lease must not outlive it.
-          preflightPasses.clearForAnswers(digest, engine);
           const result = await runInstaller('powershell', await installerArguments({ engine: 'pwsh', action: 'preflight', answersPath: answers }), options, { ...childTimeout(lease), readName: 'preflight', outputCapBytes: outputCapFor() });
           let parsed;
           const schema = await loadSchema();
@@ -411,14 +409,17 @@ export async function createInstallerUiServer(options = {}) {
           }
           let fingerprint = '';
           let identity;
+          let superseded = false;
           if (parsed.result === 'PASS' && result.code === 0) {
             identity = await readIdentitySnapshot(childTimeout(lease));
-            fingerprint = preflightFingerprint({ answers: body.answers || {}, scope, engine, identity });
-            preflightPasses.replaceForAnswers({ fingerprint, answersDigest: digest, engine, scope, time: new Date().toISOString(), identity });
-          } else {
-            preflightPasses.clearForAnswers(digest, engine);
+            if (preflightPasses.isLatest(digest, engine, attempt)) {
+              fingerprint = preflightFingerprint({ answers: body.answers || {}, scope, engine, identity });
+              preflightPasses.replaceForAnswers({ fingerprint, answersDigest: digest, engine, scope, time: new Date().toISOString(), identity });
+            } else {
+              superseded = true;
+            }
           }
-          return { exitCode: result.code, fingerprint: fingerprint || undefined, identity, scope: fingerprint ? scope : undefined, preflight: parsed, stdout: result.stdout, stderr: result.stderr, fieldsByCheckId: await fieldsByCheckId(schema) };
+          return { exitCode: result.code, fingerprint: fingerprint || undefined, superseded: superseded || undefined, identity, scope: fingerprint ? scope : undefined, preflight: parsed, stdout: result.stdout, stderr: result.stderr, fieldsByCheckId: await fieldsByCheckId(schema) };
         }, tempDirs, tempRoot)), setCookie);
       }
       if (req.method === 'POST' && url.pathname === '/api/run/stream') {

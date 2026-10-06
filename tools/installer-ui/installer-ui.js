@@ -461,7 +461,8 @@
 
   function renderPreflight(result, options = {}) {
     renderHost.renderPreflight(result, problems);
-    if (result.preflight?.result === "PASS" && result.fingerprint && !options.staleReason) {
+    const staleReason = options.staleReason || (result.superseded ? "A later preflight for the same answers started while this one ran. Run preflight again." : "");
+    if (result.preflight?.result === "PASS" && result.fingerprint && !staleReason) {
       preflightFingerprint = result.fingerprint;
       preflightIdentity = result.identity || null;
       preflightScope = result.scope || null;
@@ -472,8 +473,8 @@
       preflightFingerprint = "";
       preflightIdentity = null;
       preflightScope = null;
-      preflightStaleReason = options.staleReason || "";
-      preflightStale = Boolean(options.staleReason);
+      preflightStaleReason = staleReason;
+      preflightStale = Boolean(staleReason);
       preflightHadResult = true;
     }
     updateRunAdmission();

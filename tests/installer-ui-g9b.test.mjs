@@ -343,3 +343,28 @@ test('R4-3 Stop is disabled during admission and while an accepted stop is pendi
     await app.close();
   }
 });
+
+test('R5-1 a superseded preflight pass is shown as stale and does not admit a run', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await page.locator('[name="SubscriptionId"]').fill('00000000-0000-4000-8000-000000000093');
+    await page.getByRole('button', { name: 'List steps' }).click();
+    await page.locator('#step-list input[value="resource-group"]').check();
+    await page.route('**/api/preflight', (route) => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        superseded: true,
+        preflight: { schemaVersion: 1, installer: 'pwsh', answersSchemaVersion: 1, result: 'PASS', checks: [{ id: 'answers.schema', result: 'PASS', reason: null, message: 'answers file is valid', remedy: '', problems: [] }] },
+      }),
+    }));
+    await page.getByRole('button', { name: 'Run preflight' }).click();
+    await page.locator('#preflight-state').getByText(/Preflight is stale\. A later preflight for the same answers started while this one ran/).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Run selected steps' }).isDisabled(), true);
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});

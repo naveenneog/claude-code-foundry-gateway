@@ -6,11 +6,14 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { createInstallerUiServer } from '../tools/installer-ui/server.mjs';
+import { preflightFingerprint } from '../tools/installer-ui/preflight-record.mjs';
 
 const stubInstaller = fileURLToPath(new URL('./installer-ui-stub.mjs', import.meta.url));
 const passingAnswers = { schemaVersion: 1, SubscriptionId: '00000000-0000-4000-8000-000000000093' };
 const identityOne = { signedIn: true, user: 'operator@example.com', tenantId: 'tenant-1', subscriptionId: passingAnswers.SubscriptionId };
 const preflightBody = JSON.stringify({ answers: passingAnswers, steps: ['resource-group'] });
+// The fingerprint a passing preflight of preflightBody gets under identityOne.
+const passingFingerprint = preflightFingerprint({ answers: passingAnswers, scope: ['resource-group'], engine: 'pwsh', identity: identityOne });
 
 function scratchPath(name) {
   return join(tmpdir(), `p93-g9-${name}-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`);
@@ -25,7 +28,7 @@ async function start(extra = {}) {
     stubInstaller,
     idleMs: 60_000,
     env: extra.env || {},
-    readIdentity: async () => identityOne,
+    readIdentity: extra.readIdentity ?? (async () => identityOne),
     beforeRunSpawn: extra.beforeRunSpawn,
   });
   const address = await server.listenAsync('127.0.0.1');
@@ -170,12 +173,14 @@ test('R4-1 a pass stored while a later attempt waits for Azure CLI does not outl
     await waitForCalls(log, (calls) => calls.slice(calls.findIndex(isPreflight) + 1).some((call) => call.args.includes('-ListSteps')), 'The second attempt listing steps');
     await rm(hold, { force: true });
     const firstResponse = await within(first, 'The first attempt answering');
-    const pass = await firstResponse.json();
-    assert.equal(firstResponse.status, 200, JSON.stringify(pass));
-    assert.match(pass.fingerprint, /^[0-9a-f]{64}$/);
+    const firstJson = await firstResponse.json();
+    assert.equal(firstResponse.status, 200, JSON.stringify(firstJson).slice(0, 300));
+    assert.equal(firstJson.preflight.result, 'PASS');
+    assert.equal(firstJson.fingerprint, undefined);
+    assert.equal(firstJson.superseded, true);
     const secondResponse = await within(second, 'The second attempt answering');
     assert.equal(secondResponse.status, 502, (await secondResponse.text()).slice(0, 300));
-    await assertPreflightRequired(await runWith(app, pass.fingerprint), 'run with the earlier attempt\'s pass');
+    await assertPreflightRequired(await runWith(app, passingFingerprint), 'run with the earlier attempt\'s fingerprint');
   } finally {
     await rm(hold, { force: true });
     await app.close();
@@ -235,6 +240,50 @@ test('R4-2 run headers are flushed before the installer child starts', async () 
   } finally {
     releaseRun?.();
     await runResponse?.then((response) => response.body?.cancel()).catch(() => {});
+    await app.close();
+  }
+});
+
+test('R5-1 an earlier preflight that passes after a later attempt started stores no pass', async () => {
+  const marker = scratchPath('bad-list');
+  let holdIdentity = false;
+  let releaseIdentity;
+  let identityEntered;
+  const heldIdentity = new Promise((resolve) => { releaseIdentity = resolve; });
+  const identityStarted = new Promise((resolve) => { identityEntered = resolve; });
+  const app = await start({
+    env: { P93_INSTALLER_UI_STUB_BAD_LIST_MARKER: marker },
+    readIdentity: async () => {
+      if (holdIdentity) {
+        holdIdentity = false;
+        identityEntered();
+        await heldIdentity;
+      }
+      return identityOne;
+    },
+  });
+  try {
+    const pass = await passingPreflight(app);
+    assert.equal(pass.fingerprint, passingFingerprint, 'the test computes the fingerprint that the server stores');
+    holdIdentity = true;
+    const first = app.fetch('/api/preflight', { method: 'POST', body: preflightBody });
+    first.catch(() => {});
+    await within(identityStarted, 'The first attempt reaching its identity read after PASS');
+    await writeFile(marker, '');
+    const later = await app.fetch('/api/preflight', { method: 'POST', body: preflightBody });
+    assert.equal(later.status, 502, (await later.text()).slice(0, 300));
+    await rm(marker, { force: true });
+    releaseIdentity();
+    const firstResponse = await within(first, 'The first attempt answering');
+    const firstJson = await firstResponse.json();
+    assert.equal(firstResponse.status, 200, JSON.stringify(firstJson).slice(0, 300));
+    assert.equal(firstJson.preflight.result, 'PASS');
+    assert.equal(firstJson.fingerprint, undefined);
+    assert.equal(firstJson.superseded, true);
+    await assertPreflightRequired(await runWith(app, passingFingerprint), 'run with the superseded attempt\'s fingerprint');
+  } finally {
+    releaseIdentity?.();
+    await rm(marker, { force: true });
     await app.close();
   }
 });

@@ -91,10 +91,10 @@
   },
   {
     "id": "r3-1-1",
-    "why": "A preflight attempt clears the pass for the same answers again when it gets the Azure lease, so a pass that an earlier attempt stored while it waited does not outlive it.",
+    "why": "Only the latest preflight attempt for the same answers stores a pass, so a pass from an earlier attempt that passes while a later attempt waits for the Azure lease is not stored.",
     "file": "tools/installer-ui/server.mjs",
-    "find": "          // A pass that an earlier attempt stored while this attempt waited for the lease must not outlive it.\n          preflightPasses.clearForAnswers(digest, engine);\n",
-    "replace": "",
+    "find": "            if (preflightPasses.isLatest(digest, engine, attempt)) {\n",
+    "replace": "            if (true) {\n",
     "testFile": "tests/installer-ui-g9.test.mjs",
     "test": "R4-1 a pass stored while a later attempt waits for Azure CLI does not outlive that attempt"
   },
@@ -1375,10 +1375,10 @@
   },
   {
     "id": "r4-1-1",
-    "why": "R4-1: a preflight attempt clears the pass for its answers right after reading the request, before step validation, the Azure lease or any child",
-    "file": "tools/installer-ui/server.mjs",
-    "find": "        // A preflight attempt invalidates the earlier pass for its answers before any step that can fail.\n        preflightPasses.clearForAnswers(digest, engine);\n",
-    "replace": "",
+    "why": "R4-1: a preflight attempt clears the pass for its answers when it begins, right after the request is read and before step validation, the Azure lease or any child",
+    "file": "tools/installer-ui/preflight-record.mjs",
+    "find": "      clear(digest, engine);\n      return attempt;\n",
+    "replace": "      return attempt;\n",
     "testFile": "tests/installer-ui-g9.test.mjs",
     "test": "R4-1 a preflight retry whose step list fails clears the earlier pass for the same answers"
   },
@@ -1462,5 +1462,23 @@
     "replace": "",
     "testFile": "tests/installer-ui-g9b.test.mjs",
     "test": "L6-6 a new page-started run clears the previous run output"
+  },
+  {
+    "id": "r5-1-1",
+    "why": "R5-1: an attempt is the latest only while no later attempt for the same answers and engine has begun",
+    "file": "tools/installer-ui/preflight-record.mjs",
+    "find": "      return latest.get(keyFor(digest, engine)) === attempt;\n",
+    "replace": "      return true;\n",
+    "testFile": "tests/installer-ui-g9.test.mjs",
+    "test": "R5-1 an earlier preflight that passes after a later attempt started stores no pass"
+  },
+  {
+    "id": "r5-1-2",
+    "why": "R5-1: the page shows a superseded preflight pass as a stale preflight",
+    "file": "tools/installer-ui/installer-ui.js",
+    "find": "    const staleReason = options.staleReason || (result.superseded ? \"A later preflight for the same answers started while this one ran. Run preflight again.\" : \"\");\n",
+    "replace": "    const staleReason = options.staleReason || \"\";\n",
+    "testFile": "tests/installer-ui-g9b.test.mjs",
+    "test": "R5-1 a superseded preflight pass is shown as stale and does not admit a run"
   }
 ]

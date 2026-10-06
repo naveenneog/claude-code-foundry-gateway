@@ -100,14 +100,16 @@ version, engine, sorted answers, a sorted step scope or `full`, and the Azure id
 after a PASS. The server stores at most 20 passing records. A passing record also stores the
 signed-in state, user, tenant and subscription snapshot. A preflight attempt clears the prior pass
 for the same answers and engine as soon as the server has read the request, before step validation,
-the Azure lease or any child, and again under the Azure lease before the installer child starts. A
-failure at any stage (step list, Azure CLI busy, malformed output, timeout or identity read)
-therefore leaves no stored pass, and a pass that an earlier attempt stored while this attempt waited
-for the lease does not outlive this attempt. A
+the Azure lease or any child, and becomes the latest attempt for those answers. Only the latest
+attempt stores a pass: an earlier attempt that passes after a later one began answers without a
+fingerprint and with `superseded: true`, which the page shows as a stale preflight. A failure at any
+stage (step list, Azure CLI busy, malformed output, timeout or identity read) therefore leaves no
+stored pass. A
 run is admitted only when the submitted fingerprint exists, the answers digest matches, the engine is
 `pwsh`, the stored scope covers the requested run scope and the current identity snapshot matches
-the passing preflight (`tools/installer-ui/preflight-record.mjs:3-37`; `tools/installer-ui/preflight-record.mjs:46-64`;
-`tools/installer-ui/server.mjs:155`; `tools/installer-ui/server.mjs:388-420`; `tools/installer-ui/server.mjs:449-462`).
+the passing preflight (`tools/installer-ui/preflight-record.mjs:3-37`; `tools/installer-ui/preflight-record.mjs:46-82`;
+`tools/installer-ui/server.mjs:155`; `tools/installer-ui/server.mjs:388-423`; `tools/installer-ui/server.mjs:450-463`;
+`tools/installer-ui/installer-ui.js:462-481`).
 
 One Azure CLI lease covers identity, prefill, preflight and run work. Reads wait behind reads in
 arrival order, wait time counts against the read timeout, runs are refused while a read holds the

@@ -45,14 +45,32 @@ export function preflightRequired(reason) {
 
 export function createPreflightStore(limit = 20) {
   let records = [];
+  // The latest attempt number for each answers digest and engine; past 200 keys the oldest key is dropped, so a
+  // long-running attempt for it can no longer store a pass.
+  const latest = new Map();
+  let attempts = 0;
+  const keyFor = (digest, engine) => `${engine}:${digest}`;
+  const clear = (digest, engine) => {
+    records = records.filter((record) => !(record.answersDigest === digest && record.engine === engine));
+  };
   return {
+    // An attempt clears the pass for its answers and becomes the only attempt that may store the next one.
+    beginAttempt(digest, engine) {
+      const key = keyFor(digest, engine);
+      const attempt = ++attempts;
+      latest.delete(key);
+      latest.set(key, attempt);
+      if (latest.size > 200) latest.delete(latest.keys().next().value);
+      clear(digest, engine);
+      return attempt;
+    },
+    isLatest(digest, engine, attempt) {
+      return latest.get(keyFor(digest, engine)) === attempt;
+    },
     replaceForAnswers({ fingerprint, answersDigest: digest, engine, scope, time, identity }) {
-      records = records.filter((record) => !(record.answersDigest === digest && record.engine === engine));
+      clear(digest, engine);
       if (fingerprint) records.push({ fingerprint, answersDigest: digest, engine, scope, time, identity });
       records = records.slice(-limit);
-    },
-    clearForAnswers(digest, engine) {
-      records = records.filter((record) => !(record.answersDigest === digest && record.engine === engine));
     },
     lookup(fingerprint) {
       return records.find((record) => record.fingerprint === fingerprint) || null;
