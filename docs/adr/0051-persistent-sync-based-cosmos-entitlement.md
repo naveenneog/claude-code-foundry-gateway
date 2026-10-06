@@ -99,7 +99,9 @@ rescan the whole directory.
     it; another writer takes it over only after its lease has passed, with an `If-Match` condition on
     its ETag ([Microsoft Learn](https://learn.microsoft.com/azure/cosmos-db/database-transactions-optimistic-concurrency)).
     The lock is taken after the directory is resolved, and existing records and sync statuses are read
-    inside it, so a sync that finished while another was resolving is always seen.
+    inside it, so a sync that finished while another was resolving is always seen. The holder renews the
+    300-second lease between pages of its reads and before each batch of writes; a lost lease stops the run
+    before its next write, with no status record.
     - A full snapshot older than a successful full sync is refused.
     - A targeted snapshot older than a successful sync that covered the same person is refused.
     - A full apply leaves out the people whose targeted sync finished after its scan, less a 300-second

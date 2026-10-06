@@ -186,7 +186,8 @@ async function resolveMembership() {
   return { records, mappingVersion: Math.floor(Date.now() / 1000), source: 'graph', reconciliation };
 }
 
-async function readExisting(container) {
+// A long read renews the lease between pages, so a large container cannot outlive it before the first write.
+async function readExisting(container, lock) {
   const existing = new Map();
   const iterator = container.items.query("SELECT c.id, c.tier, c.businessUnit, c.expiresAt FROM c WHERE NOT IS_DEFINED(c.type)", { maxItemCount: 1000 });
   while (iterator.hasMoreResults()) {
@@ -196,6 +197,7 @@ async function readExisting(container) {
       if (Object.hasOwn(d, 'expiresAt')) current.expiresAt = d.expiresAt;
       existing.set(d.id, current);
     }
+    if (lock) await lock.renewIfNeeded();
   }
   return existing;
 }
@@ -216,7 +218,7 @@ async function readExistingUser(container, oid) {
   return existing;
 }
 
-async function readSuccessfulStatuses(container) {
+async function readSuccessfulStatuses(container, lock) {
   const query = {
     query: "SELECT c.id, c.oid, c.type, c.tenantId, c.accountResourceId, c.databaseName, c.containerName, c.ok, c.mode, c.user, c.finishedAt FROM c WHERE c.type = 'projection-reconciliation-status' AND c.tenantId = @tenantId",
     parameters: [
@@ -228,6 +230,7 @@ async function readSuccessfulStatuses(container) {
   while (iterator.hasMoreResults()) {
     const { resources } = await iterator.fetchNext();
     statuses.push(...(resources ?? []));
+    if (lock) await lock.renewIfNeeded();
   }
   return statuses.filter((s) => s.ok === true);
 }
@@ -286,9 +289,9 @@ try {
     lock = await step('lock', () => acquireApplyLock(container, { runId, mode: scope === 'user' ? 'user' : 'full', waitSeconds: lockWaitSeconds, now: lockClock }));
     activeLockForFailure = lock;
   }
-  let existing = await step('cosmos-read', () => userOid ? readExistingUser(container, userOid) : readExisting(container));
+  let existing = await step('cosmos-read', () => userOid ? readExistingUser(container, userOid) : readExisting(container, lock));
   let excludedByNewerTargetedSync = 0;
-  const statuses = await step('status-read', () => readSuccessfulStatuses(container));
+  const statuses = await step('status-read', () => readSuccessfulStatuses(container, lock));
   const snapshotCutoff = Date.parse(reconciliation.lastVerifiedAt);
   const targetedCutoff = snapshotCutoff - 300_000;
   if (!Number.isFinite(snapshotCutoff)) fail('invalid snapshot freshness', 2, 'plan');

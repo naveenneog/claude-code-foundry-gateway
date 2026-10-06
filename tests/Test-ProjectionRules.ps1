@@ -12,7 +12,7 @@ $resolver = Get-Content (Join-Path $root 'infra\resolver.bicep') -Raw
 $wiring = Get-Content (Join-Path $root 'resolver\src\index.mjs') -Raw
 $lookup = Get-Content (Join-Path $root 'resolver\src\lookup.mjs') -Raw
 $loader = Get-Content (Join-Path $root 'guide\loadtest-projection.mjs') -Raw
-Assert 'Node writer reads existing records page by page to the end' ($apply -match '(?s)async function readExisting\(container\) \{.*?while \(iterator\.hasMoreResults\(\)\) \{\s*const \{ resources \} = await iterator\.fetchNext\(\);')
+Assert 'Node writer reads existing records page by page to the end, renewing the apply lease' ($apply -match '(?s)async function readExisting\(container, lock\) \{.*?while \(iterator\.hasMoreResults\(\)\) \{\s*const \{ resources \} = await iterator\.fetchNext\(\);.*?if \(lock\) await lock\.renewIfNeeded\(\);')
 Assert 'PowerShell never contacts Cosmos: no data-plane token, request or write header' ($sync -notmatch 'https://cosmos\.azure\.com|x-ms-documentdb|Invoke-Cosmos|/dbs/')
 Assert 'PowerShell refuses a run without -ExportPath before it signs in' ($sync.IndexOf('if (-not $ExportPath) {') -ge 0 -and $sync.IndexOf('if (-not $ExportPath) {') -lt $sync.IndexOf('az account show'))
 Assert 'PowerShell keeps one snapshot apply-by expiry and omits record expiry' (([regex]::Matches($sync, 'expiresAt\s+= \$expiresAt')).Count -eq 1 -and $sync -notmatch '(?s)\$doc = @\{.*expiresAt\s+=')

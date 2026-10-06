@@ -354,6 +354,27 @@ test('a full apply reads every existing-record page and deletes an orphan on the
   assert.equal(docs.some((d) => d.oid === orphan), false);
 });
 
+test('a long multi-page read renews the apply lease between pages, before any write', () => {
+  const oids = ['33333333-3333-4333-8333-333333333331', '33333333-3333-4333-8333-333333333332', '33333333-3333-4333-8333-333333333333', '33333333-3333-4333-8333-333333333334'];
+  const snap = fullSnapshot({
+    verifiedAt: new Date(Date.now() - 60_000).toISOString(),
+    records: oids.map((oid) => ({ oid, tier: 'standard', businessUnit: '' })),
+  });
+  const { result, log } = runApplyWithFake({
+    name: 'lease renewed during a long read',
+    docs: Object.fromEntries(oids.map((oid) => [`${oid}|${oid}`, { id: oid, oid, tenantId: tenant, tier: 'standard', businessUnit: '' }])),
+    snapshot: snap,
+    env: { FAKE_COSMOS_PAGE_SIZE: '1', FAKE_APPLY_LOCK_ADVANCE_MS: '60000' },
+  });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  const lines = readFileSync(log, 'utf8').split('\n');
+  const readStart = lines.findIndex((l) => l.startsWith('query SELECT c.id, c.tier'));
+  const readEnd = lines.findIndex((l, i) => i > readStart && l.startsWith('query '));
+  assert.ok(readStart >= 0 && readEnd > readStart, lines.join('\n'));
+  const renewals = lines.slice(readStart, readEnd).filter((l) => l.startsWith('replace projection-apply-lock'));
+  assert.ok(renewals.length >= 1, `no lease renewal while reading existing records:\n${lines.join('\n')}`);
+});
+
 test('an empty existing-record page with more results does not end the scan early', () => {
   const target = '33333333-3333-4333-8333-333333333333';
   const snap = fullSnapshot({
