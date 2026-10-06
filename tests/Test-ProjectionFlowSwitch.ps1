@@ -42,6 +42,12 @@ Assert 'the Entitlement step reads entitlement-projection-prefix from the gatewa
 Reset-ProjectionFixture 'prefix-missing'
 Capture { Invoke-ClaudeFlowStep -Record $flowRecord -Plan $livePlan 6>$null }
 Assert 'a gateway without entitlement-projection-prefix refuses with the deploy remedy before the switch reads anything else' ($Failure -match 'entitlement-projection-prefix' -and $Failure -match 'Deploy-ClaudeProjection\.ps1' -and ($FixtureCalls -join "`n") -notmatch 'apim show|deployment group show') "$Failure | $($FixtureCalls -join ' | ')"
+# P98 council round 2 (Security residual): the guided switch said Standard v2 and Premium v2 use a private
+# resolver; since ADR-0052 the installer deploys it public by default on every tier.
+$flowText = [IO.File]::ReadAllText((Join-Path $root 'scripts\flow\Entitlement.ps1'))
+Assert 'the guided switch describes the resolver as deployed, public by default on every tier' (
+    $flowText -notmatch 'Standard v2 and Premium v2 use a private resolver' -and $flowText -notmatch 'Standard/Premium v2 use a private resolver' -and
+    ([regex]::Matches($flowText, 'public and Entra-authenticated by default')).Count -eq 2)
 Write-Host ''
 if ($fail) { Write-Host "$fail assertion(s) failed." -ForegroundColor Red; exit 1 }
 Write-Host 'Projection guided flow switch holds.' -ForegroundColor Green

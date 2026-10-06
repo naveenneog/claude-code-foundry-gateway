@@ -27,7 +27,7 @@ function Get-ClaudeFlowStepQuestions {
         Key = 'entitlementStore'
         Question = 'Move entitlement storage?'
         Options = @(
-            [pscustomobject]@{ Key = 'projection'; Label = 'Cosmos projection'; Detail = "Switching uses sync-based switch evidence: resolver checks, a clean compare and a recent full projection sync. $($target.Sku): Basic v2 uses a public Entra-authenticated resolver; Standard/Premium v2 use a private resolver." },
+            [pscustomobject]@{ Key = 'projection'; Label = 'Cosmos projection'; Detail = "Switching uses sync-based switch evidence: resolver checks, a clean compare and a recent full projection sync. $($target.Sku): the switch uses the resolver deployed with the projection, public and Entra-authenticated by default on every tier (ADR-0052), private on Standard v2 or Premium v2 when deployed with -ResolverInboundAccess private." },
             [pscustomobject]@{ Key = 'named-value'; Label = 'APIM named values'; Detail = 'Sets entitlement-source to named-value and serves allow-standard and allow-premium as they stand; refresh them with scripts/Sync-ClaudeAccess.ps1 first. Limited to roughly 100 developers.' }
         )
         WhereToFind = @('API Management > Named values > entitlement-source', 'docs/SECURE-PROJECTION.md')
@@ -54,7 +54,7 @@ function Get-ClaudeFlowStepPlan {
         $implications += 'Projection switching is available after a clean full sync writes switch evidence; no scheduled-renewal wait is required.'
         $implications += 'Cost scenarios are measured with Measure-ClaudeProjectionCost.ps1 for 100 and 500 developers before deploy.'
         if ($target.Sku -eq 'BasicV2') { $implications += 'Basic v2 uses a public resolver endpoint protected by Microsoft Entra and pinned to the gateway managed identity.' }
-        else { $implications += 'Standard v2 and Premium v2 use a private resolver reachable by gateway VNet integration.' }
+        else { $implications += 'Standard v2 and Premium v2 use the resolver as deployed: public and Entra-authenticated by default (ADR-0052), or private and reachable through gateway VNet integration when deployed with -ResolverInboundAccess private.' }
         $requires += @('Directory group read permission, for the drift check', 'ARM read of the resolver deployment and the resolver site',
             'Microsoft.Web/sites/config/list/action on the resolver site (U122)', 'Cosmos data read through the in-VNet runner',
             'Recent full-sync switch evidence')
