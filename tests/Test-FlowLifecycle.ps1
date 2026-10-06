@@ -106,7 +106,11 @@ $entRecord = [pscustomobject]@{ schemaVersion = 2; decisions = [pscustomobject]@
 $entDiscovery = [pscustomobject]@{ resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; location = 'eastus2'; sku = 'BasicV2'; namedValues = @{ 'entitlement-source' = 'named-value' }; cleanComparison = $false }
 $entPlan = Get-ClaudeFlowStepPlan -Record $entRecord -Discovery $entDiscovery
 Assert 'entitlement plan states Basic v2 public Entra resolver rule' (($entPlan.Implications -join "`n") -match 'Basic v2 uses a public resolver endpoint')
+# The gateway answers that it has no entitlement-projection-prefix named value (Get-ApimNamedValue returns null for
+# not found). A read without -FailOnError would turn an az failure into this same refusal, so the stub rejects it.
+function global:Get-ApimNamedValue { param($ResourceGroup, $ApimName, $Id, [switch]$FailOnError) if (-not $FailOnError) { throw 'prefix read without -FailOnError' }; $null }
 Assert 'entitlement flip is refused without projection prefix before backup/write' ((Get-Thrown { Invoke-ClaudeFlowStep -Record $entRecord -Plan $entPlan }) -match 'entitlement-projection-prefix' -and (Get-Thrown { Invoke-ClaudeFlowStep -Record $entRecord -Plan $entPlan }) -match 'Deploy-ClaudeProjection\.ps1')
+Remove-Item -LiteralPath function:global:Get-ApimNamedValue -ErrorAction SilentlyContinue
 $entQuestions = @(Get-ClaudeFlowStepQuestions -Record $entRecord -Discovery $entDiscovery)
 Assert 'entitlement question uses orchestrator property names' ($entQuestions[0].Key -eq 'entitlementStore' -and $entQuestions[0].Question -and $entQuestions[0].WhereToFind)
 

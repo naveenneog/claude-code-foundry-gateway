@@ -96,7 +96,7 @@ function Invoke-ClaudeFlowStep {
         # ADR-0051: the switch runs against the projection the gateway records. The guided flow's discovery
         # reads only the gateway, so the prefix is read here unless discovery already read it.
         if (-not $prefix -and -not $Plan.Data.ProjectionPrefixProblem) {
-            . (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'scripts\ApimNamedValue.ps1')
+            if (-not (Get-Command Get-ApimNamedValue -ErrorAction SilentlyContinue)) { . (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'scripts\ApimNamedValue.ps1') }
             $prefix = [string](Get-ApimNamedValue -ResourceGroup $target.ResourceGroup -ApimName $target.ApimName -Id 'entitlement-projection-prefix' -FailOnError)
         }
         if (-not $prefix) {
