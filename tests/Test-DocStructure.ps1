@@ -25,6 +25,7 @@ $PermanentReferenceExceptions = @{
 $EnrolledGuides = @(
   'README.md',
   'docs\SETUP.md',
+  'docs\ARCHITECTURE.md',
   'docs\BUSINESS-UNITS.md',
   'docs\DECISIONS.md',
   'docs\AUTHENTICATION.md',
@@ -72,7 +73,8 @@ function Assert-Condition([bool]$Condition, [string]$Message) { if (-not $Condit
 function Get-GuidePaths {
 
   $paths = @('README.md',
-  'docs\SETUP.md','DEVELOPER.md',
+  'docs\SETUP.md',
+  'docs\ARCHITECTURE.md','DEVELOPER.md',
   'docs\GET-STARTED.md',
   'docs\ONBOARDING.md',
   'docs\SCALE.md',
