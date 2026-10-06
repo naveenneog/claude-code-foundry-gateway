@@ -106,6 +106,9 @@ Assert 'a -NamePrefix equal to the recorded prefix is accepted' (-not $CapturedR
 $otherRecord = [pscustomobject]@{ resourceGroup = 'rg-other'; apimName = 'apim-other'; standardGroup = 'team-std'; premiumGroup = 'team-prem' }
 Get-Facts @{ Record = $otherRecord }
 Assert 'a decision record of another gateway is not a source of tier groups, and the plan says so' ($CapturedResult.Groups.Standard.Source -ne 'decision record' -and $CapturedResult.Blocked -and $CapturedResult.RecordNote -match 'rg-other' -and $CapturedResult.RecordNote -match 'apim-other') "$($CapturedResult.Groups.Standard.Source) | $($CapturedResult.RecordNote)"
+$neighbourRecord = [pscustomobject]@{ resourceGroup = 'rg-contoso'; apimName = 'apim-other'; standardGroup = 'team-std'; premiumGroup = 'team-prem' }
+Get-Facts @{ Record = $neighbourRecord }
+Assert 'a decision record of another gateway in the same resource group is not a source of tier groups either' ($CapturedResult.Groups.Standard.Source -ne 'decision record' -and $CapturedResult.RecordNote -match 'rg-contoso/apim-other') "$($CapturedResult.Groups.Standard.Source) | $($CapturedResult.RecordNote)"
 $sameRecordOtherCase = [pscustomobject]@{ resourceGroup = 'RG-Contoso'; apimName = 'APIM-contoso'; standardGroup = 'team-std'; premiumGroup = 'team-prem' }
 Get-Facts @{ Record = $sameRecordOtherCase }
 Assert 'Azure names compare without case, so the gateway''s own record still counts' ($CapturedResult.Groups.Standard.Source -eq 'decision record' -and -not $CapturedResult.RecordNote) "$($CapturedResult.Groups.Standard.Source) | $($CapturedResult.RecordNote)"
