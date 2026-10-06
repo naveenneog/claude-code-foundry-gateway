@@ -227,7 +227,7 @@ function Get-ClaudeRunnerExecSeconds([int]$Parallel) {
 function Get-ClaudeRunnerNow { return [DateTimeOffset]::UtcNow }
 
 function Get-ClaudeRunnerTransferRemedy([string]$ResourceGroup, [string]$Name) {
-    return ("Through the runner, a snapshot of 500,000 developers is 3,327 parts, about 38 minutes at 16 parts at a time (ADR-0053). " +
+    return ("On 2026-10-06 a snapshot of 500,000 developers took 41 minutes through the runner, in 3,336 parts sent 16 at a time (ADR-0053). " +
         "A full sync that does not fit runs in the optional sync job, which reads Microsoft Graph inside the network and needs the GroupMember.Read.All grant that its " +
         "deployment prints: .\scripts\Deploy-ClaudeProjectionRenewal.ps1 -ResourceGroup $ResourceGroup -ApimName <apim> -NamePrefix $($Name -replace '^aci-projtest-', '') " +
         "-AlertEmail <address>, then az containerapp job start.")

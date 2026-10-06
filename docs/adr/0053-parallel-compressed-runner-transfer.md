@@ -119,8 +119,9 @@ Option 1. It is the only option that adds no resource and no credential path.
 
 ## Consequences
 
-- A 500,000-record snapshot is 3,327 parts. The estimate at 16 parallel is 38 minutes. The live result
-  is in [P99 status](../status/P99.md).
+- A 500,000-record snapshot is 3,336 parts. The estimate at 16 parallel is 38 minutes; on 2026-10-06 the
+  transfer took 41 minutes, the writer applied the records in 529 seconds and the compare found no
+  differences, 78 minutes before the apply-by time ([P99 live run](../status/P99.md#live-run)).
 - The 2-hour apply-by time must also hold the directory scan. The operator-side Graph scan of 500,000
   developers is not measured (U10). A transfer that cannot end in time is refused or stopped before it
   writes anything.

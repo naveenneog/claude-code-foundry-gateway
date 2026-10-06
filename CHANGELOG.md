@@ -29,6 +29,17 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P99 a snapshot of 500,000 developers reaches the runner within its apply-by time.** `Send-RunnerFile`
+  (`scripts/ClaudeRunner.ps1`) compresses the file with gzip, sends base64url parts through up to 16
+  `az container exec` calls at once, retries a failed part, stops an exec that does not answer, and
+  assembles, decompresses and checks the file on the runner
+  ([ADR-0053](docs/adr/0053-parallel-compressed-runner-transfer.md)). On 2026-10-06 a synthetic snapshot of
+  500,000 records (63 MB, 12 MB compressed) took 41 minutes in 3,336 parts; the writer applied it in 529
+  seconds and the compare found no differences ([P99 status](docs/status/P99.md#live-run)). A transfer that
+  cannot end 10 minutes before the snapshot's apply-by time is refused before it starts, or stopped when it
+  falls behind; nothing is written either way. A transfer of a minute or more prints its progress. The
+  deployer's populate step, the switch's snapshot compare and full syncs use it unchanged, so the earlier
+  limit of about 40,000 developers no longer applies to them.
 - **P98 the installer deploys the Cosmos projection by default.** `Install-ClaudeGateway.ps1` offers
   the projection first, as recommended, for every size; `-Yes` chooses it, and named values above their
   capacity are refused, also under `-Yes` and `-Sku`, from `-DeveloperCount` or the tier groups' members
