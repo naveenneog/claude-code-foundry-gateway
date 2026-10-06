@@ -130,14 +130,17 @@ function pwsh {
     $path = [string]$words[$exportIndex + 1]
     $userIndex = [array]::IndexOf($words, '-User')
     $user = if ($userIndex -ge 0) { '30000000-0000-4000-8000-000000000001' } else { $null }
+    # Times relative to now, as the exporter writes them: a fixed time has passed by the next day, and the
+    # runner transfer refuses a snapshot past its apply-by time before sending it.
+    $scanned = [DateTimeOffset]::UtcNow
     $snapshot = [ordered]@{
         kind = 'claude-entitlement-snapshot'
         tenantId = $global:FixtureTenant
-        generatedAt = '2026-10-05T12:00:00Z'
+        generatedAt = $scanned.ToString('yyyy-MM-ddTHH:mm:ssZ')
         reconciliationGeneration = '40000000-0000-4000-8000-000000000001'
-        lastVerifiedAt = '2026-10-05T12:00:00.000Z'
-        expiresAt = 1791208800
-        mappingVersion = 1791201600
+        lastVerifiedAt = $scanned.ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
+        expiresAt = $scanned.ToUnixTimeSeconds() + 7200
+        mappingVersion = $scanned.ToUnixTimeSeconds()
         records = @()
     }
     if ($user) { $snapshot.scope = 'user'; $snapshot.user = $user }

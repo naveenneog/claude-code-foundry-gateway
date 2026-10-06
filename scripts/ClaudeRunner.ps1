@@ -181,6 +181,18 @@ function ConvertFrom-ClaudeRunnerResult {
     throw "$Step failed: runner summary is malformed or not boolean ok:true. Sanitized diagnostics are shown above."
 }
 
+# A snapshot's apply-by time, from the expiresAt (Unix seconds) in its header; $null for a file without one.
+# The header comes before the records, so the first 64 KB holds it.
+function Get-RunnerFileDeadline {
+    param([Parameter(Mandatory)][string]$Path)
+    $stream = [IO.File]::OpenRead((Resolve-Path -LiteralPath $Path).Path)
+    try { $buffer = New-Object byte[] 65536; $read = $stream.Read($buffer, 0, $buffer.Length) }
+    finally { $stream.Dispose() }
+    $found = [regex]::Match([Text.Encoding]::UTF8.GetString($buffer, 0, $read), '"expiresAt"\s*:\s*(\d{9,12})\b')
+    if (-not $found.Success) { return $null }
+    return [DateTimeOffset]::FromUnixTimeSeconds([long]$found.Groups[1].Value)
+}
+
 function Send-RunnerFile {
     param(
         [Parameter(Mandatory)][string]$ResourceGroup,
@@ -188,7 +200,12 @@ function Send-RunnerFile {
         [Parameter(Mandatory)][string]$Path,
         [Parameter(Mandatory)][string]$Destination,
         [int]$ChunkSize = 4900,
-        [string]$SubscriptionId
+        [string]$SubscriptionId,
+        # A snapshot's apply-by time (Get-RunnerFileDeadline). A transfer estimated to end after it is refused
+        # before the first exec, rather than failing at the apply-by check hours later (P98 council round 2).
+        [Nullable[DateTimeOffset]]$Deadline,
+        # One exec is about five seconds, whatever it does (measured 2026-09-23; see the notes above).
+        [double]$SecondsPerCommand = 5
     )
     if ($Destination -match '\s') { throw "Destination '$Destination' contains a space; exec cannot pass it." }
     $bytes = [IO.File]::ReadAllBytes((Resolve-Path $Path))
@@ -204,6 +221,18 @@ function Send-RunnerFile {
     # under that once the surrounding program is counted.
     $overhead = ("node -e require('fs').appendFileSync('$tmp','')").Length
     $ChunkSize = [Math]::Min($ChunkSize, 4990 - $overhead)
+    if ($null -ne $Deadline) {
+        # PowerShell hands a bound Nullable[DateTimeOffset] over as the DateTimeOffset itself.
+        $applyBy = [DateTimeOffset]$Deadline
+        $commands = [int][Math]::Ceiling($b64.Length / $ChunkSize) + 2
+        $seconds = $commands * $SecondsPerCommand
+        if ([DateTimeOffset]::UtcNow.AddSeconds($seconds) -gt $applyBy) {
+            throw ("Sending $Path ($($bytes.Length) bytes) to runner $Name takes about $([Math]::Ceiling($seconds / 60)) minutes ($commands az container exec " +
+                "commands of about $SecondsPerCommand seconds each), past the snapshot's apply-by time $($applyBy.UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ssZ')). " +
+                "The snapshot was not sent and nothing was written. Through the runner, a snapshot of about 40,000 developers fits in the 2-hour apply-by time; " +
+                "a larger directory needs the directory-scale transfer planned as ROADMAP packet P99.")
+        }
+    }
     $null = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $Name -SubscriptionId $SubscriptionId -Command "node -e require('fs').mkdirSync('$dir',{recursive:true});require('fs').writeFileSync('$tmp','')"
     for ($i = 0; $i -lt $b64.Length; $i += $ChunkSize) {
         $part = $b64.Substring($i, [Math]::Min($ChunkSize, $b64.Length - $i))

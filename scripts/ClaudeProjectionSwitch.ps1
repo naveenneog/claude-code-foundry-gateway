@@ -151,7 +151,7 @@ function Invoke-ClaudeProjectionSwitch {
             $compareRaw = Invoke-RunnerCommand -ResourceGroup $runnerGroup -Name $runner -Command "node /work/sync/src/apply-projection.mjs --cosmos https://$cosmosAccount.documents.azure.com:443/ --tenant $tenantId --account-resource-id $accountResourceId --compare /work/gateway-decisions.json"
         }
         else {
-            Send-RunnerFile -ResourceGroup $runnerGroup -Name $runner -Path $snapshot -Destination /work/snapshot.json | Out-Null
+            Send-RunnerFile -ResourceGroup $runnerGroup -Name $runner -Path $snapshot -Destination /work/snapshot.json -Deadline (Get-RunnerFileDeadline -Path $snapshot) | Out-Null
             $compareRaw = Invoke-RunnerCommand -ResourceGroup $runnerGroup -Name $runner -Command "node /work/sync/src/apply-projection.mjs --cosmos https://$cosmosAccount.documents.azure.com:443/ --tenant $tenantId --account-resource-id $accountResourceId --compare-snapshot /work/snapshot.json"
         }
         $summaryLine = @(([string]$compareRaw).TrimEnd("`r", "`n") -split '\r?\n' | Select-Object -Last 1)[0]

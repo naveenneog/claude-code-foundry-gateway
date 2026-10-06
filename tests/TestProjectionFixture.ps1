@@ -12,6 +12,9 @@ function Reset-ProjectionFixture {
     $global:FixtureTenant = '00000000-0000-4000-8000-000000000085'
     $global:FixtureApp = '00000000-0000-4000-8000-000000000086'
     $global:FixtureGroupId = '00000000-0000-4000-8000-000000000087'
+    # The premium group is a group of its own with no members, so Entra agrees with the gateway's lists
+    # (allow-standard holds the one member; allow-premium is empty).
+    $global:FixturePremiumGroupId = '00000000-0000-4000-8000-000000000089'
     $global:FixtureRgId = "/subscriptions/$FixtureSubscription/resourceGroups/rg-p84"
     $global:FixtureGatewayId = "$FixtureRgId/providers/Microsoft.ApiManagement/service/apim-p84"
     $global:FixtureCosmosId = "$FixtureRgId/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-p84fixture"
@@ -306,7 +309,7 @@ function Invoke-RestMethod {
         if ($FixtureCase -in @('401','403','network','group-error')) { throw "Graph $FixtureCase lookup failed" }
         if ($FixtureCase -eq 'group-shape') { return [pscustomobject]@{} }
         if ($FixtureCase -eq 'group-missing' -or ($FixtureCase -eq 'standard-missing' -and $url -match 'claude-code-standard') -or ($FixtureCase -eq 'premium-missing' -and $url -match 'claude-code-premium')) { return [pscustomobject]@{ value = @() } }
-        $groups = @([pscustomobject]@{ id = $FixtureGroupId; displayName = 'fixture' })
+        $groups = @([pscustomobject]@{ id = $(if ($url -match 'claude-code-premium') { $FixturePremiumGroupId } else { $FixtureGroupId }); displayName = 'fixture' })
         if ($FixtureCase -eq 'group-duplicate') { $groups += [pscustomobject]@{ id = $FixtureApp; displayName = 'fixture' } }
         if ($FixtureCase -eq 'group-no-id') { $groups[0].id = '' }
         if ($FixtureCase -eq 'group-null-nextlink') { return [pscustomobject]@{ value=$groups; '@odata.nextLink'=$null } }
@@ -315,6 +318,7 @@ function Invoke-RestMethod {
     if ($url -like 'https://graph.microsoft.com/v1.0/groups/*/transitiveMembers/*') {
         if ($FixtureCase -eq 'member-error') { throw 'Graph 403 membership denied' }
         if ($FixtureCase -eq 'member-shape') { return [pscustomobject]@{} }
+        if ($url -like "*/groups/$FixturePremiumGroupId/*") { return [pscustomobject]@{ value = @() } }
         $response = @{ value = @([pscustomobject]@{ id = $FixtureApp; userPrincipalName = 'user@example.invalid'; displayName = 'user' }) }
         if ($FixtureCase -eq 'member-nextlink') { $response['@odata.nextLink'] = 'https://example.invalid/steal-token' }
         if ($FixtureCase -eq 'member-no-id') { $response.value[0].id = '' }
