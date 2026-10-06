@@ -21,8 +21,23 @@ the gateway up*, you want [docs/SETUP.md](docs/SETUP.md) instead.
 3. [If something is wrong](#if-something-is-wrong)
 4. [FAQ](#faq)
 5. [Appendix — configuring it by hand](#appendix--configuring-it-by-hand)
+## Quickstart
+
+The platform team supplies published entitlement, `claude-gateway.json` and the complete `scripts` folder. The file sits beside that folder. Azure CLI is installed and signed in to the file's tenant; approved software installation follows the organisation's managed-device policy.
+
+```powershell
+$gateway = Get-Content .\claude-gateway.json -Raw | ConvertFrom-Json
+az login --tenant $gateway.tenantId --allow-no-subscriptions
+.\scripts\Onboard-ClaudeDeveloper.ps1 -ConfigPath .\claude-gateway.json
+```
+
+**Expected result:** the wrapper reports its checks, configures the selected path and verifies a gateway request. Desktop is verified separately when it is installed. New CLI sessions, a reloaded VS Code window and a fully restarted Desktop read the new configuration ([Using it](#using-it)).
 
 ## Prerequisites
+
+<details>
+
+<summary>Developer setup details</summary>
 
 | | |
 |---|---|
@@ -36,7 +51,12 @@ the gateway up*, you want [docs/SETUP.md](docs/SETUP.md) instead.
 
 ---
 
+</details>
 ## One command
+
+<details>
+
+<summary>Developer setup details</summary>
 
 Your platform team sent you `claude-gateway.json`. It holds the gateway URL,
 tenant and tier limits, so you do not have to type any of them. Ask for the
@@ -180,7 +200,12 @@ stops before writing anything if a check fails.
 
 ---
 
+</details>
 ## Using it
+
+<details>
+
+<summary>Developer setup details</summary>
 
 **In VS Code** — open a folder, then **Ctrl+Shift+P → `Claude Code: Open in Side
 Bar`**. There is no sign-in step; your Entra credential is already resolved.
@@ -233,7 +258,12 @@ conversation history and connected tools can also contain your prompts.
 
 ---
 
+</details>
 ## If something is wrong
+
+<details>
+
+<summary>Developer setup details</summary>
 
 | Symptom | Cause → Fix |
 |---|---|
@@ -261,7 +291,12 @@ to a public issue.
 
 ---
 
+</details>
 ## FAQ
+
+<details>
+
+<summary>Developer setup details</summary>
 
 **I fixed my settings and Claude Code still uses the old model. Why?**
 Something higher in the precedence order is overriding the file you edited.
@@ -335,7 +370,12 @@ until you sign back in with Gateway.
 
 ---
 
+</details>
 ## Appendix — configuring it by hand
+
+<details>
+
+<summary>Developer setup details</summary>
 
 Only needed if you cannot run the script, or you are checking what it did.
 
@@ -671,3 +711,10 @@ to use on another machine instead:
 # and for the helper, which signs in again when its cached token expires
 [Environment]::SetEnvironmentVariable('CLAUDE_FOUNDRY_AUTH','device','User')
 ```
+
+</details>
+## Next
+
+- [Troubleshooting](docs/TROUBLESHOOTING.md) maps known symptoms to fixes.
+- [Diagnostics](docs/DIAGNOSE.md) creates redacted support evidence.
+- [Onboarding bundle](onboarding/README.md) explains the files the platform team distributes.

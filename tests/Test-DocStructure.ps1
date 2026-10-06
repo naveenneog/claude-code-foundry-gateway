@@ -27,7 +27,8 @@ $EnrolledGuides = @(
   'docs\DECISIONS.md',
   'docs\AUTHENTICATION.md',
   'docs\GUIDED-FLOW.md',
-  'docs\OPERATIONS.md'
+  'docs\OPERATIONS.md',
+  'DEVELOPER.md'
 )
 
 
