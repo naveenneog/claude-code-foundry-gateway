@@ -29,6 +29,23 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P98 the installer deploys the Cosmos projection by default.** `Install-ClaudeGateway.ps1` offers
+  the projection first, as recommended, for every size; `-Yes` chooses it, and named values above their
+  capacity are refused, also under `-Yes` and `-Sku`, from `-DeveloperCount` or the tier groups' members
+  ([ADR-0052](docs/adr/0052-cosmos-default-installer.md)). Choosing the projection deploys, populates and
+  compares it, then switches the gateway; a failure leaves the current store serving and prints the
+  rerun command. A re-run without `-EntitlementStore` migrates a named-value gateway, and the approval
+  summary says so; a gateway already on the projection keeps it and its resolver access. Above
+  named-value capacity, `-CompareBaseline Snapshot` compares the projection with a fresh Entra snapshot.
+  The resolver is public by default on every tier, accepting only the gateway's managed identity.
+  `-DeploySyncJob` adds the optional sync job; a failed job deployment is reported with its full rerun
+  command. The approval summary lists the projection steps, so `-WhatIf` shows them. The SKU guidance
+  cites the cache, units, network and zone facts, and states that zone redundancy and Premium v2 virtual
+  network injection are chosen at creation, which the installer does not provision. README, Setup and
+  the projection guide open with a quickstart. `scripts/Test-ClaudeLiveProjection.ps1` installs a
+  disposable gateway, checks one developer's access through removal and re-adding, and deletes only what
+  the run created
+  ([P98 status](docs/status/P98.md#p98-the-installer-deploys-the-cosmos-projection-by-default-2026-10-06)).
 - **P97 Cosmos entitlement persists until a sync changes it, and syncs run on demand.** Projection
   records no longer expire 7,200 seconds after the scan that wrote them; a sync writes only the records
   that change ([ADR-0051](docs/adr/0051-persistent-sync-based-cosmos-entitlement.md)). The resolver
