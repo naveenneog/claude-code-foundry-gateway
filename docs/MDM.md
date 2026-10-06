@@ -31,8 +31,22 @@ cannot complete an interactive Entra sign-in on behalf of a developer.
 | Intune macOS custom `.mobileconfig` profiles | https://learn.microsoft.com/en-us/intune/device-configuration/templates/configure-custom-settings-apple |
 | Intune macOS PKG and DMG deployment | https://learn.microsoft.com/en-us/intune/app-management/deployment/add-lob-macos, https://learn.microsoft.com/en-us/intune/app-management/deployment/add-dmg-macos |
 | Intune assignment user-group and device-group behavior | https://learn.microsoft.com/en-us/intune/device-configuration/assign-device-profile |
+## Quickstart
+
+The commands run from the repository root in PowerShell 7 after `onboarding/claude-gateway.json` records the approved gateway and tier settings.
+
+```powershell
+.\scripts\New-ClaudeCodePolicy.ps1 -Tier standard
+.\scripts\New-ClaudeCodePolicy.ps1 -Tier premium
+```
+
+**Expected result:** the policy payloads for each tier are generated for review and assignment. One pilot device verifies the installed clients before broad deployment.
 
 ## 1. Device contract
+
+<details>
+
+<summary>MDM details</summary>
 
 | Delivered item | Reason | Windows channel | macOS channel | Notes |
 |---|---|---|---|---|
@@ -50,7 +64,12 @@ No new ADR is recorded for this packet. The existing decision remains: device
 policy is delivered by the customer's device-management plane, while entitlement,
 budgets and model allowlists are enforced at the gateway.
 
+</details>
 ## 2. Generate the profiles
+
+<details>
+
+<summary>MDM details</summary>
 
 Run profile generation from the repository root after the gateway deployment has
 written `onboarding/claude-gateway.json`, or after the platform owner supplies
@@ -120,7 +139,12 @@ family and declare that model's capabilities
 release older than the model does not send `thinking.type.enabled` and get a
 `400`.
 
+</details>
 ## 3. Intune on Windows
+
+<details>
+
+<summary>MDM details</summary>
 
 ### 3.1 Claude Code policy
 
@@ -249,7 +273,12 @@ the deployment window.
 | Update | Generate a new tier profile, update the platform script/remediation/app content, and confirm pilot device status before broad assignment. |
 | Rollback | Remove the assignment for profiles that the CSP removes cleanly; run the rollback script for registry values because Microsoft documents that removing some custom policy assignments might not revert the setting. For Win32 apps, assign **Uninstall** where packaging supports it. |
 
+</details>
 ## 4. Intune on macOS
+
+<details>
+
+<summary>MDM details</summary>
 
 ### 4.1 Claude Code custom profile
 
@@ -293,7 +322,12 @@ Claude Desktop MDM rollout order:
 | VS Code extension | Shell script after VS Code | `code --install-extension anthropic.claude-code`; user context may be required depending on the VS Code deployment. |
 | CA certificate/proxy | Device configuration profile | Certificate trust and proxy/PAC profiles before app first run. |
 
+</details>
 ## 5. Jamf Pro and Group Policy alternatives
+
+<details>
+
+<summary>MDM details</summary>
 
 | Tool | Steps |
 |---|---|
@@ -301,7 +335,12 @@ Claude Desktop MDM rollout order:
 | Windows Group Policy | Computer Configuration policy preference or startup script writes `HKLM\SOFTWARE\Policies\ClaudeCode` value `Settings` and Desktop values under `HKLM\SOFTWARE\Policies\Claude`. `claude-code.reg` and `claude-desktop.reg` are UTF-16 registry imports. Group Policy Preferences can also delete those values for rollback. |
 | File distribution | A software-distribution tool copies `claude-code.managed-settings.json` to `C:\Program Files\ClaudeCode\managed-settings.json`, `/Library/Application Support/ClaudeCode/managed-settings.json`, or `/etc/claude-code/managed-settings.json`. This is lower precedence than MDM/HKLM. |
 
+</details>
 ## 6. Verify one device
+
+<details>
+
+<summary>MDM details</summary>
 
 ### 6.1 Windows commands
 
@@ -363,7 +402,12 @@ The proof command sends a tiny prompt through Claude Code with an empty
 | `terminal_reason: "completed"` and `is_error: false` | Claude Code completed the turn. |
 | Gateway telemetry | The platform owner can join the request by UTC timestamp, user object id and model in Application Insights. |
 
+</details>
 ## 7. Live validation on this workstation
+
+<details>
+
+<summary>MDM details</summary>
 
 Validation ran on 2026-09-26 UTC against the read-only reference gateway
 `apim-claude-gw-fzgql9` in `rg-contosohub`.
@@ -394,7 +438,12 @@ Rollback for a successful HKCU pilot would remove the HKCU policy and compare
 the before/after registry value. The live run reached the same restored state
 because the policy key could not be created.
 
+</details>
 ## 8. Troubleshooting
+
+<details>
+
+<summary>MDM details</summary>
 
 | Symptom | Likely cause | Check |
 |---|---|---|
@@ -409,3 +458,10 @@ because the policy key could not be created.
 | Claude Desktop policy values appear but app stays local | App was already running or policy only contains app-behavior keys | Fully quit/reopen Desktop; verify managed keys include the connection keys. |
 | Private edge works on one network only | CA certificate, proxy or PAC profile missing on the test device | Follow [Network Enterprise](NETWORK-ENTERPRISE.md) for CA/proxy/PAC checks. |
 | Rollback removes assignment but device remains configured | CSP/profile removal did not delete registry values | Run the rollback script or Group Policy Preference delete action. |
+
+</details>
+## Next
+
+- [Developer setup](../DEVELOPER.md) verifies a configured workstation.
+- [Migration section 2](MIGRATION.md#2-mass-deployment-through-mdm) covers migration context.
+- [Troubleshooting](TROUBLESHOOTING.md) covers client failures.
