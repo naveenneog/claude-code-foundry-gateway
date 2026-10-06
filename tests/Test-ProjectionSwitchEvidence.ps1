@@ -111,6 +111,12 @@ Capture { Invoke-Switch }
 $calls = $FixtureCalls -join "`n"
 Assert 'new gateway passes the Cosmos account, skips drift export and uses compare-snapshot against a fresh full snapshot' (-not $Failure -and $calls -notmatch '(?m)^compare-stub' -and $calls -match '(?m)^sync-export rg-p84 apim-p84 .* account=cosmos-p84fixture' -and $calls -match '--account-resource-id /subscriptions/00000000-0000-4000-8000-000000000084/resourceGroups/rg-p84/providers/Microsoft\.DocumentDB/databaseAccounts/cosmos-p84fixture --compare-snapshot /work/snapshot\.json') "$Failure | $calls"
 
+Reset-ProjectionFixture
+Get-ChildItem -LiteralPath $backupDir -Filter '*.json' -ErrorAction SilentlyContinue | Remove-Item -Force
+Capture { Invoke-Switch @{ CompareBaseline = 'Snapshot' } }
+$calls = $FixtureCalls -join "`n"
+Assert 'snapshot baseline on a gateway with named-value members skips named-value drift and compares a fresh snapshot' (-not $Failure -and $calls -notmatch '(?m)^compare-stub' -and $calls -match '(?m)^sync-export rg-p84 apim-p84 .* account=cosmos-p84fixture' -and $calls -match '--compare-snapshot /work/snapshot\.json' -and $Result.Rollback -match 'cannot hold this population') "$Failure | $calls | $($Result.Rollback)"
+
 Reset-ProjectionFixture 'sp-missing'
 Get-ChildItem -LiteralPath $backupDir -Filter '*.json' -ErrorAction SilentlyContinue | Remove-Item -Force
 Capture { Invoke-Switch }

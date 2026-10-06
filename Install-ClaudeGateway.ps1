@@ -39,6 +39,8 @@ param(
     [string]$PublisherEmail,
     [ValidateSet('BasicV2', 'StandardV2', 'PremiumV2')]
     [string]$Sku,
+    [ValidateRange(1,10000000)]
+    [int]$DeveloperCount,
 
     [ValidateSet('azure','custom')][string]$AddressMode,
     [string]$AddressHostname,
@@ -290,6 +292,8 @@ Write-Host ' Nothing is created until you confirm the summary.' -ForegroundColor
 . (Join-Path $root 'scripts/ClaudeInstallProjection.ps1')
 . (Join-Path $root 'scripts/ClaudeGatewayRegion.ps1')
 if (-not (Test-ClaudePrerequisites -Mode Admin)) { return }
+if ($DeployProjection) { Write-Note '-DeployProjection is accepted for compatibility; since P98, choosing -EntitlementStore projection always deploys and switches the projection.' }
+if ($FlipProjectionAfterCleanCompare) { Write-Note '-FlipProjectionAfterCleanCompare is accepted for compatibility; since P98, the installer switch is part of -EntitlementStore projection.' }
 
 # The parameters as bound, before the first az call that uses one. A list passed to one of these
 # arrives as text joined by binding, so it is checked here too.
@@ -680,6 +684,23 @@ $oidCost = 37
 $listCeiling = [int][math]::Floor(($maxChars - 1) / $oidCost)
 $buCeiling = [int][math]::Floor(($maxChars - 1) / 44)
 
+
+$script:DeveloperEstimate = 50
+if ($PSBoundParameters.ContainsKey('DeveloperCount')) {
+    $script:DeveloperEstimate = $DeveloperCount
+}
+elseif (-not $Yes -and (Test-ClaudeInteractive)) {
+    $devs = Read-Default -Prompt 'How many developers will use this gateway' -Default '50' `
+        -Help 'Used to suggest a SKU, price the projection and check whether named values can hold the population.'
+    $n = 0
+    if (-not [int]::TryParse($devs, [ref]$n) -or $n -lt 1) { $n = 50 }
+    $script:DeveloperEstimate = $n
+}
+elseif ($EntitlementStore -eq 'named-value') {
+    $script:DeveloperEstimate = Get-ClaudeInstallerDeveloperCountFromGroups -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup
+    Write-Note "Derived developer count from the distinct tier-group membership: $script:DeveloperEstimate"
+}
+
 $Sku = if ($Sku) { $Sku }
 elseif ($ExistingApim) {
     # Reusing an instance means its SKU is already decided. Asking how many
@@ -702,11 +723,7 @@ else {
     #   Standard v2  50M requests/month, up to 10 units, VNet, zones
     #   Premium v2   unlimited,          up to 30 units, VNet injection, zones
     #   - https://learn.microsoft.com/azure/api-management/v2-service-tiers-overview
-    $devs = Read-Default -Prompt 'How many developers will use this gateway' -Default '50' `
-        -Help 'Used to suggest a SKU, and to cost the choices below at your scale. You can override the suggestion.'
-    $n = 0
-    if (-not [int]::TryParse($devs, [ref]$n) -or $n -lt 1) { $n = 50 }
-    $script:DeveloperEstimate = $n
+    $n = $script:DeveloperEstimate
 
     # More developers than named values hold: said here as a note, and asked about after the
     # entitlement store is chosen below, where the Cosmos store is one of the choices (P79). Until
@@ -731,6 +748,7 @@ else {
     Write-Host '      Built-in cache: Basic v2 250 MB, Standard v2 1 GB, Premium v2 5 GB; scale units: 10, 10 and 30 (api-management-features, updated 2026-06-05).' -ForegroundColor DarkGray
     Write-Host '      Outbound VNet integration is Standard v2 and Premium v2; VNet injection is Premium v2 only (integrate-vnet-outbound 2025-12-04; inject-vnet-v2 2025-10-08).' -ForegroundColor DarkGray
     Write-Host '      Availability zones are Standard v2 and Premium v2 (reliability-api-management, updated 2026-09-09).' -ForegroundColor DarkGray
+    Write-Host '      This installer creates APIM without zone redundancy or Premium v2 VNet injection; create such a gateway first, then rerun with -ExistingApimName.' -ForegroundColor DarkGray
     Write-Host '      Cosmos DB serverless is single-region (cosmos-db/serverless, updated 2026-04-27).' -ForegroundColor DarkGray
 
     # Volume rarely decides it, and saying so is more useful than a table that
@@ -781,6 +799,17 @@ if ($Sku -in @('BasicV2', 'StandardV2')) {
 $NamePrefix = if ($NamePrefix) { $NamePrefix } else {
     Read-Default -Prompt 'Name prefix' -Default "claudegw$(Get-Random -Minimum 100000 -Maximum 999999)" `
         -Help 'API Management names are globally unique DNS labels.'
+}
+
+. (Join-Path $root 'scripts/ApimNamedValue.ps1')
+$apimNameForDefaults = if ($ExistingApim) { $ExistingApim } else { "apim-$NamePrefix" }
+$liveApimIdForDefaults = Get-ApimServiceId -ResourceGroup $ResourceGroup -ApimName $apimNameForDefaults
+$liveEntitlementSource = ''
+if ($ExistingApim -or $liveApimIdForDefaults) {
+    $liveEntitlementSource = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $apimNameForDefaults -Id 'entitlement-source' -FailOnError
+    if ($liveEntitlementSource -in @('named-value','projection')) {
+        Write-Note "existing gateway entitlement source is $liveEntitlementSource; it is the default when -EntitlementStore is not passed"
+    }
 }
 
 # ------------------------------------------------- the saved record and the chosen gateway
@@ -854,7 +883,7 @@ $devCount = if ($script:DeveloperEstimate) { $script:DeveloperEstimate } else { 
 # docs/adr/0011-projection-platform.md is the configuration change that moves
 # identity data out of policy configuration and into Cosmos.
 $storeChoice = Resolve-ClaudeInstallerEntitlementStore -EntitlementStore $EntitlementStore -DeveloperCount $devCount `
-    -BuCeiling $buCeiling -ListCeiling $listCeiling -Yes:$Yes -Selector {
+    -BuCeiling $buCeiling -ListCeiling $listCeiling -Yes:$Yes -DefaultStore $(if ($PSBoundParameters.ContainsKey('EntitlementStore')) { '' } else { $liveEntitlementSource }) -Selector {
         param($options)
         Select-ClaudeChoice -Parameter EntitlementStore -Question 'Entitlement store' -Options $options `
             -WhereToFind @('docs/SCALE.md: named-value ceiling', 'docs/SECURE-PROJECTION.md: projection deployment') `
@@ -862,14 +891,20 @@ $storeChoice = Resolve-ClaudeInstallerEntitlementStore -EntitlementStore $Entitl
             -Interactive $true
     }
 $EntitlementStore = $storeChoice.Store
-if ($EntitlementStore -eq 'projection') { $DeployProjection = $true }
 if ($Yes -and -not $PSBoundParameters.ContainsKey('EntitlementStore')) {
     Write-Host '  -EntitlementStore projection: default under -Yes' -ForegroundColor DarkGray
 }
 if ($EntitlementStore -eq 'projection' -and -not $WhatIfPreference) {
     Assert-ClaudeInstallerProjectionPrerequisites
 }
-$resolverChoice = Resolve-ClaudeInstallerResolverInboundAccess -Sku $Sku -EntitlementStore $EntitlementStore -Requested $ResolverInboundAccess
+$resolverRequested = $ResolverInboundAccess
+if (-not $resolverRequested -and $EntitlementStore -eq 'projection' -and ($ExistingApim -or $liveApimIdForDefaults)) {
+    $resolverSite = "func-resolver-$NamePrefix"
+    $resolverAccess = Invoke-AzOptional { az functionapp show -g $ResourceGroup -n $resolverSite --query publicNetworkAccess -o tsv }
+    if ($resolverAccess -eq 'Disabled') { $resolverRequested = 'private'; Write-Note 'keeping this projection resolver private' }
+    elseif ($resolverAccess -eq 'Enabled') { $resolverRequested = 'public'; Write-Note 'keeping this projection resolver public' }
+}
+$resolverChoice = Resolve-ClaudeInstallerResolverInboundAccess -Sku $Sku -EntitlementStore $EntitlementStore -Requested $resolverRequested
 $ResolverInboundAccess = $resolverChoice.Access
 
 if ($EntitlementStore -eq 'projection') {
@@ -1371,7 +1406,6 @@ $usdBudgetState = ''
 # deploys, here and for its network settings below. Only Azure's not-found answer means a new gateway; any
 # other failed read stops the run, because the template would otherwise write its defaults over an existing
 # gateway's entitlement source, lists, business units and network settings (P95 council round 3).
-. (Join-Path $root 'scripts/ApimNamedValue.ps1')
 $liveApimId = Get-ApimServiceId -ResourceGroup $ResourceGroup -ApimName $apimName
 if ($ExistingApim -or $liveApimId) {
     . (Join-Path $PSScriptRoot 'scripts\ClaudeUsdBudgets.ps1')
@@ -1570,23 +1604,39 @@ foreach ($g in @($StandardGroup, $PremiumGroup)) {
 }
 
 Write-Step 'Sync entitlement'
-if (Test-ClaudeInstallerShouldSyncNamedValues -EntitlementStore $EntitlementStore -NewGateway (-not $ExistingApim)) {
-    & (Join-Path $root 'scripts/Sync-ClaudeAccess.ps1') -ApimName $apimName -ResourceGroup $ResourceGroup `
-        -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup
+$projectionCompareBaseline = 'Auto'
+if (Test-ClaudeInstallerShouldSyncNamedValues -EntitlementStore $EntitlementStore -NewGateway (-not ($ExistingApim -or $liveApimId))) {
+    $syncFailed = $false
+    $syncMessage = ''
+    try {
+        & (Join-Path $root 'scripts/Sync-ClaudeAccess.ps1') -ApimName $apimName -ResourceGroup $ResourceGroup `
+            -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup
+        if ($LASTEXITCODE -ne 0) { $syncFailed = $true; $syncMessage = "Sync-ClaudeAccess.ps1 exited $LASTEXITCODE" }
+    } catch { $syncFailed = $true; $syncMessage = $_.Exception.Message }
+    if ($syncFailed) {
+        if ($EntitlementStore -eq 'projection' -and $syncMessage -match 'over the API Management limit of') {
+            $projectionCompareBaseline = 'Snapshot'
+            Write-Warn2 'The population exceeds named-value capacity, so the projection will be compared with a fresh Entra snapshot.'
+            Write-Note 'A rollback to named values cannot hold this population; the lists cannot be refreshed above about 93-110 developers.'
+        }
+        else { throw $syncMessage }
+    }
 }
 else {
     Write-Note 'Projection is the default store for this new gateway; skipping named-value list population.'
 }
 
+$syncJobStatus = 'not-requested'
 if ($EntitlementStore -eq 'projection') {
     Write-Step 'Projection deployment'
     Invoke-ClaudeInstallerProjectionDeployment -Root $root -ResourceGroup $ResourceGroup -ApimName $apimName -NamePrefix $NamePrefix `
         -Location $Location -Sku $Sku -ResolverInboundAccess $ResolverInboundAccess -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup `
-        -SubscriptionId $SubscriptionId -ProjectionResolverAppId $ProjectionResolverAppId -WhatIf:$WhatIfPreference | Out-Null
+        -SubscriptionId $SubscriptionId -ProjectionResolverAppId $ProjectionResolverAppId -CompareBaseline $projectionCompareBaseline -ResolverPublicByDefault:($ResolverInboundAccess -eq 'public' -and -not $PSBoundParameters.ContainsKey('ResolverInboundAccess')) -WhatIf:$WhatIfPreference | Out-Null
     if ($DeploySyncJob -and -not $WhatIfPreference) {
-        $null = Invoke-ClaudeInstallerSyncJobDeployment -Root $root -ResourceGroup $ResourceGroup -ApimName $apimName -NamePrefix $NamePrefix `
-            -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -AlertEmail $PublisherEmail -SubscriptionId $SubscriptionId
+        $syncJobStatus = if (Invoke-ClaudeInstallerSyncJobDeployment -Root $root -ResourceGroup $ResourceGroup -ApimName $apimName -NamePrefix $NamePrefix `
+            -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -AlertEmail $PublisherEmail -SubscriptionId $SubscriptionId) { 'deployed' } else { 'failed' }
     }
+    elseif ($DeploySyncJob) { $syncJobStatus = 'deployed' }
 }
 
 # ------------------------------------------------------- 7b. business units
@@ -1750,7 +1800,7 @@ if ($addressMode -eq 'custom') {
 }
 $projectionSteps = $null
 if ($EntitlementStore -eq 'projection') {
-    $projectionSteps = Get-ClaudeInstallerProjectionNextSteps -ResourceGroup $ResourceGroup -ApimName $apimName -NamePrefix $NamePrefix -DeploySyncJob:$DeploySyncJob
+    $projectionSteps = Get-ClaudeInstallerProjectionNextSteps -ResourceGroup $ResourceGroup -ApimName $apimName -NamePrefix $NamePrefix -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -SubscriptionId $SubscriptionId -SyncJobStatus $syncJobStatus -DeploySyncJob:$DeploySyncJob
     $nextSteps.Add($projectionSteps.Developer)
 }
 else {

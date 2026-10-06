@@ -27,6 +27,11 @@ Assert 'the interactive choice offers projection first and recommends it' ($choi
 Capture { Resolve-ClaudeInstallerEntitlementStore -DeveloperCount 94 -BuCeiling 93 -ListCeiling 110 -EntitlementStore 'named-value' -Yes }
 Assert 'named values above the computed business-unit ceiling are refused' ($Failure -match 'Named values hold about 93 developers' -and $Failure -match 'choose projection') $Failure
 
+function Get-GraphToken { 'offline-token' }
+function Get-GroupMemberOids { param([string]$GroupName, [string]$Token) if ($GroupName -eq 'std') { @([pscustomobject]@{Oid='a'},[pscustomobject]@{Oid='b'}) } else { @([pscustomobject]@{Oid='b'},[pscustomobject]@{Oid='c'}) } }
+$countFromGroups = Get-ClaudeInstallerDeveloperCountFromGroups -StandardGroup std -PremiumGroup prem
+Assert 'unattended named-value capacity can derive a distinct developer count from tier groups' ($countFromGroups -eq 3) "count=$countFromGroups"
+
 foreach ($sku in 'BasicV2','StandardV2','PremiumV2') {
     $resolver = Resolve-ClaudeInstallerResolverInboundAccess -Sku $sku -EntitlementStore projection
     Assert "resolver inbound access defaults public on $sku" ($resolver.Access -eq 'public' -and $resolver.Message -match 'public') ($resolver | ConvertTo-Json -Depth 4)
@@ -95,6 +100,21 @@ Invoke-ClaudeInstallerSyncJobDeployment -Root $root -ResourceGroup rg-p98 -ApimN
     -AlertEmail 'ops@contoso.example' -SubscriptionId 00000000-0000-4000-8000-000000000001 -InvokeScript $record 6>$null | Out-Null
 Assert 'the optional sync job gets its alert address, the tier groups and the prefix' ($calls.Count -eq 1 -and $calls[0].Path -match 'Deploy-ClaudeProjectionRenewal\.ps1$' -and
     (& $named $calls[0] '-AlertEmail') -eq 'ops@contoso.example' -and (& $named $calls[0] '-StandardGroup') -eq 'std' -and (& $named $calls[0] '-PremiumGroup') -eq 'prem' -and (& $named $calls[0] '-NamePrefix') -eq 'p98') ($calls | ConvertTo-Json -Depth 5)
+
+$calls.Clear()
+$okSnapshot = Invoke-ClaudeInstallerProjectionDeployment -Root $root -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 `
+    -Location eastus2 -Sku BasicV2 -ResolverInboundAccess public -StandardGroup 'std group' -PremiumGroup prem -CompareBaseline Snapshot -InvokeScript $record
+Assert 'snapshot baseline is passed to deploy and switch, and rerun commands quote values with spaces' (
+    $okSnapshot -and $calls.Count -eq 2 -and
+    (& $named $calls[0] '-CompareBaseline') -eq 'Snapshot' -and (& $named $calls[1] '-CompareBaseline') -eq 'Snapshot'
+) ($calls | ConvertTo-Json -Depth 5)
+
+$calls.Clear()
+$warnings = @(Invoke-ClaudeInstallerSyncJobDeployment -Root $root -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 -StandardGroup 'std group' -PremiumGroup prem `
+    -AlertEmail 'ops team@contoso.example' -SubscriptionId 00000000-0000-4000-8000-000000000001 -InvokeScript { param($ScriptPath, $Arguments) $calls.Add([pscustomobject]@{ Path = $ScriptPath; Args = $Arguments }); 9 } 3>&1)
+Assert 'a failed optional sync job returns false and warns with the full quoted rerun command' (($warnings -contains $false) -and (($warnings | Out-String) -match "-StandardGroup 'std group'" -and ($warnings | Out-String) -match "-SubscriptionId 00000000-0000-4000-8000-000000000001" -and ($warnings | Out-String) -match "-AlertEmail 'ops team@contoso.example'")) (($warnings | Out-String) + ($calls | ConvertTo-Json -Depth 5))
+$failedStep = Get-ClaudeInstallerProjectionNextSteps -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 -StandardGroup 'std group' -PremiumGroup prem -SubscriptionId 00000000-0000-4000-8000-000000000001 -SyncJobStatus failed
+Assert 'sync-job failure next steps do not report the job as deployed and include the rerun command' ($failedStep.SyncJob.Title -match 'not deployed' -and ((@($failedStep.SyncJob.Detail) -join "`n") -match "-StandardGroup 'std group'")) ((@($failedStep.SyncJob.Detail) -join "`n"))
 # The live run of 2026-10-06 failed here: a string array splatted into a script binds by position, so the
 # deployer received the name prefix as -Sku. This runs the real helper against a real script.
 $probe = Join-Path ([IO.Path]::GetTempPath()) ('installer-probe-' + [guid]::NewGuid().ToString('N') + '.ps1')
@@ -108,6 +128,7 @@ $tokens = $null; $parseErrors = $null
 $installerAst = [Management.Automation.Language.Parser]::ParseInput($installerText, [ref]$tokens, [ref]$parseErrors)
 $planCall = $installerAst.Find({ param($n) $n -is [Management.Automation.Language.CommandAst] -and $n.GetCommandName() -eq 'Get-ClaudeInstallerProjectionPlan' }, $true)
 $whatIfStop = $installerAst.Find({ param($n) $n -is [Management.Automation.Language.IfStatementAst] -and $n.Clauses[0].Item1.Extent.Text -eq '$WhatIfPreference' -and $n.Extent.Text -match 'WhatIf - stopping before any change' }, $true)
+Assert 'installer exposes a validated DeveloperCount parameter' ($installerText -match '\[ValidateRange\(1,10000000\)\]\s*\[int\]\$DeveloperCount')
 Assert 'the approval summary lists the projection steps before the -WhatIf stop, so -WhatIf shows them' ($planCall -and $whatIfStop -and $planCall.Extent.StartOffset -lt $whatIfStop.Extent.StartOffset) "plan at $($planCall.Extent.StartLineNumber); stop at $($whatIfStop.Extent.StartLineNumber)"
 Assert 'new projection gateways skip the named-value Sync-ClaudeAccess step' (-not (Test-ClaudeInstallerShouldSyncNamedValues -EntitlementStore projection -NewGateway $true))
 Assert 'named-value gateways still run Sync-ClaudeAccess' (Test-ClaudeInstallerShouldSyncNamedValues -EntitlementStore 'named-value' -NewGateway $true)
@@ -123,7 +144,7 @@ Assert 'the projection developer step is the group change and the targeted sync,
 Assert 'the optional sync job is its own step, with the full deploy command' (
     $steps.SyncJob.Title -match '^Optional' -and
     $job -match 'very large directories' -and
-    $job -match 'Deploy-ClaudeProjectionRenewal\.ps1 -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 -AlertEmail' -and $job -notmatch '<prefix>'
+    $job -match 'Deploy-ClaudeProjectionRenewal\.ps1 -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 -StandardGroup claude-code-standard -PremiumGroup claude-code-premium -AlertEmail' -and $job -notmatch '<prefix>'
 ) $job
 $deployed = Get-ClaudeInstallerProjectionNextSteps -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 -DeploySyncJob
 $deployedJob = @($deployed.SyncJob.Detail) -join "`n"

@@ -1,4 +1,4 @@
-# Runs Install-ClaudeGateway.ps1 under -WhatIf -Yes once per case, in this process, and writes one
+﻿# Runs Install-ClaudeGateway.ps1 under -WhatIf -Yes once per case, in this process, and writes one
 # JSON line per case. tests/Test-InstallerPermutations.ps1 runs it on PowerShell 7 and on Windows
 # PowerShell 5.1. Offline unless -Live: az, the Azure Retail Prices API and the reachability probe
 # are functions here, and PowerShell resolves a function before the az.cmd application or a cmdlet.
@@ -32,10 +32,16 @@ if (-not $Live) {
         if ($joined -like 'bicep version*') { return 'Bicep CLI version 0.46.1 (545b338e2c)' }
         if ($joined -like 'account list --query*') { return '00000000-0000-4000-8000-0000000000a1' }
         if ($joined -like 'account show --query name*') { return 'p72-subscription' }
+        if ($joined -like 'account get-access-token*') { return '{"accessToken":"offline-token"}' }
         if ($joined -like 'account show*') { return '{"id":"00000000-0000-4000-8000-0000000000a1","name":"p72-subscription","state":"Enabled","tenantId":"00000000-0000-4000-8000-0000000000f1","user":{"name":"admin@contoso.com","type":"user"}}' }
         if ($joined -like 'account set --subscription *') { return }
         if ($joined -like 'cognitiveservices account deployment list *') { return $global:P72DriverDeployments }
+        if ($joined -like 'apim show -g rg-p72live -n apim-p72live*--query id*') { return '/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-p72live/providers/Microsoft.ApiManagement/service/apim-p72live' }
         if ($joined -like 'apim show -g rg-p72live -n apim-p72live*') { return $global:P72DriverExisting }
+        if ($joined -like 'apim show -g rg-p72 -n apim-p72perm*') { $global:LASTEXITCODE = 3; return 'ERROR: (ResourceNotFound) API Management service not found.' }
+        if ($joined -like 'apim nv show *entitlement-source*') { return 'named-value' }
+        if ($joined -like 'apim nv show *entitlement-resolver-url*') { return 'https://resolver-not-deployed.invalid' }
+        if ($joined -like 'apim nv show *entitlement-resolver-audience*') { return 'https://resolver-not-deployed.invalid' }
         if ($joined -like 'apim nv show *entitlement-cache-seconds*') { $global:LASTEXITCODE = 3; return }
         $global:P72DriverUnexpected.Add($joined)
         $global:LASTEXITCODE = 2
@@ -44,6 +50,10 @@ if (-not $Live) {
         param($Uri, $TimeoutSec, $ErrorAction, $Method, $Headers, $Body, $ContentType, [switch]$UseBasicParsing)
         $u = [uri]::UnescapeDataString([string]$Uri)
         $global:P72DriverCalls.Add("REST $u")
+        if ($u -match 'https://graph.microsoft.com/v1.0/groups') {
+            if ($u -match '/transitiveMembers/') { return [pscustomobject]@{ value=@() } }
+            return [pscustomobject]@{ value=@([pscustomobject]@{ id='00000000-0000-4000-8000-0000000000aa' }) }
+        }
         if ($u -notmatch "serviceName eq 'API Management'") { throw 'offline: only the API Management prices are stubbed' }
         $rows = foreach ($r in @(@('Basic v2 Unit', 0.21), @('Standard v2 Unit', 0.96), @('Premium v2 Unit', 3.84))) {
             [pscustomobject]@{ meterName = $r[0]; retailPrice = $r[1]; type = 'Consumption'; skuName = ($r[0] -replace ' Unit$', ''); productName = 'API Management'; tierMinimumUnits = 0; unitOfMeasure = '1 Hour'; currencyCode = 'USD'; armRegionName = 'eastus2' }
