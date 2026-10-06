@@ -693,8 +693,9 @@ own identity, which can write only this container.
 
 ```powershell
 ./scripts/Sync-ClaudeProjection.ps1 -Account cosmos-<prefix> -ApimName <apim> -ResourceGroup <rg> -ExportPath snapshot.json
+$accountResourceId = az cosmosdb show -n cosmos-<prefix> -g <rg> --query id -o tsv
 # then, in the runner:
-node /work/sync/src/apply-projection.mjs --cosmos https://cosmos-<prefix>.documents.azure.com:443/ --tenant <tenant-id> --snapshot /work/snapshot.json
+node /work/sync/src/apply-projection.mjs --cosmos https://cosmos-<prefix>.documents.azure.com:443/ --tenant <tenant-id> --account-resource-id $accountResourceId --snapshot /work/snapshot.json
 ```
 
 `-ApimName` and `-ResourceGroup` make the projection assign business units from

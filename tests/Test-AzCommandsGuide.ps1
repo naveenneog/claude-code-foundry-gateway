@@ -657,6 +657,10 @@ if [ "$1" = "cosmosdb" ] && [ "$2" = "sql" ] && [ "$3" = "role" ] && [ "$4" = "a
   printf 'cosmos-role\n' >> "$P89_WRITES"
   exit 0
 fi
+if [ "$1" = "cosmosdb" ] && [ "$2" = "show" ]; then
+  printf '/subscriptions/11111111-1111-4111-8111-111111111111/resourceGroups/rg/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-prefix\n'
+  exit 0
+fi
 if [ "$1" = "container" ] && [ "$2" = "exec" ]; then
   cmd="$(arg_after --exec-command "$@")"
   printf 'container-exec %s\n' "$cmd" >> "$P89_WRITES"
@@ -1622,7 +1626,7 @@ Assert 'projection runner block assigns Cosmos role and transfers files before a
     $runnerCalls -match 'cosmos-role' -and
     $runnerCalls -match 'sync-source\.tar\.gz' -and
     $runnerCalls -match 'snapshot\.json' -and
-    $runnerCalls -match 'apply-projection\.mjs --cosmos .* --snapshot /work/snapshot\.json' -and
+    $runnerCalls -match 'apply-projection\.mjs --cosmos .* --account-resource-id /subscriptions/11111111-1111-4111-8111-111111111111/resourceGroups/rg/providers/Microsoft\.DocumentDB/databaseAccounts/cosmos-prefix --snapshot /work/snapshot\.json' -and
     $runnerCalls -match 'gateway-decisions\.json' -and
     $runnerCalls -match 'apply-projection\.mjs --cosmos .* --compare /work/gateway-decisions\.json'
 ) $projectionRunner.Output

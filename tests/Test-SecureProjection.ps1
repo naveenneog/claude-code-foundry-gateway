@@ -89,11 +89,16 @@ Assert 'an export needs no Cosmos token'          ($sp -match '(?s)if \(-not \$E
 Assert 'and is written without a byte-order mark' ($sp -match 'UTF8Encoding\(\$false\)')
 Assert 'the importer exists'                      (Test-Path (Join-Path $root 'sync/src/apply-projection.mjs'))
 $ap = Get-Content (Join-Path $root 'sync/src/apply-projection.mjs') -Raw
+$secureDoc = Get-Content (Join-Path $root 'docs/SECURE-PROJECTION.md') -Raw
 Assert 'it validates a snapshot before writing'   ($ap -match 'validateSnapshot\(snap, \{ tenantId \}\)')
 Assert 'a failed write is not reported as ok'     ($ap -match 'ok: !\(writes\.failed \|\| deletes\.failed\)')
 Assert 'it tolerates a byte-order mark'           ($ap -match '\\uFEFF')
 Assert 'it writes in bulk'                        ($ap -match 'executeBulkOperations')
 Assert 'and can compare without writing'          ($ap -match "opt\('--compare'\)")
+Assert 'the manual runner apply passes the Cosmos account resource id' (
+    $secureDoc -match 'az cosmosdb show -n cosmos-<prefix> -g \$rg --query id -o tsv' -and
+    $secureDoc -match 'apply-projection\.mjs --cosmos https://cosmos-<prefix>\.documents\.azure\.com:443/ --tenant <tenant-id> --account-resource-id \$accountResourceId --snapshot /work/snapshot\.json'
+)
 
 Write-Host ''
 Write-Host 'Secure projection - both paths charge the same business unit' -ForegroundColor Cyan

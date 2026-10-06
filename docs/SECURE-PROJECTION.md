@@ -663,11 +663,12 @@ Invoke-RunnerCommand -ResourceGroup $rg -Name $runner -Command 'tar -x -z -f /wo
 Invoke-RunnerCommand -ResourceGroup $rg -Name $runner -Command 'npm --prefix /work/sync ci --omit=dev --ignore-scripts'
 
 # Now export using the GATEWAY resource group, copy, and apply before the snapshot apply-by deadline.
+$accountResourceId = az cosmosdb show -n cosmos-<prefix> -g $rg --query id -o tsv
 ./scripts/Sync-ClaudeProjection.ps1 -Account cosmos-<prefix> -ApimName <apim> `
     -ResourceGroup '<gateway-resource-group>' -ExportPath .\backups\snapshot.json
 Send-RunnerFile -ResourceGroup $rg -Name $runner -Path .\backups\snapshot.json -Destination /work/snapshot.json
 Invoke-RunnerCommand -ResourceGroup $rg -Name $runner -Command `
-    'node /work/sync/src/apply-projection.mjs --cosmos https://cosmos-<prefix>.documents.azure.com:443/ --tenant <tenant-id> --snapshot /work/snapshot.json'
+    "node /work/sync/src/apply-projection.mjs --cosmos https://cosmos-<prefix>.documents.azure.com:443/ --tenant <tenant-id> --account-resource-id $accountResourceId --snapshot /work/snapshot.json"
 ```
 
 The runner needs **Cosmos DB Built-in Data Contributor** scoped to this container,

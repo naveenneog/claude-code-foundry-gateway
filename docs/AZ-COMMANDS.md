@@ -1578,7 +1578,7 @@ p89_projection_runner() {
   az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node -e require('fs').mkdirSync('/work',{recursive:true})" || return 1
   az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "tar -x -z -f /work/sync-source.tar.gz -C /work" || return 1
   az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "npm --prefix /work/sync ci --omit=dev --ignore-scripts --no-audit --fund=false" || return 1
-  az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node /work/sync/src/apply-projection.mjs --cosmos https://${COSMOS_ACCOUNT}.documents.azure.com:443/ --tenant ${TENANT_ID} --snapshot /work/snapshot.json" || return 1
+  az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node /work/sync/src/apply-projection.mjs --cosmos https://${COSMOS_ACCOUNT}.documents.azure.com:443/ --tenant ${TENANT_ID} --account-resource-id ${PROJECTION_ACCOUNT_RESOURCE_ID} --snapshot /work/snapshot.json" || return 1
   ./scripts/Compare-ClaudeEntitlement.ps1 -ResourceGroup "$GATEWAY_RG" -ApimName "$APIM_NAME" -StandardGroup "$STANDARD_GROUP" -PremiumGroup "$PREMIUM_GROUP" -ExportGatewayPath gateway-decisions.json -FailOnDrift || return 1
   send_runner_file gateway-decisions.json /work/gateway-decisions.json || return 1
   az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node /work/sync/src/apply-projection.mjs --cosmos https://${COSMOS_ACCOUNT}.documents.azure.com:443/ --tenant ${TENANT_ID} --compare /work/gateway-decisions.json"
@@ -1606,6 +1606,10 @@ p94_projection_renewal() {
   fi
   if ! COSMOS_ACCOUNT="$(az deployment group show -g "$GATEWAY_RG" -n "projection-${NAME_PREFIX}" --query "properties.outputs.accountName.value" -o tsv)" || [ -z "$COSMOS_ACCOUNT" ]; then
     echo "Refused: could not read the projection Cosmos account output; nothing was deployed." >&2
+    return 1
+  fi
+  if ! PROJECTION_ACCOUNT_RESOURCE_ID="$(az cosmosdb show -n "$COSMOS_ACCOUNT" -g "$GATEWAY_RG" --query id -o tsv)" || [ -z "$PROJECTION_ACCOUNT_RESOURCE_ID" ]; then
+    echo "Refused: could not read the projection Cosmos account resource id; nothing was applied." >&2
     return 1
   fi
   if ! RG_RESOURCES="$(az resource list -g "$GATEWAY_RG" --query "[].[name,type]" -o tsv)"; then
