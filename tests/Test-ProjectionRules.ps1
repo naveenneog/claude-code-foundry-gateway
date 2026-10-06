@@ -12,17 +12,14 @@ $resolver = Get-Content (Join-Path $root 'infra\resolver.bicep') -Raw
 $wiring = Get-Content (Join-Path $root 'resolver\src\index.mjs') -Raw
 $lookup = Get-Content (Join-Path $root 'resolver\src\lookup.mjs') -Raw
 $loader = Get-Content (Join-Path $root 'guide\loadtest-projection.mjs') -Raw
-Assert 'PowerShell consumes the response continuation header' ($sync -match "Continuation = \[string\]\`$response.Headers\['x-ms-continuation'\]")
-Assert 'PowerShell queries through the multi-page helper' ($sync -match '\$existing = Get-ClaudeProjectionExisting -ReadPage')
-Assert 'PowerShell sends opaque continuation as a header' ($sync -match "\`$headers\['x-ms-continuation'\] = \`$continuation")
+Assert 'Node writer reads existing records page by page to the end' ($apply -match '(?s)async function readExisting\(container\) \{.*?while \(iterator\.hasMoreResults\(\)\) \{\s*const \{ resources \} = await iterator\.fetchNext\(\);')
+Assert 'PowerShell never contacts Cosmos: no data-plane token, request or write header' ($sync -notmatch 'https://cosmos\.azure\.com|x-ms-documentdb|Invoke-Cosmos|/dbs/')
+Assert 'PowerShell refuses a run without -ExportPath before it signs in' ($sync.IndexOf('if (-not $ExportPath) {') -ge 0 -and $sync.IndexOf('if (-not $ExportPath) {') -lt $sync.IndexOf('az account show'))
 Assert 'PowerShell keeps one snapshot apply-by expiry and omits record expiry' (([regex]::Matches($sync, 'expiresAt\s+= \$expiresAt')).Count -eq 1 -and $sync -notmatch '(?s)\$doc = @\{.*expiresAt\s+=')
 Assert 'PowerShell bounds snapshot apply-by from scan start' ($sync -match '\$expiresAt = \$scanStarted.ToUnixTimeSeconds\(\) \+ \$MaxAgeSeconds')
 Assert 'PowerShell records the scan start as lastVerifiedAt' ($sync -match '\$verifiedAt = \$scanStarted\.ToString\(''yyyy-MM-ddTHH:mm:ss\.fffZ''\)')
 Assert 'PowerShell cannot extend the snapshot apply-by limit' ($sync.Contains('[ValidateRange(60,7200)][int]$MaxAgeSeconds = 7200'))
-Assert 'unchanged PowerShell members are not rewritten' ($sync -match '\$unchanged\+\+; continue')
-Assert 'failed PowerShell deletions fail reconciliation' ($sync -match 'catch \{ \$failed\+\+; Write-Warning "  could not remove' -and $sync -match 'if \(\$failed\) \{ exit 1 \}')
-Assert 'PowerShell direct apply does not restart an ADR-0017 record lease' ($sync -notmatch 'Projection expired (before writing|during apply)')
-Assert 'Node apply writes only changed records' ($apply -match 'keepOrphans: userOid \? false : flag\(''--keep-orphans''\), refresh: false')
+Assert 'Node apply writes only changed records'  ($apply -match 'keepOrphans: userOid \? false : flag\(''--keep-orphans''\), refresh: false')
 Assert 'Node writes reconciliation metadata, not a record expiry' ($apply -match 'toDocument\(r, \{ tenantId, mappingVersion, reconciliation \}\)')
 Assert 'Node operation failures keep summary false' ($apply.Contains('ok: !(writes.failed || deletes.failed), '))
 Assert 'Node status failures keep summary false' ($apply.Contains('summary.ok = statusWrite.failed === 0;'))

@@ -5,18 +5,12 @@ $sandbox = Join-Path ([IO.Path]::GetTempPath()) ('projection-negative-' + [guid]
 $rules = 'rules'
 $node = 'node'
 $mutations = @(
-    @{ Name='paging stops after one page'; File='scripts\ClaudeProjection.ps1'; From='} while ($token)'; To='} while ($false)'; Suite='paging' }
-    @{ Name='empty pages terminate the scan'; File='scripts\ClaudeProjection.ps1'; From='$token = [string]$page.Continuation'; To='if (-not $page.Documents.Count) { break }; $token = [string]$page.Continuation'; Suite='paging' }
-    @{ Name='repeated tokens loop'; File='scripts\ClaudeProjection.ps1'; From='if ($seen.ContainsKey($token))'; To='if ($false)'; Suite='paging' }
-    @{ Name='response continuation is discarded'; File='scripts\Sync-ClaudeProjection.ps1'; From="Continuation = [string]`$response.Headers['x-ms-continuation']"; To="Continuation = ''"; Suite=$rules }
-    @{ Name='query is no longer paged'; File='scripts\Sync-ClaudeProjection.ps1'; From='$existing = Get-ClaudeProjectionExisting -ReadPage'; To='$existing = &'; Suite=$rules }
-    @{ Name='continuation header is not forwarded'; File='scripts\Sync-ClaudeProjection.ps1'; From="`$headers['x-ms-continuation'] = `$continuation"; To="`$headers['wrong-header'] = `$continuation"; Suite=$rules }
-    @{ Name='PowerShell writes expiresAt on records'; File='scripts\Sync-ClaudeProjection.ps1'; From='lastVerifiedAt = $verifiedAt'; To="lastVerifiedAt = `$verifiedAt`n        expiresAt      = `$expiresAt"; Suite=$rules }
+    @{ Name='PowerShell exporter writes a second expiry'; File='scripts\Sync-ClaudeProjection.ps1'; From='lastVerifiedAt = $verifiedAt'; To="lastVerifiedAt = `$verifiedAt`n        expiresAt      = `$expiresAt"; Suite=$rules }
     @{ Name='PowerShell verifies records at apply time'; File='scripts\Sync-ClaudeProjection.ps1'; From='$verifiedAt = $scanStarted.ToString(''yyyy-MM-ddTHH:mm:ss.fffZ'')'; To='$verifiedAt = [DateTimeOffset]::UtcNow.ToString(''yyyy-MM-ddTHH:mm:ss.fffZ'')'; Suite=$rules }
     @{ Name='PowerShell accepts a longer snapshot apply-by'; File='scripts\Sync-ClaudeProjection.ps1'; From='[ValidateRange(60,7200)]'; To='[ValidateRange(60,86400)]'; Suite=$rules }
-    @{ Name='PowerShell rewrites unchanged members'; File='scripts\Sync-ClaudeProjection.ps1'; From='{ $unchanged++; continue }'; To='{ $unchanged++ }'; Suite=$rules }
-    @{ Name='PowerShell failed revocation reports success'; File='scripts\Sync-ClaudeProjection.ps1'; From='catch { $failed++; Write-Warning "  could not remove'; To='catch { Write-Warning "  could not remove'; Suite=$rules }
     @{ Name='PowerShell omits snapshot apply-by'; File='scripts\Sync-ClaudeProjection.ps1'; From='expiresAt      = $expiresAt'; To='expiresAt      = $null'; Suite=$rules }
+    @{ Name='PowerShell exporter goes on without a snapshot file'; File='scripts\Sync-ClaudeProjection.ps1'; From='if (-not $ExportPath) {'; To='if ($false) {'; Suite=$rules }
+    @{ Name='Node writer reads only the first page'; File='sync\src\apply-projection.mjs'; From='while (iterator.hasMoreResults()) {'; To='for (let once = 0; once < 1; once++) {'; Suite=$rules }
     @{ Name='Node apply rewrites unchanged records'; File='sync\src\apply-projection.mjs'; From=', refresh: false'; To=', refresh: true'; Suite=$rules }
     @{ Name='Node apply omits reconciliation metadata'; File='sync\src\apply-projection.mjs'; From='toDocument(r, { tenantId, mappingVersion, reconciliation })'; To='toDocument(r, { tenantId, mappingVersion })'; Suite=$rules }
     @{ Name='Node status failures report success'; File='sync\src\apply-projection.mjs'; From='summary.ok = statusWrite.failed === 0;'; To='summary.ok = true;'; Suite=$rules }
@@ -69,8 +63,6 @@ function Run-Suite($suite) {
     try {
         if ($suite -eq 'node') {
             node --test --test-timeout=1500 --test-reporter=tap resolver/test/*.test.mjs sync/test/*.test.mjs *> $suiteLog
-        } elseif ($suite -eq 'paging') {
-            pwsh -NoProfile -File tests\Test-ProjectionPaging.ps1 *> $suiteLog
         } else { pwsh -NoProfile -File tests\Test-ProjectionRules.ps1 *> $suiteLog }
         return $LASTEXITCODE
     } finally { Pop-Location }
@@ -86,7 +78,7 @@ try {
                 Copy-Item $_.FullName $dest
             }
     }
-    foreach ($suite in 'rules', 'paging', 'node') {
+    foreach ($suite in 'rules', 'node') {
         if ((Run-Suite $suite) -ne 0) {
             Get-Content -LiteralPath $suiteLog | Write-Host
             throw "Unmutated $suite failed; no mutation result is valid."

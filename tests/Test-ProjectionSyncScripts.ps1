@@ -16,6 +16,7 @@ function Capture([scriptblock]$Action) {
 }
 
 Write-Host 'P97 projection sync scripts'
+$script:p97SyncWork = Join-Path ([IO.Path]::GetTempPath()) ('p97-sync-scripts-' + [guid]::NewGuid().ToString('N'))
 
 . (Join-Path $root 'scripts\ClaudeProjectionChecks.ps1')
 $calls = [Collections.Generic.List[string]]::new()
@@ -40,8 +41,8 @@ Capture { Confirm-ClaudeProjectionResolverServicePrincipal -AppId 'not-a-guid' }
 Assert 'invalid resolver app id is rejected before az' ($CapturedError -match 'GUID' -and $calls.Count -eq 0) $CapturedError
 
 function Invoke-TargetedExportFixture {
-    param([string]$User, [string[]]$BusinessUnitGroups = @())
-    $work = Join-Path $root '.test-work\p97-sync-scripts'
+    param([string]$User, [string[]]$BusinessUnitGroups = @(), [switch]$WhatIf)
+    $work = $script:p97SyncWork
     New-Item -ItemType Directory -Force -Path $work | Out-Null
     $snapshot = Join-Path $work ("snapshot-$([guid]::NewGuid().ToString('N')).json")
     $global:P97SyncFixtureCalls = [Collections.Generic.List[string]]::new()
@@ -77,18 +78,35 @@ function Invoke-TargetedExportFixture {
         }
         throw "unexpected HTTP $Method $Uri"
     }
-    & (Join-Path $root 'scripts\Sync-ClaudeProjection.ps1') -Account cosmos-p97 -TenantId '00000000-0000-4000-8000-000000000085' -StandardGroup claude-code-standard -PremiumGroup claude-code-premium -BusinessUnitGroups $BusinessUnitGroups -ExportPath $snapshot -User $User | Out-Null
-    $json = Get-Content -LiteralPath $snapshot -Raw | ConvertFrom-Json
-    [pscustomobject]@{ Calls = @($global:P97SyncFixtureCalls); Batches = @($global:P97SyncFixtureBatches); Snapshot = $json; LastExitCode = $global:LASTEXITCODE }
+    & (Join-Path $root 'scripts\Sync-ClaudeProjection.ps1') -Account cosmos-p97 -TenantId '00000000-0000-4000-8000-000000000085' -StandardGroup claude-code-standard -PremiumGroup claude-code-premium -BusinessUnitGroups $BusinessUnitGroups -ExportPath $snapshot -User $User -WhatIf:$WhatIf | Out-Null
+    $written = Test-Path -LiteralPath $snapshot
+    $json = if ($written) { Get-Content -LiteralPath $snapshot -Raw | ConvertFrom-Json } else { $null }
+    [pscustomobject]@{ Calls = @($global:P97SyncFixtureCalls); Batches = @($global:P97SyncFixtureBatches); Snapshot = $json; Written = $written; LastExitCode = $global:LASTEXITCODE }
 }
 
 Capture { & (Join-Path $root 'scripts\Sync-ClaudeProjection.ps1') -Account cosmos-p97 -User dev@contoso.com }
 Assert 'targeted export refuses User without ExportPath' ($CapturedError -match '-User requires -ExportPath') $CapturedError
 
+# ADR-0051 amendment 2: sync/src/apply-projection.mjs is the one Cosmos writer, so the exporter
+# refuses a run with no -ExportPath before it signs in, reads Graph or contacts Cosmos.
+$global:P97ExporterCalls = [Collections.Generic.List[string]]::new()
+function az { $global:P97ExporterCalls.Add("az $($args -join ' ')"); $global:LASTEXITCODE = 0; throw "unexpected az $($args -join ' ')" }
+function Invoke-RestMethod { $global:P97ExporterCalls.Add('Invoke-RestMethod'); throw 'unexpected Invoke-RestMethod' }
+function Invoke-WebRequest { $global:P97ExporterCalls.Add('Invoke-WebRequest'); throw 'unexpected Invoke-WebRequest' }
+foreach ($case in @(@{ Name = 'a full run'; Extra = @{} }, @{ Name = 'a -WhatIf run'; Extra = @{ WhatIf = $true } })) {
+    $global:P97ExporterCalls.Clear()
+    $extra = $case.Extra
+    Capture { & (Join-Path $root 'scripts\Sync-ClaudeProjection.ps1') -Account cosmos-p97 -TenantId '00000000-0000-4000-8000-000000000085' @extra }
+    Assert "without -ExportPath, $($case.Name) refuses before any Azure or Graph call and names the one Cosmos writer and the supported command" ($CapturedError -match 'Nothing was read or written' -and $CapturedError -match 'sync/src/apply-projection\.mjs' -and $CapturedError -match 'Remedy: run scripts/Sync-ClaudeAccess\.ps1 -ResourceGroup <rg> -ApimName <apim>' -and $global:P97ExporterCalls.Count -eq 0) "$CapturedError | calls: $($global:P97ExporterCalls -join ', ')"
+}
+Remove-Item function:az, function:Invoke-RestMethod, function:Invoke-WebRequest
+
 $none = Invoke-TargetedExportFixture -User 'dev@contoso.com'
 Assert 'targeted export resolves a UPN with the exact encoded Graph URL' (($none.Calls -join "`n") -match 'HTTP Get https://graph\.microsoft\.com/v1\.0/users/dev%40contoso\.com\?\$select=id') ($none.Calls -join ' | ')
 Assert 'targeted export for a user in no configured group writes a user removal snapshot' ($none.Snapshot.scope -eq 'user' -and $none.Snapshot.user -eq '30000000-0000-4000-8000-000000000001' -and @($none.Snapshot.records).Count -eq 0) ($none.Snapshot | ConvertTo-Json -Compress)
 Assert 'successful export returns with LASTEXITCODE 0 for caller checks' ($none.LastExitCode -eq 0) "LASTEXITCODE=$($none.LastExitCode)"
+$dry = Invoke-TargetedExportFixture -User 'dev@contoso.com' -WhatIf
+Assert '-WhatIf with -ExportPath resolves, writes no snapshot file and returns 0' (-not $dry.Written -and $dry.LastExitCode -eq 0 -and ($dry.Calls -join "`n") -match '/checkMemberGroups') "written=$($dry.Written) LASTEXITCODE=$($dry.LastExitCode)"
 
 $oid = '30000000-0000-4000-8000-000000000009'
 $byId = Invoke-TargetedExportFixture -User $oid
@@ -139,6 +157,10 @@ Assert 'Sync-ClaudeAccess projection runner installs production dependencies wit
 Assert 'projection access path starts runner and applies contract CLI' (-not $CapturedError -and $accessCalls -match 'container show .*aci-projtest-p84fixture' -and $accessCalls -match 'npm --prefix /work/sync ci --omit=dev --ignore-scripts --no-audit --fund=false' -and $accessCalls -match 'apply-projection\.mjs .*--account-resource-id .*--snapshot /work/projection-snapshot\.json') "$CapturedError | $accessCalls"
 Assert 'projection access uses a temp per-run snapshot directory, not a repo .claude-projection-sync directory' (-not $CapturedError -and $accessCalls -match [regex]::Escape([IO.Path]::GetTempPath()) -and $accessCalls -notmatch '\.claude-projection-sync') "$CapturedError | $accessCalls"
 Assert 'projection access removes runner snapshot and decision files after apply' (-not $CapturedError -and $accessCalls -match "rmSync\('/work/projection-snapshot\.json'" -and $accessCalls -match "rmSync\('/work/gateway-decisions\.json'") "$CapturedError | $accessCalls"
+$exportCall = @($FixtureCalls | Where-Object { $_ -like 'pwsh *Sync-ClaudeProjection.ps1*' })
+$declared = @((Get-Command (Join-Path $root 'scripts\Sync-ClaudeProjection.ps1')).Parameters.Keys)
+$passed = @(if ($exportCall.Count) { ([string]$exportCall[0] -split ' ') | Select-Object -Skip 3 | Where-Object { $_ -match '^-[A-Za-z]+$' } | ForEach-Object { $_.Substring(1) } })
+Assert 'every parameter Sync-ClaudeAccess passes to the exporter is one the exporter declares' ($exportCall.Count -eq 1 -and $passed.Count -gt 0 -and @($passed | Where-Object { $_ -notin $declared }).Count -eq 0) "passed: $($passed -join ',') | undeclared: $(@($passed | Where-Object { $_ -notin $declared }) -join ',')"
 
 Reset-ProjectionFixture 'node-modules-present'
 Capture { & (Join-Path $root 'scripts\Sync-ClaudeAccess.ps1') -ApimName apim-p84 -ResourceGroup rg-p84 -Store projection }
@@ -146,4 +168,5 @@ $presentCalls = $FixtureCalls -join "`n"
 Assert 'Sync-ClaudeAccess skips runner npm ci when node_modules is already present' (-not $CapturedError -and $presentCalls -notmatch 'npm --prefix /work/sync ci') "$CapturedError | $presentCalls"
 
 Write-Host "P97_SYNC assertions=$assertions failed=$failures"
+Remove-Item -LiteralPath $script:p97SyncWork -Recurse -Force -ErrorAction SilentlyContinue
 exit ([int]($failures -gt 0))

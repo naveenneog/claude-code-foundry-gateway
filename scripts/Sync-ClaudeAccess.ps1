@@ -83,7 +83,6 @@ function Invoke-ClaudeProjectionAccessSync {
         $exportArgs = @('-NoProfile','-File',(Join-Path $PSScriptRoot 'Sync-ClaudeProjection.ps1'),
             '-Account',"cosmos-$prefix",'-TenantId',$tenantId,'-StandardGroup',$StandardGroup,'-PremiumGroup',$PremiumGroup,
             '-ApimName',$ApimName,'-ResourceGroup',$ResourceGroup,'-ExportPath',$snapshot)
-        if ($AllowEmpty) { $exportArgs += '-AllowEmpty' }
         if ($User) { $exportArgs += @('-User',$User) }
         $exportOutput = & pwsh @exportArgs 2>&1
         if ($LASTEXITCODE -ne 0) { throw "Projection snapshot export failed (exit $LASTEXITCODE): $(($exportOutput | Select-Object -Last 12) -join "`n")" }

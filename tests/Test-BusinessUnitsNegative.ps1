@@ -2417,10 +2417,10 @@ $mutations = @(
        To    = 'Math.Max(3600, int.Parse' }
 
     @{ Suite = 'Test-SecureProjection.ps1'
-       Name  = 'an export asks for a Cosmos token it cannot use'
+       Name  = 'the exporter asks for a Cosmos token'
        File  = 'scripts/Sync-ClaudeProjection.ps1'
-       From  = 'if (-not $ExportPath) {'
-       To    = 'if ($true) {' }
+       From  = '$graphToken = Get-GraphToken'
+       To    = '$graphToken = Get-GraphToken; $cosmosToken = az account get-access-token --resource https://cosmos.azure.com --query accessToken -o tsv' }
 
     @{ Suite = 'Test-SecureProjection.ps1'
        Name  = 'the projection charges the last business unit again'

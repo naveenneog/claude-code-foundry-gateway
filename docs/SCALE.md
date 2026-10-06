@@ -567,9 +567,11 @@ The thing that would be painful to migrate is not in the layer being replaced.
 
 The named values are a *projection* of Entra, rebuilt from it on every sync. So
 moving to Cosmos changes where the gateway reads, not what is true.
-`Sync-ClaudeAccess.ps1` writes named values; `Sync-ClaudeProjection.ps1` and
-the in-network Node writer publish the projection. Reuse the directory model,
-not the assumption that the two commands are interchangeable.
+`Sync-ClaudeAccess.ps1` syncs the store the gateway reads. On a projection gateway
+`Sync-ClaudeProjection.ps1` exports a snapshot and the in-network Node writer
+(`sync/src/apply-projection.mjs`) applies it; the Node writer is the only Cosmos
+writer ([ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md), decision 10).
+Reuse the directory model, not the assumption that the two stores are interchangeable.
 
 A rollback restores authorization without restoring consumption, which is the
 rule that makes the move safe to reverse mid-flight.
