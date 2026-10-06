@@ -101,7 +101,15 @@
       else button.focus();
     }
 
-    return { run };
+    // A control about to be disabled while it has keyboard focus hands the focus to the status region of its owner.
+    function keepFocusWhenDisabled(control, owner) {
+      if (!control || !owner || document.activeElement !== control) return;
+      const status = regionFor(owner, "status");
+      status.tabIndex = -1;
+      status.focus();
+    }
+
+    return { keepFocusWhenDisabled, run };
   }
 
   globalThis.ClaudeInstallerActions = { create: createActionHost };

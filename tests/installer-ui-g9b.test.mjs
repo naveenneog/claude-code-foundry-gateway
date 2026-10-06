@@ -694,3 +694,79 @@ test('R7-1 a stop from another client reaches the page through the stream and St
     await app.close();
   }
 });
+
+// Stops the followed real run from Node with the page's session, as another tab or client would.
+async function stopFromAnotherClient(app, page) {
+  const auth = await pageApiAuth(page);
+  const { id } = await (await fetch(`${app.base}/api/run/status`, { headers: { cookie: auth.cookie } })).json();
+  const stopped = await fetch(`${app.base}/api/run/stop`, {
+    method: 'POST',
+    headers: { cookie: auth.cookie, 'x-csrf-token': auth.csrfToken, 'content-type': 'application/json' },
+    body: JSON.stringify({ runId: id }),
+  });
+  assert.equal(stopped.status, 200);
+}
+
+async function focusedElement(page) {
+  return page.evaluate(() => document.activeElement?.id || document.activeElement?.tagName || '');
+}
+
+test('R8-1 a stop from another client moves keyboard focus from Stop to the run status', async () => {
+  const run = await followHeldRun();
+  const { app, browser, page, pageErrors } = run;
+  try {
+    await page.getByRole('button', { name: 'Stop run' }).focus();
+    await stopFromAnotherClient(app, page);
+    await page.locator('#run-output').getByText(/stopped: resource-group/).waitFor();
+    await page.waitForFunction(() => document.activeElement?.id !== 'stop-run');
+    assert.equal(await focusedElement(page), 'run-status');
+    assert.match(await page.locator('#run-status').textContent(), /Stopping at resource-group\./);
+    run.release();
+    await page.locator('#run-status').getByText(/Run stopped at resource-group\./).waitFor();
+    assert.notEqual(await focusedElement(page), 'BODY');
+    await assertClean(page, pageErrors);
+  } finally {
+    run.release();
+    await browser.close();
+    await app.close();
+  }
+});
+
+test('R8-1 after a reload a stop from another client moves keyboard focus from Stop to the run status', async () => {
+  const run = await followHeldRun();
+  const { app, browser, page, pageErrors } = run;
+  try {
+    await page.reload();
+    await page.waitForSelector('[name="SubscriptionId"]');
+    await page.waitForFunction(() => !document.querySelector('#stop-run')?.disabled);
+    await page.getByRole('button', { name: 'Stop run' }).focus();
+    await stopFromAnotherClient(app, page);
+    await page.locator('#run-output').getByText(/stopped: resource-group/).waitFor();
+    await page.waitForFunction(() => document.activeElement?.id !== 'stop-run');
+    assert.equal(await focusedElement(page), 'run-status');
+    assert.match(await page.locator('#run-status').textContent(), /Stopping at resource-group\./);
+    run.release();
+    await page.locator('#run-status').getByText(/Run stopped at resource-group\./).waitFor();
+    await assertClean(page, pageErrors);
+  } finally {
+    run.release();
+    await browser.close();
+    await app.close();
+  }
+});
+
+test('R8-1 a run that ends while keyboard focus is in a field leaves the focus there', async () => {
+  const run = await followHeldRun();
+  const { app, browser, page, pageErrors } = run;
+  try {
+    await page.locator('[name="SubscriptionId"]').focus();
+    run.release();
+    await page.locator('#run-status').getByText(/Run finished\./).waitFor();
+    assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('name')), 'SubscriptionId');
+    await assertClean(page, pageErrors);
+  } finally {
+    run.release();
+    await browser.close();
+    await app.close();
+  }
+});

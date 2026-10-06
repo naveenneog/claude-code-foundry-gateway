@@ -73,6 +73,9 @@ moves keyboard focus to the action status line and then back to the button; duri
 reaches Stop run (`tools/installer-ui/installer-ui-actions.js:58-102`;
 `docs/status/P93.md:1604-1611`). The page has no keyboard shortcuts of its own
 (`docs/status/P93.md:1604-1611`).
+When Stop run is disabled while it has keyboard focus, for example after a stop from another tab or
+when the run ends, the focus moves to the run status line, which says why Stop is no longer offered
+(`tools/installer-ui/installer-ui-actions.js:104-110`; `tools/installer-ui/installer-ui.js:443-447`).
 Account refresh, prefill, preflight and run actions share a page-level Azure-busy state. A 409
 `azure-busy` response is shown beside the used control with the operation that holds Azure CLI
 (`tools/installer-ui/installer-ui-actions.js:32-56`; `tools/installer-ui/installer-ui.js:388-416`).

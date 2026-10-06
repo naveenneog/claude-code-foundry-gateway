@@ -801,7 +801,7 @@
     "id": "lead-U14",
     "why": "Stop run state is not owned by run activity",
     "file": "tools/installer-ui/installer-ui.js",
-    "find": "if (stop && stop.dataset.actionBusy !== \"true\") stop.disabled = !runHost?.canStop?.();",
+    "find": "      stop.disabled = !runHost?.canStop?.();\n",
     "replace": "",
     "testFile": "tests/installer-ui-g4.test.mjs",
     "test": "U1 fix Stop run is disabled after the run ends even when the stop response arrives after the summary"
@@ -1651,5 +1651,32 @@
     "replace": "",
     "testFile": "tests/installer-ui-g9b.test.mjs",
     "test": "R7-1 a stream that ends without its summary after the run ended does not offer Stop while its output is read"
+  },
+  {
+    "id": "r8-1-1",
+    "why": "R8-1: a Stop button disabled while it has keyboard focus hands the focus to the run status",
+    "file": "tools/installer-ui/installer-ui.js",
+    "find": "      if (!runHost?.canStop?.()) actions?.keepFocusWhenDisabled(stop, byId(\"run\"));\n",
+    "replace": "",
+    "testFile": "tests/installer-ui-g9b.test.mjs",
+    "test": "R8-1 a stop from another client moves keyboard focus from Stop to the run status"
+  },
+  {
+    "id": "r8-1-2",
+    "why": "R8-1: the status region that receives the focus is made focusable, also when the page created it without tabindex",
+    "file": "tools/installer-ui/installer-ui-actions.js",
+    "find": "      status.tabIndex = -1;\n",
+    "replace": "",
+    "testFile": "tests/installer-ui-g9b.test.mjs",
+    "test": "R8-1 after a reload a stop from another client moves keyboard focus from Stop to the run status"
+  },
+  {
+    "id": "r8-1-3",
+    "why": "R8-1: the focus moves only from the control that has it, so a run that ends does not take the focus from a field",
+    "file": "tools/installer-ui/installer-ui-actions.js",
+    "find": "      if (!control || !owner || document.activeElement !== control) return;\n",
+    "replace": "      if (!control || !owner) return;\n",
+    "testFile": "tests/installer-ui-g9b.test.mjs",
+    "test": "R8-1 a run that ends while keyboard focus is in a field leaves the focus there"
   }
 ]
