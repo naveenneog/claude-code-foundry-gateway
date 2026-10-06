@@ -192,8 +192,8 @@ if ($gatewayId -notmatch '/providers/Microsoft\.ApiManagement/service/[^/]+$') {
 # so a gateway that records this prefix serves what the job writes.
 $recordedPrefix = ([string](Get-ApimNamedValue -ResourceGroup $GatewayResourceGroup -ApimName $ApimName -Id 'entitlement-projection-prefix' -FailOnError)).Trim()
 if ($recordedPrefix -cne $NamePrefix) {
-    $recorded = if ($recordedPrefix) { "records projection '$recordedPrefix'" } else { 'has no entitlement-projection-prefix named value' }
-    throw ("API Management $ApimName $recorded, not '$NamePrefix'. The sync job writes records without expiresAt, which only the resolver that " +
+    $recorded = if ($recordedPrefix) { "records projection '$recordedPrefix', not '$NamePrefix'" } else { 'has no entitlement-projection-prefix named value' }
+    throw ("API Management $ApimName $recorded. The sync job writes records without expiresAt, which only the resolver that " +
         "scripts/Deploy-ClaudeProjection.ps1 publishes serves. Remedy: rerun scripts/Deploy-ClaudeProjection.ps1 for projection '$NamePrefix' with the " +
         "parameters it was deployed with, then rerun this script. Nothing was deployed.")
 }
