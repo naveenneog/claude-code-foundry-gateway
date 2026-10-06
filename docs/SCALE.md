@@ -23,8 +23,22 @@ table below. This checks configuration capacity, not traffic throughput.
 [Architecture](ARCHITECTURE.md) shows how the optional store fits.
 
 ---
+## Quickstart
+
+`Measure-ClaudeCeiling.ps1` measures the selected gateway's named-value headroom; it does not measure Cosmos or concurrent inference capacity. The [workbook](PROJECTION-WORKBOOK.md#quickstart) covers a store migration. Production sizing uses daily activity, peak requests/tokens, streaming concurrency and burst shape, not headcount alone.
+
+```powershell
+$gateway = Get-Content .\onboarding\claude-gateway.json -Raw | ConvertFrom-Json
+.\scripts\Measure-ClaudeCeiling.ps1 -ResourceGroup $gateway.resourceGroup -ApimName $gateway.apimName
+```
+
+**Expected result:** the command reports named-value occupancy and exits nonzero above the 80 percent threshold. A green result is headroom for the named-value store only; it is not proof of traffic capacity.
 
 ## What runs out first
+
+<details>
+
+<summary>Scale evidence and procedures</summary>
 
 | Ceiling | Value | How it was established |
 |---|---|---|
@@ -123,7 +137,12 @@ path through the resolver.
 
 ---
 
+</details>
 ## "500,000 employees" is not a capacity specification
+
+<details>
+
+<summary>Scale evidence and procedures</summary>
 
 It gives no rate, no concurrency and no shape. Five numbers do:
 
@@ -167,7 +186,12 @@ traffic-independent and were measured, and stops there. **U9** and **U10** in
 
 ---
 
+</details>
 ## What a capacity test has to prove
+
+<details>
+
+<summary>Scale evidence and procedures</summary>
 
 The obvious test - create 500,000 counter keys and see whether the service
 accepts them - answers the wrong question. Accepting a key is not the same as
@@ -377,7 +401,12 @@ quota a developer can go, or why exhausted identities were admitted again, so
 
 ---
 
+</details>
 ## Order of work
+
+<details>
+
+<summary>Scale evidence and procedures</summary>
 
 1. Observe the five numbers on a pilot cohort, over enough days to include a bad one.
 2. Load-test API Management, Foundry capacity, telemetry ingestion and quota
@@ -425,7 +454,12 @@ complete.
 
 ---
 
+</details>
 ## The budget is a delayed kill switch, not a hard cap
+
+<details>
+
+<summary>Scale evidence and procedures</summary>
 
 The delay calculation below describes a **ledger-driven external watcher**,
 not APIM's admission-time token counter. The repository's token quotas are
@@ -476,7 +510,12 @@ not establish the delay or in-flight overshoot.
 
 ---
 
+</details>
 ## Deploying today, and scaling later
+
+<details>
+
+<summary>Scale evidence and procedures</summary>
 
 ### Two things to get right on the first day
 
@@ -585,7 +624,12 @@ comparison that proves both paths agree before either is trusted, ships today as
 
 ---
 
+</details>
 ## Getting there without resetting anyone's allowance
+
+<details>
+
+<summary>Scale evidence and procedures</summary>
 
 Entitlement is live, and budgets are consumed state rather than configuration. A
 developer who has spent 80% of a monthly allowance is carrying a number that
@@ -620,7 +664,12 @@ measures the gap.
 
 ---
 
+</details>
 ## The move itself, step by step
+
+<details>
+
+<summary>Scale evidence and procedures</summary>
 
 What a pilot customer runs to get from the named-value lists to the projection.
 The measured small migration kept serving; this is not a zero-downtime
@@ -837,3 +886,10 @@ entitled developer with 403 until `Sync-ClaudeAccess.ps1` ran again.
 | Per-developer counters | keyed on the object id in both paths — allowances do not reset |
 | Spend history | in Log Analytics, untouched by any of this |
 | The policy | source flip is configuration-only after the prerequisite policy upgrade and fresh-store comparison |
+
+</details>
+## Next
+
+- [Projection workbook](PROJECTION-WORKBOOK.md) covers staged migration.
+- [Operations](OPERATIONS.md) covers health and headroom checks.
+- [Decisions](DECISIONS.md) covers tier, revocation and scale choices.
