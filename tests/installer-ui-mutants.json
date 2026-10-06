@@ -1689,12 +1689,12 @@
     "test": "R9-1 Tab from the run status after a stop from another client reaches the run output"
   },
   {
-    "id": "r9-1-2",
-    "why": "R9-1: static mode hides the run output, which a static page never fills, so it is not an empty tab stop",
+    "id": "r10-1-1",
+    "why": "R10-1: static mode hides the whole Run section, so no empty Run heading remains",
     "file": "tools/installer-ui/installer-ui.js",
-    "find": "\"stop-run\", \"run-output\", \"refresh-identity\"",
+    "find": "\"stop-run\", \"run-section\", \"refresh-identity\"",
     "replace": "\"stop-run\", \"refresh-identity\"",
-    "testFile": "tests/installer-ui-g2.test.mjs",
-    "test": "E1 missing pwsh puts the server and page in static mode without spawning children"
+    "testFile": "tests/installer-ui-g4.test.mjs",
+    "test": "U2 file static mode shows download upload command handoff and blocks invalid download"
   }
 ]

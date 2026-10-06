@@ -60,8 +60,8 @@ does not read Azure and does not start the installer. The page hides live action
 in static mode (`tools/installer-ui/installer-ui.js:680-681`). The Cloud Shell handoff displayed by
 the page is download, **Manage files > Upload**, then the generated command
 (`tools/installer-ui/installer-ui-render.js:15-16`; `tools/installer-ui/ui-model.js:648`).
-Static mode also hides the run output, which a static page never fills
-(`tools/installer-ui/installer-ui.js:680`).
+Static mode hides the whole Run section, because a static page lists no steps and starts no run
+(`tools/installer-ui/index.html:34`; `tools/installer-ui/installer-ui.js:680`).
 
 The browser validator uses the same answer names, schema subset and cross-field rules as the
 PowerShell validator for `Install-ClaudeGateway.ps1`; the P92 corpus parity test compares check ids

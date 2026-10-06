@@ -139,7 +139,8 @@ exact streaming cache-creation detail remains **U13**.
   without a second stopped event and without stopping the process tree again. Shutdown now writes the
   `installer-ui-stopping` refusals of reads that waited for Azure CLI before it closes connections.
   When Stop run is disabled while it has keyboard focus, the focus now moves to the run status line
-  instead of the document body. The run output log is now in the tab order, and static mode hides it.
+  instead of the document body. The run output log is now in the tab order, and static mode hides the
+  Run section.
 - **Installers read an answers file, check it before any change, run selected steps and write a progress stream (P92, phase 0).**
   One answers file, described by `schemas/claude-gateway.answers.schema.json`, feeds
   `Install-ClaudeGateway.ps1 -AnswersPath`, `install-claude-gateway.sh --answers-file` and

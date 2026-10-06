@@ -677,7 +677,7 @@
     validateCurrentAnswers();
     updateRunAdmission();
     if (!liveMode()) {
-      for (const id of ["preflight", "steps", "run", "full-run", "rerun", "stop-run", "run-output", "refresh-identity", "signin"]) byId(id).hidden = true;
+      for (const id of ["preflight", "steps", "run", "full-run", "rerun", "stop-run", "run-section", "refresh-identity", "signin"]) byId(id).hidden = true;
       for (const node of document.querySelectorAll("[data-prefill-kind], [data-prefill-select]")) node.hidden = true;
     }
     refreshCommands();

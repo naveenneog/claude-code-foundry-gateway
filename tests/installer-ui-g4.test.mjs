@@ -193,6 +193,7 @@ test('U2 file static mode shows download upload command handoff and blocks inval
     await page.goto(new URL('../tools/installer-ui/index.html', import.meta.url).href);
     await page.waitForSelector('[name="SubscriptionId"]');
     assert.equal(await page.getByRole('button', { name: 'Run preflight' }).count(), 0);
+    assert.equal(await page.getByRole('heading', { name: 'Run', exact: true }).isVisible(), false, 'static mode shows no empty Run section');
     await page.getByText('Manage files > Upload').waitFor();
     await page.getByText('PowerShell command').waitFor();
     await page.locator('[name="FoundryAccount"]').fill('bad account');
@@ -208,6 +209,7 @@ test('U2 server static mode without pwsh shows the same handoff and downloads va
   const { browser, page, pageErrors } = await openPage(app);
   try {
     assert.equal(await page.getByRole('button', { name: 'Run preflight' }).count(), 0);
+    assert.equal(await page.getByRole('heading', { name: 'Run', exact: true }).isVisible(), false, 'static mode shows no empty Run section');
     await fillValid(page);
     await page.getByText('Manage files > Upload').waitFor();
     await page.getByText('PowerShell command').waitFor();

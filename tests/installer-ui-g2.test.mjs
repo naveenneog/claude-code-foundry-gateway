@@ -334,8 +334,9 @@ test('E1 missing pwsh puts the server and page in static mode without spawning c
       await page.context().addCookies([{ name: 'installer_token', value: app.cookie.split('=')[1], domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Strict' }]);
       await page.goto(`${app.base}/`);
       await page.locator('#preflight-state').getByText(/Static fallback/).waitFor();
-      const hidden = await page.evaluate(() => ['preflight', 'steps', 'run', 'full-run', 'stop-run', 'run-output'].map((id) => document.getElementById(id).hidden));
-      assert.deepEqual(hidden, [true, true, true, true, true, true]);
+      const hidden = await page.evaluate(() => ['preflight', 'steps', 'run', 'full-run', 'stop-run'].map((id) => document.getElementById(id).hidden));
+      assert.deepEqual(hidden, [true, true, true, true, true]);
+      assert.equal(await page.locator('#run-output').isVisible(), false);
     } finally {
       await browser.close();
     }
