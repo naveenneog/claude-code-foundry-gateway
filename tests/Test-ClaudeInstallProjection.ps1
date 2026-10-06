@@ -113,12 +113,33 @@ Assert 'new projection gateways skip the named-value Sync-ClaudeAccess step' (-n
 Assert 'named-value gateways still run Sync-ClaudeAccess' (Test-ClaudeInstallerShouldSyncNamedValues -EntitlementStore 'named-value' -NewGateway $true)
 
 $steps = Get-ClaudeInstallerProjectionNextSteps -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 -DeploySyncJob:$false
-Assert 'projection next steps name targeted Sync-ClaudeAccess and developer setup' (
-    ($steps -join "`n") -match 'Sync-ClaudeAccess\.ps1 -ResourceGroup rg-p98 -ApimName apim-p98 -User <name-or-object-id>' -and
-    ($steps -join "`n") -match 'New-OnboardingEmail\.ps1' -and
-    ($steps -join "`n") -match 'very large directories' -and
-    ($steps -join "`n") -match 'Deploy-ClaudeProjectionRenewal\.ps1 -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 -AlertEmail' -and ($steps -join "`n") -notmatch '<prefix>'
-) ($steps -join "`n")
+$developer = @($steps.Developer.Detail) -join "`n"
+$job = @($steps.SyncJob.Detail) -join "`n"
+Assert 'the projection developer step is the group change and the targeted sync, and nothing else' (
+    $steps.Developer.Title -eq 'Add or remove a developer in the projection' -and
+    $developer -match 'Sync-ClaudeAccess\.ps1 -ResourceGroup rg-p98 -ApimName apim-p98 -User <name-or-object-id>' -and
+    $developer -match 'Entra group first' -and $developer -notmatch 'New-OnboardingEmail|Deploy-ClaudeProjectionRenewal'
+) $developer
+Assert 'the optional sync job is its own step, with the full deploy command' (
+    $steps.SyncJob.Title -match '^Optional' -and
+    $job -match 'very large directories' -and
+    $job -match 'Deploy-ClaudeProjectionRenewal\.ps1 -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 -AlertEmail' -and $job -notmatch '<prefix>'
+) $job
+$deployed = Get-ClaudeInstallerProjectionNextSteps -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 -DeploySyncJob
+$deployedJob = @($deployed.SyncJob.Detail) -join "`n"
+Assert 'a deployed sync job step names the Graph grant and how to start the job' ($deployedJob -match 'Privileged Role Administrator or Global Administrator' -and $deployedJob -match 'az containerapp job start') $deployedJob
+$module = [IO.File]::ReadAllText((Join-Path $root 'scripts\ClaudeInstallProjection.ps1'))
+$sendSetup = $installerText.IndexOf("Title = 'Send them the setup'")
+$jobStep = $installerText.IndexOf('$nextSteps.Add($projectionSteps.SyncJob)')
+Assert 'the onboarding email is only in Send them the setup, and the optional job step follows it' ($module -notmatch 'New-OnboardingEmail' -and $sendSetup -ge 0 -and $jobStep -gt $sendSetup) "send at $sendSetup; job at $jobStep"
+$setupDoc = [IO.File]::ReadAllText((Join-Path $root 'docs\SETUP.md'))
+$readmeDoc = [IO.File]::ReadAllText((Join-Path $root 'README.md'))
+$checkedTools = @(([regex]::Match($module, "foreach \(\`$tool in ('[a-z]+'(?:,'[a-z]+')*)\)").Groups[1].Value -replace "'", '') -split ',' | Where-Object { $_ })
+$toolRows = @{ az = '\| Azure CLI \|'; node = '\| Node\.js and npm \|'; npm = '\| Node\.js and npm \|'; tar = '\| tar \|' }
+Assert 'Setup lists every tool the installer checks before the projection, and PowerShell 7 for it; the README points there' (
+    $checkedTools.Count -ge 4 -and @($checkedTools | Where-Object { -not $toolRows.ContainsKey($_) -or $setupDoc -notmatch $toolRows[$_] }).Count -eq 0 -and
+    $setupDoc -match '\| PowerShell \| 7\+ for the Cosmos projection' -and $readmeDoc -match 'docs/SETUP\.md#tooling'
+) "checked: $($checkedTools -join ',')"
 
 Write-Host ''
 if ($fail) { Write-Host "$fail of $count assertion(s) failed." -ForegroundColor Red; exit 1 }

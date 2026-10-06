@@ -29,8 +29,8 @@ $syncStub = Join-Path $work 'Sync-ClaudeAccess.ps1'
 ) -join "`n"))
 $user = '00000000-0000-4000-8000-0000000000aa'
 $sub = '00000000-0000-4000-8000-000000000001'
-function Reset-Live([string]$Source = 'projection', [bool]$GroupExists = $false) {
-    $global:Live = @{ Calls = [Collections.Generic.List[string]]::new(); Member = $false; Synced = $false; Source = $Source; GroupExists = $GroupExists; Created = @{} }
+function Reset-Live([string]$Source = 'projection', [bool]$GroupExists = $false, [string]$AccountId = $sub) {
+    $global:Live = @{ Calls = [Collections.Generic.List[string]]::new(); Member = $false; Synced = $false; Source = $Source; GroupExists = $GroupExists; Created = @{}; AccountId = $AccountId }
 }
 function az {
     $line = $args -join ' '
@@ -38,7 +38,7 @@ function az {
     $global:LASTEXITCODE = 0
     switch -Regex ($line) {
         '^account set' { return }
-        '^account show' { return (@{ id = $sub; user = @{ name = 'admin@contoso.example' } } | ConvertTo-Json) }
+        '^account show' { return (@{ id = $global:Live.AccountId; user = @{ name = 'admin@contoso.example' } } | ConvertTo-Json) }
         '^group exists' { return $(if ($global:Live.GroupExists) { 'true' } else { 'false' }) }
         '^ad group show --group (\S+)' { if ($global:Live.Created.ContainsKey($Matches[1])) { return $global:Live.Created[$Matches[1]] }; $global:LASTEXITCODE = 3; return 'ERROR: Resource does not exist' }
         '^ad group create --display-name (\S+)' { $name = $Matches[1]; $id = '00000000-0000-4000-8000-0000000000' + $(if ($name -match 'std') { 'b1' } else { 'b2' }); $global:Live.Created[$name] = $id; return $id }
@@ -117,7 +117,10 @@ try {
         (At '^request ') -lt 0 -and (At '^az group delete --name rg-p98-live') -ge 0) "$Exit | $($global:Live.Calls -join ' ; ')"
 
     Reset-Live -GroupExists $true; Invoke-Verifier
-    Assert 'an existing resource group stops the run and is not deleted' ($Exit -eq 1 -and $Output -match 'already exists' -and (At '^installer ') -lt 0 -and (At '^az group delete') -lt 0) "$Exit | $($global:Live.Calls -join ' ; ')"
+    Assert 'an existing resource group stops the run, names the remedy and is not deleted' ($Exit -eq 1 -and $Output -match 'already exists' -and $Output -match 'Remedy: omit -ResourceGroup' -and (At '^installer ') -lt 0 -and (At '^az group delete') -lt 0) "$Exit | $($global:Live.Calls -join ' ; ')"
+
+    Reset-Live -AccountId '00000000-0000-4000-8000-000000000002'; Invoke-Verifier
+    Assert 'a profile on another subscription stops the run before any write and names the sign-in remedy' ($Exit -eq 1 -and $Output -match 'not 00000000-0000-4000-8000-000000000001' -and $Output -match 'Remedy: .*az login' -and (At '^az ad group create') -lt 0 -and (At '^installer ') -lt 0 -and (At '^az group delete') -lt 0) "$Exit | $Output"
 }
 finally { Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue }
 

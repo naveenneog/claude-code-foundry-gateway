@@ -1748,8 +1748,10 @@ if ($addressMode -eq 'custom') {
         '        A later address change is .\Start-ClaudeGateway.ps1 -Action Change -Change address.'
     ) })
 }
+$projectionSteps = $null
 if ($EntitlementStore -eq 'projection') {
-    $nextSteps.Add([pscustomobject]@{ Title = 'Add or remove a developer in the projection'; Warn = $false; Detail = (Get-ClaudeInstallerProjectionNextSteps -ResourceGroup $ResourceGroup -ApimName $apimName -NamePrefix $NamePrefix -DeploySyncJob:$DeploySyncJob) })
+    $projectionSteps = Get-ClaudeInstallerProjectionNextSteps -ResourceGroup $ResourceGroup -ApimName $apimName -NamePrefix $NamePrefix -DeploySyncJob:$DeploySyncJob
+    $nextSteps.Add($projectionSteps.Developer)
 }
 else {
     $nextSteps.Add([pscustomobject]@{ Title = 'Entitle a developer'; Warn = $false; Detail = @(
@@ -1766,6 +1768,7 @@ else {
 $nextSteps.Add([pscustomobject]@{ Title = 'Send them the setup'; Warn = $false; Detail = @(
     "        ./scripts/New-OnboardingEmail.ps1 -ConfigPath $configPath -To dev@contoso.com"
 ) })
+if ($projectionSteps) { $nextSteps.Add($projectionSteps.SyncJob) }
 $nextSteps.Add([pscustomobject]@{ Title = 'Close the direct-access bypass - see docs/SETUP.md section 4.1'; Warn = $true; Detail = @(
     '      Anyone holding Cognitive Services User on the Foundry account'
     '      can skip the gateway entirely and ignore these budgets.'

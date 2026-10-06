@@ -181,8 +181,10 @@ Identifiers are redacted with [terminal](guide/redact-terminal.mjs) and
 
 Platform deployment needs a Foundry account eligible to deploy Claude, an APIM
 **v2** tier, Azure CLI/Bicep, and the Azure and Entra permissions listed in
-[Setup](docs/SETUP.md#1-prerequisites). Developers need the platform team's
-configuration and entitlement, not those administrator roles.
+[Setup](docs/SETUP.md#1-prerequisites). The installer's default store, the Cosmos
+projection, also needs PowerShell 7, Node.js with npm, and `tar` on the machine
+that runs it ([Setup tooling](docs/SETUP.md#tooling)). Developers need the platform
+team's configuration and entitlement, not those administrator roles.
 
 **USD budgets:** dollar inputs now retain their approved amount and dated tariff,
 with an optional reconciler publishing gateway stops. This includes observed

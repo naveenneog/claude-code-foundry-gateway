@@ -127,9 +127,9 @@ try {
     Write-Host "`n==> Subscription and resource group" -ForegroundColor Cyan
     Invoke-Az @('account', 'set', '--subscription', $SubscriptionId) | Out-Null
     $account = Invoke-Az @('account', 'show', '-o', 'json') | ConvertFrom-Json
-    if ([string]$account.id -ne $SubscriptionId) { throw "The Azure CLI is on subscription $($account.id), not $SubscriptionId." }
+    if ([string]$account.id -ne $SubscriptionId) { throw "The Azure CLI is on subscription $($account.id), not $SubscriptionId. Nothing was created. Remedy: az login --tenant <tenant-id> in the profile this test uses (AZURE_CONFIG_DIR, or the current one with -UseCurrentAzLogin), so that it can select $SubscriptionId, then rerun." }
     Add-Result 'account' $true "$($account.user.name) in $SubscriptionId"
-    if ((Invoke-Az @('group', 'exists', '--name', $ResourceGroup)) -eq 'true') { throw "Resource group $ResourceGroup already exists; this test deletes what it creates, so it uses a new one. Nothing was created." }
+    if ((Invoke-Az @('group', 'exists', '--name', $ResourceGroup)) -eq 'true') { throw "Resource group $ResourceGroup already exists; this test deletes what it creates, so it uses a new one. Nothing was created. Remedy: omit -ResourceGroup, so the test creates rg-claude-live-<random>, or pass a -ResourceGroup name that does not exist yet." }
     $resourceGroupCreated = $true
 
     Write-Host "`n==> Tier groups and the signed-in user" -ForegroundColor Cyan

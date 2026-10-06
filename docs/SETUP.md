@@ -219,8 +219,9 @@ capacity reason and the Cosmos projection as the remedy, before anything is crea
 |------|---------|-----|
 | Azure CLI | 2.60+ | deployment and all verification commands |
 | Bicep | Azure CLI-managed executable | `az bicep version`; if missing, `az bicep install` |
-| PowerShell | 7+, or Windows PowerShell 5.1 | the setup wizard and scripts. macOS/Linux can use the `.sh` equivalents instead |
-| Node.js | compatible with the selected tooling's `package.json` | only for optional screenshot/inspector tooling and the projection code |
+| PowerShell | 7+ for the Cosmos projection, the default store; Windows PowerShell 5.1 runs the named-value store only | the installer and scripts; the installer checks the version before the projection steps (`scripts/ClaudeInstallProjection.ps1:67-80`). The macOS/Linux `.sh` installer deploys named values only ([ADR-0052](adr/0052-cosmos-default-installer.md)) |
+| Node.js and npm | no `engines` constraint in `resolver/package.json` or `sync/package.json` | required for the Cosmos projection: the resolver and the sync code are packaged on this machine; otherwise only for screenshot and inspector tooling |
+| tar | one that writes ZIP archives | required for the Cosmos projection: it packages the resolver ([SECURE-PROJECTION](SECURE-PROJECTION.md) prerequisites) |
 
 ### Region
 

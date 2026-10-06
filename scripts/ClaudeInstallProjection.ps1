@@ -183,16 +183,22 @@ function Test-ClaudeInstallerShouldSyncNamedValues {
 }
 
 function Get-ClaudeInstallerProjectionNextSteps {
+    # Two separate next steps: one developer's change (the group change, then a targeted sync), and the
+    # optional sync job, which the installer lists after the developer setup step.
     param([Parameter(Mandatory)][string]$ResourceGroup, [Parameter(Mandatory)][string]$ApimName, [Parameter(Mandatory)][string]$NamePrefix, [switch]$DeploySyncJob)
-    $steps = @(
-        "        .\scripts\Sync-ClaudeAccess.ps1 -ResourceGroup $ResourceGroup -ApimName $ApimName -User <name-or-object-id>",
-        '        Add or remove the developer in the Entra group first; this targeted sync publishes that one projection record.',
-        '        .\scripts\New-OnboardingEmail.ps1 -ConfigPath .\onboarding\claude-gateway.json -To dev@contoso.com'
-    )
-    if ($DeploySyncJob) {
-        $steps += '        The optional sync job is deployed. A Privileged Role Administrator or Global Administrator grants its Microsoft Graph permission with the command the deployment printed; then start it with az containerapp job start.'
+    $developer = [pscustomobject]@{ Title = 'Add or remove a developer in the projection'; Warn = $false; Detail = @(
+        '        Add or remove the developer in the Entra group first, then publish that one projection record:'
+        "        .\scripts\Sync-ClaudeAccess.ps1 -ResourceGroup $ResourceGroup -ApimName $ApimName -User <name-or-object-id>"
+    ) }
+    $syncJob = if ($DeploySyncJob) {
+        [pscustomobject]@{ Title = 'Optional: the sync job is deployed'; Warn = $false; Detail = @(
+            '        A Privileged Role Administrator or Global Administrator grants its Microsoft Graph permission with the command the deployment printed; then start it with az containerapp job start.'
+        ) }
     } else {
-        $steps += "        For very large directories, the optional sync job reads Microsoft Graph inside the network: .\scripts\Deploy-ClaudeProjectionRenewal.ps1 -ResourceGroup $ResourceGroup -ApimName $ApimName -NamePrefix $NamePrefix -AlertEmail <address>"
+        [pscustomobject]@{ Title = 'Optional: the sync job for very large directories'; Warn = $false; Detail = @(
+            '        For very large directories, the job reads Microsoft Graph inside the network instead of sending a snapshot through the runner:'
+            "        .\scripts\Deploy-ClaudeProjectionRenewal.ps1 -ResourceGroup $ResourceGroup -ApimName $ApimName -NamePrefix $NamePrefix -AlertEmail <address>"
+        ) }
     }
-    return $steps
+    return [pscustomobject]@{ Developer = $developer; SyncJob = $syncJob }
 }
