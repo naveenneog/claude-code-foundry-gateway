@@ -17,7 +17,7 @@ function Resolve-ClaudeProjectionTierGroupId {
 function Get-ClaudeProjectionRollbackText {
     param([string]$BackupPath, [ValidateSet('Auto','Snapshot')][string]$CompareBaseline = 'Auto')
     $rollback = 'Rollback: refresh named values with scripts/Sync-ClaudeAccess.ps1 -Store named-value, check them with scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift, then set entitlement-source back to named-value. The lists change only when Sync-ClaudeAccess.ps1 runs, so lists left unrefreshed while the projection serves can grant or deny the wrong people.'
-    if ($CompareBaseline -eq 'Snapshot') { $rollback += ' This gateway exceeded named-value capacity during migration, so rollback to named values cannot hold this population; the lists cannot be refreshed above about 93-110 developers.' }
+    if ($CompareBaseline -eq 'Snapshot') { $rollback += ' The switch compared the projection with a fresh Entra snapshot, not with the named-value lists. A rollback to named values holds only a population within their capacity, about 93-110 developers.' }
     if ($BackupPath) { $rollback += " The values before the switch are in $BackupPath." }
     return $rollback
 }
@@ -134,7 +134,7 @@ function Invoke-ClaudeProjectionSwitch {
         else {
             if ($CompareBaseline -eq 'Snapshot' -and $hasNamedMembers) {
                 Write-Host "`n==> Snapshot baseline: compare projection with a fresh full Entra snapshot" -ForegroundColor Cyan
-                Write-Host '    Named values cannot hold this population; rollback to named values cannot refresh lists above about 93-110 developers.' -ForegroundColor Yellow
+                Write-Host '    The named-value lists are not compared. A rollback to named values holds only a population within their capacity, about 93-110 developers.' -ForegroundColor Yellow
             } else {
                 Write-Host "`n==> New gateway: no named-value members; compare projection with a fresh Entra snapshot" -ForegroundColor Cyan
             }
@@ -200,7 +200,7 @@ function Invoke-ClaudeProjectionDeployerCompare {
         -BuMembers (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-members' -FailOnError)
     $apply = "node /work/sync/src/apply-projection.mjs --cosmos https://$CosmosAccount.documents.azure.com:443/ --tenant $TenantId"
     if ($CompareBaseline -eq 'Snapshot' -and $hasNamedMembers) {
-        Write-Host '    Snapshot baseline: named values cannot hold this population; comparing the projection with the fresh Entra snapshot.' -ForegroundColor DarkGray
+        Write-Host '    Snapshot baseline: comparing the projection with the fresh Entra snapshot, not with the named-value lists.' -ForegroundColor DarkGray
     }
     if ($hasNamedMembers -and $CompareBaseline -ne 'Snapshot') {
         & $CompareScript -ResourceGroup $ResourceGroup -ApimName $ApimName -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -ExportGatewayPath $GatewayPath -FailOnDrift:$true
@@ -210,7 +210,7 @@ function Invoke-ClaudeProjectionDeployerCompare {
     }
     else {
         if ($CompareBaseline -eq 'Snapshot' -and $hasNamedMembers) {
-            Write-Host '    Rollback to named values cannot hold this population; the lists cannot be refreshed above about 93-110 developers.' -ForegroundColor Yellow
+            Write-Host '    A rollback to named values holds only a population within their capacity, about 93-110 developers.' -ForegroundColor Yellow
         } else {
             Write-Host '    New gateway: no named-value members, so the projection is compared with the snapshot just applied.' -ForegroundColor DarkGray
         }

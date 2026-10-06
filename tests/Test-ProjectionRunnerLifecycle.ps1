@@ -69,6 +69,10 @@ try {
     Capture { Send-RunnerFile -ResourceGroup rg-p97 -Name aci-projtest-p97 -Path $snapshotFile -Destination /work/snapshot.json -Deadline ([DateTimeOffset]::FromUnixTimeSeconds($expires)) }
     Assert 'a snapshot transfer that would end after its apply-by time is refused before the first exec' (
         $CapturedError -match 'apply-by' -and $CapturedError -match 'P99' -and $CapturedError -match 'was not sent' -and $global:RunnerCalls.Count -eq 0) "$CapturedError | $($global:RunnerCalls -join ' | ')"
+    # P98 confirmation round (UX): the refusal names what runs today at this size.
+    Assert 'the refusal names the sync job command for a full sync of this size' (
+        $CapturedError -match [regex]::Escape('.\scripts\Deploy-ClaudeProjectionRenewal.ps1 -ResourceGroup rg-p97 -ApimName <apim> -NamePrefix p97 -AlertEmail <address>') -and
+        $CapturedError -match 'az containerapp job start') $CapturedError
     $global:RunnerCalls.Clear()
     Capture { Send-RunnerFile -ResourceGroup rg-p97 -Name aci-projtest-p97 -Path $snapshotFile -Destination /work/snapshot.json -Deadline ([DateTimeOffset]::UtcNow.AddHours(2)) }
     Assert 'a transfer that ends before the apply-by time is started' ($CapturedError -notmatch 'apply-by' -and $global:RunnerCalls.Count -ge 1) "$CapturedError | $($global:RunnerCalls.Count) call(s)"

@@ -229,8 +229,11 @@ function Send-RunnerFile {
         if ([DateTimeOffset]::UtcNow.AddSeconds($seconds) -gt $applyBy) {
             throw ("Sending $Path ($($bytes.Length) bytes) to runner $Name takes about $([Math]::Ceiling($seconds / 60)) minutes ($commands az container exec " +
                 "commands of about $SecondsPerCommand seconds each), past the snapshot's apply-by time $($applyBy.UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ssZ')). " +
-                "The snapshot was not sent and nothing was written. Through the runner, a snapshot of about 40,000 developers fits in the 2-hour apply-by time; " +
-                "a larger directory needs the directory-scale transfer planned as ROADMAP packet P99.")
+                "The snapshot was not sent and nothing was written. Through the runner, a snapshot of about 40,000 developers fits in the 2-hour apply-by time. " +
+                "A full sync of this size runs in the optional sync job, which reads Microsoft Graph inside the network and needs the GroupMember.Read.All grant that its " +
+                "deployment prints: .\scripts\Deploy-ClaudeProjectionRenewal.ps1 -ResourceGroup $ResourceGroup -ApimName <apim> -NamePrefix $($Name -replace '^aci-projtest-', '') " +
+                "-AlertEmail <address>, then az containerapp job start. The populate step and the switch's snapshot compare at this size need the directory-scale " +
+                "transfer planned as ROADMAP packet P99.")
         }
     }
     $null = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $Name -SubscriptionId $SubscriptionId -Command "node -e require('fs').mkdirSync('$dir',{recursive:true});require('fs').writeFileSync('$tmp','')"

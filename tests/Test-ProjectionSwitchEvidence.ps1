@@ -115,7 +115,7 @@ Reset-ProjectionFixture
 Get-ChildItem -LiteralPath $backupDir -Filter '*.json' -ErrorAction SilentlyContinue | Remove-Item -Force
 Capture { Invoke-Switch @{ CompareBaseline = 'Snapshot' } }
 $calls = $FixtureCalls -join "`n"
-Assert 'snapshot baseline on a gateway with named-value members skips named-value drift and compares a fresh snapshot' (-not $Failure -and $calls -notmatch '(?m)^compare-stub' -and $calls -match '(?m)^sync-export rg-p84 apim-p84 .* account=cosmos-p84fixture' -and $calls -match '--compare-snapshot /work/snapshot\.json' -and $Result.Rollback -match 'cannot hold this population') "$Failure | $calls | $($Result.Rollback)"
+Assert 'snapshot baseline on a gateway with named-value members skips named-value drift and compares a fresh snapshot' (-not $Failure -and $calls -notmatch '(?m)^compare-stub' -and $calls -match '(?m)^sync-export rg-p84 apim-p84 .* account=cosmos-p84fixture' -and $calls -match '--compare-snapshot /work/snapshot\.json' -and $Result.Rollback -match 'holds only a population within their capacity' -and $Result.Rollback -notmatch 'exceeded named-value capacity') "$Failure | $calls | $($Result.Rollback)"
 
 Reset-ProjectionFixture 'sp-missing'
 Get-ChildItem -LiteralPath $backupDir -Filter '*.json' -ErrorAction SilentlyContinue | Remove-Item -Force
