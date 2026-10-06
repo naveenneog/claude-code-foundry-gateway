@@ -44,6 +44,11 @@ exact streaming cache-creation detail remains **U13**.
   the group name `none` is no group in every Graph lookup. `-KeepNamedValues` keeps named values; in Windows
   PowerShell 5.1 no move is planned. `Invoke-ClaudeProjectionPreflight -PassThru` returns its checks without
   printing or throwing.
+  A decision record of another gateway, by resource group, API Management name or subscription, is refused
+  before any write and is not a source of tier groups. The update reads the gateway in the subscription the
+  record names and applies only when that is the Azure CLI's current subscription; otherwise the plan prints
+  `az account set --subscription <id>`. `Invoke-ClaudeProjectionSwitch -SubscriptionId` and the deployer's
+  `-FlipAfterCleanCompare -SubscriptionId` refuse another current subscription.
 
 - **P98 the installer deploys the Cosmos projection by default.** `Install-ClaudeGateway.ps1` offers
   the projection first, as recommended, for every size; `-Yes` chooses it, and named values above their
