@@ -40,7 +40,8 @@ $EnrolledGuides = @(
   'docs\MDM.md',
   'docs\NETWORK.md',
   'docs\NETWORK-ENTERPRISE.md',
-  'docs\FINOPS-TOOLS.md'
+  'docs\FINOPS-TOOLS.md',
+  'docs\CHARGEBACK-REPORTS.md'
 )
 
 
@@ -65,7 +66,8 @@ function Get-GuidePaths {
   'docs\MDM.md',
   'docs\NETWORK.md',
   'docs\NETWORK-ENTERPRISE.md',
-  'docs\FINOPS-TOOLS.md','guide\README.md','onboarding\README.md')
+  'docs\FINOPS-TOOLS.md',
+  'docs\CHARGEBACK-REPORTS.md','guide\README.md','onboarding\README.md')
 
   Get-ChildItem -LiteralPath (Join-Path $Root 'docs') -Filter '*.md' | Sort-Object Name | ForEach-Object {
 
