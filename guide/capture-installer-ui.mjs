@@ -18,7 +18,6 @@ console.error('unexpected az ' + joined); process.exit(2);
 `, 'utf8');
 
 const server = await createInstallerUiServer({
-  token: 'capture-token-with-at-least-32-bytes-0000',
   stubInstaller: resolve('tests/installer-ui-stub.mjs'),
   idleMs: 60000,
   env: {
