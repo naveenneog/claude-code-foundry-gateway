@@ -79,12 +79,16 @@ function Invoke-ClaudeFlowMigration {
     if (@($Plan.Data.UnknownDefaults).Count) {
         throw 'Policy references named values with no safe template default: ' + (@($Plan.Data.UnknownDefaults) -join ', ')
     }
+    $target = $Plan.Data.Target
+    # The update read the gateway in this subscription (ADR-0054); passed only as an ID, because az.cmd re-reads other
+    # text. Checked before the backup, which reads the gateway.
+    if ([string]$target.SubscriptionId -and -not (Test-ClaudeFlowSubscriptionId ([string]$target.SubscriptionId))) {
+        throw "The plan's subscription '$($target.SubscriptionId)' is not a subscription id, so the policy migration cannot name where it writes; nothing was written. Remedy: record the id (az account show --query id -o tsv) in the decision record, then plan again."
+    }
     Assert-ClaudeFlowLifecycleSnapshotBeforeWrite -Plan $Plan
     $root = Get-ClaudeFlowLifecycleRepoRoot
     . (Join-Path $root 'scripts\ApimNamedValue.ps1')
-    $target = $Plan.Data.Target
-    # The update read the gateway in this subscription (ADR-0054); passed only as an ID, because az.cmd re-reads other text.
-    $scope = if (Test-ClaudeFlowSubscriptionId ([string]$target.SubscriptionId)) { @{ SubscriptionId = [string]$target.SubscriptionId } } else { @{} }
+    $scope = if ([string]$target.SubscriptionId) { @{ SubscriptionId = [string]$target.SubscriptionId } } else { @{} }
     $tokenScope = if ($scope.Count) { @('--subscription', $scope.SubscriptionId) } else { @() }
     $defaults = Get-ClaudeFlowLifecycleTemplateNamedValueDefaults
     foreach ($name in @($Plan.Data.MissingNamedValues)) {
