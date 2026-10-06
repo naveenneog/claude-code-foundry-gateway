@@ -14,7 +14,8 @@ function New-ClaudeInstallerChoiceOption {
 
 function Resolve-ClaudeInstallerEntitlementStore {
     param(
-        [ValidateSet('named-value','projection')][string]$EntitlementStore,
+        # Empty when -EntitlementStore was not passed: the installer passes its own value, '' by default.
+        [AllowEmptyString()][ValidateSet('named-value','projection','')][string]$EntitlementStore,
         [Parameter(Mandatory)][int]$DeveloperCount,
         [Parameter(Mandatory)][int]$BuCeiling,
         [Parameter(Mandatory)][int]$ListCeiling,
