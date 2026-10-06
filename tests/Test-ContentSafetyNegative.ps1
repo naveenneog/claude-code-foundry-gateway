@@ -18,6 +18,8 @@ function Copy-P102Fixture($Name) {
         'infra\main.bicep',
         'infra\content-safety.bicep',
         'scripts\ClaudeContentSafety.ps1',
+        'scripts\ClaudeLiveHarness.ps1',
+        'scripts\Test-ClaudeLiveProjection.ps1',
         'scripts\Test-ClaudeLiveContentSafety.ps1',
         'tests\Test-ContentSafetyPolicy.ps1',
         'tests\Test-ContentSafetyLiveScript.ps1'
@@ -48,8 +50,8 @@ Remove-Item -LiteralPath $fixture -Recurse -Force
 
 $fixture = Copy-P102Fixture 'teardown'
 $livePath = Join-Path $fixture 'scripts\Test-ClaudeLiveContentSafety.ps1'
-(Get-Content $livePath -Raw).Replace('createdResourceGroup', 'unsafeResourceGroup') | Set-Content -LiteralPath $livePath -Encoding UTF8
-$r = Invoke-ExpectFailure 'tests\Test-ContentSafetyLiveScript.ps1' $fixture 'teardown refuses to delete a group it did not create'
+(Get-Content $livePath -Raw).Replace('if (-not $Receipt.createdResourceGroup) { throw ''Refusing teardown: receipt does not say this run created the resource group.'' }', 'if ($false) { throw ''Refusing teardown: receipt does not say this run created the resource group.'' }') | Set-Content -LiteralPath $livePath -Encoding UTF8
+$r = Invoke-ExpectFailure 'tests\Test-ContentSafetyLiveScript.ps1' $fixture 'teardown refuses resources the receipt does not say this run created'
 Assert 'removing the teardown ownership guard fails the live-script detector' ($r.Failed -and $r.Matched) $r.Output
 Remove-Item -LiteralPath $fixture -Recurse -Force
 

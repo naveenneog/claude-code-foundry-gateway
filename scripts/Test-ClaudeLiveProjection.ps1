@@ -60,78 +60,7 @@ if (-not $InstallerPath) { $InstallerPath = Join-Path $root 'Install-ClaudeGatew
 if (-not $SyncAccessPath) { $SyncAccessPath = Join-Path $root 'scripts\Sync-ClaudeAccess.ps1' }
 if (-not $UpdatePath) { $UpdatePath = Join-Path $root 'Update-ClaudeGateway.ps1' }
 $results = [System.Collections.Generic.List[object]]::new()
-function Add-Result([string]$Step, [bool]$Ok, [string]$Detail = '') {
-    $results.Add([pscustomobject]@{ step = $Step; ok = $Ok; detail = $Detail })
-    $colour = if ($Ok) { 'Green' } else { 'Red' }
-    Write-Host ("  [{0}] {1} {2}" -f $(if ($Ok) { 'OK' } else { 'FAIL' }), $Step, $Detail) -ForegroundColor $colour
-}
-function Assert-Form([string]$Name, [string]$Value, [string]$Pattern) {
-    if ([string]::IsNullOrWhiteSpace($Value) -or $Value -notmatch $Pattern) { throw "-$Name '$Value' is not in the accepted form; nothing was created." }
-}
-function Get-NormalizedPath([string]$Path) {
-    if ([string]::IsNullOrWhiteSpace($Path)) { return '' }
-    $trimmed = $Path.Trim().TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
-    try { return [IO.Path]::GetFullPath($trimmed).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) }
-    catch { return $trimmed }
-}
-# az.cmd hands its arguments to cmd.exe, so every value reaching it is checked by Assert-Form first.
-function Invoke-Az([string[]]$Arguments, [switch]$AllowFailure) {
-    $saved = $ErrorActionPreference
-    $ErrorActionPreference = 'Continue'
-    try { $output = @(& az @Arguments 2>&1); $code = $LASTEXITCODE }
-    finally { $ErrorActionPreference = $saved }
-    $text = (@($output | Where-Object { $_ -isnot [Management.Automation.ErrorRecord] }) -join "`n").Trim()
-    if ($code -ne 0 -and -not $AllowFailure) {
-        $errors = (@($output | Where-Object { $_ -is [Management.Automation.ErrorRecord] }) -join ' ').Trim()
-        if (-not $errors) { $errors = $text }
-        throw "az $($Arguments[0..1] -join ' ') failed (exit $code): $errors"
-    }
-    if ($code -ne 0) { return $null }
-    return $text
-}
-function Invoke-TeardownAz([string]$Label, [string[]]$Arguments, [string]$Removal, [System.Collections.Generic.List[string]]$Left) {
-    $out = Invoke-Az $Arguments -AllowFailure
-    if ($null -eq $out) {
-        $Left.Add("$Label was not deleted. Remove with: $Removal")
-        return $false
-    }
-    return $true
-}
-function Get-GatewayStatus([string]$Url, [string]$ModelName) {
-    $token = Invoke-Az @('account', 'get-access-token', '--resource', 'https://cognitiveservices.azure.com', '--query', 'accessToken', '-o', 'tsv')
-    if (-not $token) { throw 'No access token for https://cognitiveservices.azure.com; the request was not sent.' }
-    $body = @{ model = $ModelName; max_tokens = 16; messages = @(@{ role = 'user'; content = 'Reply with OK.' }) } | ConvertTo-Json -Depth 5
-    $headers = @{ Authorization = "Bearer $token"; 'anthropic-version' = '2023-06-01' }
-    $response = Invoke-WebRequest -Uri $Url -Method Post -Headers $headers -ContentType 'application/json' -Body $body -SkipHttpErrorCheck -TimeoutSec 120
-    return [int]$response.StatusCode
-}
-# The gateway answers 200 or 403 for an identity; anything else (a cold resolver, a policy still
-# loading) is retried until the wait ends.
-function Wait-GatewayStatus([string]$Url, [string]$ModelName, [int]$Expected, [string]$Step) {
-    $deadline = (Get-Date).AddSeconds($ChangeWaitSeconds)
-    $seen = @()
-    do {
-        $status = Get-GatewayStatus -Url $Url -ModelName $ModelName
-        $seen += $status
-        if ($status -eq $Expected) { Add-Result $Step $true "HTTP $status after $($seen.Count) request(s)"; return }
-        Start-Sleep -Seconds $PollSeconds
-    } while ((Get-Date) -lt $deadline)
-    Add-Result $Step $false "expected HTTP $Expected; saw $($seen -join ', ') over $ChangeWaitSeconds s"
-    throw "$Step did not reach HTTP $Expected."
-}
-function Wait-Membership([string]$GroupId, [string]$MemberId, [string]$Expected) {
-    $deadline = (Get-Date).AddSeconds($ChangeWaitSeconds)
-    do {
-        $value = Invoke-Az @('ad', 'group', 'member', 'check', '--group', $GroupId, '--member-id', $MemberId, '--query', 'value', '-o', 'tsv')
-        if ($value -eq $Expected) { return }
-        Start-Sleep -Seconds $PollSeconds
-    } while ((Get-Date) -lt $deadline)
-    throw "Microsoft Graph did not report membership '$Expected' for $MemberId in $GroupId within $ChangeWaitSeconds s."
-}
-function Split-NonEmptyLines([AllowEmptyString()][string]$Text) {
-    return @(([string]$Text) -split '\r?\n' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-}
-
+. (Join-Path $PSScriptRoot 'ClaudeLiveHarness.ps1')
 $guid = '\A[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\z'
 Assert-Form SubscriptionId $SubscriptionId $guid
 Assert-Form Location $Location '\A[a-z0-9]{2,40}\z'
@@ -151,14 +80,7 @@ if (-not $standardGroupExplicit -or -not $premiumGroupExplicit) {
 }
 Assert-Form StandardGroup $StandardGroup '\A[A-Za-z0-9._-]{1,120}\z'
 Assert-Form PremiumGroup $PremiumGroup '\A[A-Za-z0-9._-]{1,120}\z'
-$azProfile = Get-NormalizedPath $env:AZURE_CONFIG_DIR
-$defaultAzProfile = Get-NormalizedPath (Join-Path $HOME '.azure')
-if (-not $UseCurrentAzLogin -and [string]::IsNullOrWhiteSpace($azProfile)) {
-    throw 'Set AZURE_CONFIG_DIR to an isolated profile signed in for this test, or pass -UseCurrentAzLogin to use the current Azure CLI profile; nothing was created.'
-}
-if (-not $UseCurrentAzLogin -and $azProfile -and [string]::Equals($azProfile, $defaultAzProfile, [StringComparison]::OrdinalIgnoreCase)) {
-    throw 'AZURE_CONFIG_DIR points at the default Azure CLI profile. Set it to an isolated profile signed in for this test, or pass -UseCurrentAzLogin to use the current Azure CLI profile; nothing was created.'
-}
+Assert-AzProfileAllowed -UseCurrentAzLogin:$UseCurrentAzLogin
 $apimName = "apim-$NamePrefix"
 $expectedResolverDisplayName = "claude-projection-resolver-$NamePrefix"
 $createdGroups = [System.Collections.Generic.List[string]]::new()
@@ -320,3 +242,5 @@ finally {
     $results | ConvertTo-Json -Depth 4
 }
 if ($failed) { exit 1 }
+
+
