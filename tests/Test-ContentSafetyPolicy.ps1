@@ -104,7 +104,9 @@ Assert 'trace metadata has no prompt, system, tool, output or image content' ($t
 
 Write-Host 'P102 APIM allowed expression types'
 $allowedTypesReference = 'Microsoft Learn, Azure API Management policy expressions, .NET Framework types allowed in policy expressions, read 2026-10-07.'
+$allowed = Test-ContentSafetyPolicyAllowedTypes -FragmentText $fragment
 Assert 'allowed-type check uses the Microsoft Learn APIM policy expression type table' ($allowedTypesReference -match 'Microsoft Learn')
+Assert 'allowed-type check passes the shipped fragment' ($allowed.Pass) (($allowed.Violations -join '; '))
 Assert 'fragment uses System.Text.StringBuilder, which Microsoft Learn lists as allowed' ($fragment -match 'System\.Text\.StringBuilder')
 Assert 'fragment does not use Func<T> or Action<T> delegate types, which are not listed in the allowed CLR type table' ($fragment -notmatch 'Func\s*&lt;|Action\s*&lt;')
 Assert 'fragment does not use lambdas because their delegate types are not listed in the allowed CLR type table' ($fragment -notmatch '=&gt;')

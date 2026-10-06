@@ -6,6 +6,28 @@ $script:failures = 0
 function Assert-Harness($Name,$Condition,$Detail='') { $script:assertions++; if($Condition){ Write-Host "  [OK] $Name" } else { $script:failures++; Write-Host "  [FAIL] $Name $Detail" } }
 function ConvertTo-Hash($Object) { $Object | ConvertTo-Json -Depth 30 -Compress }
 function New-StubResponse([int]$StatusCode, $Body) { [pscustomobject]@{ StatusCode=$StatusCode; Body=$Body } }
+function Test-ContentSafetyPolicyAllowedTypes {
+    param([Parameter(Mandatory)][string]$FragmentText)
+    $decoded = [System.Net.WebUtility]::HtmlDecode($FragmentText)
+    $violations = [Collections.Generic.List[string]]::new()
+    if ($decoded -match '(?m)(^|[^\w.])(System\.)?Action\s*<') {
+        $violations.Add('System.Action delegate variables are not allowed in APIM policy expressions.') | Out-Null
+    }
+    if ($decoded -match '(?m)(^|[^\w.])(System\.)?Func\s*<') {
+        $violations.Add('System.Func delegate variables are not allowed in APIM policy expressions.') | Out-Null
+    }
+    if ($decoded -match 'object\.ReferenceEquals') {
+        $violations.Add('System.Object/object.ReferenceEquals is not listed in the APIM allowed CLR type table.') | Out-Null
+    }
+    if ($decoded -match '=>') {
+        $violations.Add('Lambda expressions are not used by this fragment because APIM documents C# 7 policy expressions and allowed CLR types, but does not list delegate variable types.') | Out-Null
+    }
+    [pscustomobject]@{
+        Pass = ($violations.Count -eq 0)
+        Violations = @($violations)
+        Citation = 'Microsoft Learn, Azure API Management policy expressions, .NET Framework types allowed in policy expressions, read 2026-10-07.'
+    }
+}
 function New-ContentSafetyAnalyzeBody {
     param([int]$Hate = 0, [int]$Violence = 0, [int]$SelfHarm = 0, [int]$Sexual = 0)
     [pscustomobject]@{ categoriesAnalysis = @(

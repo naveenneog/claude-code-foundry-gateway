@@ -90,5 +90,18 @@ $r = Invoke-ExpectFailure 'tests\Test-ContentSafetyLiveScript.ps1' $fixture 'tea
 Assert 'removing group cleanup fails the live-script detector' ($r.Failed -and $r.Matched) $r.Output
 Remove-Item -LiteralPath $fixture -Recurse -Force
 
+$savedAssertions = $script:assertions
+$savedFailures = $script:failures
+. (Join-Path $root 'tests\ContentSafetyPolicyHarness.ps1')
+$script:assertions = $savedAssertions
+$script:failures = $savedFailures
+$delegateFragment = @'
+<fragment>
+  <set-variable name="bad" value='@{ Func&lt;string,string&gt; newest = s =&gt; s; Action&lt;JToken,System.Text.StringBuilder&gt; addText = (token, output) =&gt; {}; return ""; }' />
+</fragment>
+'@
+$allowed = Test-ContentSafetyPolicyAllowedTypes -FragmentText $delegateFragment
+Assert 'allowed-type detector rejects System.Action and System.Func delegate variables' (-not $allowed.Pass -and ($allowed.Violations -join '; ') -match 'System\.Action' -and ($allowed.Violations -join '; ') -match 'System\.Func') (($allowed.Violations -join '; '))
+
 if ($script:failures) { throw "$($script:failures) of $($script:assertions) assertions failed" }
 Write-Host "P102 negative checks passed ($script:assertions assertions)."
