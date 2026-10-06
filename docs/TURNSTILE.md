@@ -18,8 +18,21 @@ Every command, result and figure on this page was measured on 2026-09-23 through
 the reference gateway and a Turnstile deployment in Central US. People, tenant and unit names in the pictures
 are replaced by example ones: the units are `sales` (teams `sales-emea`, `sales-apac`) and
 `engineering`.
+## Quickstart
+
+An existing console uses its assigned Entra role and [CLI-assisted sign-in](#sign-in-before-the-tenant-grants-consent). A new console follows the prerequisites and steps 1-6 below: registration, deployment, redirect, gateway connection, catalog and usage. The gateway remains the enforcer; a saved console value is not proof of gateway apply.
+
+```powershell
+.\scripts\Open-ClaudeTurnstile.ps1
+```
+
+**Expected result:** the console opens with an authenticated role. Mutation acceptance requires a deliberately reviewed gateway apply and restoration, not a successful read-only sign-in.
 
 ## Live evidence and sign-in without additional grants
+
+<details>
+
+<summary>Turnstile details</summary>
 
 ### One authenticated portal batch
 
@@ -106,7 +119,12 @@ scope aliases; see the [manual procedure](manual/turnstile.md#5-phase-2-membersh
 `tests/Test-Screenshots.ps1` rejects missing, undated, non-live or changed-pixel evidence
 and runs mutations proving those failures are detected.
 
+</details>
 ## One enforcer
+
+<details>
+
+<summary>Turnstile details</summary>
 
 The gateway enforces. Turnstile shows, and optionally edits. Keep it that way.
 
@@ -128,7 +146,12 @@ answer that refuses requests must be the gateway's, because the gateway also enf
 access that Turnstile does not know about. The decision is recorded in
 [ADR-0014](adr/0014-turnstile-beside-the-gateway.md).
 
+</details>
 ## How it fits together
+
+<details>
+
+<summary>Turnstile details</summary>
 
 ```text
              Microsoft Entra ID (single tenant)
@@ -156,7 +179,12 @@ A save in Turnstile ─ starts ─▶ apply job ─ the same sync, as its own id
 | A request in the ledger | A usage event | Export |
 | An hour of a developer's cache reads on a model | A usage event of its own | Export |
 
+</details>
 ## Prerequisites
+
+<details>
+
+<summary>Turnstile details</summary>
 
 | Requirement | Detail |
 |---|---|
@@ -166,7 +194,12 @@ A save in Turnstile ─ starts ─▶ apply job ─ the same sync, as its own id
 | Region | Check Azure Database for PostgreSQL Flexible Server version 16 and App Service quota in the region **before** planning. Measured for the test subscription: PostgreSQL 16 was restricted in East US 2, East US, West US 2 and South Central US, and App Service quota was 0 in Canada Central. Central US worked. |
 | Tools | PowerShell 7 (parallel export), Azure CLI, Git, Python 3.11 or later, Node.js with npm (the deployer builds the web front end). Docker is not needed: images are built in the registry with `az acr build`. |
 
+</details>
 ## 1. Create the Microsoft Entra application
+
+<details>
+
+<summary>Turnstile details</summary>
 
 Turnstile lets in only people who hold its admin app role, and Entra issues a token only to
 people assigned to it. This creates the application that rule depends on. It is safe to run
@@ -221,7 +254,12 @@ The Authentication, Properties and Users and groups blades asked for a fresh mul
 when captured, so their settings are shown from Microsoft Graph instead, in
 [Admin-only access](#admin-only-access).
 
+</details>
 ## 2. Deploy Turnstile
+
+<details>
+
+<summary>Turnstile details</summary>
 
 ```powershell
 git clone https://github.com/naveenneog/turnstile.git
@@ -272,7 +310,12 @@ On Windows, the upstream deployer stops before creating anything: it calls `az` 
 without their `.cmd` extension, checks POSIX file modes and locks with `fcntl`. The fork's
 `fix/windows-deployer` branch fixes all three and is part of `claude-gateway`.
 
+</details>
 ## 3. Add the sign-in redirect
+
+<details>
+
+<summary>Turnstile details</summary>
 
 The web address exists only once Turnstile is deployed. Add it to the application:
 
@@ -295,7 +338,12 @@ the redirect is the tenant id, not `/organizations`, which is what upstream Turn
 *Captured live from the reference deployment on 2026-09-24; names replaced. Reaching this
 page does not prove consent; the CLI-code journey above proves the working sign-in path.*
 
+</details>
 ## 4. Connect the gateway
+
+<details>
+
+<summary>Turnstile details</summary>
 
 Nothing about a Turnstile deployment is written into this repository's scripts. This finds it and
 stores what it found in one named value on the gateway, `turnstile-integration`, which every other
@@ -322,7 +370,12 @@ The value is `key=value;key=value`, with no quotes. On Windows `az` runs through
 which strips double quotes from arguments: measured, JSON written this way came back as
 `{version:1,url:https://...}`.
 
+</details>
 ## 5. Show units, teams and budgets in Turnstile
+
+<details>
+
+<summary>Turnstile details</summary>
 
 ```powershell
 ./scripts/Sync-ClaudeTurnstileGovernance.ps1
@@ -354,7 +407,12 @@ Turnstile also refuses a team budget larger than its unit's. The gateway allows 
 unit caps its teams together ([ADR-0008](DECISIONS.md)). The sync reports the refusal and carries
 on; the gateway still enforces both.
 
+</details>
 ## 6. Send usage to Turnstile
+
+<details>
+
+<summary>Turnstile details</summary>
 
 ```powershell
 ./scripts/Export-ClaudeTurnstileUsage.ps1
@@ -437,7 +495,12 @@ queries at once ([Azure Monitor service limits](https://learn.microsoft.com/azur
 so a busy gateway needs shorter slices, run side by side; a partial result stops the export
 rather than sending part of it.
 
+</details>
 ## 7. Optional: edit budgets in Turnstile
+
+<details>
+
+<summary>Turnstile details</summary>
 
 By default budgets are authored in the gateway and mirrored to Turnstile. To edit them on
 Turnstile's budget page instead:
@@ -487,7 +550,12 @@ available: this apply changes only `TokensPerMonth` for existing, matching unit/
 entries in `bu-registry`. A budget removed in Turnstile is reported, not applied;
 unknown scopes and person budgets are not imported.
 
+</details>
 ## Run it on a schedule
+
+<details>
+
+<summary>Turnstile details</summary>
 
 The export and the sync run every hour as an Azure Container Apps job signed in as its own
 managed identity. No secret exists anywhere: not in the template, the job or a key vault
@@ -534,7 +602,12 @@ The first two runs failed, and both causes are now handled:
   stopped Turnstile's PostgreSQL server, and every Turnstile function was timing out at 30 s. See
   [Troubleshooting](#troubleshooting).
 
+</details>
 ## Manage everything in Turnstile
+
+<details>
+
+<summary>Turnstile details</summary>
 
 ### Concurrent saves and the stale-run guard
 
@@ -780,7 +853,12 @@ This is the explicit, recorded administrator choice. The Set scripts have no for
 Their checks do not replace Azure RBAC: a raw portal or Azure CLI named-value edit is still
 possible and would still compete with the apply while Turnstile owns that value.
 
+</details>
 ## Admin-only access
+
+<details>
+
+<summary>Turnstile details</summary>
 
 Three layers, each measured.
 
@@ -922,7 +1000,12 @@ is stored hashed and deleted as it is redeemed.
 The break-glass Owner signs in with a password and is not affected by any of this. Keep its
 credential in a secret store.
 
+</details>
 ## What it costs
+
+<details>
+
+<summary>Turnstile details</summary>
 
 ```powershell
 ./scripts/Get-ClaudeTurnstileBom.ps1
@@ -954,7 +1037,12 @@ Management policy sends streaming traffic through to measure cache. Claude traff
 through it, so for this integration it does nothing. The deployer always creates it;
 `observerPlanSkuName` sets its size, and a smaller plan was not tested.
 
+</details>
 ## Troubleshooting
+
+<details>
+
+<summary>Turnstile details</summary>
 
 | Symptom | Cause | Fix |
 |---|---|---|
@@ -982,7 +1070,12 @@ through it, so for this integration it does nothing. The deployer always creates
 | A run names a unit "could not be checked" | Its group is new to the gateway and the directory cannot be read | Grant `GroupMember.Read.All`, or ask a gateway administrator to add the unit with `Set-ClaudeBusinessUnit.ps1` |
 | The sync refuses: "pushing the gateway's state would overwrite what was saved there" | Governance is authored in Turnstile | `-Direction FromTurnstile -Apply`, or move governance back to the gateway first |
 
+</details>
 ## FAQ
+
+<details>
+
+<summary>Turnstile details</summary>
 
 **Why does Turnstile show far more tokens "used" than the gateway's budget counter?**
 Turnstile's "used" includes cache reads; the gateway's quota counter counts prompt and completion
@@ -1026,7 +1119,12 @@ and refreshes membership as you.
 **Can Turnstile rename a business unit?** Its name, yes: the gateway stores a unit's id, group
 and budget, not its name. A different id is a different unit, with a budget counter of its own.
 
+</details>
 ## The fork
+
+<details>
+
+<summary>Turnstile details</summary>
 
 Upstream Turnstile could not be used unchanged: its catalog is fixed demo data, its web sign-in
 accepts any organization's accounts, it creates an account for anyone who signs in, and its
@@ -1042,7 +1140,12 @@ deployer does not run on Windows. The fork's branches, merged in `claude-gateway
 | `feature/entra-viewer-manager` | `ENTRA_VIEWER_ROLE` and `ENTRA_MANAGER_ROLE`, signing in as Member; `POST /api/v1/auth/cli` and `/api/v1/auth/code`, a browser sign-in through the Azure CLI | 21 new tests passed |
 | `feature/gateway-governance` | The Gateway governance page; `GET`, `PUT /api/v1/gateway-tiers`; `GET`, `POST /api/v1/gateway-apply`; `POST /api/v1/gateway-governance/prepare`; a save that starts the gateway's apply job | 27 API tests and 9 page-rule tests passed |
 
+</details>
 ## Reference
+
+<details>
+
+<summary>Turnstile details</summary>
 
 | Script | Does |
 |---|---|
@@ -1070,3 +1173,10 @@ Turnstile endpoints used: `GET`, `PUT /api/v1/enterprise-catalog`; `GET /api/v1/
 `PUT /api/v1/budgets/{scope}/{id}`; `GET /api/v1/budgets/users`;
 `POST /api/v1/budgets/users/bulk`; `GET`, `PUT /api/v1/gateway-tiers`;
 `POST /api/v1/gateway-governance/prepare`.
+
+</details>
+## Next
+
+- [FinOps](FINOPS.md) covers financial close.
+- [AUM](AUM.md#connect) covers terminal connection choices.
+- [Operations](OPERATIONS.md) covers gateway health and backups.
