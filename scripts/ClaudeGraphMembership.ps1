@@ -45,6 +45,9 @@ function Invoke-ClaudeGraphRead {
 function Get-ClaudeGraphGroup {
     param([string]$GroupName, [string]$Token)
     if ([string]::IsNullOrWhiteSpace($GroupName)) { throw 'Graph group name is required.' }
+    # 'none' means no group (-PremiumGroup none, the switch and the sync job), never a display name: any user can
+    # create a Microsoft 365 group called none, and its members must not become a tier.
+    if ($GroupName.Trim() -eq 'none') { return $null }
     $property = if ($GroupName -match '^[0-9a-fA-F-]{36}$') { 'id' } else { 'displayName' }
     $filter = [uri]::EscapeDataString("$property eq '$($GroupName.Replace("'", "''"))'")
     $page = Invoke-ClaudeGraphRead -Uri "https://graph.microsoft.com/v1.0/groups?`$filter=$filter&`$select=id&`$top=2" -Token $Token
@@ -62,6 +65,7 @@ function Get-ClaudeGraphGroup {
 function Get-GroupMemberOids {
     param([string]$GroupName, [string]$Token)
 
+    if ([string]$GroupName -and ([string]$GroupName).Trim() -eq 'none') { return @() }
     $group = Get-ClaudeGraphGroup -GroupName $GroupName -Token $Token
     if (-not $group) {
         Write-Warning "Group '$GroupName' not found - treating as empty."

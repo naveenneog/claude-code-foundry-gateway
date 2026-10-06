@@ -142,7 +142,7 @@
         "resolver/src/entitlement.mjs": "1cdde9356db441d02c894024720f5f0ae926bd75e350515d861213cef260aed4",
         "resolver/src/index.mjs": "b6b755fbbc56ef62e7b535a4bde2756111c2b5fc9913c16a893b45cb6dce33a3",
         "resolver/src/lookup.mjs": "d04392c5eb24a8a084d72f1e5dc72a61fd385992039118aba510c266c3027c3b",
-        "scripts/ClaudeProjectionSwitch.ps1": "829f75a454f5585cf48a3ed6d841441579439d59e4e4436538ede6ec6bc8cd91",
+        "scripts/ClaudeProjectionSwitch.ps1": "46f4c4d6bc8cef2cb253f6e8d1cf5ec7d8deee75b0bfd1d0a3957b262fca6425",
         "scripts/ClaudeRunner.ps1": "7b1c587f10bbde9d1de571c556d2a67756ed59a9e678991067db6cbbc7008740",
         "scripts/Deploy-ClaudeProjectionRenewal.ps1": "970779ec38b1bb0d336e481e2ab9fad7b9de2cdbd271de683a331e1107dde547",
         "scripts/Sync-ClaudeAccess.ps1": "8d69cfebf48431a3c7b6b8fdb41916acee824e426650f4bda77b70f8e16122fe",
@@ -486,7 +486,7 @@
         "scripts/ClaudeNetwork.ps1": "5709a3e94dfc7ca71e75429ea4d278b7737198a5488e07556fccc28cda9d00f9",
         "scripts/flow/Address.ps1": "88b0499d3eaf5423f98f4e6cb1ca1b2f221c4a44d4b8677a790ada807e495869",
         "scripts/flow/Discovery.ps1": "6e3832eb6250c747bf7ffbd78595ca48a5359dc45381363a2a6cc0a757b2aad3",
-        "scripts/flow/FlowContract.ps1": "5fe01f9f68710671039ba8d1fd4a303ccd3547d7f29096e23d87c58dae1b8bf8",
+        "scripts/flow/FlowContract.ps1": "548dd10f00884248ccb70a37529b2050f15a7870803e7fd2130e1479e1c65bf3",
         "scripts/flow/Foundation.ps1": "fb0d43ee4fbe00a140410bf3f9594b1a6d43bc4f226748f8231c6f23743c7ed4"
       },
       "outputs": [
@@ -520,7 +520,7 @@
         "scripts/Show-Banner.ps1": "03aa9c855b2aade332ba6810887c86700fa39dfc6bf04dfc8bc4057a4ad5db41",
         "scripts/Sync-ClaudeModels.ps1": "1afdc91387e87f10388e088060d530f5cca37ffb9c8a4d7ff97b82e9b7b73510",
         "scripts/flow/DeviceProfiles.ps1": "7f3925af5eab6f23599031b118834d1faeb657a960b20af505788ceb6097fbc4",
-        "scripts/flow/FlowContract.ps1": "5fe01f9f68710671039ba8d1fd4a303ccd3547d7f29096e23d87c58dae1b8bf8",
+        "scripts/flow/FlowContract.ps1": "548dd10f00884248ccb70a37529b2050f15a7870803e7fd2130e1479e1c65bf3",
         "scripts/flow/Models.ps1": "25d480b8b0c4d48e22fb5e1f2f7f273aa3aa735b4dafe8db60a35d7f6e6d6503",
         "scripts/setup-claude-workstation.sh": "1956dd1986603ad1399e92a44aac5562b3c2baee5fb9af17fb1bbb1cf8ffa6b7"
       },

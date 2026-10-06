@@ -63,11 +63,19 @@ function Invoke-ClaudeProjectionSwitch {
         [scriptblock]$Backup,
         [string]$CompareScript = (Join-Path $PSScriptRoot 'Compare-ClaudeEntitlement.ps1'),
         [string]$SyncProjectionScript = (Join-Path $PSScriptRoot 'Sync-ClaudeProjection.ps1'),
-        [ValidateSet('Auto','Snapshot')][string]$CompareBaseline = 'Auto'
+        [ValidateSet('Auto','Snapshot')][string]$CompareBaseline = 'Auto',
+        # The subscription the caller read the gateway in. Every read and write of the switch uses the Azure CLI's
+        # current subscription, so with this value the switch first refuses another current one (ADR-0054).
+        [string]$SubscriptionId
     )
     if ($ApimName -notmatch '^[A-Za-z][A-Za-z0-9-]{0,49}$') { throw "Projection switch refused: '$ApimName' is not an API Management name, which holds 1-50 letters, digits and hyphens and starts with a letter. Remedy: pass the gateway name as the Azure portal shows it." }
     if ($ResourceGroup -notmatch '^[A-Za-z0-9._-]{1,90}$') { throw "Projection switch refused: resource group '$ResourceGroup' holds characters other than letters, digits, '.', '_' or '-'. Azure allows some of them, such as parentheses, but az.cmd hands them to cmd.exe, so this switch does not pass them (ADR-0050). Remedy: switch a gateway in a resource group named with those characters only; Azure moves an API Management instance between resource groups, except on the Consumption tier." }
     if ($NamePrefix.Length -gt 37 -or $NamePrefix -cnotmatch '^[a-z0-9]+(?:-[a-z0-9]+)*$') { throw "Projection switch refused: NamePrefix '$NamePrefix' is not 1-37 lowercase letters/digits with separated hyphens. Remedy: pass the projection prefix used for deployment." }
+    if ($SubscriptionId) {
+        if ($SubscriptionId -notmatch '^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$') { throw "Projection switch refused: -SubscriptionId '$SubscriptionId' is not a subscription id. Remedy: pass the id, as az account show --query id -o tsv prints it." }
+        $account = Invoke-ClaudeNetworkAz @('account', 'show')
+        if (-not [string]::Equals([string]$account.id, $SubscriptionId, [StringComparison]::OrdinalIgnoreCase)) { throw "Projection switch refused: the Azure CLI's current subscription is $([string]$account.id), not $SubscriptionId, and the switch reads and writes in the current subscription. Remedy: az account set --subscription $SubscriptionId, then rerun." }
+    }
     $previewOnly = [bool]$WhatIfPreference
     $WhatIfPreference = $false
     $confirmWrite = $ConfirmPreference

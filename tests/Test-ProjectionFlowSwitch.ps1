@@ -39,6 +39,12 @@ Reset-ProjectionFixture
 Capture { Invoke-ClaudeFlowStep -Record $flowRecord -Plan $livePlan 6>$null }
 $flowCalls = $FixtureCalls -join "`n"
 Assert 'the Entitlement step reads entitlement-projection-prefix from the gateway and switches that projection' ($flowCalls -match 'apim nv show -g rg-p84 --service-name apim-p84 --named-value-id entitlement-projection-prefix' -and $flowCalls -match 'deployment group show -g rg-p84 -n projection-resolver-p84fixture') "$Failure | $(($FixtureCalls | Select-Object -First 5) -join ' | ')"
+# P100 council round 4: the step switches in the subscription its discovery read the gateway in.
+$otherDiscovery = [pscustomobject]@{ subscriptionId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'; resourceGroup = 'rg-p84'; apimName = 'apim-p84'; sku = 'BasicV2'; namedValues = @{ 'entitlement-source' = 'named-value'; 'entitlement-projection-prefix' = 'p84fixture' }; projectionPrefix = 'p84fixture' }
+$otherPlan = Get-ClaudeFlowStepPlan -Record $flowRecord -Discovery $otherDiscovery
+Reset-ProjectionFixture
+Capture { Invoke-ClaudeFlowStep -Record $flowRecord -Plan $otherPlan 6>$null }
+Assert 'the Entitlement step passes the discovered subscription to the switch, which refuses another current one before it reads the gateway' ($Failure -match '^Projection switch refused' -and $Failure -match 'az account set --subscription bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' -and ($FixtureCalls -join "`n") -notmatch 'apim show|apim nv update') "$Failure | $($FixtureCalls -join ' | ')"
 Reset-ProjectionFixture 'prefix-missing'
 Capture { Invoke-ClaudeFlowStep -Record $flowRecord -Plan $livePlan 6>$null }
 Assert 'a gateway without entitlement-projection-prefix refuses with the deploy remedy before the switch reads anything else' ($Failure -match 'entitlement-projection-prefix' -and $Failure -match 'Deploy-ClaudeProjection\.ps1' -and ($FixtureCalls -join "`n") -notmatch 'apim show|deployment group show') "$Failure | $($FixtureCalls -join ' | ')"
