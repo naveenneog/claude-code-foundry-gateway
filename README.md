@@ -287,6 +287,7 @@ there; [Operations](docs/OPERATIONS.md) maps tasks to commands and portal paths.
 | [Enterprise network](docs/NETWORK-ENTERPRISE.md) | Priced network reviews, caller access impact, live-tested regional WAF and private origins; reference-only hub and global-edge alternatives |
 | [Data governance](docs/DATA-GOVERNANCE.md) | Retention, discovery, approved purge and its coverage limits |
 | [Scale](docs/SCALE.md) / [Private projection](docs/SECURE-PROJECTION.md) | Measured limits, costs and migration runbook |
+| [Cosmos projection workbook](docs/PROJECTION-WORKBOOK.md) | Manual deploy, populate, switch, operation and rollback steps for sync-based Cosmos entitlement |
 | [Comparison](docs/COMPARISON.md) / [Foundry direct](docs/FOUNDRY-DIRECT.md) | Adoption choices and ungoverned evaluation |
 | [AI Gateway tier](docs/AI-GATEWAY-TIER.md) | Preview comparison and unverified model-serving path |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) / [Debugging](docs/DEBUGGING.md) | Known symptoms / isolate the failure layer |

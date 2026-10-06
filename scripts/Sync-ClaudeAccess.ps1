@@ -77,13 +77,14 @@ function Invoke-ClaudeProjectionAccessSync {
     $accountResourceId = "/subscriptions/$subscriptionId/resourceGroups/$ResourceGroup/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-$prefix"
     $work = Join-Path ([IO.Path]::GetTempPath()) ('claude-projection-sync-' + [guid]::NewGuid().ToString('N'))
     $runner = $null
+    # Each run has its own snapshot file on the shared runner, so concurrent runs never apply each other's file.
+    $remoteSnapshot = "/work/projection-snapshot-$([guid]::NewGuid().ToString('N')).json"
     $null = New-Item -ItemType Directory -Path $work -Force
     try {
         $snapshot = Join-Path $work 'projection-snapshot.json'
         $exportArgs = @('-NoProfile','-File',(Join-Path $PSScriptRoot 'Sync-ClaudeProjection.ps1'),
             '-Account',"cosmos-$prefix",'-TenantId',$tenantId,'-StandardGroup',$StandardGroup,'-PremiumGroup',$PremiumGroup,
             '-ApimName',$ApimName,'-ResourceGroup',$ResourceGroup,'-ExportPath',$snapshot)
-        if ($AllowEmpty) { $exportArgs += '-AllowEmpty' }
         if ($User) { $exportArgs += @('-User',$User) }
         $exportOutput = & pwsh @exportArgs 2>&1
         if ($LASTEXITCODE -ne 0) { throw "Projection snapshot export failed (exit $LASTEXITCODE): $(($exportOutput | Select-Object -Last 12) -join "`n")" }
@@ -103,22 +104,26 @@ function Invoke-ClaudeProjectionAccessSync {
         $null = New-ClaudeProjectionSyncArchive -Path $archive -Root (Split-Path $PSScriptRoot -Parent)
         $null = Send-RunnerFile -ResourceGroup $ResourceGroup -Name $runner -Path $archive -Destination '/work/sync-package.tgz'
         $null = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $runner -Command 'tar -xzf /work/sync-package.tgz -C /work'
-        $null = Send-RunnerFile -ResourceGroup $ResourceGroup -Name $runner -Path $snapshot -Destination '/work/projection-snapshot.json'
+        $null = Send-RunnerFile -ResourceGroup $ResourceGroup -Name $runner -Path $snapshot -Destination $remoteSnapshot
         $nodeModules = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $runner -Command "node -e console.log(require('fs').existsSync('/work/sync/node_modules')?'present':'absent')"
         if (($nodeModules -split '\r?\n' | Select-Object -Last 1).Trim() -ne 'present') {
             $null = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $runner -Command 'npm --prefix /work/sync ci --omit=dev --ignore-scripts --no-audit --fund=false'
         }
-        $command = "node /work/sync/src/apply-projection.mjs --cosmos https://cosmos-$prefix.documents.azure.com:443/ --tenant $tenantId --account-resource-id $accountResourceId --snapshot /work/projection-snapshot.json"
+        $command = "node /work/sync/src/apply-projection.mjs --cosmos https://cosmos-$prefix.documents.azure.com:443/ --tenant $tenantId --account-resource-id $accountResourceId --snapshot $remoteSnapshot"
         if ($targetUserOid) { $command += " --user $targetUserOid" }
         if ($AllowEmpty) { $command += ' --allow-empty' }
         $raw = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $runner -Command $command
         $result = ConvertFrom-ClaudeRunnerResult -RawOutput $raw -Step 'projection apply'
         Write-Host ("Projection sync complete: written={0} deleted={1} unchanged={2}" -f ([int]$result.written), ([int]$result.deleted), ([int]$result.unchanged)) -ForegroundColor Green
+        $excluded = [int]$result.excludedByNewerTargetedSync
+        if ($excluded -gt 0) {
+            Write-Host ("  {0} user(s) changed by a targeted sync while this full sync ran were left out of it (ADR-0051 decision 11). Remedy: rerun scripts/Sync-ClaudeAccess.ps1 -ResourceGroup {1} -ApimName {2} after five minutes, or with -User for each of them." -f $excluded, $ResourceGroup, $ApimName) -ForegroundColor Yellow
+        }
     }
     finally {
         if ($runner) {
             try {
-                $null = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $runner -Command "node -e f=require('fs');f.rmSync('/work/projection-snapshot.json',{force:true});f.rmSync('/work/gateway-decisions.json',{force:true})"
+                $null = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $runner -Command "node -e f=require('fs');f.rmSync('$remoteSnapshot',{force:true});f.rmSync('/work/projection-snapshot.json',{force:true});f.rmSync('/work/gateway-decisions.json',{force:true})"
             } catch { }
         }
         if (Test-Path -LiteralPath $work) { Remove-Item -LiteralPath $work -Recurse -Force -WhatIf:$false -ErrorAction SilentlyContinue }

@@ -669,24 +669,22 @@ Assert 'it says a new session is needed'         ($devFaq -match '(?i)a running 
 Write-Host ''
 Write-Host 'Admin - the entitlement projection' -ForegroundColor Cyan
 $sp = Get-Content (Join-Path $root 'scripts/Sync-ClaudeProjection.ps1') -Raw
+$ap = Get-Content (Join-Path $root 'sync/src/apply-projection.mjs') -Raw
 Assert 'a projection sync ships'                 ($sp.Length -gt 0)
 Assert 'it reads the same groups as the gateway' ($sp -match 'Get-GroupMemberOids')
 Assert 'premium wins over standard'              ($sp -match "(?i)premium is read first and wins")
 Assert 'every record carries its tenant'         ($sp -match 'tenantId\s+= \$TenantId')
 Assert 'and refuses to stamp another tenant'     ($sp -match '(?i)would be written and then never honoured')
-Assert 'it is a point write by partition key'    ($sp -match "x-ms-documentdb-partitionkey")
-Assert 'using Entra, not a key'                  ($sp -match 'type=aad&ver=1\.0&sig=')
+# ADR-0051 amendment 2: the PowerShell script only exports; sync/src/apply-projection.mjs writes.
+Assert 'the writer is a point write by partition key' ($ap -match "operationType: 'Upsert', partitionKey: r\.oid")
+Assert 'using Entra, not a key'                  ($ap -match 'aadCredentials: credential')
+Assert 'the exporter contacts Cosmos not at all' ($sp -notmatch 'https://cosmos\.azure\.com|x-ms-documentdb')
 # An empty resolve looks identical to a directory that cannot be read, and
 # acting on it revokes everyone.
-Assert 'an empty resolve does not wipe'          ($sp -match '(?i)Removing them all would revoke everyone')
-Assert 'unless the operator insists'             ($sp -match '\[switch\]\$AllowEmpty')
-Assert 'orphans are removed by default'          ($sp -match '(?i)Keeping them would leave')
-Assert 'and keeping them is reported'            ($sp -match '(?i)orphan\(s\) kept')
-# A 403 from Cosmos has more than one cause, needing different people to fix.
-Assert 'a firewall 403 is told from a role one'  ($sp -match "(?i)firewall\|public internet\|blocked by your")
-Assert 'naming the address it came from'         ($sp -match '(?i)This machine came from')
-Assert 'and that policy may have set it'         ($sp -match '(?i)Azure Policy can set that without anyone')
-Assert 'it says authorisation has not moved'     ($sp -match '(?i)changes nothing about who the gateway lets in')
+Assert 'an empty resolve does not wipe'          ((Get-Content (Join-Path $root 'sync/src/plan.mjs') -Raw) -match 'groups resolved to nobody while the projection holds')
+Assert 'unless the operator insists'             ($ap -match "flag\('--allow-empty'\)")
+Assert 'orphans are removed by default'          ($ap -match "keepOrphans: userOid \? false : flag\('--keep-orphans'\)")
+Assert 'and keeping them is reported'            ($ap -match 'keptOrphans: plan\.keptOrphans\.length')
 Assert 'and it is PowerShell 5.1 safe'           (-not ($sp -replace '(?m)^\s*#.*$','' -match '\?\?'))
 
 $pb = Get-Content (Join-Path $root 'infra/projection.bicep') -Raw

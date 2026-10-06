@@ -154,10 +154,10 @@ const SNAPSHOT_RECORDS = [
 
 test('runner snapshot apply requires an account resource id that matches the Cosmos endpoint for switch evidence', () => {
   const missing = scenario('missing account id');
-  assert.equal(snapshotRun(missing, '2026-10-04T09:50:00.000Z', SNAPSHOT_RECORDS).code, 0);
-  const refused = admission(missing, '2026-10-04T09:51:00.000Z');
-  assert.equal(refused.code, 4, refused.stdout + refused.stderr);
-  assert.match(refused.json.reason, /full sync evidence/);
+  const refusedMissing = snapshotRun(missing, '2026-10-04T09:50:00.000Z', SNAPSHOT_RECORDS);
+  assert.equal(refusedMissing.code, 1, refusedMissing.stdout + refusedMissing.stderr);
+  assert.match(refusedMissing.json.error, /--account-resource-id is required/);
+  assert.match(refusedMissing.json.error, /Remedy:/);
 
   const mismatch = scenario('mismatched account id');
   const wrongAccount = ACCOUNT.replace('cosmos-p94fixture', 'cosmos-other');
@@ -188,14 +188,17 @@ test('a recent full runner snapshot with account evidence admits immediately and
 
 test('switch evidence is scoped to this account and only full syncs count', () => {
   const where = scenario('evidence scope');
-  assert.equal(snapshotRun(where, '2026-10-04T09:50:00.000Z', SNAPSHOT_RECORDS).code, 0);
+  assert.equal(snapshotRun(where, '2026-10-04T09:50:00.000Z', SNAPSHOT_RECORDS, { args: ['--account-resource-id', ACCOUNT.toUpperCase()] }).code, 0);
   assert.equal(jobRun(where, '2026-10-04T10:00:00.000Z').code, 0);
   const status = JSON.parse(readFileSync(where.store, 'utf8'));
   const recorded = Object.values(status.docs).filter((d) => d.type === 'projection-reconciliation-status');
   assert.equal(recorded.length, 2, 'the runner and job each record status');
   assert.equal(recorded.every((d) => d.ttl === 604800), true, 'status records retain seven days');
-  assert.equal(recorded.some((d) => d.mode === 'full' && d.executor === 'job' && d.accountResourceId === ACCOUNT), true);
+  assert.equal(recorded.some((d) => d.mode === 'full' && d.executor === 'job' && d.accountResourceId.toLowerCase() === ACCOUNT.toLowerCase()), true);
   assert.equal(admission(where, '2026-10-04T11:01:00.000Z').json.ok, true);
+  const cosmosLog = readFileSync(join(where.dir, 'cosmos.log'), 'utf8');
+  assert.match(cosmosLog, new RegExp(`query SELECT \\* FROM c partition=projection-status::${TENANT}\\n`), 'switch evidence reads statuses from the status partition only');
+  assert.doesNotMatch(cosmosLog, /query SELECT \* FROM c\n/, 'switch evidence never reads statuses across partitions');
   const otherAccount = run(where, 'check-admission.mjs', ['--cosmos', ENDPOINT, '--tenant', TENANT, '--account-resource-id', ACCOUNT.replace('cosmos-p94fixture', 'cosmos-other')], { now: '2026-10-04T11:01:00.000Z' });
   assert.equal(otherAccount.code, 4, otherAccount.stdout + otherAccount.stderr);
   assert.match(otherAccount.json.reason, /full sync evidence/);
@@ -210,7 +213,7 @@ test('switch evidence is scoped to this account and only full syncs count', () =
 
 test('switch evidence uses max evidence age, not entry point or job receipt fields', () => {
   const where = scenario('evidence age');
-  assert.equal(snapshotRun(where, '2026-10-04T09:50:00.000Z', SNAPSHOT_RECORDS).code, 0);
+  assert.equal(snapshotRun(where, '2026-10-04T09:50:00.000Z', SNAPSHOT_RECORDS, { args: ['--account-resource-id', ACCOUNT] }).code, 0);
   assert.equal(jobRun(where, '2026-10-04T10:00:00.000Z').code, 0);
   const current = admission(where, '2026-10-04T10:30:00.000Z', ['--max-evidence-age-seconds', '3600']);
   assert.equal(current.code, 0, current.stdout + current.stderr);

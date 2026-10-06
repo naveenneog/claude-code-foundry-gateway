@@ -79,7 +79,7 @@ $spelled = @(
 )
 $spelledChanges = Compare-ClaudeTurnstileBudgets -Registry $spelled -Parents ([ordered]@{}) -TurnstileItems @([pscustomobject]@{ scope_type = 'organization'; scope_id = 'sales'; token_limit = 900; updated_by = 'admin@contoso.com' })
 Assert 'a Turnstile budget is compared with the unit of the exact spelling' ($spelledChanges.Count -eq 1 -and $spelledChanges[0].Id -ceq 'sales' -and $spelledChanges[0].Was -eq 1000 -and $spelledChanges[0].Now -eq 900) (($spelledChanges | ForEach-Object { "$($_.Id) $($_.Was)->$($_.Now)" }) -join ', ')
-Assert 'pulled budgets are written to the unit of the exact spelling' ($sync -match '\[string\]\$u\.Id -ceq \$c\.Id')
+Assert 'pulled budgets are written to the unit of the exact spelling' ($sync -match '\[string\]::Equals\(\[string\]\$u\.Id, \[string\]\$c\.Id, \[System\.StringComparison\]::Ordinal\)')
 # P96 council round 3 (Architect): a team 'sales' does not make the unit 'Sales' a team, whatever map the caller passes,
 # and the pull reads bu-parents by exact key.
 $spelledTeam = @(
@@ -90,6 +90,33 @@ $spelledTeam = @(
 $teamChanges = Compare-ClaudeTurnstileBudgets -Registry $spelledTeam -Parents ([ordered]@{ sales = 'platform' }) -TurnstileItems @([pscustomobject]@{ scope_type = 'organization'; scope_id = 'Sales'; token_limit = 900; updated_by = 'admin@contoso.com' })
 Assert 'a Turnstile organization budget for Sales applies when the team is sales' ($teamChanges.Count -eq 1 -and $teamChanges[0].Id -ceq 'Sales' -and $teamChanges[0].Was -eq 2000 -and $teamChanges[0].Now -eq 900) (($teamChanges | ForEach-Object { "$($_.Id) $($_.ScopeType) $($_.Was)->$($_.Now)" }) -join ', ')
 Assert 'the budget pull reads bu-parents by exact key' ($sync -match "ConvertFrom-ClaudeBuParents \(Get-ApimNamedValue [^\r\n]*'bu-parents'\) -ExactKeys")
+# P96 council round 4 (Architect): the catalog and the budget plan match parents by exact spelling too, whatever map the
+# caller passes. A parent 'Sales' that is not a unit leaves the team unmatched rather than rebound to 'sales', and a team
+# 'sales' does not make the unit 'Sales' a team in the budget plan.
+$exactParents = [System.Collections.Specialized.OrderedDictionary]::new([System.StringComparer]::Ordinal)
+$exactParents['eu'] = 'Sales'
+$foldCatalog = ConvertTo-ClaudeTurnstileCatalog -Registry @(
+    [pscustomobject]@{ Id = 'sales'; Group = 'Sales'; TokensPerMonth = 1000 },
+    [pscustomobject]@{ Id = 'eu'; Group = 'EU'; TokensPerMonth = 100 }
+) -Parents $exactParents
+Assert 'the catalog does not rebind a team to another spelling of its parent' (@($foldCatalog.departments | Where-Object { $_.id -ceq 'eu' }).Count -eq 0) (($foldCatalog.departments | ForEach-Object { "$($_.id)->$($_.parent_id)" }) -join ', ')
+$spelledTeamParents = [System.Collections.Specialized.OrderedDictionary]::new([System.StringComparer]::Ordinal)
+$spelledTeamParents['EU'] = 'sales'
+$teamKeyCatalog = ConvertTo-ClaudeTurnstileCatalog -Registry @(
+    [pscustomobject]@{ Id = 'sales'; Group = 'Sales'; TokensPerMonth = 1000 },
+    [pscustomobject]@{ Id = 'eu'; Group = 'EU'; TokensPerMonth = 100 }
+) -Parents $spelledTeamParents
+Assert 'the catalog does not take a team key EU for the unit eu' (@($teamKeyCatalog.departments | Where-Object { $_.id -ceq 'eu' }).Count -eq 1 -and @($teamKeyCatalog.departments | Where-Object { $_.parent_id -ceq 'sales' -and $_.id -cne 'sales' }).Count -eq 0) (($teamKeyCatalog.departments | ForEach-Object { "$($_.id)->$($_.parent_id)" }) -join ', ')
+$spelledRegistry = @(
+    [pscustomobject]@{ Id = 'platform'; Group = 'Platform'; TokensPerMonth = 5000 },
+    [pscustomobject]@{ Id = 'sales'; Group = 'Lower Sales'; TokensPerMonth = 1000 },
+    [pscustomobject]@{ Id = 'Sales'; Group = 'Upper Sales'; TokensPerMonth = 2000 }
+)
+$foldingMap = [ordered]@{ sales = 'platform' }
+# The catalog cannot hold a unit stored with capitals: its mode attributes refuse it (a ROADMAP follow-up), so only the
+# budget plan is checked with both spellings.
+$spelledPlan = Get-ClaudeTurnstileBudgetPlan -Registry $spelledRegistry -Parents $foldingMap
+Assert 'the budget plan sets Sales as an organization and sales as a department' (@($spelledPlan | Where-Object { $_.ScopeType -eq 'organization' -and $_.ScopeId -ceq 'Sales' -and $_.TokenLimit -eq 2000 }).Count -eq 1 -and @($spelledPlan | Where-Object { $_.ScopeType -eq 'department' -and $_.ScopeId -ceq 'sales' -and $_.TokenLimit -eq 1000 }).Count -eq 1) (($spelledPlan | ForEach-Object { "$($_.ScopeType):$($_.ScopeId)" }) -join ', ')
 
 Write-Host ''
 Write-Host 'Turnstile governance - tiers' -ForegroundColor Cyan
@@ -221,6 +248,82 @@ $shape = { param($r) (@($r | Sort-Object Id | ForEach-Object { "$($_.Id)=$($_.Gr
 Assert 'the registry survives the round trip through Turnstile' ((& $shape $round.Registry) -eq (& $shape $registry)) (& $shape $round.Registry)
 Assert 'and so do the teams'                                  ((ConvertTo-ClaudeBuParents $round.Parents) -eq (ConvertTo-ClaudeBuParents $parents))
 Assert 'with nothing to report'                               (@($round.Problems).Count -eq 0) ($round.Problems -join '; ')
+# P96 council round 4 (Security, pre-existing): Turnstile catalog values reach the registry and az.cmd, which cmd.exe reads
+# again. A group name with a registry or shell character, or an id that is not lower-case ASCII, is a problem at import,
+# and Test-ClaudeEntraGroup refuses a shell character before any az call.
+$unsafeCatalog = [pscustomobject]@{
+    source        = 'configured'
+    organizations = @(
+        [pscustomobject]@{ id = 'research'; name = 'R'; external_ref = 'entra-group:x&ver' },
+        [pscustomobject]@{ id = 'Sales'; name = 'S'; external_ref = 'entra-group:Claude Sales' },
+        [pscustomobject]@{ id = ([string][char]0x212A + 'itchen'); name = 'K'; external_ref = 'entra-group:Claude Kitchen' },
+        [pscustomobject]@{ id = 'ops'; name = 'O'; external_ref = 'entra-group:Ops,Team=1' }
+    )
+    departments   = @()
+}
+$unsafe = ConvertFrom-ClaudeTurnstileGovernance -Catalog $unsafeCatalog -Tiers @([pscustomobject]@{ id = 'standard'; entra_group = 'claude|standard'; tokens_per_minute = 1; tokens_per_day = 1; models = @() })
+$unsafeText = @($unsafe.Problems) -join '; '
+Assert 'a unit group with a shell character is a problem at import' ($unsafeText -match "business unit 'research': its Entra group name holds") $unsafeText
+Assert 'a unit group with a registry character is a problem at import' ($unsafeText -match "business unit 'ops': its Entra group name holds") $unsafeText
+Assert 'a tier group with a shell character is a problem at import' ($unsafeText -match "tier 'standard': its Entra group name holds") $unsafeText
+Assert 'an imported id with a capital is not a gateway id' ($unsafeText -match "business unit 'Sales': not a valid gateway id") $unsafeText
+Assert 'an imported id with a Kelvin sign is not a gateway id' ($unsafeText -match "itchen': not a valid gateway id") $unsafeText
+Assert 'no unsafe unit reaches the registry' (@($unsafe.Registry | Where-Object { $_.Id -cin @('research', 'ops', 'Sales') }).Count -eq 0) ((@($unsafe.Registry) | ForEach-Object Id) -join ',')
+$groupCalls = [System.Collections.Generic.List[string]]::new()
+$groupCheck = & {
+    function az { $groupCalls.Add("az $($args -join ' ')"); $global:LASTEXITCODE = 0; '00000000-0000-0000-0000-000000000000' }
+    try { Test-ClaudeEntraGroup -Group 'x&ver'; 'returned' } catch { 'refused' }
+}
+Assert 'Test-ClaudeEntraGroup refuses a shell character before any az call' ($groupCheck -eq 'refused' -and $groupCalls.Count -eq 0) "$groupCheck; calls $($groupCalls -join ' | ')"
+# P96 council round 5 (Architect): the import and apply path matches ids by exact spelling as well. A budget for 'Sales'
+# is not the budget of the unit 'sales'; a team whose parent is 'Sales' is not a team of 'sales'; 'Sales' in the gateway
+# against 'sales' from Turnstile is a change; selection keeps a team only under its exact parent.
+$exactCatalog = [pscustomobject]@{
+    source        = 'configured'
+    organizations = @([pscustomobject]@{ id = 'sales'; name = 'Sales'; external_ref = 'entra-group:Claude Sales' })
+    departments   = @([pscustomobject]@{ id = 'eu'; name = 'EU'; parent_id = 'Sales'; external_ref = 'entra-group:Claude EU' })
+}
+$exact = ConvertFrom-ClaudeTurnstileGovernance -Catalog $exactCatalog -BudgetItems @([pscustomobject]@{ scope_type = 'organization'; scope_id = 'Sales'; token_limit = 900 })
+$exactText = @($exact.Problems) -join '; '
+Assert 'a Turnstile budget for Sales is not the budget of the unit sales' (@($exact.Registry | Where-Object { $_.Id -ceq 'sales' -and [long]$_.TokensPerMonth -eq 0 }).Count -eq 1) ((@($exact.Registry) | ForEach-Object { "$($_.Id)=$($_.TokensPerMonth)" }) -join ',')
+# P96 council round 6 (Architect): the scope type is a fixed word Turnstile may capitalise; it must not hide the budget.
+$typeCase = ConvertFrom-ClaudeTurnstileGovernance -Catalog ([pscustomobject]@{
+    source = 'configured'; organizations = @([pscustomobject]@{ id = 'sales'; name = 'Sales'; external_ref = 'entra-group:Claude Sales' }); departments = @()
+}) -BudgetItems @([pscustomobject]@{ scope_type = 'Organization'; scope_id = 'sales'; token_limit = 900 })
+Assert 'a budget whose scope type is capitalised still reaches its unit' (@($typeCase.Registry | Where-Object { $_.Id -ceq 'sales' -and [long]$_.TokensPerMonth -eq 900 }).Count -eq 1) ((@($typeCase.Registry) | ForEach-Object { "$($_.Id)=$($_.TokensPerMonth)" }) -join ',')
+Assert 'a team whose parent is Sales is not a team of sales' (@($exact.Parents.Keys).Count -eq 0 -and $exactText -match "team 'eu': its business unit 'Sales' was not applied") "$exactText | parents $(ConvertTo-ClaudeBuParents $exact.Parents)"
+$spellingChange = Get-ClaudeGatewayGovernanceChanges -Desired ([pscustomobject]@{ Registry = @([pscustomobject]@{ Id = 'sales'; Group = 'Claude Sales'; TokensPerMonth = 0 }); Parents = [ordered]@{}; Modes = [ordered]@{}; Tiers = @() }) -Current ([ordered]@{ 'bu-registry' = ',Sales=Claude Sales:0,'; 'bu-parents' = ',,'; 'bu-modes' = ',,' })
+Assert 'Sales in the gateway against sales from Turnstile is a change' (@($spellingChange | Where-Object { $_.Id -eq 'bu-registry' }).Count -eq 1) ((@($spellingChange) | ForEach-Object Id) -join ',')
+$selectParents = [System.Collections.Specialized.OrderedDictionary]::new([System.StringComparer]::Ordinal)
+$selectParents['eu'] = 'Sales'
+$selected = Select-ClaudeGovernanceWithGroups -Desired ([pscustomobject]@{
+        Registry = @([pscustomobject]@{ Id = 'sales'; Group = 'Claude Sales'; TokensPerMonth = 0 }, [pscustomobject]@{ Id = 'eu'; Group = 'Claude EU'; TokensPerMonth = 0 })
+        Parents = $selectParents; Modes = [ordered]@{}; Tiers = @() }) -GroupState { param($g) 'exists' }
+Assert 'selection keeps a team only under its exact parent' (@($selected.Governance.Parents.Keys).Count -eq 0 -and (@($selected.Problems) -join '; ') -match "team 'eu': its business unit was not applied") ((@($selected.Problems) -join '; ') + " | parents $(ConvertTo-ClaudeBuParents $selected.Governance.Parents)")
+# P96 council round 5 (Coder): '$' also matches before a final line feed, so 'research<LF>' passed the id check and reached
+# the registry; the anchor is \z. (Security): a tier's model names reach models-<tier> and az.cmd, so each must be a
+# deployment name.
+$lfCatalog = [pscustomobject]@{
+    source        = 'configured'
+    organizations = @([pscustomobject]@{ id = "research`n"; name = 'R'; external_ref = 'entra-group:Claude Research' })
+    departments   = @([pscustomobject]@{ id = "web`n"; name = 'W'; parent_id = "research`n"; external_ref = 'entra-group:Claude Web' })
+}
+$lf = ConvertFrom-ClaudeTurnstileGovernance -Catalog $lfCatalog
+Assert 'an imported id with a trailing line feed is not a gateway id' (@($lf.Registry).Count -eq 0 -and (@($lf.Problems) -join '; ') -match 'not a valid gateway id') ((@($lf.Problems) -join '; ') + " | registry $(@($lf.Registry).Count)")
+$lfTeam = ConvertFrom-ClaudeTurnstileGovernance -Catalog ([pscustomobject]@{
+    source        = 'configured'
+    organizations = @([pscustomobject]@{ id = 'research'; name = 'R'; external_ref = 'entra-group:Claude Research' })
+    departments   = @([pscustomobject]@{ id = "web`n"; name = 'W'; parent_id = 'research'; external_ref = 'entra-group:Claude Web' })
+})
+Assert 'an imported team id with a trailing line feed under a valid unit is not a gateway id' (@($lfTeam.Registry | Where-Object { $_.Id -cne 'research' }).Count -eq 0 -and (@($lfTeam.Problems) -join '; ') -match "team 'web\s*': not a valid gateway id") ((@($lfTeam.Problems) -join '; ') + " | registry $((@($lfTeam.Registry) | ForEach-Object Id) -join ',')")
+Assert 'Test-ClaudeBuId refuses an identifier with a trailing line feed' (Throws { Test-ClaudeBuId "research`n" })
+Assert 'a stored identifier with a trailing line feed is refused too' (Throws { Test-ClaudeBuId "Legacy-Unit`n" -Stored })
+$modelTiers = ConvertFrom-ClaudeTurnstileGovernance -Catalog $stored -BudgetItems $budgetRows -Tiers @(
+    [pscustomobject]@{ id = 'standard'; entra_group = 'claude-code-standard'; tokens_per_minute = 1; tokens_per_day = 1; models = @('claude-sonnet-5', 'x&calc.exe') },
+    [pscustomobject]@{ id = 'premium'; entra_group = 'Claude Premium'; tokens_per_minute = 1; tokens_per_day = 1; models = @('claude-opus-5.5', 'claude_haiku-4.5') }
+)
+Assert 'a tier model that is not a deployment name is a problem, and its tier is not applied' ((@($modelTiers.Problems) -join '; ') -match "tier 'standard': model 'x&calc.exe' is not a deployment name" -and @($modelTiers.Tiers | Where-Object Id -eq 'standard').Count -eq 0) (@($modelTiers.Problems) -join '; ')
+Assert 'deployment names with letters, digits, dots, underscores and hyphens are kept' (@($modelTiers.Tiers | Where-Object { $_.Id -eq 'premium' -and $_.Models -ceq ',claude-opus-5.5,claude_haiku-4.5,' }).Count -eq 1) ((@($modelTiers.Tiers) | ForEach-Object { "$($_.Id)=$($_.Models)" }) -join ' ')
 
 # What an administrator might save.
 $edited = [pscustomobject]@{
@@ -422,6 +525,19 @@ try {
     Assert 'a budget saved in Turnstile reaches the gateway'  (@(& $unitsNow | Where-Object Id -eq 'platform')[0].TokensPerMonth -eq 25000000)
     Assert 'without Graph access, membership is left alone'   (-not (Test-Path $refreshed) -and $r.Membership -match 'cannot read Entra groups')
     Assert 'and a group not yet in use is not applied'        (@(& $unitsNow | ForEach-Object { $_.Id }) -notcontains 'finance')
+    # P96 council round 5 (UX): with -Apply, what is not applied is on screen before the first write.
+    & $reset
+    $script:events = [System.Collections.Generic.List[string]]::new()
+    function Set-ApimNamedValue { param($ResourceGroup, $ApimName, $Id, $Value) $script:events.Add("write $Id"); $script:writes++; if (-not $script:dropWrites) { $script:gw[$Id] = $Value } }
+    function Write-Host { $script:events.Add("host $($args -join ' ')") }
+    try { $ordered = Invoke-ClaudeGatewayGovernanceApply @applyArgs -Apply }
+    finally {
+        Remove-Item Function:\Write-Host
+        function Set-ApimNamedValue { param($ResourceGroup, $ApimName, $Id, $Value) $script:writes++; if (-not $script:dropWrites) { $script:gw[$Id] = $Value } }
+    }
+    $firstProblem = [array]::FindIndex($script:events.ToArray(), [Predicate[string]]{ param($e) $e -like 'host *not applied - *' })
+    $firstWrite = [array]::FindIndex($script:events.ToArray(), [Predicate[string]]{ param($e) $e -like 'write *' })
+    Assert 'with -Apply, what is not applied is shown before the first write' ($firstProblem -ge 0 -and $firstWrite -gt $firstProblem -and $ordered.ProblemsReported) (($script:events | Select-Object -First 6) -join ' | ')
 
     & $reset; $script:graphState = 'ok'
     $r = Invoke-ClaudeGatewayGovernanceApply @applyArgs -Apply

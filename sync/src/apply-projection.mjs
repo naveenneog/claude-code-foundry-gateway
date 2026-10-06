@@ -33,7 +33,8 @@
  *        [--whatif] [--allow-empty] [--keep-orphans]
  */
 import { readFileSync } from 'node:fs';
-import { mergeMembership, planChanges, toDocument, toStatusDocument, validateSnapshot, validateTargetedSnapshot, compareWithGateway, compareWithSnapshot, createReconciliation, normalizeJobSettings, validateJobSettings } from './plan.mjs';
+import { mergeMembership, planChanges, toDocument, toStatusDocument, validateSnapshot, validateTargetedSnapshot, compareWithGateway, compareWithSnapshot, createReconciliation, normalizeJobSettings, validateJobSettings, statusPartitionKey, STATUS_RECORD_TYPE } from './plan.mjs';
+import { acquireApplyLock, validateLockWait } from './apply-lock.mjs';
 import { resolveGroupId, getTransitiveMembers } from './graph.mjs';
 import { readGatewayUnits, sortUnitsByDepth } from './business-units.mjs';
 import { RENEWAL_SUCCEEDED, RENEWAL_FAILED } from './events.mjs';
@@ -46,18 +47,49 @@ const opts = (n) => argv.flatMap((a, i) => (a === n && argv[i + 1] ? [argv[i + 1
 const endpoint = opt('--cosmos', process.env.COSMOS_ENDPOINT);
 const databaseName = opt('--database', 'claude');
 const containerName = opt('--container', 'entitlement');
-const tenantId = opt('--tenant', process.env.PROJECTION_TENANT_ID);
+// Tenant ids are GUIDs, stored in lower case: status partitions and the stale-change guard match them exactly.
+const tenantId = (opt('--tenant', process.env.PROJECTION_TENANT_ID) ?? '').toLowerCase();
 const accountResourceIdFlag = opt('--account-resource-id');
 const whatIf = flag('--whatif');
 const renewal = flag('--graph');
 const userOid = opt('--user');
+const compareMode = Boolean(opt('--compare') || opt('--compare-snapshot'));
+const mutatingApply = !whatIf && !compareMode;
+const lockWaitSeconds = Number(opt('--lock-wait-seconds', '900'));
 const GUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 const COSMOS_ACCOUNT_RESOURCE_ID = /^\/subscriptions\/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\/resourceGroups\/([^/]+)\/providers\/Microsoft\.DocumentDB\/databaseAccounts\/([^/]+)$/i;
 const log = (m) => console.log(m);
+const rerunRemedy = 'Remedy: rerun scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim> (or start the sync job again), then rerun the switch if one was in progress.';
+const userRerunRemedy = 'Remedy: rerun scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim> -User <upn-or-oid>.';
+const accountRemedy = 'Remedy: rerun scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim>, or rerun with a matching --cosmos https://<account>.documents.azure.com:443/ --account-resource-id $(az cosmosdb show -n <account> -g <rg> --query id -o tsv).';
 
+// The remedy is also a field of its own: scripts/ClaudeRunner.ps1 shows it to the operator, while the
+// error, which can name holders and counts, stays in the sanitized diagnostics.
 function fail(message, code = 1, stage = 'config') {
-  console.log(JSON.stringify({ ok: false, error: message, ...(renewal ? { event: RENEWAL_FAILED, stage } : {}) }));
+  const at = message.indexOf(' Remedy: ');
+  const remedy = at >= 0 ? message.slice(at + 1) : undefined;
+  console.log(JSON.stringify({ ok: false, error: message, stage, ...(remedy ? { remedy } : {}), ...(renewal ? { event: RENEWAL_FAILED } : {}) }));
   process.exit(code);
+}
+
+const emptyRemedy = 'Remedy: check the tier group names and that the signed-in operator can read their membership; when the groups are empty on purpose, rerun scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim> -AllowEmpty.';
+
+let activeLockForFailure = null;
+async function releaseActiveLock() {
+  if (!activeLockForFailure) return;
+  const lock = activeLockForFailure;
+  activeLockForFailure = null;
+  try {
+    await lock.release();
+  } catch (error) {
+    console.log(JSON.stringify({ ok: false, warning: `projection apply lock release failed: ${error?.message ?? error}` }));
+  }
+}
+
+// Every refusal after the lock is taken releases it first: process.exit skips finally.
+async function failAfterLock(message, code, stage) {
+  await releaseActiveLock();
+  fail(message, code, stage);
 }
 
 // One stage of a run. An error ends the run with the stage named, before anything after it is written.
@@ -65,16 +97,23 @@ async function step(stage, work) {
   try {
     return await work();
   } catch (error) {
-    return fail(`${stage} failed: ${error?.message ?? error}`, 3, stage);
+    await releaseActiveLock();
+    const failureStage = error?.stage ?? stage;
+    return fail(`${failureStage} failed: ${error?.message ?? error}`, 3, failureStage);
   }
 }
 
 if (!endpoint) fail('--cosmos is required');
 if (!tenantId) fail('--tenant is required: every record is stamped with it and the resolver refuses another');
-const accountResourceId = resolveAccountResourceId({ endpoint, flagValue: accountResourceIdFlag, envValue: process.env.PROJECTION_ACCOUNT_RESOURCE_ID });
-const jobSettingsRun = renewal &&
-  ['PROJECTION_STANDARD_GROUP_ID', 'PROJECTION_PREMIUM_GROUP_ID', 'PROJECTION_GATEWAY_RESOURCE_ID'].some((key) => process.env[key] !== undefined) &&
-  !opt('--standard') && !opt('--premium');
+if (!GUID.test(tenantId)) fail('--tenant must be the tenant id GUID. Remedy: pass the tenant id from az account show --query tenantId -o tsv, or rerun scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim>.');
+try { validateLockWait(lockWaitSeconds); } catch (error) { fail(error.message, 1, 'config'); }
+const standardOverride = opt('--standard');
+const premiumOverride = opt('--premium');
+if (renewal && Boolean(standardOverride) !== Boolean(premiumOverride)) {
+  fail('partial tier override refused for --graph. Remedy: rerun with both --graph --standard <group-object-id> --premium <group-object-id-or-none>, or omit both tier overrides so the deployed job settings are used.', 1, 'config');
+}
+const jobSettingsRun = renewal && !standardOverride && !premiumOverride;
+const accountResourceId = resolveAccountResourceId({ endpoint, flagValue: accountResourceIdFlag, envValue: process.env.PROJECTION_ACCOUNT_RESOURCE_ID, required: mutatingApply && !jobSettingsRun });
 if (jobSettingsRun) {
   const problems = validateJobSettings(process.env);
   if (problems.length) fail(`job settings refused: ${problems.join('; ')}`, 1, 'config');
@@ -84,12 +123,12 @@ const { DefaultAzureCredential } = await import('@azure/identity');
 const { CosmosClient } = await import('@azure/cosmos');
 const credential = new DefaultAzureCredential();
 
-// Tier groups: --standard/--premium, else the job's PROJECTION_*_GROUP_ID settings (object ids,
-// checked here before any read), else the default group names for a --graph run by hand.
+// Tier groups: --standard/--premium for a manual graph run, else the job's PROJECTION_*_GROUP_ID
+// settings (object ids, checked here before any read).
 function tierGroups() {
   const fromJob = ['STANDARD', 'PREMIUM'].some((tier) => process.env[`PROJECTION_${tier}_GROUP_ID`] !== undefined);
-  const standard = opt('--standard', fromJob ? process.env.PROJECTION_STANDARD_GROUP_ID : 'claude-code-standard');
-  const premium = opt('--premium', fromJob ? process.env.PROJECTION_PREMIUM_GROUP_ID : 'claude-code-premium');
+  const standard = opt('--standard', fromJob ? process.env.PROJECTION_STANDARD_GROUP_ID : '');
+  const premium = opt('--premium', fromJob ? process.env.PROJECTION_PREMIUM_GROUP_ID : '');
   if (fromJob && !opt('--standard') && !GUID.test(standard ?? '')) fail('PROJECTION_STANDARD_GROUP_ID must be the standard tier group object id');
   if (fromJob && !opt('--premium') && premium !== 'none' && !GUID.test(premium ?? '')) fail('PROJECTION_PREMIUM_GROUP_ID must be the premium tier group object id, or none');
   return { premium: premium === 'none' ? '' : premium, standard };
@@ -110,11 +149,12 @@ async function unitGroups() {
 async function resolveMembership() {
   if (opt('--snapshot')) {
     const snap = JSON.parse(readFileSync(opt('--snapshot'), 'utf8').replace(/^\uFEFF/, ''));
+    if (typeof snap?.tenantId === 'string') snap.tenantId = snap.tenantId.toLowerCase();
     const problems = userOid
       ? validateTargetedSnapshot(snap, userOid, { tenantId })
       : validateSnapshot(snap, { tenantId });
     if (!userOid && snap.scope === 'user') problems.push('pass --user <oid> to apply a targeted snapshot');
-    if (problems.length) fail(`snapshot refused: ${problems.join('; ')}`);
+    if (problems.length) fail(`snapshot refused: ${problems.join('; ')}. ${userOid ? userRerunRemedy : rerunRemedy}`);
     return { records: snap.records, mappingVersion: snap.mappingVersion, source: `snapshot ${snap.generatedAt}`,
       scope: userOid ? 'user' : 'full',
       reconciliation: { reconciliationGeneration: snap.reconciliationGeneration, lastVerifiedAt: snap.lastVerifiedAt, expiresAt: snap.expiresAt } };
@@ -161,16 +201,22 @@ async function resolveMembership() {
   return { records, mappingVersion: Math.floor(Date.now() / 1000), source: 'graph', reconciliation };
 }
 
-async function readExisting(container) {
+// The container indexes only /oid (infra/projection.bicep), so no query here has a WHERE clause: a
+// filter on another path would scan every record. Entitlement reads skip typed documents (status
+// records, the apply lock) in the client; status reads are scoped to the status partition.
+// A long read renews the lease between pages, so a large container cannot outlive it before the first write.
+async function readExisting(container, lock) {
   const existing = new Map();
-  const iterator = container.items.query("SELECT c.id, c.tier, c.businessUnit, c.expiresAt FROM c WHERE NOT IS_DEFINED(c.type) OR c.type != 'projection-reconciliation-status'", { maxItemCount: 1000 });
+  const iterator = container.items.query('SELECT c.id, c.tier, c.businessUnit, c.expiresAt, c.type FROM c', { maxItemCount: 1000 });
   while (iterator.hasMoreResults()) {
     const { resources } = await iterator.fetchNext();
     for (const d of resources ?? []) {
+      if (d.type !== undefined) continue;
       const current = { tier: d.tier, businessUnit: d.businessUnit ?? '' };
       if (Object.hasOwn(d, 'expiresAt')) current.expiresAt = d.expiresAt;
       existing.set(d.id, current);
     }
+    if (lock) await lock.renewIfNeeded();
   }
   return existing;
 }
@@ -184,35 +230,29 @@ async function readExistingUser(container, oid) {
     if (error?.code !== 404 && error?.statusCode !== 404) throw error;
   }
   if (resource && !resource.type) {
-    existing.set(resource.id, { tier: resource.tier, businessUnit: resource.businessUnit ?? '' });
+    const current = { tier: resource.tier, businessUnit: resource.businessUnit ?? '' };
+    if (Object.hasOwn(resource, 'expiresAt')) current.expiresAt = resource.expiresAt;
+    existing.set(resource.id, current);
   }
   return existing;
 }
 
-async function readSuccessfulStatusesAfter(container, snapshotVerifiedAt) {
-  const cutoff = Date.parse(snapshotVerifiedAt);
-  if (!Number.isFinite(cutoff)) return [];
-  const query = {
-    query: "SELECT c.id, c.oid, c.type, c.tenantId, c.accountResourceId, c.databaseName, c.containerName, c.ok, c.mode, c.user, c.finishedAt FROM c WHERE c.type = 'projection-reconciliation-status' AND c.tenantId = @tenantId AND c.accountResourceId = @accountResourceId AND c.databaseName = @databaseName AND c.containerName = @containerName",
-    parameters: [
-      { name: '@tenantId', value: tenantId },
-      { name: '@accountResourceId', value: accountResourceId },
-      { name: '@databaseName', value: databaseName },
-      { name: '@containerName', value: containerName },
-    ],
-  };
+async function readSuccessfulStatuses(container, lock) {
+  const query = 'SELECT c.id, c.oid, c.type, c.tenantId, c.accountResourceId, c.databaseName, c.containerName, c.ok, c.mode, c.user, c.finishedAt FROM c';
   const statuses = [];
-  const iterator = container.items.query(query, { maxItemCount: 1000 });
+  const iterator = container.items.query(query, { maxItemCount: 1000, partitionKey: statusPartitionKey(tenantId) });
   while (iterator.hasMoreResults()) {
     const { resources } = await iterator.fetchNext();
     statuses.push(...(resources ?? []));
+    if (lock) await lock.renewIfNeeded();
   }
-  return statuses.filter((s) => s.ok === true && Date.parse(s.finishedAt) > cutoff);
+  return statuses.filter((s) => s.type === STATUS_RECORD_TYPE && s.tenantId === tenantId && s.ok === true);
 }
 
-async function bulk(container, operations) {
+async function bulk(container, operations, lock) {
   let ok = 0, failed = 0;
   for (let i = 0; i < operations.length; i += 1000) {
+    if (lock) await lock.renewIfNeeded();
     const results = await container.items.executeBulkOperations(operations.slice(i, i + 1000));
     for (const r of results) {
       const status = r.response?.statusCode ?? r.statusCode;
@@ -231,8 +271,8 @@ if (opt('--compare')) {
   const gw = JSON.parse(readFileSync(opt('--compare'), 'utf8').replace(/^\uFEFF/, ''));
   if (gw.kind !== 'claude-gateway-decisions') fail("--compare expects a file written by Compare-ClaudeEntitlement.ps1 -ExportGatewayPath");
   const records = [];
-  const it = containerRef().items.query('SELECT c.id, c.oid, c.tier, c.businessUnit, c.tenantId, c.reconciliationGeneration, c.lastVerifiedAt, c.expiresAt FROM c', { maxItemCount: 1000 });
-  while (it.hasMoreResults()) { const { resources } = await it.fetchNext(); records.push(...(resources ?? [])); }
+  const it = containerRef().items.query('SELECT c.id, c.oid, c.tier, c.businessUnit, c.tenantId, c.reconciliationGeneration, c.lastVerifiedAt, c.expiresAt, c.type FROM c', { maxItemCount: 1000 });
+  while (it.hasMoreResults()) { const { resources } = await it.fetchNext(); records.push(...(resources ?? []).filter((r) => r.type === undefined)); }
   const { compared, differences } = compareWithGateway(gw, records, { tenantId });
   const byKind = differences.reduce((a, d) => ({ ...a, [d.kind]: (a[d.kind] ?? 0) + 1 }), {});
   console.log(JSON.stringify({ ok: differences.length === 0, mode: 'compare', gateway: gw.apim, compared, projectionRecords: records.length, differences: differences.length, byKind, sample: differences.slice(0, 20), seconds: (Date.now() - started) / 1000 }));
@@ -245,9 +285,9 @@ if (opt('--compare-snapshot')) {
   const snap = JSON.parse(readFileSync(opt('--compare-snapshot'), 'utf8').replace(/^\uFEFF/, ''));
   const records = [];
   const it = containerRef().items.query('SELECT c.id, c.oid, c.tier, c.businessUnit, c.tenantId, c.reconciliationGeneration, c.lastVerifiedAt, c.expiresAt, c.type FROM c', { maxItemCount: 1000 });
-  while (it.hasMoreResults()) { const { resources } = await it.fetchNext(); records.push(...(resources ?? [])); }
+  while (it.hasMoreResults()) { const { resources } = await it.fetchNext(); records.push(...(resources ?? []).filter((r) => r.type === undefined)); }
   const comparison = compareWithSnapshot(snap, records, { tenantId });
-  if (comparison.refused) fail(`snapshot refused: ${comparison.problems.join('; ')}`, 2);
+  if (comparison.refused) fail(`snapshot refused: ${comparison.problems.join('; ')}. Remedy: rerun the switch or the deployer, which exports a fresh snapshot before it compares.`, 2);
   const byKind = comparison.differences.reduce((a, d) => ({ ...a, [d.kind]: (a[d.kind] ?? 0) + 1 }), {});
   console.log(JSON.stringify({ ok: comparison.differences.length === 0, mode: 'compare-snapshot', compared: comparison.compared, projectionRecords: records.length, differences: comparison.differences.length, byKind, sample: comparison.differences.slice(0, 20), seconds: (Date.now() - started) / 1000 }));
   process.exit(comparison.differences.length ? 4 : 0);
@@ -255,89 +295,124 @@ if (opt('--compare-snapshot')) {
 
 let { records, mappingVersion, source, reconciliation, scope = 'full' } = await resolveMembership();
 const container = containerRef();
-let existing = await step('cosmos-read', () => userOid ? readExistingUser(container, userOid) : readExisting(container));
-let excludedByNewerTargetedSync = 0;
-if (!userOid && scope === 'full') {
-  const newerStatuses = await step('status-read', () => readSuccessfulStatusesAfter(container, reconciliation.lastVerifiedAt));
-  if (newerStatuses.some((s) => s.mode === 'full')) {
-    fail('a newer full sync finished after this snapshot was taken; export a fresh snapshot', 2, 'plan');
+const runId = process.env.CONTAINER_APP_JOB_EXECUTION_NAME ?? process.env.PROJECTION_RUN_ID ?? `local-${started}`;
+const lockClock = createLockClock();
+let lock = null;
+try {
+  if (mutatingApply) {
+    lock = await step('lock', () => acquireApplyLock(container, { runId, mode: scope === 'user' ? 'user' : 'full', waitSeconds: lockWaitSeconds, now: lockClock }));
+    activeLockForFailure = lock;
   }
-  const excluded = new Set(newerStatuses
-    .filter((s) => s.mode === 'user' && GUID.test(s.user ?? ''))
-    .map((s) => s.user));
-  excludedByNewerTargetedSync = excluded.size;
-  if (excluded.size) {
-    records = records.filter((r) => !excluded.has(r.oid));
-    existing = new Map([...existing.entries()].filter(([oid]) => !excluded.has(oid)));
+  let existing = await step('cosmos-read', () => userOid ? readExistingUser(container, userOid) : readExisting(container, lock));
+  let excludedByNewerTargetedSync = 0;
+  const statuses = await step('status-read', () => readSuccessfulStatuses(container, lock));
+  const snapshotCutoff = Date.parse(reconciliation.lastVerifiedAt);
+  const targetedCutoff = snapshotCutoff - 300_000;
+  if (!Number.isFinite(snapshotCutoff)) await failAfterLock(`invalid snapshot freshness. ${rerunRemedy}`, 2, 'plan');
+  if (!userOid && scope === 'full') {
+    if (statuses.some((s) => s.mode === 'full' && Date.parse(s.finishedAt) > snapshotCutoff)) {
+      await failAfterLock(`a newer full sync finished after this snapshot was taken; export a fresh snapshot. ${rerunRemedy}`, 2, 'plan');
+    }
+    const excluded = new Set(statuses
+      .filter((s) => s.mode === 'user' && GUID.test(s.user ?? '') && Date.parse(s.finishedAt) > targetedCutoff)
+      .map((s) => s.user));
+    excludedByNewerTargetedSync = excluded.size;
+    if (excluded.size) {
+      records = records.filter((r) => !excluded.has(r.oid));
+      existing = new Map([...existing.entries()].filter(([oid]) => !excluded.has(oid)));
+    }
   }
-}
-const plan = planChanges(records, existing, { allowEmpty: userOid ? true : flag('--allow-empty'), keepOrphans: userOid ? false : flag('--keep-orphans'), refresh: false });
-if (plan.refused) fail(plan.reason, 2, 'plan');
+  if (userOid) {
+    const staleForUser = statuses.some((s) =>
+      Date.parse(s.finishedAt) > snapshotCutoff &&
+      (s.mode === 'full' || (s.mode === 'user' && s.user === userOid)));
+    if (staleForUser) {
+      await failAfterLock(`a newer sync already finished for this user after this snapshot was taken. ${userRerunRemedy}`, 2, 'plan');
+    }
+  }
+  const plan = planChanges(records, existing, { allowEmpty: userOid ? true : flag('--allow-empty'), keepOrphans: userOid ? false : flag('--keep-orphans'), refresh: false });
+  if (plan.refused) await failAfterLock(`${plan.reason}. ${emptyRemedy}`, 2, 'plan');
 
-const summary = {
-  ok: true, source, whatIf, resolved: records.length, existing: existing.size,
-  toWrite: plan.toWrite.length, toDelete: plan.toDelete.length, keptOrphans: plan.keptOrphans.length, unchanged: plan.unchanged,
-  excludedByNewerTargetedSync,
-};
-if (whatIf) { console.log(JSON.stringify(summary)); process.exit(0); }
-
-const writes = await step('cosmos-write', () => bulk(container, plan.toWrite.map((r) => ({
-  operationType: 'Upsert', partitionKey: r.oid, resourceBody: toDocument(r, { tenantId, mappingVersion, reconciliation }),
-}))));
-const deletes = await step('cosmos-write', () => bulk(container, plan.toDelete.map((oid) => ({ operationType: 'Delete', id: oid, partitionKey: oid }))));
-const writeCounts = { written: writes.ok, writeFailed: writes.failed, deleted: deletes.ok, deleteFailed: deletes.failed };
-Object.assign(summary, { ok: !(writes.failed || deletes.failed), ...writeCounts, mappingVersion, reconciliationGeneration: reconciliation.reconciliationGeneration, lastVerifiedAt: reconciliation.lastVerifiedAt, seconds: (Date.now() - started) / 1000 });
-if (summary.ok) {
-  const memberCounts = records.reduce((counts, r) => ({ ...counts, [r.tier]: (counts[r.tier] ?? 0) + 1 }), {});
+  const summary = {
+    ok: true, source, whatIf, resolved: records.length, existing: existing.size,
+    toWrite: plan.toWrite.length, toDelete: plan.toDelete.length, keptOrphans: plan.keptOrphans.length, unchanged: plan.unchanged,
+    excludedByNewerTargetedSync,
+  };
+  if (whatIf) { console.log(JSON.stringify(summary)); process.exit(0); }
+  // ADR-0051 decision 4: an old file cannot restore old membership. The lock wait can outlast the
+  // apply-by time checked when the snapshot was read, so it is checked again before the first write.
+  if (!Number.isFinite(reconciliation.expiresAt) || reconciliation.expiresAt <= Math.floor(Date.now() / 1000)) {
+    await failAfterLock(`snapshot expired; resolve the directory again. ${userOid ? userRerunRemedy : rerunRemedy}`, 2, 'plan');
+  }
   const explicitExecutor = opt('--executor');
-  if (explicitExecutor && !['job', 'runner'].includes(explicitExecutor)) fail('--executor must be job or runner', 2, 'config');
-  const status = toStatusDocument({
-    tenantId,
-    accountResourceId,
-    databaseName,
-    containerName,
-    runId: process.env.CONTAINER_APP_JOB_EXECUTION_NAME ?? process.env.PROJECTION_RUN_ID ?? `local-${started}`,
-    imageDigest: process.env.PROJECTION_IMAGE_DIGEST ?? '',
-    entrypoint: process.env.PROJECTION_ENTRYPOINT ?? 'node /app/sync/src/apply-projection.mjs',
-    command: process.argv.slice(1),
-    dryRun: whatIf,
-    commandOverride: Boolean(process.env.PROJECTION_COMMAND_OVERRIDE),
-    memberCounts,
-    writeCounts,
-    reconciliation,
-    startedAt: new Date(started).toISOString(),
-    finishedAt: new Date().toISOString(),
-    mode: scope === 'user' ? 'user' : 'full',
-    executor: explicitExecutor ?? (renewal ? 'job' : 'runner'),
-    user: userOid || null,
-    // The job's settings, which admission binds this evidence to (ADR-0050). A runner run has none.
-    settings: renewal ? normalizeJobSettings({
-      clientId: process.env.AZURE_CLIENT_ID,
-      standardGroupId: process.env.PROJECTION_STANDARD_GROUP_ID,
-      premiumGroupId: process.env.PROJECTION_PREMIUM_GROUP_ID,
-      gatewayResourceId: process.env.PROJECTION_GATEWAY_RESOURCE_ID,
-    }) : null,
-  });
-  const statusWrite = await step('status', () => bulk(container, [{ operationType: 'Upsert', partitionKey: status.oid, resourceBody: status }]));
-  Object.assign(summary, { statusWritten: statusWrite.ok, statusWriteFailed: statusWrite.failed, mode: status.mode, executor: status.executor });
-  summary.ok = statusWrite.failed === 0;
-}
-if (renewal) {
-  const stage = (writes.failed || deletes.failed) ? 'cosmos-write' : 'status';
-  Object.assign(summary, summary.ok ? { event: RENEWAL_SUCCEEDED } : { event: RENEWAL_FAILED, stage });
-}
-console.log(JSON.stringify(summary));
-if (!summary.ok) process.exit(3);
-process.exit(writes.failed || deletes.failed ? 3 : 0);
-
-function resolveAccountResourceId({ endpoint, flagValue, envValue }) {
-  const chosen = flagValue ?? envValue ?? '';
-  if (flagValue && envValue && flagValue !== envValue) {
-    fail('--account-resource-id differs from PROJECTION_ACCOUNT_RESOURCE_ID');
+  if (explicitExecutor && !['job', 'runner'].includes(explicitExecutor)) {
+    await failAfterLock('--executor must be job or runner. Remedy: rerun with --executor job or --executor runner.', 2, 'config');
   }
-  if (!chosen) return '';
+
+  const writes = await step('cosmos-write', () => bulk(container, plan.toWrite.map((r) => ({
+    operationType: 'Upsert', partitionKey: r.oid, resourceBody: toDocument(r, { tenantId, mappingVersion, reconciliation }),
+  })), lock));
+  const deletes = await step('cosmos-write', () => bulk(container, plan.toDelete.map((oid) => ({ operationType: 'Delete', id: oid, partitionKey: oid })), lock));
+  const writeCounts = { written: writes.ok, writeFailed: writes.failed, deleted: deletes.ok, deleteFailed: deletes.failed };
+  Object.assign(summary, { ok: !(writes.failed || deletes.failed), ...writeCounts, mappingVersion, reconciliationGeneration: reconciliation.reconciliationGeneration, lastVerifiedAt: reconciliation.lastVerifiedAt, seconds: (Date.now() - started) / 1000 });
+  if (summary.ok) {
+    const memberCounts = records.reduce((counts, r) => ({ ...counts, [r.tier]: (counts[r.tier] ?? 0) + 1 }), {});
+
+    const status = toStatusDocument({
+      tenantId,
+      accountResourceId,
+      databaseName,
+      containerName,
+      runId,
+      imageDigest: process.env.PROJECTION_IMAGE_DIGEST ?? '',
+      entrypoint: process.env.PROJECTION_ENTRYPOINT ?? 'node /app/sync/src/apply-projection.mjs',
+      command: process.argv.slice(1),
+      dryRun: whatIf,
+      commandOverride: Boolean(process.env.PROJECTION_COMMAND_OVERRIDE),
+      memberCounts,
+      writeCounts,
+      reconciliation,
+      startedAt: new Date(started).toISOString(),
+      finishedAt: new Date().toISOString(),
+      mode: scope === 'user' ? 'user' : 'full',
+      executor: explicitExecutor ?? (renewal ? 'job' : 'runner'),
+      user: userOid || null,
+      settings: renewal ? normalizeJobSettings({
+        clientId: process.env.AZURE_CLIENT_ID,
+        standardGroupId: process.env.PROJECTION_STANDARD_GROUP_ID,
+        premiumGroupId: process.env.PROJECTION_PREMIUM_GROUP_ID,
+        gatewayResourceId: process.env.PROJECTION_GATEWAY_RESOURCE_ID,
+      }) : null,
+    });
+    await step('lock', () => lock?.renewIfNeeded({ force: true }));
+    const statusWrite = await step('status', () => bulk(container, [{ operationType: 'Upsert', partitionKey: status.oid, resourceBody: status }], null));
+    Object.assign(summary, { statusWritten: statusWrite.ok, statusWriteFailed: statusWrite.failed, mode: status.mode, executor: status.executor });
+    summary.ok = statusWrite.failed === 0;
+  }
+  if (renewal) {
+    const stage = (writes.failed || deletes.failed) ? 'cosmos-write' : 'status';
+    Object.assign(summary, summary.ok ? { event: RENEWAL_SUCCEEDED } : { event: RENEWAL_FAILED, stage });
+  }
+  await releaseActiveLock();
+  if (lock?.warnings?.length) summary.warnings = lock.warnings;
+  console.log(JSON.stringify(summary));
+  if (!summary.ok) process.exit(3);
+  process.exit(writes.failed || deletes.failed ? 3 : 0);
+} finally {
+  await releaseActiveLock();
+}
+
+function resolveAccountResourceId({ endpoint, flagValue, envValue, required }) {
+  const chosen = flagValue ?? envValue ?? '';
+  if (flagValue && envValue && flagValue.toLowerCase() !== envValue.toLowerCase()) {
+    fail(`--account-resource-id differs from PROJECTION_ACCOUNT_RESOURCE_ID. ${accountRemedy}`);
+  }
+  if (!chosen) {
+    if (required) fail(`--account-resource-id is required for mutating applies. ${accountRemedy}`);
+    return '';
+  }
   const match = COSMOS_ACCOUNT_RESOURCE_ID.exec(chosen);
-  if (!match) fail('--account-resource-id must be an ARM id: /subscriptions/<guid>/resourceGroups/<rg>/providers/Microsoft.DocumentDB/databaseAccounts/<name>');
+  if (!match) fail(`--account-resource-id must be an ARM id: /subscriptions/<guid>/resourceGroups/<rg>/providers/Microsoft.DocumentDB/databaseAccounts/<name>. ${accountRemedy}`);
   let accountName = '';
   try {
     const url = new URL(endpoint);
@@ -348,7 +423,20 @@ function resolveAccountResourceId({ endpoint, flagValue, envValue }) {
     fail('--cosmos must be an https Cosmos DB endpoint URL');
   }
   if (match[3].toLowerCase() !== accountName.toLowerCase()) {
-    fail(`--account-resource-id names Cosmos account '${match[3]}', but --cosmos is for '${accountName}'`);
+    fail(`--account-resource-id names Cosmos account '${match[3]}', but --cosmos is for '${accountName}'. ${accountRemedy}`);
   }
-  return chosen;
+  return chosen.toLowerCase();
 }
+
+// A test seam: honoured only under the fake Cosmos store, so a production run uses the wall clock.
+function createLockClock() {
+  if (!process.env.FAKE_COSMOS_STORE) return () => new Date();
+  const stepMs = Number(process.env.FAKE_APPLY_LOCK_ADVANCE_MS ?? 0);
+  if (!Number.isFinite(stepMs) || stepMs <= 0) return () => new Date();
+  let current = Date.now();
+  return () => {
+    current += stepMs;
+    return new Date(current);
+  };
+}
+

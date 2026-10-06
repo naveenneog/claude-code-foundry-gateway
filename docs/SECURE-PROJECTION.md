@@ -40,6 +40,8 @@ Foundry account private is a separate step below, not an effect of the
 projection templates. It then points the gateway at the resolver
 without changing anyone's access, ready for the
 [migration runbook](SCALE.md#the-move-itself-step-by-step).
+For the manual operator worksheet for the sync-based Cosmos entitlement, see
+[Cosmos projection workbook](PROJECTION-WORKBOOK.md).
 
 For private gateway ingress, Application Gateway WAF, corporate DNS/routing
 and the placement of the other services, see the
@@ -143,6 +145,12 @@ permission `GroupMember.Read.All`, granted by a Privileged Role Administrator or
 through `scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1`. Large full syncs through the runner
 are slow because `scripts/ClaudeRunner.ps1` sends files through `az container exec` in chunks under
 5,000 characters.
+
+The script refuses before any write unless the gateway's `entitlement-projection-prefix` names this
+projection. The job writes records without `expiresAt`, which a resolver published before
+[ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md) refuses; `scripts/Deploy-ClaudeProjection.ps1`
+publishes the current resolver before it records the prefix. A job deployed before ADR-0051 keeps its
+older image, which writes `expiresAt` and takes no apply lock, until this script runs again.
 
 The optional job still deploys its registry, image, identity, action group, diagnostic setting and
 alerts. Failed-run and Graph-denied alerts always exist; the stale-success alert is emitted only when
@@ -690,11 +698,12 @@ Invoke-RunnerCommand -ResourceGroup $rg -Name $runner -Command 'tar -x -z -f /wo
 Invoke-RunnerCommand -ResourceGroup $rg -Name $runner -Command 'npm --prefix /work/sync ci --omit=dev --ignore-scripts'
 
 # Now export using the GATEWAY resource group, copy, and apply before the snapshot apply-by deadline.
+$accountResourceId = az cosmosdb show -n cosmos-<prefix> -g $rg --query id -o tsv
 ./scripts/Sync-ClaudeProjection.ps1 -Account cosmos-<prefix> -ApimName <apim> `
     -ResourceGroup '<gateway-resource-group>' -ExportPath .\backups\snapshot.json
 Send-RunnerFile -ResourceGroup $rg -Name $runner -Path .\backups\snapshot.json -Destination /work/snapshot.json
 Invoke-RunnerCommand -ResourceGroup $rg -Name $runner -Command `
-    'node /work/sync/src/apply-projection.mjs --cosmos https://cosmos-<prefix>.documents.azure.com:443/ --tenant <tenant-id> --snapshot /work/snapshot.json'
+    "node /work/sync/src/apply-projection.mjs --cosmos https://cosmos-<prefix>.documents.azure.com:443/ --tenant <tenant-id> --account-resource-id $accountResourceId --snapshot /work/snapshot.json"
 ```
 
 The runner needs **Cosmos DB Built-in Data Contributor** scoped to this container,

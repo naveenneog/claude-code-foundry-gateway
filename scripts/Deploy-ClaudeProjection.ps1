@@ -80,7 +80,6 @@ if (-not $ResolverInboundAccess) {
     }
 }
 if ($FlipAfterCleanCompare) {
-    . (Join-Path $PSScriptRoot 'ClaudeProjectionSwitch.ps1')
     $null = Invoke-ClaudeProjectionSwitch -ResourceGroup $ResourceGroup -ApimName $ApimName -NamePrefix $NamePrefix -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -CompareBaseline $CompareBaseline
     return
 }

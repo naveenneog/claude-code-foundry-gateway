@@ -117,6 +117,10 @@ foreach ($e in 'Scale-out', 'Policy deployment', 'Period rollover') {
 }
 
 Assert 'it points at the projection decision' ($s -match 'adr/0005-identity-projection\.md')
+Assert 'the manual projection apply includes the account resource id' (
+    $s -match 'az cosmosdb show -n cosmos-<prefix> -g <rg> --query id -o tsv' -and
+    $s -match 'apply-projection\.mjs --cosmos https://cosmos-<prefix>\.documents\.azure\.com:443/ --tenant <tenant-id> --account-resource-id \$accountResourceId --snapshot /work/snapshot\.json'
+)
 
 # The first thing a reviewer proposes is "put the tier in a token claim and skip
 # the lookup". It cannot work here and that has to be written down, or it gets

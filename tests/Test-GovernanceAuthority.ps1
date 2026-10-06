@@ -266,6 +266,11 @@ Assert 'a capitalised spelling of a stored identifier is refused, not used to ch
 Reset-Gateway $local
 $m = Invoke-Set 'Set-ClaudeBusinessUnit' @{ Id = 'sales'; Parent = 'Platform' }
 Assert 'a capitalised spelling of a stored parent is refused, not written as the parent' ($m -match "'Platform' is not a valid business unit identifier" -and $gateway.Writes.Count -eq 0) "$m | writes $($gateway.Writes -join ',')"
+# P96 council round 5 (Coder note): the writer refuses the group-name characters the Turnstile import refuses, so a unit
+# it creates is not dropped by a later Turnstile apply.
+Reset-Gateway $local
+$m = Invoke-Set 'Set-ClaudeBusinessUnit' @{ Id = 'rd'; Group = 'Claude R&D'; MonthlyBudgetUsd = 1 }
+Assert 'a group name with a shell character is refused, before any write' ($m -match 'cannot contain' -and $gateway.Writes.Count -eq 0 -and $gateway.GroupWrites.Count -eq 0) "$m | writes $($gateway.Writes -join ',')"
 # Before P96 the check ignored case, so a registry can hold an identifier with capitals. Changes that do not
 # touch its dollar budget keep working when the registry holds that exact spelling.
 $legacyRegistry = ',sales=Sales:1000,Legacy-Unit=Legacy:3000,'

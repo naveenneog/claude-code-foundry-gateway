@@ -734,7 +734,7 @@ Entra groups (denied)`.
 
 When the gateway reads entitlement from the projection, as it must beyond about 93 developers
 ([SCALE.md](SCALE.md)), the job never writes membership lists, with or without the grant.
-`Sync-ClaudeProjection.ps1` refreshes membership, and reads the units the job wrote.
+`Sync-ClaudeAccess.ps1` refreshes membership through `Sync-ClaudeProjection.ps1` and the in-network writer, and reads the units the job wrote.
 
 ### What is applied, and what is not
 

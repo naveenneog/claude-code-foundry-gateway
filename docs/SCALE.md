@@ -571,9 +571,11 @@ The thing that would be painful to migrate is not in the layer being replaced.
 
 The named values are a *projection* of Entra, rebuilt from it on every sync. So
 moving to Cosmos changes where the gateway reads, not what is true.
-`Sync-ClaudeAccess.ps1` writes named values; `Sync-ClaudeProjection.ps1` and
-the in-network Node writer publish the projection. Reuse the directory model,
-not the assumption that the two commands are interchangeable.
+`Sync-ClaudeAccess.ps1` syncs the store the gateway reads. On a projection gateway
+`Sync-ClaudeProjection.ps1` exports a snapshot and the in-network Node writer
+(`sync/src/apply-projection.mjs`) applies it; the Node writer is the only Cosmos
+writer ([ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md), decision 10).
+Reuse the directory model, not the assumption that the two stores are interchangeable.
 
 A rollback restores authorization without restoring consumption, which is the
 rule that makes the move safe to reverse mid-flight.
@@ -697,8 +699,13 @@ own identity, which can write only this container.
 
 ```powershell
 ./scripts/Sync-ClaudeProjection.ps1 -Account cosmos-<prefix> -ApimName <apim> -ResourceGroup <rg> -ExportPath snapshot.json
-# then, in the runner:
-node /work/sync/src/apply-projection.mjs --cosmos https://cosmos-<prefix>.documents.azure.com:443/ --tenant <tenant-id> --snapshot /work/snapshot.json
+$accountResourceId = az cosmosdb show -n cosmos-<prefix> -g <rg> --query id -o tsv
+# The runner holds the sync package as SECURE-PROJECTION section 8 prepares it. The id expands
+# here, before the command reaches the runner.
+. ./scripts/ClaudeRunner.ps1
+Send-RunnerFile -ResourceGroup <rg> -Name aci-projtest-<prefix> -Path .\snapshot.json -Destination /work/snapshot.json
+Invoke-RunnerCommand -ResourceGroup <rg> -Name aci-projtest-<prefix> -Command `
+    "node /work/sync/src/apply-projection.mjs --cosmos https://cosmos-<prefix>.documents.azure.com:443/ --tenant <tenant-id> --account-resource-id $accountResourceId --snapshot /work/snapshot.json"
 ```
 
 `-ApimName` and `-ResourceGroup` make the projection assign business units from

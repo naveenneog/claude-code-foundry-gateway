@@ -45,7 +45,7 @@ $mutations = @(
 
     @{ Name  = 'an identifier with a comma is accepted'
        File  = 'scripts/ClaudeBusinessUnit.ps1'
-       From  = "^[a-z0-9][a-z0-9-]*$"
+       From  = "^[a-z0-9][a-z0-9-]*\z"
        To    = '.' }
 
     @{ Name  = 'the report stops saying the figure is list price'
@@ -2417,10 +2417,10 @@ $mutations = @(
        To    = 'Math.Max(3600, int.Parse' }
 
     @{ Suite = 'Test-SecureProjection.ps1'
-       Name  = 'an export asks for a Cosmos token it cannot use'
+       Name  = 'the exporter asks for a Cosmos token'
        File  = 'scripts/Sync-ClaudeProjection.ps1'
-       From  = 'if (-not $ExportPath) {'
-       To    = 'if ($true) {' }
+       From  = '$graphToken = Get-GraphToken'
+       To    = '$graphToken = Get-GraphToken; $cosmosToken = az account get-access-token --resource https://cosmos.azure.com --query accessToken -o tsv' }
 
     @{ Suite = 'Test-SecureProjection.ps1'
        Name  = 'the projection charges the last business unit again'
@@ -2443,8 +2443,8 @@ $mutations = @(
     @{ Suite = 'Test-SecureProjection.ps1'
        Name  = 'a snapshot is applied without validation'
        File  = 'sync/src/apply-projection.mjs'
-       From  = 'const problems = validateSnapshot(snap, { tenantId });'
-       To    = 'const problems = [];' }
+       From  = '      : validateSnapshot(snap, { tenantId });'
+       To    = '      : [];' }
 
     @{ Suite = 'Test-SecureProjection.ps1'
        Name  = 'a failed write is reported as ok'

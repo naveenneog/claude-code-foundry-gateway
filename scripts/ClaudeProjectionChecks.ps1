@@ -201,6 +201,8 @@ function Assert-ClaudeProjectionResolverRedeploy {
 }
 
 function Invoke-ClaudeProjectionPreflight {
+    # Advanced, so a parameter it does not declare (such as the removed P95 -FlipAfterCleanCompare) is refused.
+    [CmdletBinding()]
     param(
         [string]$ResourceGroup, [string]$ApimName, [string]$NamePrefix, [string]$SubscriptionId,
         [string]$Location, [string]$Sku = 'BasicV2', [string]$ResolverInboundAccess,

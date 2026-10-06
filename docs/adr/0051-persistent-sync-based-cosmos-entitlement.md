@@ -4,8 +4,10 @@
 - **Date:** 2026-10-05
 - **Packet:** P97
 - **Supersedes:** the lease of [ADR-0017](0017-projection-freshness-and-admission.md) (records expire
-  7,200 seconds after the scan that wrote them) and the evidence gate of
-  [ADR-0045](0045-scheduled-projection-renewal.md) (three renewals before a switch)
+  7,200 seconds after the scan that wrote them), the evidence gate of
+  [ADR-0045](0045-scheduled-projection-renewal.md) (three renewals before a switch), and, in
+  [ADR-0005](0005-identity-projection.md), the failure-contract row "Record beyond the staleness limit:
+  Deny" and the consequence "Revocation is bounded" (amendment 2, council round 2)
 - **Refines:** [ADR-0049](0049-projection-renewal-deployment.md) (the job's deployment is kept and
   becomes optional) and [ADR-0050](0050-projection-switch-function.md) (one switch function, without the
   renewal receipt)
@@ -45,7 +47,10 @@ rescan the whole directory.
 ## Decision
 
 1. **Records persist.** A record grants its tier until a sync deletes or changes it. Writers no longer
-   write `expiresAt` on entitlement records. The resolver ignores a legacy `expiresAt`. It still
+   write `expiresAt` on entitlement records. A record that still carries a legacy `expiresAt` is served
+   until that time and then answered as no record (404); the first full sync rewrites it without one.
+   Amended in council round 1: ignoring a passed `expiresAt` would let records left expired by a job
+   outage before this decision grant again. The resolver still
    answers 404 for a status record, 403 for another tenant and 409 for an unknown tier. It answers 503
    for a record whose generation or verification time is missing, malformed or in the future.
 2. **The gateway caches answers for `entitlement-cache-seconds`.** It no longer checks expiry. A 404 is
@@ -84,6 +89,35 @@ rescan the whole directory.
    principal when missing, since Entra refuses tokens for an application without one. It refuses a
    region that differs from an existing `cosmos-<prefix>`. It records the prefix in the gateway named
    value `entitlement-projection-prefix`.
+10. **One Cosmos writer (amendment 2, council round 2).** `sync/src/apply-projection.mjs` is the only
+    writer of the entitlement container. `scripts/Sync-ClaudeProjection.ps1` resolves membership into a
+    snapshot file and contacts no Cosmos endpoint; without `-ExportPath` it refuses before it signs in.
+    Its direct data-plane write path is removed: that path took no apply lock, wrote no status record,
+    kept legacy `expiresAt` values and read status documents as entitlement records.
+11. **Applies are serialised (amendment 2, council round 2).** Every apply that writes takes a lease
+    lock: the document `projection-apply-lock` in the entitlement container. The first writer creates
+    it; another writer takes it over only after its lease has passed, with an `If-Match` condition on
+    its ETag ([Microsoft Learn](https://learn.microsoft.com/azure/cosmos-db/database-transactions-optimistic-concurrency)).
+    The lock is taken after the directory is resolved, and existing records and sync statuses are read
+    inside it, so a sync that finished while another was resolving is always seen. The holder checks the
+    300-second lease between pages of its reads and before each batch of writes, and renews it once a third
+    of it has passed; a lost lease stops the run before its next write, with no status record.
+    - A full snapshot older than a successful full sync is refused.
+    - A targeted snapshot older than a successful sync that covered the same person is refused.
+    - A full apply leaves out the people whose targeted sync finished after its scan, less a 300-second
+      margin for clock skew.
+    - Status documents are matched by type and tenant, since they live in the container they describe.
+      Every apply that writes carries the Cosmos account resource id, stored in lower case.
+    - Documents with a `type` (status records and the lock) are never read as entitlement records.
+    - Queries send no `WHERE` clause (council round 3). The container indexes only `/oid`
+      (`infra/projection.bicep`), and a filter on another path is evaluated by reading every record. Status
+      reads are scoped to the status partition `projection-status::<tenantId>`, so they cost the same at
+      any directory size; entitlement reads, which read every record by design, skip typed documents in
+      the client.
+    - The container sets `defaultTtl` to -1: item `ttl` takes effect only when the container sets
+      `defaultTtl` ([Microsoft Learn](https://learn.microsoft.com/azure/cosmos-db/time-to-live), updated
+      2026-04-27). Records and the lock carry no `ttl` and do not expire; status records expire after
+      seven days.
 
 ## Consequences
 
@@ -93,8 +127,13 @@ rescan the whole directory.
   - A person whose Entra account is disabled cannot obtain new tokens. A default access token lasts
     60 to 90 minutes ([Microsoft Learn](https://learn.microsoft.com/entra/identity-platform/access-tokens),
     updated 2026-07-17).
-- **A failed sync leaves access as it was.** A stopped sync no longer stops developers. It also no
-  longer revokes access by itself; a failed sync leaves the last successful state in place.
+- **A failed sync can leave part of its changes.** A sync that fails before its first write (the
+  directory read, snapshot validation, the lock or a refused plan) leaves the projection as it was. A
+  sync that fails during its writes can leave some of them applied: Cosmos transactions cover one
+  logical partition key ([Microsoft Learn](https://learn.microsoft.com/azure/cosmos-db/transactional-batch),
+  updated 2026-04-27), and records are partitioned by object id. Such a run writes no status record, so
+  it never counts as switch evidence, and the next successful sync converges the records. A stopped
+  sync no longer stops developers, and it no longer revokes access by itself.
 - **Runner transfer limits large full syncs.** The runner receives files through `az container exec`
   in chunks under 5,000 characters, about five seconds each (`scripts/ClaudeRunner.ps1`). A full sync
   of a very large directory through the runner is slow, and the optional job reads Graph inside the

@@ -119,7 +119,7 @@ function Test-ClaudeBuId {
     # group from budget. A space would make a counter key ambiguous to read.
     # Known means the same characters: -ccontains compares by culture and takes U+212A KELVIN SIGN for 'K'.
     $known = $Stored -or (@(@($Registry) | Where-Object { [string]::Equals([string]$_, $Id, [System.StringComparison]::Ordinal) }).Count -gt 0)
-    if (($known -and $Id -notmatch '^[a-z0-9][a-z0-9-]*$') -or (-not $known -and $Id -cnotmatch '^[a-z0-9][a-z0-9-]*$')) {
+    if (($known -and $Id -notmatch '^[a-z0-9][a-z0-9-]*\z') -or (-not $known -and $Id -cnotmatch '^[a-z0-9][a-z0-9-]*\z')) {
         throw ("'$Id' is not a valid business unit identifier. Use lower-case letters, digits and " +
                "hyphens, starting with a letter or digit - for example 'finance-emea'. " +
                "It becomes a counter key and a map key, so it cannot contain a space, comma, equals or colon.")

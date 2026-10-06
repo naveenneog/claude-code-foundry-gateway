@@ -216,6 +216,8 @@ foreach ($cmd in $commands) {
 
 $docRef = Join-Path $PSScriptRoot 'Test-DocReferences.ps1'
 Assert 'relative-link checker exists for guide links' (Test-Path -LiteralPath $docRef)
+$docMarkdown = Join-Path $PSScriptRoot 'Test-DocMarkdown.ps1'
+Assert 'markdown command checker exists for guide links' (Test-Path -LiteralPath $docMarkdown)
 
 $assignedAuthVars = New-Object 'System.Collections.Generic.HashSet[string]'
 $authorizationHeaders = New-Object Collections.Generic.List[string]
@@ -655,6 +657,10 @@ if [ "$1" = "cognitiveservices" ] && [ "$2" = "account" ] && [ "$3" = "show" ]; 
 fi
 if [ "$1" = "cosmosdb" ] && [ "$2" = "sql" ] && [ "$3" = "role" ] && [ "$4" = "assignment" ] && [ "$5" = "create" ]; then
   printf 'cosmos-role\n' >> "$P89_WRITES"
+  exit 0
+fi
+if [ "$1" = "cosmosdb" ] && [ "$2" = "show" ]; then
+  printf '/subscriptions/11111111-1111-4111-8111-111111111111/resourceGroups/rg/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-prefix\n'
   exit 0
 fi
 if [ "$1" = "container" ] && [ "$2" = "exec" ]; then
@@ -1622,7 +1628,7 @@ Assert 'projection runner block assigns Cosmos role and transfers files before a
     $runnerCalls -match 'cosmos-role' -and
     $runnerCalls -match 'sync-source\.tar\.gz' -and
     $runnerCalls -match 'snapshot\.json' -and
-    $runnerCalls -match 'apply-projection\.mjs --cosmos .* --snapshot /work/snapshot\.json' -and
+    $runnerCalls -match 'apply-projection\.mjs --cosmos .* --account-resource-id /subscriptions/11111111-1111-4111-8111-111111111111/resourceGroups/rg/providers/Microsoft\.DocumentDB/databaseAccounts/cosmos-prefix --snapshot /work/snapshot\.json' -and
     $runnerCalls -match 'gateway-decisions\.json' -and
     $runnerCalls -match 'apply-projection\.mjs --cosmos .* --compare /work/gateway-decisions\.json'
 ) $projectionRunner.Output

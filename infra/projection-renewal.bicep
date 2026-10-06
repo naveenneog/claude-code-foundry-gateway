@@ -18,7 +18,7 @@ param containerAppsSubnetId string
 @description('Log Analytics workspace id for job logs and scheduled query alerts.')
 param logAnalyticsWorkspaceId string
 
-@description('Email receivers for the required action group. Admission refuses a switch if the deployed action group is missing.')
+@description('Email receivers for the action group that the job alerts notify: failed runs, denied Graph reads and, on a schedule, no recent success.')
 param actionGroupEmailReceivers array
 
 @description('Registry from infra/projection-registry.bicep that holds the sync image.')
@@ -45,7 +45,7 @@ param premiumGroupId string
 @description('Resource id of the API Management gateway. The job reads its bu-registry and bu-parents named values on every run.')
 param gatewayResourceId string
 
-@description('Expected entrypoint recorded in status and checked before admission.')
+@description('Entrypoint recorded in each status record (ADR-0051: switch evidence does not check it).')
 param entrypoint string = 'node /app/sync/src/apply-projection.mjs'
 
 var databaseName = 'claude'

@@ -146,6 +146,19 @@ if (Test-Path $helper) {
                 # Council round 3 (UX): Get-ApimNamedValue -FailOnError returns $null for a named value that does not exist.
                 $absent = & $runAdd 'research' { $null }
                 Assert "the manager stops before the Entra group step when the gateway has no bu-registry" (($absent -join ' | ') -ceq 'read bu-registry') ($absent -join ' | ')
+                # Council round 4 (UX note): the stop names the command that updates this gateway.
+                $absentText = & {
+                    . ([scriptblock]::Create($readAst.Extent.Text))
+                    . ([scriptblock]::Create($addAst.Extent.Text))
+                    function Read-Host { 'research' }
+                    function az { $global:LASTEXITCODE = 0 }
+                    function Get-ApimNamedValue { param($ResourceGroup, $ApimName, $Id, [switch]$FailOnError) $null }
+                    function Invoke-Child { }
+                    function Complete-Change { }
+                    $ResourceGroup = 'rg-test'; $ApimName = 'apim-test'
+                    Add-Unit 6>&1 | Out-String
+                }
+                Assert "the manager's missing-registry stop names the update command for this gateway" ($absentText -match 'Update-ClaudeGateway\.ps1 -RecordPath \S+ -ResourceGroup rg-test -ApimName apim-test') $absentText
                 $fresh = & $runAdd 'research' $legacy
                 Assert "the manager reaches the Entra group step for a new lower-case identifier" ($fresh.Count -ge 2 -and $fresh[0] -ceq 'read bu-registry' -and $fresh[1] -like 'az ad group show*') ($fresh -join ' | ')
             }

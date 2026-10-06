@@ -92,6 +92,15 @@ person, or omit `-User` for everyone. Removal takes effect after the sync plus a
 60 to 90 minutes by default (Microsoft Learn access tokens, updated 2026-07-17:
 https://learn.microsoft.com/entra/identity-platform/access-tokens).
 
+A gateway that served from the projection before
+[ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md) upgrades in this order.
+`scripts/Deploy-ClaudeProjection.ps1`, run again with the parameters it was deployed with, publishes the
+current resolver, records `entitlement-projection-prefix` and applies a full snapshot, which rewrites
+every record that still carries an `expiresAt`. `scripts/Sync-ClaudeAccess.ps1` and
+`scripts/Deploy-ClaudeProjectionRenewal.ps1` refuse until that named value exists. A sync job deployed
+before then keeps its older image, which writes `expiresAt` and takes no apply lock, until
+`scripts/Deploy-ClaudeProjectionRenewal.ps1` runs again.
+
 The `Entitlement` step uses `scripts\Measure-ClaudeProjectionCost.ps1` for the operator's
 scenarios and switches through the same function as the deployer using the gateway's `entitlement-projection-prefix` named value. The standalone deployer can still deploy
 beside, populate and compare while named values remain authoritative. Deployment and

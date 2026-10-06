@@ -100,7 +100,8 @@ deployment by hand fails ([P94 status](status/P94.md#p94-the-p86-renewal-job-dep
 |---|---|---|
 | P94 | Merged (`ce8b084`) with the owner's approval on 2026-10-05, after council round 3 and the packet gate at `5320b17` | The P86 renewal job deploys and renews: one sync package for the image and the runner (the image and runner currently miss `resolver/src/entitlement.mjs`), a renewal subnet in the projection network, a registry template deployed before the image build, the job's client id, tier group ids and per-run business units, working log routing and alerts, `scripts/Deploy-ClaudeProjectionRenewal.ps1`, an offline renewal simulation that reaches admission, and the guide and its guard ([ADR-0049](adr/0049-projection-renewal-deployment.md)). |
 | P95 | Merged (`4e5ad2f`) with the owner's approval on 2026-10-05, after P94, council round 5 and the packet gate at `8c13d79` | The switch-over runs end to end: a switch never repopulates; one switch function for the deployer, installer and guided flow (receipt and resolver checks, drift check, compare, admission, backup, one named-value write); the guided flow reads the renewal receipt from its decision record's folder or the repository's `onboarding/`; every receipt value is checked before any call; the gateway must call the resolver that reads the renewed Cosmos account, read from the live site and its settings, and the deployer's normal run points it there, but on a gateway already on the projection stops before any write unless it redeploys the resolver the gateway calls; the installer reads `entitlement-source` and the resolver values fail-closed and takes a gateway for new only when Azure reports it missing; the guided flow's plan lists its one write and the documented rollback; admission requires an email receiver on the action group; admission binds the job's tier group ids, gateway, identity, Cosmos account and tenant to the evidence it accepts and to the compared gateway, so a renewal redeploy that changes them needs fresh runs; a restore does not switch to the projection; P84 text replaced; an owner-attended live runbook. |
-| P96 | On `p96-field-fixes`, based on `main` `ee7b486`; the owner approved its merge on 2026-10-05, after its council and packet gate | Fixes from a live deployment: a new business unit identifier with a capital is refused with the lower-case rule before any write, by `Set-ClaudeBusinessUnit.ps1`, the AUM bridge and the manager's prompt; another spelling of a stored unit is refused with the stored spelling, the writers compare identifiers by their characters and keep each spelling's mode and parent entry, and a budget mode is refused for an identifier with capitals, while a unit the registry already holds with capitals keeps working; the guided flow's Tier and Desktop sign-in changes name their snapshot before their write ([P96 status](status/P96.md#p96-fixes-from-a-live-deployment-2026-10-05)). |
+| P96 | Merged (`755845c`) on 2026-10-06 with the owner's approval of 2026-10-05, after council round 7 and the packet gate at `c7f93d4` | Fixes from a live deployment: a new business unit identifier with a capital is refused with the lower-case rule before any write, by `Set-ClaudeBusinessUnit.ps1`, the AUM bridge and the manager's prompt; another spelling of a stored unit is refused with the stored spelling, the writers compare identifiers by their characters and keep each spelling's mode and parent entry, and a budget mode is refused for an identifier with capitals, while a unit the registry already holds with capitals keeps working; the guided flow's Tier and Desktop sign-in changes name their snapshot before their write ([P96 status](status/P96.md#p96-fixes-from-a-live-deployment-2026-10-05)). |
+| P97 | On `p97-cosmos-sync`, based on `main` with P96; the owner approved its merge, live testing and architecture decisions on 2026-10-05; merges after its council and packet gate | Cosmos entitlement persists until a sync changes it, and syncs run on demand: records carry no lease and a sync writes only changes; `Sync-ClaudeAccess.ps1 -User` publishes one developer's change; `sync/src/apply-projection.mjs` is the one Cosmos writer, serialised by an apply lock, and refuses stale snapshots; the switch admits on a full sync within 24 hours without the job; the job is optional and manual by default ([ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md), [P97 status](status/P97.md#p97-cosmos-entitlement-persists-until-a-sync-changes-it-2026-10-05)). |
 
 Follow-ups from the P94 council, not yet packets: `sync/package-lock.json` carries `sha1` integrity
 for 50 of its 53 packages because this workstation reaches npm only through a feed whose metadata
@@ -138,11 +139,16 @@ P96 fixes the first P95 council follow-up: the guided flow's Tier and Desktop si
 snapshot path. Follow-ups from P96, not yet packets
 ([P96 status](status/P96.md#p96-fixes-from-a-live-deployment-2026-10-05)):
 
-- Turnstile apply checks a unit or team identifier without regard to case
-  (`scripts/ClaudeTurnstileApply.ps1:86,99`), while [TURNSTILE](TURNSTILE.md) says lower-case, so a
-  Turnstile identifier with capitals reaches `bu-registry`. A unit that fails the check is skipped,
-  so a case-sensitive check without the P96 registry rule removes a unit stored with capitals on the
-  next apply.
+- Turnstile apply, pre-existing LOW notes from P96 council round 6 (Security):
+  - The tier-id check compares by culture (`scripts/ClaudeTurnstileApply.ps1:119`). No `cmd.exe` metacharacter, CR, LF or TAB passes it.
+  - Group names may still carry parentheses and control characters other than CR and LF. A `)` stops `az.cmd`, and a NUL truncates a native command line.
+  - The unknown-group fallback compares `$known` by culture.
+
+  An allow-list for group names and ordinal comparisons close them. Since P96 the import checks identifiers
+  case-sensitively and with `\z`, and a unit with an unsafe group name is reported and left out.
+- `-Id Sales -Parent sales` is refused as its own parent, and `Resolve-ClaudeBuDepth` reads `{Sales=sales}`
+  as a cycle (P96 council rounds 2 and 4). It only refuses; making one spelling a team of the other needs
+  exact keys in the depth check and the readers below.
 - A unit stored with capitals cannot have a dollar budget (`scripts/ClaudeUsdBudgets.ps1:42`) or a
   budget mode (`scripts/ClaudeBudgetModes.ps1:28`), and AUM's read of the units stops with "Invalid
   bu-modes entry" because `Get-ClaudeBudgetModeAttributes` parses `<id>=strict` with that rule (checked
@@ -158,6 +164,37 @@ snapshot path. Follow-ups from P96, not yet packets
   job treat them as one team; the writers read exact keys since P96. Exact keys for the readers and the
   job, with the parity test in `tests/Test-ProjectionRenewalRuns.ps1` kept, is a decision about the
   job's ordering as well.
+- `tests/Test-FlowPermutations.ps1` reads each run's output with `ReadToEndAsync` and waits 5 seconds
+  for it after the run exits (`Invoke-Runs`). On a hosted runner the Status run for a signed-out Azure CLI
+  exited 0 with output that did not hold its comparison line (pull request #5, attempt 1); the suite passes
+  locally and passed on attempt 3. The cause is not confirmed: each pipe read blocks a thread-pool thread,
+  six runs at a time. Waiting for the read until the run's timeout, and failing with "output not captured"
+  instead of matching empty text, would separate a capture failure from a wrong answer.
+
+Follow-ups from P97, not yet packets
+([P97 status](status/P97.md#p97-cosmos-entitlement-persists-until-a-sync-changes-it-2026-10-05)):
+
+- A full sync through the runner sends its snapshot in `az container exec` chunks of under 5,000
+  characters, about five seconds each (`scripts/ClaudeRunner.ps1`), so a directory of 500,000 developers
+  takes hours; the optional job reads Graph inside the network instead. A snapshot that the runner reads
+  from a storage blob would remove the limit.
+- The apply lock compares lease times written by each holder's clock. Both writers, the runner and the
+  job, run in Azure; a writer whose clock runs fast by more than the lease's remaining time could take
+  over a live lease, and the holder's next renewal then stops it.
+- `tests/Test-ProjectionPreflightNegative.ps1` is not registered in Test-All, and some of its anchors no
+  longer exist (for example `-FailOnDrift:$true` in the deployer).
+- A snapshot's scan time (`lastVerifiedAt`) comes from the exporting machine's clock. A clock that runs
+  fast makes an older snapshot look newer than a sync that finished after it, so the snapshot passes the
+  stale-change refusals. Taking the time from Microsoft Graph's `Date` response header would remove the
+  dependence on the local clock.
+- A status record whose `finishedAt` lies in the future, written by a writer whose clock runs fast, makes
+  every later snapshot look older, so applies refuse until that time passes.
+- A writer that stops after its record writes and before its status record leaves no status for those
+  changes. The lock does not record which people the apply touched, so an older full snapshot applied
+  afterwards can undo a targeted change made in that window.
+- A sync job deployed before ADR-0051 runs an image that writes `expiresAt` and takes no apply lock until
+  `scripts/Deploy-ClaudeProjectionRenewal.ps1` runs again; nothing detects such a job. Comparing the
+  job's image digest with the current package would.
 
 M0 is shipped. The table below is the queue; the checklist under it is what the gate tracks.
 
@@ -580,7 +617,7 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       requires an email receiver; admission refuses evidence produced under other tier group ids,
       another gateway or another identity than the job and the comparison now name; P84 text is
       replaced; the live runbook is written for the owner
-- [ ] P96 Fixes from a live deployment — acceptance: a new business unit identifier with a capital is
+- [x] P96 Fixes from a live deployment — acceptance: a new business unit identifier with a capital is
       refused with the lower-case rule before any write by `Set-ClaudeBusinessUnit.ps1`, the AUM
       bridge and the manager's prompt; a spelling that differs only in case from a stored unit is
       refused with the stored spelling, and two stored spellings stay two units with their own mode
@@ -589,6 +626,13 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       budget and can be removed; the guided flow's Tier and Desktop sign-in changes name their snapshot
       under `backups/` and the write gate takes it
       ([P96 status](status/P96.md#p96-fixes-from-a-live-deployment-2026-10-05))
+- [ ] P97 Cosmos entitlement persists until a sync changes it — acceptance: records carry no expiry and
+      a sync writes only changes; a legacy record is served until its old expiry and rewritten by the next
+      sync; `Sync-ClaudeAccess.ps1 -User` writes or deletes only that person's record; one writer,
+      serialised by an apply lock, refuses stale snapshots and requires the account id; the switch admits
+      on a full sync within 24 hours and no record the resolver would refuse; the deployer creates the
+      resolver's service principal, refuses another region and records the prefix; the job is optional
+      ([P97 status](status/P97.md#p97-cosmos-entitlement-persists-until-a-sync-changes-it-2026-10-05))
 - [x] P72 permutation tests of the guided flow and the installer — acceptance: every combination of
       action (Setup, Change foundation, Guide, Status), record state (none, recorded and matching,
       recorded with another gateway URL, recorded but missing, not readable), mode (attended,

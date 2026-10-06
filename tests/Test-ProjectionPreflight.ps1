@@ -169,7 +169,7 @@ Assert 'Basic v2 cannot select an unreachable private resolver' ($CapturedError 
 Run-Preflight 'healthy' @{ ResolverAppId = 'not-an-app-id' }
 Assert 'invalid app id never reaches CLI' ($CapturedError -and ($FixtureCalls -join "`n") -notmatch 'ad app show.*not-an-app-id')
 Run-Preflight 'healthy' @{ FlipAfterCleanCompare=$true; ReconcilerResourceId='/subscriptions/00000000-0000-4000-8000-000000000084/resourceGroups/rg-p84/providers/Microsoft.App/jobs/projection-renewal' }
-Assert 'preflight with a job id remains read-only and is not admission evidence' (-not $CapturedError -and ($FixtureCalls -join "`n") -notmatch 'az (deployment .*create|ad app (create|update)|apim nv (create|update))') $CapturedError
+Assert 'a removed P95 switch parameter is refused by the preflight, not silently ignored, before any Azure call' ($CapturedError -match "parameter name '(FlipAfterCleanCompare|ReconcilerResourceId)'" -and $FixtureCalls.Count -eq 0) $CapturedError
 Run-Preflight 'healthy' @{ ResourceGroup='RG-P84' }
 Assert 'Bicep storage hash uses the canonical ARM group id, not user casing' (-not $CapturedError -and $FixtureBicepExpression.Contains("uniqueString('$FixtureRgId',")) $CapturedError
 Run-Preflight 'owned-names' @{ Location='westus' }
@@ -249,6 +249,8 @@ $flow = Get-Content (Join-Path $root 'scripts\flow\Entitlement.ps1') -Raw
 $register = Get-Content (Join-Path $root 'tests\Test-All.ps1') -Raw
 Assert 'offline check is registered' ($register -match "'Test-ProjectionPreflight.ps1'")
 Assert 'deployer checks before its first Azure write' ($deploy -match '(?s)Invoke-ClaudeProjectionPreflight.*if \(\$PreflightOnly\).*New-ClaudeProjectionResolverApp')
+$dotSources = @([regex]::Matches($deploy, "(?m)^\s*\. \(Join-Path \`$PSScriptRoot '([^']+)'\)") | ForEach-Object { $_.Groups[1].Value })
+Assert 'the deployer dot-sources each helper once' ($dotSources.Count -gt 0 -and @($dotSources | Group-Object | Where-Object Count -gt 1).Count -eq 0) ($dotSources -join ', ')
 $switchText = Get-Content (Join-Path $root 'scripts\ClaudeProjectionSwitch.ps1') -Raw
 Assert 'deployer switches only through the shared switch, which writes after sync switch evidence' ($deploy -match 'Invoke-ClaudeProjectionSwitch' -and $deploy -notmatch "Set-ApimNamedValue[^\r\n]*-Id 'entitlement-source'" -and
     $deploy -match '-NamePrefix \$NamePrefix' -and $deploy -notmatch 'RenewalActionGroupResourceId' -and $switchText -match "(?s)Assert-ClaudeProjectionAdmission.*Set-ApimNamedValue[^\r\n]*-Id 'entitlement-source'")

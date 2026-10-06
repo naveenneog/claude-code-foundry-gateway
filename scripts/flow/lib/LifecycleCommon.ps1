@@ -114,33 +114,6 @@ function global:Import-ClaudeFlowLifecycleDiscovery {
     return (Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json)
 }
 
-function global:Find-ClaudeFlowProjectionRenewal {
-    # P95 (ADR-0050): the renewal receipt for this gateway, written by
-    # scripts/Deploy-ClaudeProjectionRenewal.ps1. A file read only: admission confirms in ARM that the
-    # job exists and runs the receipt's image digest before any write.
-    param([string[]]$Directory, [string]$GatewayResourceId)
-    $remedy = 'Remedy: deploy the renewal job with scripts/Deploy-ClaudeProjectionRenewal.ps1, which writes onboarding/projection-renewal-<prefix>.json.'
-    if (-not $GatewayResourceId) { return [pscustomobject]@{ Receipt = $null; Problem = "the gateway's resource id is unknown, so no renewal receipt can be matched. $remedy" } }
-    $found = @()
-    $searched = @{}
-    foreach ($folder in @($Directory | Where-Object { $_ -and (Test-Path -LiteralPath $_) })) {
-        $full = [IO.Path]::GetFullPath($folder).TrimEnd('\', '/')
-        if ($searched.ContainsKey($full)) { continue }
-        $searched[$full] = $true
-        foreach ($file in @(Get-ChildItem -LiteralPath $full -Filter 'projection-renewal-*.json' -File)) {
-            try { $receipt = Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json } catch { continue }
-            if ($receipt.kind -eq 'claude-projection-renewal-receipt' -and [string]$receipt.gatewayResourceId -eq $GatewayResourceId) {
-                $found += [pscustomobject]@{ File = $file.Name; Receipt = $receipt }
-            }
-        }
-    }
-    if ($found.Count -eq 1) { return [pscustomobject]@{ Receipt = $found[0].Receipt; Problem = $null } }
-    if ($found.Count -gt 1) {
-        return [pscustomobject]@{ Receipt = $null; Problem = "$($found.Count) renewal receipts name gateway $GatewayResourceId ($(($found | ForEach-Object { $_.File }) -join ', ')); keep only the one for the deployed job." }
-    }
-    return [pscustomobject]@{ Receipt = $null; Problem = "no renewal receipt under onboarding/ names gateway $GatewayResourceId. $remedy" }
-}
-
 function global:Get-ClaudeFlowLifecycleLiveDiscovery {
     param([string]$ResourceGroup, [string]$ApimName, [string]$ApiId = 'claude-foundry')
     if (-not $ResourceGroup -or -not $ApimName) { throw 'ResourceGroup and ApimName are required for live discovery.' }

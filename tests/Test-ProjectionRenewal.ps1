@@ -272,6 +272,15 @@ try {
                 if ($state.Case -eq 'upgrade-from-p95') { $items += @{ name = 'sqr-projection-p94fixture-expiry-margin-60m'; type = 'microsoft.insights/scheduledqueryrules' } }
                 return (ConvertTo-Json @($items))
             }
+            '^apim nv show .*--named-value-id entitlement-projection-prefix ' {
+                # scripts/ApimNamedValue.ps1 reads a missing named value as null only on this measured answer.
+                switch ($state.Case) {
+                    'no-prefix' { $global:LASTEXITCODE = 3; return 'ERROR: (ResourceNotFound) NamedValue not found.' }
+                    'prefix-read-refused' { $global:LASTEXITCODE = 1; return 'ERROR: (AuthorizationFailed) The client does not have authorization to perform action.' }
+                    'other-prefix' { return 'otherfixture' }
+                    default { return 'p94fixture' }
+                }
+            }
             '^apim show' { return (@{ id = "$rgId/providers/Microsoft.ApiManagement/service/apim-p94" } | ConvertTo-Json) }
             '^resource delete ' { return }
             '^acr build' { if ($state.Case -eq 'tasks-refused') { $global:LASTEXITCODE = 1; return 'ERROR: (TasksOperationsNotAllowed) ACR Tasks requests are not permitted.' }; return }
@@ -315,6 +324,8 @@ try {
     $renewalAt = Get-CallIndex $run '^deployment group create .*-n projection-renewal-p94fixture '
     Assert 'a healthy run completes' (-not $run.Failure) $run.Failure
     Assert 'each deployment is named for its template and the prefix' ((@($run.Params.Keys) | Sort-Object) -join ',' -eq 'projection-registry-p94fixture,projection-renewal-p94fixture') (@($run.Params.Keys) -join ',')
+    $prefixAt = Get-CallIndex $run '^apim nv show .*--named-value-id entitlement-projection-prefix '
+    Assert "the gateway's recorded projection is read before the first write" ($prefixAt -ge 0 -and $prefixAt -lt $registryAt) ($run.Calls -join ' | ')
     Assert 'registry, then build, then digest, then the job' ($registryAt -ge 0 -and $registryAt -lt $buildAt -and $buildAt -lt $digestAt -and $digestAt -lt $renewalAt) ($run.Calls -join ' | ')
     Assert 'the image builds from the sync package with the image Dockerfile' ($run.Calls[$buildAt] -match '--registry acrp94fixture --image claude-projection-sync:sync-test --file sync/Dockerfile --no-logs ')
     $renewalParams = $run.Params['projection-renewal-p94fixture']
@@ -408,6 +419,16 @@ try {
     Assert 'two names for one group stop before any write: premium would take every standard member' ($sameGroup.Failure -match 'same group' -and (Get-WriteCount $sameGroup) -eq 0) "$($sameGroup.Failure) | writes $(Get-WriteCount $sameGroup)"
     $badAcr = Invoke-DeployScenario 'bad-acr-name'
     Assert 'a registry name that is not a registry name stops before the build' ($badAcr.Failure -match 'not a registry name' -and (Get-CallIndex $badAcr '^acr build') -lt 0 -and (Get-CallIndex $badAcr '^deployment group create .*projection-renewal') -lt 0) $badAcr.Failure
+    # ADR-0051: the job writes records without expiresAt, which a resolver published before ADR-0051 refuses; the
+    # projection deployer publishes the current resolver before it records entitlement-projection-prefix.
+    $noPrefix = Invoke-DeployScenario 'no-prefix'
+    Assert 'a gateway without entitlement-projection-prefix stops before any write, naming the projection deployer' ($noPrefix.Failure -match 'has no entitlement-projection-prefix named value' -and
+        $noPrefix.Failure -match 'scripts/Deploy-ClaudeProjection\.ps1' -and $noPrefix.Failure -match 'Nothing was deployed' -and (Get-WriteCount $noPrefix) -eq 0) "$($noPrefix.Failure) | writes $(Get-WriteCount $noPrefix)"
+    $otherPrefix = Invoke-DeployScenario 'other-prefix'
+    Assert 'a gateway that records another projection stops before any write' ($otherPrefix.Failure -match "records projection 'otherfixture', not 'p94fixture'" -and (Get-WriteCount $otherPrefix) -eq 0) "$($otherPrefix.Failure) | writes $(Get-WriteCount $otherPrefix)"
+    $prefixRefused = Invoke-DeployScenario 'prefix-read-refused'
+    Assert 'a refused prefix read stops before any write and is not read as a missing prefix' ($prefixRefused.Failure -match "Could not read named value 'entitlement-projection-prefix'" -and
+        $prefixRefused.Failure -notmatch 'has no entitlement-projection-prefix' -and (Get-WriteCount $prefixRefused) -eq 0) "$($prefixRefused.Failure) | writes $(Get-WriteCount $prefixRefused)"
     Remove-Item Function:\az -ErrorAction SilentlyContinue
     Remove-Item Function:\Invoke-RestMethod -ErrorAction SilentlyContinue
 

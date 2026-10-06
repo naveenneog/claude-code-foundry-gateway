@@ -152,6 +152,10 @@ resource container 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/container
   properties: {
     resource: {
       id: containerName
+      // Item ttl applies only when the container sets defaultTtl. -1 keeps entitlement records and the
+      // apply lock with no expiry and lets status records expire after their own ttl, seven days
+      // (Microsoft Learn, time-to-live, updated 2026-04-27).
+      defaultTtl: -1
       // Partitioned on the object id, one logical partition per identity.
       //
       // The obvious alternative, /tenantId, puts every record in a single
