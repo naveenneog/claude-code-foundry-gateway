@@ -235,10 +235,11 @@ function Get-ClaudeRunnerTransferRemedy([string]$ResourceGroup, [string]$Name) {
 
 # No declaration keyword: `const f` needs a space, which exec would split on, and `const$f` is a single
 # identifier. node -e is sloppy mode, so a bare assignment is enough. The program prints the part's own
-# index and length, and only that line shows the part was written.
+# index and length, and only that line shows the part was written. The length is printed as a string:
+# the runner runs each exec in a terminal, where console.log colours a number (measured 2026-10-06).
 function New-ClaudeRunnerPartCommand([string]$PartDir, [int]$Index, [string]$Payload) {
     $file = "$PartDir/" + $Index.ToString('000000')
-    return "node -e f=require('fs');p='$file';f.writeFileSync(p,'$Payload');console.log('ok',p.slice(-6),f.statSync(p).size)"
+    return "node -e f=require('fs');p='$file';f.writeFileSync(p,'$Payload');console.log('ok',p.slice(-6),String(f.statSync(p).size))"
 }
 
 function Get-ClaudeRunnerPartProblem {
@@ -248,7 +249,8 @@ function Get-ClaudeRunnerPartProblem {
     # An exec that fails prints its error and nothing else; ignoring it is how a copy silently arrives empty.
     if ([string]$Result.Output -match 'ERROR|InvalidCommandLength|terminated with non-zero') { return 'the exec reported an error' }
     $acknowledgement = 'ok {0} {1}' -f $Index.ToString('000000'), $Length
-    if (@(([string]$Result.Output) -split '\r?\n' | ForEach-Object { $_.Trim() }) -notcontains $acknowledgement) { return 'no acknowledgement' }
+    $lines = @((([string]$Result.Output) -replace '\x1b\[[0-9;]*[A-Za-z]', '') -split '\r?\n' | ForEach-Object { $_.Trim() })
+    if ($lines -notcontains $acknowledgement) { return "no acknowledgement '$acknowledgement'" }
     return $null
 }
 
@@ -305,12 +307,13 @@ function Send-RunnerFile {
     $azPath = if ($az -and $az.CommandType -eq 'Application') { $az.Source } else { '' }
     $effective = if ($azPath) { [Math]::Min($Parallel, $parts) } else { 1 }
     if (-not $PSBoundParameters.ContainsKey('SecondsPerExec')) { $SecondsPerExec = Get-ClaudeRunnerExecSeconds $effective }
+    # The waves of parts, the directory exec and the assembly exec, at the measured time per exec.
+    $seconds = ([int][Math]::Ceiling($parts / $effective) + 2) * $SecondsPerExec
     $reserveMinutes = [Math]::Round($ReserveSeconds / 60)
     $applyBy = $null
     if ($null -ne $Deadline) {
         # PowerShell hands a bound Nullable[DateTimeOffset] over as the DateTimeOffset itself.
         $applyBy = [DateTimeOffset]$Deadline
-        $seconds = ([int][Math]::Ceiling($parts / $effective) + 2) * $SecondsPerExec
         if ((Get-ClaudeRunnerNow).AddSeconds($seconds + $ReserveSeconds) -gt $applyBy) {
             throw ("Sending $Path ($($bytes.Length) bytes, $($compressed.Length) compressed) to runner $Name takes about $([Math]::Ceiling($seconds / 60)) minutes " +
                 "($parts parts, $effective at a time, about $SecondsPerExec seconds an exec), and $reserveMinutes minutes are kept for the steps after it; together they pass " +
@@ -319,9 +322,24 @@ function Send-RunnerFile {
         }
     }
     $started = Get-ClaudeRunnerNow
+    # A transfer estimated at a minute or more says so before it starts, and reports its progress about
+    # once a minute while it runs; a shorter one prints nothing.
+    $leaf = Split-Path $Path -Leaf
+    if ($seconds -ge 60) {
+        Write-Host ("Sending {0}: {1} parts, {2} at a time, about {3} minutes." -f $leaf, $parts, $effective, [Math]::Ceiling($seconds / 60))
+    }
     $null = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $Name -SubscriptionId $SubscriptionId -Command "node -e require('fs').mkdirSync('$partDir',{recursive:true})"
-    $state = [pscustomobject]@{ Done = 0; Retries = 0; Failure = ''; FailedPart = 0; LastOutput = ''; Late = $false; Rate = 0.0; End = $null }
+    $state = [pscustomobject]@{ Done = 0; Retries = 0; Failure = ''; FailedPart = 0; LastOutput = ''; Late = $false; Rate = 0.0; End = $null; ReportedAt = $null }
     $partsStarted = Get-ClaudeRunnerNow
+    $state.ReportedAt = $partsStarted
+    $progress = {
+        $now = Get-ClaudeRunnerNow
+        if ($state.Done -ge $parts -or ($now - $state.ReportedAt).TotalSeconds -lt 60) { return }
+        $rate = $state.Done / [Math]::Max(($now - $partsStarted).TotalSeconds, 0.001)
+        Write-Host ("Sending {0}: {1} of {2} parts ({3}%), about {4} minutes left at {5:N2} parts a second." -f $leaf, $state.Done, $parts,
+            [int][Math]::Floor(100 * $state.Done / $parts), [Math]::Ceiling(($parts - $state.Done) / $rate / 60), $rate)
+        $state.ReportedAt = $now
+    }
     # After the first wave, the measured rate projects the end of the transfer.
     $pace = {
         if ($null -eq $applyBy -or $state.Done -lt $effective) { return }
@@ -344,7 +362,7 @@ function Send-RunnerFile {
                 $state.Retries++
                 Start-Sleep -Seconds ([int][Math]::Pow(2, $attempt))
             }
-            if (-not $state.Failure) { & $pace }
+            if (-not $state.Failure) { & $pace; & $progress }
         }
     }
     else {
@@ -386,7 +404,7 @@ function Send-RunnerFile {
                     catch { $result = [pscustomobject]@{ ExitCode = -1; Output = $_.Exception.Message } }
                     finally { $item.Shell.Dispose() }
                     $problem = Get-ClaudeRunnerPartProblem -Result $result -Index $item.Index -Length $item.Length
-                    if (-not $problem) { $state.Done++; & $pace; continue }
+                    if (-not $problem) { $state.Done++; & $pace; & $progress; continue }
                     if ($attemptsOf[$item.Index] -ge $Attempts) {
                         if (-not $state.Failure) { $state.Failure = $problem; $state.FailedPart = $item.Index; $state.LastOutput = [string]$result.Output }
                         continue
@@ -421,8 +439,8 @@ function Send-RunnerFile {
     # incomplete-parts or incomplete-length instead, which the hash check below reports. A difference is non-zero, so
     # `if(a-b)` compares without '!', which cmd.exe changes when delayed expansion is on. .NET writes no gzip
     # bytes at all for an empty file, so an empty payload is an empty file.
-    $assembly = ("node -e f=require('fs');z=require('zlib');d='$partDir';p=f.readdirSync(d).sort();if(p.length-$parts){console.log('incomplete-parts',p.length);process.exit()}" +
-        "s=p.map(function(x){return(f.readFileSync(d.concat('/',x),'utf8'))}).join('');if(s.length-$($b64.Length)){console.log('incomplete-length',s.length);process.exit()}" +
+    $assembly = ("node -e f=require('fs');z=require('zlib');d='$partDir';p=f.readdirSync(d).sort();if(p.length-$parts){console.log('incomplete-parts',String(p.length));process.exit()}" +
+        "s=p.map(function(x){return(f.readFileSync(d.concat('/',x),'utf8'))}).join('');if(s.length-$($b64.Length)){console.log('incomplete-length',String(s.length));process.exit()}" +
         "b=s.length?z.gunzipSync(Buffer.from(s,'base64url')):Buffer.alloc(0);f.writeFileSync('$Destination',b);f.rmSync(d,{recursive:true,force:true});" +
         "console.log(require('crypto').createHash('sha256').update(b).digest('hex'))")
     try { $remote = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $Name -SubscriptionId $SubscriptionId -Command $assembly }

@@ -50,9 +50,15 @@ if ($part -and $fault -eq "drop:$part" -and $Command -match "f\.writeFileSync\(p
 $tokens = @($Command -split ' ' | ForEach-Object { [Net.WebUtility]::UrlDecode($_) })
 $tokens = @($tokens | ForEach-Object { $_.Replace("'/work", "'" + $Work.Replace('\', '/')) })
 if ($tokens[0] -ne 'node') { Done "ERROR: emulator runs node only, not $($tokens[0])" 2 }
+# The runner runs each exec in a terminal, where node's console.log colours numbers (measured live
+# 2026-10-06: "ok 000001 ESC[33m4856ESC[39m"). FORCE_COLOR makes node colour a pipe the same way.
+$savedColor = $env:FORCE_COLOR
+$env:FORCE_COLOR = '1'
 $output = (& node @($tokens[1..($tokens.Count - 1)]) 2>&1 | Out-String).Trim()
 $code = $LASTEXITCODE
+$env:FORCE_COLOR = $savedColor
 if ($fault -eq 'badhash' -and $Command -match 'gunzipSync') { $output = '0' * 64 }
+if ($part -and $fault -eq "colorack:$part") { $output = $output -replace '^ok (\d{6}) (\d+)$', ("ok `$1 " + [char]27 + '[33m$2' + [char]27 + '[39m') }
 Done $output $code
 '@)
 
@@ -135,6 +141,24 @@ try {
     Capture { Send-RunnerFile -ResourceGroup rg-p99 -Name aci-projtest-p99 -Path $empty -Destination /work/empty.json }
     Assert 'an empty file arrives empty' (-not $CapturedError -and (Test-Path -LiteralPath (Join-Path $work 'empty.json')) -and (Get-Item -LiteralPath (Join-Path $work 'empty.json')).Length -eq 0) $CapturedError
 
+    Write-Host 'P99 runner transfer - progress'
+    function Get-Said([scriptblock]$Action) {
+        try { @(& $Action 6>&1 | Where-Object { $_ -is [Management.Automation.InformationRecord] } | ForEach-Object { [string]$_.MessageData }) }
+        catch { @("ERROR: $($_.Exception.Message)") }
+    }
+    Reset-Runner
+    $global:FakeNow = [DateTimeOffset]::UtcNow
+    $said = Get-Said { Send-RunnerFile -ResourceGroup rg-p99 -Name aci-projtest-p99 -Path $source -Destination /work/progress.json -ChunkSize 1200 }
+    $global:FakeNow = $null
+    $opening = @($said | Where-Object { $_ -match "^Sending source\.bin: $($payload.Count) parts, 1 at a time, about \d+ minutes\.$" })
+    $ticks = @($said | Where-Object { $_ -match '^Sending source\.bin: \d+ of \d+ parts \(\d+%\), about \d+ minutes left at [\d.]+ parts a second\.$' })
+    Assert 'a transfer estimated at a minute or more gives its parts and minutes before it starts' ($opening.Count -eq 1) ($said -join ' | ')
+    Assert 'while it runs it reports its progress about once a minute' ($ticks.Count -ge 5 -and $ticks.Count -le [Math]::Ceiling($payload.Count / 2)) "$($ticks.Count) progress line(s) for $($payload.Count) parts"
+    $small = Join-Path $scratch 'small.json'; [IO.File]::WriteAllText($small, '{"records":[]}')
+    Reset-Runner
+    $said = Get-Said { Send-RunnerFile -ResourceGroup rg-p99 -Name aci-projtest-p99 -Path $small -Destination /work/small.json }
+    Assert 'a transfer estimated under a minute prints nothing' ($said.Count -eq 0 -and (Test-Path -LiteralPath (Join-Path $work 'small.json'))) ($said -join ' | ')
+
     Write-Host 'P99 runner transfer - failures stop the transfer with nothing assembled'
     Reset-Runner; $global:Waits.Clear()
     $env:P99_FAULT = 'transient:000001:1'
@@ -157,6 +181,12 @@ try {
     $env:P99_FAULT = 'noack:000001'
     Capture { Send-RunnerFile -ResourceGroup rg-p99 -Name aci-projtest-p99 -Path $source -Destination /work/snapshot.json -ChunkSize 1200 }
     Assert 'an exec that exits 0 without the part acknowledgement counts as failed' ($CapturedError -match 'part 1 of \d+' -and -not (Test-Path -LiteralPath (Join-Path $work 'snapshot.json'))) $CapturedError
+    Assert 'the failure names the acknowledgement it expected' ($CapturedError -match "no acknowledgement 'ok 000001 \d+'") $CapturedError
+
+    Reset-Runner
+    $env:P99_FAULT = 'colorack:000001'
+    Capture { Send-RunnerFile -ResourceGroup rg-p99 -Name aci-projtest-p99 -Path $source -Destination /work/snapshot.json -ChunkSize 1200 }
+    Assert 'an acknowledgement in terminal colours counts' (-not $CapturedError -and $CapturedResult.Retries -eq 0) "$CapturedError retries=$($CapturedResult.Retries)"
 
     Reset-Runner
     $env:P99_FAULT = 'badhash'

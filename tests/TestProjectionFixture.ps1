@@ -243,7 +243,7 @@ function az {
         if ($command -match "^node -e require\('fs'\)\.mkdirSync\('([^']+/\.xfer-[0-9a-f]{16})',\{recursive:true\}\)$") {
             $global:FixtureRunnerFiles[$Matches[1]] = @{}; return ''
         }
-        if ($command -match "^node -e f=require\('fs'\);p='([^']+/\.xfer-[0-9a-f]{16})/(\d{6})';f\.writeFileSync\(p,'([A-Za-z0-9_-]*)'\);console\.log\('ok',p\.slice\(-6\),f\.statSync\(p\)\.size\)$") {
+        if ($command -match "^node -e f=require\('fs'\);p='([^']+/\.xfer-[0-9a-f]{16})/(\d{6})';f\.writeFileSync\(p,'([A-Za-z0-9_-]*)'\);console\.log\('ok',p\.slice\(-6\),String\(f\.statSync\(p\)\.size\)\)$") {
             $global:FixtureRunnerFiles[$Matches[1]][$Matches[2]] = $Matches[3]; return "ok $($Matches[2]) $($Matches[3].Length)"
         }
         if ($command -match "^node -e f=require\('fs'\);z=require\('zlib'\);d='([^']+)';") {
