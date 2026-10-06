@@ -18,10 +18,12 @@
         InvalidCommandLength;
       - one exec is about five seconds, whatever it does.
 
-    So a file travels as base64url in chunks, each appended by a one-line
-    `node -e` program that contains no spaces, and is decoded and checked with
-    a SHA-256 at the end. base64url has no character that cmd.exe, PowerShell,
-    URL decoding or the ACI tokenizer treats specially.
+    So a file travels as base64url in parts, each written by a one-line
+    `node -e` program that contains no spaces. base64url has no character
+    that cmd.exe, PowerShell, URL decoding or the ACI tokenizer treats
+    specially. Since P99 (ADR-0053) the file is gzip-compressed first, up to
+    16 parts are written at once, each in its own exec, and one exec
+    assembles, decompresses and checks the file with a SHA-256.
 
 .EXAMPLE
     . ./scripts/ClaudeRunner.ps1
@@ -86,25 +88,44 @@
         [string]$Container = 'runner',
         [string]$SubscriptionId
     )
-    # The runner splits the command on spaces with no quoting and URL-decodes it, and az.cmd hands every
-    # argument to cmd.exe: a quote, '+', '%' or a cmd.exe metacharacter cannot pass through unchanged.
-    if ($Command -match '["%+&|<>^\r\n]') {
-        throw 'Runner command refused: it holds a quote, +, %, &, |, <, >, ^ or a line break, which the runner or cmd.exe would change.'
-    }
+    Assert-ClaudeRunnerCommandText $Command
     foreach ($target in @($ResourceGroup, $Name, $Container, $SubscriptionId)) { Assert-ClaudeRunnerAzName $target }
-    $arguments = @('container','exec','-g',$ResourceGroup,'-n',$Name,'--container-name',$Container,'--exec-command',$Command)
-    if ($SubscriptionId) { $arguments += @('--subscription',$SubscriptionId) }
-    $saved = $ErrorActionPreference
-    try {
-        $ErrorActionPreference = 'Continue'
-        $out = & az @arguments 2>&1 | Out-String
-        $code = $LASTEXITCODE
-    } finally { $ErrorActionPreference = $saved }
+    $exec = Invoke-ClaudeRunnerExec -Arguments (Get-ClaudeRunnerExecArguments -ResourceGroup $ResourceGroup -Name $Name -Container $Container -SubscriptionId $SubscriptionId -Command $Command)
+    $out = $exec.Output
+    $code = $exec.ExitCode
     if ($code -ne 0) {
         Write-ClaudeRunnerOutput -RawOutput $out -Step 'runner transport'
         throw "runner transport failed (az exit $code)."
     }
     return $out.Trim()
+}
+
+# The runner splits the command on spaces with no quoting and URL-decodes it, and az.cmd hands every
+# argument to cmd.exe: a quote, '+', '%' or a cmd.exe metacharacter cannot pass through unchanged.
+function Assert-ClaudeRunnerCommandText([string]$Command) {
+    if ($Command -match '["%+&|<>^\r\n]') {
+        throw 'Runner command refused: it holds a quote, +, %, &, |, <, >, ^ or a line break, which the runner or cmd.exe would change.'
+    }
+}
+
+function Get-ClaudeRunnerExecArguments {
+    param([string]$ResourceGroup, [string]$Name, [string]$Container = 'runner', [string]$SubscriptionId, [string]$Command)
+    $arguments = @('container','exec','-g',$ResourceGroup,'-n',$Name,'--container-name',$Container,'--exec-command',$Command)
+    if ($SubscriptionId) { $arguments += @('--subscription',$SubscriptionId) }
+    return ,$arguments
+}
+
+# One exec through whatever `az` resolves to here, without throwing: the caller decides what a failure means.
+function Invoke-ClaudeRunnerExec {
+    param([Parameter(Mandatory)][string[]]$Arguments)
+    $saved = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $global:LASTEXITCODE = 0
+        $out = & az @Arguments 2>&1 | Out-String
+        $code = $LASTEXITCODE
+    } finally { $ErrorActionPreference = $saved }
+    return [pscustomobject]@{ ExitCode = $code; Output = [string]$out }
 }
 
 # A writer refusal's stage and remedy are shown; its error text, which can name holders and counts, is not.
@@ -193,6 +214,51 @@ function Get-RunnerFileDeadline {
     return [DateTimeOffset]::FromUnixTimeSeconds([long]$found.Groups[1].Value)
 }
 
+# The mean time of one exec when this many run at once, measured on 2026-10-06 against a 2-CPU runner in
+# East US 2 (ADR-0053). A parallelism between two measured values takes the higher time.
+function Get-ClaudeRunnerExecSeconds([int]$Parallel) {
+    foreach ($measured in @(@(1, 6.3), @(4, 6.9), @(8, 8.1), @(16, 10.9))) {
+        if ($Parallel -le $measured[0]) { return [double]$measured[1] }
+    }
+    return 15.6
+}
+
+# The clock the apply-by checks read; the tests replace it.
+function Get-ClaudeRunnerNow { return [DateTimeOffset]::UtcNow }
+
+function Get-ClaudeRunnerTransferRemedy([string]$ResourceGroup, [string]$Name) {
+    return ("Through the runner, a snapshot of 500,000 developers is 3,327 parts, about 38 minutes at 16 parts at a time (ADR-0053). " +
+        "A full sync that does not fit runs in the optional sync job, which reads Microsoft Graph inside the network and needs the GroupMember.Read.All grant that its " +
+        "deployment prints: .\scripts\Deploy-ClaudeProjectionRenewal.ps1 -ResourceGroup $ResourceGroup -ApimName <apim> -NamePrefix $($Name -replace '^aci-projtest-', '') " +
+        "-AlertEmail <address>, then az containerapp job start.")
+}
+
+# No declaration keyword: `const f` needs a space, which exec would split on, and `const$f` is a single
+# identifier. node -e is sloppy mode, so a bare assignment is enough. The program prints the part's own
+# index and length, and only that line shows the part was written.
+function New-ClaudeRunnerPartCommand([string]$PartDir, [int]$Index, [string]$Payload) {
+    $file = "$PartDir/" + $Index.ToString('000000')
+    return "node -e f=require('fs');p='$file';f.writeFileSync(p,'$Payload');console.log('ok',p.slice(-6),f.statSync(p).size)"
+}
+
+function Get-ClaudeRunnerPartProblem {
+    param($Result, [int]$Index, [int]$Length)
+    if ($null -eq $Result) { return 'no result' }
+    if ($Result.ExitCode -ne 0) { return "az exit $($Result.ExitCode)" }
+    # An exec that fails prints its error and nothing else; ignoring it is how a copy silently arrives empty.
+    if ([string]$Result.Output -match 'ERROR|InvalidCommandLength|terminated with non-zero') { return 'the exec reported an error' }
+    $acknowledgement = 'ok {0} {1}' -f $Index.ToString('000000'), $Length
+    if (@(([string]$Result.Output) -split '\r?\n' | ForEach-Object { $_.Trim() }) -notcontains $acknowledgement) { return 'no acknowledgement' }
+    return $null
+}
+
+function ConvertTo-ClaudeRunnerGzip([byte[]]$Bytes) {
+    $buffer = [IO.MemoryStream]::new()
+    $gzip = [IO.Compression.GZipStream]::new($buffer, [IO.Compression.CompressionLevel]::Optimal, $true)
+    try { $gzip.Write($Bytes, 0, $Bytes.Length) } finally { $gzip.Dispose() }
+    return ,$buffer.ToArray()
+}
+
 function Send-RunnerFile {
     param(
         [Parameter(Mandatory)][string]$ResourceGroup,
@@ -202,55 +268,173 @@ function Send-RunnerFile {
         [int]$ChunkSize = 4900,
         [string]$SubscriptionId,
         # A snapshot's apply-by time (Get-RunnerFileDeadline). A transfer estimated to end after it is refused
-        # before the first exec, rather than failing at the apply-by check hours later (P98 council round 2).
+        # before the first exec (P98 council round 2), and one whose measured rate projects past it stops (ADR-0053).
         [Nullable[DateTimeOffset]]$Deadline,
-        # One exec is about five seconds, whatever it does (measured 2026-09-23; see the notes above).
-        [double]$SecondsPerCommand = 5
+        # Kept before the apply-by time for the steps after the transfer: unpacking, installing, and the
+        # writer's read of the projection before its first write, where it checks the apply-by time again.
+        [ValidateRange(0, 3600)][int]$ReserveSeconds = 600,
+        [ValidateRange(1, 24)][int]$Parallel = 16,
+        [ValidateRange(1, 5)][int]$Attempts = 3,
+        # The mean time of one exec at the parallelism used; by default the measured value.
+        [double]$SecondsPerExec
     )
     if ($Destination -match '\s') { throw "Destination '$Destination' contains a space; exec cannot pass it." }
+    # The destination is written into node programs inside single quotes.
+    if ($Destination -notmatch '^(/[A-Za-z0-9._-]+){2,}$') { throw "Destination '$Destination' is not an absolute runner path of letters, digits, '.', '_' and '-' below a directory." }
+    foreach ($target in @($ResourceGroup, $Name, $SubscriptionId)) { Assert-ClaudeRunnerAzName $target }
     $bytes = [IO.File]::ReadAllBytes((Resolve-Path $Path))
+    $compressed = ConvertTo-ClaudeRunnerGzip $bytes
     # base64url, not base64. The exec command is URL-decoded on its way in:
     # '+' arrives as a space - which then splits the argument - and '%2B'
     # arrives as '+' (measured 2026-09-23). base64url uses '-' and '_' instead,
     # which survive, and Node decodes it natively.
-    $b64 = [Convert]::ToBase64String($bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
-    $tmp = "$Destination.b64"
+    $b64 = [Convert]::ToBase64String($compressed).TrimEnd('=').Replace('+', '-').Replace('/', '_')
     $dir = ($Destination -replace '/[^/]+$', '')
+    $partDir = "$dir/.xfer-" + [guid]::NewGuid().ToString('N').Substring(0, 16)
     # ACI refuses an exec command of 5,000 characters or more with
-    # InvalidCommandLength (measured 2026-09-23), so a chunk is whatever fits
+    # InvalidCommandLength (measured 2026-09-23), so a part is whatever fits
     # under that once the surrounding program is counted.
-    $overhead = ("node -e require('fs').appendFileSync('$tmp','')").Length
+    $overhead = (New-ClaudeRunnerPartCommand -PartDir $partDir -Index 0 -Payload '').Length
     $ChunkSize = [Math]::Min($ChunkSize, 4990 - $overhead)
+    $parts = [Math]::Max(1, [int][Math]::Ceiling($b64.Length / $ChunkSize))
+    $payloadOf = { param([int]$Index) $at = ($Index - 1) * $ChunkSize; $b64.Substring($at, [Math]::Min($ChunkSize, $b64.Length - $at)) }
+    $execArguments = { param([string]$Command) Get-ClaudeRunnerExecArguments -ResourceGroup $ResourceGroup -Name $Name -SubscriptionId $SubscriptionId -Command $Command }
+    # Runspaces cannot see a PowerShell function or alias named az (the offline tests define one); the parts
+    # then go one at a time, in process.
+    $az = Microsoft.PowerShell.Core\Get-Command az -ErrorAction SilentlyContinue | Select-Object -First 1
+    $azPath = if ($az -and $az.CommandType -eq 'Application') { $az.Source } else { '' }
+    $effective = if ($azPath) { [Math]::Min($Parallel, $parts) } else { 1 }
+    if (-not $PSBoundParameters.ContainsKey('SecondsPerExec')) { $SecondsPerExec = Get-ClaudeRunnerExecSeconds $effective }
+    $reserveMinutes = [Math]::Round($ReserveSeconds / 60)
+    $applyBy = $null
     if ($null -ne $Deadline) {
         # PowerShell hands a bound Nullable[DateTimeOffset] over as the DateTimeOffset itself.
         $applyBy = [DateTimeOffset]$Deadline
-        $commands = [int][Math]::Ceiling($b64.Length / $ChunkSize) + 2
-        $seconds = $commands * $SecondsPerCommand
-        if ([DateTimeOffset]::UtcNow.AddSeconds($seconds) -gt $applyBy) {
-            throw ("Sending $Path ($($bytes.Length) bytes) to runner $Name takes about $([Math]::Ceiling($seconds / 60)) minutes ($commands az container exec " +
-                "commands of about $SecondsPerCommand seconds each), past the snapshot's apply-by time $($applyBy.UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ssZ')). " +
-                "The snapshot was not sent and nothing was written. Through the runner, a snapshot of about 40,000 developers fits in the 2-hour apply-by time. " +
-                "A full sync of this size runs in the optional sync job, which reads Microsoft Graph inside the network and needs the GroupMember.Read.All grant that its " +
-                "deployment prints: .\scripts\Deploy-ClaudeProjectionRenewal.ps1 -ResourceGroup $ResourceGroup -ApimName <apim> -NamePrefix $($Name -replace '^aci-projtest-', '') " +
-                "-AlertEmail <address>, then az containerapp job start. The populate step and the switch's snapshot compare at this size need the directory-scale " +
-                "transfer planned as ROADMAP packet P99.")
+        $seconds = ([int][Math]::Ceiling($parts / $effective) + 2) * $SecondsPerExec
+        if ((Get-ClaudeRunnerNow).AddSeconds($seconds + $ReserveSeconds) -gt $applyBy) {
+            throw ("Sending $Path ($($bytes.Length) bytes, $($compressed.Length) compressed) to runner $Name takes about $([Math]::Ceiling($seconds / 60)) minutes " +
+                "($parts parts, $effective at a time, about $SecondsPerExec seconds an exec), and $reserveMinutes minutes are kept for the steps after it; together they pass " +
+                "the snapshot's apply-by time $($applyBy.UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ssZ')). The snapshot was not sent and nothing was written. " +
+                (Get-ClaudeRunnerTransferRemedy -ResourceGroup $ResourceGroup -Name $Name))
         }
     }
-    $null = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $Name -SubscriptionId $SubscriptionId -Command "node -e require('fs').mkdirSync('$dir',{recursive:true});require('fs').writeFileSync('$tmp','')"
-    for ($i = 0; $i -lt $b64.Length; $i += $ChunkSize) {
-        $part = $b64.Substring($i, [Math]::Min($ChunkSize, $b64.Length - $i))
-        $said = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $Name -SubscriptionId $SubscriptionId -Command "node -e require('fs').appendFileSync('$tmp','$part')"
-        # An exec that fails prints its error and nothing else; ignoring it is
-        # how a copy silently arrives empty.
-        if ($said -match 'ERROR|InvalidCommandLength|terminated with non-zero') { throw "Chunk at $i failed: $($said.Substring(0, [Math]::Min(200, $said.Length)))" }
+    $started = Get-ClaudeRunnerNow
+    $null = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $Name -SubscriptionId $SubscriptionId -Command "node -e require('fs').mkdirSync('$partDir',{recursive:true})"
+    $state = [pscustomobject]@{ Done = 0; Retries = 0; Failure = ''; FailedPart = 0; LastOutput = ''; Late = $false; Rate = 0.0; End = $null }
+    $partsStarted = Get-ClaudeRunnerNow
+    # After the first wave, the measured rate projects the end of the transfer.
+    $pace = {
+        if ($null -eq $applyBy -or $state.Done -lt $effective) { return }
+        $now = Get-ClaudeRunnerNow
+        $elapsed = [Math]::Max(($now - $partsStarted).TotalSeconds, 0.001)
+        $state.Rate = $state.Done / $elapsed
+        $state.End = $now.AddSeconds(($parts - $state.Done) / $state.Rate + $elapsed / $state.Done * $effective)
+        if ($state.End.AddSeconds($ReserveSeconds) -gt $applyBy) { $state.Late = $true }
     }
-    # No declaration keyword: `const f` needs a space, which exec would split on,
-    # and `const$f` is a single identifier. node -e is sloppy mode, so a bare
-    # assignment is enough.
-    $remote = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $Name -SubscriptionId $SubscriptionId -Command ("node -e f=require('fs');f.writeFileSync('$Destination',Buffer.from(f.readFileSync('$tmp','utf8'),'base64url'));f.unlinkSync('$tmp');" +
-        "console.log(require('crypto').createHash('sha256').update(f.readFileSync('$Destination')).digest('hex'))")
+    if (-not $azPath) {
+        for ($index = 1; $index -le $parts -and -not $state.Late -and -not $state.Failure; $index++) {
+            $payload = & $payloadOf $index
+            $command = New-ClaudeRunnerPartCommand -PartDir $partDir -Index $index -Payload $payload
+            Assert-ClaudeRunnerCommandText $command
+            for ($attempt = 1; ; $attempt++) {
+                $result = Invoke-ClaudeRunnerExec -Arguments (& $execArguments $command)
+                $problem = Get-ClaudeRunnerPartProblem -Result $result -Index $index -Length $payload.Length
+                if (-not $problem) { $state.Done++; break }
+                if ($attempt -ge $Attempts) { $state.Failure = $problem; $state.FailedPart = $index; $state.LastOutput = [string]$result.Output; break }
+                $state.Retries++
+                Start-Sleep -Seconds ([int][Math]::Pow(2, $attempt))
+            }
+            if (-not $state.Failure) { & $pace }
+        }
+    }
+    else {
+        $worker = 'param($Az, [string[]]$Arguments) $ErrorActionPreference = ''Continue''; $global:LASTEXITCODE = 0; $out = & $Az @Arguments 2>&1 | Out-String; [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = [string]$out }'
+        $fresh = [Collections.Generic.Queue[int]]::new()
+        for ($index = 1; $index -le $parts; $index++) { $fresh.Enqueue($index) }
+        $retry = [Collections.Generic.List[object]]::new()
+        $attemptsOf = @{}
+        $running = [Collections.Generic.List[object]]::new()
+        $pool = [runspacefactory]::CreateRunspacePool(1, $effective)
+        $pool.Open()
+        try {
+            while ((-not $state.Late -and -not $state.Failure -and ($fresh.Count -or $retry.Count)) -or $running.Count) {
+                while (-not $state.Late -and -not $state.Failure -and $running.Count -lt $effective) {
+                    $ready = $retry | Where-Object { $_.NotBefore -le [DateTime]::UtcNow } | Select-Object -First 1
+                    if ($ready) { $null = $retry.Remove($ready); $index = $ready.Index }
+                    elseif ($fresh.Count) { $index = $fresh.Dequeue() }
+                    else { break }
+                    $attemptsOf[$index] = 1 + [int]$attemptsOf[$index]
+                    $payload = & $payloadOf $index
+                    $command = New-ClaudeRunnerPartCommand -PartDir $partDir -Index $index -Payload $payload
+                    Assert-ClaudeRunnerCommandText $command
+                    $shell = [powershell]::Create()
+                    $shell.RunspacePool = $pool
+                    $null = $shell.AddScript($worker).AddArgument($azPath).AddArgument((& $execArguments $command))
+                    $running.Add([pscustomobject]@{ Index = $index; Length = $payload.Length; Shell = $shell; Handle = $shell.BeginInvoke() })
+                }
+                if ($running.Count) {
+                    $null = [Threading.WaitHandle]::WaitAny([Threading.WaitHandle[]]@($running | ForEach-Object { $_.Handle.AsyncWaitHandle }), 250)
+                }
+                elseif ($retry.Count -and -not $state.Late -and -not $state.Failure) {
+                    $next = $retry | Sort-Object NotBefore | Select-Object -First 1
+                    Start-Sleep -Seconds ([Math]::Max(1, [int][Math]::Ceiling(($next.NotBefore - [DateTime]::UtcNow).TotalSeconds)))
+                    $next.NotBefore = [DateTime]::MinValue
+                }
+                foreach ($item in @($running | Where-Object { $_.Handle.IsCompleted })) {
+                    $null = $running.Remove($item)
+                    try { $result = @($item.Shell.EndInvoke($item.Handle))[0] }
+                    catch { $result = [pscustomobject]@{ ExitCode = -1; Output = $_.Exception.Message } }
+                    finally { $item.Shell.Dispose() }
+                    $problem = Get-ClaudeRunnerPartProblem -Result $result -Index $item.Index -Length $item.Length
+                    if (-not $problem) { $state.Done++; & $pace; continue }
+                    if ($attemptsOf[$item.Index] -ge $Attempts) {
+                        if (-not $state.Failure) { $state.Failure = $problem; $state.FailedPart = $item.Index; $state.LastOutput = [string]$result.Output }
+                        continue
+                    }
+                    $state.Retries++
+                    $retry.Add([pscustomobject]@{ Index = $item.Index; NotBefore = [DateTime]::UtcNow.AddSeconds([Math]::Pow(2, $attemptsOf[$item.Index])) })
+                }
+            }
+        }
+        finally {
+            foreach ($item in $running) { try { $null = $item.Shell.Stop() } catch { $null = $_ }; $item.Shell.Dispose() }
+            $pool.Close()
+            $pool.Dispose()
+        }
+    }
+    $removeParts = { Invoke-ClaudeRunnerExec -Arguments (& $execArguments "node -e require('fs').rmSync('$partDir',{recursive:true,force:true})") }
+    if ($state.Failure -or $state.Late) {
+        $cleanup = & $removeParts
+        $partsNote = if ($cleanup.ExitCode -eq 0 -and $cleanup.Output -notmatch 'ERROR') { 'The parts were removed' } else { "The part directory $partDir could not be removed; the runner's next start clears it" }
+        if ($state.Late) {
+            throw ("Stopped sending $Path to runner $Name after $($state.Done) of $parts parts: at the measured $([Math]::Round($state.Rate, 2)) parts a second it would end at " +
+                "$($state.End.UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ssZ')), and with the $reserveMinutes minutes kept for the steps after it, that passes the snapshot's apply-by time " +
+                "$($applyBy.UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ssZ')). $partsNote, and nothing was written. " + (Get-ClaudeRunnerTransferRemedy -ResourceGroup $ResourceGroup -Name $Name))
+        }
+        Write-ClaudeRunnerOutput -RawOutput $state.LastOutput -Step "runner transfer part $($state.FailedPart)"
+        throw ("Sending $Path to runner $Name stopped: part $($state.FailedPart) of $parts failed after $Attempts attempts ($($state.Failure)). Nothing was assembled. $partsNote. " +
+            "Remedy: rerun the command. If a part fails again, check that the runner is Running with az container show -g $ResourceGroup -n $Name --query instanceView.state, " +
+            "and redeploy it with scripts/Deploy-ClaudeProjection.ps1.")
+    }
+    # One exec reads the parts in name order, checks their count and length, decompresses them, writes the
+    # destination, removes the parts and prints the SHA-256 of what it wrote. A missing or short part prints
+    # incomplete-parts or incomplete-length instead, which the hash check below reports. A difference is non-zero, so
+    # `if(a-b)` compares without '!', which cmd.exe changes when delayed expansion is on. .NET writes no gzip
+    # bytes at all for an empty file, so an empty payload is an empty file.
+    $assembly = ("node -e f=require('fs');z=require('zlib');d='$partDir';p=f.readdirSync(d).sort();if(p.length-$parts){console.log('incomplete-parts',p.length);process.exit()}" +
+        "s=p.map(function(x){return(f.readFileSync(d.concat('/',x),'utf8'))}).join('');if(s.length-$($b64.Length)){console.log('incomplete-length',s.length);process.exit()}" +
+        "b=s.length?z.gunzipSync(Buffer.from(s,'base64url')):Buffer.alloc(0);f.writeFileSync('$Destination',b);f.rmSync(d,{recursive:true,force:true});" +
+        "console.log(require('crypto').createHash('sha256').update(b).digest('hex'))")
+    try { $remote = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $Name -SubscriptionId $SubscriptionId -Command $assembly }
+    catch { $null = & $removeParts; throw }
     $local = [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($bytes)).Replace('-', '').ToLower()
     $remoteHash = ($remote -split "`n" | Select-Object -Last 1).Trim()
-    if ($remoteHash -ne $local) { throw "Copy of $Path to $Destination did not arrive intact (local $local, remote '$remoteHash')." }
-    return [pscustomobject]@{ Path = $Path; Destination = $Destination; Bytes = $bytes.Length; Chunks = [Math]::Ceiling($b64.Length / $ChunkSize); Sha256 = $local }
+    if ($remoteHash -ne $local) {
+        $null = & $removeParts
+        throw "Copy of $Path to $Destination did not arrive intact (local $local, remote '$remoteHash')."
+    }
+    return [pscustomobject]@{
+        Path = $Path; Destination = $Destination; Bytes = $bytes.Length; CompressedBytes = $compressed.Length; Parts = $parts; Chunks = $parts
+        Parallel = $effective; Retries = $state.Retries; Seconds = [Math]::Round(((Get-ClaudeRunnerNow) - $started).TotalSeconds, 1); Sha256 = $local
+    }
 }

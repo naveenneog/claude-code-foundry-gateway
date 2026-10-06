@@ -273,6 +273,7 @@ Invoke-Check 'Azure CLI guide renewal block runs in order' 'Test-AzCommandsRenew
     Invoke-Check 'Projection preflight and safe switch'     'Test-ProjectionPreflight.ps1'
     Invoke-Check 'Projection council corrections'           'Test-ProjectionCouncil.ps1'
 Invoke-Check 'Projection runner lifecycle' 'Test-ProjectionRunnerLifecycle.ps1'
+Invoke-Check 'Projection runner transfer, compressed and parallel' 'Test-RunnerTransfer.ps1'
 Invoke-Check 'Projection sync scripts' 'Test-ProjectionSyncScripts.ps1'
 Invoke-Check 'Projection sync package and its import closure' 'Test-ProjectionPackage.ps1'
 Invoke-Check 'Projection renewal templates and deploy script' 'Test-ProjectionRenewal.ps1'
