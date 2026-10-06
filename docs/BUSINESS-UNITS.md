@@ -452,7 +452,25 @@ To add one at any time:
 
 The identifier must be lower-case letters, digits and hyphens. It becomes a
 counter key and a map key, so a space, comma, equals or colon is refused rather
-than silently mangled.
+than silently mangled. A capital letter is refused before anything is written,
+because the dollar budget uses the identifier as its scope and accepts only
+lower-case (`scripts/ClaudeUsdBudgets.ps1`).
+
+Before P96 the check ignored case, so a registry can hold a unit with capitals.
+That unit keeps working under its exact spelling: its group, parent and token
+budget can be changed, it can be a parent, and it can be removed. Another
+spelling of it, such as `legacy-unit` for `Legacy-Unit`, is refused, and the
+message names the stored spelling. A dollar budget and a budget mode refuse an
+identifier with capitals (`scripts/ClaudeUsdBudgets.ps1`,
+`scripts/ClaudeBudgetModes.ps1`), and AUM's read of the units stops at one with
+"Invalid bu-modes entry". The chargeback report checks every unit
+identifier it reads, from the registry and from the month's requests, and stops
+at one with capitals (`scripts/ClaudeChargebackReport.ps1`). A unit with another
+lower-case identifier for the same group, created before the old one is removed,
+or the same identifier in lower case, created after the old one is removed, can
+have a dollar budget and a budget mode. Spend before the change stays under the
+old identifier ([Removing one](#removing-one)), so a report for a month with
+that spend still stops.
 
 Creating one needs both `-Group` and `-MonthlyBudgetUsd`. After that, either can
 be changed on its own.

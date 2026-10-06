@@ -44,7 +44,10 @@ unknown named-value default.
 ## 2. Change the API Management tier
 
 The guided `Tier` step plans only from the discovered SKU and region. Prices are read from the
-Azure Retail Prices API at plan time; unknown price data is shown as unknown, never as zero.
+Azure Retail Prices API at plan time; unknown price data is shown as unknown, never as zero. Before
+its write, the step exports the gateway with `scripts\Backup-ClaudeGateway.ps1` to
+`backups\before-tier-<apim>-<UTC time>.json`. A choice that needs a new instance also takes this export,
+then stops before any Azure write; the export is the backup that the move below restores.
 
 Research fetched 2026-09-26:
 
@@ -146,7 +149,9 @@ Manual equivalent:
 ## 5. Change Claude Desktop sign-in
 
 The `DesktopSignIn` step updates the decision record, writes the
-`external-idp-extra-audience` named value, and flags device profiles for regeneration.
+`external-idp-extra-audience` named value, and flags device profiles for regeneration. Before its
+write, the step exports the gateway with `scripts\Backup-ClaudeGateway.ps1` to
+`backups\before-desktop-sign-in-<apim>-<UTC time>.json`.
 
 - `helper-script` keeps the existing Azure CLI credential helper path and writes an empty extra
   audience.

@@ -149,7 +149,7 @@ if ($Direction -eq 'FromTurnstile' -and $governanceAuthority -eq 'Turnstile') {
         -TierUpdatedAt $tierDoc.updated_at -BudgetPeriod $Period -ReadGovernance $readGovernance `
         -ResourceGroup $ResourceGroup -ApimName $ApimName -ScriptRoot $PSScriptRoot -Apply:$Apply
     foreach ($c in $result.Changes) { Write-Host "  $c" }
-    foreach ($p in $result.Problems) { Write-Host "  not applied - $p" }
+    if (-not $result.ProblemsReported) { foreach ($p in $result.Problems) { Write-Host "  not applied - $p" } }
     Write-Host "  Freshness: $($result.Freshness)"
     foreach ($read in @($result.SourceReads)) { Write-Host ("  Source revisions: " + ($read | ConvertTo-Json -Depth 5 -Compress)) }
     if (-not @($result.Changes).Count -and @($result.Problems).Count) { Write-Host '  No named values written; see the reported problems.' }
@@ -161,7 +161,7 @@ if ($Direction -eq 'FromTurnstile' -and $governanceAuthority -eq 'Turnstile') {
 }
 
 $registry = @(ConvertFrom-ClaudeBuRegistry (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-registry'))
-$parents = ConvertFrom-ClaudeBuParents (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-parents')
+$parents = ConvertFrom-ClaudeBuParents (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-parents') -ExactKeys
 if (-not $parents) { $parents = [ordered]@{} }
 $unassignedMode = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-unassigned'
 if (-not $unassignedMode) { $unassignedMode = 'allow' }
@@ -182,7 +182,7 @@ if ($Direction -eq 'FromTurnstile') {
         return [pscustomobject]@{ Direction = $Direction; Period = $Period; Changes = $toApply.Count; Applied = 0 }
     }
     foreach ($c in $toApply) {
-        foreach ($u in $registry) { if ([string]$u.Id -eq $c.Id) { $u.TokensPerMonth = [long]$c.Now } }
+        foreach ($u in $registry) { if ([string]::Equals([string]$u.Id, [string]$c.Id, [System.StringComparison]::Ordinal)) { $u.TokensPerMonth = [long]$c.Now } }
     }
     $value = ConvertTo-ClaudeBuRegistry $registry
     Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-registry' -Value $value

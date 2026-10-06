@@ -37,7 +37,7 @@ if ($Subscription) {
 $request = Get-Content -LiteralPath $InputFile -Raw | ConvertFrom-Json
 $nv = Get-AumNamedValueMap -ResourceGroup $ResourceGroup -ApimName $ApimName
 $registry = @(ConvertFrom-ClaudeBuRegistry $nv['bu-registry'])
-$parents = ConvertFrom-ClaudeBuParents $nv['bu-parents']
+$parents = ConvertFrom-ClaudeBuParents $nv['bu-parents'] -ExactKeys
 $modes = ConvertFrom-ClaudeBuModes $nv['bu-modes']
 $result = $null
 
@@ -282,9 +282,9 @@ switch ([string]$request.action) {
             break
         }
         $id = [string]$request.parameters.scope_id
-        Test-ClaudeBuId $id
+        Test-ClaudeBuId $id -Registry @($registry | ForEach-Object Id)
         if ($request.parameters.scope_type -notin 'organization', 'department') { throw 'Only unit and team budgets are direct gateway limits.' }
-        $row = @($registry | Where-Object Id -eq $id)
+        $row = @($registry | Where-Object Id -ceq $id)
         if ($row.Count -ne 1) { throw 'Scope not found in the gateway registry.' }
         $isTeam = $parents.Contains($id)
         if (($request.parameters.scope_type -eq 'department') -ne $isTeam) { throw 'Scope kind does not match the registry.' }
@@ -298,7 +298,7 @@ switch ([string]$request.action) {
         }
         foreach ($unit in @($registry | Where-Object { -not $parents.Contains([string]$_.Id) })) {
             $allocated = [long]0
-            foreach ($child in @($registry | Where-Object { $parents[[string]$_.Id] -eq [string]$unit.Id })) {
+            foreach ($child in @($registry | Where-Object { $parents[[string]$_.Id] -ceq [string]$unit.Id })) {
                 $allocated += [long]$child.TokensPerMonth
             }
             if ($unit.TokensPerMonth -gt 0 -and $allocated -gt $unit.TokensPerMonth) { throw 'Children exceed the parent budget.' }
@@ -336,12 +336,15 @@ switch ([string]$request.action) {
             ApimName = $ApimName
         }
         if ($null -ne $request.body.allowance_percent) { $modeArgs.AllowancePercent = [int]$request.body.allowance_percent }
-        $target = @($registry | Where-Object Id -eq $modeArgs.Id)
+        if ($modeArgs.Id -cnotmatch '^[a-z0-9][a-z0-9-]*$') {
+            throw "Budget modes accept only lower-case identifiers, so '$($modeArgs.Id)' cannot have one."
+        }
+        $target = @($registry | Where-Object Id -ceq $modeArgs.Id)
         if ($target.Count -ne 1) { throw 'Scope not found.' }
         $expectedMode = ConvertTo-ClaudeBudgetMode $request.body.mode $request.body.allowance_percent
         $modes.Remove($modeArgs.Id)
         if ($expectedMode -ne 'strict') { $modes[$modeArgs.Id] = $expectedMode }
-        $reordered = @($registry | Where-Object Id -ne $modeArgs.Id) + $target
+        $reordered = @($registry | Where-Object Id -cne $modeArgs.Id) + $target
         $expected = [ordered]@{
             'bu-registry'=(ConvertTo-ClaudeBuRegistry $reordered)
             'bu-modes'=(ConvertTo-ClaudeBuModes $modes)
@@ -357,10 +360,11 @@ switch ([string]$request.action) {
         $wanted = @($request.body.organizations) + @($request.body.departments | Where-Object { $_.attributes.kind -ne 'unit-direct' })
         if (-not @($request.body.organizations).Count) { throw 'Keep at least one unit.' }
         $nextRegistry = @()
-        $nextParents = [ordered]@{}
-        $seen = @{}
+        # Identifiers compare by exact spelling: a registry can hold two spellings of one identifier.
+        $nextParents = [System.Collections.Specialized.OrderedDictionary]::new([System.StringComparer]::Ordinal)
+        $seen = [hashtable]::new([System.StringComparer]::Ordinal)
         foreach ($item in $wanted) {
-            Test-ClaudeBuId ([string]$item.id)
+            Test-ClaudeBuId ([string]$item.id) -Registry @($registry | ForEach-Object Id)
             if ($seen.ContainsKey([string]$item.id)) { throw 'Duplicate scope identifier.' }
             $seen[[string]$item.id] = $true
             if ([string]$item.external_ref -notlike 'entra-group:*') { throw 'Every direct scope needs an Entra group.' }
@@ -369,18 +373,20 @@ switch ([string]$request.action) {
             if ($group -match '[,:=&|<>^%!"\r\n]') { throw 'Group contains unsafe registry or shell characters.' }
             $groupId = az ad group show --group $group --query id -o tsv 2>$null
             if ($LASTEXITCODE -ne 0 -or -not $groupId) { throw 'An Entra group could not be verified. Nothing was written.' }
-            $prior = @($registry | Where-Object Id -eq $item.id)
+            $prior = @($registry | Where-Object Id -ceq $item.id)
             $amount = if ($prior.Count) { [long]$prior[0].TokensPerMonth } else { [long]0 }
             $nextRegistry += [pscustomobject]@{ Id = [string]$item.id; Group = $group; TokensPerMonth = $amount }
             if ($item.parent_id) {
-                if ([string]$item.parent_id -notin @($request.body.organizations.id)) { throw 'Team parent is not a unit.' }
+                if ([string]$item.parent_id -cnotin @($request.body.organizations.id)) { throw 'Team parent is not a unit.' }
+                # -cnotin compares by culture and ignores characters such as U+00AD; the parent is checked by its characters.
+                Test-ClaudeBuId ([string]$item.parent_id) -Registry @($request.body.organizations.id)
                 $nextParents[[string]$item.id] = [string]$item.parent_id
             }
         }
         Test-ClaudeBuDepth -Parents $nextParents
         foreach ($unit in @($nextRegistry | Where-Object { -not $nextParents.Contains([string]$_.Id) })) {
             $allocated = [long]0
-            foreach ($child in @($nextRegistry | Where-Object { $nextParents[[string]$_.Id] -eq [string]$unit.Id })) {
+            foreach ($child in @($nextRegistry | Where-Object { $nextParents[[string]$_.Id] -ceq [string]$unit.Id })) {
                 $allocated += [long]$child.TokensPerMonth
             }
             if ($unit.TokensPerMonth -gt 0 -and $allocated -gt $unit.TokensPerMonth) { throw 'Moving these teams would exceed parent headroom.' }
@@ -392,7 +398,7 @@ switch ([string]$request.action) {
         $expected = [ordered]@{ 'bu-registry'=$nextRaw; 'bu-parents'=$parentRaw }
         if ($nv.ContainsKey('bu-modes')) {
             foreach ($modeId in @($modes.Keys)) {
-                if ($modeId -notin @($nextRegistry.Id)) { $modes.Remove($modeId) }
+                if ($modeId -cnotin @($nextRegistry.Id)) { $modes.Remove($modeId) }
             }
             $expected['bu-modes'] = ConvertTo-ClaudeBuModes $modes
         }

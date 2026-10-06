@@ -100,6 +100,7 @@ deployment by hand fails ([P94 status](status/P94.md#p94-the-p86-renewal-job-dep
 |---|---|---|
 | P94 | Merged (`ce8b084`) with the owner's approval on 2026-10-05, after council round 3 and the packet gate at `5320b17` | The P86 renewal job deploys and renews: one sync package for the image and the runner (the image and runner currently miss `resolver/src/entitlement.mjs`), a renewal subnet in the projection network, a registry template deployed before the image build, the job's client id, tier group ids and per-run business units, working log routing and alerts, `scripts/Deploy-ClaudeProjectionRenewal.ps1`, an offline renewal simulation that reaches admission, and the guide and its guard ([ADR-0049](adr/0049-projection-renewal-deployment.md)). |
 | P95 | Merged (`4e5ad2f`) with the owner's approval on 2026-10-05, after P94, council round 5 and the packet gate at `8c13d79` | The switch-over runs end to end: a switch never repopulates; one switch function for the deployer, installer and guided flow (receipt and resolver checks, drift check, compare, admission, backup, one named-value write); the guided flow reads the renewal receipt from its decision record's folder or the repository's `onboarding/`; every receipt value is checked before any call; the gateway must call the resolver that reads the renewed Cosmos account, read from the live site and its settings, and the deployer's normal run points it there, but on a gateway already on the projection stops before any write unless it redeploys the resolver the gateway calls; the installer reads `entitlement-source` and the resolver values fail-closed and takes a gateway for new only when Azure reports it missing; the guided flow's plan lists its one write and the documented rollback; admission requires an email receiver on the action group; admission binds the job's tier group ids, gateway, identity, Cosmos account and tenant to the evidence it accepts and to the compared gateway, so a renewal redeploy that changes them needs fresh runs; a restore does not switch to the projection; P84 text replaced; an owner-attended live runbook. |
+| P96 | On `p96-field-fixes`, based on `main` `ee7b486`; the owner approved its merge on 2026-10-05, after its council and packet gate | Fixes from a live deployment: a new business unit identifier with a capital is refused with the lower-case rule before any write, by `Set-ClaudeBusinessUnit.ps1`, the AUM bridge and the manager's prompt; another spelling of a stored unit is refused with the stored spelling, the writers compare identifiers by their characters and keep each spelling's mode and parent entry, and a budget mode is refused for an identifier with capitals, while a unit the registry already holds with capitals keeps working; the guided flow's Tier and Desktop sign-in changes name their snapshot before their write ([P96 status](status/P96.md#p96-fixes-from-a-live-deployment-2026-10-05)). |
 
 Follow-ups from the P94 council, not yet packets: `sync/package-lock.json` carries `sha1` integrity
 for 50 of its 53 packages because this workstation reaches npm only through a feed whose metadata
@@ -109,9 +110,7 @@ script reads the image digest back by tag, and the `az acr build` result would n
 anchor missing: bounded raw output" because `f39524d` changed `Select-Object -Last 40` in
 `scripts/ClaudeRunner.ps1` to `-Last 39`, on `main` as well ([P94 council](status/P94.md#council)).
 
-Follow-ups from the P95 council, not yet packets: `Start-ClaudeGateway.ps1 -Action Change` gives the
-Tier and DesktopSignIn plans no snapshot path, so their write gate throws "A named-value snapshot
-path is required" (the Entitlement step names its own since P95); `Install-ClaudeGateway.ps1`
+Follow-ups from the P95 council, not yet packets: `Install-ClaudeGateway.ps1`
 accepts `-FlipProjectionAfterCleanCompare` without `-DeployProjection` and then never reaches the
 switch; and `Invoke-ClaudeProjectionPreflight -FlipAfterCleanCompare` has no caller since the
 deployer's switch mode returns before the preflight. On an existing gateway, the installer reads
@@ -134,6 +133,36 @@ From the P95 packet gate (`quality.filesize`): `tests/Test-ProjectionSwitch.ps1`
 has 866 lines against the 800-line test budget. A split by responsibility, into admission and the
 switch, the deployer and the installer, the guided flow, and the guides, keeps each file under the
 budget; the charter's budget stays as it is ([P95 gate](status/P95.md#gate)).
+
+P96 fixes the first P95 council follow-up: the guided flow's Tier and Desktop sign-in plans name their
+snapshot path. Follow-ups from P96, not yet packets
+([P96 status](status/P96.md#p96-fixes-from-a-live-deployment-2026-10-05)):
+
+- Turnstile apply, pre-existing LOW notes from P96 council round 6 (Security):
+  - The tier-id check compares by culture (`scripts/ClaudeTurnstileApply.ps1:119`). No `cmd.exe` metacharacter, CR, LF or TAB passes it.
+  - Group names may still carry parentheses and control characters other than CR and LF. A `)` stops `az.cmd`, and a NUL truncates a native command line.
+  - The unknown-group fallback compares `$known` by culture.
+
+  An allow-list for group names and ordinal comparisons close them. Since P96 the import checks identifiers
+  case-sensitively and with `\z`, and a unit with an unsafe group name is reported and left out.
+- `-Id Sales -Parent sales` is refused as its own parent, and `Resolve-ClaudeBuDepth` reads `{Sales=sales}`
+  as a cycle (P96 council rounds 2 and 4). It only refuses; making one spelling a team of the other needs
+  exact keys in the depth check and the readers below.
+- A unit stored with capitals cannot have a dollar budget (`scripts/ClaudeUsdBudgets.ps1:42`) or a
+  budget mode (`scripts/ClaudeBudgetModes.ps1:28`), and AUM's read of the units stops with "Invalid
+  bu-modes entry" because `Get-ClaudeBudgetModeAttributes` parses `<id>=strict` with that rule (checked
+  on `main` `ee7b486` and on P96). The chargeback report stops for every unit while
+  the registry or the month's requests hold such an identifier
+  (`scripts/ClaudeChargebackReport.ps1:23,97,105`). A check that names such units, for example in
+  `scripts/Test-ClaudeHealth.ps1`, would show the replacement that
+  [BUSINESS-UNITS](BUSINESS-UNITS.md#adding-a-business-unit) describes before a report fails.
+- `bu-parents` is read without case by `ConvertFrom-ClaudeBuParents` without `-ExactKeys`, which the
+  scripts that compute membership and reports use, and by the renewal job, which mirrors it on purpose
+  (`sync/src/business-units.mjs:39`, P94), while the policy finds a parent in `bu-registry` by exact
+  spelling (`infra/policy.xml:482-484`). With two spellings of one team stored, those readers and the
+  job treat them as one team; the writers read exact keys since P96. Exact keys for the readers and the
+  job, with the parity test in `tests/Test-ProjectionRenewalRuns.ps1` kept, is a decision about the
+  job's ordering as well.
 
 M0 is shipped. The table below is the queue; the checklist under it is what the gate tracks.
 
@@ -556,6 +585,15 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       requires an email receiver; admission refuses evidence produced under other tier group ids,
       another gateway or another identity than the job and the comparison now name; P84 text is
       replaced; the live runbook is written for the owner
+- [ ] P96 Fixes from a live deployment — acceptance: a new business unit identifier with a capital is
+      refused with the lower-case rule before any write by `Set-ClaudeBusinessUnit.ps1`, the AUM
+      bridge and the manager's prompt; a spelling that differs only in case from a stored unit is
+      refused with the stored spelling, and two stored spellings stay two units with their own mode
+      and parent entry; a budget mode is refused for an identifier with capitals; a unit the registry
+      holds with capitals can still change its group, parent and token
+      budget and can be removed; the guided flow's Tier and Desktop sign-in changes name their snapshot
+      under `backups/` and the write gate takes it
+      ([P96 status](status/P96.md#p96-fixes-from-a-live-deployment-2026-10-05))
 - [x] P72 permutation tests of the guided flow and the installer — acceptance: every combination of
       action (Setup, Change foundation, Guide, Status), record state (none, recorded and matching,
       recorded with another gateway URL, recorded but missing, not readable), mode (attended,

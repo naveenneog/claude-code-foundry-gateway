@@ -271,6 +271,12 @@ cost and caller impact before applying.
 | `models` | `Models.ps1` | Existing Foundry deployments, per-tier allowlists, dated price mappings, deployment records and tier-specific MDM/workstation profiles; snapshot and drift check before any write | [Models](MODELS.md) |
 | `deviceProfiles` | `DeviceProfiles.ps1` | Per-tier MDM payloads | [MDM](MDM.md) |
 
+Before their write, the Tier and Desktop sign-in steps export the gateway with
+`scripts/Backup-ClaudeGateway.ps1` to `backups/before-tier-<apim>-<UTC time>.json` and
+`backups/before-desktop-sign-in-<apim>-<UTC time>.json` (`scripts/flow/lib/LifecycleCommon.ps1`). A Tier
+choice that needs a new instance takes the export and then stops before any Azure write; the export is the
+backup that the move restores ([Tier](UPDATE-AND-CHANGE.md#2-change-the-api-management-tier)).
+
 The Entitlement step switches to the projection only through `Invoke-ClaudeProjectionSwitch`
 ([ADR-0050](adr/0050-projection-switch-function.md)). Discovery (`scripts/flow/Discovery.ps1`)
 supplies the renewal receipt, from the decision record's folder or the repository's `onboarding/`,

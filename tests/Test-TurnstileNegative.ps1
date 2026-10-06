@@ -69,7 +69,7 @@ $mutations = @(
     @{ Suite = $governance; Name = 'the unassigned organization becomes a business unit'
        File  = 'scripts/ClaudeTurnstileApply.ps1'; From = 'if ($id -eq ''unassigned'') { continue }'; To = '' }
     @{ Suite = $governance; Name = 'a unit''s direct-members department becomes a team'
-       File  = 'scripts/ClaudeTurnstileApply.ps1'; From = 'if (-not $parent -or $id -eq $parent -or'; To = 'if (-not $parent -or' }
+       File  = 'scripts/ClaudeTurnstileApply.ps1'; From = 'if (-not $parent -or [string]::Equals($id, $parent, [System.StringComparison]::Ordinal) -or'; To = 'if (-not $parent -or' }
     @{ Suite = $governance; Name = 'membership is refreshed from groups that could not be read'
        File  = 'scripts/ClaudeTurnstileApply.ps1'; From = 'if ($graph -ne ''ok'') {'; To = 'if ($false) {' }
     @{ Suite = $governance; Name = 'a group that cannot be checked is always trusted'
@@ -101,7 +101,7 @@ $mutations = @(
     @{ Suite = $governance; Name = 'a save starts the job that also exports'
        File  = 'infra/turnstile-schedule.bicep'; From = 'trigger: ''Manual'', skipExport: true'; To = 'trigger: ''Manual'', skipExport: false' }
     @{ Suite = $governance; Name = 'entries in another order are written again'
-       File  = 'scripts/ClaudeTurnstileApply.ps1'; From = 'if ((& $canonical $was) -ne (& $canonical ([string]$want[$id]))) {'; To = 'if ($was -ne [string]$want[$id]) {' }
+       File  = 'scripts/ClaudeTurnstileApply.ps1'; From = 'if (-not [string]::Equals((& $canonical $was), (& $canonical ([string]$want[$id])), [System.StringComparison]::Ordinal)) {'; To = 'if ($was -cne [string]$want[$id]) {' }
     @{ Suite = $governance; Name = 'every registration restarts Turnstile'
        File  = 'scripts/Connect-ClaudeTurnstile.ps1'; From = 'if ($jobSetting -ne $applyJobId) {'; To = 'if ($true) {' }
     @{ Suite = $governance; Name = 'membership lists are written while the projection is the source'

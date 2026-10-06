@@ -94,20 +94,42 @@ function Test-ClaudeBuId {
     <#
     .SYNOPSIS
         Throws unless the identifier is safe to put in a counter key and a
-        comma-delimited map.
+        comma-delimited map, and lower-case unless it is already stored.
+
+    .DESCRIPTION
+        A new identifier is lower-case, because the dollar budget uses it as its scope and accepts only
+        lower-case (ClaudeUsdBudgets.ps1). Before P96 this check ignored case, so a registry can hold an
+        identifier with capitals. An identifier that -Registry lists with the same spelling, or one read
+        from the registry (-Stored), keeps only the map rule. An identifier that matches a registry entry
+        only when case is ignored is refused: the policy finds a unit by its exact spelling
+        (infra/policy.xml), so such an identifier is either a mistyped reference to the stored unit or a
+        second unit that a reader cannot tell apart from it.
     #>
     [CmdletBinding()]
-    param([Parameter(Mandatory = $true)][AllowEmptyString()][string]$Id)
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Id,
+        [AllowEmptyCollection()][AllowNull()][string[]]$Registry = @(),
+        [switch]$Stored
+    )
 
     if ([string]::IsNullOrWhiteSpace($Id)) {
         throw "A business unit identifier cannot be empty."
     }
     # Comma separates entries, equals separates id from value, colon separates
     # group from budget. A space would make a counter key ambiguous to read.
-    if ($Id -notmatch '^[a-z0-9][a-z0-9-]*$') {
+    # Known means the same characters: -ccontains compares by culture and takes U+212A KELVIN SIGN for 'K'.
+    $known = $Stored -or (@(@($Registry) | Where-Object { [string]::Equals([string]$_, $Id, [System.StringComparison]::Ordinal) }).Count -gt 0)
+    if (($known -and $Id -notmatch '^[a-z0-9][a-z0-9-]*\z') -or (-not $known -and $Id -cnotmatch '^[a-z0-9][a-z0-9-]*\z')) {
         throw ("'$Id' is not a valid business unit identifier. Use lower-case letters, digits and " +
                "hyphens, starting with a letter or digit - for example 'finance-emea'. " +
                "It becomes a counter key and a map key, so it cannot contain a space, comma, equals or colon.")
+    }
+    if (-not $known) {
+        $spelling = @(@($Registry) | Where-Object { $_ -eq $Id })
+        if ($spelling.Count) {
+            throw ("Business unit '$Id' differs only in case from '$($spelling[0])' in the registry. " +
+                   "Use '$($spelling[0])' to change that unit, or another lower-case identifier, such as '$Id-2', for a new unit.")
+        }
     }
 }
 
@@ -158,7 +180,7 @@ function ConvertTo-ClaudeBuRegistry {
     if (-not $items.Count) { return ',,' }
 
     $parts = foreach ($b in $items) {
-        Test-ClaudeBuId $b.Id
+        Test-ClaudeBuId $b.Id -Stored
         "$($b.Id)=$($b.Group):$([long]$b.TokensPerMonth)"
     }
     return ',' + ($parts -join ',') + ','
@@ -202,9 +224,12 @@ function ConvertFrom-ClaudeBuParents {
         that rule ambiguous.
     #>
     [CmdletBinding()]
-    param([Parameter(Mandatory = $true, Position = 0)][AllowEmptyString()][AllowNull()][string]$Value)
+    param([Parameter(Mandatory = $true, Position = 0)][AllowEmptyString()][AllowNull()][string]$Value, [switch]$ExactKeys)
 
-    $map = [ordered]@{}
+    # Without -ExactKeys, keys compare without case, as the renewal job reads bu-parents (sync/src/business-units.mjs);
+    # tests/Test-ProjectionRenewalRuns.ps1 checks that the two agree. The writers pass -ExactKeys, so a change to one
+    # spelling of an identifier leaves the entry of another spelling as it is.
+    $map = if ($ExactKeys) { [System.Collections.Specialized.OrderedDictionary]::new([System.StringComparer]::Ordinal) } else { [ordered]@{} }
     if ([string]::IsNullOrWhiteSpace($Value)) { return $map }
     foreach ($pair in ($Value.Trim(',') -split ',' | Where-Object { $_ })) {
         $bits = $pair -split '=', 2

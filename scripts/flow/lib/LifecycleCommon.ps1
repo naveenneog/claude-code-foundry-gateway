@@ -197,6 +197,17 @@ function global:Get-ClaudeFlowLifecycleApimMonthlyCost {
     return New-ClaudeFlowCost -Item "API Management $Sku ($Units unit)" -Source 'Azure Retail Prices API' -UnknownReason "no retail meter found for $Sku in $Region"
 }
 
+function global:Initialize-ClaudeFlowLifecycleSnapshotPath {
+    # Names the snapshot a change step's write gate takes (Assert-ClaudeFlowLifecycleSnapshotBeforeWrite). Each step's
+    # Initialize-ClaudeFlowStep calls it; Start-ClaudeGateway.ps1 runs that after approval and before the write, so a
+    # step that is refused before its write leaves no snapshot.
+    param([Parameter(Mandatory = $true)]$Plan, [Parameter(Mandatory = $true)][ValidatePattern('^[a-z][a-z-]*$')][string]$Step)
+    if ((Test-ClaudeFlowPlanIsNoop $Plan) -or $Plan.Data.SnapshotPath) { return }
+    $name = 'before-{0}-{1}-{2}.json' -f $Step, $Plan.Data.Target.ApimName, [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ')
+    $Plan.Data.SnapshotPath = Join-Path (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'backups') $name
+    $Plan.Data.SnapshotTaken = $false
+}
+
 function global:Assert-ClaudeFlowLifecycleSnapshotBeforeWrite {
     param([Parameter(Mandatory = $true)]$Plan)
     if (-not $Plan.Data -or -not $Plan.Data.SnapshotPath) { throw 'A named-value snapshot path is required before applying this lifecycle change.' }

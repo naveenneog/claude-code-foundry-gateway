@@ -36,6 +36,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $pending = $false   # a change has been made that the gateway has not seen
+. (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeBusinessUnit.ps1')
 
 function Invoke-Child {
     param([string]$Script, [hashtable]$Arguments)
@@ -76,12 +78,14 @@ function Read-Value {
 }
 
 function Confirm-Identifier {
-    param([string]$Id)
-    # Same rule the writer enforces, checked here so a bad name is refused while
-    # the operator is still looking at the prompt that produced it.
-    if ($Id -match '^[a-z0-9][a-z0-9-]*$') { return $true }
-    Write-Host "  '$Id' is not usable. Lower case letters, digits and hyphens." -ForegroundColor Yellow
-    return $false
+    param([string]$Id, [string[]]$Registry = @())
+    # The writer's own check (Test-ClaudeBuId), run here so a bad name is refused while the operator is still
+    # looking at the prompt that produced it, before the Entra group is offered.
+    try { Test-ClaudeBuId $Id -Registry $Registry; return $true }
+    catch {
+        Write-Host "  $($_.Exception.Message)" -ForegroundColor Yellow
+        return $false
+    }
 }
 
 function Show-Units {
@@ -96,7 +100,22 @@ function Add-Unit {
     Write-Host "  New $what" -ForegroundColor Cyan
 
     $id = Read-Value 'Identifier'
-    if (-not $id -or -not (Confirm-Identifier $id)) { return }
+    if (-not $id) { return }
+    # The registry the writer will check against, read before any group is looked up or created. A failed read
+    # stops here: the identifier cannot be checked against the units that exist.
+    try {
+        $registryRaw = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-registry' -FailOnError
+    }
+    catch {
+        Write-Host "  The business units could not be read, so nothing was created: $($_.Exception.Message)" -ForegroundColor Yellow
+        return
+    }
+    if ($null -eq $registryRaw) {
+        Write-Host "  bu-registry was not found on $ApimName, so nothing was created. Update the gateway first: .\scripts\Update-ClaudeGateway.ps1 -RecordPath .\onboarding\claude-gateway.json -ResourceGroup $ResourceGroup -ApimName $ApimName (docs/UPDATE-AND-CHANGE.md, section 1)." -ForegroundColor Yellow
+        return
+    }
+    $registryIds = @(ConvertFrom-ClaudeBuRegistry $registryRaw | ForEach-Object Id)
+    if (-not (Confirm-Identifier $id -Registry $registryIds)) { return }
 
     $prefix = if ($Parent) { 'claude-team-' } else { 'claude-bu-' }
     $group = Read-Value 'Entra group' "$prefix$id"
