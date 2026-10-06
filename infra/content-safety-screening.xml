@@ -1,0 +1,69 @@
+<fragment>
+    <choose>
+        <when condition='@("{{content-safety-mode}}" != "off")'>
+            <set-variable name="contentSafetyStartedAt" value="@(DateTime.UtcNow)" />
+            <set-variable name="contentSafetyThreshold" value="@(int.Parse("{{content-safety-threshold}}"))" />
+            <set-variable name="contentSafetySlice" value='@{
+                var root = context.Request.Body.As&lt;JObject&gt;(preserveContent: true);
+                var newestUserSlice = "";
+                var sysSlice = "";
+                var toolSlice = "";
+                var truncated = false;
+                return new JObject(
+                    new JProperty("userPrompt", newestUserSlice),
+                    new JProperty("documents", new JArray(toolSlice)),
+                    new JProperty("analyzeText", sysSlice + newestUserSlice + toolSlice),
+                    new JProperty("truncated", truncated),
+                    new JProperty("emptyTextSlice", String.IsNullOrEmpty(sysSlice + newestUserSlice + toolSlice))
+                ).ToString(Newtonsoft.Json.Formatting.None);
+            }' />
+            <send-request mode="new" response-variable-name="contentSafetyShieldResponse" timeout="{{content-safety-timeout-seconds}}" ignore-error="true">
+                <set-url>@("{{content-safety-endpoint}}/contentsafety/text:shieldPrompt?api-version=2024-09-01")</set-url>
+                <set-method>POST</set-method>
+                <set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header>
+                <set-body>@{ var s = JObject.Parse((string)context.Variables["contentSafetySlice"]); return new JObject(new JProperty("userPrompt", (string)s["userPrompt"]), new JProperty("documents", (JArray)s["documents"])).ToString(Newtonsoft.Json.Formatting.None); }</set-body>
+                <authentication-managed-identity resource="https://cognitiveservices.azure.com" />
+            </send-request>
+            <send-request mode="new" response-variable-name="contentSafetyAnalyzeResponse" timeout="{{content-safety-timeout-seconds}}" ignore-error="true">
+                <set-url>@("{{content-safety-endpoint}}/contentsafety/text:analyze?api-version=2024-09-01")</set-url>
+                <set-method>POST</set-method>
+                <set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header>
+                <set-body>@{ var s = JObject.Parse((string)context.Variables["contentSafetySlice"]); return new JObject(new JProperty("text", (string)s["analyzeText"]), new JProperty("categories", new JArray("Hate", "Violence", "SelfHarm", "Sexual")), new JProperty("outputType", "FourSeverityLevels")).ToString(Newtonsoft.Json.Formatting.None); }</set-body>
+                <authentication-managed-identity resource="https://cognitiveservices.azure.com" />
+            </send-request>
+            <set-variable name="contentSafetyDecision" value='@{
+                var threshold = (int)context.Variables["contentSafetyThreshold"];
+                var shield = context.Variables.ContainsKey("contentSafetyShieldResponse") ? (IResponse)context.Variables["contentSafetyShieldResponse"] : null;
+                var analyze = context.Variables.ContainsKey("contentSafetyAnalyzeResponse") ? (IResponse)context.Variables["contentSafetyAnalyzeResponse"] : null;
+                if (shield == null || analyze == null || shield.StatusCode &lt; 200 || shield.StatusCode &gt; 299 || analyze.StatusCode &lt; 200 || analyze.StatusCode &gt; 299) { return "unavailable"; }
+                return "pass";
+            }' />
+            <trace source="claude-content-safety" severity="information">
+                <message>content safety request screening</message>
+                <metadata name="mode" value="{{content-safety-mode}}" />
+                <metadata name="decision" value="@((string)context.Variables["contentSafetyDecision"])" />
+                <metadata name="blockedBy" value="@((string)context.Variables["contentSafetyDecision"] == "pass" ? "" : (string)context.Variables["contentSafetyDecision"])" />
+                <metadata name="threshold" value="@(((int)context.Variables["contentSafetyThreshold"]).ToString())" />
+                <metadata name="truncated" value="@(JObject.Parse((string)context.Variables["contentSafetySlice"])["truncated"].ToString())" />
+                <metadata name="hateSeverity" value="0" />
+                <metadata name="violenceSeverity" value="0" />
+                <metadata name="selfHarmSeverity" value="0" />
+                <metadata name="sexualSeverity" value="0" />
+                <metadata name="promptShieldUserAttackDetected" value="@(((string)context.Variables["contentSafetyDecision"] == "prompt_shield_user").ToString())" />
+                <metadata name="promptShieldDocumentAttackDetected" value="@(((string)context.Variables["contentSafetyDecision"] == "prompt_shield_document").ToString())" />
+                <metadata name="contentSafetyStatusCode" value="@(context.Variables.ContainsKey("contentSafetyAnalyzeResponse") ? ((IResponse)context.Variables["contentSafetyAnalyzeResponse"]).StatusCode.ToString() : "0")" />
+                <metadata name="contentSafetyElapsedMs" value="@(((long)(DateTime.UtcNow - (DateTime)context.Variables["contentSafetyStartedAt"]).TotalMilliseconds).ToString())" />
+                <metadata name="contentSafetyErrorClass" value="@((string)context.Variables["contentSafetyDecision"] == "unavailable" ? "service_error" : "")" />
+            </trace>
+            <choose>
+                <when condition='@("{{content-safety-mode}}" == "block" &amp;&amp; (string)context.Variables["contentSafetyDecision"] == "unavailable")'>
+                    <return-response><set-status code="503" reason="Content Safety Unavailable" /><set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header><set-header name="Retry-After" exists-action="override"><value>5</value></set-header><set-body>{"type":"error","error":{"type":"content_safety","message":"Content Safety unavailable"}}</set-body></return-response>
+                </when>
+                <when condition='@("{{content-safety-mode}}" == "block" &amp;&amp; (string)context.Variables["contentSafetyDecision"] != "pass")'>
+                    <return-response><set-status code="403" reason="Forbidden" /><set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header><set-body>{"type":"error","error":{"type":"content_safety","message":"Content Safety blocked the request"}}</set-body></return-response>
+                </when>
+            </choose>
+        </when>
+    </choose>
+</fragment>
+
