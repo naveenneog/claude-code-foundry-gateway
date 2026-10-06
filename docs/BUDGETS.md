@@ -4,8 +4,25 @@ For gateway administrators. This is the operating reference formerly in
 [README: Tuning budgets](../README.md#tuning-budgets). For business-unit dollar
 budgets, start with [Business units](BUSINESS-UNITS.md); for monthly reporting,
 use [FinOps](FINOPS.md). A token allowance is not an invoice cap.
+## Quickstart
+
+The commands run from the repository root in PowerShell 7. The deployment record supplies the gateway target; `developer@contoso.com` is the selected Entra account for a per-person lookup.
+
+```powershell
+$gateway = Get-Content .\onboarding\claude-gateway.json -Raw | ConvertFrom-Json
+$rg = $gateway.resourceGroup
+$apim = $gateway.apimName
+.\scripts\Get-ClaudeBudget.ps1 -ResourceGroup $rg -ApimName $apim
+.\scripts\Get-ClaudeBudget.ps1 -ResourceGroup $rg -ApimName $apim -User 'developer@contoso.com' -AsJson
+```
+
+**Expected result:** the commands show the selected gateway's organisation, tier and user limits. A read-back is configuration evidence; section 5 covers request verification.
 
 ## Dollar budgets: what is enforced
+
+<details>
+
+<summary>Budget details</summary>
 
 The dollar-input scripts now preserve the approved **USD amount and price-book
 date**, as well as their existing approximate token quota. An optional reconciler
@@ -222,7 +239,12 @@ no reference-gateway policy, named value or authority was changed.
 [ADR-0026](adr/0026-usd-budget-reconciliation.md) explains why response-weighted
 APIM counters do not solve complete streaming accounting.
 
+</details>
 ## Prerequisites
+
+<details>
+
+<summary>Budget details</summary>
 
 - A deployed gateway on a v2 tier, and a completed [bypass audit](SETUP.md#42-close-the-bypass).
 - API Management Service Contributor on the gateway to change named values;
@@ -274,7 +296,12 @@ There is no force bypass. To deliberately return ownership to scripts, use
 on the same gateway ([authority switch](TURNSTILE.md#move-governance-back-to-the-gateway)).
 The second switch matters because Connect preserves an existing budget authority.
 
+</details>
 ## Reference: shipped defaults
+
+<details>
+
+<summary>Budget details</summary>
 
 Named values are configuration the policy consumes, not consumed-quota storage.
 Defaults below come from [main.bicep](../infra/main.bicep); an existing deployment
@@ -292,7 +319,12 @@ may have different values.
 | `models-premium` | empty (all) | Premium model allowlist |
 | `calls-per-minute` | 120 | Requests per minute per developer |
 
+</details>
 ## 1. Read the effective limits
+
+<details>
+
+<summary>Budget details</summary>
 
 ```powershell
 ./scripts/Set-ClaudeTier.ps1 -ResourceGroup $rg -ApimName $apim -List
@@ -324,7 +356,12 @@ metrics in `Get-ClaudeBudget.ps1` are not the chargeback ledger or dollars.
 The first page ends at `quota-overrides`; select **Load more** for the tier rows
 (`quota-premium`, `quota-standard`, `tpm-premium`, `tpm-standard`).
 
+</details>
 ## 2. Change a tier or the organisation ceiling
+
+<details>
+
+<summary>Budget details</summary>
 
 ```powershell
 ./scripts/Set-ClaudeTier.ps1 -ResourceGroup $rg -ApimName $apim `
@@ -352,17 +389,22 @@ personal headroom while the organisation is refused. The default is roughly
 twenty premium daily allowances, not a rollout sizing recommendation. Check the
 sum of top-level unit allocations and expected daily burn before expanding.
 
+</details>
 ## 3. Override one person's daily allowance
 
+<details>
+
+<summary>Budget details</summary>
+
 ```powershell
-./scripts/Set-ClaudeBudget.ps1 -ResourceGroup $rg -ApimName $apim -User alice@contoso.com -Tokens 2000000
-./scripts/Get-ClaudeBudget.ps1 -ResourceGroup $rg -ApimName $apim -User alice@contoso.com -AsJson
+./scripts/Set-ClaudeBudget.ps1 -ResourceGroup $rg -ApimName $apim -User developer@contoso.com -Tokens 2000000
+./scripts/Get-ClaudeBudget.ps1 -ResourceGroup $rg -ApimName $apim -User developer@contoso.com -AsJson
 # To return to the tier default:
-./scripts/Set-ClaudeBudget.ps1 -ResourceGroup $rg -ApimName $apim -User alice@contoso.com -Clear
+./scripts/Set-ClaudeBudget.ps1 -ResourceGroup $rg -ApimName $apim -User developer@contoso.com -Clear
 ./scripts/Set-ClaudeBudget.ps1 -ResourceGroup $rg -ApimName $apim -List
 ```
 
-**Portal:** Entra ID > Users > Alice > Overview > Object ID; then APIM >
+**Portal:** Entra ID > Users > the selected developer > Overview > Object ID; then APIM >
 Named values > `quota-overrides`. Add or remove only that `oid=tokens` entry,
 preserving surrounding commas and every other person's entry. The script is
 safer than hand-editing this shared value.
@@ -372,7 +414,12 @@ value: `llm-token-limit` does not accept a per-person expression for
 `tokens-per-minute`. For dollar input use `-DailyUsd` instead of `-Tokens`;
 `-Model` and `-OutputShare` determine its estimated token conversion.
 
+</details>
 ## 4. Restrict models
+
+<details>
+
+<summary>Budget details</summary>
 
 ```powershell
 ./scripts/Set-ClaudeTier.ps1 -ResourceGroup $rg -ApimName $apim -Tier standard -Models claude-sonnet-5
@@ -392,7 +439,12 @@ or `-Tier premium`; deploy it using [Migration: MDM](MIGRATION.md#2-mass-deploym
 The manual equivalent is the registry, managed preferences or settings file in
 that guide; there is no Azure portal switch for a local client setting.
 
+</details>
 ## 5. Verify and troubleshoot
+
+<details>
+
+<summary>Budget details</summary>
 
 Have the affected developer make a fresh request. Successful responses can carry
 `x-org-quota-remaining` and `x-quota-remaining-today`. Inspect a refusal's body:
@@ -430,7 +482,12 @@ multiply `Total Tokens` by a single rate, and do not promise a hard dollar cap.
 Counter behaviour at 500,000 identities is measured, not exact: [Scale](SCALE.md)
 and [U9/U13](UNKNOWNS.md) describe the remaining limits.
 
+</details>
 ## Business-unit and team enforcement modes
+
+<details>
+
+<summary>Budget details</summary>
 
 The platform owner can select a mode for a unit or team independently of its
 base allocation. This does not change who is authorised to manage it.
@@ -488,6 +545,7 @@ does not reconstruct that interval in APIM's counter. The ledger still reports
 usage. The [owner's dated live checks](BUSINESS-UNITS.md#measured-on-the-reference-gateway)
 and [ADR-0019](adr/0019-budget-enforcement-modes.md) state the tested envelope.
 
+</details>
 ## Next steps
 
 - [FinOps monthly close](FINOPS.md) — prices, attribution and reconciliation.
