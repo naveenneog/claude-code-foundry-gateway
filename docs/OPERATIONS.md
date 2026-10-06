@@ -4,8 +4,25 @@ For platform administrators after [Setup](SETUP.md). Start with
 [Architecture](ARCHITECTURE.md) if you need the request path and component map.
 This guide separates resource configuration, directory membership and consumed
 allowances: backing up one does not back up all three.
+## Quickstart
+
+The operator has Reader access to the gateway resources and telemetry query access. The deployment record supplies the target. The examples use `developer@contoso.com` as a selected Entra account when a membership operation is needed.
+
+```powershell
+$gateway = Get-Content .\onboarding\claude-gateway.json -Raw | ConvertFrom-Json
+$rg = $gateway.resourceGroup
+$apim = $gateway.apimName
+.\scripts\Test-ClaudeHealth.ps1 -ResourceGroup $rg -ApimName $apim
+.\scripts\Measure-ClaudeCeiling.ps1 -ResourceGroup $rg -ApimName $apim
+```
+
+**Expected result:** health exits zero and the headroom check reports whether named-value capacity is safe for the selected gateway. A successful control-plane check is not proof of an inference request; [Developer setup](../DEVELOPER.md#using-it) covers request verification.
 
 ## Prerequisites and roles
+
+<details>
+
+<summary>Operational details</summary>
 
 | Task | Required access |
 |---|---|
@@ -21,7 +38,12 @@ Use PowerShell syntax in `powershell` blocks and a POSIX shell in `bash` blocks;
 the continuation characters are not interchangeable. Examples use Contoso
 values: replace them rather than sending requests to an example deployment.
 
+</details>
 ## 1. Select the gateway and workspace
+
+<details>
+
+<summary>Operational details</summary>
 
 Do not copy another deployment's resource names or choose the first search
 result. The examples use placeholders; the live objects come from discovery.
@@ -91,7 +113,12 @@ parameter to pass. Supply explicit parameters for scheduled automation.
 nor config path was supplied. If that file is absent, give it the approved
 client endpoint; it does not infer a direct APIM URL that could bypass an edge.
 
+</details>
 ## 2. Check health and headroom
+
+<details>
+
+<summary>Operational details</summary>
 
 ```powershell
 ./scripts/Test-ClaudeHealth.ps1 -ResourceGroup $rg -ApimName $apim
@@ -112,18 +139,23 @@ it fills. Do not silence the failure or truncate a list. For `401`, `403`,
 `429` or `503`, start with [Troubleshooting](TROUBLESHOOTING.md), then
 [Debugging](DEBUGGING.md) if the failure layer is unknown.
 
+</details>
 ## 3. Choose the day-to-day operation
+
+<details>
+
+<summary>Operational details</summary>
 
 | Task | Script, after selecting the target | Manual or portal path |
 |---|---|---|
-| Add Alice | `scripts/Set-ClaudeDeveloper.ps1 -User alice@contoso.com -Tier standard -Sync` | Entra > Groups > tier > Members; then publish membership as in [Onboarding](ONBOARDING.md) |
-| Remove Alice | `scripts/Set-ClaudeDeveloper.ps1 -User alice@contoso.com -Remove -Sync` | Remove every direct/nested path through tier, team and unit groups, then sync |
+| Add a developer | `scripts/Set-ClaudeDeveloper.ps1 -ResourceGroup $rg -ApimName $apim -User 'developer@contoso.com' -Tier standard -Sync` | [Onboarding](ONBOARDING.md#1-add-a-developer) covers membership and publication |
+| Remove a developer | `scripts/Set-ClaudeDeveloper.ps1 -ResourceGroup $rg -ApimName $apim -User 'developer@contoso.com' -Remove -Sync` | Every effective membership path is removed before verification |
 | Inspect personal limits | `scripts/Get-ClaudeBudget.ps1` | APIM > Named values; [Budgets](BUDGETS.md) explains overrides |
 | Change a tier | `scripts/Set-ClaudeTier.ps1 -Tier standard -DailyQuota 750000` | APIM > Named values; or the Turnstile authority, if enabled |
 | Create a cost centre | `scripts/Set-ClaudeBusinessUnit.ps1 -Id sales -Group claude-bu-sales -MonthlyBudgetUsd 20000` | Entra > Groups, then [Business units](BUSINESS-UNITS.md) or Turnstile > Gateway governance |
 | Inspect unit spend | `scripts/Get-ClaudeBusinessUnit.ps1` | Chargeback workbook; [FinOps](FINOPS.md) |
 | Manage units interactively | `scripts/Manage-ClaudeBusinessUnits.ps1` | Turnstile > Gateway governance / Budgets if connected |
-| Use AUM (Azure Usage Management) | [Terminal console and commands](CLI-FINOPS.md) | Turnstile's web views, or the corresponding Azure blades for direct mode; terminal Members remain read-only |
+| Use AUM (Azure Usage Management) | [Terminal console and commands](AUM.md#install) | Owner membership actions are available for supported Direct/Turnstile gateway configurations; AUM service membership is unavailable |
 | Open a workbook | `scripts/Publish-ClaudeWorkbook.ps1 -List` | Azure Monitor > Workbooks > saved workbook |
 | Reconcile newly deployed models | `Start-ClaudeGateway.ps1 -Action Change -Change models -PlanOnly` with per-deployment answers | Foundry > Models + endpoints, then the reviewed tier lists, price book and client handover; [Models](MODELS.md) |
 | Govern plugins | `scripts/New-ClaudeCodePolicy.ps1` with the selected profile | Intune / Jamf / GPO or local policy files; [Plugins](PLUGINS.md) |
@@ -134,7 +166,12 @@ with a parent. A developer's tier and unit are independent; Entra groups supply
 membership. An *allowance* is a token quota, not money already reconciled to an
 invoice. See [Budgets](BUDGETS.md) for the enforcement limits.
 
+</details>
 ## 4. Back up, change, restore, verify
+
+<details>
+
+<summary>Operational details</summary>
 
 1. Capture configuration before a change:
 
@@ -179,7 +216,12 @@ allowlist. Never restore stale membership as proof of authorisation. The
 [migration guide](MIGRATION.md#4-backing-the-gateway-up-and-putting-it-back)
 also covers client conversation backups and cross-instance limitations.
 
+</details>
 ## 5. Inspect cost and retire only what you own
+
+<details>
+
+<summary>Operational details</summary>
 
 ```powershell
 ./scripts/Get-ClaudeBom.ps1 -ResourceGroup $rg -ApimName $apim -WithPrices
@@ -216,13 +258,23 @@ keeps its globally unique name until purged. Purge is irreversible.
 remain, the old gateway address no longer serves, and Cost analysis shows no
 unexpected continuing usage after billing data arrives.
 
+</details>
 ## Next steps
+
+<details>
+
+<summary>Operational details</summary>
 
 - [Reference](REFERENCE.md) — repository map and contributor checks.
 - [Releasing](RELEASING.md) — versioning and release validation.
 - [Authentication](AUTHENTICATION.md) and [Network](NETWORK.md) — security reviews.
 
+</details>
 ## Live verification record and limits
+
+<details>
+
+<summary>Operational details</summary>
 
 On **2026-09-24 UTC**, the review discovered available subscriptions and Claude
 gateways rather than using a saved deployment name, then selected the default-
@@ -254,3 +306,10 @@ Write/restore/deletion, role/group lifecycle, full client setup, private
 deployment and release procedures were **not rerun by this documentation
 review**. Existing dated evidence is linked in their respective guides; this
 limited read verification must not be used as a blanket live-acceptance receipt.
+
+</details>
+## Next
+
+- [Onboarding](ONBOARDING.md) covers membership and developer handover.
+- [Budgets](BUDGETS.md) covers limits and enforcement caveats.
+- [Troubleshooting](TROUBLESHOOTING.md) covers known failures.
