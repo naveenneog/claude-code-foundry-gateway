@@ -28,12 +28,15 @@ class Items {
     if (params['@accountResourceId']) rows = rows.filter((d) => d.accountResourceId === params['@accountResourceId']);
     if (params['@databaseName']) rows = rows.filter((d) => d.databaseName === params['@databaseName']);
     if (params['@containerName']) rows = rows.filter((d) => d.containerName === params['@containerName']);
-    let done = false;
+    const pages = paginate(rows);
+    let page = 0;
     return {
-      hasMoreResults: () => !done,
+      hasMoreResults: () => page < pages.length,
       fetchNext: async () => {
-        done = true;
-        return { resources: rows };
+        const resources = pages[page] ?? [];
+        log(`fetch-page ${page} rows=${resources.length}`);
+        page++;
+        return { resources };
       },
     };
   }
@@ -146,4 +149,14 @@ export class CosmosClient {
 function withEtag(doc, store) {
   store.etagCounter = (store.etagCounter ?? 0) + 1;
   return { ...doc, _etag: `"${store.etagCounter}"` };
+}
+
+function paginate(rows) {
+  const requested = Number(process.env.FAKE_COSMOS_PAGE_SIZE);
+  const size = Number.isInteger(requested) && requested > 0 ? requested : Math.max(rows.length, 1);
+  const pages = [];
+  if (process.env.FAKE_COSMOS_EMPTY_FIRST_PAGE && rows.length) pages.push([]);
+  for (let i = 0; i < rows.length; i += size) pages.push(rows.slice(i, i + size));
+  if (!pages.length) pages.push([]);
+  return pages;
 }

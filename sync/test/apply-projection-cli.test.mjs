@@ -289,6 +289,98 @@ test('a targeted status older than the full snapshot excludes nothing', () => {
   assert.equal(docs.find((d) => d.oid === target).tier, 'standard');
 });
 
+test('a full apply reads every existing-record page and deletes an orphan on the last page', () => {
+  const target = '33333333-3333-4333-8333-333333333333';
+  const orphan = '55555555-5555-4555-8555-555555555555';
+  const snap = fullSnapshot({
+    verifiedAt: new Date(Date.now() - 60_000).toISOString(),
+    records: [{ oid: target, tier: 'standard', businessUnit: '' }],
+  });
+  const { result, summary, store, log } = runApplyWithFake({
+    name: 'multipage existing deletes last orphan',
+    docs: {
+      [`${target}|${target}`]: { id: target, oid: target, tenantId: tenant, tier: 'standard', businessUnit: '' },
+      [`${orphan}|${orphan}`]: { id: orphan, oid: orphan, tenantId: tenant, tier: 'premium', businessUnit: '' },
+    },
+    snapshot: snap,
+    env: { FAKE_COSMOS_PAGE_SIZE: '1' },
+  });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(summary.deleted, 1);
+  assert.equal(summary.existing, 2);
+  assert.match(readFileSync(log, 'utf8'), /fetch-page 0 rows=1/);
+  assert.match(readFileSync(log, 'utf8'), /fetch-page 1 rows=1/);
+  const docs = Object.values(JSON.parse(readFileSync(store, 'utf8')).docs);
+  assert.equal(docs.some((d) => d.oid === orphan), false);
+});
+
+test('an empty existing-record page with more results does not end the scan early', () => {
+  const target = '33333333-3333-4333-8333-333333333333';
+  const snap = fullSnapshot({
+    verifiedAt: new Date(Date.now() - 60_000).toISOString(),
+    records: [{ oid: target, tier: 'standard', businessUnit: '' }],
+  });
+  const { result, summary, log } = runApplyWithFake({
+    name: 'empty page before existing record',
+    docs: {
+      [`${target}|${target}`]: { id: target, oid: target, tenantId: tenant, tier: 'standard', businessUnit: '' },
+    },
+    snapshot: snap,
+    env: { FAKE_COSMOS_PAGE_SIZE: '1', FAKE_COSMOS_EMPTY_FIRST_PAGE: '1' },
+  });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(summary.existing, 1);
+  assert.equal(summary.unchanged, 1);
+  assert.equal(summary.toWrite, 0);
+  assert.equal(summary.toDelete, 0);
+  const calls = readFileSync(log, 'utf8');
+  assert.match(calls, /fetch-page 0 rows=0/);
+  assert.match(calls, /fetch-page 1 rows=1/);
+  assert.doesNotMatch(calls, new RegExp(`bulk (Upsert|Delete) ${target}`));
+});
+
+test('the stale-change guard reads every status page before planning a full apply', () => {
+  const target = '33333333-3333-4333-8333-333333333333';
+  const otherUser = '44444444-4444-4444-8444-444444444444';
+  const snapshotTime = new Date(Date.now() - 120_000).toISOString();
+  const olderTime = new Date(Date.now() - 600_000).toISOString();
+  const newerTime = new Date(Date.now() - 60_000).toISOString();
+  const snap = fullSnapshot({
+    verifiedAt: snapshotTime,
+    records: [
+      { oid: target, tier: 'standard', businessUnit: '' },
+      { oid: otherUser, tier: 'standard', businessUnit: '' },
+    ],
+  });
+  const olderStatus = statusDoc({
+    generation: 'bbbbbbbb-1111-4111-8111-bbbbbbbbbbbb',
+    mode: 'user',
+    user: otherUser,
+    finishedAt: olderTime,
+  });
+  const newerStatus = statusDoc({
+    generation: 'cccccccc-1111-4111-8111-cccccccccccc',
+    mode: 'user',
+    user: target,
+    finishedAt: newerTime,
+  });
+  const { result, summary, store, log } = runApplyWithFake({
+    name: 'multipage status excludes newer target',
+    docs: {
+      [`${olderStatus.id}|${olderStatus.oid}`]: olderStatus,
+      [`${newerStatus.id}|${newerStatus.oid}`]: newerStatus,
+    },
+    snapshot: snap,
+    env: { FAKE_COSMOS_PAGE_SIZE: '1' },
+  });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(summary.excludedByNewerTargetedSync, 1);
+  assert.match(readFileSync(log, 'utf8'), /fetch-page 1 rows=1/);
+  const docs = Object.values(JSON.parse(readFileSync(store, 'utf8')).docs);
+  assert.equal(docs.some((d) => d.oid === target && d.type !== 'projection-reconciliation-status'), false);
+  assert.equal(docs.find((d) => d.oid === otherUser).tier, 'standard');
+});
+
 function runGraphWithConcurrentStatus({ name, mode }) {
   const dir = join(work, name.replace(/[^a-z0-9]+/gi, '-'));
   rmSync(dir, { recursive: true, force: true });
