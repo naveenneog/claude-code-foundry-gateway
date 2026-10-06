@@ -103,6 +103,7 @@ deployment by hand fails ([P94 status](status/P94.md#p94-the-p86-renewal-job-dep
 | P96 | Merged (`755845c`) on 2026-10-06 with the owner's approval of 2026-10-05, after council round 7 and the packet gate at `c7f93d4` | Fixes from a live deployment: a new business unit identifier with a capital is refused with the lower-case rule before any write, by `Set-ClaudeBusinessUnit.ps1`, the AUM bridge and the manager's prompt; another spelling of a stored unit is refused with the stored spelling, the writers compare identifiers by their characters and keep each spelling's mode and parent entry, and a budget mode is refused for an identifier with capitals, while a unit the registry already holds with capitals keeps working; the guided flow's Tier and Desktop sign-in changes name their snapshot before their write ([P96 status](status/P96.md#p96-fixes-from-a-live-deployment-2026-10-05)). |
 | P97 | On `p97-cosmos-sync`, based on `main` with P96; the owner approved its merge, live testing and architecture decisions on 2026-10-05; merges after its council and packet gate | Cosmos entitlement persists until a sync changes it, and syncs run on demand: records carry no lease and a sync writes only changes; `Sync-ClaudeAccess.ps1 -User` publishes one developer's change; `sync/src/apply-projection.mjs` is the one Cosmos writer, serialised by an apply lock, and refuses stale snapshots; the switch admits on a full sync within 24 hours without the job; the job is optional and manual by default ([ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md), [P97 status](status/P97.md#p97-cosmos-entitlement-persists-until-a-sync-changes-it-2026-10-05)). |
 | P98 | On `p98-installer`, based on P97; the owner approved its merge, live testing and architecture decisions on 2026-10-05; merges with P97 after its council and the packet gate | The installer deploys the Cosmos projection by default: it is the recommended store for every size and `-Yes` chooses it; choosing it deploys, populates, compares and switches the gateway; a re-run migrates a named-value gateway and keeps a projection gateway's resolver access; named values above their capacity are refused; above that capacity the comparison baseline is a fresh Entra snapshot; the resolver is public by default; `-DeploySyncJob` adds the optional job; README, Setup and the projection guide open with a quickstart ([ADR-0052](adr/0052-cosmos-default-installer.md), [P98 status](status/P98.md#p98-the-installer-deploys-the-cosmos-projection-by-default-2026-10-06)) |
+| P99 | Next: starts after P97 and P98 merge | Directory-scale snapshot transfer: the deployer's populate step, the switch's snapshot compare and full syncs move a snapshot of 500,000 developers within its apply-by time, instead of about 40,000 through `az container exec` today ([ADR-0052](adr/0052-cosmos-default-installer.md), [P98 status](status/P98.md#p98-the-installer-deploys-the-cosmos-projection-by-default-2026-10-06)) |
 
 Follow-ups from the P94 council, not yet packets: `sync/package-lock.json` carries `sha1` integrity
 for 50 of its 53 packages because this workstation reaches npm only through a feed whose metadata
@@ -207,6 +208,11 @@ Follow-ups from P98, not yet packets
   create the app first under a predictable prefix and then break the resolver's authentication.
 - The resolver build runs `npm install` without a lockfile or `--ignore-scripts` on the operator's
   machine (`scripts/Deploy-ClaudeProjection.ps1`); the sync package uses `npm ci --ignore-scripts`.
+- The installer's named-value capacity refusal uses the business-unit ceiling (about 93) also on a gateway
+  without business units, where a tier list holds about 110, so an unattended re-run that keeps named values
+  is refused between 94 and 110 developers.
+- The live verifier's teardown does not report a failed `az role assignment list`; the gateway identity is
+  deleted with the resource group, so a leftover assignment grants nothing.
 - `Assert-ClaudeInstallerProjectionPrerequisites` repeats the deployer's PowerShell and tool checks
   (`scripts/ClaudeProjectionChecks.ps1`) instead of reusing them.
 - The installer still accepts `-DeployProjection` and `-FlipProjectionAfterCleanCompare` and ignores
@@ -642,6 +648,9 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       budget and can be removed; the guided flow's Tier and Desktop sign-in changes name their snapshot
       under `backups/` and the write gate takes it
       ([P96 status](status/P96.md#p96-fixes-from-a-live-deployment-2026-10-05))
+- [ ] P99 directory-scale snapshot transfer — acceptance: a snapshot of 500,000 records is applied and compared
+      within its apply-by time, and the switch admits a gateway of that size, measured live; an ADR records
+      the transport ([P98 status](status/P98.md#p98-the-installer-deploys-the-cosmos-projection-by-default-2026-10-06))
 - [ ] P98 the installer deploys the Cosmos projection by default — acceptance: `-Yes` without `-EntitlementStore`
       chooses the projection; choosing it deploys, populates and compares, then switches, and a failure leaves
       the current store serving with the rerun command; `-WhatIf` lists the steps and changes nothing; a

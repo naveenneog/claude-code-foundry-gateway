@@ -188,6 +188,30 @@ Expected result:
 
 Sources: [switch](SECURE-PROJECTION.md#switch-to-the-projection-p95), `scripts/ClaudeProjectionSwitch.ps1`.
 
+## Steps 2 and 4 above named-value capacity
+
+On an existing gateway whose Entra groups hold more developers than its named-value lists can (about 93 in business-unit membership, about 110 per tier list), the lists cannot be refreshed, and a comparison against them refuses. Both commands then take `-CompareBaseline Snapshot`, which compares the projection with a fresh Entra snapshot instead of the lists.
+
+```powershell
+pwsh -NoProfile -File .\scripts\Deploy-ClaudeProjection.ps1 `
+  -SubscriptionId <subscription-id> `
+  -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> `
+  -Location <location> -Sku <sku> -ResolverInboundAccess <public-or-private> `
+  -StandardGroup <standard-group> -PremiumGroup <premium-group> `
+  -CompareBaseline Snapshot
+```
+
+```powershell
+pwsh -NoProfile -File .\scripts\Deploy-ClaudeProjection.ps1 `
+  -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> `
+  -StandardGroup <standard-group> -PremiumGroup <premium-group> `
+  -FlipAfterCleanCompare -CompareBaseline Snapshot
+```
+
+A rollback to named values cannot hold this population. The snapshot travels through the runner at about 1 KB a second: about 40,000 developers fit in its 2-hour apply-by time, and a larger transfer is refused before it starts. ROADMAP packet P99 plans a directory-scale transfer.
+
+Sources: [ADR-0052](adr/0052-cosmos-default-installer.md), `scripts/ClaudeProjectionSwitch.ps1`, `scripts/ClaudeRunner.ps1`.
+
 ## Step 5. Verify requests
 
 What it does: Verification sends requests through the gateway after cutover. The request commands are in [AZ-COMMANDS section 11](AZ-COMMANDS.md#11-verification).
@@ -379,6 +403,9 @@ Sources: [Scale named-value limits](SCALE.md#what-runs-out-first), [rollback con
 | `AADSTS500011` | Entra has no service principal for the resolver application. | The deployer creates it when it runs again; the switch refuses without it. |
 | `InvalidResourceLocation` and `cosmos-<prefix> already exists in location X` | The resource group already holds the projection Cosmos account in another region. | `-Location X`, or another prefix. |
 | `Authorization_RequestDenied` or Graph 403 | The caller or job identity lacks directory read permission. | The Entra administrator grants directory read permission; for the optional job, a Privileged Role Administrator or Global Administrator grants `GroupMember.Read.All`. |
+| `past the snapshot's apply-by time` | The snapshot is too large to send through the runner before its apply-by time (about 40,000 developers). | ROADMAP packet P99 plans a directory-scale transfer; nothing was sent or written. |
+| `This gateway serves entitlement from the projection; the installer does not move it back to named values.` | `-EntitlementStore named-value` on a projection gateway. | The rollback steps in [Rollback to named values](#rollback-to-named-values), or the installer without `-EntitlementStore`. |
+| `Could not read the network access of resolver` | The installer could not read the deployed resolver's `publicNetworkAccess`. | `-ResolverInboundAccess private` or `public`, as the resolver was deployed. |
 | `Could not start runner '<name>' (az exit <code>).` | The runner container group could not be started. | A redeploy with `scripts/Deploy-ClaudeProjection.ps1`, then a new sync. |
 | `Runner '<name>' did not reach Running within <seconds> seconds` | The runner did not reach Running after the start. | `az container show -g <rg> -n <name>` shows its state; a redeploy with `scripts/Deploy-ClaudeProjection.ps1` recreates it. |
 

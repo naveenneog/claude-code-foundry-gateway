@@ -2,7 +2,7 @@
 
 This article explains how Claude Code, the Claude VS Code extension and Claude Desktop use
 the customer's Claude deployment in Microsoft Foundry through Azure API Management. It
-also explains the optional entitlement projection, Turnstile governance console and
+also explains the entitlement projection, which the installer deploys by default, the Turnstile governance console and
 AUM (Azure Usage Management), the terminal FinOps console. It is a concept article; use the linked how-to guides to deploy or
 operate each part.
 
@@ -35,9 +35,10 @@ Source: [01-system.json](architecture/01-system.json).
 | **AUM service (P55)** | Optional Python Functions, keyless Blob/Table state, scoped administrative API and timers. Network, redundancy, warm capacity and telemetry are explicit priced choices. | An independent administrative authority; it refuses gateway writes while Turnstile owns them. It does not proxy inference or make an unimplemented client adapter complete. |
 | **USD budget reconciliation (P21/P59)** | Two preserved named values, a five-minute timer in the optional AUM service, and an on-demand script. | Dated decimal tariffs and observed-category spend become gateway stops. The timer uses the service identity/lease/audit; Direct uses Azure CLI and ETags. Neither writes while Turnstile owns governance. |
 
-Projection and Turnstile are independent options. Turning on one does not imply the other.
-The default deployment has no additional application database, processor or queue, but
-that statement does **not** describe the optional profiles. Use
+The projection and Turnstile are independent. Turning on one does not imply the other.
+The named-values profile adds no application database, processor or queue. The default profile adds
+the projection's Cosmos DB account, resolver Function and runner, and the other profiles add the
+resources in the table. Use
 [`Get-ClaudeBom.ps1`](../scripts/Get-ClaudeBom.ps1) and
 [`Get-ClaudeTurnstileBom.ps1`](../scripts/Get-ClaudeTurnstileBom.ps1) for the resources actually
 deployed, rather than treating an architecture picture as a resource count or price quote.

@@ -44,7 +44,16 @@ exact streaming cache-creation detail remains **U13**.
   network injection are chosen at creation, which the installer does not provision. README, Setup and
   the projection guide open with a quickstart. `scripts/Test-ClaudeLiveProjection.ps1` installs a
   disposable gateway, checks one developer's access through removal and re-adding, and deletes only what
-  the run created
+  the run created. A re-run keeps the store that serves:
+  - on a projection gateway it compares with a fresh snapshot;
+  - it deploys the projection that `entitlement-projection-prefix` records;
+  - it keeps the resolver's network access;
+  - it refuses `-EntitlementStore named-value` with the rollback steps.
+
+  The named-value sync checks every list before its first write, and the drift check no longer reports a
+  one-member list as in sync. A snapshot too large to send through the runner before its apply-by time
+  (about 40,000 developers) is refused before it starts; ROADMAP packet P99 plans a directory-scale
+  transfer. Rerun commands quote every value that is not a plain token
   ([P98 status](docs/status/P98.md#p98-the-installer-deploys-the-cosmos-projection-by-default-2026-10-06)).
 - **P97 Cosmos entitlement persists until a sync changes it, and syncs run on demand.** Projection
   records no longer expire 7,200 seconds after the scan that wrote them; a sync writes only the records

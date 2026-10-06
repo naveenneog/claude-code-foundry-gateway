@@ -146,7 +146,9 @@ with `az acr manifest show-metadata`, then deploys the job with that digest
 permission `GroupMember.Read.All`, granted by a Privileged Role Administrator or Global Administrator
 through `scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1`. Large full syncs through the runner
 are slow because `scripts/ClaudeRunner.ps1` sends files through `az container exec` in chunks under
-5,000 characters.
+5,000 characters, about five seconds each. About 40,000 developers fit in a snapshot's 2-hour apply-by
+time; a transfer that cannot end in time is refused before it starts, and ROADMAP packet P99 plans a
+directory-scale transfer ([ADR-0052](adr/0052-cosmos-default-installer.md)).
 
 The script refuses before any write unless the gateway's `entitlement-projection-prefix` names this
 projection. The job writes records without `expiresAt`, which a resolver published before

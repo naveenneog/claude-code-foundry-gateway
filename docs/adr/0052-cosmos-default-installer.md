@@ -92,3 +92,35 @@ Option 3.
 - Existing projection gateways keep the resolver's live inbound access when `-ResolverInboundAccess` is not passed. A resolver site whose `publicNetworkAccess` is `Disabled` defaults to private on a rerun, and `Enabled` defaults to public.
 - Since P98, `-EntitlementStore projection` in the installer deploys and then switches the projection. `-DeployProjection` and `-FlipProjectionAfterCleanCompare` remain accepted for compatibility but do not alter installer behavior. Staged deployment without switching is the direct deployer command without `-FlipAfterCleanCompare`, followed by the same deployer with `-FlipAfterCleanCompare`.
 - Microsoft Learn states that Premium v2 virtual network injection is selected only when a Premium v2 instance is created and cannot be added to an existing Premium v2 instance ([inject-vnet-v2](https://learn.microsoft.com/azure/api-management/inject-vnet-v2), 2025-10-08). The reliability article states that Standard v2 and Premium v2 support availability-zone resilience and Basic v2 does not ([reliability-api-management](https://learn.microsoft.com/azure/reliability/reliability-api-management), 2026-09-09). The v2 tiers overview lists Standard v2 and Premium v2 virtual network integration options and Premium v2 injection ([v2-service-tiers-overview](https://learn.microsoft.com/azure/api-management/v2-service-tiers-overview), 2026-09-04). This installer creates API Management without zone-redundancy settings and without Premium v2 injection; a gateway that needs those creation-time settings is created first and then reused with `-ExistingApimName`.
+
+## Amended in council round 2, 2026-10-06
+
+- **A re-run keeps the store that serves.**
+  - On a gateway already on the projection, the installer refreshes no named-value lists, which are then
+    an old rollback copy. The deployer's populate step syncs the projection, and both the deployer's
+    compare and the switch compare it with a fresh Entra snapshot.
+  - On a gateway on named values, the installer refreshes the lists with `-Store named-value`.
+    `Sync-ClaudeAccess.ps1` checks every value against the 4,096-character limit before its first write.
+    Above capacity, no list is written, the lists keep serving until the switch, and the comparison uses
+    a fresh snapshot.
+  - A failure names the store that serves.
+- **Named values on a projection gateway are refused.** `-EntitlementStore named-value` on a gateway whose
+  `entitlement-source` is `projection` stops before anything is created, and names the rollback steps
+  ([workbook](../PROJECTION-WORKBOOK.md#rollback-to-named-values)). The installer does not switch a
+  gateway back; this replaces round 1's "unless `-EntitlementStore named-value` is passed explicitly".
+- **A re-run touches the recorded projection.** The installer deploys, switches and names the projection
+  in the gateway's `entitlement-projection-prefix`. `scripts/Deploy-ClaudeProjection.ps1` writes that
+  value, and it need not match the API Management name. The resolver's network access is read strictly:
+  a missing resolver site has none to keep, and any other failed read stops before approval with
+  `-ResolverInboundAccess` as the remedy.
+- **Snapshot transfer limit.**
+  - The deployer's populate step and the switch's snapshot compare send a full snapshot to the
+    in-network runner through `az container exec`: base64url chunks under 5,000 characters, about five
+    seconds each (measured 2026-09-23), so about 1 KB a second.
+  - The exporter writes about 130 bytes per record, so about 40,000 developers fit in the snapshot's
+    2-hour apply-by time.
+  - A transfer estimated to end after that time is refused before the first exec.
+  - A directory above that size cannot complete the installer's projection path or the switch until a
+    directory-scale transfer exists, ROADMAP packet P99.
+- **Rerun commands** single-quote every value that is not a plain token and double every single-quote
+  character, so a pasted line passes the value and runs nothing else.
