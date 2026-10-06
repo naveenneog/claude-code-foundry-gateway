@@ -69,6 +69,7 @@ trap {
 $root = Split-Path $PSScriptRoot -Parent
 . (Join-Path $PSScriptRoot 'ClaudeProjectionChecks.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeProjectionPackage.ps1')
+. (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
 Assert-ClaudeProjectionPowerShell
 
 $guid = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
@@ -186,6 +187,16 @@ if (-not $location) { throw "Could not read the location of $vnetId; the job's e
 $gateway = Invoke-ClaudeNetworkAz @('apim', 'show', '-g', $GatewayResourceGroup, '-n', $ApimName)
 $gatewayId = [string]$gateway.id
 if ($gatewayId -notmatch '/providers/Microsoft\.ApiManagement/service/[^/]+$') { throw "Could not read API Management $ApimName in $GatewayResourceGroup." }
+# ADR-0051: the job writes records without expiresAt, which a resolver published before ADR-0051 refuses.
+# scripts/Deploy-ClaudeProjection.ps1 publishes the current resolver before it records entitlement-projection-prefix,
+# so a gateway that records this prefix serves what the job writes.
+$recordedPrefix = ([string](Get-ApimNamedValue -ResourceGroup $GatewayResourceGroup -ApimName $ApimName -Id 'entitlement-projection-prefix' -FailOnError)).Trim()
+if ($recordedPrefix -cne $NamePrefix) {
+    $recorded = if ($recordedPrefix) { "records projection '$recordedPrefix'" } else { 'has no entitlement-projection-prefix named value' }
+    throw ("API Management $ApimName $recorded, not '$NamePrefix'. The sync job writes records without expiresAt, which only the resolver that " +
+        "scripts/Deploy-ClaudeProjection.ps1 publishes serves. Remedy: rerun scripts/Deploy-ClaudeProjection.ps1 for projection '$NamePrefix' with the " +
+        "parameters it was deployed with, then rerun this script. Nothing was deployed.")
+}
 if (-not $WorkspaceResourceId) {
     $telemetry = & (Join-Path $PSScriptRoot 'Get-ClaudeTelemetry.ps1') -ResourceGroup $GatewayResourceGroup -ApimName $ApimName
     $WorkspaceResourceId = [string]$telemetry.WorkspaceResourceId
