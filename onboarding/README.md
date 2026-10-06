@@ -6,8 +6,17 @@ for your deployment and are not committed to the public repository.
 **Prerequisites:** a deployed gateway, confirmed tier membership and publication,
 and its gateway/tenant values from [Setup](../docs/SETUP.md). Platform operators
 own those Azure/Entra steps; developers only consume the bundle.
+## Quickstart
+
+The distributed bundle contains the deployment's `claude-gateway.json`, the complete `scripts` folder and [Developer setup](../DEVELOPER.md). The generated message contains no configuration or helper attachment. Membership is granted separately by the platform team.
+
+**Expected result:** the developer configures the exact distributed bundle and verifies a pilot request after the relevant client restarts.
 
 ## What lands here
+
+<details>
+
+<summary>Handover details</summary>
 
 `Install-ClaudeGateway.ps1` (or `install-claude-gateway.sh`) writes
 `claude-gateway.json` at the end of a successful deployment:
@@ -46,7 +55,12 @@ described in [Developer setup](../DEVELOPER.md#one-command).
 `New-OnboardingEmail.ps1` then adds one HTML, text and `.eml` file per developer
 you onboard.
 
+</details>
 ## What it is for
+
+<details>
+
+<summary>Handover details</summary>
 
 `claude-gateway.json` is the handover artifact. Distribute it beside the complete
 `scripts` folder, not a lone setup file. Desktop needs the credential helpers
@@ -61,7 +75,12 @@ From the directory containing both, a developer runs:
 and the script reads the gateway URL, tenant and tier limits from it, so they
 type none of them.
 
+</details>
 ## It contains no secret
+
+<details>
+
+<summary>Handover details</summary>
 
 Gateway URL, tenant id, group names, tier limits. All of it is information the
 developer needs, and none of it grants access — **access is Entra group
@@ -72,7 +91,12 @@ So it is safe to email, put on an internal share, or commit to a private
 repository. It is gitignored here only because it is environment-specific and
 would go stale, not because it is sensitive.
 
+</details>
 ## Getting it to developers
+
+<details>
+
+<summary>Handover details</summary>
 
 | How | When |
 |-----|------|
@@ -86,14 +110,24 @@ attachment of the config or helper bundle**. Review before sending.
 scripts bundle and [DEVELOPER.md](../DEVELOPER.md). There is no Azure portal
 button for local bundle distribution.
 
+</details>
 ## Verify the handover
+
+<details>
+
+<summary>Handover details</summary>
 
 Have a pilot developer use the exact distributed bundle, restart each client,
 make a short request and confirm the gateway connection. A successful installer
 does not prove a separately distributed Desktop helper is present or will still
 be present at its next token refresh.
 
+</details>
 ## If you are a developer and do not have this file
+
+<details>
+
+<summary>Handover details</summary>
 
 Ask your platform team — they generated it when they built the gateway. You can
 also skip the file entirely:
@@ -103,3 +137,10 @@ also skip the file entirely:
 ```
 
 Both values are safe to share over chat.
+
+</details>
+## Next
+
+- [Developer setup](../DEVELOPER.md) configures and verifies the workstation.
+- [Onboarding](../docs/ONBOARDING.md) covers entitlement.
+- [Diagnostics](../docs/DIAGNOSE.md) covers support bundles.

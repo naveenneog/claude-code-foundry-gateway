@@ -55,7 +55,8 @@ $EnrolledGuides = @(
   'docs\COMPARISON.md',
   'docs\AI-GATEWAY-TIER.md',
   'docs\REFERENCE.md',
-  'docs\RELEASING.md'
+  'docs\RELEASING.md',
+  'onboarding\README.md'
 )
 
 
