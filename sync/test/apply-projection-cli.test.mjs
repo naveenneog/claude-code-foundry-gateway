@@ -545,7 +545,7 @@ test('an unexpired apply lock times out without writes or status', () => {
   assert.equal(result.status, 3, result.stdout + result.stderr);
   assert.equal(summary.stage, 'lock');
   assert.match(summary.error, /other-run/);
-  assert.match(summary.error, /Remedy: rerun the same command after/);
+  assert.match(summary.error, /Remedy: rerun scripts\/Sync-ClaudeAccess\.ps1 -ResourceGroup <rg> -ApimName <apim>.* after /);
   const docs = Object.values(JSON.parse(readFileSync(store, 'utf8')).docs);
   assert.equal(docs.some((d) => d.oid === target), false);
   assert.equal(docs.some((d) => d.type === 'projection-reconciliation-status'), false);
@@ -632,13 +632,27 @@ test('a renewal failure aborts before the next write and writes no status', () =
   assert.equal(docs.some((d) => d.type === 'projection-reconciliation-status'), false);
 });
 
+test('a snapshot past its apply-by time is refused with the export-and-apply remedy', () => {
+  const target = '33333333-3333-4333-8333-333333333333';
+  const snap = fullSnapshot({ verifiedAt: new Date(Date.now() - 9_000_000).toISOString(), records: [{ oid: target, tier: 'standard', businessUnit: '' }] });
+  const { result, summary } = runApplyWithFake({ name: 'expired snapshot remedy', snapshot: snap });
+  assert.notEqual(result.status, 0, result.stdout + result.stderr);
+  assert.match(summary.error, /snapshot refused/);
+  assert.match(summary.error, /Remedy: rerun scripts\/Sync-ClaudeAccess\.ps1 -ResourceGroup <rg> -ApimName <apim>/);
+});
+
 test('graph mode refuses missing or partial job settings before Azure work', () => {
   const group = '11111111-1111-4111-8111-111111111111';
   const missing = run(['--cosmos', cosmos, '--tenant', tenant, '--account-resource-id', account, '--graph']);
   assert.equal(missing.code, 1);
   assert.match(missing.json.error, /job settings refused/);
   assert.match(missing.json.error, /PROJECTION_ACCOUNT_RESOURCE_ID/);
-  assert.match(missing.json.error, /Remedy: .*Deploy-ClaudeProjectionRenewal\.ps1/);
+  assert.match(missing.json.error, /Remedy: .*Deploy-ClaudeProjectionRenewal\.ps1 -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> -AlertEmail <address>/);
+
+  const badWait = run(['--cosmos', cosmos, '--tenant', tenant, '--account-resource-id', account, '--snapshot', 'unused.json', '--lock-wait-seconds', '99999']);
+  assert.equal(badWait.code, 1);
+  assert.match(badWait.json.error, /Remedy: .*sync\/src\/apply-projection\.mjs --lock-wait-seconds <0-3600>/);
+  assert.doesNotMatch(badWait.json.error, /Sync-ClaudeAccess\.ps1[^.]*--lock-wait-seconds/);
 
   const partial = run(['--cosmos', cosmos, '--tenant', tenant, '--account-resource-id', account, '--graph', '--standard', group]);
   assert.equal(partial.code, 1);

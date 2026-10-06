@@ -44,7 +44,7 @@ export async function acquireApplyLock(container, {
 
 export function validateLockWait(value) {
   if (!Number.isInteger(value) || value < 0 || value > 3600) {
-    throw new Error('--lock-wait-seconds must be an integer from 0 to 3600. Remedy: rerun scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim> with a valid --lock-wait-seconds value.');
+    throw new Error('--lock-wait-seconds must be an integer from 0 to 3600. Remedy: pass sync/src/apply-projection.mjs --lock-wait-seconds <0-3600>, or leave it out for the default of 900 seconds.');
   }
 }
 
@@ -71,7 +71,7 @@ class ApplyLock {
       return true;
     } catch (error) {
       if (isStatus(error, 412) || isStatus(error, 404)) {
-        throw lockError('lost the projection apply lock before the next write; no further writes were made. Remedy: rerun the same command after the current lock holder finishes, or after its stuck lock expires by itself.');
+        throw lockError('lost the projection apply lock before the next write; no further writes were made. Remedy: rerun scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim> (add -User <upn-or-object-id> for one person), or start the sync job again, after the current lock holder finishes or its lease passes.');
       }
       throw error;
     }
@@ -123,7 +123,7 @@ function isExpired(lock, at) {
 }
 
 function timeoutMessage(lock) {
-  return `projection apply lock is held by ${lock?.holder ?? '(unknown)'} in ${lock?.mode ?? '(unknown)'} mode until ${lock?.leaseExpiresAt ?? '(unknown leaseExpiresAt)'}; leaseExpiresAt=${lock?.leaseExpiresAt ?? '(unknown)'}. Remedy: rerun the same command after ${lock?.leaseExpiresAt ?? 'the lease expiry'}; a stuck lock expires by itself at ${lock?.leaseExpiresAt ?? 'the recorded lease expiry'}.`;
+  return `projection apply lock is held by ${lock?.holder ?? '(unknown)'} in ${lock?.mode ?? '(unknown)'} mode until ${lock?.leaseExpiresAt ?? '(unknown leaseExpiresAt)'}; leaseExpiresAt=${lock?.leaseExpiresAt ?? '(unknown)'}. Remedy: rerun scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim> (add -User <upn-or-object-id> for one person), or start the sync job again, after ${lock?.leaseExpiresAt ?? 'the lease expiry'}; a lock left by a stopped run expires by itself at ${lock?.leaseExpiresAt ?? 'the recorded lease expiry'}.`;
 }
 
 function lockError(message) {

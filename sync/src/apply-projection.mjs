@@ -139,7 +139,7 @@ async function resolveMembership() {
       ? validateTargetedSnapshot(snap, userOid, { tenantId })
       : validateSnapshot(snap, { tenantId });
     if (!userOid && snap.scope === 'user') problems.push('pass --user <oid> to apply a targeted snapshot');
-    if (problems.length) fail(`snapshot refused: ${problems.join('; ')}`);
+    if (problems.length) fail(`snapshot refused: ${problems.join('; ')}. ${userOid ? userRerunRemedy : rerunRemedy}`);
     return { records: snap.records, mappingVersion: snap.mappingVersion, source: `snapshot ${snap.generatedAt}`,
       scope: userOid ? 'user' : 'full',
       reconciliation: { reconciliationGeneration: snap.reconciliationGeneration, lastVerifiedAt: snap.lastVerifiedAt, expiresAt: snap.expiresAt } };
@@ -273,7 +273,7 @@ if (opt('--compare-snapshot')) {
   const it = containerRef().items.query('SELECT c.id, c.oid, c.tier, c.businessUnit, c.tenantId, c.reconciliationGeneration, c.lastVerifiedAt, c.expiresAt, c.type FROM c WHERE NOT IS_DEFINED(c.type)', { maxItemCount: 1000 });
   while (it.hasMoreResults()) { const { resources } = await it.fetchNext(); records.push(...(resources ?? [])); }
   const comparison = compareWithSnapshot(snap, records, { tenantId });
-  if (comparison.refused) fail(`snapshot refused: ${comparison.problems.join('; ')}`, 2);
+  if (comparison.refused) fail(`snapshot refused: ${comparison.problems.join('; ')}. Remedy: rerun the switch or the deployer, which exports a fresh snapshot before it compares.`, 2);
   const byKind = comparison.differences.reduce((a, d) => ({ ...a, [d.kind]: (a[d.kind] ?? 0) + 1 }), {});
   console.log(JSON.stringify({ ok: comparison.differences.length === 0, mode: 'compare-snapshot', compared: comparison.compared, projectionRecords: records.length, differences: comparison.differences.length, byKind, sample: comparison.differences.slice(0, 20), seconds: (Date.now() - started) / 1000 }));
   process.exit(comparison.differences.length ? 4 : 0);

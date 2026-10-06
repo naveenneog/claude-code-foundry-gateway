@@ -696,8 +696,12 @@ own identity, which can write only this container.
 ```powershell
 ./scripts/Sync-ClaudeProjection.ps1 -Account cosmos-<prefix> -ApimName <apim> -ResourceGroup <rg> -ExportPath snapshot.json
 $accountResourceId = az cosmosdb show -n cosmos-<prefix> -g <rg> --query id -o tsv
-# then, in the runner:
-node /work/sync/src/apply-projection.mjs --cosmos https://cosmos-<prefix>.documents.azure.com:443/ --tenant <tenant-id> --account-resource-id $accountResourceId --snapshot /work/snapshot.json
+# The runner holds the sync package as SECURE-PROJECTION section 8 prepares it. The id expands
+# here, before the command reaches the runner.
+. ./scripts/ClaudeRunner.ps1
+Send-RunnerFile -ResourceGroup <rg> -Name aci-projtest-<prefix> -Path .\snapshot.json -Destination /work/snapshot.json
+Invoke-RunnerCommand -ResourceGroup <rg> -Name aci-projtest-<prefix> -Command `
+    "node /work/sync/src/apply-projection.mjs --cosmos https://cosmos-<prefix>.documents.azure.com:443/ --tenant <tenant-id> --account-resource-id $accountResourceId --snapshot /work/snapshot.json"
 ```
 
 `-ApimName` and `-ResourceGroup` make the projection assign business units from

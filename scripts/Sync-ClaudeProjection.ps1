@@ -61,7 +61,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 if ($PSVersionTable.PSVersion.Major -lt 7) { throw 'Projection sync requires PowerShell 7 or later; run in pwsh.' }
-if ($User -and -not $ExportPath) { throw '-User requires -ExportPath because targeted sync is applied from a snapshot.' }
+if ($User -and -not $ExportPath) { throw '-User requires -ExportPath because targeted sync is applied from a snapshot. Remedy: run scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim> -User <upn-or-object-id>, which exports and applies it, or pass -ExportPath <file>.' }
 if (-not $ExportPath) {
     throw ('Sync-ClaudeProjection.ps1 only resolves membership into a snapshot file (ADR-0051 amendment 2): ' +
         'sync/src/apply-projection.mjs is the one Cosmos writer, because it takes the apply lock and records each sync. ' +
@@ -81,7 +81,7 @@ function Resolve-ClaudeProjectionUserObjectId {
     $guid = '^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$'
     if ($Identity -match $guid) { return $Identity.ToLowerInvariant() }
     if ($Identity -notmatch "^[A-Za-z0-9.!#`$%&'*+/=?^_``{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$") {
-        throw '-User must be an object id GUID or a valid user principal name.'
+        throw '-User must be an object id GUID or a valid user principal name. Remedy: pass the user''s object id or user principal name, for example -User dev@contoso.com.'
     }
     $encoded = [uri]::EscapeDataString($Identity)
     $user = Invoke-ClaudeGraphRead -Uri "https://graph.microsoft.com/v1.0/users/${encoded}?`$select=id" -Token $Token
@@ -252,7 +252,7 @@ $generation = [guid]::NewGuid().ToString()
 $verifiedAt = $scanStarted.ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
 $expiresAt = $scanStarted.ToUnixTimeSeconds() + $MaxAgeSeconds
 if ($expiresAt -le [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) {
-    throw 'Directory scan outlived the snapshot apply-by limit. Nothing exported; resolve again.'
+    throw 'Directory scan outlived the snapshot apply-by limit. Nothing exported; resolve again. Remedy: rerun this command; a directory whose scan takes longer than -MaxAgeSeconds (at most 7200) is synced by the optional job, scripts/Deploy-ClaudeProjectionRenewal.ps1.'
 }
 Step 'Writing the snapshot'
 $snapshot = [ordered]@{

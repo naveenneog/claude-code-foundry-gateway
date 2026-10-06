@@ -219,7 +219,7 @@ export function normalizeJobSettings(settings = {}) {
 }
 
 export function validateJobSettings(env = {}) {
-  const remedy = 'Remedy: redeploy with scripts/Deploy-ClaudeProjectionRenewal.ps1.';
+  const remedy = 'Remedy: redeploy the job with scripts/Deploy-ClaudeProjectionRenewal.ps1 -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> -AlertEmail <address>.';
   const problems = [];
   const objectId = (value) => GUID.test(value ?? '');
   const apimId = (value) => typeof value === 'string' &&

@@ -43,7 +43,7 @@ test('an unexpired apply lock waits only to the bounded timeout and names the re
       assert.equal(error.stage, 'lock');
       assert.match(error.message, /other-run/);
       assert.match(error.message, /leaseExpiresAt/);
-      assert.match(error.message, /Remedy: rerun the same command after/);
+      assert.match(error.message, /Remedy: rerun scripts\/Sync-ClaudeAccess\.ps1 -ResourceGroup <rg> -ApimName <apim>.* after /);
       return true;
     },
   );
@@ -142,7 +142,7 @@ test('a lost renewal fails at the lock stage before the caller writes more', asy
     (error) => {
       assert.equal(error.stage, 'lock');
       assert.match(error.message, /lost the projection apply lock/);
-      assert.match(error.message, /Remedy:/);
+      assert.match(error.message, /Remedy: rerun scripts\/Sync-ClaudeAccess\.ps1 -ResourceGroup <rg> -ApimName <apim>/);
       return true;
     },
   );

@@ -85,7 +85,9 @@ function Invoke-TargetedExportFixture {
 }
 
 Capture { & (Join-Path $root 'scripts\Sync-ClaudeProjection.ps1') -Account cosmos-p97 -User dev@contoso.com }
-Assert 'targeted export refuses User without ExportPath' ($CapturedError -match '-User requires -ExportPath') $CapturedError
+Assert 'targeted export refuses User without ExportPath and names the command that exports and applies' ($CapturedError -match '-User requires -ExportPath' -and $CapturedError -match 'Remedy: run scripts/Sync-ClaudeAccess\.ps1 -ResourceGroup <rg> -ApimName <apim> -User') $CapturedError
+$exporter = [IO.File]::ReadAllText((Join-Path $root 'scripts\Sync-ClaudeProjection.ps1'))
+Assert 'an invalid -User and a scan past the apply-by time name their remedy' ($exporter -match "-User must be an object id GUID or a valid user principal name\. Remedy: " -and $exporter -match 'Nothing exported; resolve again\. Remedy: rerun ') $exporter.Length
 
 # ADR-0051 amendment 2: sync/src/apply-projection.mjs is the one Cosmos writer, so the exporter
 # refuses a run with no -ExportPath before it signs in, reads Graph or contacts Cosmos.
