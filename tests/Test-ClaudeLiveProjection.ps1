@@ -27,6 +27,19 @@ $syncStub = Join-Path $work 'Sync-ClaudeAccess.ps1'
     '$global:Live.Calls.Add("sync $ResourceGroup $ApimName -User $User")'
     '$global:Live.Synced = $global:Live.Member'
 ) -join "`n"), [Text.UTF8Encoding]::new($false))
+$updateStub = Join-Path $work 'Update-ClaudeGateway.ps1'
+# The update stub: a plan returns the 0004 plan the global state describes; an apply with its fingerprint switches.
+[IO.File]::WriteAllText($updateStub, (@(
+    'param($ResourceGroup, $ApimName, [switch]$Apply, $ApprovedPlanFingerprint)'
+    'if (-not $Apply) {'
+    '    $global:Live.Calls.Add("update plan $ResourceGroup $ApimName")'
+    '    $plan = [pscustomobject]@{ Step = ''0004-entitlement-projection''; Actions = @($global:Live.UpdateActions); Data = @{ Blocked = $global:Live.UpdateBlocked } }'
+    '    return [pscustomobject]@{ Plans = @($plan); Fingerprint = (''f'' * 64); SnapshotPath = '''' }'
+    '}'
+    '$global:Live.Calls.Add("update apply $ResourceGroup $ApimName fp=$ApprovedPlanFingerprint")'
+    'if ($ApprovedPlanFingerprint -ne (''f'' * 64)) { throw ''Approved plan fingerprint does not match.'' }'
+    '$global:Live.Source = ''projection''; $global:Live.EntitlementGroups = ''standard=00000000-0000-4000-8000-0000000000b1,premium=00000000-0000-4000-8000-0000000000b2'''
+) -join "`n"), [Text.UTF8Encoding]::new($false))
 $user = '00000000-0000-4000-8000-0000000000aa'
 $sub = '00000000-0000-4000-8000-000000000001'
 $appId = '00000000-0000-4000-8000-0000000000d1'
@@ -48,6 +61,9 @@ function Reset-Live([string]$Source = 'projection', [bool]$ResourceGroupExists =
         AppDisplayNames = @{ $appId = 'claude-projection-resolver-p98live'; $otherAppId = 'claude-projection-resolver-p98live-other' }
         DeleteFailures = @{}
         InitialSubscription = '00000000-0000-4000-8000-000000000099'
+        UpdateActions = @('Create Microsoft.DocumentDB/databaseAccounts cosmos-p98live')
+        UpdateBlocked = $false
+        EntitlementGroups = ''
     }
 }
 function Add-SubscriptionCheck([string]$line) {
@@ -75,6 +91,7 @@ function az {
         '^apim nv show .*--named-value-id entitlement-source .* --subscription ' { return $global:Live.Source }
         '^apim nv show .*--named-value-id entitlement-projection-prefix .* --subscription ' { return 'p98live' }
         '^apim nv show .*--named-value-id entitlement-resolver-audience .* --subscription ' { return $global:Live.ResolverAudience }
+        '^apim nv show .*--named-value-id entitlement-groups .* --subscription ' { return $global:Live.EntitlementGroups }
         '^apim nv show .*--named-value-id models-standard .* --subscription ' { return ',claude-haiku-4-5,claude-sonnet-5,' }
         '^apim nv update .*--named-value-id entitlement-cache-seconds --value 60 --subscription ' { return }
         '^apim show .*--query gatewayUrl .* --subscription ' { return 'https://apim-p98live.azure-api.net' }
@@ -154,6 +171,22 @@ try {
     Reset-Live -Source 'named-value'; Invoke-Verifier
     Assert 'a gateway the installer left on named values fails the run, sends no request, and is still torn down' ($Exit -eq 1 -and $Output -match '"step":\s*"switch"' -and
         (At '^request ') -lt 0 -and (At '^az group delete --name rg-p98-live') -ge 0) "$Exit | $($global:Live.Calls -join ' ; ')"
+
+    # P100: -MigrateWithUpdate installs on named values and moves the gateway with the update's plan and apply alone.
+    Reset-Live -Source 'named-value'; Invoke-Verifier @{ MigrateWithUpdate = $true; UpdatePath = $updateStub }
+    $order = @((At '^installer rg-p98-live p98live BasicV2 EntitlementStore=named-value yes=True claude-p98-std claude-p98-prm'), (At 'entitlement-source'),
+        (At '^request https://apim-p98live\.azure-api\.net/claude/v1/messages claude-haiku-4-5'), (At '^update plan rg-p98-live apim-p98live$'),
+        (At "^update apply rg-p98-live apim-p98live fp=$('f' * 64)$"), (At '^az apim nv show .*entitlement-groups'),
+        (At '^az apim nv update .*entitlement-cache-seconds --value 60'), (At '^az ad group member remove'))
+    Assert 'with -MigrateWithUpdate: named values serve a 200 first, then the update plans and applies with its fingerprint, the switch and the recorded groups are checked, then the projection serves' (
+        -not $Failure -and $Exit -ne 1 -and ($order -notcontains -1) -and (@(0..($order.Count - 2) | Where-Object { $order[$_] -lt $order[$_ + 1] }).Count -eq ($order.Count - 1)) -and
+        $Output -match '"step":\s*"entitled request on named values"' -and $Output -match '"step":\s*"update plan"' -and $Output -match '"step":\s*"update apply"' -and
+        $Output -match '"step":\s*"groups recorded"' -and $Output -match '"step":\s*"re-added, then targeted sync"' -and $Output -notmatch '"ok":\s*false') "$Failure | $($order -join ',') | $($global:Live.Calls -join ' ; ')"
+    Reset-Live -Source 'named-value'; $global:Live.UpdateBlocked = $true; Invoke-Verifier @{ MigrateWithUpdate = $true; UpdatePath = $updateStub }
+    Assert 'with -MigrateWithUpdate a blocked plan fails the run, applies nothing, and is still torn down' ($Exit -eq 1 -and $Output -match '"step":\s*"update plan"' -and
+        (At '^update apply') -lt 0 -and (At '^az group delete --name rg-p98-live') -ge 0) "$Exit | $($global:Live.Calls -join ' ; ')"
+    Reset-Live -Source 'named-value'; $global:Live.UpdateActions = @(); Invoke-Verifier @{ MigrateWithUpdate = $true; UpdatePath = $updateStub }
+    Assert 'with -MigrateWithUpdate a plan with no move fails the run and applies nothing' ($Exit -eq 1 -and (At '^update apply') -lt 0) "$Exit | $($global:Live.Calls -join ' ; ')"
 
     Reset-Live -ResourceGroupExists $true; Invoke-Verifier
     Assert 'an existing resource group stops the run, names the remedy, and deletes nothing' ($Exit -eq 1 -and $Output -match 'already exists' -and $Output -match 'Remedy: omit -ResourceGroup' -and
