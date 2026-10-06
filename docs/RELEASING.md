@@ -3,8 +3,22 @@
 `CHANGELOG.md` is the release record. `tests/Test-ReleaseLog.ps1` enforces its
 shape and runs in the normal suite, so a malformed changelog fails the build
 rather than being noticed later by a reader.
+## Quickstart
+
+Release validation starts with a clean intended tree and a release-log check. Publishing still requires the complete retained release procedure and approval.
+
+```powershell
+git status --short
+.\tests\Test-ReleaseLog.ps1
+```
+
+**Expected result:** the working tree contains only intended release edits, and the release log/tag relationships are valid. A failed check blocks publication.
 
 ## Prerequisites
+
+<details>
+
+<summary>Release details</summary>
 
 Repository release/tag permission, an approved release branch/commit, Git and
 the tools required by [Contributor checks](REFERENCE.md#contributor-checks).
@@ -12,7 +26,12 @@ Start from a clean checkout and fetch tags. Resolve release-blocking unknowns
 in the engineering record; do not lower a gate to publish.
 There is no Azure portal action that releases this repository.
 
+</details>
 ## Cutting a release
+
+<details>
+
+<summary>Release details</summary>
 
 1. Move the entries out of `## [Unreleased]` into a new
    `## [x.y.z] - YYYY-MM-DD` heading, newest first.
@@ -54,7 +73,12 @@ choose the already-validated tag, review notes and publish. It does not replace
 the local gate or approve a deployment. The Azure portal only operates the
 deployed gateway.
 
+</details>
 ## Verify and troubleshoot
+
+<details>
+
+<summary>Release details</summary>
 
 Check the remote tag and release resolve to the gated commit, all release-note
 links open, and no generated config, credentials or unredacted images are in the
@@ -62,7 +86,12 @@ release. If `Test-ReleaseLog` reports an unreachable tag, inspect the branch/tag
 relationship instead of rewriting published history. If Test-All finishes
 unexpectedly early, read its full summary: all registered checks must run.
 
+</details>
 ## What the test enforces
+
+<details>
+
+<summary>Release details</summary>
 
 | Rule | Why |
 |---|---|
@@ -78,7 +107,12 @@ unexpectedly early, read its full summary: all registered checks must run.
 Each of these was negative-tested by breaking the changelog and confirming the
 test fails.
 
+</details>
 ## Version numbers
+
+<details>
+
+<summary>Release details</summary>
 
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). For an accelerator,
 the practical reading is:
@@ -92,13 +126,19 @@ A behaviour change that makes something fail where it used to pass silently is
 not a bug fix from the caller's point of view. Record it under `Changed` and say
 so plainly — v1.5.0 has an example.
 
+</details>
 ## Known limitations
+
+<details>
+
+<summary>Release details</summary>
 
 `Known limitation` is not part of Keep a Changelog, and is used here for
 behaviour that is documented, measured, and not yet fixed — the sort of thing a
 reader needs before they trust a number. v1.5.0 records that the per-user token
 budget does not count cache tokens, and by how much.
 
+</details>
 ## Next steps
 
 [Operations](OPERATIONS.md#4-back-up-change-restore-verify) covers customer

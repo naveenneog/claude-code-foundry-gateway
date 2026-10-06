@@ -113,3 +113,8 @@ Revisit when the tier enforces budgets per Entra principal, which its release no
 coming: that removes the main reason to keep identity in front of it.
 
 </details>
+## Next
+
+- [Comparison](COMPARISON.md) covers the gateway options.
+- [Setup](SETUP.md) covers the shipped deployment path.
+

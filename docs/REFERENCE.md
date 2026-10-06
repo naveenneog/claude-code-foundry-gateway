@@ -4,6 +4,15 @@ Run commands from the repository root unless a procedure changes directories.
 For parameter descriptions use `Get-Help .\scripts\<name>.ps1 -Full`, or read
 the script's top-level `param()` block. There is no Azure portal view of local
 script parameters. [Operations](OPERATIONS.md) maps tasks to portal actions.
+## Quickstart
+
+Script help is the fastest reference for a command's supported arguments. Commands are repository-root relative unless their procedure names another directory.
+
+```powershell
+Get-Help .\scripts\Test-ClaudeHealth.ps1 -Full
+```
+
+**Expected result:** PowerShell prints the command help and parameters. When comment help is incomplete, the script's top-level `param()` block is authoritative.
 
 ## Repository layout
 
@@ -89,6 +98,10 @@ not a safe default for customer traffic. Read the
 
 ## Contributor checks
 
+<details>
+
+<summary>Contributor reference details</summary>
+
 ```powershell
 pwsh -NoProfile -File .\tests\Test-All.ps1
 pwsh -NoProfile -File .\tests\Test-All.ps1 -IncludeAzure
@@ -149,6 +162,7 @@ before running a real command. Filter Azure CLI JSON in PowerShell, or use
 Check exit status: error text is a nonempty string, not evidence of success.
 `tests/Test-AzArguments.ps1` guards repository scripts.
 
+</details>
 ## Next steps
 
 - [Releasing](RELEASING.md) — tags, changelog and release gate.
