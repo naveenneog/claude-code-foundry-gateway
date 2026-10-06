@@ -256,7 +256,19 @@ Assert 'both runner steps use the checked result parser: the apply in the deploy
 Assert 'projection sync rejects PS 5.1 explicitly' ($sync -match 'Assert-ClaudeProjectionPowerShell|PSVersion.*-lt 7' -and $sync -match 'pwsh|ClaudeProjectionChecks')
 $installerModule = Join-Path $root 'scripts\ClaudeInstallProjection.ps1'
 $installerAll = $installer + $(if (Test-Path -LiteralPath $installerModule) { Get-Content -LiteralPath $installerModule -Raw } else { '' })
-Assert 'installer still forwards a supplied resolver app to the deployer' ($installer -match 'ProjectionResolverAppId' -and $installerAll -match "'-ResolverAppId'")
+# The call site is read from the parse tree, so a comment cannot satisfy it. Test-ClaudeInstallProjection
+# checks that the helper passes the id on to the deployer as -ResolverAppId.
+$installerTree = [Management.Automation.Language.Parser]::ParseInput($installer, [ref]$null, [ref]$null)
+$projectionCall = $installerTree.Find({ param($n) $n -is [Management.Automation.Language.CommandAst] -and $n.GetCommandName() -eq 'Invoke-ClaudeInstallerProjectionDeployment' }, $true)
+$forwardsResolverApp = $false
+if ($projectionCall) {
+    $elements = $projectionCall.CommandElements
+    for ($i = 0; $i -lt $elements.Count - 1; $i++) {
+        if ($elements[$i] -is [Management.Automation.Language.CommandParameterAst] -and $elements[$i].ParameterName -eq 'ProjectionResolverAppId' -and
+            $elements[$i + 1] -is [Management.Automation.Language.VariableExpressionAst] -and $elements[$i + 1].VariablePath.UserPath -eq 'ProjectionResolverAppId') { $forwardsResolverApp = $true }
+    }
+}
+Assert 'installer still forwards a supplied resolver app to the deployer' ($installer -match '\[string\]\$ProjectionResolverAppId' -and $forwardsResolverApp)
 Assert 'installer asks for no renewal evidence; the switch checks sync evidence after deployment' ($installer -notmatch 'P86 admission requires|ProjectionReconcilerResourceId|ProjectionRenewalImageDigest|ProjectionRenewalActionGroupResourceId')
 Assert 'flow switches to the projection only through the shared switch; its own write is the rollback' ($flow -match "(?s)if \(\`$Plan\.Data\.Desired -eq 'projection'\) \{.*?Invoke-ClaudeProjectionSwitch .*?-Backup \`$snapshotGate.*?\}\s*else \{.*?Set-ApimNamedValue" -and
     ([regex]::Matches($flow, 'Set-ApimNamedValue')).Count -eq 1)

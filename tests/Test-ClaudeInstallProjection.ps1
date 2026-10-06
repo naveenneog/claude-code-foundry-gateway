@@ -120,6 +120,12 @@ $warnings = @(Invoke-ClaudeInstallerSyncJobDeployment -Root $root -ResourceGroup
     -AlertEmail 'ops team@contoso.example' -SubscriptionId 00000000-0000-4000-8000-000000000001 -InvokeScript { param($ScriptPath, $Arguments) $calls.Add([pscustomobject]@{ Path = $ScriptPath; Args = $Arguments }); 9 } 3>&1)
 Assert 'a failed optional sync job returns false and warns with the full quoted rerun command' (($warnings -contains $false) -and (($warnings | Out-String) -match "-StandardGroup 'std group'" -and ($warnings | Out-String) -match "-SubscriptionId 00000000-0000-4000-8000-000000000001" -and ($warnings | Out-String) -match "-AlertEmail 'ops team@contoso.example'")) (($warnings | Out-String) + ($calls | ConvertTo-Json -Depth 5))
 $failedStep = Get-ClaudeInstallerProjectionNextSteps -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 -StandardGroup 'std group' -PremiumGroup prem -SubscriptionId 00000000-0000-4000-8000-000000000001 -SyncJobStatus failed
+$calls.Clear()
+$resolverApp = '11111111-2222-4333-8444-555555555555'
+$null = Invoke-ClaudeInstallerProjectionDeployment -Root $root -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 `
+    -Location eastus2 -Sku BasicV2 -ResolverInboundAccess public -StandardGroup std -PremiumGroup prem -ProjectionResolverAppId $resolverApp -InvokeScript $record
+Assert 'a supplied resolver app reaches the deployer as -ResolverAppId' ($calls.Count -eq 2 -and (& $named $calls[0] '-ResolverAppId') -eq $resolverApp) ($calls | ConvertTo-Json -Depth 5)
+
 # Every argument the installer passes reaches a parameter of the real deployer, with a value that parameter's
 # fixed set allows. The live run of 2026-10-06 failed when the deployer's arguments bound by position, so
 # the name prefix reached -Sku; this reads the real scripts' parameter blocks, not a copy of them.
