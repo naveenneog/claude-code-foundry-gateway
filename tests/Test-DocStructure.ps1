@@ -24,6 +24,7 @@ $PermanentReferenceExceptions = @{
 
 $EnrolledGuides = @(
   'README.md',
+  'docs\SETUP.md',
   'docs\BUSINESS-UNITS.md',
   'docs\DECISIONS.md',
   'docs\AUTHENTICATION.md',
@@ -70,7 +71,8 @@ function Assert-Condition([bool]$Condition, [string]$Message) { if (-not $Condit
 
 function Get-GuidePaths {
 
-  $paths = @('README.md','DEVELOPER.md',
+  $paths = @('README.md',
+  'docs\SETUP.md','DEVELOPER.md',
   'docs\GET-STARTED.md',
   'docs\ONBOARDING.md',
   'docs\SCALE.md',
@@ -263,7 +265,7 @@ function Test-GuideStructure([string]$Path, [string]$Text, [bool]$Enrolled) {
 
 
 
-  $terminalNames = @('Next','Next steps','Related','See also','Verify and next steps','9. Next','Related guides','Troubleshoot and next steps','License')
+  $terminalNames = @('Next','Next steps','Related','See also','Verify and next steps','9. Next','Related guides','Troubleshoot and next steps','License','5. Next')
 
   $terminalIndex = -1
   for ($i=0; $i -lt $sections.Count; $i++) { if ($terminalNames -contains $sections[$i].Title) { $terminalIndex = $i } }
