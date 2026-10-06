@@ -39,15 +39,24 @@ exact streaming cache-creation detail remains **U13**.
   `-Store auto` follows the gateway's `entitlement-source`. `sync/src/apply-projection.mjs` is the one
   Cosmos writer: every apply that writes takes a lease lock in the container, reads records and sync
   statuses inside it, requires `--account-resource-id`, and refuses a snapshot older than a sync that
-  already covered it; a full sync leaves alone the people a newer targeted sync changed. Every refusal
-  names a remedy. `scripts/Sync-ClaudeProjection.ps1` only exports snapshots; its direct Cosmos writes,
+  already covered it, or past its apply-by time when the first write is due; a full sync leaves alone the
+  people a newer targeted sync changed, and `Sync-ClaudeAccess.ps1` prints how many. Every refusal names a
+  remedy, which `Sync-ClaudeAccess.ps1` and the deployer show with the stage that refused. No Cosmos query
+  filters on a path the container does not index: status reads query only the status partition. The
+  container sets `defaultTtl: -1`, so records and the lock never expire and status records expire after
+  seven days. The resolver refuses any document that carries a `type`, and `--tenant` must be a GUID,
+  stored in lower case. `scripts/Sync-ClaudeProjection.ps1` only exports snapshots; its direct Cosmos writes,
   `-AllowEmpty` and `-KeepOrphans` are removed. The switch (`scripts/Deploy-ClaudeProjection.ps1
   -FlipAfterCleanCompare`) admits a gateway on a successful full sync within 24 hours for its Cosmos
   account and tenant, with no record the resolver would refuse; it needs no job and no receipt. The sync
   job is optional and manual unless `-CronExpression` is passed. The runner starts when it has stopped.
   The deployer creates the resolver's service principal, refuses a `-Location` other than an existing
   Cosmos account's, compares a new gateway with the snapshot it applied, and records
-  `entitlement-projection-prefix`, also on a gateway that served from a projection before P97
+  `entitlement-projection-prefix`, also on a gateway that served from a projection before P97; the
+  renewal deployer refuses until that named value names its projection, because the job's records carry no
+  `expiresAt` and an older resolver refuses them. `docs/PROJECTION-WORKBOOK.md` gives the manual steps,
+  quickstart first, and `tests/Test-DocMarkdown.ps1` refuses masked `Authorization` headers and fenced
+  blocks inside table rows in every tracked markdown file
   ([P97 status](docs/status/P97.md#p97-cosmos-entitlement-persists-until-a-sync-changes-it-2026-10-05)).
 - **P95 the projection switch runs end to end.** `Invoke-ClaudeProjectionSwitch`
   (`scripts/ClaudeProjectionSwitch.ps1`) takes the renewal receipt and checks every value in it

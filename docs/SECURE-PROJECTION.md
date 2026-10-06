@@ -122,6 +122,12 @@ through `scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1`. Large full syncs
 are slow because `scripts/ClaudeRunner.ps1` sends files through `az container exec` in chunks under
 5,000 characters.
 
+The script refuses before any write unless the gateway's `entitlement-projection-prefix` names this
+projection. The job writes records without `expiresAt`, which a resolver published before
+[ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md) refuses; `scripts/Deploy-ClaudeProjection.ps1`
+publishes the current resolver before it records the prefix. A job deployed before ADR-0051 keeps its
+older image, which writes `expiresAt` and takes no apply lock, until this script runs again.
+
 The optional job still deploys its registry, image, identity, action group, diagnostic setting and
 alerts. Failed-run and Graph-denied alerts always exist; the stale-success alert is emitted only when
 a schedule is configured. Switch evidence does not read the job definition, image digest, action

@@ -183,6 +183,18 @@ Follow-ups from P97, not yet packets
   over a live lease, and the holder's next renewal then stops it.
 - `tests/Test-ProjectionPreflightNegative.ps1` is not registered in Test-All, and some of its anchors no
   longer exist (for example `-FailOnDrift:$true` in the deployer).
+- A snapshot's scan time (`lastVerifiedAt`) comes from the exporting machine's clock. A clock that runs
+  fast makes an older snapshot look newer than a sync that finished after it, so the snapshot passes the
+  stale-change refusals. Taking the time from Microsoft Graph's `Date` response header would remove the
+  dependence on the local clock.
+- A status record whose `finishedAt` lies in the future, written by a writer whose clock runs fast, makes
+  every later snapshot look older, so applies refuse until that time passes.
+- A writer that stops after its record writes and before its status record leaves no status for those
+  changes. The lock does not record which people the apply touched, so an older full snapshot applied
+  afterwards can undo a targeted change made in that window.
+- A sync job deployed before ADR-0051 runs an image that writes `expiresAt` and takes no apply lock until
+  `scripts/Deploy-ClaudeProjectionRenewal.ps1` runs again; nothing detects such a job. Comparing the
+  job's image digest with the current package would.
 
 M0 is shipped. The table below is the queue; the checklist under it is what the gate tracks.
 
