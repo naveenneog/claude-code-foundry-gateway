@@ -26,8 +26,13 @@ if ($global:CompareDrift) { exit 1 }
 exit 0
 '@)
 function Invoke-Compare {
-    Invoke-ClaudeProjectionDeployerCompare -ResourceGroup rg-p84 -ApimName apim-p84 -RunnerName aci-projtest-p84fixture -CosmosAccount cosmos-p84fixture `
+    param([hashtable]$Extra = @{})
+    $params = @{ ResourceGroup = 'rg-p84'; ApimName = 'apim-p84'; RunnerName = 'aci-projtest-p84fixture'; CosmosAccount = 'cosmos-p84fixture'; TenantId = $FixtureTenant; GatewayPath = (Join-Path $work 'gateway-decisions.json'); StandardGroup = 'claude-code-standard'; PremiumGroup = 'none'; CompareScript = $compareStub }
+    foreach ($key in $Extra.Keys) { $params[$key] = $Extra[$key] }
+    Invoke-ClaudeProjectionDeployerCompare @params
+    <# old -ResourceGroup rg-p84 -ApimName apim-p84 -RunnerName aci-projtest-p84fixture -CosmosAccount cosmos-p84fixture `
         -TenantId $FixtureTenant -GatewayPath (Join-Path $work 'gateway-decisions.json') -StandardGroup claude-code-standard -PremiumGroup none -CompareScript $compareStub
+#>
 }
 
 try {
@@ -43,6 +48,12 @@ try {
     Capture { Invoke-Compare 6>$null }
     $calls = $FixtureCalls -join "`n"
     Assert 'a new gateway, with no named-value members, is compared with the snapshot just applied and not drift-checked' (-not $Failure -and $Result.ok -eq $true -and
+        $calls -notmatch '(?m)^compare-stub' -and $calls -match 'apply-projection\.mjs .*--compare-snapshot /work/snapshot\.json') "$Failure | $calls"
+
+    Reset-ProjectionFixture
+    Capture { Invoke-Compare @{ CompareBaseline = 'Snapshot' } 6>$null }
+    $calls = $FixtureCalls -join "`n"
+    Assert 'snapshot baseline skips named-value drift and compares the projection with the fresh snapshot' (-not $Failure -and $Result.ok -eq $true -and
         $calls -notmatch '(?m)^compare-stub' -and $calls -match 'apply-projection\.mjs .*--compare-snapshot /work/snapshot\.json') "$Failure | $calls"
 
     Reset-ProjectionFixture

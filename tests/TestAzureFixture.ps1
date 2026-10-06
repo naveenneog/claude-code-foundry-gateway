@@ -1,4 +1,4 @@
-# Native az.cmd and HTTP fixtures shared by the wizard and both-host preflight checks.
+﻿# Native az.cmd and HTTP fixtures shared by the wizard and both-host preflight checks.
 function New-TestAzureFixture {
     param([Parameter(Mandatory)][string]$Directory)
     $ErrorActionPreference = 'Stop'
@@ -32,8 +32,12 @@ if ($joined -like 'cognitiveservices account list *') {
 }
 if ($joined -like 'cognitiveservices account show *--query location *') { 'eastus2'; exit 0 }
 if ($joined -like 'apim list *') { '[]'; exit 0 }
+if ($joined -like 'apim show -g rg-ai-p78 -n apim-p78fixture *') {
+    [Console]::Error.WriteLine('ERROR: (ResourceNotFound) fixture gateway does not exist.')
+    exit 3
+}
 if ($joined -like 'apim nv show *--named-value-id entitlement-cache-seconds *') {
-    [Console]::Error.WriteLine('ResourceNotFound: fixture gateway does not exist.')
+    [Console]::Error.WriteLine('ERROR: (ResourceNotFound) fixture gateway does not exist.')
     exit 3
 }
 [IO.File]::AppendAllText($env:P78_UNEXPECTED_CALLS, 'az ' + $joined + [Environment]::NewLine)

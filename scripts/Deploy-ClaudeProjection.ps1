@@ -34,6 +34,8 @@ param(
     [string]$PremiumGroup = 'claude-code-premium',
     [switch]$FlipAfterCleanCompare,
     [switch]$PreflightOnly,
+    [ValidateSet('Auto','Snapshot')][string]$CompareBaseline = 'Auto',
+    [switch]$ResolverPublicByDefault,
     [ValidateRange(1,10)][int]$RetryCount = 3,
     [ValidateRange(5,120)][int]$RetryDelaySeconds = 15
 )
@@ -79,7 +81,7 @@ if (-not $ResolverInboundAccess) {
 }
 if ($FlipAfterCleanCompare) {
     . (Join-Path $PSScriptRoot 'ClaudeProjectionSwitch.ps1')
-    $null = Invoke-ClaudeProjectionSwitch -ResourceGroup $ResourceGroup -ApimName $ApimName -NamePrefix $NamePrefix -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup
+    $null = Invoke-ClaudeProjectionSwitch -ResourceGroup $ResourceGroup -ApimName $ApimName -NamePrefix $NamePrefix -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -CompareBaseline $CompareBaseline
     return
 }
 $preflight = Invoke-ClaudeProjectionPreflight -ResourceGroup $ResourceGroup -ApimName $ApimName -NamePrefix $NamePrefix `
@@ -96,7 +98,8 @@ if ($WhatIfPreference) {
 $Location = $preflight.Location
 $ResolverAppId = $preflight.ResolverAppId
 if ($Sku -in @('StandardV2','PremiumV2') -and $ResolverInboundAccess -ne 'private') {
-    Write-Warning "$Sku can use a private resolver; public was explicitly requested."
+    $reason = if ($ResolverPublicByDefault) { 'the ADR-0052 installer default selected public resolver access' } else { 'public resolver access was selected for this deployment' }
+    Write-Warning "$Sku can use a private resolver; $reason."
 }
 
 $apim = $preflight.Apim
@@ -230,7 +233,7 @@ try {
     Step 'Compare before flip'
     if ($PSCmdlet.ShouldProcess($ApimName, 'export gateway decisions and compare projection')) {
         $compare = Invoke-ClaudeProjectionDeployerCompare -ResourceGroup $ResourceGroup -ApimName $ApimName -RunnerName $($network.runnerName) `
-            -CosmosAccount $cosmosAccount -TenantId $($apim.identity.tenantId) -GatewayPath $gateway -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup
+            -CosmosAccount $cosmosAccount -TenantId $($apim.identity.tenantId) -GatewayPath $gateway -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -CompareBaseline $CompareBaseline
         Ok "clean comparison: $($compare.compared) identities"
     } else { throw 'Projection comparison was declined; no further steps run.' }
     Note 'Clean comparison complete; named values remain authoritative. To switch now, rerun with -FlipAfterCleanCompare.'

@@ -182,7 +182,7 @@ Cosmos DB serverless, which the projection uses, is single-region
 ([serverless](https://learn.microsoft.com/azure/cosmos-db/serverless), 2026-04-27). The installer's
 suggestion: Basic v2 for evaluation and small teams; Standard v2 for availability zones, outbound
 virtual network integration or more than Basic v2's included volume; Premium v2 for virtual network
-injection or more than 10 units. The suggestion is a default at the prompt.
+injection or more than 10 units. The installer creates API Management without zone-redundancy settings and without Premium v2 virtual network injection. Microsoft Learn says Premium v2 virtual network injection can be selected only when the instance is created and cannot be added to an existing instance (inject-vnet-v2, 2025-10-08); the reliability article lists zone support for Standard v2 and Premium v2 (reliability-api-management, 2026-09-09), and the v2 tiers overview lists the networking options (2026-09-04). A gateway that needs zone placement or Premium v2 injection is created with those settings first and then reused with `-ExistingApimName`. The suggestion is a default at the prompt.
 
 This is included-request arithmetic, **not supported developer capacity**.
 The shipped named-value membership map fills at roughly 93 developers with
@@ -462,6 +462,8 @@ region.
 cost of this accelerator, so any v2 instance you already own is offered first,
 annotated with whether it already carries the Claude API.
 
+A re-run of an existing named-value gateway without `-EntitlementStore` migrates it to the Cosmos projection: the approval summary says `projection (migrating from named values: deploy, compare, switch)` before any write. `-EntitlementStore named-value` keeps named values for a small organisation within the named-value capacity. A gateway already on the projection stays on the projection unless named values are passed explicitly.
+
 ![The wizard listing two existing v2 API Management instances with their SKU, region and resource group, plus a third option to create a new one](guide/run-2-reuse-existing-apim.png)
 
 **4. Budgets.** Every prompt has a working default in brackets — Enter accepts
@@ -705,21 +707,23 @@ account and resource group, as the PowerShell installer's record does.
 ### Option B — non-interactive script
 
 The interactive installer's projection flags are separate from `deploy.ps1`:
-`-DeployProjection` runs the checked projection deployer and requires PowerShell 7 for apply.
-`-FlipProjectionAfterCleanCompare`, with `-EntitlementStore projection -DeployProjection`, runs the
-installer's gateway deployment and list refresh, then the deployer's switch mode, which deploys
-nothing in place of the projection deployment; without `-DeployProjection` it has no effect. It
-takes no renewal receipt, reconciler id or renewal image parameters. An admin-created resolver
-registration is supplied as `-ProjectionResolverAppId <client-id>`. An example installer invocation is:
+`-DeployProjection` and `-FlipProjectionAfterCleanCompare` remain accepted for existing scripts. Since P98, they do not change installer behavior: choosing `-EntitlementStore projection` deploys the projection, compares it, and switches through the shared switch.
+
+A staged deployment without switching uses the deployer directly, not the installer:
 
 ```powershell
-pwsh -NoProfile -File .\Install-ClaudeGateway.ps1 `
-  -SubscriptionId <subscription-id> -FoundryAccount <foundry-account> `
-  -ResourceGroup <gateway-rg> -NamePrefix <prefix> -EntitlementStore projection `
-  -DeployProjection -ProjectionResolverAppId <resolver-app-id>
+./scripts/Deploy-ClaudeProjection.ps1 `
+  -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> `
+  -Location <region> -Sku BasicV2 -ResolverInboundAccess public `
+  -StandardGroup <standard-group> -PremiumGroup <premium-group>
+
+./scripts/Deploy-ClaudeProjection.ps1 `
+  -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> `
+  -StandardGroup <standard-group> -PremiumGroup <premium-group> `
+  -FlipAfterCleanCompare
 ```
 
-The example deploys beside the gateway without switching. `Deploy-ClaudeProjection.ps1 -FlipAfterCleanCompare`
+The first command deploys and compares while named values remain authoritative. The second command switches only after the shared switch checks pass.
 switches right after a clean deploy comparison, with no 60-90 minute wait. The optional sync job deploys separately
 with `scripts/Deploy-ClaudeProjectionRenewal.ps1` for very large directories. The read-only preflight normally takes 30-90 seconds, including
 the 25-second Graph interval. [Private projection](SECURE-PROJECTION.md#one-command-deployment)

@@ -15,8 +15,9 @@ function Resolve-ClaudeProjectionTierGroupId {
 }
 
 function Get-ClaudeProjectionRollbackText {
-    param([string]$BackupPath)
+    param([string]$BackupPath, [ValidateSet('Auto','Snapshot')][string]$CompareBaseline = 'Auto')
     $rollback = 'Rollback: refresh named values with scripts/Sync-ClaudeAccess.ps1 -Store named-value, check them with scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift, then set entitlement-source back to named-value. The lists change only when Sync-ClaudeAccess.ps1 runs, so lists left unrefreshed while the projection serves can grant or deny the wrong people.'
+    if ($CompareBaseline -eq 'Snapshot') { $rollback += ' This gateway exceeded named-value capacity during migration, so rollback to named values cannot hold this population; the lists cannot be refreshed above about 93-110 developers.' }
     if ($BackupPath) { $rollback += " The values before the switch are in $BackupPath." }
     return $rollback
 }
@@ -61,7 +62,8 @@ function Invoke-ClaudeProjectionSwitch {
         [string]$BackupDirectory = (Join-Path (Split-Path $PSScriptRoot -Parent) 'onboarding'),
         [scriptblock]$Backup,
         [string]$CompareScript = (Join-Path $PSScriptRoot 'Compare-ClaudeEntitlement.ps1'),
-        [string]$SyncProjectionScript = (Join-Path $PSScriptRoot 'Sync-ClaudeProjection.ps1')
+        [string]$SyncProjectionScript = (Join-Path $PSScriptRoot 'Sync-ClaudeProjection.ps1'),
+        [ValidateSet('Auto','Snapshot')][string]$CompareBaseline = 'Auto'
     )
     if ($ApimName -notmatch '^[A-Za-z][A-Za-z0-9-]{0,49}$') { throw "Projection switch refused: '$ApimName' is not an API Management name, which holds 1-50 letters, digits and hyphens and starts with a letter. Remedy: pass the gateway name as the Azure portal shows it." }
     if ($ResourceGroup -notmatch '^[A-Za-z0-9._-]{1,90}$') { throw "Projection switch refused: resource group '$ResourceGroup' holds characters other than letters, digits, '.', '_' or '-'. Azure allows some of them, such as parentheses, but az.cmd hands them to cmd.exe, so this switch does not pass them (ADR-0050). Remedy: switch a gateway in a resource group named with those characters only; Azure moves an API Management instance between resource groups, except on the Consumption tier." }
@@ -123,13 +125,19 @@ function Invoke-ClaudeProjectionSwitch {
         $gateway = Join-Path $work 'gateway-decisions.json'
         $snapshot = Join-Path $work 'snapshot.json'
         $archive = New-ClaudeProjectionSyncArchive -Path (Join-Path $work 'sync.tar.gz') -Root (Split-Path $PSScriptRoot -Parent)
-        if ($hasNamedMembers) {
+        $useSnapshotBaseline = ($CompareBaseline -eq 'Snapshot' -or -not $hasNamedMembers)
+        if (-not $useSnapshotBaseline) {
             Write-Host "`n==> Drift check: the gateway's lists against Entra" -ForegroundColor Cyan
             & $CompareScript -ResourceGroup $ResourceGroup -ApimName $ApimName -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -ExportGatewayPath $gateway -FailOnDrift:$true
             if ($LASTEXITCODE -ne 0) { throw 'Projection switch refused: the named-value lists drift from Entra. Remedy: refresh them with scripts/Sync-ClaudeAccess.ps1 -Store named-value, then rerun.' }
         }
         else {
-            Write-Host "`n==> New gateway: no named-value members; compare projection with a fresh Entra snapshot" -ForegroundColor Cyan
+            if ($CompareBaseline -eq 'Snapshot' -and $hasNamedMembers) {
+                Write-Host "`n==> Snapshot baseline: compare projection with a fresh full Entra snapshot" -ForegroundColor Cyan
+                Write-Host '    Named values cannot hold this population; rollback to named values cannot refresh lists above about 93-110 developers.' -ForegroundColor Yellow
+            } else {
+                Write-Host "`n==> New gateway: no named-value members; compare projection with a fresh Entra snapshot" -ForegroundColor Cyan
+            }
             & $SyncProjectionScript -Account $cosmosAccount -ApimName $ApimName -ResourceGroup $ResourceGroup -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -ExportPath $snapshot
             if ($LASTEXITCODE -ne 0) { throw 'Projection switch refused: snapshot export failed; no compare or switch was attempted.' }
         }
@@ -138,7 +146,7 @@ function Invoke-ClaudeProjectionSwitch {
         Send-RunnerFile -ResourceGroup $runnerGroup -Name $runner -Path $archive -Destination /work/sync-source.tar.gz | Out-Null
         Invoke-RunnerCommand -ResourceGroup $runnerGroup -Name $runner -Command 'tar -x -z -f /work/sync-source.tar.gz -C /work' | Out-Null
         Invoke-RunnerCommand -ResourceGroup $runnerGroup -Name $runner -Command 'npm --prefix /work/sync ci --omit=dev --ignore-scripts --no-audit --fund=false' | Out-Null
-        if ($hasNamedMembers) {
+        if (-not $useSnapshotBaseline) {
             Send-RunnerFile -ResourceGroup $runnerGroup -Name $runner -Path $gateway -Destination /work/gateway-decisions.json | Out-Null
             $compareRaw = Invoke-RunnerCommand -ResourceGroup $runnerGroup -Name $runner -Command "node /work/sync/src/apply-projection.mjs --cosmos https://$cosmosAccount.documents.azure.com:443/ --tenant $tenantId --account-resource-id $accountResourceId --compare /work/gateway-decisions.json"
         }
@@ -157,7 +165,7 @@ function Invoke-ClaudeProjectionSwitch {
         $admission = Assert-ClaudeProjectionAdmission -ResourceGroup $runnerGroup -RunnerName $runner -CosmosAccount $cosmosAccount -TenantId $tenantId -AccountResourceId $accountResourceId
         if ($previewOnly) {
             Write-Host '    WhatIf: resolver checks, compare and evidence passed; no backup and no write.' -ForegroundColor DarkGray
-            return [pscustomobject]@{ Switched = $false; BackupPath = $null; Compared = $compare.compared; Admission = $admission; Rollback = (Get-ClaudeProjectionRollbackText) }
+            return [pscustomobject]@{ Switched = $false; BackupPath = $null; Compared = $compare.compared; Admission = $admission; Rollback = (Get-ClaudeProjectionRollbackText -CompareBaseline $CompareBaseline) }
         }
         $ConfirmPreference = $confirmWrite
         if (-not $PSCmdlet.ShouldProcess($ApimName, 'set entitlement-source to projection')) { throw 'Projection switch declined after evidence; entitlement-source is unchanged and no backup was written.' }
@@ -165,7 +173,7 @@ function Invoke-ClaudeProjectionSwitch {
         Write-Host '==> Backup and switch' -ForegroundColor Cyan
         $backupPath = if ($Backup) { [string](@(& $Backup) | Select-Object -Last 1) } else { Save-ClaudeProjectionSwitchBackup -ResourceGroup $ResourceGroup -ApimName $ApimName -GatewayResourceId $gatewayId -Directory $BackupDirectory }
         Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-source' -Value 'projection'
-        $rollback = Get-ClaudeProjectionRollbackText -BackupPath $backupPath
+        $rollback = Get-ClaudeProjectionRollbackText -BackupPath $backupPath -CompareBaseline $CompareBaseline
         $evidenceFinished = if ($admission.newestFullSync -and $admission.newestFullSync.finishedAt -is [DateTime]) { $admission.newestFullSync.finishedAt.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ') } elseif ($admission.newestFullSync) { [string]$admission.newestFullSync.finishedAt } else { '' }
         $evidenceText = if ($admission.newestFullSync) { " from full sync finished $evidenceFinished by $($admission.newestFullSync.executor)" } else { '' }
         Write-Host "    [OK]   entitlement-source is projection after switch evidence$evidenceText" -ForegroundColor Green
@@ -183,21 +191,29 @@ function Invoke-ClaudeProjectionDeployerCompare {
         [Parameter(Mandatory)][string]$RunnerName, [Parameter(Mandatory)][string]$CosmosAccount,
         [Parameter(Mandatory)][string]$TenantId, [Parameter(Mandatory)][string]$GatewayPath,
         [string]$StandardGroup = 'claude-code-standard', [string]$PremiumGroup = 'claude-code-premium',
-        [string]$CompareScript = (Join-Path $PSScriptRoot 'Compare-ClaudeEntitlement.ps1')
+        [string]$CompareScript = (Join-Path $PSScriptRoot 'Compare-ClaudeEntitlement.ps1'),
+        [ValidateSet('Auto','Snapshot')][string]$CompareBaseline = 'Auto'
     )
     $hasNamedMembers = Test-ClaudeProjectionHasNamedValueMembers `
         -AllowStandard (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'allow-standard' -FailOnError) `
         -AllowPremium (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'allow-premium' -FailOnError) `
         -BuMembers (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-members' -FailOnError)
     $apply = "node /work/sync/src/apply-projection.mjs --cosmos https://$CosmosAccount.documents.azure.com:443/ --tenant $TenantId"
-    if ($hasNamedMembers) {
+    if ($CompareBaseline -eq 'Snapshot' -and $hasNamedMembers) {
+        Write-Host '    Snapshot baseline: named values cannot hold this population; comparing the projection with the fresh Entra snapshot.' -ForegroundColor DarkGray
+    }
+    if ($hasNamedMembers -and $CompareBaseline -ne 'Snapshot') {
         & $CompareScript -ResourceGroup $ResourceGroup -ApimName $ApimName -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -ExportGatewayPath $GatewayPath -FailOnDrift:$true
         if ($LASTEXITCODE -ne 0) { throw 'named-value lists drift from Entra; refusing projection comparison and flip.' }
         Send-RunnerFile -ResourceGroup $ResourceGroup -Name $RunnerName -Path $GatewayPath -Destination /work/gateway-decisions.json | Out-Null
         $raw = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $RunnerName -Command "$apply --compare /work/gateway-decisions.json"
     }
     else {
-        Write-Host '    New gateway: no named-value members, so the projection is compared with the snapshot just applied.' -ForegroundColor DarkGray
+        if ($CompareBaseline -eq 'Snapshot' -and $hasNamedMembers) {
+            Write-Host '    Rollback to named values cannot hold this population; the lists cannot be refreshed above about 93-110 developers.' -ForegroundColor Yellow
+        } else {
+            Write-Host '    New gateway: no named-value members, so the projection is compared with the snapshot just applied.' -ForegroundColor DarkGray
+        }
         $raw = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $RunnerName -Command "$apply --compare-snapshot /work/snapshot.json"
     }
     return (ConvertFrom-ClaudeRunnerResult -RawOutput $raw -Step 'Refusing to flip because projection drift remains')

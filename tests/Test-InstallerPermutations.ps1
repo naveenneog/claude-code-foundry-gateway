@@ -86,9 +86,13 @@ $refusals = @(
 $reuseParams = [ordered]@{} + $reuse
 $reuseParams.EntitlementStore = 'named-value'; $reuseParams.AuthMode = 'device'; $reuseParams.DesktopSignInKind = 'external-idp-broker'; $reuseParams.DesktopEntraClientId = $clientId
 $reuseCase = [pscustomobject]@{ id = 'reuse-recorded-gateway'; factors = $null; params = $reuseParams }
+$reuseDefaultParams = [ordered]@{} + $reuse
+$reuseDefaultCase = [pscustomobject]@{ id = 'reuse-named-value-default-migrates'; factors = $null; params = $reuseDefaultParams }
+$reuseProjectionParams = [ordered]@{ FoundryAccount = 'ai-p72'; FoundryResourceGroup = 'rg-ai-p72'; ResourceGroup = 'rg-p72projection'; ExistingApimName = 'apim-p72projection' }
+$reuseProjectionCase = [pscustomobject]@{ id = 'reuse-projection-default-preserves-private-resolver'; factors = $null; params = $reuseProjectionParams }
 # ADR-0052: a run that passes no -EntitlementStore is the quickstart and the default path.
 $defaultCases = @(foreach ($t in $tiers) { $p = [ordered]@{} + $placement; $p.Sku = $t; [pscustomobject]@{ id = "default-store-$t"; factors = $null; params = $p } })
-$all = @($cases) + @($refusals) + @($reuseCase) + @($defaultCases)
+$all = @($cases) + @($refusals) + @($reuseCase) + @($reuseDefaultCase) + @($reuseProjectionCase) + @($defaultCases)
 
 # A checkout keeps one gateway's saved record (onboarding\claude-gateway.json, ignored by Git), and the
 # installer compares it with the chosen gateway before its first question (P79). The cases run a copy of
@@ -223,12 +227,24 @@ try {
             if ((Get-Row $r 'Claude Desktop sign-in') -ne "external-idp-broker, app $clientId, id_token") { Add-Bad 'a reused gateway keeps the Desktop sign-in chosen with -AuthMode' $reuseCase.id (Get-Row $r 'Claude Desktop sign-in') }
         }
         else { Add-Bad 'a reused gateway reaches the summary' $reuseCase.id 'no result' }
+        $r = $results[$shell][$reuseDefaultCase.id]
+        if ($r) {
+            if (-not $r.reachedSummary -or $r.failure) { Add-Bad 'a reused named-value gateway with no store reaches the migration summary' $reuseDefaultCase.id $r.failure }
+            if ((Get-Row $r 'Entitlement store') -ne 'projection (migrating from named values: deploy, compare, switch), resolver public') { Add-Bad 'a reused named-value gateway with no store shows the migration row' $reuseDefaultCase.id (Get-Row $r 'Entitlement store') }
+        }
+        else { Add-Bad 'a reused named-value gateway with no store reaches the migration summary' $reuseDefaultCase.id 'no result' }
+        $r = $results[$shell][$reuseProjectionCase.id]
+        if ($r) {
+            if (-not $r.reachedSummary -or $r.failure) { Add-Bad 'a reused projection gateway with no store reaches the summary' $reuseProjectionCase.id $r.failure }
+            if ((Get-Row $r 'Entitlement store') -ne 'projection, resolver private') { Add-Bad 'a reused projection gateway preserves private resolver access' $reuseProjectionCase.id (Get-Row $r 'Entitlement store') }
+        }
+        else { Add-Bad 'a reused projection gateway with no store reaches the summary' $reuseProjectionCase.id 'no result' }
         foreach ($c in $defaultCases) {
             $r = $results[$shell][$c.id]
             if (-not $r -or -not $r.reachedSummary -or $r.failure) { Add-Bad 'with no -EntitlementStore, -Yes reaches the summary on every tier' $c.id $(if ($r) { $r.failure } else { 'no result' }); continue }
             if ((Get-Row $r 'Entitlement store') -ne 'projection, resolver public') { Add-Bad 'with no -EntitlementStore, -Yes chooses the projection with a public resolver' $c.id "got '$(Get-Row $r 'Entitlement store')'" }
         }
-        $names = @('reaches the summary and stops at -WhatIf', 'makes only the Azure CLI reads the stub knows', 'the summary names the new gateway and its tier', 'the summary names the entitlement store', 'the summary names the developer sign-in', 'the summary names the Claude Desktop sign-in and its app', 'an external IdP Desktop sign-in derives the gateway audience, with or without -AuthMode', 'the helper script adds no gateway audience', 'the summary names the developer address with the gateway''s hostname', 'the address question shows the gateway''s own hostname', 'the summary names the revocation window', 'the summary names the team budget behaviour', 'the summary names the developers with no team', 'each refusal stops before the summary', 'each refusal names what to pass', 'each refusal says that nothing was created', 'a reused gateway reaches the summary', 'a reused gateway keeps its own tier in the summary', 'a reused gateway''s address is its own hostname', 'a reused gateway keeps the Desktop sign-in chosen with -AuthMode', 'with no -EntitlementStore, -Yes reaches the summary on every tier', 'with no -EntitlementStore, -Yes chooses the projection with a public resolver')
+        $names = @('reaches the summary and stops at -WhatIf', 'makes only the Azure CLI reads the stub knows', 'the summary names the new gateway and its tier', 'the summary names the entitlement store', 'the summary names the developer sign-in', 'the summary names the Claude Desktop sign-in and its app', 'an external IdP Desktop sign-in derives the gateway audience, with or without -AuthMode', 'the helper script adds no gateway audience', 'the summary names the developer address with the gateway''s hostname', 'the address question shows the gateway''s own hostname', 'the summary names the revocation window', 'the summary names the team budget behaviour', 'the summary names the developers with no team', 'each refusal stops before the summary', 'each refusal names what to pass', 'each refusal says that nothing was created', 'a reused gateway reaches the summary', 'a reused gateway keeps its own tier in the summary', 'a reused gateway''s address is its own hostname', 'a reused gateway keeps the Desktop sign-in chosen with -AuthMode', 'a reused named-value gateway with no store reaches the migration summary', 'a reused named-value gateway with no store shows the migration row', 'a reused projection gateway with no store reaches the summary', 'a reused projection gateway preserves private resolver access', 'with no -EntitlementStore, -Yes reaches the summary on every tier', 'with no -EntitlementStore, -Yes chooses the projection with a public resolver')
         if ($Live) { $names = @($names | Where-Object { $_ -ne 'makes only the Azure CLI reads the stub knows' }) }
         foreach ($n in $names) {
             $detail = if ($bad.Contains($n)) { "$($bad[$n].Count) case(s): " + (@($bad[$n] | Select-Object -First 3) -join '; ') } else { '' }
