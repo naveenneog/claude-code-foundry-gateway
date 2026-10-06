@@ -55,7 +55,7 @@ Static mode validates answers, writes `answers.json` and shows generated command
 blocks appear only when every current answer has an `x-appliedBy` entry for
 `install-claude-gateway.sh` and every selected step is one of the bash installer's `CKPT_ORDER` steps;
 the model owns that list and a test keeps it equal to `scripts/install-checkpoint.sh`
-(`tools/installer-ui/ui-model.js:582-583`; `tools/installer-ui/ui-model.js:614-651`; `tests/installer-ui-g2.test.mjs:350-356`). Static mode
+(`tools/installer-ui/ui-model.js:582-583`; `tools/installer-ui/ui-model.js:614-651`; `tests/installer-ui-g2.test.mjs:351-357`). Static mode
 does not read Azure and does not start the installer. The page hides live action and prefill controls
 in static mode (`tools/installer-ui/installer-ui.js:680-681`). The Cloud Shell handoff displayed by
 the page is download, **Manage files > Upload**, then the generated command
