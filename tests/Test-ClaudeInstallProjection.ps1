@@ -192,6 +192,103 @@ Assert 'Setup lists every tool the installer checks before the projection, and P
     $setupDoc -match '\| PowerShell \| 7\+ for the Cosmos projection' -and $readmeDoc -match 'docs/SETUP\.md#tooling'
 ) "checked: $($checkedTools -join ',')"
 
+
+# P98 council round 2 (Coder 1, Architect 2): what the installer refreshes before the projection deployment, the
+# comparison baseline and the store that serves if a later step fails.
+$syncCalls = [System.Collections.Generic.List[object]]::new()
+$syncOk = { param($ScriptPath, $Arguments) $syncCalls.Add([pscustomobject]@{ Path = $ScriptPath; Args = $Arguments }) }
+$syncOver = { param($ScriptPath, $Arguments) $syncCalls.Add([pscustomobject]@{ Path = $ScriptPath; Args = $Arguments }); throw "Named value 'allow-standard' is 4441 characters, which is 345 over the API Management limit of 4096. Nothing was written." }
+$syncArgs = @{ Root = $root; ResourceGroup = 'rg-p98'; ApimName = 'apim-p98'; StandardGroup = 'std'; PremiumGroup = 'prem' }
+$onProjection = Invoke-ClaudeInstallerEntitlementSync @syncArgs -EntitlementStore projection -LiveEntitlementSource projection -InvokeScript $syncOk
+Assert 'a re-run on a projection gateway refreshes no named values and compares with a fresh snapshot; the projection is what serves' (
+    $syncCalls.Count -eq 0 -and $onProjection.CompareBaseline -eq 'Snapshot' -and $onProjection.ServingStore -eq 'projection') ($onProjection | ConvertTo-Json -Compress)
+$syncCalls.Clear()
+$migrating = Invoke-ClaudeInstallerEntitlementSync @syncArgs -EntitlementStore projection -LiveEntitlementSource named-value -InvokeScript $syncOk
+Assert 'a migration refreshes the named-value lists explicitly and compares with them; named values serve until the switch' (
+    $syncCalls.Count -eq 1 -and $syncCalls[0].Path -match 'Sync-ClaudeAccess\.ps1$' -and $syncCalls[0].Args['Store'] -eq 'named-value' -and
+    $migrating.CompareBaseline -eq 'Auto' -and $migrating.ServingStore -eq 'named-value') ($migrating | ConvertTo-Json -Compress)
+$syncCalls.Clear()
+$overCapacity = Invoke-ClaudeInstallerEntitlementSync @syncArgs -EntitlementStore projection -LiveEntitlementSource named-value -InvokeScript $syncOver
+Assert 'above named-value capacity the comparison uses a fresh snapshot, and named values are still what serves' (
+    $overCapacity.CompareBaseline -eq 'Snapshot' -and $overCapacity.ServingStore -eq 'named-value' -and $overCapacity.Reason -eq 'over-capacity') ($overCapacity | ConvertTo-Json -Compress)
+$syncCalls.Clear()
+$newProjection = Invoke-ClaudeInstallerEntitlementSync @syncArgs -EntitlementStore projection -LiveEntitlementSource '' -NewGateway -InvokeScript $syncOk
+Assert 'a new projection gateway refreshes nothing before the deployment' ($syncCalls.Count -eq 0 -and $newProjection.CompareBaseline -eq 'Auto') ($newProjection | ConvertTo-Json -Compress)
+Capture { Invoke-ClaudeInstallerEntitlementSync @syncArgs -EntitlementStore named-value -LiveEntitlementSource named-value -InvokeScript { throw 'Graph read failed: 403' } }
+Assert 'any other refresh failure stops the installer' ($Failure -match 'Graph read failed') $Failure
+
+$calls.Clear()
+Capture { Invoke-ClaudeInstallerProjectionDeployment -Root $root -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 -Location eastus2 -Sku BasicV2 -ResolverInboundAccess public `
+        -StandardGroup std -PremiumGroup prem -CompareBaseline Snapshot -ServingStore named-value -InvokeScript { param($ScriptPath, $Arguments) 7 } }
+Assert 'a failed migration above capacity says named values keep serving' ($Failure -match 'named values keep serving' -and $Failure -notmatch 'projection keeps serving') $Failure
+Capture { Invoke-ClaudeInstallerProjectionDeployment -Root $root -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 -Location eastus2 -Sku BasicV2 -ResolverInboundAccess public `
+        -StandardGroup std -PremiumGroup prem -CompareBaseline Snapshot -ServingStore projection -InvokeScript { param($ScriptPath, $Arguments) if ($Arguments.Contains('FlipAfterCleanCompare')) { 42 } else { 0 } } }
+Assert 'a refused switch on a projection gateway says the projection keeps serving' ($Failure -match 'the projection keeps serving' -and $Failure -notmatch 'named values keep serving') $Failure
+
+# P98 council round 2 (Architect 1): -EntitlementStore named-value on a gateway that serves from the projection.
+Capture { Resolve-ClaudeInstallerEntitlementStore -EntitlementStore named-value -DeveloperCount 20 -BuCeiling 93 -ListCeiling 110 -Yes -LiveStore projection }
+Assert 'named values on a projection gateway are refused before anything is created, naming the rollback steps' (
+    $Failure -match 'serves entitlement from the projection' -and $Failure -match 'Sync-ClaudeAccess\.ps1 .*-Store named-value' -and
+    $Failure -match 'Compare-ClaudeEntitlement\.ps1 .*-FailOnDrift' -and $Failure -match 'entitlement-source' -and $Failure -match 'Nothing was created') $Failure
+$keepNamed = Resolve-ClaudeInstallerEntitlementStore -EntitlementStore named-value -DeveloperCount 20 -BuCeiling 93 -ListCeiling 110 -Yes -LiveStore named-value
+Assert 'named values on a named-value gateway are kept' ($keepNamed.Store -eq 'named-value') ($keepNamed | ConvertTo-Json -Compress -Depth 3)
+
+# P98 council round 2 (Architect 3): the projection a re-run touches, and the resolver access it keeps.
+Assert 'the gateway''s recorded projection prefix is the one a re-run deploys' ((Get-ClaudeInstallerProjectionPrefix -RecordedPrefix 'workbook-proj' -NamePrefix 'claudegw123456') -eq 'workbook-proj')
+Assert 'without a recorded prefix the installer''s own prefix is used' ((Get-ClaudeInstallerProjectionPrefix -RecordedPrefix '' -NamePrefix 'claudegw123456') -eq 'claudegw123456')
+Capture { Get-ClaudeInstallerProjectionPrefix -RecordedPrefix 'Bad_Prefix' -NamePrefix 'claudegw123456' }
+Assert 'a recorded prefix that is not a projection prefix stops the run' ($Failure -match 'entitlement-projection-prefix' -and $Failure -match 'Nothing was created') $Failure
+$accessRead = { param($Answer, $Code) { param($ResourceGroup, $SiteName) $global:LASTEXITCODE = $Code; $Answer }.GetNewClosure() }
+Assert 'a private resolver stays private on a re-run' ((Get-ClaudeInstallerResolverAccess -ResourceGroup rg-p98 -SiteName func-resolver-p98 -InvokeAz (& $accessRead 'Disabled' 0)) -eq 'private')
+Assert 'a public resolver stays public on a re-run' ((Get-ClaudeInstallerResolverAccess -ResourceGroup rg-p98 -SiteName func-resolver-p98 -InvokeAz (& $accessRead 'Enabled' 0)) -eq 'public')
+Assert 'no resolver yet means no access to keep' ((Get-ClaudeInstallerResolverAccess -ResourceGroup rg-p98 -SiteName func-resolver-p98 -InvokeAz (& $accessRead "ERROR: (ResourceNotFound) The Resource 'Microsoft.Web/sites/func-resolver-p98' under resource group 'rg-p98' was not found." 3)) -eq '')
+Capture { Get-ClaudeInstallerResolverAccess -ResourceGroup rg-p98 -SiteName func-resolver-p98 -InvokeAz (& $accessRead 'ERROR: (AuthorizationFailed) The client does not have authorization.' 1) }
+Assert 'a failed read of the resolver''s access stops the run instead of defaulting to public' ($Failure -match 'Could not read' -and $Failure -match '-ResolverInboundAccess' -and $Failure -match 'Nothing was created') $Failure
+Capture { Get-ClaudeInstallerResolverAccess -ResourceGroup rg-p98 -SiteName func-resolver-p98 -InvokeAz (& $accessRead '' 0) }
+Assert 'a resolver that reports no network access setting stops the run' ($Failure -match '-ResolverInboundAccess' -and $Failure -match 'Nothing was created') $Failure
+
+# P98 council round 2 (Security 1): a printed rerun command passes each value and runs nothing else when pasted.
+$hostile = @('grp;calc', '@{a=calc}', ("x" + [char]0x2019 + " ;\\host\share\x.exe;#"), 'cost$center', '{team}', '-x', 'a,b', 'a"b', 'std group', "it's")
+$quoteProblems = @(foreach ($value in $hostile) {
+    $line = New-ClaudeInstallerCommandLine -Command '.\scripts\Deploy-ClaudeProjection.ps1' -Parameters ([ordered]@{ StandardGroup = $value; NamePrefix = 'p98' })
+    $tokens = $null; $errors = $null
+    $tree = [System.Management.Automation.Language.Parser]::ParseInput($line, [ref]$tokens, [ref]$errors)
+    $commands = @($tree.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true))
+    $elements = if ($commands.Count -eq 1) { $commands[0].CommandElements } else { @() }
+    $argument = if ($elements.Count -ge 3) { $elements[2] } else { $null }
+    if ($errors.Count -or $tree.EndBlock.Statements.Count -ne 1 -or $commands.Count -ne 1 -or -not ($argument -is [System.Management.Automation.Language.StringConstantExpressionAst]) -or $argument.Value -cne $value) { "[$value] -> $line" }
+})
+Assert 'every rerun command value parses back as one literal argument of one command' ($quoteProblems.Count -eq 0) ($quoteProblems -join ' | ')
+$emails = New-ClaudeInstallerCommandLine -Command '.\scripts\Deploy-ClaudeProjectionRenewal.ps1' -Parameters ([ordered]@{ AlertEmail = @('ops@contoso.example', 'oncall@contoso.example') })
+$emailTree = [System.Management.Automation.Language.Parser]::ParseInput($emails, [ref]$null, [ref]$null)
+$emailParams = @($emailTree.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandParameterAst] -and $n.ParameterName -eq 'AlertEmail' }, $true))
+Assert 'an array value is passed once, as a list, not as a repeated parameter' ($emailParams.Count -eq 1 -and $emails -match 'ops@contoso\.example,oncall@contoso\.example') $emails
+
+# The installer uses each of these with its live values.
+$wiring = [IO.File]::ReadAllText((Join-Path $root 'Install-ClaudeGateway.ps1'))
+$wiringTree = [System.Management.Automation.Language.Parser]::ParseInput($wiring, [ref]$null, [ref]$null)
+function Get-CallArgument([string]$Command, [string]$Parameter) {
+    $call = $wiringTree.Find({ param($n) $n -is [System.Management.Automation.Language.CommandAst] -and $n.GetCommandName() -eq $Command }, $true)
+    if (-not $call) { return $null }
+    $elements = $call.CommandElements
+    for ($i = 0; $i -lt $elements.Count; $i++) {
+        if ($elements[$i] -is [System.Management.Automation.Language.CommandParameterAst] -and $elements[$i].ParameterName -eq $Parameter) {
+            if ($elements[$i].Argument) { return $elements[$i].Argument.Extent.Text }
+            if ($i + 1 -lt $elements.Count) { return $elements[$i + 1].Extent.Text }
+        }
+    }
+    return $null
+}
+Assert 'the installer decides the sync and baseline from the live entitlement-source' ((Get-CallArgument 'Invoke-ClaudeInstallerEntitlementSync' 'LiveEntitlementSource') -eq '$liveEntitlementSource')
+Assert 'the deployment gets the decided baseline, the serving store and the recorded projection prefix' (
+    (Get-CallArgument 'Invoke-ClaudeInstallerProjectionDeployment' 'CompareBaseline') -match '^\$entitlementSync\.CompareBaseline$' -and
+    (Get-CallArgument 'Invoke-ClaudeInstallerProjectionDeployment' 'ServingStore') -match '^\$entitlementSync\.ServingStore$' -and
+    (Get-CallArgument 'Invoke-ClaudeInstallerProjectionDeployment' 'NamePrefix') -eq '$projectionPrefix' -and
+    (Get-CallArgument 'Invoke-ClaudeInstallerSyncJobDeployment' 'NamePrefix') -eq '$projectionPrefix' -and
+    (Get-CallArgument 'Get-ClaudeInstallerProjectionNextSteps' 'NamePrefix') -eq '$projectionPrefix')
+Assert 'the store choice knows the live store' ((Get-CallArgument 'Resolve-ClaudeInstallerEntitlementStore' 'LiveStore') -eq '$liveEntitlementSource')
+Assert 'the resolver access is read strictly, not through the error-swallowing helper' ($wiring -match 'Get-ClaudeInstallerResolverAccess' -and $wiring -notmatch 'Invoke-AzOptional \{ az functionapp show')
+
 Write-Host ''
 if ($fail) { Write-Host "$fail of $count assertion(s) failed." -ForegroundColor Red; exit 1 }
 Write-Host "$count projection installer assertion(s) passed." -ForegroundColor Green

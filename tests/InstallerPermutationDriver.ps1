@@ -48,6 +48,11 @@ if (-not $Live) {
         if ($joined -like 'functionapp show -g rg-p72projection -n func-resolver-p72projection*publicNetworkAccess*') { return 'Disabled' }
         if ($joined -like 'apim nv show *apim-p72projection*entitlement-source*') { return 'projection' }
         if ($joined -like 'apim nv show *entitlement-source*') { return 'named-value' }
+        # The projection a gateway records; a gateway without one answers as Azure does (exit 3, NamedValue not found).
+        if ($joined -like 'apim nv show *apim-p72projection*entitlement-projection-prefix*') { return 'p72projection' }
+        if ($joined -like 'apim nv show *entitlement-projection-prefix*') { $global:LASTEXITCODE = 3; return 'ERROR: (ResourceNotFound) NamedValue not found.' }
+        # A gateway that never had the projection has no resolver site (exit 3, ResourceNotFound).
+        if ($joined -like 'functionapp show *func-resolver-*publicNetworkAccess*') { $global:LASTEXITCODE = 3; return "ERROR: (ResourceNotFound) The Resource 'Microsoft.Web/sites/func-resolver' was not found." }
         if ($joined -like 'apim nv show *entitlement-resolver-url*') { return 'https://resolver-not-deployed.invalid' }
         if ($joined -like 'apim nv show *entitlement-resolver-audience*') { return 'https://resolver-not-deployed.invalid' }
         if ($joined -like 'apim nv show *entitlement-cache-seconds*') { $global:LASTEXITCODE = 3; return }

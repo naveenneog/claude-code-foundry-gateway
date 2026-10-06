@@ -1,9 +1,12 @@
 
+# A plain token prints as it is. Anything else is single-quoted, with every single-quote character doubled
+# (PowerShell also reads U+2018-U+201B as single quotes), so a pasted rerun line passes the value and runs
+# nothing else (P98 council round 2, Security).
 function Format-ClaudeInstallerCommandValue {
-    param([Parameter(Mandatory)][object]$Value)
+    param([Parameter(Mandatory)][AllowEmptyString()][object]$Value)
     $text = [string]$Value
-    if ($text -match "[\s']") { return "'" + ($text -replace "'", "''") + "'" }
-    return $text
+    if ($text -cmatch '^[A-Za-z0-9][A-Za-z0-9._:/@=+-]*$') { return $text }
+    return "'" + [System.Management.Automation.Language.CodeGeneration]::EscapeSingleQuotedStringContent($text) + "'"
 }
 
 function New-ClaudeInstallerCommandLine {
@@ -18,7 +21,8 @@ function New-ClaudeInstallerCommandLine {
         }
         if ($null -eq $value -or [string]$value -eq '') { continue }
         if ($value -is [array]) {
-            foreach ($one in @($value)) { $parts.Add("-$key"); $parts.Add((Format-ClaudeInstallerCommandValue $one)) }
+            # One parameter with a comma list: a repeated parameter does not bind.
+            $parts.Add("-$key"); $parts.Add((@($value | ForEach-Object { Format-ClaudeInstallerCommandValue $_ }) -join ','))
         }
         else { $parts.Add("-$key"); $parts.Add((Format-ClaudeInstallerCommandValue $value)) }
     }
@@ -61,7 +65,9 @@ function Resolve-ClaudeInstallerEntitlementStore {
         [Parameter(Mandatory)][int]$ListCeiling,
         [switch]$Yes,
         [scriptblock]$Selector,
-        [AllowEmptyString()][ValidateSet('named-value','projection','')][string]$DefaultStore = ''
+        [AllowEmptyString()][ValidateSet('named-value','projection','')][string]$DefaultStore = '',
+        # The gateway's live entitlement-source, whether or not -EntitlementStore was passed.
+        [AllowEmptyString()][string]$LiveStore = ''
     )
     $options = @(
         New-ClaudeInstallerChoiceOption -Value 'projection' -Label 'Cosmos projection (recommended)' `
@@ -76,6 +82,13 @@ function Resolve-ClaudeInstallerEntitlementStore {
         if ($Yes) { $store = 'projection' }
         elseif ($Selector) { $store = & $Selector $options }
         else { $store = 'projection' }
+    }
+    if ($store -eq 'named-value' -and $LiveStore -eq 'projection') {
+        throw ("This gateway serves entitlement from the projection; the installer does not move it back to named values. " +
+            "The rollback holds only a population within named-value capacity (about $BuCeiling developers in business-unit membership, about $ListCeiling per tier list): " +
+            ".\scripts\Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim> -Store named-value, then " +
+            ".\scripts\Compare-ClaudeEntitlement.ps1 -ResourceGroup <rg> -ApimName <apim> -FailOnDrift, then entitlement-source set to named-value " +
+            "(docs/PROJECTION-WORKBOOK.md, Rollback to named values). Without -EntitlementStore the installer keeps the projection. Nothing was created.")
     }
     if ($store -eq 'named-value' -and $DeveloperCount -gt $BuCeiling) {
         throw ("Named values hold about {0} developers in the business-unit map (about {1} in a tier list), and you declared {2}. Choose projection; raising the API Management SKU does not increase one named value's 4,096-character capacity. Nothing was created." -f $BuCeiling, $ListCeiling, $DeveloperCount)
@@ -166,10 +179,13 @@ function Invoke-ClaudeInstallerProjectionDeployment {
         [string]$SubscriptionId,
         [string]$ProjectionResolverAppId,
         [ValidateSet('Auto','Snapshot')][string]$CompareBaseline = 'Auto',
+        # The store that serves until the switch, named in a failure (Invoke-ClaudeInstallerEntitlementSync).
+        [ValidateSet('named-value','projection')][string]$ServingStore = 'named-value',
         [switch]$ResolverPublicByDefault,
         [switch]$WhatIf,
         [scriptblock]$InvokeScript
     )
+    $serving = if ($ServingStore -eq 'projection') { 'the projection keeps serving' } else { 'named values keep serving' }
     $scriptPath = Join-Path $Root 'scripts\Deploy-ClaudeProjection.ps1'
     $common = [ordered]@{ ResourceGroup = $ResourceGroup; ApimName = $ApimName; NamePrefix = $NamePrefix; StandardGroup = $StandardGroup; PremiumGroup = $PremiumGroup; CompareBaseline = $CompareBaseline }
     if ($SubscriptionId) { $common['SubscriptionId'] = $SubscriptionId }
@@ -190,12 +206,10 @@ function Invoke-ClaudeInstallerProjectionDeployment {
     }
     $deployRerun = New-ClaudeInstallerCommandLine -Command '.\scripts\Deploy-ClaudeProjection.ps1' -Parameters $deployParameters
     if ((Invoke-ClaudeInstallerScript -ScriptPath $scriptPath -Parameters $deployParameters -InvokeScript $InvokeScript) -ne 0) {
-        $serving = if ($CompareBaseline -eq 'Snapshot') { 'the projection keeps serving' } else { 'named values keep serving' }
         throw "Projection deployment failed; $serving and nothing was switched. Rerun after fixing the reason with: $deployRerun"
     }
     if ((Invoke-ClaudeInstallerScript -ScriptPath $scriptPath -Parameters $switchParameters -InvokeScript $InvokeScript) -ne 0) {
         $switchRerun = New-ClaudeInstallerCommandLine -Command '.\scripts\Deploy-ClaudeProjection.ps1' -Parameters $switchParameters
-        $serving = if ($CompareBaseline -eq 'Snapshot') { 'the projection keeps serving' } else { 'named values keep serving' }
         throw "Projection switch refused; $serving. Rerun after fixing the reason with: $switchRerun"
     }
     return $true
@@ -229,6 +243,84 @@ function Invoke-ClaudeInstallerSyncJobDeployment {
 function Test-ClaudeInstallerShouldSyncNamedValues {
     param([ValidateSet('named-value','projection')][string]$EntitlementStore, [bool]$NewGateway)
     return ($EntitlementStore -eq 'named-value' -or -not $NewGateway)
+}
+
+# What the installer refreshes before the projection deployment, what the projection is compared with, and
+# which store serves if a later step fails (P98 council round 2):
+# - a gateway already on the projection: its named-value lists are an old rollback copy, so none are
+#   refreshed (the deployer's populate step syncs the projection) and the comparison uses a fresh snapshot;
+# - a new gateway that gets the projection: nothing serves yet and nothing is refreshed;
+# - otherwise the named-value lists are refreshed. Above their capacity Sync-ClaudeAccess.ps1 refuses before
+#   its first write, the lists stay as they were and keep serving, and the comparison uses a fresh snapshot.
+function Invoke-ClaudeInstallerEntitlementSync {
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$ResourceGroup,
+        [Parameter(Mandatory)][string]$ApimName,
+        [Parameter(Mandatory)][string]$StandardGroup,
+        [Parameter(Mandatory)][string]$PremiumGroup,
+        [Parameter(Mandatory)][ValidateSet('named-value','projection')][string]$EntitlementStore,
+        [AllowEmptyString()][string]$LiveEntitlementSource = '',
+        [switch]$NewGateway,
+        [scriptblock]$InvokeScript
+    )
+    $serving = if ($LiveEntitlementSource -eq 'projection') { 'projection' } else { 'named-value' }
+    if ($EntitlementStore -eq 'projection' -and $serving -eq 'projection') {
+        return [pscustomobject]@{ CompareBaseline = 'Snapshot'; ServingStore = 'projection'; Reason = 'already-projection' }
+    }
+    if (-not (Test-ClaudeInstallerShouldSyncNamedValues -EntitlementStore $EntitlementStore -NewGateway ([bool]$NewGateway))) {
+        return [pscustomobject]@{ CompareBaseline = 'Auto'; ServingStore = 'named-value'; Reason = 'new-gateway' }
+    }
+    $parameters = [ordered]@{ ApimName = $ApimName; ResourceGroup = $ResourceGroup; StandardGroup = $StandardGroup; PremiumGroup = $PremiumGroup; Store = 'named-value' }
+    $scriptPath = Join-Path $Root 'scripts\Sync-ClaudeAccess.ps1'
+    try {
+        if ($InvokeScript) { $null = & $InvokeScript $scriptPath $parameters }
+        else { & $scriptPath @parameters | Out-Host }
+    }
+    catch {
+        if ($EntitlementStore -eq 'projection' -and $_.Exception.Message -match 'over the API Management limit of') {
+            return [pscustomobject]@{ CompareBaseline = 'Snapshot'; ServingStore = 'named-value'; Reason = 'over-capacity' }
+        }
+        throw
+    }
+    return [pscustomobject]@{ CompareBaseline = 'Auto'; ServingStore = 'named-value'; Reason = 'refreshed' }
+}
+
+# A re-run deploys and switches the projection the gateway records in entitlement-projection-prefix (written by
+# scripts/Deploy-ClaudeProjection.ps1), which need not match the API Management name (P98 council round 2).
+function Get-ClaudeInstallerProjectionPrefix {
+    param([AllowEmptyString()][string]$RecordedPrefix = '', [Parameter(Mandatory)][string]$NamePrefix)
+    $recorded = ([string]$RecordedPrefix).Trim()
+    if (-not $recorded) { return $NamePrefix }
+    if ($recorded.Length -gt 37 -or $recorded -cnotmatch '^[a-z0-9]+(?:-[a-z0-9]+)*$') {
+        throw "The gateway's entitlement-projection-prefix '$recorded' is not a projection name prefix (1-37 lowercase letters or digits, separated by single hyphens). Remedy: correct the named value or pass -EntitlementStore explicitly. Nothing was created."
+    }
+    return $recorded
+}
+
+# A re-run keeps the deployed resolver's network access. A read that fails stops the run before approval,
+# rather than defaulting a private resolver to public (P98 council round 2).
+function Get-ClaudeInstallerResolverAccess {
+    param([Parameter(Mandatory)][string]$ResourceGroup, [Parameter(Mandatory)][string]$SiteName, [scriptblock]$InvokeAz)
+    $saved = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $global:LASTEXITCODE = 0
+        $output = if ($InvokeAz) { @(& $InvokeAz $ResourceGroup $SiteName) } else { @(az functionapp show -g $ResourceGroup -n $SiteName --query publicNetworkAccess -o tsv --only-show-errors 2>&1) }
+        $code = $LASTEXITCODE
+    }
+    finally { $ErrorActionPreference = $saved }
+    $text = ((@($output) | ForEach-Object { [string]$_ }) -join "`n").Trim()
+    $remedy = 'Remedy: pass -ResolverInboundAccess private or public. Nothing was created.'
+    if ($code -ne 0) {
+        if ($text -match '(?i)\(ResourceNotFound\)|was not found') { return '' }
+        throw "Could not read the network access of resolver $SiteName in $ResourceGroup (az exit $code); a re-run keeps it. $remedy"
+    }
+    switch ($text) {
+        'Disabled' { return 'private' }
+        'Enabled' { return 'public' }
+        default { throw "Resolver $SiteName in $ResourceGroup reports publicNetworkAccess '$text'; a re-run keeps the resolver's access only when it is Enabled or Disabled. $remedy" }
+    }
 }
 
 function Get-ClaudeInstallerProjectionNextSteps {

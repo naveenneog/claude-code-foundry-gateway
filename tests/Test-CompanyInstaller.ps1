@@ -69,7 +69,7 @@ function az {
         if($s -match '--query sku.name'){return 'BasicV2'}
         return '{"name":"apim-contoso","resourceGroup":"rg-contoso","location":"eastus2","publisherEmail":"ops@contoso.com","sku":{"name":"BasicV2"},"gatewayUrl":"https://apim-contoso.azure-api.net"}'
     }
-    if($s -like 'apim nv show*'){ if($s -like '*entitlement-cache-seconds*'){return '3600'}; return ',,' }
+    if($s -like 'apim nv show*'){ if($s -like '*entitlement-cache-seconds*'){return '3600'}; if($s -like '*entitlement-projection-prefix*'){$global:LASTEXITCODE=3; return 'ERROR: (ResourceNotFound) NamedValue not found.'}; return ',,' }
     if($s -like 'group show*'){return 'eastus2'}
     if($s -like 'deployment group create*'){$global:P69InstallWrites.Add('deployment');return}
     if($s -like 'deployment group show*'){return 'https://apim-contoso.azure-api.net/claude'}
@@ -95,7 +95,9 @@ catch {$failure=$_.Exception.Message}
     function Invoke-Installer([hashtable]$Overrides=@{},[bool]$Decline=$false,$SavedRecord=$initial,[string]$ArchiveAnswer=''){
         [IO.File]::WriteAllText($recordPath,($SavedRecord|ConvertTo-Json -Depth 15))
         [IO.File]::WriteAllText((Join-Path $scratch 'onboarding\profiles\standard\managed-settings.json'),'{"gatewayUrl":"https://old.contoso.test/claude"}')
-        $values=@{SubscriptionId=$sub;FoundryAccount='ai-contoso';FoundryResourceGroup='rg-contoso';ResourceGroup='rg-contoso';ExistingApimName='apim-contoso';Location='eastus2';Sku='BasicV2';AuthMode='interactive';EntitlementStore='named-value';SkipFinOpsOffer=$true;Yes=$true}
+        # DeveloperCount: an unattended named-value run otherwise reads every tier-group member from Graph to check
+        # capacity (Test-ClaudeInstallProjection covers that read); this sandbox holds no Graph stub.
+        $values=@{SubscriptionId=$sub;FoundryAccount='ai-contoso';FoundryResourceGroup='rg-contoso';ResourceGroup='rg-contoso';ExistingApimName='apim-contoso';Location='eastus2';Sku='BasicV2';AuthMode='interactive';EntitlementStore='named-value';DeveloperCount=25;SkipFinOpsOffer=$true;Yes=$true}
         foreach($k in $Overrides.Keys){$values[$k]=$Overrides[$k]}
         $ps=[powershell]::Create()
         try {$null=$ps.AddScript($driver).AddArgument($scratch).AddArgument($values).AddArgument($Decline).AddArgument($ArchiveAnswer);@($ps.Invoke())[-1]}finally{$ps.Dispose()}
