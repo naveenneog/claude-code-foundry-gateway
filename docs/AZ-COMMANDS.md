@@ -1527,6 +1527,10 @@ Populate and compare the projection through an in-VNet runner container.
 p89_projection_runner() {
   export RUNNER_NAME="$(az deployment group show -g "$GATEWAY_RG" -n "$PROJECTION_NETWORK_NAME" --query "properties.outputs.runnerName.value" -o tsv)"
   export RUNNER_PRINCIPAL_ID="$(az deployment group show -g "$GATEWAY_RG" -n "$PROJECTION_NETWORK_NAME" --query "properties.outputs.runnerPrincipalId.value" -o tsv)"
+  if ! PROJECTION_ACCOUNT_RESOURCE_ID="$(az cosmosdb show -n "$COSMOS_ACCOUNT" -g "$GATEWAY_RG" --query id -o tsv)" || [ -z "$PROJECTION_ACCOUNT_RESOURCE_ID" ]; then
+    echo "Refused: could not read the projection Cosmos account resource id; nothing was applied." >&2
+    return 1
+  fi
   az cosmosdb sql role assignment create --account-name "$COSMOS_ACCOUNT" --resource-group "$GATEWAY_RG" --scope /dbs/claude/colls/entitlement --principal-id "$RUNNER_PRINCIPAL_ID" --role-definition-id 00000000-0000-0000-0000-000000000002 -o none || return 1
   ./scripts/Sync-ClaudeProjection.ps1 -Account "$COSMOS_ACCOUNT" -ApimName "$APIM_NAME" -ResourceGroup "$GATEWAY_RG" -StandardGroup "$STANDARD_GROUP" -PremiumGroup "$PREMIUM_GROUP" -ExportPath snapshot.json || return 1
   tar -c -z -f sync-source.tar.gz sync/Dockerfile sync/package.json sync/package-lock.json sync/src resolver/src/entitlement.mjs || return 1
@@ -1606,10 +1610,6 @@ p94_projection_renewal() {
   fi
   if ! COSMOS_ACCOUNT="$(az deployment group show -g "$GATEWAY_RG" -n "projection-${NAME_PREFIX}" --query "properties.outputs.accountName.value" -o tsv)" || [ -z "$COSMOS_ACCOUNT" ]; then
     echo "Refused: could not read the projection Cosmos account output; nothing was deployed." >&2
-    return 1
-  fi
-  if ! PROJECTION_ACCOUNT_RESOURCE_ID="$(az cosmosdb show -n "$COSMOS_ACCOUNT" -g "$GATEWAY_RG" --query id -o tsv)" || [ -z "$PROJECTION_ACCOUNT_RESOURCE_ID" ]; then
-    echo "Refused: could not read the projection Cosmos account resource id; nothing was applied." >&2
     return 1
   fi
   if ! RG_RESOURCES="$(az resource list -g "$GATEWAY_RG" --query "[].[name,type]" -o tsv)"; then
