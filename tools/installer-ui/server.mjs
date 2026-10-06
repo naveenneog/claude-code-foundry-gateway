@@ -142,7 +142,7 @@ export async function createInstallerUiServer(options = {}) {
   const token = options.token || randomBytes(32).toString('base64url');
   const tokenDigest = tokenHash(token);
   const sessionAuth = createSessionAuth();
-  const azureLease = createAzureLease();
+  const azureLease = createAzureLease({ onQueued: options.onAzureQueued });
   const csrfToken = options.csrfToken || randomBytes(32).toString('base64url');
   const tempDirs = new Set();
   let port = Number(options.port || 0);
@@ -152,6 +152,7 @@ export async function createInstallerUiServer(options = {}) {
   let idleTimer = null;
   let stopping = false;
   let inFlight = 0;
+  const openResponses = new Set();
   const preflightPasses = createPreflightStore(20);
   const runAdmissions = createRunAdmissions(20);
   let liveMode = { ok: false, reason: 'PowerShell live-mode check has not completed.' };
@@ -172,8 +173,19 @@ export async function createInstallerUiServer(options = {}) {
     if (idleTimer) clearTimeout(idleTimer);
     azureLease.close();
     await Promise.all([...options._children].map((child) => killProcessTree(child).catch(() => {})));
+    await flushEndedResponses();
     server.closeAllConnections?.();
     for (const dir of [...tempDirs]) await rm(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }).catch(() => {});
+  };
+
+  // Closing the lease refuses queued reads; their refusals are written before connections close. Open streams are not waited for.
+  const flushEndedResponses = async () => {
+    await new Promise((resolve) => setImmediate(resolve));
+    const ending = [...openResponses].filter((res) => res.writableEnded && !res.writableFinished);
+    let timer;
+    const limit = new Promise((resolve) => { timer = setTimeout(resolve, 1000); });
+    await Promise.race([Promise.all(ending.map((res) => once(res, 'finish').catch(() => {}))), limit]);
+    clearTimeout(timer);
   };
 
   const stopServer = async (reason) => {
@@ -296,6 +308,8 @@ export async function createInstallerUiServer(options = {}) {
 
   const server = createHttpServer(async (req, res) => {
     let requestCounted = false;
+    openResponses.add(res);
+    res.once('close', () => openResponses.delete(res));
     try {
       if (!isAllowedHost(req.headers.host, port, extraHosts)) {
         log(`Refused Host: host=${req.headers.host || ''}; x-forwarded-host=${req.headers['x-forwarded-host'] || ''}; x-forwarded-proto=${req.headers['x-forwarded-proto'] || ''}; x-forwarded-prefix=${req.headers['x-forwarded-prefix'] || ''}`);
@@ -527,6 +541,8 @@ export async function createInstallerUiServer(options = {}) {
         const body = await readJsonBody(req);
         const run = activeRun || lastRun;
         if (!run || run.id !== body.runId || (run.state !== 'running' && run.state !== 'stopping')) return send(res, 404, { error: 'active run not found' }, setCookie);
+        // A run that is already stopping keeps its first stop: no second stopped event and no second process-tree stop.
+        if (run.state === 'stopping') return send(res, 200, { schemaVersion: 1, runId: run.id, message: run.stoppedMessage }, setCookie);
         run.state = 'stopping';
         run.stopRequested = true;
         const step = run.currentStepId || run.steps[0] || 'the current step';

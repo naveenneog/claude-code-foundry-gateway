@@ -112,6 +112,8 @@ Run state lives in `tools/installer-ui/run-record.mjs`, not in a browser connect
 /api/run/status` reports the active or last run, `GET /api/run/attach?after=<seq>&run=<id>` replays
 the tail and follows live events for that run id, a replaced record returns `409` with
 `reason: run-replaced`, and `POST /api/run/stop` stops the followed child process tree.
+A stop for a run that is already stopping returns the message of the first stop without stopping
+the tree again (`tools/installer-ui/server.mjs:544-545`).
 `tools/installer-ui/run-admission.mjs` keeps the admission of the last 20 run requests by client
 request id (`admitting`, then `started` with the run id or `refused` with the error and reason), and
 `GET /api/run/status?request=<id>` adds that record to the status

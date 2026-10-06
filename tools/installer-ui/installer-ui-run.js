@@ -60,9 +60,10 @@
       removedRunOutputLines = 0;
     }
 
-    // The state the server reports for the followed run: Stop is offered only while it is running, and a stopping run says so.
+    // The state the server reports for the followed run: Stop is offered only while it is running, and a stopping or ended run says so.
     function applyRunState(state) {
       runStopping = state !== "running";
+      if (state === "stopped" || state === "exited") setStatusText("run", "The run has ended. Reading its final output.");
       if (state === "stopping") setStatusText("run", `Stopping at ${activeStepId || "the current step"}.`);
       updateRunAdmission();
     }
@@ -118,6 +119,11 @@
           const event = JSON.parse(line);
           lastRunSeq = event.seq || lastRunSeq;
           if (event.type === "progress" && event.event === "started") activeStepId = event.stepId || activeStepId;
+          // A stop that another tab or client sent reaches this page as the stopped event.
+          if (event.type === "stopped") {
+            activeStepId = event.stepId || activeStepId;
+            applyRunState("stopping");
+          }
           appendRunLine(`${event.type}: ${event.stepId || ""} ${event.event || ""} ${event.line || event.message || ""}`);
           if (event.type === "summary") summary = event;
         }
@@ -170,6 +176,7 @@
         }
         activeRunId = status.id;
         activeStepId = status.currentStepId || status.steps?.[0] || "";
+        applyRunState(status.state);
         const before = lastRunSeq;
         const result = await readRunStream(await fetchRunStream(attachPath(lastRunSeq)));
         if (result) return result;
@@ -358,6 +365,12 @@
       const runId = activeRunId;
       const step = status.id === activeRunId ? status.currentStepId || status.steps?.[0] || activeStepId || "the current step" : activeStepId || "the current step";
       if (!runId) return { statusText: "No run is active, so nothing was stopped." };
+      // The followed run can already be stopping or have ended, for example after a stop from another tab.
+      if (status.id === runId && status.state !== "running") {
+        activeStepId = status.currentStepId || status.steps?.[0] || activeStepId;
+        applyRunState(status.state);
+        return { statusText: status.state === "stopping" ? "The run is already stopping, so no second stop was requested." : "The run has already ended, so nothing was stopped." };
+      }
       if (!globalThis.confirm(`Stop run at ${step}? Running the same steps again resumes from the install checkpoint.`)) return { statusText: "No stop was requested." };
       const result = await postJson("./api/run/stop", { runId });
       appendRunLine(`stopped: ${result.message}`);

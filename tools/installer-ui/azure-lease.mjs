@@ -1,4 +1,5 @@
-export function createAzureLease() {
+// onQueued is called with the operation name when a read waits behind the current holder.
+export function createAzureLease({ onQueued } = {}) {
   let holder = null;
   const queue = [];
   let closed = false;
@@ -73,6 +74,7 @@ export function createAzureLease() {
         }, timeoutMs);
         entry.timer.unref?.();
         queue.push(entry);
+        onQueued?.(operation);
       });
     },
     close() {

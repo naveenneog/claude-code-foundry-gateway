@@ -132,6 +132,12 @@ exact streaming cache-creation detail remains **U13**.
   A run that the page attaches after a lost run request, after a broken stream or on page load now
   takes its state from status: a run that is already stopping shows the stop in progress and offers no
   Stop, and a run that has already finished offers no Stop while its output is read.
+  A stream that ends without its summary now also takes the run's state from status, a run that has
+  already ended says so while its output is read, a stop sent from another tab reaches the page
+  through the run stream, and Stop run sends no stop for a run that status reports as stopping or
+  ended. The server answers a stop for a run that is already stopping with the first stop's message,
+  without a second stopped event and without stopping the process tree again. Shutdown now writes the
+  `installer-ui-stopping` refusals of reads that waited for Azure CLI before it closes connections.
 - **Installers read an answers file, check it before any change, run selected steps and write a progress stream (P92, phase 0).**
   One answers file, described by `schemas/claude-gateway.answers.schema.json`, feeds
   `Install-ClaudeGateway.ps1 -AnswersPath`, `install-claude-gateway.sh --answers-file` and

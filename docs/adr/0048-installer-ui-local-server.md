@@ -65,6 +65,8 @@ record has another id. Run and attach streams carry `x-installer-run-id` when th
 attached. `POST /api/run/stop` kills the followed process tree and reports checkpoint-based resume semantics
 (`tools/installer-ui/run-record.mjs:10-41`; `tools/installer-ui/run-record.mjs:78-129`; `tools/installer-ui/server.mjs:357-370`;
 `tools/installer-ui/server.mjs:532-536`).
+A stop for a run that is already stopping returns the message of the first stop, without a second
+stopped event and without stopping the process tree again (`tools/installer-ui/server.mjs:544-545`).
 Run requests also carry a browser-generated client request id. The server records a small admission
 history for that id before reading the body, then marks it `started` with the run id or `refused`
 with the response reason; `GET /api/run/status?request=<id>` includes that record. The page uses it
@@ -118,6 +120,8 @@ first, refusing queued and later Azure work with `installer-ui-stopping`, and ch
 refuses after cleanup starts (`tools/installer-ui/azure-lease.mjs:6-11`; `tools/installer-ui/azure-lease.mjs:44-45`; `tools/installer-ui/azure-lease.mjs:78-88`;
 `tools/installer-ui/server.mjs:74-80`; `tools/installer-ui/server.mjs:170-177`;
 `tools/installer-ui/server.mjs:205-211`; `tools/installer-ui/server.mjs:435`; `tools/installer-ui/server.mjs:450`).
+Shutdown writes those refusals before it closes the remaining connections, waiting at most 1 s for
+them (`tools/installer-ui/server.mjs:181-189`).
 
 The server refuses a live run with `AddressMode = custom` and `AddressCertificateSource = Pfx`
 before creating a run because the page does not collect the PFX password and the installer asks for

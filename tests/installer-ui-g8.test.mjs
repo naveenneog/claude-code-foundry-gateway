@@ -28,6 +28,7 @@ async function start(extra = {}) {
     readOnlyTimeoutMs: extra.readOnlyTimeoutMs,
     tempRoot: extra.tempRoot,
     beforeRunSpawn: extra.beforeRunSpawn,
+    onAzureQueued: extra.onAzureQueued,
   });
   const address = await server.listenAsync('127.0.0.1');
   const base = `http://127.0.0.1:${address.port}`;
@@ -430,6 +431,8 @@ test('R3-4 shutdown closes the Azure lease before queued reads can spawn childre
   const heldIdentity = new Promise((resolve) => { releaseIdentity = resolve; });
   let identityEntered;
   const identityStarted = new Promise((resolve) => { identityEntered = resolve; });
+  let preflightQueued;
+  const preflightWaiting = new Promise((resolve) => { preflightQueued = resolve; });
   const tempRoot = join(tmpdir(), `p93-g8-r3-4-temp-${process.pid}-${Date.now()}`);
   const app = await start({
     tempRoot,
@@ -438,12 +441,19 @@ test('R3-4 shutdown closes the Azure lease before queued reads can spawn childre
       await heldIdentity;
       return identityOne;
     },
+    onAzureQueued: (operation) => {
+      if (operation === 'preflight') preflightQueued();
+    },
   });
   try {
     const identity = app.fetch('/api/identity');
+    identity.catch(() => {});
     await identityStarted;
     const preflight = app.fetch('/api/preflight', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: passingAnswers, steps: ['resource-group'] }) });
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    preflight.catch(() => {});
+    // Shutdown starts only once the preflight waits for the Azure lease behind the held identity read.
+    let timer;
+    await Promise.race([preflightWaiting, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('The preflight did not wait for the Azure lease within 30000 ms')), 30_000); })]).finally(() => clearTimeout(timer));
     const shutdown = shutdownInstallerUiServer(app.server, 'test shutdown');
     releaseIdentity();
     const [, preflightResult] = await Promise.allSettled([identity, preflight]);
@@ -454,6 +464,7 @@ test('R3-4 shutdown closes the Azure lease before queued reads can spawn childre
     const entries = await import('node:fs/promises').then(({ readdir }) => readdir(tempRoot).catch(() => []));
     assert.deepEqual(entries.filter((name) => name.startsWith('claude-installer-ui-')), []);
   } finally {
+    releaseIdentity();
     await app.close().catch(() => {});
     await rm(tempRoot, { recursive: true, force: true });
   }

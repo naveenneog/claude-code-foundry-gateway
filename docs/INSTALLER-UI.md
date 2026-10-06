@@ -142,8 +142,9 @@ One Azure CLI lease covers identity, prefill, preflight and a run from admission
 Reads queue behind reads, reads and runs are refused while a run holds the lease, and runs are
 refused while a read holds it. Shutdown closes the lease before killing the current child snapshot,
 so queued and later Azure reads are refused with `installer-ui-stopping` and no child starts after
-cleanup begins (`tools/installer-ui/azure-lease.mjs:6-11`; `tools/installer-ui/azure-lease.mjs:44-45`; `tools/installer-ui/azure-lease.mjs:78-88`; `tools/installer-ui/server.mjs:74-80`;
-`tools/installer-ui/server.mjs:170-177`). One installer run can be active. A second run receives `409`, and `POST /api/run` is not a route, so
+cleanup begins (`tools/installer-ui/azure-lease.mjs:7-12`; `tools/installer-ui/azure-lease.mjs:45-46`; `tools/installer-ui/azure-lease.mjs:80-89`; `tools/installer-ui/server.mjs:74-80`;
+`tools/installer-ui/server.mjs:171-179`). Shutdown writes those refusals before it closes the
+remaining connections, waiting at most 1 s for them (`tools/installer-ui/server.mjs:181-189`). One installer run can be active. A second run receives `409`, and `POST /api/run` is not a route, so
 it returns `404` through the fixed-route fallback (`tools/installer-ui/server.mjs:538`). A run writes its answers and progress file to a per-run
 temporary directory and removes that directory after the child exits (`tools/installer-ui/server.mjs:272-276`;
 `tools/installer-ui/server.mjs:506-517`). A disconnected browser does not kill the child. `GET
@@ -166,12 +167,20 @@ notice, a console line above 64 KiB is truncated with ` [line truncated]`, and t
 The run output is a labelled log region (`tools/installer-ui/index.html:34`). The Stop run button is
 enabled only while the page follows a run whose id is known and that the server reports as running;
 an accepted stop sets the page state to stopping until the summary arrives
-(`tools/installer-ui/installer-ui.js:443-444`; `tools/installer-ui/installer-ui.js:651-653`; `tools/installer-ui/installer-ui-run.js:356-370`).
-A run that the page attaches after a lost run request, after a broken stream or on page load takes
-its state from status: a stopping run shows `Stopping at <step>.` and offers no Stop, and a run that
-has already finished offers no Stop while its output is read (`tools/installer-ui/installer-ui-run.js:63-68`;
-`tools/installer-ui/installer-ui-run.js:238`; `tools/installer-ui/installer-ui-run.js:267`;
-`tools/installer-ui/installer-ui-run.js:339`). Windows
+(`tools/installer-ui/installer-ui.js:443-444`; `tools/installer-ui/installer-ui.js:651-653`; `tools/installer-ui/installer-ui-run.js:363-383`).
+A run that the page attaches after a lost run request, after a broken stream, after a stream that
+ends without its summary or on page load takes its state from status: a stopping run shows
+`Stopping at <step>.` and offers no Stop, and a run that has already ended shows
+`The run has ended. Reading its final output.` and offers no Stop while its output is read
+(`tools/installer-ui/installer-ui-run.js:63-70`; `tools/installer-ui/installer-ui-run.js:179`;
+`tools/installer-ui/installer-ui-run.js:245`; `tools/installer-ui/installer-ui-run.js:274`;
+`tools/installer-ui/installer-ui-run.js:346`). A stop from another tab reaches the page as the
+stopped event in the run stream, which sets the same stopping state
+(`tools/installer-ui/installer-ui-run.js:122-126`). Stop run reads status before it asks for
+confirmation and sends no stop for a run that is already stopping or has ended
+(`tools/installer-ui/installer-ui-run.js:368-373`). The server answers a stop for a run that is
+already stopping with the message of the first stop, without a second stopped event and without
+stopping the process tree again (`tools/installer-ui/server.mjs:544-545`). Windows
 uses `taskkill.exe /PID <pid> /T /F`; POSIX children run in a detached process group so the group can
 be signalled (`tools/installer-ui/server.mjs:60-63`; `tools/installer-ui/server.mjs:85`; `tools/installer-ui/server.mjs:65-67`). The stop
 response and stream say that the install checkpoint resumes when the same steps run again

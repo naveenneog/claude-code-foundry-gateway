@@ -516,6 +516,7 @@ test('R6-1 a run recovered after it finished does not offer Stop while its outpu
     await within(held.attachRequested, 30_000, 'The recovered run attach request');
     assert.equal(await page.getByRole('button', { name: 'Stop run' }).isDisabled(), true);
     assert.doesNotMatch(await page.locator('#run-status').textContent(), /Stopping at/);
+    assert.match(await page.locator('#run-status').textContent(), /The run has ended\. Reading its final output\./);
     held.release();
     await page.locator('#run-status').getByText(/Run finished\./).waitFor();
     assert.match(await page.locator('#run-output').textContent(), /finished-run-marker/);
@@ -552,6 +553,142 @@ test('R6-1 a broken stream of a run that is stopping does not offer Stop again',
     await assertClean(page, pageErrors);
   } finally {
     held?.release();
+    await browser.close();
+    await app.close();
+  }
+});
+// The run response names the run and its stream then ends cleanly without a summary; plain status reports the run in the given state.
+async function endStreamWithoutSummary(page, state) {
+  await page.route('**/api/run/stream', (route) => route.fulfill({
+    status: 200,
+    headers: { 'x-installer-run-id': recoveredRunId },
+    contentType: 'application/x-ndjson',
+    body: '{"seq":1,"type":"progress","stepId":"resource-group","event":"started","message":"started"}\n',
+  }));
+  await page.route('**/api/run/status', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ id: recoveredRunId, state, currentStepId: 'resource-group', steps: ['resource-group'] }),
+  }));
+}
+
+test('R7-1 a stream that ends without its summary while the run is stopping shows the stop and does not offer Stop', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  let held;
+  try {
+    await passPreflight(page);
+    await endStreamWithoutSummary(page, 'stopping');
+    held = await holdAttachAndCountStops(page, stoppedTail);
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await within(held.attachRequested, 30_000, 'The reattach after the stream ended without its summary');
+    assert.match(await page.locator('#run-status').textContent(), /Stopping at resource-group\./);
+    assert.equal(await page.getByRole('button', { name: 'Stop run' }).isDisabled(), true);
+    held.release();
+    await page.locator('#run-status').getByText(/Run stopped at resource-group\./).waitFor();
+    assert.equal(held.stopRequests, 0);
+    await assertClean(page, pageErrors);
+  } finally {
+    held?.release();
+    await browser.close();
+    await app.close();
+  }
+});
+
+test('R7-1 a stream that ends without its summary after the run ended does not offer Stop while its output is read', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  let held;
+  try {
+    await passPreflight(page);
+    await endStreamWithoutSummary(page, 'exited');
+    held = await holdAttachAndCountStops(page, '{"seq":2,"type":"progress","stepId":"resource-group","event":"completed","message":"ended-run-marker"}\n{"seq":3,"type":"summary","exitCode":0,"failedStepId":"","resumeCommand":"","state":"exited","message":""}\n');
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await within(held.attachRequested, 30_000, 'The reattach after the stream ended without its summary');
+    assert.equal(await page.getByRole('button', { name: 'Stop run' }).isDisabled(), true);
+    assert.match(await page.locator('#run-status').textContent(), /The run has ended\. Reading its final output\./);
+    held.release();
+    await page.locator('#run-status').getByText(/Run finished\./).waitFor();
+    assert.match(await page.locator('#run-output').textContent(), /ended-run-marker/);
+    assert.equal(held.stopRequests, 0);
+    await assertClean(page, pageErrors);
+  } finally {
+    held?.release();
+    await browser.close();
+    await app.close();
+  }
+});
+
+// Starts a real run that waits before its installer child until release(), and returns once the page offers Stop for it.
+async function followHeldRun() {
+  let release;
+  let entered;
+  const held = new Promise((resolve) => { release = resolve; });
+  const reached = new Promise((resolve) => { entered = resolve; });
+  const app = await start({ beforeRunSpawn: async () => { entered(); await held; } });
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    const stopRequests = [];
+    page.on('request', (request) => { if (new URL(request.url()).pathname === '/api/run/stop') stopRequests.push(request.method()); });
+    await passPreflight(page);
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await within(reached, 30_000, 'The run reaching the point before its installer child');
+    await page.waitForFunction(() => !document.querySelector('#stop-run')?.disabled);
+    return { app, browser, page, pageErrors, release, stopRequests };
+  } catch (error) {
+    release();
+    await browser.close().catch(() => {});
+    await app.close().catch(() => {});
+    throw error;
+  }
+}
+
+test('R7-1 Stop sends no stop request for a followed run that status reports as stopping', async () => {
+  const run = await followHeldRun();
+  const { app, browser, page, pageErrors } = run;
+  try {
+    await page.route('**/api/run/status', async (route) => {
+      const response = await route.fetch();
+      await route.fulfill({ response, json: { ...(await response.json()), state: 'stopping' } });
+    });
+    await page.evaluate(() => { globalThis.confirm = () => true; });
+    await page.getByRole('button', { name: 'Stop run' }).click();
+    await page.locator('#stop-run-status').getByText(/The run is already stopping, so no second stop was requested\./).waitFor();
+    assert.match(await page.locator('#run-status').textContent(), /Stopping at resource-group\./);
+    assert.equal(await page.getByRole('button', { name: 'Stop run' }).isDisabled(), true);
+    assert.deepEqual(run.stopRequests, []);
+    await page.unroute('**/api/run/status');
+    run.release();
+    await page.locator('#run-status').getByText(/Run finished\./).waitFor();
+    await assertClean(page, pageErrors);
+  } finally {
+    run.release();
+    await browser.close();
+    await app.close();
+  }
+});
+
+test('R7-1 a stop from another client reaches the page through the stream and Stop is no longer offered', async () => {
+  const run = await followHeldRun();
+  const { app, browser, page, pageErrors } = run;
+  try {
+    const auth = await pageApiAuth(page);
+    const { id } = await (await fetch(`${app.base}/api/run/status`, { headers: { cookie: auth.cookie } })).json();
+    const stopped = await fetch(`${app.base}/api/run/stop`, {
+      method: 'POST',
+      headers: { cookie: auth.cookie, 'x-csrf-token': auth.csrfToken, 'content-type': 'application/json' },
+      body: JSON.stringify({ runId: id }),
+    });
+    assert.equal(stopped.status, 200);
+    await page.locator('#run-output').getByText(/stopped: resource-group/).waitFor();
+    assert.match(await page.locator('#run-status').textContent(), /Stopping at resource-group\./);
+    assert.equal(await page.getByRole('button', { name: 'Stop run' }).isDisabled(), true);
+    run.release();
+    await page.locator('#run-status').getByText(/Run stopped at resource-group\./).waitFor();
+    assert.deepEqual(run.stopRequests, []);
+    await assertClean(page, pageErrors);
+  } finally {
+    run.release();
     await browser.close();
     await app.close();
   }

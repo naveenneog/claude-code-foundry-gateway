@@ -1579,5 +1579,77 @@
     "replace": "    function adoptRun(runId, stepId = \"\", state = \"stopping\") {\n",
     "testFile": "tests/installer-ui-g9b.test.mjs",
     "test": "R4-3 Stop is disabled during admission and while an accepted stop is pending summary"
+  },
+  {
+    "id": "r7-1-1",
+    "why": "R7-1: summary-less recovery applies the state that status reports before it attaches",
+    "file": "tools/installer-ui/installer-ui-run.js",
+    "find": "        activeStepId = status.currentStepId || status.steps?.[0] || \"\";\n        applyRunState(status.state);\n",
+    "replace": "        activeStepId = status.currentStepId || status.steps?.[0] || \"\";\n        applyRunState(\"running\");\n",
+    "testFile": "tests/installer-ui-g9b.test.mjs",
+    "test": "R7-1 a stream that ends without its summary while the run is stopping shows the stop and does not offer Stop"
+  },
+  {
+    "id": "r7-1-2",
+    "why": "R7-1: the stop action sends no stop for a followed run that status reports as not running",
+    "file": "tools/installer-ui/installer-ui-run.js",
+    "find": "      if (status.id === runId && status.state !== \"running\") {\n",
+    "replace": "      if (false) {\n",
+    "testFile": "tests/installer-ui-g9b.test.mjs",
+    "test": "R7-1 Stop sends no stop request for a followed run that status reports as stopping"
+  },
+  {
+    "id": "r7-1-3",
+    "why": "R7-1: a stopped event in the run stream applies the stopping state",
+    "file": "tools/installer-ui/installer-ui-run.js",
+    "find": "            applyRunState(\"stopping\");\n",
+    "replace": "",
+    "testFile": "tests/installer-ui-g9b.test.mjs",
+    "test": "R7-1 a stop from another client reaches the page through the stream and Stop is no longer offered"
+  },
+  {
+    "id": "r7-1-4",
+    "why": "R7-1: a stop for a run that is already stopping publishes no second stopped event and stops no process tree again",
+    "file": "tools/installer-ui/server.mjs",
+    "find": "        if (run.state === 'stopping') return send(res, 200, { schemaVersion: 1, runId: run.id, message: run.stoppedMessage }, setCookie);\n",
+    "replace": "",
+    "testFile": "tests/installer-ui-g9.test.mjs",
+    "test": "R7-1 a stop for a run that is already stopping keeps the first stop"
+  },
+  {
+    "id": "r7-1-5",
+    "why": "R7-1: a stopped event names the step that the stopping text shows",
+    "file": "tools/installer-ui/installer-ui-run.js",
+    "find": "            activeStepId = event.stepId || activeStepId;\n",
+    "replace": "",
+    "testFile": "tests/installer-ui-g9b.test.mjs",
+    "test": "R7-1 a stop from another client reaches the page through the stream and Stop is no longer offered"
+  },
+  {
+    "id": "r7-1-6",
+    "why": "R7-1: the stop action takes the step that status reports for a run that is already stopping",
+    "file": "tools/installer-ui/installer-ui-run.js",
+    "find": "        activeStepId = status.currentStepId || status.steps?.[0] || activeStepId;\n",
+    "replace": "",
+    "testFile": "tests/installer-ui-g9b.test.mjs",
+    "test": "R7-1 Stop sends no stop request for a followed run that status reports as stopping"
+  },
+  {
+    "id": "r7-2-1",
+    "why": "R7-2: shutdown writes the refusals of reads that waited for the Azure lease before it closes connections",
+    "file": "tools/installer-ui/server.mjs",
+    "find": "    await flushEndedResponses();\n",
+    "replace": "",
+    "testFile": "tests/installer-ui-g8.test.mjs",
+    "test": "R3-4 shutdown closes the Azure lease before queued reads can spawn children"
+  },
+  {
+    "id": "r7-3-1",
+    "why": "R7-3: a followed run that has already ended says so while its output is read",
+    "file": "tools/installer-ui/installer-ui-run.js",
+    "find": "      if (state === \"stopped\" || state === \"exited\") setStatusText(\"run\", \"The run has ended. Reading its final output.\");\n",
+    "replace": "",
+    "testFile": "tests/installer-ui-g9b.test.mjs",
+    "test": "R7-1 a stream that ends without its summary after the run ended does not offer Stop while its output is read"
   }
 ]

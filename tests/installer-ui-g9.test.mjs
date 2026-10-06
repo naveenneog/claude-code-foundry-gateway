@@ -287,3 +287,37 @@ test('R5-1 an earlier preflight that passes after a later attempt started stores
     await app.close();
   }
 });
+
+test('R7-1 a stop for a run that is already stopping keeps the first stop', async () => {
+  let releaseRun;
+  let runEntered;
+  const held = new Promise((resolve) => { releaseRun = resolve; });
+  const runHeld = new Promise((resolve) => { runEntered = resolve; });
+  const app = await start({ beforeRunSpawn: async () => { runEntered(); await held; } });
+  let run;
+  try {
+    const pass = await passingPreflight(app);
+    run = runWith(app, pass.fingerprint);
+    run.catch(() => {});
+    await within(runHeld, 'The run reaching the point before its installer child');
+    const { id } = await (await app.fetch('/api/run/status')).json();
+    const stop = async () => {
+      const response = await app.fetch('/api/run/stop', { method: 'POST', body: JSON.stringify({ runId: id }) });
+      const json = await response.json();
+      assert.equal(response.status, 200, JSON.stringify(json));
+      return json;
+    };
+    const first = await stop();
+    const second = await stop();
+    assert.equal(second.message, first.message);
+    releaseRun();
+    const { text } = await readRunResponse(await within(run, 'The held run answering'));
+    const events = text.trim().split('\n').map((line) => JSON.parse(line));
+    assert.equal(events.filter((event) => event.type === 'stopped').length, 1, text);
+    assert.equal(events.at(-1).state, 'stopped');
+  } finally {
+    releaseRun?.();
+    await run?.then((response) => response.body?.cancel()).catch(() => {});
+    await app.close();
+  }
+});
