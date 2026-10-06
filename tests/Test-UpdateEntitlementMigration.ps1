@@ -476,6 +476,39 @@ try {
     $said = & pwsh -NoProfile -NonInteractive -Command "try { & '$updater' -RecordPath '$otherSubscriptionFile' -DiscoveryPath '$cleanPath' -Apply -ApprovedPlanFingerprint $('0' * 64) 6>&1 | Out-Null; 'NO-THROW' } catch { 'THROWN: ' + `$_.Exception.Message }" 2>&1 | Out-String
     Assert 'with a decision record of the same names in another subscription the apply is refused before any write' ($said -match 'THROWN: .*subscription aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' -and [IO.File]::ReadAllText($otherSubscriptionFile) -ceq $otherSubscriptionBefore) ($said.Trim())
     Assert 'live discovery reads the gateway in the decision record''s subscription, before and after each migration' (([regex]::Matches($updaterText, 'Get-ClaudeFlowLifecycleLiveDiscovery -ResourceGroup \$target\.ResourceGroup -ApimName \$target\.ApimName -SubscriptionId \$recordSubscription')).Count -eq 2) ''
+    # Every write of the update (the backup, the migrations, the deployer, the switch) uses the Azure CLI's current
+    # subscription, so the update applies only where that is the subscription the record names (council round 4).
+    $sameGatewayRecord = Join-Path $scratch 'same-gateway-record.json'
+    [IO.File]::WriteAllText($sameGatewayRecord, ([ordered]@{ schemaVersion = 2; subscriptionId = '00000000-0000-4000-8000-000000000084'; resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; release = @{ version = 'v0'; commit = 'old' }; decisions = @{} } | ConvertTo-Json -Depth 5), (New-Object Text.UTF8Encoding($false)))
+    $sameGatewayBefore = [IO.File]::ReadAllText($sameGatewayRecord)
+    $guardSnapshot = Join-Path $scratch 'guard-snapshot.json'
+    $cliStub = @'
+function global:az {
+    $line = $args -join ' '; $global:LASTEXITCODE = 0
+    if ($line -match '^apim show -g rg-contoso -n apim-contoso --subscription 00000000-0000-4000-8000-000000000084') { return '{"id":"/subscriptions/00000000-0000-4000-8000-000000000084/resourceGroups/rg-contoso/providers/Microsoft.ApiManagement/service/apim-contoso","location":"eastus2","sku":{"name":"BasicV2","capacity":1}}' }
+    if ($line -match '^apim nv list') { return '[]' }
+    if ($line -match '^account get-access-token') { return 'offline-token' }
+    if ($line -match '^account show') { return $env:P100_CLI_SUBSCRIPTION }
+    throw "unexpected az call: $line"
+}
+function global:Invoke-RestMethod { [pscustomobject]@{ properties = [pscustomobject]@{ value = '<policies />' } } }
+'@
+    function Invoke-UpdaterWithCli([string]$CliSubscription, [string]$Arguments) {
+        $script = Join-Path $scratch ('cli-' + [guid]::NewGuid().ToString('N') + '.ps1')
+        [IO.File]::WriteAllText($script, $cliStub + "`ntry { & '$updater' $Arguments 6>&1 | Out-String } catch { 'THROWN: ' + `$_.Exception.Message }", (New-Object Text.UTF8Encoding($false)))
+        $env:P100_CLI_SUBSCRIPTION = $CliSubscription
+        try { return (& pwsh -NoProfile -NonInteractive -File $script 2>&1 | Out-String) } finally { Remove-Item Env:\P100_CLI_SUBSCRIPTION -ErrorAction SilentlyContinue }
+    }
+    $said = Invoke-UpdaterWithCli 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' "-RecordPath '$sameGatewayRecord' -KeepNamedValues -SnapshotPath '$guardSnapshot'"
+    Assert 'a plan made with the Azure CLI on another subscription than the record names prints az account set instead of the apply command' ($said -match 'current subscription is bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' -and $said -match 'az account set --subscription 00000000-0000-4000-8000-000000000084' -and $said -notmatch '-ApprovedPlanFingerprint') (($said -split "`n" | Where-Object { $_ -match 'subscription|Apply|THROWN' } | Select-Object -First 3) -join ' ')
+    $said = Invoke-UpdaterWithCli '00000000-0000-4000-8000-000000000084' "-RecordPath '$sameGatewayRecord' -KeepNamedValues -SnapshotPath '$guardSnapshot'"
+    Assert 'a plan made with the Azure CLI on the subscription the record names prints the apply command' ($said -match '-KeepNamedValues -Apply -ApprovedPlanFingerprint [0-9a-f]{64}' -and $said -notmatch 'az account set') (($said -split "`n" | Where-Object { $_ -match 'subscription|Apply|THROWN' } | Select-Object -First 3) -join ' ')
+    $said = Invoke-UpdaterWithCli 'unused' "-RecordPath '$sameGatewayRecord' -DiscoveryPath '$cleanPath' -SnapshotPath '$guardSnapshot'"
+    $guardFp = [regex]::Match($said, 'Plan fingerprint: ([0-9a-f]{64})').Groups[1].Value
+    $said = Invoke-UpdaterWithCli 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' "-RecordPath '$sameGatewayRecord' -DiscoveryPath '$cleanPath' -SnapshotPath '$guardSnapshot' -Apply -ApprovedPlanFingerprint $guardFp"
+    Assert 'with the Azure CLI on another subscription than the record names the apply is refused before any write, and names az account set' ($guardFp -and $said -match 'THROWN: .*current subscription is bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' -and $said -match 'az account set --subscription 00000000-0000-4000-8000-000000000084' -and $said -match 'Nothing was written' -and -not (Test-Path -LiteralPath $guardSnapshot) -and [IO.File]::ReadAllText($sameGatewayRecord) -ceq $sameGatewayBefore) ($said.Trim())
+    $said = Invoke-UpdaterWithCli '00000000-0000-4000-8000-000000000084' "-RecordPath '$sameGatewayRecord' -DiscoveryPath '$cleanPath' -SnapshotPath '$guardSnapshot' -Apply -ApprovedPlanFingerprint $guardFp"
+    Assert 'with the Azure CLI on the subscription the record names the apply passes that check and reaches its first write step' ($said -match 'THROWN: ' -and $said -notmatch 'current subscription is' -and [IO.File]::ReadAllText($sameGatewayRecord) -ceq $sameGatewayBefore) ($said.Trim())
     Assert 'a migration that does not verify names the restore command with its folder' ($updaterText -match [regex]::Escape("did not verify. Roll back with .\scripts\Restore-ClaudeGateway.ps1 -Path '")) ''
     Assert 'the updater puts a record path other than the default in every plan''s data, for the resume command' ($updaterText -match '\$plan\.Data\.RecordPath = \$resumeRecordPath') ''
     $shim = [IO.File]::ReadAllText((Join-Path $root 'Update-ClaudeGateway.ps1'))

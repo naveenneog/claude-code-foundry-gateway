@@ -118,6 +118,13 @@ Migration `0004-entitlement-projection` in `scripts/flow/migrations/`:
   that names another gateway, by resource group, API Management name or subscription, is not a source of tier
   groups; the plan says so and prints no apply command, and `-Apply` refuses it before any write, naming
   `-RecordPath` for this gateway's record.
+- **Current subscription.** The update's writes (the backup, migrations 0001-0004, the deployer and the switch)
+  use the Azure CLI's current subscription. With a record that names a subscription, a live plan prints
+  `az account set --subscription <id>` instead of the apply command when another subscription is current, and
+  `-Apply` refuses before any write. Migration 0002 also passes the plan's subscription to its named-value writes
+  and token. `Invoke-ClaudeProjectionSwitch -SubscriptionId` refuses another current subscription before it reads
+  the gateway; the deployer's `-FlipAfterCleanCompare` run, which skips the preflight's subscription check, and
+  the guided flow's Entitlement step pass it.
 
 ## Consequences
 

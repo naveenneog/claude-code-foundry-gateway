@@ -229,6 +229,15 @@ Follow-ups from P98, not yet packets
 - The installer still accepts `-DeployProjection` and `-FlipProjectionAfterCleanCompare` and ignores
   them (SETUP says so); removing them is a breaking change for existing scripts.
 
+Follow-ups from P100, not yet packets
+([P100 status](status/P100.md#council-round-4-confirmation-of-round-3)):
+
+- The guided flow reads the gateway in the subscription the record names (`scripts/flow/Discovery.ps1`), and its
+  steps write in the Azure CLI's current subscription. Since P100 its Entitlement step's switch refuses another
+  current subscription; its other writes, such as the Tier step and the Entitlement step's change back to named
+  values, do not check it. The update's check (`scripts/Update-ClaudeGateway.ps1`) would serve the flow's write
+  gate too.
+
 M0 is shipped. The table below is the queue; the checklist under it is what the gate tracks.
 
 | Packet | Milestone | Deliverable | Depends on |

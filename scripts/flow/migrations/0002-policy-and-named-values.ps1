@@ -83,18 +83,21 @@ function Invoke-ClaudeFlowMigration {
     $root = Get-ClaudeFlowLifecycleRepoRoot
     . (Join-Path $root 'scripts\ApimNamedValue.ps1')
     $target = $Plan.Data.Target
+    # The update read the gateway in this subscription (ADR-0054); passed only as an ID, because az.cmd re-reads other text.
+    $scope = if (Test-ClaudeFlowSubscriptionId ([string]$target.SubscriptionId)) { @{ SubscriptionId = [string]$target.SubscriptionId } } else { @{} }
+    $tokenScope = if ($scope.Count) { @('--subscription', $scope.SubscriptionId) } else { @() }
     $defaults = Get-ClaudeFlowLifecycleTemplateNamedValueDefaults
     foreach ($name in @($Plan.Data.MissingNamedValues)) {
-        Set-ApimNamedValue -ResourceGroup $target.ResourceGroup -ApimName $target.ApimName -Id $name -Value ([string]$defaults[$name].Value)
+        Set-ApimNamedValue -ResourceGroup $target.ResourceGroup -ApimName $target.ApimName -Id $name -Value ([string]$defaults[$name].Value) @scope
     }
     if ($Plan.Data.NormalizeDisabledAudience) {
-        Set-ApimNamedValue -ResourceGroup $target.ResourceGroup -ApimName $target.ApimName -Id 'external-idp-extra-audience' -Value 'urn:disabled:claude-extra-audience'
+        Set-ApimNamedValue -ResourceGroup $target.ResourceGroup -ApimName $target.ApimName -Id 'external-idp-extra-audience' -Value 'urn:disabled:claude-extra-audience' @scope
     }
     $policyXml = [IO.File]::ReadAllText([string]$Plan.Data.PolicyPath)
     $body = @{ properties = @{ format = 'rawxml'; value = $policyXml } } | ConvertTo-Json -Depth 5
     $subscription = if ($target.SubscriptionId) { $target.SubscriptionId } else { az account show --query id -o tsv }
     $uri = "https://management.azure.com/subscriptions/$subscription/resourceGroups/$($target.ResourceGroup)/providers/Microsoft.ApiManagement/service/$($target.ApimName)/apis/claude-foundry/policies/policy?api-version=2024-05-01"
-    $token = az account get-access-token --resource https://management.azure.com --query accessToken -o tsv
+    $token = az account get-access-token --resource https://management.azure.com --query accessToken -o tsv @tokenScope
     Invoke-RestMethod -Uri $uri -Method Put -Headers @{ Authorization = "Bearer $token"; 'Content-Type' = 'application/json' } -Body $body | Out-Null
     $release = Get-ClaudeFlowReleaseInfo
     Add-ClaudeDecisionHistory -Record $Record -Action Update -Decision gatewayPolicy -From $Plan.Data.LivePolicyHash -To $Plan.Data.DesiredPolicyHash -Commit $release.commit

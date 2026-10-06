@@ -167,6 +167,20 @@ $callerRefusals = @(foreach ($case in @(@{ ResourceGroup='rg-p84&whoami' }, @{ A
         if (-not ($Failure -match '^Projection switch refused' -and $FixtureCalls.Count -eq 0)) { "$(@($case.Values)[0]): $Failure calls $($FixtureCalls.Count)" }
     })
 Assert 'resource group, gateway name and prefix are validated before any az call' (-not $callerRefusals.Count) ($callerRefusals -join ' || ')
+# P100 council round 4: the switch reads and writes in the Azure CLI's current subscription; told the subscription it
+# must act in, it refuses another current one before it reads the gateway.
+Reset-ProjectionFixture
+Backups | Remove-Item -Force
+Capture { Invoke-Switch @{ SubscriptionId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' } }
+Assert 'with -SubscriptionId the switch refuses another current subscription before it reads the gateway, and names az account set' ($Failure -match '^Projection switch refused' -and $Failure -match "current subscription is $FixtureSubscription" -and $Failure -match 'az account set --subscription bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' -and (At '^az apim show') -lt 0 -and @(Writes).Count -eq 0 -and @(Backups).Count -eq 0) "$Failure | $($FixtureCalls -join ' | ')"
+Reset-ProjectionFixture
+Capture { Invoke-Switch @{ SubscriptionId = 'not-an-id&calc' } }
+Assert 'a -SubscriptionId that is not an ID is refused before any az call' ($Failure -match '^Projection switch refused' -and $Failure -match 'not a subscription id' -and $FixtureCalls.Count -eq 0) "$Failure | calls $($FixtureCalls.Count)"
+Reset-ProjectionFixture
+$global:CompareDrift = $false
+Backups | Remove-Item -Force
+Capture { Invoke-Switch @{ SubscriptionId = $FixtureSubscription } }
+Assert 'with -SubscriptionId of the current subscription the switch checks it first and still writes once' (-not $Failure -and (At '^az account show') -ge 0 -and (At '^az account show') -lt (At '^az apim show') -and @(Writes).Count -eq 1) "$Failure | $(($FixtureCalls | Select-Object -First 3) -join ' | ')"
 Reset-ProjectionFixture; Capture { Invoke-Switch @{ ResourceGroup='rg-claude(prod)' } }; $groupRefusal = $Failure
 Reset-ProjectionFixture; Capture { Invoke-Switch @{ ApimName='apim_p84' } }; $nameRefusal = $Failure
 Assert 'a resource group the switch cannot pass to az.cmd is refused as a stated limitation, and a gateway name as not an API Management name' ($groupRefusal -match 'ADR-0050' -and $groupRefusal -notmatch 'as the Azure portal shows' -and $nameRefusal -match 'not an API Management name') "$groupRefusal || $nameRefusal"
