@@ -50,9 +50,9 @@ Remove-Item -LiteralPath $fixture -Recurse -Force
 
 $fixture = Copy-P102Fixture 'teardown'
 $livePath = Join-Path $fixture 'scripts\Test-ClaudeLiveContentSafety.ps1'
-(Get-Content $livePath -Raw).Replace('if (-not $Receipt.createdResourceGroup) { throw ''Refusing teardown: receipt does not say this run created the resource group.'' }', 'if ($false) { throw ''Refusing teardown: receipt does not say this run created the resource group.'' }') | Set-Content -LiteralPath $livePath -Encoding UTF8
-$r = Invoke-ExpectFailure 'tests\Test-ContentSafetyLiveScript.ps1' $fixture 'teardown refuses resources the receipt does not say this run created'
-Assert 'removing the teardown ownership guard fails the live-script detector' ($r.Failed -and $r.Matched) $r.Output
+(Get-Content $livePath -Raw).Replace('foreach ($groupId in @($Receipt.createdGroups)) { if ($groupId) { Invoke-TeardownAz ''tier group'' @(''ad'',''group'',''delete'',''--group'',[string]$groupId) "az ad group delete --group $groupId" $left | Out-Null } }', '') | Set-Content -LiteralPath $livePath -Encoding UTF8
+$r = Invoke-ExpectFailure 'tests\Test-ContentSafetyLiveScript.ps1' $fixture 'teardown-only deletes recorded groups even when the resource group was never created'
+Assert 'removing group cleanup fails the live-script detector' ($r.Failed -and $r.Matched) $r.Output
 Remove-Item -LiteralPath $fixture -Recurse -Force
 
 if ($script:failures) { throw "$($script:failures) of $($script:assertions) assertions failed" }

@@ -20,6 +20,20 @@ param($SubscriptionId,$FoundryAccount,$FoundryResourceGroup,$ResourceGroup,$Loca
 $global:Live.Calls.Add("installer $ResourceGroup $NamePrefix $Sku EntitlementStore=$EntitlementStore yes=$Yes DeployContentSafety=$DeployContentSafety ContentSafetyMode=$ContentSafetyMode $StandardGroup $PremiumGroup")
 if ($global:Live.InstallerFails) { throw 'installer failed after groups' }
 '@, [Text.UTF8Encoding]::new($false))
+$oldCheckout = Join-Path $work 'old'
+New-Item -ItemType Directory -Path $oldCheckout | Out-Null
+$oldInstaller = Join-Path $oldCheckout 'Install-ClaudeGateway.ps1'
+[IO.File]::WriteAllText($oldInstaller, @'
+param($SubscriptionId,$FoundryAccount,$FoundryResourceGroup,$ResourceGroup,$Location,$NamePrefix,$Sku,$EntitlementStore,[switch]$Yes,$StandardGroup,$PremiumGroup)
+$global:Live.Calls.Add("old-installer $ResourceGroup $NamePrefix $Sku EntitlementStore=$EntitlementStore yes=$Yes $StandardGroup $PremiumGroup")
+'@, [Text.UTF8Encoding]::new($false))
+$updateStub = Join-Path $work 'Update-ClaudeGateway.ps1'
+[IO.File]::WriteAllText($updateStub, @'
+param($ResourceGroup,$ApimName,[switch]$KeepNamedValues,[switch]$Apply,$ApprovedPlanFingerprint)
+if (-not $Apply) { $global:Live.Calls.Add("update plan $ResourceGroup $ApimName KeepNamedValues=$KeepNamedValues"); "Plan fingerprint: " + ("a" * 64); return }
+$global:Live.Calls.Add("update apply $ResourceGroup $ApimName KeepNamedValues=$KeepNamedValues fp=$ApprovedPlanFingerprint")
+$global:Live.Updated = $true
+'@, [Text.UTF8Encoding]::new($false))
 
 $sub = '00000000-0000-4000-8000-000000000102'
 $tenant = '00000000-0000-4000-8000-000000000103'
@@ -33,6 +47,8 @@ function Reset-Live {
         ExistingResourceGroup = $false
         CaseStatuses = @{}
         InstallerFails = $false
+        Updated = $false
+        UpgradeCheckFails = ''
         GroupExistsRemaining = 0
         GroupAlwaysExists = $false
         PostPurgeRecreate = $false
@@ -67,6 +83,9 @@ function az {
         '^apim show .*--query gatewayUrl' { return 'https://apim-p102.azure-api.net' }
         '^apim show .*--query identity\.principalId' { return '00000000-0000-4000-8000-000000000301' }
         '^apim nv show .*--named-value-id models-standard' { return $global:Live.ModelValue }
+        '^apim nv show .*--named-value-id content-safety-mode' { if ($global:Live.UpgradeCheckFails -eq 'mode') { return 'block' }; return 'off' }
+        '^apim api policy show ' { if ($global:Live.UpgradeCheckFails -eq 'policy') { return '<policies />' }; return '<policies><include-fragment fragment-id="content-safety-screening" /></policies>' }
+        '^apim api policy-fragment show ' { if (-not $global:Live.Updated -or $global:Live.UpgradeCheckFails -eq 'fragment') { $global:LASTEXITCODE = 3; return 'not found' }; return '<fragment />' }
         '^apim deletedservice purge ' { return }
         '^resource list ' { return $global:Live.ResourceList }
         '^account get-access-token .*--query accessToken -o tsv$' { return 'offline-token' }
@@ -87,7 +106,7 @@ function Invoke-WebRequest {
     $bodyObject = $Body | ConvertFrom-Json -Depth 30
     $caseName = [string]$bodyObject.metadata.p102_case
     if (-not $caseName -and [string]$bodyObject.messages[0].content -eq 'Hello, please say OK.') { $caseName = 'warmup' }
-    $status = if ($global:Live.CaseStatuses.ContainsKey($caseName)) { [int]$global:Live.CaseStatuses[$caseName] } elseif ($caseName -match 'T3|T4|T5|T6|T7|T8|T10|AC20-block') { 403 } else { 200 }
+    $status = if ($global:Live.CaseStatuses.ContainsKey($caseName)) { [int]$global:Live.CaseStatuses[$caseName] } elseif ($global:Live.Updated -and $caseName -eq 'upgrade-harmful') { 200 } elseif ($caseName -match 'T3|T4|T5|T6|T7|T8|T10|AC20-block') { 403 } else { 200 }
     $global:Live.Calls.Add("request $caseName model=$($bodyObject.model) status=$status auth=$($Headers.Authorization -eq 'Bearer offline-token')")
     $content = if ($status -eq 403) { '{"type":"error","error":{"type":"content_safety","message":"blocked"}}' } else { '{"type":"message","model":"claude-sonnet-5","content":[{"type":"text","text":"ok"}]}' }
     [pscustomobject]@{ StatusCode=$status; Content=$content }
@@ -104,6 +123,7 @@ function Invoke-P102([hashtable]$Extra = @{}) {
         RunId = 'abc123'
         UseCurrentAzLogin = $true
         InstallerPath = $installerStub
+        UpdatePath = $updateStub
         ReceiptPath = (Join-Path $root 'p102-content-safety-live-receipt.json')
         LogPollSeconds = 1
         LogWaitSeconds = 1
@@ -166,12 +186,12 @@ try {
         kind='p102-content-safety-live'; runId='abc123'; subscriptionId=$sub; resourceGroup='rg-p102-live-abc123'; location='eastus2'; namePrefix='p102live'; apimName='apim-p102live'; contentSafetyName='cs-p102live'; createdResourceGroup=$true; createdGroups=@('00000000-0000-4000-8000-000000000201','00000000-0000-4000-8000-000000000202'); contentSafetyRoleAssignmentIds=@('/role/contentSafety'); apimPrincipalId='00000000-0000-4000-8000-000000000301'; contentSafetyId='/subscriptions/sub/resourceGroups/rg-p102/providers/Microsoft.CognitiveServices/accounts/cs-p102'; foundryResourceGroup='rg-ai'; foundryAccount='ai-contoso'
     } | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $receiptPath -Encoding UTF8
     Invoke-P102 @{ TeardownOnly = $true; ReceiptPath = $receiptPath; SubscriptionId = $null; FoundryAccount = $null; FoundryResourceGroup = $null; PublisherEmail = $null }
-    $teardownOrder = @((At '^az role assignment delete --ids /role/foundry'), (At '^az role assignment delete --ids /role/contentSafety'), (At '^az group delete --name rg-p102-live-abc123'), (At '^az ad group delete --group'), (At '^az apim deletedservice purge .*apim-p102live'), (At '^az cognitiveservices account purge .*cs-p102live'))
-    Assert 'teardown-only deletes Foundry and Content Safety role assignments before the resource group, deletes groups, then purges after the group is gone' (-not $Failure -and ($teardownOrder -notcontains -1) -and (@(0..($teardownOrder.Count-2) | Where-Object { $teardownOrder[$_] -lt $teardownOrder[$_+1] }).Count -eq ($teardownOrder.Count-1))) "$Failure | $($global:Live.Calls -join '; ')"
+    $teardownOrder = @((At '^az role assignment delete --ids /role/foundry'), (At '^az role assignment delete --ids /role/contentSafety'), (At '^az group delete --name rg-p102-live-abc123'), (At '^az apim deletedservice purge .*apim-p102live'), (At '^az cognitiveservices account purge .*cs-p102live'))
+    Assert 'teardown-only deletes Foundry and Content Safety role assignments before the resource group, deletes groups, then purges after the group is gone' (-not $Failure -and ($teardownOrder -notcontains -1) -and (@(0..($teardownOrder.Count-2) | Where-Object { $teardownOrder[$_] -lt $teardownOrder[$_+1] }).Count -eq ($teardownOrder.Count-1)) -and @($global:Live.Calls | Where-Object { $_ -match '^az ad group delete --group' }).Count -eq 2) "$Failure | $($global:Live.Calls -join '; ')"
     Reset-Live
     @{ kind='p102-content-safety-live'; resourceGroup='rg-owned-by-someone-else'; createdResourceGroup=$false } | ConvertTo-Json | Set-Content -LiteralPath $receiptPath -Encoding UTF8
     Invoke-P102 @{ TeardownOnly = $true; ReceiptPath = $receiptPath; SubscriptionId = $null; FoundryAccount = $null; FoundryResourceGroup = $null; PublisherEmail = $null }
-    Assert 'teardown refuses resources the receipt does not say this run created' ($Exit -ne 0 -and $Failure -match 'created the resource group' -and (At '^az group delete') -lt 0) "$Exit | $Failure | $($global:Live.Calls -join '; ')"
+    Assert 'teardown skips protected resources when the receipt does not say this run created a resource group' ($Exit -eq 0 -and (At '^az group delete') -lt 0 -and (At '^az role assignment') -lt 0 -and (At '^az apim deletedservice purge') -lt 0) "$Exit | $Failure | $($global:Live.Calls -join '; ')"
     Reset-Live
     $global:Live.GroupAlwaysExists = $true
     @{
@@ -179,6 +199,13 @@ try {
     } | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $receiptPath -Encoding UTF8
     Invoke-P102 @{ TeardownOnly = $true; ReceiptPath = $receiptPath; SubscriptionId = $null; FoundryAccount = $null; FoundryResourceGroup = $null; PublisherEmail = $null; DeleteWaitSeconds = 1; DeletePollSeconds = 1 }
     Assert 'teardown records purge follow-ups when resource group deletion is still in progress' ($Exit -ne 0 -and $Failure -match 'az apim deletedservice purge' -and $Failure -match 'az cognitiveservices account purge' -and (At '^az apim deletedservice purge') -lt 0) "$Exit | $Failure | $($global:Live.Calls -join '; ')"
+
+    Reset-Live
+    @{
+        kind='p102-content-safety-live'; runId='abc123'; subscriptionId=$sub; resourceGroup='rg-not-created'; location='eastus2'; namePrefix='p102live'; apimName='apim-p102live'; contentSafetyName='cs-p102live'; createdResourceGroup=$false; createdGroups=@('00000000-0000-4000-8000-000000000201','00000000-0000-4000-8000-000000000202')
+    } | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $receiptPath -Encoding UTF8
+    Invoke-P102 @{ TeardownOnly = $true; ReceiptPath = $receiptPath; SubscriptionId = $null; FoundryAccount = $null; FoundryResourceGroup = $null; PublisherEmail = $null }
+    Assert 'teardown-only deletes recorded groups even when the resource group was never created' ($Exit -eq 0 -and @($global:Live.Calls | Where-Object { $_ -match '^az ad group delete --group' }).Count -eq 2 -and (At '^az group delete') -lt 0 -and (At '^az role assignment') -lt 0 -and (At '^az apim deletedservice purge') -lt 0) "$Exit | $Failure | $($global:Live.Calls -join '; ')"
 
     Reset-Live
     $global:Live.GroupExistsRemaining = 1
@@ -189,6 +216,16 @@ try {
     Invoke-P102 @{ TeardownOnly = $true; ReceiptPath = $receiptPath; SubscriptionId = $null; FoundryAccount = $null; FoundryResourceGroup = $null; PublisherEmail = $null; DeleteWaitSeconds = 2; DeletePollSeconds = 1; PostPurgeWaitSeconds = 1 }
     $policyReceipt = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json -Depth 30
     Assert 'teardown deletes an empty resource group re-created by CognitiveServices diagnostics remediation after purge and records it' ((At '^az resource list') -gt (At '^az cognitiveservices account purge') -and @($global:Live.Calls | Where-Object { $_ -match '^az group delete --name rg-p102-live-abc123' }).Count -ge 2 -and $policyReceipt.policyRemediationRecreatedResourceGroup.policyDefinitionName -eq 'CognitiveServices_Diagnostics_Enable') ($global:Live.Calls -join '; ')
+
+    Write-Host 'P102 upgrade mode'
+    Reset-Live
+    Invoke-P102 @{ UpgradeFrom = $oldCheckout }
+    $upgradeOrder = @((At '^old-installer '), (At '^request warmup'), (At '^az apim api policy-fragment show'), (At '^update plan'), (At '^update apply'), (At '^az apim nv show .*content-safety-mode'), (At '^az apim api policy show'), (At '^request upgrade-after'), (At '^request upgrade-harmful')) 
+    Assert 'upgrade mode installs with the older checkout, verifies pre-upgrade 200 and absence, runs update plan/apply, checks mode off, fragment, policy include, benign 200 and harmful pass' (-not $Failure -and ($upgradeOrder -notcontains -1) -and (@(0..($upgradeOrder.Count-2) | Where-Object { $upgradeOrder[$_] -lt $upgradeOrder[$_+1] }).Count -eq ($upgradeOrder.Count-1))) "$Failure | $($global:Live.Calls -join '; ')"
+    Reset-Live
+    $global:Live.UpgradeCheckFails = 'mode'
+    Invoke-P102 @{ UpgradeFrom = $oldCheckout }
+    Assert 'upgrade mode fails when content-safety-mode is not off after update' ($Exit -ne 0 -and $Output -match 'content-safety-mode') "$Exit | $Failure | $Output"
 
     Reset-Live
     Invoke-P102 @{ Teardown = $true }
@@ -201,5 +238,3 @@ finally {
     Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath (Join-Path $root 'p102-content-safety-live-receipt.json') -Force -ErrorAction SilentlyContinue
 }
-
-
