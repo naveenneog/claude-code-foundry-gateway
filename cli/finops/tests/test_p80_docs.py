@@ -12,7 +12,7 @@ def prose(text):
 def test_aum_guide_has_one_installation_first_reading_order():
     text = (ROOT / "docs" / "AUM.md").read_text(encoding="utf-8")
     assert re.findall(r"^## (.+)$", text, re.M) == [
-        "Install", "Connect", "First run and screen tour", "How-to", "Reference", "Troubleshooting"]
+        "Quickstart", "Install", "Connect", "First run and screen tour", "How-to", "Reference", "Troubleshooting", "Next"]
     install = text.split("## Install\n", 1)[1].split("## Connect\n", 1)[0]
     assert "Install-ClaudeAum.ps1" in install
     assert "Python 3.12" in install
