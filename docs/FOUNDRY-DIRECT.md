@@ -9,8 +9,21 @@ on it.** The distinction is not a preference, and section 4 is the part to read
 before using it on anything that matters.
 
 ---
+## Quickstart
+
+This path evaluates direct Foundry access for one controlled machine. It bypasses gateway entitlement, budgets and chargeback, so it is not the normal developer route.
+
+```powershell
+.\scripts\Test-FoundryDirect.ps1 -Resource 'foundry-account-name' -Expect gateway
+```
+
+**Expected result:** the diagnostic names the tenant, credential source and model/deployment boundary and classifies whether the machine is configured for gateway or direct Foundry use. A direct request is approved only for isolated troubleshooting.
 
 ## 1. When this is the right tool
+
+<details>
+
+<summary>Foundry direct details</summary>
 
 | | |
 |---|---|
@@ -24,7 +37,12 @@ before using it on anything that matters.
 It is also the fastest way to answer *"is the gateway broken, or is Foundry?"* —
 configure one machine directly and see which layer the failure follows.
 
+</details>
 ## Prerequisites
+
+<details>
+
+<summary>Foundry direct details</summary>
 
 - An approved isolated evaluation, not a way around a production gateway.
 - Azure CLI, PowerShell 5.1 or 7, the permitted Claude deployment names and
@@ -36,7 +54,12 @@ configure one machine directly and see which layer the failure follows.
   [Operations](OPERATIONS.md#1-select-the-gateway-and-workspace) explains resource
   and tenant values; [Developer setup](../DEVELOPER.md) is the governed path.
 
+</details>
 ## 2. Running it
+
+<details>
+
+<summary>Foundry direct details</summary>
 
 ### Discover the values instead of copying a deployment name
 
@@ -166,7 +189,12 @@ what makes it safe to put on a wiki.
 Nothing is written until steps 1–5 pass, so a failed run leaves the machine as
 it was.
 
+</details>
 ## 3. The model list
+
+<details>
+
+<summary>Foundry direct details</summary>
 
 Discovered from the resource rather than assumed, and written as four settings
 Claude Code needs:
@@ -268,7 +296,12 @@ The base URL is the gateway path; the resource is this one. The script removes
 a base URL left behind by a gateway setup, which is what makes it safe to run on
 a machine that was previously on the gateway.
 
+</details>
 ## 4. Diagnostics
+
+<details>
+
+<summary>Foundry direct details</summary>
 
 Everything in this section is measured against a live resource. Run the one
 command first - it names the layer that is broken, which is the part the
@@ -589,8 +622,12 @@ If you see `Connection dropped (ECONNRESET)` while every host is reachable, the
 allowlist is not the problem — see
 [NETWORK.md §6](NETWORK.md#6-econnreset-is-not-an-allowlist-problem).
 
-
+</details>
 ## 5. What you give up, and what you inherit
+
+<details>
+
+<summary>Foundry direct details</summary>
 
 Every control in this repository governs traffic **through the gateway**.
 Configuring a client directly does not weaken those controls — it steps around
@@ -627,7 +664,12 @@ can bypass the gateway. Two ways to keep both true:
 What does not work is suppressing the finding. The control and the exception
 then disagree, and the disagreement outlives whoever understood it.
 
+</details>
 ## 6. Reading the configuration off a machine
+
+<details>
+
+<summary>Foundry direct details</summary>
 
 There is no hidden config file for this path. The machine state is
 `~/.claude/settings.json`, and the portable form is the
@@ -656,7 +698,12 @@ A machine showing only those folders has never been pointed at Foundry or a
 gateway. There is nothing on it to export, so configure it rather than trying to
 copy from it.
 
+</details>
 ## 7. Configuring it by hand
+
+<details>
+
+<summary>Foundry direct details</summary>
 
 Only needed if you cannot run the script, or you are checking what it did. Read
 from the installed extension and the live resource on 2026-09-22, not from
@@ -826,7 +873,12 @@ If you want to test the endpoint without involving Claude Code at all:
 ./scripts/Test-FoundryDirect.ps1 -Resource <resource> -ResourceGroup <rg>
 ```
 
+</details>
 ## 8. Undoing it
+
+<details>
+
+<summary>Foundry direct details</summary>
 
 ```powershell
 # The script backs up whatever was there before overwriting
@@ -842,6 +894,7 @@ And on the Azure side, remove the role assignment. Until that is gone the
 machine can be reconfigured back at any time by anybody who can edit a JSON
 file.
 
+</details>
 ## See also
 
 - [Setup](SETUP.md) — standing up the gateway
