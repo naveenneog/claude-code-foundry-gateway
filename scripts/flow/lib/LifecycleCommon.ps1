@@ -36,6 +36,28 @@ function global:Get-ClaudeFlowLifecyclePolicyNamedValueReferences {
         Where-Object { $_ }) -Unique)
 }
 
+function global:Get-ClaudeFlowLifecyclePolicyFragmentIds {
+    param([string]$PolicyPath = (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'infra\policy.xml'))
+    if (-not (Test-Path -LiteralPath $PolicyPath)) { throw "Policy file '$PolicyPath' does not exist." }
+    $text = [IO.File]::ReadAllText($PolicyPath)
+    return @(Sort-ClaudeFlowOrdinal -InputObject @([regex]::Matches($text, '<include-fragment\s+fragment-id="([^"]+)"\s*/?>') |
+        ForEach-Object { $_.Groups[1].Value.Trim() } |
+        Where-Object { $_ }) -Unique)
+}
+
+function global:Get-ClaudeFlowLifecyclePolicyAndFragmentNamedValueReferences {
+    param([string]$PolicyPath = (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'infra\policy.xml'))
+    $root = Get-ClaudeFlowLifecycleRepoRoot
+    $references = [Collections.Generic.List[string]]::new()
+    foreach ($name in @(Get-ClaudeFlowLifecyclePolicyNamedValueReferences -PolicyPath $PolicyPath)) { $references.Add($name) }
+    foreach ($fragmentId in @(Get-ClaudeFlowLifecyclePolicyFragmentIds -PolicyPath $PolicyPath)) {
+        $fragmentPath = Join-Path (Join-Path $root 'infra') "$fragmentId.xml"
+        if (-not (Test-Path -LiteralPath $fragmentPath)) { throw "Policy fragment '$fragmentId' is included by '$PolicyPath' but '$fragmentPath' does not exist." }
+        foreach ($name in @(Get-ClaudeFlowLifecyclePolicyNamedValueReferences -PolicyPath $fragmentPath)) { $references.Add($name) }
+    }
+    return @(Sort-ClaudeFlowOrdinal -InputObject @($references) -Unique)
+}
+
 function global:Get-ClaudeFlowLifecycleTemplateNamedValueDefaults {
     param([string]$BicepPath = (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'infra\main.bicep'))
     if (-not (Test-Path -LiteralPath $BicepPath)) { throw "Bicep file '$BicepPath' does not exist." }
@@ -55,6 +77,11 @@ function global:Get-ClaudeFlowLifecycleTemplateNamedValueDefaults {
             '^entitlement-resolver-audience$' { 'https://resolver-not-deployed.invalid'; break }
             '^entitlement-cache-seconds$' { '3600'; break }
             '^external-idp-extra-audience$' { 'urn:disabled:claude-extra-audience'; break }
+            '^content-safety-mode$' { 'off'; break }
+            '^content-safety-endpoint$' { 'https://content-safety-off.invalid'; break }
+            '^content-safety-threshold$' { '2'; break }
+            '^content-safety-timeout-seconds$' { '10'; break }
+            '^content-safety-truncate-mode$' { 'newest'; break }
             '^tpm-standard$' { '20000'; break }
             '^quota-standard$' { '500000'; break }
             '^tpm-premium$' { '80000'; break }
@@ -126,6 +153,12 @@ function global:Get-ClaudeFlowLifecycleLiveDiscovery {
     $token = az account get-access-token --resource https://management.azure.com @scope --query accessToken -o tsv
     $policyUri = "https://management.azure.com$($apim.id)/apis/$ApiId/policies/policy?api-version=2024-05-01&format=rawxml"
     $policy = Invoke-RestMethod -Method Get -Uri $policyUri -Headers @{ Authorization = "Bearer $token" }
+    $fragmentUri = "https://management.azure.com$($apim.id)/policyFragments?api-version=2024-05-01"
+    $fragments = @()
+    try {
+        $fragmentResult = Invoke-RestMethod -Method Get -Uri $fragmentUri -Headers @{ Authorization = "******" }
+        $fragments = @($fragmentResult.value | ForEach-Object { if ($_.name) { [string]$_.name } elseif ($_.id -match '/policyFragments/([^/]+)$') { $Matches[1] } })
+    } catch { $fragments = @() }
     $prefixValue = @($nvs | Where-Object { $_.name -eq 'entitlement-projection-prefix' } | Select-Object -First 1)
     $projectionPrefix = if ($prefixValue) { if ($prefixValue.PSObject.Properties.Name -contains 'properties') { [string]$prefixValue.properties.value } else { [string]$prefixValue.value } } else { '' }
     [pscustomobject]@{
@@ -139,6 +172,7 @@ function global:Get-ClaudeFlowLifecycleLiveDiscovery {
         projectionPrefix = $projectionPrefix
         projectionPrefixProblem = $(if ($projectionPrefix) { $null } else { 'entitlement-projection-prefix is missing. Remedy: deploy the projection with scripts/Deploy-ClaudeProjection.ps1.' })
         policy = $policy.properties.value
+        policyFragments = $fragments
         # az apim nv list returns flattened objects; ARM returns them under properties.
         namedValues = @($nvs | Where-Object {
                 $isSecret = if ($_.PSObject.Properties.Name -contains 'properties' -and $_.properties) { $_.properties.secret } else { $_.secret }

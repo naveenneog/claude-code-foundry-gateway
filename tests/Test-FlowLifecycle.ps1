@@ -23,11 +23,12 @@ $record = [pscustomobject]@{
 }
 $policyPath = Join-Path $root 'infra\policy.xml'
 $currentPolicy = [IO.File]::ReadAllText($policyPath)
-$refs = @(Get-ClaudeFlowLifecyclePolicyNamedValueReferences -PolicyPath $policyPath)
+$refs = @(Get-ClaudeFlowLifecyclePolicyAndFragmentNamedValueReferences -PolicyPath $policyPath)
 $nv = @{}
 foreach ($r in $refs) { $nv[$r] = 'x' }
 $nv.Remove('usd-budgets')
 $nv.Remove('external-idp-extra-audience')
+foreach ($name in @('content-safety-mode','content-safety-endpoint','content-safety-threshold','content-safety-timeout-seconds','content-safety-truncate-mode')) { $nv.Remove($name) }
 $oldDiscovery = [pscustomobject]@{
     resourceGroup = 'rg-contoso'
     apimName = 'apim-contoso'
@@ -43,10 +44,11 @@ Assert 'old schema is detected' (-not (Test-ClaudeFlowPlanIsNoop $schemaPlan) -a
 
 . (Join-Path $root 'scripts\flow\migrations\0002-policy-and-named-values.ps1')
 $policyPlan = Get-ClaudeFlowMigrationPlan -Record $record -Discovery $oldDiscovery
-Assert 'old policy hash is detected' (@($policyPlan.Actions | Where-Object Target -match 'policy').Count -eq 1)
+Assert 'old policy hash is detected' (@($policyPlan.Actions | Where-Object Target -eq 'apim policy claude-foundry').Count -eq 1)
 Assert 'missing named values are derived from policy references' (($policyPlan.Data.MissingNamedValues -contains 'usd-budgets') -and ($policyPlan.Data.MissingNamedValues -contains 'external-idp-extra-audience'))
+Assert 'fragment named values are included in the migration plan' (($policyPlan.Data.MissingNamedValues -contains 'content-safety-mode') -and ($policyPlan.Data.MissingNamedValues -contains 'content-safety-endpoint') -and ($policyPlan.Data.PolicyFragments -contains 'content-safety-screening')) (($policyPlan.Data.MissingNamedValues + $policyPlan.Data.PolicyFragments) -join ',')
 $migration2Source = Get-Content (Join-Path $root 'scripts\flow\migrations\0002-policy-and-named-values.ps1') -Raw
-Assert 'derived named values include later-release values without hardcoding the detector list' ($migration2Source -match 'Get-ClaudeFlowLifecyclePolicyNamedValueReferences' -and $migration2Source -match '\$missing = @\(\$refs \| Where-Object')
+Assert 'derived named values include later-release values without hardcoding the detector list' ($migration2Source -match 'Get-ClaudeFlowLifecyclePolicyAndFragmentNamedValueReferences' -and $migration2Source -match '\$missing = @\(\$refs \| Where-Object')
 Assert 'rollback plan names Restore-ClaudeGateway' ($policyPlan.Rollback -match 'Restore-ClaudeGateway')
 Assert 'policy migration requires a snapshot before writes' ((Get-Content (Join-Path $root 'scripts\flow\migrations\0002-policy-and-named-values.ps1') -Raw) -match 'Assert-ClaudeFlowLifecycleSnapshotBeforeWrite')
 
@@ -64,6 +66,12 @@ try {
     Assert 'the policy migration reads and writes its named values in the plan''s subscription' (-not $thrown -and $nvWrites.Count -ge 2 -and @($nvWrites | Where-Object { $_ -notmatch '--subscription aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }).Count -eq 0) "$thrown | $($global:Migration2AzCalls -join ' ; ')"
     $tokenCalls = @($global:Migration2AzCalls | Where-Object { $_ -match '^account get-access-token' })
     Assert 'the policy migration takes its tokens for the plan''s subscription' ($tokenCalls.Count -ge 1 -and @($tokenCalls | Where-Object { $_ -notmatch '--subscription aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }).Count -eq 0) ($global:Migration2AzCalls -join ' ; ')
+    $callsText = $global:Migration2AzCalls -join "`n"
+    $idxNv = $callsText.IndexOf('apim nv')
+    $idxFragment = $callsText.IndexOf('/policyFragments/content-safety-screening')
+    $idxPolicy = $callsText.IndexOf('/apis/claude-foundry/policies/policy')
+    Assert 'the policy migration writes named values, then fragments, then the policy' ($idxNv -ge 0 -and $idxFragment -gt $idxNv -and $idxPolicy -gt $idxFragment) $callsText
+    Assert 'fragment and policy writes use the plan subscription' ($callsText -match 'account get-access-token.*--subscription aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' -and $callsText -match '/subscriptions/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/.*/policyFragments/content-safety-screening' -and $callsText -match '/subscriptions/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/.*/apis/claude-foundry/policies/policy') $callsText
     $global:Migration2AzCalls.Clear()
     $scopedPlan.Data.Target.SubscriptionId = 'not-an-id&calc'
     $thrown = Get-Thrown { Invoke-ClaudeFlowMigration -Record $record.PSObject.Copy() -Plan $scopedPlan | Out-Null }
@@ -80,19 +88,24 @@ $freshDiscovery = [pscustomobject]@{
     sku = 'BasicV2'
     policy = $currentPolicy
     namedValues = $allNv
+    policyFragments = @('content-safety-screening')
     jobs = @()
 }
 $noopPolicy = Get-ClaudeFlowMigrationPlan -Record $record -Discovery $freshDiscovery
 Assert 'migration is idempotent when policy and named values match' (Test-ClaudeFlowPlanIsNoop $noopPolicy)
+$freshWithFragment = $freshDiscovery.PSObject.Copy()
+$freshWithFragment | Add-Member -NotePropertyName policyFragments -NotePropertyValue @('content-safety-screening') -Force
+$noopWithFragment = Get-ClaudeFlowMigrationPlan -Record $record -Discovery $freshWithFragment
+Assert 'migration does not rewrite existing policy fragments or named values' (Test-ClaudeFlowPlanIsNoop $noopWithFragment)
 
 $normalizedPolicy = '<policies>usd-budgets usd-budget-state external-idp-extra-audience urn:disabled:claude-extra-audience entitlement-source</policies>'
-$normalizedPlan = Get-ClaudeFlowMigrationPlan -Record $record -Discovery ([pscustomobject]@{ resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; location = 'eastus2'; sku = 'BasicV2'; policy = $normalizedPolicy; namedValues = $allNv })
+$normalizedPlan = Get-ClaudeFlowMigrationPlan -Record $record -Discovery ([pscustomobject]@{ resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; location = 'eastus2'; sku = 'BasicV2'; policy = $normalizedPolicy; namedValues = $allNv; policyFragments = @('content-safety-screening') })
 Assert 'APIM-normalized current policy markers do not cause repeated updates' (Test-ClaudeFlowPlanIsNoop $normalizedPlan)
 
 $blankAudience = @{}
 foreach ($r in $refs) { $blankAudience[$r] = 'x' }
 $blankAudience['external-idp-extra-audience'] = ' '
-$blankPlan = Get-ClaudeFlowMigrationPlan -Record $record -Discovery ([pscustomobject]@{ resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; location = 'eastus2'; sku = 'BasicV2'; policy = $currentPolicy; namedValues = $blankAudience })
+$blankPlan = Get-ClaudeFlowMigrationPlan -Record $record -Discovery ([pscustomobject]@{ resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; location = 'eastus2'; sku = 'BasicV2'; policy = $currentPolicy; namedValues = $blankAudience; policyFragments = @('content-safety-screening') })
 Assert 'migration normalizes a blank Desktop audience before policy validation' ($blankPlan.Data.NormalizeDisabledAudience -eq $true -and (($blankPlan.Actions | ForEach-Object Target) -contains 'named value external-idp-extra-audience'))
 
 . (Join-Path $root 'scripts\flow\migrations\0003-job-pins.ps1')

@@ -476,6 +476,7 @@ resource contentSafetyFragment 'Microsoft.ApiManagement/service/policyFragments@
   }
   dependsOn: [
     apimNew
+    apimNamedValues
   ]
 }
 

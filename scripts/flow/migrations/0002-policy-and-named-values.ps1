@@ -31,10 +31,14 @@ function Get-ClaudeFlowMigrationPlan {
     $livePolicy = if ($Discovery -and $Discovery.PSObject.Properties.Name -contains 'policy') { [string]$Discovery.policy } else { '' }
     $liveHash = if ($livePolicy) { Get-ClaudeFlowLifecycleStringHash -Text $livePolicy } elseif ($Discovery -and $Discovery.policyHash) { [string]$Discovery.policyHash } else { '' }
     $policyCurrent = ($liveHash -eq $desiredHash) -or (Test-ClaudePolicyHasLifecycleMarkers -Policy $livePolicy)
-    $refs = @(Get-ClaudeFlowLifecyclePolicyNamedValueReferences -PolicyPath $policyPath)
+    $refs = @(Get-ClaudeFlowLifecyclePolicyAndFragmentNamedValueReferences -PolicyPath $policyPath)
+    $fragments = @(Get-ClaudeFlowLifecyclePolicyFragmentIds -PolicyPath $policyPath)
     $templateDefaults = Get-ClaudeFlowLifecycleTemplateNamedValueDefaults
     $liveNamed = Get-ClaudeFlowLifecycleNamedValueMap -Discovery $Discovery
+    $liveFragments = @{}
+    if ($Discovery -and $Discovery.PSObject.Properties.Name -contains 'policyFragments') { foreach ($fragment in @($Discovery.policyFragments)) { $liveFragments[[string]$fragment] = $true } }
     $missing = @($refs | Where-Object { -not $liveNamed.ContainsKey($_) })
+    $missingFragments = @($fragments | Where-Object { -not $liveFragments.ContainsKey($_) })
     $normalizeDisabledAudience = $liveNamed.ContainsKey('external-idp-extra-audience') -and
         [string]::IsNullOrWhiteSpace([string]$liveNamed['external-idp-extra-audience'])
     $unknownDefaults = @($missing | Where-Object { -not $templateDefaults.Contains($_) -or $null -eq $templateDefaults[$_].Value })
@@ -48,6 +52,9 @@ function Get-ClaudeFlowMigrationPlan {
     foreach ($name in $missing) {
         $detail = if ($templateDefaults.Contains($name) -and $null -ne $templateDefaults[$name].Value) { 'create with template-compatible default' } else { 'manual value required before apply' }
         $actions += New-ClaudeFlowAction -Verb Create -Target "named value $name" -Detail $detail
+    }
+    foreach ($fragment in $missingFragments) {
+        $actions += New-ClaudeFlowAction -Verb Create -Target "policy fragment $fragment" -Detail 'create reusable APIM policy fragment before the API policy includes it'
     }
     if ($normalizeDisabledAudience) {
         $actions += New-ClaudeFlowAction -Verb Update -Target 'named value external-idp-extra-audience' -Detail 'whitespace/empty -> disabled URI sentinel'
@@ -66,7 +73,9 @@ function Get-ClaudeFlowMigrationPlan {
             PolicyCurrent = $policyCurrent
             PolicyPath = $policyPath
             PolicyNamedValues = $refs
+            PolicyFragments = $fragments
             MissingNamedValues = $missing
+            MissingPolicyFragments = $missingFragments
             NormalizeDisabledAudience = $normalizeDisabledAudience
             UnknownDefaults = $unknownDefaults
             Target = Get-ClaudeFlowLifecycleRecordTarget -Record $Record -Discovery $Discovery
@@ -93,12 +102,19 @@ function Invoke-ClaudeFlowMigration {
     if ($Plan.Data.NormalizeDisabledAudience) {
         Set-ApimNamedValue -ResourceGroup $target.ResourceGroup -ApimName $target.ApimName -Id 'external-idp-extra-audience' -Value 'urn:disabled:claude-extra-audience' @scope
     }
+    $subscription = if ($target.SubscriptionId) { $target.SubscriptionId } else { az account show --query id -o tsv }
+    $token = az account get-access-token --resource https://management.azure.com --query accessToken -o tsv @tokenScope
+    foreach ($fragment in @($Plan.Data.MissingPolicyFragments)) {
+        $fragmentPath = Join-Path (Join-Path $root 'infra') "$fragment.xml"
+        $fragmentXml = [IO.File]::ReadAllText($fragmentPath)
+        $fragmentBody = @{ properties = @{ format = 'rawxml'; value = $fragmentXml } } | ConvertTo-Json -Depth 5
+        $fragmentUri = "https://management.azure.com/subscriptions/$subscription/resourceGroups/$($target.ResourceGroup)/providers/Microsoft.ApiManagement/service/$($target.ApimName)/policyFragments/$fragment`?api-version=2024-05-01"
+        Invoke-RestMethod -Uri $fragmentUri -Method Put -Headers @{ Authorization = "******"; 'Content-Type' = 'application/json' } -Body $fragmentBody | Out-Null
+    }
     $policyXml = [IO.File]::ReadAllText([string]$Plan.Data.PolicyPath)
     $body = @{ properties = @{ format = 'rawxml'; value = $policyXml } } | ConvertTo-Json -Depth 5
-    $subscription = if ($target.SubscriptionId) { $target.SubscriptionId } else { az account show --query id -o tsv }
     $uri = "https://management.azure.com/subscriptions/$subscription/resourceGroups/$($target.ResourceGroup)/providers/Microsoft.ApiManagement/service/$($target.ApimName)/apis/claude-foundry/policies/policy?api-version=2024-05-01"
-    $token = az account get-access-token --resource https://management.azure.com --query accessToken -o tsv @tokenScope
-    Invoke-RestMethod -Uri $uri -Method Put -Headers @{ Authorization = "Bearer $token"; 'Content-Type' = 'application/json' } -Body $body | Out-Null
+    Invoke-RestMethod -Uri $uri -Method Put -Headers @{ Authorization = "******"; 'Content-Type' = 'application/json' } -Body $body | Out-Null
     $release = Get-ClaudeFlowReleaseInfo
     Add-ClaudeDecisionHistory -Record $Record -Action Update -Decision gatewayPolicy -From $Plan.Data.LivePolicyHash -To $Plan.Data.DesiredPolicyHash -Commit $release.commit
     @{ policyHash = $Plan.Data.DesiredPolicyHash; namedValues = @($Plan.Data.MissingNamedValues) }
@@ -112,7 +128,7 @@ function Test-ClaudeFlowMigration {
     $liveHash = if ($livePolicy) { Get-ClaudeFlowLifecycleStringHash -Text $livePolicy } elseif ($Discovery -and $Discovery.policyHash) { [string]$Discovery.policyHash } else { '' }
     $hashOk = ($liveHash -eq $desiredHash) -or (Test-ClaudePolicyHasLifecycleMarkers -Policy $livePolicy)
     $liveNamed = Get-ClaudeFlowLifecycleNamedValueMap -Discovery $Discovery
-    $missing = @(Get-ClaudeFlowLifecyclePolicyNamedValueReferences | Where-Object { -not $liveNamed.ContainsKey($_) })
+    $missing = @(Get-ClaudeFlowLifecyclePolicyAndFragmentNamedValueReferences | Where-Object { -not $liveNamed.ContainsKey($_) })
     [pscustomobject]@{
         Step = '0002-policy-and-named-values'
         Passed = ($hashOk -and $missing.Count -eq 0)

@@ -24,6 +24,15 @@ Assert 'unsupported Content Safety region blocks before writes with a cited reme
 Write-Host 'P102 Bicep compilation'
 $out = & az bicep build --file (Join-Path $root 'infra\main.bicep') --stdout --only-show-errors 2>&1 | Out-String
 Assert 'main.bicep compiles offline' ($LASTEXITCODE -eq 0 -and $out -match 'Microsoft.ApiManagement/service/policyFragments') $out
+$compiled = $out | ConvertFrom-Json -Depth 100
+$fragmentRefs = @([regex]::Matches($fragment, '\{\{([^}]+)\}\}') | ForEach-Object { $_.Groups[1].Value.Trim() } | Sort-Object -Unique)
+$namedKeys = @([regex]::Matches($main, "\{\s*key:\s*'([^']+)'") | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+$missingFragmentRefs = @($fragmentRefs | Where-Object { $namedKeys -notcontains $_ })
+Assert 'every content-safety fragment named value reference is declared in main.bicep' ($missingFragmentRefs.Count -eq 0) (@($missingFragmentRefs) -join ',')
+$fragmentResource = @($compiled.resources | Where-Object { $_.type -eq 'Microsoft.ApiManagement/service/policyFragments' -and $_.name -match 'content-safety-screening' })[0]
+$apiPolicyResource = @($compiled.resources | Where-Object { $_.type -eq 'Microsoft.ApiManagement/service/apis/policies' })[0]
+Assert 'compiled Content Safety fragment depends on APIM named values' (@($fragmentResource.dependsOn) -contains 'apimNamedValues') (($fragmentResource.dependsOn | Out-String).Trim())
+Assert 'compiled API policy depends on the Content Safety fragment' (@($apiPolicyResource.dependsOn | Where-Object { $_ -match 'policyFragments' -and $_ -match 'content-safety-screening' }).Count -eq 1) (($apiPolicyResource.dependsOn | Out-String).Trim())
 
 if ($script:failures) { throw "$($script:failures) of $($script:assertions) assertions failed" }
 Write-Host "P102 content safety deployment checks passed ($script:assertions assertions)."
