@@ -17,6 +17,13 @@
 # for the people mapped to it directly - which is what usage rows already carry as their
 # department, so a person discovered from usage always lands somewhere that exists.
 
+function Test-ClaudeTurnstileParentKey {
+    # Whether the map holds this exact key, whatever comparer the caller's map has (P96): a team 'sales' does not make the
+    # unit 'Sales' one.
+    param([System.Collections.IDictionary]$Parents, [string]$Id)
+    return @(@($Parents.Keys) | Where-Object { [string]::Equals([string]$_, $Id, [System.StringComparison]::Ordinal) }).Count -gt 0
+}
+
 function ConvertTo-ClaudeTurnstileCatalog {
     <#
     .SYNOPSIS
@@ -31,10 +38,11 @@ function ConvertTo-ClaudeTurnstileCatalog {
     $organizations = New-Object System.Collections.Generic.List[object]
     $departments = New-Object System.Collections.Generic.List[object]
     $units = @($Registry | Where-Object { $_ -and $_.Id })
-    $byId = @{}
+    # Identifiers and parents compare by exact spelling: a team whose parent is 'Sales' is not a team of 'sales'.
+    $byId = [hashtable]::new([System.StringComparer]::Ordinal)
     foreach ($u in $units) { $byId[[string]$u.Id] = $u }
     foreach ($u in $units) {
-        if ($Parents.Contains([string]$u.Id)) { continue }
+        if (Test-ClaudeTurnstileParentKey -Parents $Parents -Id ([string]$u.Id)) { continue }
         $ref = if ($u.Group) { "entra-group:$($u.Group)" } else { $null }
         $organizations.Add([ordered]@{
             id = [string]$u.Id; name = $(if ($u.Group) { [string]$u.Group } else { [string]$u.Id })
@@ -44,7 +52,7 @@ function ConvertTo-ClaudeTurnstileCatalog {
             id = [string]$u.Id; name = ('{0} (direct members)' -f $(if ($u.Group) { $u.Group } else { $u.Id })); parent_id = [string]$u.Id
             external_ref = $ref; attributes = [ordered]@{ source = 'claude-gateway'; kind = 'unit-direct' }
         })
-        foreach ($teamId in @($Parents.Keys | Where-Object { [string]$Parents[$_] -eq [string]$u.Id })) {
+        foreach ($teamId in @($Parents.Keys | Where-Object { [string]::Equals([string]$Parents[$_], [string]$u.Id, [System.StringComparison]::Ordinal) })) {
             $team = $byId[[string]$teamId]
             if (-not $team) { continue }
             $departments.Add([ordered]@{
@@ -85,10 +93,10 @@ function Get-ClaudeTurnstileBudgetPlan {
         [System.Collections.IDictionary]$Parents = @{}
     )
     $plan = New-Object System.Collections.Generic.List[object]
-    foreach ($u in @($Registry | Where-Object { $_ -and -not $Parents.Contains([string]$_.Id) -and [long]$_.TokensPerMonth -gt 0 })) {
+    foreach ($u in @($Registry | Where-Object { $_ -and -not (Test-ClaudeTurnstileParentKey -Parents $Parents -Id ([string]$_.Id)) -and [long]$_.TokensPerMonth -gt 0 })) {
         $plan.Add([pscustomobject]@{ ScopeType = 'organization'; ScopeId = [string]$u.Id; TokenLimit = [long]$u.TokensPerMonth })
     }
-    foreach ($t in @($Registry | Where-Object { $_ -and $Parents.Contains([string]$_.Id) -and [long]$_.TokensPerMonth -gt 0 })) {
+    foreach ($t in @($Registry | Where-Object { $_ -and (Test-ClaudeTurnstileParentKey -Parents $Parents -Id ([string]$_.Id)) -and [long]$_.TokensPerMonth -gt 0 })) {
         $plan.Add([pscustomobject]@{ ScopeType = 'department'; ScopeId = [string]$t.Id; TokenLimit = [long]$t.TokensPerMonth })
     }
     return , $plan.ToArray()
@@ -118,9 +126,7 @@ function Compare-ClaudeTurnstileBudgets {
     foreach ($item in @($TurnstileItems | Where-Object { $_.scope_type -in 'organization', 'department' })) {
         $id = [string]$item.scope_id
         $unit = $byId[$id]
-        # A key with the same characters, whatever comparer the caller's map has: 'sales' as a team does not make
-        # 'Sales' one.
-        $isTeam = @(@($Parents.Keys) | Where-Object { [string]::Equals([string]$_, $id, [System.StringComparison]::Ordinal) }).Count -gt 0
+        $isTeam = Test-ClaudeTurnstileParentKey -Parents $Parents -Id $id
         $applies = $unit -and (($item.scope_type -eq 'organization' -and -not $isTeam) -or ($item.scope_type -eq 'department' -and $isTeam))
         if (-not $applies) { continue }
         $now = $item.token_limit

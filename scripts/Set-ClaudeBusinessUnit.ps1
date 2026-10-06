@@ -220,7 +220,7 @@ else {
     }
 
     $targetGroup = if ($Group) { $Group } else { $existing[0].Group }
-    if ($targetGroup -match '[,:]') { throw "An Entra group name cannot contain a comma or a colon: '$targetGroup'." }
+    if ($targetGroup -match '[,:=&|<>^%!"\r\n]') { throw "An Entra group name cannot contain , : = & | < > ^ % ! "" or a line break, which the registry or the Azure CLI cannot carry: '$targetGroup'." }
 
     # Verify the group exists before writing the registry. A typo here is
     # invisible afterwards: the unit is created, the sync resolves it to nobody,

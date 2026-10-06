@@ -45,7 +45,7 @@ $mutations = @(
 
     @{ Name  = 'an identifier with a comma is accepted'
        File  = 'scripts/ClaudeBusinessUnit.ps1'
-       From  = "^[a-z0-9][a-z0-9-]*$"
+       From  = "^[a-z0-9][a-z0-9-]*\z"
        To    = '.' }
 
     @{ Name  = 'the report stops saying the figure is list price'
