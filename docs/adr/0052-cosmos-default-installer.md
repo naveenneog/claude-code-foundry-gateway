@@ -122,5 +122,9 @@ Option 3.
   - A transfer estimated to end after that time is refused before the first exec.
   - A directory above that size cannot complete the installer's projection path or the switch until a
     directory-scale transfer exists, ROADMAP packet P99.
+  - Amended by [ADR-0053](0053-parallel-compressed-runner-transfer.md) (P99, 2026-10-06): the snapshot
+    travels gzip-compressed in parts sent in parallel, so the about-40,000 bound above no longer applies.
+    The transfer is still refused before it starts, or stopped during it, when it cannot end before the
+    apply-by time.
 - **Rerun commands** single-quote every value that is not a plain token and double every single-quote
   character, so a pasted line passes the value and runs nothing else.

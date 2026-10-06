@@ -226,6 +226,17 @@ Follow-ups from P98, not yet packets
 - The installer still accepts `-DeployProjection` and `-FlipProjectionAfterCleanCompare` and ignores
   them (SETUP says so); removing them is a breaking change for existing scripts.
 
+Follow-ups from P99, not yet packets ([P99 status](status/P99.md)):
+
+- The manual bash `send_runner_file` in [AZ-COMMANDS](AZ-COMMANDS.md) still sends one uncompressed chunk per
+  exec, one at a time, about 1 KB a second; `Send-RunnerFile` compresses and sends parts in parallel
+  ([ADR-0053](adr/0053-parallel-compressed-runner-transfer.md)).
+- `tests/Test-ProjectionPreflightNegative.ps1`, a manual mutation harness that `Test-All.ps1` does not run,
+  fails its baseline at `main` `8a4be16`: its sandbox copy of the council suite fails "deployer flip reaches the
+  sync-evidence switch" and the real Entitlement switch checks, which pass in the repository.
+- The operator-side Graph scan of 500,000 developers is not measured (U10); the snapshot's 2-hour apply-by time
+  holds that scan, the transfer and the 10 minutes `Send-RunnerFile` keeps for the steps after it.
+
 M0 is shipped. The table below is the queue; the checklist under it is what the gate tracks.
 
 | Packet | Milestone | Deliverable | Depends on |
