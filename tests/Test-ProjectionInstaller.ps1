@@ -40,6 +40,7 @@ Assert 'SKU guidance says zones and injection are not provisioned by this instal
 Assert 'installer persists projection settings into claude-gateway.json' ($installer -match 'entitlementStore\s*=' -and $installer -match 'resolverInboundAccess\s*=' -and $installer -match 'projectionDeployer\s*=')
 Assert 'installer deploys the projection whenever the store is projection' ($installer -match "(?s)if \(\`$EntitlementStore -eq 'projection'\) \{\s*Write-Step 'Projection deployment'.*?Invoke-ClaudeInstallerProjectionDeployment")
 Assert 'an explicit store under -Yes is kept' ((Resolve-ClaudeInstallerEntitlementStore -EntitlementStore named-value -DeveloperCount 25 -BuCeiling 93 -ListCeiling 110 -Yes).Store -eq 'named-value')
+Assert 'an existing named-value gateway without an explicit store migrates to projection' ((Resolve-ClaudeInstallerEntitlementStore -DeveloperCount 25 -BuCeiling 93 -ListCeiling 110 -DefaultStore named-value -Yes).Store -eq 'projection' -and $installer -match 'migrating from named values: deploy, compare, switch')
 Assert '-Yes states the projection default it chose' ($installer -match 'EntitlementStore projection: default under -Yes')
 Assert 'choosing projection implies the deployer; named values do not' ($small.DeployProjection -eq $true -and
     (Resolve-ClaudeInstallerEntitlementStore -EntitlementStore named-value -DeveloperCount 25 -BuCeiling 93 -ListCeiling 110 -Yes).DeployProjection -eq $false -and

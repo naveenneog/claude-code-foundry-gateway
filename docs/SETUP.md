@@ -462,6 +462,8 @@ region.
 cost of this accelerator, so any v2 instance you already own is offered first,
 annotated with whether it already carries the Claude API.
 
+A re-run of an existing named-value gateway without `-EntitlementStore` migrates it to the Cosmos projection: the approval summary says `projection (migrating from named values: deploy, compare, switch)` before any write. `-EntitlementStore named-value` keeps named values for a small organisation within the named-value capacity. A gateway already on the projection stays on the projection unless named values are passed explicitly.
+
 ![The wizard listing two existing v2 API Management instances with their SKU, region and resource group, plus a third option to create a new one](guide/run-2-reuse-existing-apim.png)
 
 **4. Budgets.** Every prompt has a working default in brackets — Enter accepts

@@ -24,6 +24,11 @@ $choice = Resolve-ClaudeInstallerEntitlementStore -DeveloperCount 50 -BuCeiling 
 Assert '-Yes without -EntitlementStore chooses projection at small size' ($choice.Store -eq 'projection' -and $choice.DeployProjection) ($choice | ConvertTo-Json -Depth 4)
 Assert 'the interactive choice offers projection first and recommends it' ($choice.Options[0].Value -eq 'projection' -and $choice.Options[0].Recommended -and $choice.Options[1].Value -eq 'named-value') ($choice.Options | ConvertTo-Json -Depth 4)
 
+$existingNamedDefault = Resolve-ClaudeInstallerEntitlementStore -DeveloperCount 50 -BuCeiling 93 -ListCeiling 110 -DefaultStore 'named-value' -Yes
+Assert 'an existing named-value gateway still defaults to projection so reruns migrate unless named-value is explicit' ($existingNamedDefault.Store -eq 'projection' -and $existingNamedDefault.Options[0].Recommended -and -not $existingNamedDefault.Options[1].Recommended -and $existingNamedDefault.Options[0].Reason -match 'migrate') ($existingNamedDefault | ConvertTo-Json -Depth 4)
+$existingProjectionDefault = Resolve-ClaudeInstallerEntitlementStore -DeveloperCount 50 -BuCeiling 93 -ListCeiling 110 -DefaultStore 'projection' -Yes
+Assert 'an existing projection gateway defaults to projection' ($existingProjectionDefault.Store -eq 'projection' -and $existingProjectionDefault.Options[0].Reason -match 'current store') ($existingProjectionDefault | ConvertTo-Json -Depth 4)
+
 Capture { Resolve-ClaudeInstallerEntitlementStore -DeveloperCount 94 -BuCeiling 93 -ListCeiling 110 -EntitlementStore 'named-value' -Yes }
 Assert 'named values above the computed business-unit ceiling are refused' ($Failure -match 'Named values hold about 93 developers' -and $Failure -match 'choose projection') $Failure
 
@@ -129,6 +134,7 @@ $installerAst = [Management.Automation.Language.Parser]::ParseInput($installerTe
 $planCall = $installerAst.Find({ param($n) $n -is [Management.Automation.Language.CommandAst] -and $n.GetCommandName() -eq 'Get-ClaudeInstallerProjectionPlan' }, $true)
 $whatIfStop = $installerAst.Find({ param($n) $n -is [Management.Automation.Language.IfStatementAst] -and $n.Clauses[0].Item1.Extent.Text -eq '$WhatIfPreference' -and $n.Extent.Text -match 'WhatIf - stopping before any change' }, $true)
 Assert 'installer exposes a validated DeveloperCount parameter' ($installerText -match '\[ValidateRange\(1,10000000\)\]\s*\[int\]\$DeveloperCount')
+Assert 'summary names an implicit migration from named values before writes' ($installerText -match 'migrating from named values: deploy, compare, switch')
 Assert 'the approval summary lists the projection steps before the -WhatIf stop, so -WhatIf shows them' ($planCall -and $whatIfStop -and $planCall.Extent.StartOffset -lt $whatIfStop.Extent.StartOffset) "plan at $($planCall.Extent.StartLineNumber); stop at $($whatIfStop.Extent.StartLineNumber)"
 Assert 'new projection gateways skip the named-value Sync-ClaudeAccess step' (-not (Test-ClaudeInstallerShouldSyncNamedValues -EntitlementStore projection -NewGateway $true))
 Assert 'named-value gateways still run Sync-ClaudeAccess' (Test-ClaudeInstallerShouldSyncNamedValues -EntitlementStore 'named-value' -NewGateway $true)

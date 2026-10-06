@@ -66,15 +66,14 @@ function Resolve-ClaudeInstallerEntitlementStore {
     $options = @(
         New-ClaudeInstallerChoiceOption -Value 'projection' -Label 'Cosmos projection (recommended)' `
             -Detail 'Deploys the private Cosmos entitlement store, resolver and switch. This is the default path for every team size.' `
-            -Recommended:($DefaultStore -ne 'named-value') -Reason $(if ($DefaultStore -eq 'named-value') { 'recommended default for new gateways; this existing gateway currently uses named values' } else { 'recommended default for new gateways' })
+            -Recommended -Reason $(if ($DefaultStore -eq 'named-value') { 'recommended default; this existing gateway currently uses named values and will migrate unless named-value is passed explicitly' } elseif ($DefaultStore -eq 'projection') { 'current store on this existing gateway' } else { 'recommended default for new gateways' })
         New-ClaudeInstallerChoiceOption -Value 'named-value' -Label 'Named values' `
             -Detail ("No Cosmos components. Intended for small teams only: about {0} developers in business-unit membership and about {1} per tier list." -f $BuCeiling, $ListCeiling) `
-            -Recommended:($DefaultStore -eq 'named-value') -Reason $(if ($DefaultStore -eq 'named-value') { 'current store on this existing gateway' } else { 'small-team fallback when you do not want Cosmos components' })
+            -Reason $(if ($DefaultStore -eq 'named-value') { 'explicit small-team fallback; passing this keeps the gateway on named values' } else { 'small-team fallback when you do not want Cosmos components' })
     )
     $store = $EntitlementStore
     if (-not $store) {
-        if ($DefaultStore) { $store = $DefaultStore }
-        elseif ($Yes) { $store = 'projection' }
+        if ($Yes) { $store = 'projection' }
         elseif ($Selector) { $store = & $Selector $options }
         else { $store = 'projection' }
     }

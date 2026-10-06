@@ -23,6 +23,10 @@ if (-not $Live) {
         name = 'apim-p72live'; resourceGroup = 'rg-p72live'; location = 'East US 2'; publisherEmail = 'ops@contoso.com'
         sku = [ordered]@{ name = 'StandardV2'; capacity = 1 }; identity = [ordered]@{ type = 'SystemAssigned' }; gatewayUrl = 'https://apim-p72live.azure-api.net'
     } | ConvertTo-Json -Depth 4 -Compress
+    $global:P72DriverProjection = [ordered]@{
+        name = 'apim-p72projection'; resourceGroup = 'rg-p72projection'; location = 'East US 2'; publisherEmail = 'ops@contoso.com'
+        sku = [ordered]@{ name = 'StandardV2'; capacity = 1 }; identity = [ordered]@{ type = 'SystemAssigned' }; gatewayUrl = 'https://apim-p72projection.azure-api.net'
+    } | ConvertTo-Json -Depth 4 -Compress
 
     function az {
         $joined = $args -join ' '
@@ -38,7 +42,11 @@ if (-not $Live) {
         if ($joined -like 'cognitiveservices account deployment list *') { return $global:P72DriverDeployments }
         if ($joined -like 'apim show -g rg-p72live -n apim-p72live*--query id*') { return '/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-p72live/providers/Microsoft.ApiManagement/service/apim-p72live' }
         if ($joined -like 'apim show -g rg-p72live -n apim-p72live*') { return $global:P72DriverExisting }
+        if ($joined -like 'apim show -g rg-p72projection -n apim-p72projection*--query id*') { return '/subscriptions/00000000-0000-4000-8000-0000000000a1/resourceGroups/rg-p72projection/providers/Microsoft.ApiManagement/service/apim-p72projection' }
+        if ($joined -like 'apim show -g rg-p72projection -n apim-p72projection*') { return $global:P72DriverProjection }
         if ($joined -like 'apim show -g rg-p72 -n apim-p72perm*') { $global:LASTEXITCODE = 3; return 'ERROR: (ResourceNotFound) API Management service not found.' }
+        if ($joined -like 'functionapp show -g rg-p72projection -n func-resolver-p72projection*publicNetworkAccess*') { return 'Disabled' }
+        if ($joined -like 'apim nv show *apim-p72projection*entitlement-source*') { return 'projection' }
         if ($joined -like 'apim nv show *entitlement-source*') { return 'named-value' }
         if ($joined -like 'apim nv show *entitlement-resolver-url*') { return 'https://resolver-not-deployed.invalid' }
         if ($joined -like 'apim nv show *entitlement-resolver-audience*') { return 'https://resolver-not-deployed.invalid' }

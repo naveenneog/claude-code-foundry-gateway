@@ -808,7 +808,7 @@ $liveEntitlementSource = ''
 if ($ExistingApim -or $liveApimIdForDefaults) {
     $liveEntitlementSource = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $apimNameForDefaults -Id 'entitlement-source' -FailOnError
     if ($liveEntitlementSource -in @('named-value','projection')) {
-        Write-Note "existing gateway entitlement source is $liveEntitlementSource; it is the default when -EntitlementStore is not passed"
+        Write-Note $(if ($liveEntitlementSource -eq 'named-value') { "existing gateway entitlement source is named-value; without -EntitlementStore this run migrates it to projection" } else { "existing gateway entitlement source is projection; without -EntitlementStore it stays on projection" })
     }
 }
 
@@ -1290,7 +1290,7 @@ $rows = [ordered]@{
     'Entra groups'          = "$StandardGroup, $PremiumGroup"
     '  '                    = ''
     # Every choice on the Choices page, in the order asked: the summary is the approval (ADR-0032).
-    'Entitlement store'     = $(if ($EntitlementStore -eq 'projection') { "projection, resolver $ResolverInboundAccess" } else { $EntitlementStore })
+    'Entitlement store'     = $(if ($EntitlementStore -eq 'projection') { $(if ($liveEntitlementSource -eq 'named-value') { "projection (migrating from named values: deploy, compare, switch), resolver $ResolverInboundAccess" } else { "projection, resolver $ResolverInboundAccess" }) } else { $EntitlementStore })
     'Revocation window'     = $(if ($entitlementCacheSeconds % 60) { "$entitlementCacheSeconds seconds" } else { "$($entitlementCacheSeconds / 60) minutes" })
     'Team budget behaviour' = $budgetMode
     'Developers with no team' = $unassignedMode
