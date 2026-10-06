@@ -2,14 +2,28 @@
 
 This page is the short operator path for the first rollout. It links to the
 deep guides for details and does not replace them.
+## Quickstart
+
+The commands run from the repository root in PowerShell 7 with the [Setup tools and roles](SETUP.md#1-prerequisites) and the intended Azure sign-in. The generated record supplies the gateway target for later tracks.
+
+```powershell
+.\Start-ClaudeGateway.ps1 -Action Setup
+.\Start-ClaudeGateway.ps1 -Action Status
+.\Start-ClaudeGateway.ps1 -Action Guide
+```
+
+**Expected result:** completed steps are recorded in `onboarding/claude-gateway.json`; Status reports the recorded deployment; Guide writes `onboarding/HOW-TO-USE.md`. Track 1 verifies the gateway with a real health check, Track 2 verifies a developer workstation, and Track 3 verifies FinOps reporting.
 
 ## Recommended path - guided flow
 
-Run the guided flow from the repository root. It discovers the signed-in tenant,
-subscriptions, existing gateways, Foundry accounts, deployments and workspaces,
-asks every available module's questions once, prints one combined review and
-fingerprint, then applies only after the first eight fingerprint characters are
-typed or passed with `-ApprovedPlanFingerprint`.
+<details>
+
+<summary>Track details</summary>
+
+The flow reads the gateway named by the decision record, or makes no Azure read
+when none is recorded. A first attended setup reviews the foundation in the
+installer, then reviews the remaining steps and requests their fingerprint
+([Guided flow](GUIDED-FLOW.md#attended-setup)).
 
 ```powershell
 .\Start-ClaudeGateway.ps1 -Action Setup
@@ -49,7 +63,12 @@ not a hard invoice cap.
 Claude client behavior is configured through the repository's developer setup
 and the Anthropic Claude Code/Claude Desktop clients.
 
+</details>
 ## Track 1 - Administrator, 10 steps
+
+<details>
+
+<summary>Track details</summary>
 
 ### 1. Confirm prerequisites and sign in
 
@@ -120,6 +139,9 @@ consent behavior for external-idp.
 **Command**
 
 ```powershell
+$gateway = Get-Content .\onboarding\claude-gateway.json -Raw | ConvertFrom-Json
+$rg = $gateway.resourceGroup
+$apim = $gateway.apimName
 .\scripts\Test-ClaudeHealth.ps1 -ResourceGroup $rg -ApimName $apim
 ```
 
@@ -158,10 +180,10 @@ gateway identity the required access.
 **Command**
 
 ```powershell
-.\scripts\Set-ClaudeDeveloper.ps1 -User alice@contoso.com -Tier standard -Sync
-.\.venv-finops\Scripts\aum.exe developer find alice --limit 50
-.\.venv-finops\Scripts\aum.exe developer add alice@contoso.com --tier standard --unit platform --what-if
-.\.venv-finops\Scripts\aum.exe developer remove alice@contoso.com --what-if
+.\scripts\Set-ClaudeDeveloper.ps1 -User developer@contoso.com -Tier standard -Sync
+.\.venv-finops\Scripts\aum.exe developer find developer --limit 50
+.\.venv-finops\Scripts\aum.exe developer add developer@contoso.com --tier standard --unit platform --what-if
+.\.venv-finops\Scripts\aum.exe developer remove developer@contoso.com --what-if
 .\scripts\Sync-ClaudeAccess.ps1 -ApimName $apim -ResourceGroup $rg
 ```
 
@@ -313,7 +335,12 @@ response.
 **If it fails:** use [Setup verification](SETUP.md#4-verify-before-announcing),
 [Governance checks](GOVERNANCE-CHECKS.md) and [Troubleshooting](TROUBLESHOOTING.md).
 
+</details>
 ## Track 2 - Developer, 8 steps
+
+<details>
+
+<summary>Track details</summary>
 
 ### 1. Get the handover file and sign in to Azure
 
@@ -465,7 +492,12 @@ changes. **Screenshot:** no approved live client screenshot exists in the allowe
 manifests. **If it fails:** use [Developer troubleshooting](../DEVELOPER.md#if-something-is-wrong)
 and never send tokens or prompt content in a public issue.
 
+</details>
 ## Track 3 - FinOps, 9 steps
+
+<details>
+
+<summary>Track details</summary>
 
 ### 1. Choose no console, Turnstile, AUM or both
 
@@ -667,7 +699,12 @@ Turnstile/AUM captures above for optional consoles. **If it fails:** use
 [FinOps reconcile](FINOPS.md#4-compare-to-billed-cost-and-set-the-next-budget)
 and [Monitoring](MONITORING.md).
 
+</details>
 ## Approved screenshots used on this page
+
+<details>
+
+<summary>Track details</summary>
 
 The images above are live captures already committed in this repository. Their
 provenance records are:
@@ -685,3 +722,10 @@ provenance records are:
 | `images/architecture-live/terminal-overview.png` | `docs/images/architecture-live/captures.json`, id `terminal-overview` |
 | `images/architecture-live/terminal-budgets.png` | `docs/images/architecture-live/captures.json`, id `terminal-budgets` |
 | `images/architecture-live/reports-generator-job.png` | `docs/images/architecture-live/captures.json`, id `reports-generator-job` |
+
+</details>
+## Next
+
+- [Setup](SETUP.md) is the deployment owner.
+- [Developer setup](../DEVELOPER.md) is the workstation owner.
+- [FinOps](FINOPS.md) is the financial-close owner.

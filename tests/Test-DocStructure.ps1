@@ -28,7 +28,8 @@ $EnrolledGuides = @(
   'docs\AUTHENTICATION.md',
   'docs\GUIDED-FLOW.md',
   'docs\OPERATIONS.md',
-  'DEVELOPER.md'
+  'DEVELOPER.md',
+  'docs\GET-STARTED.md'
 )
 
 
@@ -41,7 +42,8 @@ function Assert-Condition([bool]$Condition, [string]$Message) { if (-not $Condit
 
 function Get-GuidePaths {
 
-  $paths = @('README.md','DEVELOPER.md','guide\README.md','onboarding\README.md')
+  $paths = @('README.md','DEVELOPER.md',
+  'docs\GET-STARTED.md','guide\README.md','onboarding\README.md')
 
   Get-ChildItem -LiteralPath (Join-Path $Root 'docs') -Filter '*.md' | Sort-Object Name | ForEach-Object {
 
