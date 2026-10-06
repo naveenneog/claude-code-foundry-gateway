@@ -65,7 +65,9 @@ function Invoke-ClaudeProjectionAccessSync {
     . (Join-Path $PSScriptRoot 'ClaudeProjectionPackage.ps1')
     $prefix = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-projection-prefix' -FailOnError
     if ([string]::IsNullOrWhiteSpace($prefix)) {
-        throw "Projection sync needs named value 'entitlement-projection-prefix'. Remedy: redeploy with scripts/Deploy-ClaudeProjection.ps1, which writes it."
+        throw ("API Management $ApimName has no named value 'entitlement-projection-prefix', which names the projection to sync. " +
+            "Remedy: .\scripts\Deploy-ClaudeProjection.ps1 -ResourceGroup $ResourceGroup -ApimName $ApimName -NamePrefix <prefix>, with the -Sku, " +
+            "-ResolverInboundAccess, -StandardGroup and -PremiumGroup the projection was deployed with; it records the named value. Nothing was written.")
     }
     if ($prefix -notmatch '^[a-z0-9]+(?:-[a-z0-9]+)*$') { throw "Projection prefix '$prefix' is unsafe." }
     $apim = az apim show -g $ResourceGroup -n $ApimName -o json | ConvertFrom-Json

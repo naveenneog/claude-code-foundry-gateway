@@ -83,7 +83,8 @@ DNS. Do not delete the old gateway until rollback is no longer needed.
 
 ## 3. Move entitlement between named values and the projection
 
-Named values are the default and hold roughly 100 developers. The projection is the scale path.
+The Cosmos projection is the installer's default store ([ADR-0052](adr/0052-cosmos-default-installer.md)). Named values hold about
+93 developers in business-unit membership and about 110 per tier list, and serve small organisations.
 Projection records persist until a sync removes or changes the person. A sync-job outage does not
 stop developers. Add or remove a developer in the Entra group, then run
 `scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim> -User <name-or-object-id>` for one
@@ -141,7 +142,10 @@ backup ([ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md)).
 Reverse path: `entitlement-source` returns to `named-value` after the lists are refreshed with
 `scripts/Sync-ClaudeAccess.ps1 -Store named-value` and checked with `scripts/Compare-ClaudeEntitlement.ps1
 -FailOnDrift`. Lists not kept current while the projection served traffic can regrant stale
-members or deny new ones; the switch's backup holds the values from before it.
+members or deny new ones; the switch's backup holds the values from before it. A rollback to named
+values holds only a population within their capacity, about 93 developers in business-unit membership
+and about 110 per tier list ([Scale](SCALE.md#what-runs-out-first)); above it, the projection is the only
+store that holds everyone.
 
 ## 4. Change the enterprise network edge
 

@@ -151,6 +151,12 @@ Capture { & (Join-Path $root 'scripts\Sync-ClaudeAccess.ps1') -ApimName apim-p84
 Assert 'Sync-ClaudeAccess refuses targeted named-value sync before Azure calls' ($CapturedError -match '-User cannot be used with -Store named-value' -and $FixtureCalls.Count -eq 0) "$CapturedError | $($FixtureCalls -join ' | ')"
 Assert 'named-value refuses targeted user' ($CapturedError -match '-User cannot be used with -Store named-value' -and $FixtureCalls.Count -eq 0) "$CapturedError | $($FixtureCalls -join ' | ')"
 
+Reset-ProjectionFixture 'prefix-missing'
+Capture { & (Join-Path $root 'scripts\Sync-ClaudeAccess.ps1') -ApimName apim-p84 -ResourceGroup rg-p84 -Store projection }
+Assert 'a projection sync without entitlement-projection-prefix gives the deployer command for this gateway and writes nothing' (
+    $CapturedError -match [regex]::Escape('.\scripts\Deploy-ClaudeProjection.ps1 -ResourceGroup rg-p84 -ApimName apim-p84 -NamePrefix <prefix>') -and
+    @($FixtureCalls | Where-Object { $_ -match 'container exec|apply-projection|Sync-ClaudeProjection' }).Count -eq 0) "$CapturedError | $($FixtureCalls -join ' | ')"
+
 Reset-ProjectionFixture 'source-projection'
 Capture { & (Join-Path $root 'scripts\Sync-ClaudeAccess.ps1') -ApimName apim-p84 -ResourceGroup rg-p84 -Store auto -AllowEmpty }
 $accessCalls = $FixtureCalls -join "`n"

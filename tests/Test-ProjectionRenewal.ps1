@@ -424,6 +424,7 @@ try {
     $noPrefix = Invoke-DeployScenario 'no-prefix'
     Assert 'a gateway without entitlement-projection-prefix stops before any write, naming the projection deployer' ($noPrefix.Failure -match 'has no entitlement-projection-prefix named value' -and
         $noPrefix.Failure -match 'scripts/Deploy-ClaudeProjection\.ps1' -and $noPrefix.Failure -match 'Nothing was deployed' -and (Get-WriteCount $noPrefix) -eq 0) "$($noPrefix.Failure) | writes $(Get-WriteCount $noPrefix)"
+    Assert 'the prefix refusal gives the projection deployer command for this gateway and prefix' ($noPrefix.Failure -match [regex]::Escape('.\scripts\Deploy-ClaudeProjection.ps1 -ResourceGroup rg-p94 -ApimName apim-p94 -NamePrefix p94fixture')) $noPrefix.Failure
     $otherPrefix = Invoke-DeployScenario 'other-prefix'
     Assert 'a gateway that records another projection stops before any write' ($otherPrefix.Failure -match "records projection 'otherfixture', not 'p94fixture'" -and (Get-WriteCount $otherPrefix) -eq 0) "$($otherPrefix.Failure) | writes $(Get-WriteCount $otherPrefix)"
     $prefixRefused = Invoke-DeployScenario 'prefix-read-refused'

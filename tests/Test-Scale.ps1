@@ -401,6 +401,15 @@ Assert 'and gives the measured number'           ($readmeTop -match 'roughly 93 
 # caveat, but do not require the superseded "not yet load-tested" sentence.
 # ADR-0052 (P98): the installer deploys the projection by default; named values are the small-team choice.
 Assert 'and says the installer deploys the projection by default' ($readmeTop -match '\*\*The installer deploys the projection by default\.\*\*')
+# P98 council round 2 (UX): the change guide still called named values the default, and the re-run and
+# rollback texts did not say that named values cannot hold a population above their capacity.
+$updateGuide = Get-Content (Join-Path $root 'docs/UPDATE-AND-CHANGE.md') -Raw
+Assert 'the change guide names the projection as the installer default' ($updateGuide -notmatch 'Named values are the default' -and $updateGuide -match "The Cosmos projection is the installer's default store")
+foreach ($doc in 'docs/SETUP.md', 'docs/SECURE-PROJECTION.md', 'docs/UPDATE-AND-CHANGE.md') {
+    # Markdown wraps sentences across lines; compare with runs of whitespace as one space.
+    $docText = (Get-Content (Join-Path $root $doc) -Raw) -replace '\s+', ' '
+    Assert "$doc says a rollback to named values holds only a population within their capacity" ($docText -match 'A rollback to named values holds only a population within their capacity')
+}
 Assert 'and distinguishes the storage test from active developers' (
     $readmeTop -match '500,000 records were loaded and read' -and
     $readmeTop -match 'not 500,000 concurrent developers')

@@ -19,7 +19,9 @@ An existing gateway, from PowerShell 7 at the repository root, in order:
 | Optional, for very large directories: the sync job | `./scripts/Deploy-ClaudeProjectionRenewal.ps1 -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> -AlertEmail <address>` |
 
 Rollback refreshes and compares the named values, then sets `entitlement-source` back to `named-value`
-([switch](#switch-to-the-projection-p95)). The rest of this article covers each step, the network, the
+([switch](#switch-to-the-projection-p95)). A rollback to named values holds only a population within their
+capacity, about 93 developers in business-unit membership and about 110 per tier list
+([Scale](SCALE.md#what-runs-out-first)). The rest of this article covers each step, the network, the
 rights used and the costs.
 
 The gateway decides each developer's tier from two named values. A named value
