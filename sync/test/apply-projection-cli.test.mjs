@@ -82,6 +82,63 @@ test('mutating applies require an account resource id, while what-if remains rea
   const summary = JSON.parse(whatIf.stdout.trim().split(/\r?\n/).filter((line) => line.startsWith('{')).at(-1));
   assert.equal(whatIf.status, 0, whatIf.stdout + whatIf.stderr);
   assert.equal(summary.whatIf, true);
+  assert.doesNotMatch(readFileSync(log, 'utf8'), /projection-apply-lock/, 'a what-if run takes no apply lock');
+});
+
+test('a snapshot whose apply-by time passes while it waits for the lock is refused before any write', () => {
+  const target = '33333333-3333-4333-8333-333333333333';
+  const nowMs = Date.now();
+  const lock = { id: 'projection-apply-lock', oid: 'projection-apply-lock', type: 'projection-apply-lock', holder: 'other-run', mode: 'user', acquiredAt: new Date(nowMs).toISOString(), leaseExpiresAt: new Date(nowMs + 4_000).toISOString() };
+  const snap = { ...fullSnapshot({ verifiedAt: new Date(nowMs - 60_000).toISOString(), records: [{ oid: target, tier: 'standard', businessUnit: '' }] }), expiresAt: Math.floor((nowMs + 2_000) / 1000) };
+  const { result, summary, store } = runApplyWithFake({ name: 'apply-by passes during the lock wait', docs: { [`${lock.id}|${lock.oid}`]: lock }, snapshot: snap, args: ['--lock-wait-seconds', '30'] });
+  assert.equal(result.status, 2, result.stdout + result.stderr);
+  assert.match(summary.error, /snapshot expired; resolve the directory again/);
+  assert.match(summary.remedy, /^Remedy: rerun scripts\/Sync-ClaudeAccess\.ps1 -ResourceGroup <rg> -ApimName <apim>/);
+  const docs = Object.values(JSON.parse(readFileSync(store, 'utf8')).docs);
+  assert.equal(docs.some((d) => d.oid === target), false, 'no record was written');
+  assert.equal(docs.some((d) => d.type === 'projection-reconciliation-status'), false, 'no status was written');
+  assert.equal(docs.some((d) => d.type === 'projection-apply-lock'), false, 'the lock was released');
+});
+
+test('a writer that waits for a held lock takes it when the lease passes and applies', () => {
+  const target = '33333333-3333-4333-8333-333333333333';
+  const nowMs = Date.now();
+  const lock = { id: 'projection-apply-lock', oid: 'projection-apply-lock', type: 'projection-apply-lock', holder: 'other-run', mode: 'user', acquiredAt: new Date(nowMs).toISOString(), leaseExpiresAt: new Date(nowMs + 2_000).toISOString() };
+  const snap = fullSnapshot({ verifiedAt: new Date(nowMs - 60_000).toISOString(), records: [{ oid: target, tier: 'standard', businessUnit: '' }] });
+  const { result, summary, log } = runApplyWithFake({ name: 'wait then acquire', docs: { [`${lock.id}|${lock.oid}`]: lock }, snapshot: snap, args: ['--lock-wait-seconds', '20'] });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(summary.written, 1);
+  assert.match(readFileSync(log, 'utf8'), /replace projection-apply-lock\|projection-apply-lock if-match/);
+});
+
+test('a failed page of the existing-record read stops the apply before any write or status', () => {
+  const kept = '33333333-3333-4333-8333-333333333333';
+  const orphan = '55555555-5555-4555-8555-555555555555';
+  const snap = fullSnapshot({ verifiedAt: new Date(Date.now() - 60_000).toISOString(), records: [{ oid: kept, tier: 'standard', businessUnit: '' }] });
+  const { result, summary, store } = runApplyWithFake({
+    name: 'failed page stops the apply',
+    docs: {
+      [`${kept}|${kept}`]: { id: kept, oid: kept, tenantId: tenant, tier: 'standard', businessUnit: '' },
+      [`${orphan}|${orphan}`]: { id: orphan, oid: orphan, tenantId: tenant, tier: 'premium', businessUnit: '' },
+    },
+    snapshot: snap,
+    env: { FAKE_COSMOS_PAGE_SIZE: '1', FAKE_COSMOS_FAIL_PAGE: '1' },
+  });
+  assert.equal(result.status, 3, result.stdout + result.stderr);
+  assert.equal(summary.stage, 'cosmos-read');
+  const docs = Object.values(JSON.parse(readFileSync(store, 'utf8')).docs);
+  assert.equal(docs.some((d) => d.oid === orphan), true, 'a partial read never plans a revocation');
+  assert.equal(docs.some((d) => d.type === 'projection-reconciliation-status'), false);
+  assert.equal(docs.some((d) => d.type === 'projection-apply-lock'), false, 'the lock was released');
+});
+
+test('groups that resolve to nobody are refused with the check-or-AllowEmpty remedy', () => {
+  const existingOid = '33333333-3333-4333-8333-333333333333';
+  const snap = fullSnapshot({ verifiedAt: new Date(Date.now() - 60_000).toISOString(), records: [] });
+  const { result, summary } = runApplyWithFake({ name: 'empty resolve remedy', docs: { [`${existingOid}|${existingOid}`]: { id: existingOid, oid: existingOid, tenantId: tenant, tier: 'standard', businessUnit: '' } }, snapshot: snap });
+  assert.equal(result.status, 2, result.stdout + result.stderr);
+  assert.match(summary.error, /groups resolved to nobody/);
+  assert.match(summary.remedy, /^Remedy: check the tier group names .*-AllowEmpty/);
 });
 
 test('targeted snapshots must name one matching user record or no record; status records use a non-guid partition and retain seven days of switch evidence', () => {

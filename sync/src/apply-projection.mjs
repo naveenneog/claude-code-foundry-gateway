@@ -62,10 +62,16 @@ const rerunRemedy = 'Remedy: rerun scripts/Sync-ClaudeAccess.ps1 -ResourceGroup 
 const userRerunRemedy = 'Remedy: rerun scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim> -User <upn-or-oid>.';
 const accountRemedy = 'Remedy: rerun scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim>, or rerun with a matching --cosmos https://<account>.documents.azure.com:443/ --account-resource-id $(az cosmosdb show -n <account> -g <rg> --query id -o tsv).';
 
+// The remedy is also a field of its own: scripts/ClaudeRunner.ps1 shows it to the operator, while the
+// error, which can name holders and counts, stays in the sanitized diagnostics.
 function fail(message, code = 1, stage = 'config') {
-  console.log(JSON.stringify({ ok: false, error: message, stage, ...(renewal ? { event: RENEWAL_FAILED } : {}) }));
+  const at = message.indexOf(' Remedy: ');
+  const remedy = at >= 0 ? message.slice(at + 1) : undefined;
+  console.log(JSON.stringify({ ok: false, error: message, stage, ...(remedy ? { remedy } : {}), ...(renewal ? { event: RENEWAL_FAILED } : {}) }));
   process.exit(code);
 }
+
+const emptyRemedy = 'Remedy: check the tier group names and that the signed-in operator can read their membership; when the groups are empty on purpose, rerun scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim> -AllowEmpty.';
 
 let activeLockForFailure = null;
 async function releaseActiveLock() {
@@ -77,6 +83,12 @@ async function releaseActiveLock() {
   } catch (error) {
     console.log(JSON.stringify({ ok: false, warning: `projection apply lock release failed: ${error?.message ?? error}` }));
   }
+}
+
+// Every refusal after the lock is taken releases it first: process.exit skips finally.
+async function failAfterLock(message, code, stage) {
+  await releaseActiveLock();
+  fail(message, code, stage);
 }
 
 // One stage of a run. An error ends the run with the stage named, before anything after it is written.
@@ -293,11 +305,10 @@ try {
   const statuses = await step('status-read', () => readSuccessfulStatuses(container, lock));
   const snapshotCutoff = Date.parse(reconciliation.lastVerifiedAt);
   const targetedCutoff = snapshotCutoff - 300_000;
-  if (!Number.isFinite(snapshotCutoff)) fail('invalid snapshot freshness', 2, 'plan');
+  if (!Number.isFinite(snapshotCutoff)) await failAfterLock(`invalid snapshot freshness. ${rerunRemedy}`, 2, 'plan');
   if (!userOid && scope === 'full') {
     if (statuses.some((s) => s.mode === 'full' && Date.parse(s.finishedAt) > snapshotCutoff)) {
-      await releaseActiveLock();
-      fail(`a newer full sync finished after this snapshot was taken; export a fresh snapshot. ${rerunRemedy}`, 2, 'plan');
+      await failAfterLock(`a newer full sync finished after this snapshot was taken; export a fresh snapshot. ${rerunRemedy}`, 2, 'plan');
     }
     const excluded = new Set(statuses
       .filter((s) => s.mode === 'user' && GUID.test(s.user ?? '') && Date.parse(s.finishedAt) > targetedCutoff)
@@ -313,15 +324,11 @@ try {
       Date.parse(s.finishedAt) > snapshotCutoff &&
       (s.mode === 'full' || (s.mode === 'user' && s.user === userOid)));
     if (staleForUser) {
-      await releaseActiveLock();
-      fail(`a newer sync already finished for this user after this snapshot was taken. ${userRerunRemedy}`, 2, 'plan');
+      await failAfterLock(`a newer sync already finished for this user after this snapshot was taken. ${userRerunRemedy}`, 2, 'plan');
     }
   }
   const plan = planChanges(records, existing, { allowEmpty: userOid ? true : flag('--allow-empty'), keepOrphans: userOid ? false : flag('--keep-orphans'), refresh: false });
-  if (plan.refused) {
-    await releaseActiveLock();
-    fail(`${plan.reason}. ${rerunRemedy}`, 2, 'plan');
-  }
+  if (plan.refused) await failAfterLock(`${plan.reason}. ${emptyRemedy}`, 2, 'plan');
 
   const summary = {
     ok: true, source, whatIf, resolved: records.length, existing: existing.size,
@@ -329,6 +336,15 @@ try {
     excludedByNewerTargetedSync,
   };
   if (whatIf) { console.log(JSON.stringify(summary)); process.exit(0); }
+  // ADR-0051 decision 4: an old file cannot restore old membership. The lock wait can outlast the
+  // apply-by time checked when the snapshot was read, so it is checked again before the first write.
+  if (!Number.isFinite(reconciliation.expiresAt) || reconciliation.expiresAt <= Math.floor(Date.now() / 1000)) {
+    await failAfterLock(`snapshot expired; resolve the directory again. ${userOid ? userRerunRemedy : rerunRemedy}`, 2, 'plan');
+  }
+  const explicitExecutor = opt('--executor');
+  if (explicitExecutor && !['job', 'runner'].includes(explicitExecutor)) {
+    await failAfterLock('--executor must be job or runner. Remedy: rerun with --executor job or --executor runner.', 2, 'config');
+  }
 
   const writes = await step('cosmos-write', () => bulk(container, plan.toWrite.map((r) => ({
     operationType: 'Upsert', partitionKey: r.oid, resourceBody: toDocument(r, { tenantId, mappingVersion, reconciliation }),
@@ -338,11 +354,7 @@ try {
   Object.assign(summary, { ok: !(writes.failed || deletes.failed), ...writeCounts, mappingVersion, reconciliationGeneration: reconciliation.reconciliationGeneration, lastVerifiedAt: reconciliation.lastVerifiedAt, seconds: (Date.now() - started) / 1000 });
   if (summary.ok) {
     const memberCounts = records.reduce((counts, r) => ({ ...counts, [r.tier]: (counts[r.tier] ?? 0) + 1 }), {});
-    const explicitExecutor = opt('--executor');
-    if (explicitExecutor && !['job', 'runner'].includes(explicitExecutor)) {
-      await releaseActiveLock();
-      fail('--executor must be job or runner. Remedy: rerun with --executor job or --executor runner.', 2, 'config');
-    }
+
     const status = toStatusDocument({
       tenantId,
       accountResourceId,
@@ -413,7 +425,9 @@ function resolveAccountResourceId({ endpoint, flagValue, envValue, required }) {
   return chosen.toLowerCase();
 }
 
+// A test seam: honoured only under the fake Cosmos store, so a production run uses the wall clock.
 function createLockClock() {
+  if (!process.env.FAKE_COSMOS_STORE) return () => new Date();
   const stepMs = Number(process.env.FAKE_APPLY_LOCK_ADVANCE_MS ?? 0);
   if (!Number.isFinite(stepMs) || stepMs <= 0) return () => new Date();
   let current = Date.now();

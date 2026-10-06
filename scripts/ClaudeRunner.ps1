@@ -107,6 +107,14 @@
     return $out.Trim()
 }
 
+# A writer refusal's stage and remedy are shown; its error text, which can name holders and counts, is not.
+# The remedy is the writer's fixed guidance: printable ASCII, with no address and no object id.
+function Test-ClaudeRunnerStage([string]$Stage) { return ($Stage -cmatch '^[a-z][a-z-]{0,39}\z') }
+function Test-ClaudeRunnerRemedy([string]$Remedy) {
+    return ($Remedy -cmatch '^Remedy: [\x20-\x7E]{1,400}\z' -and $Remedy -notmatch '@' -and
+        $Remedy -notmatch '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}')
+}
+
 function Write-ClaudeRunnerOutput {
     param([AllowEmptyString()][string]$RawOutput, [string]$Step)
     # At most 40 lines and 4,096 characters in total: this heading and a truncation marker count.
@@ -126,6 +134,10 @@ function Write-ClaudeRunnerOutput {
                     $safe.Add("$field=$($property.Value)")
                 }
             }
+            $stage = $doc.PSObject.Properties['stage']
+            if ($stage -and (Test-ClaudeRunnerStage ([string]$stage.Value))) { $safe.Add("stage=$($stage.Value)") }
+            $remedy = $doc.PSObject.Properties['remedy']
+            if ($remedy -and (Test-ClaudeRunnerRemedy ([string]$remedy.Value))) { $safe.Add("remedy=$($remedy.Value)") }
             $samples = $doc.PSObject.Properties['sample']
             if ($samples) {
                 foreach ($sample in @($samples.Value | Select-Object -First 3)) {
@@ -154,15 +166,19 @@ function Get-ClaudeRunnerDigest {
 
 function ConvertFrom-ClaudeRunnerResult {
     param([AllowEmptyString()][string]$RawOutput, [string]$Step)
+    $result = $null
     try {
         $last = $RawOutput.TrimEnd("`r", "`n") -split '\r?\n' | Select-Object -Last 1
         $result = $last | ConvertFrom-Json -ErrorAction Stop
-        if (-not $result -or $result.ok -isnot [bool] -or -not $result.ok) { throw 'The runner summary must contain boolean ok:true.' }
-        return $result
-    } catch {
-        Write-ClaudeRunnerOutput -RawOutput $RawOutput -Step $Step
-        throw "$Step failed: runner summary is malformed or not boolean ok:true. Sanitized diagnostics are shown above."
+    } catch { $result = $null }
+    if ($result -and $result.ok -is [bool] -and $result.ok) { return $result }
+    Write-ClaudeRunnerOutput -RawOutput $RawOutput -Step $Step
+    # A writer refusal (ok:false with a stage) is named with its remedy; anything else is malformed.
+    if ($result -and $result.ok -is [bool] -and $result.PSObject.Properties['stage'] -and (Test-ClaudeRunnerStage ([string]$result.stage))) {
+        $remedy = if ($result.PSObject.Properties['remedy'] -and (Test-ClaudeRunnerRemedy ([string]$result.remedy))) { " $([string]$result.remedy)" } else { '' }
+        throw "$Step refused at stage $([string]$result.stage).$remedy Sanitized diagnostics are shown above."
     }
+    throw "$Step failed: runner summary is malformed or not boolean ok:true. Sanitized diagnostics are shown above."
 }
 
 function Send-RunnerFile {

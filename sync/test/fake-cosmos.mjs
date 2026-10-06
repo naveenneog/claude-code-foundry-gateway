@@ -27,6 +27,9 @@ class Items {
     return {
       hasMoreResults: () => page < pages.length,
       fetchNext: async () => {
+        if (process.env.FAKE_COSMOS_FAIL_PAGE !== undefined && options.partitionKey === undefined && Number(process.env.FAKE_COSMOS_FAIL_PAGE) === page) {
+          throw new Error(`fake Cosmos: page ${page} read failed`);
+        }
         const resources = pages[page] ?? [];
         log(`fetch-page ${page} rows=${resources.length}`);
         page++;

@@ -153,6 +153,12 @@ foreach($step in 'apply','compare') {
         Assert "$step diagnostic is capped in lines and characters" ($Output.Length -le (4097 + $Failure.Length) -and @($Output -split '\r?\n' | Where-Object { $_ }).Count -le 41)
     }
 }
+$refusal = '{"ok":false,"error":"lock failed: projection apply lock is held by local-1 in user mode","stage":"lock","remedy":"Remedy: rerun scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim> (add -User <upn-or-object-id> for one person), or start the sync job again, after 2026-10-06T00:05:00.000Z."}'
+Capture { ConvertFrom-ClaudeRunnerResult -RawOutput $refusal -Step 'projection apply' }
+Assert 'a writer refusal reaches the operator with its stage and remedy, not as a malformed summary' ($Failure -match 'refused at stage lock' -and $Failure -match 'Remedy: rerun scripts/Sync-ClaudeAccess\.ps1 -ResourceGroup <rg> -ApimName <apim>' -and $Failure -notmatch 'malformed') $Failure
+$leaky = '{"ok":false,"error":"x","stage":"plan","remedy":"Remedy: ask private@example.invalid about 11111111-2222-4333-8444-555555555555"}'
+Capture { ConvertFrom-ClaudeRunnerResult -RawOutput $leaky -Step 'projection apply' }
+Assert 'a remedy holding an address or an object id is not shown' ($Failure -and ($Failure + $Output) -notmatch 'private@example.invalid|11111111-2222-4333-8444-555555555555') $Failure
 Capture { Write-ClaudeRunnerOutput -RawOutput $summary -Step compare }
 Assert 'structured diagnostics retain useful counts and hashed samples' ($Output -match 'compared=5' -and $Output -match 'differences=1' -and $Output -match 'oid-sha256=[0-9a-f]{12}')
 # The heading counts: the diagnostic itself is at most 40 lines and 4096 characters, truncation marker included.
