@@ -1,4 +1,4 @@
-# Negative test for the business unit checks.
+﻿# Negative test for the business unit checks.
 #
 # A check that passes is worth nothing until it has been seen to fail. This
 # breaks each thing Test-BusinessUnits.ps1 claims to guard, one at a time,

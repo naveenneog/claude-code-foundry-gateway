@@ -1,4 +1,4 @@
-# P30-P32 and the workstation migration tool: the admin surface.
+﻿# P30-P32 and the workstation migration tool: the admin surface.
 #
 # Four things that share a property - each one guards against a mistake that is
 # invisible after it is made:
