@@ -260,6 +260,35 @@ test('L6-1 page-load reattach run-replaced clears run state and controls', async
   }
 });
 
+test('L6-6 a new page-started run clears the previous run output', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  let runCount = 0;
+  try {
+    await passPreflight(page);
+    await page.route('**/api/run/stream', (route) => {
+      runCount++;
+      const runId = runCount === 1 ? '11111111111111111111111111111111' : '22222222222222222222222222222222';
+      const marker = runCount === 1 ? 'first-run-marker' : 'second-run-marker';
+      return route.fulfill({
+        status: 200,
+        headers: { 'x-installer-run-id': runId },
+        contentType: 'application/x-ndjson',
+        body: `{"seq":1,"type":"progress","stepId":"resource-group","event":"started","message":"${marker}"}\n{"seq":2,"type":"summary","exitCode":0,"failedStepId":"","resumeCommand":"","state":"exited","message":""}\n`,
+      });
+    });
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await page.locator('#run-output').getByText(/first-run-marker/).waitFor();
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await page.locator('#run-output').getByText(/second-run-marker/).waitFor();
+    assert.doesNotMatch(await page.locator('#run-output').textContent(), /first-run-marker/);
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
 test('R4-3 Stop is disabled during admission and while an accepted stop is pending summary', async () => {
   let holdAdmission = false;
   let releaseIdentity;

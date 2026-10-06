@@ -582,7 +582,7 @@
       "source": "docs/architecture/18-installer-ui.json",
       "inputs": {
         "Install-ClaudeGateway.ps1": "fbc1ad44ddc5d7f3a318b4d8050f410ebb28a3f901dc89d2a9b65457f6de6057",
-        "docs/architecture/18-installer-ui.json": "efbc7049beaa28ea2a00bbe4f1f1eba4a505d464cd88cb24c79267af5ad30d0b",
+        "docs/architecture/18-installer-ui.json": "17ccaa4b3cb0f8a6c23909aeaebe9fb909167ad72228dc0cc6861fb5e37878bd",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
@@ -620,7 +620,7 @@
       "outputs": [
         {
           "path": "docs/images/architecture/installer-ui.png",
-          "sha256": "bbab7bd73de105bfb9f212cef8b54dab15299db8fe119acfd6e14c0e5fbb3ac8"
+          "sha256": "f82d5e528917e0a84193d24fcff1b1a00acb520adea5666fb4c89cb7d6a73dd7"
         }
       ]
     }

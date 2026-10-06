@@ -1453,5 +1453,14 @@
     "replace": "",
     "testFile": "tests/installer-ui-g9b.test.mjs",
     "test": "L6-2 real recovery refuses a later failed run that replaces the followed record"
+  },
+  {
+    "id": "l6-6-1",
+    "why": "L6-6: a new page-started run clears the previous run output before reading the new stream.",
+    "file": "tools/installer-ui/installer-ui-run.js",
+    "find": "      clearRunOutput();\n",
+    "replace": "",
+    "testFile": "tests/installer-ui-g9b.test.mjs",
+    "test": "L6-6 a new page-started run clears the previous run output"
   }
 ]
