@@ -531,10 +531,11 @@ function global:Invoke-RestMethod { [pscustomobject]@{ properties = [pscustomobj
     # the discovery, or -KeepNamedValues) must verify: 0004 has nothing to verify when it planned no move.
     $policyPath = Join-Path $root 'infra\policy.xml'
     $policyValues = @{}
-    foreach ($name in @(Get-ClaudeFlowLifecyclePolicyNamedValueReferences -PolicyPath $policyPath)) { $policyValues[$name] = 'x' }
+    foreach ($name in @(Get-ClaudeFlowLifecyclePolicyAndFragmentNamedValueReferences -PolicyPath $policyPath)) { $policyValues[$name] = 'x' }
     $policyValues['entitlement-source'] = 'named-value'
     $current = New-Discovery $policyValues
     $current | Add-Member -NotePropertyName policy -NotePropertyValue ([IO.File]::ReadAllText($policyPath))
+    $current | Add-Member -NotePropertyName policyFragments -NotePropertyValue @('content-safety-screening')
     $currentPath = Join-Path $scratch 'current.json'
     [IO.File]::WriteAllText($currentPath, ($current | ConvertTo-Json -Depth 20), (New-Object Text.UTF8Encoding($false)))
     $Keeping = $current.PSObject.Copy()

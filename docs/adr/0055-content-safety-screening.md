@@ -156,6 +156,14 @@ traces
 | order by timestamp desc
 ```
 
+'
+
+### Amendment, 2026-10-07: existing gateways receive the fragment through the update flow
+
+The first live P102 run failed while ARM created the APIM policy fragment before its named values. APIM validates `{{named-value}}` references when a fragment is created, so `infra/main.bicep` now orders the Content Safety named values before `contentSafetyFragment`, and the API policy after the fragment.
+
+Gateways installed before P102 do not have the `content-safety-screening` fragment or its named values. The update-flow policy migration treats included fragments as part of the policy: it discovers `<include-fragment fragment-id="..." />` in `infra/policy.xml`, loads `infra/<fragment-id>.xml`, creates missing named values with safe off-mode defaults, creates missing fragments, and only then writes the API policy. `content-safety-mode` defaults to `off`; `content-safety-endpoint` is a placeholder host that is not called while mode is off. The standalone `Set-GatewayPolicy.ps1` follows the same order before writing policy XML.
+'
 ## Consequences
 
 - Content Safety is enforced at the gateway before Foundry sees blocked content in `block` mode.
@@ -184,3 +192,4 @@ traces
 [send-request]: https://learn.microsoft.com/en-us/azure/api-management/send-request-policy
 [shield-prompt-rest]: https://learn.microsoft.com/en-us/rest/api/contentsafety/text-operations/shield-prompt?view=rest-contentsafety-2024-09-01
 [trace-policy]: https://learn.microsoft.com/en-us/azure/api-management/trace-policy
+
