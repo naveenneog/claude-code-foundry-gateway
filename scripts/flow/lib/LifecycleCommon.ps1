@@ -115,11 +115,15 @@ function global:Import-ClaudeFlowLifecycleDiscovery {
 }
 
 function global:Get-ClaudeFlowLifecycleLiveDiscovery {
-    param([string]$ResourceGroup, [string]$ApimName, [string]$ApiId = 'claude-foundry')
+    # -SubscriptionId: the decision record's subscription, passed only as an ID (az.cmd re-reads other text), so the
+    # gateway is read where the record says it is, with a token for that subscription's tenant, rather than in the
+    # Azure CLI's current subscription.
+    param([string]$ResourceGroup, [string]$ApimName, [string]$ApiId = 'claude-foundry', [string]$SubscriptionId)
     if (-not $ResourceGroup -or -not $ApimName) { throw 'ResourceGroup and ApimName are required for live discovery.' }
-    $apim = az apim show -g $ResourceGroup -n $ApimName -o json | ConvertFrom-Json
-    $nvs = az apim nv list -g $ResourceGroup --service-name $ApimName -o json | ConvertFrom-Json
-    $token = az account get-access-token --resource https://management.azure.com --query accessToken -o tsv
+    $scope = if ($SubscriptionId -match '^[0-9A-Fa-f]{8}-([0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12}$') { @('--subscription', $SubscriptionId) } else { @() }
+    $apim = az apim show -g $ResourceGroup -n $ApimName @scope -o json | ConvertFrom-Json
+    $nvs = az apim nv list -g $ResourceGroup --service-name $ApimName @scope -o json | ConvertFrom-Json
+    $token = az account get-access-token --resource https://management.azure.com @scope --query accessToken -o tsv
     $policyUri = "https://management.azure.com$($apim.id)/apis/$ApiId/policies/policy?api-version=2024-05-01&format=rawxml"
     $policy = Invoke-RestMethod -Method Get -Uri $policyUri -Headers @{ Authorization = "Bearer $token" }
     $prefixValue = @($nvs | Where-Object { $_.name -eq 'entitlement-projection-prefix' } | Select-Object -First 1)
@@ -180,6 +184,16 @@ function global:Initialize-ClaudeFlowLifecycleSnapshotPath {
     $name = 'before-{0}-{1}-{2}.json' -f $Step, $Plan.Data.Target.ApimName, [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ')
     $Plan.Data.SnapshotPath = Join-Path (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'backups') $name
     $Plan.Data.SnapshotTaken = $false
+}
+
+function global:Sync-ClaudeFlowLifecycleSnapshotTaken {
+    # The update's migrations share one snapshot path. The first that writes takes the backup; it then counts for
+    # every plan with that path, so a later migration does not overwrite the state from before the update.
+    param([object[]]$Plans = @())
+    $taken = @($Plans | Where-Object { $_ -and $_.Data -is [hashtable] -and $_.Data.SnapshotTaken -eq $true -and $_.Data.SnapshotPath } | ForEach-Object { [string]$_.Data.SnapshotPath })
+    foreach ($plan in $Plans) {
+        if ($plan -and $plan.Data -is [hashtable] -and $plan.Data.SnapshotPath -and $taken -contains [string]$plan.Data.SnapshotPath) { $plan.Data.SnapshotTaken = $true }
+    }
 }
 
 function global:Assert-ClaudeFlowLifecycleSnapshotBeforeWrite {

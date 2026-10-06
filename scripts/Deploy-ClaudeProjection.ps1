@@ -80,7 +80,9 @@ if (-not $ResolverInboundAccess) {
     }
 }
 if ($FlipAfterCleanCompare) {
-    $null = Invoke-ClaudeProjectionSwitch -ResourceGroup $ResourceGroup -ApimName $ApimName -NamePrefix $NamePrefix -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -CompareBaseline $CompareBaseline
+    # The switch runs without the preflight and its subscription check, so it is given the subscription (ADR-0054).
+    $switchScope = if ($SubscriptionId) { @{ SubscriptionId = $SubscriptionId } } else { @{} }
+    $null = Invoke-ClaudeProjectionSwitch -ResourceGroup $ResourceGroup -ApimName $ApimName -NamePrefix $NamePrefix -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -CompareBaseline $CompareBaseline @switchScope
     return
 }
 $preflight = Invoke-ClaudeProjectionPreflight -ResourceGroup $ResourceGroup -ApimName $ApimName -NamePrefix $NamePrefix `

@@ -10,7 +10,12 @@ param(
     [string]$ApimName,
     [switch]$Apply,
     [string]$ApprovedPlanFingerprint,
-    [string]$SnapshotPath
+    [string]$SnapshotPath,
+    [string]$StandardGroup,
+    [string]$PremiumGroup,
+    [string]$NamePrefix,
+    [ValidateSet('', 'public', 'private')][string]$ResolverInboundAccess = '',
+    [switch]$KeepNamedValues
 )
 
 $args = @{
@@ -23,5 +28,7 @@ if ($ApimName) { $args.ApimName = $ApimName }
 if ($Apply) { $args.Apply = $true }
 if ($ApprovedPlanFingerprint) { $args.ApprovedPlanFingerprint = $ApprovedPlanFingerprint }
 if ($SnapshotPath) { $args.SnapshotPath = $SnapshotPath }
+foreach ($name in 'StandardGroup', 'PremiumGroup', 'NamePrefix', 'ResolverInboundAccess') { if ($PSBoundParameters[$name]) { $args[$name] = $PSBoundParameters[$name] } }
+if ($KeepNamedValues) { $args.KeepNamedValues = $true }
 
 & (Join-Path $PSScriptRoot 'scripts\Update-ClaudeGateway.ps1') @args -WhatIf:$WhatIfPreference

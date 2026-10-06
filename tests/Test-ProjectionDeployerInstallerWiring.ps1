@@ -47,6 +47,15 @@ Assert 'deployer switch mode makes no deployment/registration/publish/role assig
 Invoke-DeployerSwitch 'clean'
 $deployOrder = @((At 'apim nv show .*allow-premium'), (At 'apply-projection\.mjs .*--compare'), (At 'check-admission\.mjs'), (At '^az apim nv update .*entitlement-source --value projection'))
 Assert 'deployer switches end to end through the real drift check: compare, evidence, backup, one write' (-not $Failure -and ($deployOrder -notcontains -1) -and (@(0..2 | Where-Object { $deployOrder[$_] -lt $deployOrder[$_ + 1] }).Count -eq 3) -and @(Writes).Count -eq 1 -and @($Made).Count -eq 1) "$Failure | positions $($deployOrder -join ',') | backups $(@($Made).Count)"
+# P100 council round 4: the switch rerun the installer and the update print names -SubscriptionId; the switch, which
+# runs without the preflight's subscription check, receives it.
+Reset-ProjectionFixture
+$global:ListMode = 'clean'
+$before = @(& $repoBackups | ForEach-Object FullName)
+Capture { & $deployer -ResourceGroup rg-p84 -ApimName apim-p84 -NamePrefix p84fixture -FlipAfterCleanCompare -StandardGroup claude-code-standard -PremiumGroup none -SubscriptionId 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' }
+$made = @(& $repoBackups | Where-Object { $before -notcontains $_.FullName }); $made | Remove-Item -Force -ErrorAction SilentlyContinue
+$global:ListMode = $null
+Assert 'the deployer''s switch run with -SubscriptionId refuses another current subscription before it reads the gateway or writes' ($Failure -match '^Projection switch refused' -and $Failure -match 'az account set --subscription bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' -and ($FixtureCalls -join "`n") -notmatch 'apim show' -and @(Writes).Count -eq 0 -and $made.Count -eq 0) "$Failure | $(($FixtureCalls | Select-Object -First 3) -join ' | ')"
 Reset-ProjectionFixture 'source-projection-other-url'
 Capture { Assert-ClaudeProjectionResolverRedeploy -ResourceGroup rg-p84 -ApimName apim-p84 -NamePrefix p84fixture -SubscriptionId $FixtureSubscription -ResolverAppId $FixtureApp }
 Assert 'deployer never redirects a gateway serving from the projection unless it redeploys the same resolver' ($Failure -match '^Refusing to redeploy the resolver' -and $Failure -match '-ResolverAppId' -and $Failure -match 'Sync-ClaudeAccess\.ps1 -Store named-value' -and @(Writes).Count -eq 0) $Failure

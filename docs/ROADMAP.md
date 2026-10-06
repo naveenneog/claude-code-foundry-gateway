@@ -105,6 +105,9 @@ deployment by hand fails ([P94 status](status/P94.md#p94-the-p86-renewal-job-dep
 | P98 | Merged (`c15f1c9`) on 2026-10-06 with the owner's approval of 2026-10-05, after council round 2, a confirmation round and the packet gate at `9c18978` | The installer deploys the Cosmos projection by default: it is the recommended store for every size and `-Yes` chooses it; choosing it deploys, populates, compares and switches the gateway; a re-run migrates a named-value gateway and keeps a projection gateway's resolver access; named values above their capacity are refused; above that capacity the comparison baseline is a fresh Entra snapshot; the resolver is public by default; `-DeploySyncJob` adds the optional job; README, Setup and the projection guide open with a quickstart ([ADR-0052](adr/0052-cosmos-default-installer.md), [P98 status](status/P98.md#p98-the-installer-deploys-the-cosmos-projection-by-default-2026-10-06)) |
 | P103 | Proposed; staged on `p103-docs-accordions` | Quickstart first, sections as disclosures for user-facing documentation, with ADR-0056, `Test-DocStructure.ps1`, preserved anchors and staged guide enrollment. Depends on P99/P100 for README, SETUP, UPDATE, PROJECTION-WORKBOOK, SECURE-PROJECTION, AZ-COMMANDS, ARCHITECTURE and CHANGELOG. |
 | P99 | Next; not started | Directory-scale snapshot transfer: the deployer's populate step, the switch's snapshot compare and full syncs move a snapshot of 500,000 developers within its apply-by time, instead of about 40,000 through `az container exec` today ([ADR-0052](adr/0052-cosmos-default-installer.md), [P98 status](status/P98.md#p98-the-installer-deploys-the-cosmos-projection-by-default-2026-10-06)) |
+| P100 | Merged (`7b365f64`) with the owner's approval; ahead of the P99 merge at the owner's request | The update flow moves a named-value gateway to the Cosmos projection: `Update-ClaudeGateway.ps1` plans the move with the gateway's previous tier groups, business units and entitlement, checks quotas, regions, permissions and policy, shows the resources, network and cost, and applies the installer's deploy, populate, compare and switch on approval ([ADR-0054](adr/0054-update-flow-entitlement-migration.md), [P100 status](status/P100.md)) |
+| P101 | Next; after P100 | One sync command for every store: `Sync-ClaudeAccess.ps1 -User` publishes one developer's change on a named-value gateway too (it refreshes the lists), reads the tier groups the gateway records in `entitlement-groups` (else the decision record, else the default names, as the P100 plan does) and records them, so gateways installed or moved by the installer gain it, and the AUM tool's developer add and remove publish through it (U25) |
+| P102 | Spike running | Content safety for Claude requests: an Azure AI Content Safety resource and an API Management policy that screens Claude Messages requests, measured live first, because the built-in `llm-content-safety` policy documents no Anthropic Messages support |
 
 Follow-ups from the P94 council, not yet packets: `sync/package-lock.json` carries `sha1` integrity
 for 50 of its 53 packages because this workstation reaches npm only through a feed whose metadata
@@ -226,6 +229,15 @@ Follow-ups from P98, not yet packets
   (`scripts/ClaudeProjectionChecks.ps1`) instead of reusing them.
 - The installer still accepts `-DeployProjection` and `-FlipProjectionAfterCleanCompare` and ignores
   them (SETUP says so); removing them is a breaking change for existing scripts.
+
+Follow-ups from P100, not yet packets
+([P100 status](status/P100.md#council-round-4-confirmation-of-round-3)):
+
+- The guided flow reads the gateway in the subscription the record names (`scripts/flow/Discovery.ps1`), and its
+  steps write in the Azure CLI's current subscription. Since P100 its Entitlement step's switch refuses another
+  current subscription; its other writes, such as the Tier step and the Entitlement step's change back to named
+  values, do not check it. The update's check (`scripts/Update-ClaudeGateway.ps1`) would serve the flow's write
+  gate too.
 
 M0 is shipped. The table below is the queue; the checklist under it is what the gate tracks.
 
@@ -661,6 +673,7 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
 - [ ] P99 directory-scale snapshot transfer — acceptance: a snapshot of 500,000 records is applied and compared
       within its apply-by time, and the switch admits a gateway of that size, measured live; an ADR records
       the transport ([P98 status](status/P98.md#p98-the-installer-deploys-the-cosmos-projection-by-default-2026-10-06))
+- [x] P100 the update flow moves a named-value gateway to the Cosmos projection — acceptance: a disposable named-value gateway moves with the plan and the apply alone, its previous values reused, readiness checked and resources, network and cost shown before any write
 - [x] P98 the installer deploys the Cosmos projection by default — acceptance: `-Yes` without `-EntitlementStore`
       chooses the projection; choosing it deploys, populates and compares, then switches, and a failure leaves
       the current store serving with the rerun command; `-WhatIf` lists the steps and changes nothing; a
