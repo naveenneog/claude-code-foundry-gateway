@@ -111,6 +111,11 @@ Assert 'a decision record of another gateway is not a source of tier groups, and
 $neighbourRecord = [pscustomobject]@{ resourceGroup = 'rg-contoso'; apimName = 'apim-other'; standardGroup = 'team-std'; premiumGroup = 'team-prem' }
 Get-Facts @{ Record = $neighbourRecord }
 Assert 'a decision record of another gateway in the same resource group is not a source of tier groups either' ($CapturedResult.Groups.Standard.Source -ne 'decision record' -and $CapturedResult.RecordNote -match 'rg-contoso/apim-other') "$($CapturedResult.Groups.Standard.Source) | $($CapturedResult.RecordNote)"
+$otherSubscriptionRecord = [pscustomobject]@{ subscriptionId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'; resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; standardGroup = 'team-std'; premiumGroup = 'team-prem' }
+Get-Facts @{ Record = $otherSubscriptionRecord }
+Assert 'a decision record of a gateway with the same names in another subscription is not a source of tier groups' ($CapturedResult.Groups.Standard.Source -ne 'decision record' -and -not $CapturedResult.RecordFits -and $CapturedResult.RecordNote -match 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa') "$($CapturedResult.Groups.Standard.Source) | $($CapturedResult.RecordNote)"
+Get-Facts @{ Record = ([pscustomobject]@{ resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; standardGroup = 'team-std'; premiumGroup = 'claude-code-premium' }); Discovery = (New-Discovery @{ 'allow-premium' = '' }) }
+Assert 'a record that names the default premium group, which the tenant does not have, plans no premium tier when allow-premium is empty, as before' (-not $CapturedResult.Blocked -and $CapturedResult.Groups.Premium.Absent) (@($CapturedResult.Problems) -join '; ')
 $sameRecordOtherCase = [pscustomobject]@{ resourceGroup = 'RG-Contoso'; apimName = 'APIM-contoso'; standardGroup = 'team-std'; premiumGroup = 'team-prem' }
 Get-Facts @{ Record = $sameRecordOtherCase }
 Assert 'Azure names compare without case, so the gateway''s own record still counts' ($CapturedResult.Groups.Standard.Source -eq 'decision record' -and -not $CapturedResult.RecordNote) "$($CapturedResult.Groups.Standard.Source) | $($CapturedResult.RecordNote)"
@@ -399,6 +404,31 @@ foreach ($value in @("Claude premium$([char]0x2019); Start-Process calc; #", "x$
     Assert "a printed value stays one argument: $value" (-not $parseErrors.Count -and $commands.Count -eq 1 -and ($parameters -join ',') -eq 'PremiumGroup,Apply') "$line | commands=$($commands.Count) parameters=$($parameters -join ',')"
 }
 
+Write-Host 'P100 live discovery reads the gateway in the decision record''s subscription'
+$global:LiveAzCalls = [Collections.Generic.List[string]]::new()
+$savedRestForDiscovery = Get-Item Function:\Invoke-RestMethod -ErrorAction SilentlyContinue
+function az {
+    $line = $args -join ' '; $global:LiveAzCalls.Add($line); $global:LASTEXITCODE = 0
+    if ($line -match '^apim show') { return '{"id":"/subscriptions/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/resourceGroups/rg-contoso/providers/Microsoft.ApiManagement/service/apim-contoso","location":"eastus2","sku":{"name":"BasicV2","capacity":1}}' }
+    if ($line -match '^apim nv list') { return '[]' }
+    if ($line -match '^account get-access-token') { return 'offline-token' }
+    throw "unexpected az call: $line"
+}
+function Invoke-RestMethod { [pscustomobject]@{ properties = [pscustomobject]@{ value = '<policies />' } } }
+try {
+    Capture { Get-ClaudeFlowLifecycleLiveDiscovery -ResourceGroup rg-contoso -ApimName apim-contoso -SubscriptionId 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }
+    Assert 'live discovery with a subscription reads the gateway and its named values in that subscription' (-not $CapturedError -and @($global:LiveAzCalls | Where-Object { $_ -match '^apim (show|nv list) .*--subscription aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }).Count -eq 2 -and $CapturedResult.subscriptionId -eq 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa') "$CapturedError | $($global:LiveAzCalls -join ' ; ')"
+    Assert 'live discovery reads the policy with a token for that subscription''s tenant' (@($global:LiveAzCalls | Where-Object { $_ -match '^account get-access-token .*--subscription aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }).Count -eq 1) ($global:LiveAzCalls -join ' ; ')
+    $global:LiveAzCalls.Clear()
+    Capture { Get-ClaudeFlowLifecycleLiveDiscovery -ResourceGroup rg-contoso -ApimName apim-contoso -SubscriptionId 'not-a-guid&calc' }
+    Assert 'a subscription that is not an ID is not passed to the Azure CLI' (-not $CapturedError -and @($global:LiveAzCalls | Where-Object { $_ -match '--subscription' }).Count -eq 0) "$CapturedError | $($global:LiveAzCalls -join ' ; ')"
+}
+finally {
+    Remove-Item Function:\az -ErrorAction SilentlyContinue
+    Remove-Item Function:\Invoke-RestMethod -ErrorAction SilentlyContinue
+    if ($savedRestForDiscovery) { Set-Item Function:\Invoke-RestMethod -Value $savedRestForDiscovery.ScriptBlock }
+}
+
 Write-Host 'P100 Update-ClaudeGateway: no record, the apply command, a blocked plan'
 $scratch = Join-Path ([IO.Path]::GetTempPath()) ('p100-update-' + [guid]::NewGuid().ToString('N'))
 $null = New-Item -ItemType Directory -Force -Path $scratch
@@ -440,6 +470,12 @@ try {
     Assert 'a plan made with a decision record of another gateway names both gateways and the -RecordPath remedy' ($said -match 'describes rg-a/apim-a, not rg-contoso/apim-contoso' -and $said -match '-RecordPath') (($said -split "`n" | Where-Object { $_ -match 'describes' } | Select-Object -First 2) -join ' ')
     $said = & pwsh -NoProfile -NonInteractive -Command "try { & '$updater' -RecordPath '$foreignRecord' -DiscoveryPath '$cleanPath' -Apply -ApprovedPlanFingerprint $foreignFp 6>&1 | Out-Null; 'NO-THROW' } catch { 'THROWN: ' + `$_.Exception.Message }" 2>&1 | Out-String
     Assert 'with a decision record of another gateway the apply is refused before any write, and the record is unchanged' ($said -match 'THROWN: .*describes rg-a/apim-a' -and [IO.File]::ReadAllText($foreignRecord) -ceq $foreignBefore -and -not (Test-Path -LiteralPath (Join-Path $root 'backups\before-update-apim-contoso.json'))) ($said.Trim())
+    $otherSubscriptionFile = Join-Path $scratch 'other-subscription-record.json'
+    [IO.File]::WriteAllText($otherSubscriptionFile, ([ordered]@{ schemaVersion = 2; subscriptionId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'; resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; release = @{ version = 'v0'; commit = 'old' }; decisions = @{} } | ConvertTo-Json -Depth 5), (New-Object Text.UTF8Encoding($false)))
+    $otherSubscriptionBefore = [IO.File]::ReadAllText($otherSubscriptionFile)
+    $said = & pwsh -NoProfile -NonInteractive -Command "try { & '$updater' -RecordPath '$otherSubscriptionFile' -DiscoveryPath '$cleanPath' -Apply -ApprovedPlanFingerprint $('0' * 64) 6>&1 | Out-Null; 'NO-THROW' } catch { 'THROWN: ' + `$_.Exception.Message }" 2>&1 | Out-String
+    Assert 'with a decision record of the same names in another subscription the apply is refused before any write' ($said -match 'THROWN: .*subscription aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' -and [IO.File]::ReadAllText($otherSubscriptionFile) -ceq $otherSubscriptionBefore) ($said.Trim())
+    Assert 'live discovery reads the gateway in the decision record''s subscription, before and after each migration' (([regex]::Matches($updaterText, 'Get-ClaudeFlowLifecycleLiveDiscovery -ResourceGroup \$target\.ResourceGroup -ApimName \$target\.ApimName -SubscriptionId \$recordSubscription')).Count -eq 2) ''
     Assert 'a migration that does not verify names the restore command with its folder' ($updaterText -match [regex]::Escape("did not verify. Roll back with .\scripts\Restore-ClaudeGateway.ps1 -Path '")) ''
     Assert 'the updater puts a record path other than the default in every plan''s data, for the resume command' ($updaterText -match '\$plan\.Data\.RecordPath = \$resumeRecordPath') ''
     $shim = [IO.File]::ReadAllText((Join-Path $root 'Update-ClaudeGateway.ps1'))
@@ -448,9 +484,15 @@ try {
     $said = & pwsh -NoProfile -NonInteractive -Command "& '$rootShim' -RecordPath '$missingRecord' -DiscoveryPath '$cleanPath' -ResourceGroup rg-contoso -ApimName apim-contoso -PremiumGroup team-prem -NamePrefix contoso -ResolverInboundAccess public 6>&1 | Out-String" 2>&1 | Out-String
     Assert 'through the root shim the options reach the plan''s apply command' ($said -match '-PremiumGroup team-prem -NamePrefix contoso -ResolverInboundAccess public -Apply -ApprovedPlanFingerprint [0-9a-f]{64}') ($said -split "`n" | Where-Object { $_ -match 'Apply|rror' } | Select-Object -First 2)
     # The root shim always passes the record path; the printed command names it only when it is not the default record.
-    $said = & pwsh -NoProfile -NonInteractive -Command "& '$rootShim' -DiscoveryPath '$cleanPath' -ResourceGroup rg-contoso -ApimName apim-contoso 6>&1 | Out-String" 2>&1 | Out-String
+    # A scratch copy of the repository holds its own default record, so a record of the checkout plays no part (P79).
+    $copy = Join-Path $scratch 'repo'
+    $null = New-Item -ItemType Directory -Force -Path (Join-Path $copy 'onboarding')
+    foreach ($d in 'scripts', 'infra', 'config') { Copy-Item -LiteralPath (Join-Path $root $d) -Destination $copy -Recurse }
+    Copy-Item -LiteralPath $rootShim -Destination $copy
+    [IO.File]::WriteAllText((Join-Path $copy 'onboarding\claude-gateway.json'), ([ordered]@{ schemaVersion = 2; resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; release = @{ version = 'v0'; commit = 'old' }; decisions = @{} } | ConvertTo-Json -Depth 5), (New-Object Text.UTF8Encoding($false)))
+    $said = & pwsh -NoProfile -NonInteractive -Command "& '$(Join-Path $copy 'Update-ClaudeGateway.ps1')' -DiscoveryPath '$cleanPath' -ResourceGroup rg-contoso -ApimName apim-contoso 6>&1 | Out-String" 2>&1 | Out-String
     $applyLine = @($said -split "`r?`n" | Where-Object { $_ -match '-ApprovedPlanFingerprint [0-9a-f]{64}' })[0]
-    Assert 'the printed apply command leaves out the default record path' ($applyLine -and $applyLine -notmatch '-RecordPath' -and $applyLine -match '^\s*\.\\Update-ClaudeGateway\.ps1 -DiscoveryPath \S+ -ResourceGroup rg-contoso -ApimName apim-contoso -Apply') "$applyLine"
+    Assert 'the printed apply command leaves out the default record path' ($applyLine -and $applyLine -notmatch '-RecordPath' -and $applyLine -match '^\s*\.\\Update-ClaudeGateway\.ps1 -DiscoveryPath \S+ -ResourceGroup rg-contoso -ApimName apim-contoso -Apply') "$applyLine | $(($said -split "`n" | Select-Object -Last 3) -join ' ')"
 
     # Every migration's Test runs after an apply. A gateway that stays on named values (no migration facts in
     # the discovery, or -KeepNamedValues) must verify: 0004 has nothing to verify when it planned no move.

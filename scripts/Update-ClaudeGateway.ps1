@@ -41,12 +41,14 @@ if (-not (Test-Path -LiteralPath $RecordPath)) {
     $record = [pscustomobject]@{ resourceGroup = $ResourceGroup; apimName = $ApimName }
 }
 else { $record = Read-ClaudeDecisionRecord -Path $RecordPath }
+# The gateway is read in the subscription the record names (ADR-0032), as the guided flow's discovery does.
+$recordSubscription = Get-ClaudeFlowRecordSubscription -Record $record
 $discovery = Import-ClaudeFlowLifecycleDiscovery -Path $DiscoveryPath
 if (-not $discovery) {
     $target = Get-ClaudeFlowLifecycleRecordTarget -Record $record
     if ($ResourceGroup) { $target.ResourceGroup = $ResourceGroup }
     if ($ApimName) { $target.ApimName = $ApimName }
-    $discovery = Get-ClaudeFlowLifecycleLiveDiscovery -ResourceGroup $target.ResourceGroup -ApimName $target.ApimName
+    $discovery = Get-ClaudeFlowLifecycleLiveDiscovery -ResourceGroup $target.ResourceGroup -ApimName $target.ApimName -SubscriptionId $recordSubscription
     # Migration 0004 renders facts read here, from the live gateway, Microsoft Graph and the subscription.
     . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
     . (Join-Path $PSScriptRoot 'ClaudeRunner.ps1')
@@ -78,9 +80,13 @@ $resumeRecordPath = if ([string]::Equals($recordFullPath, $defaultRecord, [Strin
 # read the tier groups from it (scripts/Get-ClaudeGatewayTarget.ps1). The apply refuses it (ADR-0054).
 $recordTarget = Get-ClaudeFlowLifecycleRecordTarget -Record $record
 $recordProblem = ''
-if ($recordTarget.ApimName -and $target.ApimName -and -not ([string]::Equals($recordTarget.ApimName, $target.ApimName, [StringComparison]::OrdinalIgnoreCase) -and
-        (-not $recordTarget.ResourceGroup -or [string]::Equals($recordTarget.ResourceGroup, $target.ResourceGroup, [StringComparison]::OrdinalIgnoreCase)))) {
-    $recordProblem = "The decision record at '$recordFullPath' describes $($recordTarget.ResourceGroup)/$($recordTarget.ApimName), not $($target.ResourceGroup)/$($target.ApimName). Remedy: -RecordPath with this gateway's record, or with a new path such as .\onboarding\claude-gateway.$($target.ResourceGroup)-$($target.ApimName).json, which the apply writes."
+$namesDiffer = $recordTarget.ApimName -and $target.ApimName -and -not ([string]::Equals($recordTarget.ApimName, $target.ApimName, [StringComparison]::OrdinalIgnoreCase) -and
+    (-not $recordTarget.ResourceGroup -or [string]::Equals($recordTarget.ResourceGroup, $target.ResourceGroup, [StringComparison]::OrdinalIgnoreCase)))
+$subscriptionsDiffer = (Test-ClaudeFlowSubscriptionId $recordSubscription) -and $target.SubscriptionId -and -not [string]::Equals($recordSubscription, $target.SubscriptionId, [StringComparison]::OrdinalIgnoreCase)
+if ($namesDiffer -or $subscriptionsDiffer) {
+    $recordWhere = "$($recordTarget.ResourceGroup)/$($recordTarget.ApimName)$(if ($recordSubscription) { " in subscription $recordSubscription" })"
+    $targetWhere = "$($target.ResourceGroup)/$($target.ApimName)$(if ($target.SubscriptionId) { " in subscription $($target.SubscriptionId)" })"
+    $recordProblem = "The decision record at '$recordFullPath' describes $recordWhere, not $targetWhere. Remedy: -RecordPath with this gateway's record, or with a new path such as .\onboarding\claude-gateway.$($target.ResourceGroup)-$($target.ApimName).json, which the apply writes."
 }
 
 # Code-point order: the migrations' order feeds the plan's fingerprint (P76).
@@ -140,7 +146,7 @@ foreach ($file in $migrationFiles) {
     Invoke-ClaudeFlowMigration -Record $record -Plan $plan | Out-Null
     Sync-ClaudeFlowLifecycleSnapshotTaken -Plans $plans
     if (-not $DiscoveryPath -and -not (Test-ClaudeFlowPlanIsNoop $plan)) {
-        $discovery = Get-ClaudeFlowLifecycleLiveDiscovery -ResourceGroup $target.ResourceGroup -ApimName $target.ApimName
+        $discovery = Get-ClaudeFlowLifecycleLiveDiscovery -ResourceGroup $target.ResourceGroup -ApimName $target.ApimName -SubscriptionId $recordSubscription
     }
     # A migration whose verification needs its own plan (0004: nothing to verify when no move was planned) takes it.
     $check = if ((Get-Command Test-ClaudeFlowMigration).Parameters.ContainsKey('Plan')) { Test-ClaudeFlowMigration -Record $record -Discovery $discovery -Plan $plan }

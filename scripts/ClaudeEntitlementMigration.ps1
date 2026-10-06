@@ -162,21 +162,27 @@ function Get-ClaudeEntitlementMigrationFacts {
     # Tier groups: parameters, the gateway's entitlement-groups, the decision record when it describes this gateway
     # (a record of another gateway would bring that gateway's groups), the default names.
     $recorded = ConvertFrom-ClaudeEntitlementGroups ([string]$values['entitlement-groups'])
-    $recordFits = $Record -and $Record.PSObject.Properties['resourceGroup'] -and $Record.PSObject.Properties['apimName'] -and
+    $recordSubscription = if ($Record) { Get-ClaudeFlowRecordSubscription -Record $Record } else { '' }
+    $subscriptionFits = -not $recordSubscription -or -not $facts.SubscriptionId -or [string]::Equals($recordSubscription, $facts.SubscriptionId, [StringComparison]::OrdinalIgnoreCase)
+    $recordFits = $Record -and $subscriptionFits -and $Record.PSObject.Properties['resourceGroup'] -and $Record.PSObject.Properties['apimName'] -and
         [string]::Equals([string]$Record.resourceGroup, $facts.ResourceGroup, [StringComparison]::OrdinalIgnoreCase) -and
         [string]::Equals([string]$Record.apimName, $facts.ApimName, [StringComparison]::OrdinalIgnoreCase)
     if ($Record -and -not $recordFits) {
-        $facts.RecordNote = "The decision record describes $(if ($Record.PSObject.Properties['apimName'] -and $Record.apimName) { "$($Record.resourceGroup)/$($Record.apimName)" } else { 'no gateway' }), not $($facts.ResourceGroup)/$($facts.ApimName); its tier groups were not used."
+        $recordWhere = if ($Record.PSObject.Properties['apimName'] -and $Record.apimName) { "$($Record.resourceGroup)/$($Record.apimName)$(if ($recordSubscription) { " in subscription $recordSubscription" })" } else { 'no gateway' }
+        $facts.RecordNote = "The decision record describes $recordWhere, not $($facts.ResourceGroup)/$($facts.ApimName)$(if ($facts.SubscriptionId) { " in subscription $($facts.SubscriptionId)" }); its tier groups were not used."
     }
     $facts.RecordFits = [bool]$recordFits
     $recordStandard = if ($recordFits -and $Record.PSObject.Properties['standardGroup']) { [string]$Record.standardGroup } else { '' }
     $recordPremium = if ($recordFits -and $Record.PSObject.Properties['premiumGroup']) { [string]$Record.premiumGroup } else { '' }
+    # A record that names the default name is not authoritative: the installer records it even when the tenant has no
+    # such group (Install-ClaudeGateway.ps1), and falling back looks up that same name.
+    $notDefault = { param($Value, $Default) $Value -and -not [string]::Equals([string]$Value, $Default, [StringComparison]::OrdinalIgnoreCase) }
     $standard = Resolve-ClaudeMigrationGroup -Tier 'standard' -FindGroup $FindGroup -Candidates @(
         @{ Value = $StandardGroup; Source = 'parameter'; Authoritative = $true }, @{ Value = $recorded['standard']; Source = 'gateway entitlement-groups'; Authoritative = $true },
-        @{ Value = $recordStandard; Source = 'decision record'; Authoritative = $true }, @{ Value = 'claude-code-standard'; Source = 'default name' })
+        @{ Value = $recordStandard; Source = 'decision record'; Authoritative = (& $notDefault $recordStandard 'claude-code-standard') }, @{ Value = 'claude-code-standard'; Source = 'default name' })
     $premium = Resolve-ClaudeMigrationGroup -Tier 'premium' -FindGroup $FindGroup -Candidates @(
         @{ Value = $PremiumGroup; Source = 'parameter'; Authoritative = $true }, @{ Value = $recorded['premium']; Source = 'gateway entitlement-groups'; Authoritative = $true },
-        @{ Value = $recordPremium; Source = 'decision record'; Authoritative = $true }, @{ Value = 'claude-code-premium'; Source = 'default name' })
+        @{ Value = $recordPremium; Source = 'decision record'; Authoritative = (& $notDefault $recordPremium 'claude-code-premium') }, @{ Value = 'claude-code-premium'; Source = 'default name' })
     $listedStandard = ConvertFrom-ClaudeEntitlementList ([string]$values['allow-standard'])
     $listedPremium = ConvertFrom-ClaudeEntitlementList ([string]$values['allow-premium'])
     if ($standard.Missing) {

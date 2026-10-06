@@ -133,9 +133,11 @@ The plan is BLOCKED, prints no apply command, and `-Apply` refuses it before the
 - the snapshot transfer would take more than 110 minutes, since a snapshot's apply-by time is 2 hours after
   its export.
 
-A decision record that names another gateway gets the same treatment: the plan names both gateways and prints no
-apply command, and `-Apply` refuses before any write. `-RecordPath` names this gateway's record, or a new path
-that the apply writes.
+A decision record that names another gateway, by resource group, API Management name or the subscription it
+names, gets the same treatment: the plan names both gateways and prints no apply command, and `-Apply` refuses
+before any write. `-RecordPath` names this gateway's record, or a new path that the apply writes. With a record,
+the update reads the gateway in the subscription the record names; without one, in the Azure CLI's current
+subscription.
 
 The readiness evidence, such as usage counts and times, is printed after the plan and is not part of the
 fingerprint. The check results are, with every value the apply uses, so a change between the plan and the

@@ -55,9 +55,11 @@ Migration `0004-entitlement-projection` in `scripts/flow/migrations/`:
     value, the decision record when it describes the same gateway (resource group and API Management name), the
     default names `claude-code-standard` and `claude-code-premium`. A group counts only when Microsoft Graph finds
     it. A group named by a parameter, `entitlement-groups` or the decision record that Graph cannot find blocks the
-    plan and is named in it; only the default names are a fallback. Its transitive members are compared with
-    `allow-standard` or `allow-premium`, and the difference is shown. A record of another gateway is named in the
-    plan and its groups are not used.
+    plan and is named in it; only the default names are a fallback, and a record that names the default name falls
+    back to it (the installer records the default name even when the tenant has no such group). Its transitive
+    members are compared with `allow-standard` or `allow-premium`, and the difference is shown. A record of another
+    gateway (resource group, API Management name, or the subscription it names) is named in the plan and its groups
+    are not used.
   - Business units: `bu-registry` and `bu-parents`, which the writer already reads from the gateway.
   - Name prefix: `entitlement-projection-prefix` when it is a valid prefix (the deployer writes it before the
     switch, so projection resources may exist under it), else `-NamePrefix`, else the API Management name without
@@ -110,9 +112,12 @@ Migration `0004-entitlement-projection` in `scripts/flow/migrations/`:
   its listed developers as leaving it. The decision record gets the groups the move used and the history row only
   when it describes the moved gateway.
 - **Without a decision record.** `-ResourceGroup` and `-ApimName` are enough to plan; the plan uses a record of
-  those two values, and the apply writes it with the release and a history row. A record that names another
-  gateway is not a source of tier groups; the plan says so and prints no apply command, and `-Apply` refuses it
-  before any write, naming `-RecordPath` for this gateway's record.
+  those two values, and the apply writes it with the release and a history row. With a record, the gateway is read
+  in the subscription the record names (`Get-ClaudeFlowRecordSubscription`, ADR-0032), before and after each
+  migration, as the guided flow's discovery does; without one, in the Azure CLI's current subscription. A record
+  that names another gateway, by resource group, API Management name or subscription, is not a source of tier
+  groups; the plan says so and prints no apply command, and `-Apply` refuses it before any write, naming
+  `-RecordPath` for this gateway's record.
 
 ## Consequences
 
