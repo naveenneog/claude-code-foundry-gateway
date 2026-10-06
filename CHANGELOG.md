@@ -122,6 +122,9 @@ exact streaming cache-creation detail remains **U13**.
   The run admission record is now an architecture source, drawn in the run record card.
   An earlier preflight attempt that passes after a later attempt for the same answers began no longer
   stores a pass; its response carries `superseded: true`, and the page shows the preflight as stale.
+  A run recovered after a lost run request now replaces the previous run's output and enables Stop
+  like a run whose response arrived, and the replaced-run alert ends with the reload remedy instead
+  of the generic form advice.
   Run attach now requires the followed run id, reports replaced records with `run-replaced`, and sends
   the run id header as soon as the stream response is attached.
   Stop run is now disabled during admission and while an accepted stop is waiting for the stopped

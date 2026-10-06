@@ -175,6 +175,9 @@ test('R4-2 broken stream reports a replaced run record and does not attach', asy
     await page.getByRole('button', { name: 'Run selected steps' }).click();
     await page.locator('#run-error').getByText(/later run replaced its record/i).waitFor();
     assert.equal(attachCount, 0);
+    const alert = await page.locator('#run-error').textContent();
+    assert.match(alert, /Reload the page to see the latest run\./);
+    assert.doesNotMatch(alert, /Check the values above/);
     await assertClean(page, pageErrors);
   } finally {
     await browser.close();
@@ -251,6 +254,7 @@ test('L6-1 page-load reattach run-replaced clears run state and controls', async
   });
   try {
     await page.locator('#run-error').getByText(/later run replaced its record/i).waitFor();
+    assert.match(await page.locator('#run-error').textContent(), /Reload the page to see the latest run\./);
     assert.equal(await page.getByRole('button', { name: 'Stop run' }).isDisabled(), true);
     assert.equal(await page.getByRole('button', { name: 'Refresh account' }).isEnabled(), true);
     await assertClean(page, pageErrors);
@@ -364,6 +368,91 @@ test('R5-1 a superseded preflight pass is shown as stale and does not admit a ru
     assert.equal(await page.getByRole('button', { name: 'Run selected steps' }).isDisabled(), true);
     await assertClean(page, pageErrors);
   } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
+const recoveredRunId = '22222222222222222222222222222222';
+
+// The page's run request fails before any answer; the admission record names the recovered run.
+async function loseRunRequestToRecoveredRun(page) {
+  await page.route('**/api/run/status?request=*', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ id: recoveredRunId, state: 'running', currentStepId: 'resource-group', steps: ['resource-group'], admission: { state: 'started', runId: recoveredRunId } }),
+  }));
+}
+
+test('R5-2 a run recovered after a lost request replaces the previous run output', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  try {
+    await passPreflight(page);
+    let runCount = 0;
+    await page.route('**/api/run/stream', (route) => {
+      runCount++;
+      if (runCount > 1) return route.abort('failed');
+      return route.fulfill({
+        status: 200,
+        headers: { 'x-installer-run-id': '11111111111111111111111111111111' },
+        contentType: 'application/x-ndjson',
+        body: '{"seq":1,"type":"progress","stepId":"resource-group","event":"started","message":"first-run-marker"}\n{"seq":2,"type":"summary","exitCode":0,"failedStepId":"","resumeCommand":"","state":"exited","message":""}\n',
+      });
+    });
+    await loseRunRequestToRecoveredRun(page);
+    await page.route('**/api/run/attach?after=*&run=*', (route) => route.fulfill({
+      status: 200,
+      contentType: 'application/x-ndjson',
+      body: '{"seq":1,"type":"progress","stepId":"resource-group","event":"started","message":"second-run-marker"}\n{"seq":2,"type":"summary","exitCode":0,"failedStepId":"","resumeCommand":"","state":"exited","message":""}\n',
+    }));
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await page.locator('#run-output').getByText(/first-run-marker/).waitFor();
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await page.locator('#run-output').getByText(/second-run-marker/).waitFor();
+    assert.doesNotMatch(await page.locator('#run-output').textContent(), /first-run-marker/);
+    await assertClean(page, pageErrors);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
+test('R5-2 Stop is enabled for a run recovered after a lost request and stops that run', async () => {
+  const app = await start();
+  const { browser, page, pageErrors } = await openPage(app);
+  let releaseAttach;
+  const attachHeld = new Promise((resolve) => { releaseAttach = resolve; });
+  try {
+    await passPreflight(page);
+    await page.route('**/api/run/stream', (route) => route.abort('failed'));
+    await loseRunRequestToRecoveredRun(page);
+    await page.route('**/api/run/attach?after=*&run=*', async (route) => {
+      await attachHeld;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/x-ndjson',
+        body: '{"seq":1,"type":"stopped","stepId":"resource-group","message":"Stopped installer run at resource-group."}\n{"seq":2,"type":"summary","exitCode":null,"failedStepId":"","resumeCommand":"","state":"stopped","message":"Stopped installer run at resource-group."}\n',
+      });
+    });
+    let stopBody = null;
+    await page.route('**/api/run/stop', async (route) => {
+      stopBody = JSON.parse(route.request().postData() || '{}');
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ schemaVersion: 1, runId: recoveredRunId, message: 'Stopped installer run at resource-group.' }) });
+    });
+    await page.getByRole('button', { name: 'Run selected steps' }).click();
+    await page.waitForFunction(() => !document.querySelector('#stop-run')?.disabled);
+    await page.evaluate(() => { globalThis.confirm = () => true; });
+    await page.getByRole('button', { name: 'Stop run' }).click();
+    await page.locator('#run-status').getByText(/Stopping at resource-group\./).waitFor();
+    assert.deepEqual(stopBody, { runId: recoveredRunId });
+    assert.equal(await page.getByRole('button', { name: 'Stop run' }).isDisabled(), true);
+    releaseAttach();
+    await page.locator('#run-status').getByText(/Run stopped at resource-group\./).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Stop run' }).isDisabled(), true);
+    await assertClean(page, pageErrors);
+  } finally {
+    releaseAttach?.();
     await browser.close();
     await app.close();
   }

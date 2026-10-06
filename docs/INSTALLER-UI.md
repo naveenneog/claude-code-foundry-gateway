@@ -29,9 +29,10 @@ Microsoft Learn states that Azure Cloud Shell's Web preview menu can open a port
 new tab, and the same article describes **Manage files > Upload** for file uploads
 ([Cloud Shell window](https://learn.microsoft.com/en-us/azure/cloud-shell/use-the-shell-window),
 fetched 2026-10-05; ms.date 2026-08-07). It does not state whether Web preview reaches a process
-bound to loopback, which Host header it forwards, whether it adds a URL prefix or how a cookie with
-`Path=/` behaves. Those facts remain unverified until the owner-attended Web preview check (U100,
-U101). The server has `--allow-host <host[:port]>` for that check, and refused Host requests log the
+bound to loopback, which Host header it forwards, whether it adds a URL prefix, how a cookie with
+`Path=/` behaves or whether it passes the `x-installer-run-id` response header, from which the page
+learns the run id that Stop uses. Those facts remain unverified until the owner-attended Web preview
+check (U100, U101). The server has `--allow-host <host[:port]>` for that check, and refused Host requests log the
 Host and `X-Forwarded-*` shape to the terminal only (`tools/installer-ui/server.mjs:301-302`;
 `tools/installer-ui/server.mjs:588-599`). Microsoft Learn states that Cloud Shell sessions time out
 after 20 minutes without interactive activity
@@ -177,7 +178,10 @@ The browser run script reports non-zero summaries as alerts with the exit code, 
 resume command, reports stopped summaries as status, bounds reattaches for streams that end without
 a summary and tells the operator when the run continues on the server for reload reattachment
 (`tools/installer-ui/installer-ui-run.js:66-177`). A run request that fails before the server answers
-is followed by a status read: the admitted run is reattached, a later replacement run is not shown as
+is followed by a status read: the admitted run is adopted as a run whose response had arrived (its
+output replaces the previous run's output, its current step comes from status and Stop becomes
+available) and is then reattached (`tools/installer-ui/installer-ui-run.js:66-73`;
+`tools/installer-ui/installer-ui-run.js:240-293`), a later replacement run is not shown as
 that request's result, and a missing admission record is reported as no record of the request. Each
 run request carries a 32-hex client request id; the server records `admitting`, `started` and
 `refused` admission states, and `GET /api/run/status?request=<id>` returns that admission record for

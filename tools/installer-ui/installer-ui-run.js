@@ -63,6 +63,15 @@
       removedRunOutputLines = 0;
     }
 
+    // A run the page starts following, from the run response or from the admission record of a lost request.
+    function adoptRun(runId, stepId = "") {
+      activeRunId = runId;
+      activeStepId = stepId;
+      runStopping = false;
+      clearRunOutput();
+      updateRunAdmission();
+    }
+
     function finishRun(summary) {
       const stoppedStep = summary.stepId || activeStepId || parseStoppedStep(summary.message) || summary.failedStepId || lastFailedStep || "the current step";
       activeRunId = "";
@@ -125,7 +134,9 @@
     }
 
     function replacedRunError() {
-      return new Error("The run this page followed finished, and a later run replaced its record. Reloading the page shows the latest run.");
+      const error = new Error("The run this page followed finished, and a later run replaced its record.");
+      error.data = { error: error.message, remedy: "Reload the page to see the latest run." };
+      return error;
     }
 
     function clearForReplacedRun() {
@@ -251,7 +262,7 @@
             updateRunAdmission();
             throw replacedRunError();
           }
-          activeRunId = admittedRunId || status.id || "";
+          adoptRun(admittedRunId || status.id || "", status.currentStepId || status.steps?.[0] || "");
           return followRun(() => fetchRunStream(attachPath(0)).then(readRunStream));
         }
         if (status?.admission?.state === "refused") {
@@ -311,9 +322,7 @@
         if (["identity-changed", "preflight-required"].includes(error.data?.reason) && typeof onPreflightStale === "function") onPreflightStale(error.message);
         throw error;
       }
-      activeRunId = res.headers.get("x-installer-run-id") || "";
-      clearRunOutput();
-      updateRunAdmission();
+      adoptRun(res.headers.get("x-installer-run-id") || "");
       return followRun(() => readRunStream(res));
     }
 
@@ -361,7 +370,7 @@
     }
 
     function handleAttachError(error) {
-      setErrorText("run", error.message || String(error));
+      setErrorText("run", [error.message || String(error), error.data?.remedy].filter(Boolean).join(" "));
     }
 
     function refreshIdentityAfterRun() {

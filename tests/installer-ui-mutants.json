@@ -201,7 +201,7 @@
     "id": "r3-2-6",
     "why": "Lost-request recovery must attach a run that has already started and read the real summary from the server.",
     "file": "tools/installer-ui/installer-ui-run.js",
-    "find": "        if (status?.admission?.state === \"started\") {\n          const admittedRunId = status.admission.runId || \"\";\n          if (status.id && admittedRunId && status.id !== admittedRunId) {\n            runActive = false;\n            runStopping = false;\n            updateRunAdmission();\n            throw replacedRunError();\n          }\n          activeRunId = admittedRunId || status.id || \"\";\n          return followRun(() => fetchRunStream(attachPath(0)).then(readRunStream));\n        }\n",
+    "find": "        if (status?.admission?.state === \"started\") {\n          const admittedRunId = status.admission.runId || \"\";\n          if (status.id && admittedRunId && status.id !== admittedRunId) {\n            runActive = false;\n            runStopping = false;\n            updateRunAdmission();\n            throw replacedRunError();\n          }\n          adoptRun(admittedRunId || status.id || \"\", status.currentStepId || status.steps?.[0] || \"\");\n          return followRun(() => fetchRunStream(attachPath(0)).then(readRunStream));\n        }\n",
     "replace": "        if (status?.admission?.state === \"started\") {\n          break;\n        }\n",
     "testFile": "tests/installer-ui-g8b.test.mjs",
     "test": "R3-2 real server recovery follows an aborted successful run to its summary"
@@ -1215,8 +1215,8 @@
     "id": "g7b-D06",
     "why": "G7B-4: load-time attach errors go to the status region as an alert again",
     "file": "tools/installer-ui/installer-ui-run.js",
-    "find": "setErrorText(\"run\", error.message || String(error));",
-    "replace": "setStatusText(\"run\", error.message || String(error), true);",
+    "find": "setErrorText(\"run\", [error.message || String(error), error.data?.remedy].filter(Boolean).join(\" \"));",
+    "replace": "setStatusText(\"run\", [error.message || String(error), error.data?.remedy].filter(Boolean).join(\" \"), true);",
     "testFile": "tests/installer-ui-g7b.test.mjs",
     "test": "G7B-4 load-time reattach errors are reported in the run alert region"
   },
@@ -1359,7 +1359,7 @@
     "id": "g7b-F03",
     "why": "lead fix: a lost run request whose run started is not reattached",
     "file": "tools/installer-ui/installer-ui-run.js",
-    "find": "        if (status?.admission?.state === \"started\") {\n          const admittedRunId = status.admission.runId || \"\";\n          if (status.id && admittedRunId && status.id !== admittedRunId) {\n            runActive = false;\n            runStopping = false;\n            updateRunAdmission();\n            throw replacedRunError();\n          }\n          activeRunId = admittedRunId || status.id || \"\";\n          return followRun(() => fetchRunStream(attachPath(0)).then(readRunStream));\n        }\n",
+    "find": "        if (status?.admission?.state === \"started\") {\n          const admittedRunId = status.admission.runId || \"\";\n          if (status.id && admittedRunId && status.id !== admittedRunId) {\n            runActive = false;\n            runStopping = false;\n            updateRunAdmission();\n            throw replacedRunError();\n          }\n          adoptRun(admittedRunId || status.id || \"\", status.currentStepId || status.steps?.[0] || \"\");\n          return followRun(() => fetchRunStream(attachPath(0)).then(readRunStream));\n        }\n",
     "replace": "",
     "testFile": "tests/installer-ui-g7b-r2.test.mjs",
     "test": "lead: a run request that fails after the server started the run reattaches to that run"
@@ -1480,5 +1480,50 @@
     "replace": "    const staleReason = options.staleReason || \"\";\n",
     "testFile": "tests/installer-ui-g9b.test.mjs",
     "test": "R5-1 a superseded preflight pass is shown as stale and does not admit a run"
+  },
+  {
+    "id": "r5-2-1",
+    "why": "R5-2: lost-request recovery adopts the admitted run as a new run instead of only setting its id",
+    "file": "tools/installer-ui/installer-ui-run.js",
+    "find": "          adoptRun(admittedRunId || status.id || \"\", status.currentStepId || status.steps?.[0] || \"\");\n",
+    "replace": "          activeRunId = admittedRunId || status.id || \"\";\n",
+    "testFile": "tests/installer-ui-g9b.test.mjs",
+    "test": "R5-2 a run recovered after a lost request replaces the previous run output"
+  },
+  {
+    "id": "r5-2-2",
+    "why": "R5-2: adopting a run recomputes run admission, so Stop is enabled once the run id is known",
+    "file": "tools/installer-ui/installer-ui-run.js",
+    "find": "      clearRunOutput();\n      updateRunAdmission();\n",
+    "replace": "      clearRunOutput();\n",
+    "testFile": "tests/installer-ui-g9b.test.mjs",
+    "test": "R5-2 Stop is enabled for a run recovered after a lost request and stops that run"
+  },
+  {
+    "id": "r5-2-3",
+    "why": "R5-2: adopting a run sets its current step, so the stop confirmation and status name it",
+    "file": "tools/installer-ui/installer-ui-run.js",
+    "find": "      activeStepId = stepId;\n",
+    "replace": "",
+    "testFile": "tests/installer-ui-g9b.test.mjs",
+    "test": "R5-2 Stop is enabled for a run recovered after a lost request and stops that run"
+  },
+  {
+    "id": "r5-3-1",
+    "why": "R5-3: the replaced-run error carries its own remedy instead of the generic form advice",
+    "file": "tools/installer-ui/installer-ui-run.js",
+    "find": "      error.data = { error: error.message, remedy: \"Reload the page to see the latest run.\" };\n",
+    "replace": "",
+    "testFile": "tests/installer-ui-g9b.test.mjs",
+    "test": "R4-2 broken stream reports a replaced run record and does not attach"
+  },
+  {
+    "id": "r5-3-2",
+    "why": "R5-3: a page-load attach error shows its remedy with the message",
+    "file": "tools/installer-ui/installer-ui-run.js",
+    "find": "setErrorText(\"run\", [error.message || String(error), error.data?.remedy].filter(Boolean).join(\" \"));",
+    "replace": "setErrorText(\"run\", error.message || String(error));",
+    "testFile": "tests/installer-ui-g9b.test.mjs",
+    "test": "L6-1 page-load reattach run-replaced clears run state and controls"
   }
 ]
