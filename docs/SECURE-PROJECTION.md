@@ -16,6 +16,8 @@ Foundry account private is a separate step below, not an effect of the
 projection templates. It then points the gateway at the resolver
 without changing anyone's access, ready for the
 [migration runbook](SCALE.md#the-move-itself-step-by-step).
+For the manual operator worksheet for the sync-based Cosmos entitlement, see
+[Cosmos projection workbook](PROJECTION-WORKBOOK.md).
 
 For private gateway ingress, Application Gateway WAF, corporate DNS/routing
 and the placement of the other services, see the
