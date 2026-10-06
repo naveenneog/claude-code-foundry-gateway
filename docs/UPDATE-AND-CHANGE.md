@@ -15,7 +15,11 @@ writes. It detects:
 - every `{{named-value}}` reference in the current policy, derived from the policy rather than a
   hardcoded list, including later values such as `usd-budgets`, `usd-budget-state`,
   `external-idp-extra-audience` and `entitlement-source`;
-- optional job definitions with older repository commit pins, when discovery reports them.
+- optional job definitions with older repository commit pins, when discovery reports them;
+- the entitlement store: a gateway that serves from named values gets the move to the Cosmos projection
+  ([section 3](#move-a-named-value-gateway-with-the-update)).
+
+Without the decision record, `-ResourceGroup` and `-ApimName` name the gateway, and the apply writes the record.
 
 ```powershell
 $plan = .\scripts\Update-ClaudeGateway.ps1 `
@@ -92,6 +96,55 @@ person, or omit `-User` for everyone. Removal takes effect after the sync plus a
 `entitlement-cache-seconds`; disabled Entra accounts lose access when their current token expires,
 60 to 90 minutes by default (Microsoft Learn access tokens, updated 2026-07-17:
 https://learn.microsoft.com/entra/identity-platform/access-tokens).
+
+### Move a named-value gateway with the update
+
+`Update-ClaudeGateway.ps1` plans the move from named values to the projection as migration
+`0004-entitlement-projection` ([ADR-0054](adr/0054-update-flow-entitlement-migration.md)). The plan reads the
+live gateway, so it works with or without the decision record `onboarding\claude-gateway.json`:
+
+```powershell
+.\Update-ClaudeGateway.ps1 -ResourceGroup <rg> -ApimName <apim>
+.\Update-ClaudeGateway.ps1 -ResourceGroup <rg> -ApimName <apim> -Apply -ApprovedPlanFingerprint <fingerprint>
+```
+
+The plan prints the second command with its fingerprint, followed by any option given to the first. It shows:
+
+| Item | Where the value comes from |
+|---|---|
+| Tier groups | `-StandardGroup` and `-PremiumGroup`; else the gateway's `entitlement-groups` named value; else `standardGroup` and `premiumGroup` in the decision record; else `claude-code-standard` and `claude-code-premium`. Each group is read from Microsoft Graph, and the plan counts the developers who would gain or lose access compared with `allow-standard` and `allow-premium`. `-PremiumGroup none` means no premium group. |
+| Name prefix | the gateway's `entitlement-projection-prefix`; else `-NamePrefix`; else the API Management name without `apim-` (the installer's rule) |
+| Region and tier | the gateway; a v2 tier is required |
+| Resolver access | `-ResolverInboundAccess`; else `public` ([ADR-0052](adr/0052-cosmos-default-installer.md)) |
+| Readiness | the projection preflight (`scripts/ClaudeProjectionChecks.ps1`) and `scripts/ClaudeProjectionReadiness.ps1`: region availability, usage against limits, the right to create role assignments and template validation |
+| Resources, network and identities | `scripts/ClaudeProjectionInventory.ps1`; `tests/Test-ProjectionInventory.ps1` compares it with the compiled templates |
+| Monthly cost | `scripts/Measure-ClaudeProjectionCost.ps1`, from Azure Retail Prices API list prices |
+| Time | about 20 minutes of deployment, plus the snapshot transfer through the runner at 6.3 seconds per 4,900-character part (measured 2026-10-06) |
+
+The plan is BLOCKED, prints no apply command, and `-Apply` refuses it before the backup when:
+
+- a readiness check is FAIL;
+- a tier group is not found;
+- the tier is not v2;
+- a private resolver is asked for on Basic v2;
+- the snapshot transfer would take more than 110 minutes, since a snapshot's apply-by time is 2 hours after
+  its export.
+
+The readiness evidence, such as usage counts and times, is printed after the plan and is not part of the
+fingerprint. The check results are.
+
+The apply takes the backup. It then runs the installer's steps from `scripts/ClaudeInstallProjection.ps1`:
+
+1. Refresh the named values from Entra.
+2. Deploy the projection.
+3. Populate it.
+4. Compare it with the named values.
+5. Switch `entitlement-source`.
+
+It then writes `entitlement-groups` (`standard=<object id>,premium=<object id>|none`) and verifies that
+`entitlement-source` is `projection`. A failed step leaves named values serving. The error ends with the
+update command that resumes, naming the resolved groups, prefix and access. A gateway already on the
+projection plans no move, and `-KeepNamedValues` plans none.
 
 A gateway that served from the projection before
 [ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md) upgrades in this order.
