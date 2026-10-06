@@ -586,10 +586,10 @@ $mutations = @(
        To    = 'That is a known issue' }
 
     @{ Suite = 'Test-Scale.ps1'
-       Name  = 'the README implies the projection is the default'
+       Name  = 'the README stops saying the installer deploys the projection by default'
        File  = 'README.md'
-       From  = '**It is not the default.**'
-       To    = '**It is the default.**' }
+       From  = '**The installer deploys the projection by default.**'
+       To    = '**The installer deploys named values by default.**' }
 
     @{ Suite = 'Test-Scale.ps1'
        Name  = 'private networking stops being priced'
@@ -1579,9 +1579,9 @@ $mutations = @(
 
     @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'the declared population is never checked against the store'
-       File  = 'Install-ClaudeGateway.ps1'
-       From  = 'Named values hold about {0} developers, and you said {1}.'
-       To    = 'Sizing looks fine for {0} developers' }
+       File  = 'scripts/ClaudeInstallProjection.ps1'
+       From  = 'if ($store -eq ''named-value'' -and $DeveloperCount -gt $BuCeiling) {'
+       To    = 'if ($false) {' }
 
     @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'the ceiling becomes a pasted number in the installer'
@@ -1591,9 +1591,9 @@ $mutations = @(
 
     @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'a bigger SKU is offered as the fix for the ceiling'
-       File  = 'Install-ClaudeGateway.ps1'
-       From  = 'raising the SKU does not move it'
-       To    = 'a larger SKU raises it' }
+       File  = 'scripts/ClaudeInstallProjection.ps1'
+       From  = 'raising the API Management SKU does not increase'
+       To    = 'a larger API Management SKU increases' }
 
     @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'the revocation window goes back to being documented'
@@ -2417,10 +2417,10 @@ $mutations = @(
        To    = 'Math.Max(3600, int.Parse' }
 
     @{ Suite = 'Test-SecureProjection.ps1'
-       Name  = 'an export asks for a Cosmos token it cannot use'
+       Name  = 'the exporter asks for a Cosmos token'
        File  = 'scripts/Sync-ClaudeProjection.ps1'
-       From  = 'if (-not $ExportPath) {'
-       To    = 'if ($true) {' }
+       From  = '$graphToken = Get-GraphToken'
+       To    = '$graphToken = Get-GraphToken; $cosmosToken = az account get-access-token --resource https://cosmos.azure.com --query accessToken -o tsv' }
 
     @{ Suite = 'Test-SecureProjection.ps1'
        Name  = 'the projection charges the last business unit again'
@@ -2443,8 +2443,8 @@ $mutations = @(
     @{ Suite = 'Test-SecureProjection.ps1'
        Name  = 'a snapshot is applied without validation'
        File  = 'sync/src/apply-projection.mjs'
-       From  = 'const problems = validateSnapshot(snap, { tenantId });'
-       To    = 'const problems = [];' }
+       From  = '      : validateSnapshot(snap, { tenantId });'
+       To    = '      : [];' }
 
     @{ Suite = 'Test-SecureProjection.ps1'
        Name  = 'a failed write is reported as ok'

@@ -42,7 +42,7 @@ The preflight in both setup scripts reports whether the platform is affected.
 | `An XML comment cannot contain '--', and '-' cannot be the last character` | A `--` inside an XML comment in your policy. Use single dashes. The error does not mention comments. |
 | `az rest` fails with `'charmap' codec can't encode character '\ufeff'` | An Azure CLI bug decoding APIM's policy response on Windows. **The PUT usually succeeded** — verify with a GET before retrying. `Set-GatewayPolicy.ps1` avoids `az rest` for this reason. |
 | Policy references `{{name}}` and returns 500 | The named value does not exist. Create it, or redeploy the template. |
-| A projection switch is refused | The refusal names its step: a receipt value or resource outside the gateway's subscription, tenant or form; a gateway whose `entitlement-resolver-url` is not the resolver deployed with the projection (the deployer's normal run sets it); lists that drift from Entra (`Sync-ClaudeAccess.ps1` refreshes them); a projection that differs from the gateway; or admission (renewal runs, alerts, the job's settings). `Deploy-ClaudeProjection.ps1 -FlipAfterCleanCompare -WhatIf` runs the same checks without the backup and the write ([switch](SECURE-PROJECTION.md#switch-to-the-projection-p95)). |
+| A projection switch is refused | The refusal names its step: resolver deployment/settings, missing resolver service principal, lists that drift from Entra (`Sync-ClaudeAccess.ps1` refreshes them), a projection that differs from the gateway, or switch evidence (no successful full sync in the last 24 hours, or a record the resolver would refuse). `Deploy-ClaudeProjection.ps1 -FlipAfterCleanCompare -WhatIf` runs the same checks without the backup and the write ([switch](SECURE-PROJECTION.md#switch-to-the-projection-p95)). |
 
 ## Runtime
 
@@ -53,7 +53,7 @@ The preflight in both setup scripts reports whether the platform is affected.
 | **403** `rate_limit_error` | Read `budget` and the message: personal, organisation or business-unit/team budget. A quota increase can admit new requests after propagation; it does not reset consumption. |
 | **403** `model_not_allowed` / unassigned-unit message | Model or unit policy, not necessarily missing tier membership. Check [Budgets](BUDGETS.md) and the published unit map. |
 | **429** | Token/request rate, resolver miss admission or Foundry capacity. Inspect the body and honour `Retry-After`; not every 429 is the personal TPM limit. |
-| **503** naming an expired projection | Reconciliation did not renew the lease. Complete a fresh scan/apply; never serve stale records or roll back to unreviewed old lists. |
+| Removed person still works on a projection gateway | Run `scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim> -User <name-or-object-id>`. Access ends after that sync plus at most `entitlement-cache-seconds`. Disabled Entra accounts lose access when their current token expires, 60 to 90 minutes by default (Microsoft Learn access tokens, updated 2026-07-17: https://learn.microsoft.com/entra/identity-platform/access-tokens). |
 | **503** naming the entitlement service | Resolver/network/authentication failure after cache expiry. Check [Private projection](SECURE-PROJECTION.md#troubleshooting). |
 | **404** `api_not_supported` from Foundry | An OpenAI-shaped path. Claude deployments expose only `/anthropic/*`. |
 | **404** `DeploymentNotFound` | A model alias points at a deployment you do not have. Foundry mode does no start-up model check, so this surfaces mid-task. |
@@ -184,5 +184,5 @@ Sources: [P71 measurements](status/P71.md#p71-aum-answers-fast-and-says-why-it-c
 | Symptom | Next action |
 |---|---|
 | Need admin approval at Microsoft sign-in | Use [Turnstile's CLI sign-in](TURNSTILE.md#viewers-and-managers), or have the tenant administrator grant approved web consent |
-| Removed person still works | Check nested memberships, active-store publication, `Nothing to change`/empty-list warnings and cache/lease timing; [Onboarding](ONBOARDING.md#5-revoke-access) |
+| Removed person still works | Check nested memberships, active-store publication, `Nothing to change`/empty-list warnings and cache timing; [Onboarding](ONBOARDING.md#5-revoke-access) |
 | Turnstile save is not yet applied | Check the apply job/last result and governance authority; UI save is not proof of gateway propagation |

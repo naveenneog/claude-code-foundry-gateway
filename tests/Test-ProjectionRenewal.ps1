@@ -174,7 +174,7 @@ try {
 
         $definitions = @($renewalTemplate.variables.alertDefinitions)
         $base = [string]$renewalTemplate.variables.renewalLogs
-        Assert 'there are three renewal alerts' ((($definitions | ForEach-Object name) -join ',') -eq 'no-success-45m,expiry-margin-60m,renewal-failed') (($definitions | ForEach-Object name) -join ',')
+        Assert 'there are failed-run and Graph-read-denied alerts by default' ((($definitions | ForEach-Object name) -join ',') -eq 'graph-read-denied,renewal-failed') (($definitions | ForEach-Object name) -join ',')
         Assert 'each query reads the job''s console table through a fuzzy union with an empty table' ($base -match '(?m)^union isfuzzy=true \(datatable\(TimeGenerated: datetime, JobName: string, Log: string\) \[\]\), ContainerAppConsoleLogs\s*$') $base
         Assert 'each query keeps only the job''s own lines' ($base -match 'JobName == "\{jobName\}"') $base
         $rule = $res | Where-Object { $_.type -eq 'Microsoft.Insights/scheduledQueryRules' } | Select-Object -First 1
@@ -191,11 +191,11 @@ try {
             Assert "$($definition.name): no legacy table or column" ($query -notmatch '_CL\b|Log_s\b')
             Assert "$($definition.name): no summarize that always returns a row" ($query -notmatch 'summarize' -or $lines[-1] -match '^\| where ') $lines[-1]
             Assert "$($definition.name): no datetime passed as epoch seconds" ($query -notmatch 'unixtime_seconds_todatetime\(now\(\)\)')
-            $expected = if ($definition.name -eq 'renewal-failed') { $failedEvent } else { $succeeded }
+            $expected = if ($definition.name -in 'renewal-failed','graph-read-denied') { $failedEvent } else { $succeeded }
             Assert "$($definition.name): it matches the job's $expected line" ($expected -and $query.Contains("'`"event`":`"$expected`"'")) $query
         }
-        $expiry = [string]($definitions | Where-Object name -eq 'expiry-margin-60m').query
-        Assert 'the expiry rule reads the newest success and its remaining lease' ($expiry -match 'top 1 by TimeGenerated desc' -and $expiry -match "unixtime_seconds_todatetime\(todouble\(extract\('`"oldestExpiresAt`":\(\[0-9\]\+\)', 1, Log\)\)\)" -and $expiry -match '- now\(\) < 1h') $expiry
+        Assert 'the expiry-margin alert is removed because records persist until sync changes them' (-not (($definitions | ForEach-Object name) -contains 'expiry-margin-60m')) (($definitions | ForEach-Object name) -join ',')
+        Assert 'the stale-success alert is conditional on a schedule' ([IO.File]::ReadAllText((Join-Path $root 'infra\projection-renewal.bicep')) -match "resource noSuccessAlert 'Microsoft\.Insights/scheduledQueryRules@2023-12-01' = if \(isScheduled\)" -and $renewalTemplate.parameters.cronExpression.defaultValue -eq '')
     }
 
     Write-Host ''
@@ -268,9 +268,21 @@ try {
                     $items += @(@{ name = 'caj-projection-renewal-p94fixture'; type = 'Microsoft.App/jobs' }, @{ name = 'cae-projection-p94fixture'; type = 'Microsoft.App/managedEnvironments' }, @{ name = 'sqr-projection-p94fixture-graph-read-failed'; type = 'microsoft.insights/scheduledqueryrules' })
                 }
                 if ($state.Case -eq 'p86-name-other-type') { $items += @{ name = 'cae-projection-p94fixture'; type = 'Microsoft.Network/networkSecurityGroups' } }
+                # A P94/P95 deployment also left the expiry-margin rule that ADR-0051 retired.
+                if ($state.Case -eq 'upgrade-from-p95') { $items += @{ name = 'sqr-projection-p94fixture-expiry-margin-60m'; type = 'microsoft.insights/scheduledqueryrules' } }
                 return (ConvertTo-Json @($items))
             }
+            '^apim nv show .*--named-value-id entitlement-projection-prefix ' {
+                # scripts/ApimNamedValue.ps1 reads a missing named value as null only on this measured answer.
+                switch ($state.Case) {
+                    'no-prefix' { $global:LASTEXITCODE = 3; return 'ERROR: (ResourceNotFound) NamedValue not found.' }
+                    'prefix-read-refused' { $global:LASTEXITCODE = 1; return 'ERROR: (AuthorizationFailed) The client does not have authorization to perform action.' }
+                    'other-prefix' { return 'otherfixture' }
+                    default { return 'p94fixture' }
+                }
+            }
             '^apim show' { return (@{ id = "$rgId/providers/Microsoft.ApiManagement/service/apim-p94" } | ConvertTo-Json) }
+            '^resource delete ' { return }
             '^acr build' { if ($state.Case -eq 'tasks-refused') { $global:LASTEXITCODE = 1; return 'ERROR: (TasksOperationsNotAllowed) ACR Tasks requests are not permitted.' }; return }
             '^acr manifest show-metadata' { return (ConvertTo-Json $(if ($state.Case -eq 'bad-digest') { 'latest' } else { $digestBuilt })) }
         }
@@ -312,6 +324,8 @@ try {
     $renewalAt = Get-CallIndex $run '^deployment group create .*-n projection-renewal-p94fixture '
     Assert 'a healthy run completes' (-not $run.Failure) $run.Failure
     Assert 'each deployment is named for its template and the prefix' ((@($run.Params.Keys) | Sort-Object) -join ',' -eq 'projection-registry-p94fixture,projection-renewal-p94fixture') (@($run.Params.Keys) -join ',')
+    $prefixAt = Get-CallIndex $run '^apim nv show .*--named-value-id entitlement-projection-prefix '
+    Assert "the gateway's recorded projection is read before the first write" ($prefixAt -ge 0 -and $prefixAt -lt $registryAt) ($run.Calls -join ' | ')
     Assert 'registry, then build, then digest, then the job' ($registryAt -ge 0 -and $registryAt -lt $buildAt -and $buildAt -lt $digestAt -and $digestAt -lt $renewalAt) ($run.Calls -join ' | ')
     Assert 'the image builds from the sync package with the image Dockerfile' ($run.Calls[$buildAt] -match '--registry acrp94fixture --image claude-projection-sync:sync-test --file sync/Dockerfile --no-logs ')
     $renewalParams = $run.Params['projection-renewal-p94fixture']
@@ -324,7 +338,7 @@ try {
     Assert 'the job gets the tier group ids and the gateway' ((& $value 'standardGroupId') -eq $standard -and (& $value 'premiumGroupId') -eq $premium -and (& $value 'gatewayResourceId') -match 'Microsoft\.ApiManagement/service/apim-p94$')
     Assert 'the job deploys in the network region and the signed-in tenant' ((& $value 'location') -eq 'eastus2' -and (& $value 'tenantId') -eq $tenant)
     Assert 'the tenant administrator step names the job identity' ($run.Output -match 'Grant-ClaudeProjectionRenewalGraphAccess\.ps1 -PrincipalId 40000000-0000-4000-8000-000000000002')
-    Assert 'the output names the email confirmation and the evidence wait' ($run.Output -match 'confirmation from Azure Monitor' -and $run.Output -match '60-90 minutes')
+    Assert 'the output names optional on-demand operation without admission-wait text' ($run.Output -match 'optional sync job' -and $run.Output -match 'az containerapp job start' -and $run.Output -notmatch '60-90 minutes|three successful runs')
     $receipt = $run.Receipt
     Assert 'the receipt records what the switch needs' ($receipt -and $receipt.kind -eq 'claude-projection-renewal-receipt' -and $receipt.reconcilerResourceId -match '/Microsoft\.App/jobs/caj-renew-p94$' -and
         $receipt.imageDigest -ceq $digestBuilt -and $receipt.runnerName -eq 'aci-projtest-p94fixture' -and $receipt.cosmosAccount -eq 'cosmos-p94fixture' -and
@@ -332,6 +346,7 @@ try {
         $receipt.actionGroupResourceId -match '/actionGroups/')
     Assert 'the receipt records the settings the job runs with' ($receipt -and $receipt.standardGroupId -ceq $standard -and $receipt.premiumGroupId -ceq $premium -and
         $receipt.gatewayResourceId -match 'Microsoft\.ApiManagement/service/apim-p94$' -and $receipt.identityClientId -eq '40000000-0000-4000-8000-000000000001') ($receipt | ConvertTo-Json -Compress)
+    Assert 'the receipt records a manual trigger by default' ($receipt -and $receipt.triggerType -eq 'Manual' -and $receipt.cronExpression -eq '') ($receipt | ConvertTo-Json -Compress)
     Assert 'the receipt holds no secret' ($receipt -and -not (($receipt | ConvertTo-Json) -match '(?i)token|password|secret|key"'))
     Assert 'no Graph call when both groups are object ids' (-not ($run.Calls -match 'get-access-token'))
 
@@ -366,6 +381,16 @@ try {
         $leftovers.Failure.IndexOf('Microsoft.App/jobs') -lt $leftovers.Failure.IndexOf('Microsoft.App/managedEnvironments')) "$($leftovers.Failure) | writes $(Get-WriteCount $leftovers)"
     $otherType = Invoke-DeployScenario 'p86-name-other-type'
     Assert 'a resource with a P86 name but another type does not stop the deploy' (-not $otherType.Failure -and (Get-WriteCount $otherType) -gt 0) $otherType.Failure
+    $upgrade = Invoke-DeployScenario 'upgrade-from-p95'
+    $deleted = @($upgrade.Calls | Where-Object { $_ -match '^resource delete ' })
+    $upgradeJobAt = Get-CallIndex $upgrade '^deployment group create .*-n projection-renewal-p94fixture '
+    Assert 'a manual redeploy over P94 or P95 removes the retired expiry and no-success alert rules, after the job deploys' (-not $upgrade.Failure -and $deleted.Count -eq 2 -and
+        ($deleted -join ' ') -match 'resource delete -g rg-p94 -n sqr-projection-p94fixture-expiry-margin-60m --resource-type Microsoft\.Insights/scheduledQueryRules' -and
+        ($deleted -join ' ') -match 'resource delete -g rg-p94 -n sqr-projection-p94fixture-no-success-45m --resource-type Microsoft\.Insights/scheduledQueryRules' -and
+        $upgradeJobAt -ge 0 -and (Get-CallIndex $upgrade '^resource delete ') -gt $upgradeJobAt) "$($upgrade.Failure) | $($deleted -join ' | ')"
+    $scheduledUpgrade = Invoke-DeployScenario 'upgrade-from-p95' @{ CronExpression = '*/30 * * * *' }
+    $deletedScheduled = @($scheduledUpgrade.Calls | Where-Object { $_ -match '^resource delete ' })
+    Assert 'a scheduled redeploy keeps the no-success rule its template deploys and removes only the expiry rule' (-not $scheduledUpgrade.Failure -and $deletedScheduled.Count -eq 1 -and $deletedScheduled[0] -match 'sqr-projection-p94fixture-expiry-margin-60m') "$($scheduledUpgrade.Failure) | $($deletedScheduled -join ' | ')"
     $oddSubnet = Invoke-DeployScenario 'odd-subnet-output'
     Assert 'a renewal subnet from the network output is checked like -RenewalSubnetId before it reaches az' ($oddSubnet.Failure -match 'returned renewal subnet' -and $oddSubnet.Failure -match 'docs/AZ-COMMANDS\.md' -and
         (Get-CallIndex $oddSubnet '^network vnet show') -lt 0 -and (Get-WriteCount $oddSubnet) -eq 0) "$($oddSubnet.Failure) | writes $(Get-WriteCount $oddSubnet)"
@@ -394,43 +419,20 @@ try {
     Assert 'two names for one group stop before any write: premium would take every standard member' ($sameGroup.Failure -match 'same group' -and (Get-WriteCount $sameGroup) -eq 0) "$($sameGroup.Failure) | writes $(Get-WriteCount $sameGroup)"
     $badAcr = Invoke-DeployScenario 'bad-acr-name'
     Assert 'a registry name that is not a registry name stops before the build' ($badAcr.Failure -match 'not a registry name' -and (Get-CallIndex $badAcr '^acr build') -lt 0 -and (Get-CallIndex $badAcr '^deployment group create .*projection-renewal') -lt 0) $badAcr.Failure
+    # ADR-0051: the job writes records without expiresAt, which a resolver published before ADR-0051 refuses; the
+    # projection deployer publishes the current resolver before it records entitlement-projection-prefix.
+    $noPrefix = Invoke-DeployScenario 'no-prefix'
+    Assert 'a gateway without entitlement-projection-prefix stops before any write, naming the projection deployer' ($noPrefix.Failure -match 'has no entitlement-projection-prefix named value' -and
+        $noPrefix.Failure -match 'scripts/Deploy-ClaudeProjection\.ps1' -and $noPrefix.Failure -match 'Nothing was deployed' -and (Get-WriteCount $noPrefix) -eq 0) "$($noPrefix.Failure) | writes $(Get-WriteCount $noPrefix)"
+    Assert 'the prefix refusal gives the projection deployer command for this gateway and prefix' ($noPrefix.Failure -match [regex]::Escape('.\scripts\Deploy-ClaudeProjection.ps1 -ResourceGroup rg-p94 -ApimName apim-p94 -NamePrefix p94fixture')) $noPrefix.Failure
+    $otherPrefix = Invoke-DeployScenario 'other-prefix'
+    Assert 'a gateway that records another projection stops before any write' ($otherPrefix.Failure -match "records projection 'otherfixture', not 'p94fixture'" -and (Get-WriteCount $otherPrefix) -eq 0) "$($otherPrefix.Failure) | writes $(Get-WriteCount $otherPrefix)"
+    $prefixRefused = Invoke-DeployScenario 'prefix-read-refused'
+    Assert 'a refused prefix read stops before any write and is not read as a missing prefix' ($prefixRefused.Failure -match "Could not read named value 'entitlement-projection-prefix'" -and
+        $prefixRefused.Failure -notmatch 'has no entitlement-projection-prefix' -and (Get-WriteCount $prefixRefused) -eq 0) "$($prefixRefused.Failure) | writes $(Get-WriteCount $prefixRefused)"
     Remove-Item Function:\az -ErrorAction SilentlyContinue
     Remove-Item Function:\Invoke-RestMethod -ErrorAction SilentlyContinue
 
-    Write-Host ''
-    Write-Host 'Projection renewal - admission refuses a job without these settings' -ForegroundColor Cyan
-    . (Join-Path $root 'scripts\ClaudeProjectionChecks.ps1')
-    $digest = 'sha256:' + ('c' * 64)
-    function New-JobDefinition([hashtable]$Settings) {
-        $jobContainer = @{
-            name = 'projection-renewal'; image = "acr.example.invalid/claude-projection-sync@$digest"; command = @(); args = @()
-            env = @($Settings.GetEnumerator() | Sort-Object Key | ForEach-Object { @{ name = $_.Key; value = $_.Value } })
-        }
-        return (@{ properties = @{ template = @{ containers = @($jobContainer) } } } | ConvertTo-Json -Depth 10 | ConvertFrom-Json)
-    }
-    $goodSettings = @{
-        AZURE_CLIENT_ID = '40000000-0000-4000-8000-000000000001'
-        PROJECTION_STANDARD_GROUP_ID = '10000000-0000-4000-8000-000000000001'
-        PROJECTION_PREMIUM_GROUP_ID = 'none'
-        PROJECTION_GATEWAY_RESOURCE_ID = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-p94/providers/Microsoft.ApiManagement/service/apim-p94'
-    }
-    $verdict = try { Assert-ClaudeProjectionJobDefinition -Job (New-JobDefinition $goodSettings) -ImageDigest $digest } catch { $_.Exception.Message }
-    Assert 'a job with its client id, tier groups and gateway is accepted' ($verdict -eq $true) "$verdict"
-    foreach ($case in @(
-            @{ Name = 'no client id'; Change = @{ AZURE_CLIENT_ID = $null }; Names = 'AZURE_CLIENT_ID' }
-            @{ Name = 'no standard group'; Change = @{ PROJECTION_STANDARD_GROUP_ID = $null }; Names = 'PROJECTION_STANDARD_GROUP_ID' }
-            @{ Name = 'a standard group name instead of an id'; Change = @{ PROJECTION_STANDARD_GROUP_ID = 'claude-code-standard' }; Names = 'PROJECTION_STANDARD_GROUP_ID' }
-            @{ Name = 'no premium setting'; Change = @{ PROJECTION_PREMIUM_GROUP_ID = $null }; Names = 'PROJECTION_PREMIUM_GROUP_ID' }
-            @{ Name = 'an empty premium setting'; Change = @{ PROJECTION_PREMIUM_GROUP_ID = '' }; Names = 'PROJECTION_PREMIUM_GROUP_ID' }
-            @{ Name = 'no gateway'; Change = @{ PROJECTION_GATEWAY_RESOURCE_ID = $null }; Names = 'PROJECTION_GATEWAY_RESOURCE_ID' }
-            @{ Name = 'a gateway that is not API Management'; Change = @{ PROJECTION_GATEWAY_RESOURCE_ID = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-p94/providers/Microsoft.Storage/storageAccounts/stp94' }; Names = 'PROJECTION_GATEWAY_RESOURCE_ID' }
-            @{ Name = 'one group for both tiers'; Change = @{ PROJECTION_PREMIUM_GROUP_ID = '10000000-0000-4000-8000-000000000001' }; Names = 'PROJECTION_PREMIUM_GROUP_ID' }
-        )) {
-        $settings = $goodSettings.Clone()
-        foreach ($key in $case.Change.Keys) { if ($null -eq $case.Change[$key]) { $settings.Remove($key) } else { $settings[$key] = $case.Change[$key] } }
-        $verdict = try { $null = Assert-ClaudeProjectionJobDefinition -Job (New-JobDefinition $settings) -ImageDigest $digest; 'accepted' } catch { $_.Exception.Message }
-        Assert "admission refuses a job with $($case.Name)" ($verdict -ne 'accepted' -and $verdict -match [regex]::Escape($case.Names) -and $verdict -match 'Remedy') "$verdict"
-    }
 }
 finally { Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue }
 

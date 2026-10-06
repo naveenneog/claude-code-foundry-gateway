@@ -29,6 +29,61 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P98 the installer deploys the Cosmos projection by default.** `Install-ClaudeGateway.ps1` offers
+  the projection first, as recommended, for every size; `-Yes` chooses it, and named values above their
+  capacity are refused, also under `-Yes` and `-Sku`, from `-DeveloperCount` or the tier groups' members
+  ([ADR-0052](docs/adr/0052-cosmos-default-installer.md)). Choosing the projection deploys, populates and
+  compares it, then switches the gateway; a failure leaves the current store serving and prints the
+  rerun command. A re-run without `-EntitlementStore` migrates a named-value gateway, and the approval
+  summary says so; a gateway already on the projection keeps it and its resolver access. Above
+  named-value capacity, `-CompareBaseline Snapshot` compares the projection with a fresh Entra snapshot.
+  The resolver is public by default on every tier, accepting only the gateway's managed identity.
+  `-DeploySyncJob` adds the optional sync job; a failed job deployment is reported with its full rerun
+  command. The approval summary lists the projection steps, so `-WhatIf` shows them. The SKU guidance
+  cites the cache, units, network and zone facts, and states that zone redundancy and Premium v2 virtual
+  network injection are chosen at creation, which the installer does not provision. README, Setup and
+  the projection guide open with a quickstart. `scripts/Test-ClaudeLiveProjection.ps1` installs a
+  disposable gateway, checks one developer's access through removal and re-adding, and deletes only what
+  the run created. A re-run keeps the store that serves:
+  - on a projection gateway it compares with a fresh snapshot;
+  - it deploys the projection that `entitlement-projection-prefix` records;
+  - it keeps the resolver's network access;
+  - it refuses `-EntitlementStore named-value` with the rollback steps.
+
+  The named-value sync checks every list before its first write, and the drift check no longer reports a
+  one-member list as in sync. A snapshot too large to send through the runner before its apply-by time
+  (about 40,000 developers) is refused before it starts; ROADMAP packet P99 plans a directory-scale
+  transfer. Rerun commands quote every value that is not a plain token
+  ([P98 status](docs/status/P98.md#p98-the-installer-deploys-the-cosmos-projection-by-default-2026-10-06)).
+- **P97 Cosmos entitlement persists until a sync changes it, and syncs run on demand.** Projection
+  records no longer expire 7,200 seconds after the scan that wrote them; a sync writes only the records
+  that change ([ADR-0051](docs/adr/0051-persistent-sync-based-cosmos-entitlement.md)). The resolver
+  refuses a record with an invalid generation or verification time, and a record that still carries a
+  past `expiresAt` from before ADR-0051; the next full or targeted sync rewrites it.
+  `scripts/Sync-ClaudeAccess.ps1 -User <upn-or-object-id>` publishes one developer's change through the
+  in-VNet runner, using Microsoft Graph `checkMemberGroups`; without `-User` it syncs everyone, and
+  `-Store auto` follows the gateway's `entitlement-source`. `sync/src/apply-projection.mjs` is the one
+  Cosmos writer: every apply that writes takes a lease lock in the container, reads records and sync
+  statuses inside it, requires `--account-resource-id`, and refuses a snapshot older than a sync that
+  already covered it, or past its apply-by time when the first write is due; a full sync leaves alone the
+  people a newer targeted sync changed, and `Sync-ClaudeAccess.ps1` prints how many. Every refusal names a
+  remedy, which `Sync-ClaudeAccess.ps1` and the deployer show with the stage that refused. No Cosmos query
+  filters on a path the container does not index: status reads query only the status partition. The
+  container sets `defaultTtl: -1`, so records and the lock never expire and status records expire after
+  seven days. The resolver refuses any document that carries a `type`, and `--tenant` must be a GUID,
+  stored in lower case. `scripts/Sync-ClaudeProjection.ps1` only exports snapshots; its direct Cosmos writes,
+  `-AllowEmpty` and `-KeepOrphans` are removed. The switch (`scripts/Deploy-ClaudeProjection.ps1
+  -FlipAfterCleanCompare`) admits a gateway on a successful full sync within 24 hours for its Cosmos
+  account and tenant, with no record the resolver would refuse; it needs no job and no receipt. The sync
+  job is optional and manual unless `-CronExpression` is passed. The runner starts when it has stopped.
+  The deployer creates the resolver's service principal, refuses a `-Location` other than an existing
+  Cosmos account's, compares a new gateway with the snapshot it applied, and records
+  `entitlement-projection-prefix`, also on a gateway that served from a projection before P97; the
+  renewal deployer refuses until that named value names its projection, because the job's records carry no
+  `expiresAt` and an older resolver refuses them. `docs/PROJECTION-WORKBOOK.md` gives the manual steps,
+  quickstart first, and `tests/Test-DocMarkdown.ps1` refuses masked `Authorization` headers and fenced
+  blocks inside table rows in every tracked markdown file
+  ([P97 status](docs/status/P97.md#p97-cosmos-entitlement-persists-until-a-sync-changes-it-2026-10-05)).
 - **P95 the projection switch runs end to end.** `Invoke-ClaudeProjectionSwitch`
   (`scripts/ClaudeProjectionSwitch.ps1`) takes the renewal receipt and checks every value in it
   before any call, requires the gateway's `entitlement-resolver-url` to be the resolver deployed with

@@ -84,16 +84,21 @@ Write-Host ''
 Write-Host 'Secure projection - the writer runs inside the network' -ForegroundColor Cyan
 
 $sp = Get-Content (Join-Path $root 'scripts/Sync-ClaudeProjection.ps1') -Raw
-Assert 'membership can be exported instead of written' ($sp -match '(?m)\[string\]\$ExportPath\s*$')
-Assert 'an export needs no Cosmos token'          ($sp -match '(?s)if \(-not \$ExportPath\) \{\s*\$cosmosToken = az account get-access-token')
+Assert 'membership can be exported instead of written' ($sp -match '(?m)\[string\]\$ExportPath,?\s*$')
+Assert 'the exporter never asks for a Cosmos token' ($sp -notmatch 'get-access-token --resource https://cosmos\.azure\.com')
 Assert 'and is written without a byte-order mark' ($sp -match 'UTF8Encoding\(\$false\)')
 Assert 'the importer exists'                      (Test-Path (Join-Path $root 'sync/src/apply-projection.mjs'))
 $ap = Get-Content (Join-Path $root 'sync/src/apply-projection.mjs') -Raw
+$secureDoc = Get-Content (Join-Path $root 'docs/SECURE-PROJECTION.md') -Raw
 Assert 'it validates a snapshot before writing'   ($ap -match 'validateSnapshot\(snap, \{ tenantId \}\)')
 Assert 'a failed write is not reported as ok'     ($ap -match 'ok: !\(writes\.failed \|\| deletes\.failed\)')
 Assert 'it tolerates a byte-order mark'           ($ap -match '\\uFEFF')
 Assert 'it writes in bulk'                        ($ap -match 'executeBulkOperations')
 Assert 'and can compare without writing'          ($ap -match "opt\('--compare'\)")
+Assert 'the manual runner apply passes the Cosmos account resource id' (
+    $secureDoc -match 'az cosmosdb show -n cosmos-<prefix> -g \$rg --query id -o tsv' -and
+    $secureDoc -match 'apply-projection\.mjs --cosmos https://cosmos-<prefix>\.documents\.azure\.com:443/ --tenant <tenant-id> --account-resource-id \$accountResourceId --snapshot /work/snapshot\.json'
+)
 
 Write-Host ''
 Write-Host 'Secure projection - both paths charge the same business unit' -ForegroundColor Cyan
@@ -216,8 +221,6 @@ Assert 'and quotes the device code guidance'      ($auth -match 'unilateral bloc
 
 Write-Host ''
 Write-Host 'Secure projection - the sync rules, run' -ForegroundColor Cyan
-& (Join-Path $PSScriptRoot 'Test-ProjectionPaging.ps1')
-Assert 'multi-page Cosmos behavior holds' ($LASTEXITCODE -eq 0)
 & (Join-Path $PSScriptRoot 'Test-ProjectionRules.ps1')
 Assert 'projection freshness and miss-path rules hold' ($LASTEXITCODE -eq 0)
 

@@ -83,16 +83,27 @@ DNS. Do not delete the old gateway until rollback is no longer needed.
 
 ## 3. Move entitlement between named values and the projection
 
-Named values are the default and hold roughly 100 developers. The projection is the scale path.
-Records expire at most **two hours after scan start**; without renewal **every developer gets 503
-after expiry**. `scripts/Deploy-ClaudeProjectionRenewal.ps1` deploys the job that renews them every
-30 minutes ([ADR-0049](adr/0049-projection-renewal-deployment.md)). A switch is admitted after
-three successful runs, with an action group that has an enabled email receiver; a clean comparison
-or an ARM job execution alone is not renewal evidence ([ADR-0050](adr/0050-projection-switch-function.md)).
+The Cosmos projection is the installer's default store ([ADR-0052](adr/0052-cosmos-default-installer.md)). Named values hold about
+93 developers in business-unit membership and about 110 per tier list, and serve small organisations.
+Projection records persist until a sync removes or changes the person. A sync-job outage does not
+stop developers. Add or remove a developer in the Entra group, then run
+`scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim> -User <name-or-object-id>` for one
+person, or omit `-User` for everyone. Removal takes effect after the sync plus at most
+`entitlement-cache-seconds`; disabled Entra accounts lose access when their current token expires,
+60 to 90 minutes by default (Microsoft Learn access tokens, updated 2026-07-17:
+https://learn.microsoft.com/entra/identity-platform/access-tokens).
+
+A gateway that served from the projection before
+[ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md) upgrades in this order.
+`scripts/Deploy-ClaudeProjection.ps1`, run again with the parameters it was deployed with, publishes the
+current resolver, records `entitlement-projection-prefix` and applies a full snapshot, which rewrites
+every record that still carries an `expiresAt`. `scripts/Sync-ClaudeAccess.ps1` and
+`scripts/Deploy-ClaudeProjectionRenewal.ps1` refuse until that named value exists. A sync job deployed
+before then keeps its older image, which writes `expiresAt` and takes no apply lock, until
+`scripts/Deploy-ClaudeProjectionRenewal.ps1` runs again.
 
 The `Entitlement` step uses `scripts\Measure-ClaudeProjectionCost.ps1` for the operator's
-scenarios and switches through the same function as the deployer when a renewal receipt names the
-gateway. The standalone deployer can still deploy
+scenarios and switches through the same function as the deployer using the gateway's `entitlement-projection-prefix` named value. The standalone deployer can still deploy
 beside, populate and compare while named values remain authoritative. Deployment and
 projection sync require PowerShell 7. `-PreflightOnly` runs the same read-only checks without
 Azure writes (normally 30-90 seconds, including the 25-second Graph probe interval).
@@ -101,7 +112,10 @@ SKU rules from P61:
 
 - Basic v2 uses a public resolver endpoint protected by Microsoft Entra and pinned to the gateway
   managed identity; Cosmos stays private.
-- Standard v2 and Premium v2 use a private resolver reachable from the gateway's VNet integration.
+- The installer deploys that public resolver on Standard v2 and Premium v2 too, by default
+  ([ADR-0052](adr/0052-cosmos-default-installer.md)); `-ResolverInboundAccess private` gives them a private
+  resolver reachable from the gateway's VNet integration, the default of `Deploy-ClaudeProjection.ps1`
+  run on its own.
 
 Manual equivalent:
 
@@ -118,17 +132,20 @@ Manual equivalent:
   -ResolverAppId <resolver-app-id>
 ```
 
-`-FlipAfterCleanCompare` deploys, publishes and applies nothing. It reads
-`onboarding/projection-renewal-<prefix>.json`, checks the receipt's values and that the gateway
-calls the resolver deployed with it, runs `scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift`, the
-read-only compare in the runner and admission, writes the entitlement named values to
-`onboarding/projection-switch-<apim>-<UTC time>-<8 hex digits>.json`, and sets `entitlement-source`
-to `projection`; `-WhatIf` stops before the backup ([ADR-0050](adr/0050-projection-switch-function.md)).
+`-FlipAfterCleanCompare` deploys, publishes and applies nothing. It calls
+`Invoke-ClaudeProjectionSwitch -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix>`, checks the
+resolver deployment and service principal, runs `scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift`,
+the read-only compare in the runner and switch evidence, writes the entitlement named values to a
+projection-switch backup, and sets `entitlement-source` to `projection`; `-WhatIf` stops before the
+backup ([ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md)).
 
 Reverse path: `entitlement-source` returns to `named-value` after the lists are refreshed with
-`scripts/Sync-ClaudeAccess.ps1` and checked with `scripts/Compare-ClaudeEntitlement.ps1
+`scripts/Sync-ClaudeAccess.ps1 -Store named-value` and checked with `scripts/Compare-ClaudeEntitlement.ps1
 -FailOnDrift`. Lists not kept current while the projection served traffic can regrant stale
-members or deny new ones; the switch's backup holds the values from before it.
+members or deny new ones; the switch's backup holds the values from before it. A rollback to named
+values holds only a population within their capacity, about 93 developers in business-unit membership
+and about 110 per tier list ([Scale](SCALE.md#what-runs-out-first)); above it, the projection is the only
+store that holds everyone.
 
 ## 4. Change the enterprise network edge
 

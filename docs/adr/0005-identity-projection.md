@@ -1,6 +1,9 @@
 # ADR-0005: Identity resolution is a durable projection, not a directory call
 
-- **Status:** Accepted
+- **Status:** Accepted. The failure-contract row "Record beyond the staleness limit: Deny" and the
+  consequence "Revocation is bounded" are superseded by
+  [ADR-0051](0051-persistent-sync-based-cosmos-entitlement.md) (2026-10-06): records persist until a
+  sync changes or removes them.
 - **Date:** 2026-09-15
 - **Packet:** P19 (planned), recorded now because it reverses an earlier design
 - **Deciders:** claude-code-foundry-gateway maintainers

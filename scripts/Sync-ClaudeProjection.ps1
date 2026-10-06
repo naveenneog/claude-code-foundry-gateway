@@ -1,34 +1,28 @@
 <#
 .SYNOPSIS
-    Populates the entitlement projection in Cosmos from Microsoft Entra groups.
+    Resolves Microsoft Entra group membership into an entitlement snapshot file for the Cosmos projection.
 
 .DESCRIPTION
-    The write side of ADR-0005. Sync-ClaudeAccess.ps1 writes the same membership
-    into API Management named values; this writes it into Cosmos, using the same
-    Graph resolution so the two cannot disagree about who is in a group.
+    The directory side of ADR-0005, export only (ADR-0051 amendment 2). Sync-ClaudeAccess.ps1
+    writes the same membership into API Management named values; this resolves it with the same
+    Graph calls, so the two cannot disagree about who is in a group.
 
-    Both are written while entitlement-source is 'named-value', which is what
-    makes the shadow comparison possible: the projection can be populated,
-    watched and compared for as long as an operator wants before anything reads
-    it. ADR-0009 phase 1 is schema and population; authorisation does not move
-    until the switch is flipped.
-
-    Cosmos here has local authentication disabled, so there is no key to hold.
-    Writes go over the data plane with an Entra token, which means the caller
-    needs a Cosmos data-plane role assignment - see -WhatIf output for the
-    command that grants it.
+    The script writes a snapshot file and contacts no Cosmos endpoint. sync/src/apply-projection.mjs
+    is the one Cosmos writer: it serialises writers with an apply lock and records every sync, and
+    the default Cosmos account has no public endpoint. Sync-ClaudeAccess.ps1 exports with this script
+    and applies the file through the in-network runner.
 
 .PARAMETER Account
-    Cosmos account name. Defaults to cosmos-<prefix> as projection.bicep names it.
+    Cosmos account name, cosmos-<prefix> as projection.bicep names it. Used for the printed apply command.
 
 .PARAMETER WhatIf
-    Resolve and report, writing nothing. Use this first on a live directory.
+    Resolve and report, writing no snapshot file.
 
 .EXAMPLE
-    ./scripts/Sync-ClaudeProjection.ps1 -Account cosmos-claude-gw-fzgql9 -WhatIf
+    ./scripts/Sync-ClaudeProjection.ps1 -Account cosmos-claude-gw-fzgql9 -ApimName apim-claude-gw -ResourceGroup rg-claude-gw -ExportPath snapshot.json -WhatIf
 
 .EXAMPLE
-    ./scripts/Sync-ClaudeProjection.ps1 -Account cosmos-claude-gw-fzgql9
+    ./scripts/Sync-ClaudeProjection.ps1 -Account cosmos-claude-gw-fzgql9 -ApimName apim-claude-gw -ResourceGroup rg-claude-gw -ExportPath snapshot.json
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param(
@@ -52,36 +46,122 @@ param(
     [string]$ApimName,
     [string]$ResourceGroup,
 
-    # A resync after a directory outage can legitimately resolve fewer people.
-    # A resync that resolves nobody is almost always a failure to read Graph,
-    # and deleting every record on the strength of it is unrecoverable without
-    # another sync. Refused unless the operator says otherwise.
-    [switch]$AllowEmpty,
-
-    # Records for identities no longer in any group are removed, because the
-    # resolver treats an absent record as not entitled. Keeping them would leave
-    # access behind after a removal, which is the failure this whole accelerator
-    # is built to avoid.
-    [switch]$KeepOrphans,
-
-    # Resolve membership and write it to a snapshot file instead of to Cosmos.
-    # For a projection with no public endpoint: the operator's own sign-in
-    # reads Graph here, and sync/src/apply-projection.mjs applies the file from
-    # inside the network with an identity that can write only the container.
-    # No credential crosses into the network - only object ids and tiers.
+    # Resolve membership and write it to a snapshot file. Required: the operator's
+    # own sign-in reads Graph here, and sync/src/apply-projection.mjs applies the
+    # file from inside the network with an identity that can write only the
+    # container. No credential crosses into the network - only object ids and tiers.
+    # An empty resolve and orphan removal are decided by the writer (--allow-empty).
     [ValidateRange(60,7200)][int]$MaxAgeSeconds = 7200,
-    [string]$ExportPath
+    [string]$ExportPath,
+
+    # Export a snapshot for one user only. The apply side then upserts or
+    # deletes only that user's record.
+    [string]$User
 )
 
 $ErrorActionPreference = 'Stop'
 if ($PSVersionTable.PSVersion.Major -lt 7) { throw 'Projection sync requires PowerShell 7 or later; run in pwsh.' }
+if ($User -and -not $ExportPath) { throw '-User requires -ExportPath because targeted sync is applied from a snapshot. Remedy: run scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim> -User <upn-or-object-id>, which exports and applies it, or pass -ExportPath <file>.' }
+if (-not $ExportPath) {
+    throw ('Sync-ClaudeProjection.ps1 only resolves membership into a snapshot file (ADR-0051 amendment 2): ' +
+        'sync/src/apply-projection.mjs is the one Cosmos writer, because it takes the apply lock and records each sync. ' +
+        'Nothing was read or written. Remedy: run scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim> ' +
+        '(add -User <upn-or-object-id> for one person), which exports and applies through the runner; or pass -ExportPath <file> ' +
+        'and apply that file on the runner with sync/src/apply-projection.mjs --snapshot.')
+}
 . (Join-Path $PSScriptRoot 'ClaudeGraphMembership.ps1')
-. (Join-Path $PSScriptRoot 'ClaudeProjection.ps1')
 
 function Step($m) { Write-Host "`n==> $m" -ForegroundColor Cyan }
 function Ok($m)   { Write-Host "  [OK]   $m" -ForegroundColor Green }
 function Bad($m)  { Write-Host "  [FAIL] $m" -ForegroundColor Red }
 function Note($m) { Write-Host "         $m" -ForegroundColor DarkGray }
+
+function Resolve-ClaudeProjectionUserObjectId {
+    param([Parameter(Mandatory)][string]$Identity, [Parameter(Mandatory)][string]$Token)
+    $guid = '^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$'
+    if ($Identity -match $guid) { return $Identity.ToLowerInvariant() }
+    if ($Identity -notmatch "^[A-Za-z0-9.!#`$%&'*+/=?^_``{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$") {
+        throw '-User must be an object id GUID or a valid user principal name. Remedy: pass the user''s object id or user principal name, for example -User dev@contoso.com.'
+    }
+    $encoded = [uri]::EscapeDataString($Identity)
+    $user = Invoke-ClaudeGraphRead -Uri "https://graph.microsoft.com/v1.0/users/${encoded}?`$select=id" -Token $Token
+    if (-not $user -or [string]$user.id -notmatch $guid) { throw "Graph did not return a valid object id for user '$Identity'." }
+    return ([string]$user.id).ToLowerInvariant()
+}
+
+function Invoke-ClaudeProjectionCheckMemberGroups {
+    param([Parameter(Mandatory)][string]$UserObjectId, [Parameter(Mandatory)][string[]]$GroupIds, [Parameter(Mandatory)][string]$Token)
+    $guid = '^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$'
+    if ($UserObjectId -notmatch $guid) { throw 'Target user object id must be a GUID.' }
+    $matched = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    for ($i = 0; $i -lt $GroupIds.Count; $i += 20) {
+        $batch = @($GroupIds[$i..([Math]::Min($i + 19, $GroupIds.Count - 1))] | Where-Object { $_ })
+        if (-not $batch.Count) { continue }
+        $body = @{ groupIds = @($batch) } | ConvertTo-Json -Depth 3
+        try {
+            $page = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/users/$UserObjectId/checkMemberGroups" `
+                -Method Post -Headers @{ Authorization = "Bearer $Token"; 'Content-Type' = 'application/json' } `
+                -Body $body -TimeoutSec 30 -ErrorAction Stop
+        } catch {
+            throw "Graph checkMemberGroups failed for target user: $($_.Exception.Message) $(Get-ClaudeGraphFailureRemedy $_.Exception.Message)"
+        }
+        if (-not $page -or -not $page.PSObject.Properties['value'] -or $page.value -isnot [array]) {
+            throw 'Graph checkMemberGroups returned an invalid collection.'
+        }
+        foreach ($id in @($page.value)) { if ($id -match $guid) { $null = $matched.Add([string]$id) } }
+    }
+    return ,$matched
+}
+
+function Get-ClaudeProjectionUnitRegistry {
+    param([string[]]$BusinessUnitGroups, [string]$ApimName, [string]$ResourceGroup)
+    $units = @()
+    if ($BusinessUnitGroups) {
+        foreach ($spec in $BusinessUnitGroups) {
+            $parts = $spec -split '=', 2
+            if ($parts.Count -ne 2) { Write-Warning "Skipping '$spec' - expected id=group-name"; continue }
+            $units += [pscustomobject]@{ Id = $parts[0].Trim(); Group = $parts[1].Trim() }
+        }
+    }
+    elseif ($ApimName -and $ResourceGroup) {
+        . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
+        . (Join-Path $PSScriptRoot 'ClaudeBusinessUnit.ps1')
+        $registry = @(ConvertFrom-ClaudeBuRegistry (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-registry'))
+        $parents = ConvertFrom-ClaudeBuParents (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-parents')
+        $units = @(Sort-ClaudeBuByDepth $registry -Parents $parents)
+    }
+    return @($units)
+}
+
+function Resolve-ClaudeProjectionTargetRecord {
+    param([string]$UserObjectId, [string]$Token, [string]$StandardGroup, [string]$PremiumGroup, [object[]]$Units)
+    $groupSpecs = [Collections.Generic.List[object]]::new()
+    foreach ($spec in @(
+        [pscustomobject]@{ Kind='tier'; Id='premium'; Group=$PremiumGroup },
+        [pscustomobject]@{ Kind='tier'; Id='standard'; Group=$StandardGroup }
+    )) {
+        $group = Get-ClaudeGraphGroup -GroupName $spec.Group -Token $Token
+        if ($group) { $groupSpecs.Add([pscustomobject]@{ Kind=$spec.Kind; Id=$spec.Id; GroupId=[string]$group.id }) }
+    }
+    foreach ($u in @($Units)) {
+        $group = Get-ClaudeGraphGroup -GroupName $u.Group -Token $Token
+        if ($group) { $groupSpecs.Add([pscustomobject]@{ Kind='bu'; Id=$u.Id; GroupId=[string]$group.id }) }
+    }
+    if (-not $groupSpecs.Count) { return $null }
+    $memberships = Invoke-ClaudeProjectionCheckMemberGroups -UserObjectId $UserObjectId -GroupIds @($groupSpecs.GroupId) -Token $Token
+    $tier = ''
+    foreach ($name in 'premium','standard') {
+        $spec = @($groupSpecs | Where-Object { $_.Kind -eq 'tier' -and $_.Id -eq $name } | Select-Object -First 1)
+        if ($spec.Count -and $memberships.Contains($spec[0].GroupId)) { $tier = $name; break }
+    }
+    if (-not $tier) { return $null }
+    $businessUnit = ''
+    foreach ($u in @($Units)) {
+        $spec = @($groupSpecs | Where-Object { $_.Kind -eq 'bu' -and $_.Id -eq $u.Id } | Select-Object -First 1)
+        if ($spec.Count -and $memberships.Contains($spec[0].GroupId)) { $businessUnit = [string]$u.Id; break }
+    }
+    return [pscustomobject]@{ Oid = $UserObjectId; Name = $UserObjectId; Tier = $tier; BusinessUnit = $businessUnit }
+}
 
 # ---------------------------------------------------------------- config file
 if ($ConfigPath) {
@@ -107,6 +187,8 @@ Step 'Signing in'
 $acct = az account show -o json 2>$null | ConvertFrom-Json
 if (-not $acct) { Bad "Run 'az login' first."; exit 1 }
 if (-not $TenantId) { $TenantId = $acct.tenantId }
+# Tenant ids are GUIDs, stored in lower case by the writer; the snapshot carries the same form.
+$TenantId = ([string]$TenantId).ToLowerInvariant()
 Ok "$($acct.user.name)  tenant $TenantId"
 
 # The projection records the tenant on every document, and the resolver refuses
@@ -121,68 +203,46 @@ if ($acct.tenantId -ne $TenantId) {
 }
 
 $graphToken = Get-GraphToken
-
-$cosmosToken = $null
-if (-not $ExportPath) {
-    $cosmosToken = az account get-access-token --resource https://cosmos.azure.com --query accessToken -o tsv 2>$null
-    if (-not $cosmosToken) { Bad 'Could not get a Cosmos data-plane token.'; exit 1 }
-}
-# This is only a placeholder in the role-grant example, not a directory lookup.
-$signedInOid = '<your-object-id>'
-Ok $(if ($ExportPath) { 'Graph token acquired (export only - Cosmos is not contacted)' } else { 'Graph and Cosmos tokens acquired' })
+Ok 'Graph token acquired (export only - Cosmos is not contacted)'
 
 # ---------------------------------------------------------------- 2. resolve
+$units = @(Get-ClaudeProjectionUnitRegistry -BusinessUnitGroups $BusinessUnitGroups -ApimName $ApimName -ResourceGroup $ResourceGroup)
 Step 'Reading group membership'
 $scanStarted = [DateTimeOffset]::UtcNow
 $byOid = @{}
+$targetUserOid = $null
 
-foreach ($t in @(
-    @{ Name = 'premium';  Group = $PremiumGroup },
-    @{ Name = 'standard'; Group = $StandardGroup })) {
-    $members = @(Get-GroupMemberOids -GroupName $t.Group -Token $graphToken)
-    Write-Host ("  {0,-10} {1,-32} {2} member(s)" -f $t.Name, $t.Group, $members.Count)
-    foreach ($m in $members) {
-        # Premium is read first and wins, matching the policy, which checks the
-        # premium list before the standard one. Someone in both groups is
-        # premium in the gateway, so the projection must say the same.
-        if (-not $byOid.ContainsKey($m.Oid)) {
-            $byOid[$m.Oid] = [pscustomobject]@{ Oid = $m.Oid; Name = $m.Name; Tier = $t.Name; BusinessUnit = '' }
+if ($User) {
+    $targetUserOid = Resolve-ClaudeProjectionUserObjectId -Identity $User -Token $graphToken
+    $targetRecord = Resolve-ClaudeProjectionTargetRecord -UserObjectId $targetUserOid -Token $graphToken -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -Units $units
+    if ($targetRecord) { $byOid[$targetRecord.Oid] = $targetRecord }
+    Write-Host ("  {0,-10} {1,-32} {2} record(s)" -f 'user', $targetUserOid, $byOid.Count)
+} else {
+    foreach ($t in @(
+        @{ Name = 'premium';  Group = $PremiumGroup },
+        @{ Name = 'standard'; Group = $StandardGroup })) {
+        $members = @(Get-GroupMemberOids -GroupName $t.Group -Token $graphToken)
+        Write-Host ("  {0,-10} {1,-32} {2} member(s)" -f $t.Name, $t.Group, $members.Count)
+        foreach ($m in $members) {
+            # Premium is read first and wins, matching the policy, which checks the
+            # premium list before the standard one. Someone in both groups is
+            # premium in the gateway, so the projection must say the same.
+            if (-not $byOid.ContainsKey($m.Oid)) {
+                $byOid[$m.Oid] = [pscustomobject]@{ Oid = $m.Oid; Name = $m.Name; Tier = $t.Name; BusinessUnit = '' }
+            }
         }
     }
-}
 
-# Business units, with exactly the precedence Sync-ClaudeAccess.ps1 writes into
-# bu-members: deepest first, so a team wins over the unit that contains it, then
-# registry order, and the first match wins. This used to apply
-# -BusinessUnitGroups in the order given with the last match winning, so anyone
-# in a team and its parent was charged to a different unit here than on the
-# named-value path - and the migration would have moved their spend at the flip
-# without a single entitlement difference to show for it.
-$units = @()
-if ($BusinessUnitGroups) {
-    foreach ($spec in $BusinessUnitGroups) {
-        $parts = $spec -split '=', 2
-        if ($parts.Count -ne 2) { Write-Warning "Skipping '$spec' - expected id=group-name"; continue }
-        $units += [pscustomobject]@{ Id = $parts[0].Trim(); Group = $parts[1].Trim() }
-    }
-}
-elseif ($ApimName -and $ResourceGroup) {
-    . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
-    . (Join-Path $PSScriptRoot 'ClaudeBusinessUnit.ps1')
-    $registry = @(ConvertFrom-ClaudeBuRegistry (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-registry'))
-    $parents = ConvertFrom-ClaudeBuParents (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-parents')
-    $units = @(Sort-ClaudeBuByDepth $registry -Parents $parents)
-}
-
-if ($units.Count) {
-    Step 'Reading business unit membership'
-    $assigned = @{}
-    foreach ($u in $units) {
-        $bm = @(Get-GroupMemberOids -GroupName $u.Group -Token $graphToken)
-        Write-Host ("  {0,-22} {1,-30} {2} member(s)" -f $u.Id, $u.Group, $bm.Count)
-        foreach ($m in $bm) {
-            if (-not $byOid.ContainsKey($m.Oid)) { Note "  $($m.Name) is in $($u.Id) but no tier - not entitled, so not projected"; continue }
-            if (-not $assigned.ContainsKey($m.Oid)) { $byOid[$m.Oid].BusinessUnit = $u.Id; $assigned[$m.Oid] = $true }
+    if ($units.Count) {
+        Step 'Reading business unit membership'
+        $assigned = @{}
+        foreach ($u in $units) {
+            $bm = @(Get-GroupMemberOids -GroupName $u.Group -Token $graphToken)
+            Write-Host ("  {0,-22} {1,-30} {2} member(s)" -f $u.Id, $u.Group, $bm.Count)
+            foreach ($m in $bm) {
+                if (-not $byOid.ContainsKey($m.Oid)) { Note "  $($m.Name) is in $($u.Id) but no tier - not entitled, so not projected"; continue }
+                if (-not $assigned.ContainsKey($m.Oid)) { $byOid[$m.Oid].BusinessUnit = $u.Id; $assigned[$m.Oid] = $true }
+            }
         }
     }
 }
@@ -194,208 +254,37 @@ $generation = [guid]::NewGuid().ToString()
 $verifiedAt = $scanStarted.ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
 $expiresAt = $scanStarted.ToUnixTimeSeconds() + $MaxAgeSeconds
 if ($expiresAt -le [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) {
-    throw 'Directory scan outlived the projection lease. Nothing published; resolve again.'
+    throw 'Directory scan outlived the snapshot apply-by limit. Nothing exported; resolve again. Remedy: rerun this command; a directory whose scan takes longer than -MaxAgeSeconds (at most 7200) is synced by the optional job, scripts/Deploy-ClaudeProjectionRenewal.ps1.'
 }
-
-if ($ExportPath) {
-    Step 'Writing the snapshot'
-    $snapshot = [ordered]@{
-        kind           = 'claude-entitlement-snapshot'
-        tenantId       = $TenantId
-        generatedAt    = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
-        reconciliationGeneration = $generation
-        lastVerifiedAt = $verifiedAt
-        expiresAt      = $expiresAt
-        mappingVersion = [int][double]::Parse((Get-Date -UFormat %s))
-        groups         = [ordered]@{ standard = $StandardGroup; premium = $PremiumGroup; businessUnits = @($BusinessUnitGroups) }
-        records        = @($resolved | ForEach-Object { [ordered]@{ oid = $_.Oid; tier = $_.Tier; businessUnit = $_.BusinessUnit } })
-    }
-    # Without a byte-order mark: Windows PowerShell 5.1 adds one to UTF8 and
-    # JSON.parse in Node refuses it.
-    $full = if ([IO.Path]::IsPathRooted($ExportPath)) { $ExportPath } else { Join-Path (Get-Location) $ExportPath }
-    $full = [IO.Path]::GetFullPath($full)
-    [IO.File]::WriteAllText($full, ($snapshot | ConvertTo-Json -Depth 6), (New-Object System.Text.UTF8Encoding($false)))
-    Ok "$($resolved.Count) record(s) written to $full"
-    Note 'Nothing was written to Cosmos. Apply it from inside the network:'
-    Note "  node sync/src/apply-projection.mjs --cosmos https://$Account.documents.azure.com:443/ --tenant $TenantId --snapshot <file>"
-    exit 0
+Step 'Writing the snapshot'
+$snapshot = [ordered]@{
+    kind           = 'claude-entitlement-snapshot'
+    tenantId       = $TenantId
+    generatedAt    = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+    reconciliationGeneration = $generation
+    lastVerifiedAt = $verifiedAt
+    expiresAt      = $expiresAt
+    mappingVersion = [int][double]::Parse((Get-Date -UFormat %s))
+    groups         = [ordered]@{ standard = $StandardGroup; premium = $PremiumGroup; businessUnits = @($BusinessUnitGroups) }
+    records        = @($resolved | ForEach-Object { [ordered]@{ oid = $_.Oid; tier = $_.Tier; businessUnit = $_.BusinessUnit } })
 }
-
-# ---------------------------------------------------------------- 3. existing
-Step 'Reading what the projection holds now'
-$base = "https://$Account.documents.azure.com"
-$authHeader = "type=aad&ver=1.0&sig=$cosmosToken"
-
-function Invoke-Cosmos {
-    param([string]$Method, [string]$Path, [string]$ResourceType, [string]$ResourceLink,
-          [hashtable]$Extra = @{}, [string]$Body, [switch]$Page)
-    $h = @{
-        'Authorization' = [uri]::EscapeDataString($authHeader)
-        'x-ms-version'  = '2018-12-31'
-        'x-ms-date'     = [DateTime]::UtcNow.ToString('r')
-        'Accept'        = 'application/json'
-    }
-    foreach ($k in $Extra.Keys) { $h[$k] = $Extra[$k] }
-    $p = @{ Uri = "$base$Path"; Method = $Method; Headers = $h; ContentType = 'application/json'; TimeoutSec = 60 }
-    if ($Body) { $p['Body'] = $Body }
-    $response = Invoke-WebRequest @p -UseBasicParsing
-    $data = if ($response.Content) { $response.Content | ConvertFrom-Json } else { $null }
-    if ($Page) { return @{ Documents = @($data.Documents); Continuation = [string]$response.Headers['x-ms-continuation'] } }
-    return $data
+if ($targetUserOid) {
+    $snapshot.scope = 'user'
+    $snapshot.user = $targetUserOid
 }
-
-$existing = @{}
-try {
-    $q = @{ query = 'SELECT c.id, c.oid, c.tier, c.businessUnit, c.mappingVersion FROM c' } | ConvertTo-Json -Compress
-    $existing = Get-ClaudeProjectionExisting -ReadPage {
-        param($continuation)
-        $headers = @{ 'x-ms-documentdb-isquery' = 'True'
-                      'Content-Type' = 'application/query+json'
-                      'x-ms-max-item-count' = '1000'
-                      'x-ms-documentdb-query-enablecrosspartition' = 'True' }
-        if ($continuation) { $headers['x-ms-continuation'] = $continuation }
-        Invoke-Cosmos -Method POST -Path "/dbs/$Database/colls/$Container/docs" -Extra $headers -Body $q -Page
-    }
-    Ok "$($existing.Count) record(s) already there"
+# Without a byte-order mark: Windows PowerShell 5.1 adds one to UTF8 and
+# JSON.parse in Node refuses it.
+$full = if ([IO.Path]::IsPathRooted($ExportPath)) { $ExportPath } else { Join-Path (Get-Location) $ExportPath }
+$full = [IO.Path]::GetFullPath($full)
+if (-not $PSCmdlet.ShouldProcess($full, 'write the entitlement snapshot')) {
+    Note "WhatIf: $($resolved.Count) record(s) resolved; no snapshot file was written and Cosmos was not contacted."
+    $global:LASTEXITCODE = 0
+    return
 }
-catch {
-    $code = 0
-    if ($_.Exception.Response) { try { $code = [int]$_.Exception.Response.StatusCode } catch { } }
-    $body = ''
-    if ($_.ErrorDetails -and $_.ErrorDetails.Message) { $body = $_.ErrorDetails.Message }
-
-    # A 403 from Cosmos has more than one cause and they need different people
-    # to fix them. Read what it said rather than assuming: measured on a real
-    # account where the message was a firewall block and the obvious guess was
-    # a missing data-plane role.
-    if ($code -eq 403 -and $body -match 'firewall|public internet|blocked by your') {
-        Bad 'Forbidden by the Cosmos firewall, not by a role.'
-        $ip = ''
-        if ($body -match 'IP ([0-9.]+)') { $ip = $Matches[1] }
-        if ($ip) { Note "This machine came from $ip, which the account does not allow." }
-        Note 'Whoever owns the account decides this. Either it is reachable from'
-        Note 'where the sync runs, or the sync runs somewhere it is reachable from.'
-        Note ''
-        Note "  az cosmosdb show -n $Account -g <rg> --query ""{public:publicNetworkAccess, ipRules:ipRules}"""
-        Note ''
-        Note 'publicNetworkAccess Disabled means only a private endpoint reaches it,'
-        Note 'which no laptop has. An Azure Policy can set that without anyone'
-        Note 'choosing it, so check before assuming the template did.'
-        exit 1
-    }
-    if ($code -eq 403) {
-        Bad 'Forbidden reading the container, and the message does not mention the firewall.'
-        Note 'That leaves the data-plane role. Control-plane roles such as Contributor'
-        Note 'do not grant data access here, and a new assignment takes a few minutes.'
-        Note ''
-        Note 'az cosmosdb sql role assignment create \'
-        Note "  --account-name $Account --resource-group <rg> \"
-        Note '  --role-definition-name "Cosmos DB Built-in Data Contributor" \'
-        Note "  --principal-id $signedInOid \"
-        Note '  --scope /'
-        if ($body) { Note ''; Note "Cosmos said: $(($body -split "`r?`n")[0])" }
-        exit 1
-    }
-    Bad "Could not read the container: $($_.Exception.Message)"
-    if ($body) { Note (($body -split "`r?`n")[0]) }
-    exit 1
-}
-
-# ---------------------------------------------------------------- 4. compare
-Step 'What would change'
-$mappingVersion = [int][double]::Parse((Get-Date -UFormat %s))
-$toWrite = [Collections.Generic.List[object]]::new()
-$unchanged = 0
-foreach ($r in $resolved) {
-    $cur = $existing[$r.Oid]
-    if ($cur) {
-        # No ?? here: Windows PowerShell 5.1 is what an admin's box runs.
-        $curBu = ''
-        if ($cur.businessUnit) { $curBu = $cur.businessUnit }
-        if ($cur.tier -eq $r.Tier -and $curBu -eq $r.BusinessUnit) { $unchanged++ }
-    }
-    $toWrite.Add($r)
-}
-$orphans = @($existing.Keys | Where-Object { -not $byOid.ContainsKey($_) })
-
-Write-Host ("  {0,6}  unchanged" -f $unchanged)
-Write-Host ("  {0,6}  to write" -f $toWrite.Count)
-Write-Host ("  {0,6}  no longer entitled" -f $orphans.Count)
-
-if ($resolved.Count -eq 0 -and $existing.Count -gt 0 -and -not $AllowEmpty) {
-    Write-Host ''
-    Bad "Groups resolved to nobody while the projection holds $($existing.Count) record(s)."
-    Note 'Removing them all would revoke everyone, and a directory that cannot be'
-    Note 'read looks exactly like a directory with nobody in it. Refusing.'
-    Note 'Check the group names and that you can read their membership, then'
-    Note 're-run with -AllowEmpty if the emptiness is real.'
-    exit 1
-}
-
-if ($WhatIfPreference) {
-    Write-Host ''
-    Note 'WhatIf: nothing written.'
-    foreach ($r in $toWrite | Select-Object -First 10) { Note "  would write $($r.Oid)  $($r.Tier)  $($r.BusinessUnit)" }
-    if ($toWrite.Count -gt 10) { Note "  ... and $($toWrite.Count - 10) more" }
-    foreach ($o in $orphans | Select-Object -First 10) { Note "  would remove $o" }
-    exit 0
-}
-
-# ---------------------------------------------------------------- 5. write
-Step 'Writing'
-if ($expiresAt -le [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) { throw 'Projection expired before writing; resolve again.' }
-$written = 0; $failed = 0
-foreach ($r in $toWrite) {
-    $doc = @{
-        id             = $r.Oid
-        oid            = $r.Oid
-        tenantId       = $TenantId
-        tier           = $r.Tier
-        businessUnit   = $r.BusinessUnit
-        mappingVersion = $mappingVersion
-        effectiveFrom  = $null
-        reconciliationGeneration = $generation
-        lastVerifiedAt = $verifiedAt
-        expiresAt      = $expiresAt
-    } | ConvertTo-Json -Compress
-    try {
-        Invoke-Cosmos -Method POST -Path "/dbs/$Database/colls/$Container/docs" `
-            -Extra @{ 'x-ms-documentdb-is-upsert' = 'True'
-                      'x-ms-documentdb-partitionkey' = "[""$($r.Oid)""]" } `
-            -Body $doc | Out-Null
-        $written++
-    }
-    catch { $failed++; Write-Warning "  $($r.Oid): $($_.Exception.Message)" }
-}
-Ok "$written record(s) written"
-if ($failed) { Bad "$failed record(s) failed" }
-
-$removed = 0
-if ($orphans.Count -gt 0 -and -not $KeepOrphans) {
-    foreach ($o in $orphans) {
-        try {
-            Invoke-Cosmos -Method DELETE -Path "/dbs/$Database/colls/$Container/docs/$o" `
-                -Extra @{ 'x-ms-documentdb-partitionkey' = "[""$o""]" } | Out-Null
-            $removed++
-        } catch { $failed++; Write-Warning "  could not remove $o : $($_.Exception.Message)" }
-    }
-    Ok "$removed record(s) removed"
-}
-elseif ($orphans.Count -gt 0) {
-    Write-Host "  [WARN] $($orphans.Count) orphan(s) kept (-KeepOrphans)" -ForegroundColor Yellow
-    Note 'Their existing lease is not renewed. They lose access at its absolute expiry.'
-}
-
-Write-Host ''
-if ($expiresAt -le [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) {
-    $failed++
-    Write-Warning 'Projection expired during apply; resolve again and investigate scan/apply duration.'
-}
-Write-Host "$written entitled identity(ies) refreshed; $failed failure(s)." -ForegroundColor Green
-Note "mappingVersion $mappingVersion - a cached answer can be traced to this run."
-Write-Host ''
-if ($failed) { exit 1 }
-Note 'This changes nothing about who the gateway lets in. Authorisation moves'
-Note "only when entitlement-source is set to 'projection'; until then this is"
-Note 'a shadow copy to compare against. Compare-ClaudeEntitlement.ps1 does that.'
-Write-Host ''
+[IO.File]::WriteAllText($full, ($snapshot | ConvertTo-Json -Depth 6), (New-Object System.Text.UTF8Encoding($false)))
+Ok "$($resolved.Count) record(s) written to $full"
+Note 'Nothing was written to Cosmos. scripts/Sync-ClaudeAccess.ps1 applies a snapshot through the runner.'
+Note 'To apply this file by hand from inside the network:'
+Note "  node sync/src/apply-projection.mjs --cosmos https://$Account.documents.azure.com:443/ --tenant $TenantId --account-resource-id <account-id> --snapshot <file>"
+Note "  <account-id> is the output of: az cosmosdb show -n $Account -g <rg> --query id -o tsv"
+$global:LASTEXITCODE = 0

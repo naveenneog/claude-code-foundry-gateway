@@ -101,6 +101,9 @@ deployment by hand fails ([P94 status](status/P94.md#p94-the-p86-renewal-job-dep
 | P94 | Merged (`ce8b084`) with the owner's approval on 2026-10-05, after council round 3 and the packet gate at `5320b17` | The P86 renewal job deploys and renews: one sync package for the image and the runner (the image and runner currently miss `resolver/src/entitlement.mjs`), a renewal subnet in the projection network, a registry template deployed before the image build, the job's client id, tier group ids and per-run business units, working log routing and alerts, `scripts/Deploy-ClaudeProjectionRenewal.ps1`, an offline renewal simulation that reaches admission, and the guide and its guard ([ADR-0049](adr/0049-projection-renewal-deployment.md)). |
 | P95 | Merged (`4e5ad2f`) with the owner's approval on 2026-10-05, after P94, council round 5 and the packet gate at `8c13d79` | The switch-over runs end to end: a switch never repopulates; one switch function for the deployer, installer and guided flow (receipt and resolver checks, drift check, compare, admission, backup, one named-value write); the guided flow reads the renewal receipt from its decision record's folder or the repository's `onboarding/`; every receipt value is checked before any call; the gateway must call the resolver that reads the renewed Cosmos account, read from the live site and its settings, and the deployer's normal run points it there, but on a gateway already on the projection stops before any write unless it redeploys the resolver the gateway calls; the installer reads `entitlement-source` and the resolver values fail-closed and takes a gateway for new only when Azure reports it missing; the guided flow's plan lists its one write and the documented rollback; admission requires an email receiver on the action group; admission binds the job's tier group ids, gateway, identity, Cosmos account and tenant to the evidence it accepts and to the compared gateway, so a renewal redeploy that changes them needs fresh runs; a restore does not switch to the projection; P84 text replaced; an owner-attended live runbook. |
 | P96 | Merged (`755845c`) on 2026-10-06 with the owner's approval of 2026-10-05, after council round 7 and the packet gate at `c7f93d4` | Fixes from a live deployment: a new business unit identifier with a capital is refused with the lower-case rule before any write, by `Set-ClaudeBusinessUnit.ps1`, the AUM bridge and the manager's prompt; another spelling of a stored unit is refused with the stored spelling, the writers compare identifiers by their characters and keep each spelling's mode and parent entry, and a budget mode is refused for an identifier with capitals, while a unit the registry already holds with capitals keeps working; the guided flow's Tier and Desktop sign-in changes name their snapshot before their write ([P96 status](status/P96.md#p96-fixes-from-a-live-deployment-2026-10-05)). |
+| P97 | On `p97-cosmos-sync`, based on `main` with P96; the owner approved its merge, live testing and architecture decisions on 2026-10-05; merges after its council and packet gate | Cosmos entitlement persists until a sync changes it, and syncs run on demand: records carry no lease and a sync writes only changes; `Sync-ClaudeAccess.ps1 -User` publishes one developer's change; `sync/src/apply-projection.mjs` is the one Cosmos writer, serialised by an apply lock, and refuses stale snapshots; the switch admits on a full sync within 24 hours without the job; the job is optional and manual by default ([ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md), [P97 status](status/P97.md#p97-cosmos-entitlement-persists-until-a-sync-changes-it-2026-10-05)). |
+| P98 | On `p98-installer`, based on P97; the owner approved its merge, live testing and architecture decisions on 2026-10-05; merges with P97 after its council and the packet gate | The installer deploys the Cosmos projection by default: it is the recommended store for every size and `-Yes` chooses it; choosing it deploys, populates, compares and switches the gateway; a re-run migrates a named-value gateway and keeps a projection gateway's resolver access; named values above their capacity are refused; above that capacity the comparison baseline is a fresh Entra snapshot; the resolver is public by default; `-DeploySyncJob` adds the optional job; README, Setup and the projection guide open with a quickstart ([ADR-0052](adr/0052-cosmos-default-installer.md), [P98 status](status/P98.md#p98-the-installer-deploys-the-cosmos-projection-by-default-2026-10-06)) |
+| P99 | Next: starts after P97 and P98 merge | Directory-scale snapshot transfer: the deployer's populate step, the switch's snapshot compare and full syncs move a snapshot of 500,000 developers within its apply-by time, instead of about 40,000 through `az container exec` today ([ADR-0052](adr/0052-cosmos-default-installer.md), [P98 status](status/P98.md#p98-the-installer-deploys-the-cosmos-projection-by-default-2026-10-06)) |
 
 Follow-ups from the P94 council, not yet packets: `sync/package-lock.json` carries `sha1` integrity
 for 50 of its 53 packages because this workstation reaches npm only through a feed whose metadata
@@ -169,6 +172,59 @@ snapshot path. Follow-ups from P96, not yet packets
   locally and passed on attempt 3. The cause is not confirmed: each pipe read blocks a thread-pool thread,
   six runs at a time. Waiting for the read until the run's timeout, and failing with "output not captured"
   instead of matching empty text, would separate a capture failure from a wrong answer.
+
+Follow-ups from P97, not yet packets
+([P97 status](status/P97.md#p97-cosmos-entitlement-persists-until-a-sync-changes-it-2026-10-05)):
+
+- A full sync through the runner sends its snapshot in `az container exec` chunks of under 5,000
+  characters, about five seconds each (`scripts/ClaudeRunner.ps1`), so a directory of 500,000 developers
+  takes hours; the optional job reads Graph inside the network instead. A snapshot that the runner reads
+  from a storage blob would remove the limit.
+- The apply lock compares lease times written by each holder's clock. Both writers, the runner and the
+  job, run in Azure; a writer whose clock runs fast by more than the lease's remaining time could take
+  over a live lease, and the holder's next renewal then stops it.
+- `tests/Test-ProjectionPreflightNegative.ps1` is not registered in Test-All, and some of its anchors no
+  longer exist (for example `-FailOnDrift:$true` in the deployer).
+- A snapshot's scan time (`lastVerifiedAt`) comes from the exporting machine's clock. A clock that runs
+  fast makes an older snapshot look newer than a sync that finished after it, so the snapshot passes the
+  stale-change refusals. Taking the time from Microsoft Graph's `Date` response header would remove the
+  dependence on the local clock.
+- A status record whose `finishedAt` lies in the future, written by a writer whose clock runs fast, makes
+  every later snapshot look older, so applies refuse until that time passes.
+- A writer that stops after its record writes and before its status record leaves no status for those
+  changes. The lock does not record which people the apply touched, so an older full snapshot applied
+  afterwards can undo a targeted change made in that window.
+- A sync job deployed before ADR-0051 runs an image that writes `expiresAt` and takes no apply lock until
+  `scripts/Deploy-ClaudeProjectionRenewal.ps1` runs again; nothing detects such a job. Comparing the
+  job's image digest with the current package would.
+
+Follow-ups from P98, not yet packets
+([P98 status](status/P98.md#p98-the-installer-deploys-the-cosmos-projection-by-default-2026-10-06)):
+
+- `install-claude-gateway.sh` (macOS and Linux) installs named values only; the projection path needs
+  PowerShell 7 ([ADR-0052](adr/0052-cosmos-default-installer.md)).
+- The deployer adopts an existing resolver app found by `az ad app list --display-name`, a
+  `startswith` filter (`scripts/ClaudeProjectionChecks.ps1`). A tenant user who may register apps can
+  create the app first under a predictable prefix and then break the resolver's authentication.
+- The resolver build runs `npm install` without a lockfile or `--ignore-scripts` on the operator's
+  machine (`scripts/Deploy-ClaudeProjection.ps1`); the sync package uses `npm ci --ignore-scripts`.
+- The installer's named-value capacity refusal uses the business-unit ceiling (about 93) also on a gateway
+  without business units, where a tier list holds about 110, so an unattended re-run that keeps named values
+  is refused between 94 and 110 developers.
+- The business-unit negative shards take 650 to 750 seconds in the packet gate on the owner's workstation (383 to
+  531 at P96) and run under a 900-second per-check override (ADR-0025), as shard 0 did. Splitting the suite into six
+  shards, or speeding up the suites its mutants rerun, would restore the 600-second default.
+- `scripts/Deploy-ClaudeProjection.ps1` prints "named values remain authoritative" after every deploy run; on a
+  re-run of a gateway already on the projection, the projection is what serves.
+- The packet gate keeps the last 40 lines of a failing command's output, so a failing Test-All check is named
+  without its cause; "Workstation clients read what setup writes" failed once in a gate (`945c04e`) and passed
+  alone (178 assertions).
+- The live verifier's teardown does not report a failed `az role assignment list`; the gateway identity is
+  deleted with the resource group, so a leftover assignment grants nothing.
+- `Assert-ClaudeInstallerProjectionPrerequisites` repeats the deployer's PowerShell and tool checks
+  (`scripts/ClaudeProjectionChecks.ps1`) instead of reusing them.
+- The installer still accepts `-DeployProjection` and `-FlipProjectionAfterCleanCompare` and ignores
+  them (SETUP says so); removing them is a breaking change for existing scripts.
 
 M0 is shipped. The table below is the queue; the checklist under it is what the gate tracks.
 
@@ -600,6 +656,23 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       budget and can be removed; the guided flow's Tier and Desktop sign-in changes name their snapshot
       under `backups/` and the write gate takes it
       ([P96 status](status/P96.md#p96-fixes-from-a-live-deployment-2026-10-05))
+- [ ] P99 directory-scale snapshot transfer — acceptance: a snapshot of 500,000 records is applied and compared
+      within its apply-by time, and the switch admits a gateway of that size, measured live; an ADR records
+      the transport ([P98 status](status/P98.md#p98-the-installer-deploys-the-cosmos-projection-by-default-2026-10-06))
+- [ ] P98 the installer deploys the Cosmos projection by default — acceptance: `-Yes` without `-EntitlementStore`
+      chooses the projection; choosing it deploys, populates and compares, then switches, and a failure leaves
+      the current store serving with the rerun command; `-WhatIf` lists the steps and changes nothing; a
+      re-run migrates a named-value gateway and keeps a projection gateway's resolver access; named values
+      above their capacity are refused; every argument binds to the real deployers; the live verifier proves
+      200, 403 after a removal and 200 after re-adding, and deletes only what it created
+      ([P98 status](status/P98.md#p98-the-installer-deploys-the-cosmos-projection-by-default-2026-10-06))
+- [ ] P97 Cosmos entitlement persists until a sync changes it — acceptance: records carry no expiry and
+      a sync writes only changes; a legacy record is served until its old expiry and rewritten by the next
+      sync; `Sync-ClaudeAccess.ps1 -User` writes or deletes only that person's record; one writer,
+      serialised by an apply lock, refuses stale snapshots and requires the account id; the switch admits
+      on a full sync within 24 hours and no record the resolver would refuse; the deployer creates the
+      resolver's service principal, refuses another region and records the prefix; the job is optional
+      ([P97 status](status/P97.md#p97-cosmos-entitlement-persists-until-a-sync-changes-it-2026-10-05))
 - [x] P72 permutation tests of the guided flow and the installer — acceptance: every combination of
       action (Setup, Change foundation, Guide, Status), record state (none, recorded and matching,
       recorded with another gateway URL, recorded but missing, not readable), mode (attended,

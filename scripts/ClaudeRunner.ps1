@@ -29,7 +29,56 @@
     Invoke-RunnerCommand -ResourceGroup rg -Name aci-projtest-x -Command 'node --version'
 #>
 
-function Invoke-RunnerCommand {
+    function Assert-ClaudeRunnerAzName {
+        param([AllowEmptyString()][string]$Value)
+        if ($Value -and $Value -notmatch '^[A-Za-z0-9._-]+$') { throw "Runner command refused: '$Value' is not a name of letters, digits, '.', '_' or '-'." }
+    }
+
+    function Start-ClaudeProjectionRunner {
+        param(
+            [Parameter(Mandatory)][string]$ResourceGroup,
+            [Parameter(Mandatory)][string]$Name,
+            [string]$SubscriptionId,
+            [int]$WaitTimeoutSeconds = 600,
+            [int]$PollSeconds = 10
+        )
+        foreach ($target in @($ResourceGroup, $Name, $SubscriptionId)) { Assert-ClaudeRunnerAzName $target }
+        if ($WaitTimeoutSeconds -lt 1 -or $WaitTimeoutSeconds -gt 3600) { throw 'Runner wait timeout must be between 1 and 3600 seconds.' }
+        if ($PollSeconds -lt 1 -or $PollSeconds -gt 120) { throw 'Runner poll interval must be between 1 and 120 seconds.' }
+        $subscriptionArgs = @()
+        if ($SubscriptionId) { $subscriptionArgs = @('--subscription', $SubscriptionId) }
+        function ReadRunnerState {
+            $saved = $ErrorActionPreference
+            try {
+                $ErrorActionPreference = 'Continue'
+                $global:LASTEXITCODE = 0
+                $out = @(az container show -g $ResourceGroup -n $Name --query instanceView.state -o tsv @subscriptionArgs 2>&1)
+                $code = $LASTEXITCODE
+            } finally { $ErrorActionPreference = $saved }
+            if ($code -ne 0) { throw "Could not read runner '$Name' in '$ResourceGroup' (az exit $code). Remedy: redeploy with scripts/Deploy-ClaudeProjection.ps1 and verify the operator can read the container group." }
+            return (($out | Where-Object { $_ -isnot [Management.Automation.ErrorRecord] } | Select-Object -Last 1) -as [string]).Trim()
+        }
+        $state = ReadRunnerState
+        if ($state -eq 'Running') { return [pscustomobject]@{ ResourceGroup=$ResourceGroup; Name=$Name; State=$state } }
+        $saved = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'
+            $global:LASTEXITCODE = 0
+            $out = @(az container start -g $ResourceGroup -n $Name @subscriptionArgs 2>&1)
+            $code = $LASTEXITCODE
+        } finally { $ErrorActionPreference = $saved }
+        if ($code -ne 0) { throw "Could not start runner '$Name' (az exit $code). Remedy: redeploy with scripts/Deploy-ClaudeProjection.ps1, then rerun the sync." }
+        $waited = 0
+        while ($waited -lt $WaitTimeoutSeconds) {
+            Start-Sleep -Seconds $PollSeconds
+            $waited += $PollSeconds
+            $state = ReadRunnerState
+            if ($state -eq 'Running') { return [pscustomobject]@{ ResourceGroup=$ResourceGroup; Name=$Name; State=$state } }
+        }
+        throw "Runner '$Name' did not reach Running within $WaitTimeoutSeconds seconds (last state '$state'). Remedy: inspect 'az container show -g $ResourceGroup -n $Name', or redeploy with scripts/Deploy-ClaudeProjection.ps1."
+    }
+
+    function Invoke-RunnerCommand {
     param(
         [Parameter(Mandatory)][string]$ResourceGroup,
         [Parameter(Mandatory)][string]$Name,
@@ -42,9 +91,7 @@ function Invoke-RunnerCommand {
     if ($Command -match '["%+&|<>^\r\n]') {
         throw 'Runner command refused: it holds a quote, +, %, &, |, <, >, ^ or a line break, which the runner or cmd.exe would change.'
     }
-    foreach ($target in @($ResourceGroup, $Name, $Container, $SubscriptionId)) {
-        if ($target -and $target -notmatch '^[A-Za-z0-9._-]+$') { throw "Runner command refused: '$target' is not a name of letters, digits, '.', '_' or '-'." }
-    }
+    foreach ($target in @($ResourceGroup, $Name, $Container, $SubscriptionId)) { Assert-ClaudeRunnerAzName $target }
     $arguments = @('container','exec','-g',$ResourceGroup,'-n',$Name,'--container-name',$Container,'--exec-command',$Command)
     if ($SubscriptionId) { $arguments += @('--subscription',$SubscriptionId) }
     $saved = $ErrorActionPreference
@@ -58,6 +105,14 @@ function Invoke-RunnerCommand {
         throw "runner transport failed (az exit $code)."
     }
     return $out.Trim()
+}
+
+# A writer refusal's stage and remedy are shown; its error text, which can name holders and counts, is not.
+# The remedy is the writer's fixed guidance: printable ASCII, with no address and no object id.
+function Test-ClaudeRunnerStage([string]$Stage) { return ($Stage -cmatch '^[a-z][a-z-]{0,39}\z') }
+function Test-ClaudeRunnerRemedy([string]$Remedy) {
+    return ($Remedy -cmatch '^Remedy: [\x20-\x7E]{1,400}\z' -and $Remedy -notmatch '@' -and
+        $Remedy -notmatch '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}')
 }
 
 function Write-ClaudeRunnerOutput {
@@ -79,6 +134,10 @@ function Write-ClaudeRunnerOutput {
                     $safe.Add("$field=$($property.Value)")
                 }
             }
+            $stage = $doc.PSObject.Properties['stage']
+            if ($stage -and (Test-ClaudeRunnerStage ([string]$stage.Value))) { $safe.Add("stage=$($stage.Value)") }
+            $remedy = $doc.PSObject.Properties['remedy']
+            if ($remedy -and (Test-ClaudeRunnerRemedy ([string]$remedy.Value))) { $safe.Add("remedy=$($remedy.Value)") }
             $samples = $doc.PSObject.Properties['sample']
             if ($samples) {
                 foreach ($sample in @($samples.Value | Select-Object -First 3)) {
@@ -107,15 +166,31 @@ function Get-ClaudeRunnerDigest {
 
 function ConvertFrom-ClaudeRunnerResult {
     param([AllowEmptyString()][string]$RawOutput, [string]$Step)
+    $result = $null
     try {
         $last = $RawOutput.TrimEnd("`r", "`n") -split '\r?\n' | Select-Object -Last 1
         $result = $last | ConvertFrom-Json -ErrorAction Stop
-        if (-not $result -or $result.ok -isnot [bool] -or -not $result.ok) { throw 'The runner summary must contain boolean ok:true.' }
-        return $result
-    } catch {
-        Write-ClaudeRunnerOutput -RawOutput $RawOutput -Step $Step
-        throw "$Step failed: runner summary is malformed or not boolean ok:true. Sanitized diagnostics are shown above."
+    } catch { $result = $null }
+    if ($result -and $result.ok -is [bool] -and $result.ok) { return $result }
+    Write-ClaudeRunnerOutput -RawOutput $RawOutput -Step $Step
+    # A writer refusal (ok:false with a stage) is named with its remedy; anything else is malformed.
+    if ($result -and $result.ok -is [bool] -and $result.PSObject.Properties['stage'] -and (Test-ClaudeRunnerStage ([string]$result.stage))) {
+        $remedy = if ($result.PSObject.Properties['remedy'] -and (Test-ClaudeRunnerRemedy ([string]$result.remedy))) { " $([string]$result.remedy)" } else { '' }
+        throw "$Step refused at stage $([string]$result.stage).$remedy Sanitized diagnostics are shown above."
     }
+    throw "$Step failed: runner summary is malformed or not boolean ok:true. Sanitized diagnostics are shown above."
+}
+
+# A snapshot's apply-by time, from the expiresAt (Unix seconds) in its header; $null for a file without one.
+# The header comes before the records, so the first 64 KB holds it.
+function Get-RunnerFileDeadline {
+    param([Parameter(Mandatory)][string]$Path)
+    $stream = [IO.File]::OpenRead((Resolve-Path -LiteralPath $Path).Path)
+    try { $buffer = New-Object byte[] 65536; $read = $stream.Read($buffer, 0, $buffer.Length) }
+    finally { $stream.Dispose() }
+    $found = [regex]::Match([Text.Encoding]::UTF8.GetString($buffer, 0, $read), '"expiresAt"\s*:\s*(\d{9,12})\b')
+    if (-not $found.Success) { return $null }
+    return [DateTimeOffset]::FromUnixTimeSeconds([long]$found.Groups[1].Value)
 }
 
 function Send-RunnerFile {
@@ -125,7 +200,12 @@ function Send-RunnerFile {
         [Parameter(Mandatory)][string]$Path,
         [Parameter(Mandatory)][string]$Destination,
         [int]$ChunkSize = 4900,
-        [string]$SubscriptionId
+        [string]$SubscriptionId,
+        # A snapshot's apply-by time (Get-RunnerFileDeadline). A transfer estimated to end after it is refused
+        # before the first exec, rather than failing at the apply-by check hours later (P98 council round 2).
+        [Nullable[DateTimeOffset]]$Deadline,
+        # One exec is about five seconds, whatever it does (measured 2026-09-23; see the notes above).
+        [double]$SecondsPerCommand = 5
     )
     if ($Destination -match '\s') { throw "Destination '$Destination' contains a space; exec cannot pass it." }
     $bytes = [IO.File]::ReadAllBytes((Resolve-Path $Path))
@@ -141,6 +221,21 @@ function Send-RunnerFile {
     # under that once the surrounding program is counted.
     $overhead = ("node -e require('fs').appendFileSync('$tmp','')").Length
     $ChunkSize = [Math]::Min($ChunkSize, 4990 - $overhead)
+    if ($null -ne $Deadline) {
+        # PowerShell hands a bound Nullable[DateTimeOffset] over as the DateTimeOffset itself.
+        $applyBy = [DateTimeOffset]$Deadline
+        $commands = [int][Math]::Ceiling($b64.Length / $ChunkSize) + 2
+        $seconds = $commands * $SecondsPerCommand
+        if ([DateTimeOffset]::UtcNow.AddSeconds($seconds) -gt $applyBy) {
+            throw ("Sending $Path ($($bytes.Length) bytes) to runner $Name takes about $([Math]::Ceiling($seconds / 60)) minutes ($commands az container exec " +
+                "commands of about $SecondsPerCommand seconds each), past the snapshot's apply-by time $($applyBy.UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ssZ')). " +
+                "The snapshot was not sent and nothing was written. Through the runner, a snapshot of about 40,000 developers fits in the 2-hour apply-by time. " +
+                "A full sync of this size runs in the optional sync job, which reads Microsoft Graph inside the network and needs the GroupMember.Read.All grant that its " +
+                "deployment prints: .\scripts\Deploy-ClaudeProjectionRenewal.ps1 -ResourceGroup $ResourceGroup -ApimName <apim> -NamePrefix $($Name -replace '^aci-projtest-', '') " +
+                "-AlertEmail <address>, then az containerapp job start. The populate step and the switch's snapshot compare at this size need the directory-scale " +
+                "transfer planned as ROADMAP packet P99.")
+        }
+    }
     $null = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $Name -SubscriptionId $SubscriptionId -Command "node -e require('fs').mkdirSync('$dir',{recursive:true});require('fs').writeFileSync('$tmp','')"
     for ($i = 0; $i -lt $b64.Length; $i += $ChunkSize) {
         $part = $b64.Substring($i, [Math]::Min($ChunkSize, $b64.Length - $i))

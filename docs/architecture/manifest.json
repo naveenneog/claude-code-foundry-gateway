@@ -8,15 +8,15 @@
         "Start-ClaudeGateway.ps1": "86e92a50b603e0466f2d94ef03964f1ef8a511fe49262bfb694d6df32ad2d4dc",
         "analytics/chargeback-cost.kql": "8d8a66a8980348851f37889579bf019666b229105bb4e64caae02c474de080b1",
         "analytics/chargeback-ledger.kql": "3924ba7e4edb21d761b16254452c0509a2a9d27558033d7a980c5e201e22b2f5",
-        "docs/architecture/01-system.json": "dfb279d7bec41abefa25f18d44dfef14c47435d4d45467577f02cc4ca6d8b4f3",
+        "docs/architecture/01-system.json": "104e5c44f8fb3e219304e235f37e9064ff08a8ff4b923b835de82f20ec865f8f",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
         "infra/foundry-role.bicep": "96a1602ea171dfcd975bb5b7e0f18a1b32f1e9e6d74e306298836b518db72d50",
         "infra/main.bicep": "c449423ad43d86c9c15b56c19d18ece9d7681cd627efb7110b38d06b6b0ba82b",
-        "infra/policy.xml": "afa3bf916dd99e837d0ac190aa7e2f4cdccb08877221f44f853ce1885e257105",
+        "infra/policy.xml": "b3de0787be16c3a6afd1d9c4925a6ae3922d1b5f209aeeb499cfe3323d4f37b5",
         "infra/projection-network.bicep": "5ec1c96f8ca50ca52d64e957eda2f84810b0850ab2379feb0d7ad4324a18992e",
-        "infra/projection.bicep": "dae83ef1bfe60675e49e50ddf7c795c15d9868ea9a9c72e924a4593a208a8a91",
+        "infra/projection.bicep": "dc9f8a58ca7e0b462cde24a88cc670d78b2a60d0321f3f31ccdb505429d08465",
         "infra/resolver.bicep": "d90c34a0d2b77bfaf0a7589f093ef9e32de1356d4f2cafb1a6180f6966c01f6f",
         "infra/turnstile-schedule.bicep": "54d4b2d5897a14fd580887113f697fafc3cb2993b70b5cf7368adead956a9e36",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
@@ -29,22 +29,22 @@
         "scripts/Grant-ClaudeGovernanceGraphAccess.ps1": "2313313010eef6867f730bbb1803b7a0a68113a3ad961f798627e274aff56b1a",
         "scripts/Publish-ClaudeQueries.ps1": "d54164f58a76b5d352d46d615da8f877f16df61ce9d2ecb0f3d3c1e7c6a7c72b",
         "scripts/Setup-ClaudeWorkstation.ps1": "540c547d8af1dedc264bd5ac9575e413b2c3564f2554187c55025b3cbd7e0b95",
-        "scripts/Sync-ClaudeAccess.ps1": "f4f5896df08c22bbfa9702ac0afa532e4cc4c4c990a82a4d7d4676b43e8c0c84",
-        "scripts/Sync-ClaudeProjection.ps1": "0a30b7b4178700d9eb4879d4cb78c01bacf932e21b0856f0f532e38a06a24ca7",
+        "scripts/Sync-ClaudeAccess.ps1": "8d69cfebf48431a3c7b6b8fdb41916acee824e426650f4bda77b70f8e16122fe",
+        "scripts/Sync-ClaudeProjection.ps1": "67976f06318afec6f1e3b949e9ff6d5a4b1204201459ed0fc5f2e3e20cec2232",
         "scripts/flow/DeviceProfiles.ps1": "7f3925af5eab6f23599031b118834d1faeb657a960b20af505788ceb6097fbc4",
         "scripts/flow/Foundation.ps1": "fb0d43ee4fbe00a140410bf3f9594b1a6d43bc4f226748f8231c6f23743c7ed4",
         "scripts/flow/Guide.ps1": "73bb63882ee1726fd8528e5e3045ecf6fd57a89dfa82a32f6e190cd2494461db",
         "scripts/flow/Verify.ps1": "7a8b05c6848499a8fbc26d87c90f4f3bfaa899538eeb1e6c068dd7bedda847fa",
-        "sync/src/apply-projection.mjs": "58bbd804e8c54f03c839e51e2bf89cd3e181c9cc6b7c9d74fc8300405491c399"
+        "sync/src/apply-projection.mjs": "e12e55b2ef9514483083ee09e638bfd6e85623f2685103a68b4440a6abc1e0a7"
       },
       "outputs": [
         {
           "path": "docs/images/architecture/system-overview.png",
-          "sha256": "c98e44335d1d0aaaf2fddbbd4c2df88dbc74fdc5d477bd814f9e8c05c35b6a8a"
+          "sha256": "bb390a7b7148a92595354f87e3acf78427a562200de41af65b5a820034f70b29"
         },
         {
           "path": "docs/images/architecture.png",
-          "sha256": "c98e44335d1d0aaaf2fddbbd4c2df88dbc74fdc5d477bd814f9e8c05c35b6a8a"
+          "sha256": "bb390a7b7148a92595354f87e3acf78427a562200de41af65b5a820034f70b29"
         }
       ]
     },
@@ -58,12 +58,12 @@
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
         "infra/main.bicep": "c449423ad43d86c9c15b56c19d18ece9d7681cd627efb7110b38d06b6b0ba82b",
-        "infra/policy.xml": "afa3bf916dd99e837d0ac190aa7e2f4cdccb08877221f44f853ce1885e257105",
-        "infra/projection.bicep": "dae83ef1bfe60675e49e50ddf7c795c15d9868ea9a9c72e924a4593a208a8a91",
+        "infra/policy.xml": "b3de0787be16c3a6afd1d9c4925a6ae3922d1b5f209aeeb499cfe3323d4f37b5",
+        "infra/projection.bicep": "dc9f8a58ca7e0b462cde24a88cc670d78b2a60d0321f3f31ccdb505429d08465",
         "infra/resolver.bicep": "d90c34a0d2b77bfaf0a7589f093ef9e32de1356d4f2cafb1a6180f6966c01f6f",
         "infra/turnstile-schedule.bicep": "54d4b2d5897a14fd580887113f697fafc3cb2993b70b5cf7368adead956a9e36",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
-        "resolver/src/entitlement.mjs": "6dc82d9372ddb81b199ae5c6ce099f3a0da315d075524f57e2582caff363e1bf",
+        "resolver/src/entitlement.mjs": "1cdde9356db441d02c894024720f5f0ae926bd75e350515d861213cef260aed4",
         "scripts/Publish-ClaudeQueries.ps1": "d54164f58a76b5d352d46d615da8f877f16df61ce9d2ecb0f3d3c1e7c6a7c72b",
         "scripts/get-foundry-token.ps1": "253049bb1d9c2066e9d1dcfeea4f1033d6f81569c222163a2db3777d46875ba4"
       },
@@ -93,8 +93,8 @@
         "scripts/Connect-ClaudeTurnstile.ps1": "cc4e2c094aaab8ce75856a3ba770d844bd32333d4f8b42f53f91cabdd1129201",
         "scripts/Grant-ClaudeGovernanceGraphAccess.ps1": "2313313010eef6867f730bbb1803b7a0a68113a3ad961f798627e274aff56b1a",
         "scripts/Invoke-ClaudeTurnstileSchedule.ps1": "9a1d8c6dcd25615b2bf9bd11c62306de517c08e0529aee924d5212c758f1d0b9",
-        "scripts/Sync-ClaudeAccess.ps1": "f4f5896df08c22bbfa9702ac0afa532e4cc4c4c990a82a4d7d4676b43e8c0c84",
-        "scripts/Sync-ClaudeProjection.ps1": "0a30b7b4178700d9eb4879d4cb78c01bacf932e21b0856f0f532e38a06a24ca7",
+        "scripts/Sync-ClaudeAccess.ps1": "8d69cfebf48431a3c7b6b8fdb41916acee824e426650f4bda77b70f8e16122fe",
+        "scripts/Sync-ClaudeProjection.ps1": "67976f06318afec6f1e3b949e9ff6d5a4b1204201459ed0fc5f2e3e20cec2232",
         "scripts/Sync-ClaudeTurnstileGovernance.ps1": "6c05cb24ed11afd45acf62bef9d64857adc3823267fe613985222fc1c24b99e6"
       },
       "outputs": [
@@ -127,36 +127,39 @@
       "id": "projection-freshness",
       "source": "docs/architecture/05-projection.json",
       "inputs": {
-        "docs/architecture/05-projection.json": "37ad9e1248871a8ac4a94fb945565717673cd58156cdabccfa5f05cd1243f97f",
+        "docs/architecture/05-projection.json": "1d8a95c80ac4279288012bf9902e1383952264fd7e2237706cbbf9267bcea1b3",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
-        "infra/policy.xml": "afa3bf916dd99e837d0ac190aa7e2f4cdccb08877221f44f853ce1885e257105",
+        "infra/policy.xml": "b3de0787be16c3a6afd1d9c4925a6ae3922d1b5f209aeeb499cfe3323d4f37b5",
         "infra/projection-network.bicep": "5ec1c96f8ca50ca52d64e957eda2f84810b0850ab2379feb0d7ad4324a18992e",
         "infra/projection-registry.bicep": "2016f5efb639ca2b9a227345c7bfc096a467d251f678137cff567034cfde2561",
         "infra/projection-renewal-gateway-reader.bicep": "638f32d2069747182f4f8bf166bc6f15edca388d14d6a7928a357e192c1635da",
-        "infra/projection-renewal.bicep": "d956610653e90905263cef9c4c95df3c6bdce17f94f3f4640ebd43893c9a1795",
-        "infra/projection.bicep": "dae83ef1bfe60675e49e50ddf7c795c15d9868ea9a9c72e924a4593a208a8a91",
+        "infra/projection-renewal.bicep": "3011c2b5344cecbbbe278218ff34d02e67d16d1daaadab5e9b2b89f51d56ac65",
+        "infra/projection.bicep": "dc9f8a58ca7e0b462cde24a88cc670d78b2a60d0321f3f31ccdb505429d08465",
         "infra/resolver.bicep": "d90c34a0d2b77bfaf0a7589f093ef9e32de1356d4f2cafb1a6180f6966c01f6f",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
-        "resolver/src/entitlement.mjs": "6dc82d9372ddb81b199ae5c6ce099f3a0da315d075524f57e2582caff363e1bf",
+        "resolver/src/entitlement.mjs": "1cdde9356db441d02c894024720f5f0ae926bd75e350515d861213cef260aed4",
         "resolver/src/index.mjs": "b6b755fbbc56ef62e7b535a4bde2756111c2b5fc9913c16a893b45cb6dce33a3",
         "resolver/src/lookup.mjs": "d04392c5eb24a8a084d72f1e5dc72a61fd385992039118aba510c266c3027c3b",
-        "scripts/ClaudeProjectionSwitch.ps1": "33c88a5be9e9904a6725992d84b4df01a0f9ccf9c15fe1f8c22a249f30320061",
-        "scripts/Deploy-ClaudeProjectionRenewal.ps1": "7ed4535d5463c25696e5add082d776ff0bc93a4b6e32169b252455af772bf3e5",
-        "scripts/Sync-ClaudeProjection.ps1": "0a30b7b4178700d9eb4879d4cb78c01bacf932e21b0856f0f532e38a06a24ca7",
+        "scripts/ClaudeProjectionSwitch.ps1": "829f75a454f5585cf48a3ed6d841441579439d59e4e4436538ede6ec6bc8cd91",
+        "scripts/ClaudeRunner.ps1": "7b1c587f10bbde9d1de571c556d2a67756ed59a9e678991067db6cbbc7008740",
+        "scripts/Deploy-ClaudeProjectionRenewal.ps1": "970779ec38b1bb0d336e481e2ab9fad7b9de2cdbd271de683a331e1107dde547",
+        "scripts/Sync-ClaudeAccess.ps1": "8d69cfebf48431a3c7b6b8fdb41916acee824e426650f4bda77b70f8e16122fe",
+        "scripts/Sync-ClaudeProjection.ps1": "67976f06318afec6f1e3b949e9ff6d5a4b1204201459ed0fc5f2e3e20cec2232",
         "sync/Dockerfile": "80ab80a331c8b97f903c30cf714cedfcc9969b8d8c24be0c58777ac7c7f3b382",
-        "sync/src/apply-projection.mjs": "58bbd804e8c54f03c839e51e2bf89cd3e181c9cc6b7c9d74fc8300405491c399",
+        "sync/src/apply-lock.mjs": "c477f98ab719567b04b6981017dd4dc4c0a40b8b4a6d98145d320d958d73e9b0",
+        "sync/src/apply-projection.mjs": "e12e55b2ef9514483083ee09e638bfd6e85623f2685103a68b4440a6abc1e0a7",
         "sync/src/business-units.mjs": "45df91c836676e6ad32a2d1b7f730c51b01e4210a22b716ce118c8bc6298ff31",
-        "sync/src/check-admission.mjs": "5e7532b1f7a039de189198285012a34871249ba09a28701f355f09a28920c662",
+        "sync/src/check-admission.mjs": "260384604cc5f6a77a5178fde7b76d9ab4c31e0e31a0629fa4435edc7457f06e",
         "sync/src/events.mjs": "4e2fae2fb8370d83c3bb798d8bd6f22d9db501c3a8730f8283bdab30bcb9db3f",
         "sync/src/graph.mjs": "de6c2dc421d1882a26d456dcfc1e6d908b32d17c3435663ebb513892b7c1f8ab",
-        "sync/src/plan.mjs": "5c37ce81ffdcf9d79e4b445516d17273296d75f4793e9d7ef0321387c599118a"
+        "sync/src/plan.mjs": "697bd898814fcf05ca6cfa24314a54991dc5d8007cd0bdf7d98458664f247618"
       },
       "outputs": [
         {
           "path": "docs/images/architecture/projection-freshness.png",
-          "sha256": "594468f39806a21c89ab9b703c10b85938f97cb5e8761a369bf21d9944e99b72"
+          "sha256": "dd8d363003d397c4c9043b856d6201a21475fa79271d03b83a0945ffe0e1fc9f"
         }
       ]
     },
@@ -202,7 +205,7 @@
         "scripts/Set-ClaudeDeveloper.ps1": "0587578bad882f89993c347972ebf96214ef9d489dafb7e445fec1c08f30057f",
         "scripts/Set-ClaudeTier.ps1": "90d1a5eb9f9a6ec072b55187f5940a0d19d1942321a52772fe0fa627efe9da0c",
         "scripts/Sync-AumMembership.ps1": "dd156c12bf0568160c9d24e03eba1ca29439b04bbe505a57c8684bc0adddd5f6",
-        "scripts/Sync-ClaudeAccess.ps1": "f4f5896df08c22bbfa9702ac0afa532e4cc4c4c990a82a4d7d4676b43e8c0c84",
+        "scripts/Sync-ClaudeAccess.ps1": "8d69cfebf48431a3c7b6b8fdb41916acee824e426650f4bda77b70f8e16122fe",
         "scripts/aum-cloudshell.sh": "a22627523f81596ddeeee34f0dce0ebd8db7dfd9b649d2e7f94be20658681907"
       },
       "outputs": [
@@ -228,8 +231,8 @@
         "infra/projection-network.bicep": "5ec1c96f8ca50ca52d64e957eda2f84810b0850ab2379feb0d7ad4324a18992e",
         "infra/projection-registry.bicep": "2016f5efb639ca2b9a227345c7bfc096a467d251f678137cff567034cfde2561",
         "infra/projection-renewal-gateway-reader.bicep": "638f32d2069747182f4f8bf166bc6f15edca388d14d6a7928a357e192c1635da",
-        "infra/projection-renewal.bicep": "d956610653e90905263cef9c4c95df3c6bdce17f94f3f4640ebd43893c9a1795",
-        "infra/projection.bicep": "dae83ef1bfe60675e49e50ddf7c795c15d9868ea9a9c72e924a4593a208a8a91",
+        "infra/projection-renewal.bicep": "3011c2b5344cecbbbe278218ff34d02e67d16d1daaadab5e9b2b89f51d56ac65",
+        "infra/projection.bicep": "dc9f8a58ca7e0b462cde24a88cc670d78b2a60d0321f3f31ccdb505429d08465",
         "infra/resolver.bicep": "d90c34a0d2b77bfaf0a7589f093ef9e32de1356d4f2cafb1a6180f6966c01f6f",
         "infra/turnstile-schedule.bicep": "54d4b2d5897a14fd580887113f697fafc3cb2993b70b5cf7368adead956a9e36",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d"
@@ -277,7 +280,7 @@
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
         "infra/main.bicep": "c449423ad43d86c9c15b56c19d18ece9d7681cd627efb7110b38d06b6b0ba82b",
-        "infra/policy.xml": "afa3bf916dd99e837d0ac190aa7e2f4cdccb08877221f44f853ce1885e257105",
+        "infra/policy.xml": "b3de0787be16c3a6afd1d9c4925a6ae3922d1b5f209aeeb499cfe3323d4f37b5",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "scripts/ClaudeBudgetModes.ps1": "fd119b3732c78f565ffd22126693f653c939330e4754f33b6c0769dec99cc231",
         "scripts/ClaudeTurnstileApply.ps1": "e7477c3fe80abf27b031c45beeee5c14e8894013cd5c8ccde745e95f35b9c6c6",
@@ -406,7 +409,7 @@
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
         "infra/main.bicep": "c449423ad43d86c9c15b56c19d18ece9d7681cd627efb7110b38d06b6b0ba82b",
-        "infra/policy.xml": "afa3bf916dd99e837d0ac190aa7e2f4cdccb08877221f44f853ce1885e257105",
+        "infra/policy.xml": "b3de0787be16c3a6afd1d9c4925a6ae3922d1b5f209aeeb499cfe3323d4f37b5",
         "infra/usd-reconciler-job.bicep": "d736ac4b70ca3bb863a9ba7193bcb3e4ebed3284f93aff41dad6299b1924ac56",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "scripts/ClaudeUsdBudgets.ps1": "7435987f2cd90b8456e0f85e231c5d82d46f640c950e4d5966e5feae8f1d400d",
@@ -466,7 +469,7 @@
       "id": "company-address",
       "source": "docs/architecture/15-company-address.json",
       "inputs": {
-        "Install-ClaudeGateway.ps1": "70f0ff68f918fde7f57eea3e9d89b2a1364fc503a51574e3cab3196d271b523e",
+        "Install-ClaudeGateway.ps1": "a34c29d651d9382ef26b8eab3229a94ad5a873ff1f1fa93c5a69ba4c64305198",
         "Start-ClaudeGateway.ps1": "86e92a50b603e0466f2d94ef03964f1ef8a511fe49262bfb694d6df32ad2d4dc",
         "docs/architecture/15-company-address.json": "83c08d15d71fcf6a002d004090b67ea77c858b70efa3718e8ff11aebae276981",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
@@ -482,7 +485,7 @@
         "scripts/ClaudeGatewayCertificate.ps1": "eb3895a08d7ad19d1d307f4116d6ec80260629402c253cf98219bc0508566d98",
         "scripts/ClaudeNetwork.ps1": "5709a3e94dfc7ca71e75429ea4d278b7737198a5488e07556fccc28cda9d00f9",
         "scripts/flow/Address.ps1": "88b0499d3eaf5423f98f4e6cb1ca1b2f221c4a44d4b8677a790ada807e495869",
-        "scripts/flow/Discovery.ps1": "30cb1c9d4492f5f869a8f2ce7b6821018db1ed3b4ae1d5dbaafe4f8449a51201",
+        "scripts/flow/Discovery.ps1": "6e3832eb6250c747bf7ffbd78595ca48a5359dc45381363a2a6cc0a757b2aad3",
         "scripts/flow/FlowContract.ps1": "5fe01f9f68710671039ba8d1fd4a303ccd3547d7f29096e23d87c58dae1b8bf8",
         "scripts/flow/Foundation.ps1": "fb0d43ee4fbe00a140410bf3f9594b1a6d43bc4f226748f8231c6f23743c7ed4"
       },
@@ -502,7 +505,7 @@
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
-        "infra/policy.xml": "afa3bf916dd99e837d0ac190aa7e2f4cdccb08877221f44f853ce1885e257105",
+        "infra/policy.xml": "b3de0787be16c3a6afd1d9c4925a6ae3922d1b5f209aeeb499cfe3323d4f37b5",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "scripts/ApimNamedValue.ps1": "cdab947026b92c4df235fcc5ca40d02a41fcb68ab44d66bb2200a1a148c8695a",
         "scripts/Backup-ClaudeGateway.ps1": "a3e91db51f0f6437d0a729e59931904b130e3819f19333a46b9784c4ade28678",

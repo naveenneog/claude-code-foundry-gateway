@@ -38,7 +38,7 @@ scripts/
   Sync-ClaudeAccess.ps1       publish Entra membership
   Compare-ClaudeEntitlement.ps1  compare named values with Entra
   ClaudeGraphMembership.ps1   shared transitive membership reader
-  Sync-ClaudeProjection.ps1   optional projection writer/exporter
+  Sync-ClaudeProjection.ps1   projection snapshot exporter
   Show-Governance.ps1         governance verification
   Set-ClaudeDeveloper.ps1     people, tiers and units
   Set-ClaudeTier.ps1          tier limits and models

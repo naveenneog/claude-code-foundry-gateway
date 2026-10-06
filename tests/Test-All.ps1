@@ -197,6 +197,7 @@ try {
     Invoke-Check 'Screenshots and the docs that show them' 'Test-Screenshots.ps1'
     Invoke-Check 'Architecture sources, images and code agree' 'Test-Architecture.ps1'
     Invoke-Check 'Documentation links and commands'        'Test-DocReferences.ps1'
+    Invoke-Check 'Markdown commands and tables'            'Test-DocMarkdown.ps1'
     Invoke-Check 'Azure CLI setup guide mirrors scripts [0/4]' 'Test-AzCommandsGuide.ps1' @{ Shard = '0/4' }
     Invoke-Check 'Azure CLI setup guide mirrors scripts [1/4]' 'Test-AzCommandsGuide.ps1' @{ Shard = '1/4' }
     Invoke-Check 'Azure CLI setup guide mirrors scripts [2/4]' 'Test-AzCommandsGuide.ps1' @{ Shard = '2/4' }
@@ -245,9 +246,9 @@ Invoke-Check 'Azure CLI guide renewal block runs in order' 'Test-AzCommandsRenew
     # Shard 0 also carries the mutation that runs the PS 5.1 wizard (Test-On-PS51.ps1), about
     # 100 s alone and up to 300 s on a loaded machine; measured 520 s against the others' ~220 s.
     Invoke-Check 'Business unit checks detect breakage [0/4]' 'Test-BusinessUnitsNegative.ps1' @{ Shard = '0/4' } -TimeoutSeconds 900
-    Invoke-Check 'Business unit checks detect breakage [1/4]' 'Test-BusinessUnitsNegative.ps1' @{ Shard = '1/4' }
-    Invoke-Check 'Business unit checks detect breakage [2/4]' 'Test-BusinessUnitsNegative.ps1' @{ Shard = '2/4' }
-    Invoke-Check 'Business unit checks detect breakage [3/4]' 'Test-BusinessUnitsNegative.ps1' @{ Shard = '3/4' }
+    Invoke-Check 'Business unit checks detect breakage [1/4]' 'Test-BusinessUnitsNegative.ps1' @{ Shard = '1/4' } -TimeoutSeconds 900
+    Invoke-Check 'Business unit checks detect breakage [2/4]' 'Test-BusinessUnitsNegative.ps1' @{ Shard = '2/4' } -TimeoutSeconds 900
+    Invoke-Check 'Business unit checks detect breakage [3/4]' 'Test-BusinessUnitsNegative.ps1' @{ Shard = '3/4' } -TimeoutSeconds 900
     Invoke-Check 'Admin surface - SKU, groups, tiers'      'Test-AdminSurface.ps1'
     Invoke-Check 'Set scripts respect governance authority' 'Test-GovernanceAuthority.ps1'
     Invoke-Check 'Scale ceilings and the load envelope'    'Test-Scale.ps1'
@@ -271,10 +272,20 @@ Invoke-Check 'Azure CLI guide renewal block runs in order' 'Test-AzCommandsRenew
     Invoke-Check 'Projection checks detect breakage'        'Test-ProjectionNegative.ps1'
     Invoke-Check 'Projection preflight and safe switch'     'Test-ProjectionPreflight.ps1'
     Invoke-Check 'Projection council corrections'           'Test-ProjectionCouncil.ps1'
+Invoke-Check 'Projection runner lifecycle' 'Test-ProjectionRunnerLifecycle.ps1'
+Invoke-Check 'Projection sync scripts' 'Test-ProjectionSyncScripts.ps1'
 Invoke-Check 'Projection sync package and its import closure' 'Test-ProjectionPackage.ps1'
 Invoke-Check 'Projection renewal templates and deploy script' 'Test-ProjectionRenewal.ps1'
 Invoke-Check 'Projection renewal runs reach admission offline' 'Test-ProjectionRenewalRuns.ps1'
-Invoke-Check 'Projection switch admission and switch function' 'Test-ProjectionSwitch.ps1'
+Invoke-Check 'Projection switch evidence and switch function' 'Test-ProjectionSwitchEvidence.ps1'
+# Exclusive: it counts the switch backups that a run adds to the repository's onboarding folder, which
+# the council suite's deployer flip also writes into.
+Invoke-Check 'Projection deployer and installer switch wiring' 'Test-ProjectionDeployerInstallerWiring.ps1' -SerialLane
+Invoke-Check 'Projection deployer compare before any switch' 'Test-ProjectionDeployerCompare.ps1'
+Invoke-Check 'Projection guided flow switch wiring' 'Test-ProjectionFlowSwitch.ps1'
+Invoke-Check 'Projection installer contract' 'Test-ProjectionInstaller.ps1'
+Invoke-Check 'Installer projection defaults and live verifier' 'Test-ClaudeInstallProjection.ps1'
+Invoke-Check 'Live projection verifier validation and order' 'Test-ClaudeLiveProjection.ps1'
     Invoke-Check 'Claude Desktop sign-in choice'             'Test-DesktopSignIn.ps1'
     Invoke-Check 'Workstation clients read what setup writes' 'Test-WorkstationClients.ps1' -SerialLane
     Invoke-Check 'Workstation model retirement agrees across shells' 'Test-WorkstationModels.ps1'
@@ -430,3 +441,4 @@ $failed = @($reported | Where-Object Result -eq 'FAIL').Count
 if ($failed) { Write-Host "$failed check(s) failed." -ForegroundColor Red; exit 1 }
 Write-Host 'All checks passed.' -ForegroundColor Green
 exit 0
+

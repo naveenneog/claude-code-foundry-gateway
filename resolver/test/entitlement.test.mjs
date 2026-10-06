@@ -11,12 +11,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { toEntitlement as resolveDocument, isObjectId, KNOWN_TIERS } from '../src/entitlement.mjs';
 
-// Existing authorization cases use a current lease; freshness boundary cases
-// exercise the unwrapped resolver in sync/test/freshness.test.mjs.
+// Existing authorization cases use a current generation and verification time;
+// record freshness boundary cases exercise the unwrapped resolver in
+// sync/test/freshness.test.mjs.
 const toEntitlement = (doc, options) => resolveDocument(doc ? {
   reconciliationGeneration: '33333333-3333-4333-8333-333333333333',
   lastVerifiedAt: new Date().toISOString(),
-  expiresAt: Math.floor(Date.now() / 1000) + 7200,
   ...doc,
 } : doc, options);
 
@@ -30,6 +30,7 @@ test('a standard record resolves', () => {
   assert.equal(r.ok, true);
   assert.equal(r.record.tier, 'standard');
   assert.equal(r.record.businessUnit, 'ites-1');
+  assert.equal('expiresAt' in r.record, false);
 });
 
 test('an absent record is not entitled, and is not an error', () => {
@@ -62,6 +63,22 @@ test('every known tier is accepted', () => {
     const r = toEntitlement({ id: OID, tenantId: TENANT, tier }, { tenantId: TENANT });
     assert.equal(r.ok, true, `${tier} should resolve`);
   }
+});
+
+test('a legacy expiresAt grants only until that legacy deadline passes', () => {
+  const legacyExpiresAt = Date.parse('2026-10-05T11:00:00.000Z') / 1000;
+  const beforeExpiry = toEntitlement(
+    { id: OID, tenantId: TENANT, tier: 'standard', expiresAt: legacyExpiresAt, lastVerifiedAt: '2026-10-05T09:00:00.000Z' },
+    { tenantId: TENANT, now: new Date('2026-10-05T10:00:00.000Z') });
+  assert.equal(beforeExpiry.ok, true);
+  assert.equal('expiresAt' in beforeExpiry.record, false);
+
+  const afterExpiry = toEntitlement(
+    { id: OID, tenantId: TENANT, tier: 'standard', expiresAt: legacyExpiresAt, lastVerifiedAt: '2026-10-05T09:00:00.000Z' },
+    { tenantId: TENANT, now: new Date('2026-10-05T12:00:00.000Z') });
+  assert.equal(afterExpiry.ok, false);
+  assert.equal(afterExpiry.status, 404);
+  assert.match(afterExpiry.reason, /legacy projection record expired/);
 });
 
 test('a record that is not effective yet does not grant access', () => {

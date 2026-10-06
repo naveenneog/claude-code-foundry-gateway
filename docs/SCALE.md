@@ -57,16 +57,21 @@ At 100-500 developers the named-value path is already past or close to the
 business-unit membership ceiling. The installer offers the **Cosmos projection**
 as the entitlement store. `scripts/Deploy-ClaudeProjection.ps1` deploys it,
 populates it from Entra and compares it against named-value decisions. The named values stay
-authoritative until a switch, which `-FlipAfterCleanCompare` runs over the renewal job's evidence
-([ADR-0050](adr/0050-projection-switch-function.md)).
+authoritative until a switch. `-FlipAfterCleanCompare` runs resolver checks, a drift check,
+a runner compare and Cosmos switch evidence without waiting for a scheduled job
+([ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md)).
 
 The SKU changes the resolver inbound path, not the Cosmos rule:
 
-| Gateway SKU | Resolver path | Cosmos path |
-|---|---|---|
-| Basic v2 | Public Function endpoint, authenticated by Microsoft Entra and allowed only for the gateway managed identity | Private endpoint and private DNS |
-| Standard v2 | Private resolver endpoint reached through outbound VNet integration | Private endpoint and private DNS |
-| Premium v2 | Private resolver endpoint reached through Premium v2 networking | Private endpoint and private DNS |
+| Gateway SKU | Resolver path from the installer (default) | Private resolver option | Cosmos path |
+|---|---|---|---|
+| Basic v2 | Public Function endpoint, authenticated by Microsoft Entra and allowed only for the gateway managed identity | None: Basic v2 has no outbound VNet integration | Private endpoint and private DNS |
+| Standard v2 | Public, as on Basic v2 | `-ResolverInboundAccess private`: a private endpoint reached through outbound VNet integration | Private endpoint and private DNS |
+| Premium v2 | Public, as on Basic v2 | `-ResolverInboundAccess private`: a private endpoint reached through Premium v2 networking | Private endpoint and private DNS |
+
+The installer's default is [ADR-0052](adr/0052-cosmos-default-installer.md);
+`Deploy-ClaudeProjection.ps1` run on its own uses the private option on Standard v2 and Premium v2
+([ADR-0028](adr/0028-basic-v2-projection-resolver.md)).
 
 `scripts/Measure-ClaudeProjectionCost.ps1 -P61Scenarios` prices the 100 and 500
 developer shapes. On 2026-09-26 in East US 2, excluding the APIM gateway cost,
@@ -201,7 +206,7 @@ it — but ADR-0009's phase 1 has to budget for it.
 `guide/loadtest-projection.mjs` loaded a separate, initially empty `loadtest`
 container through the private endpoint, with 32 workers and `/oid` partitioning.
 The runner was in Canada Central and Cosmos in East US 2. It used the current
-record shape, including a reconciliation generation and an absolute expiry.
+record shape used at that time, including a reconciliation generation and an absolute expiry.
 The real `entitlement` container was not the load target.
 
 | Measurement | Result |
@@ -401,20 +406,22 @@ once per request, so the cache absorbs almost all of it. See
 assumed rather than optional. The standing-cost objection to ADR-0005 does not
 survive the arithmetic either way.
 
-That estimate is **not the operating total for leased reconciliations**.
+That estimate is **not the operating total for the persistent projection**.
 The current two-warm-instance profile bills $91.56/month at rest at the same
-published rates. It also refreshes every member's lease on every reconciliation,
-including unchanged members. At 500,000 records, hourly renewal means about
-365 million writes per 730-hour month; the P86 default 30-minute schedule is
-about 730 million writes. Using the measured **create** charge of 5.9 RU as an
-illustrative input gives $538.38/month for hourly writes and about
-$1,076.75/month for 30-minute writes at $0.25/million RU. The same basis gives
-about $0.54/hourly or $1.08/30-minute for 500 members, and $5.38/hourly or
-$10.77/30-minute for 5,000 members. **INFERRED, not a renewal quote:**
-existing-record upserts, Graph scanning, runner execution, telemetry and
-retries were not priced by that load. The cost script still models the read
-path; use `-AlwaysReadyInstances 2` and budget reconciliation separately,
-rather than presenting its total as complete.
+published rates. Projection writes now follow directory churn: added, removed
+and moved people, and changed unit mappings. The historical lease model rewrote
+every member on every reconciliation, including unchanged members. At 500,000
+records, hourly renewal meant about 365 million writes per 730-hour month; the
+P86 default 30-minute schedule meant about 730 million writes. Using the
+measured **create** charge of 5.9 RU as an illustrative input gave
+$538.38/month for hourly writes and about $1,076.75/month for 30-minute writes
+at $0.25/million RU. The same basis gave about $0.54/hourly or
+$1.08/30-minute for 500 members, and $5.38/hourly or $10.77/30-minute for
+5,000 members. **INFERRED, not a renewal quote:** existing-record upserts,
+Graph scanning, runner execution, telemetry and retries were not priced by that
+load. The cost script still models the read path; use `-AlwaysReadyInstances 2`
+and budget sync operations separately, rather than presenting its total as
+complete.
 
 ---
 
@@ -564,9 +571,11 @@ The thing that would be painful to migrate is not in the layer being replaced.
 
 The named values are a *projection* of Entra, rebuilt from it on every sync. So
 moving to Cosmos changes where the gateway reads, not what is true.
-`Sync-ClaudeAccess.ps1` writes named values; `Sync-ClaudeProjection.ps1` and
-the in-network Node writer publish the projection. Reuse the directory model,
-not the assumption that the two commands are interchangeable.
+`Sync-ClaudeAccess.ps1` syncs the store the gateway reads. On a projection gateway
+`Sync-ClaudeProjection.ps1` exports a snapshot and the in-network Node writer
+(`sync/src/apply-projection.mjs`) applies it; the Node writer is the only Cosmos
+writer ([ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md), decision 10).
+Reuse the directory model, not the assumption that the two stores are interchangeable.
 
 A rollback restores authorization without restoring consumption, which is the
 rule that makes the move safe to reverse mid-flight.
@@ -616,7 +625,7 @@ measures the gap.
 What a pilot customer runs to get from the named-value lists to the projection.
 The measured small migration kept serving; this is not a zero-downtime
 guarantee. A rollback is safe only while refreshed lists fit and agree with
-current directory membership. Confirm backup, schedule, lease alerts and a
+current directory membership. Confirm backup, sync evidence and a
 test cohort before changing the source.
 
 **Before you start**, settle the two decisions that cannot be retrofitted —
@@ -690,8 +699,13 @@ own identity, which can write only this container.
 
 ```powershell
 ./scripts/Sync-ClaudeProjection.ps1 -Account cosmos-<prefix> -ApimName <apim> -ResourceGroup <rg> -ExportPath snapshot.json
-# then, in the runner:
-node /work/sync/src/apply-projection.mjs --cosmos https://cosmos-<prefix>.documents.azure.com:443/ --tenant <tenant-id> --snapshot /work/snapshot.json
+$accountResourceId = az cosmosdb show -n cosmos-<prefix> -g <rg> --query id -o tsv
+# The runner holds the sync package as SECURE-PROJECTION section 8 prepares it. The id expands
+# here, before the command reaches the runner.
+. ./scripts/ClaudeRunner.ps1
+Send-RunnerFile -ResourceGroup <rg> -Name aci-projtest-<prefix> -Path .\snapshot.json -Destination /work/snapshot.json
+Invoke-RunnerCommand -ResourceGroup <rg> -Name aci-projtest-<prefix> -Command `
+    "node /work/sync/src/apply-projection.mjs --cosmos https://cosmos-<prefix>.documents.azure.com:443/ --tenant <tenant-id> --account-resource-id $accountResourceId --snapshot /work/snapshot.json"
 ```
 
 `-ApimName` and `-ResourceGroup` make the projection assign business units from
@@ -703,14 +717,13 @@ different unit after the flip. The isolated 500,000-record loader measured
 scan and apply job. Use the in-network Node bulk writer for this population,
 not the PowerShell writer's serial HTTP loop.
 
-**Freshness is now part of the migration.** A complete scan stamps a generation,
-its start time and an absolute expiry, two hours by default and never longer.
-The snapshot must be applied before that expiry; copying or replaying it does
-not renew it. Schedule a fresh scan at least hourly, allowing scan, transfer
-and apply time to fit inside the lease. Every retained member is rewritten.
-Before upgrading an existing projection, populate leased records first, then
-deploy the strict resolver and policy. Old unleased records correctly return
-503 after that deployment.
+**Freshness is an apply-time and switch-time check.** A complete scan stamps a
+generation and verification time. Exported snapshots still have an apply-by
+limit of 7,200 seconds from scan start, so an old file cannot replay old
+membership. Applied records do not carry an expiry; they persist until a later
+sync deletes or changes them. Before switching an existing gateway, run a fresh
+full sync or targeted sync, then compare the projection with the gateway's
+current decisions.
 
 **Rollback:** delete and repopulate. No developer is affected either way.
 
@@ -735,8 +748,9 @@ This is the step that must not be rushed. The first comparison on its own says
 only whether the lists are current; the second is the one that reads the
 records the resolver would serve. It names every difference as
 `would-lose-access`, `would-gain-access`, `tier-drift` or `unit-drift` and exits
-non-zero while there are any. Expired records now count as losing access, so an
-expired snapshot cannot approve a flip. Measured on 2026-09-23: 8 identities compared,
+non-zero while there are any. A record that still carries a past `expiresAt` from before
+[ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md) counts as losing access, because the
+resolver refuses it. Measured on 2026-09-23: 8 identities compared,
 0 differences.
 
 **Portal:** Entra All members, APIM Named values and Cosmos Data Explorer can
@@ -747,17 +761,15 @@ effective identity before a bulk flip.
 
 ### 5. Flip one value
 
-**Outage warning:** records expire at most **two hours from scan start**. Without continuing
-renewal, **every developer gets 503 after expiry**. A clean comparison is not renewal. The
-deployer, the installer and the guided flow switch through one function and admit switching only
-after the renewal job, the tenant-admin grant, email-backed alerts and destination-bound Cosmos
-evidence are present ([ADR-0050](adr/0050-projection-switch-function.md)). ARM cron, environment
-strings and a successful job execution cannot prove actual renewal.
+The deployer, installer and guided flow switch through one function. The switch no longer
+needs a renewal receipt or a scheduled job. It checks the resolver deployment and service
+principal, drift against Entra, a read-only runner compare and Cosmos evidence: a successful full
+sync in the last 24 hours and no live record the resolver would refuse
+([ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md)).
 
 The following low-level manual operation remains documented for independently operated estates,
 after step 4's comparison and the resolver configuration in the
-[private deployment guide](SECURE-PROJECTION.md). It skips admission, creates no renewal job, and
-can cause the outage above. The former ARM-only guard has been removed:
+[private deployment guide](SECURE-PROJECTION.md). It skips switch evidence and creates no backup. The former ARM-only guard has been removed:
 
 ```powershell
 . .\scripts\ApimNamedValue.ps1
@@ -765,15 +777,10 @@ Set-ApimNamedValue -ResourceGroup <gateway-rg> -ApimName <apim> `
   -SubscriptionId <subscription-id> -Id entitlement-source -Value projection
 ```
 
-[ADR-0045](adr/0045-scheduled-projection-renewal.md) defines P86 admission from
-destination-bound Cosmos evidence through the runner and a separate ARM job-definition read:
-oldest expiry margin is at least 60 minutes, generation advanced twice in two hours, newest
-renewal is within 45 minutes, the action group exists and the tested image/entrypoint has no
-command, args or dry-run override. P86 proves this offline; a positive live Graph read still
-needs a tenant-admin grant.
+Switch evidence is read through the runner from the destination Cosmos container. Job history
+can help operate very large directories, but it is not required for switching.
 
-**Portal verification:** APIM > Named values shows `entitlement-source`; that stored value and
-the Container Apps Jobs > Executions blade do not prove lease renewal. Rollback conditions remain below.
+**Portal verification:** APIM > Named values shows `entitlement-source`. Rollback conditions remain below.
 
 Propagation to the running policy was measured at 9–18 seconds on Basic v2. On
 Premium v2 the write itself took 38 to 41 seconds, and the flip took effect
@@ -783,12 +790,20 @@ What each developer then experiences, measured on 2026-09-23:
 
 | Situation | Response |
 |---|---|
-| Unexpired record present | Served; cached for the smaller of `entitlement-cache-seconds` and its remaining lease, and expiry checked on every hit |
+| Entitled record present | Served; cached for `entitlement-cache-seconds` |
 | No record | `403 permission_error`, cached for at most 60 seconds |
 | Resolver down, answer still cached | Served until the window ends |
 | Resolver down, window ended | `503` with `Retry-After: 5`, and a message saying it is not the developer's access |
-| Reconciliation stopped and record expired | `503` explaining that the projection expired or could not supply an unexpired answer; never stale authorization |
 | Miss-path capacity exhausted | Retryable `429`, before the resolver |
+
+Since [ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md), from offline tests rather
+than the 2026-09-23 measurement:
+
+| Situation | Response |
+|---|---|
+| No sync since a change in Entra | The record from the last sync is served until a sync changes it; a removal takes effect after the sync and at most `entitlement-cache-seconds` |
+| Record with an invalid generation or `lastVerifiedAt` | `503`; never stale authorization |
+| Record with a past `expiresAt` from before ADR-0051 | Answered as no record (`403`) until a sync rewrites or deletes it |
 
 Before 2026-09-23 the policy answered a missing record with that 503, so every
 unentitled attempt read as an outage and invited a retry. Redeploy the current

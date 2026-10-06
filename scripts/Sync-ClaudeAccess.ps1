@@ -38,7 +38,9 @@ param(
     [switch]$AllowEmpty,
     [switch]$AllowEmptyStandard,
     [switch]$AllowEmptyPremium,
-    [switch]$WhatIf
+    [switch]$WhatIf,
+    [ValidateSet('auto','named-value','projection')][string]$Store = 'auto',
+    [string]$User
 )
 
 $ErrorActionPreference = 'Stop'
@@ -53,6 +55,93 @@ if (-not $PremiumGroup) { $PremiumGroup = 'claude-code-premium' }
 . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
 
 . (Join-Path $PSScriptRoot 'ClaudeGraphMembership.ps1')
+
+function Invoke-ClaudeProjectionAccessSync {
+    param(
+        [string]$ApimName, [string]$ResourceGroup, [string]$StandardGroup, [string]$PremiumGroup,
+        [string]$User, [switch]$AllowEmpty, [switch]$WhatIf
+    )
+    . (Join-Path $PSScriptRoot 'ClaudeRunner.ps1')
+    . (Join-Path $PSScriptRoot 'ClaudeProjectionPackage.ps1')
+    $prefix = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-projection-prefix' -FailOnError
+    if ([string]::IsNullOrWhiteSpace($prefix)) {
+        throw ("API Management $ApimName has no named value 'entitlement-projection-prefix', which names the projection to sync. " +
+            "Remedy: .\scripts\Deploy-ClaudeProjection.ps1 -ResourceGroup $ResourceGroup -ApimName $ApimName -NamePrefix <prefix>, with the -Sku, " +
+            "-ResolverInboundAccess, -StandardGroup and -PremiumGroup the projection was deployed with; it records the named value. Nothing was written.")
+    }
+    if ($prefix -notmatch '^[a-z0-9]+(?:-[a-z0-9]+)*$') { throw "Projection prefix '$prefix' is unsafe." }
+    $apim = az apim show -g $ResourceGroup -n $ApimName -o json | ConvertFrom-Json
+    if (-not $apim -or -not $apim.identity -or -not $apim.identity.tenantId) { throw 'Could not read the APIM managed identity tenant id for projection sync.' }
+    $tenantId = [string]$apim.identity.tenantId
+    if ($tenantId -notmatch '^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$') { throw 'APIM identity tenant id is not a GUID.' }
+    $subscriptionId = @([string]$apim.id -split '/')[2]
+    if ($subscriptionId -notmatch '^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$') { throw 'APIM resource id did not contain a subscription GUID.' }
+    $accountResourceId = "/subscriptions/$subscriptionId/resourceGroups/$ResourceGroup/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-$prefix"
+    $work = Join-Path ([IO.Path]::GetTempPath()) ('claude-projection-sync-' + [guid]::NewGuid().ToString('N'))
+    $runner = $null
+    # Each run has its own snapshot file on the shared runner, so concurrent runs never apply each other's file.
+    $remoteSnapshot = "/work/projection-snapshot-$([guid]::NewGuid().ToString('N')).json"
+    $null = New-Item -ItemType Directory -Path $work -Force
+    try {
+        $snapshot = Join-Path $work 'projection-snapshot.json'
+        $exportArgs = @('-NoProfile','-File',(Join-Path $PSScriptRoot 'Sync-ClaudeProjection.ps1'),
+            '-Account',"cosmos-$prefix",'-TenantId',$tenantId,'-StandardGroup',$StandardGroup,'-PremiumGroup',$PremiumGroup,
+            '-ApimName',$ApimName,'-ResourceGroup',$ResourceGroup,'-ExportPath',$snapshot)
+        if ($User) { $exportArgs += @('-User',$User) }
+        $exportOutput = & pwsh @exportArgs 2>&1
+        if ($LASTEXITCODE -ne 0) { throw "Projection snapshot export failed (exit $LASTEXITCODE): $(($exportOutput | Select-Object -Last 12) -join "`n")" }
+        $targetUserOid = $null
+        if ($User) {
+            $snap = Get-Content -LiteralPath $snapshot -Raw | ConvertFrom-Json
+            if (-not $snap.user -or [string]$snap.scope -ne 'user') { throw 'Targeted projection export did not produce a user-scoped snapshot.' }
+            $targetUserOid = [string]$snap.user
+        }
+        if ($WhatIf) {
+            Write-Host "  [WhatIf] Projection snapshot exported to $snapshot; runner was not started and Cosmos was not changed." -ForegroundColor DarkGray
+            return
+        }
+        $runner = "aci-projtest-$prefix"
+        $null = Start-ClaudeProjectionRunner -ResourceGroup $ResourceGroup -Name $runner
+        $archive = Join-Path $work 'sync-package.tgz'
+        $null = New-ClaudeProjectionSyncArchive -Path $archive -Root (Split-Path $PSScriptRoot -Parent)
+        $null = Send-RunnerFile -ResourceGroup $ResourceGroup -Name $runner -Path $archive -Destination '/work/sync-package.tgz'
+        $null = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $runner -Command 'tar -xzf /work/sync-package.tgz -C /work'
+        $null = Send-RunnerFile -ResourceGroup $ResourceGroup -Name $runner -Path $snapshot -Destination $remoteSnapshot -Deadline (Get-RunnerFileDeadline -Path $snapshot)
+        $nodeModules = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $runner -Command "node -e console.log(require('fs').existsSync('/work/sync/node_modules')?'present':'absent')"
+        if (($nodeModules -split '\r?\n' | Select-Object -Last 1).Trim() -ne 'present') {
+            $null = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $runner -Command 'npm --prefix /work/sync ci --omit=dev --ignore-scripts --no-audit --fund=false'
+        }
+        $command = "node /work/sync/src/apply-projection.mjs --cosmos https://cosmos-$prefix.documents.azure.com:443/ --tenant $tenantId --account-resource-id $accountResourceId --snapshot $remoteSnapshot"
+        if ($targetUserOid) { $command += " --user $targetUserOid" }
+        if ($AllowEmpty) { $command += ' --allow-empty' }
+        $raw = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $runner -Command $command
+        $result = ConvertFrom-ClaudeRunnerResult -RawOutput $raw -Step 'projection apply'
+        Write-Host ("Projection sync complete: written={0} deleted={1} unchanged={2}" -f ([int]$result.written), ([int]$result.deleted), ([int]$result.unchanged)) -ForegroundColor Green
+        $excluded = [int]$result.excludedByNewerTargetedSync
+        if ($excluded -gt 0) {
+            Write-Host ("  {0} user(s) changed by a targeted sync while this full sync ran were left out of it (ADR-0051 decision 11). Remedy: rerun scripts/Sync-ClaudeAccess.ps1 -ResourceGroup {1} -ApimName {2} after five minutes, or with -User for each of them." -f $excluded, $ResourceGroup, $ApimName) -ForegroundColor Yellow
+        }
+    }
+    finally {
+        if ($runner) {
+            try {
+                $null = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $runner -Command "node -e f=require('fs');f.rmSync('$remoteSnapshot',{force:true});f.rmSync('/work/projection-snapshot.json',{force:true});f.rmSync('/work/gateway-decisions.json',{force:true})"
+            } catch { }
+        }
+        if (Test-Path -LiteralPath $work) { Remove-Item -LiteralPath $work -Recurse -Force -WhatIf:$false -ErrorAction SilentlyContinue }
+    }
+}
+
+$selectedStore = $Store
+if ($selectedStore -eq 'auto') {
+    $source = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-source' -FailOnError
+    $selectedStore = if ($source -eq 'projection') { 'projection' } else { 'named-value' }
+}
+if ($User -and $selectedStore -eq 'named-value') { throw '-User cannot be used with -Store named-value because named values are rewritten whole.' }
+if ($selectedStore -eq 'projection') {
+    Invoke-ClaudeProjectionAccessSync -ApimName $ApimName -ResourceGroup $ResourceGroup -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -User $User -AllowEmpty:$AllowEmpty -WhatIf:$WhatIf
+    return
+}
 
 function Set-NamedValue {
     param([string]$Id, [string]$Value)
@@ -80,6 +169,9 @@ $tiers = @(
 )
 
 $seen = @{}
+# Every value is resolved and checked against the 4,096-character limit before the first write, so a list
+# that does not fit leaves every named value as it was, rather than some lists refreshed beside others stale.
+$pendingWrites = [Collections.Generic.List[object]]::new()
 $graphToken = Get-GraphToken
 
 foreach ($t in $tiers) {
@@ -131,7 +223,7 @@ foreach ($t in $tiers) {
         }
     }
 
-    Set-NamedValue -Id $t.NamedValue -Value $value
+    $pendingWrites.Add([pscustomobject]@{ Id = $t.NamedValue; Value = $value })
     Write-Host ""
 }
 
@@ -200,8 +292,8 @@ else {
         Write-Host ''
     }
     else {
-        Set-NamedValue -Id 'bu-members' -Value $buValue
-        Write-Host ("  {0} developer(s) mapped to a business unit." -f $buMap.Keys.Count) -ForegroundColor Green
+        $pendingWrites.Add([pscustomobject]@{ Id = 'bu-members'; Value = $buValue })
+        Write-Host ("  {0} developer(s) to map to a business unit." -f $buMap.Keys.Count) -ForegroundColor Green
     }
 
     $unmapped = @($seen.Keys | Where-Object { -not $buMap.Contains($_) })
@@ -211,6 +303,9 @@ else {
     }
     Write-Host ""
 }
+
+foreach ($write in $pendingWrites) { Test-ApimNamedValueLength -Id $write.Id -Value $write.Value }
+foreach ($write in $pendingWrites) { Set-NamedValue -Id $write.Id -Value $write.Value }
 
 Write-Host "Done. $($seen.Count) identity(ies) authorised." -ForegroundColor Green
 Write-Host "Anyone not listed receives HTTP 403 from the gateway." -ForegroundColor DarkGray

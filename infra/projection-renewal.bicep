@@ -1,4 +1,4 @@
-// Scheduled entitlement projection renewal job for P86, phase 3 of ADR-0049.
+// Optional entitlement projection sync job for ADR-0051.
 // The Container Apps environment is internal and uses its own delegated subnet. The registry and
 // the job identity come from infra/projection-registry.bicep, deployed before the image build.
 
@@ -18,7 +18,7 @@ param containerAppsSubnetId string
 @description('Log Analytics workspace id for job logs and scheduled query alerts.')
 param logAnalyticsWorkspaceId string
 
-@description('Email receivers for the required action group. Admission refuses a switch if the deployed action group is missing.')
+@description('Email receivers for the action group that the job alerts notify: failed runs, denied Graph reads and, on a schedule, no recent success.')
 param actionGroupEmailReceivers array
 
 @description('Registry from infra/projection-registry.bicep that holds the sync image.')
@@ -30,8 +30,8 @@ param identityName string
 @description('Digest-pinned projection sync image, for example sha256:<digest>.')
 param syncImageDigest string
 
-@description('Cron expression for the renewal job. Default is every 30 minutes.')
-param cronExpression string = '*/30 * * * *'
+@description('Five-field cron expression for an optional scheduled sync. Empty means a manual on-demand job.')
+param cronExpression string = ''
 
 @description('Entra tenant id written to every projection record.')
 param tenantId string = subscription().tenantId
@@ -45,7 +45,7 @@ param premiumGroupId string
 @description('Resource id of the API Management gateway. The job reads its bu-registry and bu-parents named values on every run.')
 param gatewayResourceId string
 
-@description('Expected entrypoint recorded in status and checked before admission.')
+@description('Entrypoint recorded in each status record (ADR-0051: switch evidence does not check it).')
 param entrypoint string = 'node /app/sync/src/apply-projection.mjs'
 
 var databaseName = 'claude'
@@ -55,6 +55,7 @@ var containerName = 'entitlement'
 var environmentName = 'cae-renew-${uniqueString(resourceGroup().id, namePrefix)}'
 var jobName = 'caj-renew-${uniqueString(resourceGroup().id, namePrefix)}'
 var actionGroupName = 'ag-projection-renewal-${namePrefix}'
+var isScheduled = !empty(cronExpression)
 var tags = {
   'claude-projection-prefix': namePrefix
 }
@@ -145,22 +146,28 @@ resource job 'Microsoft.App/jobs@2024-03-01' = {
   }
   properties: {
     environmentId: environment.id
-    configuration: {
-      triggerType: 'Schedule'
+    configuration: union({
+      triggerType: isScheduled ? 'Schedule' : 'Manual'
       replicaTimeout: 3600
       replicaRetryLimit: 0
-      scheduleTriggerConfig: {
-        cronExpression: cronExpression
-        parallelism: 1
-        replicaCompletionCount: 1
-      }
       registries: [
         {
           server: acr.properties.loginServer
           identity: identity.id
         }
       ]
-    }
+    }, isScheduled ? {
+      scheduleTriggerConfig: {
+        cronExpression: cronExpression
+        parallelism: 1
+        replicaCompletionCount: 1
+      }
+    } : {
+      manualTriggerConfig: {
+        parallelism: 1
+        replicaCompletionCount: 1
+      }
+    })
     template: {
       containers: [
         {
@@ -233,7 +240,7 @@ module gatewayReader 'projection-renewal-gateway-reader.bicep' = {
   }
 }
 
-// Each rule returns rows only when the renewal is unhealthy: a log search alert with Count
+// Each rule returns rows only when the optional sync job is unhealthy: a log search alert with Count
 // aggregation counts rows, and a summarize without by returns one row even when nothing matched
 // (U108). The fuzzy union with an empty table lets a rule deploy before the job's first console
 // line exists (U109). The quoted events are the last lines sync/src/apply-projection.mjs prints
@@ -245,33 +252,61 @@ union isfuzzy=true (datatable(TimeGenerated: datetime, JobName: string, Log: str
 
 var alertDefinitions = [
   {
-    name: 'no-success-45m'
-    description: 'No successful projection renewal in 45 minutes.'
+    name: 'graph-read-denied'
+    description: 'The projection sync job could not read Microsoft Graph. Tenant-admin consent for GroupMember.Read.All may be missing.'
     query: '''
-| where Log contains '"event":"projection-renewal-succeeded"'
-| summarize Succeeded = count()
-| where Succeeded == 0
-'''
-  }
-  {
-    name: 'expiry-margin-60m'
-    description: 'The newest successful projection renewal leaves less than 60 minutes before the oldest entitlement record expires.'
-    query: '''
-| where Log contains '"event":"projection-renewal-succeeded"'
-| top 1 by TimeGenerated desc
-| extend OldestExpiresAt = unixtime_seconds_todatetime(todouble(extract('"oldestExpiresAt":([0-9]+)', 1, Log)))
-| where isnull(OldestExpiresAt) or OldestExpiresAt - now() < 1h
+| where Log contains '"event":"projection-renewal-failed"'
+| where Log contains '"stage":"graph"'
+| project TimeGenerated, Log
 '''
   }
   {
     name: 'renewal-failed'
-    description: 'A projection renewal run failed: a Graph read was denied or failed, the business-unit read failed, or a Cosmos read or write failed. The line names the stage.'
+    description: 'A projection sync job run failed: a Graph read was denied or failed, the business-unit read failed, or a Cosmos read or write failed. The line names the stage.'
     query: '''
 | where Log contains '"event":"projection-renewal-failed"'
 | project TimeGenerated, Log
 '''
   }
 ]
+
+resource noSuccessAlert 'Microsoft.Insights/scheduledQueryRules@2023-12-01' = if (isScheduled) {
+  name: 'sqr-projection-${namePrefix}-no-success-45m'
+  location: location
+  properties: {
+    description: 'No successful scheduled projection sync in 45 minutes.'
+    enabled: true
+    scopes: [
+      logAnalyticsWorkspaceId
+    ]
+    evaluationFrequency: 'PT5M'
+    windowSize: 'PT45M'
+    severity: 2
+    criteria: {
+      allOf: [
+        {
+          query: replace('''${renewalLogs}
+| where Log contains '"event":"projection-renewal-succeeded"'
+| summarize Succeeded = count()
+| where Succeeded == 0
+''', '{jobName}', jobName)
+          timeAggregation: 'Count'
+          operator: 'GreaterThan'
+          threshold: 0
+          failingPeriods: {
+            numberOfEvaluationPeriods: 1
+            minFailingPeriodsToAlert: 1
+          }
+        }
+      ]
+    }
+    actions: {
+      actionGroups: [
+        actionGroup.id
+      ]
+    }
+  }
+}
 
 resource alerts 'Microsoft.Insights/scheduledQueryRules@2023-12-01' = [for alert in alertDefinitions: {
   name: 'sqr-projection-${namePrefix}-${alert.name}'
@@ -314,3 +349,4 @@ output managedIdentityPrincipalId string = identity.properties.principalId
 output actionGroupResourceId string = actionGroup.id
 output acrLoginServer string = acr.properties.loginServer
 output scheduleCron string = cronExpression
+output triggerType string = isScheduled ? 'Schedule' : 'Manual'

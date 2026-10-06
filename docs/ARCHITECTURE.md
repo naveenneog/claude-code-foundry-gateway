@@ -2,7 +2,7 @@
 
 This article explains how Claude Code, the Claude VS Code extension and Claude Desktop use
 the customer's Claude deployment in Microsoft Foundry through Azure API Management. It
-also explains the optional entitlement projection, Turnstile governance console and
+also explains the entitlement projection, which the installer deploys by default, the Turnstile governance console and
 AUM (Azure Usage Management), the terminal FinOps console. It is a concept article; use the linked how-to guides to deploy or
 operate each part.
 
@@ -27,17 +27,18 @@ Source: [01-system.json](architecture/01-system.json).
 
 | Profile | Adds to the deployment | Identity and operational boundary |
 |---|---|---|
-| **Default: named values** | API Management v2, Application Insights and Log Analytics. Foundry already exists. Workbooks and saved KQL functions are published separately as definitions. | Entra groups are synchronized to gateway named values. No resolver, Cosmos database or Turnstile service is required. |
-| **Projection** | Cosmos DB, a resolver Function, Function host/deployment storage, private endpoints and DNS. A writer runs separately to reconcile the directory. | The writer and resolver have different identities and container-scoped data roles. Cosmos stays private. Standard v2 and Premium v2 use a private resolver; Basic v2 uses a public resolver endpoint restricted by Microsoft Entra to the gateway managed identity. |
+| **Default: projection** ([ADR-0052](adr/0052-cosmos-default-installer.md)) | API Management v2, Application Insights and Log Analytics, plus Cosmos DB, a resolver Function, Function host/deployment storage, private endpoints and DNS. An in-network runner applies directory snapshots; an optional job syncs very large directories. Foundry already exists. | The runner, the job and the resolver have different identities and container-scoped data roles. Cosmos stays private. The installer deploys a public resolver endpoint restricted by Microsoft Entra to the gateway managed identity on every tier, and a private resolver on Standard v2 or Premium v2 with `-ResolverInboundAccess private`. |
+| **Named values** | API Management v2, Application Insights and Log Analytics only. For small teams: named values hold about 93 to 110 developers ([SCALE](SCALE.md)). | Entra groups are synchronized to gateway named values. No resolver, Cosmos database or Turnstile service is required. |
 | **Turnstile** | A separate fork deployment: App Service, PostgreSQL, Event Hubs and supporting Functions, Storage, Key Vault and networking. This repository adds the manual apply and hourly export Container Apps jobs. | Entra app roles control console access. The console starts one apply job; the job, not the console, writes gateway named values. |
 | **AUM (Azure Usage Management)** | A local Python terminal FinOps console, command `aum`; no new inference service or mandatory Azure resource. The terminal release is merged; the naming packet is staged on branch `aum`. | It uses Turnstile's HTTP API or Direct Azure with the operator's Azure CLI sign-in. A fake backend is for tests, never an outage fallback. |
 | **Monthly chargeback reports (P50)** | A separate Consumption environment, generator/dispatcher/admin jobs, discovered existing or explicit new VNet, private Blob storage and Azure Communication Services Email. | The reporting identity reads telemetry/configuration and writes reports. A separate administration identity writes configuration only. No Turnstile dependency. |
 | **AUM service (P55)** | Optional Python Functions, keyless Blob/Table state, scoped administrative API and timers. Network, redundancy, warm capacity and telemetry are explicit priced choices. | An independent administrative authority; it refuses gateway writes while Turnstile owns them. It does not proxy inference or make an unimplemented client adapter complete. |
 | **USD budget reconciliation (P21/P59)** | Two preserved named values, a five-minute timer in the optional AUM service, and an on-demand script. | Dated decimal tariffs and observed-category spend become gateway stops. The timer uses the service identity/lease/audit; Direct uses Azure CLI and ETags. Neither writes while Turnstile owns governance. |
 
-Projection and Turnstile are independent options. Turning on one does not imply the other.
-The default deployment has no additional application database, processor or queue, but
-that statement does **not** describe the optional profiles. Use
+The projection and Turnstile are independent. Turning on one does not imply the other.
+The named-values profile adds no application database, processor or queue. The default profile adds
+the projection's Cosmos DB account, resolver Function and runner, and the other profiles add the
+resources in the table. Use
 [`Get-ClaudeBom.ps1`](../scripts/Get-ClaudeBom.ps1) and
 [`Get-ClaudeTurnstileBom.ps1`](../scripts/Get-ClaudeTurnstileBom.ps1) for the resources actually
 deployed, rather than treating an architecture picture as a resource count or price quote.
@@ -88,7 +89,7 @@ remove aliases for families that are no longer selected.
 
 ## Request path
 
-![Six request hops: sign in, admit, serve, meter, attribute and observe. Four budget layers and projection admission, absence and expiry outcomes are shown, followed by the components each optional profile adds.](images/architecture/request-path.png)
+![Six request hops: sign in, admit, serve, meter, attribute and observe. Four budget layers and projection admission, absence and fault outcomes are shown, followed by the components each optional profile adds.](images/architecture/request-path.png)
 
 Source: [02-request.json](architecture/02-request.json). The README's
 `images/request-flow.png` is a byte-identical compatibility copy.
@@ -411,9 +412,9 @@ button. See [viewers and managers](TURNSTILE.md#viewers-and-managers),
 [sign-in before consent](TURNSTILE.md#sign-in-before-the-tenant-grants-consent)
 and [ADR-0016](adr/0016-delegated-management.md).
 
-## Projection freshness, admission and private networking
+## Projection freshness, switch evidence and private networking
 
-![Projection freshness and admission: a complete paged directory scan produces an absolute lease; the in-VNet writer reconciles Cosmos, while the gateway admits bounded misses to an authenticated resolver with per-process single flight.](images/architecture/projection-freshness.png)
+![Projection persistence and switch evidence: a complete paged directory scan writes persistent records; the in-VNet writer reconciles Cosmos, while the gateway admits bounded misses to an authenticated resolver with per-process single flight.](images/architecture/projection-freshness.png)
 
 Source: [05-projection.json](architecture/05-projection.json).
 
@@ -423,52 +424,42 @@ by `oid` and carries the tenant, tier, assigned unit/team and freshness:
 
 - `lastVerifiedAt` is the beginning of the directory observation, not the end of the upload.
 - `reconciliationGeneration` identifies a complete scan.
-- `expiresAt` is an absolute UTC epoch-second expiry. The default and maximum lease is
-  7,200 seconds; the configured range is 60 to 7,200 seconds.
+- Records do not carry an operating expiry. They persist until a later sync deletes or changes them.
 
 The writer follows Graph `@odata.nextLink` pages for users and service principals and
 pages existing Cosmos records with `fetchNext()`. Publication starts only after a complete
-observation. Snapshot replay preserves the original lease; it cannot renew stale access.
-Every retained member is refreshed, even if its tier and unit are unchanged. Kept or
-failed-to-delete orphans do not receive a new lease. A partial write can leave mixed
-generations, each with its own expiry, and exits nonzero.
+observation. Snapshot exports still carry an apply-by deadline of 7,200 seconds from scan start,
+so old membership cannot be replayed. Apply writes only added, moved or changed records and deletes
+orphans during a full sync. Targeted sync writes or deletes one person's record and reads only that
+person's memberships. A partial write can leave mixed generations and exits nonzero.
 
-P86 adds the scheduled renewal path in `infra/projection-renewal.bicep`. It declares an
-internal Container Apps environment, a scheduled Container Apps job, a container-scoped Cosmos
-SQL data-plane writer role, an email-backed action group and scheduled-query alerts. The job
-writes destination-bound status records in the entitlement container. Switch admission reads
-those records through `sync/src/check-admission.mjs` and also checks that the ARM job uses the
-tested pinned image without command or args overrides.
+The optional sync job in `infra/projection-renewal.bicep` is for very large directories. It declares
+an internal Container Apps environment, a Container Apps job with Manual trigger by default, a
+container-scoped Cosmos SQL data-plane writer role, an email-backed action group and alerts. A
+`-CronExpression` schedule adds the stale-success alert; failed-run and Graph-denied alerts remain.
+The job writes destination-bound status records in the entitlement container. It is not required for
+switching.
 
-P94 makes that path deployable ([ADR-0049](adr/0049-projection-renewal-deployment.md)).
 `scripts/Deploy-ClaudeProjectionRenewal.ps1` deploys `infra/projection-registry.bicep` (the ACR
 registry, the job's user-assigned identity and its AcrPull grant) before the image build, then
-the renewal template with the registry and identity as existing resources. The job runs on the
+the sync-job template with the registry and identity as existing resources. The job runs on the
 `renewal` subnet of `infra/projection-network.bicep`, sends its console lines to the gateway's
 Log Analytics workspace through a diagnostic setting, and reads `bu-registry` and `bu-parents`
 on every run through a named-value read role that `infra/projection-renewal-gateway-reader.bicep`
 grants at the gateway's resource group. The image and the in-network runner use one sync package
 that includes `resolver/src/entitlement.mjs`.
 
-P95 adds the switch ([ADR-0050](adr/0050-projection-switch-function.md)).
-`Invoke-ClaudeProjectionSwitch` in `scripts/ClaudeProjectionSwitch.ps1` takes the receipt that
-`scripts/Deploy-ClaudeProjectionRenewal.ps1` writes and checks its values before any call. It
-requires the gateway to call the resolver deployed as `projection-resolver-<prefix>`, which reads the
-receipt's Cosmos account, and reads that resolver's site and application settings to confirm the
-host and the Cosmos account, database, container and tenant it serves from; the deployer's normal run
-sets the gateway's `entitlement-resolver-url` and `entitlement-resolver-audience` to that resolver.
-On a gateway whose `entitlement-source` is already `projection`, the deployer stops after its
-preflight and before any write unless the run redeploys the resolver the gateway calls, with the app
-in its audience. It runs `scripts/Compare-ClaudeEntitlement.ps1
--FailOnDrift` and a read-only `apply-projection.mjs --compare` in the runner, reads the action group
-and the job definition through ARM, and runs admission over the status records the job wrote under
-its current settings. It then writes the entitlement named values to a backup file and sets
+P97 updates the switch ([ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md)).
+`Invoke-ClaudeProjectionSwitch` takes `-ResourceGroup -ApimName -NamePrefix`. It checks the resolver
+deployment, live site settings, gateway resolver named values and the resolver app's service
+principal. It then runs `scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift` and a read-only
+`apply-projection.mjs --compare` in the runner. A gateway with empty named-value lists compares the
+projection with a fresh Entra snapshot instead. Switch evidence is a successful full sync status in
+the last 24 hours for the same account, database, container and tenant, plus no live entitlement
+record the resolver would refuse. The switch writes the entitlement named values to a backup and sets
 `entitlement-source` to `projection`. The deployer's `-FlipAfterCleanCompare` and the guided
-Entitlement step call it; the deployer deploys, publishes and applies nothing in switch mode. The
-installer's `-FlipProjectionAfterCleanCompare` runs its own gateway deployment and list refresh,
-then the deployer's switch mode, and reads `entitlement-source` and the resolver values of an existing
-gateway fail-closed; it takes a gateway for new only when Azure reports it or its resource group
-missing. `scripts/Restore-ClaudeGateway.ps1` does not move
+Entitlement step call it; both deploy, publish and apply nothing in switch mode. The guided flow reads
+`entitlement-projection-prefix` from the gateway. `scripts/Restore-ClaudeGateway.ps1` does not move
 `entitlement-source` to `projection`.
 
 Before a resolver call, APIM limits `entitlement-misses` to 200 per second and 100
@@ -483,10 +474,10 @@ disabled. The deployment defaults to two warm 2-GB instances with 100 HTTP reque
 instance. There is no cross-instance single-flight lock.
 
 `toEntitlement` distinguishes absent records from invalid ones. No record becomes a
-gateway entitlement refusal, while expired or malformed freshness becomes 503. APIM
-includes tenant and schema version in the cache key, clips positive caching to the
-remaining lease, and checks expiry on every hit. A stopped sync cannot authorize new
-requests indefinitely; it does not terminate a stream already admitted.
+gateway entitlement refusal, while wrong tenant, unknown tier, malformed generation or invalid
+verification time becomes 503. APIM includes tenant and schema version in the cache key and caches
+positive answers for `entitlement-cache-seconds`. A stopped sync does not revoke existing records; a
+removal takes a sync and then at most the cache window.
 
 ### Separate network reachability from identity
 
@@ -501,12 +492,11 @@ requests indefinitely; it does not terminate a stream already admitted.
   blob, queue and table. Private DNS links and endpoint zone groups are part of the path,
   not optional decoration.
 
-Schedule observation, transfer and apply well inside the lease. Alert on failures and
-remaining lease. Existing unleased records need a fresh reconciliation before the stricter
-reader and policy are deployed. See
+Run sync after directory changes and before switching. See
 [the private deployment how-to](SECURE-PROJECTION.md),
 [the migration and measurement guide](SCALE.md) and
-[ADR-0017](adr/0017-projection-freshness-and-admission.md).
+[ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md).
+
 
 ## Enterprise network ingress (P54)
 

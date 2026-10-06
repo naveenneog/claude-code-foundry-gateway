@@ -1,13 +1,39 @@
 # Deploy the entitlement projection with private networking
 
+## Quickstart
+
+A new gateway gets the projection from the installer, which deploys it and switches the gateway to it
+([ADR-0052](adr/0052-cosmos-default-installer.md)):
+
+```powershell
+./Install-ClaudeGateway.ps1
+```
+
+An existing gateway, from PowerShell 7 at the repository root, in order:
+
+| Step | Command |
+|---|---|
+| Deploy, populate and compare; named values keep serving | `./scripts/Deploy-ClaudeProjection.ps1 -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix>` |
+| Switch, after the resolver checks, the compare and switch evidence | `./scripts/Deploy-ClaudeProjection.ps1 -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> -FlipAfterCleanCompare` |
+| Publish one developer's change, after the Entra group change | `./scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim> -User <upn-or-object-id>` |
+| Optional, for very large directories: the sync job | `./scripts/Deploy-ClaudeProjectionRenewal.ps1 -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> -AlertEmail <address>` |
+
+Rollback refreshes and compares the named values, then sets `entitlement-source` back to `named-value`
+([switch](#switch-to-the-projection-p95)). A rollback to named values holds only a population within their
+capacity, about 93 developers in business-unit membership and about 110 per tier list
+([Scale](SCALE.md#what-runs-out-first)). The rest of this article covers each step, the network, the
+rights used and the costs.
+
 The gateway decides each developer's tier from two named values. A named value
 holds 4,096 characters, which is about 93 to 110 object ids, so beyond roughly a
 hundred developers entitlement has to move to the **projection**: one Cosmos DB
 record per developer, read through a small resolver Function when the gateway's
 cache misses.
 
-This article deploys private endpoints for Cosmos DB and resolver storage. On
-Standard v2 and Premium v2, it also makes the resolver inbound path private. On
+This article deploys private endpoints for Cosmos DB and resolver storage. The
+installer deploys a public, Entra-authenticated resolver on every tier
+([ADR-0052](adr/0052-cosmos-default-installer.md)). `Deploy-ClaudeProjection.ps1` run on its own
+makes the resolver inbound path private on Standard v2 and Premium v2. On
 Basic v2, the resolver inbound path is public because Basic v2 has no outbound
 VNet integration; the resolver is still Microsoft Entra-authenticated and allows
 only the gateway managed identity. APIM ingress remains public and authenticated;
@@ -16,6 +42,8 @@ Foundry account private is a separate step below, not an effect of the
 projection templates. It then points the gateway at the resolver
 without changing anyone's access, ready for the
 [migration runbook](SCALE.md#the-move-itself-step-by-step).
+For the manual operator worksheet for the sync-based Cosmos entitlement, see
+[Cosmos projection workbook](PROJECTION-WORKBOOK.md).
 
 For private gateway ingress, Application Gateway WAF, corporate DNS/routing
 and the placement of the other services, see the
@@ -36,7 +64,7 @@ entitlement read/write path, not the inference or reporting topology.
 Developer ──Entra token──▶ API Management (public gateway)
                               │  managed identity token, audience api://<resolver-app>
                               ▼
-                        Resolver (Flex Consumption)   ◀── private endpoint, or public+Entra on Basic v2
+                        Resolver (Flex Consumption)   ◀── public+Entra, or private endpoint on Standard/Premium v2
                               │  managed identity, read only, one container
                               ▼
                         Cosmos DB (serverless)        ◀── private endpoint only
@@ -51,7 +79,7 @@ network owner. This is outbound integration, not a private client ingress.
 | Component | Authenticates with | Reachable from | Key authentication |
 |---|---|---|---|
 | Cosmos DB account | Entra only | Private endpoint | Off (`disableLocalAuth`) |
-| Resolver Function | Built-in authentication: the gateway's identity only | Private endpoint on Standard/Premium v2; public endpoint on Basic v2 | Basic publishing off, FTP off |
+| Resolver Function | Built-in authentication: the gateway's identity only | Public endpoint by default from the installer, on every tier; private endpoint on Standard/Premium v2 with `-ResolverInboundAccess private`, the standalone deployer's default on those tiers | Basic publishing off, FTP off |
 | Resolver storage | Entra only | Private endpoints (blob, queue, table) | Off (`allowSharedKeyAccess: false`) |
 | Application Insights | Entra only | Public ingestion, identity required | Off (`DisableLocalAuth`) |
 | Foundry account | The gateway's identity | Private endpoint | Unchanged by this article |
@@ -64,118 +92,146 @@ resolver therefore cannot change who is entitled.
 
 | Requirement | Detail |
 |---|---|
-| Gateway tier | **Standard v2 or Premium v2** for the private resolver profile. **Basic v2** uses `inboundAccess=public` with App Service Authentication and exact gateway managed-identity allow lists; Cosmos remains private. |
+| Gateway tier | Any v2 tier. The public resolver profile (the installer's default) uses `inboundAccess=public` with App Service Authentication and exact gateway managed-identity allow lists. The private resolver profile needs **Standard v2 or Premium v2** with outbound VNet integration. Cosmos remains private in both. |
 | Roles | Owner, or Contributor plus User Access Administrator, on deployment resources; network join/write rights on the supplied VNet/subnets/DNS; application registration/assignment rights in Entra ID. Azure subscription Owner is not a directory role. |
 | Resource providers | Registered: `Microsoft.App`, `Microsoft.DocumentDB`, `Microsoft.Web`, `Microsoft.ContainerInstance`, `Microsoft.Network`, `Microsoft.Storage`, `Microsoft.OperationalInsights`, `Microsoft.Insights` and `Microsoft.Authorization`. These cover the resources and delegations in `infra/projection.bicep:95`, `infra/projection-network.bicep:67` and `infra/resolver.bicep:137`. |
 | Region capacity | Cosmos regional capacity cannot be checked in advance or reserved by preflight. Measured: Canada Central and Canada East both refused with `ServiceUnavailable ... high demand ... To request region access for your subscription, please follow this link https://aka.ms/cosmosdbquota`. A private endpoint can point at an account in another region, so a Cosmos DB account elsewhere still stays private in the VNet. |
 | Subnets | See the next table. In most enterprises the network team creates them and hands over the resource IDs. |
 | Tools | PowerShell **7 or later** for `Deploy-ClaudeProjection.ps1` and `Sync-ClaudeProjection.ps1`; Azure CLI/Bicep, Node/npm and a ZIP-capable `tar`. Bicep `build-params` with `using none` evaluates the existing storage name locally. Shared Graph membership callers that manage named values still support Windows PowerShell 5.1. |
-| Rollout approval | P86 admits automated switching only after destination-bound Cosmos evidence from the in-VNet runner and a pinned no-override Container Apps job definition both pass. Owner approval is still required before merge. |
+| Switch evidence | The switch writes `entitlement-source` only after the resolver checks, a clean compare and a successful full sync within 24 hours for this Cosmos account and tenant, with no record the resolver would refuse ([ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md)). A full sync through the runner is enough; the sync job is optional. |
 
 | Subnet | Size | Delegation | Notes |
 |---|---|---|---|
 | Gateway integration | /27 minimum, /24 recommended | `Microsoft.Web/serverFarms` | Needs a network security group. Only for Standard v2 and Premium v2. |
 | Private endpoints | Reserve capacity for five projection endpoints plus any Foundry endpoint | None | Cosmos, resolver and resolver storage ×3; Foundry is separate |
 | Resolver integration | /27 minimum (/26 used) | `Microsoft.App/environments` | Flex Consumption's own delegation, not `Microsoft.Web/serverFarms`. No private endpoints in it, and no underscore in its name. [Learn: subnet sizing and requirements](https://learn.microsoft.com/azure/azure-functions/flex-consumption-how-to#subnet-sizing-and-requirements) |
-| Runner (optional) | /27 | `Microsoft.ContainerInstance/containerGroups` | The container that writes, compares and runs the read-only admission checker from inside the network. |
-| Renewal job | /27 minimum | `Microsoft.App/environments` | Internal workload-profiles Container Apps environment, separate from the resolver subnet. `infra/projection-network.bicep` creates `renewal` at `10.10.3.64/27` in the default `10.10.0.0/16` plan and outputs `renewalSubnetId`; with an existing VNet, pass `renewalSubnetId`. |
+| Runner (optional) | /27 | `Microsoft.ContainerInstance/containerGroups` | The container that writes, compares and reads switch evidence from inside the network. |
+| Optional sync job | /27 minimum | `Microsoft.App/environments` | Internal workload-profiles Container Apps environment, separate from the resolver subnet. `infra/projection-network.bicep` creates `renewal` at `10.10.3.64/27` in the default `10.10.0.0/16` plan and outputs `renewalSubnetId`; with an existing VNet, pass `renewalSubnetId`. |
 
 
-### Scheduled renewal job and admission (P86, P94)
+### Optional sync job and switch evidence (P97)
 
-The renewal job deploys after the projection, in the same resource group, with one command ([ADR-0049](adr/0049-projection-renewal-deployment.md)):
-
-```powershell
-pwsh -NoProfile -File .\scripts\Deploy-ClaudeProjectionRenewal.ps1 `
-  -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> -AlertEmail <alert-email>
-```
-
-It checks every value that reaches an `az` argument before the first Azure call, reads the projection and network deployment outputs, then runs three phases, each safe to rerun:
-
-1. `infra/projection-registry.bicep`: an ACR registry, the job's user-assigned managed identity and its AcrPull grant. ACR Basic is the default for standing cost and is reached over the public ACR endpoint with Entra authentication; ACR Premium (`-AcrSku Premium`) is required for a private registry endpoint.
-2. `az acr build` from the sync package, which holds `sync/` and `resolver/src/entitlement.mjs` at their repository paths, then the image digest read back with `az acr manifest show-metadata`. ACR task runs are paused for subscriptions on Azure free credits ([U114](UNKNOWNS.md#p94-research-before-implementation)); there, `docker build -f sync/Dockerfile` and `docker push` from the package directory replace the build, and `-ImageDigest <sha256 digest>` skips it.
-3. `infra/projection-renewal.bicep`: an internal Container Apps workload-profiles environment on the renewal subnet (`10.10.3.64/27` in the default plan, delegated to `Microsoft.App/environments`), a scheduled job every 30 minutes pinned to the digest, Cosmos SQL data-plane write access on `claude/entitlement` only, a custom role on the gateway whose only action is `Microsoft.ApiManagement/service/namedValues/read`, a diagnostic setting that sends the environment's logs to the gateway's Log Analytics workspace, an action group with the email receivers, and three alert rules.
-
-The job runs the image's entry point with `--graph` and no command or args override. Its environment carries `AZURE_CLIENT_ID` (the identity has no system-assigned counterpart, [U112](UNKNOWNS.md#p94-research-before-implementation)), the tier group object ids (`none` for no premium tier) and the gateway id. Every run reads `bu-registry` and `bu-parents` through ARM and orders the units as `Sort-ClaudeBuByDepth` does, so a unit added later reaches the projection on the next run. A unit whose group Graph no longer finds is an empty unit with a warning, as `Get-GroupMemberOids` in `scripts/ClaudeGraphMembership.ps1` treats it; a tier group Graph does not find stops the run. One group for both tiers is refused by the deploy script, the guide and admission, because premium membership takes precedence. Its last console line is `projection-renewal-succeeded` or `projection-renewal-failed` with the failed stage (`config`, `business-units`, `graph`, `cosmos-read`, `cosmos-write`, `status`, `expired`, `plan` or `lease`). The alert rules read `ContainerAppConsoleLogs` for this job only and return rows only when unhealthy ([U107-U110](UNKNOWNS.md#p94-research-before-implementation)): no success in 45 minutes, the newest success leaving less than 60 minutes before the oldest record expires, and any failed run. The job and environment are named `caj-renew-` and `cae-renew-` followed by a hash of the resource group and prefix, because Container Apps names are at most 32 characters ([U118](UNKNOWNS.md#p94-research-before-implementation)); both carry the tag `claude-projection-prefix`.
-
-P94 keeps P86's names for the registry, the identity, the action group and two alert rules, which a rerun updates in place. A resource group that still holds P86's job (`caj-projection-renewal-<prefix>`), environment (`cae-projection-<prefix>`) or `sqr-projection-<prefix>-graph-read-failed` alert, each matched by name and resource type, is refused before any write: the new job would run beside them, P86's job cannot run (its image lacks `resolver/src/entitlement.mjs` and it sets no `AZURE_CLIENT_ID`), and an environment's subnet is given when the environment is created ([custom virtual networks](https://learn.microsoft.com/azure/container-apps/custom-virtual-networks), updated 2026-05-19, read 2026-10-04). The refusal lists the delete commands for the ones present, the job before its environment ([ADR-0049](adr/0049-projection-renewal-deployment.md)):
-
-```bash
-az resource delete -g <rg> -n caj-projection-renewal-<prefix> --resource-type Microsoft.App/jobs
-az resource delete -g <rg> -n cae-projection-<prefix> --resource-type Microsoft.App/managedEnvironments
-az resource delete -g <rg> -n sqr-projection-<prefix>-graph-read-failed --resource-type Microsoft.Insights/scheduledQueryRules
-```
-
-The script prints the tenant administrator's Graph grant with the identity's principal id and writes a receipt with no secrets to `onboarding/projection-renewal-<prefix>.json` (ignored by git): the job, image digest, action group, runner, Cosmos account, tenant, gateway, tier group ids and the identity's client and principal ids, with the source commit. P95's switch reads it. Each alert address receives a confirmation email from Azure Monitor and receives no alerts until it confirms ([U116](UNKNOWNS.md#p94-research-before-implementation)). `-WhatIf` reads the deployment outputs and writes nothing. [Azure CLI commands](AZ-COMMANDS.md#10-optional-cosmos-projection) give the same deployment as plain commands.
-
-Standing cost at list price (Azure Retail Prices API, East US 2, read 2026-10-04): ACR Basic $0.1666 a day, about $5.07 a 730-hour month; three log search alert rules at a 5-minute frequency, $1.50 a month each. Each job run bills $0.000024 per vCPU-second and $0.000003 per GiB-second at 1 vCPU and 2 GiB, $0.00003 a second, before the Container Apps monthly free grant; at 1,460 runs a month a 60-second run would cost about $2.63 a month. Run duration depends on the directory and is not measured. Cosmos write cost by member count is in [ADR-0045](adr/0045-scheduled-projection-renewal.md#cost-note).
-
-A tenant administrator grants the job identity Graph membership read once:
+Most changes use on-demand sync. Add or remove a developer in the Entra group, then run:
 
 ```powershell
-./scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1 -PrincipalId <managed-identity-principal-id>
+.\scripts\Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim> -User <name-or-object-id>
 ```
 
-Plain `az rest` equivalent:
+Without `-User`, the script syncs every entitled person. `-Store auto` follows the gateway's
+`entitlement-source`; `-Store named-value` refreshes the named-value lists before rollback. A
+projection sync reads the gateway named value `entitlement-projection-prefix`, exports a fresh
+snapshot with the operator's Microsoft Entra sign-in, starts the in-VNet runner when it has stopped,
+and writes Cosmos from inside the VNet. The runner uses `sleep 10800` and restart policy `Never`;
+`az container start` starts a container group whose containers terminated on their own (Microsoft
+Learn, updated 2025-11-17: https://learn.microsoft.com/azure/container-instances/container-instances-stop-start).
+
+Projection records persist until a sync deletes or changes them. A job outage does not expire
+existing access. Removing a person takes effect after the sync plus at most the gateway cache window
+(`entitlement-cache-seconds`). A disabled Entra account cannot get new tokens; a default access token
+lasts 60 to 90 minutes (Microsoft Learn, updated 2026-07-17:
+https://learn.microsoft.com/entra/identity-platform/access-tokens).
+
+`scripts/Deploy-ClaudeProjectionRenewal.ps1` deploys the optional sync job for very large
+directories:
 
 ```powershell
-$graphAppId = '00000003-0000-0000-c000-000000000000'
-$graph = az ad sp show --id $graphAppId --query "{id:id, role:appRoles[?value=='GroupMember.Read.All'].id | [0]}" -o json | ConvertFrom-Json
-$body = @{ principalId = '<managed-identity-principal-id>'; resourceId = $graph.id; appRoleId = $graph.role } | ConvertTo-Json
-$file = New-TemporaryFile; Set-Content -Path $file -Value $body -Encoding utf8
-az rest --method post --url "https://graph.microsoft.com/v1.0/servicePrincipals/<managed-identity-principal-id>/appRoleAssignments" --headers 'Content-Type=application/json' --body "@$file"
+.\scripts\Deploy-ClaudeProjectionRenewal.ps1 -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> -AlertEmail <address>
 ```
 
-Outbound firewall or forced-tunnel rules must allow `login.microsoftonline.com`, `graph.microsoft.com`, `management.azure.com` (the job reads `bu-registry` and `bu-parents`), the ACR login server and data endpoint, and the Cosmos private endpoint through `privatelink.documents.azure.com`. The job writes status records into `claude/entitlement` with partition key `projection-status::<tenantId>`, `type=projection-reconciliation-status` and `ttl=21600`; resolver point reads by developer object id cannot return them.
+It deploys the registry and the job's identity, builds the image with `az acr build` from the sync package, which
+holds `sync/` and `resolver/src/entitlement.mjs` at their repository paths, reads the image digest back
+with `az acr manifest show-metadata`, then deploys the job with that digest
+([ADR-0049](adr/0049-projection-renewal-deployment.md)). Its trigger is Manual by default;
+`-CronExpression '<five fields>'` adds a schedule. A manual run starts with `az containerapp job start`. The job needs Microsoft Graph application
+permission `GroupMember.Read.All`, granted by a Privileged Role Administrator or Global Administrator
+through `scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1`. Large full syncs through the runner
+are slow because `scripts/ClaudeRunner.ps1` sends files through `az container exec` in chunks under
+5,000 characters, about five seconds each. About 40,000 developers fit in a snapshot's 2-hour apply-by
+time; a transfer that cannot end in time is refused before it starts, and ROADMAP packet P99 plans a
+directory-scale transfer ([ADR-0052](adr/0052-cosmos-default-installer.md)).
 
-Deployment order: deploy the projection (`scripts/Deploy-ClaudeProjection.ps1`), then the renewal job (`scripts/Deploy-ClaudeProjectionRenewal.ps1`); the tenant admin grants `GroupMember.Read.All`; runs succeed; evidence accumulates for about 60-90 minutes on the 30-minute schedule (three successful runs); the [switch](#switch-to-the-projection-p95); rollback by refreshing and comparing named values, then setting `entitlement-source` back to `named-value`. Offline tests prove the deployment order, the job's runs against stand-in Graph, ARM and Cosmos, admission over their evidence and the switch ([P94 status](status/P94.md#p94-the-p86-renewal-job-deploys-and-renews-2026-10-04), [P95 status](status/P95.md#p95-the-projection-switch-over-runs-end-to-end-2026-10-05)); no live tenant has run the job, and the live Graph grant is [U17](UNKNOWNS.md).
+The script refuses before any write unless the gateway's `entitlement-projection-prefix` names this
+projection. The job writes records without `expiresAt`, which a resolver published before
+[ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md) refuses; `scripts/Deploy-ClaudeProjection.ps1`
+publishes the current resolver before it records the prefix. A job deployed before ADR-0051 keeps its
+older image, which writes `expiresAt` and takes no apply lock, until this script runs again.
 
-Admission runs fixed repository code through `scripts/ClaudeRunner.ps1`, reads Cosmos status history and computes the oldest expiry from the live entitlement records the resolver can serve, then separately reads the ARM job definition and the action group. It applies the resolver's own validation to every unexpired entitlement record before counting it. Invalid live records refuse admission with a count and up to three hashed object-id samples. It requires at least 60 minutes of live-record expiry margin, two generation advances within two hours, newest success within 45 minutes, matching status/member counts, no unexpired entitlement records on an older generation, the tested image digest, no command/args override, a client id, tier group object ids (two different groups, or `none` for premium) and an API Management gateway id in the job's settings, and an enabled action group with an email receiver whose status is `Enabled` ([U119](UNKNOWNS.md#p95-research-before-implementation)). Only status records the job wrote under its current settings count, and the switch requires those settings to name the gateway being switched, the compared tier groups, the receipt's identity, and the Cosmos account and tenant admission reads ([ADR-0050](adr/0050-projection-switch-function.md)). The live-record aggregate is a one-time cross-partition scan during switching, acceptable at 500,000 records; it is not on the request path. Refusals name the reason and remedy.
+The optional job still deploys its registry, image, identity, action group, diagnostic setting and
+alerts. Failed-run and Graph-denied alerts always exist; the stale-success alert is emitted only when
+a schedule is configured. Switch evidence does not read the job definition, image digest, action
+group or receipt.
+
+Outbound firewall or forced-tunnel rules must allow `login.microsoftonline.com`,
+`graph.microsoft.com`, `management.azure.com`, the ACR login server and data endpoint, and the Cosmos
+private endpoint through `privatelink.documents.azure.com`. The job writes status records into
+`claude/entitlement` with partition key `projection-status::<tenantId>`,
+`type=projection-reconciliation-status` and a seven-day TTL; resolver point reads by developer object
+id cannot return them.
+
+Deployment order: deploy the projection (`scripts/Deploy-ClaudeProjection.ps1`), sync the projection
+(on demand through `scripts/Sync-ClaudeAccess.ps1`, or manually start the optional job after its Graph
+grant), then run the [switch](#switch-to-the-projection-p95). Rollback refreshes and compares named
+values, then sets `entitlement-source` back to `named-value`.
+
+Switch evidence runs fixed repository code through `scripts/ClaudeRunner.ps1`. It requires the newest
+successful full sync status for this account, database, container and tenant to have finished within
+24 hours, and no live entitlement record the resolver would refuse. Invalid live records refuse with
+a count and up to three SHA-256 object-id samples, never raw ids. A targeted sync writes a user-mode
+status record and does not count as switch evidence.
 
 ### Switch to the projection (P95)
 
-`scripts/Deploy-ClaudeProjection.ps1 -FlipAfterCleanCompare` reads the renewal receipt (`onboarding/projection-renewal-<prefix>.json`, or `-RenewalReceiptPath`) and runs `Invoke-ClaudeProjectionSwitch` (`scripts/ClaudeProjectionSwitch.ps1`, [ADR-0050](adr/0050-projection-switch-function.md)). It deploys, publishes and applies nothing:
+`scripts/Deploy-ClaudeProjection.ps1 -FlipAfterCleanCompare` runs `Invoke-ClaudeProjectionSwitch
+-ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix>`. It deploys, publishes and applies nothing:
 
 ```powershell
 pwsh -NoProfile -File .\scripts\Deploy-ClaudeProjection.ps1 `
   -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> -FlipAfterCleanCompare -WhatIf
 ```
 
-1. The receipt's values are checked before any call: each has the form Azure gives it, the job, action group and Cosmos account are in the receipt's resource group and the gateway's subscription, and, after the gateway is read, the receipt's tenant is the tenant of the gateway's managed identity.
-2. The deployment `projection-resolver-<prefix>` must read the receipt's Cosmos account, and the gateway's `entitlement-resolver-url` and `entitlement-resolver-audience` must be its outputs; the deployer's normal run sets them ([section 9](#9-point-the-gateway-at-the-resolver) gives the same step by hand). The site that deployment names is then read live: it must serve the gateway's URL, and its application settings `COSMOS_ENDPOINT`, `COSMOS_DATABASE`, `COSMOS_CONTAINER` and `PROJECTION_TENANT_ID` must be the receipt's Cosmos account, `claude`, `entitlement` and the receipt's tenant ([U122](UNKNOWNS.md#p95-research-before-implementation)).
-3. `scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift` compares the gateway's lists with Entra and exports the gateway's decisions.
-4. The runner unpacks the sync package and runs `apply-projection.mjs --compare` against those decisions, read-only.
-5. Admission reads the action group, the job definition and its settings, and the Cosmos evidence, as above.
-6. The entitlement named values (`entitlement-source`, `allow-standard`, `allow-premium`, `bu-members`) are written to `onboarding/projection-switch-<apim>-<UTC time>-<8 hex digits>.json`.
-7. `entitlement-source` is set to `projection`, the one write.
+1. Resolver checks: deployment `projection-resolver-<prefix>`, live resolver URL/audience named values,
+   resolver site settings, and the resolver app's service principal. The deployer creates that service
+   principal when it is missing because Entra refuses tokens for an app without one (`AADSTS500011`).
+2. Drift check: `scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift` compares the gateway's named
+   values with Entra and exports the gateway's decisions. A gateway with empty `allow-standard`,
+   `allow-premium` and `bu-members` lists skips the named-value drift/compare path and compares the
+   projection with a fresh Entra snapshot instead.
+3. Runner compare: `apply-projection.mjs --compare` or `--compare-snapshot` reads the projection and
+   writes nothing.
+4. Evidence: a successful full sync in the last 24 hours and no record the resolver would refuse.
+5. Backup: entitlement named values are written to a projection-switch backup.
+6. One write: `entitlement-source` is set to `projection`.
 
-A refusal at any step leaves `entitlement-source` unchanged and writes no backup; `-WhatIf` runs steps 1-5 and stops, and `-Confirm` asks about step 7 alone. The guided Entitlement step runs the same function with the receipt, from the decision record's folder or the repository's `onboarding/`, whose `gatewayResourceId` is the gateway, and its own snapshot, `backups/before-entitlement-<apim>-<UTC time>.json`, as the backup (`scripts/flow/Entitlement.ps1`). The output names the backup and the rollback: `entitlement-source` back to `named-value` after `scripts/Sync-ClaudeAccess.ps1` refreshes the lists and `scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift` checks them.
+A refusal leaves `entitlement-source` unchanged and writes no backup. `-WhatIf` runs through evidence
+and stops before the backup. The guided Entitlement step reads the gateway named value
+`entitlement-projection-prefix` and calls the same switch. `scripts/Restore-ClaudeGateway.ps1` does not
+move `entitlement-source` to `projection`; it names this switch instead. A deployment of
+`infra/main.bicep` with `entitlementSource=projection`, like the manual command in the [Azure CLI
+guide](AZ-COMMANDS.md#10-optional-cosmos-projection), skips switch evidence.
 
-`scripts/Restore-ClaudeGateway.ps1` does not move `entitlement-source` to `projection`; it names this switch instead. A deployment of `infra/main.bicep` with `entitlementSource=projection`, like the manual command in the [Azure CLI guide](AZ-COMMANDS.md#10-optional-cosmos-projection), skips admission. The installer passes the template the live value ([ADR-0050](adr/0050-projection-switch-function.md) decision 9).
 
 #### Owner-attended live run
 
-No live tenant has run these steps. Each row states what the step shows.
+On 2026-10-06 `scripts/Test-ClaudeLiveProjection.ps1` ran the installer's projection path in a test
+tenant on a disposable Basic v2 gateway: steps 1, 2 (with `-User`) and 4, then requests that returned
+200, 403 after a removal and targeted sync, and 200 after re-adding. Steps 3 and 6, the optional job
+and a full sync without `-User` have not run in a live tenant. Each row states what the step shows.
 
 | Step | Command or place | Shows |
 |---|---|---|
-| 1. Projection | `scripts/Deploy-ClaudeProjection.ps1` without `-FlipAfterCleanCompare` ([one-command deployment](#one-command-deployment)) | Cosmos, the network with its renewal subnet, the resolver and the gateway's two resolver named values, the population and a clean compare |
-| 2. Renewal job | `scripts/Deploy-ClaudeProjectionRenewal.ps1 -AlertEmail <address>` ([renewal job](#scheduled-renewal-job-and-admission-p86-p94)) | The registry, image digest, job and alerts deploy; whether the alert queries pass deployment-time validation ([U109](UNKNOWNS.md#p94-research-before-implementation)) and whether AcrPull was in effect for the job ([U113](UNKNOWNS.md#p94-research-before-implementation)) |
-| 3. Graph grant | A tenant administrator runs `scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1 -PrincipalId <printed id>` | The job's identity reads group membership ([U17](UNKNOWNS.md)) |
-| 4. Alert address | The confirmation email from Azure Monitor, then Monitor > Action groups > Test | The address receives alerts, and whether an unconfirmed address reads `Enabled` ([U116](UNKNOWNS.md#p94-research-before-implementation)) |
-| 5. Runs | `az containerapp job execution list -g <rg> -n <job> -o table`, and `ContainerAppConsoleLogs` in the workspace | Three successful runs 30 minutes apart, each ending with `projection-renewal-succeeded` |
-| 6. Check | Step 1's command with `-FlipAfterCleanCompare -WhatIf` | The receipt and resolver checks, the drift check, the compare and admission pass |
-| 7. Switch | Step 6's command without `-WhatIf` | One write, the backup path and the rollback text |
-| 8. Requests | Section 11 of the [Azure CLI guide](AZ-COMMANDS.md#11-verification) | Requests resolve through the projection |
-| 9. Rollback, when needed | `scripts/Sync-ClaudeAccess.ps1`, `scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift`, then `entitlement-source` set to `named-value` | Named values serve again |
+| 1. Projection | `scripts/Deploy-ClaudeProjection.ps1` without `-FlipAfterCleanCompare` ([one-command deployment](#one-command-deployment)) | Cosmos, the network, the resolver, `entitlement-projection-prefix`, the resolver named values, population and a clean compare |
+| 2. Sync | `scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim>` or `az containerapp job start` for the optional job | A successful full sync status record exists in Cosmos |
+| 3. Check | Step 1's command with `-FlipAfterCleanCompare -WhatIf` | Resolver checks, drift check, runner compare and switch evidence pass |
+| 4. Switch | Step 3's command without `-WhatIf` | One write, the backup path and the rollback text |
+| 5. Requests | Section 11 of the [Azure CLI guide](AZ-COMMANDS.md#11-verification) | Requests resolve through the projection |
+| 6. Rollback, when needed | `scripts/Sync-ClaudeAccess.ps1`, `scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift`, then `entitlement-source` set to `named-value` | Named values serve again |
 
 ### One-command deployment
 
-**Projection switching is evidence-gated in P86.** Records expire at most **two hours after scan
-start**; without renewal, **every developer gets 503 after expiry**. A clean comparison,
-digest-pinned job or successful ARM execution does not admit a switch by itself. The deployer
-reads Cosmos renewal evidence through the runner and validates the ARM job definition before
-writing `entitlement-source=projection` ([ADR-0045](adr/0045-scheduled-projection-renewal.md)).
+**Projection switching is evidence-gated.** With persistent records, a sync outage does not stop
+developers. Switching uses `Invoke-ClaudeProjectionSwitch`, which checks resolver configuration,
+drift, the runner compare and Cosmos evidence before writing `entitlement-source=projection`
+([ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md)).
 
 `-PreflightOnly` runs the same checks as a normal deployment, with no Azure writes, and exits
 nonzero on any FAIL. The normal estimate is **30-90 seconds**, including **25 seconds**
@@ -222,9 +278,9 @@ stops after the preflight and before any write, `-PreflightOnly` and `-WhatIf` i
 site `func-resolver-<prefix>` that the run redeploys serves the gateway's `entitlement-resolver-url` and the run's
 resolver app is the one in its `entitlement-resolver-audience` (`scripts/ClaudeProjectionChecks.ps1:201-227`).
 This one-command
-path uses the gateway resource group for its projection resources. With `-FlipAfterCleanCompare`
-the command deploys nothing: it reads the renewal receipt and runs the
-[switch](#switch-to-the-projection-p95); `-WhatIf` runs its checks and stops before the backup.
+path uses the gateway resource group for its projection resources. With `-FlipAfterCleanCompare` the command deploys nothing: it reads the gateway's
+`entitlement-projection-prefix` and runs the [switch](#switch-to-the-projection-p95); `-WhatIf` runs
+its checks and stops before the backup.
 A declined deployment/population/comparison prerequisite aborts the run; it does not fall through
 to a later step. `-WhatIf` without a switch request prints the planned operations without
 writing Azure resources. It does not require creating an app merely to preview the plan
@@ -253,7 +309,14 @@ or creation failures still stop the run rather than claiming success.
 | Tier group collections and shared membership readers | `GroupMember.Read.All` or broader group/directory-read permission; service-principal detail can require application-read access |
 | Gateway service principal; existing resolver app/id URI | Graph application/service-principal read permission, such as `Application.Read.All`, and applicable user/role access |
 | Default app-registration policy, only when no existing app is selected | `Policy.Read.All`; unreadable policy produces WARN, and `-ResolverAppId` avoids this read |
-| Switch (`-FlipAfterCleanCompare`) | API Management named-value read and write; ARM read of the renewal job, its action group, the resolver deployment and the resolver site; the list action on the site's application settings (`Microsoft.Web/sites/config/list/action`, which the Reader role does not include); and Cosmos data read through the runner ([ADR-0050](adr/0050-projection-switch-function.md), [U122](UNKNOWNS.md#p95-research-before-implementation)) |
+| Switch (`-FlipAfterCleanCompare`) | API Management named-value read and write; ARM read of the resolver deployment and resolver site; the list action on the site's application settings (`Microsoft.Web/sites/config/list/action`, which the Reader role does not include); Graph read for the drift check; and Cosmos data read through the runner ([ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md)) |
+| Projection sync (`Sync-ClaudeAccess.ps1`) | API Management named-value read; delegated Graph `GroupMember.Read.All` for a full sync, plus `User.ReadBasic.All` for `-User`; and, on `aci-projtest-<prefix>`, container group read, `Microsoft.ContainerInstance/containerGroups/start/action` and `Microsoft.ContainerInstance/containerGroups/containers/exec/action` |
+
+A command run through `az container exec` runs as the runner's managed identity, which holds
+Cosmos DB Built-in Data Contributor on `claude/entitlement`. Anyone who can run a projection sync can
+therefore write any entitlement record, and the status record that switch evidence reads. That is the
+same trust as write access to the named values `allow-standard`, `allow-premium` and `bu-members`,
+so the runner's exec permission is an entitlement-write permission.
 
 Sources, accessed 2026-09-29: [user GET](https://learn.microsoft.com/graph/api/user-get?view=graph-rest-1.0),
 [group list](https://learn.microsoft.com/graph/api/group-list?view=graph-rest-1.0),
@@ -273,7 +336,14 @@ $appId = az ad app create --display-name claude-projection-resolver-<prefix> `
 if ($LASTEXITCODE -ne 0 -or -not $appId) { throw 'Resolver registration failed; no update attempted.' }
 az ad app update --id $appId --identifier-uris "api://$appId"
 if ($LASTEXITCODE -ne 0) { throw 'Resolver identifier URI update failed.' }
+az ad sp create --id $appId
+if ($LASTEXITCODE -ne 0) { throw 'Resolver service principal creation failed.' }
 ```
+
+Microsoft Entra ID issues no token for an application that has no service principal in the tenant
+(AADSTS500011; [application and service principal objects](https://learn.microsoft.com/entra/identity-platform/app-objects-and-service-principals)).
+A registration made in the portal gets one; `az ad app create` does not. The deployer creates the
+service principal when it is missing, and the switch refuses without it.
 
 The operator's deployment uses `-ResolverAppId $appId`. Azure subscription Owner is not an Entra
 application-registration role. The deployer reports an actual creation failure, including
@@ -585,19 +655,16 @@ Endpoints**), save, and repeat the verification above.
 
 ### Switch evidence
 
-**A successful initial scan does not supply renewal.** Records expire at most **two hours from
-scan start**, after which **every developer receives 503** unless the renewal job has renewed
-them. The deployer's `-FlipAfterCleanCompare`, the installer's `-FlipProjectionAfterCleanCompare`
-and the guided Entitlement step switch through `Invoke-ClaudeProjectionSwitch`, which deploys and
-applies nothing: a snapshot applied before admission leaves the job's status records older than
-the live records, and admission refuses ([ADR-0050](adr/0050-projection-switch-function.md)).
+A successful full sync supplies switch evidence for 24 hours. The deployer, installer and guided
+Entitlement step switch through `Invoke-ClaudeProjectionSwitch`, which deploys and applies nothing.
+Evidence is read through the in-VNet runner and is destination-bound to the Cosmos account, database,
+container and tenant. It requires no renewal receipt and no job definition. A targeted `-User` sync is
+for one developer and does not count as switch evidence.
 
-ARM success can describe a dry-run and cannot prove actual renewal or continuing schedule
-activity. Admission reads destination-bound Cosmos evidence through the runner: the oldest expiry
-has at least 60 minutes of margin, the generation advanced at least twice in two hours, the newest
-renewal is within 45 minutes, and the job wrote the evidence under its current settings. The tested
-image and entry point reject dry-run overrides ([ADR-0045](adr/0045-scheduled-projection-renewal.md),
-U56).
+The switch refuses when a live entitlement record is one the resolver would refuse: wrong tenant,
+unknown tier, malformed generation, missing or future `lastVerifiedAt`, or a status record reached
+through the wrong query. The refusal reports a count and up to three SHA-256 object-id samples.
+
 
 Apply/compare failure diagnostics expose counts and hashed samples, not raw email or unit values.
 They contain at most 40 lines and 4,096 characters in total, counting the heading line and any
@@ -634,12 +701,13 @@ Invoke-RunnerCommand -ResourceGroup $rg -Name $runner -Command "node -e require(
 Invoke-RunnerCommand -ResourceGroup $rg -Name $runner -Command 'tar -x -z -f /work/sync-source.tar.gz -C /work'
 Invoke-RunnerCommand -ResourceGroup $rg -Name $runner -Command 'npm --prefix /work/sync ci --omit=dev --ignore-scripts'
 
-# Now export using the GATEWAY resource group, copy, and apply before expiry.
+# Now export using the GATEWAY resource group, copy, and apply before the snapshot apply-by deadline.
+$accountResourceId = az cosmosdb show -n cosmos-<prefix> -g $rg --query id -o tsv
 ./scripts/Sync-ClaudeProjection.ps1 -Account cosmos-<prefix> -ApimName <apim> `
     -ResourceGroup '<gateway-resource-group>' -ExportPath .\backups\snapshot.json
 Send-RunnerFile -ResourceGroup $rg -Name $runner -Path .\backups\snapshot.json -Destination /work/snapshot.json
 Invoke-RunnerCommand -ResourceGroup $rg -Name $runner -Command `
-    'node /work/sync/src/apply-projection.mjs --cosmos https://cosmos-<prefix>.documents.azure.com:443/ --tenant <tenant-id> --snapshot /work/snapshot.json'
+    "node /work/sync/src/apply-projection.mjs --cosmos https://cosmos-<prefix>.documents.azure.com:443/ --tenant <tenant-id> --account-resource-id $accountResourceId --snapshot /work/snapshot.json"
 ```
 
 The runner needs **Cosmos DB Built-in Data Contributor** scoped to this container,
@@ -657,56 +725,41 @@ Delete local/runner snapshots and packages after verification under your data
 handling policy; they contain person-to-unit mappings.
 
 Historical measurement: 8 records written in 1.5 seconds, then no writes on an
-unchanged run. With expiring leases, unchanged members must also be renewed:
-measured 2026-09-24, all 8 unchanged members refreshed in 1.88 seconds.
+unchanged run. That measurement was taken on 2026-09-24 under the previous lease model, where all 8
+unchanged members were refreshed in 1.88 seconds. Under the persistent model, unchanged records are
+not rewritten.
 
-**B. The job reads Entra itself.** The unattended path: the scheduled renewal job
-([above](#scheduled-renewal-job-and-admission-p86-p94)). The job's identity needs the
-Microsoft Graph application permission `GroupMember.Read.All`, which a tenant
-administrator grants once. The job runs `apply-projection.mjs --graph` with the tier
-group ids and the gateway id from its environment, and reads `bu-registry` and
-`bu-parents` on every run, in the deepest-first, then registry order of the
-named-value path. A hand run of `--graph` takes `--standard`, `--premium` and ordered
-`--bu unit=group` arguments instead; with neither `--bu` nor a gateway id it writes no
-business units, which does not reproduce the exported unit mapping.
-Measured: an operator
-without a directory role is refused with `Authorization_RequestDenied`.
+**B. The optional job reads Entra itself.** This path is for very large directories. The job's
+identity needs the Microsoft Graph application permission `GroupMember.Read.All`, granted by a
+Privileged Role Administrator or Global Administrator. The job runs `apply-projection.mjs --graph`
+with the tier group ids and the gateway id from its environment, and reads `bu-registry` and
+`bu-parents` on every run, in the deepest-first, then registry order of the named-value path. A hand
+run of `--graph` takes `--standard`, `--premium` and ordered `--bu unit=group` arguments instead;
+with neither `--bu` nor a gateway id it writes no business units, which does not reproduce the
+exported unit mapping. Measured: an operator without a directory role is refused with
+`Authorization_RequestDenied`.
 
-`-ApimName` and `-ResourceGroup` make the PowerShell export read the gateway's
-registry and parent ordering. In either path, compare against the gateway before
-cutover; do not infer equivalence from a successful write.
+`-ApimName` and `-ResourceGroup` make the PowerShell export read the gateway's registry and parent
+ordering. In either path, compare against the gateway before cutover.
 
-**Portal:** Entra > Enterprise applications > job identity > Permissions verifies
-the Graph grant; Container Apps job > Execution history verifies cadence.
-The reference deployment has not demonstrated a scheduled 500,000-member Graph
-scan ([U17](UNKNOWNS.md)); the renewal deploy script never grants Graph access itself.
+**Portal:** Entra > Enterprise applications > job identity > Permissions verifies the Graph grant;
+Container Apps job > Execution history verifies manual or scheduled runs. The reference deployment
+has not demonstrated a scheduled 500,000-member Graph scan ([U17](UNKNOWNS.md)); the sync-job deploy
+script never grants Graph access itself.
 
 ### Freshness and operating envelope
 
-**Two hours from scan start is the maximum stale-authorization window**, not
-two hours plus the gateway's cache. Each complete directory observation stamps
-`reconciliationGeneration`, `lastVerifiedAt` and absolute epoch-second
-`expiresAt`. The resolver enforces the lease; the gateway clips its cache TTL
-and rechecks expiry on every hit. Expired or malformed freshness returns 503,
-not user-not-found and never stale access. Existing unleased records must be
-reconciled before upgrading the resolver and gateway.
+A projection record remains valid until a later sync deletes or changes it. A complete directory
+observation stamps `reconciliationGeneration` and `lastVerifiedAt`; malformed or future verification
+metadata returns 503. Exported snapshots keep an apply-by deadline of 7,200 seconds from scan start,
+so an old snapshot cannot replay old membership. A scan that fails writes nothing; a failed apply may
+leave mixed generations and exits nonzero.
 
-Use `-MaxAgeSeconds` on the export/PowerShell writer or `--max-age-seconds` with
-the Node `--graph` writer to shorten the lease (60–7,200 seconds). Import never
-extends the snapshot's expiry. A scan that fails writes nothing; a failed apply
-may leave multiple generations, each retaining its own expiry, and exits nonzero.
-`-KeepOrphans`/`--keep-orphans` never renew an orphan's lease.
-
-The renewal job runs every 30 minutes by default: four planned starts inside the
-two-hour lease, so three consecutive missed runs are tolerated before expiry
-([ADR-0045](adr/0045-scheduled-projection-renewal.md)). A custom `-CronExpression`
-needs at least an hourly run, with enough time for the directory scan and all
-writes. Its alerts watch successful runs, failed runs and the oldest remaining
-lease, rather than process exit alone.
-If that workload cannot complete before expiry, reduce scan/apply time or choose
-a separately designed reconciliation scheme; do not silently serve expired data.
-The bound is for **new requests**, subject to directory replication and clock
-skew; it does not interrupt an already-running model stream.
+Removing a person takes a sync and then at most the gateway cache window
+(`entitlement-cache-seconds`). A disabled Entra account cannot get new tokens; a default access token
+lasts 60 to 90 minutes (Microsoft Learn, updated 2026-07-17:
+https://learn.microsoft.com/entra/identity-platform/access-tokens). The bound is for new requests; it
+does not interrupt an already-running model stream.
 
 APIM admits at most 100 concurrent resolver misses and 200 misses/second, with
 retryable 429 above that approximate distributed envelope. Cache hits do not
@@ -752,25 +805,25 @@ Its step 4 compares the projection with the gateway before anything is flipped.
 | Cosmos DB from inside the network | DNS lookup in the runner | The approved private endpoint address, not a public endpoint |
 | Foundry directly, after making it private | `POST https://<account>.services.ai.azure.com/anthropic/v1/messages` | `403 Public access is disabled. Please configure private endpoint.` |
 | The gateway, end to end | A request after completing comparison and cutover in Scale | `200`, tier from the projection; before the flip, success still proves only the named-value path |
-| Revocation and freshness | Remove an isolated test identity, reconcile, then test; separately observe an expired test lease | Refusal after publication/cache; `503` for expiry, never stale admission |
+| Revocation and freshness | Remove an isolated test identity, sync that identity, then test | Refusal after publication/cache; disabled accounts lose access when the current token expires |
 
 ## What the gateway does once it reads the projection
 
 | Situation | Response | Measured |
 |---|---|---|
-| Entitled, unexpired record present | Served; cache duration is clipped to absolute expiry | Still served when removed from the named-value list, which proves the projection is the source |
+| Entitled record present | Served; cached for `entitlement-cache-seconds` | Still served when removed from the named-value list, which proves the projection is the source |
 | No record | `403 permission_error`; the refusal is cached for at most 60 seconds | Second call 567 ms, answered from cache |
 | Record added back | Served once the refusal expires | 200 after the short cache |
 | Resolver down, answer cached | Served until the window ends | 200 |
 | Resolver down, window ended | `503`, `Retry-After: 5`, "the entitlement service did not answer" | 503, then 200 when it returned |
 | Rolled back to named values | The lists decide again | 403 for anyone the lists had not been kept up to date for |
-| Expired record, even with a longer cache setting | 503; run a complete reconciliation | 2026-09-24: a real test identity's lease shortened to 20 seconds with cache still 60; expected 403 before expiry, explicit projection-expired 503 after expiry, expected 403 after restoring the original record |
 
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
 |---|---|---|
 | Cosmos DB account creation fails with `ServiceUnavailable ... high demand` | The subscription has no capacity in that region | Request region access (aka.ms/cosmosdbquota) or use another region with the private endpoint in your VNet |
+| Deployment fails with `InvalidResourceLocation` and `cosmos-<prefix> already exists in location X` | The resource group already has the projection Cosmos account in region X | Re-run with `-Location X`, or choose another prefix |
 | Code publishing fails with `InaccessibleStorageException ... 403 (This request is not authorized to perform this operation.)` | The resolver's storage is private and has no endpoint the app can use. Here a management-group policy, `StorageAccount_PublicNetwork_Modify`, set it private at creation | Pass `blobDnsZoneId`, `queueDnsZoneId` and `tableDnsZoneId`. All three are needed |
 | A setting comes back different from what the template asked for, and the deployment still reports success | An Azure Policy with a Modify effect rewrote the request, possibly through a management-group assignment not shown by a narrower list | Read the resource's activity log for `Microsoft.Authorization/policies/modify/action`. Its `policies` property names the assignment and definition. The templates state private values themselves rather than depending on a tenant-specific policy |
 | `AADSTS50105` requesting a resolver token | Assignment is required, and the identity is not assigned | Expected for anything but the gateway. For the gateway, repeat the assignment in step 3 |
@@ -803,7 +856,7 @@ zones ($8.80), and endpoint data processing at $0.01 per GB.
 
 The current two-instance profile adds $26.28: **$91.56/month at rest**, and
 $95.37 for the historical read-path assumptions. Pass `-AlwaysReadyInstances 2`
-to the cost script. Neither total includes renewing every member's lease.
+to the cost script. Neither total includes optional sync-job execution or directory reads.
 At 500,000 members and hourly reconciliation, the write count is about
 365 million/month. The measured create charge (5.9 RU) would cost $538.38 at
 $0.25/million RU; that is an **illustration**, not a measured upsert or scheduled
