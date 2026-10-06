@@ -102,7 +102,10 @@ SKU rules from P61:
 
 - Basic v2 uses a public resolver endpoint protected by Microsoft Entra and pinned to the gateway
   managed identity; Cosmos stays private.
-- Standard v2 and Premium v2 use a private resolver reachable from the gateway's VNet integration.
+- The installer deploys that public resolver on Standard v2 and Premium v2 too, by default
+  ([ADR-0052](adr/0052-cosmos-default-installer.md)); `-ResolverInboundAccess private` gives them a private
+  resolver reachable from the gateway's VNet integration, the default of `Deploy-ClaudeProjection.ps1`
+  run on its own.
 
 Manual equivalent:
 

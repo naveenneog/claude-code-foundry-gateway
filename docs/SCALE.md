@@ -63,11 +63,15 @@ a runner compare and Cosmos switch evidence without waiting for a scheduled job
 
 The SKU changes the resolver inbound path, not the Cosmos rule:
 
-| Gateway SKU | Resolver path | Cosmos path |
-|---|---|---|
-| Basic v2 | Public Function endpoint, authenticated by Microsoft Entra and allowed only for the gateway managed identity | Private endpoint and private DNS |
-| Standard v2 | Private resolver endpoint reached through outbound VNet integration | Private endpoint and private DNS |
-| Premium v2 | Private resolver endpoint reached through Premium v2 networking | Private endpoint and private DNS |
+| Gateway SKU | Resolver path from the installer (default) | Private resolver option | Cosmos path |
+|---|---|---|---|
+| Basic v2 | Public Function endpoint, authenticated by Microsoft Entra and allowed only for the gateway managed identity | None: Basic v2 has no outbound VNet integration | Private endpoint and private DNS |
+| Standard v2 | Public, as on Basic v2 | `-ResolverInboundAccess private`: a private endpoint reached through outbound VNet integration | Private endpoint and private DNS |
+| Premium v2 | Public, as on Basic v2 | `-ResolverInboundAccess private`: a private endpoint reached through Premium v2 networking | Private endpoint and private DNS |
+
+The installer's default is [ADR-0052](adr/0052-cosmos-default-installer.md);
+`Deploy-ClaudeProjection.ps1` run on its own uses the private option on Standard v2 and Premium v2
+([ADR-0028](adr/0028-basic-v2-projection-resolver.md)).
 
 `scripts/Measure-ClaudeProjectionCost.ps1 -P61Scenarios` prices the 100 and 500
 developer shapes. On 2026-09-26 in East US 2, excluding the APIM gateway cost,

@@ -28,8 +28,10 @@ hundred developers entitlement has to move to the **projection**: one Cosmos DB
 record per developer, read through a small resolver Function when the gateway's
 cache misses.
 
-This article deploys private endpoints for Cosmos DB and resolver storage. On
-Standard v2 and Premium v2, it also makes the resolver inbound path private. On
+This article deploys private endpoints for Cosmos DB and resolver storage. The
+installer deploys a public, Entra-authenticated resolver on every tier
+([ADR-0052](adr/0052-cosmos-default-installer.md)). `Deploy-ClaudeProjection.ps1` run on its own
+makes the resolver inbound path private on Standard v2 and Premium v2. On
 Basic v2, the resolver inbound path is public because Basic v2 has no outbound
 VNet integration; the resolver is still Microsoft Entra-authenticated and allows
 only the gateway managed identity. APIM ingress remains public and authenticated;
@@ -58,7 +60,7 @@ entitlement read/write path, not the inference or reporting topology.
 Developer ──Entra token──▶ API Management (public gateway)
                               │  managed identity token, audience api://<resolver-app>
                               ▼
-                        Resolver (Flex Consumption)   ◀── private endpoint, or public+Entra on Basic v2
+                        Resolver (Flex Consumption)   ◀── public+Entra, or private endpoint on Standard/Premium v2
                               │  managed identity, read only, one container
                               ▼
                         Cosmos DB (serverless)        ◀── private endpoint only
@@ -73,7 +75,7 @@ network owner. This is outbound integration, not a private client ingress.
 | Component | Authenticates with | Reachable from | Key authentication |
 |---|---|---|---|
 | Cosmos DB account | Entra only | Private endpoint | Off (`disableLocalAuth`) |
-| Resolver Function | Built-in authentication: the gateway's identity only | Private endpoint on Standard/Premium v2; public endpoint on Basic v2 | Basic publishing off, FTP off |
+| Resolver Function | Built-in authentication: the gateway's identity only | Public endpoint by default from the installer, on every tier; private endpoint on Standard/Premium v2 with `-ResolverInboundAccess private`, the standalone deployer's default on those tiers | Basic publishing off, FTP off |
 | Resolver storage | Entra only | Private endpoints (blob, queue, table) | Off (`allowSharedKeyAccess: false`) |
 | Application Insights | Entra only | Public ingestion, identity required | Off (`DisableLocalAuth`) |
 | Foundry account | The gateway's identity | Private endpoint | Unchanged by this article |
@@ -86,7 +88,7 @@ resolver therefore cannot change who is entitled.
 
 | Requirement | Detail |
 |---|---|
-| Gateway tier | **Standard v2 or Premium v2** for the private resolver profile. **Basic v2** uses `inboundAccess=public` with App Service Authentication and exact gateway managed-identity allow lists; Cosmos remains private. |
+| Gateway tier | Any v2 tier. The public resolver profile (the installer's default) uses `inboundAccess=public` with App Service Authentication and exact gateway managed-identity allow lists. The private resolver profile needs **Standard v2 or Premium v2** with outbound VNet integration. Cosmos remains private in both. |
 | Roles | Owner, or Contributor plus User Access Administrator, on deployment resources; network join/write rights on the supplied VNet/subnets/DNS; application registration/assignment rights in Entra ID. Azure subscription Owner is not a directory role. |
 | Resource providers | Registered: `Microsoft.App`, `Microsoft.DocumentDB`, `Microsoft.Web`, `Microsoft.ContainerInstance`, `Microsoft.Network`, `Microsoft.Storage`, `Microsoft.OperationalInsights`, `Microsoft.Insights` and `Microsoft.Authorization`. These cover the resources and delegations in `infra/projection.bicep:95`, `infra/projection-network.bicep:67` and `infra/resolver.bicep:137`. |
 | Region capacity | Cosmos regional capacity cannot be checked in advance or reserved by preflight. Measured: Canada Central and Canada East both refused with `ServiceUnavailable ... high demand ... To request region access for your subscription, please follow this link https://aka.ms/cosmosdbquota`. A private endpoint can point at an account in another region, so a Cosmos DB account elsewhere still stays private in the VNet. |
@@ -198,16 +200,19 @@ guide](AZ-COMMANDS.md#10-optional-cosmos-projection), skips switch evidence.
 
 #### Owner-attended live run
 
-No live tenant has run these steps. Each row states what the step shows.
+On 2026-10-06 `scripts/Test-ClaudeLiveProjection.ps1` ran the installer's projection path in a test
+tenant on a disposable Basic v2 gateway: steps 1, 2 (with `-User`) and 4, then requests that returned
+200, 403 after a removal and targeted sync, and 200 after re-adding. Steps 3 and 6, the optional job
+and a full sync without `-User` have not run in a live tenant. Each row states what the step shows.
 
 | Step | Command or place | Shows |
 |---|---|---|
 | 1. Projection | `scripts/Deploy-ClaudeProjection.ps1` without `-FlipAfterCleanCompare` ([one-command deployment](#one-command-deployment)) | Cosmos, the network, the resolver, `entitlement-projection-prefix`, the resolver named values, population and a clean compare |
 | 2. Sync | `scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim>` or `az containerapp job start` for the optional job | A successful full sync status record exists in Cosmos |
 | 3. Check | Step 1's command with `-FlipAfterCleanCompare -WhatIf` | Resolver checks, drift check, runner compare and switch evidence pass |
-| 7. Switch | Step 6's command without `-WhatIf` | One write, the backup path and the rollback text |
-| 8. Requests | Section 11 of the [Azure CLI guide](AZ-COMMANDS.md#11-verification) | Requests resolve through the projection |
-| 9. Rollback, when needed | `scripts/Sync-ClaudeAccess.ps1`, `scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift`, then `entitlement-source` set to `named-value` | Named values serve again |
+| 4. Switch | Step 3's command without `-WhatIf` | One write, the backup path and the rollback text |
+| 5. Requests | Section 11 of the [Azure CLI guide](AZ-COMMANDS.md#11-verification) | Requests resolve through the projection |
+| 6. Rollback, when needed | `scripts/Sync-ClaudeAccess.ps1`, `scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift`, then `entitlement-source` set to `named-value` | Named values serve again |
 
 ### One-command deployment
 
