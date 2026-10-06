@@ -262,9 +262,18 @@ test('R3-2 real server recovery waits through admitting before following the sta
       forwardedRun = forwarded.forwarded;
       await forwarded.aborted;
     });
+    let sawAdmitting;
+    const pageSawAdmitting = new Promise((resolve) => { sawAdmitting = resolve; });
+    await page.route('**/api/run/status?request=*', async (route) => {
+      const response = await route.fetch();
+      if ((await response.json())?.admission?.state === 'admitting') sawAdmitting();
+      await route.fulfill({ response });
+    });
     await page.getByRole('button', { name: 'Run selected steps' }).click();
     await serverAdmitting;
     await page.locator('#run-status').getByText(/Running selected steps/).waitFor();
+    // Admission completes only after the page has read the admitting state, so the wait through admitting always runs.
+    await within(pageSawAdmitting, 30000, 'The page reading the admitting state of its lost run request');
     releaseIdentity();
     const forwardedResponse = await forwardedRun;
     assert.equal(forwardedResponse.status, 200);
