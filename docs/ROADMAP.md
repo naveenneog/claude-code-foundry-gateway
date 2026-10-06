@@ -211,6 +211,14 @@ Follow-ups from P98, not yet packets
 - The installer's named-value capacity refusal uses the business-unit ceiling (about 93) also on a gateway
   without business units, where a tier list holds about 110, so an unattended re-run that keeps named values
   is refused between 94 and 110 developers.
+- The business-unit negative shards take 650 to 750 seconds in the packet gate on the owner's workstation (383 to
+  531 at P96) and run under a 900-second per-check override (ADR-0025), as shard 0 did. Splitting the suite into six
+  shards, or speeding up the suites its mutants rerun, would restore the 600-second default.
+- `scripts/Deploy-ClaudeProjection.ps1` prints "named values remain authoritative" after every deploy run; on a
+  re-run of a gateway already on the projection, the projection is what serves.
+- The packet gate keeps the last 40 lines of a failing command's output, so a failing Test-All check is named
+  without its cause; "Workstation clients read what setup writes" failed once in a gate (`945c04e`) and passed
+  alone (178 assertions).
 - The live verifier's teardown does not report a failed `az role assignment list`; the gateway identity is
   deleted with the resource group, so a leftover assignment grants nothing.
 - `Assert-ClaudeInstallerProjectionPrerequisites` repeats the deployer's PowerShell and tool checks
