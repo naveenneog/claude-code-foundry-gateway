@@ -23,6 +23,7 @@ $PermanentReferenceExceptions = @{
 }
 
 $EnrolledGuides = @(
+  'README.md',
   'docs\BUSINESS-UNITS.md',
   'docs\DECISIONS.md',
   'docs\AUTHENTICATION.md',
@@ -262,7 +263,7 @@ function Test-GuideStructure([string]$Path, [string]$Text, [bool]$Enrolled) {
 
 
 
-  $terminalNames = @('Next','Next steps','Related','See also','Verify and next steps','9. Next','Related guides','Troubleshoot and next steps')
+  $terminalNames = @('Next','Next steps','Related','See also','Verify and next steps','9. Next','Related guides','Troubleshoot and next steps','License')
 
   $terminalIndex = -1
   for ($i=0; $i -lt $sections.Count; $i++) { if ($terminalNames -contains $sections[$i].Title) { $terminalIndex = $i } }
