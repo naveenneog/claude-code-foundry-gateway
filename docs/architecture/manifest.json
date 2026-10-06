@@ -57,7 +57,7 @@
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
-        "infra/content-safety-screening.xml": "04abf7b28313cc8f45f4ce69f0e6fb7b4422a04e871479a5a0448f1a7a5c6834",
+        "infra/content-safety-screening.xml": "07c68bf98a425532cecb697b6fcc5fa637346db1d3d218cb6fc46668eff2ee43",
         "infra/content-safety.bicep": "a07ff9a769ab433bf82b0dc5c372ac1b4a38312b14423290da62e483a1130ea4",
         "infra/main.bicep": "c61ea3f911267fe8924debc455ad3e53fda10999cd47f478bd4a8a9ade54a985",
         "infra/policy.xml": "5fb03fa828da5684af4eff855fb18c52a166eb884cde80fdc21b8cd476040790",

@@ -24,9 +24,7 @@ function Copy-P102Fixture($Name) {
         'tests\Test-ContentSafetyPolicy.ps1',
         'tests\ContentSafetyPolicyHarness.ps1',
         'tests\Test-ContentSafetyLiveScript.ps1'
-    )) {
-        Copy-Item -LiteralPath (Join-Path $root $file) -Destination (Join-Path $fixture $file)
-    }
+    )) { Copy-Item -LiteralPath (Join-Path $root $file) -Destination (Join-Path $fixture $file) }
     $fixture
 }
 function Invoke-ExpectFailure([string]$Script, [string]$Fixture, [string]$Pattern) {
@@ -44,19 +42,45 @@ Remove-Item -LiteralPath $fixture -Recurse -Force
 
 $fixture = Copy-P102Fixture 'stub-slice'
 $fragmentPath = Join-Path $fixture 'infra\content-safety-screening.xml'
-$fragmentText = Get-Content $fragmentPath -Raw
-$fragmentText = [regex]::Replace($fragmentText, 'var sys = new System\.Text\.StringBuilder\(\);[\s\S]*?return new JObject\(', 'var newestUserSlice = ""; var sysSlice = ""; var toolSlice = ""; var truncated = false; return new JObject(', 1)
-$fragmentText = [regex]::Replace($fragmentText, 'new JProperty\("userPrompt", userPrompt\),[\s\S]*?new JProperty\("fabricatedHistoryLimit", fabricated\)', 'new JProperty("userPrompt", newestUserSlice), new JProperty("documents", new JArray(toolSlice)), new JProperty("analyzeText", sysSlice + newestUserSlice + toolSlice), new JProperty("truncated", truncated), new JProperty("emptyTextSlice", String.IsNullOrEmpty(sysSlice + newestUserSlice + toolSlice))', 1)
-Set-Content -LiteralPath $fragmentPath -Value $fragmentText -Encoding UTF8
+@'
+<fragment>
+    <choose>
+        <when condition='@("{{content-safety-mode}}" != "off")'>
+            <set-variable name="contentSafetyStartedAt" value="@(DateTime.UtcNow)" />
+            <set-variable name="contentSafetyThreshold" value='@(int.Parse("{{content-safety-threshold}}"))' />
+            <set-variable name="contentSafetySlice" value='@{ return new JObject(new JProperty("userPrompt", ""), new JProperty("documents", new JArray()), new JProperty("analyzeText", ""), new JProperty("truncated", false), new JProperty("emptyTextSlice", true), new JProperty("fabricatedHistoryLimit", false)).ToString(Newtonsoft.Json.Formatting.None); }' />
+            <set-variable name="contentSafetyDecisionJson" value='@{ return new JObject(new JProperty("decision", "pass"), new JProperty("blockedBy", ""), new JProperty("hateSeverity", 0), new JProperty("violenceSeverity", 0), new JProperty("selfHarmSeverity", 0), new JProperty("sexualSeverity", 0), new JProperty("promptShieldUserAttackDetected", false), new JProperty("promptShieldDocumentAttackDetected", false), new JProperty("contentSafetyStatusCode", 0), new JProperty("contentSafetyErrorClass", "")).ToString(Newtonsoft.Json.Formatting.None); }' />
+            <set-variable name="contentSafetyDecision" value='@(JObject.Parse((string)context.Variables["contentSafetyDecisionJson"])["decision"].ToString())' />
+            <trace source="claude-content-safety" severity="information">
+                <message>content safety request screening</message>
+                <metadata name="mode" value="{{content-safety-mode}}" />
+                <metadata name="decision" value='@(JObject.Parse((string)context.Variables["contentSafetyDecisionJson"])["decision"].ToString())' />
+                <metadata name="blockedBy" value='@(JObject.Parse((string)context.Variables["contentSafetyDecisionJson"])["blockedBy"].ToString())' />
+                <metadata name="threshold" value='@(((int)context.Variables["contentSafetyThreshold"]).ToString())' />
+                <metadata name="truncated" value="False" />
+                <metadata name="hateSeverity" value="0" />
+                <metadata name="violenceSeverity" value="0" />
+                <metadata name="selfHarmSeverity" value="0" />
+                <metadata name="sexualSeverity" value="0" />
+                <metadata name="promptShieldUserAttackDetected" value="False" />
+                <metadata name="promptShieldDocumentAttackDetected" value="False" />
+                <metadata name="contentSafetyStatusCode" value="0" />
+                <metadata name="contentSafetyElapsedMs" value="0" />
+                <metadata name="contentSafetyErrorClass" value="" />
+            </trace>
+        </when>
+    </choose>
+</fragment>
+'@ | Set-Content -LiteralPath $fragmentPath -Encoding UTF8
 $r = Invoke-ExpectFailure 'tests\Test-ContentSafetyPolicy.ps1' $fixture 'block mode calls Prompt Shields and analyze once for benign strings'
 Assert 'restoring the stub empty slice fails the fragment harness' ($r.Failed -and $r.Matched) $r.Output
 Remove-Item -LiteralPath $fixture -Recurse -Force
 
-$fixture = Copy-P102Fixture 'harm-slice'
-$helperPath = Join-Path $fixture 'scripts\ClaudeContentSafety.ps1'
-(Get-Content $helperPath -Raw).Replace('harmful|violence|self[- ]?harm|sexual|hate', 'violence|self[- ]?harm|sexual|hate') | Set-Content -LiteralPath $helperPath -Encoding UTF8
+$fixture = Copy-P102Fixture 'severity-threshold'
+$fragmentPath = Join-Path $fixture 'infra\content-safety-screening.xml'
+(Get-Content $fragmentPath -Raw).Replace('&gt;= threshold', '&gt;= threshold + 100') | Set-Content -LiteralPath $fragmentPath -Encoding UTF8
 $r = Invoke-ExpectFailure 'tests\Test-ContentSafetyPolicy.ps1' $fixture 'harmful user string returns Anthropic-style 403'
-Assert 'breaking harm detection fails the blocking detector' ($r.Failed -and $r.Matched) $r.Output
+Assert 'breaking severity detection fails the blocking detector' ($r.Failed -and $r.Matched) $r.Output
 Remove-Item -LiteralPath $fixture -Recurse -Force
 
 $fixture = Copy-P102Fixture 'teardown'
