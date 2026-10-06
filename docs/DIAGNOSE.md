@@ -1,33 +1,25 @@
 # Diagnostics
 
-P66 adds two read-only diagnostics entry points and one guided-flow module:
+This guide covers deployment and workstation diagnostics with redacted results.
+## Quickstart
+
+The administrator target comes from the deployment record or [Operations discovery](OPERATIONS.md#1-select-the-gateway-and-workspace). A workstation uses the platform team's handover file. The commands below skip the real gateway request; an unskipped request can consume model capacity.
 
 ```powershell
-# Administrator deployment
-./scripts/Debug-ClaudeSetup.ps1 -ResourceGroup <rg> -ApimName <apim>
-
-# Developer workstation
-./scripts/Debug-ClaudeWorkstation.ps1 `
-  -GatewayUrl https://<apim>.azure-api.net/claude `
-  -TenantId <tenant-id>
-
-# macOS/Linux workstation
-./scripts/debug-claude-workstation.sh \
-  --gateway-url https://<apim>.azure-api.net/claude \
-  --tenant-id <tenant-id>
-
-# Reading the gateway, tenant and deployments from the record
-./scripts/Debug-ClaudeWorkstation.ps1 -RecordPath ./claude-gateway.json
-./scripts/debug-claude-workstation.sh --config ./claude-gateway.json
+.\scripts\Debug-ClaudeWorkstation.ps1 -RecordPath .\claude-gateway.json -NoRequest
 ```
 
-Every check prints `PASS`, `WARN`, `FAIL` or `SKIP`, the evidence used, the exact
-fix command and the portal path. By default the scripts return non-zero for a
-warning or failure. Add `-FailOn fail` if scheduled monitoring should only fail
-on hard failures. Add `-NoRequest` / `--no-request` to skip the single real
-gateway request.
+```bash
+./scripts/debug-claude-workstation.sh --config ./claude-gateway.json --no-request
+```
+
+**Expected result:** each check reports PASS, WARN, FAIL or SKIP with evidence and a fix. Default exit status is nonzero for a warning or failure.
 
 ## Administrator deployment checks
+
+<details>
+
+<summary>Diagnostic details</summary>
 
 `Debug-ClaudeSetup.ps1` checks the deployment without writing to Azure:
 
@@ -49,7 +41,12 @@ gateway request.
 | Chargeback jobs | Looks for report job evidence and last run metadata when available. | `./scripts/Invoke-ClaudeChargebackSchedule.ps1 -ResourceGroup <rg> -ApimName <apim>`. |
 | Foundry bypass principals | Reuses `Test-ClaudeHealth.ps1` / `Get-ClaudeBypass.ps1` to identify principals that can bypass the gateway. | Remove unintended direct Foundry data-plane role assignments. Portal: Foundry account > Access control (IAM). |
 
+</details>
 ## Workstation checks
+
+<details>
+
+<summary>Diagnostic details</summary>
 
 `Debug-ClaudeWorkstation.ps1` and `debug-claude-workstation.sh` check a developer
 machine:
@@ -72,7 +69,12 @@ machine:
 | Network path | DNS, proxy and `NODE_EXTRA_CA_CERTS` evidence for the gateway host. | Fix DNS, proxy or custom CA; see [Network](NETWORK.md). |
 | Gateway real request | Sends one real request unless skipped. | Rerun without `-NoRequest`; if the request fails, keep the redacted status, body and UTC time. |
 
+</details>
 ## Support bundles
+
+<details>
+
+<summary>Diagnostic details</summary>
 
 Add `-SupportBundle <path>` or `--support-bundle <path>`:
 
@@ -89,7 +91,12 @@ that explains what was checked. The bundle redacts emails, object IDs,
 subscription IDs, JWTs and token-like strings before writing files. Do not add
 raw terminal transcripts or bearer tokens to a support ticket.
 
+</details>
 ## Guided flow
+
+<details>
+
+<summary>Diagnostic details</summary>
 
 `.\Start-ClaudeGateway.ps1 -Action Diagnose -SupportBundle` runs both scripts
 with the decision record and writes their bundles to `onboarding\support\`,
@@ -98,3 +105,10 @@ which is git-ignored.
 `scripts/flow/Diagnose.ps1` implements the ADR-0030 step interface. Its plan
 contains only `Check` actions and writes nothing. Apply runs the same diagnostics
 and returns results to the orchestrator; the decision record is not changed.
+
+</details>
+## Next
+
+- [Debugging](DEBUGGING.md) isolates request layers manually.
+- [Troubleshooting](TROUBLESHOOTING.md) maps known symptoms to fixes.
+- [Developer setup](../DEVELOPER.md) covers workstation configuration.
