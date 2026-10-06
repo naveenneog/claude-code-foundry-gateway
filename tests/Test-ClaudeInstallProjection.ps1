@@ -238,9 +238,18 @@ Assert 'the gateway''s recorded projection prefix is the one a re-run deploys' (
 Assert 'without a recorded prefix the installer''s own prefix is used' ((Get-ClaudeInstallerProjectionPrefix -RecordedPrefix '' -NamePrefix 'claudegw123456') -eq 'claudegw123456')
 Capture { Get-ClaudeInstallerProjectionPrefix -RecordedPrefix 'Bad_Prefix' -NamePrefix 'claudegw123456' }
 Assert 'a recorded prefix that is not a projection prefix stops the run' ($Failure -match 'entitlement-projection-prefix' -and $Failure -match 'Nothing was created') $Failure
-$accessRead = { param($Answer, $Code) { param($ResourceGroup, $SiteName) $global:LASTEXITCODE = $Code; $Answer }.GetNewClosure() }
-Assert 'a private resolver stays private on a re-run' ((Get-ClaudeInstallerResolverAccess -ResourceGroup rg-p98 -SiteName func-resolver-p98 -InvokeAz (& $accessRead 'Disabled' 0)) -eq 'private')
-Assert 'a public resolver stays public on a re-run' ((Get-ClaudeInstallerResolverAccess -ResourceGroup rg-p98 -SiteName func-resolver-p98 -InvokeAz (& $accessRead 'Enabled' 0)) -eq 'public')
+# P98 confirmation round (Coder): the resolver runs on a Flex Consumption plan (infra/resolver.bicep), for which
+# az functionapp show returns the raw ARM resource; a top-level publicNetworkAccess query prints nothing. These
+# stubs answer as az does: only the ARM path properties.publicNetworkAccess holds the value.
+$accessRead = { param($Answer, $Code) { param([string[]]$Arguments)
+    $global:LASTEXITCODE = $Code
+    if ($Code -ne 0) { return $Answer }
+    if (($Arguments -join ' ') -match '^resource show -g rg-p98 -n func-resolver-p98 --resource-type Microsoft\.Web/sites --query properties\.publicNetworkAccess -o tsv$') { return $Answer }
+    return '' }.GetNewClosure() }
+Capture { Get-ClaudeInstallerResolverAccess -ResourceGroup rg-p98 -SiteName func-resolver-p98 -InvokeAz (& $accessRead 'Disabled' 0) }
+Assert 'a private resolver stays private on a re-run' (-not $Failure -and $Result -eq 'private') $Failure
+Capture { Get-ClaudeInstallerResolverAccess -ResourceGroup rg-p98 -SiteName func-resolver-p98 -InvokeAz (& $accessRead 'Enabled' 0) }
+Assert 'a public resolver stays public on a re-run' (-not $Failure -and $Result -eq 'public') $Failure
 Assert 'no resolver yet means no access to keep' ((Get-ClaudeInstallerResolverAccess -ResourceGroup rg-p98 -SiteName func-resolver-p98 -InvokeAz (& $accessRead "ERROR: (ResourceNotFound) The Resource 'Microsoft.Web/sites/func-resolver-p98' under resource group 'rg-p98' was not found." 3)) -eq '')
 Capture { Get-ClaudeInstallerResolverAccess -ResourceGroup rg-p98 -SiteName func-resolver-p98 -InvokeAz (& $accessRead 'ERROR: (AuthorizationFailed) The client does not have authorization.' 1) }
 Assert 'a failed read of the resolver''s access stops the run instead of defaulting to public' ($Failure -match 'Could not read' -and $Failure -match '-ResolverInboundAccess' -and $Failure -match 'Nothing was created') $Failure

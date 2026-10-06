@@ -299,14 +299,17 @@ function Get-ClaudeInstallerProjectionPrefix {
 }
 
 # A re-run keeps the deployed resolver's network access. A read that fails stops the run before approval,
-# rather than defaulting a private resolver to public (P98 council round 2).
+# rather than defaulting a private resolver to public (P98 council round 2). The resolver runs on a Flex
+# Consumption plan (infra/resolver.bicep), for which az functionapp show returns the raw ARM resource, so the
+# setting is read at its ARM path, properties.publicNetworkAccess (P98 confirmation round).
 function Get-ClaudeInstallerResolverAccess {
     param([Parameter(Mandatory)][string]$ResourceGroup, [Parameter(Mandatory)][string]$SiteName, [scriptblock]$InvokeAz)
+    $arguments = @('resource', 'show', '-g', $ResourceGroup, '-n', $SiteName, '--resource-type', 'Microsoft.Web/sites', '--query', 'properties.publicNetworkAccess', '-o', 'tsv')
     $saved = $ErrorActionPreference
     try {
         $ErrorActionPreference = 'Continue'
         $global:LASTEXITCODE = 0
-        $output = if ($InvokeAz) { @(& $InvokeAz $ResourceGroup $SiteName) } else { @(az functionapp show -g $ResourceGroup -n $SiteName --query publicNetworkAccess -o tsv --only-show-errors 2>&1) }
+        $output = if ($InvokeAz) { @(& $InvokeAz $arguments) } else { @(az @arguments --only-show-errors 2>&1) }
         $code = $LASTEXITCODE
     }
     finally { $ErrorActionPreference = $saved }
