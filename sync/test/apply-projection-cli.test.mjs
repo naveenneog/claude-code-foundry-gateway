@@ -328,6 +328,31 @@ test('a targeted status older than the full snapshot excludes nothing', () => {
   assert.equal(docs.find((d) => d.oid === target).tier, 'standard');
 });
 
+test('a targeted status up to 300 seconds older than the full snapshot still excludes that user (clock skew margin)', () => {
+  const target = '33333333-3333-4333-8333-333333333333';
+  const snapshotTime = new Date(Date.now() - 120_000).toISOString();
+  const withinMargin = new Date(Date.now() - 240_000).toISOString();
+  const snap = fullSnapshot({
+    verifiedAt: snapshotTime,
+    records: [{ oid: target, tier: 'standard', businessUnit: '' }],
+  });
+  const skewedUserStatus = statusDoc({
+    generation: '99999999-9999-4999-8999-99999999999a',
+    mode: 'user',
+    user: target,
+    finishedAt: withinMargin,
+  });
+  const { result, summary, store } = runApplyWithFake({
+    name: 'targeted status within the skew margin',
+    docs: { [`${skewedUserStatus.id}|${skewedUserStatus.oid}`]: skewedUserStatus },
+    snapshot: snap,
+  });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(summary.excludedByNewerTargetedSync, 1);
+  const docs = Object.values(JSON.parse(readFileSync(store, 'utf8')).docs);
+  assert.equal(docs.some((d) => d.oid === target && d.type !== 'projection-reconciliation-status'), false);
+});
+
 test('a full apply reads every existing-record page and deletes an orphan on the last page', () => {
   const target = '33333333-3333-4333-8333-333333333333';
   const orphan = '55555555-5555-4555-8555-555555555555';
