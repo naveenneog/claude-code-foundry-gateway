@@ -33,7 +33,7 @@ The first pass is a read-only network review. The deployment record supplies the
 
 <details>
 
-<summary>Enterprise network details</summary>
+<summary>Choose a topology reference</summary>
 
 | Choice | Entry and origin | Use when | Cost and operating consequences |
 |---|---|---|---|
@@ -159,7 +159,7 @@ the final availability check.
 
 <details>
 
-<summary>Enterprise network details</summary>
+<summary>Place the rest of the system reference</summary>
 
 Keep the optional management services out of the inference request path.
 
@@ -325,7 +325,7 @@ allows one Premium v2 activation per subscription every 60 minutes
 
 <details>
 
-<summary>Enterprise network details</summary>
+<summary>Prerequisites reference</summary>
 
 - Azure CLI signed in to the correct subscription and tenant; PowerShell 5.1
   or 7; Bicep available through Azure CLI; Node for streaming verification.
@@ -362,7 +362,7 @@ allows one Premium v2 activation per subscription every 60 minutes
 
 <details>
 
-<summary>Enterprise network details</summary>
+<summary>Deploy with the script reference</summary>
 
 > The administrator-review requirement below was added on 2026-09-25. The
 > earlier direct deployment examples are configuration references, not an
@@ -652,7 +652,7 @@ manual configuration below and the same verification contract.
 
 <details>
 
-<summary>Enterprise network details</summary>
+<summary>Configure the same design in the Azure portal reference</summary>
 
 The following fields are the manual equivalent of the supplied modules, not
 instructions to paste unknown deployment IDs into a template.
@@ -764,7 +764,7 @@ into source, enabling public access against policy, or disabling TLS validation.
 
 <details>
 
-<summary>Enterprise network details</summary>
+<summary>Configure with Azure CLI reference</summary>
 
 The modules can deploy without PowerShell. Supply parameter files populated
 from discovery; do not copy the Contoso values in screenshots into a real
@@ -806,7 +806,7 @@ subscription's token from Azure CLI.
 
 <details>
 
-<summary>Enterprise network details</summary>
+<summary>Claude-specific edge settings reference</summary>
 
 | Setting | Value / consequence |
 |---|---|
@@ -826,7 +826,7 @@ subscription's token from Azure CLI.
 
 <details>
 
-<summary>Enterprise network details</summary>
+<summary>Tune WAF for code, without turning it off reference</summary>
 
 1. Start with Detection on the two dedicated policies. It logs matches but
    does not provide Prevention's blocking control.
@@ -879,7 +879,7 @@ query strings, authentication headers or other applications on the gateway.
 
 <details>
 
-<summary>Enterprise network details</summary>
+<summary>Verify from each real boundary reference</summary>
 
 ```powershell
 .\scripts\Test-ClaudeNetworkEdge.ps1 -StatePath .\.network-state\edge.json `
@@ -915,7 +915,7 @@ Also test:
 
 <details>
 
-<summary>Enterprise network details</summary>
+<summary>Live evidence reference</summary>
 
 The 2026-09-24 evaluation uses a fresh Standard v2 gateway, the existing
 private test Foundry account, a private certificate vault and an isolated WAF
@@ -967,7 +967,7 @@ above is a cited design, not evidence from the CLI evaluation.
 
 <details>
 
-<summary>Enterprise network details</summary>
+<summary>Troubleshoot reference</summary>
 
 | Error or symptom | Cause and action |
 |---|---|
@@ -995,7 +995,7 @@ above is a cited design, not evidence from the CLI evaluation.
 
 <details>
 
-<summary>Enterprise network details</summary>
+<summary>Cost reference</summary>
 
 `Get-ClaudeNetworkCost.ps1` returns the retrieval UTC, published meter scope,
 unit, quantity and 730-hour monthly equivalent. It excludes unknown/variable
@@ -1055,7 +1055,7 @@ zero or a claim that list-price infrastructure is the invoice.
 
 <details>
 
-<summary>Enterprise network details</summary>
+<summary>Security checklist reference</summary>
 
 - [ ] Selected targets, resource owners, address plan, region/SKU restrictions
   and changes to shared resources are reviewed.
@@ -1082,7 +1082,7 @@ zero or a claim that list-price infrastructure is the invoice.
 
 <details>
 
-<summary>Enterprise network details</summary>
+<summary>Remove the evaluation reference</summary>
 
 ```powershell
 .\scripts\Remove-ClaudeNetworkEdge.ps1 -StatePath .\.network-state\edge.json `

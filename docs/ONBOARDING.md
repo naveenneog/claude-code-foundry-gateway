@@ -24,13 +24,13 @@ $apim = $gateway.apimName
 .\scripts\Set-ClaudeDeveloper.ps1 -ResourceGroup $rg -ApimName $apim -User 'developer@contoso.com' -Tier standard -Sync
 ```
 
-**Expected result:** the developer is added to the tier group, the active store is published, and a fresh request from that account verifies access. The generated handover remains separate from entitlement ([Developer setup](../DEVELOPER.md#quickstart)).
+**Expected result:** the developer is added to the tier group and the active store is published. A fresh request from that account is the separate access verification step. The generated handover remains separate from entitlement ([Developer setup](../DEVELOPER.md#quickstart)).
 
 ## Find the values before changing membership
 
 <details>
 
-<summary>Membership procedure details</summary>
+<summary>Find the values before changing membership reference</summary>
 
 | Value | Portal source | CLI lookup |
 |---|---|---|
@@ -53,9 +53,9 @@ new similarly named group as a workaround.
 
 <details>
 
-<summary>Membership procedure details</summary>
+<summary>How entitlement actually works reference</summary>
 
-Understanding this makes every operation below obvious.
+This section identifies which store receives published membership changes.
 
 ```text
 Entra group  ──(Sync-ClaudeAccess.ps1)──▶  APIM named value  ──▶  policy check
@@ -90,7 +90,7 @@ Three consequences:
 
 <details>
 
-<summary>Membership procedure details</summary>
+<summary>1. Add a developer reference</summary>
 
 One command. It edits the **Entra group**, because that is the durable change —
 `Sync-ClaudeAccess.ps1` rebuilds `allow-standard` and `allow-premium` from group
@@ -138,7 +138,7 @@ remove the person, then perform Step 3's publication and Step 4's verification.
 
 <details>
 
-<summary>Membership procedure details</summary>
+<summary>1a. Add a developer by hand reference</summary>
 
 ### Step 1 — find their object id
 
@@ -283,7 +283,7 @@ access. Access is group membership.
 
 <details>
 
-<summary>Membership procedure details</summary>
+<summary>2. UI walkthrough — adding a member in the portal reference</summary>
 
 Two portals work. **Microsoft Entra admin center** (`entra.microsoft.com`) is
 the current home for identity; the Azure portal blade is identical underneath.
@@ -386,7 +386,7 @@ out of the loop entirely.
 
 <details>
 
-<summary>Membership procedure details</summary>
+<summary>3. Common variations reference</summary>
 
 | Situation | What to do |
 |-----------|-----------|
@@ -403,7 +403,7 @@ out of the loop entirely.
 
 <details>
 
-<summary>Membership procedure details</summary>
+<summary>4. Change a developer's tier reference</summary>
 
 Two different things get called "changing the tier". Be clear which one you mean.
 
@@ -529,7 +529,7 @@ Entra group, and a branch in the policy's tier lookup. The policy structure is i
 
 <details>
 
-<summary>Membership procedure details</summary>
+<summary>5. Revoke access reference</summary>
 
 ```powershell
 ./scripts/Set-ClaudeDeveloper.ps1 -User developer@contoso.com -Remove -Sync `
@@ -566,7 +566,7 @@ and run the sync as well.
 
 <details>
 
-<summary>Membership procedure details</summary>
+<summary>6. Offboarding checklist reference</summary>
 
 - [ ] Removed from both `claude-code-*` tier groups
 - [ ] Removed from every business-unit and team group
@@ -580,7 +580,7 @@ and run the sync as well.
 ---
 ---
 
-# Part B — Developer
+<a name="part-b--developer"></a>\n\n**Part B — Developer.**
 
 Moved to **[DEVELOPER.md](../DEVELOPER.md)**, at the root of the repository.
 
@@ -594,7 +594,7 @@ Send them that link. Nothing else on this page applies to them.
 
 <details>
 
-<summary>Membership procedure details</summary>
+<summary>7. Checking a machine before you promise a date reference</summary>
 
 A developer who is in the right group, on the right tenant, with the right
 role can still fail — because their machine sits behind a proxy that breaks

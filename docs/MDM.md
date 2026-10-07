@@ -46,7 +46,7 @@ The commands run from the repository root in PowerShell 7 after `onboarding/clau
 
 <details>
 
-<summary>MDM details</summary>
+<summary>1. Device contract reference</summary>
 
 | Delivered item | Reason | Windows channel | macOS channel | Notes |
 |---|---|---|---|---|
@@ -69,7 +69,7 @@ budgets and model allowlists are enforced at the gateway.
 
 <details>
 
-<summary>MDM details</summary>
+<summary>2. Generate the profiles reference</summary>
 
 Run profile generation from the repository root after the gateway deployment has
 written `onboarding/claude-gateway.json`, or after the platform owner supplies
@@ -144,7 +144,7 @@ release older than the model does not send `thinking.type.enabled` and get a
 
 <details>
 
-<summary>MDM details</summary>
+<summary>3. Intune on Windows reference</summary>
 
 ### 3.1 Claude Code policy
 
@@ -278,7 +278,7 @@ the deployment window.
 
 <details>
 
-<summary>MDM details</summary>
+<summary>4. Intune on macOS reference</summary>
 
 ### 4.1 Claude Code custom profile
 
@@ -327,7 +327,7 @@ Claude Desktop MDM rollout order:
 
 <details>
 
-<summary>MDM details</summary>
+<summary>5. Jamf Pro and Group Policy alternatives reference</summary>
 
 | Tool | Steps |
 |---|---|
@@ -340,7 +340,7 @@ Claude Desktop MDM rollout order:
 
 <details>
 
-<summary>MDM details</summary>
+<summary>6. Verify one device reference</summary>
 
 ### 6.1 Windows commands
 
@@ -407,7 +407,7 @@ The proof command sends a tiny prompt through Claude Code with an empty
 
 <details>
 
-<summary>MDM details</summary>
+<summary>7. Live validation on this workstation reference</summary>
 
 Validation ran on 2026-09-26 UTC against the read-only reference gateway
 `apim-claude-gw-fzgql9` in `rg-contosohub`.
@@ -443,7 +443,7 @@ because the policy key could not be created.
 
 <details>
 
-<summary>MDM details</summary>
+<summary>8. Troubleshooting reference</summary>
 
 | Symptom | Likely cause | Check |
 |---|---|---|

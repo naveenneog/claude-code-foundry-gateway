@@ -19,7 +19,7 @@ The reviewer has Reader access to the gateway resources and permission to inspec
 
 <details>
 
-<summary>Access and portal locations</summary>
+<summary>Prerequisites for a review reference</summary>
 
 Use Reader access to the gateway and its supporting resources, and permission
 to inspect the relevant Entra groups/applications. No Foundry inference role is
@@ -50,7 +50,7 @@ it refuses, so a `403 model_not_allowed` means *authenticated and entitled*.
 
 <details>
 
-<summary>Measured credential matrix</summary>
+<summary>The matrix reference</summary>
 
 | Caller | How it gets the token | At the gateway | Token lifetime | Status |
 |---|---|---|---|---|
@@ -68,7 +68,7 @@ it refuses, so a `403 model_not_allowed` means *authenticated and entitled*.
 
 <details>
 
-<summary>Revocation behavior and verification</summary>
+<summary>What takes access away reference</summary>
 
 **The gateway's entitlement check, not token expiry.** A service principal's
 token lived for about 24 hours, so deleting its secret leaves a working token in
@@ -104,7 +104,7 @@ proof of refusal.
 
 <details>
 
-<summary>Data locations and retention owners</summary>
+<summary>What data lives where reference</summary>
 
 | Location | Data | Who governs retention/access |
 |---|---|---|
@@ -131,7 +131,7 @@ the full token or share user claims in a public issue.
 
 <details>
 
-<summary>Measured authentication surprises</summary>
+<summary>Things that surprised us reference</summary>
 
 | Symptom | Cause | What to do |
 |---|---|---|
@@ -144,7 +144,7 @@ the full token or share user claims in a public issue.
 
 <details>
 
-<summary>Device code and policy limits</summary>
+<summary>Conditional Access reference</summary>
 
 Device code sign-in happens on a second device, so a policy that requires a
 compliant or joined device, or that blocks the device code flow, stops it. That

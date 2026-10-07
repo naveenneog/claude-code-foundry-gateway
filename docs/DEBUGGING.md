@@ -20,7 +20,7 @@ The fastest supported path is the diagnostic command. The deployment record supp
 
 <details>
 
-<summary>Debugging details</summary>
+<summary>Prerequisites reference</summary>
 
 Developers need their supplied gateway URL, permitted model names and an Entra
 sign-in. Platform checks also need Reader access to APIM/Foundry and telemetry
@@ -41,7 +41,7 @@ and never include bearer tokens in a public report.
 
 <details>
 
-<summary>Debugging details</summary>
+<summary>Step 0 — Run the diagnostics reference</summary>
 
 For P66 guided-flow diagnostics, start with [Diagnostics](DIAGNOSE.md). It runs
 the administrator and workstation checks, prints the exact fix and can produce a
@@ -83,7 +83,7 @@ answering from somewhere other than your gateway, which no other check catches.
 
 <details>
 
-<summary>Debugging details</summary>
+<summary>The request path reference</summary>
 
 Every failure lives at exactly one of these hops.
 
@@ -113,7 +113,7 @@ Every failure lives at exactly one of these hops.
 
 <details>
 
-<summary>Debugging details</summary>
+<summary>Everything checks out but the panel is still broken reference</summary>
 
 Worth its own section because it is common, it looks nothing like a
 configuration fault, and every other check passes.
@@ -158,7 +158,7 @@ survive a reload.
 
 <details>
 
-<summary>Debugging details</summary>
+<summary>Step 1 — Read the response headers first reference</summary>
 
 Read the status, body and available headers together. Not every refusal passes
 through the same outbound/error policies, so not every header is present.
@@ -209,7 +209,7 @@ An absent header does not prove the gateway was bypassed: explicit
 
 <details>
 
-<summary>Debugging details</summary>
+<summary>Step 2 — Narrow by status code reference</summary>
 
 | Code | Layer | Go to |
 |------|-------|-------|
@@ -229,7 +229,7 @@ An absent header does not prove the gateway was bypassed: explicit
 
 <details>
 
-<summary>Debugging details</summary>
+<summary>Step 3 — Identity reference</summary>
 
 ```powershell
 az account show --query "{tenant:tenantId, user:user.name, type:user.type}" -o table
@@ -270,7 +270,7 @@ the access token the affected process actually selected.
 
 <details>
 
-<summary>Debugging details</summary>
+<summary>Step 4 — Entitlement and budget reference</summary>
 
 ### Is the object id entitled?
 
@@ -317,7 +317,7 @@ empty entitlement list or rely on an absent message.
 
 <details>
 
-<summary>Debugging details</summary>
+<summary>Step 5 — Gateway → Foundry reference</summary>
 
 A `401` with **no** `x-gateway-error` means the policy accepted you and Foundry
 rejected the gateway.
@@ -352,7 +352,7 @@ account's resource group, not automatically the gateway's.
 
 <details>
 
-<summary>Debugging details</summary>
+<summary>Step 6 — Foundry itself reference</summary>
 
 Take the gateway out of the picture entirely:
 
@@ -386,7 +386,7 @@ Two `404`s that look alike and are not:
 
 <details>
 
-<summary>Debugging details</summary>
+<summary>Step 7 — Policy and configuration reference</summary>
 
 ```bash
 # do all referenced named values exist?
@@ -415,7 +415,7 @@ A `{{name}}` in the policy with no matching named value returns `500`.
 
 <details>
 
-<summary>Debugging details</summary>
+<summary>Step 8 — Client configuration reference</summary>
 
 If there is no evidence the request reached the gateway, check the configured
 provider and URL, then the correct diagnostic destination. Missing headers or
@@ -458,7 +458,7 @@ which token a local client chose.
 
 <details>
 
-<summary>Debugging details</summary>
+<summary>Step 9 — Is it just this person? reference</summary>
 
 ```powershell
 ./scripts/Show-Governance.ps1 -ApimName <apim> -ResourceGroup <rg>
@@ -476,7 +476,7 @@ If they fail, it is platform-wide. Start at Step 5.
 
 <details>
 
-<summary>Debugging details</summary>
+<summary>Quick reference reference</summary>
 
 | Signal | Layer | Section |
 |--------|-------|---------|

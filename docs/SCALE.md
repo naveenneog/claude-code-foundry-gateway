@@ -38,7 +38,7 @@ $gateway = Get-Content .\onboarding\claude-gateway.json -Raw | ConvertFrom-Json
 
 <details>
 
-<summary>Scale evidence and procedures</summary>
+<summary>What runs out first reference</summary>
 
 | Ceiling | Value | How it was established |
 |---|---|---|
@@ -142,7 +142,7 @@ path through the resolver.
 
 <details>
 
-<summary>Scale evidence and procedures</summary>
+<summary>"500,000 employees" is not a capacity specification reference</summary>
 
 It gives no rate, no concurrency and no shape. Five numbers do:
 
@@ -191,7 +191,7 @@ traffic-independent and were measured, and stops there. **U9** and **U10** in
 
 <details>
 
-<summary>Scale evidence and procedures</summary>
+<summary>What a capacity test has to prove reference</summary>
 
 The obvious test - create 500,000 counter keys and see whether the service
 accepts them - answers the wrong question. Accepting a key is not the same as
@@ -406,7 +406,7 @@ quota a developer can go, or why exhausted identities were admitted again, so
 
 <details>
 
-<summary>Scale evidence and procedures</summary>
+<summary>Order of work reference</summary>
 
 1. Observe the five numbers on a pilot cohort, over enough days to include a bad one.
 2. Load-test API Management, Foundry capacity, telemetry ingestion and quota
@@ -459,7 +459,7 @@ complete.
 
 <details>
 
-<summary>Scale evidence and procedures</summary>
+<summary>The budget is a delayed kill switch, not a hard cap reference</summary>
 
 The delay calculation below describes a **ledger-driven external watcher**,
 not APIM's admission-time token counter. The repository's token quotas are
@@ -515,7 +515,7 @@ not establish the delay or in-flight overshoot.
 
 <details>
 
-<summary>Scale evidence and procedures</summary>
+<summary>Deploying today, and scaling later reference</summary>
 
 ### Two things to get right on the first day
 
@@ -629,7 +629,7 @@ comparison that proves both paths agree before either is trusted, ships today as
 
 <details>
 
-<summary>Scale evidence and procedures</summary>
+<summary>Getting there without resetting anyone's allowance reference</summary>
 
 Entitlement is live, and budgets are consumed state rather than configuration. A
 developer who has spent 80% of a monthly allowance is carrying a number that
@@ -669,7 +669,7 @@ measures the gap.
 
 <details>
 
-<summary>Scale evidence and procedures</summary>
+<summary>The move itself, step by step reference</summary>
 
 What a pilot customer runs to get from the named-value lists to the projection.
 The measured small migration kept serving; this is not a zero-downtime

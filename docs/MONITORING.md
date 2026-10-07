@@ -21,7 +21,7 @@ $gateway = Get-Content .\onboarding\claude-gateway.json -Raw | ConvertFrom-Json
 
 <details>
 
-<summary>Monitoring details</summary>
+<summary>Prerequisites and data sources reference</summary>
 
 - Select the gateway, Application Insights and Log Analytics workspace with
   [Operations](OPERATIONS.md#1-select-the-gateway-and-workspace). Never choose the
@@ -125,7 +125,7 @@ name or ARM resource ID.
 
 <details>
 
-<summary>Monitoring details</summary>
+<summary>1. What is emitted reference</summary>
 
 ### Metrics
 
@@ -157,7 +157,7 @@ a client-supplied header and cannot be spoofed by editing a config file.
 
 <details>
 
-<summary>Monitoring details</summary>
+<summary>2. The chart — step by step reference</summary>
 
 ![Application Insights Metrics: the metric namespace and Apply splitting controls](guide/a8-chargeback.png)
 
@@ -193,7 +193,7 @@ the priced ledger for finance, with its caveats.
 
 <details>
 
-<summary>Monitoring details</summary>
+<summary>3. Filtering reference</summary>
 
 **Add filter** narrows the chart; **Apply splitting** breaks it apart. You will
 usually want both.
@@ -218,7 +218,7 @@ usage before deciding whether to change default aliases or budgets.
 
 <details>
 
-<summary>Monitoring details</summary>
+<summary>4. Same data, from the CLI reference</summary>
 
 Useful for scheduled reporting, and it is the only reliable path because
 `az monitor metrics list` **drops `--namespace` for custom namespaces** and will
@@ -263,7 +263,7 @@ Two syntax traps:
 
 <details>
 
-<summary>Monitoring details</summary>
+<summary>5. Drill into logs reference</summary>
 
 Metrics can be pre-aggregated. For request attribution, use **Log Analytics >
 Logs** in the ledger workspace after publishing the functions in section 7:
@@ -330,7 +330,7 @@ custom metrics also remain subject to the namespace's series limit.
 
 <details>
 
-<summary>Monitoring details</summary>
+<summary>6. Alerts reference</summary>
 
 Budgets throttle individuals. Alerts tell **you** before the monthly invoice
 does.
@@ -369,7 +369,7 @@ you alert on it.
 
 <details>
 
-<summary>Monitoring details</summary>
+<summary>7. Dashboard reference</summary>
 
 Two things ship: **saved KQL functions** and an **Azure Workbook**. Both are
 metadata — a saved search stores nothing and a workbook runs nothing, so each
@@ -712,7 +712,7 @@ uses the log rather than metrics — see [ADR-0006](adr/0006-ledger-is-the-llm-l
 
 <details>
 
-<summary>Monitoring details</summary>
+<summary>8. When the charts are empty reference</summary>
 
 Diagnose in this order — each check is cheap and rules out everything below it.
 

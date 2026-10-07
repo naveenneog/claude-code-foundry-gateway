@@ -39,7 +39,7 @@ The script path discovers targets, previews cost choices and deploys only after 
 
 <details>
 
-<summary>AUM service details</summary>
+<summary>Choose a FinOps tool reference</summary>
 
 Run the selector before creating infrastructure:
 
@@ -78,7 +78,7 @@ tools. Deployment does not change that setting for you.
 
 <details>
 
-<summary>AUM service details</summary>
+<summary>Prerequisites and roles reference</summary>
 
 | Principal | Required access | Why |
 |---|---|---|
@@ -122,7 +122,7 @@ as strict. The service never rewrites the gateway policy to enable a feature.
 
 <details>
 
-<summary>AUM service details</summary>
+<summary>Deploy with the script reference</summary>
 
 ### 1. Discover targets
 
@@ -229,7 +229,7 @@ the same deployment succeeded after this routing property was enabled.
 
 <details>
 
-<summary>AUM service details</summary>
+<summary>Deploy in the Azure portal reference</summary>
 
 The portal route uses the same Bicep deployment translated to ARM, so identity,
 role and storage settings do not drift from the script.
@@ -353,7 +353,7 @@ string insufficient to send telemetry. With Insights off, neither setting exists
 
 <details>
 
-<summary>AUM service details</summary>
+<summary>Deploy with Azure CLI reference</summary>
 
 Use the script for app-owner reconciliation, or reproduce the preceding Graph
 manifest steps with `az rest` and JSON body files. Never put quoted JSON, `&`,
@@ -385,7 +385,7 @@ workstation runs Windows.
 
 <details>
 
-<summary>AUM service details</summary>
+<summary>Assign roles and manager groups reference</summary>
 
 Role precedence is **Admin > Viewer > Manager**. A Viewer+Manager sees everything
 but cannot edit. Remove the Viewer assignment if the person should be scoped.
@@ -452,7 +452,7 @@ that empty object into unrestricted access.
 
 <details>
 
-<summary>AUM service details</summary>
+<summary>Verify reads, writes and expiry reference</summary>
 
 ### Read-only verification
 
@@ -572,7 +572,7 @@ record IDs may differ, but principal/resource/role tuples must match the snapsho
 
 <details>
 
-<summary>AUM service details</summary>
+<summary>API reference reference</summary>
 
 The versioned contract is
 [`service/aum/openapi.yaml`](../service/aum/openapi.yaml).
@@ -605,7 +605,7 @@ Unknown capabilities default to false in a client.
 
 <details>
 
-<summary>AUM service details</summary>
+<summary>Cost reference</summary>
 
 The script fetches list-price meters from the
 [Azure Retail Prices API](https://learn.microsoft.com/rest/api/cost-management/retail-prices/azure-retail-prices).
@@ -641,7 +641,7 @@ architectures, not a required AUM cost. See [Turnstile costs](TURNSTILE.md#what-
 
 <details>
 
-<summary>AUM service details</summary>
+<summary>Limits and 500,000 developers reference</summary>
 
 | Boundary | What this release does |
 |---|---|
@@ -666,7 +666,7 @@ count, audit retention, query latency and manager concurrency explicitly.
 
 <details>
 
-<summary>AUM service details</summary>
+<summary>Troubleshoot reference</summary>
 
 | Exact error/symptom | Cause | Action |
 |---|---|---|
@@ -706,7 +706,7 @@ count, audit retention, query latency and manager concurrency explicitly.
 
 <details>
 
-<summary>AUM service details</summary>
+<summary>Test and remove reference</summary>
 
 ```powershell
 python -m venv .venv-aum-service
@@ -759,7 +759,7 @@ test group only after confirming no shared or attached resource remains.
 
 <details>
 
-<summary>AUM service details</summary>
+<summary>Live verification receipt reference</summary>
 
 [Measured results and redacted API receipts](aum-service/LIVE-VERIFICATION.md)
 separate the September 24 pilot from the September 25 dedicated Basic v2 proof:

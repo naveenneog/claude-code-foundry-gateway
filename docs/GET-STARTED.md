@@ -12,13 +12,13 @@ The commands run from the repository root in PowerShell 7 with the [Setup tools 
 .\Start-ClaudeGateway.ps1 -Action Guide
 ```
 
-**Expected result:** completed steps are recorded in `onboarding/claude-gateway.json`; Status reports the recorded deployment; Guide writes `onboarding/HOW-TO-USE.md`. Track 1 verifies the gateway with a real health check, Track 2 verifies a developer workstation, and Track 3 verifies FinOps reporting.
+**Expected result:** completed steps are recorded in `onboarding/claude-gateway.json`; Status reports the recorded deployment; Guide writes `onboarding/HOW-TO-USE.md`. The retained tracks below contain the gateway health check, developer workstation verification and FinOps reporting verification.
 
 ## Recommended path - guided flow
 
 <details>
 
-<summary>Track details</summary>
+<summary>Recommended path - guided flow reference</summary>
 
 The flow reads the gateway named by the decision record, or makes no Azure read
 when none is recorded. A first attended setup reviews the foundation in the
@@ -68,7 +68,7 @@ and the Anthropic Claude Code/Claude Desktop clients.
 
 <details>
 
-<summary>Track details</summary>
+<summary>Track 1 - Administrator, 10 steps reference</summary>
 
 ### 1. Confirm prerequisites and sign in
 
@@ -340,7 +340,7 @@ response.
 
 <details>
 
-<summary>Track details</summary>
+<summary>Track 2 - Developer, 8 steps reference</summary>
 
 ### 1. Get the handover file and sign in to Azure
 
@@ -497,7 +497,7 @@ and never send tokens or prompt content in a public issue.
 
 <details>
 
-<summary>Track details</summary>
+<summary>Track 3 - FinOps, 9 steps reference</summary>
 
 ### 1. Choose no console, Turnstile, AUM or both
 
@@ -704,7 +704,7 @@ and [Monitoring](MONITORING.md).
 
 <details>
 
-<summary>Track details</summary>
+<summary>Approved screenshots used on this page reference</summary>
 
 The images above are live captures already committed in this repository. Their
 provenance records are:

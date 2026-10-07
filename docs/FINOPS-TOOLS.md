@@ -32,7 +32,7 @@ The selector previews the available tools, prices, roles and prerequisites. `eas
 
 <details>
 
-<summary>FinOps tooling details</summary>
+<summary>The tools at a glance reference</summary>
 
 | Tool | What it is for | Who uses it | Writes budgets? | Added Azure resources | Standing cost, list |
 |---|---|---|---|---|---|
@@ -56,7 +56,7 @@ alias for one release.
 
 <details>
 
-<summary>FinOps tooling details</summary>
+<summary>Which one to choose reference</summary>
 
 - **Nobody needs a console:** publish the saved queries and workbooks ([flow 1](#flow-1-reports-with-no-console-and-no-added-cost))
   and run the scripts ([flow 2](#flow-2-budgets-from-scripts)). This adds no cost.
@@ -97,7 +97,7 @@ comparison.
 
 <details>
 
-<summary>FinOps tooling details</summary>
+<summary>Sign-in reference</summary>
 
 ### Who signs in to what
 
@@ -142,7 +142,7 @@ reflect a change on their own is still open (**U21**, [Unknowns](UNKNOWNS.md)).
 
 <details>
 
-<summary>FinOps tooling details</summary>
+<summary>End-to-end flows reference</summary>
 
 Every flow starts from a deployed gateway (`Install-ClaudeGateway.ps1`) and `az login`. Scripts
 that are not given a value ask for it: they list what they found in Azure, the recommended one
@@ -370,7 +370,7 @@ are explicit. Stale enforced snapshots fail closed after 15 minutes.
 
 <details>
 
-<summary>FinOps tooling details</summary>
+<summary>Bill of materials and pricing reference</summary>
 
 ### How the numbers are worked out
 
@@ -463,7 +463,7 @@ Read with the commands above on 2026-09-25:
 
 <details>
 
-<summary>FinOps tooling details</summary>
+<summary>Limits worth knowing reference</summary>
 
 - Direct mode is an administrative connection. Anyone who can write the gateway's named values
   can write any unit's budget.

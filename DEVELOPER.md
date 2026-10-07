@@ -37,7 +37,7 @@ az login --tenant $gateway.tenantId --allow-no-subscriptions
 
 <details>
 
-<summary>Developer setup details</summary>
+<summary>Prerequisites reference</summary>
 
 | | |
 |---|---|
@@ -56,7 +56,7 @@ az login --tenant $gateway.tenantId --allow-no-subscriptions
 
 <details>
 
-<summary>Developer setup details</summary>
+<summary>One command reference</summary>
 
 Your platform team sent you `claude-gateway.json`. It holds the gateway URL,
 tenant and tier limits, so you do not have to type any of them. Ask for the
@@ -205,7 +205,7 @@ stops before writing anything if a check fails.
 
 <details>
 
-<summary>Developer setup details</summary>
+<summary>Using it reference</summary>
 
 **In VS Code** — open a folder, then **Ctrl+Shift+P → `Claude Code: Open in Side
 Bar`**. There is no sign-in step; your Entra credential is already resolved.
@@ -263,7 +263,7 @@ conversation history and connected tools can also contain your prompts.
 
 <details>
 
-<summary>Developer setup details</summary>
+<summary>If something is wrong reference</summary>
 
 | Symptom | Cause → Fix |
 |---|---|
@@ -296,7 +296,7 @@ to a public issue.
 
 <details>
 
-<summary>Developer setup details</summary>
+<summary>FAQ reference</summary>
 
 **I fixed my settings and Claude Code still uses the old model. Why?**
 Something higher in the precedence order is overriding the file you edited.
@@ -375,7 +375,7 @@ until you sign back in with Gateway.
 
 <details>
 
-<summary>Developer setup details</summary>
+<summary>Appendix — configuring it by hand reference</summary>
 
 Only needed if you cannot run the script, or you are checking what it did.
 

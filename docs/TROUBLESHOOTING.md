@@ -18,7 +18,7 @@ The known symptom selects the section below. An unknown failure layer starts wit
 
 <details>
 
-<summary>Troubleshooting details</summary>
+<summary>Deployment reference</summary>
 
 | Symptom | Cause → Fix |
 |---|---|
@@ -39,7 +39,7 @@ The known symptom selects the section below. An unknown failure layer starts wit
 
 <details>
 
-<summary>Troubleshooting details</summary>
+<summary>Environment reference</summary>
 
 | Symptom | Cause → Fix |
 |---|---|
@@ -54,7 +54,7 @@ The preflight in both setup scripts reports whether the platform is affected.
 
 <details>
 
-<summary>Troubleshooting details</summary>
+<summary>Policy reference</summary>
 
 | Symptom | Cause → Fix |
 |---|---|
@@ -68,7 +68,7 @@ The preflight in both setup scripts reports whether the platform is affected.
 
 <details>
 
-<summary>Troubleshooting details</summary>
+<summary>Runtime reference</summary>
 
 | Symptom | Cause → Fix |
 |---|---|
@@ -88,7 +88,7 @@ The preflight in both setup scripts reports whether the platform is affected.
 
 <details>
 
-<summary>Troubleshooting details</summary>
+<summary>Claude Code client reference</summary>
 
 | Symptom | Cause → Fix |
 |---|---|
@@ -109,7 +109,7 @@ The preflight in both setup scripts reports whether the platform is affected.
 
 <details>
 
-<summary>Troubleshooting details</summary>
+<summary>Claude Desktop reference</summary>
 
 | Symptom | Cause → Fix |
 |---|---|
@@ -162,7 +162,7 @@ those files while no Claude process is running is the signature.
 
 <details>
 
-<summary>Troubleshooting details</summary>
+<summary>Monitoring reference</summary>
 
 | Symptom | Cause → Fix |
 |---|---|
@@ -179,7 +179,7 @@ those files while no Claude process is running is the signature.
 
 <details>
 
-<summary>Troubleshooting details</summary>
+<summary>Still stuck? reference</summary>
 
 Collect UTC time, client/version, gateway host, status/error body and the
 relevant operation/request ID for the platform team. Redact personal/deployment
@@ -194,7 +194,7 @@ its listener is not explicitly loopback-only. See
 
 <details>
 
-<summary>Troubleshooting details</summary>
+<summary>Turnstile and offboarding reference</summary>
 
 ### Turnstile database stopped
 

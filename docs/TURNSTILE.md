@@ -32,7 +32,7 @@ An existing console uses its assigned Entra role and [CLI-assisted sign-in](#sig
 
 <details>
 
-<summary>Turnstile details</summary>
+<summary>Live evidence and sign-in without additional grants reference</summary>
 
 ### One authenticated portal batch
 
@@ -124,7 +124,7 @@ and runs mutations proving those failures are detected.
 
 <details>
 
-<summary>Turnstile details</summary>
+<summary>One enforcer reference</summary>
 
 The gateway enforces. Turnstile shows, and optionally edits. Keep it that way.
 
@@ -151,7 +151,7 @@ access that Turnstile does not know about. The decision is recorded in
 
 <details>
 
-<summary>Turnstile details</summary>
+<summary>How it fits together reference</summary>
 
 ```text
              Microsoft Entra ID (single tenant)
@@ -184,7 +184,7 @@ A save in Turnstile ─ starts ─▶ apply job ─ the same sync, as its own id
 
 <details>
 
-<summary>Turnstile details</summary>
+<summary>Prerequisites reference</summary>
 
 | Requirement | Detail |
 |---|---|
@@ -199,7 +199,7 @@ A save in Turnstile ─ starts ─▶ apply job ─ the same sync, as its own id
 
 <details>
 
-<summary>Turnstile details</summary>
+<summary>1. Create the Microsoft Entra application reference</summary>
 
 Turnstile lets in only people who hold its admin app role, and Entra issues a token only to
 people assigned to it. This creates the application that rule depends on. It is safe to run
@@ -259,7 +259,7 @@ when captured, so their settings are shown from Microsoft Graph instead, in
 
 <details>
 
-<summary>Turnstile details</summary>
+<summary>2. Deploy Turnstile reference</summary>
 
 ```powershell
 git clone https://github.com/naveenneog/turnstile.git
@@ -315,7 +315,7 @@ without their `.cmd` extension, checks POSIX file modes and locks with `fcntl`. 
 
 <details>
 
-<summary>Turnstile details</summary>
+<summary>3. Add the sign-in redirect reference</summary>
 
 The web address exists only once Turnstile is deployed. Add it to the application:
 
@@ -343,7 +343,7 @@ page does not prove consent; the CLI-code journey above proves the working sign-
 
 <details>
 
-<summary>Turnstile details</summary>
+<summary>4. Connect the gateway reference</summary>
 
 Nothing about a Turnstile deployment is written into this repository's scripts. This finds it and
 stores what it found in one named value on the gateway, `turnstile-integration`, which every other
@@ -375,7 +375,7 @@ which strips double quotes from arguments: measured, JSON written this way came 
 
 <details>
 
-<summary>Turnstile details</summary>
+<summary>5. Show units, teams and budgets in Turnstile reference</summary>
 
 ```powershell
 ./scripts/Sync-ClaudeTurnstileGovernance.ps1
@@ -412,7 +412,7 @@ on; the gateway still enforces both.
 
 <details>
 
-<summary>Turnstile details</summary>
+<summary>6. Send usage to Turnstile reference</summary>
 
 ```powershell
 ./scripts/Export-ClaudeTurnstileUsage.ps1
@@ -500,7 +500,7 @@ rather than sending part of it.
 
 <details>
 
-<summary>Turnstile details</summary>
+<summary>7. Optional: edit budgets in Turnstile reference</summary>
 
 By default budgets are authored in the gateway and mirrored to Turnstile. To edit them on
 Turnstile's budget page instead:
@@ -555,7 +555,7 @@ unknown scopes and person budgets are not imported.
 
 <details>
 
-<summary>Turnstile details</summary>
+<summary>Run it on a schedule reference</summary>
 
 The export and the sync run every hour as an Azure Container Apps job signed in as its own
 managed identity. No secret exists anywhere: not in the template, the job or a key vault
@@ -607,7 +607,7 @@ The first two runs failed, and both causes are now handled:
 
 <details>
 
-<summary>Turnstile details</summary>
+<summary>Manage everything in Turnstile reference</summary>
 
 ### Concurrent saves and the stale-run guard
 
@@ -858,7 +858,7 @@ possible and would still compete with the apply while Turnstile owns that value.
 
 <details>
 
-<summary>Turnstile details</summary>
+<summary>Admin-only access reference</summary>
 
 Three layers, each measured.
 
@@ -1005,7 +1005,7 @@ credential in a secret store.
 
 <details>
 
-<summary>Turnstile details</summary>
+<summary>What it costs reference</summary>
 
 ```powershell
 ./scripts/Get-ClaudeTurnstileBom.ps1
@@ -1042,7 +1042,7 @@ through it, so for this integration it does nothing. The deployer always creates
 
 <details>
 
-<summary>Turnstile details</summary>
+<summary>Troubleshooting reference</summary>
 
 | Symptom | Cause | Fix |
 |---|---|---|
@@ -1075,7 +1075,7 @@ through it, so for this integration it does nothing. The deployer always creates
 
 <details>
 
-<summary>Turnstile details</summary>
+<summary>FAQ reference</summary>
 
 **Why does Turnstile show far more tokens "used" than the gateway's budget counter?**
 Turnstile's "used" includes cache reads; the gateway's quota counter counts prompt and completion
@@ -1124,7 +1124,7 @@ and budget, not its name. A different id is a different unit, with a budget coun
 
 <details>
 
-<summary>Turnstile details</summary>
+<summary>The fork reference</summary>
 
 Upstream Turnstile could not be used unchanged: its catalog is fixed demo data, its web sign-in
 accepts any organization's accounts, it creates an account for anyone who signs in, and its
@@ -1145,7 +1145,7 @@ deployer does not run on Windows. The fork's branches, merged in `claude-gateway
 
 <details>
 
-<summary>Turnstile details</summary>
+<summary>Reference reference</summary>
 
 | Script | Does |
 |---|---|

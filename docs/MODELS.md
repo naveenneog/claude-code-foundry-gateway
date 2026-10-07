@@ -23,7 +23,7 @@ $gateway = Get-Content .\onboarding\claude-gateway.json -Raw | ConvertFrom-Json
 
 <details>
 
-<summary>Model lifecycle details</summary>
+<summary>Prerequisites reference</summary>
 
 Discovery needs read access to the selected Foundry account and API Management
 instance. Apply needs API Management Service Contributor, writable local
@@ -63,7 +63,7 @@ and provisioning state
 
 <details>
 
-<summary>Model lifecycle details</summary>
+<summary>1. Inspect, deploy and allow reference</summary>
 
 An administrator deploys the model through Foundry's approved deployment
 process. The model change then discovers it:
@@ -170,7 +170,7 @@ reconciliation remains U2.
 
 <details>
 
-<summary>Model lifecycle details</summary>
+<summary>The four things that have to agree reference</summary>
 
 | State | Location | Consequence of a mismatch |
 |---|---|---|
@@ -190,7 +190,7 @@ describing them as zero usage.
 
 <details>
 
-<summary>Model lifecycle details</summary>
+<summary>The price book reference</summary>
 
 `config/price-book.json` may hold your negotiated rates. It is private and
 git-ignored; negotiated rates can be
@@ -241,7 +241,7 @@ exports and price snapshot retained ([FinOps](FINOPS.md),
 
 <details>
 
-<summary>Model lifecycle details</summary>
+<summary>What developers change reference</summary>
 
 The administrator record contains the allowed live union in `models`, and
 `deployments` includes each deployment's model/version and existing client
@@ -295,7 +295,7 @@ update devices ([MDM](MDM.md)).
 
 <details>
 
-<summary>Model lifecycle details</summary>
+<summary>Retiring one reference</summary>
 
 When Foundry no longer lists a deployment, the model question offers `drop`.
 For example:
@@ -324,7 +324,7 @@ The reviewed sync is the lifecycle path described here.
 
 <details>
 
-<summary>Model lifecycle details</summary>
+<summary>Troubleshoot and next steps reference</summary>
 
 ### Reference-gateway preview
 

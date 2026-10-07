@@ -19,7 +19,7 @@ $gateway = Get-Content .\onboarding\claude-gateway.json -Raw | ConvertFrom-Json
 
 <details>
 
-<summary>FinOps details</summary>
+<summary>Prerequisites reference</summary>
 
 | Need | Who supplies it |
 |---|---|
@@ -53,7 +53,7 @@ named value. Do not derive a client ID from an account or tenant ID.
 
 <details>
 
-<summary>FinOps details</summary>
+<summary>1. Publish or refresh the reporting definitions reference</summary>
 
 Have a platform owner run these from the repository root, with explicit targets:
 
@@ -91,7 +91,7 @@ and `priced_ok`. An empty chart is not proof of zero spend.
 
 <details>
 
-<summary>FinOps details</summary>
+<summary>2. Select and export the closed month reference</summary>
 
 In Log Analytics > Logs, run:
 
@@ -121,7 +121,7 @@ as independent charges.
 
 <details>
 
-<summary>FinOps details</summary>
+<summary>3. Review caveats before approving allocations reference</summary>
 
 | Check | Consequence |
 |---|---|
@@ -143,7 +143,7 @@ examples describe that sample only, not your organisation.
 
 <details>
 
-<summary>FinOps details</summary>
+<summary>4. Compare to billed cost and set the next budget reference</summary>
 
 **Portal:** Cost Management > Cost analysis > select the same billing scope and
 closed month > filter the Foundry resource / Claude meter. Reconcile separately
@@ -162,7 +162,7 @@ dollar stop; see [Scale](SCALE.md#the-budget-is-a-delayed-kill-switch-not-a-hard
 
 <details>
 
-<summary>FinOps details</summary>
+<summary>Optional consoles reference</summary>
 
 - **Turnstile:** [setup and operating guide](TURNSTILE.md). Units/teams, usage
   and delegated management are separate from the inference request path.

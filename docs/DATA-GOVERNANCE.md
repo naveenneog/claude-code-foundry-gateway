@@ -18,7 +18,7 @@ Discovery is read-only. The subject is the selected user principal name or objec
 
 <details>
 
-<summary>Data governance details</summary>
+<summary>Prerequisites reference</summary>
 
 - An approved request identifying the subject, required time window and systems
   in scope. Purge is destructive and not routine log housekeeping.
@@ -36,7 +36,7 @@ Discovery is read-only. The subject is the selected user principal name or objec
 
 <details>
 
-<summary>Data governance details</summary>
+<summary>1. Review collection and retention reference</summary>
 
 **Portal:** APIM > APIs > Claude API > Diagnostics, then the linked Application
 Insights resource and Log Analytics workspace > Tables > Manage table.
@@ -59,7 +59,7 @@ Basic/Auxiliary. Exports and Sentinel data-lake mirrors have separate lifecycles
 
 <details>
 
-<summary>Data governance details</summary>
+<summary>2. Discover before deleting reference</summary>
 
 ```powershell
 ./scripts/Find-ClaudeUserData.ps1 -User '<subject-object-id>' -Since 90 `
@@ -92,7 +92,7 @@ and ingestion paths first.
 
 <details>
 
-<summary>Data governance details</summary>
+<summary>3. Preview and approve the purge reference</summary>
 
 ```powershell
 ./scripts/Remove-ClaudeUserData.ps1 -User '<subject-object-id>' -Since 90 `
@@ -118,7 +118,7 @@ names; use workspace names such as `AppMetrics`.
 
 <details>
 
-<summary>Data governance details</summary>
+<summary>4. Execute and verify completion reference</summary>
 
 Only after approval, repeat the exact reviewed command with `-Execute`.
 Keep every returned operation ID and status URL in the restricted case record.

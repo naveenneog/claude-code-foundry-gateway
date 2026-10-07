@@ -17,11 +17,12 @@ $gateway = Get-Content .\onboarding\claude-gateway.json -Raw | ConvertFrom-Json
 .\scripts\Set-ClaudeDeveloper.ps1 -ResourceGroup $gateway.resourceGroup -ApimName $gateway.apimName -User 'developer@contoso.com' -Tier standard -Sync
 .\scripts\New-OnboardingEmail.ps1 -ConfigPath .\onboarding\claude-gateway.json -To 'developer@contoso.com'
 .\scripts\Test-ClaudeHealth.ps1 -ResourceGroup $gateway.resourceGroup -ApimName $gateway.apimName
+.\scripts\Get-ClaudeBypass.ps1 -ResourceGroup $gateway.resourceGroup -ApimName $gateway.apimName
 ```
 
-**Expected result:** the installer writes the handover record; the membership command publishes access; the email command writes HTML, text and EML files; health exits zero. The generated message contains no attached configuration or scripts bundle.
+**Expected result:** the installer writes the handover record; the membership command publishes access; the email command writes HTML, text and EML files; health exits zero; the bypass audit has no unapproved direct or inherited Foundry role. The generated message contains no attached configuration or scripts bundle.
 
-The developer's [setup and request verification](DEVELOPER.md#one-command) uses the record and complete scripts bundle. [Setup](docs/SETUP.md) covers deployment choices; [Guided flow](docs/GUIDED-FLOW.md) covers setup followed by later operations.
+Roll out broadly only after the bypass findings are clean or explicitly approved; direct Foundry access skips entitlement, budgets and model restrictions ([details](docs/SETUP.md#42-close-the-bypass)). The developer's [setup and request verification](DEVELOPER.md#one-command) uses the record and complete scripts bundle. [Setup](docs/SETUP.md) covers deployment choices; [Guided flow](docs/GUIDED-FLOW.md) covers setup followed by later operations.
 
 `./install-claude-gateway.sh` on macOS and Linux deploys the gateway with named values; the projection path runs from PowerShell 7 ([ADR-0052](docs/adr/0052-cosmos-default-installer.md)). `./Update-ClaudeGateway.ps1 -ResourceGroup $gateway.resourceGroup -ApimName $gateway.apimName` plans moving a named-value gateway to the projection without writing until `-Apply` and the plan fingerprint are supplied ([Update and change](docs/UPDATE-AND-CHANGE.md#move-a-named-value-gateway-with-the-update), [ADR-0054](docs/adr/0054-update-flow-entitlement-migration.md)).
 
@@ -29,7 +30,7 @@ The developer's [setup and request verification](DEVELOPER.md#one-command) uses 
 
 <details>
 
-<summary>Guide index and day-to-day routes</summary>
+<summary>Start here reference</summary>
 
 | You need to… | Start with |
 |---|---|
@@ -91,7 +92,7 @@ explains created, reused and optional resources.
 
 <details>
 
-<summary>Purpose and trust model</summary>
+<summary>Why reference</summary>
 
 Foundry provides Entra authentication. The gateway adds a shared enforcement
 point for entitlement, token limits and model access. It governs only requests
@@ -110,7 +111,7 @@ does not make a stolen token impossible to replay.
 
 <details>
 
-<summary>Included controls and clients</summary>
+<summary>What you get reference</summary>
 
 | Control | Mechanism |
 |---|---|
@@ -157,7 +158,7 @@ Identifiers are redacted with [terminal](guide/redact-terminal.mjs) and
 
 <details>
 
-<summary>Required tools and roles</summary>
+<summary>Prerequisites reference</summary>
 
 Platform deployment needs a Foundry account eligible to deploy Claude, an APIM
 **v2** tier, Azure CLI/Bicep, and the Azure and Entra permissions listed in
@@ -182,7 +183,7 @@ See [dollar budgets](docs/BUDGETS.md#dollar-budgets-what-is-enforced) and the
 
 <details>
 
-<summary>Deployment behavior</summary>
+<summary>What the installer does reference</summary>
 
 The installer discovers resources, collects deployment and budget choices,
 deploys or reuses the gateway and observability resources, grants the gateway
@@ -198,7 +199,7 @@ procedure ([Setup](docs/SETUP.md)).
 
 <details>
 
-<summary>Developer handover summary</summary>
+<summary>Onboarding a developer reference</summary>
 
 Follow [Onboarding](docs/ONBOARDING.md): change the Entra group, publish the
 change, verify it, then send [DEVELOPER.md](DEVELOPER.md), the generated config
@@ -209,7 +210,7 @@ and the complete scripts bundle. No developer API key is issued.
 
 <details>
 
-<summary>Verification checks</summary>
+<summary>Verifying the controls reference</summary>
 
 Use [Governance checks](docs/GOVERNANCE-CHECKS.md). Agree a test window:
 throttle tests temporarily change live limits and send billable model requests.
@@ -219,7 +220,7 @@ throttle tests temporarily change live limits and send billable model requests.
 
 <details>
 
-<summary>Direct-access audit</summary>
+<summary>Close the bypass reference</summary>
 
 Run the [Foundry bypass audit](docs/SETUP.md#42-close-the-bypass) and review
 inherited as well as direct roles. Keep the gateway's managed identity grant.
@@ -230,7 +231,7 @@ Do not remove another application's legitimate assignment without its owner.
 
 <details>
 
-<summary>Budget configuration</summary>
+<summary>Tuning budgets reference</summary>
 
 Moved to [Configure token budgets and model access](docs/BUDGETS.md), including
 all defaults, per-person overrides, refusal bodies, portal edits and verification.
@@ -240,7 +241,7 @@ all defaults, per-person overrides, refusal bodies, portal edits and verificatio
 
 <details>
 
-<summary>Usage allocation</summary>
+<summary>Chargeback reference</summary>
 
 Start with [FinOps](docs/FINOPS.md). `ClaudeChargeback` is the request ledger;
 `ClaudeCost` prices its usage plus observed cache reads. The
@@ -264,7 +265,7 @@ Custom metrics remain useful for pilot diagnostics, not complete scaled billing.
 
 <details>
 
-<summary>Cost references</summary>
+<summary>What it costs reference</summary>
 
 Use `scripts/Get-ClaudeBom.ps1 -WithPrices` with your selected gateway;
 [Operations](docs/OPERATIONS.md#5-inspect-cost-and-retire-only-what-you-own)
@@ -280,7 +281,7 @@ Include the optional [projection](docs/SECURE-PROJECTION.md#cost) and
 
 <details>
 
-<summary>Repository map</summary>
+<summary>Repository layout reference</summary>
 
 Moved to [Repository and command reference](docs/REFERENCE.md#repository-layout).
 The scripts, templates, analytics, resolver, sync and screenshot tools are mapped
@@ -291,7 +292,7 @@ there; [Operations](docs/OPERATIONS.md) maps tasks to commands and portal paths.
 
 <details>
 
-<summary>Documentation map</summary>
+<summary>Documentation reference</summary>
 
 | Guide | Purpose |
 |---|---|
@@ -330,7 +331,7 @@ The engineering record is separate from the user guides:
 
 <details>
 
-<summary>Related accelerator</summary>
+<summary>Companion accelerator reference</summary>
 
 [claude-desktop-foundry](https://github.com/naveenneog/claude-desktop-foundry)
 provides Desktop fleet-policy tooling that can reuse this gateway. Follow that
@@ -341,7 +342,7 @@ repository's instructions for its scripts; they are not all in this checkout.
 
 <details>
 
-<summary>Contributor checks</summary>
+<summary>Contributing reference</summary>
 
 Open an issue or pull request with a reproducible command, client/version,
 status code and redacted output. Do not include tokens, tenant/resource IDs,

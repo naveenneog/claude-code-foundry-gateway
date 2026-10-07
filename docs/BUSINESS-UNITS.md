@@ -22,7 +22,7 @@ The commands run from the repository root in PowerShell 7. The operator has the 
 
 <details>
 
-<summary>Definition and registry fields</summary>
+<summary>What a business unit is reference</summary>
 
 An **Entra security group** with a **monthly budget**.
 
@@ -41,7 +41,7 @@ step.
 
 <details>
 
-<summary>Governance authority rules</summary>
+<summary>Choose where changes are authored reference</summary>
 
 `Set-ClaudeBusinessUnit.ps1` reads the gateway's `turnstile-integration` before
 mutating it. If Turnstile owns governance, creates, updates and removals are
@@ -70,7 +70,7 @@ and can still be overwritten.
 
 <details>
 
-<summary>Enforcement modes and measured limits</summary>
+<summary>Budget modes reference</summary>
 
 The platform admin chooses an enforcement mode for each unit or team. A missing
 mode means **strict**, preserving the existing behavior. A zero-token budget
@@ -168,7 +168,7 @@ expressions and mutation tests exercise.
 
 <details>
 
-<summary>Teams, tiers and Entra hierarchy</summary>
+<summary>Teams, and how they relate to tiers reference</summary>
 
 A **team** is a business unit that names a parent. A request is charged to the
 team **and** to the business unit above it — two counters, both monthly, both
@@ -380,7 +380,7 @@ pointing at something that is gone.
 
 <details>
 
-<summary>Measurement and pricing limits</summary>
+<summary>Read this before you quote a number reference</summary>
 
 The budget is a **spend guide, not an accounting figure**, and there are two
 measured reasons why.
@@ -431,7 +431,7 @@ without them.
 
 <details>
 
-<summary>AUM and pipeline entry points</summary>
+<summary>Managing it all in one place reference</summary>
 
 Most chargeback work is a short session — add a team, move two people into it,
 check the budget — and doing that as five separate commands means remembering
@@ -476,7 +476,7 @@ there is no terminal and names the command for each option.
 
 <details>
 
-<summary>Create command and identifier rules</summary>
+<summary>Adding a business unit reference</summary>
 
 The installer offers to create your first ones at the end of a run, once the
 Entra groups exist. It creates the group for you and then calls the same command
@@ -525,7 +525,7 @@ be changed on its own.
 
 <details>
 
-<summary>List command and output</summary>
+<summary>Listing them reference</summary>
 
 ```powershell
 ./scripts/Set-ClaudeBusinessUnit.ps1 -List
@@ -538,7 +538,7 @@ be changed on its own.
 
 <details>
 
-<summary>Budget and group edits</summary>
+<summary>Changing a budget reference</summary>
 
 Pass the identifier and the new figure. The group is left alone.
 
@@ -559,7 +559,7 @@ both, pass both.
 
 <details>
 
-<summary>Membership sync behavior</summary>
+<summary>Moving people between business units reference</summary>
 
 Membership is group membership. Add or remove the developer in Entra, then run
 the sync:
@@ -586,7 +586,7 @@ spend landing on no budget — is invisible until someone reconciles a report.
 
 <details>
 
-<summary>Spend report source</summary>
+<summary>Seeing what has been spent reference</summary>
 
 ```powershell
 ./scripts/Get-ClaudeBusinessUnit.ps1
@@ -603,7 +603,7 @@ same data for a dashboard, and `-Days` overrides the default of month-to-date.
 
 <details>
 
-<summary>Unassigned behavior</summary>
+<summary>Developers with no business unit reference</summary>
 
 Anyone entitled but not in a business-unit group is **unassigned**. What happens
 to them is set by `bu-unassigned`, one of the gateway's named values — API
@@ -630,7 +630,7 @@ az apim nv update -g <rg> --service-name <apim> `
 
 <details>
 
-<summary>Removal behavior</summary>
+<summary>Removing one reference</summary>
 
 ```powershell
 ./scripts/Set-ClaudeBusinessUnit.ps1 -Id research -Remove
@@ -647,7 +647,7 @@ force at the time rather than looking it up later.
 
 <details>
 
-<summary>Refusal response and soft cap</summary>
+<summary>When a budget runs out reference</summary>
 
 The gateway returns `403` in Anthropic's error shape, naming the business unit:
 
@@ -673,7 +673,7 @@ described to a budget holder as a hard stop.
 
 <details>
 
-<summary>Store and reporting limits</summary>
+<summary>Limits worth knowing reference</summary>
 
 | | |
 |---|---|

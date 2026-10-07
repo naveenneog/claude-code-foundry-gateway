@@ -16,7 +16,7 @@ The distributed bundle contains the deployment's `claude-gateway.json`, the comp
 
 <details>
 
-<summary>Handover details</summary>
+<summary>What lands here reference</summary>
 
 `Install-ClaudeGateway.ps1` (or `install-claude-gateway.sh`) writes
 `claude-gateway.json` at the end of a successful deployment:
@@ -60,7 +60,7 @@ you onboard.
 
 <details>
 
-<summary>Handover details</summary>
+<summary>What it is for reference</summary>
 
 `claude-gateway.json` is the handover artifact. Distribute it beside the complete
 `scripts` folder, not a lone setup file. Desktop needs the credential helpers
@@ -80,7 +80,7 @@ type none of them.
 
 <details>
 
-<summary>Handover details</summary>
+<summary>It contains no secret reference</summary>
 
 Gateway URL, tenant id, group names, tier limits. All of it is information the
 developer needs, and none of it grants access — **access is Entra group
@@ -96,7 +96,7 @@ would go stale, not because it is sensitive.
 
 <details>
 
-<summary>Handover details</summary>
+<summary>Getting it to developers reference</summary>
 
 | How | When |
 |-----|------|
@@ -115,7 +115,7 @@ button for local bundle distribution.
 
 <details>
 
-<summary>Handover details</summary>
+<summary>Verify the handover reference</summary>
 
 Have a pilot developer use the exact distributed bundle, restart each client,
 make a short request and confirm the gateway connection. A successful installer
@@ -127,7 +127,7 @@ be present at its next token refresh.
 
 <details>
 
-<summary>Handover details</summary>
+<summary>If you are a developer and do not have this file reference</summary>
 
 Ask your platform team — they generated it when they built the gateway. You can
 also skip the file entirely:

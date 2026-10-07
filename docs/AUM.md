@@ -34,7 +34,7 @@ The Direct path uses the existing gateway, the operator's Azure CLI sign-in and 
 
 <details>
 
-<summary>AUM details</summary>
+<summary>Install reference</summary>
 
 AUM requires Python 3.12 or later and Azure CLI. Direct also requires
 PowerShell 7 and this repository. The
@@ -176,7 +176,7 @@ The AUM endpoint facts come from
 
 <details>
 
-<summary>AUM details</summary>
+<summary>Connect reference</summary>
 
 Each gateway has one budget/governance write authority. P80 does not change the authority
 rules in [ADR-0026](adr/0026-usd-budget-reconciliation.md) or the publication
@@ -237,7 +237,7 @@ described in [Configure a backend](#configure-a-backend).
 
 <details>
 
-<summary>AUM details</summary>
+<summary>First run and screen tour reference</summary>
 
 The terminal entry point is:
 
@@ -297,7 +297,7 @@ accessed 2026-09-29;
 
 <details>
 
-<summary>AUM details</summary>
+<summary>How-to reference</summary>
 
 ### Add a person to a team
 
@@ -565,7 +565,7 @@ aum lookup amara@contoso.com --team sales-emea
 
 <details>
 
-<summary>AUM details</summary>
+<summary>Reference reference</summary>
 
 Command syntax is in [Command reference](#command-reference). Backend-specific
 details remain in [Direct gateway access](#direct-gateway-access),
@@ -2371,7 +2371,7 @@ are what the cleanup restores.
 
 <details>
 
-<summary>AUM details</summary>
+<summary>Troubleshooting reference</summary>
 
 [Troubleshoot and validate](#troubleshoot-and-validate) lists exit codes.
 [Read latency and progress](#read-latency-and-progress) and

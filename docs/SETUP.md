@@ -27,15 +27,16 @@ $gateway = Get-Content .\onboarding\claude-gateway.json -Raw | ConvertFrom-Json
 .\scripts\Set-ClaudeDeveloper.ps1 -ResourceGroup $gateway.resourceGroup -ApimName $gateway.apimName -User 'developer@contoso.com' -Tier standard -Sync
 .\scripts\New-OnboardingEmail.ps1 -ConfigPath .\onboarding\claude-gateway.json -To 'developer@contoso.com'
 .\scripts\Test-ClaudeHealth.ps1 -ResourceGroup $gateway.resourceGroup -ApimName $gateway.apimName
+.\scripts\Get-ClaudeBypass.ps1 -ResourceGroup $gateway.resourceGroup -ApimName $gateway.apimName
 ```
 
-**Expected result:** the installer writes `onboarding/claude-gateway.json`; the membership command publishes the pilot to the active store; the email command writes HTML, text and EML files; health exits zero. An entitled pilot request verifies the developer path before broad rollout.
+**Expected result:** the installer writes `onboarding/claude-gateway.json`; the membership command publishes the pilot to the active store; the email command writes HTML, text and EML files; health exits zero; the bypass audit has no unapproved direct or inherited Foundry role. A separate developer setup run verifies the pilot request before broad rollout. Roll out only after bypass findings are clean or explicitly approved ([details](#42-close-the-bypass)).
 
 ## 1. Prerequisites
 
 <details>
 
-<summary>Prerequisites, tooling and value lookup</summary>
+<summary>1. Prerequisites reference</summary>
 
 ### Find the values used in this guide
 
@@ -245,7 +246,7 @@ case or spacing, or by its number in the list.
 
 <details>
 
-<summary>Deployment permissions and identities</summary>
+<summary>2. Permissions and roles reference</summary>
 
 This is the part that most often blocks a deployment, so it is worth reading in
 full. There are three distinct identities involved and they need different
@@ -417,7 +418,7 @@ budget without creating anything.
 
 <details>
 
-<summary>Installer, unattended and portal deployment</summary>
+<summary>3. Deploy reference</summary>
 
 ### Option A — the interactive wizard (recommended)
 
@@ -871,7 +872,7 @@ it — it clears it.
 
 <details>
 
-<summary>Verification and bypass checks</summary>
+<summary>4. Verify before announcing reference</summary>
 
 Use an entitled test identity and an agreed change window. The governance
 check sends model requests and its throttle test temporarily changes limits;

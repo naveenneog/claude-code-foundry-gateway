@@ -22,7 +22,7 @@ This comparison is a reference lookup for choosing between Claude Enterprise, th
 
 <details>
 
-<summary>Comparison details</summary>
+<summary>The three options reference</summary>
 
 | | **A. Anthropic direct** | **B. Foundry direct** | **C. Foundry + gateway** |
 |---|---|---|---|
@@ -45,7 +45,7 @@ and a good debugging isolation point — nothing more. This accelerator builds C
 
 <details>
 
-<summary>Comparison details</summary>
+<summary>What actually changes reference</summary>
 
 ### 1. There is no API key to leak
 
@@ -162,7 +162,7 @@ That is worth more than any single feature in these tables.
 
 <details>
 
-<summary>Comparison details</summary>
+<summary>What you give up reference</summary>
 
 An honest architecture review has to cover this side too.
 
@@ -184,7 +184,7 @@ An honest architecture review has to cover this side too.
 
 <details>
 
-<summary>Comparison details</summary>
+<summary>How to choose reference</summary>
 
 ```text
 Do you need per-developer budgets or chargeback?
@@ -220,7 +220,7 @@ small, tightly-held direct account for evaluating new releases.
 
 <details>
 
-<summary>Comparison details</summary>
+<summary>Verified technical differences reference</summary>
 
 Established empirically against a live deployment while building this, not read
 from documentation:

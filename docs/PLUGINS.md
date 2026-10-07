@@ -21,7 +21,7 @@ The policy profile is generated from the repository root after the approved mark
 
 <details>
 
-<summary>Plugin policy details</summary>
+<summary>Prerequisites reference</summary>
 
 - An approved plugin repository and review owner. Plugins execute with the
   developer's permissions; approve their tools/network access separately.
@@ -36,7 +36,7 @@ The policy profile is generated from the repository root after the approved mark
 
 <details>
 
-<summary>Plugin policy details</summary>
+<summary>Generate the profiles reference</summary>
 
 ```powershell
 ./scripts/New-ClaudeCodePolicy.ps1 -GatewayUrl <url> -Tier premium `
@@ -64,7 +64,7 @@ without understanding first-wins precedence in
 
 <details>
 
-<summary>Plugin policy details</summary>
+<summary>What each switch sets reference</summary>
 
 | Switch | Claude Code | Claude Desktop |
 |---|---|---|
@@ -87,7 +87,7 @@ can sign in to claude.ai and leave the policy behind.
 
 <details>
 
-<summary>Plugin policy details</summary>
+<summary>What these controls are not reference</summary>
 
 **They are feature-availability controls, not data boundaries.** Anthropic
 states that marketplaces already registered on a machine — including any
@@ -114,7 +114,7 @@ as something that stops a determined user.
 
 <details>
 
-<summary>Plugin policy details</summary>
+<summary>Where the policy goes reference</summary>
 
 Claude Code and Claude Desktop read different stores. The generated files map
 onto them:
@@ -151,7 +151,7 @@ a running app notices a changed managed configuration at its next re-check
 
 <details>
 
-<summary>Plugin policy details</summary>
+<summary>Checking it applied reference</summary>
 
 **Claude Code.** Open an interactive session and type `/status`. The
 `Setting sources` line names the source in force — `Enterprise managed settings
@@ -174,7 +174,7 @@ the plugin browser. On Linux a rejected `managed-settings.json` is logged to
 
 <details>
 
-<summary>Plugin policy details</summary>
+<summary>Running your own marketplace reference</summary>
 
 A marketplace is a GitHub repository with a catalog file at
 `.claude-plugin/marketplace.json` listing the plugins it offers:
@@ -206,7 +206,7 @@ for you.
 
 <details>
 
-<summary>Plugin policy details</summary>
+<summary>Verify the trust controls, not just the UI reference</summary>
 
 On an isolated test device, test the approved plugin, an unapproved marketplace,
 and an intentionally modified hash-pinned package. Where signed Desktop

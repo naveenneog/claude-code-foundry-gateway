@@ -27,7 +27,7 @@ The cutover starts with import enablement, export, backup and a verified pilot b
 
 <details>
 
-<summary>Migration details</summary>
+<summary>Prerequisites and owners reference</summary>
 
 - Platform owner: deployed gateway, approved model/hosting choice and
   [Setup roles](SETUP.md#2-permissions-and-roles).
@@ -51,7 +51,7 @@ Plan [Scale](SCALE.md) first.
 
 <details>
 
-<summary>Migration details</summary>
+<summary>1. History, memory and sessions reference</summary>
 
 ### What survives
 
@@ -426,7 +426,7 @@ token counts per person for chargeback without any of this — see
 
 <details>
 
-<summary>Migration details</summary>
+<summary>2. Mass deployment through MDM reference</summary>
 
 Both clients are designed for this. Managed settings sit above every other
 level: no user, project, local or `--settings` value overrides them.
@@ -561,7 +561,7 @@ carry `x-governed-by`, and the call appears in Application Insights.
 
 <details>
 
-<summary>Migration details</summary>
+<summary>3. Bulk entitlement from a CSV or an Entra group reference</summary>
 
 Entitlement is Entra group membership. Filling those groups is the migration.
 
@@ -644,7 +644,7 @@ on a schedule ([Onboarding](ONBOARDING.md#5-revoke-access)).
 
 <details>
 
-<summary>Migration details</summary>
+<summary>4. Backing the gateway up, and putting it back reference</summary>
 
 Two different backups, because there are two different things worth keeping and
 they carry different risk.
@@ -795,7 +795,7 @@ Both backup folders are git-ignored.
 
 <details>
 
-<summary>Migration details</summary>
+<summary>5. Cutover runbook reference</summary>
 
 **Turn on both import switches first.** `claudeAiImport.enabled` in the Desktop
 managed configuration, and **Allow members to export their own data** on
@@ -845,7 +845,7 @@ on the Foundry account directly can skip the gateway and every budget with it.
 
 <details>
 
-<summary>Migration details</summary>
+<summary>What is still genuinely unknown reference</summary>
 
 - **Accepted values for `forceLoginMethod`.** It restricts login to claude.ai,
   the Console, or a gateway, and would stop someone signing in to a personal
@@ -860,7 +860,7 @@ on the Foundry account directly can skip the gateway and every budget with it.
 
 <details>
 
-<summary>Migration details</summary>
+<summary>Anthropic references reference</summary>
 
 Everything above is grounded in these. Worth checking them directly before a
 cutover date: Claude Desktop on 3P is moving quickly, and the support site

@@ -23,7 +23,7 @@ This path evaluates direct Foundry access for one controlled machine. It bypasse
 
 <details>
 
-<summary>Foundry direct details</summary>
+<summary>1. When this is the right tool reference</summary>
 
 | | |
 |---|---|
@@ -42,7 +42,7 @@ configure one machine directly and see which layer the failure follows.
 
 <details>
 
-<summary>Foundry direct details</summary>
+<summary>Prerequisites reference</summary>
 
 - An approved isolated evaluation, not a way around a production gateway.
 - Azure CLI, PowerShell 5.1 or 7, the permitted Claude deployment names and
@@ -59,7 +59,7 @@ configure one machine directly and see which layer the failure follows.
 
 <details>
 
-<summary>Foundry direct details</summary>
+<summary>2. Running it reference</summary>
 
 ### Discover the values instead of copying a deployment name
 
@@ -194,7 +194,7 @@ it was.
 
 <details>
 
-<summary>Foundry direct details</summary>
+<summary>3. The model list reference</summary>
 
 Discovered from the resource rather than assumed, and written as four settings
 Claude Code needs:
@@ -301,7 +301,7 @@ a machine that was previously on the gateway.
 
 <details>
 
-<summary>Foundry direct details</summary>
+<summary>4. Diagnostics reference</summary>
 
 Everything in this section is measured against a live resource. Run the one
 command first - it names the layer that is broken, which is the part the
@@ -627,7 +627,7 @@ allowlist is not the problem — see
 
 <details>
 
-<summary>Foundry direct details</summary>
+<summary>5. What you give up, and what you inherit reference</summary>
 
 Every control in this repository governs traffic **through the gateway**.
 Configuring a client directly does not weaken those controls — it steps around
@@ -669,7 +669,7 @@ then disagree, and the disagreement outlives whoever understood it.
 
 <details>
 
-<summary>Foundry direct details</summary>
+<summary>6. Reading the configuration off a machine reference</summary>
 
 There is no hidden config file for this path. The machine state is
 `~/.claude/settings.json`, and the portable form is the
@@ -703,7 +703,7 @@ copy from it.
 
 <details>
 
-<summary>Foundry direct details</summary>
+<summary>7. Configuring it by hand reference</summary>
 
 Only needed if you cannot run the script, or you are checking what it did. Read
 from the installed extension and the live resource on 2026-09-22, not from
@@ -878,7 +878,7 @@ If you want to test the endpoint without involving Claude Code at all:
 
 <details>
 
-<summary>Foundry direct details</summary>
+<summary>8. Undoing it reference</summary>
 
 ```powershell
 # The script backs up whatever was there before overwriting

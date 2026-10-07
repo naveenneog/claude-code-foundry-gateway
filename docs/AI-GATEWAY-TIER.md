@@ -25,7 +25,7 @@ This page records the AI Gateway tier evaluation. It is reference material, not 
 
 <details>
 
-<summary>AI Gateway tier details</summary>
+<summary>Side by side reference</summary>
 
 | | AI Gateway tier (preview) | This gateway |
 |---|---|---|
@@ -48,7 +48,7 @@ provider billing or Azure Cost Management. That page predates the cost limits.
 
 <details>
 
-<summary>AI Gateway tier details</summary>
+<summary>How it is deployed reference</summary>
 
 Measured: the gateway, its connector gateway, monitoring, a managed-identity Foundry provider and a
 runtime key deployed in **133 s**.
@@ -82,7 +82,7 @@ the cost limit; their shape was not tested.
 
 <details>
 
-<summary>AI Gateway tier details</summary>
+<summary>What happened with Claude reference</summary>
 
 The runtime did not serve a model. Its health endpoint returned 200, but every model route returned
 404 `Resource not found`, with or without a key, from provisioning until the last check more than
@@ -101,7 +101,7 @@ followed the published sample's shape, which expects its model route within a mi
 
 <details>
 
-<summary>AI Gateway tier details</summary>
+<summary>Which to use reference</summary>
 
 | You need | Use |
 |---|---|

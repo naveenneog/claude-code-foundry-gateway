@@ -32,7 +32,7 @@ The one-shot check runs from the repository root after entitlement and budget se
 
 <details>
 
-<summary>Governance check details</summary>
+<summary>The one-shot check reference</summary>
 
 Produces the full four-control report:
 
@@ -59,7 +59,7 @@ There is no single portal button equivalent to this report.
 
 <details>
 
-<summary>Governance check details</summary>
+<summary>Check 1 — Is the caller entitled, and at which tier? reference</summary>
 
 One call tells you everything: whether they are allowed, their tier, what they spent, and what is left.
 
@@ -114,7 +114,7 @@ x-governed-by                    apim-claude-gateway
 
 <details>
 
-<summary>Governance check details</summary>
+<summary>Check 2 — Tier enforcement, using a second identity reference</summary>
 
 Acquire a token as a service principal standing in for another developer:
 
@@ -148,7 +148,7 @@ portal operator's own sign-in is a different identity.
 
 <details>
 
-<summary>Governance check details</summary>
+<summary>Check 3 — Prove the budget actually throttles reference</summary>
 
 Lower the limit, exhaust it, restore it:
 
@@ -198,7 +198,7 @@ conclusion about the new limit.
 
 <details>
 
-<summary>Governance check details</summary>
+<summary>Check 4 — Chargeback attribution reference</summary>
 
 First verify the request ledger in **Log Analytics > Logs** in the gateway's
 workspace, after [publishing its functions](MONITORING.md#7-dashboard):
@@ -255,7 +255,7 @@ evidence of complete billing.
 
 <details>
 
-<summary>Governance check details</summary>
+<summary>Configuration audits reference</summary>
 
 **Who is currently entitled, and at which tier**
 
@@ -312,7 +312,7 @@ $uri = "https://management.azure.com/subscriptions/$sub/resourceGroups/$RG/provi
 
 <details>
 
-<summary>Governance check details</summary>
+<summary>Traffic and errors at the gateway reference</summary>
 
 ```powershell
 $wsid = az monitor log-analytics workspace show -g $RG -n <workspace> --query customerId -o tsv
@@ -335,7 +335,7 @@ Query access is required, not a Foundry inference role.
 
 <details>
 
-<summary>Governance check details</summary>
+<summary>Client-side verification reference</summary>
 
 Run on the developer's machine, not the gateway:
 
