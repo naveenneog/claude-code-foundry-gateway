@@ -124,7 +124,7 @@ try {
             Reset-Fixture -Present @('models-standard', 'quota-org') -ExistingUpdatesForbidden @('models-standard', 'quota-org') -ListMode $case.Mode
             $thrown = Get-Thrown { & (Join-Path $root 'scripts\Set-GatewayPolicy.ps1') -ApimName apim-contoso -ResourceGroup rg-contoso -PolicyFile $scratch -SubscriptionId '00000000-0000-4000-8000-0000000000a1' }
             $writes = @($global:P102SetPolicyCalls | Where-Object { $_ -match '^apim nv (create|update|show)' })
-            Assert "$($case.Label) stops before any named-value read-back, write or PUT" ($thrown -match 'Could not list the named values of ''apim-contoso''' -and $thrown -match 'No named values were written' -and $writes.Count -eq 0 -and $global:P102SetPolicyPutTargets.Count -eq 0) "$thrown | $($writes -join '; ') | $($global:P102SetPolicyPutTargets -join '; ')"
+            Assert "$($case.Label) stops before any named-value read-back, write or PUT" ($thrown -match 'Could not list the named values of ''apim-contoso''' -and $thrown -match 'No named values were written' -and $thrown -match 'Remedy: az login' -and $writes.Count -eq 0 -and $global:P102SetPolicyPutTargets.Count -eq 0) "$thrown | $($writes -join '; ') | $($global:P102SetPolicyPutTargets -join '; ')"
         }
     }
     finally { Remove-Item -LiteralPath $scratch -Force -ErrorAction SilentlyContinue }

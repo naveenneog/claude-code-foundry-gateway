@@ -42,7 +42,7 @@ if (-not $listProblem -and $liveNamedValues -isnot [array]) { $listProblem = 'th
 elseif (-not $listProblem -and $liveNamedValues.Count -eq 0) { $listProblem = 'the list was empty' }
 elseif (-not $listProblem -and @($liveNamedValues | Where-Object { -not [string]$_.name }).Count) { $listProblem = 'an entry had no name' }
 if ($listProblem) {
-    throw "Could not list the named values of '$ApimName' ($listProblem). No named values were written and no policy was applied. A deployed gateway has named values such as tenant-id, so an empty list counts as a failed read."
+    throw "Could not list the named values of '$ApimName' ($listProblem). No named values were written and no policy was applied. A deployed gateway has named values such as tenant-id, so an empty list counts as a failed read. Remedy: az login, confirm that subscription '$SubscriptionId' can read the API Management named values of '$ResourceGroup/$ApimName', then run this script again."
 }
 $liveNamedValueMap = Get-ClaudeFlowLifecycleNamedValueMap -Discovery ([pscustomobject]@{ namedValues = @($liveNamedValues) })
 $requiredNamedValues = [Collections.Generic.List[string]]::new()

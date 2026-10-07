@@ -16,6 +16,10 @@ $missingNamedValues = @('content-safety-mode','content-safety-endpoint','content
 Assert 'main template adds endpoint, threshold, timeout and fragment named values' (@($missingNamedValues).Count -eq 0) (@($missingNamedValues) -join ',')
 Assert 'main template creates the APIM policy fragment and the API policy depends on it' ($main -match 'service/policyFragments' -and $main -match "loadTextContent\('content-safety-screening.xml'\)" -and $main -match 'contentSafetyFragment')
 Assert 'installer exposes an opt-in Content Safety switch and preserves existing mode unless explicitly changed' ($installer.Contains('[switch]$DeployContentSafety') -and $installer.Contains('$operatorSuppliedContentSafetyMode') -and $installer.Contains('contentSafetyMode=$contentSafetyModeForDeployment'))
+$unsafeContentSafetyReads = @('content-safety-mode','content-safety-endpoint','content-safety-threshold','content-safety-timeout-seconds','content-safety-truncate-mode') | Where-Object {
+    $installer -notmatch "Get-ApimNamedValue[^\r\n]+-Id '$([regex]::Escape($_))'[^\r\n]+-FailOnError"
+}
+Assert 'installer Content Safety read-back fails closed on read errors' ($unsafeContentSafetyReads.Count -eq 0) (@($unsafeContentSafetyReads) -join ',')
 $supported = Test-ClaudeContentSafetyRegion 'East US 2'
 $unsupported = Test-ClaudeContentSafetyRegion 'antarcticacentral'
 Assert 'supported Content Safety region passes readiness' ($supported.Result -eq 'PASS' -and $supported.Location -eq 'eastus2') ($supported | ConvertTo-Json -Compress)
