@@ -14,39 +14,30 @@ the subscription, gateway group, Foundry group and telemetry workspace.
 
 ## Quickstart
 
-The first command, from PowerShell 7 at the repository root, signed in with `az login`:
+The default projection path requires PowerShell 7, Azure CLI/Bicep, Node.js/npm and ZIP-capable `tar`, an eligible Foundry account and the [deployment roles](#2-permissions-and-roles). The command runs from the repository root. The installer presents discovered targets, prices and an approval summary before writing.
 
 ```powershell
-./Install-ClaudeGateway.ps1
+.\Install-ClaudeGateway.ps1
 ```
 
-It asks for the subscription, the Foundry account, the gateway's resource group, region and SKU, the
-budgets and the tier groups. It shows a summary with prices and changes nothing until that summary is
-approved. The Cosmos DB projection is the default entitlement store, and the installer deploys it and
-switches the gateway to it ([ADR-0052](adr/0052-cosmos-default-installer.md)). Named values remain
-selectable for teams of up to about 93 developers.
-
-The same installation without prompts, previewed with `-WhatIf` first:
+After installation, the generated record supplies the gateway target for the pilot handover and health check. The example uses `developer@contoso.com` as the selected standard-tier pilot account and handover recipient.
 
 ```powershell
-./Install-ClaudeGateway.ps1 -Yes -WhatIf -SubscriptionId <sub> -FoundryAccount <account> -FoundryResourceGroup <foundry-rg> `
-    -ResourceGroup <gateway-rg> -Location <region> -NamePrefix <prefix> -Sku BasicV2
-./Install-ClaudeGateway.ps1 -Yes -SubscriptionId <sub> -FoundryAccount <account> -FoundryResourceGroup <foundry-rg> `
-    -ResourceGroup <gateway-rg> -Location <region> -NamePrefix <prefix> -Sku BasicV2
+$gateway = Get-Content .\onboarding\claude-gateway.json -Raw | ConvertFrom-Json
+.\scripts\Set-ClaudeDeveloper.ps1 -ResourceGroup $gateway.resourceGroup -ApimName $gateway.apimName -User 'developer@contoso.com' -Tier standard -Sync
+.\scripts\New-OnboardingEmail.ps1 -ConfigPath .\onboarding\claude-gateway.json -To 'developer@contoso.com'
+.\scripts\Test-ClaudeHealth.ps1 -ResourceGroup $gateway.resourceGroup -ApimName $gateway.apimName
+.\scripts\Get-ClaudeBypass.ps1 -ResourceGroup $gateway.resourceGroup -ApimName $gateway.apimName
 ```
 
-`-EntitlementStore named-value` keeps named values. `-DeploySyncJob` adds the optional sync job for
-very large directories ([private projection](SECURE-PROJECTION.md#optional-sync-job-and-switch-evidence-p97)).
+**Expected result:** the installer writes `onboarding/claude-gateway.json`; the membership command publishes the pilot to the active store; the email command writes HTML, text and EML files; health exits zero; the bypass audit has no unapproved direct or inherited Foundry role. A separate developer setup run verifies the pilot request before broad rollout. Roll out only after bypass findings are clean or explicitly approved, and after section 4.2 reviews Foundry key access, local authentication and network exposure ([details](#42-close-the-bypass)).
 
-After the installation, in order:
+## 1. Prerequisites
 
-| Step | Command |
-|---|---|
-| Entitle one developer, after adding them to the standard or premium Entra group | `./scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <gateway-rg> -ApimName <apim> -User <upn-or-object-id>` |
-| Send the developer their setup | `./scripts/New-OnboardingEmail.ps1 -ConfigPath ./onboarding/claude-gateway.json -To <address>` |
-| Check the gateway | `./scripts/Test-ClaudeHealth.ps1 -ResourceGroup <gateway-rg> -ApimName <apim>` |
+<details>
 
-The sections below give the prerequisites, roles, SKU choice and each installer option.
+<summary>Azure resource lookups, SKU choice, tooling and region checks</summary>
+
 ### Find the values used in this guide
 
 The following are lookups, not permission grants or deployment commands. Run
@@ -84,7 +75,6 @@ shows the fields used for the gateway lookup.
 
 The customer-deployment command guide is [Azure CLI commands for a customer gateway setup](AZ-COMMANDS.md). It mirrors the installer, setup and administration scripts in Cloud Shell bash, with one-line purpose statements, `az` commands, verification commands, expected results and source script references. Its current status is commands checked against Azure CLI help and the templates; not yet run end to end.
 
-## 1. Prerequisites
 
 ### Azure resources you must already have
 
@@ -253,11 +243,15 @@ case or spacing, or by its number in the list.
 
 ---
 
+</details>
+
 ## 2. Permissions and roles
 
-This is the part that most often blocks a deployment, so it is worth reading in
-full. There are three distinct identities involved and they need different
-things.
+<details>
+
+<summary>Operator, gateway, developer and directory role requirements</summary>
+
+Three identities are involved, and each needs different roles.
 
 ### 2.1 You — the person running the deployment
 
@@ -420,7 +414,13 @@ budget without creating anything.
 
 ---
 
+</details>
+
 ## 3. Deploy
+
+<details>
+
+<summary>Wizard, projection, company address and portal deployment paths</summary>
 
 ### Option A — the interactive wizard (recommended)
 
@@ -488,17 +488,17 @@ where it costs money, with the figure at your stated developer count:
 | Developer address | `azure` / `custom` | Azure keeps the default hostname. Custom asks for the company hostname, supplied certificate and DNS hosting, shows their costs, then configures and proves the address after deployment. A later address change requires redistributed workstation settings ([Company address](#company-address)). |
 
 > [!IMPORTANT]
-> **Developer sign-in is decided here, once, for everyone.** A fleet where half
-> the workstations authenticate one way and half another is a fleet with two
-> support paths and two sets of symptoms. Choose `device` if *any* developer
-> works on a jump box, a VDI session or over SSH — it costs nothing on a laptop
-> and is the only option that works without a browser. `helper` routes every
-> client through the credential helper that Claude Desktop needs anyway.
+> **Developer sign-in is one setting for every developer.** A fleet where half
+> the workstations authenticate one way and half another has two
+> support paths and two sets of symptoms. `device` works on a jump box, in a VDI
+> session and over SSH as well as on a laptop, and is
+> the only option that works without a browser. `helper` routes every client
+> through the credential helper that Claude Desktop uses.
 >
 > It is changeable later by reissuing `claude-gateway.json` and re-running
 > `Onboard-ClaudeDeveloper.ps1`, which is safe to run repeatedly.
-> Device-code sign-in still needs Conditional Access to allow that flow; review
-> [Authentication](AUTHENTICATION.md#conditional-access) before choosing it.
+> Device-code sign-in needs Conditional Access to allow that flow
+> ([Authentication](AUTHENTICATION.md#conditional-access)).
 
 > [!NOTE]
 > **Desktop sign-in is separate.** `helper-script` keeps today's Desktop
@@ -869,7 +869,13 @@ it — it clears it.
 
 ---
 
+</details>
+
 ## 4. Verify before announcing
+
+<details>
+
+<summary>Governance tests, v2 tier proof and bypass audit</summary>
 
 Use an entitled test identity and an agreed change window. The governance
 check sends model requests and its throttle test temporarily changes limits;
@@ -976,6 +982,8 @@ RBAC-only audit does not prove an old API key cannot bypass the gateway.
 > the access is ungoverned, not that it is wrong.
 
 ---
+
+</details>
 
 ## 5. Next
 

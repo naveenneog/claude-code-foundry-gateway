@@ -5,8 +5,23 @@ Who this is for: whoever owns the AI spend and has to answer "who used what".
 For a monthly financial task, start with [FinOps](FINOPS.md). For the big
 picture, see [Architecture](ARCHITECTURE.md). **Custom token metrics are not
 the chargeback ledger and are not the Azure bill.**
+## Quickstart
+
+The commands run from the repository root in PowerShell 7. The deployment record supplies the gateway target; telemetry must already be configured for the selected gateway.
+
+```powershell
+$gateway = Get-Content .\onboarding\claude-gateway.json -Raw | ConvertFrom-Json
+.\scripts\Publish-ClaudeQueries.ps1 -ResourceGroup $gateway.resourceGroup -ApimName $gateway.apimName
+.\scripts\Publish-ClaudeWorkbook.ps1 -ResourceGroup $gateway.resourceGroup -List
+```
+
+**Expected result:** the query functions are published or refreshed, and the workbook command lists the saved workbook target. Empty charts mean no matching telemetry, not a successful request.
 
 ## Prerequisites and data sources
+
+<details>
+
+<summary>Telemetry permissions, workspace discovery and data limits</summary>
 
 - Select the gateway, Application Insights and Log Analytics workspace with
   [Operations](OPERATIONS.md#1-select-the-gateway-and-workspace). Never choose the
@@ -105,7 +120,13 @@ name or ARM resource ID.
 
 ---
 
+</details>
+
 ## 1. What is emitted
+
+<details>
+
+<summary>Token metrics and five supported dimensions</summary>
 
 ### Metrics
 
@@ -132,7 +153,13 @@ a client-supplied header and cannot be spoofed by editing a config file.
 
 ---
 
+</details>
+
 ## 2. The chart — step by step
+
+<details>
+
+<summary>Metrics chart setup and aggregation trap</summary>
 
 ![Application Insights Metrics: the metric namespace and Apply splitting controls](guide/a8-chargeback.png)
 
@@ -163,7 +190,13 @@ the priced ledger for finance, with its caveats.
 
 ---
 
+</details>
+
 ## 3. Filtering
+
+<details>
+
+<summary>Metric filters, splits and cost caveats</summary>
 
 **Add filter** narrows the chart; **Apply splitting** breaks it apart. You will
 usually want both.
@@ -183,7 +216,13 @@ usage before deciding whether to change default aliases or budgets.
 
 ---
 
+</details>
+
 ## 4. Same data, from the CLI
+
+<details>
+
+<summary>REST metric query syntax and namespace pitfalls</summary>
 
 Useful for scheduled reporting, and it is the only reliable path because
 `az monitor metrics list` **drops `--namespace` for custom namespaces** and will
@@ -223,7 +262,13 @@ Two syntax traps:
 
 ---
 
+</details>
+
 ## 5. Drill into logs
+
+<details>
+
+<summary>KQL request attribution and throttle visibility</summary>
 
 Metrics can be pre-aggregated. For request attribution, use **Log Analytics >
 Logs** in the ledger workspace after publishing the functions in section 7:
@@ -285,7 +330,13 @@ custom metrics also remain subject to the namespace's series limit.
 
 ---
 
+</details>
+
 ## 6. Alerts
+
+<details>
+
+<summary>Operational alert rules and action groups</summary>
 
 Budgets throttle individuals. Alerts tell **you** before the monthly invoice
 does.
@@ -319,7 +370,13 @@ you alert on it.
 
 ---
 
+</details>
+
 ## 7. Dashboard
+
+<details>
+
+<summary>Saved functions, workbooks, chargeback and Grafana</summary>
 
 Two things ship: **saved KQL functions** and an **Azure Workbook**. Both are
 metadata — a saved search stores nothing and a workbook runs nothing, so each
@@ -657,7 +714,13 @@ uses the log rather than metrics — see [ADR-0006](adr/0006-ledger-is-the-llm-l
 
 ---
 
+</details>
+
 ## 8. When the charts are empty
+
+<details>
+
+<summary>Traffic, diagnostics, dimensions, tier and ingestion checks</summary>
 
 Diagnose in this order — each check is cheap and rules out everything below it.
 
@@ -673,6 +736,8 @@ Check 4 is the cruel one: everything looks healthy, the API returns 200, the
 metric exists, and every value is zero.
 
 ---
+
+</details>
 
 ## 9. Next
 

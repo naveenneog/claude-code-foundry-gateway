@@ -1,6 +1,23 @@
 # Generate and deliver business-unit chargeback reports
 
+This guide covers private monthly report generation, reconciliation, scheduling and email delivery for business-unit owners.
+
+## Quickstart
+
+The commands run from the repository root in PowerShell 7. The default report window is the previous complete calendar month, and output is private until an approved delivery path sends it.
+
+```powershell
+.\scripts\New-ClaudeChargebackReport.ps1 -WhatIf
+.\scripts\New-ClaudeChargebackReport.ps1
+```
+
+**Expected result:** the preview names the report window and output path; the apply writes a manifest whose status is Complete and whose reconciliation is matched. Email delivery is a separate scheduled or manual step.
+
 ## Overview
+
+<details>
+
+<summary>Report purpose, recipients, caveats and examples</summary>
 
 Use this guide to generate a monthly report for business-unit budget owners, archive it
 privately, and deliver it to administrator-maintained recipient lists. The report reads
@@ -46,7 +63,13 @@ an Excel screenshot. Reproduce both images with:
 node .\guide\capture-chargeback-reports.mjs
 ```
 
+</details>
+
 ## Prerequisites
+
+<details>
+
+<summary>Tools, telemetry, network access and reporting roles</summary>
 
 - Windows PowerShell 5.1 or PowerShell 7, Azure CLI, and an Azure sign-in.
 - A governed gateway with request telemetry and published `ClaudeCost` and
@@ -89,7 +112,13 @@ For the custom roles, open **Subscription > Access control (IAM) > Roles**. A di
 administrator and Microsoft Graph application permission are not needed for literal
 recipient addresses.
 
+</details>
+
 ## Generate a report
+
+<details>
+
+<summary>Target selection, report generation and manifest checks</summary>
 
 ### 1. Select the gateway
 
@@ -201,7 +230,13 @@ unit emails. A filtered unit's HTML and CSV never contain another unit's people.
 > replacement before moving the old report aside. Use different output roots for concurrent
 > manual runs; scheduled runs already use unique roots and archive prefixes.
 
+</details>
+
 ## Deploy scheduled reporting
+
+<details>
+
+<summary>Private jobs, recipients, settings and delivery verification</summary>
 
 The guided flow uses `scripts/flow/Reports.ps1` as the product entry point for this
 feature. It collects the same P50 decisions: allowed recipient domains, recipients,
@@ -287,9 +322,9 @@ From a VNet-connected terminal:
 
 ```powershell
 .\scripts\Set-ClaudeChargebackRecipients.ps1 -BusinessUnit engineering `
-  -Add alice@contoso.com,bob@contoso.com -WhatIf
+  -Add finance-owner@contoso.com,unit-owner@contoso.com -WhatIf
 .\scripts\Set-ClaudeChargebackRecipients.ps1 -BusinessUnit engineering `
-  -Add alice@contoso.com,bob@contoso.com
+  -Add finance-owner@contoso.com,unit-owner@contoso.com
 .\scripts\Set-ClaudeChargebackRecipients.ps1 -AllUnits -Add finance-ops@contoso.com
 .\scripts\Set-ClaudeChargebackRecipients.ps1 -BusinessUnit engineering -List
 ```
@@ -299,7 +334,7 @@ write run in the private administration job; no resource redeploy is required:
 
 ```powershell
 .\scripts\Set-ClaudeChargebackRecipients.ps1 -BusinessUnit engineering `
-  -Add alice@contoso.com -ViaJob
+  -Add finance-owner@contoso.com -ViaJob
 ```
 
 Portal: Storage **Containers > configuration > settings.json**. On an approved network,
@@ -314,9 +349,9 @@ by the script; do not change the job's pinned command.
 ```powershell
 # Add/remove are idempotent. Addresses are normalized and deduplicated.
 .\scripts\Set-ClaudeChargebackRecipients.ps1 -BusinessUnit engineering `
-  -Remove bob@contoso.com -ViaJob -WhatIf
+  -Remove unit-owner@contoso.com -ViaJob -WhatIf
 .\scripts\Set-ClaudeChargebackRecipients.ps1 -BusinessUnit engineering `
-  -Remove bob@contoso.com -ViaJob
+  -Remove unit-owner@contoso.com -ViaJob
 
 # The allow-list is exact: contoso.com does not allow sub.contoso.com.
 .\scripts\Set-ClaudeChargebackSettings.ps1 `
@@ -374,7 +409,13 @@ confirmed that it arrived in **Inbox at 17:42:49 UTC**. The receiving organizati
 `[EXTERNAL]` to the subject. This is one delivery observation, not a guarantee for other
 organizations or future messages. No live mailbox screenshot is published.
 
+</details>
+
 ## Send, regenerate or resend by hand
+
+<details>
+
+<summary>Manual generation, queueing, dispatch and resend controls</summary>
 
 From a VNet-connected terminal:
 
@@ -398,7 +439,13 @@ current settings; use the script on a connected terminal for a specific historic
 An empty recipient list archives the report without sending it. `-Send` queues mail;
 `-Dispatch` attempts one paced action rather than waiting for the entire outbox.
 
+</details>
+
 ## Delivery limits and 500,000 people
+
+<details>
+
+<summary>Query paging, CSV splitting and ACS quotas</summary>
 
 [Azure Monitor's query API limits][monitor-limits] are 500,000 rows, about 100 MiB raw /
 64 MB compressed, 10 minutes, and 200 requests per 30 seconds per user/client IP.
@@ -456,7 +503,13 @@ They require no DNS changes, but a recipient may not recognize the generated dom
 organization filtering or junk placement remains possible. Do not call a successful
 send an inbox-delivery guarantee.
 
+</details>
+
 ## Costs
+
+<details>
+
+<summary>Email, jobs, storage and private networking prices</summary>
 
 Prices are USD list price for an **East US 2 deployment, retrieved 2026-09-24**, before tax,
 discounts, free grants and existing-resource charges. Nonregional Global and Zone 1
@@ -517,7 +570,13 @@ Do not use the older "Data Analyzed" ingestion meters as a query tariff.
 not a Basic/Auxiliary-plan query. Private networking and the environment's Azure-managed
 network resources must also be included in a deployed bill of materials.
 
+</details>
+
 ## Troubleshoot
+
+<details>
+
+<summary>Storage, query, email and job failure recovery</summary>
 
 | Symptom or exact error | Cause and action |
 |---|---|
@@ -567,7 +626,13 @@ Portal: Storage **Containers > reports > state > dispatch.json > Break lease**.
 Breaking a live lease can allow duplicate sends; it is an operator recovery action,
 not a normal retry mechanism.
 
+</details>
+
 ## Reference
+
+<details>
+
+<summary>Columns, configuration schema and command parameters</summary>
 
 ### Report columns
 
@@ -606,7 +671,7 @@ visible; the CSV retains calculation precision.
   "SchemaVersion": 1,
   "AllowedDomains": ["contoso.com"],
   "AllUnitsRecipients": ["finance-ops@contoso.com"],
-  "Units": { "engineering": ["alice@contoso.com"] },
+  "Units": { "engineering": ["finance-owner@contoso.com"] },
   "BusinessUnits": [],
   "Formats": ["CSV", "HTML"],
   "MonthToDate": false,
@@ -675,6 +740,8 @@ value. Remove jobs before their environment; then the reports private endpoint/V
 ACS connection/service, Email Service/domain, identities and, only if intended, storage.
 Review IAM assignments for the removed identities and the two reports custom roles.
 Never delete the resource group: it also contains the gateway and workspace.
+
+</details>
 
 ## Next steps
 
