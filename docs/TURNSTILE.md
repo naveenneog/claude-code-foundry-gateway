@@ -32,7 +32,7 @@ An existing console uses its assigned Entra role and [CLI-assisted sign-in](#sig
 
 <details>
 
-<summary>Live evidence and sign-in without additional grants commands, choices and checks</summary>
+<summary>Captures, CLI-code sign-in and evidence boundaries</summary>
 
 ### One authenticated portal batch
 
@@ -125,7 +125,7 @@ and runs mutations proving those failures are detected.
 
 <details>
 
-<summary>One enforcer commands, choices and checks</summary>
+<summary>Gateway enforcement with Turnstile display and edits</summary>
 
 The gateway enforces. Turnstile shows, and optionally edits. Keep it that way.
 
@@ -153,7 +153,7 @@ access that Turnstile does not know about. The decision is recorded in
 
 <details>
 
-<summary>How it fits together commands, choices and checks</summary>
+<summary>Gateway-to-Turnstile mappings and usage export flow</summary>
 
 ```text
              Microsoft Entra ID (single tenant)
@@ -187,7 +187,7 @@ A save in Turnstile ─ starts ─▶ apply job ─ the same sync, as its own id
 
 <details>
 
-<summary>Prerequisites commands, choices and checks</summary>
+<summary>Gateway, Azure, Entra, region and tooling requirements</summary>
 
 | Requirement | Detail |
 |---|---|
@@ -203,7 +203,7 @@ A save in Turnstile ─ starts ─▶ apply job ─ the same sync, as its own id
 
 <details>
 
-<summary>1. Create the Microsoft Entra application reference</summary>
+<summary>Entra app roles, scope, assignment and portal steps</summary>
 
 Turnstile lets in only people who hold its admin app role, and Entra issues a token only to
 people assigned to it. This creates the application that rule depends on. It is safe to run
@@ -264,7 +264,7 @@ when captured, so their settings are shown from Microsoft Graph instead, in
 
 <details>
 
-<summary>2. Deploy Turnstile reference</summary>
+<summary>Fork clone, parameters, deployment command and Windows fixes</summary>
 
 ```powershell
 git clone https://github.com/naveenneog/turnstile.git
@@ -321,7 +321,7 @@ without their `.cmd` extension, checks POSIX file modes and locks with `fcntl`. 
 
 <details>
 
-<summary>3. Add the sign-in redirect reference</summary>
+<summary>Turnstile redirect URI and tenant sign-in proof</summary>
 
 The web address exists only once Turnstile is deployed. Add it to the application:
 
@@ -350,7 +350,7 @@ page does not prove consent; the CLI-code journey above proves the working sign-
 
 <details>
 
-<summary>4. Connect the gateway reference</summary>
+<summary>Discovery, stored integration value and Event Hubs grant</summary>
 
 Nothing about a Turnstile deployment is written into this repository's scripts. This finds it and
 stores what it found in one named value on the gateway, `turnstile-integration`, which every other
@@ -383,7 +383,7 @@ which strips double quotes from arguments: measured, JSON written this way came 
 
 <details>
 
-<summary>5. Show units, teams and budgets in Turnstile reference</summary>
+<summary>Catalog sync, budget page mapping and person-budget limits</summary>
 
 ```powershell
 ./scripts/Sync-ClaudeTurnstileGovernance.ps1
@@ -421,7 +421,7 @@ on; the gateway still enforces both.
 
 <details>
 
-<summary>6. Send usage to Turnstile reference</summary>
+<summary>Settled-window exports, cache rows and ingest contract</summary>
 
 ```powershell
 ./scripts/Export-ClaudeTurnstileUsage.ps1
@@ -510,7 +510,7 @@ rather than sending part of it.
 
 <details>
 
-<summary>7. Optional: edit budgets in Turnstile reference</summary>
+<summary>Budget authority switch, preview, apply and restrictions</summary>
 
 By default budgets are authored in the gateway and mirrored to Turnstile. To edit them on
 Turnstile's budget page instead:
@@ -566,7 +566,7 @@ unknown scopes and person budgets are not imported.
 
 <details>
 
-<summary>Run it on a schedule commands, choices and checks</summary>
+<summary>Hourly export job identity, grants and measured runs</summary>
 
 The export and the sync run every hour as an Azure Container Apps job signed in as its own
 managed identity. No secret exists anywhere: not in the template, the job or a key vault
@@ -619,7 +619,7 @@ The first two runs failed, and both causes are now handled:
 
 <details>
 
-<summary>Manage everything in Turnstile commands, choices and checks</summary>
+<summary>Full governance saves, stale-run guard and apply rules</summary>
 
 ### Concurrent saves and the stale-run guard
 
@@ -871,7 +871,7 @@ possible and would still compete with the apply while Turnstile owns that value.
 
 <details>
 
-<summary>Admin-only access commands, choices and checks</summary>
+<summary>Entra role gates, viewers, managers and CLI sign-in</summary>
 
 Three layers, each measured.
 
@@ -1019,7 +1019,7 @@ credential in a secret store.
 
 <details>
 
-<summary>What it costs commands, choices and checks</summary>
+<summary>Turnstile resource bill and observer plan cost</summary>
 
 ```powershell
 ./scripts/Get-ClaudeTurnstileBom.ps1
@@ -1057,7 +1057,7 @@ through it, so for this integration it does nothing. The deployer always creates
 
 <details>
 
-<summary>Troubleshooting commands, choices and checks</summary>
+<summary>Deployment, sync, sign-in and scheduled-job fixes</summary>
 
 | Symptom | Cause | Fix |
 |---|---|---|
@@ -1091,7 +1091,7 @@ through it, so for this integration it does nothing. The deployer always creates
 
 <details>
 
-<summary>FAQ commands, choices and checks</summary>
+<summary>Token totals, membership ownership and outage answers</summary>
 
 **Why does Turnstile show far more tokens "used" than the gateway's budget counter?**
 Turnstile's "used" includes cache reads; the gateway's quota counter counts prompt and completion
@@ -1141,7 +1141,7 @@ and budget, not its name. A different id is a different unit, with a budget coun
 
 <details>
 
-<summary>The fork commands, choices and checks</summary>
+<summary>Claude-gateway fork branches, features and tests</summary>
 
 Upstream Turnstile could not be used unchanged: its catalog is fixed demo data, its web sign-in
 accepts any organization's accounts, it creates an account for anyone who signs in, and its
@@ -1163,7 +1163,7 @@ deployer does not run on Windows. The fork's branches, merged in `claude-gateway
 
 <details>
 
-<summary>Reference commands, choices and checks</summary>
+<summary>Turnstile scripts, named values and API endpoints</summary>
 
 | Script | Does |
 |---|---|

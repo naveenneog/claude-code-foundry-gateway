@@ -17,7 +17,7 @@ The commands run from the repository root in PowerShell 7. The default report wi
 
 <details>
 
-<summary>Overview commands, choices and checks</summary>
+<summary>Report purpose, recipients, caveats and examples</summary>
 
 Use this guide to generate a monthly report for business-unit budget owners, archive it
 privately, and deliver it to administrator-maintained recipient lists. The report reads
@@ -69,7 +69,7 @@ node .\guide\capture-chargeback-reports.mjs
 
 <details>
 
-<summary>Prerequisites commands, choices and checks</summary>
+<summary>Tools, telemetry, network access and reporting roles</summary>
 
 - Windows PowerShell 5.1 or PowerShell 7, Azure CLI, and an Azure sign-in.
 - A governed gateway with request telemetry and published `ClaudeCost` and
@@ -118,7 +118,7 @@ recipient addresses.
 
 <details>
 
-<summary>Generate a report commands, choices and checks</summary>
+<summary>Target selection, report generation and manifest checks</summary>
 
 ### 1. Select the gateway
 
@@ -236,7 +236,7 @@ unit emails. A filtered unit's HTML and CSV never contain another unit's people.
 
 <details>
 
-<summary>Deploy scheduled reporting commands, choices and checks</summary>
+<summary>Private jobs, recipients, settings and delivery verification</summary>
 
 The guided flow uses `scripts/flow/Reports.ps1` as the product entry point for this
 feature. It collects the same P50 decisions: allowed recipient domains, recipients,
@@ -415,7 +415,7 @@ organizations or future messages. No live mailbox screenshot is published.
 
 <details>
 
-<summary>Send, regenerate or resend by hand commands, choices and checks</summary>
+<summary>Manual generation, queueing, dispatch and resend controls</summary>
 
 From a VNet-connected terminal:
 
@@ -445,7 +445,7 @@ An empty recipient list archives the report without sending it. `-Send` queues m
 
 <details>
 
-<summary>Delivery limits and 500,000 people commands, choices and checks</summary>
+<summary>Query paging, CSV splitting and ACS quotas</summary>
 
 [Azure Monitor's query API limits][monitor-limits] are 500,000 rows, about 100 MiB raw /
 64 MB compressed, 10 minutes, and 200 requests per 30 seconds per user/client IP.
@@ -509,7 +509,7 @@ send an inbox-delivery guarantee.
 
 <details>
 
-<summary>Costs commands, choices and checks</summary>
+<summary>Email, jobs, storage and private networking prices</summary>
 
 Prices are USD list price for an **East US 2 deployment, retrieved 2026-09-24**, before tax,
 discounts, free grants and existing-resource charges. Nonregional Global and Zone 1
@@ -576,7 +576,7 @@ network resources must also be included in a deployed bill of materials.
 
 <details>
 
-<summary>Troubleshoot commands, choices and checks</summary>
+<summary>Storage, query, email and job failure recovery</summary>
 
 | Symptom or exact error | Cause and action |
 |---|---|
@@ -632,7 +632,7 @@ not a normal retry mechanism.
 
 <details>
 
-<summary>Reference commands, choices and checks</summary>
+<summary>Columns, configuration schema and command parameters</summary>
 
 ### Report columns
 

@@ -22,7 +22,7 @@ $apim = $gateway.apimName
 
 <details>
 
-<summary>Prerequisites and roles commands, choices and checks</summary>
+<summary>Azure roles, tools and example conventions</summary>
 
 | Task | Required access |
 |---|---|
@@ -44,7 +44,7 @@ values: replace them rather than sending requests to an example deployment.
 
 <details>
 
-<summary>1. Select the gateway and workspace reference</summary>
+<summary>Target discovery, subscription selection and telemetry routes</summary>
 
 Do not copy another deployment's resource names or choose the first search
 result. The examples use placeholders; the live objects come from discovery.
@@ -120,7 +120,7 @@ client endpoint; it does not infer a direct APIM URL that could bypass an edge.
 
 <details>
 
-<summary>2. Check health and headroom reference</summary>
+<summary>Health scripts, portal checks and failure routing</summary>
 
 ```powershell
 ./scripts/Test-ClaudeHealth.ps1 -ResourceGroup $rg -ApimName $apim
@@ -147,7 +147,7 @@ it fills. Do not silence the failure or truncate a list. For `401`, `403`,
 
 <details>
 
-<summary>3. Choose the day-to-day operation reference</summary>
+<summary>Common operations, scripts and terminology</summary>
 
 | Task | Script, after selecting the target | Manual or portal path |
 |---|---|---|
@@ -175,7 +175,7 @@ invoice. See [Budgets](BUDGETS.md) for the enforcement limits.
 
 <details>
 
-<summary>4. Back up, change, restore, verify reference</summary>
+<summary>Snapshot, restore and verification boundaries</summary>
 
 1. Capture configuration before a change:
 
@@ -226,7 +226,7 @@ also covers client conversation backups and cross-instance limitations.
 
 <details>
 
-<summary>5. Inspect cost and retire only what you own reference</summary>
+<summary>BOM pricing, cleanup safeguards and deletion verification</summary>
 
 ```powershell
 ./scripts/Get-ClaudeBom.ps1 -ResourceGroup $rg -ApimName $apim -WithPrices
@@ -281,7 +281,7 @@ unexpected continuing usage after billing data arrives.
 
 <details>
 
-<summary>Live verification record and limits commands, choices and checks</summary>
+<summary>Dated read-only evidence and unverified areas</summary>
 
 On **2026-09-24 UTC**, the review discovered available subscriptions and Claude
 gateways rather than using a saved deployment name, then selected the default-

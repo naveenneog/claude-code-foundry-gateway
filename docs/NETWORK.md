@@ -38,7 +38,7 @@ The workstation uses the platform team's handover file and the approved clients.
 
 <details>
 
-<summary>Prerequisites commands, choices and checks</summary>
+<summary>Client tools, access paths and network preflight</summary>
 
 | | |
 |---|---|
@@ -74,7 +74,7 @@ showing Healthy does not test the developer's proxy.
 
 <details>
 
-<summary>1. The complete list reference</summary>
+<summary>Runtime, install, admin and observed destinations</summary>
 
 One row per destination, marked with which client needs it. **CLI** is Claude
 Code on the command line, **VS Code** is the `anthropic.claude-code`
@@ -175,7 +175,7 @@ one most often missing, because every other host in the deployment is under
 
 <details>
 
-<summary>2. What differs between the clients reference</summary>
+<summary>Client install differences and identical runtime egress</summary>
 
 All three build the same request. The VS Code extension ships its own copy of
 the Claude Code binary rather than calling the one on `PATH`, and Desktop
@@ -233,7 +233,7 @@ problem. See [FOUNDRY-DIRECT.md §4](FOUNDRY-DIRECT.md#4-diagnostics).
 
 <details>
 
-<summary>3. Administration, and what developers do not need reference</summary>
+<summary>Setup endpoints excluded from developer machines</summary>
 
 Rows 9 and 10 are needed on the machine that runs setup, the entitlement sync
 or the health checks. They are **not** needed on a developer's machine to use
@@ -245,7 +245,7 @@ any of the three clients.
 
 <details>
 
-<summary>4. The instance metadata service reference</summary>
+<summary>Managed identity probe behavior and timeout risks</summary>
 
 Row 13, `169.254.169.254:80`, is link-local and not a firewall rule, but it
 decides which identity the clients use. The Azure identity chain probes it
@@ -273,7 +273,7 @@ CLI 2.1.272: `AzureCliCredential` is rejected with
 
 <details>
 
-<summary>5. How this was measured reference</summary>
+<summary>Network test, proxy observer and hostname extraction</summary>
 
 ```powershell
 ./scripts/Test-ClaudeNetwork.ps1                  # required destinations
@@ -324,7 +324,7 @@ capture a local client's egress. Treat the hostname report as internal data.
 
 <details>
 
-<summary>6. ECONNRESET is not an allowlist problem reference</summary>
+<summary>Streaming reset diagnosis and proxy exclusion test</summary>
 
 ```text
 ✳ Connection dropped (ECONNRESET) · Retrying in 22s · attempt 8/10

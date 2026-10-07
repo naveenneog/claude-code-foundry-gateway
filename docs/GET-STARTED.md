@@ -18,7 +18,7 @@ The commands run from the repository root in PowerShell 7 with the [Setup tools 
 
 <details>
 
-<summary>Recommended path - guided flow commands, choices and checks</summary>
+<summary>Guided setup, status, guide and roles</summary>
 
 The flow reads the gateway named by the decision record, or makes no Azure read
 when none is recorded. A first attended setup reviews the foundation in the
@@ -69,7 +69,7 @@ and the Anthropic Claude Code/Claude Desktop clients.
 
 <details>
 
-<summary>Track 1 - Administrator, 10 steps commands, choices and checks</summary>
+<summary>Administrator deployment, entitlement and verification steps</summary>
 
 ### 1. Confirm prerequisites and sign in
 
@@ -342,7 +342,7 @@ response.
 
 <details>
 
-<summary>Track 2 - Developer, 8 steps commands, choices and checks</summary>
+<summary>Developer workstation setup and client checks</summary>
 
 ### 1. Get the handover file and sign in to Azure
 
@@ -500,7 +500,7 @@ and never send tokens or prompt content in a public issue.
 
 <details>
 
-<summary>Track 3 - FinOps, 9 steps commands, choices and checks</summary>
+<summary>FinOps tool choice, budgets and reporting checks</summary>
 
 ### 1. Choose no console, Turnstile, AUM or both
 
@@ -708,7 +708,7 @@ and [Monitoring](MONITORING.md).
 
 <details>
 
-<summary>Approved screenshots used on this page commands, choices and checks</summary>
+<summary>Live image provenance and manifest records</summary>
 
 The images above are live captures already committed in this repository. Their
 provenance records are:

@@ -21,7 +21,7 @@ The policy profile is generated from the repository root after the approved mark
 
 <details>
 
-<summary>Prerequisites commands, choices and checks</summary>
+<summary>Approved repository, admin rights and test device</summary>
 
 - An approved plugin repository and review owner. Plugins execute with the
   developer's permissions; approve their tools/network access separately.
@@ -37,7 +37,7 @@ The policy profile is generated from the repository root after the approved mark
 
 <details>
 
-<summary>Generate the profiles commands, choices and checks</summary>
+<summary>Policy generator command and MDM deployment path</summary>
 
 ```powershell
 ./scripts/New-ClaudeCodePolicy.ps1 -GatewayUrl <url> -Tier premium `
@@ -66,7 +66,7 @@ without understanding first-wins precedence in
 
 <details>
 
-<summary>What each switch sets commands, choices and checks</summary>
+<summary>Marketplace allowlist, upload blocks and signing keys</summary>
 
 | Switch | Claude Code | Claude Desktop |
 |---|---|---|
@@ -90,7 +90,7 @@ can sign in to claude.ai and leave the policy behind.
 
 <details>
 
-<summary>What these controls are not commands, choices and checks</summary>
+<summary>Client-side limits and gateway-enforced safeguards</summary>
 
 **They are feature-availability controls, not data boundaries.** Anthropic
 states that marketplaces already registered on a machine — including any
@@ -118,7 +118,7 @@ as something that stops a determined user.
 
 <details>
 
-<summary>Where the policy goes commands, choices and checks</summary>
+<summary>Platform stores, registry encoding and restart behavior</summary>
 
 Claude Code and Claude Desktop read different stores. The generated files map
 onto them:
@@ -156,7 +156,7 @@ a running app notices a changed managed configuration at its next re-check
 
 <details>
 
-<summary>Checking it applied commands, choices and checks</summary>
+<summary>Status source, hidden routes and log validation</summary>
 
 **Claude Code.** Open an interactive session and type `/status`. The
 `Setting sources` line names the source in force — `Enterprise managed settings
@@ -180,7 +180,7 @@ the plugin browser. On Linux a rejected `managed-settings.json` is logged to
 
 <details>
 
-<summary>Running your own marketplace commands, choices and checks</summary>
+<summary>Catalog repository format and ownership boundary</summary>
 
 A marketplace is a GitHub repository with a catalog file at
 `.claude-plugin/marketplace.json` listing the plugins it offers:
@@ -213,7 +213,7 @@ for you.
 
 <details>
 
-<summary>Verify the trust controls, not just the UI commands, choices and checks</summary>
+<summary>Real client refusal tests and signing gaps</summary>
 
 On an isolated test device, test the approved plugin, an unapproved marketplace,
 and an intentionally modified hash-pinned package. Where signed Desktop

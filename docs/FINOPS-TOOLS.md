@@ -32,7 +32,7 @@ The selector previews the available tools, prices, roles and prerequisites. `eas
 
 <details>
 
-<summary>The tools at a glance commands, choices and checks</summary>
+<summary>Tool roles, write authority and monthly costs</summary>
 
 | Tool | What it is for | Who uses it | Writes budgets? | Added Azure resources | Standing cost, list |
 |---|---|---|---|---|---|
@@ -57,7 +57,7 @@ alias for one release.
 
 <details>
 
-<summary>Which one to choose commands, choices and checks</summary>
+<summary>Console selection, authority choices and guided setup</summary>
 
 - **Nobody needs a console:** publish the saved queries and workbooks ([flow 1](#flow-1-reports-with-no-console-and-no-added-cost))
   and run the scripts ([flow 2](#flow-2-budgets-from-scripts)). This adds no cost.
@@ -99,7 +99,7 @@ comparison.
 
 <details>
 
-<summary>Sign-in commands, choices and checks</summary>
+<summary>Roles, token methods and session refresh</summary>
 
 ### Who signs in to what
 
@@ -145,7 +145,7 @@ reflect a change on their own is still open (**U21**, [Unknowns](UNKNOWNS.md)).
 
 <details>
 
-<summary>End-to-end flows commands, choices and checks</summary>
+<summary>Reporting, budgets, consoles, reports and enforcement flow</summary>
 
 Every flow starts from a deployed gateway (`Install-ClaudeGateway.ps1`) and `az login`. Scripts
 that are not given a value ask for it: they list what they found in Azure, the recommended one
@@ -374,7 +374,7 @@ are explicit. Stale enforced snapshots fail closed after 15 minutes.
 
 <details>
 
-<summary>Bill of materials and pricing commands, choices and checks</summary>
+<summary>List-price components, add-ons and token cost</summary>
 
 ### How the numbers are worked out
 
@@ -468,7 +468,7 @@ Read with the commands above on 2026-09-25:
 
 <details>
 
-<summary>Limits worth knowing commands, choices and checks</summary>
+<summary>Authority boundaries, propagation and open evidence gaps</summary>
 
 - Direct mode is an administrative connection. Anyone who can write the gateway's named values
   can write any unit's budget.

@@ -22,7 +22,7 @@ $apim = $gateway.apimName
 
 <details>
 
-<summary>Dollar budgets: what is enforced commands, choices and checks</summary>
+<summary>USD stops, reconciler timing and arithmetic limits</summary>
 
 The dollar-input scripts now preserve the approved **USD amount and price-book
 date**, as well as their existing approximate token quota. An optional reconciler
@@ -245,7 +245,7 @@ APIM counters do not solve complete streaming accounting.
 
 <details>
 
-<summary>Prerequisites commands, choices and checks</summary>
+<summary>Gateway access, target values and governance ownership</summary>
 
 - A deployed gateway on a v2 tier, and a completed [bypass audit](SETUP.md#42-close-the-bypass).
 - API Management Service Contributor on the gateway to change named values;
@@ -303,7 +303,7 @@ The second switch matters because Connect preserves an existing budget authority
 
 <details>
 
-<summary>Reference: shipped defaults commands, choices and checks</summary>
+<summary>Default named values and policy meanings</summary>
 
 Named values are configuration the policy consumes, not consumed-quota storage.
 Defaults below come from [main.bicep](../infra/main.bicep); an existing deployment
@@ -327,7 +327,7 @@ may have different values.
 
 <details>
 
-<summary>1. Read the effective limits reference</summary>
+<summary>Tier reads, named values and portal confirmation</summary>
 
 ```powershell
 ./scripts/Set-ClaudeTier.ps1 -ResourceGroup $rg -ApimName $apim -List
@@ -365,7 +365,7 @@ The first page ends at `quota-overrides`; select **Load more** for the tier rows
 
 <details>
 
-<summary>2. Change a tier or the organisation ceiling reference</summary>
+<summary>Tier quota edits, propagation and organisation cap</summary>
 
 ```powershell
 ./scripts/Set-ClaudeTier.ps1 -ResourceGroup $rg -ApimName $apim `
@@ -399,7 +399,7 @@ sum of top-level unit allocations and expected daily burn before expanding.
 
 <details>
 
-<summary>3. Override one person's daily allowance reference</summary>
+<summary>Personal quota overrides and safe shared-value edits</summary>
 
 ```powershell
 ./scripts/Set-ClaudeBudget.ps1 -ResourceGroup $rg -ApimName $apim -User developer@contoso.com -Tokens 2000000
@@ -425,7 +425,7 @@ value: `llm-token-limit` does not accept a per-person expression for
 
 <details>
 
-<summary>4. Restrict models reference</summary>
+<summary>Deployment allowlists, client profiles and gateway enforcement</summary>
 
 ```powershell
 ./scripts/Set-ClaudeTier.ps1 -ResourceGroup $rg -ApimName $apim -Tier standard -Models claude-sonnet-5
@@ -451,7 +451,7 @@ that guide; there is no Azure portal switch for a local client setting.
 
 <details>
 
-<summary>5. Verify and troubleshoot reference</summary>
+<summary>Request proofs, refusal bodies and soft-cap limits</summary>
 
 Have the affected developer make a fresh request. Successful responses can carry
 `x-org-quota-remaining` and `x-quota-remaining-today`. Inspect a refusal's body:
@@ -495,7 +495,7 @@ and [U9/U13](UNKNOWNS.md) describe the remaining limits.
 
 <details>
 
-<summary>Business-unit and team enforcement modes commands, choices and checks</summary>
+<summary>Strict, allowance and notify mode operations</summary>
 
 The platform owner can select a mode for a unit or team independently of its
 base allocation. This does not change who is authorised to manage it.

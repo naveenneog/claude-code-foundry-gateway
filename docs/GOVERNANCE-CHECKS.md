@@ -32,7 +32,7 @@ The one-shot check runs from the repository root after entitlement and budget se
 
 <details>
 
-<summary>The one-shot check commands, choices and checks</summary>
+<summary>Four-control report and throttle skip option</summary>
 
 Produces the full four-control report:
 
@@ -60,7 +60,7 @@ There is no single portal button equivalent to this report.
 
 <details>
 
-<summary>Check 1 — Is the caller entitled, and at which tier? commands, choices and checks</summary>
+<summary>Entitlement headers, quotas and failure codes</summary>
 
 One call tells you everything: whether they are allowed, their tier, what they spent, and what is left.
 
@@ -116,7 +116,7 @@ x-governed-by                    apim-claude-gateway
 
 <details>
 
-<summary>Check 2 — Tier enforcement, using a second identity commands, choices and checks</summary>
+<summary>Second identity token and premium tier proof</summary>
 
 Acquire a token as a service principal standing in for another developer:
 
@@ -151,7 +151,7 @@ portal operator's own sign-in is a different identity.
 
 <details>
 
-<summary>Check 3 — Prove the budget actually throttles commands, choices and checks</summary>
+<summary>Temporary limit reduction and restore proof</summary>
 
 Lower the limit, exhaust it, restore it:
 
@@ -202,7 +202,7 @@ conclusion about the new limit.
 
 <details>
 
-<summary>Check 4 — Chargeback attribution commands, choices and checks</summary>
+<summary>Ledger queries and pilot metric attribution</summary>
 
 First verify the request ledger in **Log Analytics > Logs** in the gateway's
 workspace, after [publishing its functions](MONITORING.md#7-dashboard):
@@ -260,7 +260,7 @@ evidence of complete billing.
 
 <details>
 
-<summary>Configuration audits commands, choices and checks</summary>
+<summary>Membership, budgets, bypass and policy reads</summary>
 
 **Who is currently entitled, and at which tier**
 
@@ -318,7 +318,7 @@ $uri = "https://management.azure.com/subscriptions/$sub/resourceGroups/$RG/provi
 
 <details>
 
-<summary>Traffic and errors at the gateway commands, choices and checks</summary>
+<summary>Workspace request query and access requirements</summary>
 
 ```powershell
 $wsid = az monitor log-analytics workspace show -g $RG -n <workspace> --query customerId -o tsv
@@ -342,7 +342,7 @@ Query access is required, not a Foundry inference role.
 
 <details>
 
-<summary>Client-side verification commands, choices and checks</summary>
+<summary>Developer machine provider checks</summary>
 
 Run on the developer's machine, not the gateway:
 

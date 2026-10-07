@@ -21,7 +21,7 @@ $gateway = Get-Content .\onboarding\claude-gateway.json -Raw | ConvertFrom-Json
 
 <details>
 
-<summary>Prerequisites and data sources commands, choices and checks</summary>
+<summary>Telemetry permissions, workspace discovery and data limits</summary>
 
 - Select the gateway, Application Insights and Log Analytics workspace with
   [Operations](OPERATIONS.md#1-select-the-gateway-and-workspace). Never choose the
@@ -126,7 +126,7 @@ name or ARM resource ID.
 
 <details>
 
-<summary>1. What is emitted reference</summary>
+<summary>Token metrics and five supported dimensions</summary>
 
 ### Metrics
 
@@ -159,7 +159,7 @@ a client-supplied header and cannot be spoofed by editing a config file.
 
 <details>
 
-<summary>2. The chart — step by step reference</summary>
+<summary>Metrics chart setup and aggregation trap</summary>
 
 ![Application Insights Metrics: the metric namespace and Apply splitting controls](guide/a8-chargeback.png)
 
@@ -196,7 +196,7 @@ the priced ledger for finance, with its caveats.
 
 <details>
 
-<summary>3. Filtering reference</summary>
+<summary>Metric filters, splits and cost caveats</summary>
 
 **Add filter** narrows the chart; **Apply splitting** breaks it apart. You will
 usually want both.
@@ -222,7 +222,7 @@ usage before deciding whether to change default aliases or budgets.
 
 <details>
 
-<summary>4. Same data, from the CLI reference</summary>
+<summary>REST metric query syntax and namespace pitfalls</summary>
 
 Useful for scheduled reporting, and it is the only reliable path because
 `az monitor metrics list` **drops `--namespace` for custom namespaces** and will
@@ -268,7 +268,7 @@ Two syntax traps:
 
 <details>
 
-<summary>5. Drill into logs reference</summary>
+<summary>KQL request attribution and throttle visibility</summary>
 
 Metrics can be pre-aggregated. For request attribution, use **Log Analytics >
 Logs** in the ledger workspace after publishing the functions in section 7:
@@ -336,7 +336,7 @@ custom metrics also remain subject to the namespace's series limit.
 
 <details>
 
-<summary>6. Alerts reference</summary>
+<summary>Operational alert rules and action groups</summary>
 
 Budgets throttle individuals. Alerts tell **you** before the monthly invoice
 does.
@@ -376,7 +376,7 @@ you alert on it.
 
 <details>
 
-<summary>7. Dashboard reference</summary>
+<summary>Saved functions, workbooks, chargeback and Grafana</summary>
 
 Two things ship: **saved KQL functions** and an **Azure Workbook**. Both are
 metadata — a saved search stores nothing and a workbook runs nothing, so each
@@ -720,7 +720,7 @@ uses the log rather than metrics — see [ADR-0006](adr/0006-ledger-is-the-llm-l
 
 <details>
 
-<summary>8. When the charts are empty reference</summary>
+<summary>Traffic, diagnostics, dimensions, tier and ingestion checks</summary>
 
 Diagnose in this order — each check is cheap and rules out everything below it.
 

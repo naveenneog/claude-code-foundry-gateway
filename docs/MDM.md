@@ -46,7 +46,7 @@ The commands run from the repository root in PowerShell 7 after `onboarding/clau
 
 <details>
 
-<summary>1. Device contract reference</summary>
+<summary>Delivered apps, policies, certificates and user sign-in</summary>
 
 | Delivered item | Reason | Windows channel | macOS channel | Notes |
 |---|---|---|---|---|
@@ -70,7 +70,7 @@ budgets and model allowlists are enforced at the gateway.
 
 <details>
 
-<summary>2. Generate the profiles reference</summary>
+<summary>Tier payloads, Desktop keys and model capabilities</summary>
 
 Run profile generation from the repository root after the gateway deployment has
 written `onboarding/claude-gateway.json`, or after the platform owner supplies
@@ -146,7 +146,7 @@ release older than the model does not send `thinking.type.enabled` and get a
 
 <details>
 
-<summary>3. Intune on Windows reference</summary>
+<summary>Windows policies, scripts, apps and rollback monitoring</summary>
 
 ### 3.1 Claude Code policy
 
@@ -281,7 +281,7 @@ the deployment window.
 
 <details>
 
-<summary>4. Intune on macOS reference</summary>
+<summary>macOS profiles, Desktop configuration and app deployment</summary>
 
 ### 4.1 Claude Code custom profile
 
@@ -331,7 +331,7 @@ Claude Desktop MDM rollout order:
 
 <details>
 
-<summary>5. Jamf Pro and Group Policy alternatives reference</summary>
+<summary>Jamf, Group Policy and file distribution paths</summary>
 
 | Tool | Steps |
 |---|---|
@@ -345,7 +345,7 @@ Claude Desktop MDM rollout order:
 
 <details>
 
-<summary>6. Verify one device reference</summary>
+<summary>Registry, profile, Desktop and live request checks</summary>
 
 ### 6.1 Windows commands
 
@@ -413,7 +413,7 @@ The proof command sends a tiny prompt through Claude Code with an empty
 
 <details>
 
-<summary>7. Live validation on this workstation reference</summary>
+<summary>Generated profile proof and Intune capture gaps</summary>
 
 Validation ran on 2026-09-26 UTC against the read-only reference gateway
 `apim-claude-gw-fzgql9` in `rg-contosohub`.
@@ -450,7 +450,7 @@ because the policy key could not be created.
 
 <details>
 
-<summary>8. Troubleshooting reference</summary>
+<summary>Policy precedence, assignment, sign-in and rollback symptoms</summary>
 
 | Symptom | Likely cause | Check |
 |---|---|---|

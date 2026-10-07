@@ -30,7 +30,7 @@ $apim = $gateway.apimName
 
 <details>
 
-<summary>Find the values before changing membership commands, choices and checks</summary>
+<summary>Gateway, group, user and unit lookup sources</summary>
 
 | Value | Portal source | CLI lookup |
 |---|---|---|
@@ -54,7 +54,7 @@ new similarly named group as a workaround.
 
 <details>
 
-<summary>How entitlement actually works commands, choices and checks</summary>
+<summary>Group sync, allowlists and projection store behavior</summary>
 
 This section identifies which store receives published membership changes.
 
@@ -92,7 +92,7 @@ Three consequences:
 
 <details>
 
-<summary>1. Add a developer reference</summary>
+<summary>Membership command, sync behavior and guest resolution</summary>
 
 One command. It edits the **Entra group**, because that is the durable change —
 `Sync-ClaudeAccess.ps1` rebuilds `allow-standard` and `allow-premium` from group
@@ -141,7 +141,7 @@ remove the person, then perform Step 3's publication and Step 4's verification.
 
 <details>
 
-<summary>1a. Add a developer by hand reference</summary>
+<summary>Object IDs, group membership, sync and handover</summary>
 
 ### Step 1 — find their object id
 
@@ -287,7 +287,7 @@ access. Access is group membership.
 
 <details>
 
-<summary>2. UI walkthrough — adding a member in the portal reference</summary>
+<summary>Portal group membership, sync and delegation steps</summary>
 
 Two portals work. **Microsoft Entra admin center** (`entra.microsoft.com`) is
 the current home for identity; the Azure portal blade is identical underneath.
@@ -391,7 +391,7 @@ out of the loop entirely.
 
 <details>
 
-<summary>3. Common variations reference</summary>
+<summary>Teams, nested groups, contractors and CI identities</summary>
 
 | Situation | What to do |
 |-----------|-----------|
@@ -409,7 +409,7 @@ out of the loop entirely.
 
 <details>
 
-<summary>4. Change a developer's tier reference</summary>
+<summary>Person tier moves, tier budgets and model lists</summary>
 
 Two different things get called "changing the tier". Be clear which one you mean.
 
@@ -536,7 +536,7 @@ Entra group, and a branch in the policy's tier lookup. The policy structure is i
 
 <details>
 
-<summary>5. Revoke access reference</summary>
+<summary>Removal, publication, token lifetime and bypass audit</summary>
 
 ```powershell
 ./scripts/Set-ClaudeDeveloper.ps1 -User developer@contoso.com -Remove -Sync `
@@ -574,7 +574,7 @@ and run the sync as well.
 
 <details>
 
-<summary>6. Offboarding checklist reference</summary>
+<summary>Membership, store publication and refusal checklist</summary>
 
 - [ ] Removed from both `claude-code-*` tier groups
 - [ ] Removed from every business-unit and team group
@@ -603,7 +603,7 @@ Send them that link. Nothing else on this page applies to them.
 
 <details>
 
-<summary>7. Checking a machine before you promise a date reference</summary>
+<summary>Preflight checks for tooling, identity, network and access</summary>
 
 A developer who is in the right group, on the right tenant, with the right
 role can still fail — because their machine sits behind a proxy that breaks

@@ -23,7 +23,7 @@ This path evaluates direct Foundry access for one controlled machine. It bypasse
 
 <details>
 
-<summary>1. When this is the right tool reference</summary>
+<summary>Evaluation uses and production exclusions</summary>
 
 | | |
 |---|---|
@@ -43,7 +43,7 @@ configure one machine directly and see which layer the failure follows.
 
 <details>
 
-<summary>Prerequisites commands, choices and checks</summary>
+<summary>Approval, tools, roles and restore planning</summary>
 
 - An approved isolated evaluation, not a way around a production gateway.
 - Azure CLI, PowerShell 5.1 or 7, the permitted Claude deployment names and
@@ -61,7 +61,7 @@ configure one machine directly and see which layer the failure follows.
 
 <details>
 
-<summary>2. Running it reference</summary>
+<summary>Resource discovery, setup commands and config file</summary>
 
 ### Discover the values instead of copying a deployment name
 
@@ -197,7 +197,7 @@ it was.
 
 <details>
 
-<summary>3. The model list reference</summary>
+<summary>Deployment discovery, aliases and mutual exclusion</summary>
 
 Discovered from the resource rather than assumed, and written as four settings
 Claude Code needs:
@@ -305,7 +305,7 @@ a machine that was previously on the gateway.
 
 <details>
 
-<summary>4. Diagnostics reference</summary>
+<summary>Admin checks, 401 causes, Desktop device flow and roles</summary>
 
 Everything in this section is measured against a live resource. Run the one
 command first - it names the layer that is broken, which is the part the
@@ -632,7 +632,7 @@ allowlist is not the problem — see
 
 <details>
 
-<summary>5. What you give up, and what you inherit reference</summary>
+<summary>Bypassed gateway controls and direct-role revocation</summary>
 
 Every control in this repository governs traffic **through the gateway**.
 Configuring a client directly does not weaken those controls — it steps around
@@ -675,7 +675,7 @@ then disagree, and the disagreement outlives whoever understood it.
 
 <details>
 
-<summary>6. Reading the configuration off a machine reference</summary>
+<summary>Settings file inspection and portable direct config</summary>
 
 There is no hidden config file for this path. The machine state is
 `~/.claude/settings.json`, and the portable form is the
@@ -710,7 +710,7 @@ copy from it.
 
 <details>
 
-<summary>7. Configuring it by hand reference</summary>
+<summary>Tenant sign-in, roles, settings and VS Code values</summary>
 
 Only needed if you cannot run the script, or you are checking what it did. Read
 from the installed extension and the live resource on 2026-09-22, not from
@@ -886,7 +886,7 @@ If you want to test the endpoint without involving Claude Code at all:
 
 <details>
 
-<summary>8. Undoing it reference</summary>
+<summary>Settings restore and direct role removal</summary>
 
 ```powershell
 # The script backs up whatever was there before overwriting

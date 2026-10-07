@@ -39,7 +39,7 @@ The script path discovers targets, previews cost choices and deploys only after 
 
 <details>
 
-<summary>Choose a FinOps tool commands, choices and checks</summary>
+<summary>Tool selector options, costs and authority ownership</summary>
 
 Run the selector before creating infrastructure:
 
@@ -79,7 +79,7 @@ tools. Deployment does not change that setting for you.
 
 <details>
 
-<summary>Prerequisites and roles commands, choices and checks</summary>
+<summary>Required principals, permissions and published queries</summary>
 
 | Principal | Required access | Why |
 |---|---|---|
@@ -124,7 +124,7 @@ as strict. The service never rewrites the gateway policy to enable a feature.
 
 <details>
 
-<summary>Deploy with the script commands, choices and checks</summary>
+<summary>Discovery, cost preview, deployment and private networking</summary>
 
 ### 1. Discover targets
 
@@ -232,7 +232,7 @@ the same deployment succeeded after this routing property was enabled.
 
 <details>
 
-<summary>Deploy in the Azure portal commands, choices and checks</summary>
+<summary>App registration, template deployment and portal evidence</summary>
 
 The portal route uses the same Bicep deployment translated to ARM, so identity,
 role and storage settings do not drift from the script.
@@ -357,7 +357,7 @@ string insufficient to send telemetry. With Insights off, neither setting exists
 
 <details>
 
-<summary>Deploy with Azure CLI commands, choices and checks</summary>
+<summary>Parameter-file deployment and remote package build</summary>
 
 Use the script for app-owner reconciliation, or reproduce the preceding Graph
 manifest steps with `az rest` and JSON body files. Never put quoted JSON, `&`,
@@ -390,7 +390,7 @@ workstation runs Windows.
 
 <details>
 
-<summary>Assign roles and manager groups commands, choices and checks</summary>
+<summary>App roles, manager mappings and scoped access</summary>
 
 Role precedence is **Admin > Viewer > Manager**. A Viewer+Manager sees everything
 but cannot edit. Remove the Viewer assignment if the person should be scoped.
@@ -458,7 +458,7 @@ that empty object into unrestricted access.
 
 <details>
 
-<summary>Verify reads, writes and expiry commands, choices and checks</summary>
+<summary>API checks, budget changes, requests and boosts</summary>
 
 ### Read-only verification
 
@@ -579,7 +579,7 @@ record IDs may differ, but principal/resource/role tuples must match the snapsho
 
 <details>
 
-<summary>API reference commands, choices and checks</summary>
+<summary>Routes, tokens, revisions and mutation contract</summary>
 
 The versioned contract is
 [`service/aum/openapi.yaml`](../service/aum/openapi.yaml).
@@ -613,7 +613,7 @@ Unknown capabilities default to false in a client.
 
 <details>
 
-<summary>Cost commands, choices and checks</summary>
+<summary>Retail meters, storage choices and network charges</summary>
 
 The script fetches list-price meters from the
 [Azure Retail Prices API](https://learn.microsoft.com/rest/api/cost-management/retail-prices/azure-retail-prices).
@@ -650,7 +650,7 @@ architectures, not a required AUM cost. See [Turnstile costs](TURNSTILE.md#what-
 
 <details>
 
-<summary>Limits and 500,000 developers commands, choices and checks</summary>
+<summary>Paging, scope, named-value ceilings and scale caveats</summary>
 
 | Boundary | What this release does |
 |---|---|
@@ -676,7 +676,7 @@ count, audit retention, query latency and manager concurrency explicitly.
 
 <details>
 
-<summary>Troubleshoot commands, choices and checks</summary>
+<summary>Errors, causes and operator recovery actions</summary>
 
 | Exact error/symptom | Cause | Action |
 |---|---|---|
@@ -717,7 +717,7 @@ count, audit retention, query latency and manager concurrency explicitly.
 
 <details>
 
-<summary>Test and remove commands, choices and checks</summary>
+<summary>Service tests, live harnesses and safe removal</summary>
 
 ```powershell
 python -m venv .venv-aum-service
@@ -771,7 +771,7 @@ test group only after confirming no shared or attached resource remains.
 
 <details>
 
-<summary>Live verification receipt commands, choices and checks</summary>
+<summary>Pilot receipts, manager journeys and pending screenshots</summary>
 
 [Measured results and redacted API receipts](aum-service/LIVE-VERIFICATION.md)
 separate the September 24 pilot from the September 25 dedicated Basic v2 proof:

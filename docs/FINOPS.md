@@ -19,7 +19,7 @@ $gateway = Get-Content .\onboarding\claude-gateway.json -Raw | ConvertFrom-Json
 
 <details>
 
-<summary>Prerequisites commands, choices and checks</summary>
+<summary>Gateway, workspace, billing access and rate inputs</summary>
 
 | Need | Who supplies it |
 |---|---|
@@ -54,7 +54,7 @@ named value. Do not derive a client ID from an account or tenant ID.
 
 <details>
 
-<summary>1. Publish or refresh the reporting definitions reference</summary>
+<summary>KQL functions, workbook publication and verification</summary>
 
 Have a platform owner run these from the repository root, with explicit targets:
 
@@ -93,7 +93,7 @@ and `priced_ok`. An empty chart is not proof of zero spend.
 
 <details>
 
-<summary>2. Select and export the closed month reference</summary>
+<summary>Closed-month KQL export and provenance fields</summary>
 
 In Log Analytics > Logs, run:
 
@@ -124,7 +124,7 @@ as independent charges.
 
 <details>
 
-<summary>3. Review caveats before approving allocations reference</summary>
+<summary>Ledger, cache, pricing and invoice caveats</summary>
 
 | Check | Consequence |
 |---|---|
@@ -147,7 +147,7 @@ examples describe that sample only, not your organisation.
 
 <details>
 
-<summary>4. Compare to billed cost and set the next budget reference</summary>
+<summary>Cost analysis reconciliation and budget setting</summary>
 
 **Portal:** Cost Management > Cost analysis > select the same billing scope and
 closed month > filter the Foundry resource / Claude meter. Reconcile separately
@@ -167,7 +167,7 @@ dollar stop; see [Scale](SCALE.md#the-budget-is-a-delayed-kill-switch-not-a-hard
 
 <details>
 
-<summary>Optional consoles commands, choices and checks</summary>
+<summary>Turnstile, AUM, Grafana and scoped sign-in</summary>
 
 - **Turnstile:** [setup and operating guide](TURNSTILE.md). Units/teams, usage
   and delegated management are separate from the inference request path.

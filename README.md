@@ -30,7 +30,7 @@ Roll out broadly only after the bypass findings are clean or explicitly approved
 
 <details>
 
-<summary>Start here commands, choices and checks</summary>
+<summary>Guide map for setup, operations and troubleshooting</summary>
 
 | You need to… | Start with |
 |---|---|
@@ -136,7 +136,7 @@ explains created, reused and optional resources.
 
 <details>
 
-<summary>Why commands, choices and checks</summary>
+<summary>Gateway controls Foundry authentication does not enforce</summary>
 
 Foundry provides Entra authentication. The gateway adds a shared enforcement
 point for entitlement, token limits and model access. It governs only requests
@@ -156,7 +156,7 @@ does not make a stolen token impossible to replay.
 
 <details>
 
-<summary>What you get commands, choices and checks</summary>
+<summary>Governance controls, clients and installer walkthrough</summary>
 
 | Control | Mechanism |
 |---|---|
@@ -204,7 +204,7 @@ Identifiers are redacted with [terminal](guide/redact-terminal.mjs) and
 
 <details>
 
-<summary>Prerequisites commands, choices and checks</summary>
+<summary>Foundry, APIM, tooling, permissions and SKU requirements</summary>
 
 Platform deployment needs a Foundry account eligible to deploy Claude, an APIM
 **v2** tier, Azure CLI/Bicep, and the Azure and Entra permissions listed in
@@ -230,7 +230,7 @@ See [dollar budgets](docs/BUDGETS.md#dollar-budgets-what-is-enforced) and the
 
 <details>
 
-<summary>What the installer does commands, choices and checks</summary>
+<summary>Resource discovery, deployment choices and projection switch</summary>
 
 The installer discovers resources, collects deployment and budget choices,
 deploys or reuses the gateway and observability resources, grants the gateway
@@ -247,7 +247,7 @@ procedure ([Setup](docs/SETUP.md)).
 
 <details>
 
-<summary>Onboarding a developer commands, choices and checks</summary>
+<summary>Group membership, sync verification and handover files</summary>
 
 Follow [Onboarding](docs/ONBOARDING.md): change the Entra group, publish the
 change, verify it, then send [DEVELOPER.md](DEVELOPER.md), the generated config
@@ -259,7 +259,7 @@ and the complete scripts bundle. No developer API key is issued.
 
 <details>
 
-<summary>Verifying the controls commands, choices and checks</summary>
+<summary>Governance test window and billable throttle checks</summary>
 
 Use [Governance checks](docs/GOVERNANCE-CHECKS.md). Agree a test window:
 throttle tests temporarily change live limits and send billable model requests.
@@ -270,7 +270,7 @@ throttle tests temporarily change live limits and send billable model requests.
 
 <details>
 
-<summary>Close the bypass commands, choices and checks</summary>
+<summary>Foundry role audit and direct-access cleanup</summary>
 
 Run the [Foundry bypass audit](docs/SETUP.md#42-close-the-bypass) and review
 inherited as well as direct roles. Keep the gateway's managed identity grant.
@@ -282,7 +282,7 @@ Do not remove another application's legitimate assignment without its owner.
 
 <details>
 
-<summary>Tuning budgets commands, choices and checks</summary>
+<summary>Budget defaults, overrides, refusals and portal edits</summary>
 
 Moved to [Configure token budgets and model access](docs/BUDGETS.md), including
 all defaults, per-person overrides, refusal bodies, portal edits and verification.
@@ -293,7 +293,7 @@ all defaults, per-person overrides, refusal bodies, portal edits and verificatio
 
 <details>
 
-<summary>Chargeback commands, choices and checks</summary>
+<summary>Ledger, workbooks, consoles and billing gaps</summary>
 
 Start with [FinOps](docs/FINOPS.md). `ClaudeChargeback` is the request ledger;
 `ClaudeCost` prices its usage plus observed cache reads. The
@@ -318,7 +318,7 @@ Custom metrics remain useful for pilot diagnostics, not complete scaled billing.
 
 <details>
 
-<summary>What it costs commands, choices and checks</summary>
+<summary>Bill of materials prices and excluded token costs</summary>
 
 Use `scripts/Get-ClaudeBom.ps1 -WithPrices` with your selected gateway;
 [Operations](docs/OPERATIONS.md#5-inspect-cost-and-retire-only-what-you-own)
@@ -335,7 +335,7 @@ Include the optional [projection](docs/SECURE-PROJECTION.md#cost) and
 
 <details>
 
-<summary>Repository layout commands, choices and checks</summary>
+<summary>Script, template and operations reference locations</summary>
 
 Moved to [Repository and command reference](docs/REFERENCE.md#repository-layout).
 The scripts, templates, analytics, resolver, sync and screenshot tools are mapped
@@ -347,7 +347,7 @@ there; [Operations](docs/OPERATIONS.md) maps tasks to commands and portal paths.
 
 <details>
 
-<summary>Documentation commands, choices and checks</summary>
+<summary>User guide index and engineering record links</summary>
 
 | Guide | Purpose |
 |---|---|
@@ -387,7 +387,7 @@ The engineering record is separate from the user guides:
 
 <details>
 
-<summary>Companion accelerator commands, choices and checks</summary>
+<summary>Desktop fleet-policy tooling in the companion repository</summary>
 
 [claude-desktop-foundry](https://github.com/naveenneog/claude-desktop-foundry)
 provides Desktop fleet-policy tooling that can reuse this gateway. Follow that
@@ -399,7 +399,7 @@ repository's instructions for its scripts; they are not all in this checkout.
 
 <details>
 
-<summary>Contributing commands, choices and checks</summary>
+<summary>Issue evidence, redaction rules and contributor checks</summary>
 
 Open an issue or pull request with a reproducible command, client/version,
 status code and redacted output. Do not include tokens, tenant/resource IDs,

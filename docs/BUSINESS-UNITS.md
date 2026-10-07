@@ -22,7 +22,7 @@ The commands run from the repository root in PowerShell 7. The operator has the 
 
 <details>
 
-<summary>What a business unit is commands, choices and checks</summary>
+<summary>Entra group, stable identifier and monthly budget</summary>
 
 An **Entra security group** with a **monthly budget**.
 
@@ -42,7 +42,7 @@ step.
 
 <details>
 
-<summary>Choose where changes are authored commands, choices and checks</summary>
+<summary>Gateway or Turnstile governance authority rules</summary>
 
 `Set-ClaudeBusinessUnit.ps1` reads the gateway's `turnstile-integration` before
 mutating it. If Turnstile owns governance, creates, updates and removals are
@@ -72,7 +72,7 @@ and can still be overwritten.
 
 <details>
 
-<summary>Budget modes commands, choices and checks</summary>
+<summary>Strict, allowance and notify commands and caveats</summary>
 
 The platform admin chooses an enforcement mode for each unit or team. A missing
 mode means **strict**, preserving the existing behavior. A zero-token budget
@@ -171,7 +171,7 @@ expressions and mutation tests exercise.
 
 <details>
 
-<summary>Teams, and how they relate to tiers commands, choices and checks</summary>
+<summary>Nested groups separating chargeback from tier entitlement</summary>
 
 A **team** is a business unit that names a parent. A request is charged to the
 team **and** to the business unit above it — two counters, both monthly, both
@@ -384,7 +384,7 @@ pointing at something that is gone.
 
 <details>
 
-<summary>Read this before you quote a number commands, choices and checks</summary>
+<summary>Token conversion, cache gaps and list-price caveats</summary>
 
 The budget is a **spend guide, not an accounting figure**, and there are two
 measured reasons why.
@@ -436,7 +436,7 @@ without them.
 
 <details>
 
-<summary>Managing it all in one place commands, choices and checks</summary>
+<summary>Menu-driven business-unit edits with automatic sync</summary>
 
 Most chargeback work is a short session — add a team, move two people into it,
 check the budget — and doing that as five separate commands means remembering
@@ -482,7 +482,7 @@ there is no terminal and names the command for each option.
 
 <details>
 
-<summary>Adding a business unit commands, choices and checks</summary>
+<summary>Identifier rules, group mapping and dollar budget creation</summary>
 
 The installer offers to create your first ones at the end of a run, once the
 Entra groups exist. It creates the group for you and then calls the same command
@@ -532,7 +532,7 @@ be changed on its own.
 
 <details>
 
-<summary>Listing them commands, choices and checks</summary>
+<summary>Current unit registry, groups and token budgets</summary>
 
 ```powershell
 ./scripts/Set-ClaudeBusinessUnit.ps1 -List
@@ -546,7 +546,7 @@ be changed on its own.
 
 <details>
 
-<summary>Changing a budget commands, choices and checks</summary>
+<summary>Budget updates and Entra group retargeting</summary>
 
 Pass the identifier and the new figure. The group is left alone.
 
@@ -568,7 +568,7 @@ both, pass both.
 
 <details>
 
-<summary>Moving people between business units commands, choices and checks</summary>
+<summary>Entra membership changes and sync safeguards</summary>
 
 Membership is group membership. Add or remove the developer in Entra, then run
 the sync:
@@ -596,7 +596,7 @@ spend landing on no budget — is invisible until someone reconciles a report.
 
 <details>
 
-<summary>Seeing what has been spent commands, choices and checks</summary>
+<summary>Chargeback ledger report and JSON dashboard output</summary>
 
 ```powershell
 ./scripts/Get-ClaudeBusinessUnit.ps1
@@ -614,7 +614,7 @@ same data for a dashboard, and `-Days` overrides the default of month-to-date.
 
 <details>
 
-<summary>Developers with no business unit commands, choices and checks</summary>
+<summary>Unassigned policy behavior and deny transition</summary>
 
 Anyone entitled but not in a business-unit group is **unassigned**. What happens
 to them is set by `bu-unassigned`, one of the gateway's named values — API
@@ -642,7 +642,7 @@ az apim nv update -g <rg> --service-name <apim> `
 
 <details>
 
-<summary>Removing one commands, choices and checks</summary>
+<summary>Removal command, unassigned members and retained history</summary>
 
 ```powershell
 ./scripts/Set-ClaudeBusinessUnit.ps1 -Id research -Remove
@@ -660,7 +660,7 @@ force at the time rather than looking it up later.
 
 <details>
 
-<summary>When a budget runs out commands, choices and checks</summary>
+<summary>Business-unit refusal body and soft-cap warning</summary>
 
 The gateway returns `403` in Anthropic's error shape, naming the business unit:
 
@@ -687,7 +687,7 @@ described to a budget holder as a hard stop.
 
 <details>
 
-<summary>Limits worth knowing commands, choices and checks</summary>
+<summary>Named-value ceilings, soft enforcement and reporting limits</summary>
 
 | | |
 |---|---|

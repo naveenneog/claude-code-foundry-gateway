@@ -23,7 +23,7 @@ $gateway = Get-Content .\onboarding\claude-gateway.json -Raw | ConvertFrom-Json
 
 <details>
 
-<summary>Prerequisites commands, choices and checks</summary>
+<summary>Required access, records and target discovery</summary>
 
 Discovery needs read access to the selected Foundry account and API Management
 instance. Apply needs API Management Service Contributor, writable local
@@ -64,7 +64,7 @@ and provisioning state
 
 <details>
 
-<summary>1. Inspect, deploy and allow reference</summary>
+<summary>Deployment choices, approval fingerprint and live proof</summary>
 
 An administrator deploys the model through Foundry's approved deployment
 process. The model change then discovers it:
@@ -172,7 +172,7 @@ reconciliation remains U2.
 
 <details>
 
-<summary>The four things that have to agree commands, choices and checks</summary>
+<summary>Deployment, allowlist, pricing and client selection alignment</summary>
 
 | State | Location | Consequence of a mismatch |
 |---|---|---|
@@ -193,7 +193,7 @@ describing them as zero usage.
 
 <details>
 
-<summary>The price book commands, choices and checks</summary>
+<summary>Private rates, missing prices and reporting publication</summary>
 
 `config/price-book.json` may hold your negotiated rates. It is private and
 git-ignored; negotiated rates can be
@@ -245,7 +245,7 @@ exports and price snapshot retained ([FinOps](FINOPS.md),
 
 <details>
 
-<summary>What developers change commands, choices and checks</summary>
+<summary>Generated tier records and client profile refresh</summary>
 
 The administrator record contains the allowed live union in `models`, and
 `deployments` includes each deployment's model/version and existing client
@@ -300,7 +300,7 @@ update devices ([MDM](MDM.md)).
 
 <details>
 
-<summary>Retiring one commands, choices and checks</summary>
+<summary>Drop choices, allow-all risk and legacy command limits</summary>
 
 When Foundry no longer lists a deployment, the model question offers `drop`.
 For example:

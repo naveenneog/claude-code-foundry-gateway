@@ -16,7 +16,7 @@ The distributed bundle contains the deployment's `claude-gateway.json`, the comp
 
 <details>
 
-<summary>What lands here commands, choices and checks</summary>
+<summary>Generated gateway record and email artifacts</summary>
 
 `Install-ClaudeGateway.ps1` (or `install-claude-gateway.sh`) writes
 `claude-gateway.json` at the end of a successful deployment:
@@ -61,7 +61,7 @@ you onboard.
 
 <details>
 
-<summary>What it is for commands, choices and checks</summary>
+<summary>Handover bundle and setup command</summary>
 
 `claude-gateway.json` is the handover artifact. Distribute it beside the complete
 `scripts` folder, not a lone setup file. Desktop needs the credential helpers
@@ -82,7 +82,7 @@ type none of them.
 
 <details>
 
-<summary>It contains no secret commands, choices and checks</summary>
+<summary>Shareable gateway values and entitlement boundary</summary>
 
 Gateway URL, tenant id, group names, tier limits. All of it is information the
 developer needs, and none of it grants access — **access is Entra group
@@ -99,7 +99,7 @@ would go stale, not because it is sensitive.
 
 <details>
 
-<summary>Getting it to developers commands, choices and checks</summary>
+<summary>Email, share and software portal distribution</summary>
 
 | How | When |
 |-----|------|
@@ -119,7 +119,7 @@ button for local bundle distribution.
 
 <details>
 
-<summary>Verify the handover commands, choices and checks</summary>
+<summary>Pilot request and Desktop helper validation</summary>
 
 Have a pilot developer use the exact distributed bundle, restart each client,
 make a short request and confirm the gateway connection. A successful installer
@@ -132,7 +132,7 @@ be present at its next token refresh.
 
 <details>
 
-<summary>If you are a developer and do not have this file commands, choices and checks</summary>
+<summary>Platform team request or direct setup values</summary>
 
 Ask your platform team — they generated it when they built the gateway. You can
 also skip the file entirely:

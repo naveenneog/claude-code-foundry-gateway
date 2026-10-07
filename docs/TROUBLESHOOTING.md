@@ -18,7 +18,7 @@ The known symptom selects the section below. An unknown failure layer starts wit
 
 <details>
 
-<summary>Deployment commands, choices and checks</summary>
+<summary>APIM deployment, policy update and group creation failures</summary>
 
 | Symptom | Cause → Fix |
 |---|---|
@@ -40,7 +40,7 @@ The known symptom selects the section below. An unknown failure layer starts wit
 
 <details>
 
-<summary>Environment commands, choices and checks</summary>
+<summary>Windows Azure CLI quoting and query hazards</summary>
 
 | Symptom | Cause → Fix |
 |---|---|
@@ -56,7 +56,7 @@ The preflight in both setup scripts reports whether the platform is affected.
 
 <details>
 
-<summary>Policy commands, choices and checks</summary>
+<summary>XML, named value and projection switch failures</summary>
 
 | Symptom | Cause → Fix |
 |---|---|
@@ -71,7 +71,7 @@ The preflight in both setup scripts reports whether the platform is affected.
 
 <details>
 
-<summary>Runtime commands, choices and checks</summary>
+<summary>Authentication, entitlement, quota and backend responses</summary>
 
 | Symptom | Cause → Fix |
 |---|---|
@@ -92,7 +92,7 @@ The preflight in both setup scripts reports whether the platform is affected.
 
 <details>
 
-<summary>Claude Code client commands, choices and checks</summary>
+<summary>Client settings, versions, setup files and shell issues</summary>
 
 | Symptom | Cause → Fix |
 |---|---|
@@ -114,7 +114,7 @@ The preflight in both setup scripts reports whether the platform is affected.
 
 <details>
 
-<summary>Claude Desktop commands, choices and checks</summary>
+<summary>Desktop sign-in, DNS and app-container failures</summary>
 
 | Symptom | Cause → Fix |
 |---|---|
@@ -168,7 +168,7 @@ those files while no Claude process is running is the signature.
 
 <details>
 
-<summary>Monitoring commands, choices and checks</summary>
+<summary>Metric emission, dimensions, workspaces and missing principals</summary>
 
 | Symptom | Cause → Fix |
 |---|---|
@@ -186,7 +186,7 @@ those files while no Claude process is running is the signature.
 
 <details>
 
-<summary>Still stuck? commands, choices and checks</summary>
+<summary>Support evidence and inspector proxy warning</summary>
 
 Collect UTC time, client/version, gateway host, status/error body and the
 relevant operation/request ID for the platform team. Redact personal/deployment
@@ -202,7 +202,7 @@ its listener is not explicitly loopback-only. See
 
 <details>
 
-<summary>Turnstile and offboarding commands, choices and checks</summary>
+<summary>Stopped database, consent gaps and removal checks</summary>
 
 ### Turnstile database stopped
 

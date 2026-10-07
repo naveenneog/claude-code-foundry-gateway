@@ -23,7 +23,7 @@ $apim = $gateway.apimName
 
 <details>
 
-<summary>Prerequisites for a review commands, choices and checks</summary>
+<summary>Gateway reads, portal blades and measured scope</summary>
 
 Use Reader access to the gateway and its supporting resources, and permission
 to inspect the relevant Entra groups/applications. No Foundry inference role is
@@ -55,7 +55,7 @@ it refuses, so a `403 model_not_allowed` means *authenticated and entitled*.
 
 <details>
 
-<summary>The matrix commands, choices and checks</summary>
+<summary>Caller token types, lifetimes and gateway outcomes</summary>
 
 | Caller | How it gets the token | At the gateway | Token lifetime | Status |
 |---|---|---|---|---|
@@ -74,7 +74,7 @@ it refuses, so a `403 model_not_allowed` means *authenticated and entitled*.
 
 <details>
 
-<summary>What takes access away commands, choices and checks</summary>
+<summary>Entitlement publication, cache expiry and revocation steps</summary>
 
 **The gateway's entitlement check, not token expiry.** A service principal's
 token lived for about 24 hours, so deleting its secret leaves a working token in
@@ -111,7 +111,7 @@ proof of refusal.
 
 <details>
 
-<summary>What data lives where commands, choices and checks</summary>
+<summary>Storage locations, retention owners and token handling</summary>
 
 | Location | Data | Who governs retention/access |
 |---|---|---|
@@ -139,7 +139,7 @@ the full token or share user claims in a public issue.
 
 <details>
 
-<summary>Things that surprised us commands, choices and checks</summary>
+<summary>Secret policy, propagation and audience gotchas</summary>
 
 | Symptom | Cause | What to do |
 |---|---|---|
@@ -153,7 +153,7 @@ the full token or share user claims in a public issue.
 
 <details>
 
-<summary>Conditional Access commands, choices and checks</summary>
+<summary>Device-code blocks, helper route and workload caveats</summary>
 
 Device code sign-in happens on a second device, so a policy that requires a
 compliant or joined device, or that blocks the device code flow, stops it. That

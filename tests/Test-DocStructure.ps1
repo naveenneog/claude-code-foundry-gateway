@@ -418,6 +418,17 @@ function Test-QuickstartShellVariables([object]$Section, [object[]]$ScanLines) {
   return $errors.ToArray()
 }
 
+function Get-TemplatedSummarySuffixes([string[]]$Summaries, [int]$Limit) {
+  $counts = @{}
+  foreach ($summary in $Summaries) {
+    $words = @(($summary.ToLowerInvariant() -replace '[^\p{L}\p{N}\s]', ' ') -split '\s+' | Where-Object { $_ })
+    if ($words.Count -lt 3) { continue }
+    $key = $words[-3..-1] -join ' '
+    if ($counts.ContainsKey($key)) { $counts[$key]++ } else { $counts[$key] = 1 }
+  }
+  return @($counts.GetEnumerator() | Where-Object { $_.Value -gt $Limit } | ForEach-Object { "'$($_.Key)' ends $($_.Value) summaries" })
+}
+
 function Test-GuideStructure([string]$Path, [string]$Text, [bool]$Enrolled) {
   $errors = New-Object System.Collections.Generic.List[string]
   if ($Text -match "(?<!`r)`n") { $errors.Add('working-tree line endings include isolated LF') }
@@ -492,9 +503,13 @@ function Test-GuideStructure([string]$Path, [string]$Text, [bool]$Enrolled) {
     if ($body -notmatch '(?s)^<details>\s*\n\s*<summary>([^<\n#][^<\n]*)</summary>\s*\n\s*\n.+\n\s*</details>\s*$') { $errors.Add("section '$($sections[$i].Title)' body is not exactly one blank-separated details block") }
     else {
       $summary = $Matches[1].Trim()
-      $summaryCore = ($summary -replace '(?i)\s+(reference|details|information|section|content|more|notes)$', '').Trim()
-      $titleCore = ($sections[$i].Title -replace '^\d+[a-zA-Z]?\.\s*', '').Trim()
-      if (-not $summaryCore -or $summaryCore -ieq $titleCore) { $errors.Add("section '$($sections[$i].Title)' uses non-descriptive summary '$summary'") }
+      $numbering = '^\s*(?:step\s+)?\d+[a-zA-Z]?(?:\.\d+)*[\.\):]?\s*(?:[-\u2013\u2014]\s*)?'
+      $titleCore = ($sections[$i].Title -replace "(?i)$numbering", '').Trim()
+      $summaryCore = ($summary -replace "(?i)$numbering", '').Trim()
+      $summaryWords = @($summaryCore -split '\s+' | Where-Object { $_ })
+      if ($summary -match '(?i)\b(reference|details|information|section|content|more|notes|overview)$') { $errors.Add("section '$($sections[$i].Title)' summary '$summary' ends with a generic word") }
+      elseif (-not $summaryCore -or ($titleCore -and $summaryCore -match ('(?i)^' + [regex]::Escape($titleCore) + '(?![\p{L}\p{N}])'))) { $errors.Add("section '$($sections[$i].Title)' summary '$summary' repeats its heading instead of naming what the section holds") }
+      elseif ($summaryWords.Count -lt 2 -or $summaryWords.Count -gt 14) { $errors.Add("section '$($sections[$i].Title)' summary '$summary' has $($summaryWords.Count) word(s); use 2 to 14") }
       if (-not $summaries.Add($summary.ToLowerInvariant())) { $errors.Add("summary '$summary' is duplicated in $Path") }
     }
     if (($body | Select-String -Pattern '<details>' -AllMatches).Matches.Count -gt 1) { $errors.Add("section '$($sections[$i].Title)' nests disclosures") }
@@ -557,9 +572,12 @@ Assert-InvalidCase 'comment heading ignored' (Join-Lines @('# Guide','','Purpose
 Assert-InvalidCase 'fenced details ignored' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','**Expected result:** success.','','## Body','','```markdown','<details>','','<summary>Area</summary>','','Text.','','</details>','```','','## Next','','- [Next](NEXT.md)')) 'details block'
 Assert-InvalidCase 'Quickstart heading hidden in details' (Join-Lines @('# Guide','','Purpose.','','<details>','','<summary>Hidden path</summary>','','## Quickstart','','**Expected result:** success.','','</details>','','## Next','','- [Next](NEXT.md)')) 'inside details'
 Assert-InvalidCase 'Quickstart body hidden in details' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','<details>','','<summary>Steps</summary>','','**Expected result:** success.','','</details>','','## Next','','- [Next](NEXT.md)')) 'Quickstart body contains details or summary'
-Assert-InvalidCase 'generic summary rejected' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','**Expected result:** success.','','## Why','','<details>','','<summary>Why reference</summary>','','Text.','','</details>','','## Next','','- [Next](NEXT.md)')) 'non-descriptive summary'
-Assert-InvalidCase 'summary matching heading rejected' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','**Expected result:** success.','','## Why','','<details>','','<summary>Why</summary>','','Text.','','</details>','','## Next','','- [Next](NEXT.md)')) 'non-descriptive summary'
-Assert-NoErrorCase 'specific summary accepted' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','**Expected result:** success.','','## Reference','','<details>','','<summary>CLI commands, backend profiles and manual Azure steps</summary>','','Text.','','</details>','','## Next','','- [Next](NEXT.md)'))
+Assert-InvalidCase 'generic summary rejected' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','**Expected result:** success.','','## Why','','<details>','','<summary>Why reference</summary>','','Text.','','</details>','','## Next','','- [Next](NEXT.md)')) 'ends with a generic word'
+Assert-InvalidCase 'summary matching heading rejected' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','**Expected result:** success.','','## Why','','<details>','','<summary>Why</summary>','','Text.','','</details>','','## Next','','- [Next](NEXT.md)')) 'repeats its heading'
+Assert-InvalidCase 'numbered heading with a generic summary' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','**Expected result:** success.','','## 5. Show units','','<details>','','<summary>5. Show units reference</summary>','','Text.','','</details>','','## Next','','- [Next](NEXT.md)')) 'ends with a generic word'
+Assert-InvalidCase 'summary starting with its heading' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','**Expected result:** success.','','## Generate a report','','<details>','','<summary>Generate a report commands, choices and checks</summary>','','Text.','','</details>','','## Next','','- [Next](NEXT.md)')) 'repeats its heading'
+Assert-InvalidCase 'one-word summary' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','**Expected result:** success.','','## Body','','<details>','','<summary>Area</summary>','','Text.','','</details>','','## Next','','- [Next](NEXT.md)')) 'has 1 word'
+Assert-ValidCase 'specific summary accepted' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','**Expected result:** success.','','## Reference','','<details>','','<summary>CLI commands, backend profiles and manual Azure steps</summary>','','Text.','','</details>','','## Next','','- [Next](NEXT.md)'))
 Assert-InvalidCase 'duplicate summaries rejected' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','**Expected result:** success.','','## One','','<details>','','<summary>First area</summary>','','Text.','','</details>','','## Two','','<details>','','<summary>First area</summary>','','Text.','','</details>','','## Next','','- [Next](NEXT.md)')) 'duplicated'
 Assert-InvalidCase 'heading directly after a closing details tag' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','**Expected result:** success.','','## Body','','<details>','','<summary>Area</summary>','','Text.','','</details>','## Next','','- [Next](NEXT.md)')) 'follows </details> without a blank line'
 Assert-ValidCase 'definition before fenced command' (Join-Lines @('# Guide','','`<developer-upn>` is the selected account.','','## Quickstart','','```powershell','Do-Thing -User <developer-upn>','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)'))
@@ -638,5 +656,22 @@ foreach ($guide in $EnrolledGuides) {
 }
 
 Write-Ok 'permanent reference exceptions are reasoned in the manifest'
+
+# Templated summaries pass every per-guide rule while saying nothing: the same
+# closing words appended to every heading. Count each summary's last three words
+# across the enrolled guides; a phrase closing more than five summaries is a template.
+$templateProbe = @(Get-TemplatedSummarySuffixes (@(1..6 | ForEach-Object { "Area $_ commands, choices and checks" })) 5)
+Assert-Condition ($templateProbe.Count -eq 1) "templated-suffix check missed six shared endings: $($templateProbe -join ', ')"
+Assert-Condition (@(Get-TemplatedSummarySuffixes (@(1..5 | ForEach-Object { "Area $_ commands, choices and checks" })) 5).Count -eq 0) 'templated-suffix check flagged five shared endings'
+$allSummaries = [System.Collections.Generic.List[string]]::new()
+foreach ($guide in $EnrolledGuides) {
+  if ($PermanentReferenceExceptions.ContainsKey($guide)) { continue }
+  $rows = Get-MarkdownScanLines ((Get-Content -LiteralPath (Join-Path $Root $guide) -Raw) -replace "`r", '')
+  foreach ($row in $rows) { foreach ($m in [regex]::Matches($row.Text, '<summary>([^<]+)</summary>')) { $allSummaries.Add($m.Groups[1].Value.Trim()) } }
+}
+Assert-Condition ($allSummaries.Count -gt 0) 'no summaries found, so the templated-suffix check guards nothing'
+$templated = @(Get-TemplatedSummarySuffixes $allSummaries.ToArray() 5)
+Assert-Condition ($templated.Count -eq 0) "summaries share templated endings: $($templated -join '; ')"
+Write-Ok "$($allSummaries.Count) summaries across enrolled guides share no templated ending"
 
 Write-Host 'Documentation structure holds.'

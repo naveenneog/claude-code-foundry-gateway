@@ -36,7 +36,7 @@ $gateway = Get-Content .\onboarding\claude-gateway.json -Raw | ConvertFrom-Json
 
 <details>
 
-<summary>1. Prerequisites reference</summary>
+<summary>Azure resource lookups, SKU choice, tooling and region checks</summary>
 
 ### Find the values used in this guide
 
@@ -247,7 +247,7 @@ case or spacing, or by its number in the list.
 
 <details>
 
-<summary>2. Permissions and roles reference</summary>
+<summary>Operator, gateway, developer and directory role requirements</summary>
 
 Three identities are involved, and each needs different roles.
 
@@ -418,7 +418,7 @@ budget without creating anything.
 
 <details>
 
-<summary>3. Deploy reference</summary>
+<summary>Wizard, projection, company address and portal deployment paths</summary>
 
 ### Option A — the interactive wizard (recommended)
 
@@ -873,7 +873,7 @@ it — it clears it.
 
 <details>
 
-<summary>4. Verify before announcing reference</summary>
+<summary>Governance tests, v2 tier proof and bypass audit</summary>
 
 Use an entitled test identity and an agreed change window. The governance
 check sends model requests and its throttle test temporarily changes limits;

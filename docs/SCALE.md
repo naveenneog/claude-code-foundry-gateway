@@ -38,7 +38,7 @@ $gateway = Get-Content .\onboarding\claude-gateway.json -Raw | ConvertFrom-Json
 
 <details>
 
-<summary>What runs out first commands, choices and checks</summary>
+<summary>Named-value ceilings and projection threshold</summary>
 
 | Ceiling | Value | How it was established |
 |---|---|---|
@@ -143,7 +143,7 @@ path through the resolver.
 
 <details>
 
-<summary>"500,000 employees" is not a capacity specification commands, choices and checks</summary>
+<summary>Active users, request rates and Foundry quota</summary>
 
 It gives no rate, no concurrency and no shape. Five numbers do:
 
@@ -193,7 +193,7 @@ traffic-independent and were measured, and stops there. **U9** and **U10** in
 
 <details>
 
-<summary>What a capacity test has to prove commands, choices and checks</summary>
+<summary>Projection cardinality, lookup latency and counter behavior</summary>
 
 The obvious test - create 500,000 counter keys and see whether the service
 accepts them - answers the wrong question. Accepting a key is not the same as
@@ -409,7 +409,7 @@ quota a developer can go, or why exhausted identities were admitted again, so
 
 <details>
 
-<summary>Order of work commands, choices and checks</summary>
+<summary>Pilot observation, load testing and projection cost inputs</summary>
 
 1. Observe the five numbers on a pilot cohort, over enough days to include a bad one.
 2. Load-test API Management, Foundry capacity, telemetry ingestion and quota
@@ -463,7 +463,7 @@ complete.
 
 <details>
 
-<summary>The budget is a delayed kill switch, not a hard cap commands, choices and checks</summary>
+<summary>Telemetry lag, schedule delay and propagation overshoot</summary>
 
 The delay calculation below describes a **ledger-driven external watcher**,
 not APIM's admission-time token counter. The repository's token quotas are
@@ -520,7 +520,7 @@ not establish the delay or in-flight overshoot.
 
 <details>
 
-<summary>Deploying today, and scaling later commands, choices and checks</summary>
+<summary>Custom domain, SKU choices and named-value migration path</summary>
 
 ### Two things to get right on the first day
 
@@ -635,7 +635,7 @@ comparison that proves both paths agree before either is trusted, ships today as
 
 <details>
 
-<summary>Getting there without resetting anyone's allowance commands, choices and checks</summary>
+<summary>Shadow comparison and consumed-budget preservation</summary>
 
 Entitlement is live, and budgets are consumed state rather than configuration. A
 developer who has spent 80% of a monthly allowance is carrying a number that
@@ -676,7 +676,7 @@ measures the gap.
 
 <details>
 
-<summary>The move itself, step by step commands, choices and checks</summary>
+<summary>Projection migration steps, comparisons, flip and rollback</summary>
 
 What a pilot customer runs to get from the named-value lists to the projection.
 The measured small migration kept serving; this is not a zero-downtime

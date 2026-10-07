@@ -22,7 +22,7 @@ This comparison is a reference lookup for choosing between Claude Enterprise, th
 
 <details>
 
-<summary>The three options commands, choices and checks</summary>
+<summary>Endpoints, credentials, budgets and billing paths</summary>
 
 | | **A. Anthropic direct** | **B. Foundry direct** | **C. Foundry + gateway** |
 |---|---|---|---|
@@ -46,7 +46,7 @@ and a good debugging isolation point — nothing more. This accelerator builds C
 
 <details>
 
-<summary>What actually changes commands, choices and checks</summary>
+<summary>Entra identity, Azure billing, governance and residency</summary>
 
 ### 1. There is no API key to leak
 
@@ -164,7 +164,7 @@ That is worth more than any single feature in these tables.
 
 <details>
 
-<summary>What you give up commands, choices and checks</summary>
+<summary>Model lag, gateway cost and operations trade-offs</summary>
 
 An honest architecture review has to cover this side too.
 
@@ -187,7 +187,7 @@ An honest architecture review has to cover this side too.
 
 <details>
 
-<summary>How to choose commands, choices and checks</summary>
+<summary>Decision tree, regulated needs and evaluation pattern</summary>
 
 ```text
 Do you need per-developer budgets or chargeback?
@@ -224,7 +224,7 @@ small, tightly-held direct account for evaluating new releases.
 
 <details>
 
-<summary>Verified technical differences commands, choices and checks</summary>
+<summary>Live API, auth, client and APIM findings</summary>
 
 Established empirically against a live deployment while building this, not read
 from documentation:

@@ -30,7 +30,7 @@ $apim = $record.apimName
 
 <details>
 
-<summary>Prerequisites and owners commands, choices and checks</summary>
+<summary>Platform, directory, device and privacy owners</summary>
 
 - Platform owner: deployed gateway, approved model/hosting choice and
   [Setup roles](SETUP.md#2-permissions-and-roles).
@@ -55,7 +55,7 @@ Plan [Scale](SCALE.md) first.
 
 <details>
 
-<summary>1. History, memory and sessions reference</summary>
+<summary>Imports, attachments, memory, plugins and storage choices</summary>
 
 ### What survives
 
@@ -431,7 +431,7 @@ token counts per person for chargeback without any of this — see
 
 <details>
 
-<summary>2. Mass deployment through MDM reference</summary>
+<summary>Managed settings, app installs, updates and verification</summary>
 
 Both clients are designed for this. Managed settings sit above every other
 level: no user, project, local or `--settings` value overrides them.
@@ -567,7 +567,7 @@ carry `x-governed-by`, and the call appears in Application Insights.
 
 <details>
 
-<summary>3. Bulk entitlement from a CSV or an Entra group reference</summary>
+<summary>Roster import, identity resolution and ongoing sync</summary>
 
 Entitlement is Entra group membership. Filling those groups is the migration.
 
@@ -651,7 +651,7 @@ on a schedule ([Onboarding](ONBOARDING.md#5-revoke-access)).
 
 <details>
 
-<summary>4. Backing the gateway up, and putting it back reference</summary>
+<summary>Gateway backups, workstation archives and restore safeguards</summary>
 
 Two different backups, because there are two different things worth keeping and
 they carry different risk.
@@ -803,7 +803,7 @@ Both backup folders are git-ignored.
 
 <details>
 
-<summary>5. Cutover runbook reference</summary>
+<summary>Import switches, pilot, dual-run and decommission sequence</summary>
 
 **Turn on both import switches first.** `claudeAiImport.enabled` in the Desktop
 managed configuration, and **Allow members to export their own data** on
@@ -854,7 +854,7 @@ on the Foundry account directly can skip the gateway and every budget with it.
 
 <details>
 
-<summary>What is still genuinely unknown commands, choices and checks</summary>
+<summary>Unconfirmed forceLoginMethod values</summary>
 
 - **Accepted values for `forceLoginMethod`.** It restricts login to claude.ai,
   the Console, or a gateway, and would stop someone signing in to a personal
@@ -870,7 +870,7 @@ on the Foundry account directly can skip the gateway and every budget with it.
 
 <details>
 
-<summary>Anthropic references commands, choices and checks</summary>
+<summary>Source links for data, Desktop, Code and Cowork</summary>
 
 Everything above is grounded in these. Worth checking them directly before a
 cutover date: Claude Desktop on 3P is moving quickly, and the support site
