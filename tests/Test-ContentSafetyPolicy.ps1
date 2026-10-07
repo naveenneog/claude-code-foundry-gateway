@@ -186,6 +186,21 @@ Assert 'trace metadata has screening marker, decisions, severities, booleans, th
 Assert 'trace metadata has no prompt, system, tool, output or image content' ($traceJson -notmatch 'harmful|benign|system|imageBytes|matchedSnippet|modelOutput') $traceJson
 
 Write-Host 'P102 APIM allowed expression types'
+Write-Host 'P102 Prompt Shields empty-input contract (live probe 2026-10-07)'
+$toolOnly = @{ model = 'm'; max_tokens = 16; messages = @(@{ role = 'user'; content = @(@{ type = 'tool_result'; tool_use_id = 'toolu_01'; content = 'harmful tool result for the empty prompt case' }) }) }
+$r = Run $toolOnly 'block' (New-ContentSafetyStubMap (ShieldStub $false @($false)) (AnalyzeStub 6))
+Assert 'a tool_result-only message sends Prompt Shields an empty userPrompt and one document' ($r.Calls.Count -eq 2 -and $r.Calls[0].Operation -eq 'shieldPrompt' -and [string]$r.Calls[0].Body.userPrompt -eq '' -and @($r.Calls[0].Body.documents).Count -eq 1) ($r.Calls | ConvertTo-Json -Depth 6 -Compress)
+Assert 'an answer without userPromptAnalysis for an empty userPrompt is not malformed: severity 6 blocks with 403 (live T7)' ($r.StatusCode -eq 403 -and $r.Decision.BlockedBy -eq 'severity') ($r | ConvertTo-Json -Depth 8 -Compress)
+$r = Run $toolOnly 'audit' (New-ContentSafetyStubMap (ShieldStub $false @($false)) (AnalyzeStub 6))
+Assert 'audit mode forwards a tool_result-only message and records the severity decision' ($r.StatusCode -eq 200 -and $r.Forwarded -and $r.Decision.BlockedBy -eq 'severity') ($r | ConvertTo-Json -Depth 8 -Compress)
+$systemOnly = @{ model = 'm'; max_tokens = 16; system = 'Answer in one short sentence.'; messages = @(@{ role = 'user'; content = @(@{ type = 'image'; source = @{ type = 'base64'; media_type = 'image/png'; data = 'iVBORw0KGgo=' } }) }) }
+$r = Run $systemOnly 'block'
+Assert 'system-only screened text calls analyze but not Prompt Shields, which answers an empty userPrompt with no documents with 400' ($r.StatusCode -eq 200 -and $r.Calls.Count -eq 1 -and $r.Calls[0].Operation -eq 'analyze' -and $r.Calls[0].Body.text -match 'one short sentence') ($r | ConvertTo-Json -Depth 8 -Compress)
+$r = Run $systemOnly 'block' (New-ContentSafetyStubMap (ShieldStub) (AnalyzeStub 6))
+Assert 'harmful system-only text still blocks with 403 without a Prompt Shields call' ($r.StatusCode -eq 403 -and $r.Decision.BlockedBy -eq 'severity' -and $r.Calls.Count -eq 1) ($r | ConvertTo-Json -Depth 8 -Compress)
+$r = Run @{ model = 'm'; max_tokens = 16; messages = @(@{ role = 'user'; content = 'Plain user text.' }) } 'block' (New-ContentSafetyStubMap ([pscustomobject]@{ documentsAnalysis = @() }) (AnalyzeStub 0))
+Assert 'a non-empty userPrompt still requires userPromptAnalysis: its absence is malformed and fails closed with 503' ($r.StatusCode -eq 503 -and $r.Decision.BlockedBy -eq 'unavailable') ($r | ConvertTo-Json -Depth 8 -Compress)
+
 function Get-PolicyLiteralLineBreaks([string]$Text, [string]$Label) {
     # APIM compiles each @(...) / @{...} expression from the raw policy text: a raw line break inside a regular
     # C# string or char literal is "Unterminated string literal" there, although an XML parser turns the same

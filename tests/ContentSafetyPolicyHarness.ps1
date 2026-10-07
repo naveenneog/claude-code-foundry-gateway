@@ -217,6 +217,22 @@ function Invoke-PolicyNodes($Nodes, $HostInfo, $Context, [Collections.Generic.Li
                 $Calls.Add([pscustomobject]@{ Operation=$operation; Url=$req.Url; Method=$req.Method; Headers=[pscustomobject]$req.Headers; Body=$req.Body }) | Out-Null
                 $responseName = $node.GetAttribute('response-variable-name')
                 $stub = $Stubs[$operation]
+                # Prompt Shields contract observed live on 2026-10-07 (text:shieldPrompt, api-version 2024-09-01, P102
+                # lead probe): an empty userPrompt returns no userPromptAnalysis, and an empty userPrompt with no
+                # documents is 400 InvalidRequestBody. Applied over any 2xx stub so the harness cannot pass a fragment
+                # that the service would answer differently.
+                if ($operation -eq 'shieldPrompt' -and $null -ne $stub -and [int]$stub.StatusCode -ge 200 -and [int]$stub.StatusCode -le 299) {
+                    $sentPrompt = if ($null -ne $req.Body) { [string]$req.Body.userPrompt } else { '' }
+                    $sentDocuments = if ($null -ne $req.Body -and $null -ne $req.Body.documents) { @($req.Body.documents).Count } else { 0 }
+                    if ([string]::IsNullOrEmpty($sentPrompt) -and $sentDocuments -eq 0) {
+                        $stub = New-StubResponse 400 ([pscustomobject]@{ error = [pscustomobject]@{ code = 'InvalidRequestBody'; message = 'User prompt and document cannot be empty at the same time, please follow the contract provisions.'; details = @() } })
+                    }
+                    elseif ([string]::IsNullOrEmpty($sentPrompt)) {
+                        $withoutUserAnalysis = (ConvertTo-JsonText $stub.Body) | ConvertFrom-Json
+                        if ($null -ne $withoutUserAnalysis -and $withoutUserAnalysis.PSObject.Properties['userPromptAnalysis']) { $withoutUserAnalysis.PSObject.Properties.Remove('userPromptAnalysis') }
+                        $stub = New-StubResponse ([int]$stub.StatusCode) $withoutUserAnalysis
+                    }
+                }
                 if ($null -eq $stub) { Set-ApimVariable $Context $responseName $null }
                 else {
                     $response = [Activator]::CreateInstance($HostInfo.ResponseType)
