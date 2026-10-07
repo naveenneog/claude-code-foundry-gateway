@@ -82,6 +82,7 @@
             <set-variable name="contentSafetyDecision" value='@(JObject.Parse((string)context.Variables["contentSafetyDecisionJson"])["decision"].ToString())' />
             <trace source="claude-content-safety" severity="information">
                 <message>content safety request screening</message>
+                <metadata name="screening" value="claude-content-safety" />
                 <metadata name="mode" value="{{content-safety-mode}}" />
                 <metadata name="decision" value='@(JObject.Parse((string)context.Variables["contentSafetyDecisionJson"])["decision"].ToString())' />
                 <metadata name="blockedBy" value='@(JObject.Parse((string)context.Variables["contentSafetyDecisionJson"])["blockedBy"].ToString())' />
