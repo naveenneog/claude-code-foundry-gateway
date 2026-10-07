@@ -53,7 +53,7 @@
       "source": "docs/architecture/02-request.json",
       "inputs": {
         "analytics/chargeback-ledger.kql": "3924ba7e4edb21d761b16254452c0509a2a9d27558033d7a980c5e201e22b2f5",
-        "docs/architecture/02-request.json": "0cd1a1730569af95cefacd29ebd19a837e3f5813e88643fc6093f2856aeebe50",
+        "docs/architecture/02-request.json": "8762b94051220dc247fc03424a006de2670e1f180406a64dc705f3511d6aa631",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
@@ -72,11 +72,11 @@
       "outputs": [
         {
           "path": "docs/images/architecture/request-path.png",
-          "sha256": "74cac0a40300191091fc6bf6a2360d91730c9c3c7cc5bd60c1cbbf841c4dff7f"
+          "sha256": "1a1366d22562e09df0a0a256c22dd56a0a1fc973b6ad89f64b67c02fb531dde4"
         },
         {
           "path": "docs/images/request-flow.png",
-          "sha256": "74cac0a40300191091fc6bf6a2360d91730c9c3c7cc5bd60c1cbbf841c4dff7f"
+          "sha256": "1a1366d22562e09df0a0a256c22dd56a0a1fc973b6ad89f64b67c02fb531dde4"
         }
       ]
     },

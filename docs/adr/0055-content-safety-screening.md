@@ -136,12 +136,14 @@ Logged metadata:
 - `contentSafetyStatusCode`, `contentSafetyElapsedMs` and `contentSafetyErrorClass` when present.
 - No prompt, system text, tool text, model output, image bytes or matched snippet.
 
-KQL for live evidence:
+KQL for live evidence (a trace's `source` attribute is not stored as a custom property, so the query filters on the
+message and the `screening` metadata entry, as `scripts/Test-ClaudeLiveContentSafety.ps1` does):
 
 ```kusto
 traces
 | where timestamp > ago(24h)
-| where customDimensions.Source == "claude-content-safety" or customDimensions.source == "claude-content-safety"
+| where message == "content safety request screening"
+| where customDimensions.screening == "claude-content-safety"
 | project timestamp,
           operation_Id,
           mode=tostring(customDimensions.mode),

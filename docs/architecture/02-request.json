@@ -2,7 +2,7 @@
   "version": 1,
   "id": "request-path",
   "kind": "flow",
-  "title": "One request, six governed hops",
+  "title": "One request, seven governed hops",
   "subtitle": "Claude Code, the VS Code extension and Claude Desktop share the gateway policy. The numbered hops explain the flow; telemetry arrives asynchronously after the request.",
   "width": 1280,
   "height": 1260,
@@ -36,34 +36,40 @@
     { "x": 0, "y": 354, "w": 1280, "h": 230, "tone": "blue", "title": "Four budget layers, in policy order · up to four quotas for a team member" }
   ],
   "nodes": [
-    { "id": "signin", "x": 0, "y": 0, "w": 195, "h": 320, "tone": "teal", "compact": true, "eyebrow": "01 · caller", "title": "Sign in", "lines": [
+    { "id": "signin", "x": 0, "y": 0, "w": 164, "h": 344, "tone": "teal", "compact": true, "eyebrow": "01 · caller", "title": "Sign in", "lines": [
       "Azure CLI sign-in for people",
       "Desktop: [[helper]]",
       "Managed identity for automation",
       "Entra token; signed oid"
     ] },
-    { "id": "admit", "x": 217, "y": 0, "w": 195, "h": 320, "tone": "blue", "compact": true, "eyebrow": "02 · gateway", "title": "Admit", "lines": [
+    { "id": "admit", "x": 186, "y": 0, "w": 164, "h": 344, "tone": "blue", "compact": true, "eyebrow": "02 · gateway", "title": "Admit", "lines": [
       "Validate token and model",
       "[[source]] selects lists or projection.",
       "Tier, assigned unit or team; four budget layers",
       "Rate ceilings also apply."
     ] },
-    { "id": "serve", "x": 434, "y": 0, "w": 195, "h": 320, "tone": "teal", "compact": true, "eyebrow": "03 · model", "title": "Serve", "lines": [
+    { "id": "screen", "x": 372, "y": 0, "w": 164, "h": 344, "tone": "blue", "compact": true, "eyebrow": "03 · gateway", "title": "Screen", "lines": [
+      "Optional. Mode: off, audit or block",
+      "After entitlement, before budgets",
+      "[[cs-account]] screens system prompt and newest turn",
+      "Block: 403; unavailable: 503"
+    ] },
+    { "id": "serve", "x": 558, "y": 0, "w": 164, "h": 344, "tone": "teal", "compact": true, "eyebrow": "04 · model", "title": "Serve", "lines": [
       "Customer's own Foundry Claude deployment",
       "Gateway managed identity replaces caller token.",
       "Stream returned to the client"
     ] },
-    { "id": "meter", "x": 651, "y": 0, "w": 195, "h": 320, "tone": "blue", "compact": true, "eyebrow": "04 · resource log", "title": "Meter", "lines": [
+    { "id": "meter", "x": 744, "y": 0, "w": 164, "h": 344, "tone": "blue", "compact": true, "eyebrow": "05 · resource log", "title": "Meter", "lines": [
       "[[llm-log]]",
       "Prompt + completion, model, correlation and streaming fields",
       "No per-request cache breakdown"
     ] },
-    { "id": "attribute", "x": 868, "y": 0, "w": 195, "h": 320, "tone": "purple", "compact": true, "eyebrow": "05 · trace", "title": "Attribute", "lines": [
+    { "id": "attribute", "x": 930, "y": 0, "w": 164, "h": 344, "tone": "purple", "compact": true, "eyebrow": "06 · trace", "title": "Attribute", "lines": [
       "[[traces]]",
       "User, tier, assigned unit / team and client",
       "[[request-id]] joins the log's [[correlation-id]]."
     ] },
-    { "id": "observe", "x": 1085, "y": 0, "w": 195, "h": 320, "tone": "slate", "compact": true, "eyebrow": "06 · readers", "title": "Observe", "lines": [
+    { "id": "observe", "x": 1116, "y": 0, "w": 164, "h": 344, "tone": "slate", "compact": true, "eyebrow": "07 · readers", "title": "Observe", "lines": [
       "Log Analytics",
       "[[chargeback]]",
       "Workbook and saved functions",
@@ -89,11 +95,12 @@
     ] }
   ],
   "edges": [
-    { "from": "signin", "to": "admit", "kind": "data", "points": [[195, 150], [217, 150]] },
-    { "from": "admit", "to": "serve", "kind": "data", "points": [[412, 150], [434, 150]] },
-    { "from": "serve", "to": "meter", "kind": "data", "points": [[629, 150], [651, 150]] },
-    { "from": "meter", "to": "attribute", "kind": "data", "points": [[846, 150], [868, 150]] },
-    { "from": "attribute", "to": "observe", "kind": "data", "points": [[1063, 150], [1085, 150]] }
+    { "from": "signin", "to": "admit", "kind": "data", "points": [[164, 150], [186, 150]] },
+    { "from": "admit", "to": "screen", "kind": "data", "points": [[350, 150], [372, 150]] },
+    { "from": "screen", "to": "serve", "kind": "data", "points": [[536, 150], [558, 150]] },
+    { "from": "serve", "to": "meter", "kind": "data", "points": [[722, 150], [744, 150]] },
+    { "from": "meter", "to": "attribute", "kind": "data", "points": [[908, 150], [930, 150]] },
+    { "from": "attribute", "to": "observe", "kind": "data", "points": [[1094, 150], [1116, 150]] }
   ],
   "notice": "Unit/team modes in [[modes]] can extend or skip that scope's limiter, not the other controls. Budgets remain approximate: the quota scalar omits cache; the recorded sample attributed 38.7% of cost weight to cache reads. Streaming and concurrency add uncertainty; no invoice ceiling or exact crossing is promised."
 }

@@ -89,7 +89,7 @@ remove aliases for families that are no longer selected.
 
 ## Request path
 
-![Six request hops: sign in, admit, serve, meter, attribute and observe. Four budget layers and projection admission, absence and fault outcomes are shown, followed by the components each optional profile adds.](images/architecture/request-path.png)
+![Seven request hops: sign in, admit, the optional Content Safety screen, serve, meter, attribute and observe. Four budget layers and projection admission, absence and fault outcomes are shown, followed by the components each optional profile adds.](images/architecture/request-path.png)
 
 Source: [02-request.json](architecture/02-request.json). The README's
 `images/request-flow.png` is a byte-identical compatibility copy.
