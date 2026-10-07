@@ -108,6 +108,10 @@ deployment by hand fails ([P94 status](status/P94.md#p94-the-p86-renewal-job-dep
 | P100 | Merged (`7b365f64`) with the owner's approval; ahead of the P99 merge at the owner's request | The update flow moves a named-value gateway to the Cosmos projection: `Update-ClaudeGateway.ps1` plans the move with the gateway's previous tier groups, business units and entitlement, checks quotas, regions, permissions and policy, shows the resources, network and cost, and applies the installer's deploy, populate, compare and switch on approval ([ADR-0054](adr/0054-update-flow-entitlement-migration.md), [P100 status](status/P100.md)) |
 | P101 | Next; after P100 | One sync command for every store: `Sync-ClaudeAccess.ps1 -User` publishes one developer's change on a named-value gateway too (it refreshes the lists), reads the tier groups the gateway records in `entitlement-groups` (else the decision record, else the default names, as the P100 plan does) and records them, so gateways installed or moved by the installer gain it, and the AUM tool's developer add and remove publish through it (U25) |
 | P102 | Merged (`49fe7a3c`) with the owner's approval | Content safety for Claude requests: an optional Azure AI Content Safety resource and custom API Management policy fragment that screens the system prompt, tool descriptions and the newest turn before Claude Messages requests reach Foundry ([ADR-0055](adr/0055-content-safety-screening.md), [P102 status](status/P102.md)) |
+| P104 | In progress on `p104-scheduled-sync` ([ADR-0058](adr/0058-scheduled-projection-sync.md), [P104 status](status/P104.md)) | The projection sync job runs on a schedule the admin sets: the installer deploys it with the projection at an interval from 30 minutes to 12 hours (2 hours by default); a developer added to or removed from a tier or business-unit group in Microsoft Entra ID gets or loses access at the next run; a run writes only the developers whose membership changed, and an unattended run deletes no more than max(10, 10%) of the records; the no-success alert follows the interval |
+| P105 | Planned; after P104 | Several Foundry accounts or subscriptions behind one gateway: an API Management backend pool with circuit breakers, each caller pinned to one account so that a caller's requests reach the same prompt cache, and failover to another account; the Azure CLI and portal steps in the guides |
+| P106 | Planned | A token cost calculator in the cost workbook, and customer discounts set in the private price book (`config/price-book.json`, published by `scripts/Publish-ClaudeQueries.ps1`) |
+
 Follow-ups from the P94 council, not yet packets: `sync/package-lock.json` carries `sha1` integrity
 for 50 of its 53 packages because this workstation reaches npm only through a feed whose metadata
 lacks `sha512`, and a lockfile written against `registry.npmjs.org` would carry `sha512`; the deploy
@@ -679,6 +683,12 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       budget and can be removed; the guided flow's Tier and Desktop sign-in changes name their snapshot
       under `backups/` and the write gate takes it
       ([P96 status](status/P96.md#p96-fixes-from-a-live-deployment-2026-10-05))
+- [ ] P104 the projection sync job runs on a schedule the admin sets — acceptance: choosing the projection in the
+      installer deploys the job at the chosen interval (default 2 hours; `30m` to `12h` or `manual`; shorter refused);
+      a scheduled run writes only changed developers and stops before deleting more than max(10, 10%) of the
+      records; the installer reports the Graph grant and prints its command; the interval changes later with
+      `scripts/Set-ClaudeProjectionSyncSchedule.ps1`; the no-success alert reads 2 x interval + 15 minutes; a live
+      install observes a scheduled execution ([P104 status](status/P104.md))
 - [ ] P103 quickstart first, sections as disclosures — part 1 merged (`5bb94762`); part 2 in progress. Acceptance: user-facing guides open with a short purpose and visible Quickstart, enrolled sections keep H2 anchors visible while folding bodies into native disclosures, permanent reference exceptions are documented in ADR-0056, and `tests/Test-DocStructure.ps1` protects quickstarts, details structure, anchors, links and line endings.
 - [x] P99 directory-scale snapshot transfer — acceptance: a snapshot of 500,000 records is applied and compared
       within its apply-by time, and the switch admits a gateway of that size, measured live; an ADR records
