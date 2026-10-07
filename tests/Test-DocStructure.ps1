@@ -322,7 +322,7 @@ function Test-VisibleProseDefinesVariable([object[]]$ScanLines, [int]$BeforeLine
 function Test-QuickstartPowerShellVariables([string]$Path, [object]$Section, [object[]]$ScanLines) {
   $errors = [System.Collections.Generic.List[string]]::new()
   $auto = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-  foreach ($name in @('true','false','null','_','PSItem','LASTEXITCODE','PSScriptRoot','HOME','PWD','args','Matches','Error','Host','PSVersionTable')) { [void]$auto.Add($name) }
+  foreach ($name in @('true','false','null','_','PSItem','LASTEXITCODE','PSScriptRoot','PSCommandPath','MyInvocation','PSBoundParameters','input','HOME','PWD','PSHOME','PID','args','Matches','Error','Host','PSVersionTable','PSEdition','IsWindows','IsLinux','IsMacOS','IsCoreCLR','ExecutionContext','PSCulture','PSUICulture','ShellId','StackTrace','this','profile','ErrorActionPreference','ProgressPreference','VerbosePreference','WarningPreference','InformationPreference','DebugPreference','ConfirmPreference','WhatIfPreference','OFS','NestedPromptLevel')) { [void]$auto.Add($name) }
   $assigned = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
   foreach ($block in Get-FencedBlocks $Section.Body) {
     if ($block.Language -notin @('powershell','pwsh','ps1')) { continue }
@@ -393,14 +393,28 @@ function Test-QuickstartScriptCommands([object]$Section) {
     $blockAst = [System.Management.Automation.Language.Parser]::ParseInput($code, [ref]$null, [ref]$null)
     foreach ($command in $blockAst.FindAll({ param($node) $node -is [System.Management.Automation.Language.CommandAst] }, $true)) {
       $name = [string]$command.GetCommandName()
-      if ($name -notmatch '^\.[\\/][^\\/].*\.ps1$') { continue }
-      $target = Join-Path $Root ($name.Substring(2))
-      if (-not (Test-Path -LiteralPath $target -PathType Leaf)) { $errors.Add("Quickstart command $name names a script that does not exist"); continue }
+      $elements = @($command.CommandElements)
+      $scriptPath = $null; $argElements = @()
+      if ($name -match '^\.[\\/][^\\/].*\.ps1$') { $scriptPath = $name; $argElements = @($elements | Select-Object -Skip 1) }
+      elseif ($name -match '^(?i)(pwsh|powershell)(\.exe)?$') {
+        # pwsh -File <script> <script arguments>: the script's parameters follow its path.
+        for ($e = 1; $e -lt $elements.Count - 1; $e++) {
+          if ($elements[$e] -is [System.Management.Automation.Language.CommandParameterAst] -and $elements[$e].ParameterName -match '^(?i)f(ile)?$') {
+            $candidate = [string]$elements[$e + 1].Extent.Text.Trim('''', '"')
+            if ($candidate -match '^\.?[\\/]?[^\\/].*\.ps1$') { $scriptPath = $candidate; $argElements = @($elements | Select-Object -Skip ($e + 2)) }
+            break
+          }
+        }
+      }
+      if (-not $scriptPath) { continue }
+      $relative = $scriptPath -replace '^\.[\\/]', ''
+      $target = Join-Path $Root $relative
+      if (-not (Test-Path -LiteralPath $target -PathType Leaf)) { $errors.Add("Quickstart command $scriptPath names a script that does not exist"); continue }
       $known = @(Get-ScriptParameterNames $target)
-      foreach ($given in @($command.CommandElements | Where-Object { $_ -is [System.Management.Automation.Language.CommandParameterAst] } | ForEach-Object ParameterName)) {
+      foreach ($given in @($argElements | Where-Object { $_ -is [System.Management.Automation.Language.CommandParameterAst] } | ForEach-Object ParameterName)) {
         $exact = @($known | Where-Object { $_ -eq $given })
         $prefixHits = @($known | Where-Object { $_ -like "$given*" })
-        if (-not $exact.Count -and $prefixHits.Count -ne 1) { $errors.Add("Quickstart command $name has no parameter -$given") }
+        if (-not $exact.Count -and $prefixHits.Count -ne 1) { $errors.Add("Quickstart command $scriptPath has no parameter -$given") }
       }
     }
   }
@@ -414,6 +428,8 @@ function Test-QuickstartShellVariables([object]$Section, [object[]]$ScanLines) {
     $lines = $block.Text -split "`n"
     for ($i = 0; $i -lt $lines.Count; $i++) {
       $line = $lines[$i]
+      # Single-quoted text is literal in POSIX shells: no expansion, so no variable use.
+      $line = [regex]::Replace($line, "'[^']*'", "''")
       foreach ($m in [regex]::Matches($line, '(^|\s)(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=')) { [void]$assigned.Add($m.Groups[2].Value) }
       foreach ($m in [regex]::Matches($line, '\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?')) {
         $name = $m.Groups[1].Value
@@ -598,6 +614,11 @@ Assert-InvalidCase 'Quickstart assignment without a variable' (Join-Lines @('# G
 Assert-InvalidCase 'fence opener with a backtick in its info string' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','```powershell`r`n$rg = 1','Do-Thing -ResourceGroup $rg','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)')) 'info string contains a backtick'
 Assert-InvalidCase 'Quickstart script parameter that does not exist' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','```powershell','.\scripts\Test-ClaudeHealth.ps1 -NoSuchSwitch','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)')) 'has no parameter -NoSuchSwitch'
 Assert-InvalidCase 'Quickstart script that does not exist' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','```powershell','.\scripts\No-SuchScript.ps1','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)')) 'names a script that does not exist'
+Assert-InvalidCase 'pwsh -File script that does not exist' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','```powershell','pwsh -NoProfile -File .\scripts\No-SuchScript.ps1','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)')) 'names a script that does not exist'
+Assert-InvalidCase 'pwsh -File script parameter that does not exist' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','```powershell','pwsh -NoProfile -File ./scripts/Test-ClaudeHealth.ps1 -NoSuchSwitch','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)')) 'has no parameter -NoSuchSwitch'
+Assert-InvalidCase 'shell variable used before assignment' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','```bash','az group show --name "$RG"','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)')) 'Shell variable \$RG'
+Assert-ValidCase 'shell single-quoted dollar text is not a variable' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','```bash','echo ''$TOKEN is set later''','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)'))
+Assert-ValidCase 'PowerShell automatic variables need no definition' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','```powershell','Write-Output $PSCommandPath $MyInvocation.MyCommand.Name $IsWindows $PSHOME','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)'))
 Assert-ValidCase 'Quickstart script call with its real parameters' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','```powershell','.\scripts\Test-ClaudeHealth.ps1 -ResourceGroup rg-claude -ApimName apim-claude -FailOn warn','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)'))
 Assert-ValidCase 'PowerShell variable assigned before use' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','```powershell','$rg = ''rg-claude''','Do-Thing -ResourceGroup $rg','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)'))
 Assert-ValidCase 'PowerShell variable defined in prose before use' (Join-Lines @('# Guide','','The `$rg` variable is the selected resource group.','','## Quickstart','','```powershell','Do-Thing -ResourceGroup $rg','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)'))
