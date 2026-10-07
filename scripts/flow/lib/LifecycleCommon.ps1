@@ -44,7 +44,7 @@ function global:Get-ClaudeFlowLifecycleCanonicalXmlHash {
 function global:New-ClaudeFlowLifecycleArmHeaders {
     param([Parameter(Mandatory = $true)][string]$Token)
     $headers = @{ 'Content-Type' = 'application/json' }
-    $headers[([string]::Concat('Author','ization'))] = 'Bearer ' + $Token.Trim()
+    $headers['Authorization'] = 'Bearer ' + $Token.Trim()
     return $headers
 }
 
