@@ -283,8 +283,7 @@ foreach ($t in $tiers) {
     # resolving to empty while APIM still holds entries for it.
     $allowEmptyTier = $AllowEmpty -or ($t.Name -eq 'standard' -and $AllowEmptyStandard) -or ($t.Name -eq 'premium' -and $AllowEmptyPremium)
     if (-not $effective.Count -and -not $allowEmptyTier -and -not $WhatIf) {
-        $current = az apim nv show -g $ResourceGroup --service-name $ApimName `
-            --named-value-id $t.NamedValue --query value -o tsv 2>$null
+        $current = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id $t.NamedValue -FailOnError
         if ($current -and $current.Trim().Trim(',')) {
             Write-Host ''
             Write-Warning ("$($t.Group) resolved to 0 members, but '$($t.NamedValue)' currently entitles " +
@@ -356,7 +355,7 @@ else {
     # Same guard as entitlement: a lookup that resolved nothing must not wipe a
     # map that currently assigns people, because the result is silent and the
     # symptom is spend landing on no budget.
-    $currentBu = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-members'
+    $currentBu = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-members' -FailOnError
     $currentCount = @(ConvertFrom-ClaudeBuMembers $currentBu).Keys.Count
 
     if (-not $buMap.Keys.Count -and -not $AllowEmpty -and -not $WhatIf -and $currentCount) {

@@ -224,7 +224,7 @@ Assert 'a projection sync for an unknown UPN stops before writes with a clear me
 # 4,096-character limit, so the gateway served a refreshed premium list beside a stale standard list. Every
 # value is now checked before the first write. The fixture answers Graph and az for a gateway with no business units.
 function Invoke-NamedValueSyncFixture {
-    param([int]$PremiumCount, [int]$StandardCount, [string]$GatewayStandard = '', [string]$GatewayPremium = '', [string]$GatewayGroups = '', [string]$Script = 'Sync-ClaudeAccess.ps1', [hashtable]$Parameters = @{ Store = 'named-value' }, [switch]$FailAllowStandardWrite, [switch]$WithDecisionRecord)
+    param([int]$PremiumCount, [int]$StandardCount, [string]$GatewayStandard = '', [string]$GatewayPremium = '', [string]$GatewayGroups = '', [string]$GatewayBuRegistry = '', [string]$GatewayBuMembers = ',', [string]$Script = 'Sync-ClaudeAccess.ps1', [hashtable]$Parameters = @{ Store = 'named-value' }, [switch]$FailAllowStandardWrite, [switch]$FailAllowStandardRead, [switch]$FailBuMembersRead, [switch]$WithDecisionRecord)
     $global:P98NvCalls = [Collections.Generic.List[string]]::new()
     $script:P98NvResult = $null
     $recordPath = Join-Path $root 'onboarding\claude-gateway.json'
@@ -242,16 +242,21 @@ function Invoke-NamedValueSyncFixture {
         '10000000-0000-4000-8000-000000000003' = @(& $oids $StandardCount '51000000-0000-4000-8000-')
         '10000000-0000-4000-8000-000000000004' = @(& $oids $PremiumCount '41000000-0000-4000-8000-')
         '10000000-0000-4000-8000-000000000005' = @(& $oids $StandardCount '52000000-0000-4000-8000-')
+        '10000000-0000-4000-8000-000000000007' = @()
         '10000000-0000-4000-8000-000000000006' = @(& $oids $PremiumCount '42000000-0000-4000-8000-')
     }
-    $gatewayLists = @{ 'allow-standard' = $GatewayStandard; 'allow-premium' = $GatewayPremium; 'bu-members' = ',' }
+    $gatewayLists = @{ 'allow-standard' = $GatewayStandard; 'allow-premium' = $GatewayPremium; 'bu-members' = $GatewayBuMembers }
     if ($GatewayGroups) { $gatewayLists['entitlement-groups'] = $GatewayGroups }
+    if ($GatewayBuRegistry) { $gatewayLists['bu-registry'] = $GatewayBuRegistry }
     function az {
         $words = @($args); $line = $words -join ' '; $global:P98NvCalls.Add("az $line"); $global:LASTEXITCODE = 0
         if ($line -like 'account get-access-token*') { return '{"accessToken":"offline-token"}' }
         if ($line -like 'account show*') { return '{"id":"00000000-0000-4000-8000-000000000001","tenantId":"00000000-0000-4000-8000-000000000085"}' }
         if ($line -like 'apim nv show*') {
             $id = [string]$words[[array]::IndexOf($words, '--named-value-id') + 1]
+            if (($FailAllowStandardRead -and $id -eq 'allow-standard') -or ($FailBuMembersRead -and $id -eq 'bu-members')) {
+                $global:LASTEXITCODE = 7; Write-Error 'ERROR: (AuthorizationFailed) The client does not have authorization to read named values.'; return
+            }
             if ($gatewayLists.ContainsKey($id) -and $gatewayLists[$id]) {
                 if ($line -match '--query value') { return $gatewayLists[$id] }
                 return (@{ name = $id; value = $gatewayLists[$id] } | ConvertTo-Json -Compress)
@@ -285,6 +290,7 @@ function Invoke-NamedValueSyncFixture {
             elseif ($text -match "displayName eq 'record-premium'" -or $text -match "id eq '10000000-0000-4000-8000-000000000004'") { '10000000-0000-4000-8000-000000000004' }
             elseif ($text -match "displayName eq 'gateway-standard'" -or $text -match "id eq '10000000-0000-4000-8000-000000000005'") { '10000000-0000-4000-8000-000000000005' }
             elseif ($text -match "displayName eq 'gateway-premium'" -or $text -match "id eq '10000000-0000-4000-8000-000000000006'") { '10000000-0000-4000-8000-000000000006' }
+            elseif ($text -match "displayName eq 'bu-empty'" -or $text -match "id eq '10000000-0000-4000-8000-000000000007'") { '10000000-0000-4000-8000-000000000007' }
             else { '' }
             return [pscustomobject]@{ value = @(if ($id) { [pscustomobject]@{ id = $id } }) }
         }
@@ -337,6 +343,16 @@ $nvWrites = Get-NamedValueWrites
 Assert 'a named-value sync whose list write fails leaves no recorded groups' (
     $CapturedError -match "Writing named value 'allow-standard' failed" -and -not $script:P98NvResult.Values.ContainsKey('entitlement-groups') -and
     @($nvWrites -match 'allow-premium').Count -ge 1 -and @($nvWrites -match 'allow-standard').Count -ge 1 -and @($nvWrites -match 'entitlement-groups').Count -eq 0) "$CapturedError | groups=$($script:P98NvResult.Values['entitlement-groups']) | writes: $($nvWrites -join ' | ')"
+
+Invoke-NamedValueSyncFixture -PremiumCount 1 -StandardCount 0 -GatewayStandard ',50000000-0000-4000-8000-000000000001,' -Parameters @{ Store = 'named-value'; StandardGroup = 'claude-code-standard'; PremiumGroup = 'claude-code-premium' } -FailAllowStandardRead
+$nvWrites = Get-NamedValueWrites
+Assert 'a failed allow-standard guard read stops before named-value writes' (
+    $CapturedError -match "Could not read named value 'allow-standard'" -and $nvWrites.Count -eq 0) "$CapturedError | writes: $($nvWrites -join ' | ')"
+
+Invoke-NamedValueSyncFixture -PremiumCount 1 -StandardCount 1 -GatewayBuRegistry 'eng=bu-empty:100' -GatewayBuMembers ',50000000-0000-4000-8000-000000000001=eng,' -FailBuMembersRead
+$nvWrites = Get-NamedValueWrites
+Assert 'a failed bu-members guard read stops before named-value writes' (
+    $CapturedError -match "Could not read named value 'bu-members'" -and $nvWrites.Count -eq 0) "$CapturedError | writes: $($nvWrites -join ' | ')"
 
 Invoke-NamedValueSyncFixture -PremiumCount 1 -StandardCount 1 -Parameters @{ Store = 'named-value'; User = 'dev@contoso.com' }
 $nvWrites = Get-NamedValueWrites
