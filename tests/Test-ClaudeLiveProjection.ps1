@@ -24,8 +24,16 @@ $syncStub = Join-Path $work 'Sync-ClaudeAccess.ps1'
 ) -join "`n"), [Text.UTF8Encoding]::new($false))
 [IO.File]::WriteAllText($syncStub, (@(
     'param($ResourceGroup, $ApimName, $User)'
-    '$global:Live.Calls.Add("sync $ResourceGroup $ApimName -User $User")'
+    'if ($global:Live.SyncFails) { throw "sync failed by fixture" }'
+    '$global:Live.Calls.Add("sync $ResourceGroup $ApimName -User $User source=$($global:Live.Source) member=$($global:Live.Member)")'
+    'if (-not $User) {'
+    '    $global:Live.EntitlementGroups = ''standard=00000000-0000-4000-8000-0000000000b1,premium=00000000-0000-4000-8000-0000000000b2'''
+    '    if ($global:Live.SyncMentionsOtherStore) { "projection should not be named" } else { "Syncing Entra group membership -> APIM named values" }'
+    '    $global:Live.Synced = $global:Live.Member'
+    '    return'
+    '}'
     '$global:Live.Synced = $global:Live.Member'
+    'if (-not $global:Live.OmitTierText) { "Developer tier as written: $(if ($global:Live.Member) { ''standard'' } else { ''none'' })" }'
 ) -join "`n"), [Text.UTF8Encoding]::new($false))
 $updateStub = Join-Path $work 'Update-ClaudeGateway.ps1'
 # The update stub: a plan returns the 0004 plan the global state describes; an apply with its fingerprint switches.
@@ -65,6 +73,9 @@ function Reset-Live([string]$Source = 'projection', [bool]$ResourceGroupExists =
         UpdateActions = @('Create Microsoft.DocumentDB/databaseAccounts cosmos-p98live')
         UpdateBlocked = $false
         EntitlementGroups = ''
+        SyncFails = $false
+        OmitTierText = $false
+        SyncMentionsOtherStore = $false
     }
 }
 function Add-SubscriptionCheck([string]$line) {
@@ -126,6 +137,16 @@ function Invoke-Verifier([hashtable]$Extra = @{}, [switch]$WithHost) {
     $script:Exit = $LASTEXITCODE
 }
 function At([string]$Pattern) { for ($i = 0; $i -lt $global:Live.Calls.Count; $i++) { if ($global:Live.Calls[$i] -match $Pattern) { return $i } }; return -1 }
+function AtNth([string]$Pattern, [int]$N) {
+    $seen = 0
+    for ($i = 0; $i -lt $global:Live.Calls.Count; $i++) {
+        if ($global:Live.Calls[$i] -match $Pattern) {
+            $seen++
+            if ($seen -eq $N) { return $i }
+        }
+    }
+    return -1
+}
 function CountCalls([string]$Pattern) { @($global:Live.Calls | Where-Object { $_ -match $Pattern }).Count }
 
 try {
@@ -176,13 +197,25 @@ try {
     # P100: -MigrateWithUpdate installs on named values and moves the gateway with the update's plan and apply alone.
     Reset-Live -Source 'named-value'; Invoke-Verifier @{ MigrateWithUpdate = $true; UpdatePath = $updateStub }
     $order = @((At '^installer rg-p98-live p98live BasicV2 EntitlementStore=named-value yes=True claude-p98-std claude-p98-prm'), (At 'entitlement-source'),
-        (At '^request https://apim-p98live\.azure-api\.net/claude/v1/messages claude-haiku-4-5'), (At '^update plan rg-p98-live apim-p98live$'),
-        (At "^update apply rg-p98-live apim-p98live fp=$('f' * 64)$"), (At '^az apim nv show .*entitlement-groups'),
-        (At '^az apim nv update .*entitlement-cache-seconds --value 60'), (At '^az ad group member remove'))
-    Assert 'with -MigrateWithUpdate: named values serve a 200 first, then the update plans and applies with its fingerprint, the switch and the recorded groups are checked, then the projection serves' (
+        (At '^request https://apim-p98live\.azure-api\.net/claude/v1/messages claude-haiku-4-5'), (At '^sync rg-p98-live apim-p98live -User  source=named-value member=True'),
+        (At '^az apim nv show .*entitlement-groups'), (At '^az ad group member remove'), (At '^sync rg-p98-live apim-p98live -User 00000000-0000-4000-8000-0000000000aa source=named-value member=False'),
+        (AtNth '^az ad group member add' 2), (At '^sync rg-p98-live apim-p98live -User 00000000-0000-4000-8000-0000000000aa source=named-value member=True'), (At '^update plan rg-p98-live apim-p98live$'),
+        (At "^update apply rg-p98-live apim-p98live fp=$('f' * 64)$"), (AtNth '^az apim nv show .*entitlement-groups' 2),
+        (At '^az apim nv update .*entitlement-cache-seconds --value 60'), (AtNth '^az ad group member remove' 2))
+    Assert 'with -MigrateWithUpdate: named values record groups, prove removal and re-add with -User, then the update plans and applies with its fingerprint and the projection serves' (
         -not $Failure -and $Exit -ne 1 -and ($order -notcontains -1) -and (@(0..($order.Count - 2) | Where-Object { $order[$_] -lt $order[$_ + 1] }).Count -eq ($order.Count - 1)) -and
         $Output -match '"step":\s*"entitled request on named values"' -and $Output -match '"step":\s*"update plan"' -and $Output -match '"step":\s*"update apply"' -and
+        $Output -match '"step":\s*"named-value groups recorded"' -and $Output -match '"step":\s*"named-value removed sync lag"' -and $Output -match '"step":\s*"named-value re-added sync lag"' -and
         $Output -match '"step":\s*"groups recorded"' -and $Output -match '"step":\s*"re-added, then targeted sync"' -and $Output -notmatch '"ok":\s*false') "$Failure | $($order -join ',') | $($global:Live.Calls -join ' ; ')"
+    Reset-Live -Source 'named-value'; $global:Live.OmitTierText = $true; Invoke-Verifier @{ MigrateWithUpdate = $true; UpdatePath = $updateStub }
+    Assert 'with -MigrateWithUpdate a named-value -User sync that does not print the written tier stops before the update' ($Exit -eq 1 -and $Output -match 'printed no developer tier as written' -and
+        (At '^update plan') -lt 0 -and (At '^az group delete --name rg-p98-live') -ge 0) "$Exit | $Output | $($global:Live.Calls -join ' ; ')"
+    Reset-Live -Source 'named-value'; $global:Live.SyncFails = $true; Invoke-Verifier @{ MigrateWithUpdate = $true; UpdatePath = $updateStub }
+    Assert 'with -MigrateWithUpdate a named-value sync failure stops before the update and tears down' ($Exit -eq 1 -and $Output -match 'sync failed by fixture' -and
+        (At '^update plan') -lt 0 -and (At '^az group delete --name rg-p98-live') -ge 0) "$Exit | $Output | $($global:Live.Calls -join ' ; ')"
+    Reset-Live -Source 'named-value'; $global:Live.SyncMentionsOtherStore = $true; Invoke-Verifier @{ MigrateWithUpdate = $true; UpdatePath = $updateStub }
+    Assert 'with -MigrateWithUpdate the named-value full sync output must not name the projection store' ($Exit -eq 1 -and $Output -match 'named-value sync output named another store' -and
+        (At '^update plan') -lt 0) "$Exit | $Output"
     Reset-Live -Source 'named-value'; $global:Live.UpdateBlocked = $true; Invoke-Verifier @{ MigrateWithUpdate = $true; UpdatePath = $updateStub }
     Assert 'with -MigrateWithUpdate a blocked plan fails the run, applies nothing, and is still torn down' ($Exit -eq 1 -and $Output -match '"step":\s*"update plan"' -and
         (At '^update apply') -lt 0 -and (At '^az group delete --name rg-p98-live') -ge 0) "$Exit | $($global:Live.Calls -join ' ; ')"

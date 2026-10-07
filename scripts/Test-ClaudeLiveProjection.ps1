@@ -128,6 +128,16 @@ function Wait-Membership([string]$GroupId, [string]$MemberId, [string]$Expected)
     } while ((Get-Date) -lt $deadline)
     throw "Microsoft Graph did not report membership '$Expected' for $MemberId in $GroupId within $ChangeWaitSeconds s."
 }
+function Invoke-AccessSyncText([hashtable]$Arguments) {
+    $output = @(& $SyncAccessPath @Arguments 2>&1)
+    return (@($output) | ForEach-Object { [string]$_ }) -join "`n"
+}
+function Assert-SyncTierText([string]$Output, [string]$ExpectedTier, [string]$Step) {
+    if ($Output -notmatch "(?im)developer tier as written:\s*$ExpectedTier\b") {
+        Add-Result $Step $false "Sync-ClaudeAccess printed no developer tier as written '$ExpectedTier'."
+        throw "$Step printed no developer tier as written '$ExpectedTier'."
+    }
+}
 function Split-NonEmptyLines([AllowEmptyString()][string]$Text) {
     return @(([string]$Text) -split '\r?\n' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
 }
@@ -222,6 +232,37 @@ try {
         if ($source -ne 'named-value') { Add-Result 'named values' $false "entitlement-source '$source'"; throw 'The installer did not leave the gateway on named values.' }
         Add-Result 'named values' $true 'entitlement-source named-value'
         Wait-GatewayStatus $url $Model 200 'entitled request on named values'
+
+        $fullSyncOutput = Invoke-AccessSyncText @{ ResourceGroup = $ResourceGroup; ApimName = $apimName }
+        if ($fullSyncOutput -match '(?i)\b(projection|cosmos)\b') {
+            Add-Result 'named-value full sync' $false 'named-value sync output named another store'
+            throw 'named-value sync output named another store.'
+        }
+        $recordedNamedValueGroups = Invoke-Az @('apim', 'nv', 'show', '-g', $ResourceGroup, '--service-name', $apimName, '--named-value-id', 'entitlement-groups', '--query', 'value', '-o', 'tsv', '--subscription', $SubscriptionId)
+        $expectedNamedValueGroups = "standard=$($groupIds[$StandardGroup]),premium=$($groupIds[$PremiumGroup])".ToLowerInvariant()
+        if ($recordedNamedValueGroups -ne $expectedNamedValueGroups) {
+            Add-Result 'named-value groups recorded' $false "entitlement-groups '$recordedNamedValueGroups', expected '$expectedNamedValueGroups'"
+            throw 'The named-value sync did not record the tier groups.'
+        }
+        Add-Result 'named-value groups recorded' $true $recordedNamedValueGroups
+
+        Invoke-Az @('ad', 'group', 'member', 'remove', '--group', $groupIds[$StandardGroup], '--member-id', $userId) | Out-Null
+        $removedAt = Get-Date
+        Wait-Membership $groupIds[$StandardGroup] $userId 'false'
+        $removedSyncOutput = Invoke-AccessSyncText @{ ResourceGroup = $ResourceGroup; ApimName = $apimName; User = $userId }
+        Assert-SyncTierText -Output $removedSyncOutput -ExpectedTier 'none' -Step 'named-value removed sync tier'
+        $removedSeconds = [Math]::Round(((Get-Date) - $removedAt).TotalSeconds, 1)
+        Add-Result 'named-value removed sync lag' $true "$removedSeconds second(s) from membership removal to tier none (U157)"
+        Wait-GatewayStatus $url $Model 403 'removed on named values, then targeted sync'
+
+        Invoke-Az @('ad', 'group', 'member', 'add', '--group', $groupIds[$StandardGroup], '--member-id', $userId) | Out-Null
+        $addedAt = Get-Date
+        Wait-Membership $groupIds[$StandardGroup] $userId 'true'
+        $addedSyncOutput = Invoke-AccessSyncText @{ ResourceGroup = $ResourceGroup; ApimName = $apimName; User = $userId }
+        Assert-SyncTierText -Output $addedSyncOutput -ExpectedTier 'standard' -Step 'named-value re-added sync tier'
+        $addedSeconds = [Math]::Round(((Get-Date) - $addedAt).TotalSeconds, 1)
+        Add-Result 'named-value re-added sync lag' $true "$addedSeconds second(s) from membership add to tier standard (U157)"
+        Wait-GatewayStatus $url $Model 200 're-added on named values, then targeted sync'
 
         Write-Host "`n==> Update: the plan, then its apply" -ForegroundColor Cyan
         # The plan's review text comes back on the output stream with the result; printed, it keeps the planned
