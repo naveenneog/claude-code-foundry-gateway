@@ -220,6 +220,11 @@ Invoke-Check 'Azure CLI guide renewal block runs in order' 'Test-AzCommandsRenew
     Invoke-Check 'Guided diagnostics and support bundles'  'Test-Diagnose.ps1' -SerialLane
     Invoke-Check 'Wizard reaches summary on PS 5.1'        'Test-On-PS51.ps1' -SerialLane
     Invoke-Check 'Analytics query contract'                'Test-Analytics.ps1' @{ SkipLive = $true }
+    Invoke-Check 'Content Safety request screening'        'Test-ContentSafetyPolicy.ps1'
+    Invoke-Check 'Content Safety deployment wiring'        'Test-ContentSafetyDeployment.ps1'
+    Invoke-Check 'Content Safety live-script contract'     'Test-ContentSafetyLiveScript.ps1'
+    Invoke-Check 'Set gateway policy drift repair'         'Test-SetGatewayPolicy.ps1'
+    Invoke-Check 'Content Safety negative detectors'       'Test-ContentSafetyNegative.ps1' -SerialLane
     Invoke-Check 'Org spend ceiling'                       'Test-OrgCeiling.ps1' @{ SkipLive = $true }
     Invoke-Check 'Per-user budget control'                 'Test-BudgetControl.ps1' @{ SkipLive = $true }
     Invoke-Check 'Capability scoping per tier'             'Test-CapabilityScoping.ps1' @{ SkipLive = $true }
@@ -446,4 +451,3 @@ $failed = @($reported | Where-Object Result -eq 'FAIL').Count
 if ($failed) { Write-Host "$failed check(s) failed." -ForegroundColor Red; exit 1 }
 Write-Host 'All checks passed.' -ForegroundColor Green
 exit 0
-

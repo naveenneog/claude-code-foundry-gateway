@@ -62,14 +62,21 @@ function Run-Suite($suite) {
     Push-Location $sandbox
     try {
         if ($suite -eq 'node') {
-            # Unit tests keep the short timeout that catches a mutant that hangs. The two CLI files start a
-            # process per case; Node 22 (the hosted runner) applies the timeout to a whole file, so they run
-            # second with room for that, and --test-force-exit still stops a mutant that leaves a handle open.
-            $cli = @('apply-projection-cli.test.mjs', 'check-admission-cli.test.mjs')
-            $unit = @(Get-ChildItem -LiteralPath 'resolver/test', 'sync/test' -Filter '*.test.mjs' -File | Where-Object { $_.Name -notin $cli } | ForEach-Object { $_.FullName })
+            # Unit tests keep the short timeout that catches a mutant that hangs. These files start a process per
+            # case; Node 22 (the hosted runner) applies the timeout to a whole file, so they run second with room
+            # for that, and --test-force-exit still stops a mutant that leaves a handle open.
+            $cli = @('apply-projection-cli.test.mjs', 'check-admission-cli.test.mjs', 'job-settings.test.mjs', 'load.test.mjs')
+            $tests = @(Get-ChildItem -LiteralPath 'resolver/test', 'sync/test' -Filter '*.test.mjs' -File)
+            $misplaced = @($tests | Where-Object {
+                ($_.Name -in $cli) -ne ([IO.File]::ReadAllText($_.FullName) -match "from\s+['""](?:node:)?child_process['""]")
+            } | ForEach-Object Name)
+            if ($misplaced.Count) { throw "The long-timeout group must list exactly the projection test files that start processes: $($misplaced -join ', ')." }
+            $unit = @($tests | Where-Object Name -notin $cli | ForEach-Object FullName)
+            $processes = @($tests | Where-Object Name -in $cli | ForEach-Object FullName)
+            if ($processes.Count -ne $cli.Count) { throw 'A long-timeout projection test file is missing.' }
             node --test --test-timeout=1500 --test-reporter=tap @unit *> $suiteLog
             $code = $LASTEXITCODE
-            node --test --test-timeout=120000 --test-force-exit --test-reporter=tap sync/test/apply-projection-cli.test.mjs sync/test/check-admission-cli.test.mjs *>> $suiteLog
+            node --test --test-timeout=120000 --test-force-exit --test-reporter=tap @processes *>> $suiteLog
             if ($LASTEXITCODE) { $code = $LASTEXITCODE }
             return $code
         } else { pwsh -NoProfile -File tests\Test-ProjectionRules.ps1 *> $suiteLog }

@@ -12,9 +12,11 @@ writes. It detects:
 - the record schema (`schemaVersion` 1 or 2), preserving unknown fields while adding `release` and
   `history`;
 - the live API policy hash versus `infra\policy.xml`;
-- every `{{named-value}}` reference in the current policy, derived from the policy rather than a
-  hardcoded list, including later values such as `usd-budgets`, `usd-budget-state`,
-  `external-idp-extra-audience` and `entitlement-source`;
+- every `{{named-value}}` reference in the current policy and in included policy fragments, derived
+  from XML rather than a hardcoded list, including later values such as `usd-budgets`,
+  `usd-budget-state`, `external-idp-extra-audience`, `entitlement-source` and the
+  `content-safety-*` named values;
+- APIM policy fragments included by `infra\policy.xml`, created before the API policy is written;
 - optional job definitions with older repository commit pins, when discovery reports them;
 - the entitlement store: a gateway that serves from named values gets the move to the Cosmos projection
   ([section 3](#move-a-named-value-gateway-with-the-update)).
@@ -40,8 +42,9 @@ path in the plan. Roll back with:
 ```
 
 Manual equivalent: take a backup, compare the live API policy with `infra\policy.xml`, create any
-missing named values shown by `{{...}}` references in the policy with the defaults from
-`infra\main.bicep`, deploy the policy, then update `claude-gateway.json` with the current release
+missing named values shown by `{{...}}` references in the policy and included fragments with the
+defaults from `infra\main.bicep`, create any included policy fragments, deploy the policy, then
+update `claude-gateway.json` with the current release
 commit and a history row. Prefer the script because it fingerprints the whole plan and refuses an
 unknown named-value default.
 

@@ -73,6 +73,26 @@ exact streaming cache-creation detail remains **U13**.
   `az account set --subscription <id>`. `Invoke-ClaudeProjectionSwitch -SubscriptionId` and the deployer's
   `-FlipAfterCleanCompare -SubscriptionId` refuse another current subscription.
 
+- **P102 Azure AI Content Safety request screening.** The gateway can opt into an Azure AI Content
+  Safety account and the APIM policy fragment `content-safety-screening`
+  ([ADR-0055](docs/adr/0055-content-safety-screening.md)), which screens a Messages request before
+  Foundry: the system prompt, tool descriptions and the newest turn, meaning the user messages that
+  end the conversation with their text, documents (title and context included), search results and
+  tool results, and the assistant prefill after them. The newest turn has the
+  first claim on each 10,000-character budget. Caller-written text goes to Prompt Shields
+  `userPrompt`, tool and document text to Prompt Shields `documents`, and all screened text to harm
+  analysis; Prompt Shields is called only when there is a prompt or a document. `content-safety-mode`
+  is `off`, `audit` or `block`, trimmed and case-insensitive, and any other value enforces as `block`.
+  In block mode a detected attack, or a severity at or above `content-safety-threshold`, returns 403,
+  and a Content Safety error, timeout or malformed answer returns 503; audit mode forwards and traces
+  the decision. Gateways that do not opt in keep `off` and create no Content Safety account. Existing
+  gateways receive the fragment and its named values through `Update-ClaudeGateway.ps1`, with
+  `content-safety-mode` set to `off`; the update plans a fragment update when the live content differs
+  or could not be read. `Set-GatewayPolicy.ps1` creates only missing named values and stops before any
+  write when the named-value list cannot be read. The policy tests compile and run the fragment's own
+  expressions. `scripts/Test-ClaudeLiveContentSafety.ps1` is the owner-run disposable live proof; fresh
+  run 25 and upgrade run 26, from a P100 gateway, passed at `de775d73` on 2026-10-07
+  ([P102 status](docs/status/P102.md)).
 - **P98 the installer deploys the Cosmos projection by default.** `Install-ClaudeGateway.ps1` offers
   the projection first, as recommended, for every size; `-Yes` chooses it, and named values above their
   capacity are refused, also under `-Yes` and `-Sku`, from `-DeveloperCount` or the tier groups' members

@@ -117,7 +117,10 @@ $projection = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'Test-ProjectionNe
 Assert 'a failed projection baseline preserves the diagnostic instead of suppressing the cause' (
     $projection -match '(?s)if \(\(Run-Suite \$suite\) -ne 0\) \{\s+Get-Content -LiteralPath \$suiteLog \| Write-Host\s+throw' -and
     $projection -match 'node --test --test-timeout=1500 --test-reporter=tap .+>\s*\$suiteLog' -and
-    $projection -match 'node --test --test-timeout=120000 --test-force-exit --test-reporter=tap sync/test/apply-projection-cli\.test\.mjs sync/test/check-admission-cli\.test\.mjs \*>>\s*\$suiteLog')
+    $projection -match 'node --test --test-timeout=120000 --test-force-exit --test-reporter=tap @processes \*>>\s*\$suiteLog' -and
+    $projection -match '\$processes = @\(\$tests \| Where-Object Name -in \$cli \| ForEach-Object FullName\)' -and
+    $projection.Contains('if ($misplaced.Count) { throw "The long-timeout group must list exactly the projection test files that start processes')
+)
 
 $workflowPath = Join-Path (Split-Path $PSScriptRoot -Parent) '.github\workflows\test-all.yml'
 Assert 'the hosted workflow exists' (Test-Path -LiteralPath $workflowPath)

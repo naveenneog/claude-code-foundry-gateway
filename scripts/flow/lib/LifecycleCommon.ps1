@@ -26,6 +26,67 @@ function global:Get-ClaudeFlowLifecycleStringHash {
     finally { $sha.Dispose() }
 }
 
+function global:ConvertTo-ClaudeFlowLifecycleCanonicalXmlDocument {
+    # Insignificant whitespace is dropped and line endings inside attribute and text values are made uniform, so a
+    # checkout's line endings do not change the canonical form.
+    param([Parameter(Mandatory = $true)][string]$XmlText, [switch]$DecodeStoredText)
+    $doc = New-Object System.Xml.XmlDocument
+    $doc.PreserveWhitespace = $false
+    $doc.LoadXml($XmlText)
+    foreach ($node in @(@($doc.SelectNodes('//@*')) + @($doc.SelectNodes('//text()')))) {
+        $value = [string]$node.Value
+        if ($DecodeStoredText) { $value = ConvertFrom-ClaudeFlowLifecycleXmlEntities -Text $value }
+        $node.Value = $value.Replace("`r`n", "`n").Replace("`r", "`n")
+    }
+    return $doc
+}
+
+function global:ConvertFrom-ClaudeFlowLifecycleXmlEntities {
+    # One pass over the five predefined XML entities and character references: '&amp;lt;' becomes '&lt;', not '<'.
+    # A reference that is not a Unicode scalar value (above 0x10FFFF, a surrogate, or too long) is left as written.
+    param([AllowEmptyString()][string]$Text)
+    return [regex]::Replace($Text, '&(lt|gt|quot|apos|amp|#x[0-9A-Fa-f]{1,6}|#[0-9]{1,7});', {
+            param($match)
+            $name = $match.Groups[1].Value
+            if ($name -eq 'lt') { return '<' }
+            if ($name -eq 'gt') { return '>' }
+            if ($name -eq 'quot') { return '"' }
+            if ($name -eq 'apos') { return "'" }
+            if ($name -eq 'amp') { return '&' }
+            $codePoint = if ($name.StartsWith('#x')) { [Convert]::ToInt32($name.Substring(2), 16) } else { [int]$name.Substring(1) }
+            if ($codePoint -gt 0x10FFFF -or ($codePoint -ge 0xD800 -and $codePoint -le 0xDFFF)) { return $match.Value }
+            return [char]::ConvertFromUtf32($codePoint)
+        })
+}
+
+function global:Get-ClaudeFlowLifecycleCanonicalXml {
+    param([AllowEmptyString()][string]$XmlText)
+    if ([string]::IsNullOrWhiteSpace($XmlText)) { return '' }
+    return (ConvertTo-ClaudeFlowLifecycleCanonicalXmlDocument -XmlText $XmlText).OuterXml
+}
+
+function global:Get-ClaudeFlowLifecycleCanonicalXmlHash {
+    param([AllowEmptyString()][string]$XmlText)
+    if ([string]::IsNullOrWhiteSpace($XmlText)) { return '' }
+    return Get-ClaudeFlowLifecycleStringHash -Text (Get-ClaudeFlowLifecycleCanonicalXml -XmlText $XmlText)
+}
+
+function global:Get-ClaudeFlowLifecycleStoredXmlHash {
+    # API Management keeps the text of a fragment written with format=rawxml as it was sent, entity references
+    # included, and encodes that text once more when it returns format=xml (P102 probe, 2026-10-07; ADR-0055).
+    # Decoding the read-back once more gives the values the template parses to, so both hash alike.
+    param([AllowEmptyString()][string]$XmlText)
+    if ([string]::IsNullOrWhiteSpace($XmlText)) { return '' }
+    return Get-ClaudeFlowLifecycleStringHash -Text (ConvertTo-ClaudeFlowLifecycleCanonicalXmlDocument -XmlText $XmlText -DecodeStoredText).OuterXml
+}
+
+function global:New-ClaudeFlowLifecycleArmHeaders {
+    param([Parameter(Mandatory = $true)][string]$Token)
+    $headers = @{ 'Content-Type' = 'application/json' }
+    $headers['Authorization'] = 'Bearer ' + $Token.Trim()
+    return $headers
+}
+
 function global:Get-ClaudeFlowLifecyclePolicyNamedValueReferences {
     param([string]$PolicyPath = (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'infra\policy.xml'))
     if (-not (Test-Path -LiteralPath $PolicyPath)) { throw "Policy file '$PolicyPath' does not exist." }
@@ -34,6 +95,28 @@ function global:Get-ClaudeFlowLifecyclePolicyNamedValueReferences {
     return @(Sort-ClaudeFlowOrdinal -InputObject @([regex]::Matches($text, '\{\{([^}]+)\}\}') |
         ForEach-Object { $_.Groups[1].Value.Trim() } |
         Where-Object { $_ }) -Unique)
+}
+
+function global:Get-ClaudeFlowLifecyclePolicyFragmentIds {
+    param([string]$PolicyPath = (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'infra\policy.xml'))
+    if (-not (Test-Path -LiteralPath $PolicyPath)) { throw "Policy file '$PolicyPath' does not exist." }
+    $text = [IO.File]::ReadAllText($PolicyPath)
+    return @(Sort-ClaudeFlowOrdinal -InputObject @([regex]::Matches($text, '<include-fragment\s+fragment-id="([^"]+)"\s*/?>') |
+        ForEach-Object { $_.Groups[1].Value.Trim() } |
+        Where-Object { $_ }) -Unique)
+}
+
+function global:Get-ClaudeFlowLifecyclePolicyAndFragmentNamedValueReferences {
+    param([string]$PolicyPath = (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'infra\policy.xml'))
+    $root = Get-ClaudeFlowLifecycleRepoRoot
+    $references = [Collections.Generic.List[string]]::new()
+    foreach ($name in @(Get-ClaudeFlowLifecyclePolicyNamedValueReferences -PolicyPath $PolicyPath)) { $references.Add($name) }
+    foreach ($fragmentId in @(Get-ClaudeFlowLifecyclePolicyFragmentIds -PolicyPath $PolicyPath)) {
+        $fragmentPath = Join-Path (Join-Path $root 'infra') "$fragmentId.xml"
+        if (-not (Test-Path -LiteralPath $fragmentPath)) { throw "Policy fragment '$fragmentId' is included by '$PolicyPath' but '$fragmentPath' does not exist." }
+        foreach ($name in @(Get-ClaudeFlowLifecyclePolicyNamedValueReferences -PolicyPath $fragmentPath)) { $references.Add($name) }
+    }
+    return @(Sort-ClaudeFlowOrdinal -InputObject @($references) -Unique)
 }
 
 function global:Get-ClaudeFlowLifecycleTemplateNamedValueDefaults {
@@ -55,6 +138,11 @@ function global:Get-ClaudeFlowLifecycleTemplateNamedValueDefaults {
             '^entitlement-resolver-audience$' { 'https://resolver-not-deployed.invalid'; break }
             '^entitlement-cache-seconds$' { '3600'; break }
             '^external-idp-extra-audience$' { 'urn:disabled:claude-extra-audience'; break }
+            '^content-safety-mode$' { 'off'; break }
+            '^content-safety-endpoint$' { 'https://content-safety-off.invalid'; break }
+            '^content-safety-threshold$' { '2'; break }
+            '^content-safety-timeout-seconds$' { '10'; break }
+            '^content-safety-truncate-mode$' { 'newest'; break }
             '^tpm-standard$' { '20000'; break }
             '^quota-standard$' { '500000'; break }
             '^tpm-premium$' { '80000'; break }
@@ -126,6 +214,25 @@ function global:Get-ClaudeFlowLifecycleLiveDiscovery {
     $token = az account get-access-token --resource https://management.azure.com @scope --query accessToken -o tsv
     $policyUri = "https://management.azure.com$($apim.id)/apis/$ApiId/policies/policy?api-version=2024-05-01&format=rawxml"
     $policy = Invoke-RestMethod -Method Get -Uri $policyUri -Headers @{ Authorization = "Bearer $token" }
+    $fragmentUri = "https://management.azure.com$($apim.id)/policyFragments?api-version=2024-05-01"
+    $fragments = @()
+    try {
+        $fragmentResult = Invoke-RestMethod -Method Get -Uri $fragmentUri -Headers @{ Authorization = "Bearer $token" }
+        $fragmentNames = @($fragmentResult.value | ForEach-Object { if ($_.name) { [string]$_.name } elseif ($_.id -match '/policyFragments/([^/]+)$') { $Matches[1] } } | Where-Object { $_ })
+        $fragments = @(foreach ($fragmentName in $fragmentNames) {
+                $rawFragmentUri = "https://management.azure.com$($apim.id)/policyFragments/$fragmentName`?format=xml&api-version=2024-05-01"
+                try {
+                    $rawFragment = Invoke-RestMethod -Method Get -Uri $rawFragmentUri -Headers (New-ClaudeFlowLifecycleArmHeaders -Token $token)
+                    $value = [string]$rawFragment.properties.value
+                    [pscustomobject]@{ name = $fragmentName; value = $value; canonicalHash = Get-ClaudeFlowLifecycleStoredXmlHash -XmlText $value }
+                }
+                catch {
+                    $readError = $_.Exception.Message
+                    Write-Warning "The policy fragment '$fragmentName' could not be read ($readError). The update plan treats it as not current and writes the release content."
+                    [pscustomobject]@{ name = $fragmentName; value = ''; canonicalHash = ''; error = $readError }
+                }
+            })
+    } catch { $fragments = @() }
     $prefixValue = @($nvs | Where-Object { $_.name -eq 'entitlement-projection-prefix' } | Select-Object -First 1)
     $projectionPrefix = if ($prefixValue) { if ($prefixValue.PSObject.Properties.Name -contains 'properties') { [string]$prefixValue.properties.value } else { [string]$prefixValue.value } } else { '' }
     [pscustomobject]@{
@@ -139,6 +246,7 @@ function global:Get-ClaudeFlowLifecycleLiveDiscovery {
         projectionPrefix = $projectionPrefix
         projectionPrefixProblem = $(if ($projectionPrefix) { $null } else { 'entitlement-projection-prefix is missing. Remedy: deploy the projection with scripts/Deploy-ClaudeProjection.ps1.' })
         policy = $policy.properties.value
+        policyFragments = $fragments
         # az apim nv list returns flattened objects; ARM returns them under properties.
         namedValues = @($nvs | Where-Object {
                 $isSecret = if ($_.PSObject.Properties.Name -contains 'properties' -and $_.properties) { $_.properties.secret } else { $_.secret }

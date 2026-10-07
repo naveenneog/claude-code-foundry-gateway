@@ -103,6 +103,28 @@ foreach ($f in $files) {
 Assert 'every dot-sourced helper path resolves' ($missing.Count -eq 0) ($missing -join ' | ')
 Assert 'the scan found paths to check' ($checked -gt 0) 'regex matched nothing, so this check guards nothing'
 
+# An Authorization header whose value is a run of asterisks. Tool output masks
+# bearer header values as asterisks, and edits made from that display wrote the
+# mask into four scripts (P102, ac99cc85): every ARM call from them returned 401.
+# Stubs that ignore the header value stayed green; only a live update found it.
+Write-Host ''
+Write-Host 'Authorization headers' -ForegroundColor Cyan
+
+$maskPattern = 'Authorization\s*=\s*[''"]\*{3,}[''"]'
+Assert 'the masked-header check flags a masked value' (('$h = @{ Authorization = "' + ('*' * 6) + '" }') -match $maskPattern)
+$masked = @()
+$headers = 0
+foreach ($f in $files) {
+    $n = 0
+    foreach ($line in (Get-Content $f.FullName)) {
+        $n++
+        if ($line -match 'Authorization\s*=') { $headers++ }
+        if ($line -match $maskPattern) { $masked += "$($f.Name):$n" }
+    }
+}
+Assert 'no Authorization header value is a masked placeholder' ($masked.Count -eq 0) ($masked -join ' | ')
+Assert 'the scan found Authorization headers to check' ($headers -gt 0) 'pattern matched nothing, so this check guards nothing'
+
 Write-Host ''
 if ($fail) { Write-Host "$fail assertion(s) failed." -ForegroundColor Red; exit 1 }
 Write-Host ("Format strings hold across {0} script(s); {1} helper path(s) resolve." -f $files.Count, $checked) -ForegroundColor Green

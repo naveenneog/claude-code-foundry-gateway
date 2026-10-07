@@ -24,7 +24,7 @@ The [Overview](#overview) identifies the components; [Request path](#request-pat
 <summary>APIM enforcement point and optional deployment profiles</summary>
 
 API Management is the enforcement point. It validates the caller's Microsoft Entra token,
-resolves entitlement, checks model access and token budgets, and replaces the caller's
+resolves entitlement, optionally screens request text with Azure AI Content Safety, checks model access and token budgets, and replaces the caller's
 token with the gateway's managed identity before calling Foundry. The governance and
 reporting tools configure or observe that path; they do not proxy inference.
 
@@ -114,9 +114,9 @@ remove aliases for families that are no longer selected.
 
 <details>
 
-<summary>Sign-in, entitlement, budgets, Foundry call and telemetry</summary>
+<summary>Sign-in, entitlement, optional screening, budgets, Foundry call and telemetry</summary>
 
-![Six request hops: sign in, admit, serve, meter, attribute and observe. Four budget layers and projection admission, absence and fault outcomes are shown, followed by the components each optional profile adds.](images/architecture/request-path.png)
+![Seven request hops: sign in, admit, the optional Content Safety screen, serve, meter, attribute and observe. Four budget layers and projection admission, absence and fault outcomes are shown, followed by the components each optional profile adds.](images/architecture/request-path.png)
 
 Source: [02-request.json](architecture/02-request.json). The README's
 `images/request-flow.png` is a byte-identical compatibility copy.
@@ -136,15 +136,22 @@ Source: [02-request.json](architecture/02-request.json). The README's
    is non-empty.
    `entitlement-source` selects `named-value` or `projection`. Entitlement, tier and the
    requested model are checked before Foundry is called.
-3. **Serve.** `authentication-managed-identity` obtains the gateway's Foundry token.
+3. **Screen (optional).** With `content-safety-mode` set to `audit` or `block`, the
+   [`content-safety-screening`](../infra/content-safety-screening.xml) fragment runs after
+   entitlement and before the budgets. It sends the system prompt, tool descriptions, the
+   newest user turn and an assistant prefill to Azure AI Content Safety with the gateway's
+   managed identity. Block mode returns 403 for detected content, 503 when Content Safety
+   fails and 400 for a body it cannot read ([Content Safety](CONTENT-SAFETY.md),
+   [ADR-0055](adr/0055-content-safety-screening.md)).
+4. **Serve.** `authentication-managed-identity` obtains the gateway's Foundry token.
    The policy replaces `Authorization` and deletes `x-api-key`. The existing customer
    Foundry deployment receives the gateway identity, not the developer token.
-4. **Meter.** The built-in `ApiManagementGatewayLlmLog` records request-level token usage,
+5. **Meter.** The built-in `ApiManagementGatewayLlmLog` records request-level token usage,
    model and streaming metadata. It is not the custom-metric budget counter.
-5. **Attribute.** The outbound `claude-chargeback` trace supplies the user, tier, assigned
+6. **Attribute.** The outbound `claude-chargeback` trace supplies the user, tier, assigned
    unit or team and raw client string in `AppTraces`. The trace's `Properties.RequestId`
    joins the LLM log's `CorrelationId`. Application Insights operation ids are not that key.
-6. **Observe.** Saved functions, workbooks and optional consumers read the Log Analytics
+7. **Observe.** Saved functions, workbooks and optional consumers read the Log Analytics
    data. Ingestion is asynchronous; a successful request is not an immediately complete
    reporting window.
 

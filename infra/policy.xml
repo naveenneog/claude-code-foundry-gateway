@@ -303,6 +303,9 @@
             </when>
         </choose>
 
+        <!-- 5b. Optional Azure AI Content Safety request screening. -->
+        <include-fragment fragment-id="content-safety-screening" />
+
         <!-- 6. Organisation-wide monthly ceiling.
              ==========================================================
              A constant counter-key is a single counter shared by every caller.
@@ -943,3 +946,4 @@
         </choose>
     </on-error>
 </policies>
+
