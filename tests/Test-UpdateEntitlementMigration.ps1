@@ -177,12 +177,21 @@ $global:PreflightChecks = @([pscustomobject]@{ Check = 'Resource-group RBAC'; Re
 Get-Facts
 Assert 'a FAIL from the projection preflight blocks the plan' ($CapturedResult.Blocked -and @($CapturedResult.Checks | Where-Object { $_.Name -eq 'Resource-group RBAC' -and $_.Result -eq 'FAIL' }).Count -eq 1)
 $global:PreflightChecks = @([pscustomobject]@{ Check = 'Graph probe 1'; Result = 'PASS'; Evidence = "Graph reached at $([DateTimeOffset]::UtcNow.ToString('o'))"; Remedy = 'None' })
-# The refresh and the snapshot carry the Entra members, not the named-value lists: a stale list of a few developers
-# and a group of 45,000 is the case the transfer limit is for.
+# The refresh and the snapshot carry the Entra members, not the named-value lists: the transfer estimate gets a tier
+# group's members (45,000 here) even when the named-value lists hold a few developers.
 $global:GroupDirectory['team-std'] = @{ Id = $standardId; Name = 'team-std'; Members = @(1..45000 | ForEach-Object { '{0:x8}-0000-4000-8000-000000000000' -f $_ }) }
+$global:TransferAskedFor = $null
+Get-Facts @{ TransferMinutes = { param($Developers) $global:TransferAskedFor = $Developers; 200 } }
+Assert 'a tier group too large for the runner''s transfer blocks the plan and names the sync job, even when the named-value lists are small' ($CapturedResult.Blocked -and @($CapturedResult.Checks | Where-Object { $_.Name -match 'transfer' -and $_.Result -eq 'FAIL' -and $_.Remedy -match 'Deploy-ClaudeProjectionRenewal' }).Count -eq 1 -and $CapturedResult.ListedDevelopers -eq 3 -and $global:TransferAskedFor -ge 45000) "asked for $global:TransferAskedFor; $(($CapturedResult.Checks | ForEach-Object { "$($_.Name)=$($_.Result)" }) -join '; ')"
+Assert 'the transfer FAIL''s remedy names the optional sync job and no planned packet' (@($CapturedResult.Checks | Where-Object { $_.Name -match 'transfer' -and $_.Remedy -match 'optional sync job' -and $_.Remedy -notmatch 'ROADMAP|P99' }).Count -eq 1) (($CapturedResult.Checks | Where-Object { $_.Name -match 'transfer' } | ForEach-Object Remedy) -join ' ')
 Get-Facts
-Assert 'a tier group too large for the runner''s transfer blocks the plan and names the sync job, even when the named-value lists are small' ($CapturedResult.Blocked -and @($CapturedResult.Checks | Where-Object { $_.Name -match 'transfer' -and $_.Result -eq 'FAIL' -and $_.Remedy -match 'Deploy-ClaudeProjectionRenewal' }).Count -eq 1 -and $CapturedResult.ListedDevelopers -eq 3) (($CapturedResult.Checks | ForEach-Object { "$($_.Name)=$($_.Result)" }) -join '; ')
+Assert 'a tier group of 45,000 developers fits the runner''s compressed parallel transfer and does not block the plan' (-not $CapturedResult.Blocked -and @($CapturedResult.Checks | Where-Object { $_.Name -match 'transfer' }).Count -eq 0) (($CapturedResult.Checks | ForEach-Object { "$($_.Name)=$($_.Result)" }) -join '; ')
 $global:GroupDirectory['team-std'] = @{ Id = $standardId; Name = 'team-std'; Members = @($oid[0], $oid[1]) }
+# P99 measured 41 minutes for a 500,000-record snapshot on 2026-10-06 (ADR-0053); the plan's estimate uses the
+# runner's own transfer model.
+$estimate500k = Get-ClaudeMigrationTransferMinutes -Developers 500000
+Assert 'the plan estimates the transfer as the runner sends it: 500,000 developers take 30 to 45 minutes' ($estimate500k -ge 30 -and $estimate500k -le 45) "$estimate500k minutes"
+Assert 'the 110-minute transfer limit falls between 1,000,000 and 2,000,000 developers' ((Get-ClaudeMigrationTransferMinutes -Developers 1000000) -le 110 -and (Get-ClaudeMigrationTransferMinutes -Developers 2000000) -gt 110) "$(Get-ClaudeMigrationTransferMinutes -Developers 1000000) / $(Get-ClaudeMigrationTransferMinutes -Developers 2000000) minutes"
 
 Write-Host 'P100 the plan of migration 0004'
 . (Join-Path $root 'scripts\flow\migrations\0004-entitlement-projection.ps1')

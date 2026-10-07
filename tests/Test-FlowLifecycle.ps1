@@ -74,8 +74,10 @@ try {
     Assert 'fragment and policy writes use the plan subscription' ($callsText -match 'account get-access-token.*--subscription aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' -and $callsText -match '/subscriptions/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/.*/policyFragments/content-safety-screening' -and $callsText -match '/subscriptions/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/.*/apis/claude-foundry/policies/policy') $callsText
     $global:Migration2AzCalls.Clear()
     $scopedPlan.Data.Target.SubscriptionId = 'not-an-id&calc'
+    # No snapshot yet: a check placed after the backup would show the backup's Azure calls.
+    $scopedPlan.Data.SnapshotTaken = $false; $scopedPlan.Data.SnapshotPath = Join-Path ([IO.Path]::GetTempPath()) ('p100-0002-' + [guid]::NewGuid().ToString('N') + '.json')
     $thrown = Get-Thrown { Invoke-ClaudeFlowMigration -Record $record.PSObject.Copy() -Plan $scopedPlan | Out-Null }
-    Assert 'a target subscription that is not an ID is not passed to the Azure CLI by the policy migration' (@($global:Migration2AzCalls | Where-Object { $_ -match '--subscription' }).Count -eq 0) "$thrown | $($global:Migration2AzCalls -join ' ; ')"
+    Assert 'a target subscription that is not an ID is refused by the policy migration before any Azure call' ($thrown -match 'not a subscription id' -and $global:Migration2AzCalls.Count -eq 0 -and -not (Test-Path -LiteralPath $scopedPlan.Data.SnapshotPath)) "$thrown | $($global:Migration2AzCalls -join ' ; ')"
 }
 finally { Remove-Item Function:\az, Function:\Invoke-RestMethod -ErrorAction SilentlyContinue }
 
