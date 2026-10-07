@@ -281,13 +281,15 @@ try {
 $argv = @($args)
 if ($argv[0] -eq 'container' -and $argv[1] -eq 'exec') {
     $command = [string]$argv[[array]::IndexOf($argv, '--exec-command') + 1]
-    & (Join-Path $PSScriptRoot 'runner-emulator.ps1') -Command $command -Work $env:P99_WORK -LogDir $env:P99_LOGDIR
+    & '__P99_EMULATOR__' -Command $command -Work $env:P99_WORK -LogDir $env:P99_LOGDIR
     exit $LASTEXITCODE
 }
 [Console]::Error.WriteLine('unexpected az call: ' + ($argv -join ' '))
 exit 97
 '@
-    [IO.File]::WriteAllText((Join-Path $bin 'az-fake.ps1'), $fakeAz)
+    # The generated script names the emulator by its absolute path. Test-FormatStrings resolves every
+    # PSScriptRoot helper path in this file against the tests folder, where the emulator does not live.
+    [IO.File]::WriteAllText((Join-Path $bin 'az-fake.ps1'), $fakeAz.Replace('__P99_EMULATOR__', $emulator.Replace("'", "''")))
     $pwshPath = (Get-Process -Id $PID).Path
     [IO.File]::WriteAllText((Join-Path $bin 'az.cmd'), "@echo off`r`n`"$pwshPath`" -NoProfile -NonInteractive -File `"%~dp0az-fake.ps1`" %*`r`nexit /b %errorlevel%`r`n", [Text.Encoding]::ASCII)
     $savedPath = $env:PATH
