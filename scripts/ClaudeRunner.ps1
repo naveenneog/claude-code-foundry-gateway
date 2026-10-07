@@ -272,7 +272,7 @@ function Send-RunnerFile {
         [Parameter(Mandatory)][string]$Name,
         [Parameter(Mandatory)][string]$Path,
         [Parameter(Mandatory)][string]$Destination,
-        [int]$ChunkSize = 4900,
+        [ValidateRange(1, 1048576)][int]$ChunkSize = 4900,
         [string]$SubscriptionId,
         # A snapshot's apply-by time (Get-RunnerFileDeadline). A transfer estimated to end after it is refused
         # before the first exec (P98 council round 2), and one whose measured rate projects past it stops (ADR-0053).
@@ -287,9 +287,9 @@ function Send-RunnerFile {
         # The mean time of one exec at the parallelism used; by default the measured value.
         [double]$SecondsPerExec
     )
-    if ($Destination -match '\s') { throw "Destination '$Destination' contains a space; exec cannot pass it." }
+    if ($Destination -match '\s') { throw "Destination '$Destination' contains a space; exec cannot pass it. No exec ran and nothing was written. Remedy: pass an absolute runner path below a directory, such as /work/snapshot.json." }
     # The destination is written into node programs inside single quotes.
-    if ($Destination -notmatch '^(/[A-Za-z0-9._-]+){2,}$') { throw "Destination '$Destination' is not an absolute runner path of letters, digits, '.', '_' and '-' below a directory." }
+    if ($Destination -notmatch '^(/[A-Za-z0-9._-]+){2,}$') { throw "Destination '$Destination' is not an absolute runner path of letters, digits, '.', '_' and '-' below a directory. No exec ran and nothing was written. Remedy: pass a path such as /work/snapshot.json." }
     foreach ($target in @($ResourceGroup, $Name, $SubscriptionId)) { Assert-ClaudeRunnerAzName $target }
     $bytes = [IO.File]::ReadAllBytes((Resolve-Path $Path))
     $compressed = ConvertTo-ClaudeRunnerGzip $bytes
@@ -483,13 +483,24 @@ function Send-RunnerFile {
         "s=p.map(function(x){return(f.readFileSync(d.concat('/',x),'utf8'))}).join('');if(s.length-$($b64.Length)){console.log('incomplete-length',String(s.length));process.exit()}" +
         "b=s.length?z.gunzipSync(Buffer.from(s,'base64url')):Buffer.alloc(0);f.writeFileSync('$Destination',b);f.rmSync(d,{recursive:true,force:true});" +
         "console.log(require('crypto').createHash('sha256').update(b).digest('hex'))")
+    # After a failed assembly: the parts, and anything the assembly wrote, so a later step cannot read a partial file.
+    $removeAll = { Invoke-ClaudeRunnerExec -Arguments (& $execArguments "node -e f=require('fs');f.rmSync('$partDir',{recursive:true,force:true});f.rmSync('$Destination',{force:true})") }
+    $cleaned = { param($Result) $Result.ExitCode -eq 0 -and $Result.Output -notmatch 'ERROR' }
+    $assemblyRemedy = "Remedy: rerun the command. If it fails again, check that the runner is Running with az container show -g $ResourceGroup -n $Name --query instanceView.state, and redeploy it with scripts/Deploy-ClaudeProjection.ps1."
     try { $remote = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $Name -SubscriptionId $SubscriptionId -Command $assembly }
-    catch { $null = & $removeParts; throw }
+    catch {
+        $failure = $_.Exception.Message
+        $removed = & $cleaned (& $removeAll)
+        throw ("Assembling $Path on runner $Name failed: $failure " + $(if ($removed) { "The parts and $Destination were removed, so nothing was written. " } else { "The part directory $partDir and $Destination could not be removed; the runner's next start clears them. " }) + $assemblyRemedy)
+    }
     $local = [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($bytes)).Replace('-', '').ToLower()
     $remoteHash = ($remote -split "`n" | Select-Object -Last 1).Trim()
     if ($remoteHash -ne $local) {
-        $null = & $removeParts
-        throw "Copy of $Path to $Destination did not arrive intact (local $local, remote '$remoteHash')."
+        $removed = & $cleaned (& $removeAll)
+        $incomplete = $remoteHash -match '^incomplete-'
+        $what = if ($incomplete) { "the runner reported $remoteHash before writing, so $Destination was not written" } else { "the file the runner wrote has SHA-256 '$remoteHash', not $local" }
+        $cleanup = if (-not $removed) { "The part directory $partDir could not be removed; the runner's next start clears it. " } elseif ($incomplete) { 'The parts were removed. ' } else { 'The parts and that file were removed. ' }
+        throw ("Copy of $Path to $Destination did not arrive intact: $what. " + $cleanup + $assemblyRemedy)
     }
     return [pscustomobject]@{
         Path = $Path; Destination = $Destination; Bytes = $bytes.Length; CompressedBytes = $compressed.Length; Parts = $parts; Chunks = $parts

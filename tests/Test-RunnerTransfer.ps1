@@ -51,6 +51,8 @@ if ($part -and $fault -eq "hang:$part") {
 if ($part -and $fault -eq "always:$part") { Done 'ERROR: simulated failure' 1 }
 if ($part -and $fault -eq "noack:$part") { Done '' 0 }
 if ($part -and $fault -eq "drop:$part" -and $Command -match "f\.writeFileSync\(p,'([A-Za-z0-9_-]*)'\)") { Done "ok $part $($Matches[1].Length)" 0 }
+# The assembly exec fails before it writes anything (for example the runner stops).
+if ($fault -eq 'assemblyfail' -and $Command -match 'gunzipSync') { Done 'ERROR: simulated assembly failure' 1 }
 # The runner: split on spaces with no quoting, URL-decode each token, run without a shell.
 $tokens = @($Command -split ' ' | ForEach-Object { [Net.WebUtility]::UrlDecode($_) })
 $tokens = @($tokens | ForEach-Object { $_.Replace("'/work", "'" + $Work.Replace('\', '/')) })
@@ -197,6 +199,9 @@ try {
     $env:P99_FAULT = 'badhash'
     Capture { Send-RunnerFile -ResourceGroup rg-p99 -Name aci-projtest-p99 -Path $source -Destination /work/snapshot.json -ChunkSize 1200 }
     Assert 'an assembly whose hash differs fails' ($CapturedError -match 'did not arrive intact') $CapturedError
+    Assert 'a hash mismatch removes the file it wrote and the parts, and names a remedy' (
+        $CapturedError -match 'removed' -and $CapturedError -match 'Remedy:' -and -not (Test-Path -LiteralPath (Join-Path $work 'snapshot.json')) -and
+        @(Get-ChildItem -LiteralPath $work -Force -Filter '.xfer-*').Count -eq 0) $CapturedError
 
     Reset-Runner
     $env:P99_FAULT = 'drop:000002'
@@ -204,10 +209,33 @@ try {
     Assert 'a part acknowledged but missing at assembly fails, with nothing written and the parts removed' (
         $CapturedError -match 'did not arrive intact' -and $CapturedError -match 'incomplete-parts' -and -not (Test-Path -LiteralPath (Join-Path $work 'snapshot.json')) -and
         @(Get-ChildItem -LiteralPath $work -Force -Filter '.xfer-*').Count -eq 0) $CapturedError
+    Assert 'an incomplete assembly says the destination was not written and names a remedy' ($CapturedError -match 'not written' -and $CapturedError -match 'Remedy:') $CapturedError
+
+    Reset-Runner
+    $env:P99_FAULT = 'assemblyfail'
+    Capture { Send-RunnerFile -ResourceGroup rg-p99 -Name aci-projtest-p99 -Path $source -Destination /work/snapshot.json -ChunkSize 1200 }
+    Assert 'an assembly exec that fails removes the parts, writes nothing and names a remedy' (
+        $CapturedError -match 'Assembling' -and $CapturedError -match 'Remedy:' -and -not (Test-Path -LiteralPath (Join-Path $work 'snapshot.json')) -and
+        @(Get-ChildItem -LiteralPath $work -Force -Filter '.xfer-*').Count -eq 0) $CapturedError
+
+    Reset-Runner; $global:AzCalls = 0
+    Capture { Send-RunnerFile -ResourceGroup rg-p99 -Name aci-projtest-p99 -Path $source -Destination /work/snapshot.json -ChunkSize 0 }
+    Assert 'a part size of 0 is refused before any exec' ($CapturedError -match 'ChunkSize' -and $global:AzCalls -eq 0) $CapturedError
+    Reset-Runner
+    Capture { Send-RunnerFile -ResourceGroup rg-p99 -Name aci-projtest-p99 -Path $source -Destination /work/snapshot.json -ChunkSize 20000 }
+    $records = Get-ExecRecords
+    Assert 'a part size above the exec limit is reduced to fit, and the file arrives' (
+        -not $CapturedError -and $records.Count -gt 0 -and @($records | Where-Object { $_.command.Length -ge 5000 }).Count -eq 0 -and
+        (Get-Sha256 ([IO.File]::ReadAllBytes((Join-Path $work 'snapshot.json')))) -eq $sourceSha) "$CapturedError | longest $(($records.command | Measure-Object -Property Length -Maximum).Maximum)"
+    Reset-Runner
+    Capture { Send-RunnerFile -ResourceGroup rg-p99 -Name aci-projtest-p99 -Path $source -Destination /work/snapshot.json -ChunkSize 300 }
+    Assert 'a small part size makes more parts, and the file arrives' (
+        -not $CapturedError -and $CapturedResult.Parts -gt $payload.Count -and (Get-Sha256 ([IO.File]::ReadAllBytes((Join-Path $work 'snapshot.json')))) -eq $sourceSha) "$CapturedError parts=$($CapturedResult.Parts)"
 
     Reset-Runner; $global:AzCalls = 0
     Capture { Send-RunnerFile -ResourceGroup rg-p99 -Name aci-projtest-p99 -Path $source -Destination '/work/a b.json' }
     Assert 'a destination with a space is refused before any exec' ($CapturedError -match 'space' -and $global:AzCalls -eq 0) $CapturedError
+    Assert 'a refused destination says that no exec ran and names a valid example' ($CapturedError -match 'No exec ran' -and $CapturedError -match '/work/snapshot\.json') $CapturedError
     Capture { Send-RunnerFile -ResourceGroup rg-p99 -Name aci-projtest-p99 -Path $source -Destination "/work/x';process.exit();'.json" }
     Assert 'a destination that would break out of the program''s quotes is refused before any exec' ($CapturedError -match 'absolute runner path' -and $global:AzCalls -eq 0) $CapturedError
     Capture { Send-RunnerFile -ResourceGroup rg-p99 -Name aci-projtest-p99 -Path $source -Destination /work/x.json -Parallel 25 }

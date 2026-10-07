@@ -259,7 +259,7 @@ function Get-ClaudeEntitlementMigrationFacts {
     if ($minutesToTransfer -gt 110) {
         $checks.Add([pscustomobject]@{ Name = 'Snapshot transfer through the runner'; Result = 'FAIL'
             Evidence = "about $minutesToTransfer minutes for $($facts.Developers) developers, past the snapshot's 2-hour apply-by time"
-            Remedy = "A directory of this size syncs in the optional sync job: .\scripts\Deploy-ClaudeProjectionRenewal.ps1 -ResourceGroup $($facts.ResourceGroup) -ApimName $($facts.ApimName) -NamePrefix $($facts.NamePrefix) -AlertEmail <address>; the directory-scale transfer is ROADMAP packet P99." })
+            Remedy = "A directory of this size syncs in the optional sync job, which reads Microsoft Graph inside the network: .\scripts\Deploy-ClaudeProjectionRenewal.ps1 -ResourceGroup $($facts.ResourceGroup) -ApimName $($facts.ApimName) -NamePrefix $($facts.NamePrefix) -AlertEmail <address>." })
     }
     $facts.Checks = @($checks)
     $facts.Problems = @($problems)

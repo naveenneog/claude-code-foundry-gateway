@@ -183,6 +183,7 @@ $global:GroupDirectory['team-std'] = @{ Id = $standardId; Name = 'team-std'; Mem
 $global:TransferAskedFor = $null
 Get-Facts @{ TransferMinutes = { param($Developers) $global:TransferAskedFor = $Developers; 200 } }
 Assert 'a tier group too large for the runner''s transfer blocks the plan and names the sync job, even when the named-value lists are small' ($CapturedResult.Blocked -and @($CapturedResult.Checks | Where-Object { $_.Name -match 'transfer' -and $_.Result -eq 'FAIL' -and $_.Remedy -match 'Deploy-ClaudeProjectionRenewal' }).Count -eq 1 -and $CapturedResult.ListedDevelopers -eq 3 -and $global:TransferAskedFor -ge 45000) "asked for $global:TransferAskedFor; $(($CapturedResult.Checks | ForEach-Object { "$($_.Name)=$($_.Result)" }) -join '; ')"
+Assert 'the transfer FAIL''s remedy names the optional sync job and no planned packet' (@($CapturedResult.Checks | Where-Object { $_.Name -match 'transfer' -and $_.Remedy -match 'optional sync job' -and $_.Remedy -notmatch 'ROADMAP|P99' }).Count -eq 1) (($CapturedResult.Checks | Where-Object { $_.Name -match 'transfer' } | ForEach-Object Remedy) -join ' ')
 Get-Facts
 Assert 'a tier group of 45,000 developers fits the runner''s compressed parallel transfer and does not block the plan' (-not $CapturedResult.Blocked -and @($CapturedResult.Checks | Where-Object { $_.Name -match 'transfer' }).Count -eq 0) (($CapturedResult.Checks | ForEach-Object { "$($_.Name)=$($_.Result)" }) -join '; ')
 $global:GroupDirectory['team-std'] = @{ Id = $standardId; Name = 'team-std'; Members = @($oid[0], $oid[1]) }
