@@ -63,7 +63,7 @@ FinOps beyond the gateway's named values (AUM, Turnstile, chargeback reports, US
 - `bu-parents` — not covered: business units and teams are out of scope for this guide.
 - `bu-modes` — not covered: business-unit budget modes are out of scope for this guide.
 - `bu-unassigned` — not covered: business-unit assignment behavior is out of scope for this guide.
-- `entitlement-groups` — not covered: scripts/Sync-ClaudeAccess.ps1 records the tier groups' object ids after a sync with explicit groups ([ADR-0057](adr/0057-one-sync-command.md)).
+- `entitlement-groups` — not covered: scripts/Sync-ClaudeAccess.ps1 records the tier groups' object ids after a sync whose groups came from parameters, the gateway's own `entitlement-groups` or this gateway's decision record ([ADR-0057](adr/0057-one-sync-command.md)).
 - `usd-budgets` — not covered: USD reconciler and FinOps budget projection are out of scope.
 - `usd-budget-state` — not covered: USD reconciler state is out of scope.
 - Removing gateway artifacts from a reused APIM is out of scope: API `claude-foundry`, named values, logger `appinsights`, diagnostics, diagnostic setting `claude-llm-logs`, `appi-<prefix>` and `log-<prefix>`.

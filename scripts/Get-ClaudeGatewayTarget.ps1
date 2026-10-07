@@ -10,8 +10,8 @@
       2. onboarding/claude-gateway.json, which Install-ClaudeGateway.ps1 writes with the
          resourceGroup and apimName it deployed to. The file is not committed.
 
-    Returns an empty string when neither has a value, after a warning that says what to pass,
-    so the calling script can still fail with its own message.
+    Returns an empty string when neither has a value, so the calling script can still fail
+    with its own message. For ResourceGroup, a warning first says what to pass.
 
     -ForApimName and -ForResourceGroup limit the recorded group names to the gateway they were
     recorded for: when the record names a different API Management instance or resource group,
