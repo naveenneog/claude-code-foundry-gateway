@@ -77,6 +77,8 @@ function Reset-Live([string]$Source = 'projection', [bool]$ResourceGroupExists =
         UpdateBlocked = $false
         EntitlementGroups = ''
         AppListResults = @()
+        AppListFails = $false
+        AppListRaw = ''
         UpdateApplyCreatesResolverApp = $false
         UpdateApplyFailsAfterApp = $false
         SyncFails = $false
@@ -102,7 +104,11 @@ function az {
         '^account show -o json$' { return (@{ id = $global:Live.AccountId; user = @{ name = 'admin@contoso.example' } } | ConvertTo-Json) }
         '^group exists --name (\S+) --subscription (\S+)$' { return $(if ($global:Live.ResourceGroupExists) { 'true' } else { 'false' }) }
         '^ad app list --filter displayName eq ''claude-projection-resolver-([^'']+)'' --query \[\]\.appId -o tsv$' { if ($global:Live.ResolverExists) { return $global:Live.ExistingResolverId }; return '' }
-        '^ad app list --display-name ([^ ]+) --query \[\]\.\{appId:appId,displayName:displayName\} -o json$' { return ($global:Live.AppListResults | ConvertTo-Json -Compress) }
+        '^ad app list --display-name ([^ ]+) --query \[\]\.\{appId:appId,displayName:displayName\} -o json$' {
+            if ($global:Live.AppListFails) { $global:LASTEXITCODE = 7; return 'app list failed' }
+            if ($global:Live.AppListRaw) { return $global:Live.AppListRaw }
+            return ($global:Live.AppListResults | ConvertTo-Json -Compress)
+        }
         '^ad group list --filter displayName eq ''([^'']+)'' --query \[\]\.id -o tsv$' { $name = $Matches[1]; if ($global:Live.ExistingGroups.ContainsKey($name)) { return $global:Live.ExistingGroups[$name] }; return '' }
         '^ad group create --display-name (\S+) --mail-nickname \S+ --query id -o tsv$' { $name = $Matches[1]; $id = '00000000-0000-4000-8000-0000000000' + $(if ($global:Live.CreatedGroups.Count -eq 0) { 'b1' } else { 'b2' }); $global:Live.CreatedGroups[$name] = $id; return $id }
         '^ad signed-in-user show --query id -o tsv$' { return $user }
@@ -246,6 +252,16 @@ try {
     Invoke-Verifier @{ MigrateWithUpdate = $true; UpdatePath = $updateStub }
     Assert 'with -MigrateWithUpdate a prefix-only resolver app name is not deleted and not reported as this run leftover' ($Exit -eq 1 -and
         (At "^az ad app delete --id $otherAppId$") -lt 0 -and $Output -notmatch $otherAppId -and $Output -notmatch 'Resolver app was not deleted') "$Exit | $Output | $($global:Live.Calls -join ' ; ')"
+    Reset-Live -Source 'named-value'; $global:Live.ResolverAudience = ''; $global:Live.UpdateApplyFailsAfterApp = $true; $global:Live.AppListFails = $true
+    Invoke-Verifier @{ MigrateWithUpdate = $true; UpdatePath = $updateStub }
+    Assert 'with -MigrateWithUpdate a failed resolver app lookup is reported and resource and group teardown still run' ($Exit -eq 1 -and
+        $Output -match 'az ad app list --display-name claude-projection-resolver-p98live' -and $Output -match 'az ad app delete --id <appId>' -and
+        (At '^az group delete --name rg-p98-live') -ge 0 -and @($global:Live.Calls | Where-Object { $_ -like 'az ad group delete *' }).Count -eq 2) "$Exit | $Output | $($global:Live.Calls -join ' ; ')"
+    Reset-Live -Source 'named-value'; $global:Live.ResolverAudience = ''; $global:Live.UpdateApplyFailsAfterApp = $true; $global:Live.AppListRaw = 'not-json'
+    Invoke-Verifier @{ MigrateWithUpdate = $true; UpdatePath = $updateStub }
+    Assert 'with -MigrateWithUpdate a malformed resolver app lookup is reported and resource and group teardown still run' ($Exit -eq 1 -and
+        $Output -match 'Resolver app lookup by display name' -and $Output -match 'az ad app list --display-name claude-projection-resolver-p98live' -and
+        (At '^az group delete --name rg-p98-live') -ge 0 -and @($global:Live.Calls | Where-Object { $_ -like 'az ad group delete *' }).Count -eq 2) "$Exit | $Output | $($global:Live.Calls -join ' ; ')"
     Reset-Live -Source 'named-value'; $global:Live.ResolverAudience = ''; Invoke-Verifier @{ MigrateWithUpdate = $true; UpdatePath = $updateStub }
     Assert 'with -MigrateWithUpdate a missing resolver audience and no app name match reports no resolver leftover after the update ran' ($Exit -eq 0 -and $Output -notmatch 'Resolver app was not deleted' -and
         (At '^update apply') -ge 0 -and (At '^az ad app list --display-name claude-projection-resolver-p98live ') -ge 0) "$Exit | $Output | $($global:Live.Calls -join ' ; ')"

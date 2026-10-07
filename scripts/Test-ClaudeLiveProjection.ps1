@@ -371,8 +371,16 @@ finally {
             else {
                 $appListJson = Invoke-Az @('ad', 'app', 'list', '--display-name', $expectedResolverDisplayName, '--query', '[].{appId:appId,displayName:displayName}', '-o', 'json') -AllowFailure
                 $resolverApps = @()
-                if ($appListJson) {
-                    $resolverApps = @($appListJson | ConvertFrom-Json | Where-Object { [string]$_.displayName -eq $expectedResolverDisplayName -and [string]$_.appId -match $guid })
+                if ($null -eq $appListJson) {
+                    $teardownLeft.Add("Resolver app lookup by display name '$expectedResolverDisplayName' failed. Finish by hand with: az ad app list --display-name $expectedResolverDisplayName; az ad app delete --id <appId>")
+                }
+                else {
+                    try {
+                        $resolverApps = @($appListJson | ConvertFrom-Json -ErrorAction Stop | Where-Object { [string]$_.displayName -eq $expectedResolverDisplayName -and [string]$_.appId -match $guid })
+                    }
+                    catch {
+                        $teardownLeft.Add("Resolver app lookup by display name '$expectedResolverDisplayName' returned output that was not JSON. Finish by hand with: az ad app list --display-name $expectedResolverDisplayName; az ad app delete --id <appId>")
+                    }
                 }
                 if ($resolverApps.Count -eq 1) {
                     $resolverAppId = [string]$resolverApps[0].appId
@@ -390,7 +398,7 @@ finally {
         }
         $teardownOk = $teardownLeft.Count -eq 0
         if (-not $teardownOk) { $failed = $true }
-        $detail = if ($teardownOk) { "deleted $ResourceGroup (if created), resolver app from entitlement-resolver-audience, role assignments, and $($createdGroups.Count) group(s) created by this run" } else { $teardownLeft -join ' ' }
+        $detail = if ($teardownOk) { "deleted $ResourceGroup (if created), resolver app found by entitlement-resolver-audience or exact display name, role assignments, and $($createdGroups.Count) group(s) created by this run" } else { $teardownLeft -join ' ' }
         Add-Result 'teardown' $teardownOk $detail
     }
     if ($UseCurrentAzLogin -and $originalSubscription -match $guid -and $originalSubscription -ne $SubscriptionId) {
