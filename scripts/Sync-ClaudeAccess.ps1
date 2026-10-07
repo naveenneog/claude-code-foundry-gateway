@@ -343,7 +343,7 @@ if ($targetUserOid) {
     $premiumList = if ($WhatIf) { [string]@($pendingWrites | Where-Object Id -eq 'allow-premium' | Select-Object -First 1).Value } else { Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'allow-premium' -FailOnError }
     $publishedTier = Get-ClaudeNamedValueTierForUser -UserObjectId $targetUserOid -StandardList $standardList -PremiumList $premiumList
     Write-Host "Developer tier as written: $publishedTier" -ForegroundColor Green
-    if ($publishedTier -eq 'none') { Write-Host 'Graph membership changes can take time to appear in reads, so a just-changed user may report none until Graph catches up.' -ForegroundColor DarkGray }
+    Write-Host "Microsoft Graph can report a membership change a few minutes late; if this developer's groups changed just now and the tier is the previous one, run this command again." -ForegroundColor DarkGray
     [pscustomobject]@{ published_tier = $publishedTier; user = $targetUserOid }
 }
 

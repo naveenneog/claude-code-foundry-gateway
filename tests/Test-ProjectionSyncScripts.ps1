@@ -316,7 +316,8 @@ Invoke-NamedValueSyncFixture -PremiumCount 1 -StandardCount 1 -Parameters @{ Sto
 $nvWrites = Get-NamedValueWrites
 Assert 'Sync-ClaudeAccess -User on named values runs the whole refresh and reports the written tier' (
     -not $CapturedError -and @($nvWrites -match 'allow-premium').Count -ge 1 -and @($nvWrites -match 'allow-standard').Count -ge 1 -and
-    $script:P98NvResult.Output -match 'developer tier as written: standard') "$CapturedError | output: $($script:P98NvResult.Output) | writes: $($nvWrites -join ' | ')"
+    $script:P98NvResult.Output -match 'developer tier as written: standard' -and
+    $script:P98NvResult.Output -match 'Microsoft Graph can report a membership change a few minutes late') "$CapturedError | output: $($script:P98NvResult.Output) | writes: $($nvWrites -join ' | ')"
 
 Invoke-NamedValueSyncFixture -PremiumCount 1 -StandardCount 1 -GatewayGroups 'standard=10000000-0000-4000-8000-000000000001,premium=10000000-0000-4000-8000-000000000002' -Parameters @{ Store = 'named-value'; User = '40000000-0000-4000-8000-000000000001'; WhatIf = $true }
 $nvWrites = Get-NamedValueWrites

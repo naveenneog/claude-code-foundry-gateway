@@ -132,8 +132,33 @@ function Invoke-AccessSyncText([hashtable]$Arguments) {
     $output = @(& $SyncAccessPath @Arguments 2>&1)
     return (@($output) | ForEach-Object { [string]$_ }) -join "`n"
 }
+function Get-SyncPrintedTier([AllowEmptyString()][string]$Output) {
+    $matches = [regex]::Matches([string]$Output, '(?im)developer tier as written:\s*(standard|premium|none)\b')
+    if ($matches.Count) { return $matches[$matches.Count - 1].Groups[1].Value.ToLowerInvariant() }
+    return ''
+}
+function Invoke-AccessSyncUntilTier([hashtable]$Arguments, [string]$ExpectedTier, [DateTime]$ChangedAt, [string]$Step) {
+    $deadline = $ChangedAt.AddSeconds($ChangeWaitSeconds)
+    $lastTier = ''
+    $lastOutput = ''
+    do {
+        $lastOutput = Invoke-AccessSyncText $Arguments
+        $lastTier = Get-SyncPrintedTier $lastOutput
+        if (-not $lastTier) {
+            Add-Result $Step $false "Sync-ClaudeAccess printed no developer tier as written '$ExpectedTier'."
+            throw "$Step printed no developer tier as written '$ExpectedTier'."
+        }
+        if ($lastTier -eq $ExpectedTier) {
+            return [pscustomobject]@{ Tier = $lastTier; Seconds = [Math]::Round(((Get-Date) - $ChangedAt).TotalSeconds, 1); Output = $lastOutput }
+        }
+        if ((Get-Date) -lt $deadline) { Start-Sleep -Seconds $PollSeconds }
+    } while ((Get-Date) -lt $deadline)
+    Add-Result $Step $false "expected tier $ExpectedTier; last printed tier $lastTier after $ChangeWaitSeconds second(s)."
+    throw "$Step expected tier $ExpectedTier; last printed tier $lastTier after $ChangeWaitSeconds second(s)."
+}
 function Assert-SyncTierText([string]$Output, [string]$ExpectedTier, [string]$Step) {
-    if ($Output -notmatch "(?im)developer tier as written:\s*$ExpectedTier\b") {
+    $tier = Get-SyncPrintedTier $Output
+    if ($tier -ne $ExpectedTier) {
         Add-Result $Step $false "Sync-ClaudeAccess printed no developer tier as written '$ExpectedTier'."
         throw "$Step printed no developer tier as written '$ExpectedTier'."
     }
@@ -176,6 +201,7 @@ $resourceGroupCreated = $false
 $installerStarted = $false
 $failed = $false
 $originalSubscription = $null
+$projectionDeploymentReached = $false
 
 try {
     Write-Host "`n==> Subscription and resource group" -ForegroundColor Cyan
@@ -217,6 +243,7 @@ try {
     $installerStarted = $true
     & $InstallerPath @installerArgs
     $resourceGroupCreated = $true
+    if (-not $MigrateWithUpdate) { $projectionDeploymentReached = $true }
     Add-Result 'installer' $true $apimName
 
     if (-not $Model) {
@@ -249,18 +276,16 @@ try {
         Invoke-Az @('ad', 'group', 'member', 'remove', '--group', $groupIds[$StandardGroup], '--member-id', $userId) | Out-Null
         $removedAt = Get-Date
         Wait-Membership $groupIds[$StandardGroup] $userId 'false'
-        $removedSyncOutput = Invoke-AccessSyncText @{ ResourceGroup = $ResourceGroup; ApimName = $apimName; User = $userId }
-        Assert-SyncTierText -Output $removedSyncOutput -ExpectedTier 'none' -Step 'named-value removed sync tier'
-        $removedSeconds = [Math]::Round(((Get-Date) - $removedAt).TotalSeconds, 1)
+        $removedSync = Invoke-AccessSyncUntilTier -Arguments @{ ResourceGroup = $ResourceGroup; ApimName = $apimName; User = $userId } -ExpectedTier 'none' -ChangedAt $removedAt -Step 'named-value removed sync tier'
+        $removedSeconds = $removedSync.Seconds
         Add-Result 'named-value removed sync lag' $true "$removedSeconds second(s) from membership removal to tier none (U157)"
         Wait-GatewayStatus $url $Model 403 'removed on named values, then targeted sync'
 
         Invoke-Az @('ad', 'group', 'member', 'add', '--group', $groupIds[$StandardGroup], '--member-id', $userId) | Out-Null
         $addedAt = Get-Date
         Wait-Membership $groupIds[$StandardGroup] $userId 'true'
-        $addedSyncOutput = Invoke-AccessSyncText @{ ResourceGroup = $ResourceGroup; ApimName = $apimName; User = $userId }
-        Assert-SyncTierText -Output $addedSyncOutput -ExpectedTier 'standard' -Step 'named-value re-added sync tier'
-        $addedSeconds = [Math]::Round(((Get-Date) - $addedAt).TotalSeconds, 1)
+        $addedSync = Invoke-AccessSyncUntilTier -Arguments @{ ResourceGroup = $ResourceGroup; ApimName = $apimName; User = $userId } -ExpectedTier 'standard' -ChangedAt $addedAt -Step 'named-value re-added sync tier'
+        $addedSeconds = $addedSync.Seconds
         Add-Result 'named-value re-added sync lag' $true "$addedSeconds second(s) from membership add to tier standard (U157)"
         Wait-GatewayStatus $url $Model 200 're-added on named values, then targeted sync'
 
@@ -278,6 +303,7 @@ try {
         }
         Add-Result 'update plan' $true "fingerprint $fingerprint, $(@($move.Actions).Count) action(s)"
         & $UpdatePath -ResourceGroup $ResourceGroup -ApimName $apimName -Apply -ApprovedPlanFingerprint $fingerprint | Out-Null
+        $projectionDeploymentReached = $true
         Add-Result 'update apply' $true $fingerprint
     }
 
@@ -331,19 +357,21 @@ finally {
                 $teardownLeft.Add("Gateway role assignments were not deleted because the gateway principal or Foundry account id could not be read. Remove by listing assignments for the gateway principal on the Foundry account scope in subscription $SubscriptionId.")
             }
 
-            $audience = Invoke-Az @('apim', 'nv', 'show', '-g', $ResourceGroup, '--service-name', $apimName, '--named-value-id', 'entitlement-resolver-audience', '--query', 'value', '-o', 'tsv', '--subscription', $SubscriptionId) -AllowFailure
-            if ($audience -match '\Aapi://([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\z') {
-                $resolverAppId = $Matches[1]
-                $displayName = Invoke-Az @('ad', 'app', 'show', '--id', $resolverAppId, '--query', 'displayName', '-o', 'tsv') -AllowFailure
-                if ($displayName -eq $expectedResolverDisplayName) {
-                    [void](Invoke-TeardownAz "Resolver app $resolverAppId" @('ad', 'app', 'delete', '--id', $resolverAppId) "az ad app delete --id $resolverAppId" $teardownLeft)
+            if ($projectionDeploymentReached) {
+                $audience = Invoke-Az @('apim', 'nv', 'show', '-g', $ResourceGroup, '--service-name', $apimName, '--named-value-id', 'entitlement-resolver-audience', '--query', 'value', '-o', 'tsv', '--subscription', $SubscriptionId) -AllowFailure
+                if ($audience -match '\Aapi://([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\z') {
+                    $resolverAppId = $Matches[1]
+                    $displayName = Invoke-Az @('ad', 'app', 'show', '--id', $resolverAppId, '--query', 'displayName', '-o', 'tsv') -AllowFailure
+                    if ($displayName -eq $expectedResolverDisplayName) {
+                        [void](Invoke-TeardownAz "Resolver app $resolverAppId" @('ad', 'app', 'delete', '--id', $resolverAppId) "az ad app delete --id $resolverAppId" $teardownLeft)
+                    }
+                    else {
+                        $teardownLeft.Add("Resolver app $resolverAppId was not deleted because its displayName was '$displayName', not '$expectedResolverDisplayName'. Remove with: az ad app delete --id $resolverAppId")
+                    }
                 }
                 else {
-                    $teardownLeft.Add("Resolver app $resolverAppId was not deleted because its displayName was '$displayName', not '$expectedResolverDisplayName'. Remove with: az ad app delete --id $resolverAppId")
+                    $teardownLeft.Add("Resolver app was not deleted because entitlement-resolver-audience could not be read from $apimName. Remove with: az ad app delete --id <app-id-from-entitlement-resolver-audience>")
                 }
-            }
-            else {
-                $teardownLeft.Add("Resolver app was not deleted because entitlement-resolver-audience could not be read from $apimName. Remove with: az ad app delete --id <app-id-from-entitlement-resolver-audience>")
             }
             [void](Invoke-TeardownAz "Resource group $ResourceGroup" @('group', 'delete', '--name', $ResourceGroup, '--yes', '--no-wait', '--subscription', $SubscriptionId) "az group delete --name $ResourceGroup --yes --subscription $SubscriptionId" $teardownLeft)
         }

@@ -32,8 +32,9 @@ $syncStub = Join-Path $work 'Sync-ClaudeAccess.ps1'
     '    $global:Live.Synced = $global:Live.Member'
     '    return'
     '}'
-    '$global:Live.Synced = $global:Live.Member'
-    'if (-not $global:Live.OmitTierText) { "Developer tier as written: $(if ($global:Live.Member) { ''standard'' } else { ''none'' })" }'
+    '$tier = if ($global:Live.AlwaysTier) { [string]$global:Live.AlwaysTier } elseif ($global:Live.SyncTiers.Count) { $next = [string]$global:Live.SyncTiers[0]; $global:Live.SyncTiers.RemoveAt(0); $next } else { if ($global:Live.Member) { ''standard'' } else { ''none'' } }'
+    '$global:Live.Synced = ($tier -eq ''standard'')'
+    'if (-not $global:Live.OmitTierText) { "Developer tier as written: $tier" }'
 ) -join "`n"), [Text.UTF8Encoding]::new($false))
 $updateStub = Join-Path $work 'Update-ClaudeGateway.ps1'
 # The update stub: a plan returns the 0004 plan the global state describes; an apply with its fingerprint switches.
@@ -76,6 +77,8 @@ function Reset-Live([string]$Source = 'projection', [bool]$ResourceGroupExists =
         SyncFails = $false
         OmitTierText = $false
         SyncMentionsOtherStore = $false
+        SyncTiers = [Collections.Generic.List[string]]::new()
+        AlwaysTier = ''
     }
 }
 function Add-SubscriptionCheck([string]$line) {
@@ -102,7 +105,7 @@ function az {
         '^ad group member remove' { $global:Live.Member = $false; return }
         '^apim nv show .*--named-value-id entitlement-source .* --subscription ' { return $global:Live.Source }
         '^apim nv show .*--named-value-id entitlement-projection-prefix .* --subscription ' { return 'p98live' }
-        '^apim nv show .*--named-value-id entitlement-resolver-audience .* --subscription ' { return $global:Live.ResolverAudience }
+        '^apim nv show .*--named-value-id entitlement-resolver-audience .* --subscription ' { if (-not $global:Live.ResolverAudience) { $global:LASTEXITCODE = 3; return 'not found' }; return $global:Live.ResolverAudience }
         '^apim nv show .*--named-value-id entitlement-groups .* --subscription ' { return $global:Live.EntitlementGroups }
         '^apim nv show .*--named-value-id models-standard .* --subscription ' { return ',claude-haiku-4-5,claude-sonnet-5,' }
         '^apim nv update .*--named-value-id entitlement-cache-seconds --value 60 --subscription ' { return }
@@ -207,12 +210,25 @@ try {
         $Output -match '"step":\s*"entitled request on named values"' -and $Output -match '"step":\s*"update plan"' -and $Output -match '"step":\s*"update apply"' -and
         $Output -match '"step":\s*"named-value groups recorded"' -and $Output -match '"step":\s*"named-value removed sync lag"' -and $Output -match '"step":\s*"named-value re-added sync lag"' -and
         $Output -match '"step":\s*"groups recorded"' -and $Output -match '"step":\s*"re-added, then targeted sync"' -and $Output -notmatch '"ok":\s*false') "$Failure | $($order -join ',') | $($global:Live.Calls -join ' ; ')"
+    Reset-Live -Source 'named-value'; $global:Live.SyncTiers.Add('standard'); $global:Live.SyncTiers.Add('none'); $global:Live.SyncTiers.Add('none'); $global:Live.SyncTiers.Add('standard'); Invoke-Verifier @{ MigrateWithUpdate = $true; UpdatePath = $updateStub }
+    Assert 'with -MigrateWithUpdate stale named-value tiers are retried until none then standard and the lag seconds are recorded' ($Exit -ne 1 -and
+        (CountCalls '^sync rg-p98-live apim-p98live -User 00000000-0000-4000-8000-0000000000aa source=named-value') -eq 4 -and
+        $Output -match 'from membership removal to tier none \(U157\)' -and $Output -match 'from membership add to tier standard \(U157\)') "$Exit | $Output | $($global:Live.Calls -join ' ; ')"
+    Reset-Live -Source 'named-value'; $global:Live.AlwaysTier = 'standard'; Invoke-Verifier @{ MigrateWithUpdate = $true; UpdatePath = $updateStub; ChangeWaitSeconds = 60; PollSeconds = 30 }
+    Assert 'with -MigrateWithUpdate a named-value tier that never catches up fails with the last printed tier' ($Exit -eq 1 -and $Output -match 'last printed tier standard' -and
+        (At '^update plan') -lt 0 -and (At '^az group delete --name rg-p98-live') -ge 0) "$Exit | $Output | $($global:Live.Calls -join ' ; ')"
     Reset-Live -Source 'named-value'; $global:Live.OmitTierText = $true; Invoke-Verifier @{ MigrateWithUpdate = $true; UpdatePath = $updateStub }
     Assert 'with -MigrateWithUpdate a named-value -User sync that does not print the written tier stops before the update' ($Exit -eq 1 -and $Output -match 'printed no developer tier as written' -and
         (At '^update plan') -lt 0 -and (At '^az group delete --name rg-p98-live') -ge 0) "$Exit | $Output | $($global:Live.Calls -join ' ; ')"
     Reset-Live -Source 'named-value'; $global:Live.SyncFails = $true; Invoke-Verifier @{ MigrateWithUpdate = $true; UpdatePath = $updateStub }
     Assert 'with -MigrateWithUpdate a named-value sync failure stops before the update and tears down' ($Exit -eq 1 -and $Output -match 'sync failed by fixture' -and
         (At '^update plan') -lt 0 -and (At '^az group delete --name rg-p98-live') -ge 0) "$Exit | $Output | $($global:Live.Calls -join ' ; ')"
+    Reset-Live -Source 'named-value'; $global:Live.SyncFails = $true; $global:Live.ResolverAudience = ''; Invoke-Verifier @{ MigrateWithUpdate = $true; UpdatePath = $updateStub }
+    Assert 'with -MigrateWithUpdate a stop before update has no resolver app leftover when no resolver audience exists' ($Exit -eq 1 -and $Output -match 'sync failed by fixture' -and
+        $Output -notmatch 'Resolver app was not deleted because entitlement-resolver-audience could not be read') "$Exit | $Output"
+    Reset-Live -Source 'named-value'; $global:Live.ResolverAudience = ''; Invoke-Verifier @{ MigrateWithUpdate = $true; UpdatePath = $updateStub }
+    Assert 'with -MigrateWithUpdate a missing resolver audience remains a leftover after the update ran' ($Exit -eq 1 -and $Output -match 'Resolver app was not deleted because entitlement-resolver-audience could not be read' -and
+        (At '^update apply') -ge 0) "$Exit | $Output | $($global:Live.Calls -join ' ; ')"
     Reset-Live -Source 'named-value'; $global:Live.SyncMentionsOtherStore = $true; Invoke-Verifier @{ MigrateWithUpdate = $true; UpdatePath = $updateStub }
     Assert 'with -MigrateWithUpdate the named-value full sync output must not name the projection store' ($Exit -eq 1 -and $Output -match 'named-value sync output named another store' -and
         (At '^update plan') -lt 0) "$Exit | $Output"
