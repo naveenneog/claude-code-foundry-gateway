@@ -1410,6 +1410,11 @@ $buMem = ''
 $buPar = ''
 $usdBudgets = ''
 $usdBudgetState = ''
+$contentSafetyModeExisting = ''
+$contentSafetyEndpointExisting = ''
+$contentSafetyThresholdExisting = ''
+$contentSafetyTimeoutExisting = ''
+$contentSafetyTruncateModeExisting = ''
 # Whether the gateway already exists decides whether its live values are read back before the template
 # deploys, here and for its network settings below. Only Azure's not-found answer means a new gateway; any
 # other failed read stops the run, because the template would otherwise write its defaults over an existing
@@ -1442,6 +1447,11 @@ if ($ExistingApim -or $liveApimId) {
     $entSrc = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $apimName -Id 'entitlement-source' -FailOnError
     $entUrl = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $apimName -Id 'entitlement-resolver-url' -FailOnError
     $entAud = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $apimName -Id 'entitlement-resolver-audience' -FailOnError
+    $contentSafetyModeExisting = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $apimName -Id 'content-safety-mode' -FailOnError
+    $contentSafetyEndpointExisting = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $apimName -Id 'content-safety-endpoint' -FailOnError
+    $contentSafetyThresholdExisting = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $apimName -Id 'content-safety-threshold' -FailOnError
+    $contentSafetyTimeoutExisting = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $apimName -Id 'content-safety-timeout-seconds' -FailOnError
+    $contentSafetyTruncateModeExisting = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $apimName -Id 'content-safety-truncate-mode' -FailOnError
     $entTtl = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id entitlement-cache-seconds --query value -o tsv 2>$null
     if (-not $allowStd) { $allowStd = '' }
     if (-not $allowPrm) { $allowPrm = '' }
@@ -1465,6 +1475,9 @@ if ($ExistingApim -or $liveApimId) {
     }
     if ($entSrc -eq 'projection') {
         Write-Note "preserving entitlement source: projection (resolver $entUrl)"
+    }
+    if ($contentSafetyModeExisting -and $contentSafetyModeExisting -ne 'off') {
+        Write-Note "preserving Content Safety mode: $contentSafetyModeExisting"
     }
 }
 
@@ -1545,6 +1558,25 @@ if ($ExistingApim) {
     }
 }
 
+$operatorSuppliedContentSafetyMode = $PSBoundParameters.ContainsKey('ContentSafetyMode')
+$contentSafetyModeForDeployment = if ($DeployContentSafety -or $operatorSuppliedContentSafetyMode) {
+    $ContentSafetyMode.ToLowerInvariant()
+} elseif ($contentSafetyModeExisting) {
+    $contentSafetyModeExisting.ToLowerInvariant()
+} else {
+    'off'
+}
+$contentSafetyEndpointForDeployment = if (-not $DeployContentSafety -and $contentSafetyEndpointExisting) { $contentSafetyEndpointExisting } else { '' }
+$contentSafetyThresholdForDeployment = if (-not $DeployContentSafety -and $contentSafetyThresholdExisting) { [int]$contentSafetyThresholdExisting } else { 2 }
+$contentSafetyTimeoutForDeployment = if (-not $DeployContentSafety -and $contentSafetyTimeoutExisting) { [int]$contentSafetyTimeoutExisting } else { 10 }
+$restoreContentSafetyTruncateMode = (-not $DeployContentSafety) -and $contentSafetyTruncateModeExisting -and $contentSafetyTruncateModeExisting -ne 'newest'
+Assert-AzArgumentsSafe -Values ([ordered]@{
+    ContentSafetyMode = $contentSafetyModeForDeployment
+    ContentSafetyEndpoint = $contentSafetyEndpointForDeployment
+    ContentSafetyThreshold = $contentSafetyThresholdForDeployment
+    ContentSafetyTimeoutSeconds = $contentSafetyTimeoutForDeployment
+})
+
 az deployment group create `
     --name $deployName `
     -g $ResourceGroup `
@@ -1576,7 +1608,10 @@ az deployment group create `
         quotaOrg=$QuotaOrg `
         callsPerMinute=$CallsPerMinute `
         deployContentSafety=$($DeployContentSafety.IsPresent.ToString().ToLower()) `
-        contentSafetyMode=$(if ($DeployContentSafety) { $ContentSafetyMode } else { 'off' }) `
+        contentSafetyMode=$contentSafetyModeForDeployment `
+        contentSafetyEndpoint=$contentSafetyEndpointForDeployment `
+        contentSafetyThreshold=$contentSafetyThresholdForDeployment `
+        contentSafetyTimeoutSeconds=$contentSafetyTimeoutForDeployment `
         desktopExtraAudience=$(if ($desktopGatewayAudience) { $desktopGatewayAudience } else { 'urn:disabled:claude-extra-audience' }) `
         entitlementSource=$(if ($entSrc) { $entSrc } else { 'named-value' }) `
         entitlementResolverUrl=$(if ($entUrl) { $entUrl } else { 'https://resolver-not-deployed.invalid' }) `
@@ -1587,6 +1622,9 @@ az deployment group create `
     -o none
 
 if ($LASTEXITCODE -ne 0) { throw 'Deployment failed. See the error above.' }
+if ($restoreContentSafetyTruncateMode) {
+    Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $apimName -Id 'content-safety-truncate-mode' -Value $contentSafetyTruncateModeExisting
+}
 Write-Ok 'deployed'
 
 $gatewayUrl = az deployment group show -g $ResourceGroup -n $deployName --query "properties.outputs.gatewayUrl.value" -o tsv 2>$null

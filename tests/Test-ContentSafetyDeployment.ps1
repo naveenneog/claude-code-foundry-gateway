@@ -15,7 +15,7 @@ Assert 'main template defaults content safety off without creating an account' (
 $missingNamedValues = @('content-safety-mode','content-safety-endpoint','content-safety-threshold','content-safety-timeout-seconds','content-safety-truncate-mode') | Where-Object { $main -notmatch [regex]::Escape($_) }
 Assert 'main template adds endpoint, threshold, timeout and fragment named values' (@($missingNamedValues).Count -eq 0) (@($missingNamedValues) -join ',')
 Assert 'main template creates the APIM policy fragment and the API policy depends on it' ($main -match 'service/policyFragments' -and $main -match "loadTextContent\('content-safety-screening.xml'\)" -and $main -match 'contentSafetyFragment')
-Assert 'installer exposes an opt-in Content Safety switch and leaves default deployments off' ($installer.Contains('[switch]$DeployContentSafety') -and $installer.Contains("contentSafetyMode=`$(if (`$DeployContentSafety) { `$ContentSafetyMode } else { 'off' })"))
+Assert 'installer exposes an opt-in Content Safety switch and preserves existing mode unless explicitly changed' ($installer.Contains('[switch]$DeployContentSafety') -and $installer.Contains('$operatorSuppliedContentSafetyMode') -and $installer.Contains('contentSafetyMode=$contentSafetyModeForDeployment'))
 $supported = Test-ClaudeContentSafetyRegion 'East US 2'
 $unsupported = Test-ClaudeContentSafetyRegion 'antarcticacentral'
 Assert 'supported Content Safety region passes readiness' ($supported.Result -eq 'PASS' -and $supported.Location -eq 'eastus2') ($supported | ConvertTo-Json -Compress)

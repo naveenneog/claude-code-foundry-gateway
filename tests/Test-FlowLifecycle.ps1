@@ -232,6 +232,27 @@ Assert 'a plan that already names its snapshot keeps that path' ($namedPlan.Data
 Remove-Item -LiteralPath $stubRoot -Recurse -Force -ErrorAction SilentlyContinue
 
 Write-Host ''
+Write-Host 'P102 lifecycle - Foundation preserves Content Safety' -ForegroundColor Cyan
+foreach ($name in 'Get-ClaudeFlowStepPlan', 'Initialize-ClaudeFlowStep', 'Invoke-ClaudeFlowStep') { Remove-Item "function:\$name" -Force -ErrorAction SilentlyContinue }
+. (Join-Path $root 'scripts\flow\Foundation.ps1')
+function Get-ClaudeFlowFoundationCost { param([string]$Sku, [string]$Location) New-ClaudeFlowCost -Item "API Management $Sku" -MonthlyUsd 150 -Source fixture }
+$safetyRecord = [pscustomobject]@{
+    schemaVersion = 2
+    subscriptionId = '00000000-0000-4000-8000-0000000000a1'
+    resourceGroup = 'rg-contoso'
+    apimName = 'apim-contoso'
+    decisions = [pscustomobject]@{
+        foundation = [pscustomobject]@{
+            contentSafetyMode = 'block'
+            foundryAccount = 'ai-contoso'
+            foundryResourceGroup = 'rg-ai'
+        }
+    }
+}
+$safetyPlan = Get-ClaudeFlowStepPlan -Record $safetyRecord -Discovery ([pscustomobject]@{ action = 'Change'; attended = $false; gateway = [pscustomobject]@{ sku = 'BasicV2'; location = 'eastus2' } })
+Assert 'Foundation change passes the recorded Content Safety mode back to the installer' ([string]$safetyPlan.Data.installerArgs.ContentSafetyMode -eq 'block') ($safetyPlan.Data.installerArgs | ConvertTo-Json -Depth 5 -Compress)
+
+Write-Host ''
 Write-Host 'P66 lifecycle - plans write nothing' -ForegroundColor Cyan
 $updateScript = Get-Content (Join-Path $root 'scripts\Update-ClaudeGateway.ps1') -Raw
 $rootUpdateScript = Get-Content (Join-Path $root 'Update-ClaudeGateway.ps1') -Raw

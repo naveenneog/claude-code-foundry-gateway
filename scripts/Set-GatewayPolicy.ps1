@@ -24,8 +24,21 @@ $root = Split-Path $PSScriptRoot -Parent
 $resolvedPolicyPath = (Resolve-Path $PolicyFile)
 $xml = [IO.File]::ReadAllText($resolvedPolicyPath).TrimStart([char]0xFEFF)
 $scope = if (Test-ClaudeFlowSubscriptionId $SubscriptionId) { @{ SubscriptionId = $SubscriptionId } } else { @{} }
+$subscriptionArgs = if ($scope.ContainsKey('SubscriptionId')) { @('--subscription', $scope.SubscriptionId) } else { @() }
 $defaults = Get-ClaudeFlowLifecycleTemplateNamedValueDefaults
-foreach ($name in @(Get-ClaudeFlowLifecyclePolicyAndFragmentNamedValueReferences -PolicyPath $resolvedPolicyPath)) {
+$liveNamedValues = az apim nv list -g $ResourceGroup --service-name $ApimName -o json @subscriptionArgs | ConvertFrom-Json
+$liveNamedValueMap = Get-ClaudeFlowLifecycleNamedValueMap -Discovery ([pscustomobject]@{ namedValues = @($liveNamedValues) })
+$requiredNamedValues = [Collections.Generic.List[string]]::new()
+foreach ($name in @(Get-ClaudeFlowLifecyclePolicyAndFragmentNamedValueReferences -PolicyPath $resolvedPolicyPath)) { $requiredNamedValues.Add($name) }
+if (@(Get-ClaudeFlowLifecyclePolicyFragmentIds -PolicyPath $resolvedPolicyPath | Where-Object { $_ -eq 'content-safety-screening' }).Count) {
+    foreach ($name in @($defaults.Keys | Where-Object { $_ -like 'content-safety-*' })) { $requiredNamedValues.Add($name) }
+}
+$missingNamedValues = @(Sort-ClaudeFlowOrdinal -InputObject @($requiredNamedValues) -Unique | Where-Object { -not $liveNamedValueMap.ContainsKey($_) })
+$unknownDefaults = @($missingNamedValues | Where-Object { -not $defaults.Contains($_) -or $null -eq $defaults[$_].Value })
+if ($unknownDefaults.Count) {
+    throw "Policy references missing named value(s) with no safe template default: $($unknownDefaults -join ', '). No named values were written. Create them first, or run Update-ClaudeGateway.ps1 so the fingerprinted migration can plan them."
+}
+foreach ($name in $missingNamedValues) {
     if (-not $defaults.Contains($name) -or $null -eq $defaults[$name].Value) {
         throw "Policy references named value '$name' but this script has no safe default. Create the named value first, or run Update-ClaudeGateway.ps1 so the fingerprinted migration can plan it."
     }
