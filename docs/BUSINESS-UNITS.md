@@ -614,7 +614,7 @@ same data for a dashboard, and `-Days` overrides the default of month-to-date.
 
 <details>
 
-<summary>Unassigned policy behavior and deny transition</summary>
+<summary>Policy for unassigned developers and the deny transition</summary>
 
 Anyone entitled but not in a business-unit group is **unassigned**. What happens
 to them is set by `bu-unassigned`, one of the gateway's named values — API

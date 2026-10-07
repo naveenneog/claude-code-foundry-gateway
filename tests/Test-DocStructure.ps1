@@ -67,6 +67,22 @@ $EnrolledGuides = @(
 
 function Write-Ok([string]$Message) { Write-Host "  [OK]   $Message" }
 
+# git's output is decoded with the console encoding when captured with & git. Test-All runs each suite
+# without a console, where that is not UTF-8, so a heading with an em dash turned into mojibake and its
+# baseline anchor never matched. Read blobs through a process whose output is decoded as UTF-8.
+function Get-GitBlobText([string]$Spec) {
+  $psi = [Diagnostics.ProcessStartInfo]::new()
+  $psi.FileName = 'git'
+  foreach ($arg in @('-C', $Root, 'show', $Spec)) { $psi.ArgumentList.Add($arg) }
+  $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+  $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+  $psi.StandardOutputEncoding = [Text.UTF8Encoding]::new($false)
+  $process = [Diagnostics.Process]::Start($psi)
+  $text = $process.StandardOutput.ReadToEnd(); [void]$process.StandardError.ReadToEnd(); $process.WaitForExit()
+  if ($process.ExitCode -ne 0) { return $null }
+  return $text
+}
+
 function Assert-Condition([bool]$Condition, [string]$Message) { if (-not $Condition) { throw $Message } }
 
 
@@ -636,6 +652,10 @@ Write-Ok "source guide discovery found $($guides.Count) guides"
 
 
 
+$developerBaseline = Get-GitBlobText "$BaselineCommit`:DEVELOPER.md"
+Assert-Condition ($developerBaseline -match ('(?m)^# Claude Code ' + [char]0x2014 + ' developer setup')) 'baseline guides are not read as UTF-8: the DEVELOPER.md H1 em dash did not survive'
+Write-Ok 'baseline guides are read as UTF-8 whatever the console encoding'
+
 foreach ($guide in $guides) {
 
   $currentPath = Join-Path $Root $guide
@@ -644,11 +664,11 @@ foreach ($guide in $guides) {
 
   $baselinePath = $guide -replace '\\','/'
 
-  $baseline = & git -C $Root show "$BaselineCommit`:$baselinePath" 2>$null
+  $baseline = Get-GitBlobText "$BaselineCommit`:$baselinePath"
 
-  if ($LASTEXITCODE -ne 0) { throw "baseline guide missing at $baselinePath" }
+  if ($null -eq $baseline) { throw "baseline guide missing at $baselinePath" }
 
-  $baseAnchors = Get-DocumentAnchors ($baseline -join "`n")
+  $baseAnchors = Get-DocumentAnchors ($baseline -replace "`r`n", "`n")
 
   $currentAnchors = Get-DocumentAnchors ($current -replace "`r`n", "`n")
 
