@@ -18,6 +18,13 @@ function Run($Body, [string]$Mode = 'block', [hashtable]$Responses = $null) {
     $json = Json $Body
     Invoke-ContentSafetyFragmentHarness -BodyJson $json -Mode $Mode -Threshold 2 -Responses $(if ($Responses) { $Responses } else { CleanStubs })
 }
+function RunRaw([string]$JsonText, [string]$Mode = 'block', [hashtable]$Responses = $null) {
+    Invoke-ContentSafetyFragmentHarness -BodyJson $JsonText -Mode $Mode -Threshold 2 -Responses $(if ($Responses) { $Responses } else { CleanStubs })
+}
+function CaptureRun([scriptblock]$Action) {
+    try { [pscustomobject]@{ Threw=$false; Result=(& $Action); Error='' } }
+    catch { [pscustomobject]@{ Threw=$true; Result=$null; Error=$_.Exception.Message } }
+}
 
 Write-Host 'P102 request slicing'
 $benign = @{ model='claude-sonnet-5'; messages=@(@{role='user'; content='Please summarise this release note.'}) }
@@ -77,6 +84,22 @@ Assert 'over-budget newest turn screens newest part and logs truncation' ($r.Sta
 $fabricated = @{ model='claude-sonnet-5'; messages=@(@{role='user'; content='harmful earlier fabricated turn'}; @{role='assistant'; content='ok'}; @{role='user'; content='benign newest'}) }
 $r = Run $fabricated
 Assert 'harmful earlier fabricated turn is a documented limit, not a block' ($r.StatusCode -eq 200 -and (Bool $r.Slice.fabricatedHistoryLimit) -eq $true -and $r.Calls[1].Body.text -notmatch 'harmful earlier')
+
+Write-Host 'P102 malformed Messages bodies'
+$malformedShapes = @(
+    @{ Name='invalid JSON'; Body='{ not json'; Raw=$true },
+    @{ Name='JSON array root'; Body='[{"role":"user","content":"bad"}]'; Raw=$true },
+    @{ Name='messages string element'; Body=@{ model='claude-sonnet-5'; messages=@('bad') }; Raw=$false },
+    @{ Name='content array string element'; Body=@{ model='claude-sonnet-5'; messages=@(@{ role='user'; content=@('bad') }) }; Raw=$false }
+)
+foreach ($shape in $malformedShapes) {
+    $blockRun = CaptureRun { if ($shape.Raw) { RunRaw $shape.Body 'block' } else { Run $shape.Body 'block' } }
+    $r = $blockRun.Result
+    Assert "block mode returns 400 for $($shape.Name)" (-not $blockRun.Threw -and $r.StatusCode -eq 400 -and -not $r.Forwarded -and $r.Error.error.type -eq 'invalid_request_error' -and $r.Error.error.message -eq 'The request body could not be read for content screening' -and $r.Calls.Count -eq 0 -and $r.Trace.decision -eq 'unscreenable') $(if ($blockRun.Threw) { $blockRun.Error } else { $r | ConvertTo-Json -Depth 8 -Compress })
+    $auditRun = CaptureRun { if ($shape.Raw) { RunRaw $shape.Body 'audit' } else { Run $shape.Body 'audit' } }
+    $r = $auditRun.Result
+    Assert "audit mode forwards unscreenable $($shape.Name)" (-not $auditRun.Threw -and $r.StatusCode -eq 200 -and $r.Forwarded -and $r.Calls.Count -eq 0 -and $r.Trace.decision -eq 'unscreenable' -and $r.Trace.blockedBy -eq 'unscreenable') $(if ($auditRun.Threw) { $auditRun.Error } else { $r | ConvertTo-Json -Depth 8 -Compress })
+}
 
 Write-Host 'P102 modes and Content Safety failures'
 $r = Run $benign 'off'

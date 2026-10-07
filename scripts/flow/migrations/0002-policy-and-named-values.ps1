@@ -22,6 +22,12 @@ function Test-ClaudePolicyHasLifecycleMarkers {
     return $true
 }
 
+function Test-ClaudePolicyHasContentSafetyInclude {
+    param([AllowEmptyString()][string]$Policy)
+    if (-not $Policy) { return $false }
+    return [bool]($Policy -match '<include-fragment\s+fragment-id="content-safety-screening"\s*/>')
+}
+
 function Get-ClaudeFlowMigrationPlan {
     param([Parameter(Mandatory = $true)]$Record, $Discovery)
     $root = Get-ClaudeFlowLifecycleRepoRoot
@@ -30,9 +36,11 @@ function Get-ClaudeFlowMigrationPlan {
     $desiredHash = Get-ClaudeFlowLifecycleStringHash -Text $desiredPolicy
     $livePolicy = if ($Discovery -and $Discovery.PSObject.Properties.Name -contains 'policy') { [string]$Discovery.policy } else { '' }
     $liveHash = if ($livePolicy) { Get-ClaudeFlowLifecycleStringHash -Text $livePolicy } elseif ($Discovery -and $Discovery.policyHash) { [string]$Discovery.policyHash } else { '' }
-    $policyCurrent = ($liveHash -eq $desiredHash) -or (Test-ClaudePolicyHasLifecycleMarkers -Policy $livePolicy)
     $refs = @(Get-ClaudeFlowLifecyclePolicyAndFragmentNamedValueReferences -PolicyPath $policyPath)
     $fragments = @(Get-ClaudeFlowLifecyclePolicyFragmentIds -PolicyPath $policyPath)
+    $requiresContentSafetyInclude = @($fragments | Where-Object { $_ -eq 'content-safety-screening' }).Count -gt 0
+    $policyHasRequiredIncludes = (-not $requiresContentSafetyInclude) -or (Test-ClaudePolicyHasContentSafetyInclude -Policy $livePolicy)
+    $policyCurrent = ($liveHash -eq $desiredHash) -or ((Test-ClaudePolicyHasLifecycleMarkers -Policy $livePolicy) -and $policyHasRequiredIncludes)
     $templateDefaults = Get-ClaudeFlowLifecycleTemplateNamedValueDefaults
     $liveNamed = Get-ClaudeFlowLifecycleNamedValueMap -Discovery $Discovery
     $liveFragments = @{}
@@ -130,7 +138,10 @@ function Test-ClaudeFlowMigration {
     $desiredHash = Get-ClaudeFlowLifecycleStringHash -Text ([IO.File]::ReadAllText((Join-Path $root 'infra\policy.xml')))
     $livePolicy = if ($Discovery -and $Discovery.policy) { [string]$Discovery.policy } else { '' }
     $liveHash = if ($livePolicy) { Get-ClaudeFlowLifecycleStringHash -Text $livePolicy } elseif ($Discovery -and $Discovery.policyHash) { [string]$Discovery.policyHash } else { '' }
-    $hashOk = ($liveHash -eq $desiredHash) -or (Test-ClaudePolicyHasLifecycleMarkers -Policy $livePolicy)
+    $fragments = @(Get-ClaudeFlowLifecyclePolicyFragmentIds -PolicyPath (Join-Path $root 'infra\policy.xml'))
+    $requiresContentSafetyInclude = @($fragments | Where-Object { $_ -eq 'content-safety-screening' }).Count -gt 0
+    $policyHasRequiredIncludes = (-not $requiresContentSafetyInclude) -or (Test-ClaudePolicyHasContentSafetyInclude -Policy $livePolicy)
+    $hashOk = ($liveHash -eq $desiredHash) -or ((Test-ClaudePolicyHasLifecycleMarkers -Policy $livePolicy) -and $policyHasRequiredIncludes)
     $liveNamed = Get-ClaudeFlowLifecycleNamedValueMap -Discovery $Discovery
     $missing = @(Get-ClaudeFlowLifecyclePolicyAndFragmentNamedValueReferences | Where-Object { -not $liveNamed.ContainsKey($_) })
     [pscustomobject]@{

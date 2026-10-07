@@ -100,9 +100,12 @@ $freshWithFragment | Add-Member -NotePropertyName policyFragments -NotePropertyV
 $noopWithFragment = Get-ClaudeFlowMigrationPlan -Record $record -Discovery $freshWithFragment
 Assert 'migration does not rewrite existing policy fragments or named values' (Test-ClaudeFlowPlanIsNoop $noopWithFragment)
 
-$normalizedPolicy = '<policies>usd-budgets usd-budget-state external-idp-extra-audience urn:disabled:claude-extra-audience entitlement-source</policies>'
+$normalizedPolicy = '<policies>usd-budgets usd-budget-state external-idp-extra-audience urn:disabled:claude-extra-audience entitlement-source <include-fragment fragment-id="content-safety-screening" /></policies>'
 $normalizedPlan = Get-ClaudeFlowMigrationPlan -Record $record -Discovery ([pscustomobject]@{ resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; location = 'eastus2'; sku = 'BasicV2'; policy = $normalizedPolicy; namedValues = $allNv; policyFragments = @('content-safety-screening') })
 Assert 'APIM-normalized current policy markers do not cause repeated updates' (Test-ClaudeFlowPlanIsNoop $normalizedPlan)
+$oldMarkedPolicy = '<policies>usd-budgets usd-budget-state external-idp-extra-audience urn:disabled:claude-extra-audience entitlement-source</policies>'
+$oldMarkedPlan = Get-ClaudeFlowMigrationPlan -Record $record -Discovery ([pscustomobject]@{ resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; location = 'eastus2'; sku = 'BasicV2'; policy = $oldMarkedPolicy; namedValues = $allNv; policyFragments = @('content-safety-screening') })
+Assert 'policy migration rewrites older marked policies that lack the content safety include' (@($oldMarkedPlan.Actions | Where-Object Target -eq 'apim policy claude-foundry').Count -eq 1 -and @($oldMarkedPlan.Data.MissingNamedValues).Count -eq 0 -and @($oldMarkedPlan.Data.MissingPolicyFragments).Count -eq 0) ($oldMarkedPlan | ConvertTo-Json -Depth 8 -Compress)
 
 $blankAudience = @{}
 foreach ($r in $refs) { $blankAudience[$r] = 'x' }

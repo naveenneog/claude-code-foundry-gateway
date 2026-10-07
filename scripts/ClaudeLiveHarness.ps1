@@ -1,5 +1,8 @@
 function Add-Result([string]$Step, [bool]$Ok, [string]$Detail = '') {
-    $results.Add([pscustomobject]@{ step = $Step; ok = $Ok; detail = $Detail })
+    $entry = [pscustomobject]@{ step = $Step; ok = $Ok; detail = $Detail }
+    $stepList = Get-Variable -Name stepResults -Scope Script -ErrorAction SilentlyContinue
+    if ($stepList -and $null -ne $stepList.Value) { $stepList.Value.Add($entry) }
+    else { $results.Add($entry) }
     $colour = if ($Ok) { 'Green' } else { 'Red' }
     Write-Host ("  [{0}] {1} {2}" -f $(if ($Ok) { 'OK' } else { 'FAIL' }), $Step, $Detail) -ForegroundColor $colour
 }

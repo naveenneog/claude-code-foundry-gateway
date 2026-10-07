@@ -16,8 +16,8 @@ The newest slice is capped at 10,000 characters and tool-result documents at fiv
 | Mode | Behavior |
 |---|---|
 | `off` | No Prompt Shields or analyze call is made. The existing Foundry forwarding path is unchanged. |
-| `audit` | Prompt Shields and analyze run and trace the decision, but the Claude request continues. Content Safety errors are logged. |
-| `block` | Detected prompt attacks or severity at or above `content-safety-threshold` return Anthropic-style 403 JSON before Foundry. Content Safety errors or timeouts return 503 with `Retry-After: 5`. |
+| `audit` | Prompt Shields and analyze run and trace the decision, but the Claude request continues. Content Safety errors are logged. If the body cannot be read as a Claude Messages request, no Content Safety call is made and the trace decision is `unscreenable`. |
+| `block` | Detected prompt attacks or severity at or above `content-safety-threshold` return Anthropic-style 403 JSON before Foundry. Content Safety errors or timeouts return 503 with `Retry-After: 5`. If the body cannot be read as a Claude Messages request, the gateway returns Anthropic-style 400 `invalid_request_error` JSON and traces decision `unscreenable`. |
 
 The default threshold is `2`, matching the first nonzero severity in `FourSeverityLevels`.
 
@@ -51,7 +51,7 @@ Crash-recovery teardown can be re-run from the receipt:
 
 ## Logging
 
-The policy writes one trace per screened request, with the message `content safety request screening` and the custom property `screening` set to `claude-content-safety`; a trace's `source` attribute is not stored as a custom property. Metadata includes mode, decision, blocked reason, severity numbers, booleans for Prompt Shields results, threshold, truncation and elapsed milliseconds. It does not store prompt text, system text, tool text, model output, image bytes or matched snippets. With `content-safety-mode` set to `off`, the policy does not screen and writes no trace.
+The policy writes one trace per screened or unscreenable request, with the message `content safety request screening` and the custom property `screening` set to `claude-content-safety`; a trace's `source` attribute is not stored as a custom property. Metadata includes mode, decision, blocked reason, severity numbers, booleans for Prompt Shields results, threshold, truncation and elapsed milliseconds. It does not store prompt text, system text, tool text, model output, image bytes or matched snippets. With `content-safety-mode` set to `off`, the policy does not screen and writes no trace.
 
 ```kusto
 traces
