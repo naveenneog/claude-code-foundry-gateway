@@ -119,8 +119,9 @@ function Invoke-RestMethod {
         return [pscustomobject]@{ name='content-safety-screening'; properties=[pscustomobject]@{ value='<fragment />' } }
     }
     if ($Uri -match '^https://management\.azure\.com/.+/apis/claude-foundry/policies/policy\?api-version=2024-05-01&format=rawxml$') {
-        if ($global:Live.UpgradeCheckFails -eq 'policy') { return '<policies />' }
-        return '<policies><include-fragment fragment-id="content-safety-screening" /></policies>'
+        # ARM returns the policy as a resource object; the XML is in properties.value (format rawxml).
+        if ($global:Live.UpgradeCheckFails -eq 'policy') { return [pscustomobject]@{ name = 'policy'; properties = [pscustomobject]@{ format = 'rawxml'; value = '<policies />' } } }
+        return [pscustomobject]@{ name = 'policy'; properties = [pscustomobject]@{ format = 'rawxml'; value = '<policies><include-fragment fragment-id="content-safety-screening" /></policies>' } }
     }
     if ($Uri -match '^https://management\.azure\.com/.+/apis/claude-foundry/diagnostics/applicationinsights\?api-version=2024-05-01$') {
         return [pscustomobject]@{ properties = [pscustomobject]@{ loggerId = '/subscriptions/sub/resourceGroups/rg-p102-live-abc123/providers/Microsoft.ApiManagement/service/apim-p102live/loggers/applicationinsights'; metrics = $true } }

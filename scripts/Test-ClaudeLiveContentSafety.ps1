@@ -199,7 +199,7 @@ try {
         if ($fragment.StatusCode -ne 200) { throw "content-safety-screening fragment was not found after update: $($fragment.Error)" }
         $policyResponse = Invoke-P102ArmGet -Uri $policyUri -SubscriptionId $SubscriptionId
         if ($policyResponse.StatusCode -ne 200) { throw "API policy was not found after update: $($policyResponse.Error)" }
-        $policy = [string]$policyResponse.Body
+        $policy = [string]$policyResponse.Body.properties.value
         if ($policy -notmatch 'include-fragment.*content-safety-screening') { throw 'API policy does not include content-safety-screening after update.' }
         $case1 = New-P102Case upgrade-after pass @{ model=$Model; max_tokens=16; messages=@(@{role='user'; content='Hello, please say OK.'}) }
         Add-P102CaseResult $case1 (Invoke-GatewayRequest -Url $url -BodyObject $case1.body)
