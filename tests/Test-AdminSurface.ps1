@@ -1148,7 +1148,7 @@ Assert 'and routed to a proxy exclusion'         ($dev2 -match 'a proxy exclusio
 $set2 = Get-Content (Join-Path $root 'docs/SETUP.md') -Raw
 Assert 'the setup guide lists its sections'      ($set2 -match '(?m)^\*\*In this article\*\*')
 Assert 'the wizard choices are tabulated'        ($set2 -match '\| Developer sign-in \| `interactive` / `device` / `helper` \|')
-Assert 'sign-in is said to be decided once'      ($set2 -match 'decided here, once, for everyone')
+Assert 'sign-in is said to be one fleet-wide setting' ($set2 -match 'one setting for every developer')
 Assert 'with the reason a fleet should not split' ($set2 -match 'support paths and two sets of symptoms')
 Assert 'device is recommended for no browser'    ($set2 -match 'the only option that works without a browser')
 Assert 'and it is said to be changeable later'   ($set2 -match 'reissuing `claude-gateway\.json`')

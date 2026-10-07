@@ -12,8 +12,22 @@ Nothing here is a recommendation about your organisation — each entry says wha
 the default does, what the alternatives cost, and what happens if you leave it.
 
 ---
+## Quickstart
+
+This page records deployment decisions before a gateway is announced. The platform, finance and network owners supply the required address, availability, revocation, tier, budget and scale inputs.
+
+```powershell
+.\scripts\Measure-ClaudeCeiling.ps1
+.\scripts\Measure-ClaudeProjectionCost.ps1 -Developers 500000 -DailyActive 50000 -AlwaysReadyInstances 2
+```
+
+**Expected result:** the decision record names the selected address, availability design, revocation window, APIM tier, budget authority and planned population. The commands provide local headroom and projection-cost evidence; they do not approve production capacity by themselves.
 
 ## The two that are expensive to defer
+
+<details>
+
+<summary>Custom address and regional resilience choices</summary>
 
 ### 1. Do developers get a company web address, or the Azure one?
 
@@ -66,47 +80,55 @@ See [Scale](SCALE.md#two-things-to-get-right-on-the-first-day) and U9.
 
 ---
 
+</details>
+
 ## The one that blocks the scaling work
+
+<details>
+
+<summary>Revocation window, projection records and removal proof</summary>
 
 ### 3. If you remove someone, how long may they keep working?
 
-**Default today:** the named-value install changes only when a sync publishes.
-It has no lease-based revocation bound if sync stops. On the optional projection,
-`entitlement-cache-seconds` defaults to 3600, but cache is clipped to an absolute
-lease of at most 7,200 seconds from directory scan start.
+**Default today:** the installer deploys the Cosmos projection. Its records persist
+until a sync deletes or changes them; a job outage does not expire existing access.
+Removal becomes effective after the sync plus at most `entitlement-cache-seconds`.
+Snapshot apply-by deadlines are separate from record lifetime
+([ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md),
+[ADR-0052](adr/0052-cosmos-default-installer.md)).
 
-Under healthy sync, removal takes effect after reconciliation plus the smaller
-of cache duration and remaining lease. A stopped projection sync eventually
-causes `503`, not indefinitely stale access. Existing streams are not interrupted.
-
-Read-path cost is computed by `./scripts/Measure-ClaudeProjectionCost.ps1
--Developers 500000 -DailyActive 50000 -AlwaysReadyInstances 2`, not quoted as a
-complete operating bill. Current at-rest cost is $91.56/month; hourly lease
-renewal at this size adds about 365 million writes/month, approximately
-$538/month at the measured create charge (derived). See the
-[2026-09-24 P19 record](status/P19.md#where-p19-stands-2026-09-24).
+The current two-instance read profile is computed by `./scripts/Measure-ClaudeProjectionCost.ps1 -Developers 500000 -DailyActive 50000 -AlwaysReadyInstances 2` and costs $91.56/month, not quoted as a complete operating bill, at rest under the dated
+assumptions in [Secure projection](SECURE-PROJECTION.md#cost). The former hourly
+lease-renewal write estimate is historical, not the current operating model.
 
 **Portal:** APIM > Named values > `entitlement-cache-seconds`; the sync owner
-sets the scan schedule and lease. Cosmos > Data Explorer, from an authorised
-private-network client, can inspect `lastVerifiedAt` and `expiresAt`.
-Do not lengthen a cache setting to hide an expired projection. Verify removal
-with a real request and the [projection checks](SECURE-PROJECTION.md#verify).
+sets the sync schedule. Cosmos > Data Explorer, from an authorised private-network
+client, can inspect the applied records and sync status. Verify removal with a
+fresh request and the [projection checks](PROJECTION-WORKBOOK.md#step-5-verify-requests).
 
 ---
 
+</details>
+
 ## The tier
+
+<details>
+
+<summary>Basic, Standard and Premium v2 upgrade triggers</summary>
 
 ### 4. When do you move off the starter tier?
 
 **Default today:** Basic v2.
 
-Basic v2 cannot join a virtual network. The entitlement store that removes the
-roughly 93-developer ceiling sits behind a private endpoint, so **Basic v2
-cannot run it at any size**. This is a networking limit, not a headcount one.
+Basic v2 supports the public Entra-authenticated resolver profile while Cosmos
+remains private. A private resolver needs Standard v2 or Premium v2 outbound VNet
+integration ([ADR-0028](adr/0028-basic-v2-projection-resolver.md),
+[ADR-0052](adr/0052-cosmos-default-installer.md)).
 
-Basic v2 to Standard v2 is an in-place change: no gateway downtime, no change of
-address, nothing to reconfigure. Anything beyond Standard v2 means a new
-instance, which is why decision 1 exists.
+Basic v2 to Standard v2 is an in-place change on the supported path; verify the
+current upgrade operation and rollback plan before relying on no client address
+change. Anything beyond Standard v2 can mean a new instance, which is why
+decision 1 exists.
 
 **Move before a wider rollout**, not after.
 **Portal:** APIM > Pricing tier can show available in-place changes. Review the
@@ -115,7 +137,13 @@ the tier decision from the storage and traffic limits.
 
 ---
 
+</details>
+
 ## Money and policy
+
+<details>
+
+<summary>Org ceiling, budget modes, model allowlists and unassigned users</summary>
 
 ### 5. What is the whole-organisation ceiling?
 
@@ -170,9 +198,9 @@ use the ledger for reporting ([ADR-0019](adr/0019-budget-enforcement-modes.md)).
 **Default today:** yes. `models-standard` and `models-premium` are both empty,
 which means every deployed model is allowed in both tiers.
 
-Opus is two and a half times Sonnet on both input and output. This is the
-largest single cost lever available, and it is the only one caching cannot
-defeat.
+Opus is two and a half times Sonnet on both input and output. Model allowlists
+control permitted deployments independently of client settings. Prices vary by
+model; the approved price book supplies the rates ([Models](MODELS.md#the-price-book)).
 
 ```powershell
 ./scripts/Set-ClaudeTier.ps1 -Tier standard -Models claude-sonnet-5
@@ -195,7 +223,13 @@ unassigned developers in the workbook before switching to `deny`.
 
 ---
 
+</details>
+
 ## The scope question
+
+<details>
+
+<summary>Population targets and required scaling evidence</summary>
 
 ### 9. How many developers are you actually planning for?
 
@@ -212,6 +246,8 @@ This decides how much of the scaling work is worth doing.
 the first of those.
 **Portal:** APIM > Named values shows list lengths; [Scale](SCALE.md) explains
 how to calculate headroom and the measurements a capacity claim requires.
+
+</details>
 
 ## Next steps
 

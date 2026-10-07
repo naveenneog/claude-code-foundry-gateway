@@ -3,8 +3,23 @@
 For FinOps owners and budget holders. The output is an **internal usage tariff**,
 not a reconciled Azure invoice. Read [Architecture](ARCHITECTURE.md) for the data
 flow and [Business units](BUSINESS-UNITS.md) for who owns each allocation.
+## Quickstart
+
+The commands run from the repository root in PowerShell 7 after the gateway telemetry definitions have been published. The deployment record supplies the gateway target.
+
+```powershell
+$gateway = Get-Content .\onboarding\claude-gateway.json -Raw | ConvertFrom-Json
+.\scripts\Publish-ClaudeQueries.ps1 -ResourceGroup $gateway.resourceGroup -ApimName $gateway.apimName
+.\scripts\New-ClaudeChargebackReport.ps1 -ResourceGroup $gateway.resourceGroup -ApimName $gateway.apimName -WhatIf
+```
+
+**Expected result:** reporting definitions are present and the previous closed month report plan is shown with documented caveats. Invoice reconciliation remains a separate finance review.
 
 ## Prerequisites
+
+<details>
+
+<summary>Gateway, workspace, billing access and rate inputs</summary>
 
 | Need | Who supplies it |
 |---|---|
@@ -33,7 +48,13 @@ For a console connection, the owner supplies the actual URL and delegated scope,
 or an authorised administrator reads the gateway's `turnstile-integration`
 named value. Do not derive a client ID from an account or tenant ID.
 
+</details>
+
 ## 1. Publish or refresh the reporting definitions
+
+<details>
+
+<summary>KQL functions, workbook publication and verification</summary>
 
 Have a platform owner run these from the repository root, with explicit targets:
 
@@ -66,7 +87,13 @@ Azure Monitor > Workbooks > New > Edit > Advanced editor accepts
 Confirm recent known requests, nonempty `price_book_date`/`membership_date`,
 and `priced_ok`. An empty chart is not proof of zero spend.
 
+</details>
+
 ## 2. Select and export the closed month
+
+<details>
+
+<summary>Closed-month KQL export and provenance fields</summary>
 
 In Log Analytics > Logs, run:
 
@@ -91,7 +118,13 @@ settle and rerun after late data arrives; do not count the same boundary twice.
 Child spend also rolls into its parent, so do not sum a parent and its children
 as independent charges.
 
+</details>
+
 ## 3. Review caveats before approving allocations
+
+<details>
+
+<summary>Ledger, cache, pricing and invoice caveats</summary>
 
 | Check | Consequence |
 |---|---|
@@ -108,7 +141,13 @@ Keep each token category separate when pricing. `Total Tokens` is neither a
 dollar amount nor complete billable usage. The measured cache ratios in older
 examples describe that sample only, not your organisation.
 
+</details>
+
 ## 4. Compare to billed cost and set the next budget
+
+<details>
+
+<summary>Cost analysis reconciliation and budget setting</summary>
 
 **Portal:** Cost Management > Cost analysis > select the same billing scope and
 closed month > filter the Foundry resource / Claude meter. Reconcile separately
@@ -122,7 +161,13 @@ For a dollar budget, state the model and output-share assumptions used to conver
 it to tokens. Concurrent requests and cache blindness mean it is not a hard
 dollar stop; see [Scale](SCALE.md#the-budget-is-a-delayed-kill-switch-not-a-hard-cap).
 
+</details>
+
 ## Optional consoles
+
+<details>
+
+<summary>Turnstile, AUM, Grafana and scoped sign-in</summary>
 
 - **Turnstile:** [setup and operating guide](TURNSTILE.md). Units/teams, usage
   and delegated management are separate from the inference request path.
@@ -179,6 +224,8 @@ An empty manager scope means check the assigned manager group/catalog and a
 fresh sign-in. The owner's live manager-only acceptance is still open in
 [Status](STATUS.md); do not mistake the recorded test-signed-token browser run
 for that separate live acceptance.
+
+</details>
 
 ## Next steps
 

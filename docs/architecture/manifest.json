@@ -329,7 +329,7 @@
       "id": "network-private",
       "source": "docs/architecture/11-network-private.json",
       "inputs": {
-        "docs/NETWORK-ENTERPRISE.md": "4a01b10e555d04096ba51deaebadaa8b829826f7377dd2e27446eaca442e8467",
+        "docs/NETWORK-ENTERPRISE.md": "afdb12628b40e56c2bd1ee18fd9e214603ef2a1647b5503e5019460be4205944",
         "docs/architecture/11-network-private.json": "0a7649f7c1029dd7da0b0e63d17479086d3515c7359a36d3705dd5c272f0afaf",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
@@ -355,7 +355,7 @@
       "id": "network-public",
       "source": "docs/architecture/12-network-public.json",
       "inputs": {
-        "docs/NETWORK-ENTERPRISE.md": "4a01b10e555d04096ba51deaebadaa8b829826f7377dd2e27446eaca442e8467",
+        "docs/NETWORK-ENTERPRISE.md": "afdb12628b40e56c2bd1ee18fd9e214603ef2a1647b5503e5019460be4205944",
         "docs/architecture/12-network-public.json": "71187267e6c49b7dd686e266396b45b8e2f503d8fb7ae28b93dd1b3bd8cbc76d",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
@@ -380,7 +380,7 @@
       "id": "network-hybrid",
       "source": "docs/architecture/13-network-hybrid.json",
       "inputs": {
-        "docs/NETWORK-ENTERPRISE.md": "4a01b10e555d04096ba51deaebadaa8b829826f7377dd2e27446eaca442e8467",
+        "docs/NETWORK-ENTERPRISE.md": "afdb12628b40e56c2bd1ee18fd9e214603ef2a1647b5503e5019460be4205944",
         "docs/architecture/13-network-hybrid.json": "7540f67ef2881f2a329edbcbd38d1e5ec76602277636c7cda1d45d24067226ab",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",

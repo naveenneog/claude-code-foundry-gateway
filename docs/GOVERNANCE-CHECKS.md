@@ -18,8 +18,21 @@ $FRG     = "<foundry-resource-group>"
 ```
 
 ---
+## Quickstart
+
+The one-shot check runs from the repository root after entitlement and budget settings are published. The selected identities are test accounts approved for governance verification. `$rg` and `$apim` are the gateway resource group and API Management name.
+
+```powershell
+.\scripts\Test-ClaudeHealth.ps1 -ResourceGroup $rg -ApimName $apim -FailOn warn
+```
+
+**Expected result:** entitlement, tier, attribution and configuration checks report their observed evidence. The throttle check is skipped until an approved budget-exhaustion window is available.
 
 ## The one-shot check
+
+<details>
+
+<summary>Four-control report and throttle skip option</summary>
 
 Produces the full four-control report:
 
@@ -31,7 +44,7 @@ Produces the full four-control report:
 1. Entitled developer          [PASS] HTTP 200  tier=standard  consumed=20  remaining=19980
 2. Tier enforcement            [PASS] HTTP 200  tier=premium   consumed=20  remaining=79980
 3. Per-minute token budget     [PASS] HTTP 429  Retry-After: 3s
-4. Chargeback attribution      alice@contoso.com 831 · build-agent 728
+4. Chargeback attribution      developer@contoso.com 831 · build-agent 728
 ```
 
 Add `-SkipThrottleTest` to leave the live budget untouched.
@@ -41,7 +54,13 @@ There is no single portal button equivalent to this report.
 
 ---
 
+</details>
+
 ## Check 1 — Is the caller entitled, and at which tier?
+
+<details>
+
+<summary>Entitlement headers, quotas and failure codes</summary>
 
 One call tells you everything: whether they are allowed, their tier, what they spent, and what is left.
 
@@ -91,7 +110,13 @@ x-governed-by                    apim-claude-gateway
 
 ---
 
+</details>
+
 ## Check 2 — Tier enforcement, using a second identity
+
+<details>
+
+<summary>Second identity token and premium tier proof</summary>
 
 Acquire a token as a service principal standing in for another developer:
 
@@ -120,7 +145,13 @@ portal operator's own sign-in is a different identity.
 
 ---
 
+</details>
+
 ## Check 3 — Prove the budget actually throttles
+
+<details>
+
+<summary>Temporary limit reduction and restore proof</summary>
 
 Lower the limit, exhaust it, restore it:
 
@@ -165,7 +196,13 @@ conclusion about the new limit.
 
 ---
 
+</details>
+
 ## Check 4 — Chargeback attribution
+
+<details>
+
+<summary>Ledger queries and pilot metric attribution</summary>
 
 First verify the request ledger in **Log Analytics > Logs** in the gateway's
 workspace, after [publishing its functions](MONITORING.md#7-dashboard):
@@ -217,7 +254,13 @@ evidence of complete billing.
 
 ---
 
+</details>
+
 ## Configuration audits
+
+<details>
+
+<summary>Membership, budgets, bypass and policy reads</summary>
 
 **Who is currently entitled, and at which tier**
 
@@ -269,7 +312,13 @@ $uri = "https://management.azure.com/subscriptions/$sub/resourceGroups/$RG/provi
 
 ---
 
+</details>
+
 ## Traffic and errors at the gateway
+
+<details>
+
+<summary>Workspace request query and access requirements</summary>
 
 ```powershell
 $wsid = az monitor log-analytics workspace show -g $RG -n <workspace> --query customerId -o tsv
@@ -287,7 +336,13 @@ Query access is required, not a Foundry inference role.
 
 ---
 
+</details>
+
 ## Client-side verification
+
+<details>
+
+<summary>Developer machine provider checks</summary>
 
 Run on the developer's machine, not the gateway:
 
@@ -303,3 +358,11 @@ plus the resource name. It does not work in the VS Code panel — terminal only.
 **Client UI:** verify the gateway connection in Desktop and the configured
 provider in VS Code; use [Developer setup](../DEVELOPER.md#using-it).
 If a request fails, [Troubleshooting](TROUBLESHOOTING.md) routes by symptom.
+
+</details>
+
+## Next
+
+- [Operations](OPERATIONS.md) covers health and headroom.
+- [Budgets](BUDGETS.md) covers enforcement limits.
+- [Monitoring](MONITORING.md) covers usage evidence.
