@@ -1,5 +1,7 @@
 """AUM developer add/remove actions shared by CLI and terminal screens."""
 
+import time
+
 from .developers import EntraDevelopers
 from .direct import DirectBackend
 from .errors import FinOpsError
@@ -41,6 +43,33 @@ def _scope_groups(state):
 def _client(engine):
     factory = getattr(engine, "developer_factory", None) or getattr(engine, "group_factory", None)
     return factory() if factory else EntraDevelopers(config=getattr(engine.backend, "config", None))
+
+
+PUBLISH_RETRY_SECONDS = 90
+PUBLISH_RETRY_INTERVAL_SECONDS = 10
+
+
+def _developer_publish_until_tier(bridge, *, tiers, person_id, expected_tier, allow_empty):
+    deadline = time.monotonic() + PUBLISH_RETRY_SECONDS
+    attempts = 0
+    last = {}
+    while True:
+        attempts += 1
+        last = bridge._bridge("developer_publish", standard_group=tiers["standard"],
+                              premium_group=tiers["premium"], user=person_id, **allow_empty)
+        published = last.get("published_tier")
+        if published == expected_tier:
+            if attempts > 1:
+                last["publication_lag_seconds"] = (attempts - 1) * PUBLISH_RETRY_INTERVAL_SECONDS
+            return last
+        if time.monotonic() >= deadline:
+            rerun = f"aum developer {'remove' if expected_tier == 'none' else 'add'} {person_id}"
+            last["publication_warning"] = (
+                f"Gateway still reports tier {published or 'unknown'} after {PUBLISH_RETRY_SECONDS}s; "
+                f"expected {expected_tier}. Microsoft Graph can lag; rerun {rerun} or "
+                "scripts/Sync-ClaudeAccess.ps1 -User for this developer.")
+            return last
+        time.sleep(PUBLISH_RETRY_INTERVAL_SECONDS)
 
 
 def developer_find(engine, config, query, *, limit=50, cursor=None):
@@ -120,8 +149,10 @@ def developer_change(engine, config, target, *, tier=None, unit=None, remove=Fal
             plan["publication"] = publish_as_signed_in_admin(engine, config, apply=True).get("result", {})
             plan["publication_path"] = "Turnstile delegated publish-as-admin"
         else:
-            plan["publication"] = bridge._bridge("developer_publish", standard_group=tiers["standard"],
-                                                 premium_group=tiers["premium"], user=person["id"], **allow_empty)
+            expected_tier = "none" if remove else tier
+            plan["publication"] = _developer_publish_until_tier(
+                bridge, tiers=tiers, person_id=person["id"], expected_tier=expected_tier,
+                allow_empty=allow_empty)
             plan["publication_path"] = "Direct selected-scope membership refresh and tier allow-list sync"
         plan["preview"] = False
         plan["gateway_ready"] = "The developer can call the gateway after APIM named-value publication and gateway cache propagation."
