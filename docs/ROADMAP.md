@@ -107,7 +107,7 @@ deployment by hand fails ([P94 status](status/P94.md#p94-the-p86-renewal-job-dep
 | P99 | Merged (`2cfb932f`) with the owner's approval | Directory-scale snapshot transfer: the deployer's populate step, the switch's snapshot compare and full syncs move a snapshot of 500,000 developers within its apply-by time, instead of about 40,000 through `az container exec` today ([ADR-0053](adr/0053-parallel-compressed-runner-transfer.md), [P99 status](status/P99.md)) |
 | P100 | Merged (`7b365f64`) with the owner's approval; ahead of the P99 merge at the owner's request | The update flow moves a named-value gateway to the Cosmos projection: `Update-ClaudeGateway.ps1` plans the move with the gateway's previous tier groups, business units and entitlement, checks quotas, regions, permissions and policy, shows the resources, network and cost, and applies the installer's deploy, populate, compare and switch on approval ([ADR-0054](adr/0054-update-flow-entitlement-migration.md), [P100 status](status/P100.md)) |
 | P101 | In progress (`p101-one-sync`), [ADR-0057](adr/0057-one-sync-command.md) | One sync command for every store: `Sync-ClaudeAccess.ps1 -User` publishes one developer's change on a named-value gateway too (it refreshes the lists), reads the tier groups the gateway records in `entitlement-groups` (else the decision record, else the default names, as the P100 plan does) and records them, so gateways installed or moved by the installer gain it, and the AUM tool's developer add and remove publish through it (U25) |
-| P102 | Spike running | Content safety for Claude requests: an Azure AI Content Safety resource and an API Management policy that screens Claude Messages requests, measured live first, because the built-in `llm-content-safety` policy documents no Anthropic Messages support |
+| P102 | Merged (`49fe7a3c`) with the owner's approval | Content safety for Claude requests: an optional Azure AI Content Safety resource and custom API Management policy fragment that screens the system prompt, tool descriptions and the newest turn before Claude Messages requests reach Foundry ([ADR-0055](adr/0055-content-safety-screening.md), [P102 status](status/P102.md)) |
 
 Follow-ups from the P94 council, not yet packets: `sync/package-lock.json` carries `sha1` integrity
 for 50 of its 53 packages because this workstation reaches npm only through a feed whose metadata
@@ -784,3 +784,6 @@ to close the preview-feature gap. Both are recorded in `docs/CHARTER.md` as non-
       than assumed, and the fix is proven by a membership count changing on the live gateway.
       A build agent or scheduled job authenticates as a service principal and needs entitlement
       the same way a developer does
+
+
+Follow-up from P102 live proof: add tests/Test-AzArguments.ps1 coverage for az arguments passed through wrapper arrays such as Invoke-Az @(...), including embedded double quotes and shell metacharacters. Evidence: P102's Application Insights trace query was passed to az.cmd with KQL string literals and split before reaching Python, while the current literal-command detector did not see it.

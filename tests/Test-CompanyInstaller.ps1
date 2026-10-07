@@ -50,6 +50,7 @@ function Invoke-ClaudeAddressPlan {
 param($Root,$Values,$Decline,$ArchiveAnswer)
 $global:P69InstallWrites=New-Object 'Collections.Generic.List[string]'
 $global:P69InstallUnexpected=New-Object 'Collections.Generic.List[string]'
+$global:P69InstallDeployments=New-Object 'Collections.Generic.List[string]'
 $global:P69InstallPlanned=$null
 function az {
     $s=$args -join ' '; $global:LASTEXITCODE=0
@@ -69,9 +70,18 @@ function az {
         if($s -match '--query sku.name'){return 'BasicV2'}
         return '{"name":"apim-contoso","resourceGroup":"rg-contoso","location":"eastus2","publisherEmail":"ops@contoso.com","sku":{"name":"BasicV2"},"gatewayUrl":"https://apim-contoso.azure-api.net"}'
     }
-    if($s -like 'apim nv show*'){ if($s -like '*entitlement-cache-seconds*'){return '3600'}; if($s -like '*entitlement-projection-prefix*'){$global:LASTEXITCODE=3; return 'ERROR: (ResourceNotFound) NamedValue not found.'}; return ',,' }
+    if($s -like 'apim nv show*'){
+        if($s -like '*content-safety-mode*'){return 'block'}
+        if($s -like '*content-safety-endpoint*'){return 'https://content-safety-live.cognitiveservices.azure.com'}
+        if($s -like '*content-safety-threshold*'){return '4'}
+        if($s -like '*content-safety-timeout-seconds*'){return '7'}
+        if($s -like '*content-safety-truncate-mode*'){return 'newest'}
+        if($s -like '*entitlement-cache-seconds*'){return '3600'}
+        if($s -like '*entitlement-projection-prefix*'){$global:LASTEXITCODE=3; return 'ERROR: (ResourceNotFound) NamedValue not found.'}
+        return ',,'
+    }
     if($s -like 'group show*'){return 'eastus2'}
-    if($s -like 'deployment group create*'){$global:P69InstallWrites.Add('deployment');return}
+    if($s -like 'deployment group create*'){$global:P69InstallWrites.Add('deployment');$global:P69InstallDeployments.Add($s);return}
     if($s -like 'deployment group show*'){return 'https://apim-contoso.azure-api.net/claude'}
     if($s -like 'ad group show*'){return '00000000-0000-0000-0000-000000000002'}
     $global:P69InstallUnexpected.Add($s); throw "Unexpected az call: $s"
@@ -90,7 +100,7 @@ $lines=New-Object 'Collections.Generic.List[string]'
 $failure=''
 try { & (Join-Path $Root 'Install-ClaudeGateway.ps1') @Values *>&1 | ForEach-Object {$lines.Add([string]$_)} }
 catch {$failure=$_.Exception.Message}
-[pscustomobject]@{Text=$lines -join "`n";Failure=$failure;Writes=@($global:P69InstallWrites);Unexpected=@($global:P69InstallUnexpected);Planned=$global:P69InstallPlanned;Gateway=$global:P69ReceiptGateway}
+[pscustomobject]@{Text=$lines -join "`n";Failure=$failure;Writes=@($global:P69InstallWrites);Deployments=@($global:P69InstallDeployments);Unexpected=@($global:P69InstallUnexpected);Planned=$global:P69InstallPlanned;Gateway=$global:P69ReceiptGateway}
 '@
     function Invoke-Installer([hashtable]$Overrides=@{},[bool]$Decline=$false,$SavedRecord=$initial,[string]$ArchiveAnswer=''){
         [IO.File]::WriteAllText($recordPath,($SavedRecord|ConvertTo-Json -Depth 15))
@@ -109,6 +119,18 @@ catch {$failure=$_.Exception.Message}
         $true
     }
     Check 'custom WhatIf creates no deployment or address' {$preview.Writes.Count -eq 0 -and $preview.Unexpected.Count -eq 0}
+    $preserveSafety=Invoke-Installer @{AddressMode='azure'}
+    Check 'existing gateway re-run preserves live Content Safety settings without Content Safety switches' {
+        $deploy=[string]$preserveSafety.Deployments[0]
+        -not $preserveSafety.Failure -and $deploy -match 'contentSafetyMode=block' -and
+            $deploy -match 'contentSafetyEndpoint=https://content-safety-live\.cognitiveservices\.azure\.com' -and
+            $deploy -match 'contentSafetyThreshold=4' -and $deploy -match 'contentSafetyTimeoutSeconds=7'
+    }
+    $explicitSafety=Invoke-Installer @{AddressMode='azure';ContentSafetyMode='Audit'}
+    Check 'explicit ContentSafetyMode is lower-cased and overrides the live mode' {
+        $deploy=[string]$explicitSafety.Deployments[0]
+        -not $explicitSafety.Failure -and $deploy -match 'contentSafetyMode=audit'
+    }
     $mismatch=Invoke-Installer @{AddressApprovedPlanFingerprint=('0'*64)}
     Check 'real installer fingerprint mismatch rejects every resource write' {$mismatch.Failure -match 'plan changed' -and $mismatch.Writes.Count -eq 0}
     $declined=Invoke-Installer @{Yes=$false} $true

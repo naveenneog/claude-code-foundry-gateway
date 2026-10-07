@@ -154,6 +154,7 @@ try {
         Add-Case 'wizard uses offline native fixture' 'tests\Test-On-PS51.ps1' 'TestAzureFixture.ps1' 'MissingAzureFixture.ps1' $suite
         Add-Case 'preflight uses offline native fixture' 'tests\Test-PreflightBothHosts.ps1' 'TestAzureFixture.ps1' 'MissingAzureFixture.ps1' $suite
         Add-Case 'projection baseline diagnostic' 'tests\Test-ProjectionNegative.ps1' 'Get-Content -LiteralPath $suiteLog | Write-Host' '$null = "suppressed baseline output"' $suite
+        Add-Case 'projection process-start grouping' 'tests\Test-ProjectionNegative.ps1' 'if ($misplaced.Count) { throw' 'if ($false) { throw' $suite
         Add-Case 'all hosted proof groups' $workflow "@('Core', 'Runner', 'Wizard')" "@('Core', 'Core', 'Wizard')" $suite
     }
     elseif ($Mode -eq 'Runner') {

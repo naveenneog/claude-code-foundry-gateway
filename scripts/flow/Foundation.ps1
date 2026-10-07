@@ -127,6 +127,7 @@ function Get-ClaudeFlowFoundationInstallerMap {
         DesktopEntraScopes = 'desktopEntraScopes'
         DesktopEntraAudience = 'desktopEntraAudience'
         DesktopEntraResource = 'desktopEntraResource'
+        ContentSafetyMode = 'contentSafetyMode'
         ModelOrganizationName = 'modelOrganizationName'
         ModelIndustry = 'modelIndustry'
         ModelCountryCode = 'modelCountryCode'
