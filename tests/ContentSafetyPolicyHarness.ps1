@@ -161,6 +161,11 @@ function Assert-KnownAttributes($Node, [string[]]$Allowed) {
     foreach ($attr in @($Node.Attributes)) { if ($Allowed -notcontains $attr.Name) { throw "Unsupported attribute '$($attr.Name)' on <$($Node.LocalName)>" } }
 }
 function Get-ElementInnerValue($HostInfo, $Node, $Context) { Invoke-CompiledExpression $HostInfo $Node.InnerText $Context }
+function Assert-TraceValue($Kind, $Value) {
+    if ($null -eq $Value -or [string]$Value -eq '') {
+        throw "ExpressionValueValidationFailure at trace: Expression value is invalid. The value field is required. ($Kind)"
+    }
+}
 function Invoke-PolicyNodes($Nodes, $HostInfo, $Context, [Collections.Generic.List[object]]$Calls, [System.Collections.Specialized.OrderedDictionary]$Trace, [hashtable]$Stubs) {
     foreach ($node in @($Nodes)) {
         switch ($node.LocalName) {
@@ -223,10 +228,16 @@ function Invoke-PolicyNodes($Nodes, $HostInfo, $Context, [Collections.Generic.Li
             'trace' {
                 Assert-KnownAttributes $node @('source','severity')
                 foreach ($child in (Get-ElementChildren $node)) {
-                    if ($child.LocalName -eq 'message') { Assert-KnownAttributes $child @(); continue }
+                    if ($child.LocalName -eq 'message') {
+                        Assert-KnownAttributes $child @()
+                        Assert-TraceValue 'message' (Get-ElementInnerValue $HostInfo $child $Context)
+                        continue
+                    }
                     if ($child.LocalName -ne 'metadata') { throw "Unsupported <trace> child <$($child.LocalName)>" }
                     Assert-KnownAttributes $child @('name','value')
-                    $Trace[$child.GetAttribute('name')] = [string](Invoke-CompiledExpression $HostInfo $child.GetAttribute('value') $Context)
+                    $metadataValue = Invoke-CompiledExpression $HostInfo $child.GetAttribute('value') $Context
+                    Assert-TraceValue "metadata $($child.GetAttribute('name'))" $metadataValue
+                    $Trace[$child.GetAttribute('name')] = [string]$metadataValue
                 }
             }
             'return-response' {
@@ -281,7 +292,7 @@ function Invoke-ContentSafetyFragmentHarness {
         Variables = [pscustomobject](ConvertTo-PlainHash $ctx.Variables)
         Trace = [pscustomobject]$trace
         Slice = $slice
-        Decision = if ($decision) { [pscustomobject]@{ WouldBlock = ([string]$decision.blockedBy -ne '' -and [string]$decision.blockedBy -ne 'unavailable'); BlockedBy = [string]$decision.blockedBy; Raw = $decision } } else { [pscustomobject]@{ WouldBlock=$false; BlockedBy=''; Raw=$null } }
+        Decision = if ($decision) { [pscustomobject]@{ WouldBlock = ([string]$decision.blockedBy -ne '' -and [string]$decision.blockedBy -ne 'none' -and [string]$decision.blockedBy -ne 'unavailable'); BlockedBy = [string]$decision.blockedBy; Raw = $decision } } else { [pscustomobject]@{ WouldBlock=$false; BlockedBy=''; Raw=$null } }
         ReturnResponse = $return
         Forwarded = $forwarded
         Status = if ($forwarded) { 'forwarded' } else { 'return-response' }

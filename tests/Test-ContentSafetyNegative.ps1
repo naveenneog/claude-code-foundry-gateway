@@ -72,7 +72,7 @@ $fragmentPath = Join-Path $fixture 'infra\content-safety-screening.xml'
     </choose>
 </fragment>
 '@ | Set-Content -LiteralPath $fragmentPath -Encoding UTF8
-$r = Invoke-ExpectFailure 'tests\Test-ContentSafetyPolicy.ps1' $fixture 'block mode calls Prompt Shields and analyze once for benign strings'
+$r = Invoke-ExpectFailure 'tests\Test-ContentSafetyPolicy.ps1' $fixture 'ExpressionValueValidationFailure|block mode calls Prompt Shields and analyze once for benign strings'
 Assert 'restoring the stub empty slice fails the fragment harness' ($r.Failed -and $r.Matched) $r.Output
 Remove-Item -LiteralPath $fixture -Recurse -Force
 
@@ -102,6 +102,13 @@ $delegateFragment = @'
 '@
 $allowed = Test-ContentSafetyPolicyAllowedTypes -FragmentText $delegateFragment
 Assert 'allowed-type detector rejects System.Action and System.Func delegate variables' (-not $allowed.Pass -and ($allowed.Violations -join '; ') -match 'System\.Action' -and ($allowed.Violations -join '; ') -match 'System\.Func') (($allowed.Violations -join '; '))
+
+$fixture = Copy-P102Fixture 'empty-trace-metadata'
+$fragmentPath = Join-Path $fixture 'infra\content-safety-screening.xml'
+(Get-Content $fragmentPath -Raw).Replace('new JProperty("contentSafetyErrorClass", "none")', 'new JProperty("contentSafetyErrorClass", "")') | Set-Content -LiteralPath $fragmentPath -Encoding UTF8
+$r = Invoke-ExpectFailure 'tests\Test-ContentSafetyPolicy.ps1' $fixture 'ExpressionValueValidationFailure at trace'
+Assert 'empty trace metadata value fails the fragment harness' ($r.Failed -and $r.Matched) $r.Output
+Remove-Item -LiteralPath $fixture -Recurse -Force
 
 if ($script:failures) { throw "$($script:failures) of $($script:assertions) assertions failed" }
 Write-Host "P102 negative checks passed ($script:assertions assertions)."
