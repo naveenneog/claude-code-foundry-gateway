@@ -1,0 +1,209 @@
+<fragment>
+    <set-variable name="contentSafetyMode" value='@{ var raw = "{{content-safety-mode}}"; var mode = String.IsNullOrEmpty(raw) ? "" : raw.Trim().ToLowerInvariant(); return mode == "off" ? "off" : (mode == "audit" ? "audit" : "block"); }' />
+    <choose>
+        <when condition='@((string)context.Variables["contentSafetyMode"] != "off")'>
+            <set-variable name="contentSafetyStartedAt" value="@(DateTime.UtcNow)" />
+            <set-variable name="contentSafetyThreshold" value='@{ var parsed = 2; if (!int.TryParse("{{content-safety-threshold}}", out parsed)) { parsed = 2; } if (parsed &lt; 0) { parsed = 0; } if (parsed &gt; 6) { parsed = 6; } return parsed; }' />
+            <set-variable name="contentSafetySlice" value="@{
+                var unscreenable = false;
+                var truncated = false;
+                var newestSampled = false;
+                var marker = &quot;\n[...content safety sampled...]\n&quot;;
+                void addPart(System.Collections.Generic.List&lt;string&gt; list, string value) { var s = value == null ? &quot;&quot; : value.TrimEnd(&#x27;\r&#x27;,&#x27;\n&#x27;); if (!String.IsNullOrEmpty(s)) { list.Add(s); } }
+                void collectText(JToken token, System.Collections.Generic.List&lt;string&gt; list) {
+                    if (token == null) { return; }
+                    if (token.Type == JTokenType.String) { addPart(list, token.ToString()); return; }
+                    if (token.Type != JTokenType.Array) { unscreenable = true; return; }
+                    foreach (var blockToken in (JArray)token) {
+                        var block = blockToken as JObject; if (block == null) { unscreenable = true; break; }
+                        if (block[&quot;type&quot;] == null || block[&quot;type&quot;].Type != JTokenType.String) { continue; }
+                        var blockType = (string)block[&quot;type&quot;];
+                        if (blockType == &quot;text&quot; &amp;&amp; block[&quot;text&quot;] != null &amp;&amp; block[&quot;text&quot;].Type == JTokenType.String) { addPart(list, (string)block[&quot;text&quot;]); }
+                        else if (blockType == &quot;document&quot;) { var source = block[&quot;source&quot;] as JObject; if (source != null &amp;&amp; source[&quot;type&quot;] != null &amp;&amp; source[&quot;type&quot;].Type == JTokenType.String &amp;&amp; (string)source[&quot;type&quot;] == &quot;text&quot; &amp;&amp; source[&quot;data&quot;] != null &amp;&amp; source[&quot;data&quot;].Type == JTokenType.String) { addPart(list, (string)source[&quot;data&quot;]); } }
+                        else if (blockType == &quot;search_result&quot;) { collectText(block[&quot;content&quot;], list); }
+                    }
+                }
+                string sample(string value, int budget) {
+                    var s = value == null ? &quot;&quot; : value;
+                    if (budget &lt; 1) { budget = 1; }
+                    if (s.Length &lt;= budget) { return s; }
+                    truncated = true;
+                    if (budget &lt;= marker.Length) { return s.Substring(0, budget); }
+                    var keep = budget - marker.Length; var head = keep / 2; var tail = keep - head;
+                    return s.Substring(0, head) + marker + s.Substring(s.Length - tail, tail);
+                }
+                System.Collections.Generic.List&lt;int&gt; allocate(System.Collections.Generic.List&lt;string&gt; parts, int budget) {
+                    var alloc = new System.Collections.Generic.List&lt;int&gt;(); var open = parts.Count; var remaining = budget; var changed = true;
+                    for (var i = 0; i &lt; parts.Count; i++) { alloc.Add(-1); }
+                    while (changed &amp;&amp; open &gt; 0) {
+                        changed = false; var passShare = remaining / open;
+                        for (var i = 0; i &lt; parts.Count; i++) { if (alloc[i] &lt; 0 &amp;&amp; parts[i].Length &lt;= passShare) { alloc[i] = parts[i].Length; remaining -= parts[i].Length; open--; changed = true; } }
+                    }
+                    if (open &gt; 0) { var finalShare = Math.Max(1, remaining / open); for (var i = 0; i &lt; parts.Count; i++) { if (alloc[i] &lt; 0) { alloc[i] = finalShare; } } }
+                    return alloc;
+                }
+                string fairJoin(System.Collections.Generic.List&lt;string&gt; parts, int budget) {
+                    if (parts.Count == 0) { return &quot;&quot;; }
+                    if (budget &lt; 1) { truncated = true; return &quot;&quot;; }
+                    var alloc = allocate(parts, Math.Max(parts.Count, budget - (parts.Count - 1)));
+                    var joined = new System.Text.StringBuilder();
+                    for (var i = 0; i &lt; parts.Count; i++) { if (i &gt; 0) { joined.Append(&quot;\n&quot;); } joined.Append(sample(parts[i], alloc[i])); }
+                    var result = joined.ToString(); if (result.Length &gt; budget) { truncated = true; result = sample(result, budget); }
+                    return result;
+                }
+                int joinedLength(System.Collections.Generic.List&lt;string&gt; parts) { var n = 0; foreach (var p in parts) { n += p.Length; } return parts.Count == 0 ? 0 : n + parts.Count - 1; }
+                string newestFirst(System.Collections.Generic.List&lt;string&gt; first, System.Collections.Generic.List&lt;string&gt; rest, int budget) {
+                    var firstLength = joinedLength(first); var restLength = joinedLength(rest);
+                    var firstBudget = rest.Count == 0 ? budget : Math.Min(firstLength, Math.Max(budget * 6 / 10, budget - restLength - 1));
+                    var before = truncated; truncated = false;
+                    var head = fairJoin(first, firstBudget);
+                    if (truncated) { newestSampled = true; }
+                    truncated = truncated || before;
+                    if (rest.Count == 0) { return head; }
+                    var tail = fairJoin(rest, budget - head.Length - (head.Length &gt; 0 ? 1 : 0));
+                    if (head.Length == 0) { return tail; }
+                    if (tail.Length == 0) { return head; }
+                    return head + &quot;\n&quot; + tail;
+                }
+                string unscreenableSlice() { return new JObject(new JProperty(&quot;unscreenable&quot;, true), new JProperty(&quot;userPrompt&quot;, &quot;&quot;), new JProperty(&quot;documents&quot;, new JArray()), new JProperty(&quot;analyzeText&quot;, &quot;&quot;), new JProperty(&quot;truncated&quot;, truncated), new JProperty(&quot;emptyTextSlice&quot;, true), new JProperty(&quot;fabricatedHistoryLimit&quot;, false)).ToString(Newtonsoft.Json.Formatting.None); }
+                JObject root = null;
+                try { var parsed = context.Request.Body.As&lt;JToken&gt;(preserveContent: true); root = parsed as JObject; if (root == null) { unscreenable = true; } } catch { unscreenable = true; }
+                var truncateRaw = &quot;{{content-safety-truncate-mode}}&quot;;
+                var truncateMode = String.IsNullOrEmpty(truncateRaw) ? &quot;newest&quot; : truncateRaw.Trim().ToLowerInvariant();
+                if (truncateMode != &quot;newest&quot;) { truncateMode = &quot;block&quot;; }
+                var turnParts = new System.Collections.Generic.List&lt;string&gt;();
+                var envelopeParts = new System.Collections.Generic.List&lt;string&gt;();
+                var userParts = new System.Collections.Generic.List&lt;string&gt;();
+                var turnDocParts = new System.Collections.Generic.List&lt;string&gt;();
+                var toolDocParts = new System.Collections.Generic.List&lt;string&gt;();
+                JObject newestUser = null; var fabricated = false; var newestUserIndex = -1;
+                if (!unscreenable) { var sysParts = new System.Collections.Generic.List&lt;string&gt;(); collectText(root[&quot;system&quot;], sysParts); foreach (var p in sysParts) { envelopeParts.Add(p); } }
+                if (!unscreenable) { var tools = root[&quot;tools&quot;] as JArray; if (tools != null) { foreach (var toolToken in tools) { var toolObj = toolToken as JObject; if (toolObj != null &amp;&amp; toolObj[&quot;description&quot;] != null &amp;&amp; toolObj[&quot;description&quot;].Type == JTokenType.String) { addPart(toolDocParts, (string)toolObj[&quot;description&quot;]); addPart(envelopeParts, (string)toolObj[&quot;description&quot;]); } } } }
+                if (!unscreenable) {
+                    var messages = root[&quot;messages&quot;] as JArray;
+                    if (messages == null) { unscreenable = true; }
+                    else {
+                        for (var i = messages.Count - 1; i &gt;= 0; i--) { var message = messages[i] as JObject; if (message == null) { unscreenable = true; break; } if (message[&quot;role&quot;] != null &amp;&amp; message[&quot;role&quot;].Type == JTokenType.String &amp;&amp; (string)message[&quot;role&quot;] == &quot;user&quot;) { newestUser = message; newestUserIndex = i; break; } }
+                        if (!unscreenable &amp;&amp; newestUserIndex &gt; 0) { for (var h = 0; h &lt; newestUserIndex; h++) { var historic = messages[h] as JObject; if (historic == null) { unscreenable = true; break; } if (historic[&quot;role&quot;] != null &amp;&amp; historic[&quot;role&quot;].Type == JTokenType.String &amp;&amp; (string)historic[&quot;role&quot;] == &quot;user&quot;) { fabricated = true; break; } } }
+                        if (!unscreenable &amp;&amp; newestUserIndex &gt;= 0 &amp;&amp; newestUserIndex + 1 &lt; messages.Count) { var after = messages[newestUserIndex + 1] as JObject; if (after != null &amp;&amp; after[&quot;role&quot;] != null &amp;&amp; after[&quot;role&quot;].Type == JTokenType.String &amp;&amp; (string)after[&quot;role&quot;] == &quot;assistant&quot;) { var prefill = new System.Collections.Generic.List&lt;string&gt;(); collectText(after[&quot;content&quot;], prefill); foreach (var p in prefill) { userParts.Add(p); turnParts.Add(p); } } }
+                    }
+                }
+                if (!unscreenable &amp;&amp; newestUser != null) {
+                    var userContentToken = newestUser[&quot;content&quot;];
+                    if (userContentToken != null) {
+                        if (userContentToken.Type == JTokenType.String) { addPart(userParts, userContentToken.ToString()); addPart(turnParts, userContentToken.ToString()); }
+                        else if (userContentToken.Type == JTokenType.Array) {
+                            foreach (var blockToken in (JArray)userContentToken) {
+                                var block = blockToken as JObject; if (block == null) { unscreenable = true; break; }
+                                if (block[&quot;type&quot;] == null || block[&quot;type&quot;].Type != JTokenType.String) { continue; }
+                                var blockType = (string)block[&quot;type&quot;];
+                                if (blockType == &quot;text&quot;) { if (block[&quot;text&quot;] != null &amp;&amp; block[&quot;text&quot;].Type == JTokenType.String) { addPart(userParts, (string)block[&quot;text&quot;]); addPart(turnParts, (string)block[&quot;text&quot;]); } }
+                                else if (blockType == &quot;document&quot;) { var documentText = new System.Collections.Generic.List&lt;string&gt;(); collectText(new JArray(block), documentText); foreach (var p in documentText) { turnDocParts.Add(p); turnParts.Add(p); } }
+                                else if (blockType == &quot;tool_result&quot; || blockType == &quot;search_result&quot;) { var thirdParty = new System.Collections.Generic.List&lt;string&gt;(); collectText(block[&quot;content&quot;], thirdParty); if (unscreenable) { break; } foreach (var p in thirdParty) { turnDocParts.Add(p); turnParts.Add(p); } }
+                            }
+                        }
+                        else { unscreenable = true; }
+                    }
+                }
+                if (unscreenable) { return unscreenableSlice(); }
+                var beforePrompt = truncated; truncated = false;
+                var userPrompt = fairJoin(userParts, 10000);
+                if (truncated) { newestSampled = true; }
+                truncated = truncated || beforePrompt;
+                var turnSlots = toolDocParts.Count &gt; 0 ? 4 : 5;
+                var turnDocs = new System.Collections.Generic.List&lt;string&gt;();
+                if (turnDocParts.Count &lt;= turnSlots) { foreach (var p in turnDocParts) { turnDocs.Add(p); } }
+                else { for (var b = 0; b &lt; turnSlots; b++) { var bucket = new System.Text.StringBuilder(); for (var i = b; i &lt; turnDocParts.Count; i += turnSlots) { if (bucket.Length &gt; 0) { bucket.Append(&quot;\n&quot;); } bucket.Append(turnDocParts[i]); } turnDocs.Add(bucket.ToString()); } }
+                var turnDocLength = 0; foreach (var p in turnDocs) { turnDocLength += p.Length; }
+                var turnDocBudget = toolDocParts.Count == 0 ? 10000 : Math.Min(turnDocLength, Math.Max(6000, 10000 - joinedLength(toolDocParts)));
+                var documents = new JArray(); var usedDocChars = 0;
+                if (turnDocs.Count &gt; 0) {
+                    var beforeDocs = truncated; truncated = false;
+                    var docAlloc = allocate(turnDocs, Math.Max(turnDocs.Count, turnDocBudget));
+                    for (var i = 0; i &lt; turnDocs.Count; i++) { var d = sample(turnDocs[i], docAlloc[i]); documents.Add(d); usedDocChars += d.Length; }
+                    if (truncated) { newestSampled = true; }
+                    truncated = truncated || beforeDocs;
+                }
+                if (toolDocParts.Count &gt; 0) { var toolDoc = fairJoin(toolDocParts, 10000 - usedDocChars); if (toolDoc.Length &gt; 0) { documents.Add(toolDoc); } }
+                var analyze = newestFirst(turnParts, envelopeParts, 10000);
+                if (truncateMode == &quot;block&quot; &amp;&amp; newestSampled) { truncated = true; return unscreenableSlice(); }
+                return new JObject(new JProperty(&quot;unscreenable&quot;, false), new JProperty(&quot;userPrompt&quot;, userPrompt), new JProperty(&quot;documents&quot;, documents), new JProperty(&quot;analyzeText&quot;, analyze), new JProperty(&quot;truncated&quot;, truncated), new JProperty(&quot;emptyTextSlice&quot;, String.IsNullOrEmpty(analyze)), new JProperty(&quot;fabricatedHistoryLimit&quot;, fabricated)).ToString(Newtonsoft.Json.Formatting.None);
+            }" />
+            <choose>
+                <when condition='@(JObject.Parse((string)context.Variables["contentSafetySlice"])["unscreenable"].ToString().Equals("True", StringComparison.OrdinalIgnoreCase))'>
+                    <set-variable name="contentSafetyDecisionJson" value='@{ return new JObject(new JProperty("decision", "unscreenable"), new JProperty("blockedBy", "unscreenable"), new JProperty("hateSeverity", 0), new JProperty("violenceSeverity", 0), new JProperty("selfHarmSeverity", 0), new JProperty("sexualSeverity", 0), new JProperty("promptShieldUserAttackDetected", false), new JProperty("promptShieldDocumentAttackDetected", false), new JProperty("contentSafetyStatusCode", 0), new JProperty("contentSafetyErrorClass", "invalid_request")).ToString(Newtonsoft.Json.Formatting.None); }' />
+                </when>
+                <when condition='@(JObject.Parse((string)context.Variables["contentSafetySlice"])["emptyTextSlice"].ToString().Equals("True", StringComparison.OrdinalIgnoreCase))'>
+                    <set-variable name="contentSafetyDecisionJson" value='@{ return new JObject(new JProperty("decision", "pass"), new JProperty("blockedBy", "none"), new JProperty("hateSeverity", 0), new JProperty("violenceSeverity", 0), new JProperty("selfHarmSeverity", 0), new JProperty("sexualSeverity", 0), new JProperty("promptShieldUserAttackDetected", false), new JProperty("promptShieldDocumentAttackDetected", false), new JProperty("contentSafetyStatusCode", 0), new JProperty("contentSafetyErrorClass", "none")).ToString(Newtonsoft.Json.Formatting.None); }' />
+                </when>
+                <otherwise>
+                    <set-variable name="contentSafetyShieldNeeded" value='@{ var s = JObject.Parse((string)context.Variables["contentSafetySlice"]); var d = s["documents"] as JArray; return !String.IsNullOrEmpty((string)s["userPrompt"]) || (d != null &amp;&amp; d.Count &gt; 0); }' />
+                    <choose>
+                        <when condition='@((bool)context.Variables["contentSafetyShieldNeeded"])'>
+                    <send-request mode="new" response-variable-name="contentSafetyShieldResponse" timeout="{{content-safety-timeout-seconds}}" ignore-error="true">
+                        <set-url>@("{{content-safety-endpoint}}/contentsafety/text:shieldPrompt?api-version=2024-09-01")</set-url>
+                        <set-method>POST</set-method>
+                        <set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header>
+                        <set-body>@{ var s = JObject.Parse((string)context.Variables["contentSafetySlice"]); return new JObject(new JProperty("userPrompt", (string)s["userPrompt"]), new JProperty("documents", (JArray)s["documents"])).ToString(Newtonsoft.Json.Formatting.None); }</set-body>
+                        <authentication-managed-identity resource="https://cognitiveservices.azure.com" />
+                    </send-request>
+                        </when>
+                    </choose>
+                    <send-request mode="new" response-variable-name="contentSafetyAnalyzeResponse" timeout="{{content-safety-timeout-seconds}}" ignore-error="true">
+                        <set-url>@("{{content-safety-endpoint}}/contentsafety/text:analyze?api-version=2024-09-01")</set-url>
+                        <set-method>POST</set-method>
+                        <set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header>
+                        <set-body>@{ var s = JObject.Parse((string)context.Variables["contentSafetySlice"]); return new JObject(new JProperty("text", (string)s["analyzeText"]), new JProperty("categories", new JArray("Hate", "Violence", "SelfHarm", "Sexual")), new JProperty("outputType", "FourSeverityLevels")).ToString(Newtonsoft.Json.Formatting.None); }</set-body>
+                        <authentication-managed-identity resource="https://cognitiveservices.azure.com" />
+                    </send-request>
+                    <set-variable name="contentSafetyDecisionJson" value='@{
+                        var threshold = (int)context.Variables["contentSafetyThreshold"];
+                        var shield = context.Variables.ContainsKey("contentSafetyShieldResponse") ? (IResponse)context.Variables["contentSafetyShieldResponse"] : null;
+                        var analyze = context.Variables.ContainsKey("contentSafetyAnalyzeResponse") ? (IResponse)context.Variables["contentSafetyAnalyzeResponse"] : null;
+                        var status = analyze != null ? analyze.StatusCode : (shield != null ? shield.StatusCode : 0);
+                        var shieldNeeded = (bool)context.Variables["contentSafetyShieldNeeded"]; var shieldMissing = shieldNeeded &amp;&amp; shield == null; var shieldFailed = shieldNeeded &amp;&amp; shield != null &amp;&amp; (shield.StatusCode &lt; 200 || shield.StatusCode &gt; 299);
+                        if (shieldMissing || shieldFailed || analyze == null || analyze.StatusCode &lt; 200 || analyze.StatusCode &gt; 299) { return new JObject(new JProperty("decision", "unavailable"), new JProperty("blockedBy", "unavailable"), new JProperty("hateSeverity", 0), new JProperty("violenceSeverity", 0), new JProperty("selfHarmSeverity", 0), new JProperty("sexualSeverity", 0), new JProperty("promptShieldUserAttackDetected", false), new JProperty("promptShieldDocumentAttackDetected", false), new JProperty("contentSafetyStatusCode", status), new JProperty("contentSafetyErrorClass", shieldMissing || analyze == null ? "timeout" : "service_error")).ToString(Newtonsoft.Json.Formatting.None); }
+                        try {
+                            var sj = shieldNeeded ? shield.Body.As&lt;JObject&gt;(preserveContent: true) : new JObject(); var aj = analyze.Body.As&lt;JObject&gt;(preserveContent: true); var slice = JObject.Parse((string)context.Variables["contentSafetySlice"]);
+                            if (shieldNeeded &amp;&amp; !String.IsNullOrEmpty((string)slice["userPrompt"]) &amp;&amp; (sj["userPromptAnalysis"] as JObject) == null) { throw new Exception("Malformed Prompt Shields response"); }
+                            var userAttack = (bool?)sj["userPromptAnalysis"]?["attackDetected"] == true; var docAttack = false; var docs = sj["documentsAnalysis"] as JArray; var sentDocs = slice["documents"] as JArray; var sentDocCount = sentDocs == null ? 0 : sentDocs.Count; if (shieldNeeded &amp;&amp; sentDocCount &gt; 0 &amp;&amp; (docs == null || docs.Count != sentDocCount)) { throw new Exception("Malformed Prompt Shields documents response"); } if (docs != null) { foreach (var d in docs) { if ((bool?)d["attackDetected"] == true) { docAttack = true; break; } } }
+                            var hate = 0; var violence = 0; var selfHarm = 0; var sexual = 0; var cats = aj["categoriesAnalysis"] as JArray; if (cats == null) { throw new Exception("Malformed analyze response"); } foreach (var c in cats) { var cat = (string)c["category"]; var sev = (int?)c["severity"] ?? 0; if (cat == "Hate") { hate = sev; } else if (cat == "Violence") { violence = sev; } else if (cat == "SelfHarm") { selfHarm = sev; } else if (cat == "Sexual") { sexual = sev; } }
+                            var blockedBy = ""; if (userAttack) { blockedBy = "prompt_shield_user"; } else if (docAttack) { blockedBy = "prompt_shield_document"; } else if (hate &gt;= threshold || violence &gt;= threshold || selfHarm &gt;= threshold || sexual &gt;= threshold) { blockedBy = "severity"; }
+                            return new JObject(new JProperty("decision", blockedBy == "" ? "pass" : ((string)context.Variables["contentSafetyMode"] == "audit" ? "audit" : "block")), new JProperty("blockedBy", blockedBy == "" ? "none" : blockedBy), new JProperty("hateSeverity", hate), new JProperty("violenceSeverity", violence), new JProperty("selfHarmSeverity", selfHarm), new JProperty("sexualSeverity", sexual), new JProperty("promptShieldUserAttackDetected", userAttack), new JProperty("promptShieldDocumentAttackDetected", docAttack), new JProperty("contentSafetyStatusCode", status), new JProperty("contentSafetyErrorClass", "none")).ToString(Newtonsoft.Json.Formatting.None);
+                        } catch { return new JObject(new JProperty("decision", "unavailable"), new JProperty("blockedBy", "unavailable"), new JProperty("hateSeverity", 0), new JProperty("violenceSeverity", 0), new JProperty("selfHarmSeverity", 0), new JProperty("sexualSeverity", 0), new JProperty("promptShieldUserAttackDetected", false), new JProperty("promptShieldDocumentAttackDetected", false), new JProperty("contentSafetyStatusCode", status), new JProperty("contentSafetyErrorClass", "malformed")).ToString(Newtonsoft.Json.Formatting.None); }
+                    }' />
+                </otherwise>
+            </choose>
+            <set-variable name="contentSafetyDecision" value='@(JObject.Parse((string)context.Variables["contentSafetyDecisionJson"])["decision"].ToString())' />
+            <trace source="claude-content-safety" severity="information">
+                <message>content safety request screening</message>
+                <metadata name="screening" value="claude-content-safety" />
+                <metadata name="mode" value='@((string)context.Variables["contentSafetyMode"])' />
+                <metadata name="decision" value='@(JObject.Parse((string)context.Variables["contentSafetyDecisionJson"])["decision"].ToString())' />
+                <metadata name="blockedBy" value='@(JObject.Parse((string)context.Variables["contentSafetyDecisionJson"])["blockedBy"].ToString())' />
+                <metadata name="threshold" value='@(((int)context.Variables["contentSafetyThreshold"]).ToString())' />
+                <metadata name="truncated" value='@(JObject.Parse((string)context.Variables["contentSafetySlice"])["truncated"].ToString())' />
+                <metadata name="hateSeverity" value='@(JObject.Parse((string)context.Variables["contentSafetyDecisionJson"])["hateSeverity"].ToString())' />
+                <metadata name="violenceSeverity" value='@(JObject.Parse((string)context.Variables["contentSafetyDecisionJson"])["violenceSeverity"].ToString())' />
+                <metadata name="selfHarmSeverity" value='@(JObject.Parse((string)context.Variables["contentSafetyDecisionJson"])["selfHarmSeverity"].ToString())' />
+                <metadata name="sexualSeverity" value='@(JObject.Parse((string)context.Variables["contentSafetyDecisionJson"])["sexualSeverity"].ToString())' />
+                <metadata name="promptShieldUserAttackDetected" value='@(JObject.Parse((string)context.Variables["contentSafetyDecisionJson"])["promptShieldUserAttackDetected"].ToString())' />
+                <metadata name="promptShieldDocumentAttackDetected" value='@(JObject.Parse((string)context.Variables["contentSafetyDecisionJson"])["promptShieldDocumentAttackDetected"].ToString())' />
+                <metadata name="contentSafetyStatusCode" value='@(JObject.Parse((string)context.Variables["contentSafetyDecisionJson"])["contentSafetyStatusCode"].ToString())' />
+                <metadata name="contentSafetyElapsedMs" value='@(((long)(DateTime.UtcNow - (DateTime)context.Variables["contentSafetyStartedAt"]).TotalMilliseconds).ToString())' />
+                <metadata name="contentSafetyErrorClass" value='@(JObject.Parse((string)context.Variables["contentSafetyDecisionJson"])["contentSafetyErrorClass"].ToString())' />
+            </trace>
+            <choose>
+                <when condition='@((string)context.Variables["contentSafetyMode"] == "block" &amp;&amp; (string)context.Variables["contentSafetyDecision"] == "unscreenable")'>
+                    <return-response><set-status code="400" reason="Bad Request" /><set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header><set-body>{"type":"error","error":{"type":"invalid_request_error","message":"The request body could not be read for content screening"}}</set-body></return-response>
+                </when>
+                <when condition='@((string)context.Variables["contentSafetyMode"] == "block" &amp;&amp; (string)context.Variables["contentSafetyDecision"] == "unavailable")'>
+                    <return-response><set-status code="503" reason="Content Safety Unavailable" /><set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header><set-header name="Retry-After" exists-action="override"><value>5</value></set-header><set-body>{"type":"error","error":{"type":"content_safety","message":"Content Safety unavailable"}}</set-body></return-response>
+                </when>
+                <when condition='@((string)context.Variables["contentSafetyMode"] == "block" &amp;&amp; (string)context.Variables["contentSafetyDecision"] == "block")'>
+                    <return-response><set-status code="403" reason="Forbidden" /><set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header><set-body>{"type":"error","error":{"type":"content_safety","message":"Content Safety blocked the request"}}</set-body></return-response>
+                </when>
+            </choose>
+        </when>
+    </choose>
+</fragment>

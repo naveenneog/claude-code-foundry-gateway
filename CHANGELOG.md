@@ -89,8 +89,8 @@ exact streaming cache-creation detail remains **U13**.
   `content-safety-mode` set to `off`; the update plans a fragment update when the live content differs
   or could not be read. `Set-GatewayPolicy.ps1` creates only missing named values and stops before any
   write when the named-value list cannot be read. The policy tests compile and run the fragment's own
-  expressions. `scripts/Test-ClaudeLiveContentSafety.ps1` is the owner-run disposable live proof; fresh
-  and upgrade live runs passed on 2026-10-07 ([P102 status](docs/status/P102.md)).
+  expressions. `scripts/Test-ClaudeLiveContentSafety.ps1` is the owner-run disposable live proof
+  ([P102 status](docs/status/P102.md)).
 - **P98 the installer deploys the Cosmos projection by default.** `Install-ClaudeGateway.ps1` offers
   the projection first, as recommended, for every size; `-Yes` chooses it, and named values above their
   capacity are refused, also under `-Yes` and `-Sku`, from `-DeveloperCount` or the tier groups' members

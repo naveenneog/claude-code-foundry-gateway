@@ -187,7 +187,7 @@ The default truncation mode samples the head and tail of each oversized item rat
 
 The `content-safety-truncate-mode` named value is part of the contract. `newest` is the deployment default and means head/tail sampling. `block` means any oversized screened item or over-limit document set is `unscreenable` (narrowed to newest-turn text by the council round 2 amendment); block mode returns the existing Anthropic-style 400 response, and audit mode forwards with an `unscreenable` trace. Unknown truncation-mode values are treated as `block`.
 
-The update flow now treats policy fragment content as part of the deployed policy. Discovery reads fragment raw XML through ARM, canonicalizes live and template XML without preserving whitespace, and plans a fragment PUT when hashes differ. The plan fingerprint includes the fragment hashes, so an approved plan is tied to the fragment bytes it reviewed.
+The update flow now treats policy fragment content as part of the deployed policy. Discovery reads fragment raw XML through ARM, canonicalizes live and template XML without preserving whitespace, and plans a fragment PUT when hashes differ (the council round 2 read-back amendment replaces the raw XML read). The plan fingerprint includes the fragment hashes, so an approved plan is tied to the fragment bytes it reviewed.
 
 ### Amendment 2026-10-07 (P102 council round 2): Prompt Shields calls and text records
 
@@ -199,7 +199,9 @@ The Azure pricing page defines a Standard text record as up to 1,000 characters,
 
 | Screened request | Records | List price per 1,000 requests |
 |---|---|---|
-| Under 1,000 characters to each call | 2 | USD 0.75 |
+| No screened text, so no call | 0 | USD 0 |
+| `analyze` only, under 1,000 characters | 1 | USD 0.38 |
+| Under 1,000 characters to each of the two calls | 2 | USD 0.75 |
 | Full `analyze` budget, `userPrompt` under 1,000 characters, no documents | 11 | USD 4.13 |
 | Full `analyze` and document budgets, `userPrompt` under 1,000 characters | 21-25 | USD 7.88-9.38 |
 | Full `analyze`, `userPrompt` and document budgets | 30-34 | USD 11.25-12.75 |
@@ -217,11 +219,15 @@ The round 2 Security seat reproduced a harmful span about 300 characters into a 
 - `search_result` blocks, top level or inside a `tool_result`, are third-party text and are screened like tool results. Before this amendment they were skipped.
 
 Two limits stay and are documented in [Content Safety](../CONTENT-SAFETY.md#limits): Prompt Shields does not receive the system prompt, so attack text that is only in `system` meets harm analysis alone; and `content-safety-mode = off` writes no trace, so turning screening off leaves no screening record. An activity log alert on `Microsoft.ApiManagement/service/namedValues/write` can report the change; P102 does not deploy one.
+
+### Amendment 2026-10-07 (P102 council round 2): reading the fragment back
+
+Upgrade live run 23 stopped at the update's check: the fragment read back with `format=rawxml` did not parse as XML. Microsoft documents `rawxml` as "a non XML encoded policy document" and `xml` as "an XML document" ([Policy Fragment - Get, read 2026-10-07][policy-fragment-get]). A probe on a disposable API Management instance on 2026-10-07 wrote `infra/content-safety-screening.xml` with `format=rawxml`, as the template, migration 0002 and `Set-GatewayPolicy.ps1` do, and read it back: `rawxml` did not parse, and `xml` parsed but returned the stored text encoded once more, so `&lt;` came back as `&amp;lt;`. Discovery now reads `format=xml` and decodes the stored text once more before hashing; line endings inside values are made uniform on both sides. The probe's read-back and its template are test fixtures, and their hashes match. Upgrade runs 19 and 21 had reported no fragment change after the update because the code before this round counted a fragment it could not read as current.
 ## Consequences
 
 - Content Safety is enforced at the gateway before Foundry sees blocked content in `block` mode.
 - The built-in APIM policy remains a reference point, but P102 implements a custom shape because the spike found Anthropic Messages gaps.
-- A screened request adds up to two Content Safety calls in `block` and `audit` modes, billed by characters: USD 0.75 to 12.75 per 1,000 requests at list price ([council round 2 amendment](#amendment-2026-10-07-p102-council-round-2-prompt-shields-calls-and-text-records)). The first measured added latency is 711-2,220 ms for passed requests.
+- A screened request adds up to two Content Safety calls in `block` and `audit` modes, billed by characters: USD 0 to 12.75 per 1,000 requests at list price ([council round 2 amendment](#amendment-2026-10-07-p102-council-round-2-prompt-shields-calls-and-text-records)). The first measured added latency is 711-2,220 ms for passed requests.
 - Long Claude Code conversations remain usable, but only the system prompt, tool descriptions, the newest user turn and an assistant prefill after it are screened. Fabricated earlier turns are a documented limit.
 - Operators can turn the feature to `audit` or `off` by named value. Changing categories beyond the four standard categories is out of scope for P102.
 - A new component and data flow enter the architecture: APIM calls Azure AI Content Safety with its managed identity before calling Foundry. The implementation stage must update the architecture diagram source under `docs/architecture/`, render it, inspect the image and update `docs/ARCHITECTURE.md`.
@@ -242,6 +248,7 @@ Two limits stay and are documented in [Content Safety](../CONTENT-SAFETY.md#limi
 [content-safety-regions]: https://learn.microsoft.com/en-us/azure/ai-services/content-safety/region-availability
 [foundry-claude-hosting]: https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/claude-models-hosting-comparison
 [include-fragment]: https://learn.microsoft.com/en-us/azure/api-management/include-fragment-policy
+[policy-fragment-get]: https://learn.microsoft.com/en-us/rest/api/apimanagement/policy-fragment/get?view=rest-apimanagement-2024-05-01
 [prompt-shields]: https://learn.microsoft.com/en-us/azure/ai-services/content-safety/concepts/jailbreak-detection
 [send-request]: https://learn.microsoft.com/en-us/azure/api-management/send-request-policy
 [shield-prompt-rest]: https://learn.microsoft.com/en-us/rest/api/contentsafety/text-operations/shield-prompt?view=rest-contentsafety-2024-09-01

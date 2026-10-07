@@ -127,16 +127,29 @@ function global:Invoke-RestMethod {
     $global:LifecycleDiscoveryCalls.Add("HTTP $Method $Uri")
     if ($Uri -match '/apis/claude-foundry/policies/policy\?api-version=2024-05-01&format=rawxml$') { return [pscustomobject]@{ properties=[pscustomobject]@{ value=$currentPolicy } } }
     if ($Uri -match '/policyFragments\?api-version=2024-05-01$') { return [pscustomobject]@{ value=@([pscustomobject]@{ name='content-safety-screening' }) } }
-    if ($Uri -match '/policyFragments/content-safety-screening\?format=rawxml&api-version=2024-05-01$') {
+    if ($Uri -match '/policyFragments/content-safety-screening\?format=xml&api-version=2024-05-01$') {
         if ($global:LifecycleFragmentReadFails) { throw 'Response status code does not indicate success: 500 (Internal Server Error).' }
-        return [pscustomobject]@{ properties=[pscustomobject]@{ format='rawxml'; value=$desiredFragment } }
+        return [pscustomobject]@{ properties=[pscustomobject]@{ value=$fragmentReadback } }
     }
     throw "unexpected REST URI $Uri"
 }
+# A fragment written with format=rawxml and read back with format=xml from a disposable API Management instance on
+# 2026-10-07 (P102 probe), with the template it was written from. rawxml is "a non XML encoded policy document" and
+# did not parse; xml parses, and API Management encodes the stored text once more.
+$fragmentFixtures = Join-Path $root 'tests\fixtures\content-safety-fragment'
+$fragmentReadback = [IO.File]::ReadAllText((Join-Path $fragmentFixtures 'apim-readback-format-xml.xml'))
+$fragmentTemplate = [IO.File]::ReadAllText((Join-Path $fragmentFixtures 'template.xml'))
+$fixtureTemplateHash = Get-ClaudeFlowLifecycleCanonicalXmlHash -XmlText $fragmentTemplate
+$storedHash = try { Get-ClaudeFlowLifecycleStoredXmlHash -XmlText $fragmentReadback } catch { "error: $($_.Exception.Message)" }
+Assert 'an API Management format=xml read-back hashes like the template it was written from (probe 2026-10-07)' ($fixtureTemplateHash -and $storedHash -eq $fixtureTemplateHash) "stored=$storedHash template=$fixtureTemplateHash"
+Assert 'the read-back matches only after its stored text is decoded once more' ((Get-ClaudeFlowLifecycleCanonicalXmlHash -XmlText $fragmentReadback) -ne $fixtureTemplateHash) ''
+$lfTemplate = $fragmentTemplate -replace "`r`n", "`n"
+$crlfTemplate = $lfTemplate -replace "`n", "`r`n"
+Assert 'line endings inside values do not change the canonical hash' ((Get-ClaudeFlowLifecycleCanonicalXmlHash -XmlText $lfTemplate) -eq (Get-ClaudeFlowLifecycleCanonicalXmlHash -XmlText $crlfTemplate)) ''
 $global:LifecycleFragmentReadFails = $false
 try {
     $discovered = Get-ClaudeFlowLifecycleLiveDiscovery -ResourceGroup 'rg-contoso' -ApimName 'apim-contoso' -SubscriptionId 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
-    Assert 'live discovery reads policy fragment rawxml through ARM GET and records its content hash' (@($discovered.policyFragments | Where-Object { $_.name -eq 'content-safety-screening' -and $_.value -match '<fragment>' -and $_.canonicalHash }).Count -eq 1 -and ($global:LifecycleDiscoveryCalls -join "`n") -match '/policyFragments/content-safety-screening\?format=rawxml&api-version=2024-05-01') ($global:LifecycleDiscoveryCalls -join ' ; ')
+    Assert 'live discovery reads the policy fragment with format=xml and records the hash of its stored text' (@($discovered.policyFragments | Where-Object { $_.name -eq 'content-safety-screening' -and $_.value -match '<fragment>' -and $_.canonicalHash -eq $fixtureTemplateHash }).Count -eq 1 -and ($global:LifecycleDiscoveryCalls -join "`n") -match '/policyFragments/content-safety-screening\?format=xml&api-version=2024-05-01') ($global:LifecycleDiscoveryCalls -join ' ; ')
     $badAz = az apim api policy-fragment show --service-name apim-contoso --fragment-id content-safety-screening
     Assert 'fake az refuses nonexistent APIM policy-fragment commands' ($LASTEXITCODE -ne 0 -and $badAz -match 'does not exist') $badAz
     # P102 council round 2 (Coder): a failed fragment read is recorded with its error and warned about, and the plan

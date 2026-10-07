@@ -26,19 +26,56 @@ function global:Get-ClaudeFlowLifecycleStringHash {
     finally { $sha.Dispose() }
 }
 
-function global:Get-ClaudeFlowLifecycleCanonicalXml {
-    param([AllowEmptyString()][string]$XmlText)
-    if ([string]::IsNullOrWhiteSpace($XmlText)) { return '' }
+function global:ConvertTo-ClaudeFlowLifecycleCanonicalXmlDocument {
+    # Insignificant whitespace is dropped and line endings inside attribute and text values are made uniform, so a
+    # checkout's line endings do not change the canonical form.
+    param([Parameter(Mandatory = $true)][string]$XmlText, [switch]$DecodeStoredText)
     $doc = New-Object System.Xml.XmlDocument
     $doc.PreserveWhitespace = $false
     $doc.LoadXml($XmlText)
-    return $doc.OuterXml
+    foreach ($node in @(@($doc.SelectNodes('//@*')) + @($doc.SelectNodes('//text()')))) {
+        $value = [string]$node.Value
+        if ($DecodeStoredText) { $value = ConvertFrom-ClaudeFlowLifecycleXmlEntities -Text $value }
+        $node.Value = $value.Replace("`r`n", "`n").Replace("`r", "`n")
+    }
+    return $doc
+}
+
+function global:ConvertFrom-ClaudeFlowLifecycleXmlEntities {
+    # One pass over the five predefined XML entities and character references: '&amp;lt;' becomes '&lt;', not '<'.
+    param([AllowEmptyString()][string]$Text)
+    return [regex]::Replace($Text, '&(lt|gt|quot|apos|amp|#x[0-9A-Fa-f]+|#[0-9]+);', {
+            param($match)
+            $name = $match.Groups[1].Value
+            if ($name -eq 'lt') { return '<' }
+            if ($name -eq 'gt') { return '>' }
+            if ($name -eq 'quot') { return '"' }
+            if ($name -eq 'apos') { return "'" }
+            if ($name -eq 'amp') { return '&' }
+            if ($name.StartsWith('#x')) { return [string][char][Convert]::ToInt32($name.Substring(2), 16) }
+            return [string][char][int]$name.Substring(1)
+        })
+}
+
+function global:Get-ClaudeFlowLifecycleCanonicalXml {
+    param([AllowEmptyString()][string]$XmlText)
+    if ([string]::IsNullOrWhiteSpace($XmlText)) { return '' }
+    return (ConvertTo-ClaudeFlowLifecycleCanonicalXmlDocument -XmlText $XmlText).OuterXml
 }
 
 function global:Get-ClaudeFlowLifecycleCanonicalXmlHash {
     param([AllowEmptyString()][string]$XmlText)
     if ([string]::IsNullOrWhiteSpace($XmlText)) { return '' }
     return Get-ClaudeFlowLifecycleStringHash -Text (Get-ClaudeFlowLifecycleCanonicalXml -XmlText $XmlText)
+}
+
+function global:Get-ClaudeFlowLifecycleStoredXmlHash {
+    # API Management keeps the text of a fragment written with format=rawxml as it was sent, entity references
+    # included, and encodes that text once more when it returns format=xml (P102 probe, 2026-10-07; ADR-0055).
+    # Decoding the read-back once more gives the values the template parses to, so both hash alike.
+    param([AllowEmptyString()][string]$XmlText)
+    if ([string]::IsNullOrWhiteSpace($XmlText)) { return '' }
+    return Get-ClaudeFlowLifecycleStringHash -Text (ConvertTo-ClaudeFlowLifecycleCanonicalXmlDocument -XmlText $XmlText -DecodeStoredText).OuterXml
 }
 
 function global:New-ClaudeFlowLifecycleArmHeaders {
@@ -181,11 +218,11 @@ function global:Get-ClaudeFlowLifecycleLiveDiscovery {
         $fragmentResult = Invoke-RestMethod -Method Get -Uri $fragmentUri -Headers @{ Authorization = "Bearer $token" }
         $fragmentNames = @($fragmentResult.value | ForEach-Object { if ($_.name) { [string]$_.name } elseif ($_.id -match '/policyFragments/([^/]+)$') { $Matches[1] } } | Where-Object { $_ })
         $fragments = @(foreach ($fragmentName in $fragmentNames) {
-                $rawFragmentUri = "https://management.azure.com$($apim.id)/policyFragments/$fragmentName`?format=rawxml&api-version=2024-05-01"
+                $rawFragmentUri = "https://management.azure.com$($apim.id)/policyFragments/$fragmentName`?format=xml&api-version=2024-05-01"
                 try {
                     $rawFragment = Invoke-RestMethod -Method Get -Uri $rawFragmentUri -Headers (New-ClaudeFlowLifecycleArmHeaders -Token $token)
                     $value = [string]$rawFragment.properties.value
-                    [pscustomobject]@{ name = $fragmentName; value = $value; canonicalHash = Get-ClaudeFlowLifecycleCanonicalXmlHash -XmlText $value }
+                    [pscustomobject]@{ name = $fragmentName; value = $value; canonicalHash = Get-ClaudeFlowLifecycleStoredXmlHash -XmlText $value }
                 }
                 catch {
                     $readError = $_.Exception.Message

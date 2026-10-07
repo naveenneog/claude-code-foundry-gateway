@@ -62,7 +62,7 @@ A kept value has to be one the template accepts: mode `off`, `audit` or `block`,
 
 ## Cost
 
-Content Safety bills Standard text records of up to 1,000 characters each; a longer input counts one record for each 1,000 characters ([Azure pricing, read 2026-10-07](https://azure.microsoft.com/en-us/pricing/details/content-safety/)). A screened request uses 2 records when each call sends under 1,000 characters, and 30-34 records when the `analyze`, prompt and document budgets are full. At the list price of USD 0.375 per 1,000 records read on 2026-10-06, that is USD 0.75 to 12.75 per 1,000 requests. Tool descriptions count toward the `analyze` and document budgets. [ADR-0055](adr/0055-content-safety-screening.md#amendment-2026-10-07-p102-council-round-2-prompt-shields-calls-and-text-records) has the per-row estimate and its assumptions.
+Content Safety bills Standard text records of up to 1,000 characters each; a longer input counts one record for each 1,000 characters ([Azure pricing, read 2026-10-07](https://azure.microsoft.com/en-us/pricing/details/content-safety/)). A request with no screened text makes no call. A request whose only call is `analyze` with under 1,000 characters uses 1 record, two calls with under 1,000 characters each use 2 records, and full `analyze`, prompt and document budgets use 30-34 records. At the list price of USD 0.375 per 1,000 records read on 2026-10-06, that is USD 0 to 12.75 per 1,000 requests. Tool descriptions count toward the `analyze` and document budgets. [ADR-0055](adr/0055-content-safety-screening.md#amendment-2026-10-07-p102-council-round-2-prompt-shields-calls-and-text-records) has the per-row estimate and its assumptions.
 
 ## Deployment
 
