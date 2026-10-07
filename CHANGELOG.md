@@ -29,6 +29,16 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P103 user guides open with a Quickstart, and every other section is a disclosure (part 1).** README,
+  SETUP, ARCHITECTURE and 38 guides open with an H1, a purpose line and a visible `## Quickstart` with its
+  expected result. Every other section heading stays visible, with its body in one `<details>` block whose
+  summary names what the section holds, and a visible Next section ends each guide
+  ([ADR-0056](docs/adr/0056-documentation-quickstart-and-disclosures.md)). `tests/Test-DocStructure.ps1`
+  checks the structure, that every heading anchor from before the change still exists, that Quickstart
+  commands define their inputs and call scripts and parameters that exist, and that GitHub renders the heading
+  after each disclosure ([P103 status](docs/status/P103.md#p103-quickstart-first-sections-as-disclosures)).
+  Part 2 covers SECURE-PROJECTION, PROJECTION-WORKBOOK, UPDATE-AND-CHANGE and AZ-COMMANDS.
+
 - **P99 a snapshot of 500,000 developers reaches the runner within its apply-by time.** `Send-RunnerFile`
   (`scripts/ClaudeRunner.ps1`) compresses the file with gzip, sends base64url parts through up to 16
   `az container exec` calls at once, retries a failed part, stops an exec that does not answer, and
