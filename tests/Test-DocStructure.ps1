@@ -303,9 +303,18 @@ function Get-FencedBlocks([string]$Text) {
 }
 
 function Test-VisibleProseDefinesVariable([object[]]$ScanLines, [int]$BeforeLine, [string]$Name) {
-  $pattern = '(?i)(?<![A-Za-z0-9_-])\$' + [regex]::Escape($Name) + '(?![A-Za-z0-9_-])'
+  # A definition says what the variable holds, not only that it appears: "`$rg` is the resource group",
+  # "`$rg` and `$apim` are the ...", "`$rg`: ...", "Set `$rg` to ...", or a table row whose first cell is `$rg`.
+  $code = '`\$' + [regex]::Escape($Name) + '`'
+  $otherCode = '`\$[A-Za-z_][A-Za-z0-9_:]*`'
+  $patterns = @(
+    "(?i)$code(?:\s*(?:,|and)\s*$otherCode)*\s*(?:variables?\s+)?(?:(?:is|are|holds|names|means)\s+(?:the|a|an|your|its)\b|[:=]\s*\S)",
+    "(?i)(?:$otherCode\s*(?:,|and)\s*)+$code\s*(?:variables?\s+)?(?:(?:is|are|holds|names|means)\s+(?:the|a|an|your|its)\b)",
+    "(?i)\b(?:set|replace)\s+$code\s+(?:to|with)\b",
+    "^\s*\|\s*$code\s*\|"
+  )
   foreach ($line in @($ScanLines | Where-Object { $_.Number -lt $BeforeLine -and -not $_.InFence -and $_.Text.Trim() })) {
-    if ($line.Text -match $pattern) { return $true }
+    foreach ($pattern in $patterns) { if ($line.Text -match $pattern) { return $true } }
   }
   return $false
 }
@@ -583,6 +592,7 @@ Assert-InvalidCase 'heading directly after a closing details tag' (Join-Lines @(
 Assert-ValidCase 'definition before fenced command' (Join-Lines @('# Guide','','`<developer-upn>` is the selected account.','','## Quickstart','','```powershell','Do-Thing -User <developer-upn>','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)'))
 
 Assert-InvalidCase 'PowerShell variable before assignment' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','```powershell','Do-Thing -ResourceGroup $rg','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)')) 'PowerShell variable'
+Assert-InvalidCase 'PowerShell variable only mentioned in prose' (Join-Lines @('# Guide','','The command below uses `$rg` later.','','## Quickstart','','```powershell','Do-Thing -ResourceGroup $rg','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)')) 'PowerShell variable \$rg is used'
 Assert-InvalidCase 'Quickstart PowerShell that does not parse' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','```powershell','$record = ','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)')) 'does not parse'
 Assert-InvalidCase 'Quickstart assignment without a variable' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','```powershell',' = Get-Content .\record.json -Raw','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)')) 'assignment has no variable'
 Assert-InvalidCase 'fence opener with a backtick in its info string' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','```powershell`r`n$rg = 1','Do-Thing -ResourceGroup $rg','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)')) 'info string contains a backtick'
@@ -591,6 +601,8 @@ Assert-InvalidCase 'Quickstart script that does not exist' (Join-Lines @('# Guid
 Assert-ValidCase 'Quickstart script call with its real parameters' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','```powershell','.\scripts\Test-ClaudeHealth.ps1 -ResourceGroup rg-claude -ApimName apim-claude -FailOn warn','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)'))
 Assert-ValidCase 'PowerShell variable assigned before use' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','```powershell','$rg = ''rg-claude''','Do-Thing -ResourceGroup $rg','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)'))
 Assert-ValidCase 'PowerShell variable defined in prose before use' (Join-Lines @('# Guide','','The `$rg` variable is the selected resource group.','','## Quickstart','','```powershell','Do-Thing -ResourceGroup $rg','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)'))
+Assert-ValidCase 'PowerShell variables defined together in prose' (Join-Lines @('# Guide','','`$rg` and `$apim` are the gateway resource group and API Management name.','','## Quickstart','','```powershell','Do-Thing -ResourceGroup $rg -ApimName $apim','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)'))
+Assert-ValidCase 'PowerShell variable defined in a table' (Join-Lines @('# Guide','','| Input | Value |','|---|---|','| `$rg` | The gateway resource group |','','## Quickstart','','```powershell','Do-Thing -ResourceGroup $rg','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)'))
 Assert-InvalidCase 'local path and real name' (Join-Lines @('# Guide','','Purpose C:\Users\owner\checkout mentions Alice.','','## Quickstart','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)')) 'local machine path|personal/example name'
 
 Assert-Condition ($NegativeFailures.Count -eq 0) ($NegativeFailures -join "`n")
