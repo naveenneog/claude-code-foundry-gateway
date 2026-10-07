@@ -200,8 +200,8 @@ try {
     Capture { Send-RunnerFile -ResourceGroup rg-p99 -Name aci-projtest-p99 -Path $source -Destination /work/snapshot.json -ChunkSize 1200 }
     Assert 'an assembly whose hash differs fails' ($CapturedError -match 'did not arrive intact') $CapturedError
     Assert 'a hash mismatch removes the file it wrote and the parts, and names a remedy' (
-        $CapturedError -match 'removed' -and $CapturedError -match 'Remedy:' -and -not (Test-Path -LiteralPath (Join-Path $work 'snapshot.json')) -and
-        @(Get-ChildItem -LiteralPath $work -Force -Filter '.xfer-*').Count -eq 0) $CapturedError
+        $CapturedError -match 'removed' -and $CapturedError -match 'Remedy:' -and $CapturedError -match "SHA-256 '0{64}', not $sourceSha" -and
+        -not (Test-Path -LiteralPath (Join-Path $work 'snapshot.json')) -and @(Get-ChildItem -LiteralPath $work -Force -Filter '.xfer-*').Count -eq 0) $CapturedError
 
     Reset-Runner
     $env:P99_FAULT = 'drop:000002'
