@@ -146,6 +146,12 @@ Assert 'the read-back matches only after its stored text is decoded once more' (
 $lfTemplate = $fragmentTemplate -replace "`r`n", "`n"
 $crlfTemplate = $lfTemplate -replace "`n", "`r`n"
 Assert 'line endings inside values do not change the canonical hash' ((Get-ClaudeFlowLifecycleCanonicalXmlHash -XmlText $lfTemplate) -eq (Get-ClaudeFlowLifecycleCanonicalXmlHash -XmlText $crlfTemplate)) ''
+# P102 council round 4 (Coder): a character reference above 0xFFFF is one character made of two UTF-16 units.
+$astral = try { ConvertFrom-ClaudeFlowLifecycleXmlEntities -Text 'smile &#x1F600; and &#128512;' } catch { "error: $($_.Exception.Message)" }
+$smile = [char]::ConvertFromUtf32(0x1F600)
+Assert 'character references above 0xFFFF decode to their character' ($astral -eq "smile $smile and $smile") $astral
+$notCharacters = try { ConvertFrom-ClaudeFlowLifecycleXmlEntities -Text '&#x110000; &#xD800; &#99999999999;' } catch { "error: $($_.Exception.Message)" }
+Assert 'a reference outside Unicode, to a surrogate, or too long to be a code point is left as written' ($notCharacters -eq '&#x110000; &#xD800; &#99999999999;') $notCharacters
 $global:LifecycleFragmentReadFails = $false
 try {
     $discovered = Get-ClaudeFlowLifecycleLiveDiscovery -ResourceGroup 'rg-contoso' -ApimName 'apim-contoso' -SubscriptionId 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'

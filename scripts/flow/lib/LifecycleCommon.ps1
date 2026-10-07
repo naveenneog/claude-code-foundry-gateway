@@ -43,8 +43,9 @@ function global:ConvertTo-ClaudeFlowLifecycleCanonicalXmlDocument {
 
 function global:ConvertFrom-ClaudeFlowLifecycleXmlEntities {
     # One pass over the five predefined XML entities and character references: '&amp;lt;' becomes '&lt;', not '<'.
+    # A reference that is not a Unicode scalar value (above 0x10FFFF, a surrogate, or too long) is left as written.
     param([AllowEmptyString()][string]$Text)
-    return [regex]::Replace($Text, '&(lt|gt|quot|apos|amp|#x[0-9A-Fa-f]+|#[0-9]+);', {
+    return [regex]::Replace($Text, '&(lt|gt|quot|apos|amp|#x[0-9A-Fa-f]{1,6}|#[0-9]{1,7});', {
             param($match)
             $name = $match.Groups[1].Value
             if ($name -eq 'lt') { return '<' }
@@ -52,8 +53,9 @@ function global:ConvertFrom-ClaudeFlowLifecycleXmlEntities {
             if ($name -eq 'quot') { return '"' }
             if ($name -eq 'apos') { return "'" }
             if ($name -eq 'amp') { return '&' }
-            if ($name.StartsWith('#x')) { return [string][char][Convert]::ToInt32($name.Substring(2), 16) }
-            return [string][char][int]$name.Substring(1)
+            $codePoint = if ($name.StartsWith('#x')) { [Convert]::ToInt32($name.Substring(2), 16) } else { [int]$name.Substring(1) }
+            if ($codePoint -gt 0x10FFFF -or ($codePoint -ge 0xD800 -and $codePoint -le 0xDFFF)) { return $match.Value }
+            return [char]::ConvertFromUtf32($codePoint)
         })
 }
 
