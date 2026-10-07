@@ -413,7 +413,9 @@ Assert 'explicit groups that differ from entitlement-groups refuse before writes
 Invoke-NamedValueSyncFixture -PremiumCount 1 -StandardCount 1 -Parameters @{ Store = 'named-value'; StandardGroup = 'claude-code-standard'; PremiumGroup = 'claude-code-standard' }
 $nvWrites = Get-NamedValueWrites
 Assert 'equal standard and premium group object ids refuse before writes' (
-    $CapturedError -match 'standard and premium tier groups must be different' -and $nvWrites.Count -eq 0) "$CapturedError | writes: $($nvWrites -join ' | ')"
+    $CapturedError -match 'standard and premium tier groups must be different' -and
+    $CapturedError -match '-StandardGroup' -and $CapturedError -match '-PremiumGroup' -and $CapturedError -match '-RecordGroups' -and
+    $nvWrites.Count -eq 0) "$CapturedError | writes: $($nvWrites -join ' | ')"
 
 Invoke-NamedValueSyncFixture -PremiumCount 1 -StandardCount 1 -GatewayGroups 'standard=10000000-0000-4000-8000-000000000001,premium=10000000-0000-4000-8000-000000000002' -Parameters @{ Store = 'named-value'; StandardGroup = 'gateway-standard'; PremiumGroup = 'gateway-premium'; RecordGroups = $true }
 $nvWrites = Get-NamedValueWrites

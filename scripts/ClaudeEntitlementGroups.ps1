@@ -23,7 +23,7 @@ function ConvertTo-ClaudeEntitlementGroups([Parameter(Mandatory)][string]$Standa
     $premium = if ($PremiumId) { $PremiumId } else { 'none' }
     if ($premium -ne 'none' -and -not (Test-ClaudeEntitlementGroupGuid $premium)) { throw "entitlement-groups needs the premium group's object id or none, not '$PremiumId'." }
     if ($premium -ne 'none' -and [string]::Equals($StandardId, $premium, [StringComparison]::OrdinalIgnoreCase)) {
-        throw 'The standard and premium tier groups must be different object ids. Nothing was written.'
+        throw 'The standard and premium tier groups must be different object ids. Remedy: pass different -StandardGroup and -PremiumGroup groups, and add -RecordGroups when this replaces entitlement-groups. Nothing was written.'
     }
     return "standard=$($StandardId.ToLowerInvariant()),premium=$($premium.ToLowerInvariant())"
 }
@@ -107,7 +107,7 @@ function Resolve-ClaudeEntitlementGroupsForSync {
         }
     }
     if ($premium.Id -ne 'none' -and [string]::Equals([string]$standard.Id, [string]$premium.Id, [StringComparison]::OrdinalIgnoreCase)) {
-        throw 'The standard and premium tier groups must be different object ids. Nothing was written.'
+        throw 'The standard and premium tier groups must be different object ids. Remedy: pass different -StandardGroup and -PremiumGroup groups, and add -RecordGroups when this replaces entitlement-groups. Nothing was written.'
     }
     return [pscustomobject]@{ Standard = $standard; Premium = $premium; Recorded = $recorded; Raw = $raw; DecisionStandard = $decisionStandard; DecisionPremium = $decisionPremium }
 }
