@@ -33,7 +33,7 @@ foreach ($name in @(Get-ClaudeFlowLifecyclePolicyAndFragmentNamedValueReferences
 }
 
 $token = az account get-access-token --resource https://management.azure.com --query accessToken -o tsv
-$headers = @{ Authorization = "******"; 'Content-Type' = 'application/json' }
+$headers = @{ Authorization = "Bearer $token"; 'Content-Type' = 'application/json' }
 foreach ($fragment in @(Get-ClaudeFlowLifecyclePolicyFragmentIds -PolicyPath $resolvedPolicyPath)) {
     $fragmentPath = Join-Path (Join-Path $root 'infra') "$fragment.xml"
     if (-not (Test-Path -LiteralPath $fragmentPath)) { throw "Policy includes fragment '$fragment', but '$fragmentPath' was not found." }

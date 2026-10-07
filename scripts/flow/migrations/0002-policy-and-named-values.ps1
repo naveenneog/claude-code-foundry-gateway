@@ -109,12 +109,12 @@ function Invoke-ClaudeFlowMigration {
         $fragmentXml = [IO.File]::ReadAllText($fragmentPath)
         $fragmentBody = @{ properties = @{ format = 'rawxml'; value = $fragmentXml } } | ConvertTo-Json -Depth 5
         $fragmentUri = "https://management.azure.com/subscriptions/$subscription/resourceGroups/$($target.ResourceGroup)/providers/Microsoft.ApiManagement/service/$($target.ApimName)/policyFragments/$fragment`?api-version=2024-05-01"
-        Invoke-RestMethod -Uri $fragmentUri -Method Put -Headers @{ Authorization = "******"; 'Content-Type' = 'application/json' } -Body $fragmentBody | Out-Null
+        Invoke-RestMethod -Uri $fragmentUri -Method Put -Headers @{ Authorization = "Bearer $token"; 'Content-Type' = 'application/json' } -Body $fragmentBody | Out-Null
     }
     $policyXml = [IO.File]::ReadAllText([string]$Plan.Data.PolicyPath)
     $body = @{ properties = @{ format = 'rawxml'; value = $policyXml } } | ConvertTo-Json -Depth 5
     $uri = "https://management.azure.com/subscriptions/$subscription/resourceGroups/$($target.ResourceGroup)/providers/Microsoft.ApiManagement/service/$($target.ApimName)/apis/claude-foundry/policies/policy?api-version=2024-05-01"
-    Invoke-RestMethod -Uri $uri -Method Put -Headers @{ Authorization = "******"; 'Content-Type' = 'application/json' } -Body $body | Out-Null
+    Invoke-RestMethod -Uri $uri -Method Put -Headers @{ Authorization = "Bearer $token"; 'Content-Type' = 'application/json' } -Body $body | Out-Null
     $release = Get-ClaudeFlowReleaseInfo
     Add-ClaudeDecisionHistory -Record $Record -Action Update -Decision gatewayPolicy -From $Plan.Data.LivePolicyHash -To $Plan.Data.DesiredPolicyHash -Commit $release.commit
     @{ policyHash = $Plan.Data.DesiredPolicyHash; namedValues = @($Plan.Data.MissingNamedValues) }

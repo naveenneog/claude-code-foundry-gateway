@@ -156,7 +156,7 @@ function global:Get-ClaudeFlowLifecycleLiveDiscovery {
     $fragmentUri = "https://management.azure.com$($apim.id)/policyFragments?api-version=2024-05-01"
     $fragments = @()
     try {
-        $fragmentResult = Invoke-RestMethod -Method Get -Uri $fragmentUri -Headers @{ Authorization = "******" }
+        $fragmentResult = Invoke-RestMethod -Method Get -Uri $fragmentUri -Headers @{ Authorization = "Bearer $token" }
         $fragments = @($fragmentResult.value | ForEach-Object { if ($_.name) { [string]$_.name } elseif ($_.id -match '/policyFragments/([^/]+)$') { $Matches[1] } })
     } catch { $fragments = @() }
     $prefixValue = @($nvs | Where-Object { $_.name -eq 'entitlement-projection-prefix' } | Select-Object -First 1)
