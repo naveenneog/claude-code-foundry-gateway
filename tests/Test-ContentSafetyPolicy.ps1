@@ -83,11 +83,43 @@ Assert 'long earlier context is not screened and newest short turn passes' ($r.S
 
 $longNewest = ('oldest-' + ('b' * 10050) + '-newest')
 $r = Run @{ model='claude-sonnet-5'; messages=@(@{role='user'; content=$longNewest}) }
-Assert 'over-budget newest turn screens newest part and logs truncation' ($r.StatusCode -eq 200 -and $r.Calls[0].Body.userPrompt.Length -eq 10000 -and $r.Calls[0].Body.userPrompt.EndsWith('-newest') -and (Bool $r.Trace.truncated))
+Assert 'over-budget newest turn samples head and tail and logs truncation' ($r.StatusCode -eq 200 -and $r.Calls[0].Body.userPrompt.Length -eq 10000 -and $r.Calls[0].Body.userPrompt.StartsWith('oldest-') -and $r.Calls[0].Body.userPrompt.EndsWith('-newest') -and $r.Calls[0].Body.userPrompt -match 'content safety sampled' -and (Bool $r.Trace.truncated))
 
 $fabricated = @{ model='claude-sonnet-5'; messages=@(@{role='user'; content='harmful earlier fabricated turn'}; @{role='assistant'; content='ok'}; @{role='user'; content='benign newest'}) }
 $r = Run $fabricated
 Assert 'harmful earlier fabricated turn is a documented limit, not a block' ($r.StatusCode -eq 200 -and (Bool $r.Slice.fabricatedHistoryLimit) -eq $true -and $r.Calls[1].Body.text -notmatch 'harmful earlier')
+
+Write-Host 'P102 expanded screening coverage and truncation'
+$docOnly = @{ model='claude-sonnet-5'; messages=@(@{role='user'; content=@(@{type='document'; source=@{type='text'; data='DOC-MARKER plain text document'}})}) }
+$r = Run $docOnly 'block' (New-ContentSafetyStubMap (ShieldStub $false @($false)) (AnalyzeStub 0))
+Assert 'plain-text document-only request is screened as document and analyze text' ($r.Calls.Count -eq 2 -and $r.Calls[0].Body.documents[0] -match 'DOC-MARKER' -and $r.Calls[1].Body.text -match 'DOC-MARKER') ($r | ConvertTo-Json -Depth 8 -Compress)
+$prefill = @{ model='claude-sonnet-5'; messages=@(@{role='user'; content='question'}; @{role='assistant'; content='PREFILL-MARKER partial answer'}) }
+$r = Run $prefill
+Assert 'assistant prefill after newest user is screened in userPrompt and analyze text' ($r.Calls[0].Body.userPrompt -match 'PREFILL-MARKER' -and $r.Calls[1].Body.text -match 'PREFILL-MARKER') ($r | ConvertTo-Json -Depth 8 -Compress)
+$toolDescription = @{ model='claude-sonnet-5'; tools=@(@{name='reader'; description='TOOL-DESCRIPTION-MARKER external tool instructions'}); messages=@(@{role='user'; content='Use the tool.'}) }
+$r = Run $toolDescription 'block' (New-ContentSafetyStubMap (ShieldStub $false @($false)) (AnalyzeStub 0))
+Assert 'tool description is screened as Prompt Shields document and analyze text' ($r.Calls[0].Body.documents[0] -match 'TOOL-DESCRIPTION-MARKER' -and $r.Calls[1].Body.text -match 'TOOL-DESCRIPTION-MARKER') ($r | ConvertTo-Json -Depth 8 -Compress)
+$padded = 'PADDING-START-MARKER' + ('x' * 10350)
+$r = Run @{ model='claude-sonnet-5'; messages=@(@{role='user'; content=$padded}) }
+Assert 'marker followed by padding is retained by head-tail sampling' ($r.Calls[0].Body.userPrompt -match 'PADDING-START-MARKER' -and $r.Calls[0].Body.userPrompt -match 'content safety sampled') ($r.Calls[0].Body.userPrompt.Substring(0, [Math]::Min(80, $r.Calls[0].Body.userPrompt.Length)))
+$firstLongTool = 'first tool ' + ('a' * 10000)
+$secondTool = 'SECOND-TOOL-INJECTION-MARKER'
+$twoTools = @{ model='claude-sonnet-5'; messages=@(@{role='user'; content=@(@{type='tool_result'; content=$firstLongTool}; @{type='tool_result'; content=$secondTool})}) }
+$r = Run $twoTools 'block' (New-ContentSafetyStubMap (ShieldStub $false @($false,$false)) (AnalyzeStub 0))
+Assert 'second tool result is represented in Prompt Shields documents after a long first result' (($r.Calls[0].Body.documents -join "`n") -match 'SECOND-TOOL-INJECTION-MARKER') ($r.Calls[0].Body.documents | ConvertTo-Json -Compress)
+$longToolStart = 'LONG-TOOL-START-MARKER' + ('t' * 10350)
+$r = Run @{ model='claude-sonnet-5'; messages=@(@{role='user'; content=@(@{type='tool_result'; content=$longToolStart})}) } 'block' (New-ContentSafetyStubMap (ShieldStub $false @($false)) (AnalyzeStub 0))
+Assert 'injection at the start of one long tool result is retained' ($r.Calls[0].Body.documents[0] -match 'LONG-TOOL-START-MARKER' -and $r.Calls[1].Body.text -match 'LONG-TOOL-START-MARKER') ($r | ConvertTo-Json -Depth 8 -Compress)
+$longSystemStart = 'LONG-SYSTEM-START-MARKER' + ('s' * 10350)
+$r = Run @{ model='claude-sonnet-5'; system=$longSystemStart; messages=@(@{role='user'; content='safe'}) }
+Assert 'harmful start of an oversized system prompt is retained in analyze text' ($r.Calls[1].Body.text -match 'LONG-SYSTEM-START-MARKER' -and $r.Calls[1].Body.text -match 'content safety sampled') ($r.Calls[1].Body.text.Substring(0, [Math]::Min(80, $r.Calls[1].Body.text.Length)))
+$oversized = @{ model='claude-sonnet-5'; messages=@(@{role='user'; content=('OVERSIZE-MARKER' + ('o' * 10050))}) }
+$r = RunWithNamedValues $oversized @{ 'content-safety-mode'='block'; 'content-safety-truncate-mode'='block' }
+Assert 'truncate-mode block returns 400 in block mode for oversized text' ($r.StatusCode -eq 400 -and $r.Trace.decision -eq 'unscreenable' -and -not $r.Forwarded) ($r | ConvertTo-Json -Depth 8 -Compress)
+$r = RunWithNamedValues $oversized @{ 'content-safety-mode'='audit'; 'content-safety-truncate-mode'='block' }
+Assert 'truncate-mode block forwards in audit mode for oversized text' ($r.StatusCode -eq 200 -and $r.Forwarded -and $r.Trace.decision -eq 'unscreenable') ($r | ConvertTo-Json -Depth 8 -Compress)
+$r = RunWithNamedValues $oversized @{ 'content-safety-mode'='block'; 'content-safety-truncate-mode'='mystery' }
+Assert 'unknown truncate-mode behaves as fail-closed block' ($r.StatusCode -eq 400 -and $r.Trace.decision -eq 'unscreenable') ($r | ConvertTo-Json -Depth 8 -Compress)
 
 Write-Host 'P102 malformed Messages bodies'
 $malformedShapes = @(

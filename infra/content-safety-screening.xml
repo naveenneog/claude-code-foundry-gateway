@@ -6,80 +6,91 @@
             <set-variable name="contentSafetyThreshold" value='@{ var parsed = 2; if (!int.TryParse("{{content-safety-threshold}}", out parsed)) { parsed = 2; } if (parsed &lt; 0) { parsed = 0; } if (parsed &gt; 6) { parsed = 6; } return parsed; }' />
             <set-variable name="contentSafetySlice" value="@{
                 var unscreenable = false;
-                JObject root = null;
-                try { var parsed = context.Request.Body.As&lt;JToken&gt;(preserveContent: true); root = parsed as JObject; if (root == null) { unscreenable = true; } } catch { unscreenable = true; }
-                var sys = new System.Text.StringBuilder();
-                JObject newestUser = null; var fabricated = false; var newestUserIndex = -1;
-                var user = new System.Text.StringBuilder(); var tool = new System.Text.StringBuilder(); var docs = new JArray(); var docChars = 0; var truncated = false;
-                if (!unscreenable) {
-                    var systemToken = root[&quot;system&quot;];
-                    if (systemToken != null) {
-                        if (systemToken.Type == JTokenType.String) { sys.AppendLine(systemToken.ToString()); }
-                        else if (systemToken.Type == JTokenType.Array) {
-                            foreach (var blockToken in (JArray)systemToken) {
-                                var block = blockToken as JObject; if (block == null) { unscreenable = true; break; }
-                                if (block[&quot;type&quot;] != null &amp;&amp; block[&quot;type&quot;].Type == JTokenType.String &amp;&amp; (string)block[&quot;type&quot;] == &quot;text&quot; &amp;&amp; block[&quot;text&quot;] != null &amp;&amp; block[&quot;text&quot;].Type == JTokenType.String) { sys.AppendLine((string)block[&quot;text&quot;]); }
-                            }
-                        }
-                        else { unscreenable = true; }
+                var truncated = false;
+                var marker = &quot;
+[...content safety sampled...]
+&quot;;
+                void addPart(System.Collections.Generic.List&lt;string&gt; list, string value) { var s = value == null ? &quot;&quot; : value.TrimEnd(&#x27;&#x27;,&#x27;
+&#x27;); if (!String.IsNullOrEmpty(s)) { list.Add(s); } }
+                void collectText(JToken token, System.Collections.Generic.List&lt;string&gt; list) {
+                    if (token == null) { return; }
+                    if (token.Type == JTokenType.String) { addPart(list, token.ToString()); return; }
+                    if (token.Type != JTokenType.Array) { unscreenable = true; return; }
+                    foreach (var blockToken in (JArray)token) {
+                        var block = blockToken as JObject; if (block == null) { unscreenable = true; break; }
+                        if (block[&quot;type&quot;] == null || block[&quot;type&quot;].Type != JTokenType.String) { continue; }
+                        var blockType = (string)block[&quot;type&quot;];
+                        if (blockType == &quot;text&quot; &amp;&amp; block[&quot;text&quot;] != null &amp;&amp; block[&quot;text&quot;].Type == JTokenType.String) { addPart(list, (string)block[&quot;text&quot;]); }
+                        else if (blockType == &quot;document&quot;) { var source = block[&quot;source&quot;] as JObject; if (source != null &amp;&amp; source[&quot;type&quot;] != null &amp;&amp; source[&quot;type&quot;].Type == JTokenType.String &amp;&amp; (string)source[&quot;type&quot;] == &quot;text&quot; &amp;&amp; source[&quot;data&quot;] != null &amp;&amp; source[&quot;data&quot;].Type == JTokenType.String) { addPart(list, (string)source[&quot;data&quot;]); } }
                     }
                 }
+                string sample(string value, int budget) {
+                    var s = value == null ? &quot;&quot; : value;
+                    if (budget &lt; 1) { budget = 1; }
+                    if (s.Length &lt;= budget) { return s; }
+                    truncated = true;
+                    if (budget &lt;= marker.Length) { return s.Substring(0, budget); }
+                    var keep = budget - marker.Length; var head = keep / 2; var tail = keep - head;
+                    return s.Substring(0, head) + marker + s.Substring(s.Length - tail, tail);
+                }
+                string fairJoin(System.Collections.Generic.List&lt;string&gt; parts, int budget) {
+                    if (parts.Count == 0) { return &quot;&quot;; }
+                    var share = Math.Max(1, budget / parts.Count); var joined = new System.Text.StringBuilder();
+                    for (var i = 0; i &lt; parts.Count; i++) { if (i &gt; 0) { joined.Append(&quot;
+&quot;); } joined.Append(sample(parts[i], share)); }
+                    var result = joined.ToString(); if (result.Length &gt; budget) { truncated = true; result = sample(result, budget); }
+                    return result;
+                }
+                JObject root = null;
+                try { var parsed = context.Request.Body.As&lt;JToken&gt;(preserveContent: true); root = parsed as JObject; if (root == null) { unscreenable = true; } } catch { unscreenable = true; }
+                var truncateRaw = &quot;{{content-safety-truncate-mode}}&quot;;
+                var truncateMode = String.IsNullOrEmpty(truncateRaw) ? &quot;newest&quot; : truncateRaw.Trim().ToLowerInvariant();
+                if (truncateMode != &quot;newest&quot;) { truncateMode = &quot;block&quot;; }
+                var analyzeParts = new System.Collections.Generic.List&lt;string&gt;();
+                var userParts = new System.Collections.Generic.List&lt;string&gt;();
+                var documentParts = new System.Collections.Generic.List&lt;string&gt;();
+                JObject newestUser = null; var fabricated = false; var newestUserIndex = -1;
+                if (!unscreenable) { var sysParts = new System.Collections.Generic.List&lt;string&gt;(); collectText(root[&quot;system&quot;], sysParts); foreach (var p in sysParts) { analyzeParts.Add(p); } }
+                if (!unscreenable) { var tools = root[&quot;tools&quot;] as JArray; if (tools != null) { foreach (var toolToken in tools) { var toolObj = toolToken as JObject; if (toolObj != null &amp;&amp; toolObj[&quot;description&quot;] != null &amp;&amp; toolObj[&quot;description&quot;].Type == JTokenType.String) { addPart(documentParts, (string)toolObj[&quot;description&quot;]); analyzeParts.Add((string)toolObj[&quot;description&quot;]); } } } }
                 if (!unscreenable) {
                     var messages = root[&quot;messages&quot;] as JArray;
                     if (messages == null) { unscreenable = true; }
                     else {
-                        for (var i = messages.Count - 1; i &gt;= 0; i--) {
-                            var message = messages[i] as JObject; if (message == null) { unscreenable = true; break; }
-                            if (message[&quot;role&quot;] != null &amp;&amp; message[&quot;role&quot;].Type == JTokenType.String &amp;&amp; (string)message[&quot;role&quot;] == &quot;user&quot;) { newestUser = message; newestUserIndex = i; break; }
-                        }
-                        if (!unscreenable &amp;&amp; newestUserIndex &gt; 0) {
-                            for (var h = 0; h &lt; newestUserIndex; h++) {
-                                var historic = messages[h] as JObject; if (historic == null) { unscreenable = true; break; }
-                                if (historic[&quot;role&quot;] != null &amp;&amp; historic[&quot;role&quot;].Type == JTokenType.String &amp;&amp; (string)historic[&quot;role&quot;] == &quot;user&quot;) { fabricated = true; break; }
-                            }
-                        }
+                        for (var i = messages.Count - 1; i &gt;= 0; i--) { var message = messages[i] as JObject; if (message == null) { unscreenable = true; break; } if (message[&quot;role&quot;] != null &amp;&amp; message[&quot;role&quot;].Type == JTokenType.String &amp;&amp; (string)message[&quot;role&quot;] == &quot;user&quot;) { newestUser = message; newestUserIndex = i; break; } }
+                        if (!unscreenable &amp;&amp; newestUserIndex &gt; 0) { for (var h = 0; h &lt; newestUserIndex; h++) { var historic = messages[h] as JObject; if (historic == null) { unscreenable = true; break; } if (historic[&quot;role&quot;] != null &amp;&amp; historic[&quot;role&quot;].Type == JTokenType.String &amp;&amp; (string)historic[&quot;role&quot;] == &quot;user&quot;) { fabricated = true; break; } } }
+                        if (!unscreenable &amp;&amp; newestUserIndex &gt;= 0 &amp;&amp; newestUserIndex + 1 &lt; messages.Count) { var after = messages[newestUserIndex + 1] as JObject; if (after != null &amp;&amp; after[&quot;role&quot;] != null &amp;&amp; after[&quot;role&quot;].Type == JTokenType.String &amp;&amp; (string)after[&quot;role&quot;] == &quot;assistant&quot;) { var prefill = new System.Collections.Generic.List&lt;string&gt;(); collectText(after[&quot;content&quot;], prefill); foreach (var p in prefill) { userParts.Add(p); analyzeParts.Add(p); } } }
                     }
                 }
                 if (!unscreenable &amp;&amp; newestUser != null) {
                     var userContentToken = newestUser[&quot;content&quot;];
                     if (userContentToken != null) {
-                        if (userContentToken.Type == JTokenType.String) { user.AppendLine(userContentToken.ToString()); }
+                        if (userContentToken.Type == JTokenType.String) { addPart(userParts, userContentToken.ToString()); analyzeParts.Add(userContentToken.ToString()); }
                         else if (userContentToken.Type == JTokenType.Array) {
                             foreach (var blockToken in (JArray)userContentToken) {
                                 var block = blockToken as JObject; if (block == null) { unscreenable = true; break; }
                                 if (block[&quot;type&quot;] == null || block[&quot;type&quot;].Type != JTokenType.String) { continue; }
                                 var blockType = (string)block[&quot;type&quot;];
-                                if (blockType == &quot;text&quot;) {
-                                    if (block[&quot;text&quot;] != null &amp;&amp; block[&quot;text&quot;].Type == JTokenType.String) { user.AppendLine((string)block[&quot;text&quot;]); }
-                                }
-                                else if (blockType == &quot;tool_result&quot;) {
-                                    var part = new System.Text.StringBuilder(); var tc = block[&quot;content&quot;];
-                                    if (tc != null &amp;&amp; tc.Type == JTokenType.String) { part.AppendLine(tc.ToString()); }
-                                    else if (tc != null &amp;&amp; tc.Type == JTokenType.Array) {
-                                        foreach (var textBlockToken in (JArray)tc) {
-                                            var textBlock = textBlockToken as JObject; if (textBlock == null) { unscreenable = true; break; }
-                                            if (textBlock[&quot;type&quot;] != null &amp;&amp; textBlock[&quot;type&quot;].Type == JTokenType.String &amp;&amp; (string)textBlock[&quot;type&quot;] == &quot;text&quot; &amp;&amp; textBlock[&quot;text&quot;] != null &amp;&amp; textBlock[&quot;text&quot;].Type == JTokenType.String) { part.AppendLine((string)textBlock[&quot;text&quot;]); }
-                                        }
-                                    }
-                                    else if (tc != null) { unscreenable = true; }
-                                    if (unscreenable) { break; }
-                                    var text = part.ToString().TrimEnd('\r','\n'); if (text.Length == 0) { continue; }
-                                    tool.AppendLine(text);
-                                    if (docs.Count &lt; 5 &amp;&amp; docChars &lt; 10000) { var remaining = 10000 - docChars; var d = text.Length &gt; remaining ? text.Substring(text.Length - remaining, remaining) : text; if (text.Length &gt; remaining) { truncated = true; } docs.Add(d); docChars += d.Length; } else { truncated = true; }
-                                }
+                                if (blockType == &quot;text&quot;) { if (block[&quot;text&quot;] != null &amp;&amp; block[&quot;text&quot;].Type == JTokenType.String) { addPart(userParts, (string)block[&quot;text&quot;]); analyzeParts.Add((string)block[&quot;text&quot;]); } }
+                                else if (blockType == &quot;document&quot;) { var documentText = new System.Collections.Generic.List&lt;string&gt;(); collectText(new JArray(block), documentText); foreach (var p in documentText) { documentParts.Add(p); analyzeParts.Add(p); } }
+                                else if (blockType == &quot;tool_result&quot;) { var toolParts = new System.Collections.Generic.List&lt;string&gt;(); collectText(block[&quot;content&quot;], toolParts); if (unscreenable) { break; } foreach (var p in toolParts) { documentParts.Add(p); analyzeParts.Add(p); } }
                             }
                         }
                         else { unscreenable = true; }
                     }
                 }
-                if (unscreenable) { return new JObject(new JProperty(&quot;unscreenable&quot;, true), new JProperty(&quot;userPrompt&quot;, &quot;&quot;), new JProperty(&quot;documents&quot;, new JArray()), new JProperty(&quot;analyzeText&quot;, &quot;&quot;), new JProperty(&quot;truncated&quot;, false), new JProperty(&quot;emptyTextSlice&quot;, true), new JProperty(&quot;fabricatedHistoryLimit&quot;, false)).ToString(Newtonsoft.Json.Formatting.None); }
-                var userRaw = user.ToString().TrimEnd('\r','\n'); var userPrompt = userRaw; if (userRaw.Length &gt; 10000) { userPrompt = userRaw.Substring(userRaw.Length - 10000, 10000); truncated = true; }
-                var analyzeBuilder = new System.Text.StringBuilder(); var sysPart = sys.ToString().TrimEnd('\r','\n'); var toolPart = tool.ToString().TrimEnd('\r','\n');
-                if (!String.IsNullOrEmpty(sysPart)) { analyzeBuilder.Append(sysPart); }
-                if (!String.IsNullOrEmpty(userRaw)) { if (analyzeBuilder.Length &gt; 0) { analyzeBuilder.Append(&quot;\n&quot;); } analyzeBuilder.Append(userRaw); }
-                if (!String.IsNullOrEmpty(toolPart)) { if (analyzeBuilder.Length &gt; 0) { analyzeBuilder.Append(&quot;\n&quot;); } analyzeBuilder.Append(toolPart); }
-                var analyzeRaw = analyzeBuilder.ToString(); var analyze = analyzeRaw; if (analyzeRaw.Length &gt; 10000) { analyze = analyzeRaw.Substring(analyzeRaw.Length - 10000, 10000); truncated = true; }
-                return new JObject(new JProperty(&quot;unscreenable&quot;, false), new JProperty(&quot;userPrompt&quot;, userPrompt), new JProperty(&quot;documents&quot;, docs), new JProperty(&quot;analyzeText&quot;, analyze), new JProperty(&quot;truncated&quot;, truncated), new JProperty(&quot;emptyTextSlice&quot;, String.IsNullOrEmpty(analyze)), new JProperty(&quot;fabricatedHistoryLimit&quot;, fabricated)).ToString(Newtonsoft.Json.Formatting.None);
+                if (!unscreenable) {
+                    var userRawLen = 0; foreach (var p in userParts) { userRawLen += p.Length; }
+                    var analyzeRawLen = 0; foreach (var p in analyzeParts) { analyzeRawLen += p.Length; }
+                    var docsRawLen = 0; foreach (var p in documentParts) { docsRawLen += p.Length; }
+                    if (truncateMode == &quot;block&quot; &amp;&amp; (userRawLen &gt; 10000 || analyzeRawLen &gt; 10000 || docsRawLen &gt; 10000 || documentParts.Count &gt; 5)) { unscreenable = true; truncated = true; }
+                }
+                if (unscreenable) { return new JObject(new JProperty(&quot;unscreenable&quot;, true), new JProperty(&quot;userPrompt&quot;, &quot;&quot;), new JProperty(&quot;documents&quot;, new JArray()), new JProperty(&quot;analyzeText&quot;, &quot;&quot;), new JProperty(&quot;truncated&quot;, truncated), new JProperty(&quot;emptyTextSlice&quot;, true), new JProperty(&quot;fabricatedHistoryLimit&quot;, false)).ToString(Newtonsoft.Json.Formatting.None); }
+                var userPrompt = fairJoin(userParts, 10000);
+                var documents = new JArray();
+                if (documentParts.Count &gt; 0) { if (documentParts.Count &lt;= 5) { var share = Math.Max(1, 10000 / documentParts.Count); foreach (var p in documentParts) { documents.Add(sample(p, share)); } } else { var bucketCount = 5; var share = Math.Max(1, 10000 / bucketCount); for (var b = 0; b &lt; bucketCount; b++) { var bucket = new System.Text.StringBuilder(); for (var i = b; i &lt; documentParts.Count; i += bucketCount) { if (bucket.Length &gt; 0) { bucket.Append(&quot;
+&quot;); } bucket.Append(documentParts[i]); } documents.Add(sample(bucket.ToString(), share)); } truncated = true; } }
+                var analyze = fairJoin(analyzeParts, 10000);
+                return new JObject(new JProperty(&quot;unscreenable&quot;, false), new JProperty(&quot;userPrompt&quot;, userPrompt), new JProperty(&quot;documents&quot;, documents), new JProperty(&quot;analyzeText&quot;, analyze), new JProperty(&quot;truncated&quot;, truncated), new JProperty(&quot;emptyTextSlice&quot;, String.IsNullOrEmpty(analyze)), new JProperty(&quot;fabricatedHistoryLimit&quot;, fabricated)).ToString(Newtonsoft.Json.Formatting.None);
             }" />
             <choose>
                 <when condition='@(JObject.Parse((string)context.Variables["contentSafetySlice"])["unscreenable"].ToString().Equals("True", StringComparison.OrdinalIgnoreCase))'>

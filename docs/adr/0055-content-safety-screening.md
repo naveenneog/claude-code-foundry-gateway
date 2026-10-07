@@ -172,6 +172,22 @@ Gateways installed before P102 do not have the `content-safety-screening` fragme
 Live run 2 of P102 deployed the fragment but every request returned 503 because the first fragment implementation was a stub: it parsed the request body, then set system, newest-user and tool-result slices to empty strings; its decision logic never read Prompt Shields or analyze severities. The offline tests had exercised a PowerShell model instead of the XML fragment and therefore did not prove the deployed artifact.
 
 P102 now treats `infra/content-safety-screening.xml` as the tested artifact. The policy test harness executes the fragment-derived flow for slicing, request bodies, decision, trace metadata and block/audit/off outcomes, and keeps the PowerShell model only as a parity oracle. A negative test restores the empty-slice stub and must fail. This is required evidence before any later live run can claim the gateway is screening requests.
+
+### Amendment 2026-10-07 (P102 council round 1)
+
+The Security council found that raw mode values, malformed 2xx Content Safety responses, tail-only truncation and fragment update drift left enforceable gaps.
+
+P102 now normalizes `content-safety-mode` once with trim and invariant lowercase. `off` skips screening and tracing, `audit` forwards after screening, and any other value enforces like `block`. The threshold named value is parsed with `int.TryParse`, clamped to 0-6, and defaults to 2 when parsing fails.
+
+Content Safety 2xx responses are treated as malformed unless `text:analyze` returns a `categoriesAnalysis` array, Prompt Shields returns `userPromptAnalysis`, and `documentsAnalysis` has the same count as the documents sent. Malformed responses fail closed with 503 in block mode and forward with error trace metadata in audit mode.
+
+The screened slice now includes plain-text document blocks in the newest user message, assistant prefill after that message, tool descriptions, and plain-text document blocks inside tool results. Caller-written text is sent to Prompt Shields `userPrompt`; tool descriptions, tool results and document text are sent as Prompt Shields `documents`; all screened text is sent to harm analysis. Non-text image, PDF, URL and base64 document sources remain documented limits.
+
+The default truncation mode samples the head and tail of each oversized item rather than the tail only. Analyze text uses a fair share of its 10,000-character budget across screened parts. Prompt Shields documents use a fair share of the documented five-document and 10,000-character document budget, grouping sources when more than five documents are present so every source contributes text. Microsoft documents the analyze text 10,000-character request limit and `FourSeverityLevels` values in the Analyze Text REST reference, and the Prompt Shields prompt, document count and document character limits in the Azure AI Content Safety service limits page ([Analyze Text, read 2026-10-07][analyze-text]; [region availability and service limits, read 2026-10-07][content-safety-regions]).
+
+The `content-safety-truncate-mode` named value is part of the contract. `newest` is the deployment default and means head/tail sampling. `block` means any oversized screened item or over-limit document set is `unscreenable`; block mode returns the existing Anthropic-style 400 response, and audit mode forwards with an `unscreenable` trace. Unknown truncation-mode values are treated as `block`.
+
+The update flow now treats policy fragment content as part of the deployed policy. Discovery reads fragment raw XML through ARM, canonicalizes live and template XML without preserving whitespace, and plans a fragment PUT when hashes differ. The plan fingerprint includes the fragment hashes, so an approved plan is tied to the fragment bytes it reviewed.
 ## Consequences
 
 - Content Safety is enforced at the gateway before Foundry sees blocked content in `block` mode.
@@ -200,5 +216,4 @@ P102 now treats `infra/content-safety-screening.xml` as the tested artifact. The
 [send-request]: https://learn.microsoft.com/en-us/azure/api-management/send-request-policy
 [shield-prompt-rest]: https://learn.microsoft.com/en-us/rest/api/contentsafety/text-operations/shield-prompt?view=rest-contentsafety-2024-09-01
 [trace-policy]: https://learn.microsoft.com/en-us/azure/api-management/trace-policy
-
 

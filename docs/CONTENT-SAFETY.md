@@ -2,14 +2,15 @@
 
 P102 adds optional request screening in API Management before a Claude Messages request reaches Microsoft Foundry. The default deployment remains unchanged: `deployContentSafety` is `false`, `content-safety-mode` is `off`, and the policy fragment emits no Content Safety calls.
 
-## What is screened
+## Limits
 
-The gateway screens only the Claude Messages `system` field and the newest `user` message. It builds two Azure AI Content Safety requests:
-
-- Prompt Shields `text:shieldPrompt`: `userPrompt` from newest user text, and `documents` from newest user `tool_result` text.
-- Harm analysis `text:analyze`: system text, newest user text and newest user `tool_result` text, using `Hate`, `Violence`, `SelfHarm` and `Sexual` with `FourSeverityLevels`.
-
-The newest slice is capped at 10,000 characters and tool-result documents at five documents and 10,000 total characters. When the newest turn is over budget, the policy screens the newest part and logs `truncated=true`. Earlier conversation turns are not screened; the fabricated-history case is a documented limit, not a safety pass. The contract is in [ADR-0055](adr/0055-content-safety-screening.md), based on Microsoft Learn pages for [Analyze Text](https://learn.microsoft.com/en-us/rest/api/contentsafety/text-operations/analyze-text?view=rest-contentsafety-2024-09-01), [Shield Prompt](https://learn.microsoft.com/en-us/rest/api/contentsafety/text-operations/shield-prompt?view=rest-contentsafety-2024-09-01), [Prompt Shields](https://learn.microsoft.com/en-us/azure/ai-services/content-safety/concepts/jailbreak-detection) and [region availability](https://learn.microsoft.com/en-us/azure/ai-services/content-safety/region-availability), read 2026-10-06.
+- Screened text: the Claude Messages `system` field, newest user text blocks, plain-text `document` blocks in the newest user message, a trailing assistant prefill after that newest user message, `tools[].description`, and plain text or plain-text document blocks inside that newest user's `tool_result` blocks.
+- Prompt Shields `userPrompt`: caller-written newest user text and assistant prefill text. Prompt Shields `documents`: tool descriptions, tool results and document text, because Microsoft describes Prompt Shields document attacks as third-party content and tool-response intervention content ([Microsoft Learn, read 2026-10-07](https://learn.microsoft.com/en-us/azure/ai-services/content-safety/concepts/jailbreak-detection)).
+- Harm analysis `text:analyze`: all screened text, using `Hate`, `Violence`, `SelfHarm` and `Sexual` with `FourSeverityLevels`. The REST reference caps one analyze request at 10,000 Unicode characters and defines four-level severities as 0, 2, 4 and 6 ([Microsoft Learn, read 2026-10-07](https://learn.microsoft.com/en-us/rest/api/contentsafety/text-operations/analyze-text?view=rest-contentsafety-2024-09-01)).
+- Sampling: `content-safety-truncate-mode=newest` samples every oversized item from its head and tail, joined by a `content safety sampled` marker. This keeps a harmful prefix visible when it is followed by more than 10,000 padding characters. The analyze request gives each screened part a fair share of the 10,000-character budget.
+- Prompt Shields document budget: the service limit is a 10,000-character prompt, up to five documents and 10,000 total document characters ([Microsoft Learn, read 2026-10-07](https://learn.microsoft.com/en-us/azure/ai-services/content-safety/region-availability)). The policy gives each document a fair share. More than five source documents are grouped into five sampled document strings so each source contributes text.
+- Not screened as text: earlier conversation turns, image/PDF/URL documents, base64 document sources and any document source that is not already plain text. These are documented limits, not safety passes.
+- Truncation mode: the named value `content-safety-truncate-mode` defaults to `newest` in `infra/main.bicep`. Operators change the APIM named value to `block` to turn any oversized screened item or grouped document set into `unscreenable`; block mode returns 400 and audit mode forwards with trace metadata. Unknown truncation-mode values are treated as `block`.
 
 ## Modes
 
