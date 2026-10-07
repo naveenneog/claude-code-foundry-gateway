@@ -769,3 +769,5 @@ to close the preview-feature gap. Both are recorded in `docs/CHARTER.md` as non-
       A build agent or scheduled job authenticates as a service principal and needs entitlement
       the same way a developer does
 
+
+Follow-up from P102 live proof: add tests/Test-AzArguments.ps1 coverage for az arguments passed through wrapper arrays such as Invoke-Az @(...), including embedded double quotes and shell metacharacters. Evidence: P102's Application Insights trace query was passed to az.cmd with KQL string literals and split before reaching Python, while the current literal-command detector did not see it.
