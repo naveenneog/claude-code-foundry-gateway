@@ -404,7 +404,7 @@ Reset-Gateway $local
 $publish = Invoke-BridgeResult @{ action = 'developer_publish'; parameters = @{ standard_group = 'standard-group'; premium_group = 'premium-group'; user = $personId } }
 Assert 'developer_publish passes -User through the real sync and returns the published tier' (
     -not $publish.error -and $publish.synced -eq $true -and $publish.published_tier -eq 'premium' -and
-    $gateway.Writes -contains 'allow-premium' -and $gateway.Writes -contains 'entitlement-groups') ($publish | ConvertTo-Json -Compress)
+    $gateway.Writes -contains 'allow-premium' -and $gateway.Writes -notcontains 'entitlement-groups') ($publish | ConvertTo-Json -Compress)
 # Council round 1 (QA): with two spellings stored, the AUM bridge acts on the exact one.
 $bridgeSpellings = ',platform=Platform:5000,sales=Lower Sales:1000,Sales=Upper Sales:2000,'
 Reset-Gateway $local

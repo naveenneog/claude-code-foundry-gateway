@@ -186,8 +186,8 @@ Capture { & (Join-Path $root 'scripts\Sync-ClaudeAccess.ps1') -ApimName apim-p84
 $projectionRecordCalls = $FixtureCalls -join "`n"
 $projectionApplyIndex = [array]::FindIndex([string[]]@($FixtureCalls), [Predicate[string]]{ param($line) $line -match 'apply-projection\.mjs .*--snapshot' })
 $projectionRecordIndex = [array]::FindIndex([string[]]@($FixtureCalls), [Predicate[string]]{ param($line) $line -match 'az apim nv (update|create) .*--named-value-id entitlement-groups' })
-Assert 'a projection sync records entitlement-groups after the successful apply' (
-    -not $CapturedError -and $projectionApplyIndex -ge 0 -and $projectionRecordIndex -gt $projectionApplyIndex) "$CapturedError | $projectionRecordCalls"
+Assert 'a projection sync from default fallback does not record entitlement-groups after apply' (
+    -not $CapturedError -and $projectionApplyIndex -ge 0 -and $projectionRecordIndex -lt 0) "$CapturedError | $projectionRecordCalls"
 
 Reset-ProjectionFixture 'source-projection'
 Capture { & (Join-Path $root 'scripts\Sync-ClaudeAccess.ps1') -ApimName apim-p84 -ResourceGroup rg-p84 -Store projection -WhatIf }
@@ -309,8 +309,15 @@ Invoke-NamedValueSyncFixture -PremiumCount 5 -StandardCount 20
 $nvWrites = Get-NamedValueWrites
 Assert 'a named-value sync within the limit writes both lists' (
     -not $CapturedError -and @($nvWrites -match 'allow-premium').Count -ge 1 -and @($nvWrites -match 'allow-standard').Count -ge 1) "$CapturedError | writes: $($nvWrites -join ' | ')"
-Assert 'a named-value sync records entitlement-groups after a successful first sync' (
-    -not $CapturedError -and $script:P98NvResult.Values['entitlement-groups'] -eq 'standard=10000000-0000-4000-8000-000000000001,premium=10000000-0000-4000-8000-000000000002') "$CapturedError | groups=$($script:P98NvResult.Values['entitlement-groups']) | writes: $($nvWrites -join ' | ')"
+Assert 'a named-value sync from default fallback writes lists but does not record entitlement-groups' (
+    -not $CapturedError -and -not $script:P98NvResult.Values.ContainsKey('entitlement-groups') -and
+    $script:P98NvResult.Output -match 'not recording entitlement-groups' -and $script:P98NvResult.Output -match 'default name') "$CapturedError | groups=$($script:P98NvResult.Values['entitlement-groups']) | output: $($script:P98NvResult.Output) | writes: $($nvWrites -join ' | ')"
+
+Invoke-NamedValueSyncFixture -PremiumCount 5 -StandardCount 20 -Parameters @{ Store = 'named-value'; StandardGroup = 'claude-code-standard'; PremiumGroup = 'claude-code-premium' }
+$nvWrites = Get-NamedValueWrites
+Assert 'a named-value sync records entitlement-groups after a successful explicit-group first sync' (
+    -not $CapturedError -and $script:P98NvResult.Values['entitlement-groups'] -eq 'standard=10000000-0000-4000-8000-000000000001,premium=10000000-0000-4000-8000-000000000002' -and
+    $script:P98NvResult.Output -match 'standard\s+claude-code-standard\s+10000000-0000-4000-8000-000000000001\s+parameter') "$CapturedError | groups=$($script:P98NvResult.Values['entitlement-groups']) | output: $($script:P98NvResult.Output) | writes: $($nvWrites -join ' | ')"
 
 Invoke-NamedValueSyncFixture -PremiumCount 5 -StandardCount 20 -Parameters @{ Store = 'named-value'; WhatIf = $true }
 $nvWrites = Get-NamedValueWrites
@@ -336,6 +343,9 @@ Assert 'Sync-ClaudeAccess -User reports the empty-tier guard remedy instead of G
     -not $CapturedError -and $script:P98NvResult.Output -match 'developer tier as written: standard' -and
     $script:P98NvResult.Output -match 'rerun with -AllowEmptyStandard, -AllowEmptyPremium or -AllowEmpty' -and
     $script:P98NvResult.Output -notmatch 'Microsoft Graph can report a membership change') "$CapturedError | output: $($script:P98NvResult.Output) | writes: $($nvWrites -join ' | ')"
+Assert 'a skipped tier write does not record entitlement-groups without RecordGroups' (
+    -not $script:P98NvResult.Values.ContainsKey('entitlement-groups') -and
+    $script:P98NvResult.Output -match 'not recording entitlement-groups') "$CapturedError | groups=$($script:P98NvResult.Values['entitlement-groups']) | output: $($script:P98NvResult.Output) | writes: $($nvWrites -join ' | ')"
 
 Invoke-NamedValueSyncFixture -PremiumCount 1 -StandardCount 1 -GatewayGroups 'standard=10000000-0000-4000-8000-000000000001,premium=10000000-0000-4000-8000-000000000002' -Parameters @{ Store = 'named-value'; User = '40000000-0000-4000-8000-000000000001'; WhatIf = $true }
 $nvWrites = Get-NamedValueWrites
@@ -364,10 +374,15 @@ $nvWrites = Get-NamedValueWrites
 Assert 'an explicit missing standard group refuses before writes and names the parameter remedy' (
     $CapturedError -match "standard tier group 'missing-standard' from the parameter was not found" -and $CapturedError -match '-StandardGroup' -and $CapturedError -match '-RecordGroups' -and $nvWrites.Count -eq 0) "$CapturedError | writes: $($nvWrites -join ' | ')"
 
-Invoke-NamedValueSyncFixture -PremiumCount 1 -StandardCount 1 -GatewayGroups 'standard=10000000-0000-4000-8000-000000000001,premium=10000000-0000-4000-8000-000000000002' -Parameters @{ Store = 'named-value'; StandardGroup = 'claude-code-premium' }
+Invoke-NamedValueSyncFixture -PremiumCount 1 -StandardCount 1 -GatewayGroups 'standard=10000000-0000-4000-8000-000000000001,premium=10000000-0000-4000-8000-000000000002' -Parameters @{ Store = 'named-value'; StandardGroup = 'gateway-standard' }
 $nvWrites = Get-NamedValueWrites
 Assert 'explicit groups that differ from entitlement-groups refuse before writes and name RecordGroups' (
     $CapturedError -match '-RecordGroups' -and $nvWrites.Count -eq 0) "$CapturedError | writes: $($nvWrites -join ' | ')"
+
+Invoke-NamedValueSyncFixture -PremiumCount 1 -StandardCount 1 -Parameters @{ Store = 'named-value'; StandardGroup = 'claude-code-standard'; PremiumGroup = 'claude-code-standard' }
+$nvWrites = Get-NamedValueWrites
+Assert 'equal standard and premium group object ids refuse before writes' (
+    $CapturedError -match 'standard and premium tier groups must be different' -and $nvWrites.Count -eq 0) "$CapturedError | writes: $($nvWrites -join ' | ')"
 
 Invoke-NamedValueSyncFixture -PremiumCount 1 -StandardCount 1 -GatewayGroups 'standard=10000000-0000-4000-8000-000000000001,premium=10000000-0000-4000-8000-000000000002' -Parameters @{ Store = 'named-value'; StandardGroup = 'gateway-standard'; PremiumGroup = 'gateway-premium'; RecordGroups = $true }
 $nvWrites = Get-NamedValueWrites
@@ -384,9 +399,8 @@ Assert 'Sync-ClaudeAccess uses the decision record groups before the default gro
 
 Invoke-NamedValueSyncFixture -PremiumCount 1 -StandardCount 1 -WithDecisionRecord -GatewayGroups 'standard=10000000-0000-4000-8000-000000000005,premium=10000000-0000-4000-8000-000000000006'
 $nvWrites = Get-NamedValueWrites
-Assert 'Sync-ClaudeAccess uses entitlement-groups before a decision record of this gateway' (
-    -not $CapturedError -and @($nvWrites | Where-Object { $_ -match 'entitlement-groups' }).Count -eq 0 -and
-    $script:P98NvResult.Values['entitlement-groups'] -eq 'standard=10000000-0000-4000-8000-000000000005,premium=10000000-0000-4000-8000-000000000006') "$CapturedError | groups=$($script:P98NvResult.Values['entitlement-groups']) | writes: $($nvWrites -join ' | ')"
+Assert 'a decision record that disagrees with entitlement-groups refuses before writes and names RecordGroups' (
+    $CapturedError -match '-RecordGroups' -and $CapturedError -match 'decision record' -and $nvWrites.Count -eq 0) "$CapturedError | groups=$($script:P98NvResult.Values['entitlement-groups']) | writes: $($nvWrites -join ' | ')"
 
 Invoke-NamedValueSyncFixture -PremiumCount 1 -StandardCount 1 -GatewayGroups 'standard=99999999-9999-4999-8999-999999999999,premium=none' -Parameters @{ Store = 'named-value' }
 $nvWrites = Get-NamedValueWrites

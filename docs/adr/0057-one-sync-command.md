@@ -39,13 +39,19 @@ a full snapshot. U25 records that this path is not measured live.
    a decision record of this gateway, then the default names. A group that `entitlement-groups` names and Microsoft
    Graph does not find stops the sync before any write; the record and default names are not used in its place.
    `premium=none` means the gateway has no premium group.
-3. A gateway without `entitlement-groups` gets it after its first successful sync, not with `-WhatIf`. When
-   `-StandardGroup` or `-PremiumGroup` resolve to other groups than the gateway records, the sync refuses before
-   any write and names `-RecordGroups`; with `-RecordGroups` it syncs and then records the new groups.
+3. A gateway without `entitlement-groups` gets it after its first successful sync only when each tier came from a
+   parameter, this gateway's decision record or the gateway's own `entitlement-groups`, and the tier write was not
+   skipped by the empty-tier guard; a default-name fallback syncs but does not pin those names unless
+   `-RecordGroups` is explicit. When `-StandardGroup`, `-PremiumGroup` or this gateway's decision record resolve to
+   other groups than the gateway records, the sync refuses before any write and names `-RecordGroups`; with
+   `-RecordGroups` it syncs and then records the new groups. The standard and premium group object ids must differ.
 4. AUM's Direct publication passes the developer's object ID as `-User`, so a projection gateway runs a targeted
-   sync and a named-value gateway the whole refresh.
+   sync and a named-value gateway the whole refresh. It compares the returned `published_tier` with the requested
+   outcome and retries for bounded Microsoft Graph lag before warning the operator to rerun.
 5. `entitlement-groups` is read and written through one module, `scripts/ClaudeEntitlementGroups.ps1`, which
    the update flow's migration 0004 also uses.
+6. Turnstile is authoritative for tier groups when connected, so its apply path calls the same sync command with
+   `-RecordGroups` after writing its governance values.
 
 ## Consequences
 
@@ -53,7 +59,8 @@ a full snapshot. U25 records that this path is not measured live.
   publishes one developer's change on every gateway.
 - On named values, `-User` costs a whole refresh: a Microsoft Graph read of both groups, and up to three
   named-value writes. Named values hold about 110 developers per tier list, so the refresh stays small.
-- A sync can write one more named value, `entitlement-groups`, the first time it runs on a gateway that lacks it.
+- A sync can write one more named value, `entitlement-groups`, the first time it runs on a gateway that lacks it,
+  but default display-name fallback and skipped empty-tier writes are not recorded unless `-RecordGroups` is explicit.
 - A changed tier group is an explicit act (`-RecordGroups`), as P100 made it in the update flow.
 - Microsoft Graph can report a membership change late; a `-User` report taken right after a change can show the
   previous tier. P101 live run 5 measured 54.3 s for a removal and 80.5 s for an addition (U157).

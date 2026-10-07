@@ -168,8 +168,8 @@ switch ([string]$request.action) {
         $result=& (Join-Path $PSScriptRoot 'Sync-AumMembership.ps1') @arguments | ConvertFrom-Json
     }
     'read' {
-        $standardGroup = [string](& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') StandardGroup 3>$null)
-        $premiumGroup = [string](& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') PremiumGroup 3>$null)
+        $standardGroup = [string](& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') StandardGroup -ForApimName $ApimName 3>$null)
+        $premiumGroup = [string](& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') PremiumGroup -ForApimName $ApimName 3>$null)
         $tiers = foreach ($tier in @('standard', 'premium')) {
             [ordered]@{
                 id = $tier; name = $tier; entra_group = $(if ($tier -eq 'standard') { $standardGroup } else { $premiumGroup })

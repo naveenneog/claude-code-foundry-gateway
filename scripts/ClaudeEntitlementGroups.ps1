@@ -22,6 +22,9 @@ function ConvertTo-ClaudeEntitlementGroups([Parameter(Mandatory)][string]$Standa
     if (-not (Test-ClaudeEntitlementGroupGuid $StandardId)) { throw "entitlement-groups needs the standard group's object id, not '$StandardId'." }
     $premium = if ($PremiumId) { $PremiumId } else { 'none' }
     if ($premium -ne 'none' -and -not (Test-ClaudeEntitlementGroupGuid $premium)) { throw "entitlement-groups needs the premium group's object id or none, not '$PremiumId'." }
+    if ($premium -ne 'none' -and [string]::Equals($StandardId, $premium, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'The standard and premium tier groups must be different object ids. Nothing was written.'
+    }
     return "standard=$($StandardId.ToLowerInvariant()),premium=$($premium.ToLowerInvariant())"
 }
 
@@ -37,12 +40,12 @@ function Resolve-ClaudeEntitlementGroupCandidate {
             if ($Tier -eq 'standard') {
                 return [pscustomobject]@{ Tier = $Tier; Argument = ''; Id = ''; Source = $candidate.Source; Found = $false; Absent = $false; Missing = 'none' }
             }
-            return [pscustomobject]@{ Tier = $Tier; Argument = 'none'; Id = 'none'; Source = $candidate.Source; Found = $false; Absent = $true; Missing = '' }
+            return [pscustomobject]@{ Tier = $Tier; Argument = 'none'; Id = 'none'; Source = $candidate.Source; Found = $false; Absent = $true; Missing = ''; DisplayName = 'none' }
         }
         $group = & $FindGroup ([string]$candidate.Value)
         if ($group -and $group.id) {
             $id = ([string]$group.id).ToLowerInvariant()
-            return [pscustomobject]@{ Tier = $Tier; Argument = $id; Id = $id; Source = $candidate.Source; Found = $true; Absent = $false; Missing = '' }
+            return [pscustomobject]@{ Tier = $Tier; Argument = $id; Id = $id; Source = $candidate.Source; Found = $true; Absent = $false; Missing = ''; DisplayName = [string]$candidate.Value }
         }
         if ($candidate.Authoritative) {
             return [pscustomobject]@{ Tier = $Tier; Argument = ''; Id = ''; Source = $candidate.Source; Found = $false; Absent = $false; Missing = [string]$candidate.Value }
@@ -74,8 +77,20 @@ function Resolve-ClaudeEntitlementGroupsForSync {
         @{ Value = $PremiumGroup; Source = 'parameter'; Authoritative = $true },
         @{ Value = $recorded['premium']; Source = 'gateway entitlement-groups'; Authoritative = $true },
         @{ Value = $recordPremium; Source = 'decision record'; Authoritative = $true },
-        @{ Value = 'claude-code-premium'; Source = 'default name'; Authoritative = $false }
+        @{ Value = 'claude-code-premium'; Source = 'default name'; Authoritative = $true }
     )
+    $decisionStandard = $null
+    if ($recordStandard) {
+        $decisionStandard = Resolve-ClaudeEntitlementGroupCandidate -Tier 'standard' -FindGroup $FindGroup -Candidates @(
+            @{ Value = $recordStandard; Source = 'decision record'; Authoritative = $true }
+        )
+    }
+    $decisionPremium = $null
+    if ($recordPremium) {
+        $decisionPremium = Resolve-ClaudeEntitlementGroupCandidate -Tier 'premium' -FindGroup $FindGroup -Candidates @(
+            @{ Value = $recordPremium; Source = 'decision record'; Authoritative = $true }
+        )
+    }
     foreach ($group in @($standard, $premium)) {
         if ($group.Missing -and $group.Source -eq 'gateway entitlement-groups') {
             $switch = if ($group.Tier -eq 'standard') { '-StandardGroup' } else { '-PremiumGroup' }
@@ -91,5 +106,8 @@ function Resolve-ClaudeEntitlementGroupsForSync {
             $group.Missing = ''
         }
     }
-    return [pscustomobject]@{ Standard = $standard; Premium = $premium; Recorded = $recorded; Raw = $raw }
+    if ($premium.Id -ne 'none' -and [string]::Equals([string]$standard.Id, [string]$premium.Id, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'The standard and premium tier groups must be different object ids. Nothing was written.'
+    }
+    return [pscustomobject]@{ Standard = $standard; Premium = $premium; Recorded = $recorded; Raw = $raw; DecisionStandard = $decisionStandard; DecisionPremium = $decisionPremium }
 }

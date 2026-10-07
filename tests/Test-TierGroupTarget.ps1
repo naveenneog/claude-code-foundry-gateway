@@ -38,10 +38,8 @@ try {
 
     foreach ($script in 'Compare-ClaudeEntitlement.ps1') {
         $text = Get-Content -LiteralPath (Join-Path $root "scripts\$script") -Raw
-        foreach ($field in 'StandardGroup', 'PremiumGroup') {
-            $call = "(?m)^\s*if \(-not \`$$field\) \{ \`$$field = \[string\]\(& \(Join-Path \`$PSScriptRoot 'Get-ClaudeGatewayTarget\.ps1'\) $field -ForApimName \`$ApimName 3>\`$null\) \}"
-            Assert "$script takes $field from the record for this gateway" ($text -match $call)
-        }
+        Assert "$script uses the shared entitlement-group resolver" ($text -match 'Resolve-ClaudeEntitlementGroupsForSync')
+        Assert "$script lets the shared resolver read APIM entitlement-groups" ($text -match 'Get-ApimNamedValue')
         Assert "$script no longer hardcodes the default group as its parameter default" ($text -notmatch "(?m)^\s*\[string\]\`$StandardGroup = 'claude-code-standard'")
     }
 }

@@ -167,9 +167,24 @@ function Assert-RecordGroupChangeAllowed {
 Assert-RecordGroupChangeAllowed -Tier standard -Explicit $StandardGroup -Recorded ([string]$groupResolution.Recorded['standard']) -Resolved ([string]$groupResolution.Standard.Id)
 Assert-RecordGroupChangeAllowed -Tier premium -Explicit $PremiumGroup -Recorded ([string]$groupResolution.Recorded['premium']) -Resolved ([string]$groupResolution.Premium.Id)
 
+function Assert-DecisionRecordMatchesEntitlementGroups {
+    param([string]$Tier, [string]$Recorded, [object]$Decision)
+    if (-not $Recorded -or -not $Decision -or -not $Decision.Id) { return }
+    if ([string]::Equals($Recorded, [string]$Decision.Id, [StringComparison]::OrdinalIgnoreCase)) { return }
+    if ($RecordGroups) { return }
+    throw "The gateway records $Tier group '$Recorded' in entitlement-groups, but this gateway's decision record resolves to '$([string]$Decision.Id)'. Remedy: rerun with -RecordGroups to replace entitlement-groups after a successful sync, or restore the recorded group. Nothing was written."
+}
+Assert-DecisionRecordMatchesEntitlementGroups -Tier standard -Recorded ([string]$groupResolution.Recorded['standard']) -Decision $groupResolution.DecisionStandard
+Assert-DecisionRecordMatchesEntitlementGroups -Tier premium -Recorded ([string]$groupResolution.Recorded['premium']) -Decision $groupResolution.DecisionPremium
+
 $StandardGroup = [string]$groupResolution.Standard.Argument
 $PremiumGroup = [string]$groupResolution.Premium.Argument
 $targetUserOid = if ($User) { Resolve-ClaudeGraphUserObjectId -Identity $User -Token $graphToken } else { '' }
+
+Write-Host "Tier groups resolved:" -ForegroundColor Cyan
+foreach ($resolvedGroup in @($groupResolution.Standard, $groupResolution.Premium)) {
+    Write-Host ("  {0,-8} {1,-36} {2,-36} {3}" -f $resolvedGroup.Tier, $resolvedGroup.DisplayName, $resolvedGroup.Id, $resolvedGroup.Source) -ForegroundColor DarkGray
+}
 
 function Get-ClaudeNamedValueTierForUser {
     param([string]$UserObjectId, [string]$StandardList, [string]$PremiumList)
@@ -181,6 +196,15 @@ function Get-ClaudeNamedValueTierForUser {
 
 function Set-ClaudeEntitlementGroupsIfNeeded {
     if ($WhatIf) { return }
+    $recordReasons = [Collections.Generic.List[string]]::new()
+    foreach ($resolvedGroup in @($groupResolution.Standard, $groupResolution.Premium)) {
+        if ($resolvedGroup.Source -eq 'default name') { $recordReasons.Add("$($resolvedGroup.Tier) came from the default name fallback") }
+    }
+    foreach ($tierName in @($skippedTierWrites)) { $recordReasons.Add("$tierName list was skipped by the empty-tier guard") }
+    if ($recordReasons.Count -and -not $RecordGroups) {
+        Write-Host ("Not recording entitlement-groups: {0}. Rerun with -RecordGroups after verifying the tier groups are this gateway's intended groups." -f ($recordReasons -join '; ')) -ForegroundColor Yellow
+        return
+    }
     $wanted = ConvertTo-ClaudeEntitlementGroups -StandardId ([string]$groupResolution.Standard.Id) -PremiumId ([string]$groupResolution.Premium.Id)
     if ($RecordGroups -or -not $groupResolution.Raw -or $groupResolution.Raw -ne $wanted) {
         Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-groups' -Value $wanted

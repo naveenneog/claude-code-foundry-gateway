@@ -321,7 +321,7 @@ function Invoke-RestMethod {
         if ($FixtureCase -in @('401','403','network','group-error')) { throw "Graph $FixtureCase lookup failed" }
         if ($FixtureCase -eq 'group-shape') { return [pscustomobject]@{} }
         if ($FixtureCase -eq 'group-missing' -or ($FixtureCase -eq 'standard-missing' -and $url -match 'claude-code-standard') -or ($FixtureCase -eq 'premium-missing' -and $url -match 'claude-code-premium')) { return [pscustomobject]@{ value = @() } }
-        $groups = @([pscustomobject]@{ id = $(if ($url -match 'claude-code-premium') { $FixturePremiumGroupId } else { $FixtureGroupId }); displayName = 'fixture' })
+        $groups = @([pscustomobject]@{ id = $(if ($url -match 'claude-code-premium' -or $url -match [regex]::Escape($FixturePremiumGroupId)) { $FixturePremiumGroupId } else { $FixtureGroupId }); displayName = 'fixture' })
         if ($FixtureCase -eq 'group-duplicate') { $groups += [pscustomobject]@{ id = $FixtureApp; displayName = 'fixture' } }
         if ($FixtureCase -eq 'group-no-id') { $groups[0].id = '' }
         if ($FixtureCase -eq 'group-null-nextlink') { return [pscustomobject]@{ value=$groups; '@odata.nextLink'=$null } }

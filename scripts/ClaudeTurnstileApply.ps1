@@ -471,7 +471,7 @@ function Invoke-ClaudeGatewayGovernanceApply {
             # The access sync signals failure by throwing, not by an exit code.
             try {
                 & (Join-Path $ScriptRoot 'Sync-ClaudeAccess.ps1') -ApimName $ApimName -ResourceGroup $ResourceGroup `
-                    -StandardGroup $selected.TierGroups['standard'] -PremiumGroup $selected.TierGroups['premium'] *> $null
+                    -StandardGroup $selected.TierGroups['standard'] -PremiumGroup $selected.TierGroups['premium'] -RecordGroups *> $null
             }
             catch { throw "The limits were applied, but the membership refresh did not finish: $($_.Exception.Message)" }
             $membership = 'refreshed from the Entra groups'
