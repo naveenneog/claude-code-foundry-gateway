@@ -55,6 +55,7 @@ function Reset-Live {
         ResourceList = ''
         ModelValue = ',claude-sonnet-5,'
         HelloCount = 0
+        ScreeningWhileOff = $false
         RestQueryFails = $false
         UpdatePlanNoContentSafety = $false
         LogRows = @(
@@ -139,6 +140,8 @@ function Invoke-RestMethod {
     if ([string]$parsed.query -notmatch 'message == "content safety request screening"' -or [string]$parsed.query -notmatch 'customDimensions\.screening == "claude-content-safety"') {
         throw 'trace query missing screening metadata marker or message filter'
     }
+    # The fragment emits its screening trace only when content-safety-mode is not off; an update leaves it off.
+    if ($global:Live.Updated -and -not $global:Live.ScreeningWhileOff) { return @{ tables=@(@{ rows=@() }) } }
     @{ tables=@(@{ rows=$global:Live.LogRows }) }
 }
 function Invoke-WebRequest {
@@ -292,6 +295,15 @@ try {
     Assert 'teardown deletes an empty resource group re-created by CognitiveServices diagnostics remediation after purge and records it' ((At '^az resource list') -gt (At '^az cognitiveservices account purge') -and @($global:Live.Calls | Where-Object { $_ -match '^az group delete --name rg-p102-live-abc123' }).Count -ge 2 -and $policyReceipt.policyRemediationRecreatedResourceGroup.policyDefinitionName -eq 'CognitiveServices_Diagnostics_Enable') ($global:Live.Calls -join '; ')
 
     Write-Host 'P102 upgrade mode'
+    Reset-Live
+    Invoke-P102 @{ UpgradeFrom = $oldCheckout; LogWaitSeconds = 1 }
+    $upgradeReceipt = Get-Content (Join-Path $root 'p102-content-safety-live-receipt.json') -Raw | ConvertFrom-Json -Depth 30
+    Assert 'upgrade mode passes when content-safety-mode off emits no screening trace' ($Exit -eq 0 -and $upgradeReceipt.trace.status -eq 'PASS' -and $upgradeReceipt.trace.detail -match 'off') "$Exit | $($upgradeReceipt.trace | ConvertTo-Json -Compress)"
+    Reset-Live
+    $global:Live.ScreeningWhileOff = $true
+    Invoke-P102 @{ UpgradeFrom = $oldCheckout; LogWaitSeconds = 1 }
+    $offReceipt = Get-Content (Join-Path $root 'p102-content-safety-live-receipt.json') -Raw | ConvertFrom-Json -Depth 30
+    Assert 'upgrade mode fails when a screening trace appears while content-safety-mode is off' ($Exit -ne 0 -and $offReceipt.trace.status -eq 'FAIL' -and $offReceipt.trace.detail -match 'mode is off') "$Exit | $($offReceipt.trace | ConvertTo-Json -Compress)"
     Reset-Live
     Invoke-P102 @{ UpgradeFrom = $oldCheckout }
     $upgradeOrder = @((At '^old-installer '), (At '^request warmup'), (At '^az account get-access-token --resource https://management.azure.com'), (At '^update plan'), (At '^update apply'), (At '^az apim nv show .*content-safety-mode'), (At '^request upgrade-after'), (At '^request upgrade-harmful')) 
