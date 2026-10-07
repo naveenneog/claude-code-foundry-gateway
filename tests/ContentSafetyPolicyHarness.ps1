@@ -265,8 +265,8 @@ function Invoke-PolicyNodes($Nodes, $HostInfo, $Context, [Collections.Generic.Li
 function Invoke-ContentSafetyFragmentHarness {
     param(
         [Parameter(Mandatory)][string]$BodyJson,
-        [ValidateSet('off','audit','block')][string]$Mode='block',
-        [int]$Threshold=2,
+        [string]$Mode='block',
+        [object]$Threshold=2,
         [hashtable]$Responses,
         [hashtable]$NamedValues
     )

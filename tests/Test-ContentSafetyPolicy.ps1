@@ -18,6 +18,10 @@ function Run($Body, [string]$Mode = 'block', [hashtable]$Responses = $null) {
     $json = Json $Body
     Invoke-ContentSafetyFragmentHarness -BodyJson $json -Mode $Mode -Threshold 2 -Responses $(if ($Responses) { $Responses } else { CleanStubs })
 }
+function RunWithNamedValues($Body, [hashtable]$NamedValues, [hashtable]$Responses = $null) {
+    $json = Json $Body
+    Invoke-ContentSafetyFragmentHarness -BodyJson $json -NamedValues $NamedValues -Responses $(if ($Responses) { $Responses } else { CleanStubs })
+}
 function RunRaw([string]$JsonText, [string]$Mode = 'block', [hashtable]$Responses = $null) {
     Invoke-ContentSafetyFragmentHarness -BodyJson $JsonText -Mode $Mode -Threshold 2 -Responses $(if ($Responses) { $Responses } else { CleanStubs })
 }
@@ -106,6 +110,29 @@ $r = Run $benign 'off'
 Assert 'off mode emits no Content Safety calls and forwards unchanged' ($r.StatusCode -eq 200 -and $r.Calls.Count -eq 0 -and $r.Forwarded)
 $r = Run $harmString 'audit' (New-ContentSafetyStubMap (ShieldStub) (AnalyzeStub 4))
 Assert 'audit mode logs a block decision but forwards' ($r.StatusCode -eq 200 -and $r.Forwarded -and $r.Decision.WouldBlock)
+$severitySix = New-ContentSafetyStubMap (ShieldStub) (AnalyzeStub 6)
+foreach ($modeVariant in @('Block','BLOCK',' block ','enforce','')) {
+    $r = Run $harmString $modeVariant $severitySix
+    Assert "mode '$modeVariant' enforces block after normalisation" ($r.StatusCode -eq 403 -and -not $r.Forwarded -and $r.Trace.mode -eq 'block') ($r | ConvertTo-Json -Depth 8 -Compress)
+}
+$r = Run $harmString 'AUDIT' $severitySix
+Assert 'AUDIT normalises to audit and forwards with audit decision' ($r.StatusCode -eq 200 -and $r.Forwarded -and $r.Trace.mode -eq 'audit' -and $r.Trace.decision -eq 'audit') ($r | ConvertTo-Json -Depth 8 -Compress)
+$r = Run $benign 'Block' (New-ContentSafetyStubMap (ShieldStub) (AnalyzeStub 0) -ShieldTimeout -AnalyzeTimeout)
+Assert 'Block mode variant fails closed with 503 on Content Safety timeout' ($r.StatusCode -eq 503 -and -not $r.Forwarded -and $r.Trace.mode -eq 'block') ($r | ConvertTo-Json -Depth 8 -Compress)
+$r = RunWithNamedValues $harmString @{ 'content-safety-mode'='block'; 'content-safety-threshold'='8' } $severitySix
+Assert 'threshold above six clamps to six and severity six blocks' ($r.StatusCode -eq 403 -and $r.Trace.threshold -eq '6') ($r | ConvertTo-Json -Depth 8 -Compress)
+$r = RunWithNamedValues $harmString @{ 'content-safety-mode'='audit'; 'content-safety-threshold'='-1' } (New-ContentSafetyStubMap (ShieldStub) (AnalyzeStub 0))
+Assert 'threshold below zero clamps to zero' ($r.StatusCode -eq 200 -and $r.Trace.threshold -eq '0' -and $r.Trace.decision -eq 'audit') ($r | ConvertTo-Json -Depth 8 -Compress)
+$r = RunWithNamedValues $benign @{ 'content-safety-mode'='block'; 'content-safety-threshold'='abc' } (New-ContentSafetyStubMap (ShieldStub) (AnalyzeStub 0))
+Assert 'unparseable threshold defaults to two without throwing' ($r.StatusCode -eq 200 -and $r.Trace.threshold -eq '2') ($r | ConvertTo-Json -Depth 8 -Compress)
+$malformedEmptyBodies = New-ContentSafetyStubMap ([pscustomobject]@{}) ([pscustomobject]@{})
+$r = Run $benign 'block' $malformedEmptyBodies
+Assert 'block mode fails closed with 503 when Content Safety 2xx bodies omit required properties' ($r.StatusCode -eq 503 -and -not $r.Forwarded -and $r.Trace.contentSafetyErrorClass -eq 'malformed') ($r | ConvertTo-Json -Depth 8 -Compress)
+$r = Run $benign 'audit' $malformedEmptyBodies
+Assert 'audit mode forwards and traces malformed Content Safety 2xx bodies' ($r.StatusCode -eq 200 -and $r.Forwarded -and $r.Trace.contentSafetyErrorClass -eq 'malformed') ($r | ConvertTo-Json -Depth 8 -Compress)
+$docMismatch = New-ContentSafetyStubMap ([pscustomobject]@{ userPromptAnalysis=[pscustomobject]@{ attackDetected=$false }; documentsAnalysis=@() }) (AnalyzeStub 0)
+$r = Run $tool 'block' $docMismatch
+Assert 'documentsAnalysis count mismatch is malformed in block mode' ($r.StatusCode -eq 503 -and $r.Trace.contentSafetyErrorClass -eq 'malformed') ($r | ConvertTo-Json -Depth 8 -Compress)
 $r = Run $benign 'block' (New-ContentSafetyStubMap (ShieldStub) (AnalyzeStub 0) -ShieldTimeout)
 Assert 'block mode fails closed with 503 and Retry-After on timeout' ($r.StatusCode -eq 503 -and $r.Error.error.type -eq 'content_safety' -and $r.ReturnResponse.Headers.'Retry-After'[0] -eq '5')
 $r = Run $benign 'audit' (New-ContentSafetyStubMap (ShieldStub) 'not-json')

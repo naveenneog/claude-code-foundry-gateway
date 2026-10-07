@@ -1,8 +1,9 @@
 <fragment>
+    <set-variable name="contentSafetyMode" value='@{ var raw = "{{content-safety-mode}}"; var mode = String.IsNullOrEmpty(raw) ? "" : raw.Trim().ToLowerInvariant(); return mode == "off" ? "off" : (mode == "audit" ? "audit" : "block"); }' />
     <choose>
-        <when condition='@("{{content-safety-mode}}" != "off")'>
+        <when condition='@((string)context.Variables["contentSafetyMode"] != "off")'>
             <set-variable name="contentSafetyStartedAt" value="@(DateTime.UtcNow)" />
-            <set-variable name="contentSafetyThreshold" value='@(int.Parse("{{content-safety-threshold}}"))' />
+            <set-variable name="contentSafetyThreshold" value='@{ var parsed = 2; if (!int.TryParse("{{content-safety-threshold}}", out parsed)) { parsed = 2; } if (parsed &lt; 0) { parsed = 0; } if (parsed &gt; 6) { parsed = 6; } return parsed; }' />
             <set-variable name="contentSafetySlice" value="@{
                 var unscreenable = false;
                 JObject root = null;
@@ -109,11 +110,12 @@
                         var status = analyze != null ? analyze.StatusCode : (shield != null ? shield.StatusCode : 0);
                         if (shield == null || analyze == null || shield.StatusCode &lt; 200 || shield.StatusCode &gt; 299 || analyze.StatusCode &lt; 200 || analyze.StatusCode &gt; 299) { return new JObject(new JProperty("decision", "unavailable"), new JProperty("blockedBy", "unavailable"), new JProperty("hateSeverity", 0), new JProperty("violenceSeverity", 0), new JProperty("selfHarmSeverity", 0), new JProperty("sexualSeverity", 0), new JProperty("promptShieldUserAttackDetected", false), new JProperty("promptShieldDocumentAttackDetected", false), new JProperty("contentSafetyStatusCode", status), new JProperty("contentSafetyErrorClass", shield == null || analyze == null ? "timeout" : "service_error")).ToString(Newtonsoft.Json.Formatting.None); }
                         try {
-                            var sj = shield.Body.As&lt;JObject&gt;(preserveContent: true); var aj = analyze.Body.As&lt;JObject&gt;(preserveContent: true);
-                            var userAttack = (bool?)sj["userPromptAnalysis"]?["attackDetected"] == true; var docAttack = false; var docs = sj["documentsAnalysis"] as JArray; if (docs != null) { foreach (var d in docs) { if ((bool?)d["attackDetected"] == true) { docAttack = true; break; } } }
-                            var hate = 0; var violence = 0; var selfHarm = 0; var sexual = 0; var cats = aj["categoriesAnalysis"] as JArray; if (cats != null) { foreach (var c in cats) { var cat = (string)c["category"]; var sev = (int?)c["severity"] ?? 0; if (cat == "Hate") { hate = sev; } else if (cat == "Violence") { violence = sev; } else if (cat == "SelfHarm") { selfHarm = sev; } else if (cat == "Sexual") { sexual = sev; } } }
+                            var sj = shield.Body.As&lt;JObject&gt;(preserveContent: true); var aj = analyze.Body.As&lt;JObject&gt;(preserveContent: true); var slice = JObject.Parse((string)context.Variables["contentSafetySlice"]);
+                            if ((sj["userPromptAnalysis"] as JObject) == null) { throw new Exception("Malformed Prompt Shields response"); }
+                            var userAttack = (bool?)sj["userPromptAnalysis"]?["attackDetected"] == true; var docAttack = false; var docs = sj["documentsAnalysis"] as JArray; var sentDocs = slice["documents"] as JArray; var sentDocCount = sentDocs == null ? 0 : sentDocs.Count; if (docs == null || docs.Count != sentDocCount) { throw new Exception("Malformed Prompt Shields documents response"); } foreach (var d in docs) { if ((bool?)d["attackDetected"] == true) { docAttack = true; break; } }
+                            var hate = 0; var violence = 0; var selfHarm = 0; var sexual = 0; var cats = aj["categoriesAnalysis"] as JArray; if (cats == null) { throw new Exception("Malformed analyze response"); } foreach (var c in cats) { var cat = (string)c["category"]; var sev = (int?)c["severity"] ?? 0; if (cat == "Hate") { hate = sev; } else if (cat == "Violence") { violence = sev; } else if (cat == "SelfHarm") { selfHarm = sev; } else if (cat == "Sexual") { sexual = sev; } }
                             var blockedBy = ""; if (userAttack) { blockedBy = "prompt_shield_user"; } else if (docAttack) { blockedBy = "prompt_shield_document"; } else if (hate &gt;= threshold || violence &gt;= threshold || selfHarm &gt;= threshold || sexual &gt;= threshold) { blockedBy = "severity"; }
-                            return new JObject(new JProperty("decision", blockedBy == "" ? "pass" : ("{{content-safety-mode}}" == "audit" ? "audit" : "block")), new JProperty("blockedBy", blockedBy == "" ? "none" : blockedBy), new JProperty("hateSeverity", hate), new JProperty("violenceSeverity", violence), new JProperty("selfHarmSeverity", selfHarm), new JProperty("sexualSeverity", sexual), new JProperty("promptShieldUserAttackDetected", userAttack), new JProperty("promptShieldDocumentAttackDetected", docAttack), new JProperty("contentSafetyStatusCode", status), new JProperty("contentSafetyErrorClass", "none")).ToString(Newtonsoft.Json.Formatting.None);
+                            return new JObject(new JProperty("decision", blockedBy == "" ? "pass" : ((string)context.Variables["contentSafetyMode"] == "audit" ? "audit" : "block")), new JProperty("blockedBy", blockedBy == "" ? "none" : blockedBy), new JProperty("hateSeverity", hate), new JProperty("violenceSeverity", violence), new JProperty("selfHarmSeverity", selfHarm), new JProperty("sexualSeverity", sexual), new JProperty("promptShieldUserAttackDetected", userAttack), new JProperty("promptShieldDocumentAttackDetected", docAttack), new JProperty("contentSafetyStatusCode", status), new JProperty("contentSafetyErrorClass", "none")).ToString(Newtonsoft.Json.Formatting.None);
                         } catch { return new JObject(new JProperty("decision", "unavailable"), new JProperty("blockedBy", "unavailable"), new JProperty("hateSeverity", 0), new JProperty("violenceSeverity", 0), new JProperty("selfHarmSeverity", 0), new JProperty("sexualSeverity", 0), new JProperty("promptShieldUserAttackDetected", false), new JProperty("promptShieldDocumentAttackDetected", false), new JProperty("contentSafetyStatusCode", status), new JProperty("contentSafetyErrorClass", "malformed")).ToString(Newtonsoft.Json.Formatting.None); }
                     }' />
                 </otherwise>
@@ -122,7 +124,7 @@
             <trace source="claude-content-safety" severity="information">
                 <message>content safety request screening</message>
                 <metadata name="screening" value="claude-content-safety" />
-                <metadata name="mode" value="{{content-safety-mode}}" />
+                <metadata name="mode" value='@((string)context.Variables["contentSafetyMode"])' />
                 <metadata name="decision" value='@(JObject.Parse((string)context.Variables["contentSafetyDecisionJson"])["decision"].ToString())' />
                 <metadata name="blockedBy" value='@(JObject.Parse((string)context.Variables["contentSafetyDecisionJson"])["blockedBy"].ToString())' />
                 <metadata name="threshold" value='@(((int)context.Variables["contentSafetyThreshold"]).ToString())' />
@@ -138,13 +140,13 @@
                 <metadata name="contentSafetyErrorClass" value='@(JObject.Parse((string)context.Variables["contentSafetyDecisionJson"])["contentSafetyErrorClass"].ToString())' />
             </trace>
             <choose>
-                <when condition='@("{{content-safety-mode}}" == "block" &amp;&amp; (string)context.Variables["contentSafetyDecision"] == "unscreenable")'>
+                <when condition='@((string)context.Variables["contentSafetyMode"] == "block" &amp;&amp; (string)context.Variables["contentSafetyDecision"] == "unscreenable")'>
                     <return-response><set-status code="400" reason="Bad Request" /><set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header><set-body>{"type":"error","error":{"type":"invalid_request_error","message":"The request body could not be read for content screening"}}</set-body></return-response>
                 </when>
-                <when condition='@("{{content-safety-mode}}" == "block" &amp;&amp; (string)context.Variables["contentSafetyDecision"] == "unavailable")'>
+                <when condition='@((string)context.Variables["contentSafetyMode"] == "block" &amp;&amp; (string)context.Variables["contentSafetyDecision"] == "unavailable")'>
                     <return-response><set-status code="503" reason="Content Safety Unavailable" /><set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header><set-header name="Retry-After" exists-action="override"><value>5</value></set-header><set-body>{"type":"error","error":{"type":"content_safety","message":"Content Safety unavailable"}}</set-body></return-response>
                 </when>
-                <when condition='@("{{content-safety-mode}}" == "block" &amp;&amp; (string)context.Variables["contentSafetyDecision"] == "block")'>
+                <when condition='@((string)context.Variables["contentSafetyMode"] == "block" &amp;&amp; (string)context.Variables["contentSafetyDecision"] == "block")'>
                     <return-response><set-status code="403" reason="Forbidden" /><set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header><set-body>{"type":"error","error":{"type":"content_safety","message":"Content Safety blocked the request"}}</set-body></return-response>
                 </when>
             </choose>
