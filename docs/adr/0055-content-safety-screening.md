@@ -1,6 +1,7 @@
 # ADR-0055: Azure AI Content Safety screens Claude requests at the gateway
 
-- **Status:** Proposed
+- **Status:** Accepted. The owner asked on 2026-10-06 for content safety on Claude requests; merged on
+  2026-10-08 (`49fe7a3c`).
 - **Date:** 2026-10-06
 - **Packet:** P102
 - **Builds on:** [ADR-0054](0054-update-flow-entitlement-migration.md) (the update flow plans existing-gateway migrations before writes), [ADR-0052](0052-cosmos-default-installer.md) (the installer deploys optional gateway components and preserves live APIM values)
