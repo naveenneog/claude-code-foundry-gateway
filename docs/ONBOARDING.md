@@ -30,7 +30,7 @@ $apim = $gateway.apimName
 
 <details>
 
-<summary>Find the values before changing membership reference</summary>
+<summary>Find the values before changing membership commands, choices and checks</summary>
 
 | Value | Portal source | CLI lookup |
 |---|---|---|
@@ -54,7 +54,7 @@ new similarly named group as a workaround.
 
 <details>
 
-<summary>How entitlement actually works reference</summary>
+<summary>How entitlement actually works commands, choices and checks</summary>
 
 This section identifies which store receives published membership changes.
 

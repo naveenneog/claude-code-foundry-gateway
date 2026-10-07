@@ -492,7 +492,9 @@ function Test-GuideStructure([string]$Path, [string]$Text, [bool]$Enrolled) {
     if ($body -notmatch '(?s)^<details>\s*\n\s*<summary>([^<\n#][^<\n]*)</summary>\s*\n\s*\n.+\n\s*</details>\s*$') { $errors.Add("section '$($sections[$i].Title)' body is not exactly one blank-separated details block") }
     else {
       $summary = $Matches[1].Trim()
-      if ($summary -match '(?i)^.+\sdetails$') { $errors.Add("section '$($sections[$i].Title)' uses generic summary '$summary'") }
+      $summaryCore = ($summary -replace '(?i)\s+(reference|details|information|section|content|more|notes)$', '').Trim()
+      $titleCore = ($sections[$i].Title -replace '^\d+[a-zA-Z]?\.\s*', '').Trim()
+      if (-not $summaryCore -or $summaryCore -ieq $titleCore) { $errors.Add("section '$($sections[$i].Title)' uses non-descriptive summary '$summary'") }
       if (-not $summaries.Add($summary.ToLowerInvariant())) { $errors.Add("summary '$summary' is duplicated in $Path") }
     }
     if (($body | Select-String -Pattern '<details>' -AllMatches).Matches.Count -gt 1) { $errors.Add("section '$($sections[$i].Title)' nests disclosures") }
@@ -531,6 +533,15 @@ function Assert-ValidCase([string]$Name, [string]$Text) {
   }
 }
 
+
+function Assert-NoErrorCase([string]$Name, [string]$Text, [string]$Pattern) {
+  $material = $Text -replace '\n', "`n"
+  $errors = Test-GuideStructure 'docs\CASE.md' ($material -replace "`n", "`r`n") $true
+  $matched = @($errors | Where-Object { $_ -match $Pattern })
+  if ($matched.Count -eq 0) { Write-Ok "valid case accepted: $Name" }
+  else { $script:NegativeFailures.Add("valid case failed: $Name. Errors: $($matched -join '; ')"); Write-Host "  [FAIL] $Name" -ForegroundColor Red }
+}
+
 $NegativeFailures = [System.Collections.Generic.List[string]]::new()
 
 Assert-InvalidCase 'missing Quickstart' (Join-Lines @('# Guide','','Purpose.','','## Setup','','Text.','','## Next','','- [Next](NEXT.md)')) 'first H2'
@@ -546,7 +557,9 @@ Assert-InvalidCase 'comment heading ignored' (Join-Lines @('# Guide','','Purpose
 Assert-InvalidCase 'fenced details ignored' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','**Expected result:** success.','','## Body','','```markdown','<details>','','<summary>Area</summary>','','Text.','','</details>','```','','## Next','','- [Next](NEXT.md)')) 'details block'
 Assert-InvalidCase 'Quickstart heading hidden in details' (Join-Lines @('# Guide','','Purpose.','','<details>','','<summary>Hidden path</summary>','','## Quickstart','','**Expected result:** success.','','</details>','','## Next','','- [Next](NEXT.md)')) 'inside details'
 Assert-InvalidCase 'Quickstart body hidden in details' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','<details>','','<summary>Steps</summary>','','**Expected result:** success.','','</details>','','## Next','','- [Next](NEXT.md)')) 'Quickstart body contains details or summary'
-Assert-InvalidCase 'generic summary rejected' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','**Expected result:** success.','','## Body','','<details>','','<summary>Guide details</summary>','','Text.','','</details>','','## Next','','- [Next](NEXT.md)')) 'generic summary'
+Assert-InvalidCase 'generic summary rejected' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','**Expected result:** success.','','## Why','','<details>','','<summary>Why reference</summary>','','Text.','','</details>','','## Next','','- [Next](NEXT.md)')) 'non-descriptive summary'
+Assert-InvalidCase 'summary matching heading rejected' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','**Expected result:** success.','','## Why','','<details>','','<summary>Why</summary>','','Text.','','</details>','','## Next','','- [Next](NEXT.md)')) 'non-descriptive summary'
+Assert-NoErrorCase 'specific summary accepted' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','**Expected result:** success.','','## Reference','','<details>','','<summary>CLI commands, backend profiles and manual Azure steps</summary>','','Text.','','</details>','','## Next','','- [Next](NEXT.md)'))
 Assert-InvalidCase 'duplicate summaries rejected' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','**Expected result:** success.','','## One','','<details>','','<summary>First area</summary>','','Text.','','</details>','','## Two','','<details>','','<summary>First area</summary>','','Text.','','</details>','','## Next','','- [Next](NEXT.md)')) 'duplicated'
 Assert-InvalidCase 'heading directly after a closing details tag' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','**Expected result:** success.','','## Body','','<details>','','<summary>Area</summary>','','Text.','','</details>','## Next','','- [Next](NEXT.md)')) 'follows </details> without a blank line'
 Assert-ValidCase 'definition before fenced command' (Join-Lines @('# Guide','','`<developer-upn>` is the selected account.','','## Quickstart','','```powershell','Do-Thing -User <developer-upn>','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)'))

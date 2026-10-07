@@ -32,7 +32,7 @@ An existing console uses its assigned Entra role and [CLI-assisted sign-in](#sig
 
 <details>
 
-<summary>Live evidence and sign-in without additional grants reference</summary>
+<summary>Live evidence and sign-in without additional grants commands, choices and checks</summary>
 
 ### One authenticated portal batch
 
@@ -125,7 +125,7 @@ and runs mutations proving those failures are detected.
 
 <details>
 
-<summary>One enforcer reference</summary>
+<summary>One enforcer commands, choices and checks</summary>
 
 The gateway enforces. Turnstile shows, and optionally edits. Keep it that way.
 
@@ -153,7 +153,7 @@ access that Turnstile does not know about. The decision is recorded in
 
 <details>
 
-<summary>How it fits together reference</summary>
+<summary>How it fits together commands, choices and checks</summary>
 
 ```text
              Microsoft Entra ID (single tenant)
@@ -187,7 +187,7 @@ A save in Turnstile ─ starts ─▶ apply job ─ the same sync, as its own id
 
 <details>
 
-<summary>Prerequisites reference</summary>
+<summary>Prerequisites commands, choices and checks</summary>
 
 | Requirement | Detail |
 |---|---|
@@ -566,7 +566,7 @@ unknown scopes and person budgets are not imported.
 
 <details>
 
-<summary>Run it on a schedule reference</summary>
+<summary>Run it on a schedule commands, choices and checks</summary>
 
 The export and the sync run every hour as an Azure Container Apps job signed in as its own
 managed identity. No secret exists anywhere: not in the template, the job or a key vault
@@ -619,7 +619,7 @@ The first two runs failed, and both causes are now handled:
 
 <details>
 
-<summary>Manage everything in Turnstile reference</summary>
+<summary>Manage everything in Turnstile commands, choices and checks</summary>
 
 ### Concurrent saves and the stale-run guard
 
@@ -871,7 +871,7 @@ possible and would still compete with the apply while Turnstile owns that value.
 
 <details>
 
-<summary>Admin-only access reference</summary>
+<summary>Admin-only access commands, choices and checks</summary>
 
 Three layers, each measured.
 
@@ -1019,7 +1019,7 @@ credential in a secret store.
 
 <details>
 
-<summary>What it costs reference</summary>
+<summary>What it costs commands, choices and checks</summary>
 
 ```powershell
 ./scripts/Get-ClaudeTurnstileBom.ps1
@@ -1057,7 +1057,7 @@ through it, so for this integration it does nothing. The deployer always creates
 
 <details>
 
-<summary>Troubleshooting reference</summary>
+<summary>Troubleshooting commands, choices and checks</summary>
 
 | Symptom | Cause | Fix |
 |---|---|---|
@@ -1091,7 +1091,7 @@ through it, so for this integration it does nothing. The deployer always creates
 
 <details>
 
-<summary>FAQ reference</summary>
+<summary>FAQ commands, choices and checks</summary>
 
 **Why does Turnstile show far more tokens "used" than the gateway's budget counter?**
 Turnstile's "used" includes cache reads; the gateway's quota counter counts prompt and completion
@@ -1141,7 +1141,7 @@ and budget, not its name. A different id is a different unit, with a budget coun
 
 <details>
 
-<summary>The fork reference</summary>
+<summary>The fork commands, choices and checks</summary>
 
 Upstream Turnstile could not be used unchanged: its catalog is fixed demo data, its web sign-in
 accepts any organization's accounts, it creates an account for anyone who signs in, and its
@@ -1163,7 +1163,7 @@ deployer does not run on Windows. The fork's branches, merged in `claude-gateway
 
 <details>
 
-<summary>Reference reference</summary>
+<summary>Reference commands, choices and checks</summary>
 
 | Script | Does |
 |---|---|

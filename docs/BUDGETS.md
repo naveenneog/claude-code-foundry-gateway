@@ -22,7 +22,7 @@ $apim = $gateway.apimName
 
 <details>
 
-<summary>Dollar budgets: what is enforced reference</summary>
+<summary>Dollar budgets: what is enforced commands, choices and checks</summary>
 
 The dollar-input scripts now preserve the approved **USD amount and price-book
 date**, as well as their existing approximate token quota. An optional reconciler
@@ -245,7 +245,7 @@ APIM counters do not solve complete streaming accounting.
 
 <details>
 
-<summary>Prerequisites reference</summary>
+<summary>Prerequisites commands, choices and checks</summary>
 
 - A deployed gateway on a v2 tier, and a completed [bypass audit](SETUP.md#42-close-the-bypass).
 - API Management Service Contributor on the gateway to change named values;
@@ -303,7 +303,7 @@ The second switch matters because Connect preserves an existing budget authority
 
 <details>
 
-<summary>Reference: shipped defaults reference</summary>
+<summary>Reference: shipped defaults commands, choices and checks</summary>
 
 Named values are configuration the policy consumes, not consumed-quota storage.
 Defaults below come from [main.bicep](../infra/main.bicep); an existing deployment
@@ -495,7 +495,7 @@ and [U9/U13](UNKNOWNS.md) describe the remaining limits.
 
 <details>
 
-<summary>Business-unit and team enforcement modes reference</summary>
+<summary>Business-unit and team enforcement modes commands, choices and checks</summary>
 
 The platform owner can select a mode for a unit or team independently of its
 base allocation. This does not change who is authorised to manage it.

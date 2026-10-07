@@ -19,7 +19,7 @@ The administrator target comes from the deployment record or [Operations discove
 
 <details>
 
-<summary>Administrator deployment checks reference</summary>
+<summary>Administrator deployment checks commands, choices and checks</summary>
 
 `Debug-ClaudeSetup.ps1` checks the deployment without writing to Azure:
 
@@ -47,7 +47,7 @@ The administrator target comes from the deployment record or [Operations discove
 
 <details>
 
-<summary>Workstation checks reference</summary>
+<summary>Workstation checks commands, choices and checks</summary>
 
 `Debug-ClaudeWorkstation.ps1` and `debug-claude-workstation.sh` check a developer
 machine:
@@ -76,7 +76,7 @@ machine:
 
 <details>
 
-<summary>Support bundles reference</summary>
+<summary>Support bundles commands, choices and checks</summary>
 
 Add `-SupportBundle <path>` or `--support-bundle <path>`:
 
@@ -99,7 +99,7 @@ raw terminal transcripts or bearer tokens to a support ticket.
 
 <details>
 
-<summary>Guided flow reference</summary>
+<summary>Guided flow commands, choices and checks</summary>
 
 `.\Start-ClaudeGateway.ps1 -Action Diagnose -SupportBundle` runs both scripts
 with the decision record and writes their bundles to `onboarding\support\`,

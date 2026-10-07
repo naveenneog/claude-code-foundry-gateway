@@ -23,7 +23,7 @@ $gateway = Get-Content .\onboarding\claude-gateway.json -Raw | ConvertFrom-Json
 
 <details>
 
-<summary>Prerequisites reference</summary>
+<summary>Prerequisites commands, choices and checks</summary>
 
 Discovery needs read access to the selected Foundry account and API Management
 instance. Apply needs API Management Service Contributor, writable local
@@ -172,7 +172,7 @@ reconciliation remains U2.
 
 <details>
 
-<summary>The four things that have to agree reference</summary>
+<summary>The four things that have to agree commands, choices and checks</summary>
 
 | State | Location | Consequence of a mismatch |
 |---|---|---|
@@ -193,7 +193,7 @@ describing them as zero usage.
 
 <details>
 
-<summary>The price book reference</summary>
+<summary>The price book commands, choices and checks</summary>
 
 `config/price-book.json` may hold your negotiated rates. It is private and
 git-ignored; negotiated rates can be
@@ -245,7 +245,7 @@ exports and price snapshot retained ([FinOps](FINOPS.md),
 
 <details>
 
-<summary>What developers change reference</summary>
+<summary>What developers change commands, choices and checks</summary>
 
 The administrator record contains the allowed live union in `models`, and
 `deployments` includes each deployment's model/version and existing client
@@ -300,7 +300,7 @@ update devices ([MDM](MDM.md)).
 
 <details>
 
-<summary>Retiring one reference</summary>
+<summary>Retiring one commands, choices and checks</summary>
 
 When Foundry no longer lists a deployment, the model question offers `drop`.
 For example:
@@ -330,7 +330,7 @@ The reviewed sync is the lifecycle path described here.
 
 <details>
 
-<summary>Troubleshoot and next steps reference</summary>
+<summary>Troubleshoot and next steps commands, choices and checks</summary>
 
 ### Reference-gateway preview
 

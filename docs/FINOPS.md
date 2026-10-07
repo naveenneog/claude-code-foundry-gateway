@@ -19,7 +19,7 @@ $gateway = Get-Content .\onboarding\claude-gateway.json -Raw | ConvertFrom-Json
 
 <details>
 
-<summary>Prerequisites reference</summary>
+<summary>Prerequisites commands, choices and checks</summary>
 
 | Need | Who supplies it |
 |---|---|
@@ -167,7 +167,7 @@ dollar stop; see [Scale](SCALE.md#the-budget-is-a-delayed-kill-switch-not-a-hard
 
 <details>
 
-<summary>Optional consoles reference</summary>
+<summary>Optional consoles commands, choices and checks</summary>
 
 - **Turnstile:** [setup and operating guide](TURNSTILE.md). Units/teams, usage
   and delegated management are separate from the inference request path.

@@ -32,7 +32,7 @@ node .\guide\capture.mjs --help
 
 <details>
 
-<summary>Setup reference</summary>
+<summary>Setup commands, choices and checks</summary>
 
 The gateway itself needs none of this — the tooling is only for regenerating
 the guide's images.
@@ -54,7 +54,7 @@ so no browser download is needed. If Edge is not present, run
 
 <details>
 
-<summary>Capturing reference</summary>
+<summary>Capturing commands, choices and checks</summary>
 
 ### 1. Discover and select the capture targets
 
@@ -170,7 +170,7 @@ screenshots and reports which ones it skipped.
 
 <details>
 
-<summary>Pending portal batch captures reference</summary>
+<summary>Pending portal batch captures commands, choices and checks</summary>
 
 When Conditional Access asks for a new sign-in on a resource or Entra blade,
 stop portal capture. Do not retry, invoke `auth.mjs` unattended or reuse the
@@ -207,7 +207,7 @@ an API was renamed, resolve its known API ID/path before capturing.
 
 <details>
 
-<summary>What is not committed, and why reference</summary>
+<summary>What is not committed, and why commands, choices and checks</summary>
 
 Captures partially mask email addresses in the DOM — first/last characters and
 the domain can remain. **This is not anonymization and does not make an image
@@ -242,7 +242,7 @@ it.
 
 <details>
 
-<summary>Composing reference</summary>
+<summary>Composing commands, choices and checks</summary>
 
 ```bash
 node guide/compose.mjs
@@ -262,7 +262,7 @@ its sources live.
 
 <details>
 
-<summary>Writing a step reference</summary>
+<summary>Writing a step commands, choices and checks</summary>
 
 ```js
 {
@@ -287,7 +287,7 @@ its sources live.
 
 <details>
 
-<summary>Redaction reference</summary>
+<summary>Redaction commands, choices and checks</summary>
 
 `annotate()` masks the Azure portal's signed-in account block **by default**.
 Pass `maskIdentity: false` only for pages that have no identity in them.
@@ -312,7 +312,7 @@ titles.
 
 <details>
 
-<summary>Conditional access reference</summary>
+<summary>Conditional access commands, choices and checks</summary>
 
 `channel: 'msedge'` is set on the browser launch. A plain Chromium profile is
 rejected with `AADSTS530033` on tenants that require device compliance; Edge

@@ -18,7 +18,7 @@ The known symptom selects the section below. An unknown failure layer starts wit
 
 <details>
 
-<summary>Deployment reference</summary>
+<summary>Deployment commands, choices and checks</summary>
 
 | Symptom | Cause → Fix |
 |---|---|
@@ -40,7 +40,7 @@ The known symptom selects the section below. An unknown failure layer starts wit
 
 <details>
 
-<summary>Environment reference</summary>
+<summary>Environment commands, choices and checks</summary>
 
 | Symptom | Cause → Fix |
 |---|---|
@@ -56,7 +56,7 @@ The preflight in both setup scripts reports whether the platform is affected.
 
 <details>
 
-<summary>Policy reference</summary>
+<summary>Policy commands, choices and checks</summary>
 
 | Symptom | Cause → Fix |
 |---|---|
@@ -71,7 +71,7 @@ The preflight in both setup scripts reports whether the platform is affected.
 
 <details>
 
-<summary>Runtime reference</summary>
+<summary>Runtime commands, choices and checks</summary>
 
 | Symptom | Cause → Fix |
 |---|---|
@@ -92,7 +92,7 @@ The preflight in both setup scripts reports whether the platform is affected.
 
 <details>
 
-<summary>Claude Code client reference</summary>
+<summary>Claude Code client commands, choices and checks</summary>
 
 | Symptom | Cause → Fix |
 |---|---|
@@ -114,7 +114,7 @@ The preflight in both setup scripts reports whether the platform is affected.
 
 <details>
 
-<summary>Claude Desktop reference</summary>
+<summary>Claude Desktop commands, choices and checks</summary>
 
 | Symptom | Cause → Fix |
 |---|---|
@@ -168,7 +168,7 @@ those files while no Claude process is running is the signature.
 
 <details>
 
-<summary>Monitoring reference</summary>
+<summary>Monitoring commands, choices and checks</summary>
 
 | Symptom | Cause → Fix |
 |---|---|
@@ -186,7 +186,7 @@ those files while no Claude process is running is the signature.
 
 <details>
 
-<summary>Still stuck? reference</summary>
+<summary>Still stuck? commands, choices and checks</summary>
 
 Collect UTC time, client/version, gateway host, status/error body and the
 relevant operation/request ID for the platform team. Redact personal/deployment
@@ -202,7 +202,7 @@ its listener is not explicitly loopback-only. See
 
 <details>
 
-<summary>Turnstile and offboarding reference</summary>
+<summary>Turnstile and offboarding commands, choices and checks</summary>
 
 ### Turnstile database stopped
 

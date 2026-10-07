@@ -38,7 +38,7 @@ The workstation uses the platform team's handover file and the approved clients.
 
 <details>
 
-<summary>Prerequisites reference</summary>
+<summary>Prerequisites commands, choices and checks</summary>
 
 | | |
 |---|---|

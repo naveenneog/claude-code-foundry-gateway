@@ -21,7 +21,7 @@ $gateway = Get-Content .\onboarding\claude-gateway.json -Raw | ConvertFrom-Json
 
 <details>
 
-<summary>Prerequisites and data sources reference</summary>
+<summary>Prerequisites and data sources commands, choices and checks</summary>
 
 - Select the gateway, Application Insights and Log Analytics workspace with
   [Operations](OPERATIONS.md#1-select-the-gateway-and-workspace). Never choose the

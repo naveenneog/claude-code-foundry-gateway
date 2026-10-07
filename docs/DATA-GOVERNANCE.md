@@ -18,7 +18,7 @@ Discovery is read-only. The subject is the selected user principal name or objec
 
 <details>
 
-<summary>Prerequisites reference</summary>
+<summary>Prerequisites commands, choices and checks</summary>
 
 - An approved request identifying the subject, required time window and systems
   in scope. Purge is destructive and not routine log housekeeping.

@@ -30,7 +30,7 @@ Roll out broadly only after the bypass findings are clean or explicitly approved
 
 <details>
 
-<summary>Start here reference</summary>
+<summary>Start here commands, choices and checks</summary>
 
 | You need to… | Start with |
 |---|---|
@@ -89,11 +89,54 @@ explains created, reused and optional resources.
 
 </details>
 
+## Capacity and cost today
+
+<details>
+
+<summary>Measured projection capacity, named-value limits and costs</summary>
+
+> **How many developers this holds today:** the projection stores one Cosmos DB record per developer.
+> On 2026-09-24, **500,000 records were loaded and read**: 954 writes/second; point reads cost 1 RU,
+> p99 51 ms. This is a storage test, **not 500,000 concurrent developers** or a completed directory
+> scan.
+>
+> Named values remain selectable for small teams. Business-unit membership fills first, at
+> **roughly 93 developers** with six-character unit IDs; tier lists hold 110 each. Longer IDs reduce
+> that capacity. Oversized writes fail, not truncate.
+> **The installer deploys the projection by default.** Above that capacity it refuses named values.
+>
+> Projection deployment requires PowerShell 7. Its [read-only preflight](docs/SECURE-PROJECTION.md#one-command-deployment)
+> runs before Azure writes. Projection records persist until a sync deletes or changes them,
+> so a sync-job outage does not stop developers. `scripts/Sync-ClaudeAccess.ps1 -User`
+> refreshes one developer through the in-VNet runner; without `-User` it refreshes everyone.
+> `scripts/Deploy-ClaudeProjection.ps1 -FlipAfterCleanCompare` switches without deploying
+> anything, after resolver checks, drift check, runner compare and Cosmos switch evidence
+> ([ADR-0051](docs/adr/0051-persistent-sync-based-cosmos-entitlement.md)).
+> `.\Update-ClaudeGateway.ps1 -ResourceGroup <rg> -ApimName <apim>` plans the move of a named-value
+> gateway to the projection. The plan reuses the gateway's tier groups, checks quotas and prerequisites, and
+> lists the resources, network and monthly cost before `-Apply` writes anything
+> ([Update and change](docs/UPDATE-AND-CHANGE.md#move-a-named-value-gateway-with-the-update),
+> [ADR-0054](docs/adr/0054-update-flow-entitlement-migration.md)).
+>
+> The current two-always-ready-instance profile costs **$91.56/month at rest**.
+> Projection writes now follow directory churn. The older 500,000-member renewal estimate was
+> about **365 million writes/month** and **$538/month** at the measured create RU charge and
+> stated list price; it is historical, not the current operating model. APIM, Foundry and other usage
+> costs are additional. See the [dated P19 record](docs/status/P19.md#where-p19-stands-2026-09-24),
+> [Scale](docs/SCALE.md) and [private deployment](docs/SECURE-PROJECTION.md).
+>
+> `scripts/Measure-ClaudeCeiling.ps1` checks your named-value headroom and fails
+> at 80%; [Operations](docs/OPERATIONS.md#2-check-health-and-headroom) gives the
+> command, roles and portal checks.
+
+</details>
+
+
 ## Why
 
 <details>
 
-<summary>Why reference</summary>
+<summary>Why commands, choices and checks</summary>
 
 Foundry provides Entra authentication. The gateway adds a shared enforcement
 point for entitlement, token limits and model access. It governs only requests
@@ -113,7 +156,7 @@ does not make a stolen token impossible to replay.
 
 <details>
 
-<summary>What you get reference</summary>
+<summary>What you get commands, choices and checks</summary>
 
 | Control | Mechanism |
 |---|---|
@@ -161,7 +204,7 @@ Identifiers are redacted with [terminal](guide/redact-terminal.mjs) and
 
 <details>
 
-<summary>Prerequisites reference</summary>
+<summary>Prerequisites commands, choices and checks</summary>
 
 Platform deployment needs a Foundry account eligible to deploy Claude, an APIM
 **v2** tier, Azure CLI/Bicep, and the Azure and Entra permissions listed in
@@ -187,7 +230,7 @@ See [dollar budgets](docs/BUDGETS.md#dollar-budgets-what-is-enforced) and the
 
 <details>
 
-<summary>What the installer does reference</summary>
+<summary>What the installer does commands, choices and checks</summary>
 
 The installer discovers resources, collects deployment and budget choices,
 deploys or reuses the gateway and observability resources, grants the gateway
@@ -204,7 +247,7 @@ procedure ([Setup](docs/SETUP.md)).
 
 <details>
 
-<summary>Onboarding a developer reference</summary>
+<summary>Onboarding a developer commands, choices and checks</summary>
 
 Follow [Onboarding](docs/ONBOARDING.md): change the Entra group, publish the
 change, verify it, then send [DEVELOPER.md](DEVELOPER.md), the generated config
@@ -216,7 +259,7 @@ and the complete scripts bundle. No developer API key is issued.
 
 <details>
 
-<summary>Verifying the controls reference</summary>
+<summary>Verifying the controls commands, choices and checks</summary>
 
 Use [Governance checks](docs/GOVERNANCE-CHECKS.md). Agree a test window:
 throttle tests temporarily change live limits and send billable model requests.
@@ -227,7 +270,7 @@ throttle tests temporarily change live limits and send billable model requests.
 
 <details>
 
-<summary>Close the bypass reference</summary>
+<summary>Close the bypass commands, choices and checks</summary>
 
 Run the [Foundry bypass audit](docs/SETUP.md#42-close-the-bypass) and review
 inherited as well as direct roles. Keep the gateway's managed identity grant.
@@ -239,7 +282,7 @@ Do not remove another application's legitimate assignment without its owner.
 
 <details>
 
-<summary>Tuning budgets reference</summary>
+<summary>Tuning budgets commands, choices and checks</summary>
 
 Moved to [Configure token budgets and model access](docs/BUDGETS.md), including
 all defaults, per-person overrides, refusal bodies, portal edits and verification.
@@ -250,7 +293,7 @@ all defaults, per-person overrides, refusal bodies, portal edits and verificatio
 
 <details>
 
-<summary>Chargeback reference</summary>
+<summary>Chargeback commands, choices and checks</summary>
 
 Start with [FinOps](docs/FINOPS.md). `ClaudeChargeback` is the request ledger;
 `ClaudeCost` prices its usage plus observed cache reads. The
@@ -275,7 +318,7 @@ Custom metrics remain useful for pilot diagnostics, not complete scaled billing.
 
 <details>
 
-<summary>What it costs reference</summary>
+<summary>What it costs commands, choices and checks</summary>
 
 Use `scripts/Get-ClaudeBom.ps1 -WithPrices` with your selected gateway;
 [Operations](docs/OPERATIONS.md#5-inspect-cost-and-retire-only-what-you-own)
@@ -292,7 +335,7 @@ Include the optional [projection](docs/SECURE-PROJECTION.md#cost) and
 
 <details>
 
-<summary>Repository layout reference</summary>
+<summary>Repository layout commands, choices and checks</summary>
 
 Moved to [Repository and command reference](docs/REFERENCE.md#repository-layout).
 The scripts, templates, analytics, resolver, sync and screenshot tools are mapped
@@ -304,7 +347,7 @@ there; [Operations](docs/OPERATIONS.md) maps tasks to commands and portal paths.
 
 <details>
 
-<summary>Documentation reference</summary>
+<summary>Documentation commands, choices and checks</summary>
 
 | Guide | Purpose |
 |---|---|
@@ -344,7 +387,7 @@ The engineering record is separate from the user guides:
 
 <details>
 
-<summary>Companion accelerator reference</summary>
+<summary>Companion accelerator commands, choices and checks</summary>
 
 [claude-desktop-foundry](https://github.com/naveenneog/claude-desktop-foundry)
 provides Desktop fleet-policy tooling that can reuse this gateway. Follow that
@@ -356,7 +399,7 @@ repository's instructions for its scripts; they are not all in this checkout.
 
 <details>
 
-<summary>Contributing reference</summary>
+<summary>Contributing commands, choices and checks</summary>
 
 Open an issue or pull request with a reproducible command, client/version,
 status code and redacted output. Do not include tokens, tenant/resource IDs,

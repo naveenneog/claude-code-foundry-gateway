@@ -43,7 +43,7 @@ configure one machine directly and see which layer the failure follows.
 
 <details>
 
-<summary>Prerequisites reference</summary>
+<summary>Prerequisites commands, choices and checks</summary>
 
 - An approved isolated evaluation, not a way around a production gateway.
 - Azure CLI, PowerShell 5.1 or 7, the permitted Claude deployment names and

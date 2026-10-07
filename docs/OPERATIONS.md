@@ -22,7 +22,7 @@ $apim = $gateway.apimName
 
 <details>
 
-<summary>Prerequisites and roles reference</summary>
+<summary>Prerequisites and roles commands, choices and checks</summary>
 
 | Task | Required access |
 |---|---|
@@ -269,7 +269,7 @@ unexpected continuing usage after billing data arrives.
 
 <details>
 
-<summary>Next steps reference</summary>
+<summary>Next steps commands, choices and checks</summary>
 
 - [Reference](REFERENCE.md) — repository map and contributor checks.
 - [Releasing](RELEASING.md) — versioning and release validation.
@@ -281,7 +281,7 @@ unexpected continuing usage after billing data arrives.
 
 <details>
 
-<summary>Live verification record and limits reference</summary>
+<summary>Live verification record and limits commands, choices and checks</summary>
 
 On **2026-09-24 UTC**, the review discovered available subscriptions and Claude
 gateways rather than using a saved deployment name, then selected the default-

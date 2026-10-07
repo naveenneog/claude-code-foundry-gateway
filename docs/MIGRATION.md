@@ -30,7 +30,7 @@ $apim = $record.apimName
 
 <details>
 
-<summary>Prerequisites and owners reference</summary>
+<summary>Prerequisites and owners commands, choices and checks</summary>
 
 - Platform owner: deployed gateway, approved model/hosting choice and
   [Setup roles](SETUP.md#2-permissions-and-roles).
@@ -854,7 +854,7 @@ on the Foundry account directly can skip the gateway and every budget with it.
 
 <details>
 
-<summary>What is still genuinely unknown reference</summary>
+<summary>What is still genuinely unknown commands, choices and checks</summary>
 
 - **Accepted values for `forceLoginMethod`.** It restricts login to claude.ai,
   the Console, or a gateway, and would stop someone signing in to a personal
@@ -870,7 +870,7 @@ on the Foundry account directly can skip the gateway and every budget with it.
 
 <details>
 
-<summary>Anthropic references reference</summary>
+<summary>Anthropic references commands, choices and checks</summary>
 
 Everything above is grounded in these. Worth checking them directly before a
 cutover date: Claude Desktop on 3P is moving quickly, and the support site

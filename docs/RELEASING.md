@@ -18,7 +18,7 @@ git status --short
 
 <details>
 
-<summary>Prerequisites reference</summary>
+<summary>Prerequisites commands, choices and checks</summary>
 
 Repository release/tag permission, an approved release branch/commit, Git and
 the tools required by [Contributor checks](REFERENCE.md#contributor-checks).
@@ -32,7 +32,7 @@ There is no Azure portal action that releases this repository.
 
 <details>
 
-<summary>Cutting a release reference</summary>
+<summary>Cutting a release commands, choices and checks</summary>
 
 1. Move the entries out of `## [Unreleased]` into a new
    `## [x.y.z] - YYYY-MM-DD` heading, newest first.
@@ -80,7 +80,7 @@ deployed gateway.
 
 <details>
 
-<summary>Verify and troubleshoot reference</summary>
+<summary>Verify and troubleshoot commands, choices and checks</summary>
 
 Check the remote tag and release resolve to the gated commit, all release-note
 links open, and no generated config, credentials or unredacted images are in the
@@ -94,7 +94,7 @@ unexpectedly early, read its full summary: all registered checks must run.
 
 <details>
 
-<summary>What the test enforces reference</summary>
+<summary>What the test enforces commands, choices and checks</summary>
 
 | Rule | Why |
 |---|---|
@@ -116,7 +116,7 @@ test fails.
 
 <details>
 
-<summary>Version numbers reference</summary>
+<summary>Version numbers commands, choices and checks</summary>
 
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). For an accelerator,
 the practical reading is:
@@ -136,7 +136,7 @@ so plainly — v1.5.0 has an example.
 
 <details>
 
-<summary>Known limitations reference</summary>
+<summary>Known limitations commands, choices and checks</summary>
 
 `Known limitation` is not part of Keep a Changelog, and is used here for
 behaviour that is documented, measured, and not yet fixed — the sort of thing a

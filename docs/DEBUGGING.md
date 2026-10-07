@@ -20,7 +20,7 @@ The fastest supported path is the diagnostic command. The deployment record supp
 
 <details>
 
-<summary>Prerequisites reference</summary>
+<summary>Prerequisites commands, choices and checks</summary>
 
 Developers need their supplied gateway URL, permitted model names and an Entra
 sign-in. Platform checks also need Reader access to APIM/Foundry and telemetry
@@ -42,7 +42,7 @@ and never include bearer tokens in a public report.
 
 <details>
 
-<summary>Step 0 — Run the diagnostics reference</summary>
+<summary>Step 0 — Run the diagnostics commands, choices and checks</summary>
 
 For P66 guided-flow diagnostics, start with [Diagnostics](DIAGNOSE.md). It runs
 the administrator and workstation checks, prints the exact fix and can produce a
@@ -85,7 +85,7 @@ answering from somewhere other than your gateway, which no other check catches.
 
 <details>
 
-<summary>The request path reference</summary>
+<summary>The request path commands, choices and checks</summary>
 
 Every failure lives at exactly one of these hops.
 
@@ -116,7 +116,7 @@ Every failure lives at exactly one of these hops.
 
 <details>
 
-<summary>Everything checks out but the panel is still broken reference</summary>
+<summary>Everything checks out but the panel is still broken commands, choices and checks</summary>
 
 Worth its own section because it is common, it looks nothing like a
 configuration fault, and every other check passes.
@@ -162,7 +162,7 @@ survive a reload.
 
 <details>
 
-<summary>Step 1 — Read the response headers first reference</summary>
+<summary>Step 1 — Read the response headers first commands, choices and checks</summary>
 
 Read the status, body and available headers together. Not every refusal passes
 through the same outbound/error policies, so not every header is present.
@@ -214,7 +214,7 @@ An absent header does not prove the gateway was bypassed: explicit
 
 <details>
 
-<summary>Step 2 — Narrow by status code reference</summary>
+<summary>Step 2 — Narrow by status code commands, choices and checks</summary>
 
 | Code | Layer | Go to |
 |------|-------|-------|
@@ -235,7 +235,7 @@ An absent header does not prove the gateway was bypassed: explicit
 
 <details>
 
-<summary>Step 3 — Identity reference</summary>
+<summary>Step 3 — Identity commands, choices and checks</summary>
 
 ```powershell
 az account show --query "{tenant:tenantId, user:user.name, type:user.type}" -o table
@@ -277,7 +277,7 @@ the access token the affected process actually selected.
 
 <details>
 
-<summary>Step 4 — Entitlement and budget reference</summary>
+<summary>Step 4 — Entitlement and budget commands, choices and checks</summary>
 
 ### Is the object id entitled?
 
@@ -325,7 +325,7 @@ empty entitlement list or rely on an absent message.
 
 <details>
 
-<summary>Step 5 — Gateway → Foundry reference</summary>
+<summary>Step 5 — Gateway → Foundry commands, choices and checks</summary>
 
 A `401` with **no** `x-gateway-error` means the policy accepted you and Foundry
 rejected the gateway.
@@ -361,7 +361,7 @@ account's resource group, not automatically the gateway's.
 
 <details>
 
-<summary>Step 6 — Foundry itself reference</summary>
+<summary>Step 6 — Foundry itself commands, choices and checks</summary>
 
 Take the gateway out of the picture entirely:
 
@@ -396,7 +396,7 @@ Two `404`s that look alike and are not:
 
 <details>
 
-<summary>Step 7 — Policy and configuration reference</summary>
+<summary>Step 7 — Policy and configuration commands, choices and checks</summary>
 
 ```bash
 # do all referenced named values exist?
@@ -426,7 +426,7 @@ A `{{name}}` in the policy with no matching named value returns `500`.
 
 <details>
 
-<summary>Step 8 — Client configuration reference</summary>
+<summary>Step 8 — Client configuration commands, choices and checks</summary>
 
 If there is no evidence the request reached the gateway, check the configured
 provider and URL, then the correct diagnostic destination. Missing headers or
@@ -470,7 +470,7 @@ which token a local client chose.
 
 <details>
 
-<summary>Step 9 — Is it just this person? reference</summary>
+<summary>Step 9 — Is it just this person? commands, choices and checks</summary>
 
 ```powershell
 ./scripts/Show-Governance.ps1 -ApimName <apim> -ResourceGroup <rg>
@@ -489,7 +489,7 @@ If they fail, it is platform-wide. Start at Step 5.
 
 <details>
 
-<summary>Quick reference reference</summary>
+<summary>Quick reference commands, choices and checks</summary>
 
 | Signal | Layer | Section |
 |--------|-------|---------|

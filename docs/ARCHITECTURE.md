@@ -21,7 +21,7 @@ The [Overview](#overview) identifies the components; [Request path](#request-pat
 
 <details>
 
-<summary>Overview reference</summary>
+<summary>Overview commands, choices and checks</summary>
 
 API Management is the enforcement point. It validates the caller's Microsoft Entra token,
 resolves entitlement, checks model access and token budgets, and replaces the caller's
@@ -65,7 +65,7 @@ Turnstile, AUM or the reporting jobs; it coordinates their setup and handover.
 
 <details>
 
-<summary>Optional company hostname reference</summary>
+<summary>Optional company hostname commands, choices and checks</summary>
 
 ![Company address control path: a priced installer or Change review creates DNS first, configures the supplied certificate and preserves APIM hostnames, then publishes the developer URL only after trusted TLS and a gateway HTTP 401.](images/architecture/company-address.png)
 
@@ -91,7 +91,7 @@ include native reads and clean their private files when cancelled.
 
 <details>
 
-<summary>Model lifecycle administration reference</summary>
+<summary>Model lifecycle administration commands, choices and checks</summary>
 
 ![Model lifecycle: read Foundry and gateway state, approve a fingerprint, check ownership and snapshot, write the two model lists, preserve dated prices and records, then generate separate tier profiles for existing fleet and workstation routes.](images/architecture/model-lifecycle.png)
 
@@ -114,7 +114,7 @@ remove aliases for families that are no longer selected.
 
 <details>
 
-<summary>Request path reference</summary>
+<summary>Request path commands, choices and checks</summary>
 
 ![Six request hops: sign in, admit, serve, meter, attribute and observe. Four budget layers and projection admission, absence and fault outcomes are shown, followed by the components each optional profile adds.](images/architecture/request-path.png)
 
@@ -233,7 +233,7 @@ See [BUDGETS.md](BUDGETS.md) and the
 
 <details>
 
-<summary>Telemetry and chargeback reference</summary>
+<summary>Telemetry and chargeback commands, choices and checks</summary>
 
 The default gateway uses a resource diagnostic for the LLM log and an Application Insights
 diagnostic for traces and custom token metrics. The shipped diagnostic does not capture
@@ -259,7 +259,7 @@ and [financial semantics](adr/0010-financial-semantics.md).
 
 <details>
 
-<summary>Private monthly reports and email delivery (P50) reference</summary>
+<summary>Private monthly reports and email delivery (P50) commands, choices and checks</summary>
 
 ![P50 chargeback reports: read-only workspace and gateway sources feed a monthly generator in a dedicated reports VNet. Private Blob settings, archive and hashed-recipient outbox connect separate reporting and administration identities to a paced ACS Email dispatcher and scoped BCC recipients.](images/architecture/chargeback-reports.png)
 
@@ -354,7 +354,7 @@ of inbox placement, and emailed data is outside the archive's retention control.
 
 <details>
 
-<summary>Governance apply path reference</summary>
+<summary>Governance apply path commands, choices and checks</summary>
 
 ![Turnstile governance apply: a save starts one manual Container Apps job; its pinned scripts prepare the month, read catalog, tiers and budgets, reject unsafe input, write changed named values and verify read-back.](images/architecture/governance-apply.png)
 
@@ -419,7 +419,7 @@ ordering guarantee from the arrows.
 
 <details>
 
-<summary>Delegated management and console sign-in reference</summary>
+<summary>Delegated management and console sign-in commands, choices and checks</summary>
 
 ![Delegated management: assigned Entra application groups and catalog manager_group_id determine scope; an Azure CLI token becomes a single-use 60-second browser login code. Admin, Viewer and Manager privileges are distinct.](images/architecture/delegated-management.png)
 
@@ -466,7 +466,7 @@ and [ADR-0016](adr/0016-delegated-management.md).
 
 <details>
 
-<summary>Projection freshness, switch evidence and private networking reference</summary>
+<summary>Projection freshness, switch evidence and private networking commands, choices and checks</summary>
 
 ![Projection persistence and switch evidence: a complete paged directory scan writes persistent records; the in-VNet writer reconciles Cosmos, while the gateway admits bounded misses to an authenticated resolver with per-process single flight.](images/architecture/projection-freshness.png)
 
@@ -560,7 +560,7 @@ Run sync after directory changes and before switching. See
 
 <details>
 
-<summary>Enterprise network ingress (P54) reference</summary>
+<summary>Enterprise network ingress (P54) commands, choices and checks</summary>
 
 ![Internal-only regional WAF and private origins](images/architecture/network-private.png)
 
@@ -585,7 +585,7 @@ scheduled jobs (P49); a plan that needs those fails before it writes. See
 
 <details>
 
-<summary>AUM (Azure Usage Management) - terminal FinOps console reference</summary>
+<summary>AUM (Azure Usage Management) - terminal FinOps console commands, choices and checks</summary>
 
 ![AUM (Azure Usage Management), terminal FinOps console, command aum: Textual UI and Typer commands share one engine, which selects Turnstile HTTP, Direct Azure through ARM and Log Analytics with a PowerShell bridge, or a fake test backend.](images/architecture/terminal-finops.png)
 
@@ -710,7 +710,7 @@ wrappers are created suspended, assigned to their timeout job, then resumed.
 
 <details>
 
-<summary>Optional independent AUM service (P55) reference</summary>
+<summary>Optional independent AUM service (P55) commands, choices and checks</summary>
 
 ![Independent AUM service: delegated Entra users reach a token-validated Functions API; authority, scope and allocation checks precede audited and leased named-value writes; keyless service storage holds workflows and two timers handle boost expiry and warnings.](images/architecture/aum-service.png)
 
@@ -761,7 +761,7 @@ limit or prove capacity for 500,000 per-person overrides.
 
 <details>
 
-<summary>Budget enforcement modes reference</summary>
+<summary>Budget enforcement modes commands, choices and checks</summary>
 
 ![Budget modes: validated owner configuration publishes bu-modes separately from the base budget registry; strict, allowance and notify act on each scope independently, preserve other controls and emit advisory response/trace information.](images/architecture/budget-modes.png)
 
@@ -802,7 +802,7 @@ it does not claim an additional live mode mutation run.
 
 <details>
 
-<summary>Azure resource inventory reference</summary>
+<summary>Azure resource inventory commands, choices and checks</summary>
 
 ![Azure resource type inventory grouped into default gateway, projection, private networking, resolver and Turnstile integration. All resource types declared in this repository's infra Bicep files are represented.](images/architecture/azure-resource-inventory.png)
 
@@ -820,7 +820,7 @@ These are not claimed as resources in the current default deployment.
 
 <details>
 
-<summary>Keep architecture current after every feature reference</summary>
+<summary>Keep architecture current after every feature commands, choices and checks</summary>
 
 The sources are JSON under [`docs/architecture`](architecture), one file per diagram.
 The layout is deterministic HTML/SVG with real code identifiers, rendered by the existing

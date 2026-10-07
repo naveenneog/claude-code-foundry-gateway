@@ -33,7 +33,7 @@ The first pass is a read-only network review. The deployment record supplies the
 
 <details>
 
-<summary>Choose a topology reference</summary>
+<summary>Choose a topology commands, choices and checks</summary>
 
 | Choice | Entry and origin | Use when | Cost and operating consequences |
 |---|---|---|---|
@@ -160,7 +160,7 @@ the final availability check.
 
 <details>
 
-<summary>Place the rest of the system reference</summary>
+<summary>Place the rest of the system commands, choices and checks</summary>
 
 Keep the optional management services out of the inference request path.
 
@@ -327,7 +327,7 @@ allows one Premium v2 activation per subscription every 60 minutes
 
 <details>
 
-<summary>Prerequisites reference</summary>
+<summary>Prerequisites commands, choices and checks</summary>
 
 - Azure CLI signed in to the correct subscription and tenant; PowerShell 5.1
   or 7; Bicep available through Azure CLI; Node for streaming verification.
@@ -365,7 +365,7 @@ allows one Premium v2 activation per subscription every 60 minutes
 
 <details>
 
-<summary>Deploy with the script reference</summary>
+<summary>Deploy with the script commands, choices and checks</summary>
 
 > The administrator-review requirement below was added on 2026-09-25. The
 > earlier direct deployment examples are configuration references, not an
@@ -656,7 +656,7 @@ manual configuration below and the same verification contract.
 
 <details>
 
-<summary>Configure the same design in the Azure portal reference</summary>
+<summary>Configure the same design in the Azure portal commands, choices and checks</summary>
 
 The following fields are the manual equivalent of the supplied modules, not
 instructions to paste unknown deployment IDs into a template.
@@ -769,7 +769,7 @@ into source, enabling public access against policy, or disabling TLS validation.
 
 <details>
 
-<summary>Configure with Azure CLI reference</summary>
+<summary>Configure with Azure CLI commands, choices and checks</summary>
 
 The modules can deploy without PowerShell. Supply parameter files populated
 from discovery; do not copy the Contoso values in screenshots into a real
@@ -812,7 +812,7 @@ subscription's token from Azure CLI.
 
 <details>
 
-<summary>Claude-specific edge settings reference</summary>
+<summary>Claude-specific edge settings commands, choices and checks</summary>
 
 | Setting | Value / consequence |
 |---|---|
@@ -833,7 +833,7 @@ subscription's token from Azure CLI.
 
 <details>
 
-<summary>Tune WAF for code, without turning it off reference</summary>
+<summary>Tune WAF for code, without turning it off commands, choices and checks</summary>
 
 1. Start with Detection on the two dedicated policies. It logs matches but
    does not provide Prevention's blocking control.
@@ -887,7 +887,7 @@ query strings, authentication headers or other applications on the gateway.
 
 <details>
 
-<summary>Verify from each real boundary reference</summary>
+<summary>Verify from each real boundary commands, choices and checks</summary>
 
 ```powershell
 .\scripts\Test-ClaudeNetworkEdge.ps1 -StatePath .\.network-state\edge.json `
@@ -924,7 +924,7 @@ Also test:
 
 <details>
 
-<summary>Live evidence reference</summary>
+<summary>Live evidence commands, choices and checks</summary>
 
 The 2026-09-24 evaluation uses a fresh Standard v2 gateway, the existing
 private test Foundry account, a private certificate vault and an isolated WAF
@@ -977,7 +977,7 @@ above is a cited design, not evidence from the CLI evaluation.
 
 <details>
 
-<summary>Troubleshoot reference</summary>
+<summary>Troubleshoot commands, choices and checks</summary>
 
 | Error or symptom | Cause and action |
 |---|---|
@@ -1006,7 +1006,7 @@ above is a cited design, not evidence from the CLI evaluation.
 
 <details>
 
-<summary>Cost reference</summary>
+<summary>Cost commands, choices and checks</summary>
 
 `Get-ClaudeNetworkCost.ps1` returns the retrieval UTC, published meter scope,
 unit, quantity and 730-hour monthly equivalent. It excludes unknown/variable
@@ -1067,7 +1067,7 @@ zero or a claim that list-price infrastructure is the invoice.
 
 <details>
 
-<summary>Security checklist reference</summary>
+<summary>Security checklist commands, choices and checks</summary>
 
 - [ ] Selected targets, resource owners, address plan, region/SKU restrictions
   and changes to shared resources are reviewed.
@@ -1095,7 +1095,7 @@ zero or a claim that list-price infrastructure is the invoice.
 
 <details>
 
-<summary>Remove the evaluation reference</summary>
+<summary>Remove the evaluation commands, choices and checks</summary>
 
 ```powershell
 .\scripts\Remove-ClaudeNetworkEdge.ps1 -StatePath .\.network-state\edge.json `

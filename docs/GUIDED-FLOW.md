@@ -17,7 +17,7 @@ The commands run from the repository root in PowerShell 7 with the [Setup tools 
 
 <details>
 
-<summary>Run it reference</summary>
+<summary>Run it commands, choices and checks</summary>
 
 ```powershell
 .\Start-ClaudeGateway.ps1 -Action Setup
@@ -44,7 +44,7 @@ path is relative to the repository, from `Start-ClaudeGateway.ps1` and the root
 
 <details>
 
-<summary>What the flow asks and why reference</summary>
+<summary>What the flow asks and why commands, choices and checks</summary>
 
 Discovery reads only the gateway the record names (`az apim show`), and nothing
 when the record names none. The flow then asks the questions exposed by the step
@@ -65,7 +65,7 @@ modules present on the branch. It never invents resource names.
 
 <details>
 
-<summary>Attended setup reference</summary>
+<summary>Attended setup commands, choices and checks</summary>
 
 An attended run is `-Action Setup` in a console, without `-PlanOnly`,
 `-ApprovedPlanFingerprint` or `-WhatIf`. With no gateway in the record it has
@@ -149,7 +149,7 @@ take precedence over it.
 
 <details>
 
-<summary>Review and fingerprint reference</summary>
+<summary>Review and fingerprint commands, choices and checks</summary>
 
 After questions, every present module returns a plan. The flow prints one review
 with actions, list-price cost where known, unknown-cost reasons, implications,
@@ -234,7 +234,7 @@ and does not exit its caller
 
 <details>
 
-<summary>Resume after failure reference</summary>
+<summary>Resume after failure commands, choices and checks</summary>
 
 Questions and plans use proposed decisions in memory, only for the selected
 steps. Status, Guide, discovery and drift checks read applied values. Durable
@@ -276,7 +276,7 @@ step, the run prints that the steps differ and plans every step again.
 
 <details>
 
-<summary>Update reference</summary>
+<summary>Update commands, choices and checks</summary>
 
 ```powershell
 .\Start-ClaudeGateway.ps1 -Action Update
@@ -297,7 +297,7 @@ snapshot before its first write. `-PlanOnly` never applies. See
 
 <details>
 
-<summary>Change one decision reference</summary>
+<summary>Change one decision commands, choices and checks</summary>
 
 ```powershell
 .\Start-ClaudeGateway.ps1 -Action Change -Change sku
@@ -453,7 +453,7 @@ local generation from MDM distribution and a developer rerunning setup.
 
 <details>
 
-<summary>Diagnose reference</summary>
+<summary>Diagnose commands, choices and checks</summary>
 
 ```powershell
 .\Start-ClaudeGateway.ps1 -Action Diagnose
@@ -473,7 +473,7 @@ the folder is git-ignored. See [Diagnostics](DIAGNOSE.md) and
 
 <details>
 
-<summary>Status and drift reference</summary>
+<summary>Status and drift commands, choices and checks</summary>
 
 ```powershell
 .\Start-ClaudeGateway.ps1 -Action Status
@@ -502,7 +502,7 @@ that company gateway address.
 
 <details>
 
-<summary>Generated guide reference</summary>
+<summary>Generated guide commands, choices and checks</summary>
 
 ```powershell
 .\Start-ClaudeGateway.ps1 -Action Guide
@@ -521,7 +521,7 @@ planning and names `-Action Setup`.
 
 <details>
 
-<summary>What the tests hold reference</summary>
+<summary>What the tests hold commands, choices and checks</summary>
 
 | Suite | What it runs | What it holds |
 |---|---|---|
@@ -542,7 +542,7 @@ gateway.
 
 <details>
 
-<summary>Manual equivalents reference</summary>
+<summary>Manual equivalents commands, choices and checks</summary>
 
 | Guided step | Manual script or guide |
 |---|---|
@@ -559,7 +559,7 @@ gateway.
 
 <details>
 
-<summary>Live proof transcript excerpts reference</summary>
+<summary>Live proof transcript excerpts commands, choices and checks</summary>
 
 The P66 core was exercised against an isolated Basic v2 gateway in eastus2,
 using the shared Foundry account only for the gateway managed identity's

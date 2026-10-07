@@ -27,7 +27,7 @@ This page records deployment decisions before a gateway is announced. The platfo
 
 <details>
 
-<summary>The two that are expensive to defer reference</summary>
+<summary>The two that are expensive to defer commands, choices and checks</summary>
 
 ### 1. Do developers get a company web address, or the Azure one?
 
@@ -86,7 +86,7 @@ See [Scale](SCALE.md#two-things-to-get-right-on-the-first-day) and U9.
 
 <details>
 
-<summary>The one that blocks the scaling work reference</summary>
+<summary>The one that blocks the scaling work commands, choices and checks</summary>
 
 ### 3. If you remove someone, how long may they keep working?
 
@@ -114,7 +114,7 @@ fresh request and the [projection checks](PROJECTION-WORKBOOK.md#step-5-verify-r
 
 <details>
 
-<summary>The tier reference</summary>
+<summary>The tier commands, choices and checks</summary>
 
 ### 4. When do you move off the starter tier?
 
@@ -143,7 +143,7 @@ the tier decision from the storage and traffic limits.
 
 <details>
 
-<summary>Money and policy reference</summary>
+<summary>Money and policy commands, choices and checks</summary>
 
 ### 5. What is the whole-organisation ceiling?
 
@@ -229,7 +229,7 @@ unassigned developers in the workbook before switching to `deny`.
 
 <details>
 
-<summary>The scope question reference</summary>
+<summary>The scope question commands, choices and checks</summary>
 
 ### 9. How many developers are you actually planning for?
 
