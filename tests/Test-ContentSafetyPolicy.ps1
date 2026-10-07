@@ -137,6 +137,9 @@ $shieldCall = @($r.Calls | Where-Object Operation -eq 'shieldPrompt')[0]
 Assert 'the whole newest user text reaches analyze in a Claude Code-shaped request' ($analyzeCall -and $analyzeCall.Body.text -match 'HARM-MIDDLE-MARKER') $(if ($analyzeCall) { "analyze length $($analyzeCall.Body.text.Length)" } else { 'no analyze call' })
 Assert 'a Claude Code-shaped request stays inside the service limits' ($analyzeCall.Body.text.Length -le 10000 -and $shieldCall.Body.userPrompt.Length -le 10000 -and @($shieldCall.Body.documents).Count -le 5 -and (@($shieldCall.Body.documents) | Measure-Object -Property Length -Sum).Sum -le 10000) "analyze=$($analyzeCall.Body.text.Length) prompt=$($shieldCall.Body.userPrompt.Length) documents=$(@($shieldCall.Body.documents).Count)/$((@($shieldCall.Body.documents) | Measure-Object -Property Length -Sum).Sum)"
 Assert 'the request envelope still reaches analyze when the newest turn is short' ($analyzeCall.Body.text -match 'System block one' -and $analyzeCall.Body.text -match 'Tool 18 description') ''
+# 2 system blocks and 18 tool descriptions are each longer than their share, so each carries one marker; a join that
+# fits its budget (separators counted) is not sampled a second time.
+Assert 'each sampled part carries one marker and the fitted join is not sampled again' (([regex]::Matches($analyzeCall.Body.text, 'content safety sampled')).Count -eq 20) "markers $(([regex]::Matches($analyzeCall.Body.text, 'content safety sampled')).Count)"
 $toolMiddle = @(@{ type = 'tool_result'; tool_use_id = 'toolu_01'; content = (('r' * 1500) + 'INJECTION-MIDDLE-MARKER' + ('q' * 1500)) })
 $r = Run (ClaudeCodeShape $toolMiddle)
 $analyzeCall = @($r.Calls | Where-Object Operation -eq 'analyze')[0]
