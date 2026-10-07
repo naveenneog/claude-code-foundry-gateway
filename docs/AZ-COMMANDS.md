@@ -1591,7 +1591,7 @@ p89_projection_runner
 # P89-PROJECTION-RUNNER-END
 ```
 
-Expected result: population and comparison run through the runner created by `projection-network.bicep`. `send_runner_file` mirrors `scripts/ClaudeRunner.ps1:113-148`: base64url chunks are appended through `az container exec` and decoded in the container. The snapshot and gateway-decision files are produced by the repository scripts because their Graph and named-value comparison logic is not an Azure CLI data-plane operation. This mirrors `scripts/Deploy-ClaudeProjection.ps1:241-270`, `scripts/Sync-ClaudeProjection.ps1`, `scripts/ClaudeRunner.ps1`, `docs/SCALE.md:681-726` and `infra/projection-network.bicep:46-49`.
+Expected result: population and comparison run through the runner created by `projection-network.bicep`. `send_runner_file` sends base64url chunks through `az container exec`, one at a time, and decodes them in the container: the protocol `scripts/ClaudeRunner.ps1` used before [ADR-0053](adr/0053-parallel-compressed-runner-transfer.md), about 1 KB a second. `Send-RunnerFile` in `scripts/ClaudeRunner.ps1` compresses the file and sends parts in parallel, which a directory of more than about 40,000 developers needs within the snapshot's 2-hour apply-by time. The snapshot and gateway-decision files are produced by the repository scripts because their Graph and named-value comparison logic is not an Azure CLI data-plane operation. This mirrors `scripts/Deploy-ClaudeProjection.ps1:241-270`, `scripts/Sync-ClaudeProjection.ps1`, `scripts/ClaudeRunner.ps1`, `docs/SCALE.md:681-726` and `infra/projection-network.bicep:46-49`.
 
 Deploy the optional sync job, its registry and its alerts.
 

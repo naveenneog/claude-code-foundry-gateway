@@ -85,8 +85,9 @@ Migration `0004-entitlement-projection` in `scripts/flow/migrations/`:
   - The effective right to create role assignments in the resource group, from the permissions API.
   - Template validation of the projection and network templates; a policy denial is a FAIL.
   - The snapshot transfer through the runner: more than 110 minutes is a FAIL, because a snapshot's apply-by time
-    is 2 hours after its export; the estimate uses the measured 6.3 seconds per 4,900-character part and about 127
-    bytes per developer (2026-10-06).
+    is 2 hours after its export; the estimate uses the runner's transfer model (`scripts/ClaudeRunnerTransferModel.ps1`,
+    [ADR-0053](0053-parallel-compressed-runner-transfer.md): compressed, 16 parts at a time at the measured exec time)
+    and about 127 bytes per developer (2026-10-06).
 - **What the plan shows.** The previous values and their sources; the drift between named values and Entra;
   each resource to be created (name, type, SKU, region) from an inventory that a test compares with the compiled
   templates; the network (address space, subnets, private endpoint, DNS zones, resolver access, runner); the
