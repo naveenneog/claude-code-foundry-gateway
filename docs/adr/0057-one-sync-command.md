@@ -56,4 +56,4 @@ a full snapshot. U25 records that this path is not measured live.
 - A sync can write one more named value, `entitlement-groups`, the first time it runs on a gateway that lacks it.
 - A changed tier group is an explicit act (`-RecordGroups`), as P100 made it in the update flow.
 - Microsoft Graph can report a membership change late; a `-User` report taken right after a change can show the
-  previous tier (U157).
+  previous tier. P101 live run 5 measured 54.3 s for a removal and 80.5 s for an addition (U157).
