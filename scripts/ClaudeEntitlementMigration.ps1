@@ -27,23 +27,17 @@ function ConvertFrom-ClaudeEntitlementList([AllowEmptyString()][string]$Value) {
 # with no sign in the plan. Only the default names are a fallback.
 function Resolve-ClaudeMigrationGroup {
     param([Parameter(Mandatory)][string]$Tier, [object[]]$Candidates, [Parameter(Mandatory)][scriptblock]$FindGroup)
-    foreach ($candidate in $Candidates) {
-        if (-not $candidate.Value) { continue }
-        if ($candidate.Value -eq 'none') {
-            return [pscustomobject]@{ Tier = $Tier; Name = ''; Id = ''; Source = $candidate.Source; Found = $false; Absent = $true; Missing = ''; Members = @() }
-        }
-        $group = & $FindGroup $candidate.Value
-        if ($group -and $group.Id) {
-            $members = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-            foreach ($member in @($group.Members)) { if ($member) { $null = $members.Add(([string]$member).ToLowerInvariant()) } }
-            return [pscustomobject]@{ Tier = $Tier; Name = [string]$group.Name; Id = ([string]$group.Id).ToLowerInvariant(); Source = $candidate.Source; Found = $true; Absent = $false
-                Missing = ''; Members = @($members) }
-        }
-        if ($candidate.Authoritative) {
-            return [pscustomobject]@{ Tier = $Tier; Name = ''; Id = ''; Source = $candidate.Source; Found = $false; Absent = $false; Missing = [string]$candidate.Value; Members = @() }
-        }
+    $resolved = Resolve-ClaudeEntitlementGroupCandidate -Tier $Tier -Candidates $Candidates -FindGroup $FindGroup
+    $members = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    if ($resolved.Found -and $resolved.Group) {
+        foreach ($member in @($resolved.Group.Members)) { if ($member) { $null = $members.Add(([string]$member).ToLowerInvariant()) } }
     }
-    return [pscustomobject]@{ Tier = $Tier; Name = ''; Id = ''; Source = ''; Found = $false; Absent = $false; Missing = ''; Members = @() }
+    $name = ''
+    if ($resolved.Found -and $resolved.Group -and $resolved.Group.PSObject.Properties['Name']) { $name = [string]$resolved.Group.Name }
+    [pscustomobject]@{
+        Tier = $Tier; Name = $name; Id = [string]$resolved.Id; Source = [string]$resolved.Source; Found = [bool]$resolved.Found
+        Absent = [bool]$resolved.Absent; Missing = [string]$resolved.Missing; Members = @($members)
+    }
 }
 
 # A snapshot takes about 127 bytes a record (63,150,738 bytes for 500,000, measured 2026-10-06). The runner sends it

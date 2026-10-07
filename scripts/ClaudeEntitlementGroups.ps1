@@ -45,7 +45,7 @@ function Resolve-ClaudeEntitlementGroupCandidate {
         $group = & $FindGroup ([string]$candidate.Value)
         if ($group -and $group.id) {
             $id = ([string]$group.id).ToLowerInvariant()
-            return [pscustomobject]@{ Tier = $Tier; Argument = $id; Id = $id; Source = $candidate.Source; Found = $true; Absent = $false; Missing = ''; DisplayName = [string]$candidate.Value }
+            return [pscustomobject]@{ Tier = $Tier; Argument = $id; Id = $id; Source = $candidate.Source; Found = $true; Absent = $false; Missing = ''; DisplayName = [string]$candidate.Value; Group = $group }
         }
         if ($candidate.Authoritative) {
             return [pscustomobject]@{ Tier = $Tier; Argument = ''; Id = ''; Source = $candidate.Source; Found = $false; Absent = $false; Missing = [string]$candidate.Value }
