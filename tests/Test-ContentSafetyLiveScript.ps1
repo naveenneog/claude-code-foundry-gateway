@@ -30,7 +30,7 @@ $global:Live.Calls.Add("old-installer $ResourceGroup $NamePrefix $Sku Entitlemen
 $updateStub = Join-Path $work 'Update-ClaudeGateway.ps1'
 [IO.File]::WriteAllText($updateStub, @'
 param($ResourceGroup,$ApimName,[switch]$KeepNamedValues,[switch]$Apply,$ApprovedPlanFingerprint)
-if (-not $Apply) { $global:Live.Calls.Add("update plan $ResourceGroup $ApimName KeepNamedValues=$KeepNamedValues"); Write-Host ("Plan fingerprint: " + ("a" * 64)); $step = if ($global:Live.UpdatePlanNoContentSafety) { '0001-record-schema-v2' } else { '0002-policy-and-named-values' }; return [pscustomobject]@{ Fingerprint = ("a" * 64); Plans = @([pscustomobject]@{ Step = $step; Summary = 'Create content-safety-screening fragment and named values.' }) } }
+if (-not $Apply) { $global:Live.UpdatePlanCalls++; $phase = if ($global:Live.Updated) { 'post' } else { 'pre' }; $global:Live.Calls.Add("update plan $phase $ResourceGroup $ApimName KeepNamedValues=$KeepNamedValues"); Write-Host ("Plan fingerprint: " + ("a" * 64)); $step = if ($global:Live.UpdatePlanNoContentSafety -or $global:Live.Updated) { '0001-record-schema-v2' } else { '0002-policy-and-named-values' }; return [pscustomobject]@{ Fingerprint = ("a" * 64); Plans = @([pscustomobject]@{ Step = $step; Summary = $(if ($step -eq '0002-policy-and-named-values') { 'Create content-safety-screening fragment and named values.' } else { 'No content safety fragment update.' }) }) } }
 $global:Live.Calls.Add("update apply $ResourceGroup $ApimName KeepNamedValues=$KeepNamedValues fp=$ApprovedPlanFingerprint")
 $global:Live.Updated = $true
 '@, [Text.UTF8Encoding]::new($false))
@@ -58,6 +58,7 @@ function Reset-Live {
         ScreeningWhileOff = $false
         RestQueryFails = $false
         UpdatePlanNoContentSafety = $false
+        UpdatePlanCalls = 0
         LogRows = @(
             @{ mode='block'; decision='pass'; hateSeverity=0; violenceSeverity=0; selfHarmSeverity=0; sexualSeverity=0; customDimensions=@{ screening='claude-content-safety' } }
             @{ mode='block'; decision='block'; hateSeverity=0; violenceSeverity=2; selfHarmSeverity=0; sexualSeverity=0; customDimensions=@{ screening='claude-content-safety' } }
@@ -307,8 +308,8 @@ try {
     Assert 'upgrade mode fails when a screening trace appears while content-safety-mode is off' ($Exit -ne 0 -and $offReceipt.trace.status -eq 'FAIL' -and $offReceipt.trace.detail -match 'mode is off') "$Exit | $($offReceipt.trace | ConvertTo-Json -Compress)"
     Reset-Live
     Invoke-P102 @{ UpgradeFrom = $oldCheckout }
-    $upgradeOrder = @((At '^old-installer '), (At '^request warmup'), (At '^az account get-access-token --resource https://management.azure.com'), (At '^update plan'), (At '^update apply'), (At '^az apim nv show .*content-safety-mode'), (At '^request upgrade-after'), (At '^request upgrade-harmful')) 
-    Assert 'upgrade mode installs with the older checkout, verifies pre-upgrade 200 and absence over ARM REST, runs update plan/apply, checks mode off, fragment, policy include, benign 200 and harmful pass' (-not $Failure -and ($upgradeOrder -notcontains -1) -and (@(0..($upgradeOrder.Count-2) | Where-Object { $upgradeOrder[$_] -lt $upgradeOrder[$_+1] }).Count -eq ($upgradeOrder.Count-1)) -and @($global:Live.Calls | Where-Object { $_ -match '^az apim api ' }).Count -eq 0) "$Failure | $($global:Live.Calls -join '; ')"
+    $upgradeOrder = @((At '^old-installer '), (At '^request warmup'), (At '^az account get-access-token --resource https://management.azure.com'), (At '^update plan pre'), (At '^update apply'), (At '^az apim nv show .*content-safety-mode'), (At '^request upgrade-after'), (At '^request upgrade-harmful'), (At '^update plan post')) 
+    Assert 'upgrade mode installs with the older checkout, verifies pre-upgrade 200 and absence over ARM REST, runs update plan/apply, checks mode off, fragment, policy include, benign 200, harmful pass, then proves no 0002 fragment re-plan' (-not $Failure -and ($upgradeOrder -notcontains -1) -and (@(0..($upgradeOrder.Count-2) | Where-Object { $upgradeOrder[$_] -lt $upgradeOrder[$_+1] }).Count -eq ($upgradeOrder.Count-1)) -and @($global:Live.Calls | Where-Object { $_ -match '^az apim api ' }).Count -eq 0 -and $global:Live.UpdatePlanCalls -ge 2) "$Failure | $($global:Live.Calls -join '; ')"
     Reset-Live
     $global:Live.UpgradeCheckFails = 'mode'
     Invoke-P102 @{ UpgradeFrom = $oldCheckout }

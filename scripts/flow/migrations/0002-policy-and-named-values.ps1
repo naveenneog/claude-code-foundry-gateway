@@ -28,6 +28,38 @@ function Test-ClaudePolicyHasContentSafetyInclude {
     return [bool]($Policy -match '<include-fragment\s+fragment-id="content-safety-screening"\s*/>')
 }
 
+function Get-ClaudeLivePolicyFragmentMap {
+    param($Discovery)
+    $map = @{}
+    if (-not ($Discovery -and $Discovery.PSObject.Properties.Name -contains 'policyFragments')) { return $map }
+    foreach ($fragment in @($Discovery.policyFragments)) {
+        if ($fragment -is [string]) { $map[[string]$fragment] = [pscustomobject]@{ Name = [string]$fragment; Hash = ''; Value = '' }; continue }
+        $name = ''
+        if ($fragment.PSObject.Properties.Name -contains 'name') { $name = [string]$fragment.name }
+        elseif ($fragment.PSObject.Properties.Name -contains 'id' -and [string]$fragment.id -match '/policyFragments/([^/]+)$') { $name = $Matches[1] }
+        if (-not $name) { continue }
+        $hash = ''
+        $value = ''
+        if ($fragment.PSObject.Properties.Name -contains 'canonicalHash' -and $fragment.canonicalHash) { $hash = [string]$fragment.canonicalHash }
+        elseif ($fragment.PSObject.Properties.Name -contains 'hash' -and $fragment.hash) { $hash = [string]$fragment.hash }
+        elseif ($fragment.PSObject.Properties.Name -contains 'value') { $value = [string]$fragment.value; if ($value) { $hash = Get-ClaudeFlowLifecycleCanonicalXmlHash -XmlText $value } }
+        elseif ($fragment.PSObject.Properties.Name -contains 'properties' -and $fragment.properties -and $fragment.properties.PSObject.Properties.Name -contains 'value') { $value = [string]$fragment.properties.value; if ($value) { $hash = Get-ClaudeFlowLifecycleCanonicalXmlHash -XmlText $value } }
+        $map[$name] = [pscustomobject]@{ Name = $name; Hash = $hash; Value = $value }
+    }
+    return $map
+}
+
+function Get-ClaudeDesiredPolicyFragmentHashes {
+    param([string[]]$Fragments)
+    $root = Get-ClaudeFlowLifecycleRepoRoot
+    $hashes = [ordered]@{}
+    foreach ($fragment in @($Fragments)) {
+        $fragmentPath = Join-Path (Join-Path $root 'infra') "$fragment.xml"
+        $hashes[$fragment] = Get-ClaudeFlowLifecycleCanonicalXmlHash -XmlText ([IO.File]::ReadAllText($fragmentPath))
+    }
+    return $hashes
+}
+
 function Get-ClaudeFlowMigrationPlan {
     param([Parameter(Mandatory = $true)]$Record, $Discovery)
     $root = Get-ClaudeFlowLifecycleRepoRoot
@@ -43,10 +75,13 @@ function Get-ClaudeFlowMigrationPlan {
     $policyCurrent = ($liveHash -eq $desiredHash) -or ((Test-ClaudePolicyHasLifecycleMarkers -Policy $livePolicy) -and $policyHasRequiredIncludes)
     $templateDefaults = Get-ClaudeFlowLifecycleTemplateNamedValueDefaults
     $liveNamed = Get-ClaudeFlowLifecycleNamedValueMap -Discovery $Discovery
-    $liveFragments = @{}
-    if ($Discovery -and $Discovery.PSObject.Properties.Name -contains 'policyFragments') { foreach ($fragment in @($Discovery.policyFragments)) { $liveFragments[[string]$fragment] = $true } }
+    $desiredFragmentHashes = Get-ClaudeDesiredPolicyFragmentHashes -Fragments $fragments
+    $liveFragments = Get-ClaudeLivePolicyFragmentMap -Discovery $Discovery
+    $liveFragmentHashes = [ordered]@{}
+    foreach ($fragment in @($liveFragments.Keys)) { $liveFragmentHashes[$fragment] = [string]$liveFragments[$fragment].Hash }
     $missing = @($refs | Where-Object { -not $liveNamed.ContainsKey($_) })
     $missingFragments = @($fragments | Where-Object { -not $liveFragments.ContainsKey($_) })
+    $changedFragments = @($fragments | Where-Object { $liveFragments.ContainsKey($_) -and [string]$liveFragments[$_].Hash -and [string]$liveFragments[$_].Hash -ne [string]$desiredFragmentHashes[$_] })
     $normalizeDisabledAudience = $liveNamed.ContainsKey('external-idp-extra-audience') -and
         [string]::IsNullOrWhiteSpace([string]$liveNamed['external-idp-extra-audience'])
     $unknownDefaults = @($missing | Where-Object { -not $templateDefaults.Contains($_) -or $null -eq $templateDefaults[$_].Value })
@@ -63,6 +98,9 @@ function Get-ClaudeFlowMigrationPlan {
     }
     foreach ($fragment in $missingFragments) {
         $actions += New-ClaudeFlowAction -Verb Create -Target "policy fragment $fragment" -Detail 'create reusable APIM policy fragment before the API policy includes it'
+    }
+    foreach ($fragment in $changedFragments) {
+        $actions += New-ClaudeFlowAction -Verb Update -Target "policy fragment $fragment" -Detail "content differs; update canonical XML hash $($liveFragments[$fragment].Hash) -> $($desiredFragmentHashes[$fragment])"
     }
     if ($normalizeDisabledAudience) {
         $actions += New-ClaudeFlowAction -Verb Update -Target 'named value external-idp-extra-audience' -Detail 'whitespace/empty -> disabled URI sentinel'
@@ -82,8 +120,11 @@ function Get-ClaudeFlowMigrationPlan {
             PolicyPath = $policyPath
             PolicyNamedValues = $refs
             PolicyFragments = $fragments
+            DesiredPolicyFragmentHashes = $desiredFragmentHashes
+            LivePolicyFragmentHashes = $liveFragmentHashes
             MissingNamedValues = $missing
             MissingPolicyFragments = $missingFragments
+            ChangedPolicyFragments = $changedFragments
             NormalizeDisabledAudience = $normalizeDisabledAudience
             UnknownDefaults = $unknownDefaults
             Target = Get-ClaudeFlowLifecycleRecordTarget -Record $Record -Discovery $Discovery
@@ -116,7 +157,7 @@ function Invoke-ClaudeFlowMigration {
     }
     $subscription = if ($target.SubscriptionId) { $target.SubscriptionId } else { az account show --query id -o tsv }
     $token = az account get-access-token --resource https://management.azure.com --query accessToken -o tsv @tokenScope
-    foreach ($fragment in @($Plan.Data.MissingPolicyFragments)) {
+    foreach ($fragment in @(@($Plan.Data.MissingPolicyFragments) + @($Plan.Data.ChangedPolicyFragments) | Select-Object -Unique)) {
         $fragmentPath = Join-Path (Join-Path $root 'infra') "$fragment.xml"
         $fragmentXml = [IO.File]::ReadAllText($fragmentPath)
         $fragmentBody = @{ properties = @{ format = 'rawxml'; value = $fragmentXml } } | ConvertTo-Json -Depth 5
@@ -139,6 +180,10 @@ function Test-ClaudeFlowMigration {
     $livePolicy = if ($Discovery -and $Discovery.policy) { [string]$Discovery.policy } else { '' }
     $liveHash = if ($livePolicy) { Get-ClaudeFlowLifecycleStringHash -Text $livePolicy } elseif ($Discovery -and $Discovery.policyHash) { [string]$Discovery.policyHash } else { '' }
     $fragments = @(Get-ClaudeFlowLifecyclePolicyFragmentIds -PolicyPath (Join-Path $root 'infra\policy.xml'))
+    $desiredFragmentHashes = Get-ClaudeDesiredPolicyFragmentHashes -Fragments $fragments
+    $liveFragments = Get-ClaudeLivePolicyFragmentMap -Discovery $Discovery
+    $missingFragments = @($fragments | Where-Object { -not $liveFragments.ContainsKey($_) })
+    $changedFragments = @($fragments | Where-Object { $liveFragments.ContainsKey($_) -and [string]$liveFragments[$_].Hash -and [string]$liveFragments[$_].Hash -ne [string]$desiredFragmentHashes[$_] })
     $requiresContentSafetyInclude = @($fragments | Where-Object { $_ -eq 'content-safety-screening' }).Count -gt 0
     $policyHasRequiredIncludes = (-not $requiresContentSafetyInclude) -or (Test-ClaudePolicyHasContentSafetyInclude -Policy $livePolicy)
     $hashOk = ($liveHash -eq $desiredHash) -or ((Test-ClaudePolicyHasLifecycleMarkers -Policy $livePolicy) -and $policyHasRequiredIncludes)
@@ -146,10 +191,11 @@ function Test-ClaudeFlowMigration {
     $missing = @(Get-ClaudeFlowLifecyclePolicyAndFragmentNamedValueReferences | Where-Object { -not $liveNamed.ContainsKey($_) })
     [pscustomobject]@{
         Step = '0002-policy-and-named-values'
-        Passed = ($hashOk -and $missing.Count -eq 0)
+        Passed = ($hashOk -and $missing.Count -eq 0 -and $missingFragments.Count -eq 0 -and $changedFragments.Count -eq 0)
         Checks = @(
             @{ Name = 'policy hash'; Passed = $hashOk; Evidence = "live=$liveHash desired=$desiredHash"; Fix = 'Apply the policy migration.' },
-            @{ Name = 'named values'; Passed = ($missing.Count -eq 0); Evidence = "missing=$($missing -join ',')"; Fix = 'Create missing named values or rerun the migration.' }
+            @{ Name = 'named values'; Passed = ($missing.Count -eq 0); Evidence = "missing=$($missing -join ',')"; Fix = 'Create missing named values or rerun the migration.' },
+            @{ Name = 'policy fragments'; Passed = ($missingFragments.Count -eq 0 -and $changedFragments.Count -eq 0); Evidence = "missing=$($missingFragments -join ',') changed=$($changedFragments -join ',')"; Fix = 'Create or update policy fragments by rerunning the migration.' }
         )
     }
 }

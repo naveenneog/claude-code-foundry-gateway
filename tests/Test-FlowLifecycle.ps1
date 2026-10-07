@@ -52,6 +52,9 @@ Assert 'derived named values include later-release values without hardcoding the
 Assert 'rollback plan names Restore-ClaudeGateway' ($policyPlan.Rollback -match 'Restore-ClaudeGateway')
 Assert 'policy migration requires a snapshot before writes' ((Get-Content (Join-Path $root 'scripts\flow\migrations\0002-policy-and-named-values.ps1') -Raw) -match 'Assert-ClaudeFlowLifecycleSnapshotBeforeWrite')
 
+$allNv = @{}
+foreach ($r in $refs) { $allNv[$r] = 'x' }
+
 # P100 council round 4: the plan's target subscription reaches every write of the policy migration, so the
 # migration writes where the update read the gateway.
 $global:Migration2AzCalls = [Collections.Generic.List[string]]::new()
@@ -73,6 +76,14 @@ try {
     Assert 'the policy migration writes named values, then fragments, then the policy' ($idxNv -ge 0 -and $idxFragment -gt $idxNv -and $idxPolicy -gt $idxFragment) $callsText
     Assert 'fragment and policy writes use the plan subscription' ($callsText -match 'account get-access-token.*--subscription aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' -and $callsText -match '/subscriptions/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/.*/policyFragments/content-safety-screening' -and $callsText -match '/subscriptions/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/.*/apis/claude-foundry/policies/policy') $callsText
     $global:Migration2AzCalls.Clear()
+    $changedFragmentDiscovery = [pscustomobject]@{ resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; location = 'eastus2'; sku = 'BasicV2'; policy = $currentPolicy; namedValues = $allNv; policyFragments = @([pscustomobject]@{ name='content-safety-screening'; value='<fragment><choose /></fragment>' }) }
+    $changedFragmentApplyPlan = Get-ClaudeFlowMigrationPlan -Record $record -Discovery $changedFragmentDiscovery
+    $changedFragmentApplyPlan.Data.Target.SubscriptionId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+    $changedFragmentApplyPlan.Data.SnapshotPath = 'unused.json'; $changedFragmentApplyPlan.Data.SnapshotTaken = $true
+    $thrown = Get-Thrown { Invoke-ClaudeFlowMigration -Record $record.PSObject.Copy() -Plan $changedFragmentApplyPlan | Out-Null }
+    $changedCallsText = $global:Migration2AzCalls -join "`n"
+    Assert 'policy migration applies PUT for an existing fragment whose canonical content differs' (-not $thrown -and $changedCallsText -match '/policyFragments/content-safety-screening' -and $changedCallsText -match '/apis/claude-foundry/policies/policy') "$thrown | $changedCallsText"
+    $global:Migration2AzCalls.Clear()
     $scopedPlan.Data.Target.SubscriptionId = 'not-an-id&calc'
     # No snapshot yet: a check placed after the backup would show the backup's Azure calls.
     $scopedPlan.Data.SnapshotTaken = $false; $scopedPlan.Data.SnapshotPath = Join-Path ([IO.Path]::GetTempPath()) ('p100-0002-' + [guid]::NewGuid().ToString('N') + '.json')
@@ -81,8 +92,37 @@ try {
 }
 finally { Remove-Item Function:\az, Function:\Invoke-RestMethod -ErrorAction SilentlyContinue }
 
-$allNv = @{}
-foreach ($r in $refs) { $allNv[$r] = 'x' }
+$desiredFragment = [IO.File]::ReadAllText((Join-Path $root 'infra\content-safety-screening.xml'))
+$global:LifecycleDiscoveryCalls = [Collections.Generic.List[string]]::new()
+function global:az {
+    $line = $args -join ' '
+    $global:LifecycleDiscoveryCalls.Add("az $line")
+    $global:LASTEXITCODE = 0
+    switch -Regex ($line) {
+        '^apim show ' { return (@{ id='/subscriptions/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/resourceGroups/rg-contoso/providers/Microsoft.ApiManagement/service/apim-contoso'; location='eastus2'; sku=@{ name='BasicV2'; capacity=1 } } | ConvertTo-Json -Depth 5) }
+        '^apim nv list ' { return (@(@{ name='content-safety-mode'; value='off' }) | ConvertTo-Json -Depth 5) }
+        '^account get-access-token ' { return 'offline-token' }
+        '^apim api ' { $global:LASTEXITCODE = 9; return "ERROR: az apim api policy-fragment does not exist" }
+    }
+    $global:LASTEXITCODE = 9
+    return "unexpected az $line"
+}
+function global:Invoke-RestMethod {
+    param($Method,$Uri,$Headers)
+    $global:LifecycleDiscoveryCalls.Add("HTTP $Method $Uri")
+    if ($Uri -match '/apis/claude-foundry/policies/policy\?api-version=2024-05-01&format=rawxml$') { return [pscustomobject]@{ properties=[pscustomobject]@{ value=$currentPolicy } } }
+    if ($Uri -match '/policyFragments\?api-version=2024-05-01$') { return [pscustomobject]@{ value=@([pscustomobject]@{ name='content-safety-screening' }) } }
+    if ($Uri -match '/policyFragments/content-safety-screening\?format=rawxml&api-version=2024-05-01$') { return [pscustomobject]@{ properties=[pscustomobject]@{ format='rawxml'; value=$desiredFragment } } }
+    throw "unexpected REST URI $Uri"
+}
+try {
+    $discovered = Get-ClaudeFlowLifecycleLiveDiscovery -ResourceGroup 'rg-contoso' -ApimName 'apim-contoso' -SubscriptionId 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+    Assert 'live discovery reads policy fragment rawxml through ARM GET and records its content hash' (@($discovered.policyFragments | Where-Object { $_.name -eq 'content-safety-screening' -and $_.value -match '<fragment>' -and $_.canonicalHash }).Count -eq 1 -and ($global:LifecycleDiscoveryCalls -join "`n") -match '/policyFragments/content-safety-screening\?format=rawxml&api-version=2024-05-01') ($global:LifecycleDiscoveryCalls -join ' ; ')
+    $badAz = az apim api policy-fragment show --service-name apim-contoso --fragment-id content-safety-screening
+    Assert 'fake az refuses nonexistent APIM policy-fragment commands' ($LASTEXITCODE -ne 0 -and $badAz -match 'does not exist') $badAz
+}
+finally { Remove-Item Function:\az, Function:\Invoke-RestMethod -ErrorAction SilentlyContinue }
+
 $freshDiscovery = [pscustomobject]@{
     resourceGroup = 'rg-contoso'
     apimName = 'apim-contoso'
@@ -96,9 +136,18 @@ $freshDiscovery = [pscustomobject]@{
 $noopPolicy = Get-ClaudeFlowMigrationPlan -Record $record -Discovery $freshDiscovery
 Assert 'migration is idempotent when policy and named values match' (Test-ClaudeFlowPlanIsNoop $noopPolicy)
 $freshWithFragment = $freshDiscovery.PSObject.Copy()
-$freshWithFragment | Add-Member -NotePropertyName policyFragments -NotePropertyValue @('content-safety-screening') -Force
+$freshWithFragment | Add-Member -NotePropertyName policyFragments -NotePropertyValue @([pscustomobject]@{ name='content-safety-screening'; value=($desiredFragment -replace '><', ">`r`n<") }) -Force
 $noopWithFragment = Get-ClaudeFlowMigrationPlan -Record $record -Discovery $freshWithFragment
-Assert 'migration does not rewrite existing policy fragments or named values' (Test-ClaudeFlowPlanIsNoop $noopWithFragment)
+Assert 'migration does not rewrite existing policy fragments or named values when canonical XML matches' (Test-ClaudeFlowPlanIsNoop $noopWithFragment)
+$differentFragmentDiscovery = $freshDiscovery.PSObject.Copy()
+$differentFragmentDiscovery | Add-Member -NotePropertyName policyFragments -NotePropertyValue @([pscustomobject]@{ name='content-safety-screening'; value='<fragment><choose /></fragment>' }) -Force
+$differentFragmentPlan = Get-ClaudeFlowMigrationPlan -Record $record -Discovery $differentFragmentDiscovery
+Assert 'live policy fragment content drift plans an update that names the differing fragment' (@($differentFragmentPlan.Actions | Where-Object { $_.Target -eq 'policy fragment content-safety-screening' -and $_.Verb -eq 'Update' -and $_.Detail -match 'content differs' }).Count -eq 1) ($differentFragmentPlan | ConvertTo-Json -Depth 8 -Compress)
+$differentMigrationCheck = Test-ClaudeFlowMigration -Record $record -Discovery $differentFragmentDiscovery
+Assert 'Test-ClaudeFlowMigration is not current when a live fragment content hash differs' (-not $differentMigrationCheck.Passed -and @($differentMigrationCheck.Checks | Where-Object { $_.Name -eq 'policy fragments' -and -not $_.Passed }).Count -eq 1) ($differentMigrationCheck | ConvertTo-Json -Depth 8 -Compress)
+$missingFragmentPlan = Get-ClaudeFlowMigrationPlan -Record $record -Discovery ([pscustomobject]@{ resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; location = 'eastus2'; sku = 'BasicV2'; policy = $currentPolicy; namedValues = $allNv; policyFragments = @() })
+Assert 'missing policy fragment still plans a create' (@($missingFragmentPlan.Actions | Where-Object { $_.Target -eq 'policy fragment content-safety-screening' -and $_.Verb -eq 'Create' }).Count -eq 1) ($missingFragmentPlan | ConvertTo-Json -Depth 8 -Compress)
+Assert 'fragment content participates in the update fingerprint' ((Get-ClaudeFlowFingerprint @($noopWithFragment)) -ne (Get-ClaudeFlowFingerprint @($differentFragmentPlan))) 'fingerprints matched despite content drift'
 
 $normalizedPolicy = '<policies>usd-budgets usd-budget-state external-idp-extra-audience urn:disabled:claude-extra-audience entitlement-source <include-fragment fragment-id="content-safety-screening" /></policies>'
 $normalizedPlan = Get-ClaudeFlowMigrationPlan -Record $record -Discovery ([pscustomobject]@{ resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; location = 'eastus2'; sku = 'BasicV2'; policy = $normalizedPolicy; namedValues = $allNv; policyFragments = @('content-safety-screening') })

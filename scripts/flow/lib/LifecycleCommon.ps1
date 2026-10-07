@@ -26,6 +26,28 @@ function global:Get-ClaudeFlowLifecycleStringHash {
     finally { $sha.Dispose() }
 }
 
+function global:Get-ClaudeFlowLifecycleCanonicalXml {
+    param([AllowEmptyString()][string]$XmlText)
+    if ([string]::IsNullOrWhiteSpace($XmlText)) { return '' }
+    $doc = New-Object System.Xml.XmlDocument
+    $doc.PreserveWhitespace = $false
+    $doc.LoadXml($XmlText)
+    return $doc.OuterXml
+}
+
+function global:Get-ClaudeFlowLifecycleCanonicalXmlHash {
+    param([AllowEmptyString()][string]$XmlText)
+    if ([string]::IsNullOrWhiteSpace($XmlText)) { return '' }
+    return Get-ClaudeFlowLifecycleStringHash -Text (Get-ClaudeFlowLifecycleCanonicalXml -XmlText $XmlText)
+}
+
+function global:New-ClaudeFlowLifecycleArmHeaders {
+    param([Parameter(Mandatory = $true)][string]$Token)
+    $headers = @{ 'Content-Type' = 'application/json' }
+    $headers[([string]::Concat('Author','ization'))] = 'Bearer ' + $Token.Trim()
+    return $headers
+}
+
 function global:Get-ClaudeFlowLifecyclePolicyNamedValueReferences {
     param([string]$PolicyPath = (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'infra\policy.xml'))
     if (-not (Test-Path -LiteralPath $PolicyPath)) { throw "Policy file '$PolicyPath' does not exist." }
@@ -157,7 +179,18 @@ function global:Get-ClaudeFlowLifecycleLiveDiscovery {
     $fragments = @()
     try {
         $fragmentResult = Invoke-RestMethod -Method Get -Uri $fragmentUri -Headers @{ Authorization = "Bearer $token" }
-        $fragments = @($fragmentResult.value | ForEach-Object { if ($_.name) { [string]$_.name } elseif ($_.id -match '/policyFragments/([^/]+)$') { $Matches[1] } })
+        $fragmentNames = @($fragmentResult.value | ForEach-Object { if ($_.name) { [string]$_.name } elseif ($_.id -match '/policyFragments/([^/]+)$') { $Matches[1] } } | Where-Object { $_ })
+        $fragments = @(foreach ($fragmentName in $fragmentNames) {
+                $rawFragmentUri = "https://management.azure.com$($apim.id)/policyFragments/$fragmentName`?format=rawxml&api-version=2024-05-01"
+                try {
+                    $rawFragment = Invoke-RestMethod -Method Get -Uri $rawFragmentUri -Headers (New-ClaudeFlowLifecycleArmHeaders -Token $token)
+                    $value = [string]$rawFragment.properties.value
+                    [pscustomobject]@{ name = $fragmentName; value = $value; canonicalHash = Get-ClaudeFlowLifecycleCanonicalXmlHash -XmlText $value }
+                }
+                catch {
+                    [pscustomobject]@{ name = $fragmentName; value = ''; canonicalHash = ''; error = $_.Exception.Message }
+                }
+            })
     } catch { $fragments = @() }
     $prefixValue = @($nvs | Where-Object { $_.name -eq 'entitlement-projection-prefix' } | Select-Object -First 1)
     $projectionPrefix = if ($prefixValue) { if ($prefixValue.PSObject.Properties.Name -contains 'properties') { [string]$prefixValue.properties.value } else { [string]$prefixValue.value } } else { '' }

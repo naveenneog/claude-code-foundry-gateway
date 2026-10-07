@@ -209,6 +209,13 @@ try {
         Add-P102CaseResult $case1 (Invoke-GatewayRequest -Url $url -BodyObject $case1.body)
         $case2 = New-P102Case upgrade-harmful pass @{ model=$Model; max_tokens=16; messages=@(@{role='user'; content='I will kill everyone in this room with a knife.'}) }
         Add-P102CaseResult $case2 (Invoke-GatewayRequest -Url $url -BodyObject $case2.body)
+        $postPlanOutput = @(& $UpdatePath -ResourceGroup $resourceGroup -ApimName $apimName -KeepNamedValues)
+        $postPlan = @($postPlanOutput | Where-Object { $_ -isnot [string] -and $_.PSObject.Properties['Fingerprint'] })[0]
+        if (-not $postPlan) { throw 'Post-update plan did not return a fingerprint object.' }
+        $fragmentReplan = @(@($postPlan.Plans) | Where-Object { $_.Step -eq '0002-policy-and-named-values' -and (([string]$_.Summary -match 'fragment') -or ((@($_.Actions) | Where-Object { [string]$_.Target -match 'policy fragment' }).Count -gt 0)) })
+        if ($fragmentReplan.Count) { throw 'Post-update plan still includes a 0002 policy fragment change.' }
+        $stepResults.Add([pscustomobject]@{ step='post-update content safety fragment re-plan'; ok=$true; detail='no 0002 policy fragment change after apply' }) | Out-Null
+        $script:receipt.steps = @($stepResults); Save-P102Receipt
     }
     $apimPrincipalId = Invoke-Az @('apim','show','-g',$resourceGroup,'-n',$apimName,'--query','identity.principalId','-o','tsv','--subscription',$SubscriptionId); $contentSafetyId = Invoke-Az @('cognitiveservices','account','show','-g',$resourceGroup,'-n',$contentSafetyName,'--query','id','-o','tsv','--subscription',$SubscriptionId) -AllowFailure; $roleIds = if ($contentSafetyId) { Split-NonEmptyLines (Invoke-Az @('role','assignment','list','--assignee',$apimPrincipalId,'--scope',$contentSafetyId,'--query','[].id','-o','tsv','--subscription',$SubscriptionId) -AllowFailure) } else { @() }; $script:receipt.apimPrincipalId = $apimPrincipalId; $script:receipt.contentSafetyId = $contentSafetyId; $script:receipt.contentSafetyRoleAssignmentIds = @($roleIds); Save-P102Receipt
     if (-not $UpgradeFrom) { Wait-GatewayStatus $url $Model 200 'authenticated benign warmup'; foreach ($case in Get-P102Cases $Model) { Add-P102CaseResult $case (Invoke-GatewayRequest -Url $url -BodyObject $case.body) } }
