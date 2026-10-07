@@ -355,6 +355,13 @@ Assert 'a skipped tier write does not record entitlement-groups without RecordGr
     -not $script:P98NvResult.Values.ContainsKey('entitlement-groups') -and
     $script:P98NvResult.Output -match 'not recording entitlement-groups') "$CapturedError | groups=$($script:P98NvResult.Values['entitlement-groups']) | output: $($script:P98NvResult.Output) | writes: $($nvWrites -join ' | ')"
 
+Invoke-NamedValueSyncFixture -PremiumCount 1 -StandardCount 0 -GatewayStandard ',50000000-0000-4000-8000-000000000001,' -Parameters @{ Store = 'named-value'; StandardGroup = 'claude-code-standard'; PremiumGroup = 'claude-code-premium' }
+$nvWrites = Get-NamedValueWrites
+Assert 'a skipped explicit standard tier does not record entitlement-groups and names the skipped tier' (
+    -not $CapturedError -and -not $script:P98NvResult.Values.ContainsKey('entitlement-groups') -and
+    $script:P98NvResult.Output -match 'standard list was skipped by the empty-tier guard' -and
+    $script:P98NvResult.Output -notmatch 'default name fallback') "$CapturedError | groups=$($script:P98NvResult.Values['entitlement-groups']) | output: $($script:P98NvResult.Output) | writes: $($nvWrites -join ' | ')"
+
 Invoke-NamedValueSyncFixture -PremiumCount 1 -StandardCount 1 -GatewayGroups 'standard=10000000-0000-4000-8000-000000000001,premium=10000000-0000-4000-8000-000000000002' -Parameters @{ Store = 'named-value'; User = '40000000-0000-4000-8000-000000000001'; WhatIf = $true }
 $nvWrites = Get-NamedValueWrites
 Assert 'Sync-ClaudeAccess -User -WhatIf on named values reports the would-be tier and writes nothing' (
