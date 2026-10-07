@@ -98,6 +98,19 @@ function Test-P102TraceRows { param([string]$ResourceGroup, [string]$ApimName, [
     [pscustomobject]@{ status='UNVERIFIED'; detail="No claude-content-safety trace rows arrived within $LogWaitSeconds seconds." }
 }
 function Get-LatencySummary($CaseRows) { $latencies = @($CaseRows | Where-Object { $_.latencyMs -gt 0 } | ForEach-Object { [int]$_.latencyMs } | Sort-Object); if (-not $latencies.Count) { return [pscustomobject]@{ p50Ms=0; maxMs=0 } }; [pscustomobject]@{ p50Ms=$latencies[[Math]::Floor(($latencies.Count - 1) / 2)]; maxMs=$latencies[-1] } }
+function Invoke-P102ArmGet {
+    param([Parameter(Mandatory)][string]$Uri, [Parameter(Mandatory)][string]$SubscriptionId)
+    $token = Invoke-Az @('account','get-access-token','--resource','https://management.azure.com','--subscription',$SubscriptionId,'--query','accessToken','-o','tsv')
+    if (-not $token) { throw 'Could not get an ARM access token.' }
+    try {
+        [pscustomobject]@{ StatusCode = 200; Body = (Invoke-RestMethod -Method Get -Uri $Uri -Headers @{ Authorization = 'Bearer ' + $token.Trim() }); Error = '' }
+    } catch {
+        $status = 0
+        if ($_.Exception.Response) { try { $status = [int]$_.Exception.Response.StatusCode } catch {} }
+        if (-not $status -and $_.Exception.Message -match '\b404\b') { $status = 404 }
+        [pscustomobject]@{ StatusCode = $status; Body = $null; Error = ($_.Exception.Message -replace 'Bearer\s+[A-Za-z0-9._~+/=-]+','Bearer ***') }
+    }
+}
 function Wait-P102ResourceGroupDeleted([string]$ResourceGroupName, [string]$Sub) { $deadline = (Get-Date).AddSeconds($DeleteWaitSeconds); do { $exists = Invoke-Az @('group','exists','--name',$ResourceGroupName,'--subscription',$Sub) -AllowFailure; if ($exists -eq 'false') { return $true }; Start-Sleep -Seconds $DeletePollSeconds } while ((Get-Date) -lt $deadline); return $false }
 function Test-P102ResourceGroupEmpty([string]$ResourceGroupName, [string]$Sub) {
     $resources = Invoke-Az @('resource','list','-g',$ResourceGroupName,'--query','[].id','-o','tsv','--subscription',$Sub) -AllowFailure
@@ -167,8 +180,12 @@ try {
     if (-not $Model) { $models = Invoke-Az @('apim','nv','show','-g',$resourceGroup,'--service-name',$apimName,'--named-value-id','models-standard','--query','value','-o','tsv','--subscription',$SubscriptionId); $Model = @([regex]::Matches([string]$models, '[A-Za-z0-9._-]+') | ForEach-Object Value | Select-Object -First 1)[0]; if (-not $Model) { throw 'models-standard names no model to request.' } }
     if ($UpgradeFrom) {
         Wait-GatewayStatus $url $Model 200 'upgrade pre-update benign request'
-        $preFragment = Invoke-Az @('apim','api','policy-fragment','show','-g',$resourceGroup,'--service-name',$apimName,'--fragment-id','content-safety-screening','--subscription',$SubscriptionId) -AllowFailure
-        if ($preFragment) { throw 'Expected content-safety-screening fragment to be absent before the update.' }
+        $apimId = "/subscriptions/$SubscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.ApiManagement/service/$apimName"
+        $fragmentUri = "https://management.azure.com$apimId/policyFragments/content-safety-screening?api-version=2024-05-01"
+        $policyUri = "https://management.azure.com$apimId/apis/claude-foundry/policies/policy?api-version=2024-05-01&format=rawxml"
+        $preFragment = Invoke-P102ArmGet -Uri $fragmentUri -SubscriptionId $SubscriptionId
+        if ($preFragment.StatusCode -eq 200) { throw 'Expected content-safety-screening fragment to be absent before the update.' }
+        if ($preFragment.StatusCode -ne 404) { throw "Pre-update content-safety fragment check failed: $($preFragment.Error)" }
         $planOutput = @(& $UpdatePath -ResourceGroup $resourceGroup -ApimName $apimName -KeepNamedValues)
         $plan = @($planOutput | Where-Object { $_ -isnot [string] -and $_.PSObject.Properties['Fingerprint'] })[0]
         $fingerprint = [string]$plan.Fingerprint
@@ -178,9 +195,11 @@ try {
         & $UpdatePath -ResourceGroup $resourceGroup -ApimName $apimName -KeepNamedValues -Apply -ApprovedPlanFingerprint $fingerprint | Out-Null
         $mode = Invoke-Az @('apim','nv','show','-g',$resourceGroup,'--service-name',$apimName,'--named-value-id','content-safety-mode','--query','value','-o','tsv','--subscription',$SubscriptionId)
         if ($mode -ne 'off') { throw "content-safety-mode after update was '$mode', expected off." }
-        $fragment = Invoke-Az @('apim','api','policy-fragment','show','-g',$resourceGroup,'--service-name',$apimName,'--fragment-id','content-safety-screening','--subscription',$SubscriptionId)
-        if (-not $fragment) { throw 'content-safety-screening fragment was not found after update.' }
-        $policy = Invoke-Az @('apim','api','policy','show','-g',$resourceGroup,'--service-name',$apimName,'--api-id','claude-foundry','--query','value','-o','tsv','--subscription',$SubscriptionId)
+        $fragment = Invoke-P102ArmGet -Uri $fragmentUri -SubscriptionId $SubscriptionId
+        if ($fragment.StatusCode -ne 200) { throw "content-safety-screening fragment was not found after update: $($fragment.Error)" }
+        $policyResponse = Invoke-P102ArmGet -Uri $policyUri -SubscriptionId $SubscriptionId
+        if ($policyResponse.StatusCode -ne 200) { throw "API policy was not found after update: $($policyResponse.Error)" }
+        $policy = [string]$policyResponse.Body
         if ($policy -notmatch 'include-fragment.*content-safety-screening') { throw 'API policy does not include content-safety-screening after update.' }
         $case1 = New-P102Case upgrade-after pass @{ model=$Model; max_tokens=16; messages=@(@{role='user'; content='Hello, please say OK.'}) }
         Add-P102CaseResult $case1 (Invoke-GatewayRequest -Url $url -BodyObject $case1.body)

@@ -94,6 +94,7 @@ function az {
         '^apim show .*--query identity\.principalId' { return '00000000-0000-4000-8000-000000000301' }
         '^apim nv show .*--named-value-id models-standard' { return $global:Live.ModelValue }
         '^apim nv show .*--named-value-id content-safety-mode' { if ($global:Live.UpgradeCheckFails -eq 'mode') { return 'block' }; return 'off' }
+        '^apim api ' { $global:LASTEXITCODE = 2; return "ERROR: 'policy-fragment' is misspelled or not recognized" }
         '^apim api policy show ' { if ($global:Live.UpgradeCheckFails -eq 'policy') { return '<policies />' }; return '<policies><include-fragment fragment-id="content-safety-screening" /></policies>' }
         '^apim api policy-fragment show ' { if (-not $global:Live.Updated -or $global:Live.UpgradeCheckFails -eq 'fragment') { $global:LASTEXITCODE = 3; return 'not found' }; return '<fragment />' }
         '^apim deletedservice purge ' { return }
@@ -113,6 +114,14 @@ function az {
 }
 function Invoke-RestMethod {
     param($Method,$Uri,$ContentType,$Headers,$Body)
+    if ($Uri -match '^https://management\.azure\.com/.+/policyFragments/content-safety-screening\?api-version=2024-05-01$') {
+        if (-not $global:Live.Updated -or $global:Live.UpgradeCheckFails -eq 'fragment') { throw 'Response status code does not indicate success: 404 (Not Found).' }
+        return [pscustomobject]@{ name='content-safety-screening'; properties=[pscustomobject]@{ value='<fragment />' } }
+    }
+    if ($Uri -match '^https://management\.azure\.com/.+/apis/claude-foundry/policies/policy\?api-version=2024-05-01&format=rawxml$') {
+        if ($global:Live.UpgradeCheckFails -eq 'policy') { return '<policies />' }
+        return '<policies><include-fragment fragment-id="content-safety-screening" /></policies>'
+    }
     if ($Uri -match '^https://management\.azure\.com/.+/apis/claude-foundry/diagnostics/applicationinsights\?api-version=2024-05-01$') {
         return [pscustomobject]@{ properties = [pscustomobject]@{ loggerId = '/subscriptions/sub/resourceGroups/rg-p102-live-abc123/providers/Microsoft.ApiManagement/service/apim-p102live/loggers/applicationinsights'; metrics = $true } }
     }
@@ -284,8 +293,8 @@ try {
     Write-Host 'P102 upgrade mode'
     Reset-Live
     Invoke-P102 @{ UpgradeFrom = $oldCheckout }
-    $upgradeOrder = @((At '^old-installer '), (At '^request warmup'), (At '^az apim api policy-fragment show'), (At '^update plan'), (At '^update apply'), (At '^az apim nv show .*content-safety-mode'), (At '^az apim api policy show'), (At '^request upgrade-after'), (At '^request upgrade-harmful')) 
-    Assert 'upgrade mode installs with the older checkout, verifies pre-upgrade 200 and absence, runs update plan/apply, checks mode off, fragment, policy include, benign 200 and harmful pass' (-not $Failure -and ($upgradeOrder -notcontains -1) -and (@(0..($upgradeOrder.Count-2) | Where-Object { $upgradeOrder[$_] -lt $upgradeOrder[$_+1] }).Count -eq ($upgradeOrder.Count-1))) "$Failure | $($global:Live.Calls -join '; ')"
+    $upgradeOrder = @((At '^old-installer '), (At '^request warmup'), (At '^az account get-access-token --resource https://management.azure.com'), (At '^update plan'), (At '^update apply'), (At '^az apim nv show .*content-safety-mode'), (At '^request upgrade-after'), (At '^request upgrade-harmful')) 
+    Assert 'upgrade mode installs with the older checkout, verifies pre-upgrade 200 and absence over ARM REST, runs update plan/apply, checks mode off, fragment, policy include, benign 200 and harmful pass' (-not $Failure -and ($upgradeOrder -notcontains -1) -and (@(0..($upgradeOrder.Count-2) | Where-Object { $upgradeOrder[$_] -lt $upgradeOrder[$_+1] }).Count -eq ($upgradeOrder.Count-1)) -and @($global:Live.Calls | Where-Object { $_ -match '^az apim api ' }).Count -eq 0) "$Failure | $($global:Live.Calls -join '; ')"
     Reset-Live
     $global:Live.UpgradeCheckFails = 'mode'
     Invoke-P102 @{ UpgradeFrom = $oldCheckout }
