@@ -220,6 +220,8 @@ The round 2 Security seat reproduced a harmful span about 300 characters into a 
 
 Two limits stay and are documented in [Content Safety](../CONTENT-SAFETY.md#limits): Prompt Shields does not receive the system prompt, so attack text that is only in `system` meets harm analysis alone; and `content-safety-mode = off` writes no trace, so turning screening off leaves no screening record. An activity log alert on `Microsoft.ApiManagement/service/namedValues/write` can report the change; P102 does not deploy one.
 
+Council round 3 Security found newest-turn text the slice did not read. The newest turn is now the run of `user` messages that ends the conversation, because the Messages API combines consecutive `user` or `assistant` turns into one ([Claude API reference, read 2026-10-07][claude-messages]), plus every `assistant` message after it. A `document` block contributes its `title` and `context`, which are passed to the model ([Claude citations, read 2026-10-07][claude-citations]), and a content-block source; a `search_result` contributes its title. Each document or search result stays one part. The system prompt and tool descriptions remain sampled in both truncation modes, so harmful text in the part of a long system prompt that sampling leaves out reaches Foundry; this is a documented limit.
+
 ### Amendment 2026-10-07 (P102 council round 2): reading the fragment back
 
 Upgrade live run 23 stopped at the update's check: the fragment read back with `format=rawxml` did not parse as XML. Microsoft documents `rawxml` as "a non XML encoded policy document" and `xml` as "an XML document" ([Policy Fragment - Get, read 2026-10-07][policy-fragment-get]). A probe on a disposable API Management instance on 2026-10-07 wrote `infra/content-safety-screening.xml` with `format=rawxml`, as the template, migration 0002 and `Set-GatewayPolicy.ps1` do, and read it back: `rawxml` did not parse, and `xml` parsed but returned the stored text encoded once more, so `&lt;` came back as `&amp;lt;`. Discovery now reads `format=xml` and decodes the stored text once more before hashing; line endings inside values are made uniform on both sides. The probe's read-back and its template are test fixtures, and their hashes match. Upgrade runs 19 and 21 had reported no fragment change after the update because the code before this round counted a fragment it could not read as current.
@@ -236,12 +238,14 @@ Upgrade live run 23 stopped at the update's check: the fragment read back with `
 
 - A live T1-T11 run no longer matches the spike's custom-policy decisions, without a cited service change.
 - A Claude Code-shaped long conversation is refused because older conversation context exceeds 10,000 characters.
-- A harmful newest `system`, newest user text, newest user text block or newest `tool_result` reaches Foundry in `block` mode.
+- A harmful newest user text, document, search result or `tool_result` that fits the newest-turn budget reaches Foundry in `block` mode. The system prompt and tool descriptions are sampled ([council round 2 amendment](#amendment-2026-10-07-p102-council-round-2-the-newest-turn-first)).
 - The KQL evidence contains prompt text or snippets.
 - Cost Management shows text-record quantities outside the per-request range in the council round 2 amendment.
 
 [analyze-text]: https://learn.microsoft.com/en-us/rest/api/contentsafety/text-operations/analyze-text?view=rest-contentsafety-2024-09-01
 [apim-llm-content-safety]: https://learn.microsoft.com/en-us/azure/api-management/llm-content-safety-policy
+[claude-citations]: https://platform.claude.com/docs/en/build-with-claude/citations
+[claude-messages]: https://platform.claude.com/docs/claude/reference/messages_post
 [cognitive-account-bicep]: https://learn.microsoft.com/en-us/azure/templates/microsoft.cognitiveservices/accounts
 [cognitive-auth]: https://learn.microsoft.com/en-us/azure/ai-services/authentication
 [content-safety-pricing]: https://azure.microsoft.com/en-us/pricing/details/content-safety/

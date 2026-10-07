@@ -19,8 +19,21 @@
                         if (block[&quot;type&quot;] == null || block[&quot;type&quot;].Type != JTokenType.String) { continue; }
                         var blockType = (string)block[&quot;type&quot;];
                         if (blockType == &quot;text&quot; &amp;&amp; block[&quot;text&quot;] != null &amp;&amp; block[&quot;text&quot;].Type == JTokenType.String) { addPart(list, (string)block[&quot;text&quot;]); }
-                        else if (blockType == &quot;document&quot;) { var source = block[&quot;source&quot;] as JObject; if (source != null &amp;&amp; source[&quot;type&quot;] != null &amp;&amp; source[&quot;type&quot;].Type == JTokenType.String &amp;&amp; (string)source[&quot;type&quot;] == &quot;text&quot; &amp;&amp; source[&quot;data&quot;] != null &amp;&amp; source[&quot;data&quot;].Type == JTokenType.String) { addPart(list, (string)source[&quot;data&quot;]); } }
-                        else if (blockType == &quot;search_result&quot;) { collectText(block[&quot;content&quot;], list); }
+                        else if (blockType == &quot;document&quot; || blockType == &quot;search_result&quot;) {
+                            var pieces = new System.Collections.Generic.List&lt;string&gt;();
+                            if (block[&quot;title&quot;] != null &amp;&amp; block[&quot;title&quot;].Type == JTokenType.String) { addPart(pieces, (string)block[&quot;title&quot;]); }
+                            if (block[&quot;context&quot;] != null &amp;&amp; block[&quot;context&quot;].Type == JTokenType.String) { addPart(pieces, (string)block[&quot;context&quot;]); }
+                            if (blockType == &quot;search_result&quot;) { collectText(block[&quot;content&quot;], pieces); }
+                            else {
+                                var source = block[&quot;source&quot;] as JObject;
+                                if (source != null &amp;&amp; source[&quot;type&quot;] != null &amp;&amp; source[&quot;type&quot;].Type == JTokenType.String) {
+                                    var sourceType = (string)source[&quot;type&quot;];
+                                    if (sourceType == &quot;text&quot; &amp;&amp; source[&quot;data&quot;] != null &amp;&amp; source[&quot;data&quot;].Type == JTokenType.String) { addPart(pieces, (string)source[&quot;data&quot;]); }
+                                    else if (sourceType == &quot;content&quot;) { collectText(source[&quot;content&quot;], pieces); }
+                                }
+                            }
+                            if (pieces.Count &gt; 0) { addPart(list, String.Join(&quot;\n&quot;, pieces)); }
+                        }
                     }
                 }
                 string sample(string value, int budget) {
@@ -76,21 +89,25 @@
                 var userParts = new System.Collections.Generic.List&lt;string&gt;();
                 var turnDocParts = new System.Collections.Generic.List&lt;string&gt;();
                 var toolDocParts = new System.Collections.Generic.List&lt;string&gt;();
-                JObject newestUser = null; var fabricated = false; var newestUserIndex = -1;
+                JObject newestUser = null; var fabricated = false; var newestUserIndex = -1; var firstTurnIndex = -1; JArray messages = null;
                 if (!unscreenable) { var sysParts = new System.Collections.Generic.List&lt;string&gt;(); collectText(root[&quot;system&quot;], sysParts); foreach (var p in sysParts) { envelopeParts.Add(p); } }
                 if (!unscreenable) { var tools = root[&quot;tools&quot;] as JArray; if (tools != null) { foreach (var toolToken in tools) { var toolObj = toolToken as JObject; if (toolObj != null &amp;&amp; toolObj[&quot;description&quot;] != null &amp;&amp; toolObj[&quot;description&quot;].Type == JTokenType.String) { addPart(toolDocParts, (string)toolObj[&quot;description&quot;]); addPart(envelopeParts, (string)toolObj[&quot;description&quot;]); } } } }
                 if (!unscreenable) {
-                    var messages = root[&quot;messages&quot;] as JArray;
+                    messages = root[&quot;messages&quot;] as JArray;
                     if (messages == null) { unscreenable = true; }
                     else {
                         for (var i = messages.Count - 1; i &gt;= 0; i--) { var message = messages[i] as JObject; if (message == null) { unscreenable = true; break; } if (message[&quot;role&quot;] != null &amp;&amp; message[&quot;role&quot;].Type == JTokenType.String &amp;&amp; (string)message[&quot;role&quot;] == &quot;user&quot;) { newestUser = message; newestUserIndex = i; break; } }
-                        if (!unscreenable &amp;&amp; newestUserIndex &gt; 0) { for (var h = 0; h &lt; newestUserIndex; h++) { var historic = messages[h] as JObject; if (historic == null) { unscreenable = true; break; } if (historic[&quot;role&quot;] != null &amp;&amp; historic[&quot;role&quot;].Type == JTokenType.String &amp;&amp; (string)historic[&quot;role&quot;] == &quot;user&quot;) { fabricated = true; break; } } }
-                        if (!unscreenable &amp;&amp; newestUserIndex &gt;= 0 &amp;&amp; newestUserIndex + 1 &lt; messages.Count) { var after = messages[newestUserIndex + 1] as JObject; if (after != null &amp;&amp; after[&quot;role&quot;] != null &amp;&amp; after[&quot;role&quot;].Type == JTokenType.String &amp;&amp; (string)after[&quot;role&quot;] == &quot;assistant&quot;) { var prefill = new System.Collections.Generic.List&lt;string&gt;(); collectText(after[&quot;content&quot;], prefill); foreach (var p in prefill) { userParts.Add(p); turnParts.Add(p); } } }
+                        firstTurnIndex = newestUserIndex;
+                        while (!unscreenable &amp;&amp; firstTurnIndex &gt; 0) { var previous = messages[firstTurnIndex - 1] as JObject; if (previous == null) { unscreenable = true; break; } if (previous[&quot;role&quot;] != null &amp;&amp; previous[&quot;role&quot;].Type == JTokenType.String &amp;&amp; (string)previous[&quot;role&quot;] == &quot;user&quot;) { firstTurnIndex--; } else { break; } }
+                        if (!unscreenable &amp;&amp; firstTurnIndex &gt; 0) { for (var h = 0; h &lt; firstTurnIndex; h++) { var historic = messages[h] as JObject; if (historic == null) { unscreenable = true; break; } if (historic[&quot;role&quot;] != null &amp;&amp; historic[&quot;role&quot;].Type == JTokenType.String &amp;&amp; (string)historic[&quot;role&quot;] == &quot;user&quot;) { fabricated = true; break; } } }
+                        if (!unscreenable &amp;&amp; newestUserIndex &gt;= 0) { for (var k = newestUserIndex + 1; k &lt; messages.Count; k++) { var after = messages[k] as JObject; if (after == null) { unscreenable = true; break; } if (after[&quot;role&quot;] != null &amp;&amp; after[&quot;role&quot;].Type == JTokenType.String &amp;&amp; (string)after[&quot;role&quot;] == &quot;assistant&quot;) { var prefill = new System.Collections.Generic.List&lt;string&gt;(); collectText(after[&quot;content&quot;], prefill); foreach (var p in prefill) { userParts.Add(p); turnParts.Add(p); } } } }
                     }
                 }
                 if (!unscreenable &amp;&amp; newestUser != null) {
-                    var userContentToken = newestUser[&quot;content&quot;];
-                    if (userContentToken != null) {
+                    for (var u = firstTurnIndex; u &lt;= newestUserIndex &amp;&amp; !unscreenable; u++) {
+                        var turnMessage = messages[u] as JObject;
+                        var userContentToken = turnMessage[&quot;content&quot;];
+                        if (userContentToken == null) { continue; }
                         if (userContentToken.Type == JTokenType.String) { addPart(userParts, userContentToken.ToString()); addPart(turnParts, userContentToken.ToString()); }
                         else if (userContentToken.Type == JTokenType.Array) {
                             foreach (var blockToken in (JArray)userContentToken) {
@@ -98,8 +115,8 @@
                                 if (block[&quot;type&quot;] == null || block[&quot;type&quot;].Type != JTokenType.String) { continue; }
                                 var blockType = (string)block[&quot;type&quot;];
                                 if (blockType == &quot;text&quot;) { if (block[&quot;text&quot;] != null &amp;&amp; block[&quot;text&quot;].Type == JTokenType.String) { addPart(userParts, (string)block[&quot;text&quot;]); addPart(turnParts, (string)block[&quot;text&quot;]); } }
-                                else if (blockType == &quot;document&quot;) { var documentText = new System.Collections.Generic.List&lt;string&gt;(); collectText(new JArray(block), documentText); foreach (var p in documentText) { turnDocParts.Add(p); turnParts.Add(p); } }
-                                else if (blockType == &quot;tool_result&quot; || blockType == &quot;search_result&quot;) { var thirdParty = new System.Collections.Generic.List&lt;string&gt;(); collectText(block[&quot;content&quot;], thirdParty); if (unscreenable) { break; } foreach (var p in thirdParty) { turnDocParts.Add(p); turnParts.Add(p); } }
+                                else if (blockType == &quot;document&quot; || blockType == &quot;search_result&quot;) { var documentText = new System.Collections.Generic.List&lt;string&gt;(); collectText(new JArray(block), documentText); if (unscreenable) { break; } foreach (var p in documentText) { turnDocParts.Add(p); turnParts.Add(p); } }
+                                else if (blockType == &quot;tool_result&quot;) { var thirdParty = new System.Collections.Generic.List&lt;string&gt;(); collectText(block[&quot;content&quot;], thirdParty); if (unscreenable) { break; } foreach (var p in thirdParty) { turnDocParts.Add(p); turnParts.Add(p); } }
                             }
                         }
                         else { unscreenable = true; }

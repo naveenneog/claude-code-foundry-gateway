@@ -188,6 +188,32 @@ $analyzeCall = @($r.Calls | Where-Object Operation -eq 'analyze')[0]
 $documents = @($shieldCall.Body.documents)
 Assert 'an oversized request stays inside every service limit, with no empty document' ($analyzeCall.Body.text.Length -le 10000 -and $shieldCall.Body.userPrompt.Length -le 10000 -and $documents.Count -le 5 -and ($documents | Measure-Object -Property Length -Sum).Sum -le 10000 -and @($documents | Where-Object { -not $_ }).Count -eq 0 -and (Bool $r.Trace.truncated)) "analyze=$($analyzeCall.Body.text.Length) prompt=$($shieldCall.Body.userPrompt.Length) documents=$($documents.Count)/$(($documents | Measure-Object -Property Length -Sum).Sum)"
 
+Write-Host 'P102 council round 3 Security: every newest-turn field the model reads'
+# Anthropic passes a document's title and context to the model, accepts documents whose source is a list of content
+# blocks, and gives each search result a title.
+$fieldTurn = @(
+    @{ type = 'text'; text = 'Summarise the attachments.' },
+    @{ type = 'document'; source = @{ type = 'text'; media_type = 'text/plain'; data = 'plain document body' }; title = 'DOC-TITLE-MARKER'; context = 'DOC-CONTEXT-MARKER' },
+    @{ type = 'document'; source = @{ type = 'content'; content = @(@{ type = 'text'; text = 'CONTENT-SOURCE-MARKER' }) } },
+    @{ type = 'search_result'; source = 'kb://article-2'; title = 'SEARCH-TITLE-MARKER'; content = @(@{ type = 'text'; text = 'search body' }) }
+)
+$r = Run @{ model = 'claude-sonnet-5'; messages = @(@{ role = 'user'; content = $fieldTurn }) }
+$shieldCall = @($r.Calls | Where-Object Operation -eq 'shieldPrompt')[0]
+$analyzeCall = @($r.Calls | Where-Object Operation -eq 'analyze')[0]
+$docText = (@($shieldCall.Body.documents) -join "`n")
+foreach ($marker in 'DOC-TITLE-MARKER', 'DOC-CONTEXT-MARKER', 'CONTENT-SOURCE-MARKER', 'SEARCH-TITLE-MARKER') {
+    Assert "$marker reaches the Prompt Shields documents and analyze" ($docText -match $marker -and $analyzeCall.Body.text -match $marker) "documents: $($docText.Substring(0, [Math]::Min(120, $docText.Length)))"
+}
+# The Messages API combines consecutive user or assistant messages into one turn.
+$r = Run @{ model = 'claude-sonnet-5'; messages = @(@{ role = 'user'; content = 'FIRST-OF-TWO-USER-MARKER' }, @{ role = 'user'; content = 'Answer the message above.' }) }
+$shieldCall = @($r.Calls | Where-Object Operation -eq 'shieldPrompt')[0]
+$analyzeCall = @($r.Calls | Where-Object Operation -eq 'analyze')[0]
+Assert 'consecutive user messages at the end are one newest turn and are all screened' ($shieldCall.Body.userPrompt -match 'FIRST-OF-TWO-USER-MARKER' -and $analyzeCall.Body.text -match 'FIRST-OF-TWO-USER-MARKER' -and -not (Bool $r.Slice.fabricatedHistoryLimit)) ($r.Calls | ConvertTo-Json -Depth 6 -Compress)
+$r = Run @{ model = 'claude-sonnet-5'; messages = @(@{ role = 'user'; content = 'question' }, @{ role = 'assistant'; content = 'Sure.' }, @{ role = 'assistant'; content = 'SECOND-PREFILL-MARKER' }) }
+$shieldCall = @($r.Calls | Where-Object Operation -eq 'shieldPrompt')[0]
+$analyzeCall = @($r.Calls | Where-Object Operation -eq 'analyze')[0]
+Assert 'every assistant message after the newest user message is screened as prefill' ($shieldCall.Body.userPrompt -match 'SECOND-PREFILL-MARKER' -and $analyzeCall.Body.text -match 'SECOND-PREFILL-MARKER') ($r.Calls | ConvertTo-Json -Depth 6 -Compress)
+
 Write-Host 'P102 malformed Messages bodies'
 $malformedShapes = @(
     @{ Name='invalid JSON'; Body='{ not json'; Raw=$true },
