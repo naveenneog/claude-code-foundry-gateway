@@ -196,6 +196,16 @@ Assert 'a projection WhatIf sync does not record entitlement-groups' (
     -not $CapturedError -and $projectionWhatIfCalls -notmatch 'az apim nv (update|create) .*--named-value-id entitlement-groups') "$CapturedError | $projectionWhatIfCalls"
 
 Reset-ProjectionFixture 'source-projection'
+Capture { & (Join-Path $root 'scripts\Sync-ClaudeAccess.ps1') -ApimName apim-p84 -ResourceGroup rg-p84 -Store projection -User user@example.invalid 6>&1 }
+$projectionUserOutput = (@($CapturedResult) | ForEach-Object { [string]$_ }) -join "`n"
+$projectionUserObject = @($CapturedResult | Where-Object { $_ -and $_.PSObject.Properties['published_tier'] } | Select-Object -Last 1)
+Assert 'Sync-ClaudeAccess -User on a projection reports the applied user tier and returns the bridge object' (
+    -not $CapturedError -and $projectionUserOutput -match 'Developer tier as written: standard' -and
+    $projectionUserOutput -match 'Microsoft Graph can report a membership change a few minutes late' -and
+    $projectionUserObject.published_tier -eq 'standard' -and
+    $projectionUserObject.user -eq '30000000-0000-4000-8000-000000000001') "$CapturedError | output: $projectionUserOutput | calls: $($FixtureCalls -join ' | ')"
+
+Reset-ProjectionFixture 'source-projection'
 Capture { & (Join-Path $root 'scripts\Sync-ClaudeAccess.ps1') -ApimName apim-p84 -ResourceGroup rg-p84 -Store projection -User missing@contoso.com }
 $missingProjectionCalls = $FixtureCalls -join "`n"
 Assert 'a projection sync for an unknown UPN stops before writes with a clear message' (
@@ -343,6 +353,16 @@ Assert 'an explicit missing premium group syncs as an empty premium tier and rec
     -not $CapturedError -and $script:P98NvResult.Values['allow-premium'] -eq ',' -and
     $script:P98NvResult.Values['entitlement-groups'] -eq 'standard=10000000-0000-4000-8000-000000000001,premium=none' -and
     @($nvWrites -match 'allow-premium').Count -ge 1) "$CapturedError | groups=$($script:P98NvResult.Values['entitlement-groups']) premium=$($script:P98NvResult.Values['allow-premium']) | writes: $($nvWrites -join ' | ')"
+
+Invoke-NamedValueSyncFixture -PremiumCount 1 -StandardCount 1 -GatewayGroups 'standard=none,premium=10000000-0000-4000-8000-000000000002' -Parameters @{ Store = 'named-value' }
+$nvWrites = Get-NamedValueWrites
+Assert 'standard none in entitlement-groups refuses before writes and names the remedy' (
+    $CapturedError -match 'standard.*none' -and $CapturedError -match 'entitlement-groups' -and $CapturedError -match '-StandardGroup' -and $CapturedError -match '-RecordGroups' -and $nvWrites.Count -eq 0) "$CapturedError | writes: $($nvWrites -join ' | ')"
+
+Invoke-NamedValueSyncFixture -PremiumCount 1 -StandardCount 1 -Parameters @{ Store = 'named-value'; StandardGroup = 'missing-standard' }
+$nvWrites = Get-NamedValueWrites
+Assert 'an explicit missing standard group refuses before writes and names the parameter remedy' (
+    $CapturedError -match "standard tier group 'missing-standard' from the parameter was not found" -and $CapturedError -match '-StandardGroup' -and $CapturedError -match '-RecordGroups' -and $nvWrites.Count -eq 0) "$CapturedError | writes: $($nvWrites -join ' | ')"
 
 Invoke-NamedValueSyncFixture -PremiumCount 1 -StandardCount 1 -GatewayGroups 'standard=10000000-0000-4000-8000-000000000001,premium=10000000-0000-4000-8000-000000000002' -Parameters @{ Store = 'named-value'; StandardGroup = 'claude-code-premium' }
 $nvWrites = Get-NamedValueWrites

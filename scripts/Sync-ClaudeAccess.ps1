@@ -86,13 +86,21 @@ function Invoke-ClaudeProjectionAccessSync {
         $exportOutput = & pwsh @exportArgs 2>&1
         if ($LASTEXITCODE -ne 0) { throw "Projection snapshot export failed (exit $LASTEXITCODE): $(($exportOutput | Select-Object -Last 12) -join "`n")" }
         $targetUserOid = $null
+        $targetSnapshotRecord = $null
         if ($User) {
             $snap = Get-Content -LiteralPath $snapshot -Raw | ConvertFrom-Json
             if (-not $snap.user -or [string]$snap.scope -ne 'user') { throw 'Targeted projection export did not produce a user-scoped snapshot.' }
             $targetUserOid = [string]$snap.user
+            $targetSnapshotRecord = @($snap.records | Where-Object { [string]$_.oid -eq $targetUserOid } | Select-Object -First 1)
         }
         if ($WhatIf) {
             Write-Host "  [WhatIf] Projection snapshot exported to $snapshot; runner was not started and Cosmos was not changed." -ForegroundColor DarkGray
+            if ($targetUserOid) {
+                $publishedTier = if ($targetSnapshotRecord -and $targetSnapshotRecord.tier) { [string]$targetSnapshotRecord.tier } else { 'none' }
+                Write-Host "Developer tier as written: $publishedTier" -ForegroundColor Green
+                Write-Host "Microsoft Graph can report a membership change a few minutes late; if this developer's groups changed just now and the tier is the previous one, run this command again." -ForegroundColor DarkGray
+                [pscustomobject]@{ published_tier = $publishedTier; user = $targetUserOid }
+            }
             return
         }
         $runner = "aci-projtest-$prefix"
@@ -112,6 +120,16 @@ function Invoke-ClaudeProjectionAccessSync {
         $raw = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $runner -Command $command
         $result = ConvertFrom-ClaudeRunnerResult -RawOutput $raw -Step 'projection apply'
         Write-Host ("Projection sync complete: written={0} deleted={1} unchanged={2}" -f ([int]$result.written), ([int]$result.deleted), ([int]$result.unchanged)) -ForegroundColor Green
+        if ($targetUserOid) {
+            $appliedRecord = $null
+            if ($result.PSObject.Properties['userRecord']) { $appliedRecord = $result.userRecord }
+            $publishedTier = if ($appliedRecord -and $appliedRecord.PSObject.Properties['tier'] -and $appliedRecord.tier) { [string]$appliedRecord.tier }
+                elseif ($targetSnapshotRecord -and $targetSnapshotRecord.tier) { [string]$targetSnapshotRecord.tier }
+                else { 'none' }
+            Write-Host "Developer tier as written: $publishedTier" -ForegroundColor Green
+            Write-Host "Microsoft Graph can report a membership change a few minutes late; if this developer's groups changed just now and the tier is the previous one, run this command again." -ForegroundColor DarkGray
+            [pscustomobject]@{ published_tier = $publishedTier; user = $targetUserOid }
+        }
         $excluded = [int]$result.excludedByNewerTargetedSync
         if ($excluded -gt 0) {
             Write-Host ("  {0} user(s) changed by a targeted sync while this full sync ran were left out of it (ADR-0051 decision 11). Remedy: rerun scripts/Sync-ClaudeAccess.ps1 -ResourceGroup {1} -ApimName {2} after five minutes, or with -User for each of them." -f $excluded, $ResourceGroup, $ApimName) -ForegroundColor Yellow

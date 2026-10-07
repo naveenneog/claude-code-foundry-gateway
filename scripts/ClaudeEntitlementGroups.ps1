@@ -9,6 +9,9 @@ function ConvertFrom-ClaudeEntitlementGroups([AllowEmptyString()][string]$Value)
     foreach ($pair in ([string]$Value -split ',')) {
         if ($pair -match '^\s*(standard|premium)=([0-9a-fA-F-]{36}|none)\s*$') {
             $id = $Matches[2].ToLowerInvariant()
+            if ($Matches[1] -eq 'standard' -and $id -eq 'none') {
+                throw "entitlement-groups cannot set standard=none. The standard tier must name a Microsoft Graph group object id. Remedy: pass -StandardGroup <existing standard group> and -PremiumGroup <existing premium group or none>, then add -RecordGroups to replace the gateway record. Nothing was written."
+            }
             if ($id -eq 'none' -or (Test-ClaudeEntitlementGroupGuid $id)) { $result[$Matches[1]] = $id }
         }
     }
@@ -31,6 +34,9 @@ function Resolve-ClaudeEntitlementGroupCandidate {
     foreach ($candidate in $Candidates) {
         if (-not $candidate.Value) { continue }
         if ([string]$candidate.Value -eq 'none') {
+            if ($Tier -eq 'standard') {
+                return [pscustomobject]@{ Tier = $Tier; Argument = ''; Id = ''; Source = $candidate.Source; Found = $false; Absent = $false; Missing = 'none' }
+            }
             return [pscustomobject]@{ Tier = $Tier; Argument = 'none'; Id = 'none'; Source = $candidate.Source; Found = $false; Absent = $true; Missing = '' }
         }
         $group = & $FindGroup ([string]$candidate.Value)
@@ -62,7 +68,7 @@ function Resolve-ClaudeEntitlementGroupsForSync {
         @{ Value = $StandardGroup; Source = 'parameter'; Authoritative = $true },
         @{ Value = $recorded['standard']; Source = 'gateway entitlement-groups'; Authoritative = $true },
         @{ Value = $recordStandard; Source = 'decision record'; Authoritative = $true },
-        @{ Value = 'claude-code-standard'; Source = 'default name'; Authoritative = $false }
+        @{ Value = 'claude-code-standard'; Source = 'default name'; Authoritative = $true }
     )
     $premium = Resolve-ClaudeEntitlementGroupCandidate -Tier 'premium' -FindGroup $FindGroup -Candidates @(
         @{ Value = $PremiumGroup; Source = 'parameter'; Authoritative = $true },
@@ -74,6 +80,9 @@ function Resolve-ClaudeEntitlementGroupsForSync {
         if ($group.Missing -and $group.Source -eq 'gateway entitlement-groups') {
             $switch = if ($group.Tier -eq 'standard') { '-StandardGroup' } else { '-PremiumGroup' }
             throw "U160: the $($group.Tier) tier group '$($group.Missing)' recorded in entitlement-groups was not found in Microsoft Graph. Remedy: pass -StandardGroup <existing standard group> and -PremiumGroup <existing premium group or none>, then add -RecordGroups to replace the gateway record, or restore the recorded group. Nothing was written."
+        }
+        if ($group.Missing -and $group.Tier -eq 'standard') {
+            throw "The standard tier group '$($group.Missing)' from the $($group.Source) was not found in Microsoft Graph. Remedy: pass -StandardGroup <existing standard group> and -PremiumGroup <existing premium group or none>, then add -RecordGroups if this replaces entitlement-groups. Nothing was written."
         }
         if ($group.Missing) {
             $group.Argument = 'none'
