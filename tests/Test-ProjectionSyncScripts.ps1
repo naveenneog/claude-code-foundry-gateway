@@ -190,6 +190,14 @@ Assert 'a projection sync from default fallback does not record entitlement-grou
     -not $CapturedError -and $projectionApplyIndex -ge 0 -and $projectionRecordIndex -lt 0) "$CapturedError | $projectionRecordCalls"
 
 Reset-ProjectionFixture 'source-projection'
+Capture { & (Join-Path $root 'scripts\Sync-ClaudeAccess.ps1') -ApimName apim-p84 -ResourceGroup rg-p84 -Store projection -StandardGroup claude-code-standard -PremiumGroup claude-code-premium }
+$projectionExplicitCalls = $FixtureCalls -join "`n"
+$projectionExplicitApplyIndex = [array]::FindIndex([string[]]@($FixtureCalls), [Predicate[string]]{ param($line) $line -match 'apply-projection\.mjs .*--snapshot' })
+$projectionExplicitRecordIndex = [array]::FindIndex([string[]]@($FixtureCalls), [Predicate[string]]{ param($line) $line -match 'az apim nv (update|create) .*--named-value-id entitlement-groups' })
+Assert 'a projection sync records entitlement-groups after a successful explicit-group first sync' (
+    -not $CapturedError -and $projectionExplicitApplyIndex -ge 0 -and $projectionExplicitRecordIndex -gt $projectionExplicitApplyIndex) "$CapturedError | $projectionExplicitCalls"
+
+Reset-ProjectionFixture 'source-projection'
 Capture { & (Join-Path $root 'scripts\Sync-ClaudeAccess.ps1') -ApimName apim-p84 -ResourceGroup rg-p84 -Store projection -WhatIf }
 $projectionWhatIfCalls = $FixtureCalls -join "`n"
 Assert 'a projection WhatIf sync does not record entitlement-groups' (

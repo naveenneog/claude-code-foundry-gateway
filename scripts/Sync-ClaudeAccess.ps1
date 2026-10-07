@@ -194,6 +194,7 @@ function Get-ClaudeNamedValueTierForUser {
     return 'none'
 }
 
+$skippedTierWrites = [Collections.Generic.List[string]]::new()
 function Set-ClaudeEntitlementGroupsIfNeeded {
     if ($WhatIf) { return }
     $recordReasons = [Collections.Generic.List[string]]::new()
@@ -246,7 +247,6 @@ $seen = @{}
 # Every value is resolved and checked against the 4,096-character limit before the first write, so a list
 # that does not fit leaves every named value as it was, rather than some lists refreshed beside others stale.
 $pendingWrites = [Collections.Generic.List[object]]::new()
-$skippedTierWrites = [Collections.Generic.List[string]]::new()
 foreach ($t in $tiers) {
     $members = @(Get-GroupMemberOids -GroupName $t.Group -Token $graphToken)
 
