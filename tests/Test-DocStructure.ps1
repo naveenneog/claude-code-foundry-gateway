@@ -656,6 +656,18 @@ $developerBaseline = Get-GitBlobText "$BaselineCommit`:DEVELOPER.md"
 Assert-Condition ($developerBaseline -match ('(?m)^# Claude Code ' + [char]0x2014 + ' developer setup')) 'baseline guides are not read as UTF-8: the DEVELOPER.md H1 em dash did not survive'
 Write-Ok 'baseline guides are read as UTF-8 whatever the console encoding'
 
+# A guide added after the baseline commit has no baseline anchors to keep. git ls-tree prints nothing for a
+# path that the commit does not contain and fails only on a real error, so a failed read is never taken for
+# a new guide.
+function Test-BaselineGuidePath([string]$Path) {
+  $listed = @(& git -C $Root ls-tree --name-only $BaselineCommit -- $Path 2>&1)
+  if ($LASTEXITCODE -ne 0) { throw "git ls-tree failed for $Path at ${BaselineCommit}: $($listed -join ' ')" }
+  return ($listed.Count -gt 0 -and [string]$listed[0] -eq $Path)
+}
+Assert-Condition (Test-BaselineGuidePath 'DEVELOPER.md') 'baseline path probe does not find DEVELOPER.md at the baseline commit'
+Assert-Condition (-not (Test-BaselineGuidePath 'docs/NO-SUCH-GUIDE.md')) 'baseline path probe reports a guide that the baseline commit does not contain'
+
+$guidesAddedAfterBaseline = [System.Collections.Generic.List[string]]::new()
 foreach ($guide in $guides) {
 
   $currentPath = Join-Path $Root $guide
@@ -663,6 +675,8 @@ foreach ($guide in $guides) {
   $current = Get-Content -LiteralPath $currentPath -Raw
 
   $baselinePath = $guide -replace '\\','/'
+
+  if (-not (Test-BaselineGuidePath $baselinePath)) { $guidesAddedAfterBaseline.Add($baselinePath); continue }
 
   $baseline = Get-GitBlobText "$BaselineCommit`:$baselinePath"
 
@@ -680,7 +694,9 @@ foreach ($guide in $guides) {
 
 }
 
-Write-Ok 'baseline heading and explicit anchors are preserved for every guide'
+$guidesCheckedAgainstBaseline = $guides.Count - $guidesAddedAfterBaseline.Count
+Assert-Condition ($guidesCheckedAgainstBaseline -ge 44) "expected at least 44 guides checked against the baseline, checked $guidesCheckedAgainstBaseline"
+Write-Ok "baseline heading and explicit anchors are preserved for every guide ($guidesCheckedAgainstBaseline checked; added after the baseline: $(if ($guidesAddedAfterBaseline.Count) { $guidesAddedAfterBaseline -join ', ' } else { 'none' }))"
 
 $enrolledSet = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
 foreach ($guide in $EnrolledGuides) { [void]$enrolledSet.Add($guide) }
