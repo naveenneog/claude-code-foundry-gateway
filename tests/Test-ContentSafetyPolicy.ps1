@@ -186,6 +186,62 @@ Assert 'trace metadata has screening marker, decisions, severities, booleans, th
 Assert 'trace metadata has no prompt, system, tool, output or image content' ($traceJson -notmatch 'harmful|benign|system|imageBytes|matchedSnippet|modelOutput') $traceJson
 
 Write-Host 'P102 APIM allowed expression types'
+function Get-PolicyLiteralLineBreaks([string]$Text, [string]$Label) {
+    # APIM compiles each @(...) / @{...} expression from the raw policy text: a raw line break inside a regular
+    # C# string or char literal is "Unterminated string literal" there, although an XML parser turns the same
+    # attribute line break into a space. So scan the raw text, not a parsed XmlDocument.
+    $findings = [Collections.Generic.List[string]]::new()
+    $regions = [Collections.Generic.List[System.Text.RegularExpressions.Group]]::new()
+    foreach ($m in [regex]::Matches($Text, '[\w-]+=(?<q>["''])(?<val>@[\s\S]*?)\k<q>')) { $regions.Add($m.Groups['val']) }
+    foreach ($m in [regex]::Matches($Text, '>(?<val>@[\(\{][\s\S]*?)</')) { $regions.Add($m.Groups['val']) }
+    foreach ($region in $regions) {
+        $code = $region.Value.Replace('&quot;', '"').Replace('&#x27;', "'").Replace('&apos;', "'").Replace('&#39;', "'").Replace('&lt;', '<').Replace('&gt;', '>').Replace('&amp;', '&')
+        $startLine = ($Text.Substring(0, $region.Index) -split "`n").Count
+        $state = 'code'; $literalStart = 0; $reported = $false
+        for ($i = 0; $i -lt $code.Length; $i++) {
+            $c = $code[$i]; $next = if ($i + 1 -lt $code.Length) { $code[$i + 1] } else { [char]0 }
+            if ($state -eq 'code') {
+                if ($c -eq '/' -and $next -eq '/') { $state = 'line'; $i++ }
+                elseif ($c -eq '/' -and $next -eq '*') { $state = 'block'; $i++ }
+                elseif (($c -eq '@' -and $next -eq '"') -or ($c -eq '$' -and $next -eq '@') -or ($c -eq '@' -and $next -eq '$')) { $state = 'verbatim'; while ($code[$i] -ne '"') { $i++ } }
+                elseif ($c -eq '"') { $state = 'string'; $literalStart = $i; $reported = $false }
+                elseif ($c -eq "'") { $state = 'char'; $literalStart = $i; $reported = $false }
+            }
+            elseif ($state -eq 'line') { if ($c -eq "`n") { $state = 'code' } }
+            elseif ($state -eq 'block') { if ($c -eq '*' -and $next -eq '/') { $state = 'code'; $i++ } }
+            elseif ($state -eq 'verbatim') { if ($c -eq '"' -and $next -eq '"') { $i++ } elseif ($c -eq '"') { $state = 'code' } }
+            else {
+                $close = if ($state -eq 'string') { '"' } else { "'" }
+                if ($c -eq '\') { $i++ }
+                elseif ($c -eq $close) { $state = 'code' }
+                elseif (($c -eq "`n" -or $c -eq "`r") -and -not $reported) {
+                    $line = $startLine + ($code.Substring(0, $literalStart) -split "`n").Count - 1
+                    $snippet = ($code.Substring($literalStart, [Math]::Min(40, $code.Length - $literalStart)) -replace '\r?\n', '<LF>')
+                    $findings.Add("${Label}:$line $state literal $snippet")
+                    $reported = $true
+                }
+            }
+        }
+    }
+    return $findings.ToArray()
+}
+$literalSamples = @{
+    'string literal across a line' = @{ Text = "<set-variable name=`"x`" value=`"@{ var m = &quot;`r`n[sampled]`r`n&quot;; return m; }`" />"; Flagged = $true }
+    'char literal holding a line break' = @{ Text = "<set-body>@{ return `"a`".TrimEnd('`n'); }</set-body>"; Flagged = $true }
+    'verbatim string across a line' = @{ Text = "<set-body>@{ return @`"one`r`ntwo`"; }</set-body>"; Flagged = $false }
+    'escaped line break in a string' = @{ Text = "<set-variable name=`"x`" value=`"@{ var m = &quot;\n[sampled]\n&quot;; return m.TrimEnd(&#x27;\r&#x27;,&#x27;\n&#x27;); }`" />"; Flagged = $false }
+    'expression code across lines' = @{ Text = "<set-variable name=`"x`" value='@{`r`n    var a = `"b`";`r`n    return a; // `"`r`n}' />"; Flagged = $false }
+}
+foreach ($name in @($literalSamples.Keys | Sort-Object)) {
+    $sample = $literalSamples[$name]
+    $found = @(Get-PolicyLiteralLineBreaks -Text $sample.Text -Label 'sample')
+    Assert "literal line-break detector: $name is $(if ($sample.Flagged) { 'flagged' } else { 'not flagged' })" (($found.Count -gt 0) -eq $sample.Flagged) ($found -join '; ')
+}
+$literalBreaks = @(foreach ($policyFile in @(Get-ChildItem -LiteralPath (Join-Path $root 'infra') -Filter '*.xml' -File)) {
+        Get-PolicyLiteralLineBreaks -Text ([IO.File]::ReadAllText($policyFile.FullName)) -Label ('infra/' + $policyFile.Name)
+    })
+Assert 'every expression in infra/*.xml keeps regular C# string and char literals on one line, as APIM requires' ($literalBreaks.Count -eq 0) ($literalBreaks -join '; ')
+
 $allowedTypesReference = 'Microsoft Learn, Azure API Management policy expressions, .NET Framework types allowed in policy expressions, read 2026-10-07.'
 $allowed = Test-ContentSafetyPolicyAllowedTypes -FragmentText $fragment
 Assert 'allowed-type check uses the Microsoft Learn APIM policy expression type table' ($allowedTypesReference -match 'Microsoft Learn')

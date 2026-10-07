@@ -7,11 +7,8 @@
             <set-variable name="contentSafetySlice" value="@{
                 var unscreenable = false;
                 var truncated = false;
-                var marker = &quot;
-[...content safety sampled...]
-&quot;;
-                void addPart(System.Collections.Generic.List&lt;string&gt; list, string value) { var s = value == null ? &quot;&quot; : value.TrimEnd(&#x27;&#x27;,&#x27;
-&#x27;); if (!String.IsNullOrEmpty(s)) { list.Add(s); } }
+                var marker = &quot;\n[...content safety sampled...]\n&quot;;
+                void addPart(System.Collections.Generic.List&lt;string&gt; list, string value) { var s = value == null ? &quot;&quot; : value.TrimEnd(&#x27;\r&#x27;,&#x27;\n&#x27;); if (!String.IsNullOrEmpty(s)) { list.Add(s); } }
                 void collectText(JToken token, System.Collections.Generic.List&lt;string&gt; list) {
                     if (token == null) { return; }
                     if (token.Type == JTokenType.String) { addPart(list, token.ToString()); return; }
@@ -36,8 +33,7 @@
                 string fairJoin(System.Collections.Generic.List&lt;string&gt; parts, int budget) {
                     if (parts.Count == 0) { return &quot;&quot;; }
                     var share = Math.Max(1, budget / parts.Count); var joined = new System.Text.StringBuilder();
-                    for (var i = 0; i &lt; parts.Count; i++) { if (i &gt; 0) { joined.Append(&quot;
-&quot;); } joined.Append(sample(parts[i], share)); }
+                    for (var i = 0; i &lt; parts.Count; i++) { if (i &gt; 0) { joined.Append(&quot;\n&quot;); } joined.Append(sample(parts[i], share)); }
                     var result = joined.ToString(); if (result.Length &gt; budget) { truncated = true; result = sample(result, budget); }
                     return result;
                 }
@@ -87,8 +83,7 @@
                 if (unscreenable) { return new JObject(new JProperty(&quot;unscreenable&quot;, true), new JProperty(&quot;userPrompt&quot;, &quot;&quot;), new JProperty(&quot;documents&quot;, new JArray()), new JProperty(&quot;analyzeText&quot;, &quot;&quot;), new JProperty(&quot;truncated&quot;, truncated), new JProperty(&quot;emptyTextSlice&quot;, true), new JProperty(&quot;fabricatedHistoryLimit&quot;, false)).ToString(Newtonsoft.Json.Formatting.None); }
                 var userPrompt = fairJoin(userParts, 10000);
                 var documents = new JArray();
-                if (documentParts.Count &gt; 0) { if (documentParts.Count &lt;= 5) { var share = Math.Max(1, 10000 / documentParts.Count); foreach (var p in documentParts) { documents.Add(sample(p, share)); } } else { var bucketCount = 5; var share = Math.Max(1, 10000 / bucketCount); for (var b = 0; b &lt; bucketCount; b++) { var bucket = new System.Text.StringBuilder(); for (var i = b; i &lt; documentParts.Count; i += bucketCount) { if (bucket.Length &gt; 0) { bucket.Append(&quot;
-&quot;); } bucket.Append(documentParts[i]); } documents.Add(sample(bucket.ToString(), share)); } truncated = true; } }
+                if (documentParts.Count &gt; 0) { if (documentParts.Count &lt;= 5) { var share = Math.Max(1, 10000 / documentParts.Count); foreach (var p in documentParts) { documents.Add(sample(p, share)); } } else { var bucketCount = 5; var share = Math.Max(1, 10000 / bucketCount); for (var b = 0; b &lt; bucketCount; b++) { var bucket = new System.Text.StringBuilder(); for (var i = b; i &lt; documentParts.Count; i += bucketCount) { if (bucket.Length &gt; 0) { bucket.Append(&quot;\n&quot;); } bucket.Append(documentParts[i]); } documents.Add(sample(bucket.ToString(), share)); } truncated = true; } }
                 var analyze = fairJoin(analyzeParts, 10000);
                 return new JObject(new JProperty(&quot;unscreenable&quot;, false), new JProperty(&quot;userPrompt&quot;, userPrompt), new JProperty(&quot;documents&quot;, documents), new JProperty(&quot;analyzeText&quot;, analyze), new JProperty(&quot;truncated&quot;, truncated), new JProperty(&quot;emptyTextSlice&quot;, String.IsNullOrEmpty(analyze)), new JProperty(&quot;fabricatedHistoryLimit&quot;, fabricated)).ToString(Newtonsoft.Json.Formatting.None);
             }" />
