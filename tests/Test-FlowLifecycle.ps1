@@ -78,9 +78,12 @@ try {
     $global:Migration2AzCalls.Clear()
     $changedFragmentDiscovery = [pscustomobject]@{ resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; location = 'eastus2'; sku = 'BasicV2'; policy = $currentPolicy; namedValues = $allNv; policyFragments = @([pscustomobject]@{ name='content-safety-screening'; value='<fragment><choose /></fragment>' }) }
     $changedFragmentApplyPlan = Get-ClaudeFlowMigrationPlan -Record $record -Discovery $changedFragmentDiscovery
-    $changedFragmentApplyPlan.Data.Target.SubscriptionId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
-    $changedFragmentApplyPlan.Data.SnapshotPath = 'unused.json'; $changedFragmentApplyPlan.Data.SnapshotTaken = $true
-    $thrown = Get-Thrown { Invoke-ClaudeFlowMigration -Record $record.PSObject.Copy() -Plan $changedFragmentApplyPlan | Out-Null }
+    if (Test-ClaudeFlowPlanIsNoop $changedFragmentApplyPlan) { $thrown = 'the plan was a no-op' }
+    else {
+        $changedFragmentApplyPlan.Data.Target.SubscriptionId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        $changedFragmentApplyPlan.Data.SnapshotPath = 'unused.json'; $changedFragmentApplyPlan.Data.SnapshotTaken = $true
+        $thrown = Get-Thrown { Invoke-ClaudeFlowMigration -Record $record.PSObject.Copy() -Plan $changedFragmentApplyPlan | Out-Null }
+    }
     $changedCallsText = $global:Migration2AzCalls -join "`n"
     Assert 'policy migration applies PUT for an existing fragment whose canonical content differs' (-not $thrown -and $changedCallsText -match '/policyFragments/content-safety-screening' -and $changedCallsText -match '/apis/claude-foundry/policies/policy') "$thrown | $changedCallsText"
     $global:Migration2AzCalls.Clear()
@@ -187,7 +190,11 @@ Assert 'the update fingerprint differs for two different live fragment contents 
 $desiredFragmentHash = Get-ClaudeFlowLifecycleCanonicalXmlHash -XmlText $desiredFragment
 $liveFragmentHash = Get-ClaudeFlowLifecycleCanonicalXmlHash -XmlText '<fragment><choose /></fragment>'
 $fingerprinted = ConvertTo-ClaudeFlowCanonical @($differentFragmentPlan)
-Assert 'the fingerprinted plan data holds the exact desired and live fragment hashes' ($desiredFragmentHash -and $liveFragmentHash -and [string]$differentFragmentPlan.Data.DesiredPolicyFragmentHashes['content-safety-screening'] -eq $desiredFragmentHash -and [string]$differentFragmentPlan.Data.LivePolicyFragmentHashes['content-safety-screening'] -eq $liveFragmentHash -and $fingerprinted.Contains($desiredFragmentHash) -and $fingerprinted.Contains($liveFragmentHash)) ($differentFragmentPlan.Data | ConvertTo-Json -Depth 4 -Compress)
+$plannedDesiredHashes = if ($differentFragmentPlan.Data) { $differentFragmentPlan.Data.DesiredPolicyFragmentHashes } else { $null }
+$plannedLiveHashes = if ($differentFragmentPlan.Data) { $differentFragmentPlan.Data.LivePolicyFragmentHashes } else { $null }
+$plannedDesiredHash = if ($plannedDesiredHashes) { [string]$plannedDesiredHashes['content-safety-screening'] } else { '' }
+$plannedLiveHash = if ($plannedLiveHashes) { [string]$plannedLiveHashes['content-safety-screening'] } else { '' }
+Assert 'the fingerprinted plan data holds the exact desired and live fragment hashes' ($desiredFragmentHash -and $liveFragmentHash -and $plannedDesiredHash -eq $desiredFragmentHash -and $plannedLiveHash -eq $liveFragmentHash -and $fingerprinted.Contains($desiredFragmentHash) -and $fingerprinted.Contains($liveFragmentHash)) ($differentFragmentPlan.Data | ConvertTo-Json -Depth 4 -Compress)
 # P102 council round 2 (Coder): a fragment whose content could not be read, or that a discovery names without its
 # content, is not current: the plan writes the release content and the check fails until a read returns content
 # that matches.

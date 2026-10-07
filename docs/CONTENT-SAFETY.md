@@ -22,6 +22,45 @@ P102 adds optional request screening in API Management before a Claude Messages 
 
 The default threshold is `2`, matching the first nonzero severity in `FourSeverityLevels`.
 
+## Change a setting
+
+The fragment reads five API Management named values, which are name/value pairs that policies reference ([Microsoft Learn, read 2026-10-07](https://learn.microsoft.com/en-us/azure/api-management/api-management-howto-properties)). Changing a value changes neither the API policy nor the fragment.
+
+| Named value | Accepted values | Default |
+|---|---|---|
+| `content-safety-mode` | `off`, `audit` or `block`. The fragment trims and lowercases the value, and any other value enforces as `block`. | `off`. `-DeployContentSafety` writes `-ContentSafetyMode`, whose default is `block`. |
+| `content-safety-threshold` | `0`-`6`. The fragment clamps other whole numbers to 0-6 and reads any other text as `2`. | `2` |
+| `content-safety-timeout-seconds` | `1`-`30`, the range `infra/main.bicep` accepts. | `10` |
+| `content-safety-truncate-mode` | `newest` or `block`. Any other value acts as `block`. | `newest` |
+| `content-safety-endpoint` | The endpoint of the Content Safety account that the gateway's managed identity calls. | The deployed account's endpoint. The update flow creates it as `https://content-safety-off.invalid`, which is not called while the mode is `off`. |
+
+Read and change a value with the Azure CLI, using the gateway's resource group and API Management name:
+
+```text
+az apim nv show   -g <resource-group> --service-name <apim-name> --named-value-id content-safety-mode --query value -o tsv
+az apim nv update -g <resource-group> --service-name <apim-name> --named-value-id content-safety-mode --value audit -o none
+az apim nv update -g <resource-group> --service-name <apim-name> --named-value-id content-safety-threshold --value 4 -o none
+az apim nv update -g <resource-group> --service-name <apim-name> --named-value-id content-safety-truncate-mode --value block -o none
+```
+
+`audit` and `block` call the account named by `content-safety-endpoint`. On a gateway whose endpoint is still `https://content-safety-off.invalid`, no account answers, so block mode returns 503 for every screened request. Running `Install-ClaudeGateway.ps1` with `-DeployContentSafety` creates the account, the APIM role assignment and the endpoint value.
+
+### Installer re-runs
+
+`Install-ClaudeGateway.ps1` reads the five values before it deploys `infra/main.bicep` and passes them back to the template:
+
+| Re-run | Mode | Endpoint, threshold and timeout | Truncate mode |
+|---|---|---|---|
+| Without `-DeployContentSafety` or `-ContentSafetyMode` | Kept, lowercased | Kept | Kept. The template writes `newest`, then the installer writes the previous value back. |
+| With `-ContentSafetyMode <mode>` only | `<mode>` | Kept | Kept |
+| With `-DeployContentSafety` | `-ContentSafetyMode`, default `block` | The created account's endpoint, threshold `2`, timeout `10` | `newest` |
+
+A kept value has to be one the template accepts: mode `off`, `audit` or `block`, threshold 0-6 and timeout 1-30. Another value, for example threshold `8`, which the fragment itself clamps to 6, stops the re-run before the template deploys.
+
+## Cost
+
+Content Safety bills Standard text records of up to 1,000 characters each; a longer input counts one record for each 1,000 characters ([Azure pricing, read 2026-10-07](https://azure.microsoft.com/en-us/pricing/details/content-safety/)). A screened request uses 2 records when each call sends under 1,000 characters, and 30-34 records when the `analyze`, prompt and document budgets are full. At the list price of USD 0.375 per 1,000 records read on 2026-10-06, that is USD 0.75 to 12.75 per 1,000 requests. Tool descriptions count toward the `analyze` and document budgets. [ADR-0055](adr/0055-content-safety-screening.md#amendment-2026-10-07-p102-council-round-2-prompt-shields-calls-and-text-records) has the per-row estimate and its assumptions.
+
 ## Deployment
 
 `infra/main.bicep` always creates the APIM policy fragment and named values so the policy shape is stable. The Azure AI Content Safety account is created only when `deployContentSafety=true`. The module `infra/content-safety.bicep` creates a Cognitive Services account with `kind: ContentSafety`, SKU `S0`, a custom subdomain, disabled local authentication, and a Cognitive Services User role assignment for the APIM managed identity. Microsoft Entra authentication for AI services requires a custom subdomain and Microsoft recommends disabling local authentication when using Entra ID ([Microsoft Learn, read 2026-10-06](https://learn.microsoft.com/en-us/azure/ai-services/authentication)).

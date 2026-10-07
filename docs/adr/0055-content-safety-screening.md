@@ -88,7 +88,7 @@ The Azure Retail Prices API query on 2026-10-06 was:
 https://prices.azure.com/api/retail/prices?$filter=serviceName eq 'Foundry Tools' and productName eq 'Content Safety' and skuName eq 'Standard' and meterName eq 'Standard Text Records'
 ```
 
-It returned USD 0.375 per 1,000 Standard Text Records in `eastus2` and the same public-cloud price for the listed commercial regions. P102 assumes one text record per Content Safety text API call until Cost Management confirms the meter. With one `shieldPrompt` call and one `analyze` call per screened Claude request, the list-price estimate is:
+It returned USD 0.375 per 1,000 Standard Text Records in `eastus2` and the same public-cloud price for the listed commercial regions. The first estimate assumed one text record per Content Safety text API call and one `shieldPrompt` call and one `analyze` call per screened Claude request. The [council round 2 amendment](#amendment-2026-10-07-p102-council-round-2-prompt-shields-calls-and-text-records) replaces both assumptions with the published text-record size and the conditional Prompt Shields call. The first estimate was:
 
 ```text
 monthly_content_safety_usd = N requests * 2 records/request * 0.375 / 1000
@@ -179,7 +179,7 @@ The Security council found that raw mode values, malformed 2xx Content Safety re
 
 P102 now normalizes `content-safety-mode` once with trim and invariant lowercase. `off` skips screening and tracing, `audit` forwards after screening, and any other value enforces like `block`. The threshold named value is parsed with `int.TryParse`, clamped to 0-6, and defaults to 2 when parsing fails.
 
-Content Safety 2xx responses are treated as malformed unless `text:analyze` returns a `categoriesAnalysis` array, Prompt Shields returns `userPromptAnalysis`, and `documentsAnalysis` has the same count as the documents sent. Malformed responses fail closed with 503 in block mode and forward with error trace metadata in audit mode.
+Content Safety 2xx responses are treated as malformed unless `text:analyze` returns a `categoriesAnalysis` array, Prompt Shields returns `userPromptAnalysis`, and `documentsAnalysis` has the same count as the documents sent. The council round 2 amendment limits the `userPromptAnalysis` requirement to a request that sent a non-empty `userPrompt`. Malformed responses fail closed with 503 in block mode and forward with error trace metadata in audit mode.
 
 The screened slice now includes plain-text document blocks in the newest user message, assistant prefill after that message, tool descriptions, and plain-text document blocks inside tool results. Caller-written text is sent to Prompt Shields `userPrompt`; tool descriptions, tool results and document text are sent as Prompt Shields `documents`; all screened text is sent to harm analysis. Non-text image, PDF, URL and base64 document sources remain documented limits.
 
@@ -188,12 +188,29 @@ The default truncation mode samples the head and tail of each oversized item rat
 The `content-safety-truncate-mode` named value is part of the contract. `newest` is the deployment default and means head/tail sampling. `block` means any oversized screened item or over-limit document set is `unscreenable`; block mode returns the existing Anthropic-style 400 response, and audit mode forwards with an `unscreenable` trace. Unknown truncation-mode values are treated as `block`.
 
 The update flow now treats policy fragment content as part of the deployed policy. Discovery reads fragment raw XML through ARM, canonicalizes live and template XML without preserving whitespace, and plans a fragment PUT when hashes differ. The plan fingerprint includes the fragment hashes, so an approved plan is tied to the fragment bytes it reviewed.
+
+### Amendment 2026-10-07 (P102 council round 2): Prompt Shields calls and text records
+
+A live probe on 2026-10-07 (`text:shieldPrompt`, api-version `2024-09-01`) returned `documentsAnalysis` and no `userPromptAnalysis` for an empty `userPrompt` with one document, and 400 `InvalidRequestBody` for an empty `userPrompt` with no documents ([P102 status](../status/P102.md#lead-audit-fixes-and-live-runs-13-21-2026-10-07)). The fragment therefore calls Prompt Shields only when the screened slice has a non-empty `userPrompt` or at least one document, and requires `userPromptAnalysis` only when it sent a non-empty `userPrompt`. `documentsAnalysis` still needs one entry per document sent, and `text:analyze` still needs `categoriesAnalysis`.
+
+A screened request makes no Content Safety call when its screened text is empty, one `analyze` call when it has screened text but no `userPrompt` and no document (for example a system prompt with an image-only user turn), and one `shieldPrompt` call and one `analyze` call otherwise.
+
+The Azure pricing page defines a Standard text record as up to 1,000 characters, measured in Unicode code points, and counts a longer text input as one record for each 1,000 characters: 7,500 characters are 8 records ([Azure pricing, read 2026-10-07][content-safety-pricing]). This replaces the one-record-per-call assumption (U147). `analyze` sends at most 10,000 characters, so it uses 1-10 records. Prompt Shields sends a `userPrompt` of at most 10,000 characters and at most five documents of 10,000 characters in total. The pricing page does not say whether the prompt and each document count as separate inputs (U164); counted separately, one Prompt Shields call uses at most 24 records.
+
+| Screened request | Records | List price per 1,000 requests |
+|---|---|---|
+| Under 1,000 characters to each call | 2 | USD 0.75 |
+| Full `analyze` budget, `userPrompt` under 1,000 characters, no documents | 11 | USD 4.13 |
+| Full `analyze` and document budgets, `userPrompt` under 1,000 characters | 21-25 | USD 7.88-9.38 |
+| Full `analyze`, `userPrompt` and document budgets | 30-34 | USD 11.25-12.75 |
+
+Tool descriptions are Prompt Shields documents and part of the `analyze` text, so a request with long tool descriptions is in the third or fourth row. The trace does not record characters per call, so the share of requests in each row is not measured (U164).
 ## Consequences
 
 - Content Safety is enforced at the gateway before Foundry sees blocked content in `block` mode.
 - The built-in APIM policy remains a reference point, but P102 implements a custom shape because the spike found Anthropic Messages gaps.
-- The request adds two Content Safety calls in `block` and `audit` modes. The first measured added latency is 711-2,220 ms for passed requests.
-- Long Claude Code conversations remain usable, but only the system prompt and newest user turn are screened. Fabricated earlier turns are a documented limit.
+- A screened request adds up to two Content Safety calls in `block` and `audit` modes, billed by characters: USD 0.75 to 12.75 per 1,000 requests at list price ([council round 2 amendment](#amendment-2026-10-07-p102-council-round-2-prompt-shields-calls-and-text-records)). The first measured added latency is 711-2,220 ms for passed requests.
+- Long Claude Code conversations remain usable, but only the system prompt, tool descriptions, the newest user turn and an assistant prefill after it are screened. Fabricated earlier turns are a documented limit.
 - Operators can turn the feature to `audit` or `off` by named value. Changing categories beyond the four standard categories is out of scope for P102.
 - A new component and data flow enter the architecture: APIM calls Azure AI Content Safety with its managed identity before calling Foundry. The implementation stage must update the architecture diagram source under `docs/architecture/`, render it, inspect the image and update `docs/ARCHITECTURE.md`.
 
@@ -203,12 +220,13 @@ The update flow now treats policy fragment content as part of the deployed polic
 - A Claude Code-shaped long conversation is refused because older conversation context exceeds 10,000 characters.
 - A harmful newest `system`, newest user text, newest user text block or newest `tool_result` reaches Foundry in `block` mode.
 - The KQL evidence contains prompt text or snippets.
-- Cost Management shows a different text-record multiplier than two records per screened Claude request.
+- Cost Management shows text-record quantities outside the per-request range in the council round 2 amendment.
 
 [analyze-text]: https://learn.microsoft.com/en-us/rest/api/contentsafety/text-operations/analyze-text?view=rest-contentsafety-2024-09-01
 [apim-llm-content-safety]: https://learn.microsoft.com/en-us/azure/api-management/llm-content-safety-policy
 [cognitive-account-bicep]: https://learn.microsoft.com/en-us/azure/templates/microsoft.cognitiveservices/accounts
 [cognitive-auth]: https://learn.microsoft.com/en-us/azure/ai-services/authentication
+[content-safety-pricing]: https://azure.microsoft.com/en-us/pricing/details/content-safety/
 [content-safety-regions]: https://learn.microsoft.com/en-us/azure/ai-services/content-safety/region-availability
 [foundry-claude-hosting]: https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/claude-models-hosting-comparison
 [include-fragment]: https://learn.microsoft.com/en-us/azure/api-management/include-fragment-policy

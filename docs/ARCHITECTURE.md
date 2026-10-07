@@ -136,15 +136,22 @@ Source: [02-request.json](architecture/02-request.json). The README's
    is non-empty.
    `entitlement-source` selects `named-value` or `projection`. Entitlement, tier and the
    requested model are checked before Foundry is called.
-3. **Serve.** `authentication-managed-identity` obtains the gateway's Foundry token.
+3. **Screen (optional).** With `content-safety-mode` set to `audit` or `block`, the
+   [`content-safety-screening`](../infra/content-safety-screening.xml) fragment runs after
+   entitlement and before the budgets. It sends the system prompt, tool descriptions, the
+   newest user turn and an assistant prefill to Azure AI Content Safety with the gateway's
+   managed identity. Block mode returns 403 for detected content, 503 when Content Safety
+   fails and 400 for a body it cannot read ([Content Safety](CONTENT-SAFETY.md),
+   [ADR-0055](adr/0055-content-safety-screening.md)).
+4. **Serve.** `authentication-managed-identity` obtains the gateway's Foundry token.
    The policy replaces `Authorization` and deletes `x-api-key`. The existing customer
    Foundry deployment receives the gateway identity, not the developer token.
-4. **Meter.** The built-in `ApiManagementGatewayLlmLog` records request-level token usage,
+5. **Meter.** The built-in `ApiManagementGatewayLlmLog` records request-level token usage,
    model and streaming metadata. It is not the custom-metric budget counter.
-5. **Attribute.** The outbound `claude-chargeback` trace supplies the user, tier, assigned
+6. **Attribute.** The outbound `claude-chargeback` trace supplies the user, tier, assigned
    unit or team and raw client string in `AppTraces`. The trace's `Properties.RequestId`
    joins the LLM log's `CorrelationId`. Application Insights operation ids are not that key.
-6. **Observe.** Saved functions, workbooks and optional consumers read the Log Analytics
+7. **Observe.** Saved functions, workbooks and optional consumers read the Log Analytics
    data. Ingestion is asynchronous; a successful request is not an immediately complete
    reporting window.
 

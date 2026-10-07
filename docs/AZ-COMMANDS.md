@@ -56,7 +56,7 @@ References use repository paths and line numbers from the source scripts that th
 
 ## Out of scope
 
-FinOps beyond the gateway's named values (AUM, Turnstile, chargeback reports, USD reconciler, Grafana), business units and teams, workstation setup scripts, the network WAF edge, backup/restore/update, and analytics and data deletion.
+FinOps beyond the gateway's named values (AUM, Turnstile, chargeback reports, USD reconciler, Grafana), business units and teams, optional Azure AI Content Safety request screening, workstation setup scripts, the network WAF edge, backup/restore/update, and analytics and data deletion.
 
 - `bu-registry` — not covered: business units and teams are out of scope for this guide.
 - `bu-members` — not covered: business units and teams are out of scope for this guide.
@@ -65,6 +65,11 @@ FinOps beyond the gateway's named values (AUM, Turnstile, chargeback reports, US
 - `bu-unassigned` — not covered: business-unit assignment behavior is out of scope for this guide.
 - `usd-budgets` — not covered: USD reconciler and FinOps budget projection are out of scope.
 - `usd-budget-state` — not covered: USD reconciler state is out of scope.
+- `content-safety-mode` — not covered: Content Safety screening is optional; [CONTENT-SAFETY.md](CONTENT-SAFETY.md#change-a-setting) lists its named values and the commands that change them.
+- `content-safety-endpoint` — not covered: Content Safety screening is optional; see [CONTENT-SAFETY.md](CONTENT-SAFETY.md#change-a-setting).
+- `content-safety-threshold` — not covered: Content Safety screening is optional; see [CONTENT-SAFETY.md](CONTENT-SAFETY.md#change-a-setting).
+- `content-safety-timeout-seconds` — not covered: Content Safety screening is optional; see [CONTENT-SAFETY.md](CONTENT-SAFETY.md#change-a-setting).
+- `content-safety-truncate-mode` — not covered: Content Safety screening is optional; see [CONTENT-SAFETY.md](CONTENT-SAFETY.md#change-a-setting).
 - Removing gateway artifacts from a reused APIM is out of scope: API `claude-foundry`, named values, logger `appinsights`, diagnostics, diagnostic setting `claude-llm-logs`, `appi-<prefix>` and `log-<prefix>`.
 
 ## 1. Variables, prerequisites and discovery
