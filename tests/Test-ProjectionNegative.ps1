@@ -67,6 +67,10 @@ function Run-Suite($suite) {
             # for that, and --test-force-exit still stops a mutant that leaves a handle open.
             $cli = @('apply-projection-cli.test.mjs', 'check-admission-cli.test.mjs', 'job-settings.test.mjs', 'load.test.mjs')
             $tests = @(Get-ChildItem -LiteralPath 'resolver/test', 'sync/test' -Filter '*.test.mjs' -File)
+            $misplaced = @($tests | Where-Object {
+                ($_.Name -in $cli) -ne ([IO.File]::ReadAllText($_.FullName) -match "from\s+['""](?:node:)?child_process['""]")
+            } | ForEach-Object Name)
+            if ($misplaced.Count) { throw "The long-timeout group must list exactly the projection test files that start processes: $($misplaced -join ', ')." }
             $unit = @($tests | Where-Object Name -notin $cli | ForEach-Object FullName)
             $processes = @($tests | Where-Object Name -in $cli | ForEach-Object FullName)
             if ($processes.Count -ne $cli.Count) { throw 'A long-timeout projection test file is missing.' }

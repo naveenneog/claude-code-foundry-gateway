@@ -118,21 +118,9 @@ Assert 'a failed projection baseline preserves the diagnostic instead of suppres
     $projection -match '(?s)if \(\(Run-Suite \$suite\) -ne 0\) \{\s+Get-Content -LiteralPath \$suiteLog \| Write-Host\s+throw' -and
     $projection -match 'node --test --test-timeout=1500 --test-reporter=tap .+>\s*\$suiteLog' -and
     $projection -match 'node --test --test-timeout=120000 --test-force-exit --test-reporter=tap @processes \*>>\s*\$suiteLog' -and
-    $projection -match '\$processes = @\(\$tests \| Where-Object Name -in \$cli \| ForEach-Object FullName\)')
-# Node 22 applies --test-timeout to a whole file, and a file that starts processes needs more than 1.5 s on a
-# busy hosted runner (job-settings.test.mjs timed out there at 1,501 ms), so it runs in the long-timeout group.
-$repoRoot = Split-Path $PSScriptRoot -Parent
-$processGroup = [regex]::Match($projection, '(?m)^\s*\$cli = @\((?<names>[^)]*)\)')
-$processNames = @([regex]::Matches($processGroup.Groups['names'].Value, "'([^']+)'") | ForEach-Object { $_.Groups[1].Value })
-$startsProcesses = @(foreach ($package in 'resolver', 'sync') {
-    Get-ChildItem -LiteralPath (Join-Path $repoRoot "$package\test") -Filter '*.test.mjs' -File |
-        Where-Object { [IO.File]::ReadAllText($_.FullName) -match "from\s+['""](?:node:)?child_process['""]" } |
-        ForEach-Object Name
-})
-$inUnitGroup = @($startsProcesses | Where-Object { $_ -cnotin $processNames })
-Assert 'every projection test file that starts processes runs in the long-timeout group' (
-    $processGroup.Success -and $startsProcesses -ccontains 'apply-projection-cli.test.mjs' -and -not $inUnitGroup.Count
-) "in the 1.5 s unit group: $($inUnitGroup -join ', ')"
+    $projection -match '\$processes = @\(\$tests \| Where-Object Name -in \$cli \| ForEach-Object FullName\)' -and
+    $projection.Contains('if ($misplaced.Count) { throw "The long-timeout group must list exactly the projection test files that start processes')
+)
 
 $workflowPath = Join-Path (Split-Path $PSScriptRoot -Parent) '.github\workflows\test-all.yml'
 Assert 'the hosted workflow exists' (Test-Path -LiteralPath $workflowPath)
