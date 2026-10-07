@@ -34,12 +34,12 @@ Owner-run command for the reference proof:
 $env:AZURE_CONFIG_DIR = 'C:\path\to\isolated\azure-profile'
 ./scripts/Test-ClaudeLiveContentSafety.ps1 `
   -UseCurrentAzLogin `
-  -SubscriptionId e839ff0f-532b-4828-a2b3-8c9a1b719d85 `
+  -SubscriptionId <subscription-id> `
   -Location eastus2 `
   -NamePrefix p102live<unique> `
   -RunId p102live<unique> `
-  -FoundryAccount ai-contosohub530569751908 `
-  -FoundryResourceGroup rg-contosohub `
+  -FoundryAccount <foundry-account> `
+  -FoundryResourceGroup <foundry-resource-group> `
   -PublisherEmail ops@example.com `
   -Teardown
 ```
@@ -83,12 +83,12 @@ $env:AZURE_CONFIG_DIR = 'C:\path\to\isolated\azure-profile'
 $run = 'p102up' + (Get-Date -Format yyyyMMddHHmm)
 ./scripts/Test-ClaudeLiveContentSafety.ps1 `
   -UseCurrentAzLogin `
-  -SubscriptionId e839ff0f-532b-4828-a2b3-8c9a1b719d85 `
+  -SubscriptionId <subscription-id> `
   -Location eastus2 `
   -NamePrefix $run `
   -RunId $run `
-  -FoundryAccount ai-contosohub530569751908 `
-  -FoundryResourceGroup rg-contosohub `
+  -FoundryAccount <foundry-account> `
+  -FoundryResourceGroup <foundry-resource-group> `
   -PublisherEmail ops@example.com `
   -UpgradeFrom C:\path\to\p100-checkout `
   -Teardown

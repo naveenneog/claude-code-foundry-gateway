@@ -15,7 +15,7 @@ function Assert($label, $condition, $detail = '') {
 }
 
 # The reference deployment's names belong only in this detector, never runtime defaults.
-$reference = @('rg-contosohub', 'apim-claude-gw-fzgql9', 'ai-contosohub530569751908', 'log-claude-gw-fzgql9', 'appi-claude-gw-fzgql9')
+$reference = @('rg-contosohub', 'apim-claude-gw-fzgql9', 'ai-contosohub530569751908', 'log-claude-gw-fzgql9', 'appi-claude-gw-fzgql9', 'e839ff0f-532b-4828-a2b3-8c9a1b719d85', '16b3c013')
 $allowed = @('tests/Test-NoDeploymentValues.ps1')
 
 function Find-Reference([string[]]$Paths) {
@@ -34,6 +34,12 @@ $code = @(Get-ChildItem (Join-Path $root 'scripts'), (Join-Path $root 'tests') -
     @(Get-ChildItem $root -File -Filter *.ps1) | ForEach-Object { $_.FullName }
 $found = @(Find-Reference $code)
 Assert 'no script or test names the reference deployment' (-not $found.Count) ($found -join '; ')
+
+$base = (& git -C $root merge-base HEAD origin/main 2>$null)
+$changed = if ($base) { @(& git -C $root diff --name-only $base HEAD 2>$null) } else { @() }
+$docs = @($changed | Where-Object { $_ -match '^docs/' -and $_ -match '\.md$' } | ForEach-Object { Join-Path $root ($_.Replace('/', '\')) } | Where-Object { Test-Path -LiteralPath $_ })
+$foundDocs = @(Find-Reference $docs)
+Assert 'no changed public documentation names the reference deployment identifiers' (-not $foundDocs.Count) ($foundDocs -join '; ')
 
 # The check has been seen to fail: a planted name in a copy is found.
 $plant = Join-Path ([IO.Path]::GetTempPath()) "nodeploy-$PID.ps1"
