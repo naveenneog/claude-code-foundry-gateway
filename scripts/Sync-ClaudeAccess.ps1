@@ -204,6 +204,7 @@ $seen = @{}
 # Every value is resolved and checked against the 4,096-character limit before the first write, so a list
 # that does not fit leaves every named value as it was, rather than some lists refreshed beside others stale.
 $pendingWrites = [Collections.Generic.List[object]]::new()
+$skippedTierWrites = [Collections.Generic.List[string]]::new()
 foreach ($t in $tiers) {
     $members = @(Get-GroupMemberOids -GroupName $t.Group -Token $graphToken)
 
@@ -249,6 +250,7 @@ foreach ($t in $tiers) {
             Write-Host "  If the group really is empty, re-run with -AllowEmpty." -ForegroundColor DarkGray
             Write-Host "  Otherwise check the group name and that you can read its membership." -ForegroundColor DarkGray
             Write-Host ''
+            $skippedTierWrites.Add($t.Name)
             continue
         }
     }
@@ -343,7 +345,12 @@ if ($targetUserOid) {
     $premiumList = if ($WhatIf) { [string]@($pendingWrites | Where-Object Id -eq 'allow-premium' | Select-Object -First 1).Value } else { Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'allow-premium' -FailOnError }
     $publishedTier = Get-ClaudeNamedValueTierForUser -UserObjectId $targetUserOid -StandardList $standardList -PremiumList $premiumList
     Write-Host "Developer tier as written: $publishedTier" -ForegroundColor Green
-    Write-Host "Microsoft Graph can report a membership change a few minutes late; if this developer's groups changed just now and the tier is the previous one, run this command again." -ForegroundColor DarkGray
+    if ($skippedTierWrites.Count) {
+        Write-Host "A tier write was skipped by the empty-tier guard; rerun with -AllowEmptyStandard, -AllowEmptyPremium or -AllowEmpty if the group really is empty." -ForegroundColor DarkGray
+    }
+    else {
+        Write-Host "Microsoft Graph can report a membership change a few minutes late; if this developer's groups changed just now and the tier is the previous one, run this command again." -ForegroundColor DarkGray
+    }
     [pscustomobject]@{ published_tier = $publishedTier; user = $targetUserOid }
 }
 

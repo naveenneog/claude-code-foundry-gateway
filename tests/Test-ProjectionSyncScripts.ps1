@@ -217,13 +217,14 @@ function Invoke-NamedValueSyncFixture {
         @{ apimName = 'apim-p98'; resourceGroup = 'rg-p98'; standardGroup = 'record-standard'; premiumGroup = 'record-premium' } |
             ConvertTo-Json -Compress | Set-Content -LiteralPath $recordPath -Encoding UTF8
     }
+    $oids = { param([int]$Count, [string]$Prefix) if ($Count -gt 0) { @(1..$Count | ForEach-Object { $Prefix + ([string]$_).PadLeft(12, '0') }) } else { @() } }
     $directory = @{
-        '10000000-0000-4000-8000-000000000002' = @(1..$PremiumCount | Where-Object { $_ -gt 0 } | ForEach-Object { '40000000-0000-4000-8000-' + ([string]$_).PadLeft(12, '0') })
-        '10000000-0000-4000-8000-000000000001' = @(1..$StandardCount | Where-Object { $_ -gt 0 } | ForEach-Object { '50000000-0000-4000-8000-' + ([string]$_).PadLeft(12, '0') })
-        '10000000-0000-4000-8000-000000000003' = @(1..$StandardCount | Where-Object { $_ -gt 0 } | ForEach-Object { '51000000-0000-4000-8000-' + ([string]$_).PadLeft(12, '0') })
-        '10000000-0000-4000-8000-000000000004' = @(1..$PremiumCount | Where-Object { $_ -gt 0 } | ForEach-Object { '41000000-0000-4000-8000-' + ([string]$_).PadLeft(12, '0') })
-        '10000000-0000-4000-8000-000000000005' = @(1..$StandardCount | Where-Object { $_ -gt 0 } | ForEach-Object { '52000000-0000-4000-8000-' + ([string]$_).PadLeft(12, '0') })
-        '10000000-0000-4000-8000-000000000006' = @(1..$PremiumCount | Where-Object { $_ -gt 0 } | ForEach-Object { '42000000-0000-4000-8000-' + ([string]$_).PadLeft(12, '0') })
+        '10000000-0000-4000-8000-000000000002' = @(& $oids $PremiumCount '40000000-0000-4000-8000-')
+        '10000000-0000-4000-8000-000000000001' = @(& $oids $StandardCount '50000000-0000-4000-8000-')
+        '10000000-0000-4000-8000-000000000003' = @(& $oids $StandardCount '51000000-0000-4000-8000-')
+        '10000000-0000-4000-8000-000000000004' = @(& $oids $PremiumCount '41000000-0000-4000-8000-')
+        '10000000-0000-4000-8000-000000000005' = @(& $oids $StandardCount '52000000-0000-4000-8000-')
+        '10000000-0000-4000-8000-000000000006' = @(& $oids $PremiumCount '42000000-0000-4000-8000-')
     }
     $gatewayLists = @{ 'allow-standard' = $GatewayStandard; 'allow-premium' = $GatewayPremium; 'bu-members' = ',' }
     if ($GatewayGroups) { $gatewayLists['entitlement-groups'] = $GatewayGroups }
@@ -318,6 +319,13 @@ Assert 'Sync-ClaudeAccess -User on named values runs the whole refresh and repor
     -not $CapturedError -and @($nvWrites -match 'allow-premium').Count -ge 1 -and @($nvWrites -match 'allow-standard').Count -ge 1 -and
     $script:P98NvResult.Output -match 'developer tier as written: standard' -and
     $script:P98NvResult.Output -match 'Microsoft Graph can report a membership change a few minutes late') "$CapturedError | output: $($script:P98NvResult.Output) | writes: $($nvWrites -join ' | ')"
+
+Invoke-NamedValueSyncFixture -PremiumCount 1 -StandardCount 0 -GatewayStandard ',50000000-0000-4000-8000-000000000001,' -Parameters @{ Store = 'named-value'; User = '50000000-0000-4000-8000-000000000001' }
+$nvWrites = Get-NamedValueWrites
+Assert 'Sync-ClaudeAccess -User reports the empty-tier guard remedy instead of Graph lag when a tier write is skipped' (
+    -not $CapturedError -and $script:P98NvResult.Output -match 'developer tier as written: standard' -and
+    $script:P98NvResult.Output -match 'rerun with -AllowEmptyStandard, -AllowEmptyPremium or -AllowEmpty' -and
+    $script:P98NvResult.Output -notmatch 'Microsoft Graph can report a membership change') "$CapturedError | output: $($script:P98NvResult.Output) | writes: $($nvWrites -join ' | ')"
 
 Invoke-NamedValueSyncFixture -PremiumCount 1 -StandardCount 1 -GatewayGroups 'standard=10000000-0000-4000-8000-000000000001,premium=10000000-0000-4000-8000-000000000002' -Parameters @{ Store = 'named-value'; User = '40000000-0000-4000-8000-000000000001'; WhatIf = $true }
 $nvWrites = Get-NamedValueWrites

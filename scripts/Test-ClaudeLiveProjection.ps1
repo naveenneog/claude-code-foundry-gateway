@@ -288,7 +288,10 @@ try {
         Invoke-Az @('ad', 'group', 'member', 'remove', '--group', $groupIds[$StandardGroup], '--member-id', $userId) | Out-Null
         $removedAt = Get-Date
         Wait-Membership $groupIds[$StandardGroup] $userId 'false'
-        $removedSync = Invoke-AccessSyncUntilTier -Arguments @{ ResourceGroup = $ResourceGroup; ApimName = $apimName; User = $userId } -ExpectedTier 'none' -ChangedAt $removedAt -Step 'named-value removed sync tier'
+        # This disposable run's standard tier intentionally becomes empty after the removal. The named-value sync
+        # normally refuses to empty a tier that still has listed users, so the live proof must explicitly allow
+        # emptying only the standard tier for this targeted removal.
+        $removedSync = Invoke-AccessSyncUntilTier -Arguments @{ ResourceGroup = $ResourceGroup; ApimName = $apimName; User = $userId; AllowEmptyStandard = $true } -ExpectedTier 'none' -ChangedAt $removedAt -Step 'named-value removed sync tier'
         $removedSeconds = $removedSync.Seconds
         Add-Result 'named-value removed sync lag' $true "$removedSeconds second(s) from membership removal to tier none (U157)"
         Wait-GatewayStatus $url $Model 403 'removed on named values, then targeted sync'

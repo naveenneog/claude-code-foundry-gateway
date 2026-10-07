@@ -23,16 +23,20 @@ $syncStub = Join-Path $work 'Sync-ClaudeAccess.ps1'
     '$global:Live.Synced = $global:Live.Member'
 ) -join "`n"), [Text.UTF8Encoding]::new($false))
 [IO.File]::WriteAllText($syncStub, (@(
-    'param($ResourceGroup, $ApimName, $User)'
+    'param($ResourceGroup, $ApimName, $User, [switch]$AllowEmpty, [switch]$AllowEmptyStandard, [switch]$AllowEmptyPremium)'
     'if ($global:Live.SyncFails) { throw "sync failed by fixture" }'
-    '$global:Live.Calls.Add("sync $ResourceGroup $ApimName -User $User source=$($global:Live.Source) member=$($global:Live.Member)")'
+    '$global:Live.Calls.Add("sync $ResourceGroup $ApimName -User $User source=$($global:Live.Source) member=$($global:Live.Member) AllowEmptyStandard=$AllowEmptyStandard")'
     'if (-not $User) {'
     '    $global:Live.EntitlementGroups = ''standard=00000000-0000-4000-8000-0000000000b1,premium=00000000-0000-4000-8000-0000000000b2'''
     '    if ($global:Live.SyncMentionsOtherStore) { Write-Host "projection should not be named" } else { Write-Host "Syncing Entra group membership -> APIM named values" }'
     '    $global:Live.Synced = $global:Live.Member'
     '    return'
     '}'
-    '$tier = if ($global:Live.AlwaysTier) { [string]$global:Live.AlwaysTier } elseif ($global:Live.SyncTiers.Count) { $next = [string]$global:Live.SyncTiers[0]; $global:Live.SyncTiers.RemoveAt(0); $next } else { if ($global:Live.Member) { ''standard'' } else { ''none'' } }'
+    'if ($global:Live.Source -eq ''named-value'' -and -not $global:Live.Member -and -not $AllowEmpty -and -not $AllowEmptyStandard) {'
+    '    Write-Warning "claude-p98-std resolved to 0 members, but ''allow-standard'' currently entitles 1. Not overwriting."'
+    '    $tier = $(if ($global:Live.Synced) { ''standard'' } else { ''none'' })'
+    '}'
+    'else { $tier = if ($global:Live.AlwaysTier) { [string]$global:Live.AlwaysTier } elseif ($global:Live.SyncTiers.Count) { $next = [string]$global:Live.SyncTiers[0]; $global:Live.SyncTiers.RemoveAt(0); $next } else { if ($global:Live.Member) { ''standard'' } else { ''none'' } } }'
     '$global:Live.Synced = ($tier -eq ''standard'')'
     'if ($global:Live.OmitTierText) { return }'
     'Write-Host "Developer tier as written: $tier"'
@@ -228,6 +232,11 @@ try {
     Assert 'with -MigrateWithUpdate stale named-value tiers are retried until none then standard and the lag seconds are recorded' ($Exit -ne 1 -and
         (CountCalls '^sync rg-p98-live apim-p98live -User 00000000-0000-4000-8000-0000000000aa source=named-value') -eq 4 -and
         $Output -match 'from membership removal to tier none \(U157\)' -and $Output -match 'from membership add to tier standard \(U157\)') "$Exit | $Output | $($global:Live.Calls -join ' ; ')"
+    Reset-Live -Source 'named-value'; $global:Live.Synced = $true; $global:Live.Member = $false
+    $guardOutput = @(& $syncStub -ResourceGroup rg-p98-live -ApimName apim-p98live -User $user *>&1)
+    $guardTier = @($guardOutput | Where-Object { $_ -and $_.PSObject.Properties['published_tier'] } | Select-Object -Last 1).published_tier
+    $guardText = (@($guardOutput) | ForEach-Object { if ($_ -is [Management.Automation.WarningRecord]) { $_.Message } elseif ($_ -is [Management.Automation.InformationRecord]) { [string]$_.MessageData } elseif ($_ -is [string]) { $_ } }) -join "`n"
+    Assert 'the named-value sync stub models the empty-tier guard without AllowEmptyStandard' ($guardTier -eq 'standard' -and $guardText -match 'resolved to 0 members.*Not overwriting') "tier=$guardTier output=$guardText"
     Reset-Live -Source 'named-value'; $global:Live.AlwaysTier = 'standard'; Invoke-Verifier @{ MigrateWithUpdate = $true; UpdatePath = $updateStub; ChangeWaitSeconds = 60; PollSeconds = 30 }
     Assert 'with -MigrateWithUpdate a named-value tier that never catches up fails with the last printed tier' ($Exit -eq 1 -and $Output -match 'last printed tier standard' -and
         (At '^update plan') -lt 0 -and (At '^az group delete --name rg-p98-live') -ge 0) "$Exit | $Output | $($global:Live.Calls -join ' ; ')"
