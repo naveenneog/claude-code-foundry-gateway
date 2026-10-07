@@ -48,6 +48,8 @@ $updateStub = Join-Path $work 'Update-ClaudeGateway.ps1'
     '}'
     '$global:Live.Calls.Add("update apply $ResourceGroup $ApimName fp=$ApprovedPlanFingerprint")'
     'if ($ApprovedPlanFingerprint -ne (''f'' * 64)) { throw ''Approved plan fingerprint does not match.'' }'
+    'if ($global:Live.UpdateApplyCreatesResolverApp -and -not @($global:Live.AppListResults).Count) { $global:Live.AppListResults = @(@{ appId = ''00000000-0000-4000-8000-0000000000d1''; displayName = ''claude-projection-resolver-p98live'' }) }'
+    'if ($global:Live.UpdateApplyFailsAfterApp) { throw ''update apply failed after resolver app creation'' }'
     '$global:Live.Source = ''projection''; $global:Live.EntitlementGroups = ''standard=00000000-0000-4000-8000-0000000000b1,premium=00000000-0000-4000-8000-0000000000b2'''
 ) -join "`n"), [Text.UTF8Encoding]::new($false))
 $user = '00000000-0000-4000-8000-0000000000aa'
@@ -74,6 +76,9 @@ function Reset-Live([string]$Source = 'projection', [bool]$ResourceGroupExists =
         UpdateActions = @('Create Microsoft.DocumentDB/databaseAccounts cosmos-p98live')
         UpdateBlocked = $false
         EntitlementGroups = ''
+        AppListResults = @()
+        UpdateApplyCreatesResolverApp = $false
+        UpdateApplyFailsAfterApp = $false
         SyncFails = $false
         OmitTierText = $false
         SyncMentionsOtherStore = $false
@@ -97,6 +102,7 @@ function az {
         '^account show -o json$' { return (@{ id = $global:Live.AccountId; user = @{ name = 'admin@contoso.example' } } | ConvertTo-Json) }
         '^group exists --name (\S+) --subscription (\S+)$' { return $(if ($global:Live.ResourceGroupExists) { 'true' } else { 'false' }) }
         '^ad app list --filter displayName eq ''claude-projection-resolver-([^'']+)'' --query \[\]\.appId -o tsv$' { if ($global:Live.ResolverExists) { return $global:Live.ExistingResolverId }; return '' }
+        '^ad app list --display-name ([^ ]+) --query \[\]\.\{appId:appId,displayName:displayName\} -o json$' { return ($global:Live.AppListResults | ConvertTo-Json -Compress) }
         '^ad group list --filter displayName eq ''([^'']+)'' --query \[\]\.id -o tsv$' { $name = $Matches[1]; if ($global:Live.ExistingGroups.ContainsKey($name)) { return $global:Live.ExistingGroups[$name] }; return '' }
         '^ad group create --display-name (\S+) --mail-nickname \S+ --query id -o tsv$' { $name = $Matches[1]; $id = '00000000-0000-4000-8000-0000000000' + $(if ($global:Live.CreatedGroups.Count -eq 0) { 'b1' } else { 'b2' }); $global:Live.CreatedGroups[$name] = $id; return $id }
         '^ad signed-in-user show --query id -o tsv$' { return $user }
@@ -226,9 +232,23 @@ try {
     Reset-Live -Source 'named-value'; $global:Live.SyncFails = $true; $global:Live.ResolverAudience = ''; Invoke-Verifier @{ MigrateWithUpdate = $true; UpdatePath = $updateStub }
     Assert 'with -MigrateWithUpdate a stop before update has no resolver app leftover when no resolver audience exists' ($Exit -eq 1 -and $Output -match 'sync failed by fixture' -and
         $Output -notmatch 'Resolver app was not deleted because entitlement-resolver-audience could not be read') "$Exit | $Output"
+    Reset-Live -Source 'named-value'; $global:Live.ResolverAudience = ''; $global:Live.UpdateApplyCreatesResolverApp = $true; $global:Live.UpdateApplyFailsAfterApp = $true; Invoke-Verifier @{ MigrateWithUpdate = $true; UpdatePath = $updateStub }
+    Assert 'with -MigrateWithUpdate an apply failure after resolver app creation deletes the exact-name app by display name' ($Exit -eq 1 -and $Output -match 'update apply failed after resolver app creation' -and
+        (At '^az ad app list --display-name claude-projection-resolver-p98live ') -ge 0 -and (At "^az ad app delete --id $appId$") -ge 0 -and
+        $Output -notmatch 'Resolver app was not deleted') "$Exit | $Output | $($global:Live.Calls -join ' ; ')"
+    Reset-Live -Source 'named-value'; $global:Live.ResolverAudience = ''; $global:Live.UpdateApplyCreatesResolverApp = $true; $global:Live.UpdateApplyFailsAfterApp = $true
+    $global:Live.AppListResults = @(@{ appId = $appId; displayName = 'claude-projection-resolver-p98live' }, @{ appId = $otherAppId; displayName = 'claude-projection-resolver-p98live' })
+    Invoke-Verifier @{ MigrateWithUpdate = $true; UpdatePath = $updateStub }
+    Assert 'with -MigrateWithUpdate two exact-name resolver apps are reported as leftovers with both ids' ($Exit -eq 1 -and $Output -match $appId -and $Output -match $otherAppId -and
+        $Output -match 'az ad app delete --id' -and (At "^az ad app delete --id $appId$") -lt 0 -and (At "^az ad app delete --id $otherAppId$") -lt 0) "$Exit | $Output | $($global:Live.Calls -join ' ; ')"
+    Reset-Live -Source 'named-value'; $global:Live.ResolverAudience = ''; $global:Live.UpdateApplyCreatesResolverApp = $true; $global:Live.UpdateApplyFailsAfterApp = $true
+    $global:Live.AppListResults = @(@{ appId = $otherAppId; displayName = 'claude-projection-resolver-p98live-old' })
+    Invoke-Verifier @{ MigrateWithUpdate = $true; UpdatePath = $updateStub }
+    Assert 'with -MigrateWithUpdate a prefix-only resolver app name is not deleted and not reported as this run leftover' ($Exit -eq 1 -and
+        (At "^az ad app delete --id $otherAppId$") -lt 0 -and $Output -notmatch $otherAppId -and $Output -notmatch 'Resolver app was not deleted') "$Exit | $Output | $($global:Live.Calls -join ' ; ')"
     Reset-Live -Source 'named-value'; $global:Live.ResolverAudience = ''; Invoke-Verifier @{ MigrateWithUpdate = $true; UpdatePath = $updateStub }
-    Assert 'with -MigrateWithUpdate a missing resolver audience remains a leftover after the update ran' ($Exit -eq 1 -and $Output -match 'Resolver app was not deleted because entitlement-resolver-audience could not be read' -and
-        (At '^update apply') -ge 0) "$Exit | $Output | $($global:Live.Calls -join ' ; ')"
+    Assert 'with -MigrateWithUpdate a missing resolver audience and no app name match reports no resolver leftover after the update ran' ($Exit -eq 0 -and $Output -notmatch 'Resolver app was not deleted' -and
+        (At '^update apply') -ge 0 -and (At '^az ad app list --display-name claude-projection-resolver-p98live ') -ge 0) "$Exit | $Output | $($global:Live.Calls -join ' ; ')"
     Reset-Live -Source 'named-value'; $global:Live.SyncMentionsOtherStore = $true; Invoke-Verifier @{ MigrateWithUpdate = $true; UpdatePath = $updateStub }
     Assert 'with -MigrateWithUpdate the named-value full sync output must not name the projection store' ($Exit -eq 1 -and $Output -match 'named-value sync output named another store' -and
         (At '^update plan') -lt 0) "$Exit | $Output"

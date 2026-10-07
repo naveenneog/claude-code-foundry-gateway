@@ -133,8 +133,8 @@ function Invoke-AccessSyncText([hashtable]$Arguments) {
     return (@($output) | ForEach-Object { [string]$_ }) -join "`n"
 }
 function Get-SyncPrintedTier([AllowEmptyString()][string]$Output) {
-    $matches = [regex]::Matches([string]$Output, '(?im)developer tier as written:\s*(standard|premium|none)\b')
-    if ($matches.Count) { return $matches[$matches.Count - 1].Groups[1].Value.ToLowerInvariant() }
+    $found = [regex]::Matches([string]$Output, '(?im)developer tier as written:\s*(standard|premium|none)\b')
+    if ($found.Count) { return $found[$found.Count - 1].Groups[1].Value.ToLowerInvariant() }
     return ''
 }
 function Invoke-AccessSyncUntilTier([hashtable]$Arguments, [string]$ExpectedTier, [DateTime]$ChangedAt, [string]$Step) {
@@ -357,20 +357,30 @@ finally {
                 $teardownLeft.Add("Gateway role assignments were not deleted because the gateway principal or Foundry account id could not be read. Remove by listing assignments for the gateway principal on the Foundry account scope in subscription $SubscriptionId.")
             }
 
-            if ($projectionDeploymentReached) {
-                $audience = Invoke-Az @('apim', 'nv', 'show', '-g', $ResourceGroup, '--service-name', $apimName, '--named-value-id', 'entitlement-resolver-audience', '--query', 'value', '-o', 'tsv', '--subscription', $SubscriptionId) -AllowFailure
-                if ($audience -match '\Aapi://([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\z') {
-                    $resolverAppId = $Matches[1]
-                    $displayName = Invoke-Az @('ad', 'app', 'show', '--id', $resolverAppId, '--query', 'displayName', '-o', 'tsv') -AllowFailure
-                    if ($displayName -eq $expectedResolverDisplayName) {
-                        [void](Invoke-TeardownAz "Resolver app $resolverAppId" @('ad', 'app', 'delete', '--id', $resolverAppId) "az ad app delete --id $resolverAppId" $teardownLeft)
-                    }
-                    else {
-                        $teardownLeft.Add("Resolver app $resolverAppId was not deleted because its displayName was '$displayName', not '$expectedResolverDisplayName'. Remove with: az ad app delete --id $resolverAppId")
-                    }
+            $audience = Invoke-Az @('apim', 'nv', 'show', '-g', $ResourceGroup, '--service-name', $apimName, '--named-value-id', 'entitlement-resolver-audience', '--query', 'value', '-o', 'tsv', '--subscription', $SubscriptionId) -AllowFailure
+            if ($audience -match '\Aapi://([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\z') {
+                $resolverAppId = $Matches[1]
+                $displayName = Invoke-Az @('ad', 'app', 'show', '--id', $resolverAppId, '--query', 'displayName', '-o', 'tsv') -AllowFailure
+                if ($displayName -eq $expectedResolverDisplayName) {
+                    [void](Invoke-TeardownAz "Resolver app $resolverAppId" @('ad', 'app', 'delete', '--id', $resolverAppId) "az ad app delete --id $resolverAppId" $teardownLeft)
                 }
                 else {
-                    $teardownLeft.Add("Resolver app was not deleted because entitlement-resolver-audience could not be read from $apimName. Remove with: az ad app delete --id <app-id-from-entitlement-resolver-audience>")
+                    $teardownLeft.Add("Resolver app $resolverAppId was not deleted because its displayName was '$displayName', not '$expectedResolverDisplayName'. Remove with: az ad app delete --id $resolverAppId")
+                }
+            }
+            else {
+                $appListJson = Invoke-Az @('ad', 'app', 'list', '--display-name', $expectedResolverDisplayName, '--query', '[].{appId:appId,displayName:displayName}', '-o', 'json') -AllowFailure
+                $resolverApps = @()
+                if ($appListJson) {
+                    $resolverApps = @($appListJson | ConvertFrom-Json | Where-Object { [string]$_.displayName -eq $expectedResolverDisplayName -and [string]$_.appId -match $guid })
+                }
+                if ($resolverApps.Count -eq 1) {
+                    $resolverAppId = [string]$resolverApps[0].appId
+                    [void](Invoke-TeardownAz "Resolver app $resolverAppId" @('ad', 'app', 'delete', '--id', $resolverAppId) "az ad app delete --id $resolverAppId" $teardownLeft)
+                }
+                elseif ($resolverApps.Count -gt 1) {
+                    $commands = @($resolverApps | ForEach-Object { "az ad app delete --id $($_.appId)" })
+                    $teardownLeft.Add("Resolver app lookup by display name '$expectedResolverDisplayName' found more than one exact match: $((@($resolverApps | ForEach-Object appId)) -join ', '). Remove with: $($commands -join '; ')")
                 }
             }
             [void](Invoke-TeardownAz "Resource group $ResourceGroup" @('group', 'delete', '--name', $ResourceGroup, '--yes', '--no-wait', '--subscription', $SubscriptionId) "az group delete --name $ResourceGroup --yes --subscription $SubscriptionId" $teardownLeft)
