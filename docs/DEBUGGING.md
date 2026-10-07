@@ -327,8 +327,11 @@ empty entitlement list or rely on an absent message.
 
 <summary>Gateway identity and Foundry data-plane role checks</summary>
 
-A `401` with **no** `x-gateway-error` means the policy accepted you and Foundry
-rejected the gateway.
+A `401` without `x-gateway-error` is consistent with Foundry rejecting the
+gateway's identity. An absent header does not prove where the request failed
+(the header table in Step 4 explains why), so the request's record in
+Application Insights or an APIM trace confirms the failing hop; the checks below
+confirm the identity and its data-plane role.
 
 ```bash
 # 1. does the gateway have an identity at all?

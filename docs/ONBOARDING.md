@@ -320,7 +320,9 @@ separate from this directory view.
 People on a directory page are pseudonymised from the group's own member list read at
 capture time (`redaction.people` in the capture spec); their initials are hidden.
 
-### Then run the sync — this is the step people miss
+<a id="then-run-the-sync--this-is-the-step-people-miss"></a>
+
+### Then publish the group change with the sync
 
 The portal grants *group membership*. The gateway reads an **allowlist of
 object ids** that is refreshed by the sync, so until it runs the developer still

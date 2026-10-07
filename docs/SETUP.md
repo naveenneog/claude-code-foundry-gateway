@@ -486,17 +486,17 @@ where it costs money, with the figure at your stated developer count:
 | Developer address | `azure` / `custom` | Azure keeps the default hostname. Custom asks for the company hostname, supplied certificate and DNS hosting, shows their costs, then configures and proves the address after deployment. A later address change requires redistributed workstation settings ([Company address](#company-address)). |
 
 > [!IMPORTANT]
-> **Developer sign-in is decided here, once, for everyone.** A fleet where half
-> the workstations authenticate one way and half another is a fleet with two
-> support paths and two sets of symptoms. Choose `device` if *any* developer
-> works on a jump box, a VDI session or over SSH — it costs nothing on a laptop
-> and is the only option that works without a browser. `helper` routes every
-> client through the credential helper that Claude Desktop needs anyway.
+> **Developer sign-in is one setting for every developer.** A fleet where half
+> the workstations authenticate one way and half another has two
+> support paths and two sets of symptoms. `device` works on a jump box, in a VDI
+> session and over SSH as well as on a laptop, and is
+> the only option that works without a browser. `helper` routes every client
+> through the credential helper that Claude Desktop uses.
 >
 > It is changeable later by reissuing `claude-gateway.json` and re-running
 > `Onboard-ClaudeDeveloper.ps1`, which is safe to run repeatedly.
-> Device-code sign-in still needs Conditional Access to allow that flow; review
-> [Authentication](AUTHENTICATION.md#conditional-access) before choosing it.
+> Device-code sign-in needs Conditional Access to allow that flow
+> ([Authentication](AUTHENTICATION.md#conditional-access)).
 
 > [!NOTE]
 > **Desktop sign-in is separate.** `helper-script` keeps today's Desktop

@@ -218,8 +218,8 @@ Bar`**. There is no sign-in step; your Entra credential is already resolved.
 
 ![claude /status showing API provider: Microsoft Foundry](docs/guide/b5-cli-status.png)
 
-**In Claude Desktop** — this one has a sign-in step, and the option you need is
-not the obvious one.
+**In Claude Desktop** — Desktop shows a sign-in screen, and the gateway sign-in
+is the **Or sign in with Gateway** option at the bottom of it.
 
 1. **Quit Desktop completely**, including the tray or menu-bar icon. It reads
    its configuration at startup, so a running instance will not pick this up.
