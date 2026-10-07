@@ -24,7 +24,9 @@
 [CmdletBinding()]
 param(
     [ValidateSet('ResourceGroup', 'ApimName', 'StandardGroup', 'PremiumGroup')][string]$Field = 'ResourceGroup',
-    [string]$ForApimName
+    [string]$ForApimName,
+    [string]$ForResourceGroup,
+    [string]$ForSubscriptionId
 )
 
 $fromEnvironment = switch ($Field) { 'ResourceGroup' { $env:CLAUDE_RG } 'ApimName' { $env:CLAUDE_APIM } default { $null } }
@@ -34,7 +36,11 @@ $config = Join-Path (Split-Path $PSScriptRoot -Parent) 'onboarding/claude-gatewa
 if (Test-Path $config) {
     try {
         $recorded = Get-Content $config -Raw | ConvertFrom-Json
-        if ($ForApimName -and $Field -in @('StandardGroup', 'PremiumGroup') -and [string]$recorded.apimName -ne $ForApimName) { return '' }
+        if ($Field -in @('StandardGroup', 'PremiumGroup')) {
+            if ($ForApimName -and -not [string]::Equals([string]$recorded.apimName, $ForApimName, [StringComparison]::OrdinalIgnoreCase)) { return '' }
+            if ($ForResourceGroup -and -not [string]::Equals([string]$recorded.resourceGroup, $ForResourceGroup, [StringComparison]::OrdinalIgnoreCase)) { return '' }
+            if ($ForSubscriptionId -and $recorded.PSObject.Properties['subscriptionId'] -and $recorded.subscriptionId -and -not [string]::Equals([string]$recorded.subscriptionId, $ForSubscriptionId, [StringComparison]::OrdinalIgnoreCase)) { return '' }
+        }
         $value = switch ($Field) { 'ResourceGroup' { $recorded.resourceGroup } 'ApimName' { $recorded.apimName } 'StandardGroup' { $recorded.standardGroup } 'PremiumGroup' { $recorded.premiumGroup } }
         if ($value) { return [string]$value }
     }

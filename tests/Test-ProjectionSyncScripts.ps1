@@ -224,7 +224,7 @@ Assert 'a projection sync for an unknown UPN stops before writes with a clear me
 # 4,096-character limit, so the gateway served a refreshed premium list beside a stale standard list. Every
 # value is now checked before the first write. The fixture answers Graph and az for a gateway with no business units.
 function Invoke-NamedValueSyncFixture {
-    param([int]$PremiumCount, [int]$StandardCount, [string]$GatewayStandard = '', [string]$GatewayPremium = '', [string]$GatewayGroups = '', [string]$GatewayBuRegistry = '', [string]$GatewayBuMembers = ',', [string]$Script = 'Sync-ClaudeAccess.ps1', [hashtable]$Parameters = @{ Store = 'named-value' }, [switch]$FailAllowStandardWrite, [switch]$FailAllowStandardRead, [switch]$FailBuMembersRead, [switch]$WithDecisionRecord)
+    param([int]$PremiumCount, [int]$StandardCount, [string]$GatewayStandard = '', [string]$GatewayPremium = '', [string]$GatewayGroups = '', [string]$GatewayBuRegistry = '', [string]$GatewayBuMembers = ',', [string]$Script = 'Sync-ClaudeAccess.ps1', [hashtable]$Parameters = @{ Store = 'named-value' }, [switch]$FailAllowStandardWrite, [switch]$FailAllowStandardRead, [switch]$FailBuMembersRead, [switch]$WithDecisionRecord, [string]$DecisionRecordResourceGroup = 'rg-p98', [string]$DecisionRecordApimName = 'apim-p98', [string]$DecisionRecordSubscriptionId = '')
     $global:P98NvCalls = [Collections.Generic.List[string]]::new()
     $script:P98NvResult = $null
     $recordPath = Join-Path $root 'onboarding\claude-gateway.json'
@@ -232,8 +232,9 @@ function Invoke-NamedValueSyncFixture {
     $oldRecord = if ($hadRecord) { Get-Content -LiteralPath $recordPath -Raw } else { '' }
     if ($WithDecisionRecord) {
         New-Item -ItemType Directory -Force -Path (Split-Path $recordPath -Parent) | Out-Null
-        @{ apimName = 'apim-p98'; resourceGroup = 'rg-p98'; standardGroup = 'record-standard'; premiumGroup = 'record-premium' } |
-            ConvertTo-Json -Compress | Set-Content -LiteralPath $recordPath -Encoding UTF8
+        $record = @{ apimName = $DecisionRecordApimName; resourceGroup = $DecisionRecordResourceGroup; standardGroup = 'record-standard'; premiumGroup = 'record-premium' }
+        if ($DecisionRecordSubscriptionId) { $record.subscriptionId = $DecisionRecordSubscriptionId }
+        $record | ConvertTo-Json -Compress | Set-Content -LiteralPath $recordPath -Encoding UTF8
     }
     $oids = { param([int]$Count, [string]$Prefix) if ($Count -gt 0) { @(1..$Count | ForEach-Object { $Prefix + ([string]$_).PadLeft(12, '0') }) } else { @() } }
     $directory = @{
@@ -429,6 +430,12 @@ Invoke-NamedValueSyncFixture -PremiumCount 1 -StandardCount 1 -WithDecisionRecor
 $nvWrites = Get-NamedValueWrites
 Assert 'Sync-ClaudeAccess uses the decision record groups before the default group names' (
     -not $CapturedError -and $script:P98NvResult.Values['entitlement-groups'] -eq 'standard=10000000-0000-4000-8000-000000000003,premium=10000000-0000-4000-8000-000000000004') "$CapturedError | groups=$($script:P98NvResult.Values['entitlement-groups']) | writes: $($nvWrites -join ' | ')"
+
+Invoke-NamedValueSyncFixture -PremiumCount 1 -StandardCount 1 -WithDecisionRecord -DecisionRecordResourceGroup 'rg-other'
+$nvWrites = Get-NamedValueWrites
+Assert 'a decision record for another resource group is not used for tier groups or automatic recording' (
+    -not $CapturedError -and -not $script:P98NvResult.Values.ContainsKey('entitlement-groups') -and
+    $script:P98NvResult.Output -match 'default name fallback') "$CapturedError | groups=$($script:P98NvResult.Values['entitlement-groups']) | output: $($script:P98NvResult.Output) | writes: $($nvWrites -join ' | ')"
 
 Invoke-NamedValueSyncFixture -PremiumCount 1 -StandardCount 1 -WithDecisionRecord -GatewayGroups 'standard=10000000-0000-4000-8000-000000000005,premium=10000000-0000-4000-8000-000000000006'
 $nvWrites = Get-NamedValueWrites

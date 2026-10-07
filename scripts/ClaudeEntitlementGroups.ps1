@@ -65,8 +65,8 @@ function Resolve-ClaudeEntitlementGroupsForSync {
     )
     $raw = [string](& $GetNamedValue 'entitlement-groups')
     $recorded = ConvertFrom-ClaudeEntitlementGroups $raw
-    $recordStandard = [string](& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') StandardGroup -ForApimName $ApimName 3>$null)
-    $recordPremium = [string](& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') PremiumGroup -ForApimName $ApimName 3>$null)
+    $recordStandard = [string](& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') StandardGroup -ForApimName $ApimName -ForResourceGroup $ResourceGroup 3>$null)
+    $recordPremium = [string](& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') PremiumGroup -ForApimName $ApimName -ForResourceGroup $ResourceGroup 3>$null)
     $standard = Resolve-ClaudeEntitlementGroupCandidate -Tier 'standard' -FindGroup $FindGroup -Candidates @(
         @{ Value = $StandardGroup; Source = 'parameter'; Authoritative = $true },
         @{ Value = $recorded['standard']; Source = 'gateway entitlement-groups'; Authoritative = $true },
