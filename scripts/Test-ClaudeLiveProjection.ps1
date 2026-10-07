@@ -128,9 +128,20 @@ function Wait-Membership([string]$GroupId, [string]$MemberId, [string]$Expected)
     } while ((Get-Date) -lt $deadline)
     throw "Microsoft Graph did not report membership '$Expected' for $MemberId in $GroupId within $ChangeWaitSeconds s."
 }
+function ConvertTo-LiveOutputText([object[]]$Output) {
+    return (@($Output) | ForEach-Object {
+        if ($_ -is [Management.Automation.InformationRecord]) { [string]$_.MessageData }
+        elseif ($_ -is [string]) { $_ }
+    } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join "`n"
+}
+function Invoke-AccessSyncResult([hashtable]$Arguments) {
+    $output = @(& $SyncAccessPath @Arguments *>&1)
+    $tierObjects = @($output | Where-Object { $_ -and $_.PSObject.Properties['published_tier'] })
+    $tier = if ($tierObjects.Count) { [string]$tierObjects[$tierObjects.Count - 1].published_tier } else { '' }
+    return [pscustomobject]@{ Output = (ConvertTo-LiveOutputText $output); Tier = $tier.ToLowerInvariant() }
+}
 function Invoke-AccessSyncText([hashtable]$Arguments) {
-    $output = @(& $SyncAccessPath @Arguments 2>&1)
-    return (@($output) | ForEach-Object { [string]$_ }) -join "`n"
+    return (Invoke-AccessSyncResult $Arguments).Output
 }
 function Get-SyncPrintedTier([AllowEmptyString()][string]$Output) {
     $found = [regex]::Matches([string]$Output, '(?im)developer tier as written:\s*(standard|premium|none)\b')
@@ -142,8 +153,9 @@ function Invoke-AccessSyncUntilTier([hashtable]$Arguments, [string]$ExpectedTier
     $lastTier = ''
     $lastOutput = ''
     do {
-        $lastOutput = Invoke-AccessSyncText $Arguments
-        $lastTier = Get-SyncPrintedTier $lastOutput
+        $syncResult = Invoke-AccessSyncResult $Arguments
+        $lastOutput = $syncResult.Output
+        $lastTier = $syncResult.Tier
         if (-not $lastTier) {
             Add-Result $Step $false "Sync-ClaudeAccess printed no developer tier as written '$ExpectedTier'."
             throw "$Step printed no developer tier as written '$ExpectedTier'."
@@ -292,8 +304,11 @@ try {
         Write-Host "`n==> Update: the plan, then its apply" -ForegroundColor Cyan
         # The plan's review text comes back on the output stream with the result; printed, it keeps the planned
         # resources, cost and time in the run's log.
-        $planOutput = @(& $UpdatePath -ResourceGroup $ResourceGroup -ApimName $apimName)
-        foreach ($text in @($planOutput | Where-Object { $_ -is [string] })) { Write-Host $text }
+        $planOutput = @(& $UpdatePath -ResourceGroup $ResourceGroup -ApimName $apimName *>&1)
+        foreach ($text in @($planOutput | Where-Object { $_ -is [string] -or $_ -is [Management.Automation.InformationRecord] })) {
+            $line = if ($text -is [Management.Automation.InformationRecord]) { [string]$text.MessageData } else { [string]$text }
+            if ($line) { Write-Host $line }
+        }
         $plan = @($planOutput | Where-Object { $_ -isnot [string] -and $_.PSObject.Properties['Fingerprint'] })[0]
         $move = @(@($plan.Plans) | Where-Object { $_.Step -eq '0004-entitlement-projection' })[0]
         $fingerprint = [string]$plan.Fingerprint
