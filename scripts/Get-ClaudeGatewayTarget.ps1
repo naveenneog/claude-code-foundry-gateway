@@ -13,10 +13,10 @@
     Returns an empty string when neither has a value, after a warning that says what to pass,
     so the calling script can still fail with its own message.
 
-    -ForApimName limits the recorded group names to the gateway they were recorded for: when
-    the record names a different API Management instance, StandardGroup and PremiumGroup
-    return an empty string, so a caller falls back to its own default instead of publishing
-    another gateway's groups.
+    -ForApimName and -ForResourceGroup limit the recorded group names to the gateway they were
+    recorded for: when the record names a different API Management instance or resource group,
+    StandardGroup and PremiumGroup return an empty string, so a caller falls back to its own
+    default instead of publishing another gateway's groups.
 
 .EXAMPLE
     [string]$ResourceGroup = $(& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') ResourceGroup)
@@ -25,8 +25,7 @@
 param(
     [ValidateSet('ResourceGroup', 'ApimName', 'StandardGroup', 'PremiumGroup')][string]$Field = 'ResourceGroup',
     [string]$ForApimName,
-    [string]$ForResourceGroup,
-    [string]$ForSubscriptionId
+    [string]$ForResourceGroup
 )
 
 $fromEnvironment = switch ($Field) { 'ResourceGroup' { $env:CLAUDE_RG } 'ApimName' { $env:CLAUDE_APIM } default { $null } }
@@ -39,7 +38,6 @@ if (Test-Path $config) {
         if ($Field -in @('StandardGroup', 'PremiumGroup')) {
             if ($ForApimName -and -not [string]::Equals([string]$recorded.apimName, $ForApimName, [StringComparison]::OrdinalIgnoreCase)) { return '' }
             if ($ForResourceGroup -and -not [string]::Equals([string]$recorded.resourceGroup, $ForResourceGroup, [StringComparison]::OrdinalIgnoreCase)) { return '' }
-            if ($ForSubscriptionId -and $recorded.PSObject.Properties['subscriptionId'] -and $recorded.subscriptionId -and -not [string]::Equals([string]$recorded.subscriptionId, $ForSubscriptionId, [StringComparison]::OrdinalIgnoreCase)) { return '' }
         }
         $value = switch ($Field) { 'ResourceGroup' { $recorded.resourceGroup } 'ApimName' { $recorded.apimName } 'StandardGroup' { $recorded.standardGroup } 'PremiumGroup' { $recorded.premiumGroup } }
         if ($value) { return [string]$value }
