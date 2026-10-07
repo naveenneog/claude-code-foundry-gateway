@@ -328,6 +328,13 @@ $nvWrites = Get-NamedValueWrites
 Assert 'a named-value sync for an unknown UPN stops before writes with a clear message' (
     $CapturedError -match "Graph did not return a valid object id for user 'missing@contoso\.com'" -and $nvWrites.Count -eq 0) "$CapturedError | writes: $($nvWrites -join ' | ')"
 
+Invoke-NamedValueSyncFixture -PremiumCount 1 -StandardCount 1 -Parameters @{ Store = 'named-value'; StandardGroup = 'claude-code-standard'; PremiumGroup = 'missing-premium'; AllowEmptyPremium = $true }
+$nvWrites = Get-NamedValueWrites
+Assert 'an explicit missing premium group syncs as an empty premium tier and records premium none' (
+    -not $CapturedError -and $script:P98NvResult.Values['allow-premium'] -eq ',' -and
+    $script:P98NvResult.Values['entitlement-groups'] -eq 'standard=10000000-0000-4000-8000-000000000001,premium=none' -and
+    @($nvWrites -match 'allow-premium').Count -ge 1) "$CapturedError | groups=$($script:P98NvResult.Values['entitlement-groups']) premium=$($script:P98NvResult.Values['allow-premium']) | writes: $($nvWrites -join ' | ')"
+
 Invoke-NamedValueSyncFixture -PremiumCount 1 -StandardCount 1 -GatewayGroups 'standard=10000000-0000-4000-8000-000000000001,premium=10000000-0000-4000-8000-000000000002' -Parameters @{ Store = 'named-value'; StandardGroup = 'claude-code-premium' }
 $nvWrites = Get-NamedValueWrites
 Assert 'explicit groups that differ from entitlement-groups refuse before writes and name RecordGroups' (

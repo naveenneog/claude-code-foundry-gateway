@@ -217,8 +217,8 @@ try {
                     $log=Join-Path $scratch 'caller.log'
                     & $shell -NoProfile -NonInteractive -File $PSCommandPath -CallerChild $caller -Case $caseName *> $log
                     $code=$LASTEXITCODE;$text=Get-Content $log -Raw
-                    $expectFailure=$caseName -eq 'Error' -or $caller -eq 'Sync-AumMembership' -or ($caller -eq 'Sync-ClaudeAccess' -and $caseName -eq 'Absent')
-                    $reason=if($caseName -eq 'Error'){'Graph 403 caller fixture'}elseif($caller -eq 'Sync-AumMembership'){'confirmed absent'}elseif($caller -eq 'Sync-ClaudeAccess'){'premium tier group.*not found'}else{'R1_CALLER reads=[1-9]'}
+                    $expectFailure=$caseName -eq 'Error' -or $caller -eq 'Sync-AumMembership'
+                    $reason=if($caseName -eq 'Error'){'Graph 403 caller fixture'}elseif($caller -eq 'Sync-AumMembership'){'confirmed absent'}else{'R1_CALLER reads=[1-9]'}
                     Assert "$caller $caseName on $([IO.Path]::GetFileName($shell))" (($code -ne 0) -eq $expectFailure -and $text -match $reason -and $text -match 'writes=0') (($text -split "`n" | Where-Object { $_ -match 'R1_CALLER' }) -join '')
                 }
             }

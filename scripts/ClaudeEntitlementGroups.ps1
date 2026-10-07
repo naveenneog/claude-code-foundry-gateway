@@ -76,8 +76,10 @@ function Resolve-ClaudeEntitlementGroupsForSync {
             throw "U160: the $($group.Tier) tier group '$($group.Missing)' recorded in entitlement-groups was not found in Microsoft Graph. Remedy: pass -StandardGroup <existing standard group> and -PremiumGroup <existing premium group or none>, then add -RecordGroups to replace the gateway record, or restore the recorded group. Nothing was written."
         }
         if ($group.Missing) {
-            $switch = if ($group.Tier -eq 'standard') { '-StandardGroup' } else { '-PremiumGroup' }
-            throw "The $($group.Tier) tier group '$($group.Missing)' from the $($group.Source) was not found in Microsoft Graph. Remedy: pass $switch <existing group>. Nothing was written."
+            $group.Argument = 'none'
+            $group.Id = 'none'
+            $group.Absent = $true
+            $group.Missing = ''
         }
     }
     return [pscustomobject]@{ Standard = $standard; Premium = $premium; Recorded = $recorded; Raw = $raw }
