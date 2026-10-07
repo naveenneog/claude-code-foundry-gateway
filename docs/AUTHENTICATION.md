@@ -9,11 +9,15 @@ lifetime, Conditional Access and revocation differ by caller type.
 
 The reviewer has Reader access to the gateway resources and permission to inspect the relevant Entra users, groups and enterprise applications. The deployment target comes from [Operations](OPERATIONS.md#1-select-the-gateway-and-workspace).
 
-```powershell`r`n$gateway = Get-Content .\onboarding\claude-gateway.json -Raw | ConvertFrom-Json`r`n$rg = $gateway.resourceGroup`r`n$apim = $gateway.apimName`r`n.\scripts\Test-ClaudeHealth.ps1 -ResourceGroup $rg -ApimName $apim -NoRequest
+```powershell
+$gateway = Get-Content .\onboarding\claude-gateway.json -Raw | ConvertFrom-Json
+$rg = $gateway.resourceGroup
+$apim = $gateway.apimName
+.\scripts\Test-ClaudeHealth.ps1 -ResourceGroup $rg -ApimName $apim
 .\scripts\Compare-ClaudeEntitlement.ps1 -ResourceGroup $rg -ApimName $apim
 ```
 
-**Expected result:** the health command reports the authentication configuration without spending model capacity, and the entitlement comparison identifies whether the selected gateway's published store matches directory membership. Revocation still requires a fresh request from the affected identity or the projection verification path below.
+**Expected result:** the health command runs its read-only checks (SKU, entitlement sync, named-value headroom, model prices, Foundry bypass and business units) and sends no model request ([`Test-ClaudeHealth.ps1`](../scripts/Test-ClaudeHealth.ps1)); the entitlement comparison identifies whether the selected gateway's published store matches directory membership. Revocation still requires a fresh request from the affected identity or the projection verification path below.
 
 ## Prerequisites for a review
 

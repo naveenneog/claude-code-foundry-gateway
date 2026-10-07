@@ -18,9 +18,9 @@ than guessing.
 The cutover starts with import enablement, export, backup and a verified pilot before fleet rollout or deprovisioning. Privacy, platform and device-management owners approve those separate operations. Project attachments require a separate transfer; history import does not include them. The `$rg` and `$apim` variables in the command are assigned from the deployment record.
 
 ```powershell
- = Get-Content .\onboarding\claude-gateway.json -Raw | ConvertFrom-Json
- = .resourceGroup
- = .apimName
+$record = Get-Content .\onboarding\claude-gateway.json -Raw | ConvertFrom-Json
+$rg = $record.resourceGroup
+$apim = $record.apimName
 .\scripts\Backup-ClaudeGateway.ps1 -ResourceGroup $rg -ApimName $apim -Path .\backups\before-cutover.json
 ```
 

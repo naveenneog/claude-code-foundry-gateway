@@ -318,7 +318,16 @@ function Test-QuickstartPowerShellVariables([string]$Path, [object]$Section, [ob
   foreach ($block in Get-FencedBlocks $Section.Body) {
     if ($block.Language -notin @('powershell','pwsh','ps1')) { continue }
     $tokens = $null; $parseErrors = $null
-    $ast = [System.Management.Automation.Language.Parser]::ParseInput($block.Text, [ref]$tokens, [ref]$parseErrors)
+    $code = [regex]::Replace($block.Text, '<([a-zA-Z][a-zA-Z0-9-]*)>', 'PLACEHOLDER_$1')
+    $ast = [System.Management.Automation.Language.Parser]::ParseInput($code, [ref]$tokens, [ref]$parseErrors)
+    if (@($parseErrors).Count -gt 0) {
+      $errors.Add("Quickstart PowerShell block at line $($Section.StartLine + $block.StartLine) does not parse: $(@($parseErrors)[0].Message)")
+    }
+    foreach ($command in $ast.FindAll({ param($node) $node -is [System.Management.Automation.Language.CommandAst] }, $true)) {
+      if ([string]$command.GetCommandName() -match '^[-+*/%]?=$') {
+        $errors.Add("Quickstart PowerShell at line $($Section.StartLine + $block.StartLine + $command.Extent.StartLineNumber) runs '$($command.GetCommandName())' as a command: an assignment has no variable")
+      }
+    }
     $definitions = @()
     $definitions += $ast.FindAll({ param($node) $node -is [System.Management.Automation.Language.AssignmentStatementAst] -and $node.Left -is [System.Management.Automation.Language.VariableExpressionAst] }, $true) | ForEach-Object { $_.Left }
     $definitions += $ast.FindAll({ param($node) $node -is [System.Management.Automation.Language.ForEachStatementAst] }, $true) | ForEach-Object { $_.Variable }
@@ -351,6 +360,43 @@ function Test-QuickstartPowerShellVariables([string]$Path, [object]$Section, [ob
   return $errors.ToArray()
 }
 
+$script:ScriptParameterCache = @{}
+function Get-ScriptParameterNames([string]$Path) {
+  if (-not $script:ScriptParameterCache.ContainsKey($Path)) {
+    $scriptAst = [System.Management.Automation.Language.Parser]::ParseFile($Path, [ref]$null, [ref]$null)
+    $names = [System.Collections.Generic.List[string]]::new()
+    if ($scriptAst.ParamBlock) {
+      foreach ($parameter in $scriptAst.ParamBlock.Parameters) { $names.Add($parameter.Name.VariablePath.UserPath) }
+      $advanced = @($scriptAst.ParamBlock.Attributes | Where-Object { $_.TypeName.Name -eq 'CmdletBinding' }).Count -gt 0 -or
+        @($scriptAst.ParamBlock.Parameters | Where-Object { @($_.Attributes | Where-Object { $_.TypeName.Name -eq 'Parameter' }).Count }).Count -gt 0
+      if ($advanced) { foreach ($common in 'Verbose','Debug','ErrorAction','WarningAction','InformationAction','ProgressAction','ErrorVariable','WarningVariable','InformationVariable','OutVariable','OutBuffer','PipelineVariable','WhatIf','Confirm') { $names.Add($common) } }
+    }
+    $script:ScriptParameterCache[$Path] = $names.ToArray()
+  }
+  return $script:ScriptParameterCache[$Path]
+}
+
+function Test-QuickstartScriptCommands([object]$Section) {
+  $errors = [System.Collections.Generic.List[string]]::new()
+  foreach ($block in Get-FencedBlocks $Section.Body) {
+    if ($block.Language -notin @('powershell','pwsh','ps1')) { continue }
+    $code = [regex]::Replace($block.Text, '<([a-zA-Z][a-zA-Z0-9-]*)>', 'PLACEHOLDER_$1')
+    $blockAst = [System.Management.Automation.Language.Parser]::ParseInput($code, [ref]$null, [ref]$null)
+    foreach ($command in $blockAst.FindAll({ param($node) $node -is [System.Management.Automation.Language.CommandAst] }, $true)) {
+      $name = [string]$command.GetCommandName()
+      if ($name -notmatch '^\.[\\/][^\\/].*\.ps1$') { continue }
+      $target = Join-Path $Root ($name.Substring(2))
+      if (-not (Test-Path -LiteralPath $target -PathType Leaf)) { $errors.Add("Quickstart command $name names a script that does not exist"); continue }
+      $known = @(Get-ScriptParameterNames $target)
+      foreach ($given in @($command.CommandElements | Where-Object { $_ -is [System.Management.Automation.Language.CommandParameterAst] } | ForEach-Object ParameterName)) {
+        $exact = @($known | Where-Object { $_ -eq $given })
+        $prefixHits = @($known | Where-Object { $_ -like "$given*" })
+        if (-not $exact.Count -and $prefixHits.Count -ne 1) { $errors.Add("Quickstart command $name has no parameter -$given") }
+      }
+    }
+  }
+  return $errors.ToArray()
+}
 function Test-QuickstartShellVariables([object]$Section, [object[]]$ScanLines) {
   $errors = [System.Collections.Generic.List[string]]::new()
   $assigned = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
@@ -380,6 +426,11 @@ function Test-GuideStructure([string]$Path, [string]$Text, [bool]$Enrolled) {
   if ($logical -match '(?i)C:\\Users\\') { $errors.Add('local machine path appears in guide') }
   if ($logical -match '(?i)\bAlice\b|\bBob\b|\bNaveen\b') { $errors.Add('personal/example name appears in guide') }
   $closeRows = @(Get-MarkdownScanLines $logical)
+  foreach ($row in $closeRows) {
+    if (-not $row.InFence -and $row.Original -match '^ {0,3}(`{3,})(.*)$' -and $Matches[2] -match '`') {
+      $errors.Add("line $($row.Number) opens a backtick fence whose info string contains a backtick, so it is not a code fence (CommonMark 0.31.2, 4.5)")
+    }
+  }
   for ($k = 0; $k -lt $closeRows.Count - 1; $k++) {
     if ($closeRows[$k].Text -match '^\s*</details>\s*$' -and $closeRows[$k + 1].Original.Trim()) {
       $errors.Add("line $($closeRows[$k + 1].Number) follows </details> without a blank line, so GitHub renders it as raw HTML text: $($closeRows[$k + 1].Original.Trim())")
@@ -409,6 +460,7 @@ function Test-GuideStructure([string]$Path, [string]$Text, [bool]$Enrolled) {
   if ($quick -match '(?i)<details(?:\s|>)|<summary(?:\s|>)') { $errors.Add('Quickstart body contains details or summary') }
   foreach ($variableError in (Test-QuickstartPowerShellVariables $Path $sections[0] $scanLines)) { $errors.Add($variableError) }
   foreach ($variableError in (Test-QuickstartShellVariables $sections[0] $scanLines)) { $errors.Add($variableError) }
+  foreach ($commandError in (Test-QuickstartScriptCommands $sections[0])) { $errors.Add($commandError) }
   $quickRows = @($scanLines | Where-Object { $_.Number -gt $sections[0].StartLine -and $_.Number -le $sections[0].EndLine })
   foreach ($row in $quickRows) {
     if (-not $row.InFence) { continue }
@@ -452,7 +504,7 @@ function Test-GuideStructure([string]$Path, [string]$Text, [bool]$Enrolled) {
 
 function Assert-InvalidCase([string]$Name, [string]$Text, [string]$Expected) {
 
-  $material = $Text -replace '\\n', "`n"
+  $material = $Text -creplace '\\n', "`n"
   $errors = Test-GuideStructure 'docs\CASE.md' ($material -replace "`n", "`r`n") $true
   if (($errors -join '; ') -match $Expected) {
     Write-Ok "detected: $Name"
@@ -468,14 +520,13 @@ function Assert-InvalidCase([string]$Name, [string]$Text, [string]$Expected) {
 Write-Host 'Documentation structure - quickstarts, disclosures and anchors'
 function Join-Lines([string[]]$Lines) { return ($Lines -join "`n") }
 
-function Assert-NoPlaceholderCase([string]$Name, [string]$Text) {
-  $material = $Text -replace '\\n', "`n"
+function Assert-ValidCase([string]$Name, [string]$Text) {
+  $material = $Text -creplace '\\n', "`n"
   $errors = Test-GuideStructure 'docs\CASE.md' ($material -replace "`n", "`r`n") $true
-  $placeholderErrors = @($errors | Where-Object { $_ -match 'placeholder' })
-  if ($placeholderErrors.Count -eq 0) {
-    Write-Ok "placeholder definitions accepted: $Name"
+  if (@($errors).Count -eq 0) {
+    Write-Ok "valid guide accepted: $Name"
   } else {
-    $script:NegativeFailures.Add("positive placeholder case failed: $Name. Errors: $($placeholderErrors -join '; ')")
+    $script:NegativeFailures.Add("positive case failed: $Name. Errors: $($errors -join '; ')")
     Write-Host "  [FAIL] $Name" -ForegroundColor Red
   }
 }
@@ -498,11 +549,17 @@ Assert-InvalidCase 'Quickstart body hidden in details' (Join-Lines @('# Guide','
 Assert-InvalidCase 'generic summary rejected' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','**Expected result:** success.','','## Body','','<details>','','<summary>Guide details</summary>','','Text.','','</details>','','## Next','','- [Next](NEXT.md)')) 'generic summary'
 Assert-InvalidCase 'duplicate summaries rejected' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','**Expected result:** success.','','## One','','<details>','','<summary>First area</summary>','','Text.','','</details>','','## Two','','<details>','','<summary>First area</summary>','','Text.','','</details>','','## Next','','- [Next](NEXT.md)')) 'duplicated'
 Assert-InvalidCase 'heading directly after a closing details tag' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','**Expected result:** success.','','## Body','','<details>','','<summary>Area</summary>','','Text.','','</details>','## Next','','- [Next](NEXT.md)')) 'follows </details> without a blank line'
-Assert-NoPlaceholderCase 'definition before fenced command' (Join-Lines @('# Guide','','`<developer-upn>` is the selected account.','','## Quickstart','','```powershell','Do-Thing -User <developer-upn>','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)'))
+Assert-ValidCase 'definition before fenced command' (Join-Lines @('# Guide','','`<developer-upn>` is the selected account.','','## Quickstart','','```powershell','Do-Thing -User <developer-upn>','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)'))
 
 Assert-InvalidCase 'PowerShell variable before assignment' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','```powershell','Do-Thing -ResourceGroup $rg','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)')) 'PowerShell variable'
-Assert-NoPlaceholderCase 'PowerShell variable assigned before use' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','```powershell','$rg = ''rg-claude''','Do-Thing -ResourceGroup $rg','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)'))
-Assert-NoPlaceholderCase 'PowerShell variable defined in prose before use' (Join-Lines @('# Guide','','The `$rg` variable is the selected resource group.','','## Quickstart','','```powershell','Do-Thing -ResourceGroup $rg','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)'))
+Assert-InvalidCase 'Quickstart PowerShell that does not parse' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','```powershell','$record = ','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)')) 'does not parse'
+Assert-InvalidCase 'Quickstart assignment without a variable' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','```powershell',' = Get-Content .\record.json -Raw','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)')) 'assignment has no variable'
+Assert-InvalidCase 'fence opener with a backtick in its info string' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','```powershell`r`n$rg = 1','Do-Thing -ResourceGroup $rg','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)')) 'info string contains a backtick'
+Assert-InvalidCase 'Quickstart script parameter that does not exist' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','```powershell','.\scripts\Test-ClaudeHealth.ps1 -NoSuchSwitch','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)')) 'has no parameter -NoSuchSwitch'
+Assert-InvalidCase 'Quickstart script that does not exist' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','```powershell','.\scripts\No-SuchScript.ps1','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)')) 'names a script that does not exist'
+Assert-ValidCase 'Quickstart script call with its real parameters' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','```powershell','.\scripts\Test-ClaudeHealth.ps1 -ResourceGroup rg-claude -ApimName apim-claude -FailOn warn','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)'))
+Assert-ValidCase 'PowerShell variable assigned before use' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','```powershell','$rg = ''rg-claude''','Do-Thing -ResourceGroup $rg','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)'))
+Assert-ValidCase 'PowerShell variable defined in prose before use' (Join-Lines @('# Guide','','The `$rg` variable is the selected resource group.','','## Quickstart','','```powershell','Do-Thing -ResourceGroup $rg','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)'))
 Assert-InvalidCase 'local path and real name' (Join-Lines @('# Guide','','Purpose C:\Users\owner\checkout mentions Alice.','','## Quickstart','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)')) 'local machine path|personal/example name'
 
 Assert-Condition ($NegativeFailures.Count -eq 0) ($NegativeFailures -join "`n")

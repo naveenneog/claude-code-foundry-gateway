@@ -11,10 +11,10 @@ below it.
 The fastest supported path is the diagnostic command. The deployment record supplies the gateway target, and the command emits redacted evidence for the failing layer.
 
 ```powershell
-.\scripts\Debug-ClaudeSetup.ps1 -RecordPath .\onboarding\claude-gateway.json -NoRequest
+.\scripts\Debug-ClaudeSetup.ps1 -DecisionRecord .\onboarding\claude-gateway.json -NoRequest
 ```
 
-**Expected result:** diagnostics identify the first failing boundary or produce a redacted support bundle. Manual steps below are for cases where the diagnostic output is incomplete or a specific layer needs proof.
+**Expected result:** the diagnostic reports each layer and names the first failing boundary without sending a model request (`-NoRequest`); adding `-SupportBundle <path>` writes the redacted evidence to a file. Manual steps below are for cases where the diagnostic output is incomplete or a specific layer needs proof.
 
 ## Prerequisites
 
