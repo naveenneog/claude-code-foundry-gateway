@@ -183,9 +183,9 @@ Content Safety 2xx responses are treated as malformed unless `text:analyze` retu
 
 The screened slice now includes plain-text document blocks in the newest user message, assistant prefill after that message, tool descriptions, and plain-text document blocks inside tool results. Caller-written text is sent to Prompt Shields `userPrompt`; tool descriptions, tool results and document text are sent as Prompt Shields `documents`; all screened text is sent to harm analysis. Non-text image, PDF, URL and base64 document sources remain documented limits.
 
-The default truncation mode samples the head and tail of each oversized item rather than the tail only. Analyze text uses a fair share of its 10,000-character budget across screened parts. Prompt Shields documents use a fair share of the documented five-document and 10,000-character document budget, grouping sources when more than five documents are present so every source contributes text. Microsoft documents the analyze text 10,000-character request limit and `FourSeverityLevels` values in the Analyze Text REST reference, and the Prompt Shields prompt, document count and document character limits in the Azure AI Content Safety service limits page ([Analyze Text, read 2026-10-07][analyze-text]; [region availability and service limits, read 2026-10-07][content-safety-regions]).
+The default truncation mode samples the head and tail of each oversized item rather than the tail only. Analyze text uses a fair share of its 10,000-character budget across screened parts; the council round 2 amendment gives the newest turn the first claim on that budget. Prompt Shields documents use a fair share of the documented five-document and 10,000-character document budget, grouping sources when more than five documents are present so every source contributes text. Microsoft documents the analyze text 10,000-character request limit and `FourSeverityLevels` values in the Analyze Text REST reference, and the Prompt Shields prompt, document count and document character limits in the Azure AI Content Safety service limits page ([Analyze Text, read 2026-10-07][analyze-text]; [region availability and service limits, read 2026-10-07][content-safety-regions]).
 
-The `content-safety-truncate-mode` named value is part of the contract. `newest` is the deployment default and means head/tail sampling. `block` means any oversized screened item or over-limit document set is `unscreenable`; block mode returns the existing Anthropic-style 400 response, and audit mode forwards with an `unscreenable` trace. Unknown truncation-mode values are treated as `block`.
+The `content-safety-truncate-mode` named value is part of the contract. `newest` is the deployment default and means head/tail sampling. `block` means any oversized screened item or over-limit document set is `unscreenable` (narrowed to newest-turn text by the council round 2 amendment); block mode returns the existing Anthropic-style 400 response, and audit mode forwards with an `unscreenable` trace. Unknown truncation-mode values are treated as `block`.
 
 The update flow now treats policy fragment content as part of the deployed policy. Discovery reads fragment raw XML through ARM, canonicalizes live and template XML without preserving whitespace, and plans a fragment PUT when hashes differ. The plan fingerprint includes the fragment hashes, so an approved plan is tied to the fragment bytes it reviewed.
 
@@ -205,6 +205,18 @@ The Azure pricing page defines a Standard text record as up to 1,000 characters,
 | Full `analyze`, `userPrompt` and document budgets | 30-34 | USD 11.25-12.75 |
 
 Tool descriptions are Prompt Shields documents and part of the `analyze` text, so a request with long tool descriptions is in the third or fourth row. The trace does not record characters per call, so the share of requests in each row is not measured (U164).
+
+### Amendment 2026-10-07 (P102 council round 2): the newest turn first
+
+The round 2 Security seat reproduced a harmful span about 300 characters into a 650-character user turn that reached Foundry in block mode. The request had the shape of a Claude Code request, two system blocks and 18 tool descriptions, and the equal share per part (10,000 characters over 21 parts) kept only the head and tail of each part. A harmful newest user text that reaches Foundry in block mode is one of this ADR's "How we'd know this was wrong" signals, so the slicing changes:
+
+- The newest turn (user text, prefill, documents, tool results and search results) has the first claim on the `analyze` budget and on the Prompt Shields document budget: all it needs when the system prompt and tool descriptions are short, and at least 6,000 of the 10,000 characters when they are long. The system prompt and tool descriptions share the rest. Prompt Shields `userPrompt` keeps its own 10,000 characters.
+- Within each budget, parts shorter than an equal share are kept whole and the rest goes to the longer parts, so budget that short tool descriptions leave unused is not lost.
+- The newest turn's sources fill up to four Prompt Shields documents (five without tools), and all tool descriptions share one document.
+- `content-safety-truncate-mode = block` refuses a request only when newest-turn text would be sampled. Refusing on the system prompt and tool descriptions made every request with many tools `unscreenable`; they are sampled in both truncation modes.
+- `search_result` blocks, top level or inside a `tool_result`, are third-party text and are screened like tool results. Before this amendment they were skipped.
+
+Two limits stay and are documented in [Content Safety](../CONTENT-SAFETY.md#limits): Prompt Shields does not receive the system prompt, so attack text that is only in `system` meets harm analysis alone; and `content-safety-mode = off` writes no trace, so turning screening off leaves no screening record. An activity log alert on `Microsoft.ApiManagement/service/namedValues/write` can report the change; P102 does not deploy one.
 ## Consequences
 
 - Content Safety is enforced at the gateway before Foundry sees blocked content in `block` mode.

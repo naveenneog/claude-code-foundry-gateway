@@ -76,8 +76,9 @@ exact streaming cache-creation detail remains **U13**.
 - **P102 Azure AI Content Safety request screening.** The gateway can opt into an Azure AI Content
   Safety account and the APIM policy fragment `content-safety-screening`
   ([ADR-0055](docs/adr/0055-content-safety-screening.md)), which screens a Messages request before
-  Foundry: the system prompt, the newest user turn with its plain-text document blocks, tool
-  descriptions, tool results and assistant prefill. Caller-written text goes to Prompt Shields
+  Foundry: the system prompt, tool descriptions and the newest turn, meaning the newest user text, its
+  plain-text documents, tool results, search results and an assistant prefill. The newest turn has the
+  first claim on each 10,000-character budget. Caller-written text goes to Prompt Shields
   `userPrompt`, tool and document text to Prompt Shields `documents`, and all screened text to harm
   analysis; Prompt Shields is called only when there is a prompt or a document. `content-safety-mode`
   is `off`, `audit` or `block`, trimmed and case-insensitive, and any other value enforces as `block`.

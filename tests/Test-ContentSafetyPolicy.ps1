@@ -121,6 +121,48 @@ Assert 'truncate-mode block forwards in audit mode for oversized text' ($r.Statu
 $r = RunWithNamedValues $oversized @{ 'content-safety-mode'='block'; 'content-safety-truncate-mode'='mystery' }
 Assert 'unknown truncate-mode behaves as fail-closed block' ($r.StatusCode -eq 400 -and $r.Trace.decision -eq 'unscreenable') ($r | ConvertTo-Json -Depth 8 -Compress)
 
+Write-Host 'P102 council round 2: the newest turn first, then the request envelope'
+# A Claude Code-shaped request: two system blocks and 18 tool descriptions (about 33,000 characters) around a short
+# newest turn. Round 2 Security reproduced a harmful span in the middle of a 650-character user turn that an equal
+# share per part (10,000 / 21 parts) dropped before analyze.
+function ClaudeCodeShape($UserContent) {
+    $tools = @(for ($i = 1; $i -le 18; $i++) { @{ name = "tool$i"; description = ("Tool $i description. " + ('d' * 1480)) } })
+    $system = @(@{ type = 'text'; text = ('System block one. ' + ('s' * 3000)) }, @{ type = 'text'; text = ('System block two. ' + ('t' * 3000)) })
+    @{ model = 'claude-sonnet-5'; max_tokens = 16; system = $system; tools = $tools; messages = @(@{ role = 'user'; content = $UserContent }) }
+}
+$middleHarm = ('u' * 300) + 'HARM-MIDDLE-MARKER' + ('v' * 332)
+$r = Run (ClaudeCodeShape $middleHarm)
+$analyzeCall = @($r.Calls | Where-Object Operation -eq 'analyze')[0]
+$shieldCall = @($r.Calls | Where-Object Operation -eq 'shieldPrompt')[0]
+Assert 'the whole newest user text reaches analyze in a Claude Code-shaped request' ($analyzeCall -and $analyzeCall.Body.text -match 'HARM-MIDDLE-MARKER') $(if ($analyzeCall) { "analyze length $($analyzeCall.Body.text.Length)" } else { 'no analyze call' })
+Assert 'a Claude Code-shaped request stays inside the service limits' ($analyzeCall.Body.text.Length -le 10000 -and $shieldCall.Body.userPrompt.Length -le 10000 -and @($shieldCall.Body.documents).Count -le 5 -and (@($shieldCall.Body.documents) | Measure-Object -Property Length -Sum).Sum -le 10000) "analyze=$($analyzeCall.Body.text.Length) prompt=$($shieldCall.Body.userPrompt.Length) documents=$(@($shieldCall.Body.documents).Count)/$((@($shieldCall.Body.documents) | Measure-Object -Property Length -Sum).Sum)"
+Assert 'the request envelope still reaches analyze when the newest turn is short' ($analyzeCall.Body.text -match 'System block one' -and $analyzeCall.Body.text -match 'Tool 18 description') ''
+$toolMiddle = @(@{ type = 'tool_result'; tool_use_id = 'toolu_01'; content = (('r' * 1500) + 'INJECTION-MIDDLE-MARKER' + ('q' * 1500)) })
+$r = Run (ClaudeCodeShape $toolMiddle)
+$analyzeCall = @($r.Calls | Where-Object Operation -eq 'analyze')[0]
+$shieldCall = @($r.Calls | Where-Object Operation -eq 'shieldPrompt')[0]
+Assert 'the whole newest tool result reaches the Prompt Shields documents in a Claude Code-shaped request' ($shieldCall -and ((@($shieldCall.Body.documents) -join "`n") -match 'INJECTION-MIDDLE-MARKER') -and @($shieldCall.Body.documents).Count -le 5 -and (@($shieldCall.Body.documents) | Measure-Object -Property Length -Sum).Sum -le 10000) $(if ($shieldCall) { "documents $(@($shieldCall.Body.documents).Count)" } else { 'no shieldPrompt call' })
+Assert 'the whole newest tool result reaches analyze in a Claude Code-shaped request' ($analyzeCall -and $analyzeCall.Body.text -match 'INJECTION-MIDDLE-MARKER') ''
+$r = RunWithNamedValues (ClaudeCodeShape 'Please summarise the release note.') @{ 'content-safety-mode' = 'block'; 'content-safety-truncate-mode' = 'block' } (New-ContentSafetyStubMap (ShieldStub $false @($false)) (AnalyzeStub 0))
+Assert 'truncate-mode block screens a Claude Code-shaped request whose newest turn fits, sampling only the envelope' ($r.Trace.decision -ne 'unscreenable' -and @($r.Calls).Count -eq 2 -and (Bool $r.Trace.truncated)) ($r.Trace | ConvertTo-Json -Compress)
+$r = RunWithNamedValues (ClaudeCodeShape ('LONG-NEWEST-' + ('n' * 7000))) @{ 'content-safety-mode' = 'block'; 'content-safety-truncate-mode' = 'block' }
+Assert 'truncate-mode block still refuses with 400 when the newest turn would be sampled' ($r.StatusCode -eq 400 -and $r.Trace.decision -eq 'unscreenable' -and -not $r.Forwarded) ($r.Trace | ConvertTo-Json -Compress)
+$shortParts = @(for ($i = 1; $i -le 18; $i++) { @{ name = "t$i"; description = "short tool $i" } })
+$waterFill = @{ model = 'claude-sonnet-5'; system = (('w' * 3000) + 'SYSTEM-OFFSET-3000-MARKER' + ('x' * 9000)); tools = $shortParts; messages = @(@{ role = 'user'; content = 'hi' }) }
+$r = Run $waterFill
+$analyzeCall = @($r.Calls | Where-Object Operation -eq 'analyze')[0]
+Assert 'budget that short parts leave unused goes to the long part' ($analyzeCall.Body.text -match 'SYSTEM-OFFSET-3000-MARKER' -and $analyzeCall.Body.text.Length -le 10000) "analyze length $($analyzeCall.Body.text.Length)"
+
+Write-Host 'P102 council round 2: search_result blocks'
+$searchResult = @{ type = 'search_result'; source = 'kb://article-1'; title = 'Article'; content = @(@{ type = 'text'; text = 'SEARCH-RESULT-MARKER third-party text' }) }
+$r = Run @{ model = 'claude-sonnet-5'; messages = @(@{ role = 'user'; content = @(@{ type = 'text'; text = 'What does the article say?' }, $searchResult) }) } 'block' (New-ContentSafetyStubMap (ShieldStub $false @($false)) (AnalyzeStub 0))
+$shieldCall = @($r.Calls | Where-Object Operation -eq 'shieldPrompt')[0]
+$analyzeCall = @($r.Calls | Where-Object Operation -eq 'analyze')[0]
+Assert 'a top-level search_result is a Prompt Shields document and analyze text' ($shieldCall -and ((@($shieldCall.Body.documents) -join "`n") -match 'SEARCH-RESULT-MARKER') -and $analyzeCall.Body.text -match 'SEARCH-RESULT-MARKER') ($r.Calls | ConvertTo-Json -Depth 6 -Compress)
+$r = Run @{ model = 'claude-sonnet-5'; messages = @(@{ role = 'user'; content = @(@{ type = 'tool_result'; tool_use_id = 'toolu_01'; content = @($searchResult) }) }) } 'block' (New-ContentSafetyStubMap (ShieldStub $false @($false)) (AnalyzeStub 6))
+$shieldCall = @($r.Calls | Where-Object Operation -eq 'shieldPrompt')[0]
+Assert 'a search_result inside a tool_result is screened and a harmful one blocks' ($shieldCall -and ((@($shieldCall.Body.documents) -join "`n") -match 'SEARCH-RESULT-MARKER') -and $r.StatusCode -eq 403) ($r | ConvertTo-Json -Depth 8 -Compress)
+
 Write-Host 'P102 malformed Messages bodies'
 $malformedShapes = @(
     @{ Name='invalid JSON'; Body='{ not json'; Raw=$true },
