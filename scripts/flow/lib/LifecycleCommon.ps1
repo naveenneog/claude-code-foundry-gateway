@@ -188,7 +188,9 @@ function global:Get-ClaudeFlowLifecycleLiveDiscovery {
                     [pscustomobject]@{ name = $fragmentName; value = $value; canonicalHash = Get-ClaudeFlowLifecycleCanonicalXmlHash -XmlText $value }
                 }
                 catch {
-                    [pscustomobject]@{ name = $fragmentName; value = ''; canonicalHash = ''; error = $_.Exception.Message }
+                    $readError = $_.Exception.Message
+                    Write-Warning "The policy fragment '$fragmentName' could not be read ($readError). The update plan treats it as not current and writes the release content."
+                    [pscustomobject]@{ name = $fragmentName; value = ''; canonicalHash = ''; error = $readError }
                 }
             })
     } catch { $fragments = @() }

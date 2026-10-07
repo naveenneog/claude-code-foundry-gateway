@@ -149,6 +149,11 @@ foreach ($modeVariant in @('Block','BLOCK',' block ','enforce','')) {
 }
 $r = Run $harmString 'AUDIT' $severitySix
 Assert 'AUDIT normalises to audit and forwards with audit decision' ($r.StatusCode -eq 200 -and $r.Forwarded -and $r.Trace.mode -eq 'audit' -and $r.Trace.decision -eq 'audit') ($r | ConvertTo-Json -Depth 8 -Compress)
+# P102 council round 2 (QA): surrounding spaces are trimmed for every mode, not only for block, which fails closed anyway.
+$r = Run $harmString ' audit ' $severitySix
+Assert "mode ' audit ' normalises to audit and forwards with audit decision" ($r.StatusCode -eq 200 -and $r.Forwarded -and $r.Trace.mode -eq 'audit' -and $r.Trace.decision -eq 'audit') ($r | ConvertTo-Json -Depth 8 -Compress)
+$r = Run $harmString ' off ' $severitySix
+Assert "mode ' off ' normalises to off: no Content Safety call and the request is forwarded" ($r.StatusCode -eq 200 -and $r.Forwarded -and $r.Calls.Count -eq 0) ($r | ConvertTo-Json -Depth 8 -Compress)
 $r = Run $benign 'Block' (New-ContentSafetyStubMap (ShieldStub) (AnalyzeStub 0) -ShieldTimeout -AnalyzeTimeout)
 Assert 'Block mode variant fails closed with 503 on Content Safety timeout' ($r.StatusCode -eq 503 -and -not $r.Forwarded -and $r.Trace.mode -eq 'block') ($r | ConvertTo-Json -Depth 8 -Compress)
 $r = RunWithNamedValues $harmString @{ 'content-safety-mode'='block'; 'content-safety-threshold'='8' } $severitySix
@@ -162,6 +167,12 @@ $r = Run $benign 'block' $malformedEmptyBodies
 Assert 'block mode fails closed with 503 when Content Safety 2xx bodies omit required properties' ($r.StatusCode -eq 503 -and -not $r.Forwarded -and $r.Trace.contentSafetyErrorClass -eq 'malformed') ($r | ConvertTo-Json -Depth 8 -Compress)
 $r = Run $benign 'audit' $malformedEmptyBodies
 Assert 'audit mode forwards and traces malformed Content Safety 2xx bodies' ($r.StatusCode -eq 200 -and $r.Forwarded -and $r.Trace.contentSafetyErrorClass -eq 'malformed') ($r | ConvertTo-Json -Depth 8 -Compress)
+# P102 council round 2 (QA): a well-formed Prompt Shields answer does not cover an analyze answer without categoriesAnalysis.
+$analyzeWithoutCategories = New-ContentSafetyStubMap (ShieldStub) ([pscustomobject]@{ blocklistsMatch = @() })
+$r = Run $benign 'block' $analyzeWithoutCategories
+Assert 'block mode fails closed with 503 when only the analyze 2xx body omits categoriesAnalysis' ($r.StatusCode -eq 503 -and -not $r.Forwarded -and $r.Calls.Count -eq 2 -and $r.Trace.contentSafetyErrorClass -eq 'malformed') ($r | ConvertTo-Json -Depth 8 -Compress)
+$r = Run $benign 'audit' $analyzeWithoutCategories
+Assert 'audit mode forwards and traces malformed when only the analyze 2xx body omits categoriesAnalysis' ($r.StatusCode -eq 200 -and $r.Forwarded -and $r.Trace.contentSafetyErrorClass -eq 'malformed') ($r | ConvertTo-Json -Depth 8 -Compress)
 $docMismatch = New-ContentSafetyStubMap ([pscustomobject]@{ userPromptAnalysis=[pscustomobject]@{ attackDetected=$false }; documentsAnalysis=@() }) (AnalyzeStub 0)
 $r = Run $tool 'block' $docMismatch
 Assert 'documentsAnalysis count mismatch is malformed in block mode' ($r.StatusCode -eq 503 -and $r.Trace.contentSafetyErrorClass -eq 'malformed') ($r | ConvertTo-Json -Depth 8 -Compress)
@@ -198,6 +209,8 @@ $r = Run $systemOnly 'block'
 Assert 'system-only screened text calls analyze but not Prompt Shields, which answers an empty userPrompt with no documents with 400' ($r.StatusCode -eq 200 -and $r.Calls.Count -eq 1 -and $r.Calls[0].Operation -eq 'analyze' -and $r.Calls[0].Body.text -match 'one short sentence') ($r | ConvertTo-Json -Depth 8 -Compress)
 $r = Run $systemOnly 'block' (New-ContentSafetyStubMap (ShieldStub) (AnalyzeStub 6))
 Assert 'harmful system-only text still blocks with 403 without a Prompt Shields call' ($r.StatusCode -eq 403 -and $r.Decision.BlockedBy -eq 'severity' -and $r.Calls.Count -eq 1) ($r | ConvertTo-Json -Depth 8 -Compress)
+$r = Run $systemOnly 'block' (New-ContentSafetyStubMap (ShieldStub) ([pscustomobject]@{ blocklistsMatch = @() }))
+Assert 'with no Prompt Shields call, an analyze 2xx body without categoriesAnalysis is malformed and fails closed with 503' ($r.StatusCode -eq 503 -and $r.Calls.Count -eq 1 -and $r.Trace.contentSafetyErrorClass -eq 'malformed') ($r | ConvertTo-Json -Depth 8 -Compress)
 $r = Run @{ model = 'm'; max_tokens = 16; messages = @(@{ role = 'user'; content = 'Plain user text.' }) } 'block' (New-ContentSafetyStubMap ([pscustomobject]@{ documentsAnalysis = @() }) (AnalyzeStub 0))
 Assert 'a non-empty userPrompt still requires userPromptAnalysis: its absence is malformed and fails closed with 503' ($r.StatusCode -eq 503 -and $r.Decision.BlockedBy -eq 'unavailable') ($r | ConvertTo-Json -Depth 8 -Compress)
 

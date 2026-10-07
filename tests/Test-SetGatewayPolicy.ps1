@@ -44,6 +44,8 @@ function global:az {
         # A failed az call prints its error on stderr and nothing on stdout.
         switch ($global:P102SetPolicyListMode) {
             'fail' { $global:LASTEXITCODE = 1; return }
+            # A non-zero exit with a well-formed page on stdout: only the exit code shows that the read failed.
+            'partial' { $global:LASTEXITCODE = 1; return '[{ "name": "models-standard", "value": "live" }]' }
             'empty' { return '[]' }
             'object' { return '{ "name": "models-standard", "value": "live" }' }
             'text' { return 'WARNING: the service returned an unexpected page' }
@@ -118,6 +120,7 @@ try {
         [IO.File]::WriteAllText($scratch, '<policies><inbound><set-variable name="a" value="{{models-standard}}" /><set-variable name="b" value="{{quota-org}}" /></inbound></policies>')
         foreach ($case in @(
                 @{ Mode = 'fail'; Label = 'a failed named-value list read' },
+                @{ Mode = 'partial'; Label = 'a named-value list read that exits non-zero after printing a JSON array' },
                 @{ Mode = 'empty'; Label = 'an empty named-value list' },
                 @{ Mode = 'object'; Label = 'a named-value list that is not a JSON array' },
                 @{ Mode = 'text'; Label = 'a named-value list that is not JSON' })) {

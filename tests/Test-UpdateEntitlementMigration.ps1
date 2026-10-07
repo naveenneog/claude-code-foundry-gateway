@@ -544,7 +544,7 @@ function global:Invoke-RestMethod { [pscustomobject]@{ properties = [pscustomobj
     $policyValues['entitlement-source'] = 'named-value'
     $current = New-Discovery $policyValues
     $current | Add-Member -NotePropertyName policy -NotePropertyValue ([IO.File]::ReadAllText($policyPath))
-    $current | Add-Member -NotePropertyName policyFragments -NotePropertyValue @('content-safety-screening')
+    $current | Add-Member -NotePropertyName policyFragments -NotePropertyValue @([pscustomobject]@{ name = 'content-safety-screening'; value = [IO.File]::ReadAllText((Join-Path $root 'infra\content-safety-screening.xml')) })
     $currentPath = Join-Path $scratch 'current.json'
     [IO.File]::WriteAllText($currentPath, ($current | ConvertTo-Json -Depth 20), (New-Object Text.UTF8Encoding($false)))
     $Keeping = $current.PSObject.Copy()

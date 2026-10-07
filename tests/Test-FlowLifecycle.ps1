@@ -84,6 +84,18 @@ try {
     $changedCallsText = $global:Migration2AzCalls -join "`n"
     Assert 'policy migration applies PUT for an existing fragment whose canonical content differs' (-not $thrown -and $changedCallsText -match '/policyFragments/content-safety-screening' -and $changedCallsText -match '/apis/claude-foundry/policies/policy') "$thrown | $changedCallsText"
     $global:Migration2AzCalls.Clear()
+    # P102 council round 2 (Coder): a fragment whose live content could not be read is written with the release content.
+    $unreadApplyDiscovery = [pscustomobject]@{ resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; location = 'eastus2'; sku = 'BasicV2'; policy = $currentPolicy; namedValues = $allNv; policyFragments = @([pscustomobject]@{ name='content-safety-screening'; value=''; canonicalHash=''; error='Response status code does not indicate success: 500 (Internal Server Error).' }) }
+    $unreadApplyPlan = Get-ClaudeFlowMigrationPlan -Record $record -Discovery $unreadApplyDiscovery
+    if (Test-ClaudeFlowPlanIsNoop $unreadApplyPlan) { $thrown = 'the plan was a no-op'; $unreadCallsText = '' }
+    else {
+        $unreadApplyPlan.Data.Target.SubscriptionId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        $unreadApplyPlan.Data.SnapshotPath = 'unused.json'; $unreadApplyPlan.Data.SnapshotTaken = $true
+        $thrown = Get-Thrown { Invoke-ClaudeFlowMigration -Record $record.PSObject.Copy() -Plan $unreadApplyPlan | Out-Null }
+        $unreadCallsText = $global:Migration2AzCalls -join "`n"
+    }
+    Assert 'policy migration writes the release content to a fragment whose live content could not be read' (-not $thrown -and $unreadCallsText -match '/policyFragments/content-safety-screening' -and $unreadCallsText -match '/apis/claude-foundry/policies/policy') "$thrown | $unreadCallsText"
+    $global:Migration2AzCalls.Clear()
     $scopedPlan.Data.Target.SubscriptionId = 'not-an-id&calc'
     # No snapshot yet: a check placed after the backup would show the backup's Azure calls.
     $scopedPlan.Data.SnapshotTaken = $false; $scopedPlan.Data.SnapshotPath = Join-Path ([IO.Path]::GetTempPath()) ('p100-0002-' + [guid]::NewGuid().ToString('N') + '.json')
@@ -112,17 +124,34 @@ function global:Invoke-RestMethod {
     $global:LifecycleDiscoveryCalls.Add("HTTP $Method $Uri")
     if ($Uri -match '/apis/claude-foundry/policies/policy\?api-version=2024-05-01&format=rawxml$') { return [pscustomobject]@{ properties=[pscustomobject]@{ value=$currentPolicy } } }
     if ($Uri -match '/policyFragments\?api-version=2024-05-01$') { return [pscustomobject]@{ value=@([pscustomobject]@{ name='content-safety-screening' }) } }
-    if ($Uri -match '/policyFragments/content-safety-screening\?format=rawxml&api-version=2024-05-01$') { return [pscustomobject]@{ properties=[pscustomobject]@{ format='rawxml'; value=$desiredFragment } } }
+    if ($Uri -match '/policyFragments/content-safety-screening\?format=rawxml&api-version=2024-05-01$') {
+        if ($global:LifecycleFragmentReadFails) { throw 'Response status code does not indicate success: 500 (Internal Server Error).' }
+        return [pscustomobject]@{ properties=[pscustomobject]@{ format='rawxml'; value=$desiredFragment } }
+    }
     throw "unexpected REST URI $Uri"
 }
+$global:LifecycleFragmentReadFails = $false
 try {
     $discovered = Get-ClaudeFlowLifecycleLiveDiscovery -ResourceGroup 'rg-contoso' -ApimName 'apim-contoso' -SubscriptionId 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
     Assert 'live discovery reads policy fragment rawxml through ARM GET and records its content hash' (@($discovered.policyFragments | Where-Object { $_.name -eq 'content-safety-screening' -and $_.value -match '<fragment>' -and $_.canonicalHash }).Count -eq 1 -and ($global:LifecycleDiscoveryCalls -join "`n") -match '/policyFragments/content-safety-screening\?format=rawxml&api-version=2024-05-01') ($global:LifecycleDiscoveryCalls -join ' ; ')
     $badAz = az apim api policy-fragment show --service-name apim-contoso --fragment-id content-safety-screening
     Assert 'fake az refuses nonexistent APIM policy-fragment commands' ($LASTEXITCODE -ne 0 -and $badAz -match 'does not exist') $badAz
+    # P102 council round 2 (Coder): a failed fragment read is recorded with its error and warned about, and the plan
+    # treats the fragment as not current, so the update neither skips it nor reports it verified.
+    $global:LifecycleFragmentReadFails = $true
+    $failedRead = @(Get-ClaudeFlowLifecycleLiveDiscovery -ResourceGroup 'rg-contoso' -ApimName 'apim-contoso' -SubscriptionId 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' 3>&1)
+    $readWarnings = (@($failedRead | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } | ForEach-Object { $_.Message }) -join ' ')
+    $failedDiscovery = @($failedRead | Where-Object { $_ -isnot [System.Management.Automation.WarningRecord] })[0]
+    $failedEntry = @($failedDiscovery.policyFragments | Where-Object { $_.name -eq 'content-safety-screening' })[0]
+    Assert 'live discovery records a failed fragment read with its error and warns with the fragment name and reason' ($failedEntry -and -not $failedEntry.canonicalHash -and $failedEntry.error -match '500' -and $readWarnings -match 'content-safety-screening' -and $readWarnings -match '500') "$readWarnings | $($failedDiscovery.policyFragments | ConvertTo-Json -Compress)"
+    $failedReadDiscovery = [pscustomobject]@{ resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; location = 'eastus2'; sku = 'BasicV2'; policy = $currentPolicy; namedValues = $allNv; policyFragments = $failedDiscovery.policyFragments }
+    $failedReadPlan = Get-ClaudeFlowMigrationPlan -Record $record -Discovery $failedReadDiscovery
+    $failedReadCheck = Test-ClaudeFlowMigration -Record $record -Discovery $failedReadDiscovery
+    Assert 'a fragment read that failed in live discovery plans the fragment update and fails the migration check' (-not (Test-ClaudeFlowPlanIsNoop $failedReadPlan) -and @($failedReadPlan.Actions | Where-Object { $_.Target -eq 'policy fragment content-safety-screening' }).Count -eq 1 -and -not $failedReadCheck.Passed) (($failedReadPlan | ConvertTo-Json -Depth 8 -Compress) + ' | ' + ($failedReadCheck | ConvertTo-Json -Depth 8 -Compress))
 }
-finally { Remove-Item Function:\az, Function:\Invoke-RestMethod -ErrorAction SilentlyContinue }
+finally { $global:LifecycleFragmentReadFails = $false; Remove-Item Function:\az, Function:\Invoke-RestMethod -ErrorAction SilentlyContinue }
 
+$currentFragments = @([pscustomobject]@{ name='content-safety-screening'; value=$desiredFragment })
 $freshDiscovery = [pscustomobject]@{
     resourceGroup = 'rg-contoso'
     apimName = 'apim-contoso'
@@ -130,7 +159,7 @@ $freshDiscovery = [pscustomobject]@{
     sku = 'BasicV2'
     policy = $currentPolicy
     namedValues = $allNv
-    policyFragments = @('content-safety-screening')
+    policyFragments = $currentFragments
     jobs = @()
 }
 $noopPolicy = Get-ClaudeFlowMigrationPlan -Record $record -Discovery $freshDiscovery
@@ -148,18 +177,42 @@ Assert 'Test-ClaudeFlowMigration is not current when a live fragment content has
 $missingFragmentPlan = Get-ClaudeFlowMigrationPlan -Record $record -Discovery ([pscustomobject]@{ resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; location = 'eastus2'; sku = 'BasicV2'; policy = $currentPolicy; namedValues = $allNv; policyFragments = @() })
 Assert 'missing policy fragment still plans a create' (@($missingFragmentPlan.Actions | Where-Object { $_.Target -eq 'policy fragment content-safety-screening' -and $_.Verb -eq 'Create' }).Count -eq 1) ($missingFragmentPlan | ConvertTo-Json -Depth 8 -Compress)
 Assert 'fragment content participates in the update fingerprint' ((Get-ClaudeFlowFingerprint @($noopWithFragment)) -ne (Get-ClaudeFlowFingerprint @($differentFragmentPlan))) 'fingerprints matched despite content drift'
+# P102 council round 2 (QA): the approved fingerprint binds the exact fragment content, not only the action shape.
+$otherContentDiscovery = $freshDiscovery.PSObject.Copy()
+$otherContentDiscovery | Add-Member -NotePropertyName policyFragments -NotePropertyValue @([pscustomobject]@{ name='content-safety-screening'; value='<fragment><choose><otherwise /></choose></fragment>' }) -Force
+$otherContentPlan = Get-ClaudeFlowMigrationPlan -Record $record -Discovery $otherContentDiscovery
+$actionShape = { param($Plan) (@($Plan.Actions | ForEach-Object { "$($_.Verb) $($_.Target)" }) -join ';') }
+Assert 'two different live fragment contents plan the same action shape' ((& $actionShape $differentFragmentPlan) -eq (& $actionShape $otherContentPlan) -and (& $actionShape $otherContentPlan) -match 'Update policy fragment content-safety-screening') "$(& $actionShape $differentFragmentPlan) | $(& $actionShape $otherContentPlan)"
+Assert 'the update fingerprint differs for two different live fragment contents with the same action shape' ((Get-ClaudeFlowFingerprint @($differentFragmentPlan)) -ne (Get-ClaudeFlowFingerprint @($otherContentPlan))) 'fingerprints matched for different fragment contents'
+$desiredFragmentHash = Get-ClaudeFlowLifecycleCanonicalXmlHash -XmlText $desiredFragment
+$liveFragmentHash = Get-ClaudeFlowLifecycleCanonicalXmlHash -XmlText '<fragment><choose /></fragment>'
+$fingerprinted = ConvertTo-ClaudeFlowCanonical @($differentFragmentPlan)
+Assert 'the fingerprinted plan data holds the exact desired and live fragment hashes' ($desiredFragmentHash -and $liveFragmentHash -and [string]$differentFragmentPlan.Data.DesiredPolicyFragmentHashes['content-safety-screening'] -eq $desiredFragmentHash -and [string]$differentFragmentPlan.Data.LivePolicyFragmentHashes['content-safety-screening'] -eq $liveFragmentHash -and $fingerprinted.Contains($desiredFragmentHash) -and $fingerprinted.Contains($liveFragmentHash)) ($differentFragmentPlan.Data | ConvertTo-Json -Depth 4 -Compress)
+# P102 council round 2 (Coder): a fragment whose content could not be read, or that a discovery names without its
+# content, is not current: the plan writes the release content and the check fails until a read returns content
+# that matches.
+$unreadDiscovery = $freshDiscovery.PSObject.Copy()
+$unreadDiscovery | Add-Member -NotePropertyName policyFragments -NotePropertyValue @([pscustomobject]@{ name='content-safety-screening'; value=''; canonicalHash=''; error='Response status code does not indicate success: 500 (Internal Server Error).' }) -Force
+$unreadPlan = Get-ClaudeFlowMigrationPlan -Record $record -Discovery $unreadDiscovery
+Assert 'a policy fragment whose content could not be read plans an update that writes the release content' (@($unreadPlan.Actions | Where-Object { $_.Target -eq 'policy fragment content-safety-screening' -and $_.Verb -eq 'Update' -and $_.Detail -match 'could not be read' -and $_.Detail -match [regex]::Escape($desiredFragmentHash) }).Count -eq 1 -and @($unreadPlan.Data.UnreadPolicyFragments) -contains 'content-safety-screening') ($unreadPlan | ConvertTo-Json -Depth 8 -Compress)
+$unreadCheck = Test-ClaudeFlowMigration -Record $record -Discovery $unreadDiscovery
+Assert 'Test-ClaudeFlowMigration is not current when a live fragment could not be read' (-not $unreadCheck.Passed -and @($unreadCheck.Checks | Where-Object { $_.Name -eq 'policy fragments' -and -not $_.Passed -and $_.Evidence -match 'unread=content-safety-screening' }).Count -eq 1) ($unreadCheck | ConvertTo-Json -Depth 8 -Compress)
+$nameOnlyDiscovery = $freshDiscovery.PSObject.Copy()
+$nameOnlyDiscovery | Add-Member -NotePropertyName policyFragments -NotePropertyValue @('content-safety-screening') -Force
+$nameOnlyPlan = Get-ClaudeFlowMigrationPlan -Record $record -Discovery $nameOnlyDiscovery
+Assert 'a policy fragment named without its content is not current' (@($nameOnlyPlan.Actions | Where-Object { $_.Target -eq 'policy fragment content-safety-screening' -and $_.Verb -eq 'Update' -and $_.Detail -match 'not in the discovery' }).Count -eq 1 -and -not (Test-ClaudeFlowMigration -Record $record -Discovery $nameOnlyDiscovery).Passed) ($nameOnlyPlan | ConvertTo-Json -Depth 8 -Compress)
 
 $normalizedPolicy = '<policies>usd-budgets usd-budget-state external-idp-extra-audience urn:disabled:claude-extra-audience entitlement-source <include-fragment fragment-id="content-safety-screening" /></policies>'
-$normalizedPlan = Get-ClaudeFlowMigrationPlan -Record $record -Discovery ([pscustomobject]@{ resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; location = 'eastus2'; sku = 'BasicV2'; policy = $normalizedPolicy; namedValues = $allNv; policyFragments = @('content-safety-screening') })
+$normalizedPlan = Get-ClaudeFlowMigrationPlan -Record $record -Discovery ([pscustomobject]@{ resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; location = 'eastus2'; sku = 'BasicV2'; policy = $normalizedPolicy; namedValues = $allNv; policyFragments = $currentFragments })
 Assert 'APIM-normalized current policy markers do not cause repeated updates' (Test-ClaudeFlowPlanIsNoop $normalizedPlan)
 $oldMarkedPolicy = '<policies>usd-budgets usd-budget-state external-idp-extra-audience urn:disabled:claude-extra-audience entitlement-source</policies>'
-$oldMarkedPlan = Get-ClaudeFlowMigrationPlan -Record $record -Discovery ([pscustomobject]@{ resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; location = 'eastus2'; sku = 'BasicV2'; policy = $oldMarkedPolicy; namedValues = $allNv; policyFragments = @('content-safety-screening') })
+$oldMarkedPlan = Get-ClaudeFlowMigrationPlan -Record $record -Discovery ([pscustomobject]@{ resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; location = 'eastus2'; sku = 'BasicV2'; policy = $oldMarkedPolicy; namedValues = $allNv; policyFragments = $currentFragments })
 Assert 'policy migration rewrites older marked policies that lack the content safety include' (@($oldMarkedPlan.Actions | Where-Object Target -eq 'apim policy claude-foundry').Count -eq 1 -and @($oldMarkedPlan.Data.MissingNamedValues).Count -eq 0 -and @($oldMarkedPlan.Data.MissingPolicyFragments).Count -eq 0) ($oldMarkedPlan | ConvertTo-Json -Depth 8 -Compress)
 
 $blankAudience = @{}
 foreach ($r in $refs) { $blankAudience[$r] = 'x' }
 $blankAudience['external-idp-extra-audience'] = ' '
-$blankPlan = Get-ClaudeFlowMigrationPlan -Record $record -Discovery ([pscustomobject]@{ resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; location = 'eastus2'; sku = 'BasicV2'; policy = $currentPolicy; namedValues = $blankAudience; policyFragments = @('content-safety-screening') })
+$blankPlan = Get-ClaudeFlowMigrationPlan -Record $record -Discovery ([pscustomobject]@{ resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; location = 'eastus2'; sku = 'BasicV2'; policy = $currentPolicy; namedValues = $blankAudience; policyFragments = $currentFragments })
 Assert 'migration normalizes a blank Desktop audience before policy validation' ($blankPlan.Data.NormalizeDisabledAudience -eq $true -and (($blankPlan.Actions | ForEach-Object Target) -contains 'named value external-idp-extra-audience'))
 
 . (Join-Path $root 'scripts\flow\migrations\0003-job-pins.ps1')
