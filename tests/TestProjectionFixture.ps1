@@ -238,16 +238,27 @@ function az {
         # az.cmd re-quotes its arguments for cmd.exe, so an embedded quote splits the command (measured with
         # the real az.cmd in P95 council round 1: "ERROR: unrecognized arguments").
         if ($command.Contains('"')) { $global:LASTEXITCODE = 2; return "ERROR: unrecognized arguments: $command" }
-        # Send-RunnerFile: an empty temp file, base64url chunks appended, then the decoded file's SHA-256.
-        if ($command -match "^node -e require\('fs'\)\.mkdirSync\('[^']*',\{recursive:true\}\);require\('fs'\)\.writeFileSync\('([^']+)',''\)$") {
-            $global:FixtureRunnerFiles[$Matches[1]] = [Text.StringBuilder]::new(); return ''
+        # Send-RunnerFile (ADR-0053): a part directory, gzip-compressed base64url parts acknowledged by index and
+        # length, then one assembly that decompresses them and prints the SHA-256 of the result.
+        if ($command -match "^node -e require\('fs'\)\.mkdirSync\('([^']+/\.xfer-[0-9a-f]{16})',\{recursive:true\}\)$") {
+            $global:FixtureRunnerFiles[$Matches[1]] = @{}; return ''
         }
-        if ($command -match "^node -e require\('fs'\)\.appendFileSync\('([^']+)','([^']*)'\)$") { $null = $global:FixtureRunnerFiles[$Matches[1]].Append($Matches[2]); return '' }
-        if ($command -match "^node -e f=require\('fs'\);f\.writeFileSync\('[^']+',Buffer\.from\(f\.readFileSync\('([^']+)','utf8'\),'base64url'\)\)") {
-            $b64 = $global:FixtureRunnerFiles[$Matches[1]].ToString().Replace('-', '+').Replace('_', '/')
+        if ($command -match "^node -e f=require\('fs'\);p='([^']+/\.xfer-[0-9a-f]{16})/(\d{6})';f\.writeFileSync\(p,'([A-Za-z0-9_-]*)'\);console\.log\('ok',p\.slice\(-6\),String\(f\.statSync\(p\)\.size\)\)$") {
+            $global:FixtureRunnerFiles[$Matches[1]][$Matches[2]] = $Matches[3]; return "ok $($Matches[2]) $($Matches[3].Length)"
+        }
+        if ($command -match "^node -e f=require\('fs'\);z=require\('zlib'\);d='([^']+)';") {
+            $parts = $global:FixtureRunnerFiles[$Matches[1]]
+            $null = $global:FixtureRunnerFiles.Remove($Matches[1])
+            $b64 = (-join @($parts.Keys | Sort-Object | ForEach-Object { $parts[$_] })).Replace('-', '+').Replace('_', '/')
             $b64 += '=' * ((4 - $b64.Length % 4) % 4)
-            return [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Convert]::FromBase64String($b64))).Replace('-', '').ToLower()
+            $plain = [IO.MemoryStream]::new()
+            if ($b64.Length) {
+                $gzip = [IO.Compression.GZipStream]::new([IO.MemoryStream]::new([Convert]::FromBase64String($b64)), [IO.Compression.CompressionMode]::Decompress)
+                $gzip.CopyTo($plain); $gzip.Dispose()
+            }
+            return [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($plain.ToArray())).Replace('-', '').ToLower()
         }
+        if ($command -match "^node -e require\('fs'\)\.rmSync\('([^']+)',") { $null = $global:FixtureRunnerFiles.Remove($Matches[1]); return '' }
         if ($command -match "existsSync\('/work/sync/node_modules'\)") {
             return $(if ($FixtureCase -eq 'node-modules-present') { 'present' } else { 'absent' })
         }

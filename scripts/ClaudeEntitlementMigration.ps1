@@ -9,6 +9,7 @@
 # reads take 'eastus2' (as Install-ClaudeGateway.ps1 converts an existing gateway's region).
 . (Join-Path $PSScriptRoot 'ClaudeGatewayRegion.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeEntitlementGroups.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeRunnerTransferModel.ps1')
 
 function Test-ClaudeMigrationGuid([AllowEmptyString()][string]$Value) {
     return ([string]$Value -match '^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$')
@@ -45,12 +46,11 @@ function Resolve-ClaudeMigrationGroup {
     return [pscustomobject]@{ Tier = $Tier; Name = ''; Id = ''; Source = ''; Found = $false; Absent = $false; Missing = ''; Members = @() }
 }
 
-# The runner's transfer on this branch sends one 4,900-character chunk per exec, one at a time, 6.3 s each
-# (measured 2026-10-06), and a snapshot takes about 127 bytes a record (63,150,738 bytes for 500,000, measured
-# 2026-10-06). Send-RunnerFile refuses a transfer that cannot end inside the snapshot's 2-hour apply-by time.
+# A snapshot takes about 127 bytes a record (63,150,738 bytes for 500,000, measured 2026-10-06). The runner sends it
+# compressed and in parallel parts (ADR-0053), and Send-RunnerFile refuses a transfer that cannot end 10 minutes
+# before the snapshot's 2-hour apply-by time; the plan estimates it with the runner's own model.
 function Get-ClaudeMigrationTransferMinutes([int]$Developers) {
-    $chars = [Math]::Ceiling([Math]::Max(1, $Developers) * 127 * 4 / 3)
-    return [int][Math]::Ceiling(([Math]::Ceiling($chars / 4900) + 2) * 6.3 / 60)
+    return [int][Math]::Ceiling((Get-ClaudeRunnerTransferSeconds -Bytes ([long][Math]::Max(1, $Developers) * 127)) / 60)
 }
 
 function ConvertTo-ClaudeMigrationCheck($Check) {
@@ -76,7 +76,8 @@ function Get-ClaudeEntitlementMigrationFacts {
         [scriptblock]$Readiness = { param($Parameters) , @(Get-ClaudeProjectionReadiness @Parameters) },
         [scriptblock]$Inventory = { param($Parameters) Get-ClaudeProjectionResourcePlan @Parameters },
         [scriptblock]$FormatInventory = { param($Plan) Format-ClaudeProjectionResourcePlan -Plan $Plan },
-        [scriptblock]$Cost = { param($Developers, $Region, $Access) Get-ClaudeMigrationMonthlyCost -Developers $Developers -Region $Region -ResolverInboundAccess $Access }
+        [scriptblock]$Cost = { param($Developers, $Region, $Access) Get-ClaudeMigrationMonthlyCost -Developers $Developers -Region $Region -ResolverInboundAccess $Access },
+        [scriptblock]$TransferMinutes = { param($Developers) Get-ClaudeMigrationTransferMinutes -Developers $Developers }
     )
     $values = Get-ClaudeFlowLifecycleNamedValueMap -Discovery $Discovery
     $store = if ($values['entitlement-source']) { [string]$values['entitlement-source'] } else { 'named-value' }
@@ -235,11 +236,11 @@ function Get-ClaudeEntitlementMigrationFacts {
             if (-not @($checks | Where-Object { $_.Name -eq $converted.Name }).Count) { $checks.Add($converted) }
         }
     }
-    $transferMinutes = Get-ClaudeMigrationTransferMinutes -Developers $facts.Developers
-    if ($transferMinutes -gt 110) {
+    $minutesToTransfer = [int](& $TransferMinutes $facts.Developers)
+    if ($minutesToTransfer -gt 110) {
         $checks.Add([pscustomobject]@{ Name = 'Snapshot transfer through the runner'; Result = 'FAIL'
-            Evidence = "about $transferMinutes minutes for $($facts.Developers) developers, past the snapshot's 2-hour apply-by time"
-            Remedy = "A directory of this size syncs in the optional sync job: .\scripts\Deploy-ClaudeProjectionRenewal.ps1 -ResourceGroup $($facts.ResourceGroup) -ApimName $($facts.ApimName) -NamePrefix $($facts.NamePrefix) -AlertEmail <address>; the directory-scale transfer is ROADMAP packet P99." })
+            Evidence = "about $minutesToTransfer minutes for $($facts.Developers) developers, past the snapshot's 2-hour apply-by time"
+            Remedy = "A directory of this size syncs in the optional sync job, which reads Microsoft Graph inside the network: .\scripts\Deploy-ClaudeProjectionRenewal.ps1 -ResourceGroup $($facts.ResourceGroup) -ApimName $($facts.ApimName) -NamePrefix $($facts.NamePrefix) -AlertEmail <address>." })
     }
     $facts.Checks = @($checks)
     $facts.Problems = @($problems)
@@ -254,7 +255,7 @@ function Get-ClaudeEntitlementMigrationFacts {
     if ($price -and $null -ne $price.MonthlyUsd) { $facts.MonthlyUsd = [decimal]$price.MonthlyUsd }
     else { $facts.CostUnknownReason = $(if ($price -and $price.UnknownReason) { [string]$price.UnknownReason } else { 'the price could not be read' }) }
     # The apply took 36 minutes for one developer in the live run of 2026-10-06 (docs/status/P100.md, Live run).
-    $facts.EstimatedMinutes = 35 + $transferMinutes
+    $facts.EstimatedMinutes = 35 + $minutesToTransfer
     return [pscustomobject]$facts
 }
 

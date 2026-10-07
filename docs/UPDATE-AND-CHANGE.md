@@ -124,7 +124,7 @@ The plan prints the second command with its fingerprint, followed by any option 
 | Readiness | the projection preflight (`scripts/ClaudeProjectionChecks.ps1`) and `scripts/ClaudeProjectionReadiness.ps1`: region availability, usage against limits, the right to create role assignments and template validation |
 | Resources, network and identities | `scripts/ClaudeProjectionInventory.ps1`; `tests/Test-ProjectionInventory.ps1` compares it with the compiled templates |
 | Monthly cost | `scripts/Measure-ClaudeProjectionCost.ps1`, from Azure Retail Prices API list prices |
-| Time | about 35 minutes for the apply, plus the snapshot transfer through the runner at 6.3 seconds per 4,900-character part. On 2026-10-06 the plan of a Basic v2 gateway with one developer took 3 minutes and its apply 36 minutes ([P100 status](status/P100.md#live-run)). |
+| Time | about 35 minutes for the apply, plus the snapshot transfer through the runner, compressed and sent in parts 16 at a time: a snapshot of 500,000 developers took 41 minutes on 2026-10-06 ([P99 status](status/P99.md#live-run)). On 2026-10-06 the plan of a Basic v2 gateway with one developer took 3 minutes and its apply 36 minutes ([P100 status](status/P100.md#live-run)). |
 
 The plan is BLOCKED, prints no apply command, and `-Apply` refuses it before the backup when:
 
@@ -133,7 +133,7 @@ The plan is BLOCKED, prints no apply command, and `-Apply` refuses it before the
 - the tier is not v2;
 - a private resolver is asked for on Basic v2;
 - the snapshot transfer would take more than 110 minutes, since a snapshot's apply-by time is 2 hours after
-  its export.
+  its export; at the measured rate that is about 1.4 million developers.
 
 A decision record that names another gateway, by resource group, API Management name or the subscription it
 names, gets the same treatment: the plan names both gateways and prints no apply command, and `-Apply` refuses

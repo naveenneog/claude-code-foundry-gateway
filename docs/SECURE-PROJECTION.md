@@ -144,11 +144,13 @@ with `az acr manifest show-metadata`, then deploys the job with that digest
 ([ADR-0049](adr/0049-projection-renewal-deployment.md)). Its trigger is Manual by default;
 `-CronExpression '<five fields>'` adds a schedule. A manual run starts with `az containerapp job start`. The job needs Microsoft Graph application
 permission `GroupMember.Read.All`, granted by a Privileged Role Administrator or Global Administrator
-through `scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1`. Large full syncs through the runner
-are slow because `scripts/ClaudeRunner.ps1` sends files through `az container exec` in chunks under
-5,000 characters, about five seconds each. About 40,000 developers fit in a snapshot's 2-hour apply-by
-time; a transfer that cannot end in time is refused before it starts, and ROADMAP packet P99 plans a
-directory-scale transfer ([ADR-0052](adr/0052-cosmos-default-installer.md)).
+through `scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1`. A full sync through the runner sends its
+snapshot with `Send-RunnerFile` (`scripts/ClaudeRunner.ps1`): gzip-compressed, in base64url parts of one
+`az container exec` each, up to 16 at once, then assembled and checked with a SHA-256 on the runner
+([ADR-0053](adr/0053-parallel-compressed-runner-transfer.md)). A snapshot of 500,000 developers is about
+3,300 parts; the live measurement is in [P99 status](status/P99.md#live-run). A transfer that cannot end
+10 minutes before the snapshot's 2-hour apply-by time is refused before it starts, or stopped when its
+measured rate falls behind; nothing is written either way.
 
 The script refuses before any write unless the gateway's `entitlement-projection-prefix` names this
 projection. The job writes records without `expiresAt`, which a resolver published before

@@ -46,7 +46,7 @@ fails the release stage while any remain. Detail for each one follows below.
 
 ## P100 research before implementation
 
-Researched 2026-10-06 for [ADR-0054](adr/0054-update-flow-entitlement-migration.md), before any P100 code. U131-U134 belong to P99, on its own branch.
+Researched 2026-10-06 for [ADR-0054](adr/0054-update-flow-entitlement-migration.md), before any P100 code. U131-U134 belong to P99.
 
 | ID | State | Question | Blocks |
 |---|---|---|---|
@@ -59,6 +59,19 @@ Researched 2026-10-06 for [ADR-0054](adr/0054-update-flow-entitlement-migration.
 | U158 | CLOSED | Does AUM's Direct publication know the developer's object ID when it publishes? Yes: `developer_change` resolves the developer (`person["id"]`) before it changes the memberships and before it calls `developer_publish` (`cli/finops/src/claude_finops/developer_actions.py:73,119-124`, read 2026-10-07). |
 | U159 | ASSUMED | Two syncs on one named-value gateway at the same time each write the whole lists from Entra, and the later write wins. Assumption: both read the same Entra state, so the result is the same; a membership change between the two reads is published by the next sync. Blast radius: one sync interval of a stale tier for one developer. Detector: the whole refresh rewrites every list on every run. |
 | U160 | OPEN | What does the sync do when the gateway's `entitlement-groups` names a group that was deleted? Plan: stop before any write and name the remedy (`-StandardGroup`/`-PremiumGroup` with `-RecordGroups`), as the update flow does for a missing authoritative group ([ADR-0054](adr/0054-update-flow-entitlement-migration.md)); closed by a P101 test. |
+
+---
+
+## P99 research before implementation
+
+Researched and measured on 2026-10-06 for [ADR-0053](adr/0053-parallel-compressed-runner-transfer.md), before any P99 code.
+
+| ID | State | Question | Blocks |
+|---|---|---|---|
+| U131 | CLOSED | How many `az container exec` calls a second reach one runner when several run at once? Measured 2026-10-06 in East US 2 against a 2-CPU container instance, each exec writing 4,850 characters: 0.16 a second one at a time (6.3 s each), 0.57 at 4, 0.93 at 8, 1.39 at 16 (10.9 s each) and 1.45 at 24 (15.6 s each). All 318 execs succeeded. The [ACI quota page](https://learn.microsoft.com/azure/container-instances/container-instances-resource-and-quota-limits) (updated 2026-07-26, read 2026-10-06) lists no exec limit. | P99 parallelism |
+| U132 | CLOSED | How far does a full snapshot compress? A synthetic 500,000-record snapshot in the exporter's format (`scripts/Sync-ClaudeProjection.ps1:260-284`) is 63,152,686 bytes. .NET gzip `Optimal` makes it 12,126,017 bytes (3,327 parts of 4,860 characters), `SmallestSize` 12,860,707, and Brotli 11,641,280; measured 2026-10-06 on PowerShell 7.6.6 (.NET 10.0.12). Random object IDs bound the ratio. | P99 part count |
+| U133 | CLOSED | Does Azure Resource Manager throttle 16 execs at once? Writes are limited for each subscription and service principal to a bucket of 200, refilled at 10 a second, and globally to 15 times that ([ARM throttling](https://learn.microsoft.com/azure/azure-resource-manager/management/request-limits-and-throttling), updated 2026-04-03, read 2026-10-06). An exec is a `POST` ([Containers - Execute Command](https://learn.microsoft.com/rest/api/container-instances/containers/execute-command), updated 2026-07-09). Measured 2026-10-06 with `az container exec --debug` against the P99 live runner: the exec's response carried `x-ms-ratelimit-remaining-subscription-writes: 199` and `x-ms-ratelimit-remaining-subscription-global-writes: 2999`, so an exec counts against the write bucket. At up to 1.45 execs a second the transfer uses about 15% of the refill rate. A throttled exec fails and is retried; a part that fails 3 times stops the transfer with nothing written. | P99 parallelism |
+| U134 | CLOSED | Does a 500,000-record snapshot arrive, apply and compare through the runner (2 CPU, 4 GB, `infra/projection-network.bicep:293-294`) within its 2-hour apply-by time? Yes, measured 2026-10-06: a 63,150,738-byte snapshot travelled in 41 minutes (3,336 parts, 16 at once), the writer applied 500,000 records in 529 s through one exec session, and `--compare-snapshot` found 0 differences in 28 s; the apply started 78 minutes before the apply-by time ([P99 live run](status/P99.md#live-run)). The operator-side Graph scan of 500,000 developers is not measured (U10). | P99 acceptance |
 
 ---
 

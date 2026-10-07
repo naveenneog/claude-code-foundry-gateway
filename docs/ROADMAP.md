@@ -103,7 +103,7 @@ deployment by hand fails ([P94 status](status/P94.md#p94-the-p86-renewal-job-dep
 | P96 | Merged (`755845c`) on 2026-10-06 with the owner's approval of 2026-10-05, after council round 7 and the packet gate at `c7f93d4` | Fixes from a live deployment: a new business unit identifier with a capital is refused with the lower-case rule before any write, by `Set-ClaudeBusinessUnit.ps1`, the AUM bridge and the manager's prompt; another spelling of a stored unit is refused with the stored spelling, the writers compare identifiers by their characters and keep each spelling's mode and parent entry, and a budget mode is refused for an identifier with capitals, while a unit the registry already holds with capitals keeps working; the guided flow's Tier and Desktop sign-in changes name their snapshot before their write ([P96 status](status/P96.md#p96-fixes-from-a-live-deployment-2026-10-05)). |
 | P97 | Merged with P98 (`c15f1c9`) on 2026-10-06 with the owner's approval of 2026-10-05, after council round 3 and the packet gate at `9c18978` | Cosmos entitlement persists until a sync changes it, and syncs run on demand: records carry no lease and a sync writes only changes; `Sync-ClaudeAccess.ps1 -User` publishes one developer's change; `sync/src/apply-projection.mjs` is the one Cosmos writer, serialised by an apply lock, and refuses stale snapshots; the switch admits on a full sync within 24 hours without the job; the job is optional and manual by default ([ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md), [P97 status](status/P97.md#p97-cosmos-entitlement-persists-until-a-sync-changes-it-2026-10-05)). |
 | P98 | Merged (`c15f1c9`) on 2026-10-06 with the owner's approval of 2026-10-05, after council round 2, a confirmation round and the packet gate at `9c18978` | The installer deploys the Cosmos projection by default: it is the recommended store for every size and `-Yes` chooses it; choosing it deploys, populates, compares and switches the gateway; a re-run migrates a named-value gateway and keeps a projection gateway's resolver access; named values above their capacity are refused; above that capacity the comparison baseline is a fresh Entra snapshot; the resolver is public by default; `-DeploySyncJob` adds the optional job; README, Setup and the projection guide open with a quickstart ([ADR-0052](adr/0052-cosmos-default-installer.md), [P98 status](status/P98.md#p98-the-installer-deploys-the-cosmos-projection-by-default-2026-10-06)) |
-| P99 | Next; not started | Directory-scale snapshot transfer: the deployer's populate step, the switch's snapshot compare and full syncs move a snapshot of 500,000 developers within its apply-by time, instead of about 40,000 through `az container exec` today ([ADR-0052](adr/0052-cosmos-default-installer.md), [P98 status](status/P98.md#p98-the-installer-deploys-the-cosmos-projection-by-default-2026-10-06)) |
+| P99 | Merged (`2cfb932f`) with the owner's approval | Directory-scale snapshot transfer: the deployer's populate step, the switch's snapshot compare and full syncs move a snapshot of 500,000 developers within its apply-by time, instead of about 40,000 through `az container exec` today ([ADR-0053](adr/0053-parallel-compressed-runner-transfer.md), [P99 status](status/P99.md)) |
 | P100 | Merged (`7b365f64`) with the owner's approval; ahead of the P99 merge at the owner's request | The update flow moves a named-value gateway to the Cosmos projection: `Update-ClaudeGateway.ps1` plans the move with the gateway's previous tier groups, business units and entitlement, checks quotas, regions, permissions and policy, shows the resources, network and cost, and applies the installer's deploy, populate, compare and switch on approval ([ADR-0054](adr/0054-update-flow-entitlement-migration.md), [P100 status](status/P100.md)) |
 | P101 | In progress (`p101-one-sync`), [ADR-0057](adr/0057-one-sync-command.md) | One sync command for every store: `Sync-ClaudeAccess.ps1 -User` publishes one developer's change on a named-value gateway too (it refreshes the lists), reads the tier groups the gateway records in `entitlement-groups` (else the decision record, else the default names, as the P100 plan does) and records them, so gateways installed or moved by the installer gain it, and the AUM tool's developer add and remove publish through it (U25) |
 | P102 | Spike running | Content safety for Claude requests: an Azure AI Content Safety resource and an API Management policy that screens Claude Messages requests, measured live first, because the built-in `llm-content-safety` policy documents no Anthropic Messages support |
@@ -228,6 +228,17 @@ Follow-ups from P98, not yet packets
   (`scripts/ClaudeProjectionChecks.ps1`) instead of reusing them.
 - The installer still accepts `-DeployProjection` and `-FlipProjectionAfterCleanCompare` and ignores
   them (SETUP says so); removing them is a breaking change for existing scripts.
+
+Follow-ups from P99, not yet packets ([P99 status](status/P99.md)):
+
+- The manual bash `send_runner_file` in [AZ-COMMANDS](AZ-COMMANDS.md) still sends one uncompressed chunk per
+  exec, one at a time, about 1 KB a second; `Send-RunnerFile` compresses and sends parts in parallel
+  ([ADR-0053](adr/0053-parallel-compressed-runner-transfer.md)).
+- `tests/Test-ProjectionPreflightNegative.ps1`, a manual mutation harness that `Test-All.ps1` does not run,
+  fails its baseline at `main` `8a4be16`: its sandbox copy of the council suite fails "deployer flip reaches the
+  sync-evidence switch" and the real Entitlement switch checks, which pass in the repository.
+- The operator-side Graph scan of 500,000 developers is not measured (U10); the snapshot's 2-hour apply-by time
+  holds that scan, the transfer and the 10 minutes `Send-RunnerFile` keeps for the steps after it.
 
 Follow-ups from P100, not yet packets
 ([P100 status](status/P100.md#council-round-4-confirmation-of-round-3)):
@@ -668,7 +679,7 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       budget and can be removed; the guided flow's Tier and Desktop sign-in changes name their snapshot
       under `backups/` and the write gate takes it
       ([P96 status](status/P96.md#p96-fixes-from-a-live-deployment-2026-10-05))
-- [ ] P99 directory-scale snapshot transfer — acceptance: a snapshot of 500,000 records is applied and compared
+- [x] P99 directory-scale snapshot transfer — acceptance: a snapshot of 500,000 records is applied and compared
       within its apply-by time, and the switch admits a gateway of that size, measured live; an ADR records
       the transport ([P98 status](status/P98.md#p98-the-installer-deploys-the-cosmos-projection-by-default-2026-10-06))
 - [x] P100 the update flow moves a named-value gateway to the Cosmos projection — acceptance: a disposable named-value gateway moves with the plan and the apply alone, its previous values reused, readiness checked and resources, network and cost shown before any write
