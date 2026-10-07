@@ -65,6 +65,7 @@ policy is delivered by the customer's device-management plane, while entitlement
 budgets and model allowlists are enforced at the gateway.
 
 </details>
+
 ## 2. Generate the profiles
 
 <details>
@@ -140,6 +141,7 @@ release older than the model does not send `thinking.type.enabled` and get a
 `400`.
 
 </details>
+
 ## 3. Intune on Windows
 
 <details>
@@ -274,6 +276,7 @@ the deployment window.
 | Rollback | Remove the assignment for profiles that the CSP removes cleanly; run the rollback script for registry values because Microsoft documents that removing some custom policy assignments might not revert the setting. For Win32 apps, assign **Uninstall** where packaging supports it. |
 
 </details>
+
 ## 4. Intune on macOS
 
 <details>
@@ -323,6 +326,7 @@ Claude Desktop MDM rollout order:
 | CA certificate/proxy | Device configuration profile | Certificate trust and proxy/PAC profiles before app first run. |
 
 </details>
+
 ## 5. Jamf Pro and Group Policy alternatives
 
 <details>
@@ -336,6 +340,7 @@ Claude Desktop MDM rollout order:
 | File distribution | A software-distribution tool copies `claude-code.managed-settings.json` to `C:\Program Files\ClaudeCode\managed-settings.json`, `/Library/Application Support/ClaudeCode/managed-settings.json`, or `/etc/claude-code/managed-settings.json`. This is lower precedence than MDM/HKLM. |
 
 </details>
+
 ## 6. Verify one device
 
 <details>
@@ -403,6 +408,7 @@ The proof command sends a tiny prompt through Claude Code with an empty
 | Gateway telemetry | The platform owner can join the request by UTC timestamp, user object id and model in Application Insights. |
 
 </details>
+
 ## 7. Live validation on this workstation
 
 <details>
@@ -439,6 +445,7 @@ the before/after registry value. The live run reached the same restored state
 because the policy key could not be created.
 
 </details>
+
 ## 8. Troubleshooting
 
 <details>
@@ -460,6 +467,7 @@ because the policy key could not be created.
 | Rollback removes assignment but device remains configured | CSP/profile removal did not delete registry values | Run the rollback script or Group Policy Preference delete action. |
 
 </details>
+
 ## Next
 
 - [Developer setup](../DEVELOPER.md) verifies a configured workstation.

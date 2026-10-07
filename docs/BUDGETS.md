@@ -240,6 +240,7 @@ no reference-gateway policy, named value or authority was changed.
 APIM counters do not solve complete streaming accounting.
 
 </details>
+
 ## Prerequisites
 
 <details>
@@ -297,6 +298,7 @@ on the same gateway ([authority switch](TURNSTILE.md#move-governance-back-to-the
 The second switch matters because Connect preserves an existing budget authority.
 
 </details>
+
 ## Reference: shipped defaults
 
 <details>
@@ -320,6 +322,7 @@ may have different values.
 | `calls-per-minute` | 120 | Requests per minute per developer |
 
 </details>
+
 ## 1. Read the effective limits
 
 <details>
@@ -357,6 +360,7 @@ The first page ends at `quota-overrides`; select **Load more** for the tier rows
 (`quota-premium`, `quota-standard`, `tpm-premium`, `tpm-standard`).
 
 </details>
+
 ## 2. Change a tier or the organisation ceiling
 
 <details>
@@ -390,6 +394,7 @@ twenty premium daily allowances, not a rollout sizing recommendation. Check the
 sum of top-level unit allocations and expected daily burn before expanding.
 
 </details>
+
 ## 3. Override one person's daily allowance
 
 <details>
@@ -415,6 +420,7 @@ value: `llm-token-limit` does not accept a per-person expression for
 `-Model` and `-OutputShare` determine its estimated token conversion.
 
 </details>
+
 ## 4. Restrict models
 
 <details>
@@ -440,6 +446,7 @@ The manual equivalent is the registry, managed preferences or settings file in
 that guide; there is no Azure portal switch for a local client setting.
 
 </details>
+
 ## 5. Verify and troubleshoot
 
 <details>
@@ -483,6 +490,7 @@ Counter behaviour at 500,000 identities is measured, not exact: [Scale](SCALE.md
 and [U9/U13](UNKNOWNS.md) describe the remaining limits.
 
 </details>
+
 ## Business-unit and team enforcement modes
 
 <details>
@@ -546,6 +554,7 @@ usage. The [owner's dated live checks](BUSINESS-UNITS.md#measured-on-the-referen
 and [ADR-0019](adr/0019-budget-enforcement-modes.md) state the tested envelope.
 
 </details>
+
 ## Next steps
 
 - [FinOps monthly close](FINOPS.md) — prices, attribution and reconciliation.

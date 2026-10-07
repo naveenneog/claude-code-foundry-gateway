@@ -286,6 +286,12 @@ function Test-GuideStructure([string]$Path, [string]$Text, [bool]$Enrolled) {
   $logical = $logical -replace "`r", ""
   if ($logical -match '(?i)C:\\Users\\') { $errors.Add('local machine path appears in guide') }
   if ($logical -match '(?i)\bAlice\b|\bBob\b|\bNaveen\b') { $errors.Add('personal/example name appears in guide') }
+  $closeRows = @(Get-MarkdownScanLines $logical)
+  for ($k = 0; $k -lt $closeRows.Count - 1; $k++) {
+    if ($closeRows[$k].Text -match '^\s*</details>\s*$' -and $closeRows[$k + 1].Original.Trim()) {
+      $errors.Add("line $($closeRows[$k + 1].Number) follows </details> without a blank line, so GitHub renders it as raw HTML text: $($closeRows[$k + 1].Original.Trim())")
+    }
+  }
   if (-not $Enrolled) { return ,$errors.ToArray() }
 
   $scanLines = Get-MarkdownScanLines $logical
@@ -396,6 +402,7 @@ Assert-InvalidCase 'Quickstart heading hidden in details' (Join-Lines @('# Guide
 Assert-InvalidCase 'Quickstart body hidden in details' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','<details>','','<summary>Steps</summary>','','**Expected result:** success.','','</details>','','## Next','','- [Next](NEXT.md)')) 'Quickstart body contains details or summary'
 Assert-InvalidCase 'generic summary rejected' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','**Expected result:** success.','','## Body','','<details>','','<summary>Guide details</summary>','','Text.','','</details>','','## Next','','- [Next](NEXT.md)')) 'generic summary'
 Assert-InvalidCase 'duplicate summaries rejected' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','**Expected result:** success.','','## One','','<details>','','<summary>First area</summary>','','Text.','','</details>','','## Two','','<details>','','<summary>First area</summary>','','Text.','','</details>','','## Next','','- [Next](NEXT.md)')) 'duplicated'
+Assert-InvalidCase 'heading directly after a closing details tag' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','**Expected result:** success.','','## Body','','<details>','','<summary>Area</summary>','','Text.','','</details>','## Next','','- [Next](NEXT.md)')) 'follows </details> without a blank line'
 Assert-NoPlaceholderCase 'definition before fenced command' (Join-Lines @('# Guide','','`<developer-upn>` is the selected account.','','## Quickstart','','```powershell','Do-Thing -User <developer-upn>','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)'))
 Assert-InvalidCase 'local path and real name' (Join-Lines @('# Guide','','Purpose C:\Users\owner\checkout mentions Alice.','','## Quickstart','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)')) 'local machine path|personal/example name'
 

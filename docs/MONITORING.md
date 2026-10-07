@@ -121,6 +121,7 @@ name or ARM resource ID.
 ---
 
 </details>
+
 ## 1. What is emitted
 
 <details>
@@ -153,6 +154,7 @@ a client-supplied header and cannot be spoofed by editing a config file.
 ---
 
 </details>
+
 ## 2. The chart — step by step
 
 <details>
@@ -189,6 +191,7 @@ the priced ledger for finance, with its caveats.
 ---
 
 </details>
+
 ## 3. Filtering
 
 <details>
@@ -214,6 +217,7 @@ usage before deciding whether to change default aliases or budgets.
 ---
 
 </details>
+
 ## 4. Same data, from the CLI
 
 <details>
@@ -259,6 +263,7 @@ Two syntax traps:
 ---
 
 </details>
+
 ## 5. Drill into logs
 
 <details>
@@ -326,6 +331,7 @@ custom metrics also remain subject to the namespace's series limit.
 ---
 
 </details>
+
 ## 6. Alerts
 
 <details>
@@ -365,6 +371,7 @@ you alert on it.
 ---
 
 </details>
+
 ## 7. Dashboard
 
 <details>
@@ -708,6 +715,7 @@ uses the log rather than metrics — see [ADR-0006](adr/0006-ledger-is-the-llm-l
 ---
 
 </details>
+
 ## 8. When the charts are empty
 
 <details>
@@ -730,6 +738,7 @@ metric exists, and every value is zero.
 ---
 
 </details>
+
 ## 9. Next
 
 | Task | Guide |

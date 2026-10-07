@@ -27,6 +27,7 @@ in the engineering record; do not lower a gate to publish.
 There is no Azure portal action that releases this repository.
 
 </details>
+
 ## Cutting a release
 
 <details>
@@ -74,6 +75,7 @@ the local gate or approve a deployment. The Azure portal only operates the
 deployed gateway.
 
 </details>
+
 ## Verify and troubleshoot
 
 <details>
@@ -87,6 +89,7 @@ relationship instead of rewriting published history. If Test-All finishes
 unexpectedly early, read its full summary: all registered checks must run.
 
 </details>
+
 ## What the test enforces
 
 <details>
@@ -108,6 +111,7 @@ Each of these was negative-tested by breaking the changelog and confirming the
 test fails.
 
 </details>
+
 ## Version numbers
 
 <details>
@@ -127,6 +131,7 @@ not a bug fix from the caller's point of view. Record it under `Changed` and say
 so plainly — v1.5.0 has an example.
 
 </details>
+
 ## Known limitations
 
 <details>
@@ -139,6 +144,7 @@ reader needs before they trust a number. v1.5.0 records that the per-user token
 budget does not count cache tokens, and by how much.
 
 </details>
+
 ## Next steps
 
 [Operations](OPERATIONS.md#4-back-up-change-restore-verify) covers customer

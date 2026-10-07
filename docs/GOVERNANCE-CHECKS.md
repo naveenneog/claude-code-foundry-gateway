@@ -55,6 +55,7 @@ There is no single portal button equivalent to this report.
 ---
 
 </details>
+
 ## Check 1 — Is the caller entitled, and at which tier?
 
 <details>
@@ -110,6 +111,7 @@ x-governed-by                    apim-claude-gateway
 ---
 
 </details>
+
 ## Check 2 — Tier enforcement, using a second identity
 
 <details>
@@ -144,6 +146,7 @@ portal operator's own sign-in is a different identity.
 ---
 
 </details>
+
 ## Check 3 — Prove the budget actually throttles
 
 <details>
@@ -194,6 +197,7 @@ conclusion about the new limit.
 ---
 
 </details>
+
 ## Check 4 — Chargeback attribution
 
 <details>
@@ -251,6 +255,7 @@ evidence of complete billing.
 ---
 
 </details>
+
 ## Configuration audits
 
 <details>
@@ -308,6 +313,7 @@ $uri = "https://management.azure.com/subscriptions/$sub/resourceGroups/$RG/provi
 ---
 
 </details>
+
 ## Traffic and errors at the gateway
 
 <details>
@@ -331,6 +337,7 @@ Query access is required, not a Foundry inference role.
 ---
 
 </details>
+
 ## Client-side verification
 
 <details>
@@ -353,6 +360,7 @@ provider in VS Code; use [Developer setup](../DEVELOPER.md#using-it).
 If a request fails, [Troubleshooting](TROUBLESHOOTING.md) routes by symptom.
 
 </details>
+
 ## Next
 
 - [Operations](OPERATIONS.md) covers health and headroom.

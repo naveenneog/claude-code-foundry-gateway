@@ -52,6 +52,7 @@ az login --tenant $gateway.tenantId --allow-no-subscriptions
 ---
 
 </details>
+
 ## One command
 
 <details>
@@ -201,6 +202,7 @@ stops before writing anything if a check fails.
 ---
 
 </details>
+
 ## Using it
 
 <details>
@@ -259,6 +261,7 @@ conversation history and connected tools can also contain your prompts.
 ---
 
 </details>
+
 ## If something is wrong
 
 <details>
@@ -292,6 +295,7 @@ to a public issue.
 ---
 
 </details>
+
 ## FAQ
 
 <details>
@@ -371,6 +375,7 @@ until you sign back in with Gateway.
 ---
 
 </details>
+
 ## Appendix — configuring it by hand
 
 <details>
@@ -713,6 +718,7 @@ to use on another machine instead:
 ```
 
 </details>
+
 ## Next
 
 - [Troubleshooting](docs/TROUBLESHOOTING.md) maps known symptoms to fixes.

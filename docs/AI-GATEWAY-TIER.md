@@ -44,6 +44,7 @@ Learn says governance policies are operational controls, and that financial repo
 provider billing or Azure Cost Management. That page predates the cost limits.
 
 </details>
+
 ## How it is deployed
 
 <details>
@@ -78,6 +79,7 @@ measured, `Invalid field 'counterKey' specified`. Per-key overrides go in an `ov
 the cost limit; their shape was not tested.
 
 </details>
+
 ## What happened with Claude
 
 <details>
@@ -97,6 +99,7 @@ sign-in asked for a fresh multifactor approval that could not be given unattende
 followed the published sample's shape, which expects its model route within a minute.
 
 </details>
+
 ## Which to use
 
 <details>
@@ -113,6 +116,7 @@ Revisit when the tier enforces budgets per Entra principal, which its release no
 coming: that removes the main reason to keep identity in front of it.
 
 </details>
+
 ## Next
 
 - [Comparison](COMPARISON.md) covers the gateway options.

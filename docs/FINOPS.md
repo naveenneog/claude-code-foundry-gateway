@@ -49,6 +49,7 @@ or an authorised administrator reads the gateway's `turnstile-integration`
 named value. Do not derive a client ID from an account or tenant ID.
 
 </details>
+
 ## 1. Publish or refresh the reporting definitions
 
 <details>
@@ -87,6 +88,7 @@ Confirm recent known requests, nonempty `price_book_date`/`membership_date`,
 and `priced_ok`. An empty chart is not proof of zero spend.
 
 </details>
+
 ## 2. Select and export the closed month
 
 <details>
@@ -117,6 +119,7 @@ Child spend also rolls into its parent, so do not sum a parent and its children
 as independent charges.
 
 </details>
+
 ## 3. Review caveats before approving allocations
 
 <details>
@@ -139,6 +142,7 @@ dollar amount nor complete billable usage. The measured cache ratios in older
 examples describe that sample only, not your organisation.
 
 </details>
+
 ## 4. Compare to billed cost and set the next budget
 
 <details>
@@ -158,6 +162,7 @@ it to tokens. Concurrent requests and cache blindness mean it is not a hard
 dollar stop; see [Scale](SCALE.md#the-budget-is-a-delayed-kill-switch-not-a-hard-cap).
 
 </details>
+
 ## Optional consoles
 
 <details>
@@ -221,6 +226,7 @@ fresh sign-in. The owner's live manager-only acceptance is still open in
 for that separate live acceptance.
 
 </details>
+
 ## Next steps
 
 - [Monitoring](MONITORING.md) — saved functions, workbooks, alerts and empty data.

@@ -69,6 +69,7 @@ showing Healthy does not test the developer's proxy.
 ---
 
 </details>
+
 ## 1. The complete list
 
 <details>
@@ -169,6 +170,7 @@ one most often missing, because every other host in the deployment is under
 ---
 
 </details>
+
 ## 2. What differs between the clients
 
 <details>
@@ -226,6 +228,7 @@ problem. See [FOUNDRY-DIRECT.md §4](FOUNDRY-DIRECT.md#4-diagnostics).
 ---
 
 </details>
+
 ## 3. Administration, and what developers do not need
 
 <details>
@@ -237,6 +240,7 @@ or the health checks. They are **not** needed on a developer's machine to use
 any of the three clients.
 
 </details>
+
 ## 4. The instance metadata service
 
 <details>
@@ -264,6 +268,7 @@ CLI 2.1.272: `AzureCliCredential` is rejected with
 `Valid values are 'prod' or 'dev'`.
 
 </details>
+
 ## 5. How this was measured
 
 <details>
@@ -314,6 +319,7 @@ capture a local client's egress. Treat the hostname report as internal data.
 > a production endpoint.
 
 </details>
+
 ## 6. ECONNRESET is not an allowlist problem
 
 <details>
@@ -403,6 +409,7 @@ true and useless.
 > again gets the ticket closed as "already done".
 
 </details>
+
 ## Next steps
 
 For backend private endpoints, VNet/subnet ownership, DNS zones, and tests from

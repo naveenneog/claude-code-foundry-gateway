@@ -74,6 +74,7 @@ in AUM, or intentionally move authority with the existing Turnstile connection
 tools. Deployment does not change that setting for you.
 
 </details>
+
 ## Prerequisites and roles
 
 <details>
@@ -118,6 +119,7 @@ If `bu-modes` is absent, mode-write capability is false; missing metadata reads
 as strict. The service never rewrites the gateway policy to enable a feature.
 
 </details>
+
 ## Deploy with the script
 
 <details>
@@ -225,6 +227,7 @@ private endpoints, DNS and data roles without it still gave OneDeploy a 403;
 the same deployment succeeded after this routing property was enabled.
 
 </details>
+
 ## Deploy in the Azure portal
 
 <details>
@@ -349,6 +352,7 @@ storage/authentication credential. `DisableLocalAuth=true` makes the routing
 string insufficient to send telemetry. With Insights off, neither setting exists.
 
 </details>
+
 ## Deploy with Azure CLI
 
 <details>
@@ -381,6 +385,7 @@ Remote build is required for Linux-compatible Python dependencies when the
 workstation runs Windows.
 
 </details>
+
 ## Assign roles and manager groups
 
 <details>
@@ -448,6 +453,7 @@ including an object of empty arrays for no assignments. Clients must not turn
 that empty object into unrestricted access.
 
 </details>
+
 ## Verify reads, writes and expiry
 
 <details>
@@ -568,6 +574,7 @@ Privileged groups are restored before direct assignments; recreated assignment
 record IDs may differ, but principal/resource/role tuples must match the snapshot.
 
 </details>
+
 ## API reference
 
 <details>
@@ -601,6 +608,7 @@ After a timeout, read the target and audit log to establish its outcome.
 Unknown capabilities default to false in a client.
 
 </details>
+
 ## Cost
 
 <details>
@@ -637,6 +645,7 @@ Turnstile's approximately $58-159/month examples describe its different
 architectures, not a required AUM cost. See [Turnstile costs](TURNSTILE.md#what-it-costs).
 
 </details>
+
 ## Limits and 500,000 developers
 
 <details>
@@ -662,6 +671,7 @@ throttle. Large organizations must plan catalog size, individual override
 count, audit retention, query latency and manager concurrency explicitly.
 
 </details>
+
 ## Troubleshoot
 
 <details>
@@ -702,6 +712,7 @@ count, audit retention, query latency and manager concurrency explicitly.
 | Portal capture reaches sign-in | Copied session expired | Stop capture and tell the lead; never open or share the original profile |
 
 </details>
+
 ## Test and remove
 
 <details>
@@ -755,6 +766,7 @@ Tenant policy can create extra NSGs. Inspect any remainder and delete an isolate
 test group only after confirming no shared or attached resource remains.
 
 </details>
+
 ## Live verification receipt
 
 <details>
@@ -774,6 +786,7 @@ separate the September 24 pilot from the September 25 dedicated Basic v2 proof:
   storage pictures remain pending until a service is deployed again.
 
 </details>
+
 ## Next steps
 
 - Use an AUM build with an explicit service adapter, endpoint and scope; this

@@ -39,6 +39,7 @@ path is relative to the repository, from `Start-ClaudeGateway.ps1` and the root
 `Update-ClaudeGateway.ps1` alike.
 
 </details>
+
 ## What the flow asks and why
 
 <details>
@@ -59,6 +60,7 @@ modules present on the branch. It never invents resource names.
 | Guide | `Guide.ps1` | Writes `onboarding/HOW-TO-USE.md` with this tenant's names and the operator/developer/FinOps instructions. |
 
 </details>
+
 ## Attended setup
 
 <details>
@@ -142,6 +144,7 @@ so a test can drive an attended run through standard input
 take precedence over it.
 
 </details>
+
 ## Review and fingerprint
 
 <details>
@@ -226,6 +229,7 @@ and does not exit its caller
 ([U36](UNKNOWNS.md#u36--a-top-level-run-and-an-in-process-call--closed-2026-09-28)).
 
 </details>
+
 ## Resume after failure
 
 <details>
@@ -267,6 +271,7 @@ step was added or removed since, for example a new prerequisite of a recorded
 step, the run prints that the steps differ and plans every step again.
 
 </details>
+
 ## Update
 
 <details>
@@ -287,6 +292,7 @@ snapshot before its first write. `-PlanOnly` never applies. See
 [Update and change](UPDATE-AND-CHANGE.md#1-update-an-older-deployment).
 
 </details>
+
 ## Change one decision
 
 <details>
@@ -442,6 +448,7 @@ local generation from MDM distribution and a developer rerunning setup.
 ![The live Change models preview shows each deployment's model, version, SKU, capacity, record status and price status before its fingerprint.](guide/50-model-change-plan.png)
 
 </details>
+
 ## Diagnose
 
 <details>
@@ -461,6 +468,7 @@ the folder is git-ignored. See [Diagnostics](DIAGNOSE.md) and
 [Troubleshooting](TROUBLESHOOTING.md).
 
 </details>
+
 ## Status and drift
 
 <details>
@@ -489,6 +497,7 @@ with credentials, a query, a fragment or a different port is not accepted as
 that company gateway address.
 
 </details>
+
 ## Generated guide
 
 <details>
@@ -507,6 +516,7 @@ is git-ignored. Guide needs a recorded gateway: with none, it stops before
 planning and names `-Action Setup`.
 
 </details>
+
 ## What the tests hold
 
 <details>
@@ -527,6 +537,7 @@ case about 20 s, mostly Azure CLI start-up); the reuse case reads the named
 gateway.
 
 </details>
+
 ## Manual equivalents
 
 <details>
@@ -543,6 +554,7 @@ gateway.
 | Status | `scripts\Get-ClaudeGatewayTarget.ps1`, `scripts\Test-ClaudeHealth.ps1`, Azure portal checks in [Operations](OPERATIONS.md) |
 
 </details>
+
 ## Live proof transcript excerpts
 
 <details>
@@ -591,6 +603,7 @@ nothing was written. Names are redacted by `guide/render-terminal.mjs`; the raw 
 under private evidence.
 
 </details>
+
 ## Next
 
 - [Update and change](UPDATE-AND-CHANGE.md) covers day-2 lifecycle changes.

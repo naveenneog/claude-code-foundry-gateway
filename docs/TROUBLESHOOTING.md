@@ -35,6 +35,7 @@ The known symptom selects the section below. An unknown failure layer starts wit
 | Deleting a resource group rolls back with `ResourceGroupDeletionBlocked`, naming a Flex Consumption plan (`Microsoft.Web/serverFarms`, FC1) whose delete fails `NotFound` | The Functions resolver's plan outlived its app: ARM still lists it, the Web provider no longer knows it, and every group delete rolls back on it. Measured on 2026-09-25: five deletes over more than 90 minutes each rolled back. Re-create the plan under the same name (`az rest --method PUT` on its resource ID with `sku` FC1 / FlexConsumption, `kind` functionapp, the original location), delete it, then delete the group; the group was gone 24 seconds later. Capacity 0 carries no cost while it exists. |
 
 </details>
+
 ## Environment
 
 <details>
@@ -50,6 +51,7 @@ The known symptom selects the section below. An unknown failure layer starts wit
 The preflight in both setup scripts reports whether the platform is affected.
 
 </details>
+
 ## Policy
 
 <details>
@@ -64,6 +66,7 @@ The preflight in both setup scripts reports whether the platform is affected.
 | A projection switch is refused | The refusal names its step: resolver deployment/settings, missing resolver service principal, lists that drift from Entra (`Sync-ClaudeAccess.ps1` refreshes them), a projection that differs from the gateway, or switch evidence (no successful full sync in the last 24 hours, or a record the resolver would refuse). `Deploy-ClaudeProjection.ps1 -FlipAfterCleanCompare -WhatIf` runs the same checks without the backup and the write ([switch](SECURE-PROJECTION.md#switch-to-the-projection-p95)). |
 
 </details>
+
 ## Runtime
 
 <details>
@@ -84,6 +87,7 @@ The preflight in both setup scripts reports whether the platform is affected.
 | Backend returns 401 through the gateway | The gateway identity lacks `Cognitive Services User` on the Foundry account, or the assignment has not propagated (allow 2–5 minutes). |
 
 </details>
+
 ## Claude Code client
 
 <details>
@@ -105,6 +109,7 @@ The preflight in both setup scripts reports whether the platform is affected.
 | Windows: a credential script returns *"Windows Subsystem for Linux has no installed distributions"* | Inside Git Bash a bare `az` resolves to the WSL shim. Use `az.cmd`. Note `command -v az.cmd` also fails because bash ignores `PATHEXT`, so probe by running the candidate and checking the result starts with `eyJ`. |
 
 </details>
+
 ## Claude Desktop
 
 <details>
@@ -158,6 +163,7 @@ To confirm it is this and not something else:
 those files while no Claude process is running is the signature.
 
 </details>
+
 ## Monitoring
 
 <details>
@@ -175,6 +181,7 @@ those files while no Claude process is running is the signature.
 | `ApiManagementGatewayLlmLog` is empty — even over all time — while the gateway is plainly serving | You are reading a different workspace. A resource group often holds several, and the first one listed need not be the gateway's; on the reference deployment three share the group and the first is not it. Ask the gateway where it writes rather than guessing: `az monitor diagnostic-settings list --resource <apim-resource-id> --query "[].workspaceId" -o tsv`. The scripts here ask the gateway, match the workspace named after it, or refuse to guess — none takes the first one listed. |
 
 </details>
+
 ## Still stuck?
 
 <details>
@@ -190,6 +197,7 @@ its listener is not explicitly loopback-only. See
 [the inspection warning](DEBUGGING.md#see-exactly-what-is-on-the-wire).
 
 </details>
+
 ## Turnstile and offboarding
 
 <details>
@@ -237,6 +245,7 @@ Sources: [P71 measurements](status/P71.md#p71-aum-answers-fast-and-says-why-it-c
 | Turnstile save is not yet applied | Check the apply job/last result and governance authority; UI save is not proof of gateway propagation |
 
 </details>
+
 ## Next
 
 - [Diagnostics](DIAGNOSE.md) creates support bundles.

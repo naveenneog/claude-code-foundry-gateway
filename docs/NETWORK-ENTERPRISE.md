@@ -155,6 +155,7 @@ advertisement is not a promise of instantaneous capacity; deployment remains
 the final availability check.
 
 </details>
+
 ## Place the rest of the system
 
 <details>
@@ -321,6 +322,7 @@ allows one Premium v2 activation per subscription every 60 minutes
 (`ServiceSkuActivationThrottled`).
 
 </details>
+
 ## Prerequisites
 
 <details>
@@ -358,6 +360,7 @@ allows one Premium v2 activation per subscription every 60 minutes
 ![Fresh Standard v2 test gateway before integration, not a screenshot of final private networking](guide/network-03-apim-before.png)
 
 </details>
+
 ## Deploy with the script
 
 <details>
@@ -648,6 +651,7 @@ policies through their selected IDs. For an existing shared gateway, use the
 manual configuration below and the same verification contract.
 
 </details>
+
 ## Configure the same design in the Azure portal
 
 <details>
@@ -760,6 +764,7 @@ returns to the workstation. Never fix this by exporting the PFX
 into source, enabling public access against policy, or disabling TLS validation.
 
 </details>
+
 ## Configure with Azure CLI
 
 <details>
@@ -802,6 +807,7 @@ network helper uses bounded PowerShell ARM requests and obtains each
 subscription's token from Azure CLI.
 
 </details>
+
 ## Claude-specific edge settings
 
 <details>
@@ -822,6 +828,7 @@ subscription's token from Azure CLI.
 | Evaluation certificate | Set `NODE_EXTRA_CA_CERTS` before launch, or in the isolated profile's `env`, to the **public CA** PEM returned by setup. A Key Vault self-signed end-entity certificate was accepted by Node but rejected by the tested native client as CA material. The supplied evaluation issuer now creates a proper CA/server chain |
 
 </details>
+
 ## Tune WAF for code, without turning it off
 
 <details>
@@ -875,6 +882,7 @@ by APIM. Conversely, an exclusion for prompt data must not exempt arbitrary
 query strings, authentication headers or other applications on the gateway.
 
 </details>
+
 ## Verify from each real boundary
 
 <details>
@@ -911,6 +919,7 @@ Also test:
   a workstation DNS lookup does not prove their egress path.
 
 </details>
+
 ## Live evidence
 
 <details>
@@ -963,6 +972,7 @@ load/scale, or the VS Code/Desktop clients through this edge. Their placement
 above is a cited design, not evidence from the CLI evaluation.
 
 </details>
+
 ## Troubleshoot
 
 <details>
@@ -991,6 +1001,7 @@ above is a cited design, not evidence from the CLI evaluation.
 | Portal redirects to sign-in during evidence capture | Stop. Refresh the dedicated capture profile, copy it again to the worktree, and resume; do not publish the sign-in page as configuration evidence |
 
 </details>
+
 ## Cost
 
 <details>
@@ -1051,6 +1062,7 @@ Use the customer's agreement and categorized token ledger, not a fabricated
 zero or a claim that list-price infrastructure is the invoice.
 
 </details>
+
 ## Security checklist
 
 <details>
@@ -1078,6 +1090,7 @@ zero or a claim that list-price infrastructure is the invoice.
   not confused with layer-7 WAF. See [DDoS protection][ddos].
 
 </details>
+
 ## Remove the evaluation
 
 <details>
@@ -1100,6 +1113,7 @@ APIM and its Foundry role only after checking that they were created for that
 evaluation.
 
 </details>
+
 ## Next steps
 
 - [Client egress requirements](NETWORK.md).

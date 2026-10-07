@@ -39,6 +39,7 @@ the continuation characters are not interchangeable. Examples use Contoso
 values: replace them rather than sending requests to an example deployment.
 
 </details>
+
 ## 1. Select the gateway and workspace
 
 <details>
@@ -114,6 +115,7 @@ nor config path was supplied. If that file is absent, give it the approved
 client endpoint; it does not infer a direct APIM URL that could bypass an edge.
 
 </details>
+
 ## 2. Check health and headroom
 
 <details>
@@ -140,6 +142,7 @@ it fills. Do not silence the failure or truncate a list. For `401`, `403`,
 [Debugging](DEBUGGING.md) if the failure layer is unknown.
 
 </details>
+
 ## 3. Choose the day-to-day operation
 
 <details>
@@ -167,6 +170,7 @@ membership. An *allowance* is a token quota, not money already reconciled to an
 invoice. See [Budgets](BUDGETS.md) for the enforcement limits.
 
 </details>
+
 ## 4. Back up, change, restore, verify
 
 <details>
@@ -217,6 +221,7 @@ allowlist. Never restore stale membership as proof of authorisation. The
 also covers client conversation backups and cross-instance limitations.
 
 </details>
+
 ## 5. Inspect cost and retire only what you own
 
 <details>
@@ -259,6 +264,7 @@ remain, the old gateway address no longer serves, and Cost analysis shows no
 unexpected continuing usage after billing data arrives.
 
 </details>
+
 ## Next steps
 
 <details>
@@ -270,6 +276,7 @@ unexpected continuing usage after billing data arrives.
 - [Authentication](AUTHENTICATION.md) and [Network](NETWORK.md) — security reviews.
 
 </details>
+
 ## Live verification record and limits
 
 <details>
@@ -308,6 +315,7 @@ review**. Existing dated evidence is linked in their respective guides; this
 limited read verification must not be used as a blanket live-acceptance receipt.
 
 </details>
+
 ## Next
 
 - [Onboarding](ONBOARDING.md) covers membership and developer handover.

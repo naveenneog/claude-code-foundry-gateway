@@ -60,6 +60,7 @@ writes the decision record after each completed step, verifies, and generates
 Turnstile, AUM or the reporting jobs; it coordinates their setup and handover.
 
 </details>
+
 ## Optional company hostname
 
 <details>
@@ -85,6 +86,7 @@ unverified receipt for a new scoped recovery review. Deadline-bound workers
 include native reads and clean their private files when cancelled.
 
 </details>
+
 ## Model lifecycle administration
 
 <details>
@@ -107,6 +109,7 @@ lists that later model changes use, and both workstation setup implementations
 remove aliases for families that are no longer selected.
 
 </details>
+
 ## Request path
 
 <details>
@@ -225,6 +228,7 @@ See [BUDGETS.md](BUDGETS.md) and the
 [AUM client contract](aum-usd-budgets-client-contract.md).
 
 </details>
+
 ## Telemetry and chargeback
 
 <details>
@@ -250,6 +254,7 @@ discarded. See [monitoring](MONITORING.md), [analytics provenance](adr/0006-ledg
 and [financial semantics](adr/0010-financial-semantics.md).
 
 </details>
+
 ## Private monthly reports and email delivery (P50)
 
 <details>
@@ -344,6 +349,7 @@ approved quota for timely production delivery. A successful ACS operation is not
 of inbox placement, and emailed data is outside the archive's retention control.
 
 </details>
+
 ## Governance apply path
 
 <details>
@@ -408,6 +414,7 @@ and [ADR-0019](adr/0019-budget-enforcement-modes.md); do not infer a stronger
 ordering guarantee from the arrows.
 
 </details>
+
 ## Delegated management and console sign-in
 
 <details>
@@ -454,6 +461,7 @@ button. See [viewers and managers](TURNSTILE.md#viewers-and-managers),
 and [ADR-0016](adr/0016-delegated-management.md).
 
 </details>
+
 ## Projection freshness, switch evidence and private networking
 
 <details>
@@ -547,6 +555,7 @@ Run sync after directory changes and before switching. See
 [ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md).
 
 </details>
+
 ## Enterprise network ingress (P54)
 
 <details>
@@ -571,6 +580,7 @@ scheduled jobs (P49); a plan that needs those fails before it writes. See
 [ADR-0022](adr/0022-enterprise-network-edge.md).
 
 </details>
+
 ## AUM (Azure Usage Management) - terminal FinOps console
 
 <details>
@@ -695,6 +705,7 @@ MSI launcher runs its existing Python entry point directly; other command
 wrappers are created suspended, assigned to their timeout job, then resumed.
 
 </details>
+
 ## Optional independent AUM service (P55)
 
 <details>
@@ -745,6 +756,7 @@ network. Bounded observed-user queries do not remove the 4,096-character named-v
 limit or prove capacity for 500,000 per-person overrides.
 
 </details>
+
 ## Budget enforcement modes
 
 <details>
@@ -785,6 +797,7 @@ The architecture capture's live scope remains the explicit
 it does not claim an additional live mode mutation run.
 
 </details>
+
 ## Azure resource inventory
 
 <details>
@@ -802,6 +815,7 @@ definitions, Storage management policies and the three Communication/Email resou
 These are not claimed as resources in the current default deployment.
 
 </details>
+
 ## Keep architecture current after every feature
 
 <details>
@@ -907,6 +921,7 @@ Playwright/browser and installed fonts; cross-platform font rasterization can di
 without changing the architecture.
 
 </details>
+
 ## Next
 
 - [Setup](SETUP.md) deploys the components.

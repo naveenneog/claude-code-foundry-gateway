@@ -172,6 +172,7 @@ The AUM endpoint facts come from
 [Graph](../cli/finops/src/claude_finops/groups.py).
 
 </details>
+
 ## Connect
 
 <details>
@@ -233,6 +234,7 @@ addresses, not tokens. `--config`, `AUM_CONFIG` and the legacy fallbacks are
 described in [Configure a backend](#configure-a-backend).
 
 </details>
+
 ## First run and screen tour
 
 <details>
@@ -293,6 +295,7 @@ accessed 2026-09-29;
 [pilot matrix](../cli/finops/tests/test_p85_escape.py)).
 
 </details>
+
 ## How-to
 
 <details>
@@ -561,6 +564,7 @@ aum lookup amara@contoso.com --team sales-emea
 ```
 
 </details>
+
 ## Reference
 
 <details>
@@ -2367,6 +2371,7 @@ to make the test disappear. Operational configuration, memberships and groups
 are what the cleanup restores.
 
 </details>
+
 ## Troubleshooting
 
 <details>
@@ -2411,6 +2416,7 @@ future request/response contracts ship in
 [`contracts.json`](../cli/finops/src/claude_finops/contracts.json).
 
 </details>
+
 ## Next
 
 - [FinOps](FINOPS.md) covers monthly close.

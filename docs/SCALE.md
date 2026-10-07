@@ -138,6 +138,7 @@ path through the resolver.
 ---
 
 </details>
+
 ## "500,000 employees" is not a capacity specification
 
 <details>
@@ -187,6 +188,7 @@ traffic-independent and were measured, and stops there. **U9** and **U10** in
 ---
 
 </details>
+
 ## What a capacity test has to prove
 
 <details>
@@ -402,6 +404,7 @@ quota a developer can go, or why exhausted identities were admitted again, so
 ---
 
 </details>
+
 ## Order of work
 
 <details>
@@ -455,6 +458,7 @@ complete.
 ---
 
 </details>
+
 ## The budget is a delayed kill switch, not a hard cap
 
 <details>
@@ -511,6 +515,7 @@ not establish the delay or in-flight overshoot.
 ---
 
 </details>
+
 ## Deploying today, and scaling later
 
 <details>
@@ -625,6 +630,7 @@ comparison that proves both paths agree before either is trusted, ships today as
 ---
 
 </details>
+
 ## Getting there without resetting anyone's allowance
 
 <details>
@@ -665,6 +671,7 @@ measures the gap.
 ---
 
 </details>
+
 ## The move itself, step by step
 
 <details>
@@ -888,6 +895,7 @@ entitled developer with 403 until `Sync-ClaudeAccess.ps1` ran again.
 | The policy | source flip is configuration-only after the prerequisite policy upgrade and fresh-store comparison |
 
 </details>
+
 ## Next
 
 - [Projection workbook](PROJECTION-WORKBOOK.md) covers staged migration.

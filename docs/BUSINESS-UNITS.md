@@ -37,6 +37,7 @@ done in Entra and picked up by the sync. There is no separate roster to keep in
 step.
 
 </details>
+
 ## Choose where changes are authored
 
 <details>
@@ -66,6 +67,7 @@ the existing budget authority. Raw portal or Azure CLI writes are not guarded
 and can still be overwritten.
 
 </details>
+
 ## Budget modes
 
 <details>
@@ -164,6 +166,7 @@ non-blocking scope follows from skipping the limiter, which both policy
 expressions and mutation tests exercise.
 
 </details>
+
 ## Teams, and how they relate to tiers
 
 <details>
@@ -376,6 +379,7 @@ Removing a business unit promotes its teams to top level rather than leaving the
 pointing at something that is gone.
 
 </details>
+
 ## Read this before you quote a number
 
 <details>
@@ -427,6 +431,7 @@ Every command repeats these caveats in its own output, so nobody reads a number
 without them.
 
 </details>
+
 ## Managing it all in one place
 
 <details>
@@ -472,6 +477,7 @@ For pipelines, call the commands directly — the console refuses cleanly when
 there is no terminal and names the command for each option.
 
 </details>
+
 ## Adding a business unit
 
 <details>
@@ -521,6 +527,7 @@ Creating one needs both `-Group` and `-MonthlyBudgetUsd`. After that, either can
 be changed on its own.
 
 </details>
+
 ## Listing them
 
 <details>
@@ -534,6 +541,7 @@ be changed on its own.
 ![Listing business units with their groups, token budgets and approximate dollar value](guide/bu-2-list.png)
 
 </details>
+
 ## Changing a budget
 
 <details>
@@ -555,6 +563,7 @@ To point a unit at a different Entra group, pass `-Group` instead. To change
 both, pass both.
 
 </details>
+
 ## Moving people between business units
 
 <details>
@@ -582,6 +591,7 @@ entitlement lists were once silently emptied by exactly this, and the symptom �
 spend landing on no budget — is invisible until someone reconciles a report.
 
 </details>
+
 ## Seeing what has been spent
 
 <details>
@@ -599,6 +609,7 @@ is the built-in API Management LLM log joined to the caller. `-AsJson` gives the
 same data for a dashboard, and `-Days` overrides the default of month-to-date.
 
 </details>
+
 ## Developers with no business unit
 
 <details>
@@ -626,6 +637,7 @@ az apim nv update -g <rg> --service-name <apim> `
 ```
 
 </details>
+
 ## Removing one
 
 <details>
@@ -643,6 +655,7 @@ the identifier they spent under, because the ledger records the unit that was in
 force at the time rather than looking it up later.
 
 </details>
+
 ## When a budget runs out
 
 <details>
@@ -669,6 +682,7 @@ than guaranteeing it. Combined with the cache blind spot above, it should not be
 described to a budget holder as a hard stop.
 
 </details>
+
 ## Limits worth knowing
 
 <details>
@@ -686,6 +700,7 @@ The membership ceiling is the same one entitlement already has, and
 [ROADMAP.md](ROADMAP.md) `P19` replaces the store.
 
 </details>
+
 ## Related
 
 - [ADR-0007](adr/0007-business-unit-model.md) — why a group rather than a directory attribute

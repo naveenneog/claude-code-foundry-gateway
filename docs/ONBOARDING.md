@@ -49,6 +49,7 @@ new similarly named group as a workaround.
 ---
 
 </details>
+
 ## How entitlement actually works
 
 <details>
@@ -86,6 +87,7 @@ Three consequences:
 ---
 
 </details>
+
 ## 1. Add a developer
 
 <details>
@@ -134,6 +136,7 @@ The sections below cover the same job done by hand, and the portal walkthrough.
 remove the person, then perform Step 3's publication and Step 4's verification.
 
 </details>
+
 ## 1a. Add a developer by hand
 
 <details>
@@ -279,6 +282,7 @@ access. Access is group membership.
 ---
 
 </details>
+
 ## 2. UI walkthrough — adding a member in the portal
 
 <details>
@@ -382,6 +386,7 @@ out of the loop entirely.
 ---
 
 </details>
+
 ## 3. Common variations
 
 <details>
@@ -399,6 +404,7 @@ out of the loop entirely.
 ---
 
 </details>
+
 ## 4. Change a developer's tier
 
 <details>
@@ -525,6 +531,7 @@ Entra group, and a branch in the policy's tier lookup. The policy structure is i
 ---
 
 </details>
+
 ## 5. Revoke access
 
 <details>
@@ -562,6 +569,7 @@ and run the sync as well.
 ---
 
 </details>
+
 ## 6. Offboarding checklist
 
 <details>
@@ -590,6 +598,7 @@ separate page rather than the second half of this one.
 Send them that link. Nothing else on this page applies to them.
 
 </details>
+
 ## 7. Checking a machine before you promise a date
 
 <details>
@@ -659,6 +668,7 @@ Both paths use the same shape, distinguished by `mode`:
 > printed. Reissue the file to remove the warning.
 
 </details>
+
 ## Next
 
 - [Developer setup](../DEVELOPER.md) covers workstation configuration.

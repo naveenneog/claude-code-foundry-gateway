@@ -42,6 +42,7 @@ The administrator target comes from the deployment record or [Operations discove
 | Foundry bypass principals | Reuses `Test-ClaudeHealth.ps1` / `Get-ClaudeBypass.ps1` to identify principals that can bypass the gateway. | Remove unintended direct Foundry data-plane role assignments. Portal: Foundry account > Access control (IAM). |
 
 </details>
+
 ## Workstation checks
 
 <details>
@@ -70,6 +71,7 @@ machine:
 | Gateway real request | Sends one real request unless skipped. | Rerun without `-NoRequest`; if the request fails, keep the redacted status, body and UTC time. |
 
 </details>
+
 ## Support bundles
 
 <details>
@@ -92,6 +94,7 @@ subscription IDs, JWTs and token-like strings before writing files. Do not add
 raw terminal transcripts or bearer tokens to a support ticket.
 
 </details>
+
 ## Guided flow
 
 <details>
@@ -107,6 +110,7 @@ contains only `Check` actions and writes nothing. Apply runs the same diagnostic
 and returns results to the orchestrator; the decision record is not changed.
 
 </details>
+
 ## Next
 
 - [Debugging](DEBUGGING.md) isolates request layers manually.

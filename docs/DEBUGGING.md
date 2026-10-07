@@ -37,6 +37,7 @@ and never include bearer tokens in a public report.
 ---
 
 </details>
+
 ## Step 0 — Run the diagnostics
 
 <details>
@@ -79,6 +80,7 @@ answering from somewhere other than your gateway, which no other check catches.
 ---
 
 </details>
+
 ## The request path
 
 <details>
@@ -109,6 +111,7 @@ Every failure lives at exactly one of these hops.
 ---
 
 </details>
+
 ## Everything checks out but the panel is still broken
 
 <details>
@@ -154,6 +157,7 @@ survive a reload.
 ---
 
 </details>
+
 ## Step 1 — Read the response headers first
 
 <details>
@@ -205,6 +209,7 @@ An absent header does not prove the gateway was bypassed: explicit
 ---
 
 </details>
+
 ## Step 2 — Narrow by status code
 
 <details>
@@ -225,6 +230,7 @@ An absent header does not prove the gateway was bypassed: explicit
 ---
 
 </details>
+
 ## Step 3 — Identity
 
 <details>
@@ -266,6 +272,7 @@ the access token the affected process actually selected.
 ---
 
 </details>
+
 ## Step 4 — Entitlement and budget
 
 <details>
@@ -313,6 +320,7 @@ empty entitlement list or rely on an absent message.
 ---
 
 </details>
+
 ## Step 5 — Gateway → Foundry
 
 <details>
@@ -348,6 +356,7 @@ account's resource group, not automatically the gateway's.
 ---
 
 </details>
+
 ## Step 6 — Foundry itself
 
 <details>
@@ -382,6 +391,7 @@ Two `404`s that look alike and are not:
 ---
 
 </details>
+
 ## Step 7 — Policy and configuration
 
 <details>
@@ -411,6 +421,7 @@ A `{{name}}` in the policy with no matching named value returns `500`.
 ---
 
 </details>
+
 ## Step 8 — Client configuration
 
 <details>
@@ -454,6 +465,7 @@ which token a local client chose.
 ---
 
 </details>
+
 ## Step 9 — Is it just this person?
 
 <details>
@@ -472,6 +484,7 @@ If they fail, it is platform-wide. Start at Step 5.
 ---
 
 </details>
+
 ## Quick reference
 
 <details>
@@ -490,6 +503,7 @@ If they fail, it is platform-wide. Start at Step 5.
 | Metrics exist, no per-user split | `CustomMetricsOptedInType` | [Monitoring §8](MONITORING.md#8-when-the-charts-are-empty) |
 
 </details>
+
 ## Next
 
 - [Diagnostics](DIAGNOSE.md) covers support bundles.

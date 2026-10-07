@@ -41,6 +41,7 @@ and a good debugging isolation point — nothing more. This accelerator builds C
 ---
 
 </details>
+
 ## What actually changes
 
 <details>
@@ -158,6 +159,7 @@ That is worth more than any single feature in these tables.
 ---
 
 </details>
+
 ## What you give up
 
 <details>
@@ -180,6 +182,7 @@ An honest architecture review has to cover this side too.
 ---
 
 </details>
+
 ## How to choose
 
 <details>
@@ -216,6 +219,7 @@ small, tightly-held direct account for evaluating new releases.
 ---
 
 </details>
+
 ## Verified technical differences
 
 <details>
@@ -240,6 +244,7 @@ from documentation:
 ---
 
 </details>
+
 ## Next
 
 | Task | Guide |

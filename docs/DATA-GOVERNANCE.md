@@ -32,6 +32,7 @@ Discovery is read-only. The subject is the selected user principal name or objec
   which is not available in Windows PowerShell 5.1.
 
 </details>
+
 ## 1. Review collection and retention
 
 <details>
@@ -55,6 +56,7 @@ selective purge: the recorded U7 constraints allow Analytics-plan tables, not
 Basic/Auxiliary. Exports and Sentinel data-lake mirrors have separate lifecycles.
 
 </details>
+
 ## 2. Discover before deleting
 
 <details>
@@ -88,6 +90,7 @@ found is not proof no data exists: verify query permissions, expected tables
 and ingestion paths first.
 
 </details>
+
 ## 3. Preview and approve the purge
 
 <details>
@@ -114,6 +117,7 @@ Application Insights aliases such as `customMetrics` are not valid purge table
 names; use workspace names such as `AppMetrics`.
 
 </details>
+
 ## 4. Execute and verify completion
 
 <details>
@@ -136,6 +140,7 @@ Coordinate separately with the owners of all other data locations in step 2.
 Deletion does not change Azure billing or revoke inference entitlement.
 
 </details>
+
 ## Troubleshoot and next steps
 
 | Symptom | Action |

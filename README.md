@@ -88,6 +88,7 @@ bill of materials; the [operations procedure](docs/OPERATIONS.md#5-inspect-cost-
 explains created, reused and optional resources.
 
 </details>
+
 ## Why
 
 <details>
@@ -107,6 +108,7 @@ does not make a stolen token impossible to replay.
 [Authentication](docs/AUTHENTICATION.md) explains identities and revocation.
 
 </details>
+
 ## What you get
 
 <details>
@@ -154,6 +156,7 @@ Identifiers are redacted with [terminal](guide/redact-terminal.mjs) and
 [client](guide/redact-clients.mjs) tooling. Raw captures are not committed.
 
 </details>
+
 ## Prerequisites
 
 <details>
@@ -179,6 +182,7 @@ See [dollar budgets](docs/BUDGETS.md#dollar-budgets-what-is-enforced) and the
 > access needs Standard v2 or Premium v2 outbound VNet integration.
 
 </details>
+
 ## What the installer does
 
 <details>
@@ -195,6 +199,7 @@ syncs the tier lists. It ends with the [developer handover](onboarding/README.md
 procedure ([Setup](docs/SETUP.md)).
 
 </details>
+
 ## Onboarding a developer
 
 <details>
@@ -206,6 +211,7 @@ change, verify it, then send [DEVELOPER.md](DEVELOPER.md), the generated config
 and the complete scripts bundle. No developer API key is issued.
 
 </details>
+
 ## Verifying the controls
 
 <details>
@@ -216,6 +222,7 @@ Use [Governance checks](docs/GOVERNANCE-CHECKS.md). Agree a test window:
 throttle tests temporarily change live limits and send billable model requests.
 
 </details>
+
 ## Close the bypass
 
 <details>
@@ -227,6 +234,7 @@ inherited as well as direct roles. Keep the gateway's managed identity grant.
 Do not remove another application's legitimate assignment without its owner.
 
 </details>
+
 ## Tuning budgets
 
 <details>
@@ -237,6 +245,7 @@ Moved to [Configure token budgets and model access](docs/BUDGETS.md), including
 all defaults, per-person overrides, refusal bodies, portal edits and verification.
 
 </details>
+
 ## Chargeback
 
 <details>
@@ -261,6 +270,7 @@ See [console choices](docs/FINOPS.md#optional-consoles) for access differences.
 Custom metrics remain useful for pilot diagnostics, not complete scaled billing.
 
 </details>
+
 ## What it costs
 
 <details>
@@ -277,6 +287,7 @@ Include the optional [projection](docs/SECURE-PROJECTION.md#cost) and
 ![Bill of materials listing deployed resources and list prices, explicitly excluding Claude tokens](docs/guide/bom-prices.png)
 
 </details>
+
 ## Repository layout
 
 <details>
@@ -288,6 +299,7 @@ The scripts, templates, analytics, resolver, sync and screenshot tools are mappe
 there; [Operations](docs/OPERATIONS.md) maps tasks to commands and portal paths.
 
 </details>
+
 ## Documentation
 
 <details>
@@ -327,6 +339,7 @@ The engineering record is separate from the user guides:
 [Unknowns](docs/UNKNOWNS.md), [ADRs](docs/adr/) and [Changelog](CHANGELOG.md).
 
 </details>
+
 ## Companion accelerator
 
 <details>
@@ -338,6 +351,7 @@ provides Desktop fleet-policy tooling that can reuse this gateway. Follow that
 repository's instructions for its scripts; they are not all in this checkout.
 
 </details>
+
 ## Contributing
 
 <details>
@@ -354,6 +368,7 @@ Use [Contributor checks](docs/REFERENCE.md#contributor-checks) for offline/live
 tests, the packet gate, PowerShell encoding and Windows Azure CLI quoting.
 
 </details>
+
 ## Next
 
 - [Setup](docs/SETUP.md) covers deployment choices.

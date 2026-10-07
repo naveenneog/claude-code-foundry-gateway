@@ -64,6 +64,7 @@ node .\guide\capture-chargeback-reports.mjs
 ```
 
 </details>
+
 ## Prerequisites
 
 <details>
@@ -112,6 +113,7 @@ administrator and Microsoft Graph application permission are not needed for lite
 recipient addresses.
 
 </details>
+
 ## Generate a report
 
 <details>
@@ -229,6 +231,7 @@ unit emails. A filtered unit's HTML and CSV never contain another unit's people.
 > manual runs; scheduled runs already use unique roots and archive prefixes.
 
 </details>
+
 ## Deploy scheduled reporting
 
 <details>
@@ -407,6 +410,7 @@ confirmed that it arrived in **Inbox at 17:42:49 UTC**. The receiving organizati
 organizations or future messages. No live mailbox screenshot is published.
 
 </details>
+
 ## Send, regenerate or resend by hand
 
 <details>
@@ -436,6 +440,7 @@ An empty recipient list archives the report without sending it. `-Send` queues m
 `-Dispatch` attempts one paced action rather than waiting for the entire outbox.
 
 </details>
+
 ## Delivery limits and 500,000 people
 
 <details>
@@ -499,6 +504,7 @@ organization filtering or junk placement remains possible. Do not call a success
 send an inbox-delivery guarantee.
 
 </details>
+
 ## Costs
 
 <details>
@@ -565,6 +571,7 @@ not a Basic/Auxiliary-plan query. Private networking and the environment's Azure
 network resources must also be included in a deployed bill of materials.
 
 </details>
+
 ## Troubleshoot
 
 <details>
@@ -620,6 +627,7 @@ Breaking a live lease can allow duplicate sends; it is an operator recovery acti
 not a normal retry mechanism.
 
 </details>
+
 ## Reference
 
 <details>
@@ -734,6 +742,7 @@ Review IAM assignments for the removed identities and the two reports custom rol
 Never delete the resource group: it also contains the gateway and workspace.
 
 </details>
+
 ## Next steps
 
 - Verify report figures with your finance team before using them for allocation.

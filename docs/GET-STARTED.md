@@ -64,6 +64,7 @@ Claude client behavior is configured through the repository's developer setup
 and the Anthropic Claude Code/Claude Desktop clients.
 
 </details>
+
 ## Track 1 - Administrator, 10 steps
 
 <details>
@@ -336,6 +337,7 @@ response.
 [Governance checks](GOVERNANCE-CHECKS.md) and [Troubleshooting](TROUBLESHOOTING.md).
 
 </details>
+
 ## Track 2 - Developer, 8 steps
 
 <details>
@@ -493,6 +495,7 @@ manifests. **If it fails:** use [Developer troubleshooting](../DEVELOPER.md#if-s
 and never send tokens or prompt content in a public issue.
 
 </details>
+
 ## Track 3 - FinOps, 9 steps
 
 <details>
@@ -700,6 +703,7 @@ Turnstile/AUM captures above for optional consoles. **If it fails:** use
 and [Monitoring](MONITORING.md).
 
 </details>
+
 ## Approved screenshots used on this page
 
 <details>
@@ -724,6 +728,7 @@ provenance records are:
 | `images/architecture-live/reports-generator-job.png` | `docs/images/architecture-live/captures.json`, id `reports-generator-job` |
 
 </details>
+
 ## Next
 
 - [Setup](SETUP.md) is the deployment owner.

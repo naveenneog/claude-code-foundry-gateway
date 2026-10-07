@@ -81,6 +81,7 @@ See [Scale](SCALE.md#two-things-to-get-right-on-the-first-day) and U9.
 ---
 
 </details>
+
 ## The one that blocks the scaling work
 
 <details>
@@ -108,6 +109,7 @@ fresh request and the [projection checks](PROJECTION-WORKBOOK.md#step-5-verify-r
 ---
 
 </details>
+
 ## The tier
 
 <details>
@@ -136,6 +138,7 @@ the tier decision from the storage and traffic limits.
 ---
 
 </details>
+
 ## Money and policy
 
 <details>
@@ -221,6 +224,7 @@ unassigned developers in the workbook before switching to `deny`.
 ---
 
 </details>
+
 ## The scope question
 
 <details>
@@ -244,6 +248,7 @@ the first of those.
 how to calculate headroom and the measurements a capacity claim requires.
 
 </details>
+
 ## Next steps
 
 [Setup](SETUP.md) for deployment, [FinOps](FINOPS.md) for financial close, and

@@ -49,6 +49,7 @@ so no browser download is needed. If Edge is not present, run
 `npx playwright install chromium` and drop the `channel` option.
 
 </details>
+
 ## Capturing
 
 <details>
@@ -164,6 +165,7 @@ is not signed in. A run with no session still produces the public-page
 screenshots and reports which ones it skipped.
 
 </details>
+
 ## Pending portal batch captures
 
 <details>
@@ -200,6 +202,7 @@ Logical API names in click selectors come from this repository's template; if
 an API was renamed, resolve its known API ID/path before capturing.
 
 </details>
+
 ## What is not committed, and why
 
 <details>
@@ -234,6 +237,7 @@ every new capture and check it shows what its banner claims before committing
 it.
 
 </details>
+
 ## Composing
 
 <details>
@@ -253,6 +257,7 @@ shipped in this repo — only the finished images in `docs/guide/` are. Point th
 its sources live.
 
 </details>
+
 ## Writing a step
 
 <details>
@@ -277,6 +282,7 @@ its sources live.
   stays correct if a source is recaptured at a different resolution.
 
 </details>
+
 ## Redaction
 
 <details>
@@ -301,6 +307,7 @@ tend to contain real UPNs, and browser captures pick up bookmark bars and tab
 titles.
 
 </details>
+
 ## Conditional access
 
 <details>
@@ -312,6 +319,7 @@ rejected with `AADSTS530033` on tenants that require device compliance; Edge
 passes because it can present the device certificate.
 
 </details>
+
 ## Verify and next steps
 
 Open each image at readable resolution, confirm the caption describes the

@@ -47,6 +47,7 @@ Plan [Scale](SCALE.md) first.
 ---
 
 </details>
+
 ## 1. History, memory and sessions
 
 <details>
@@ -422,6 +423,7 @@ token counts per person for chargeback without any of this — see
 ---
 
 </details>
+
 ## 2. Mass deployment through MDM
 
 <details>
@@ -557,6 +559,7 @@ carry `x-governed-by`, and the call appears in Application Insights.
 ---
 
 </details>
+
 ## 3. Bulk entitlement from a CSV or an Entra group
 
 <details>
@@ -640,6 +643,7 @@ on a schedule ([Onboarding](ONBOARDING.md#5-revoke-access)).
 ---
 
 </details>
+
 ## 4. Backing the gateway up, and putting it back
 
 <details>
@@ -791,6 +795,7 @@ Both backup folders are git-ignored.
 <a name="4-cutover-runbook"></a>
 
 </details>
+
 ## 5. Cutover runbook
 
 <details>
@@ -841,6 +846,7 @@ on the Foundry account directly can skip the gateway and every budget with it.
 ---
 
 </details>
+
 ## What is still genuinely unknown
 
 <details>
@@ -856,6 +862,7 @@ on the Foundry account directly can skip the gateway and every budget with it.
 ---
 
 </details>
+
 ## Anthropic references
 
 <details>
@@ -903,6 +910,7 @@ links 404 rather than redirect.
 - [Overview](https://claude.com/docs/cowork/overview) · [Monitoring](https://claude.com/docs/cowork/monitoring)
 
 </details>
+
 ## Next
 
 - [Operations](OPERATIONS.md) covers backup and restore.

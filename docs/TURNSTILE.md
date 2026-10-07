@@ -120,6 +120,7 @@ scope aliases; see the [manual procedure](manual/turnstile.md#5-phase-2-membersh
 and runs mutations proving those failures are detected.
 
 </details>
+
 ## One enforcer
 
 <details>
@@ -147,6 +148,7 @@ access that Turnstile does not know about. The decision is recorded in
 [ADR-0014](adr/0014-turnstile-beside-the-gateway.md).
 
 </details>
+
 ## How it fits together
 
 <details>
@@ -180,6 +182,7 @@ A save in Turnstile ─ starts ─▶ apply job ─ the same sync, as its own id
 | An hour of a developer's cache reads on a model | A usage event of its own | Export |
 
 </details>
+
 ## Prerequisites
 
 <details>
@@ -195,6 +198,7 @@ A save in Turnstile ─ starts ─▶ apply job ─ the same sync, as its own id
 | Tools | PowerShell 7 (parallel export), Azure CLI, Git, Python 3.11 or later, Node.js with npm (the deployer builds the web front end). Docker is not needed: images are built in the registry with `az acr build`. |
 
 </details>
+
 ## 1. Create the Microsoft Entra application
 
 <details>
@@ -255,6 +259,7 @@ when captured, so their settings are shown from Microsoft Graph instead, in
 [Admin-only access](#admin-only-access).
 
 </details>
+
 ## 2. Deploy Turnstile
 
 <details>
@@ -311,6 +316,7 @@ without their `.cmd` extension, checks POSIX file modes and locks with `fcntl`. 
 `fix/windows-deployer` branch fixes all three and is part of `claude-gateway`.
 
 </details>
+
 ## 3. Add the sign-in redirect
 
 <details>
@@ -339,6 +345,7 @@ the redirect is the tenant id, not `/organizations`, which is what upstream Turn
 page does not prove consent; the CLI-code journey above proves the working sign-in path.*
 
 </details>
+
 ## 4. Connect the gateway
 
 <details>
@@ -371,6 +378,7 @@ which strips double quotes from arguments: measured, JSON written this way came 
 `{version:1,url:https://...}`.
 
 </details>
+
 ## 5. Show units, teams and budgets in Turnstile
 
 <details>
@@ -408,6 +416,7 @@ unit caps its teams together ([ADR-0008](DECISIONS.md)). The sync reports the re
 on; the gateway still enforces both.
 
 </details>
+
 ## 6. Send usage to Turnstile
 
 <details>
@@ -496,6 +505,7 @@ so a busy gateway needs shorter slices, run side by side; a partial result stops
 rather than sending part of it.
 
 </details>
+
 ## 7. Optional: edit budgets in Turnstile
 
 <details>
@@ -551,6 +561,7 @@ entries in `bu-registry`. A budget removed in Turnstile is reported, not applied
 unknown scopes and person budgets are not imported.
 
 </details>
+
 ## Run it on a schedule
 
 <details>
@@ -603,6 +614,7 @@ The first two runs failed, and both causes are now handled:
   [Troubleshooting](#troubleshooting).
 
 </details>
+
 ## Manage everything in Turnstile
 
 <details>
@@ -854,6 +866,7 @@ Their checks do not replace Azure RBAC: a raw portal or Azure CLI named-value ed
 possible and would still compete with the apply while Turnstile owns that value.
 
 </details>
+
 ## Admin-only access
 
 <details>
@@ -1001,6 +1014,7 @@ The break-glass Owner signs in with a password and is not affected by any of thi
 credential in a secret store.
 
 </details>
+
 ## What it costs
 
 <details>
@@ -1038,6 +1052,7 @@ through it, so for this integration it does nothing. The deployer always creates
 `observerPlanSkuName` sets its size, and a smaller plan was not tested.
 
 </details>
+
 ## Troubleshooting
 
 <details>
@@ -1071,6 +1086,7 @@ through it, so for this integration it does nothing. The deployer always creates
 | The sync refuses: "pushing the gateway's state would overwrite what was saved there" | Governance is authored in Turnstile | `-Direction FromTurnstile -Apply`, or move governance back to the gateway first |
 
 </details>
+
 ## FAQ
 
 <details>
@@ -1120,6 +1136,7 @@ and refreshes membership as you.
 and budget, not its name. A different id is a different unit, with a budget counter of its own.
 
 </details>
+
 ## The fork
 
 <details>
@@ -1141,6 +1158,7 @@ deployer does not run on Windows. The fork's branches, merged in `claude-gateway
 | `feature/gateway-governance` | The Gateway governance page; `GET`, `PUT /api/v1/gateway-tiers`; `GET`, `POST /api/v1/gateway-apply`; `POST /api/v1/gateway-governance/prepare`; a save that starts the gateway's apply job | 27 API tests and 9 page-rule tests passed |
 
 </details>
+
 ## Reference
 
 <details>
@@ -1175,6 +1193,7 @@ Turnstile endpoints used: `GET`, `PUT /api/v1/enterprise-catalog`; `GET /api/v1/
 `POST /api/v1/gateway-governance/prepare`.
 
 </details>
+
 ## Next
 
 - [FinOps](FINOPS.md) covers financial close.

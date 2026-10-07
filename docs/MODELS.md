@@ -59,6 +59,7 @@ and provisioning state
 ([Microsoft Learn](https://learn.microsoft.com/azure/foundry/foundry-models/how-to/deploy-foundry-models)).
 
 </details>
+
 ## 1. Inspect, deploy and allow
 
 <details>
@@ -166,6 +167,7 @@ reconciliation remains U2.
 ![Final isolated-proof cleanup records the resource group, gateway purge, exact role-assignment removal and deletion of both dedicated Entra groups, with UTC times.](guide/55-model-proof-cleanup.png)
 
 </details>
+
 ## The four things that have to agree
 
 <details>
@@ -186,6 +188,7 @@ book is left stale; the sync explicitly labels missing prices rather than
 describing them as zero usage.
 
 </details>
+
 ## The price book
 
 <details>
@@ -237,6 +240,7 @@ exports and price snapshot retained ([FinOps](FINOPS.md),
 [ADR-0010](adr/0010-financial-semantics.md)).
 
 </details>
+
 ## What developers change
 
 <details>
@@ -291,6 +295,7 @@ update devices ([MDM](MDM.md)).
 ![The generated live client files give standard Haiku and Sonnet, keep premium Sonnet-only, pin the Haiku alias within each tier and declare Sonnet's adaptive-thinking capabilities.](guide/53-model-client-handover.png)
 
 </details>
+
 ## Retiring one
 
 <details>
@@ -320,6 +325,7 @@ services, and can write an empty allow-all list on last-entry removal.
 The reviewed sync is the lifecycle path described here.
 
 </details>
+
 ## Troubleshoot and next steps
 
 <details>
@@ -353,6 +359,7 @@ access change separately.
 client capabilities.
 
 </details>
+
 ## Next
 
 - [Developer setup](../DEVELOPER.md) covers client refresh after a model change.

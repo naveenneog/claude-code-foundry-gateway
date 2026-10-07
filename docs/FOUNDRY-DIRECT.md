@@ -38,6 +38,7 @@ It is also the fastest way to answer *"is the gateway broken, or is Foundry?"* �
 configure one machine directly and see which layer the failure follows.
 
 </details>
+
 ## Prerequisites
 
 <details>
@@ -55,6 +56,7 @@ configure one machine directly and see which layer the failure follows.
   and tenant values; [Developer setup](../DEVELOPER.md) is the governed path.
 
 </details>
+
 ## 2. Running it
 
 <details>
@@ -190,6 +192,7 @@ Nothing is written until steps 1–5 pass, so a failed run leaves the machine as
 it was.
 
 </details>
+
 ## 3. The model list
 
 <details>
@@ -297,6 +300,7 @@ a base URL left behind by a gateway setup, which is what makes it safe to run on
 a machine that was previously on the gateway.
 
 </details>
+
 ## 4. Diagnostics
 
 <details>
@@ -623,6 +627,7 @@ allowlist is not the problem — see
 [NETWORK.md §6](NETWORK.md#6-econnreset-is-not-an-allowlist-problem).
 
 </details>
+
 ## 5. What you give up, and what you inherit
 
 <details>
@@ -665,6 +670,7 @@ What does not work is suppressing the finding. The control and the exception
 then disagree, and the disagreement outlives whoever understood it.
 
 </details>
+
 ## 6. Reading the configuration off a machine
 
 <details>
@@ -699,6 +705,7 @@ gateway. There is nothing on it to export, so configure it rather than trying to
 copy from it.
 
 </details>
+
 ## 7. Configuring it by hand
 
 <details>
@@ -874,6 +881,7 @@ If you want to test the endpoint without involving Claude Code at all:
 ```
 
 </details>
+
 ## 8. Undoing it
 
 <details>
@@ -895,6 +903,7 @@ machine can be reconfigured back at any time by anybody who can edit a JSON
 file.
 
 </details>
+
 ## See also
 
 - [Setup](SETUP.md) — standing up the gateway

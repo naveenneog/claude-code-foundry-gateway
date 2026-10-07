@@ -46,6 +46,7 @@ call. The gateway then authenticates the caller and resolves entitlement before
 it refuses, so a `403 model_not_allowed` means *authenticated and entitled*.
 
 </details>
+
 ## The matrix
 
 <details>
@@ -64,6 +65,7 @@ it refuses, so a `403 model_not_allowed` means *authenticated and entitled*.
 | Workload identity federation | For example GitHub Actions OIDC | Not run here | | not measured |
 
 </details>
+
 ## What takes access away
 
 <details>
@@ -100,6 +102,7 @@ All members and the published store. A portal membership removal alone is not
 proof of refusal.
 
 </details>
+
 ## What data lives where
 
 <details>
@@ -127,6 +130,7 @@ not a stolen token against replay. Keep diagnostic exports private; never print
 the full token or share user claims in a public issue.
 
 </details>
+
 ## Things that surprised us
 
 <details>
@@ -140,6 +144,7 @@ the full token or share user claims in a public issue.
 | A signed-in developer gets `401 A Microsoft Entra ID token is required. Run 'az login'.` | The token has the wrong audience. The message is the same as for no token at all | Check the client requests `https://cognitiveservices.azure.com`; `az account get-access-token --resource https://cognitiveservices.azure.com` shows what it would get |
 
 </details>
+
 ## Conditional Access
 
 <details>
@@ -159,6 +164,7 @@ unilateral block on device code flow"
 ([Block authentication flows with Conditional Access](https://learn.microsoft.com/entra/identity/conditional-access/policy-block-authentication-flows)).
 
 </details>
+
 ## Next steps
 
 - [Network](NETWORK.md) — client egress and private endpoint boundaries.

@@ -32,6 +32,7 @@ The policy profile is generated from the repository root after the approved mark
   Run generator commands from the repository root.
 
 </details>
+
 ## Generate the profiles
 
 <details>
@@ -60,6 +61,7 @@ without understanding first-wins precedence in
 ---
 
 </details>
+
 ## What each switch sets
 
 <details>
@@ -83,6 +85,7 @@ can sign in to claude.ai and leave the policy behind.
 ---
 
 </details>
+
 ## What these controls are not
 
 <details>
@@ -110,6 +113,7 @@ as something that stops a determined user.
 ---
 
 </details>
+
 ## Where the policy goes
 
 <details>
@@ -147,6 +151,7 @@ a running app notices a changed managed configuration at its next re-check
 ---
 
 </details>
+
 ## Checking it applied
 
 <details>
@@ -170,6 +175,7 @@ the plugin browser. On Linux a rejected `managed-settings.json` is logged to
 ---
 
 </details>
+
 ## Running your own marketplace
 
 <details>
@@ -202,6 +208,7 @@ decisions about what your organisation trusts, and this page does not make them
 for you.
 
 </details>
+
 ## Verify the trust controls, not just the UI
 
 <details>
@@ -220,6 +227,7 @@ have a publisher-signing scheme; pin supported content to a commit/hash and
 review updates. Desktop `.mcpb` signing is a different mechanism.
 
 </details>
+
 ## Troubleshoot and next steps
 
 | Symptom | Check |

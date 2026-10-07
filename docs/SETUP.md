@@ -242,6 +242,7 @@ case or spacing, or by its number in the list.
 ---
 
 </details>
+
 ## 2. Permissions and roles
 
 <details>
@@ -414,6 +415,7 @@ budget without creating anything.
 ---
 
 </details>
+
 ## 3. Deploy
 
 <details>
@@ -868,6 +870,7 @@ it — it clears it.
 ---
 
 </details>
+
 ## 4. Verify before announcing
 
 <details>
@@ -981,6 +984,7 @@ RBAC-only audit does not prove an old API key cannot bypass the gateway.
 ---
 
 </details>
+
 ## 5. Next
 
 | Task | Guide |

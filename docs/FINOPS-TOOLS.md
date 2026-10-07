@@ -52,6 +52,7 @@ alias for one release.
 ![Terminal FinOps: one engine, a terminal and scriptable commands, and three backends](images/architecture/terminal-finops.png)
 
 </details>
+
 ## Which one to choose
 
 <details>
@@ -93,6 +94,7 @@ has the full
 comparison.
 
 </details>
+
 ## Sign-in
 
 <details>
@@ -138,6 +140,7 @@ renews it without deleting any cache. How long Entra, Turnstile and the AUM serv
 reflect a change on their own is still open (**U21**, [Unknowns](UNKNOWNS.md)).
 
 </details>
+
 ## End-to-end flows
 
 <details>
@@ -366,6 +369,7 @@ are explicit. Stale enforced snapshots fail closed after 15 minutes.
 ![Budget enforcement modes: strict, allowance and notify](images/architecture/budget-modes.png)
 
 </details>
+
 ## Bill of materials and pricing
 
 <details>
@@ -459,6 +463,7 @@ Read with the commands above on 2026-09-25:
 - The chargeback reports deployment: about $29.70/month standing.
 
 </details>
+
 ## Limits worth knowing
 
 <details>
@@ -483,6 +488,7 @@ Read with the commands above on 2026-09-25:
   portal pictures, which need one owner sign-in.
 
 </details>
+
 ## Related guides
 
 - [FinOps reporting](FINOPS.md): the monthly close, step by step.

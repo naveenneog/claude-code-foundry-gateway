@@ -56,6 +56,7 @@ described in [Developer setup](../DEVELOPER.md#one-command).
 you onboard.
 
 </details>
+
 ## What it is for
 
 <details>
@@ -76,6 +77,7 @@ and the script reads the gateway URL, tenant and tier limits from it, so they
 type none of them.
 
 </details>
+
 ## It contains no secret
 
 <details>
@@ -92,6 +94,7 @@ repository. It is gitignored here only because it is environment-specific and
 would go stale, not because it is sensitive.
 
 </details>
+
 ## Getting it to developers
 
 <details>
@@ -111,6 +114,7 @@ scripts bundle and [DEVELOPER.md](../DEVELOPER.md). There is no Azure portal
 button for local bundle distribution.
 
 </details>
+
 ## Verify the handover
 
 <details>
@@ -123,6 +127,7 @@ does not prove a separately distributed Desktop helper is present or will still
 be present at its next token refresh.
 
 </details>
+
 ## If you are a developer and do not have this file
 
 <details>
@@ -139,6 +144,7 @@ also skip the file entirely:
 Both values are safe to share over chat.
 
 </details>
+
 ## Next
 
 - [Developer setup](../DEVELOPER.md) configures and verifies the workstation.

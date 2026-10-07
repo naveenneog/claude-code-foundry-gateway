@@ -163,6 +163,7 @@ Check exit status: error text is a nonempty string, not evidence of success.
 `tests/Test-AzArguments.ps1` guards repository scripts.
 
 </details>
+
 ## Next steps
 
 - [Releasing](RELEASING.md) — tags, changelog and release gate.
