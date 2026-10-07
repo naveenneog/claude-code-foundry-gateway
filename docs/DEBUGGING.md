@@ -329,7 +329,7 @@ empty entitlement list or rely on an absent message.
 
 A `401` without `x-gateway-error` is consistent with Foundry rejecting the
 gateway's identity. An absent header does not prove where the request failed
-(the header table in Step 4 explains why), so the request's record in
+(the header table in Step 1 explains why), so the request's record in
 Application Insights or an APIM trace confirms the failing hop; the checks below
 confirm the identity and its data-plane role.
 
