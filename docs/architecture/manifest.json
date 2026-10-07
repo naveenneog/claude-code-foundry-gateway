@@ -32,7 +32,7 @@
         "scripts/Sync-ClaudeAccess.ps1": "8d69cfebf48431a3c7b6b8fdb41916acee824e426650f4bda77b70f8e16122fe",
         "scripts/Sync-ClaudeProjection.ps1": "67976f06318afec6f1e3b949e9ff6d5a4b1204201459ed0fc5f2e3e20cec2232",
         "scripts/flow/DeviceProfiles.ps1": "7f3925af5eab6f23599031b118834d1faeb657a960b20af505788ceb6097fbc4",
-        "scripts/flow/Foundation.ps1": "fb0d43ee4fbe00a140410bf3f9594b1a6d43bc4f226748f8231c6f23743c7ed4",
+        "scripts/flow/Foundation.ps1": "b7c2a9dadb4edfbe131e43a242af710567a59daed83c37884cea1dfa7edfd1f4",
         "scripts/flow/Guide.ps1": "73bb63882ee1726fd8528e5e3045ecf6fd57a89dfa82a32f6e190cd2494461db",
         "scripts/flow/Verify.ps1": "7a8b05c6848499a8fbc26d87c90f4f3bfaa899538eeb1e6c068dd7bedda847fa",
         "sync/src/apply-projection.mjs": "e12e55b2ef9514483083ee09e638bfd6e85623f2685103a68b4440a6abc1e0a7"
@@ -57,7 +57,7 @@
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
-        "infra/content-safety-screening.xml": "d37fe038823bc186c5908c48883c55ef450ea9a679969cb1526bb4984b3232b5",
+        "infra/content-safety-screening.xml": "ca4ce0ed9c92051a479c8ab241a0fe760071139e0538a74f0f06cde18379dd3d",
         "infra/content-safety.bicep": "a07ff9a769ab433bf82b0dc5c372ac1b4a38312b14423290da62e483a1130ea4",
         "infra/main.bicep": "c61ea3f911267fe8924debc455ad3e53fda10999cd47f478bd4a8a9ade54a985",
         "infra/policy.xml": "5fb03fa828da5684af4eff855fb18c52a166eb884cde80fdc21b8cd476040790",
@@ -471,7 +471,7 @@
       "id": "company-address",
       "source": "docs/architecture/15-company-address.json",
       "inputs": {
-        "Install-ClaudeGateway.ps1": "4aa81ea8e42629dbbf84cd95099f36cd372ff23484fa833505d991682bfc907e",
+        "Install-ClaudeGateway.ps1": "9ab8abc81a2687f1071e9f73a1402ec0a509adda86f9320565e4cd872f2571b4",
         "Start-ClaudeGateway.ps1": "86e92a50b603e0466f2d94ef03964f1ef8a511fe49262bfb694d6df32ad2d4dc",
         "docs/architecture/15-company-address.json": "83c08d15d71fcf6a002d004090b67ea77c858b70efa3718e8ff11aebae276981",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
@@ -489,7 +489,7 @@
         "scripts/flow/Address.ps1": "88b0499d3eaf5423f98f4e6cb1ca1b2f221c4a44d4b8677a790ada807e495869",
         "scripts/flow/Discovery.ps1": "6e3832eb6250c747bf7ffbd78595ca48a5359dc45381363a2a6cc0a757b2aad3",
         "scripts/flow/FlowContract.ps1": "548dd10f00884248ccb70a37529b2050f15a7870803e7fd2130e1479e1c65bf3",
-        "scripts/flow/Foundation.ps1": "fb0d43ee4fbe00a140410bf3f9594b1a6d43bc4f226748f8231c6f23743c7ed4"
+        "scripts/flow/Foundation.ps1": "b7c2a9dadb4edfbe131e43a242af710567a59daed83c37884cea1dfa7edfd1f4"
       },
       "outputs": [
         {
