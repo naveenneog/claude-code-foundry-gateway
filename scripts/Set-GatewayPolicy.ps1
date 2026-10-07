@@ -4,6 +4,8 @@
 .DESCRIPTION
     Creates any named values and policy fragments referenced by the policy before PUTting the API policy.
     This lets pre-P102 gateways accept policy.xml, whose APIM include-fragment depends on a fragment resource.
+    Only missing named values are created; existing values are never updated. The script stops before any
+    write when the live named-value list cannot be read.
 #>
 [CmdletBinding()]
 param(
@@ -26,7 +28,22 @@ $xml = [IO.File]::ReadAllText($resolvedPolicyPath).TrimStart([char]0xFEFF)
 $scope = if (Test-ClaudeFlowSubscriptionId $SubscriptionId) { @{ SubscriptionId = $SubscriptionId } } else { @{} }
 $subscriptionArgs = if ($scope.ContainsKey('SubscriptionId')) { @('--subscription', $scope.SubscriptionId) } else { @() }
 $defaults = Get-ClaudeFlowLifecycleTemplateNamedValueDefaults
-$liveNamedValues = az apim nv list -g $ResourceGroup --service-name $ApimName -o json @subscriptionArgs | ConvertFrom-Json
+# A failed, empty or malformed read would make every referenced value look missing, and the repair below would
+# then overwrite operator-owned values with template defaults. A deployed gateway always has named values.
+$global:LASTEXITCODE = 0
+$liveNamedValueJson = az apim nv list -g $ResourceGroup --service-name $ApimName -o json @subscriptionArgs
+$listProblem = if ($LASTEXITCODE -ne 0) { "az exit $LASTEXITCODE" } else { '' }
+$liveNamedValues = $null
+if (-not $listProblem) {
+    try { $liveNamedValues = ($liveNamedValueJson | Out-String) | ConvertFrom-Json -NoEnumerate -ErrorAction Stop }
+    catch { $listProblem = 'the output was not JSON' }
+}
+if (-not $listProblem -and $liveNamedValues -isnot [array]) { $listProblem = 'the output was not a JSON array' }
+elseif (-not $listProblem -and $liveNamedValues.Count -eq 0) { $listProblem = 'the list was empty' }
+elseif (-not $listProblem -and @($liveNamedValues | Where-Object { -not [string]$_.name }).Count) { $listProblem = 'an entry had no name' }
+if ($listProblem) {
+    throw "Could not list the named values of '$ApimName' ($listProblem). No named values were written and no policy was applied. A deployed gateway has named values such as tenant-id, so an empty list counts as a failed read."
+}
 $liveNamedValueMap = Get-ClaudeFlowLifecycleNamedValueMap -Discovery ([pscustomobject]@{ namedValues = @($liveNamedValues) })
 $requiredNamedValues = [Collections.Generic.List[string]]::new()
 foreach ($name in @(Get-ClaudeFlowLifecyclePolicyAndFragmentNamedValueReferences -PolicyPath $resolvedPolicyPath)) { $requiredNamedValues.Add($name) }

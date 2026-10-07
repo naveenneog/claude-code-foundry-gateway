@@ -22,8 +22,10 @@ $global:P102SetPolicyLiveNamedValues = @{}
 $global:P102SetPolicyCalls = [Collections.Generic.List[string]]::new()
 $global:P102SetPolicyPutTargets = [Collections.Generic.List[string]]::new()
 $global:P102SetPolicyForbiddenExistingUpdates = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+$global:P102SetPolicyListMode = 'ok'
 
-function Reset-Fixture([string[]]$Present, [string[]]$ExistingUpdatesForbidden = @()) {
+function Reset-Fixture([string[]]$Present, [string[]]$ExistingUpdatesForbidden = @(), [string]$ListMode = 'ok') {
+    $global:P102SetPolicyListMode = $ListMode
     $global:P102SetPolicyLiveNamedValues = @{}
     foreach ($name in $Present) { $global:P102SetPolicyLiveNamedValues[$name] = "live-$name" }
     $global:P102SetPolicyCalls.Clear()
@@ -39,6 +41,13 @@ function global:az {
     if ($line -match '^account show') { return '00000000-0000-4000-8000-0000000000a1' }
     if ($line -match '^account get-access-token') { return 'offline-token' }
     if ($line -match '^apim nv list') {
+        # A failed az call prints its error on stderr and nothing on stdout.
+        switch ($global:P102SetPolicyListMode) {
+            'fail' { $global:LASTEXITCODE = 1; return }
+            'empty' { return '[]' }
+            'object' { return '{ "name": "models-standard", "value": "live" }' }
+            'text' { return 'WARNING: the service returned an unexpected page' }
+        }
         return (@($global:P102SetPolicyLiveNamedValues.Keys | Sort-Object | ForEach-Object { [pscustomobject]@{ name = $_; value = $global:P102SetPolicyLiveNamedValues[$_] } }) | ConvertTo-Json -Depth 4)
     }
     if ($line -match '^apim nv show') {
@@ -104,6 +113,19 @@ try {
         $thrown = Get-Thrown { & (Join-Path $root 'scripts\Set-GatewayPolicy.ps1') -ApimName apim-contoso -ResourceGroup rg-contoso -PolicyFile $scratch -SubscriptionId '00000000-0000-4000-8000-0000000000a1' }
         $writes = @($global:P102SetPolicyCalls | Where-Object { $_ -match '^apim nv (create|update)' })
         Assert 'a missing named value without a safe default stops before any write and names it' ($thrown -match 'tenant-id' -and $thrown -match 'nothing was written|No named values were written' -and $writes.Count -eq 0 -and $global:P102SetPolicyPutTargets.Count -eq 0) "$thrown | $($writes -join '; ') | $($global:P102SetPolicyPutTargets -join '; ')"
+
+        # Every reference here has a safe default, so a bad list read is the only thing that can stop the run.
+        [IO.File]::WriteAllText($scratch, '<policies><inbound><set-variable name="a" value="{{models-standard}}" /><set-variable name="b" value="{{quota-org}}" /></inbound></policies>')
+        foreach ($case in @(
+                @{ Mode = 'fail'; Label = 'a failed named-value list read' },
+                @{ Mode = 'empty'; Label = 'an empty named-value list' },
+                @{ Mode = 'object'; Label = 'a named-value list that is not a JSON array' },
+                @{ Mode = 'text'; Label = 'a named-value list that is not JSON' })) {
+            Reset-Fixture -Present @('models-standard', 'quota-org') -ExistingUpdatesForbidden @('models-standard', 'quota-org') -ListMode $case.Mode
+            $thrown = Get-Thrown { & (Join-Path $root 'scripts\Set-GatewayPolicy.ps1') -ApimName apim-contoso -ResourceGroup rg-contoso -PolicyFile $scratch -SubscriptionId '00000000-0000-4000-8000-0000000000a1' }
+            $writes = @($global:P102SetPolicyCalls | Where-Object { $_ -match '^apim nv (create|update|show)' })
+            Assert "$($case.Label) stops before any named-value read-back, write or PUT" ($thrown -match 'Could not list the named values of ''apim-contoso''' -and $thrown -match 'No named values were written' -and $writes.Count -eq 0 -and $global:P102SetPolicyPutTargets.Count -eq 0) "$thrown | $($writes -join '; ') | $($global:P102SetPolicyPutTargets -join '; ')"
+        }
     }
     finally { Remove-Item -LiteralPath $scratch -Force -ErrorAction SilentlyContinue }
 
