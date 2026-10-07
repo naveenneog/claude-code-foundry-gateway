@@ -19,8 +19,21 @@ distributed here. The enterprise designs use Microsoft Learn's
 [APIM landing zone architecture][landing-zone] and
 [network capability documentation][apim-network], checked 2026-09-24, with the
 deck comparison below checked on 2026-09-25.
+## Quickstart
+
+The first pass is a read-only network review. The deployment record supplies the gateway target, and the selected topology is reviewed with network, security and platform owners before any edge resource is created.
+
+```powershell
+.\scripts\New-ClaudeNetworkEdge.ps1 -DiscoverOnly
+```
+
+**Expected result:** the review names listeners, origin reachability, private DNS requirements, WAF implications and estimated standing cost without deploying. A confirmed deployment still requires the verification boundaries below.
 
 ## Choose a topology
+
+<details>
+
+<summary>Topology options, deck comparison and APIM network capabilities</summary>
 
 | Choice | Entry and origin | Use when | Cost and operating consequences |
 |---|---|---|---|
@@ -141,7 +154,13 @@ location restrictions, and the instance's real SKU and network mode. Region
 advertisement is not a promise of instantaneous capacity; deployment remains
 the final availability check.
 
+</details>
+
 ## Place the rest of the system
+
+<details>
+
+<summary>Component placement, subnets, routing and private DNS</summary>
 
 Keep the optional management services out of the inference request path.
 
@@ -302,7 +321,13 @@ switched to outbound integration (`ChangingVnetTypeNotSupportedForPremiumV2`). A
 allows one Premium v2 activation per subscription every 60 minutes
 (`ServiceSkuActivationThrottled`).
 
+</details>
+
 ## Prerequisites
+
+<details>
+
+<summary>Roles, certificate, IPAM and evaluation gateway requirements</summary>
 
 - Azure CLI signed in to the correct subscription and tenant; PowerShell 5.1
   or 7; Bicep available through Azure CLI; Node for streaming verification.
@@ -334,7 +359,13 @@ allows one Premium v2 activation per subscription every 60 minutes
 
 ![Fresh Standard v2 test gateway before integration, not a screenshot of final private networking](guide/network-03-apim-before.png)
 
+</details>
+
 ## Deploy with the script
+
+<details>
+
+<summary>Reviewed plan workflow, pricing choices and impact acknowledgements</summary>
 
 > The administrator-review requirement below was added on 2026-09-25. The
 > earlier direct deployment examples are configuration references, not an
@@ -619,7 +650,13 @@ Application Gateway. Reuse shared subnets, IPs, certificates, workspaces and
 policies through their selected IDs. For an existing shared gateway, use the
 manual configuration below and the same verification contract.
 
+</details>
+
 ## Configure the same design in the Azure portal
+
+<details>
+
+<summary>Portal blade settings and live capture evidence</summary>
 
 The following fields are the manual equivalent of the supplied modules, not
 instructions to paste unknown deployment IDs into a template.
@@ -726,7 +763,13 @@ identity with **Key Vault Certificates Officer** instead. Only the public CA
 returns to the workstation. Never fix this by exporting the PFX
 into source, enabling public access against policy, or disabling TLS validation.
 
+</details>
+
 ## Configure with Azure CLI
+
+<details>
+
+<summary>Bicep module deployment order and policy file inputs</summary>
 
 The modules can deploy without PowerShell. Supply parameter files populated
 from discovery; do not copy the Contoso values in screenshots into a real
@@ -763,7 +806,13 @@ KQL or multi-parameter continuation URLs directly into its arguments. The
 network helper uses bounded PowerShell ARM requests and obtains each
 subscription's token from Azure CLI.
 
+</details>
+
 ## Claude-specific edge settings
+
+<details>
+
+<summary>Streaming, body, header and client-IP edge settings</summary>
 
 | Setting | Value / consequence |
 |---|---|
@@ -778,7 +827,13 @@ subscription's token from Azure CLI.
 | Health | Probe APIM's status endpoint over HTTPS with correct SNI. A 200 probe does not prove Entra sign-in, entitlement, budgets or Foundry access |
 | Evaluation certificate | Set `NODE_EXTRA_CA_CERTS` before launch, or in the isolated profile's `env`, to the **public CA** PEM returned by setup. A Key Vault self-signed end-entity certificate was accepted by Node but rejected by the tested native client as CA material. The supplied evaluation issuer now creates a proper CA/server chain |
 
+</details>
+
 ## Tune WAF for code, without turning it off
+
+<details>
+
+<summary>Detection, precise exclusions and Prevention replay tests</summary>
 
 1. Start with Detection on the two dedicated policies. It logs matches but
    does not provide Prevention's blocking control.
@@ -826,7 +881,13 @@ code is safe. A code prompt containing SQL or HTML is not a SQL query executed
 by APIM. Conversely, an exclusion for prompt data must not exempt arbitrary
 query strings, authentication headers or other applications on the gateway.
 
+</details>
+
 ## Verify from each real boundary
+
+<details>
+
+<summary>DNS, TLS, SSE and bypass checks per path</summary>
 
 ```powershell
 .\scripts\Test-ClaudeNetworkEdge.ps1 -StatePath .\.network-state\edge.json `
@@ -857,7 +918,13 @@ Also test:
 - optional resolver, database, jobs and telemetry **from their own subnets**;
   a workstation DNS lookup does not prove their egress path.
 
+</details>
+
 ## Live evidence
+
+<details>
+
+<summary>Measured WAF streaming, body and private-listener results</summary>
 
 The 2026-09-24 evaluation uses a fresh Standard v2 gateway, the existing
 private test Foundry account, a private certificate vault and an isolated WAF
@@ -904,7 +971,13 @@ forced-tunnel deployment, AMPLS, Front Door, DDoS mitigation, high availability,
 load/scale, or the VS Code/Desktop clients through this edge. Their placement
 above is a cited design, not evidence from the CLI evaluation.
 
+</details>
+
 ## Troubleshoot
+
+<details>
+
+<summary>Network edge errors and corrective actions</summary>
 
 | Error or symptom | Cause and action |
 |---|---|
@@ -927,7 +1000,13 @@ above is a cited design, not evidence from the CLI evaluation.
 | Resolver returns 503 after a successful network check | Check projection lease freshness and the sync's permissions. DNS/TLS success cannot renew an expired entitlement |
 | Portal redirects to sign-in during evidence capture | Stop. Refresh the dedicated capture profile, copy it again to the worktree, and resume; do not publish the sign-in page as configuration evidence |
 
+</details>
+
 ## Cost
+
+<details>
+
+<summary>Retail tariffs, topology bill items and variable exclusions</summary>
 
 `Get-ClaudeNetworkCost.ps1` returns the retrieval UTC, published meter scope,
 unit, quantity and 730-hour monthly equivalent. It excludes unknown/variable
@@ -982,7 +1061,13 @@ Claude model inference is not a model-specific tariff in the retail price API.
 Use the customer's agreement and categorized token ledger, not a fabricated
 zero or a claim that list-price infrastructure is the invoice.
 
+</details>
+
 ## Security checklist
+
+<details>
+
+<summary>TLS, private endpoints, WAF and evidence safeguards</summary>
 
 - [ ] Selected targets, resource owners, address plan, region/SKU restrictions
   and changes to shared resources are reviewed.
@@ -1004,7 +1089,13 @@ zero or a claim that list-price infrastructure is the invoice.
 - [ ] DDoS Network Protection or per-IP protection is a deliberate decision,
   not confused with layer-7 WAF. See [DDoS protection][ddos].
 
+</details>
+
 ## Remove the evaluation
+
+<details>
+
+<summary>State-based teardown and shared-resource preservation</summary>
 
 ```powershell
 .\scripts\Remove-ClaudeNetworkEdge.ps1 -StatePath .\.network-state\edge.json `
@@ -1020,6 +1111,8 @@ resource group, purge a vault, or reopen a shared Foundry account unless
 deletion is still pending and re-run. Remove a separately created evaluation
 APIM and its Foundry role only after checking that they were created for that
 evaluation.
+
+</details>
 
 ## Next steps
 

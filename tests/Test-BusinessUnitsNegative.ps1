@@ -2904,9 +2904,9 @@ $mutations = @(
        To    = "''" }
 
     @{ Suite = 'Test-AdminSurface.ps1'
-       Name  = 'the sign-in choice stops being decided once'
+       Name  = 'the sign-in choice stops being one fleet-wide setting'
        File  = 'docs/SETUP.md'
-       From  = 'decided here, once, for everyone'
+       From  = 'one setting for every developer'
        To    = 'set per machine' }
 
     @{ Suite = 'Test-AdminSurface.ps1'

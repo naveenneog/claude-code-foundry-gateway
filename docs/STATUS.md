@@ -6,6 +6,7 @@ Merged packet sections live under [`docs/status/`](status/), one file per packet
 
 | Packet | Section heading | Date |
 |---|---|---|
+| P103 | [P103 Quickstart first, sections as disclosures, 2026-10-07](status/P103.md#p103-quickstart-first-sections-as-disclosures) | 2026-10-07 |
 | P99 | [P99 Directory-scale snapshot transfer, 2026-10-06](status/P99.md#p99-directory-scale-snapshot-transfer-2026-10-06) | 2026-10-06 |
 | P100 | [P100 The update flow moves a named-value gateway to the Cosmos projection, 2026-10-06](status/P100.md#p100-the-update-flow-moves-a-named-value-gateway-to-the-cosmos-projection-2026-10-06) | 2026-10-06 |
 | P98 | [P98 The installer deploys the Cosmos projection by default, 2026-10-06](status/P98.md#p98-the-installer-deploys-the-cosmos-projection-by-default-2026-10-06) | 2026-10-06 |

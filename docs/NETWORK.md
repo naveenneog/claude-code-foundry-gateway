@@ -24,8 +24,21 @@ default inference hosts and Entra token endpoint, not every feature of a client.
 4. [The instance metadata service](#4-the-instance-metadata-service)
 5. [How this was measured](#5-how-this-was-measured)
 6. [ECONNRESET is not an allowlist problem](#6-econnreset-is-not-an-allowlist-problem)
+## Quickstart
+
+The workstation uses the platform team's handover file and the approved clients. The checks below name the endpoint and skip a real model request unless the support path explicitly asks for one.
+
+```powershell
+.\scripts\Debug-ClaudeWorkstation.ps1 -RecordPath .\claude-gateway.json -NoRequest
+```
+
+**Expected result:** network, token and client checks report PASS, WARN, FAIL or SKIP with redacted evidence. A streaming failure after these checks points to [ECONNRESET](#6-econnreset-is-not-an-allowlist-problem) rather than a simple host allowlist.
 
 ## Prerequisites
+
+<details>
+
+<summary>Client tools, access paths and network preflight</summary>
 
 | | |
 |---|---|
@@ -55,7 +68,13 @@ showing Healthy does not test the developer's proxy.
 
 ---
 
+</details>
+
 ## 1. The complete list
+
+<details>
+
+<summary>Runtime, install, admin and observed destinations</summary>
 
 One row per destination, marked with which client needs it. **CLI** is Claude
 Code on the command line, **VS Code** is the `anthropic.claude-code`
@@ -150,7 +169,13 @@ one most often missing, because every other host in the deployment is under
 
 ---
 
+</details>
+
 ## 2. What differs between the clients
+
+<details>
+
+<summary>Client install differences and identical runtime egress</summary>
 
 All three build the same request. The VS Code extension ships its own copy of
 the Claude Code binary rather than calling the one on `PATH`, and Desktop
@@ -202,13 +227,25 @@ problem. See [FOUNDRY-DIRECT.md §4](FOUNDRY-DIRECT.md#4-diagnostics).
 
 ---
 
+</details>
+
 ## 3. Administration, and what developers do not need
+
+<details>
+
+<summary>Setup endpoints excluded from developer machines</summary>
 
 Rows 9 and 10 are needed on the machine that runs setup, the entitlement sync
 or the health checks. They are **not** needed on a developer's machine to use
 any of the three clients.
 
+</details>
+
 ## 4. The instance metadata service
+
+<details>
+
+<summary>Managed identity probe behavior and timeout risks</summary>
 
 Row 13, `169.254.169.254:80`, is link-local and not a firewall rule, but it
 decides which identity the clients use. The Azure identity chain probes it
@@ -230,8 +267,13 @@ Three behaviours, all different:
 CLI 2.1.272: `AzureCliCredential` is rejected with
 `Valid values are 'prod' or 'dev'`.
 
+</details>
 
 ## 5. How this was measured
+
+<details>
+
+<summary>Network test, proxy observer and hostname extraction</summary>
 
 ```powershell
 ./scripts/Test-ClaudeNetwork.ps1                  # required destinations
@@ -276,7 +318,13 @@ capture a local client's egress. Treat the hostname report as internal data.
 > which is all a firewall rule needs, and the reason it is safe to run against
 > a production endpoint.
 
+</details>
+
 ## 6. ECONNRESET is not an allowlist problem
+
+<details>
+
+<summary>Streaming reset diagnosis and proxy exclusion test</summary>
 
 ```text
 ✳ Connection dropped (ECONNRESET) · Retrying in 22s · attempt 8/10
@@ -359,6 +407,8 @@ true and useless.
 > be **allowed**. A reset stream needs those hosts **excluded from TLS
 > inspection** — they are already allowed, and asking for them to be allowed
 > again gets the ticket closed as "already done".
+
+</details>
 
 ## Next steps
 

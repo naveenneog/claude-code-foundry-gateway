@@ -1,8 +1,8 @@
 # AUM client contract: USD budgets (P21/P59)
 
-This is an additive AUM **service** contract. No terminal-client code changes
-are included in this branch. Existing `/budgets`, requests and boosts still
-operate in tokens; never relabel those values as dollars.
+This reference defines the AUM service's USD-budget HTTP contract. Token requests
+and boosts retain their existing token semantics. Client actions depend on the
+service's advertised capabilities ([AUM connection](AUM.md#connect)).
 
 `GET capabilities` exposes `usd_budgets_read`, `usd_budget_write`,
 `usd_budget_reconcile` and `usd_price_book_write`. Unknown flags default false.
@@ -182,3 +182,9 @@ reconcile and APIM propagation. UTC rollover likewise needs the new snapshot.
 5. Never expose a manager-only Apply or price-book editor.
 6. Existing token requests/boosts remain token workflows until a separate
    dollar workflow is implemented. No automatic token-to-dollar translation.
+
+## Next
+
+- [AUM service](AUM-SERVICE.md) covers service deployment and roles.
+- [AUM USD budget how-to](AUM.md#set-a-usd-budget) covers the terminal path when the service advertises the capability.
+- [Budgets](BUDGETS.md) covers operator semantics.

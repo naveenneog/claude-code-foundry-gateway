@@ -1,7 +1,7 @@
 # Claude FinOps is now AUM
 
 The terminal console is now **AUM - Azure Usage Management**.
-The command is `aum`. The [AUM guide](AUM.md) starts with
+The command is `aum`. The canonical guide is [AUM](AUM.md), with
 [Install](AUM.md#install), [Connect](AUM.md#connect) and the
 [task how-tos](AUM.md#how-to).
 
