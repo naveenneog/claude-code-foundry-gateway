@@ -30,7 +30,7 @@ $global:Live.Calls.Add("old-installer $ResourceGroup $NamePrefix $Sku Entitlemen
 $updateStub = Join-Path $work 'Update-ClaudeGateway.ps1'
 [IO.File]::WriteAllText($updateStub, @'
 param($ResourceGroup,$ApimName,[switch]$KeepNamedValues,[switch]$Apply,$ApprovedPlanFingerprint)
-if (-not $Apply) { $global:Live.Calls.Add("update plan $ResourceGroup $ApimName KeepNamedValues=$KeepNamedValues"); "Plan fingerprint: " + ("a" * 64); return }
+if (-not $Apply) { $global:Live.Calls.Add("update plan $ResourceGroup $ApimName KeepNamedValues=$KeepNamedValues"); Write-Host ("Plan fingerprint: " + ("a" * 64)); $step = if ($global:Live.UpdatePlanNoContentSafety) { '0001-record-schema-v2' } else { '0002-policy-and-named-values' }; return [pscustomobject]@{ Fingerprint = ("a" * 64); Plans = @([pscustomobject]@{ Step = $step; Summary = 'Create content-safety-screening fragment and named values.' }) } }
 $global:Live.Calls.Add("update apply $ResourceGroup $ApimName KeepNamedValues=$KeepNamedValues fp=$ApprovedPlanFingerprint")
 $global:Live.Updated = $true
 '@, [Text.UTF8Encoding]::new($false))
@@ -56,6 +56,7 @@ function Reset-Live {
         ModelValue = ',claude-sonnet-5,'
         HelloCount = 0
         RestQueryFails = $false
+        UpdatePlanNoContentSafety = $false
         LogRows = @(
             @{ mode='block'; decision='pass'; hateSeverity=0; violenceSeverity=0; selfHarmSeverity=0; sexualSeverity=0; customDimensions=@{ screening='claude-content-safety' } }
             @{ mode='block'; decision='block'; hateSeverity=0; violenceSeverity=2; selfHarmSeverity=0; sexualSeverity=0; customDimensions=@{ screening='claude-content-safety' } }
@@ -289,6 +290,10 @@ try {
     $global:Live.UpgradeCheckFails = 'mode'
     Invoke-P102 @{ UpgradeFrom = $oldCheckout }
     Assert 'upgrade mode fails when content-safety-mode is not off after update' ($Exit -ne 0 -and $Output -match 'content-safety-mode') "$Exit | $Failure | $Output"
+    Reset-Live
+    $global:Live.UpdatePlanNoContentSafety = $true
+    Invoke-P102 @{ UpgradeFrom = $oldCheckout }
+    Assert 'upgrade mode stops before apply when the update plan lacks content-safety migration step 0002' ($Exit -ne 0 -and $Output -match '0002-policy-and-named-values' -and (At '^update apply') -lt 0) "$Exit | $Failure | $Output | $($global:Live.Calls -join '; ')"
 
     Reset-Live
     Invoke-P102 @{ Teardown = $true }
@@ -301,4 +306,3 @@ finally {
     Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath (Join-Path $root 'p102-content-safety-live-receipt.json') -Force -ErrorAction SilentlyContinue
 }
-

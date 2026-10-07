@@ -169,9 +169,12 @@ try {
         Wait-GatewayStatus $url $Model 200 'upgrade pre-update benign request'
         $preFragment = Invoke-Az @('apim','api','policy-fragment','show','-g',$resourceGroup,'--service-name',$apimName,'--fragment-id','content-safety-screening','--subscription',$SubscriptionId) -AllowFailure
         if ($preFragment) { throw 'Expected content-safety-screening fragment to be absent before the update.' }
-        $planText = & $UpdatePath -ResourceGroup $resourceGroup -ApimName $apimName -KeepNamedValues 2>&1 | Out-String
-        $fingerprint = [regex]::Match($planText, 'Plan fingerprint: ([0-9a-f]{64})').Groups[1].Value
-        if (-not $fingerprint) { throw 'Update plan did not print a fingerprint.' }
+        $planOutput = @(& $UpdatePath -ResourceGroup $resourceGroup -ApimName $apimName -KeepNamedValues)
+        $plan = @($planOutput | Where-Object { $_ -isnot [string] -and $_.PSObject.Properties['Fingerprint'] })[0]
+        $fingerprint = [string]$plan.Fingerprint
+        if ($fingerprint -notmatch '^[0-9a-f]{64}$') { throw 'Update plan did not return a valid fingerprint object.' }
+        $contentSafetyPlan = @(@($plan.Plans) | Where-Object { $_.Step -eq '0002-policy-and-named-values' })[0]
+        if (-not $contentSafetyPlan) { throw 'Update plan did not include the content-safety policy migration step 0002-policy-and-named-values.' }
         & $UpdatePath -ResourceGroup $resourceGroup -ApimName $apimName -KeepNamedValues -Apply -ApprovedPlanFingerprint $fingerprint | Out-Null
         $mode = Invoke-Az @('apim','nv','show','-g',$resourceGroup,'--service-name',$apimName,'--named-value-id','content-safety-mode','--query','value','-o','tsv','--subscription',$SubscriptionId)
         if ($mode -ne 'off') { throw "content-safety-mode after update was '$mode', expected off." }
@@ -191,4 +194,3 @@ try {
 catch { $failed = $true; if ($script:receipt.installerStarted -and -not $script:receipt.createdResourceGroup) { $existsAfterInstaller = Invoke-Az @('group','exists','--name',$resourceGroup,'--subscription',$SubscriptionId) -AllowFailure; if ($existsAfterInstaller -eq 'true') { $script:receipt.createdResourceGroup = $true } }; Save-P102Receipt; Add-Result 'stopped' $false $_.Exception.Message }
 finally { if ($Teardown -and $script:receiptReady) { try { Remove-P102Resources -Receipt ([pscustomobject]$script:receipt) } catch { $failed = $true; Add-Result 'teardown' $false $_.Exception.Message } }; if ($originalSubscription) { Invoke-Az @('account','set','--subscription',$originalSubscription) -AllowFailure | Out-Null } }
 if ($failed) { exit 1 }
-
