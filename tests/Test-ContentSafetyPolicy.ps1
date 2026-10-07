@@ -166,6 +166,28 @@ $r = Run @{ model = 'claude-sonnet-5'; messages = @(@{ role = 'user'; content = 
 $shieldCall = @($r.Calls | Where-Object Operation -eq 'shieldPrompt')[0]
 Assert 'a search_result inside a tool_result is screened and a harmful one blocks' ($shieldCall -and ((@($shieldCall.Body.documents) -join "`n") -match 'SEARCH-RESULT-MARKER') -and $r.StatusCode -eq 403) ($r | ConvertTo-Json -Depth 8 -Compress)
 
+Write-Host 'P102 council round 3: document slots and budget limits'
+# With tools present the newest turn fills four documents and the tool descriptions share the fifth: Prompt Shields
+# accepts at most five documents.
+$sixResults = @(for ($i = 1; $i -le 6; $i++) { @{ type = 'tool_result'; tool_use_id = "toolu_0$i"; content = ("TR$i-MARKER " + ('r' * 300)) } })
+$r = Run (ClaudeCodeShape $sixResults)
+$shieldCall = @($r.Calls | Where-Object Operation -eq 'shieldPrompt')[0]
+$documents = @($shieldCall.Body.documents)
+$firstFour = ($documents | Select-Object -First 4) -join "`n"
+Assert 'six newest-turn sources and tools make exactly five documents: four for the newest turn, the fifth for the tool descriptions' ($documents.Count -eq 5 -and $documents[4] -match 'Tool 1 description' -and $firstFour -notmatch 'Tool 1 description' -and @(1..6 | Where-Object { $firstFour -notmatch "TR$_-MARKER" }).Count -eq 0) "documents=$($documents.Count) last=$(if ($documents.Count) { $documents[-1].Substring(0, [Math]::Min(40, $documents[-1].Length)) })"
+$prefillOnly = @{ model = 'claude-sonnet-5'; messages = @(@{ role = 'user'; content = @(@{ type = 'image'; source = @{ type = 'base64'; media_type = 'image/png'; data = 'iVBORw0KGgo=' } }) }, @{ role = 'assistant'; content = 'PREFILL-ONLY-MARKER partial answer' }) }
+$r = Run $prefillOnly
+$shieldCall = @($r.Calls | Where-Object Operation -eq 'shieldPrompt')[0]
+$analyzeCall = @($r.Calls | Where-Object Operation -eq 'analyze')[0]
+Assert 'a prefill after an image-only user turn is the Prompt Shields userPrompt and analyze text' ($shieldCall.Body.userPrompt -match 'PREFILL-ONLY-MARKER' -and $analyzeCall.Body.text -match 'PREFILL-ONLY-MARKER') ($r.Calls | ConvertTo-Json -Depth 6 -Compress)
+$manyTools = @(for ($i = 1; $i -le 25; $i++) { @{ name = "t$i"; description = ("tool $i " + ('d' * 800)) } })
+$heavyTurn = @(@{ type = 'text'; text = ('U' * 10500) }) + @(for ($i = 1; $i -le 12; $i++) { @{ type = 'tool_result'; tool_use_id = "toolu_$i"; content = ('R' * 2000) } }) + @(for ($i = 1; $i -le 3; $i++) { @{ type = 'search_result'; source = "kb://$i"; title = "t$i"; content = @(@{ type = 'text'; text = ('S' * 1500) }) } })
+$r = Run @{ model = 'claude-sonnet-5'; system = ('Y' * 20000); tools = $manyTools; messages = @(@{ role = 'user'; content = $heavyTurn }) }
+$shieldCall = @($r.Calls | Where-Object Operation -eq 'shieldPrompt')[0]
+$analyzeCall = @($r.Calls | Where-Object Operation -eq 'analyze')[0]
+$documents = @($shieldCall.Body.documents)
+Assert 'an oversized request stays inside every service limit, with no empty document' ($analyzeCall.Body.text.Length -le 10000 -and $shieldCall.Body.userPrompt.Length -le 10000 -and $documents.Count -le 5 -and ($documents | Measure-Object -Property Length -Sum).Sum -le 10000 -and @($documents | Where-Object { -not $_ }).Count -eq 0 -and (Bool $r.Trace.truncated)) "analyze=$($analyzeCall.Body.text.Length) prompt=$($shieldCall.Body.userPrompt.Length) documents=$($documents.Count)/$(($documents | Measure-Object -Property Length -Sum).Sum)"
+
 Write-Host 'P102 malformed Messages bodies'
 $malformedShapes = @(
     @{ Name='invalid JSON'; Body='{ not json'; Raw=$true },
