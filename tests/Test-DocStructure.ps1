@@ -208,6 +208,7 @@ function Get-MarkdownScanLines([string]$Text) {
   for ($i = 0; $i -lt $lines.Count; $i++) {
     $line = $lines[$i]
     $visible = $line
+    $code = $false
     $trimmed = $line -replace '^(?:[ ]{0,3}>[ ]?)+', ''
     if ($trimmed -match '^ {0,3}(```+|~~~+)') {
       $mark = $Matches[1]
@@ -215,7 +216,7 @@ function Get-MarkdownScanLines([string]$Text) {
       elseif ($mark.Substring(0, 1) -eq $fenceChar -and $mark.Length -ge $fenceLength) { $inFence = $false; $fenceChar = ''; $fenceLength = 0 }
       $visible = ''
     }
-    elseif ($inFence) { $visible = '' }
+    elseif ($inFence) { $visible = ''; $code = $true }
     else {
       if ($inComment) {
         $visible = ''
@@ -226,7 +227,7 @@ function Get-MarkdownScanLines([string]$Text) {
         if ($line -match '<!--' -and $line -notmatch '-->') { $visible = ''; $inComment = $true }
       }
     }
-    $rows.Add([pscustomobject]@{ Number = $i + 1; Text = $visible; Original = $line })
+    $rows.Add([pscustomobject]@{ Number = $i + 1; Text = $visible; Original = $line; InFence = $code })
   }
   return $rows.ToArray()
 }
@@ -306,10 +307,17 @@ function Test-GuideStructure([string]$Path, [string]$Text, [bool]$Enrolled) {
 
   $quick = $sections[0].BodyVisible
   if ($quick -notmatch '(?i)Expected result') { $errors.Add('Quickstart lacks Expected result') }
-  foreach ($ph in [regex]::Matches($quick, '<[a-zA-Z][a-zA-Z0-9-]*>')) {
-    $idx = $quick.IndexOf($ph.Value)
-    $prefix = $quick.Substring(0, $idx)
-    if ($prefix -notmatch [regex]::Escape($ph.Value)) { $errors.Add("placeholder $($ph.Value) is used before local definition") }
+  if ($quick -match '(?i)<details(?:\s|>)|<summary(?:\s|>)') { $errors.Add('Quickstart body contains details or summary') }
+  $quickRows = @($scanLines | Where-Object { $_.Number -gt $sections[0].StartLine -and $_.Number -le $sections[0].EndLine })
+  foreach ($row in $quickRows) {
+    if (-not $row.InFence) { continue }
+    foreach ($ph in [regex]::Matches($row.Original, '<[a-zA-Z][a-zA-Z0-9-]*>')) {
+      $definedEarlier = $false
+      foreach ($prior in @($scanLines | Where-Object { $_.Number -lt $row.Number -and -not $_.InFence -and $_.Text.Trim() })) {
+        if ($prior.Text -match [regex]::Escape($ph.Value)) { $definedEarlier = $true; break }
+      }
+      if (-not $definedEarlier) { $errors.Add("placeholder $($ph.Value) is used in a Quickstart command before local definition") }
+    }
   }
 
   $terminalNames = @('Next','Next steps','Related','See also','Verify and next steps','9. Next','Related guides','Troubleshoot and next steps','License','5. Next')
@@ -323,7 +331,11 @@ function Test-GuideStructure([string]$Path, [string]$Text, [bool]$Enrolled) {
     if ($terminalNames -contains $sections[$i].Title) { continue }
     if ($PermanentReferenceExceptions.ContainsKey($Path)) { continue }
     $body = $sections[$i].BodyVisible.Trim()
-    if (-not $body) { continue }
+    $rawBody = $sections[$i].Body.Trim()
+    if (-not $body) {
+      if ($rawBody) { $errors.Add("section '$($sections[$i].Title)' body is not exactly one blank-separated details block") }
+      continue
+    }
     if ($body -notmatch '(?s)^<details>\s*\n\s*<summary>([^<\n#][^<\n]*)</summary>\s*\n\s*\n.+\n\s*</details>\s*$') { $errors.Add("section '$($sections[$i].Title)' body is not exactly one blank-separated details block") }
     else {
       $summary = $Matches[1].Trim()
@@ -354,11 +366,24 @@ function Assert-InvalidCase([string]$Name, [string]$Text, [string]$Expected) {
 
 Write-Host 'Documentation structure - quickstarts, disclosures and anchors'
 function Join-Lines([string[]]$Lines) { return ($Lines -join "`n") }
+
+function Assert-NoPlaceholderCase([string]$Name, [string]$Text) {
+  $material = $Text -replace '\\n', "`n"
+  $errors = Test-GuideStructure 'docs\CASE.md' ($material -replace "`n", "`r`n") $true
+  $placeholderErrors = @($errors | Where-Object { $_ -match 'placeholder' })
+  if ($placeholderErrors.Count -eq 0) {
+    Write-Ok "placeholder definitions accepted: $Name"
+  } else {
+    $script:NegativeFailures.Add("positive placeholder case failed: $Name. Errors: $($placeholderErrors -join '; ')")
+    Write-Host "  [FAIL] $Name" -ForegroundColor Red
+  }
+}
+
 $NegativeFailures = [System.Collections.Generic.List[string]]::new()
 
 Assert-InvalidCase 'missing Quickstart' (Join-Lines @('# Guide','','Purpose.','','## Setup','','Text.','','## Next','','- [Next](NEXT.md)')) 'first H2'
 Assert-InvalidCase 'absent Expected result' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','```powershell','Do-Thing','```','','## Next','','- [Next](NEXT.md)')) 'Expected result'
-Assert-InvalidCase 'undefined placeholder before definition' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','Do-Thing -User <developer-upn>','','`<developer-upn>` is defined too late.','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)')) 'used before'
+Assert-InvalidCase 'undefined placeholder before definition' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','```powershell','Do-Thing -User <developer-upn>','```','','`<developer-upn>` is defined too late.','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)')) 'used in a Quickstart command before local definition'
 Assert-InvalidCase 'summary without blank line' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','**Expected result:** success.','','## Body','','<details>','<summary>Reference</summary>','Text.','</details>','','## Next','','- [Next](NEXT.md)')) 'details block'
 Assert-InvalidCase 'heading moved to summary' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','**Expected result:** success.','','## Body','','<details>','','<summary>## Body</summary>','','Text.','','</details>','','## Next','','- [Next](NEXT.md)')) 'heading in summary'
 Assert-InvalidCase 'terminal Next hidden' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','**Expected result:** success.','','## Next','','<details>','','<summary>Navigation</summary>','','- [Next](NEXT.md)','','</details>')) 'terminal navigation'
@@ -366,10 +391,11 @@ Assert-InvalidCase 'terminal Next hidden' (Join-Lines @('# Guide','','Purpose.',
 Assert-InvalidCase 'missing purpose before Quickstart' (Join-Lines @('# Guide','','## Quickstart','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)')) 'missing purpose'
 Assert-InvalidCase 'fenced heading ignored' (Join-Lines @('# Guide','','Purpose.','','```markdown','## Quickstart','```','','## Next','','- [Next](NEXT.md)')) 'first H2|no H2'
 Assert-InvalidCase 'comment heading ignored' (Join-Lines @('# Guide','','Purpose.','','<!--','## Quickstart','-->','','## Next','','- [Next](NEXT.md)')) 'first H2|no H2'
-Assert-InvalidCase 'fenced details ignored' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','**Expected result:** success.','','## Body','','```markdown','<details>','</details>','```','','Not wrapped.','','## Next','','- [Next](NEXT.md)')) 'details block'
-Assert-InvalidCase 'Quickstart hidden in details' (Join-Lines @('# Guide','','Purpose.','','<details>','','<summary>Hidden path</summary>','','## Quickstart','','**Expected result:** success.','','</details>','','## Next','','- [Next](NEXT.md)')) 'inside details|first H2'
+Assert-InvalidCase 'fenced details ignored' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','**Expected result:** success.','','## Body','','```markdown','<details>','','<summary>Area</summary>','','Text.','','</details>','```','','## Next','','- [Next](NEXT.md)')) 'details block'
+Assert-InvalidCase 'Quickstart body hidden in details' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','<details>','','<summary>Steps</summary>','','**Expected result:** success.','','</details>','','## Next','','- [Next](NEXT.md)')) 'Quickstart body contains details or summary'
 Assert-InvalidCase 'generic summary rejected' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','**Expected result:** success.','','## Body','','<details>','','<summary>Guide details</summary>','','Text.','','</details>','','## Next','','- [Next](NEXT.md)')) 'generic summary'
 Assert-InvalidCase 'duplicate summaries rejected' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','**Expected result:** success.','','## One','','<details>','','<summary>First area</summary>','','Text.','','</details>','','## Two','','<details>','','<summary>First area</summary>','','Text.','','</details>','','## Next','','- [Next](NEXT.md)')) 'duplicated'
+Assert-NoPlaceholderCase 'definition before fenced command' (Join-Lines @('# Guide','','`<developer-upn>` is the selected account.','','## Quickstart','','```powershell','Do-Thing -User <developer-upn>','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)'))
 Assert-InvalidCase 'local path and real name' (Join-Lines @('# Guide','','Purpose C:\Users\owner\checkout mentions Alice.','','## Quickstart','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)')) 'local machine path|personal/example name'
 
 Assert-Condition ($NegativeFailures.Count -eq 0) ($NegativeFailures -join "`n")
