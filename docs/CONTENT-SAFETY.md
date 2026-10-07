@@ -51,12 +51,13 @@ Crash-recovery teardown can be re-run from the receipt:
 
 ## Logging
 
-The policy traces under source `claude-content-safety`. Metadata includes mode, decision, blocked reason, severity numbers, booleans for Prompt Shields results, threshold, truncation and elapsed milliseconds. It does not store prompt text, system text, tool text, model output, image bytes or matched snippets.
+The policy writes one trace per screened request, with the message `content safety request screening` and the custom property `screening` set to `claude-content-safety`; a trace's `source` attribute is not stored as a custom property. Metadata includes mode, decision, blocked reason, severity numbers, booleans for Prompt Shields results, threshold, truncation and elapsed milliseconds. It does not store prompt text, system text, tool text, model output, image bytes or matched snippets. With `content-safety-mode` set to `off`, the policy does not screen and writes no trace.
 
 ```kusto
 traces
 | where timestamp > ago(24h)
-| where customDimensions.Source == "claude-content-safety" or customDimensions.source == "claude-content-safety"
+| where message == "content safety request screening"
+| where customDimensions.screening == "claude-content-safety"
 | project timestamp,
           operation_Id,
           mode=tostring(customDimensions.mode),
