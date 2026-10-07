@@ -279,6 +279,99 @@ function Test-LineInDetails([int]$Line, [object[]]$Ranges) {
   return $false
 }
 
+
+function Get-FencedBlocks([string]$Text) {
+  $lines = ($Text -replace "`r", "") -split "`n"
+  $blocks = New-Object System.Collections.Generic.List[object]
+  $inFence = $false; $fenceChar = ''; $fenceLength = 0; $language = ''; $start = 0; $content = [System.Collections.Generic.List[string]]::new()
+  for ($i = 0; $i -lt $lines.Count; $i++) {
+    $line = $lines[$i]
+    $trimmed = $line -replace '^(?:[ ]{0,3}>[ ]?)+', ''
+    if ($trimmed -match '^ {0,3}(```+|~~~+)\s*([^`]*)$') {
+      $mark = $Matches[1]
+      if (-not $inFence) {
+        $inFence = $true; $fenceChar = $mark.Substring(0, 1); $fenceLength = $mark.Length; $language = ($Matches[2] -split '\s+')[0].Trim().ToLowerInvariant(); $start = $i + 1; $content = [System.Collections.Generic.List[string]]::new()
+      }
+      elseif ($mark.Substring(0, 1) -eq $fenceChar -and $mark.Length -ge $fenceLength) {
+        $blocks.Add([pscustomobject]@{ StartLine = $start; EndLine = $i + 1; Language = $language; Text = ($content -join "`n") })
+        $inFence = $false; $fenceChar = ''; $fenceLength = 0; $language = ''
+      }
+    }
+    elseif ($inFence) { $content.Add($line) }
+  }
+  return $blocks.ToArray()
+}
+
+function Test-VisibleProseDefinesVariable([object[]]$ScanLines, [int]$BeforeLine, [string]$Name) {
+  $pattern = '(?i)(?<![A-Za-z0-9_-])\$' + [regex]::Escape($Name) + '(?![A-Za-z0-9_-])'
+  foreach ($line in @($ScanLines | Where-Object { $_.Number -lt $BeforeLine -and -not $_.InFence -and $_.Text.Trim() })) {
+    if ($line.Text -match $pattern) { return $true }
+  }
+  return $false
+}
+
+function Test-QuickstartPowerShellVariables([string]$Path, [object]$Section, [object[]]$ScanLines) {
+  $errors = [System.Collections.Generic.List[string]]::new()
+  $auto = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+  foreach ($name in @('true','false','null','_','PSItem','LASTEXITCODE','PSScriptRoot','HOME','PWD','args','Matches','Error','Host','PSVersionTable')) { [void]$auto.Add($name) }
+  $assigned = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+  foreach ($block in Get-FencedBlocks $Section.Body) {
+    if ($block.Language -notin @('powershell','pwsh','ps1')) { continue }
+    $tokens = $null; $parseErrors = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseInput($block.Text, [ref]$tokens, [ref]$parseErrors)
+    $definitions = @()
+    $definitions += $ast.FindAll({ param($node) $node -is [System.Management.Automation.Language.AssignmentStatementAst] -and $node.Left -is [System.Management.Automation.Language.VariableExpressionAst] }, $true) | ForEach-Object { $_.Left }
+    $definitions += $ast.FindAll({ param($node) $node -is [System.Management.Automation.Language.ForEachStatementAst] }, $true) | ForEach-Object { $_.Variable }
+    $definitions += $ast.FindAll({ param($node) $node -is [System.Management.Automation.Language.ParamBlockAst] }, $true) | ForEach-Object { $_.Parameters } | ForEach-Object { $_.Name }
+    $definitionKeys = @{}
+    foreach ($definition in $definitions) { $definitionKeys[$definition.Extent.StartOffset.ToString() + ':' + $definition.Extent.EndOffset.ToString()] = $true }
+    $variables = @($ast.FindAll({ param($node) $node -is [System.Management.Automation.Language.VariableExpressionAst] }, $true) | Sort-Object { $_.Extent.StartOffset })
+    foreach ($variable in $variables) {
+      $key = $variable.Extent.StartOffset.ToString() + ':' + $variable.Extent.EndOffset.ToString()
+      $name = $variable.VariablePath.UserPath
+      if ($definitionKeys.ContainsKey($key)) { continue }
+      if ($variable.VariablePath.IsDriveQualified -and $variable.VariablePath.DriveName -eq 'env') { continue }
+      if ($auto.Contains($name)) { continue }
+      $earlierInBlock = $false
+      foreach ($definition in $definitions) {
+        if ($definition.VariablePath.UserPath -eq $name -and $definition.Extent.StartOffset -lt $variable.Extent.StartOffset) { $earlierInBlock = $true; break }
+      }
+      if ($earlierInBlock) { continue }
+      if ($variable.VariablePath.IsGlobal -or $variable.VariablePath.IsScript) {
+        if (-not $assigned.Contains($name)) { $errors.Add("PowerShell variable `$$name is used in Quickstart before assignment") }
+        continue
+      }
+      if ($assigned.Contains($name)) { continue }
+      $absoluteLine = $Section.StartLine + $block.StartLine + $variable.Extent.StartLineNumber - 1
+      if (Test-VisibleProseDefinesVariable $ScanLines $absoluteLine $name) { continue }
+      $errors.Add("PowerShell variable `$$name is used in Quickstart before assignment or prose definition")
+    }
+    foreach ($definition in $definitions | Sort-Object { $_.Extent.StartOffset }) { [void]$assigned.Add($definition.VariablePath.UserPath) }
+  }
+  return $errors.ToArray()
+}
+
+function Test-QuickstartShellVariables([object]$Section, [object[]]$ScanLines) {
+  $errors = [System.Collections.Generic.List[string]]::new()
+  $assigned = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+  foreach ($block in Get-FencedBlocks $Section.Body) {
+    if ($block.Language -notin @('bash','sh','shell')) { continue }
+    $lines = $block.Text -split "`n"
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+      $line = $lines[$i]
+      foreach ($m in [regex]::Matches($line, '(^|\s)(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=')) { [void]$assigned.Add($m.Groups[2].Value) }
+      foreach ($m in [regex]::Matches($line, '\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?')) {
+        $name = $m.Groups[1].Value
+        if ($assigned.Contains($name)) { continue }
+        $absoluteLine = $Section.StartLine + $block.StartLine + $i
+        if (Test-VisibleProseDefinesVariable $ScanLines $absoluteLine $name) { continue }
+        $errors.Add("Shell variable `$$name is used in Quickstart before assignment or prose definition")
+      }
+    }
+  }
+  return $errors.ToArray()
+}
+
 function Test-GuideStructure([string]$Path, [string]$Text, [bool]$Enrolled) {
   $errors = New-Object System.Collections.Generic.List[string]
   if ($Text -match "(?<!`r)`n") { $errors.Add('working-tree line endings include isolated LF') }
@@ -314,6 +407,8 @@ function Test-GuideStructure([string]$Path, [string]$Text, [bool]$Enrolled) {
   $quick = $sections[0].BodyVisible
   if ($quick -notmatch '(?i)Expected result') { $errors.Add('Quickstart lacks Expected result') }
   if ($quick -match '(?i)<details(?:\s|>)|<summary(?:\s|>)') { $errors.Add('Quickstart body contains details or summary') }
+  foreach ($variableError in (Test-QuickstartPowerShellVariables $Path $sections[0] $scanLines)) { $errors.Add($variableError) }
+  foreach ($variableError in (Test-QuickstartShellVariables $sections[0] $scanLines)) { $errors.Add($variableError) }
   $quickRows = @($scanLines | Where-Object { $_.Number -gt $sections[0].StartLine -and $_.Number -le $sections[0].EndLine })
   foreach ($row in $quickRows) {
     if (-not $row.InFence) { continue }
@@ -404,6 +499,10 @@ Assert-InvalidCase 'generic summary rejected' (Join-Lines @('# Guide','','Purpos
 Assert-InvalidCase 'duplicate summaries rejected' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','**Expected result:** success.','','## One','','<details>','','<summary>First area</summary>','','Text.','','</details>','','## Two','','<details>','','<summary>First area</summary>','','Text.','','</details>','','## Next','','- [Next](NEXT.md)')) 'duplicated'
 Assert-InvalidCase 'heading directly after a closing details tag' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','**Expected result:** success.','','## Body','','<details>','','<summary>Area</summary>','','Text.','','</details>','## Next','','- [Next](NEXT.md)')) 'follows </details> without a blank line'
 Assert-NoPlaceholderCase 'definition before fenced command' (Join-Lines @('# Guide','','`<developer-upn>` is the selected account.','','## Quickstart','','```powershell','Do-Thing -User <developer-upn>','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)'))
+
+Assert-InvalidCase 'PowerShell variable before assignment' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','```powershell','Do-Thing -ResourceGroup $rg','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)')) 'PowerShell variable'
+Assert-NoPlaceholderCase 'PowerShell variable assigned before use' (Join-Lines @('# Guide','','Purpose.','','## Quickstart','','```powershell','$rg = ''rg-claude''','Do-Thing -ResourceGroup $rg','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)'))
+Assert-NoPlaceholderCase 'PowerShell variable defined in prose before use' (Join-Lines @('# Guide','','The `$rg` variable is the selected resource group.','','## Quickstart','','```powershell','Do-Thing -ResourceGroup $rg','```','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)'))
 Assert-InvalidCase 'local path and real name' (Join-Lines @('# Guide','','Purpose C:\Users\owner\checkout mentions Alice.','','## Quickstart','','**Expected result:** success.','','## Next','','- [Next](NEXT.md)')) 'local machine path|personal/example name'
 
 Assert-Condition ($NegativeFailures.Count -eq 0) ($NegativeFailures -join "`n")

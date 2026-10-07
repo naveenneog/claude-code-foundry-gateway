@@ -30,7 +30,7 @@ $gateway = Get-Content .\onboarding\claude-gateway.json -Raw | ConvertFrom-Json
 .\scripts\Get-ClaudeBypass.ps1 -ResourceGroup $gateway.resourceGroup -ApimName $gateway.apimName
 ```
 
-**Expected result:** the installer writes `onboarding/claude-gateway.json`; the membership command publishes the pilot to the active store; the email command writes HTML, text and EML files; health exits zero; the bypass audit has no unapproved direct or inherited Foundry role. A separate developer setup run verifies the pilot request before broad rollout. Roll out only after bypass findings are clean or explicitly approved ([details](#42-close-the-bypass)).
+**Expected result:** the installer writes `onboarding/claude-gateway.json`; the membership command publishes the pilot to the active store; the email command writes HTML, text and EML files; health exits zero; the bypass audit has no unapproved direct or inherited Foundry role. A separate developer setup run verifies the pilot request before broad rollout. Roll out only after bypass findings are clean or explicitly approved, and after section 4.2 reviews Foundry key access, local authentication and network exposure ([details](#42-close-the-bypass)).
 
 ## 1. Prerequisites
 
@@ -249,9 +249,7 @@ case or spacing, or by its number in the list.
 
 <summary>2. Permissions and roles reference</summary>
 
-This is the part that most often blocks a deployment, so it is worth reading in
-full. There are three distinct identities involved and they need different
-things.
+Three identities are involved, and each needs different roles.
 
 ### 2.1 You — the person running the deployment
 

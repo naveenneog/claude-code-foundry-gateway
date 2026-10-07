@@ -569,7 +569,7 @@ aum lookup amara@contoso.com --team sales-emea
 
 <details>
 
-<summary>Reference reference</summary>
+<summary>CLI commands, backend profiles and manual Azure steps</summary>
 
 Command syntax is in [Command reference](#command-reference). Backend-specific
 details remain in [Direct gateway access](#direct-gateway-access),

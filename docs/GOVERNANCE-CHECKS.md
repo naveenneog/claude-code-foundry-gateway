@@ -20,7 +20,7 @@ $FRG     = "<foundry-resource-group>"
 ---
 ## Quickstart
 
-The one-shot check runs from the repository root after entitlement and budget settings are published. The selected identities are test accounts approved for governance verification.
+The one-shot check runs from the repository root after entitlement and budget settings are published. The selected identities are test accounts approved for governance verification. `$rg` and `$apim` are the gateway resource group and API Management name.
 
 ```powershell
 .\scripts\Test-ClaudeHealth.ps1 -ResourceGroup $rg -ApimName $apim -FailOn warn
