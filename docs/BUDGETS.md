@@ -235,13 +235,19 @@ still an observed-cost stop, not a hard invoice cap.
   is missing/expired; `x-claude-usd-budget-notice` is advisory. Other enforced
   scopes and the existing token guards can still refuse.
 - **Unpriced:** enforced scopes return 403 `usd_budget_unpriced` only for their
-  own rows whose model cannot be priced. Repair the dated price book or the
-  deployment/model telemetry, then reconcile. A row without a user id is reported
-  in the reconciliation output with token totals, but it is not a member's spend
-  and does not make any scope unpriced. If the state lists a deployment such as
-  `claude-opus-5-5`, add the missing model tariff; if it lists a dated model
-  whose family is already present, update the software because the normalized
-  eight-digit match should price it.
+  own rows whose model cannot be priced. The 403 body carries
+  `unpriced_models` and `price_book_date`; this release's policy text also names
+  up to five unpriced models and the dated book. Repair the dated price book or
+  the deployment/model telemetry, then reconcile. Existing gateways receive the
+  new text only after `scripts/Set-GatewayPolicy.ps1` uploads the policy or an
+  installer rerun writes it; `Update-ClaudeGateway.ps1` migration 0002 treats a
+  policy with lifecycle markers as current
+  (`scripts/flow/migrations/0002-policy-and-named-values.ps1:19-20,76`). A row
+  without a user id is reported in the reconciliation output with token totals,
+  but it is not a member's spend and does not make any scope unpriced. If the
+  state lists a deployment such as `claude-opus-5-5`, add the missing model
+  tariff; if it lists a dated model whose family is already present, update the
+  software because the normalized eight-digit match should price it.
 - **Claude Haiku 5.5:** left unpriced by this book. Anthropic publishes two
   Haiku 5.5 tiers by prompt size, and the current reconciler aggregates rows by
   day rather than per-request prompt-size tier. Until U178 is resolved, an

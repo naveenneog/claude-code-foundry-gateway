@@ -44,6 +44,11 @@ An unpriced row is never $0 and marks only scopes that own that row. The compact
 the same `compact-v1` item shape and `policy_revision`; the userless-row report is emitted only when such
 rows are present.
 
+The gateway's `usd_budget_unpriced` response names the unpriced model list from
+the state and the state's `price_book_date` when both fields have the expected
+shape. If those fields are absent or malformed, the response stays a 403 with
+the previous generic wording rather than becoming a stale-state 503.
+
 ## Consequences
 
 Projection-backed budgets no longer fail every strict/allowance unit because one user moved units during the

@@ -36,7 +36,9 @@ exact streaming cache-creation detail remains **U13**.
   scope. The reconciler, model price reader and chargeback KQL share the normalized exact-or-eight-digit
   dated model match. The shipped price book covers every 2026-10-08 eastus2 Foundry Claude catalog
   model with a single Anthropic list tariff, and deliberately leaves tiered `claude-haiku-5-5`
-  unpriced until U178 splits usage by prompt size. Registering the standalone scheduled reconciler
+  unpriced until U178 splits usage by prompt size. The gateway's `usd_budget_unpriced` message now
+  names the model list and price-book date when the reconciled state carries them, with a generic
+  403 fallback for malformed older state. Registering the standalone scheduled reconciler
   at a newer commit now updates the same per-gateway job and removes older jobs for that gateway
   only after the replacement deploys. Cleanup uses core `az resource delete` and no longer suggests
   deleting the environment used by the replacement job; upgrades now keep old jobs until the new
