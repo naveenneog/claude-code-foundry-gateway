@@ -596,9 +596,32 @@
                         error["type"] = "rate_limit_error";
                         error["reconciled_at"] = state["reconciled_at"].DeepClone();
                         error["http_status"] = 403;
+                        var unpricedMessage = "Usage cannot be completely priced for this scope. Ask the gateway owner to correct the dated price book.";
+                        if (status == "unpriced") {
+                            var unpriced = item["unpriced_models"] as JArray;
+                            var priceBookDate = (string)item["price_book_date"];
+                            if (unpriced != null &amp;&amp; unpriced.Count &gt; 0 &amp;&amp; !string.IsNullOrEmpty(priceBookDate)) {
+                                var names = "";
+                                var modelCount = 0;
+                                foreach (var modelToken in unpriced) {
+                                    if (modelCount &gt;= 5) { break; }
+                                    var model = (string)modelToken;
+                                    if (string.IsNullOrEmpty(model)) { continue; }
+                                    if (names.Length &gt; 0) { names += ", "; }
+                                    names += model;
+                                    modelCount++;
+                                }
+                                if (modelCount &gt; 0) {
+                                    var more = unpriced.Count - modelCount;
+                                    if (more &gt; 0) { names += " and " + more.ToString() + " more"; }
+                                    var pronoun = (modelCount == 1 &amp;&amp; more == 0) ? "it" : "them";
+                                    unpricedMessage = "Usage of " + names + " cannot be priced with the price book dated " + priceBookDate + ". Ask the gateway owner to add a price for " + pronoun + ", then reconcile.";
+                                }
+                            }
+                        }
                         error["message"] = status == "stop"
                             ? "The observed USD budget for this scope is spent. Ask its owner to raise it, then reconcile."
-                            : "Usage cannot be completely priced for this scope. Ask the gateway owner to correct the dated price book.";
+                            : unpricedMessage;
                         return error.ToString(Newtonsoft.Json.Formatting.None);
                     }
                     if (status == "notice") {
@@ -946,4 +969,3 @@
         </choose>
     </on-error>
 </policies>
-

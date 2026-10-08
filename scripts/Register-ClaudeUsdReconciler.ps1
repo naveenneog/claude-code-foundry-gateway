@@ -92,16 +92,50 @@ function Get-ClaudeUsdReconcilerJobsForGateway {
     return @($matches)
 }
 
+function Get-ClaudeUsdReconcilerJobPrincipalId {
+    param($Job)
+    if (-not ($Job -and $Job.PSObject.Properties.Name -contains 'identity' -and $Job.identity)) { return '' }
+    if (-not ($Job.identity.PSObject.Properties.Name -contains 'userAssignedIdentities' -and $Job.identity.userAssignedIdentities)) { return '' }
+    foreach ($entry in @($Job.identity.userAssignedIdentities.PSObject.Properties)) {
+        $candidate = ''
+        if ($entry.Value -and $entry.Value.PSObject.Properties.Name -contains 'principalId') {
+            $candidate = [string]$entry.Value.principalId
+        }
+        $parsed = [guid]::Empty
+        if ($candidate -and [guid]::TryParse($candidate, [ref]$parsed)) { return $candidate }
+    }
+    return ''
+}
+
+function Test-ClaudeUsdReconcilerStringIn {
+    param([AllowNull()][string]$Value, [string[]]$Candidates = @())
+    foreach ($candidate in @($Candidates)) {
+        if ([string]::Equals([string]$Value, [string]$candidate, [StringComparison]::OrdinalIgnoreCase)) {
+            return $true
+        }
+    }
+    return $false
+}
+
 function Get-ClaudeUsdReconcilerLeftoverCommands {
-    param($Job, [string[]]$UsedEnvironmentNames = @(), [string[]]$UsedEnvironmentIds = @())
+    param($Job, [string]$WorkspaceResourceId, [string]$GatewayResourceId, [string[]]$UsedEnvironmentNames = @(), [string[]]$UsedEnvironmentIds = @())
     $name = [string]$Job.name
     $suffix = if ($name -match '^job-usd-reconcile-(.+)$') { $Matches[1] } else { '' }
     $envId = [string]$Job.properties.environmentId
     $envName = if ($envId) { ($envId -split '/')[-1] } elseif ($suffix) { "cae-usd-reconcile-$suffix" } else { '' }
     $identityName = if ($suffix) { "id-usd-reconcile-$suffix" } else { '' }
     $commands = @()
+    $principalId = Get-ClaudeUsdReconcilerJobPrincipalId $Job
+    if ($principalId) {
+        $commands += "az role assignment delete --assignee $principalId --scope $WorkspaceResourceId"
+        $commands += "az role assignment delete --assignee $principalId --scope $GatewayResourceId"
+    }
+    elseif ($identityName) {
+        $commands += "old identity principalId is unavailable; role assignment delete commands cannot be printed"
+    }
     if ($identityName) { $commands += "az identity delete -g <resource-group> -n $identityName" }
-    $environmentStillUsed = ($envName -and $envName -in @($UsedEnvironmentNames)) -or ($envId -and $envId -in @($UsedEnvironmentIds))
+    $environmentStillUsed = ($envName -and (Test-ClaudeUsdReconcilerStringIn -Value $envName -Candidates $UsedEnvironmentNames)) -or
+        ($envId -and (Test-ClaudeUsdReconcilerStringIn -Value $envId -Candidates $UsedEnvironmentIds))
     if ($envName -and -not $environmentStillUsed) { $commands += "az containerapp env delete -g <resource-group> -n $envName" }
     return @($commands)
 }
@@ -146,12 +180,17 @@ function Wait-ClaudeUsdReconcilerFirstSuccess {
         [Parameter(Mandatory = $true)][string]$JobName,
         [Parameter(Mandatory = $true)][datetime]$DeployStartedUtc,
         [Parameter(Mandatory = $true)][scriptblock]$Clock,
-        [Parameter(Mandatory = $true)][scriptblock]$Sleep
+        [Parameter(Mandatory = $true)][scriptblock]$Sleep,
+        [int]$RetryWindowMinutes = 12,
+        [int]$HardStopMinutes = 35,
+        [int]$MaxFailureRetries = 1000,
+        [string]$SuccessMessageSuffix = ''
     )
-    $retryUntil = $DeployStartedUtc.AddMinutes(12)
-    $hardStop = $DeployStartedUtc.AddMinutes(35)
+    $retryUntil = $DeployStartedUtc.AddMinutes($RetryWindowMinutes)
+    $hardStop = $DeployStartedUtc.AddMinutes($HardStopMinutes)
     $attempted = $false
     $lastFailed = ''
+    $failureRetries = 0
     $handledFailures = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     while ((& $Clock).ToUniversalTime() -lt $hardStop) {
         $now = (& $Clock).ToUniversalTime()
@@ -176,7 +215,7 @@ function Wait-ClaudeUsdReconcilerFirstSuccess {
         $success = @($executions | Where-Object { [string]$_.properties.status -eq 'Succeeded' } | Select-Object -Last 1)
         if ($success.Count) {
             $ended = try { ConvertTo-ClaudeUsdReconcilerUtc $success[0].properties.endTime } catch { (& $Clock).ToUniversalTime() }
-            Write-Host ("Run {0} succeeded at {1:HH:mm} UTC." -f ([string]$success[0].name), $ended) -ForegroundColor Green
+            Write-Host ("Run {0} succeeded at {1:HH:mm} UTC{2}" -f ([string]$success[0].name), $ended, $SuccessMessageSuffix) -ForegroundColor Green
             return [pscustomobject]@{ Status = 'Succeeded'; Execution = [string]$success[0].name; OldJobsKept = @() }
         }
         $active = @($executions | Where-Object { [string]$_.properties.status -in @('Running', 'Processing', 'Pending') })
@@ -187,6 +226,8 @@ function Wait-ClaudeUsdReconcilerFirstSuccess {
         if ($failed.Count) {
             $lastFailed = [string]$failed[0].name
             if ($handledFailures.Add($lastFailed)) {
+                if ($failureRetries -ge $MaxFailureRetries) { break }
+                $failureRetries++
                 $retryAt = $now.AddSeconds(60)
                 Write-Host ("Run {0} failed. Role assignments for a new job identity can take up to 10 minutes to take effect; starting another run at {1:HH:mm} UTC." -f $lastFailed, $retryAt) -ForegroundColor Yellow
                 & $Sleep 60
@@ -260,7 +301,7 @@ finally { Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue }
 $usedEnvironmentNames = @([string]$outputs.environmentName.value | Where-Object { $_ })
 $usedEnvironmentIds = @($ExistingEnvironmentId | Where-Object { $_ })
 if ($ExistingEnvironmentId) { $usedEnvironmentNames += ($ExistingEnvironmentId -split '/')[-1] }
-$oldJobs = @($existingJobs | Where-Object { [string]$_.name -ne [string]$outputs.jobName.value })
+$oldJobs = @($existingJobs | Where-Object { -not [string]::Equals([string]$_.name, [string]$outputs.jobName.value, [StringComparison]::OrdinalIgnoreCase) })
 $run = $null
 $jobId = [string]$outputs.jobId.value
 if (-not $jobId) {
@@ -272,7 +313,10 @@ $needsSuccessfulRun = $RunNow -or $oldJobs.Count -gt 0
 if ($needsSuccessfulRun) {
     $run = Wait-ClaudeUsdReconcilerFirstSuccess -JobId $jobId -JobName ([string]$outputs.jobName.value) -DeployStartedUtc $deployStartedUtc -Clock $Clock -Sleep $Sleep
 }
+$finalRun = $null
 if (-not $needsSuccessfulRun -or $run.Status -eq 'Succeeded') {
+    $deletedOldJobCount = 0
+    $lastDeletionUtc = $null
     foreach ($job in $oldJobs) {
         $jobName = [string]$job.name
         $oldJobId = [string]$job.id
@@ -280,9 +324,17 @@ if (-not $needsSuccessfulRun -or $run.Status -eq 'Succeeded') {
         Assert-ClaudeUsdReconcilerRegisterValue JobId $oldJobId '^/subscriptions/[0-9a-fA-F-]{36}/resourceGroups/[-A-Za-z0-9._()]+/providers/Microsoft\.App/jobs/[-A-Za-z0-9]+$'
         az resource delete --ids $oldJobId | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "Deleting old USD reconciler job '$jobName' failed." }
+        $deletedOldJobCount++
+        $lastDeletionUtc = (& $Clock).ToUniversalTime()
         Write-Host "Deleted old USD reconciler job $jobName." -ForegroundColor Yellow
-        foreach ($command in @(Get-ClaudeUsdReconcilerLeftoverCommands $job -UsedEnvironmentNames $usedEnvironmentNames -UsedEnvironmentIds $usedEnvironmentIds)) {
+        foreach ($command in @(Get-ClaudeUsdReconcilerLeftoverCommands $job -WorkspaceResourceId $WorkspaceResourceId -GatewayResourceId $gatewayId -UsedEnvironmentNames $usedEnvironmentNames -UsedEnvironmentIds $usedEnvironmentIds)) {
             Write-Host "Leftover resource may be removable if unused: $command" -ForegroundColor DarkGray
+        }
+    }
+    if ($deletedOldJobCount -gt 0) {
+        $finalRun = Wait-ClaudeUsdReconcilerFirstSuccess -JobId $jobId -JobName ([string]$outputs.jobName.value) -DeployStartedUtc $lastDeletionUtc -Clock $Clock -Sleep $Sleep -RetryWindowMinutes 10 -HardStopMinutes 10 -MaxFailureRetries 1 -SuccessMessageSuffix ("; the dollar-budget state now comes from job {0}." -f [string]$outputs.jobName.value)
+        if ($finalRun.Status -ne 'Succeeded') {
+            Write-Warning ("Old USD reconciler jobs are deleted. The new job {0}'s next scheduled run writes the dollar-budget state. Read logs in the gateway workspace with: ContainerAppConsoleLogs | where JobName == '{0}' | order by TimeGenerated desc | take 50 ." -f [string]$outputs.jobName.value)
         }
     }
 }
@@ -314,5 +366,6 @@ elseif ($oldJobs.Count) {
     Commit = $RepositoryRef
     Image = $Image
     Run = $run
+    FinalRun = $finalRun
     OldJobsKept = $(if ($run -and $run.OldJobsKept) { @($run.OldJobsKept) } else { @() })
 }

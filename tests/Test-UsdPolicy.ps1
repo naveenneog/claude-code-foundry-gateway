@@ -97,6 +97,32 @@ $variables['buMode'] = 'notify'
 $spec.items['user:00000000-0000-0000-0000-000000000001'] = @{ amount_usd = '1'; period = 'day' }
 $named['usd-budgets'] = Pack $spec
 Assert 'notify cannot bypass an enforced personal scope' ((Evaluate).http_status -eq 503)
+$variables['buMode'] = 'strict'
+$variables['businessUnit'] = 'finance'
+$spec.items = @{ 'organization:finance' = @{ amount_usd = '1'; period = 'month' } }
+$named['usd-budgets'] = Pack $spec
+$material = (@('usd-budgets','bu-modes','bu-parents','bu-members','entitlement-source') | ForEach-Object { $named[$_] }) -join "`n"
+$hash = [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($material))).Replace('-', '').ToLowerInvariant()
+$state.policy_revision = $hash
+$state.valid_until = $now.AddSeconds(600).ToString('o')
+$state.items = @{ 'organization:finance' = $item }
+$item.status = 'unpriced'; $item.exact = $false; $item.spent_usd = $null; $item.price_book_date = '2026-10-08'
+$genericUnpriced = 'Usage cannot be completely priced for this scope. Ask the gateway owner to correct the dated price book.'
+$item.unpriced_models = @('claude-haiku-5-5')
+$named['usd-budget-state'] = Pack $state
+$namedModel = Evaluate
+Assert 'unpriced refusal names the model and price book date' ($namedModel.http_status -eq 403 -and $namedModel.code -eq 'usd_budget_unpriced' -and $namedModel.message -eq 'Usage of claude-haiku-5-5 cannot be priced with the price book dated 2026-10-08. Ask the gateway owner to add a price for it, then reconcile.')
+$item.unpriced_models = @('model-a','model-b','model-c','model-d','model-e','model-f','model-g')
+$named['usd-budget-state'] = Pack $state
+Assert 'unpriced refusal lists at most five models and a remaining count' ((Evaluate).message -eq 'Usage of model-a, model-b, model-c, model-d, model-e and 2 more cannot be priced with the price book dated 2026-10-08. Ask the gateway owner to add a price for them, then reconcile.')
+$item.unpriced_models = $null
+$named['usd-budget-state'] = Pack $state
+$nullModels = Evaluate
+Assert 'null unpriced models keep the generic 403 instead of becoming stale' ($nullModels.http_status -eq 403 -and $nullModels.code -eq 'usd_budget_unpriced' -and $nullModels.message -eq $genericUnpriced)
+$item.unpriced_models = 'claude-haiku-5-5'
+$named['usd-budget-state'] = Pack $state
+$scalarModels = Evaluate
+Assert 'non-array unpriced models keep the generic 403 instead of becoming stale' ($scalarModels.http_status -eq 403 -and $scalarModels.code -eq 'usd_budget_unpriced' -and $scalarModels.message -eq $genericUnpriced)
 if ($fail) { Write-Host "$fail policy expression assertion(s) failed."; exit 1 }
 Write-Host 'Actual USD policy expression passed.'
 exit 0

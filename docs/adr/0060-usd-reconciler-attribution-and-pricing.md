@@ -56,6 +56,11 @@ An unpriced row is never $0 and marks only scopes that own that row. The compact
 the same `compact-v1` item shape and `policy_revision`; the userless-row report is emitted only when such
 rows are present.
 
+The gateway's `usd_budget_unpriced` response names the unpriced model list from
+the state and the state's `price_book_date` when both fields have the expected
+shape. If those fields are absent or malformed, the response stays a 403 with
+the previous generic wording rather than becoming a stale-state 503.
+
 ## Consequences
 
 Projection-backed budgets no longer fail every strict/allowance unit because one user moved units during the
@@ -71,6 +76,9 @@ book adds every 2026-10-08 eastus2 Foundry Claude catalog model whose Anthropic 
 price is a single tariff. `claude-haiku-5-5` stays unpriced until U178 splits usage
 by prompt-size tier.
 
+The price book is pinned while budget items exist. The script path now follows
+the AUM service rule: clear active budgets before replacing the stored book.
+
 The standalone scheduled reconciler is also per gateway, not per commit. Its
 Container Apps job, identity and default environment suffix excludes `repositoryRef`,
 so a registration at a newer commit changes `REPO_REF` on the same job. Because a
@@ -80,3 +88,19 @@ deleting older jobs for the same gateway. If no such run succeeds, the older job
 are kept so state stays fresh and the operator gets the log query and rerun command.
 Job deletion uses core ARM resource deletion. The immediate `-RunNow` path uses the
 same ARM start/poll flow, not the Container Apps CLI extension.
+
+After deleting old jobs, the register script starts the replacement job once more
+and waits for a post-deletion success. Live run 2 for P108 showed that an old
+job can begin a scheduled run before deletion finishes and can overwrite the
+new state for one interval (`docs/status/P108.md`, live run 2, 2026-10-08).
+
+On `main`, each scheduled-reconciler registration created a commit-specific
+Container Apps job, optional environment and user-assigned identity. From this
+release, one job and one identity per gateway are updated in place. Older
+identities keep their role assignments until those assignments are removed and
+the identity is deleted. The role assignment names are keyed by the runtime
+principal id through the shared gateway and Log Analytics access modules
+(`infra/aum-gateway-access.bicep`, `infra/aum-logs-access.bicep`). This naming
+changed before release. A gateway that deployed an earlier build of this branch
+could have hit Azure `RoleAssignmentExists` because the same assignment name
+cannot change principals, but no released build used that shape.

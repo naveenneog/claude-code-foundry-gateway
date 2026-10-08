@@ -80,13 +80,30 @@ function New-ClaudeUsdBudgetValue {
     }
     if ($ScopeType -ne 'user' -and $Period -ne 'month') { throw 'Unit and team USD budgets are monthly.' }
     $doc = ConvertFrom-ClaudeUsdValue $Value
-    if (-not $doc.schema_version) {
-        if ($Clear) { return 'e30=' }
-        Assert-ClaudeUsdPriceBookWritable $PriceBook
+    $hasItems = $doc.schema_version -and $doc.items -and @($doc.items.PSObject.Properties).Count -gt 0
+    $hasOfferedBook = $PriceBook -and $PriceBook.date -and $PriceBook.models
+    if (-not $Clear -and $hasOfferedBook) {
         $date = [datetime]::MinValue
         if (-not [datetime]::TryParseExact([string]$PriceBook.date, 'yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture,
             [Globalization.DateTimeStyles]::None, [ref]$date)) { throw 'USD price book date must be YYYY-MM-DD.' }
+    }
+    if (-not $doc.schema_version) {
+        if ($Clear) { return 'e30=' }
+        if (-not $hasOfferedBook) { throw 'A dated USD price book is required.' }
+        Assert-ClaudeUsdPriceBookWritable $PriceBook
         $doc = [pscustomobject]@{ schema_version = 1; price_book = $PriceBook; items = [pscustomobject]@{} }
+    }
+    elseif (-not $Clear -and -not $hasItems) {
+        if (-not $hasOfferedBook) { throw 'A dated USD price book is required.' }
+        Assert-ClaudeUsdPriceBookWritable $PriceBook
+        $doc.price_book = $PriceBook
+    }
+    elseif (-not $Clear -and $hasItems -and $hasOfferedBook) {
+        $storedBook = $doc.price_book | ConvertTo-Json -Depth 30 -Compress
+        $offeredBook = $PriceBook | ConvertTo-Json -Depth 30 -Compress
+        if ($storedBook -cne $offeredBook) {
+            Write-Warning ("Active USD budgets pin their tariff; stored price book {0} remains in use instead of offered price book {1}. Record the dollar budgets, clear each one, then write them again to store the current book." -f [string]$doc.price_book.date, [string]$PriceBook.date)
+        }
     }
     $key = "$ScopeType`:$ScopeId"
     if ($Clear) { $doc.items.PSObject.Properties.Remove($key) }
@@ -129,7 +146,6 @@ function Get-ClaudeUsdPriceBook {
         if (-not (Test-Path $Path)) { $Path = Join-Path $base 'config\price-book.example.json' }
     }
     $book = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
-    Assert-ClaudeUsdPriceBookWritable $book
     Write-Host ("  USD tariff source: {0}; dated {1}. Existing USD budgets keep their stored tariff." -f $Path, $book.date)
     return $book
 }

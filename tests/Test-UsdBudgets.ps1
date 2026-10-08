@@ -14,16 +14,31 @@ function Get-Thrown([scriptblock]$Block) { try { & $Block *> $null; return $null
 $book = [pscustomobject]@{ date = '2026-09-16'; models = [pscustomobject]@{
     'claude-sonnet-5' = [pscustomobject]@{ inputPerM = '2'; outputPerM = '10' }
 } }
+$newBook = [pscustomobject]@{ date = '2026-10-08'; models = [pscustomobject]@{
+    'claude-sonnet-5' = [pscustomobject]@{ inputPerM = '3'; outputPerM = '15' }
+    'claude-opus-5-5' = [pscustomobject]@{ inputPerM = '4'; outputPerM = '20' }
+} }
 $raw = Invoke-Value { New-ClaudeUsdBudgetValue -Value 'e30=' -ScopeType organization -ScopeId finance -AmountUsd 12.345678901 -Period month -PriceBook $book }
 $doc = Invoke-Value { ConvertFrom-ClaudeUsdValue $raw }
 Assert 'USD is stored as decimal text, not a blended quota' ($doc.items.'organization:finance'.amount_usd -ceq '12.345678901')
 Assert 'price book date travels with the dollars' ($doc.items.'organization:finance'.price_book_date -eq '2026-09-16')
+Assert 'empty value creates a schema document with the current price book' ($doc.schema_version -eq 1 -and $doc.price_book.date -eq '2026-09-16' -and $doc.price_book.models.'claude-sonnet-5')
 $next = Invoke-Value { New-ClaudeUsdBudgetValue -Value $raw -ScopeType department -ScopeId payroll -AmountUsd 1 -Period month -PriceBook $book }
 $doc = Invoke-Value { ConvertFrom-ClaudeUsdValue $next }
 Assert 'setting one budget preserves the other scope' ($doc.items.'organization:finance'.amount_usd -ceq '12.345678901')
 $cleared = Invoke-Value { New-ClaudeUsdBudgetValue -Value $next -ScopeType department -ScopeId payroll -Clear }
 $doc = Invoke-Value { ConvertFrom-ClaudeUsdValue $cleared }
 Assert 'clear removes only the selected dollar budget' ($null -eq $doc.items.'department:payroll' -and $doc.items.'organization:finance')
+$emptyDocValue = Invoke-Value { New-ClaudeUsdBudgetValue -Value $raw -ScopeType organization -ScopeId finance -Clear }
+$emptyDoc = Invoke-Value { ConvertFrom-ClaudeUsdValue $emptyDocValue }
+Assert 'clearing the last item leaves a valid schema document' ($emptyDoc.schema_version -eq 1 -and $emptyDoc.price_book.date -eq '2026-09-16' -and @($emptyDoc.items.PSObject.Properties).Count -eq 0)
+$rewrittenAfterClear = Invoke-Value { New-ClaudeUsdBudgetValue -Value $emptyDocValue -ScopeType organization -ScopeId finance -AmountUsd 2 -Period month -PriceBook $newBook }
+$rewrittenDoc = Invoke-Value { ConvertFrom-ClaudeUsdValue $rewrittenAfterClear }
+Assert 'writing after clearing all budgets stores the current price book' ($rewrittenDoc.price_book.date -eq '2026-10-08' -and $rewrittenDoc.items.'organization:finance'.price_book_date -eq '2026-10-08')
+$activePinOutput = @(New-ClaudeUsdBudgetValue -Value $raw -ScopeType department -ScopeId payroll -AmountUsd 1 -Period month -PriceBook $newBook *>&1)
+$activePinValue = [string]$activePinOutput[-1]
+$activePinDoc = Invoke-Value { ConvertFrom-ClaudeUsdValue $activePinValue }
+Assert 'active budgets keep their stored price book and warn when a newer book is offered' ($activePinDoc.price_book.date -eq '2026-09-16' -and $activePinDoc.items.'department:payroll'.price_book_date -eq '2026-09-16' -and (($activePinOutput | Out-String) -match 'Active USD budgets pin their tariff' -and ($activePinOutput | Out-String) -match '2026-09-16' -and ($activePinOutput | Out-String) -match '2026-10-08')) ($activePinOutput | Out-String)
 Assert 'negative dollars refuse' ((Get-Thrown { New-ClaudeUsdBudgetValue -Value 'e30=' -ScopeType organization -ScopeId finance -AmountUsd -1 -Period month -PriceBook $book }) -match 'nonnegative')
 Assert 'malformed state is not an empty budget map' ((Get-Thrown { ConvertFrom-ClaudeUsdValue 'broken!' }) -match 'USD')
 Assert 'capacity is enforced before writing' ((Get-Thrown { ConvertTo-ClaudeUsdValue @{ big = ('x' * 5000) } }) -match '4,096|4096')
@@ -135,6 +150,19 @@ $dupBook = [pscustomobject]@{ date = '2026-10-08'; models = [pscustomobject]@{
 } }
 $rawDup = Invoke-Value { New-ClaudeUsdBudgetValue -Value 'e30=' -ScopeType organization -ScopeId finance -AmountUsd 1 -Period month -PriceBook $dupBook }
 Assert 'USD budget writer refuses even equal-rate duplicate normalized price keys' ($rawDup -match 'Duplicate normalized price-book key')
+# A local book is validated only where it is stored. With active budgets the stored book stays pinned, so a local book
+# that holds two spellings of one model (the R2 workaround) must not stop a budget change.
+$dupBookPath = Join-Path ([IO.Path]::GetTempPath()) ('usd-dup-book-' + [guid]::NewGuid().ToString('N') + '.json')
+[IO.File]::WriteAllText($dupBookPath, ($dupBook | ConvertTo-Json -Depth 8), (New-Object Text.UTF8Encoding($false)))
+try {
+    $readDup = Get-Thrown { Get-ClaudeUsdPriceBook -Path $dupBookPath }
+    Assert 'reading a local book with an equal-rate duplicate does not throw' ($null -eq $readDup) $readDup
+    $pinnedDoc = New-ClaudeUsdBudgetValue -Value 'e30=' -ScopeType organization -ScopeId finance -AmountUsd 1 -Period month -PriceBook (Get-Content (Join-Path $root 'config\price-book.example.json') -Raw | ConvertFrom-Json)
+    $raised = Invoke-Value { New-ClaudeUsdBudgetValue -Value $pinnedDoc -ScopeType organization -ScopeId finance -AmountUsd 2 -Period month -PriceBook $dupBook 3>$null }
+    $raisedDoc = ConvertFrom-ClaudeUsdValue $raised
+    Assert 'raising a budget with active budgets and a duplicate local book keeps the stored book' ($raisedDoc.items.'organization:finance'.amount_usd -eq '2' -and -not $raisedDoc.price_book.models.PSObject.Properties['claude-haiku-4-5']) $raised
+}
+finally { Remove-Item -LiteralPath $dupBookPath -Force -ErrorAction SilentlyContinue }
 Write-Host ''
 if ($fail) { Write-Host "$fail USD assertion(s) failed." -ForegroundColor Red; exit 1 }
 Write-Host 'USD script and gateway contracts passed.' -ForegroundColor Green
