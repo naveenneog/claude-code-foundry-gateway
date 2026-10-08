@@ -217,7 +217,11 @@ Timing:
 
 `Install-ClaudeGateway.ps1` deploys the job with the projection. `-ProjectionSyncInterval` takes the values
 above or `none`, which deploys no job. Without the parameter, a re-run keeps the interval of the deployed job,
-and a first install uses `2h`. The review before any write shows the interval, the runs a month and the
+and a first install uses `2h`. A deployed cron outside the table stops a re-run before any write until
+`-ProjectionSyncInterval` names an interval. With `none`, a deployed job is left as it is, and the review and
+next steps name its schedule. A re-run that redeploys the job keeps its alert addresses (from the live action
+group), its registry SKU, and the workspace and subnet of its renewal deployment, and changes only the job that
+deployment created. The review before any write shows the interval, the runs a month and the
 missed-run range. `-DeploySyncJob` is still accepted and has no effect.
 
 Change the interval of a deployed job:
@@ -227,8 +231,13 @@ Change the interval of a deployed job:
 ```
 
 The script reads the deployed job's image digest, tier group ids and alert addresses, prints the change, and
-runs `scripts/Deploy-ClaudeProjectionRenewal.ps1` with the same image and the new `-SyncInterval`, so the job's
-schedule and the no-success alert change together. `-WhatIf` shows the change without writing. In the Azure
+runs `scripts/Deploy-ClaudeProjectionRenewal.ps1` with the same image, the new `-SyncInterval` and `-KeepRegistry`,
+so the job's schedule and the no-success alert change together and the registry is not deployed again. It keeps
+the workspace and subnet of the renewal deployment, and changes only the job that the
+`projection-renewal-<prefix>` deployment created. When the job already runs at the requested interval, the script
+writes nothing unless the alert rules differ from the template (a scheduled job has one no-success rule, a manual
+job none, and neither keeps P97's 45-minute rule); then it redeploys to repair them. `-WhatIf` shows the change
+without writing. In the Azure
 portal, run the same command in Azure Cloud Shell (PowerShell) from a clone of this repository. Changing the
 job's cron expression alone leaves the no-success alert on the old range.
 
