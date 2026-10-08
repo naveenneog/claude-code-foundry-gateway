@@ -44,7 +44,7 @@ trap {
 }
 
 . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
-. (Join-Path $PSScriptRoot 'ClaudeProjectionSchedule.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeProjectionSyncJob.ps1')
 
 function Get-JsonAz {
     param([Parameter(Mandatory = $true)][string[]]$Arguments, [Parameter(Mandatory = $true)][string]$What)
@@ -63,22 +63,6 @@ function Get-JsonAz {
     $text = ($output | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] } | Out-String).Trim()
     if (-not $text) { return $null }
     return ($text | ConvertFrom-Json)
-}
-
-function Get-JobEnvironmentValue($Job, [string]$Name) {
-    $containers = @($Job.properties.template.containers)
-    foreach ($container in $containers) {
-        foreach ($env in @($container.env)) {
-            if ([string]$env.name -ceq $Name) { return [string]$env.value }
-        }
-    }
-    return ''
-}
-
-function Get-JobCron($Job) {
-    $trigger = [string]$Job.properties.configuration.triggerType
-    if ($trigger -ceq 'Manual') { return '' }
-    return [string]$Job.properties.configuration.scheduleTriggerConfig.cronExpression
 }
 
 function Get-EmailReceivers($ActionGroup) {
@@ -114,27 +98,26 @@ if ([string]::IsNullOrWhiteSpace($NamePrefix)) {
     }
 }
 
-$jobsJson = Get-JsonAz -Arguments @('containerapp', 'job', 'list', '-g', $ResourceGroup, '-o', 'json') -What "Container Apps jobs in $ResourceGroup"
-$jobs = @($jobsJson | Where-Object { $_.tags.'claude-projection-prefix' -ceq $NamePrefix })
-if ($jobs.Count -eq 0) {
+$job = try { Get-ClaudeProjectionSyncJob -ResourceGroup $ResourceGroup -NamePrefix $NamePrefix }
+catch {
+    $message = $_.Exception.Message
+    if ($message -match 'More than one Container Apps job') {
+        throw "$message Remedy: keep one deployed sync job for the prefix, or redeploy it with scripts/Deploy-ClaudeProjectionRenewal.ps1."
+    }
+    throw
+}
+if (-not $job) {
     throw "No Container Apps job in $ResourceGroup has tag claude-projection-prefix '$NamePrefix'. Remedy: deploy it with scripts/Deploy-ClaudeProjectionRenewal.ps1."
 }
-if ($jobs.Count -gt 1) {
-    throw "More than one Container Apps job in $ResourceGroup has tag claude-projection-prefix '$NamePrefix'. Remedy: keep one deployed sync job for the prefix, or redeploy it with scripts/Deploy-ClaudeProjectionRenewal.ps1."
-}
-$job = $jobs[0]
-
-$image = [string]@($job.properties.template.containers)[0].image
-$digestMatch = [regex]::Match($image, '@(sha256:[0-9a-f]{64})$')
-if (-not $digestMatch.Success) { throw "The deployed job image has no sha256 image digest: '$image'. Redeploy with scripts/Deploy-ClaudeProjectionRenewal.ps1 so this script can preserve the exact image." }
-$imageDigest = $digestMatch.Groups[1].Value
-$standardGroup = Get-JobEnvironmentValue $job 'PROJECTION_STANDARD_GROUP_ID'
-$premiumGroup = Get-JobEnvironmentValue $job 'PROJECTION_PREMIUM_GROUP_ID'
+$imageDigest = [string]$job.ImageDigest
+if (-not $imageDigest) { throw "The deployed job image has no sha256 image digest. Redeploy with scripts/Deploy-ClaudeProjectionRenewal.ps1 so this script can preserve the exact image." }
+$standardGroup = [string]$job.StandardGroupId
+$premiumGroup = [string]$job.PremiumGroupId
 if (-not $standardGroup) { throw "The deployed job is missing PROJECTION_STANDARD_GROUP_ID. Redeploy it with scripts/Deploy-ClaudeProjectionRenewal.ps1." }
 if (-not $premiumGroup) { throw "The deployed job is missing PROJECTION_PREMIUM_GROUP_ID. Redeploy it with scripts/Deploy-ClaudeProjectionRenewal.ps1." }
 
-$currentCron = Get-JobCron $job
-$currentInterval = ConvertFrom-ClaudeProjectionSyncCron -Cron $currentCron
+$currentCron = [string]$job.Cron
+$currentInterval = $job.Interval
 $currentWords = if ($currentInterval) { Format-ClaudeProjectionSyncInterval -Interval $currentInterval } else { 'a cron expression this script did not set' }
 
 $actionGroupName = "ag-projection-renewal-$NamePrefix"

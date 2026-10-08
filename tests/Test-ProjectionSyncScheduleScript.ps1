@@ -23,6 +23,7 @@ try {
     $scripts = Join-Path $work 'scripts'
     New-Item -ItemType Directory -Force -Path $scripts | Out-Null
     Copy-Item -LiteralPath (Join-Path $root 'scripts\ClaudeProjectionSchedule.ps1') -Destination (Join-Path $scripts 'ClaudeProjectionSchedule.ps1')
+    Copy-Item -LiteralPath (Join-Path $root 'scripts\ClaudeProjectionSyncJob.ps1') -Destination (Join-Path $scripts 'ClaudeProjectionSyncJob.ps1')
     Copy-Item -LiteralPath (Join-Path $root 'scripts\ApimNamedValue.ps1') -Destination (Join-Path $scripts 'ApimNamedValue.ps1')
     if (Test-Path -LiteralPath $setScript -PathType Leaf) {
         Copy-Item -LiteralPath $setScript -Destination (Join-Path $scripts 'Set-ClaudeProjectionSyncSchedule.ps1')
@@ -64,9 +65,10 @@ $calls += [pscustomobject]$record
     $digest = 'sha256:' + ('a' * 64)
     $standard = '11111111-1111-4111-8111-111111111111'
     $premium = '22222222-2222-4222-8222-222222222222'
+    $rgId = '/subscriptions/00000000-0000-4000-8000-000000000104/resourceGroups/rg-p104'
     $global:ProjectionScheduleAzCalls = [Collections.Generic.List[string]]::new()
     $global:ProjectionScheduleScenario = @{}
-    function New-Job([string]$Prefix = 'p104fixture', [string]$Cron = '0 */2 * * *', [string]$Image = $digest, [string]$PremiumGroup = $premium) {
+    function New-Job([string]$Prefix = 'p104fixture', [string]$Cron = '0 */2 * * *', [string]$Image = $digest, [string]$StandardGroup = $standard, [string]$PremiumGroup = $premium) {
         $trigger = if ($Cron) { 'Schedule' } else { 'Manual' }
         $configuration = if ($Cron) {
             @{ triggerType = $trigger; scheduleTriggerConfig = @{ cronExpression = $Cron } }
@@ -75,6 +77,7 @@ $calls += [pscustomobject]$record
             @{ triggerType = $trigger; manualTriggerConfig = @{ parallelism = 1; replicaCompletionCount = 1 } }
         }
         [pscustomobject]@{
+            id = "$rgId/providers/Microsoft.App/jobs/caj-renew-$Prefix"
             name = "caj-renew-$Prefix"
             tags = @{ 'claude-projection-prefix' = $Prefix }
             properties = @{
@@ -84,7 +87,7 @@ $calls += [pscustomobject]$record
                         @{
                             image = "acrp104.azurecr.io/claude-projection-sync@$Image"
                             env = @(
-                                @{ name = 'PROJECTION_STANDARD_GROUP_ID'; value = $standard }
+                                @{ name = 'PROJECTION_STANDARD_GROUP_ID'; value = $StandardGroup }
                                 @{ name = 'PROJECTION_PREMIUM_GROUP_ID'; value = $PremiumGroup }
                             )
                         }
@@ -105,12 +108,23 @@ $calls += [pscustomobject]$record
         Remove-Item -LiteralPath $deployCallsPath -Force -ErrorAction SilentlyContinue
     }
     function global:az {
-        $global:ProjectionScheduleAzCalls.Add(($args -join ' '))
-        if (($args -join ' ') -match '^containerapp job list ') { return ($global:ProjectionScheduleScenario.Jobs | ConvertTo-Json -Depth 20) }
-        if (($args -join ' ') -match '^monitor action-group show ') {
+        $line = @($args | ForEach-Object { [string]$_ }) -join ' '
+        $global:ProjectionScheduleAzCalls.Add($line)
+        $global:LASTEXITCODE = 0
+        if ($line -ceq 'resource list -g rg-p104 --resource-type Microsoft.App/jobs -o json') {
+            if (-not @($global:ProjectionScheduleScenario.Jobs).Count) { return '[]' }
+            return (@($global:ProjectionScheduleScenario.Jobs | ForEach-Object { @{ id = $_.id; name = $_.name; tags = $_.tags } }) | ConvertTo-Json -Depth 6)
+        }
+        if ($line -match '^resource show --ids .*/providers/Microsoft\.App/jobs/[^ ]+ --api-version 2024-03-01 -o json$') {
+            $id = [regex]::Match($line, '^resource show --ids (.+) --api-version 2024-03-01 -o json$').Groups[1].Value
+            $job = @($global:ProjectionScheduleScenario.Jobs | Where-Object { $_.id -eq $id }) | Select-Object -First 1
+            if (-not $job) { $global:LASTEXITCODE = 9; return "stub az has no job for: $id" }
+            return ($job | ConvertTo-Json -Depth 20)
+        }
+        if ($line -match '^monitor action-group show ') {
             return ([pscustomobject]@{ emailReceivers = @($global:ProjectionScheduleScenario.Emails | ForEach-Object { @{ emailAddress = $_ } }) } | ConvertTo-Json -Depth 6)
         }
-        if (($args -join ' ') -match '^apim nv show ') {
+        if ($line -match '^apim nv show ') {
             if ($global:ProjectionScheduleScenario.NamedValue -eq $null) {
                 $global:LASTEXITCODE = 3
                 Write-Error '(ResourceNotFound) NamedValue not found'
@@ -119,7 +133,7 @@ $calls += [pscustomobject]$record
             $global:LASTEXITCODE = 0
             return $global:ProjectionScheduleScenario.NamedValue
         }
-        throw "Unexpected az call: $($args -join ' ')"
+        throw "Unexpected az call: $line"
     }
     function Get-DeployCalls {
         if (-not (Test-Path -LiteralPath $deployCallsPath)) { return @() }
@@ -152,7 +166,7 @@ $calls += [pscustomobject]$record
             $deploy.ResourceGroup -eq 'rg-p104' -and $deploy.ApimName -eq 'apim-p104' -and $deploy.NamePrefix -eq 'p104fixture' -and
             $deploy.ImageDigest -eq $digest -and $deploy.StandardGroup -eq $standard -and $deploy.PremiumGroup -eq $premium -and
             (($deploy.AlertEmail | Sort-Object) -join ',') -eq 'oncall@example.invalid,ops@example.invalid' -and $deploy.SyncInterval -eq '30m') ($deploy | ConvertTo-Json -Compress)
-        Assert 'the job list is filtered in PowerShell by prefix tag' (($change.Calls -join ' | ') -match '^containerapp job list -g rg-p104 -o json' -and ($change.Calls -join ' | ') -notmatch '--query') ($change.Calls -join ' | ')
+        Assert 'the job lookup uses core az resource commands, with no query or containerapp extension' (($change.Calls -join ' | ') -match '^resource list -g rg-p104 --resource-type Microsoft.App/jobs -o json' -and ($change.Calls -join ' | ') -match 'resource show --ids .*/providers/Microsoft\.App/jobs/' -and ($change.Calls -join ' | ') -notmatch '--query|^containerapp') ($change.Calls -join ' | ')
 
         $same = Invoke-ScheduleScenario -Scenario @{} -Overrides @{ Interval = '2h' }
         Assert 'the same interval exits without redeploying' (-not $same.Failure -and $same.Deploy.Count -eq 0 -and $same.Output -match 'already runs every 2 hours') "$($same.Failure) | $($same.Output)"
@@ -167,6 +181,11 @@ $calls += [pscustomobject]$record
 
         $noDigest = Invoke-ScheduleScenario -Scenario @{ Jobs = @(New-Job -Image 'latest') } -Overrides @{}
         Assert 'a job image without a digest is refused before deploy' ($noDigest.Failure -match 'image digest' -and $noDigest.Deploy.Count -eq 0) "$($noDigest.Failure) | deploys $($noDigest.Deploy.Count)"
+
+        $missingStandard = Invoke-ScheduleScenario -Scenario @{ Jobs = @(New-Job -StandardGroup '') } -Overrides @{}
+        Assert 'a job without the standard group id is refused before deploy' ($missingStandard.Failure -match 'PROJECTION_STANDARD_GROUP_ID' -and $missingStandard.Deploy.Count -eq 0) "$($missingStandard.Failure) | deploys $($missingStandard.Deploy.Count)"
+        $missingPremium = Invoke-ScheduleScenario -Scenario @{ Jobs = @(New-Job -PremiumGroup '') } -Overrides @{}
+        Assert 'a job without the premium group id is refused before deploy' ($missingPremium.Failure -match 'PROJECTION_PREMIUM_GROUP_ID' -and $missingPremium.Deploy.Count -eq 0) "$($missingPremium.Failure) | deploys $($missingPremium.Deploy.Count)"
 
         $noJob = Invoke-ScheduleScenario -Scenario @{ Jobs = @() } -Overrides @{}
         Assert 'no matching job is refused with the deploy remedy' ($noJob.Failure -match 'No Container Apps job' -and $noJob.Failure -match 'Deploy-ClaudeProjectionRenewal\.ps1' -and $noJob.Deploy.Count -eq 0) $noJob.Failure
