@@ -28,8 +28,8 @@ let ledger = {chargeback}(_from, _to)
 | where timestamp >= _from and timestamp < _to
 | where gateway_id =~ {literal(gateway)}
 | extend deployment=iff(isempty(deployment),model,deployment),
-         family=family_of(deployment),
-         business_unit=coalesce(business_unit, "unassigned");
+         business_unit=coalesce(business_unit, "unassigned")
+| extend family=family_of(deployment);
 let latest_unit =
     ledger
     | where user_id != ""
