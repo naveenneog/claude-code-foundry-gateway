@@ -51,6 +51,10 @@ $global:UsdShown = @{}
 $global:UsdDeploymentFails = $false
 $global:UsdDeleted = @()
 $global:UsdDeploymentEnvironmentName = 'cae-usd-reconcile-stable'
+$global:UsdNow = [datetime]'2026-10-08T10:00:00Z'
+$global:UsdRestGets = @()
+$global:UsdRestPostFailures = 0
+$global:UsdPostCount = 0
 function New-JobListItem($Name) {
     [pscustomobject]@{
         id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.App/jobs/$Name"
@@ -71,6 +75,16 @@ function New-JobDetail($Name, $Gateway, $EnvironmentId = "/subscriptions/0000000
         }
     }
 }
+function New-Execution($Name, $Status, $Start, $End = $null) {
+    [pscustomobject]@{
+        name = $Name
+        properties = [pscustomobject]@{
+            status = $Status
+            startTime = ([datetime]$Start).ToUniversalTime().ToString('o')
+            endTime = $(if ($End) { ([datetime]$End).ToUniversalTime().ToString('o') } else { $null })
+        }
+    }
+}
 function global:az {
     $global:UsdCalls.Add(($args -join ' '))
     $global:LASTEXITCODE = 0
@@ -85,21 +99,37 @@ function global:az {
     }
     if ($line -like 'deployment group create*') {
         if ($global:UsdDeploymentFails) { $global:LASTEXITCODE = 1; return 'denied' }
-        return (@{ jobName = @{ value = 'job-usd-reconcile-stable' }; environmentName = @{ value = $global:UsdDeploymentEnvironmentName }; principalId = @{ value = 'principal' }; cronExpression = @{ value = '*/5 * * * *' } } | ConvertTo-Json -Depth 10 -Compress)
+        return (@{ jobName = @{ value = 'job-usd-reconcile-stable' }; jobId = @{ value = '/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.App/jobs/job-usd-reconcile-stable' }; environmentName = @{ value = $global:UsdDeploymentEnvironmentName }; principalId = @{ value = 'principal' }; cronExpression = @{ value = '*/5 * * * *' } } | ConvertTo-Json -Depth 10 -Compress)
     }
     if ($line -like 'resource delete*') {
         $global:UsdDeleted += [string]$args[[array]::IndexOf($args, '--ids') + 1]
         return ''
     }
+    if ($line -like 'rest --method post*') {
+        $global:UsdPostCount++
+        if ($global:UsdRestPostFailures -gt 0) {
+            $global:UsdRestPostFailures--
+            $global:LASTEXITCODE = 1
+            return 'HTTP 403'
+        }
+        return ''
+    }
+    if ($line -like 'rest --method get*executions*') {
+        $index = [math]::Min($global:UsdRestGets.Count - 1, [math]::Max(0, $global:UsdPostCount - 1))
+        $value = if ($global:UsdRestGets.Count) { @($global:UsdRestGets[$index]) } else { @() }
+        return (@{ value = $value } | ConvertTo-Json -Depth 20 -Compress)
+    }
     throw "Unexpected az call: $line"
 }
-function Invoke-Register($Jobs, $Shown, [switch]$FailDeploy, [string]$ExistingEnvironmentId = '', [string]$OutputEnvironmentName = '') {
+function Invoke-Register($Jobs, $Shown, [switch]$FailDeploy, [string]$ExistingEnvironmentId = '', [string]$OutputEnvironmentName = '', $RestGets = @(@(New-Execution 'run-ok' Succeeded '2026-10-08T10:00:20Z' '2026-10-08T10:00:40Z')), [int]$PostFailures = 0, [switch]$RunNow) {
     $global:UsdCalls.Clear(); $global:UsdDeleted = @(); $global:UsdJobs = $Jobs; $global:UsdShown = $Shown; $global:UsdDeploymentFails = [bool]$FailDeploy
     $global:UsdDeploymentEnvironmentName = if ($OutputEnvironmentName) { $OutputEnvironmentName } elseif ($ExistingEnvironmentId) { ($ExistingEnvironmentId -split '/')[-1] } else { 'cae-usd-reconcile-stable' }
+    $global:UsdNow = [datetime]'2026-10-08T10:00:00Z'; $global:UsdRestGets = @($RestGets); $global:UsdRestPostFailures = $PostFailures; $global:UsdPostCount = 0
     & $register -ResourceGroup rg-test -ApimName apim-test `
         -WorkspaceResourceId '/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.OperationalInsights/workspaces/log-test' `
         -WorkspaceCustomerId '11111111-1111-1111-1111-111111111111' `
-        -RepositoryUrl 'https://github.com/contoso/gateway.git' -RepositoryRef ('b' * 40) -Location eastus2 -ExistingEnvironmentId $ExistingEnvironmentId *>&1
+        -RepositoryUrl 'https://github.com/contoso/gateway.git' -RepositoryRef ('b' * 40) -Location eastus2 -ExistingEnvironmentId $ExistingEnvironmentId `
+        -RunNow:$RunNow -Clock { $global:UsdNow } -Sleep { param($Seconds) $global:UsdNow = $global:UsdNow.AddSeconds($Seconds) } *>&1
 }
 $gateway = '/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.ApiManagement/service/apim-test'
 $otherGateway = '/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.ApiManagement/service/apim-other'
@@ -112,11 +142,16 @@ $shown = @{
     $other.id = New-JobDetail 'job-usd-reconcile-other' $otherGateway
 }
 $none = @(Invoke-Register @() @{})
-Assert 'no earlier job means no delete' ($global:UsdDeleted.Count -eq 0 -and ($global:UsdCalls -join '|') -notmatch 'containerapp job delete|resource delete')
-$cleanup = @(Invoke-Register @($old, $stable, $other) $shown)
+Assert 'no earlier job and no RunNow means no delete and no ARM start/poll' ($global:UsdDeleted.Count -eq 0 -and ($global:UsdCalls -join '|') -notmatch 'containerapp job delete|resource delete|/start\?|/executions\?')
+$firstFailedThenSucceeded = @(
+    @(New-Execution 'run-fail' Failed '2026-10-08T10:00:10Z' '2026-10-08T10:00:20Z'),
+    @((New-Execution 'run-fail' Failed '2026-10-08T10:00:10Z' '2026-10-08T10:00:20Z'), (New-Execution 'run-ok' Succeeded '2026-10-08T10:01:40Z' '2026-10-08T10:02:00Z'))
+)
+$cleanup = @(Invoke-Register @($old, $stable, $other) $shown -RestGets $firstFailedThenSucceeded)
 $deployIndex = [array]::FindIndex($global:UsdCalls.ToArray(), [Predicate[string]]{ param($x) $x -like 'deployment group create*' })
 $deleteIndex = [array]::FindIndex($global:UsdCalls.ToArray(), [Predicate[string]]{ param($x) $x -like 'resource delete*job-usd-reconcile-old*' })
-Assert 'earlier job for this gateway is deleted after successful deploy with core az resource delete' ($global:UsdDeleted -contains $old.id -and $deployIndex -ge 0 -and $deleteIndex -gt $deployIndex -and ($global:UsdCalls -join '|') -notmatch 'containerapp job delete') ($global:UsdCalls -join ' | ')
+Assert 'upgrade deletes old job only after a successful counted run and uses core az resource delete' ($global:UsdDeleted -contains $old.id -and $deployIndex -ge 0 -and $deleteIndex -gt ([array]::FindIndex($global:UsdCalls.ToArray(), [Predicate[string]]{ param($x) $x -like 'rest --method get*executions*' })) -and ($global:UsdCalls -join '|') -notmatch 'containerapp job delete') ($global:UsdCalls -join ' | ')
+Assert 'failed first execution starts another run before cleanup' (@($global:UsdCalls | Where-Object { $_ -like 'rest --method post*/start*' }).Count -eq 2 -and ($cleanup | Out-String) -match 'Run run-fail failed' -and ($cleanup | Out-String) -match 'Run run-ok succeeded')
 Assert 'another gateway reconciler job is untouched' ($global:UsdDeleted -notcontains $other.id)
 Assert 'cleanup prints leftover identity and environment delete commands' (($cleanup | Out-String) -match 'az identity delete' -and ($cleanup | Out-String) -match 'az containerapp env delete')
 $sharedEnvId = '/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.App/managedEnvironments/cae-shared'
@@ -131,6 +166,18 @@ $sameOutputEnv = @(Invoke-Register @($shared, $stable) $sharedShown -OutputEnvir
 Assert 'cleanup does not print an environment delete for the environment returned by the deployment' (($sameOutputEnv | Out-String) -match 'az identity delete' -and ($sameOutputEnv | Out-String) -notmatch 'az containerapp env delete')
 $failed = Throws { Invoke-Register @($old, $stable) $shown -FailDeploy }
 Assert 'failed deployment does not delete earlier jobs' ($failed -and $global:UsdDeleted.Count -eq 0) $failed
+$noSuccess = @(Invoke-Register @($old, $stable) $shown -RestGets @(@(New-Execution 'run-fail' Failed '2026-10-08T10:00:10Z' '2026-10-08T10:00:20Z')))
+Assert 'upgrade keeps old job and reports logs when no new run succeeds' ($global:UsdDeleted.Count -eq 0 -and ($noSuccess | Out-String) -match 'kept' -and ($noSuccess | Out-String) -match 'ContainerAppConsoleLogs' -and ($noSuccess | Out-String) -match 'Status=Failed') ($noSuccess | Out-String)
+$scheduledAfterEmptyStart = @(Invoke-Register @($old, $stable) $shown -RestGets @(@(New-Execution 'scheduled-ok' Succeeded '2026-10-08T10:00:30Z' '2026-10-08T10:00:50Z')))
+Assert 'empty POST body with scheduled success counts and deletes old job' ($global:UsdDeleted -contains $old.id -and ($scheduledAfterEmptyStart | Out-String) -match 'scheduled-ok')
+$oldThenNew = @(Invoke-Register @($old, $stable) $shown -RestGets @(
+    @((New-Execution 'old-ok' Succeeded '2026-10-08T09:59:00Z' '2026-10-08T09:59:30Z'), (New-Execution 'run-fail' Failed '2026-10-08T10:00:10Z' '2026-10-08T10:00:20Z')),
+    @((New-Execution 'old-ok' Succeeded '2026-10-08T09:59:00Z' '2026-10-08T09:59:30Z'), (New-Execution 'new-ok' Succeeded '2026-10-08T10:01:40Z' '2026-10-08T10:02:00Z'))
+))
+Assert 'success before deployStartedUtc does not count' (($oldThenNew | Out-String) -notmatch 'Run old-ok succeeded' -and ($oldThenNew | Out-String) -match 'Run new-ok succeeded')
+$postFailure = @(Invoke-Register @($old, $stable) $shown -PostFailures 1 -RestGets @(@(New-Execution 'run-ok' Succeeded '2026-10-08T10:01:40Z' '2026-10-08T10:02:00Z')))
+Assert 'failed POST start is retried within the window and then reported by a later run' (@($global:UsdCalls | Where-Object { $_ -like 'rest --method post*/start*' }).Count -eq 2 -and ($postFailure | Out-String) -match 'Run run-ok succeeded')
+Assert 'no Container Apps extension start or execution commands are used' (($global:UsdCalls -join '|') -notmatch 'containerapp job start|containerapp job execution')
 
 if ($fail) { throw "$fail USD reconciler schedule assertion(s) failed." }
 Write-Host 'USD reconciler schedule contract holds.' -ForegroundColor Green

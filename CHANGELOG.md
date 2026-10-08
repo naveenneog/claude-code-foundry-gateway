@@ -39,7 +39,9 @@ exact streaming cache-creation detail remains **U13**.
   unpriced until U178 splits usage by prompt size. Registering the standalone scheduled reconciler
   at a newer commit now updates the same per-gateway job and removes older jobs for that gateway
   only after the replacement deploys. Cleanup uses core `az resource delete` and no longer suggests
-  deleting the environment used by the replacement job ([ADR-0060](docs/adr/0060-usd-reconciler-attribution-and-pricing.md)).
+  deleting the environment used by the replacement job; upgrades now keep old jobs until the new
+  job has one successful post-deployment execution, and `-RunNow` uses ARM start/poll calls rather
+  than the Container Apps CLI extension ([ADR-0060](docs/adr/0060-usd-reconciler-attribution-and-pricing.md)).
 
 - **P104 the projection sync job runs on an admin-set schedule.** Adding or removing a developer in an Entra
   tier group or business-unit group reaches the Cosmos projection at the sync job's next run, with no command

@@ -14,7 +14,9 @@ param(
     [string]$Image = 'python:3.12.11-slim-bookworm',
     [string]$ExistingEnvironmentId,
     [string]$Location,
-    [switch]$RunNow
+    [switch]$RunNow,
+    [Parameter(DontShow)][scriptblock]$Clock = { [DateTime]::UtcNow },
+    [Parameter(DontShow)][scriptblock]$Sleep = { param([int]$Seconds) Start-Sleep -Seconds $Seconds }
 )
 
 $ErrorActionPreference = 'Stop'
@@ -41,6 +43,22 @@ function Invoke-ClaudeUsdReconcilerAzJson {
     if ($code -ne 0) { throw "Reading $What failed (az exit $code): $((($output | Out-String).Trim()))" }
     $text = (@($output | Where-Object { $_ -isnot [Management.Automation.ErrorRecord] }) | Out-String).Trim()
     if (-not $text) { return $null }
+    return ($text | ConvertFrom-Json)
+}
+
+function Invoke-ClaudeUsdReconcilerAzRestJson {
+    param([Parameter(Mandatory = $true)][string[]]$Arguments, [Parameter(Mandatory = $true)][string]$What)
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $global:LASTEXITCODE = 0
+        $output = @(az rest @Arguments 2>&1)
+        $code = $LASTEXITCODE
+    }
+    finally { $ErrorActionPreference = $previous }
+    if ($code -ne 0) { throw "Calling $What failed (az exit $code): $((($output | Out-String).Trim()))" }
+    $text = (@($output | Where-Object { $_ -isnot [Management.Automation.ErrorRecord] }) | Out-String).Trim()
+    if (-not $text -or $text[0] -notin @('{', '[')) { return $null }
     return ($text | ConvertFrom-Json)
 }
 
@@ -88,6 +106,82 @@ function Get-ClaudeUsdReconcilerLeftoverCommands {
     return @($commands)
 }
 
+function Start-ClaudeUsdReconcilerExecution {
+    param([Parameter(Mandatory = $true)][string]$JobId)
+    Assert-ClaudeUsdReconcilerRegisterValue JobId $JobId '^/subscriptions/[0-9a-fA-F-]{36}/resourceGroups/[-A-Za-z0-9._()]+/providers/Microsoft\.App/jobs/[-A-Za-z0-9]+$'
+    try {
+        Invoke-ClaudeUsdReconcilerAzRestJson -Arguments @('--method', 'post', '--url', "https://management.azure.com$JobId/start?api-version=2024-03-01") -What 'the USD reconciler job start' | Out-Null
+        return $true
+    }
+    catch {
+        Write-Warning $_.Exception.Message
+        return $false
+    }
+}
+
+function Get-ClaudeUsdReconcilerExecutions {
+    param([Parameter(Mandatory = $true)][string]$JobId)
+    Assert-ClaudeUsdReconcilerRegisterValue JobId $JobId '^/subscriptions/[0-9a-fA-F-]{36}/resourceGroups/[-A-Za-z0-9._()]+/providers/Microsoft\.App/jobs/[-A-Za-z0-9]+$'
+    $result = Invoke-ClaudeUsdReconcilerAzRestJson -Arguments @('--method', 'get', '--url', "https://management.azure.com$JobId/executions?api-version=2024-03-01") -What 'the USD reconciler job executions'
+    if ($null -eq $result) { return @() }
+    if ($result.PSObject.Properties['value']) { return @($result.value) }
+    return @($result)
+}
+
+function Wait-ClaudeUsdReconcilerFirstSuccess {
+    param(
+        [Parameter(Mandatory = $true)][string]$JobId,
+        [Parameter(Mandatory = $true)][string]$JobName,
+        [Parameter(Mandatory = $true)][datetime]$DeployStartedUtc,
+        [Parameter(Mandatory = $true)][scriptblock]$Clock,
+        [Parameter(Mandatory = $true)][scriptblock]$Sleep
+    )
+    $retryUntil = $DeployStartedUtc.AddMinutes(12)
+    $hardStop = $DeployStartedUtc.AddMinutes(35)
+    $attempted = $false
+    $lastFailed = ''
+    while ((& $Clock).ToUniversalTime() -lt $hardStop) {
+        $now = (& $Clock).ToUniversalTime()
+        if (-not $attempted -or ($lastFailed -and $now -lt $retryUntil)) {
+            if ($lastFailed) {
+                Write-Host ("Run {0} failed. Role assignments for a new job identity can take up to 10 minutes to take effect; starting another run at {1:HH:mm} UTC." -f $lastFailed, $now) -ForegroundColor Yellow
+                & $Sleep 60
+            }
+            if (-not (Start-ClaudeUsdReconcilerExecution -JobId $JobId)) {
+                $lastFailed = 'start'
+                $attempted = $true
+                & $Sleep 60
+                continue
+            }
+            $attempted = $true
+            $lastFailed = ''
+        }
+        & $Sleep 15
+        $executions = @(Get-ClaudeUsdReconcilerExecutions -JobId $JobId | Where-Object {
+            try {
+                $start = [datetime]::Parse([string]$_.properties.startTime, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal).ToUniversalTime()
+                $start -ge $DeployStartedUtc
+            }
+            catch { $false }
+        } | Sort-Object { [datetime]::Parse([string]$_.properties.startTime, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal).ToUniversalTime() })
+        $success = @($executions | Where-Object { [string]$_.properties.status -eq 'Succeeded' } | Select-Object -Last 1)
+        if ($success.Count) {
+            $ended = try { [datetime]::Parse([string]$success[0].properties.endTime, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal).ToUniversalTime() } catch { (& $Clock).ToUniversalTime() }
+            Write-Host ("Run {0} succeeded at {1:HH:mm} UTC." -f ([string]$success[0].name), $ended) -ForegroundColor Green
+            return [pscustomobject]@{ Status = 'Succeeded'; Execution = [string]$success[0].name; OldJobsKept = @() }
+        }
+        $active = @($executions | Where-Object { [string]$_.properties.status -in @('Running', 'Processing', 'Pending') })
+        $failed = @($executions | Where-Object { [string]$_.properties.status -eq 'Failed' } | Select-Object -Last 1)
+        if ($failed.Count -and -not $active.Count) {
+            $lastFailed = [string]$failed[0].name
+        }
+        elseif ((& $Clock).ToUniversalTime() -ge $retryUntil -and -not $active.Count) {
+            break
+        }
+    }
+    return [pscustomobject]@{ Status = 'Failed'; Execution = $lastFailed; OldJobsKept = @() }
+}
+
 if (-not (az account show --query id -o tsv 2>$null)) { throw 'Not signed in. Run: az login.' }
 if (-not $ResourceGroup) { $ResourceGroup = Select-ClaudeResourceGroup }
 Assert-ClaudeUsdReconcilerRegisterValue ResourceGroup $ResourceGroup '^[A-Za-z0-9._()-]{1,90}$'
@@ -130,6 +224,7 @@ $parameters = New-ClaudeUsdReconcilerParameters -GatewayResourceId $gatewayId -W
 $existingJobs = @(Get-ClaudeUsdReconcilerJobsForGateway -ResourceGroup $ResourceGroup -GatewayResourceId $gatewayId)
 
 if (-not $PSCmdlet.ShouldProcess("$ResourceGroup/$ApimName", 'Deploy scheduled USD reconciler job')) { return }
+$deployStartedUtc = (& $Clock).ToUniversalTime()
 $file = Join-Path ([IO.Path]::GetTempPath()) ('usd-reconciler-' + [guid]::NewGuid().ToString('N') + '.json')
 try {
     [IO.File]::WriteAllText($file, ($parameters | ConvertTo-Json -Depth 30), (New-Object Text.UTF8Encoding($false)))
@@ -144,29 +239,35 @@ $usedEnvironmentNames = @([string]$outputs.environmentName.value | Where-Object 
 $usedEnvironmentIds = @($ExistingEnvironmentId | Where-Object { $_ })
 if ($ExistingEnvironmentId) { $usedEnvironmentNames += ($ExistingEnvironmentId -split '/')[-1] }
 $oldJobs = @($existingJobs | Where-Object { [string]$_.name -ne [string]$outputs.jobName.value })
-foreach ($job in $oldJobs) {
-    $jobName = [string]$job.name
-    $jobId = [string]$job.id
-    Assert-ClaudeUsdReconcilerRegisterValue JobName $jobName '^[-A-Za-z0-9]{1,63}$'
-    Assert-ClaudeUsdReconcilerRegisterValue JobId $jobId '^/subscriptions/[0-9a-fA-F-]{36}/resourceGroups/[-A-Za-z0-9._()]+/providers/Microsoft\.App/jobs/[-A-Za-z0-9]+$'
-    az resource delete --ids $jobId | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "Deleting old USD reconciler job '$jobName' failed." }
-    Write-Host "Deleted old USD reconciler job $jobName." -ForegroundColor Yellow
-    foreach ($command in @(Get-ClaudeUsdReconcilerLeftoverCommands $job -UsedEnvironmentNames $usedEnvironmentNames -UsedEnvironmentIds $usedEnvironmentIds)) {
-        Write-Host "Leftover resource may be removable if unused: $command" -ForegroundColor DarkGray
+$run = $null
+$jobId = [string]$outputs.jobId.value
+if (-not $jobId) {
+    $jobId = "$gatewayId/providers/Microsoft.App/jobs/$([string]$outputs.jobName.value)"
+    $jobId = $jobId -replace '/providers/Microsoft.ApiManagement/service/[^/]+/providers/', '/providers/'
+}
+Assert-ClaudeUsdReconcilerRegisterValue JobId $jobId '^/subscriptions/[0-9a-fA-F-]{36}/resourceGroups/[-A-Za-z0-9._()]+/providers/Microsoft\.App/jobs/[-A-Za-z0-9]+$'
+$needsSuccessfulRun = $RunNow -or $oldJobs.Count -gt 0
+if ($needsSuccessfulRun) {
+    $run = Wait-ClaudeUsdReconcilerFirstSuccess -JobId $jobId -JobName ([string]$outputs.jobName.value) -DeployStartedUtc $deployStartedUtc -Clock $Clock -Sleep $Sleep
+}
+if (-not $needsSuccessfulRun -or $run.Status -eq 'Succeeded') {
+    foreach ($job in $oldJobs) {
+        $jobName = [string]$job.name
+        $oldJobId = [string]$job.id
+        Assert-ClaudeUsdReconcilerRegisterValue JobName $jobName '^[-A-Za-z0-9]{1,63}$'
+        Assert-ClaudeUsdReconcilerRegisterValue JobId $oldJobId '^/subscriptions/[0-9a-fA-F-]{36}/resourceGroups/[-A-Za-z0-9._()]+/providers/Microsoft\.App/jobs/[-A-Za-z0-9]+$'
+        az resource delete --ids $oldJobId | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "Deleting old USD reconciler job '$jobName' failed." }
+        Write-Host "Deleted old USD reconciler job $jobName." -ForegroundColor Yellow
+        foreach ($command in @(Get-ClaudeUsdReconcilerLeftoverCommands $job -UsedEnvironmentNames $usedEnvironmentNames -UsedEnvironmentIds $usedEnvironmentIds)) {
+            Write-Host "Leftover resource may be removable if unused: $command" -ForegroundColor DarkGray
+        }
     }
 }
-
-$run = $null
-if ($RunNow) {
-    Start-Sleep -Seconds 90
-    $execution = az containerapp job start -g $ResourceGroup -n $outputs.jobName.value --query name -o tsv
-    $deadline = [DateTime]::UtcNow.AddMinutes(30)
-    do {
-        Start-Sleep -Seconds 15
-        $status = az containerapp job execution show -g $ResourceGroup -n $outputs.jobName.value --job-execution-name $execution --query properties.status -o tsv 2>$null
-    } while ($status -in @('Running', 'Processing', '') -and [DateTime]::UtcNow -lt $deadline)
-    $run = [pscustomobject]@{ Execution = $execution; Status = $status }
+elseif ($oldJobs.Count) {
+    $kept = @($oldJobs | ForEach-Object { [string]$_.name })
+    $run.OldJobsKept = $kept
+    Write-Warning ("New USD reconciler job {0} has not succeeded; kept old job(s) {1} so the dollar-budget state stays fresh. Read logs in the gateway workspace with: ContainerAppConsoleLogs | where JobName == '{0}' | order by TimeGenerated desc | take 50 . Rerun: .\scripts\Register-ClaudeUsdReconciler.ps1 -ResourceGroup {2} -ApimName {3} -WorkspaceResourceId '{4}' -WorkspaceCustomerId {5} -RepositoryUrl {6} -RepositoryRef {7}" -f [string]$outputs.jobName.value, ($kept -join ', '), $ResourceGroup, $ApimName, $WorkspaceResourceId, $WorkspaceCustomerId, $RepositoryUrl, $RepositoryRef)
 }
 
 [pscustomobject][ordered]@{
@@ -177,4 +278,5 @@ if ($RunNow) {
     Commit = $RepositoryRef
     Image = $Image
     Run = $run
+    OldJobsKept = $(if ($run -and $run.OldJobsKept) { @($run.OldJobsKept) } else { @() })
 }

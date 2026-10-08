@@ -209,6 +209,7 @@ resource job 'Microsoft.App/jobs@2024-03-01' = {
 }
 
 output jobName string = job.name
+output jobId string = job.id
 output environmentName string = empty(existingEnvironmentId) ? environment.name : last(split(existingEnvironmentId, '/'))
 output identityId string = identity.id
 output principalId string = identity.properties.principalId

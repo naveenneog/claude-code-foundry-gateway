@@ -61,9 +61,10 @@ by prompt-size tier.
 
 The standalone scheduled reconciler is also per gateway, not per commit. Its
 Container Apps job, identity and default environment suffix excludes `repositoryRef`,
-so a registration at a newer commit changes `REPO_REF` on the same job. The
-register script removes older jobs for the same gateway only after the replacement
-deployment succeeds, and only prints manual cleanup commands for the old identity
-and an unused old environment because those resources may be shared. Job deletion
-uses core ARM resource deletion; the optional `-RunNow` path still uses the
-Container Apps CLI extension.
+so a registration at a newer commit changes `REPO_REF` on the same job. Because a
+new managed identity's RBAC can take up to 10 minutes to propagate, the register
+script proves the replacement job has a post-deployment successful execution before
+deleting older jobs for the same gateway. If no such run succeeds, the older jobs
+are kept so state stays fresh and the operator gets the log query and rerun command.
+Job deletion uses core ARM resource deletion. The immediate `-RunNow` path uses the
+same ARM start/poll flow, not the Container Apps CLI extension.

@@ -166,17 +166,34 @@ Registering a newer commit updates the same per-gateway job in place: resource
 names are based on the resource group, gateway and workspace, not on
 `RepositoryRef`. Before deployment the register script inventories Container Apps
 jobs in the resource group tagged `component=usd-reconciler`, reads each job's
-`GATEWAY_ID`, and remembers only jobs for this gateway. After the deployment
-succeeds it deletes older jobs for this gateway only, then prints the old identity
-and Container Apps environment names with `az identity delete` and
-`az containerapp env delete` commands for an operator to run if those resources
-are unused. It does not print an environment delete command for the environment
-the replacement deployment uses. A failed deployment deletes nothing, and jobs
-for another gateway are left untouched. The cleanup uses core `az resource
-delete --ids <job-resource-id>` and does not need the Container Apps CLI
-extension. `-RunNow` still uses `az containerapp job start` and
-`az containerapp job execution show`, so that optional immediate execution path
-does need the extension.
+`GATEWAY_ID`, and remembers only jobs for this gateway. After the deployment succeeds it starts the replacement job with the ARM
+Container Apps Jobs Start API (`POST <job-id>/start?api-version=2024-03-01`)
+and polls the job executions API. Microsoft documents that the start call can
+return either 200 with a job execution body or 202 with only headers, so the
+script waits for any execution that started after the deployment began to
+succeed rather than trusting the start response body. Microsoft also documents
+that Azure RBAC role assignment changes can take up to 10 minutes to take
+effect (Troubleshoot Azure RBAC, updated 2026-05-24, read 2026-10-08). The
+first run of a new identity can therefore fail with HTTP 403 against Log
+Analytics before the next run succeeds.
+
+Older jobs for this gateway are deleted only after the replacement job has had
+one successful execution. If no new execution succeeds in the propagation window
+plus margin, the script leaves the old jobs running so `usd-budget-state` stays
+fresh, returns `Run.Status = Failed`, and prints the log query:
+
+```kusto
+ContainerAppConsoleLogs
+| where JobName == '<new job>'
+| order by TimeGenerated desc
+| take 50
+```
+
+It also prints the rerun command with the same parameters. Jobs for another
+gateway are left untouched. Cleanup uses core `az resource delete --ids
+<job-resource-id>` and does not need the Container Apps CLI extension. The
+immediate `-RunNow` path uses the same ARM `az rest` start/poll flow and also
+needs no Container Apps CLI extension.
 
 Permissions are deliberately narrow:
 
