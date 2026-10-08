@@ -153,6 +153,12 @@ try {
     [IO.File]::WriteAllText($tempPublishBook, (@{ date = '2026-10-08'; models = @{ 'my-typo' = @{ inputPerM = 3; outputPerM = 15; cacheReadPerM = 'oops' } } } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
     $invalidRate = Get-Thrown { New-PriceBlock }
     Assert 'query publisher refuses a non-numeric optional rate with the key and field' ($invalidRate -match 'my-typo' -and $invalidRate -match 'cacheReadPerM') $invalidRate
+    [IO.File]::WriteAllText($tempPublishBook, (@{ date = '2026-10-08'; models = [ordered]@{
+        'claude-haiku-4.5' = @{ inputPerM = 1; outputPerM = 5 }
+        'claude-haiku-4-5' = @{ inputPerM = 1; outputPerM = 5; cacheReadPerM = 0.05 }
+    } } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+    $conflictingDuplicate = Get-Thrown { New-PriceBlock }
+    Assert 'query publisher behaviorally refuses duplicate normalized keys with conflicting effective rates' ($conflictingDuplicate -match 'Duplicate normalized price-book key' -and $conflictingDuplicate -match 'claude-haiku-4\.5' -and $conflictingDuplicate -match 'claude-haiku-4-5') $conflictingDuplicate
 }
 finally { Remove-Item -LiteralPath $tempPublishBook -Force -ErrorAction SilentlyContinue }
 $harness = Get-Content (Join-Path $root 'scripts\Test-ClaudeUsdUsageQuery.ps1') -Raw
