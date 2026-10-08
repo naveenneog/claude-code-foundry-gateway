@@ -58,6 +58,8 @@ let group_totals = metered
 | summarize total_body_reads=sum(body_reads), total_missing_reads=sum(missing_reads), group_latest=max(latest_request)
     by day, user_id, family
 | join kind=fullouter cached on day, user_id, family
+| extend day=coalesce(day, day1), user_id=coalesce(user_id, user_id1), family=coalesce(family, family1)
+| project-away day1, user_id1, family1
 | extend group_cache_read_total=iff(isnotnull(total_missing_reads) and total_missing_reads == 0,
     coalesce(total_body_reads,0), max_of(coalesce(total_body_reads,0), coalesce(metric_reads,0)));
 let metered_rows = metered

@@ -284,7 +284,10 @@ def calculate_state(values, rows, now, freshness_seconds=900):
         problems = set()
         for row in rows:
             try:
-                observed = datetime.fromisoformat(row["day"].replace("Z", "+00:00"))
+                raw_day = row.get("day")
+                if not isinstance(raw_day, str):
+                    raise ValueError()
+                observed = datetime.fromisoformat(raw_day.replace("Z", "+00:00"))
                 if observed.tzinfo is None:
                     raise ValueError()
             except (KeyError, TypeError, ValueError) as error:

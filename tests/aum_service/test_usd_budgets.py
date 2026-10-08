@@ -320,6 +320,11 @@ class DollarDecisionTests(unittest.TestCase):
         self.assertEqual("allow", state["items"]["organization:finance"]["status"])
         self.assertEqual("0", state["items"]["organization:finance"]["spent_usd"])
 
+    def test_missing_day_is_a_service_error_not_attribute_error(self):
+        with self.assertRaises(ServiceError) as error:
+            calculate_state(configured(), [row(day=None)], NOW)
+        self.assertEqual("usd_invalid_usage", error.exception.code)
+
     def test_repeat_evaluation_is_idempotent_and_expiry_is_bounded(self):
         config = configured()
         state = calculate_state(config, [row()], NOW)
