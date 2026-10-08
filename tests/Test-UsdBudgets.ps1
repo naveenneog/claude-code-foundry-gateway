@@ -150,19 +150,36 @@ foreach ($fn in 'Format-ClaudeQueryDecimal', 'Get-ClaudeQueryPriceRate', 'Get-Cl
     $fnAst = $publishAst.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $fn }, $true)
     if ($fnAst) { . ([scriptblock]::Create($fnAst.Extent.Text)) }
 }
-$tempPublishBook = Join-Path $root 'config\price-book.json'
+$testSourceRoots = @((Join-Path $root 'tests'), (Join-Path $root 'tests\aum_service'))
+$unsafePriceBookTouches = @()
+foreach ($sourceRoot in $testSourceRoots) {
+    Get-ChildItem -LiteralPath $sourceRoot -Recurse -File -Include *.ps1,*.py | ForEach-Object {
+        $text = Get-Content -LiteralPath $_.FullName -Raw
+        $writesRepoPriceBook = $text -match '(?is)(Set-Content|WriteAllText|Remove-Item|Move-Item|Copy-Item|open\s*\()[^`r`n;]*(config[\\/]|Join-Path\s+\$root\s+[''"]config[\\/])price-book\.json'
+        $repoPriceVariable = [regex]::Match($text, '(?im)^\s*(\$\w+)\s*=\s*Join-Path\s+\$root\s+[''"]config[\\/]price-book\.json[''"]')
+        $writesRepoPriceVariable = $repoPriceVariable.Success -and $text -match ('(?is)(Set-Content|WriteAllText|Remove-Item|Move-Item|Copy-Item|open\s*\()[^`r`n;]*' + [regex]::Escape($repoPriceVariable.Groups[1].Value))
+        if ($writesRepoPriceBook -or $writesRepoPriceVariable) {
+            $unsafePriceBookTouches += $_.FullName.Substring($root.Length + 1)
+        }
+    }
+}
+Assert 'tests never write, move, copy or delete the repo-local config\price-book.json' (-not $unsafePriceBookTouches.Count) ($unsafePriceBookTouches -join ', ')
+$tempPublishBook = Join-Path ([IO.Path]::GetTempPath()) ('p108-price-book-' + [guid]::NewGuid().ToString('N') + '.json')
 try {
+    [IO.File]::WriteAllText($tempPublishBook, (@{ date = '2026-10-08'; models = @{ 'temp-only-model' = @{ inputPerM = 3; outputPerM = 15 } } } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+    $tempBlock = New-PriceBlock -Path $tempPublishBook
+    Assert 'query publisher can read a caller-supplied temporary price-book path' ($tempBlock -match 'temp-only-model' -and $tempBlock -notmatch 'claude-sonnet-5') $tempBlock
     [IO.File]::WriteAllText($tempPublishBook, (@{ date = '2026-10-08'; models = @{ 'my-typo' = @{ inputPerM = 3 } } } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
-    $missingRate = Get-Thrown { New-PriceBlock }
+    $missingRate = Get-Thrown { New-PriceBlock -Path $tempPublishBook }
     Assert 'query publisher refuses a missing required rate before formatting it as zero' ($missingRate -match 'my-typo' -and $missingRate -match 'outputPerM') $missingRate
     [IO.File]::WriteAllText($tempPublishBook, (@{ date = '2026-10-08'; models = @{ 'my-typo' = @{ inputPerM = 3; outputPerM = 15; cacheReadPerM = 'oops' } } } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
-    $invalidRate = Get-Thrown { New-PriceBlock }
+    $invalidRate = Get-Thrown { New-PriceBlock -Path $tempPublishBook }
     Assert 'query publisher refuses a non-numeric optional rate with the key and field' ($invalidRate -match 'my-typo' -and $invalidRate -match 'cacheReadPerM') $invalidRate
     [IO.File]::WriteAllText($tempPublishBook, (@{ date = '2026-10-08'; models = [ordered]@{
         'claude-haiku-4.5' = @{ inputPerM = 1; outputPerM = 5 }
         'claude-haiku-4-5' = @{ inputPerM = 1; outputPerM = 5; cacheReadPerM = 0.05 }
     } } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
-    $conflictingDuplicate = Get-Thrown { New-PriceBlock }
+    $conflictingDuplicate = Get-Thrown { New-PriceBlock -Path $tempPublishBook }
     Assert 'query publisher behaviorally refuses duplicate normalized keys with conflicting effective rates' ($conflictingDuplicate -match 'Duplicate normalized price-book key' -and $conflictingDuplicate -match 'claude-haiku-4\.5' -and $conflictingDuplicate -match 'claude-haiku-4-5') $conflictingDuplicate
 }
 finally { Remove-Item -LiteralPath $tempPublishBook -Force -ErrorAction SilentlyContinue }

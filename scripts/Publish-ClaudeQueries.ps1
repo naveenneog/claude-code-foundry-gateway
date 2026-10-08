@@ -125,7 +125,8 @@ function New-GeneratedBlock {
 }
 
 function New-PriceBlock {
-    $path = Join-Path $root 'config/price-book.json'
+    param([string]$Path)
+    $path = if ($Path) { $Path } else { Join-Path $root 'config/price-book.json' }
     if (-not (Test-Path $path)) { $path = Join-Path $root 'config/price-book.example.json' }
     $pb = Get-Content $path -Raw | ConvertFrom-Json
     $models = @($pb.models.PSObject.Properties)
