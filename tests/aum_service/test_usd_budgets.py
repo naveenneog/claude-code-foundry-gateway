@@ -101,6 +101,22 @@ class DollarArithmeticTests(unittest.TestCase):
             "claude-haiku-4-5": {"inputPerM": 1, "outputPerM": 5, "cacheReadPerM": "0.05"},
         }}
         self.assertIsNone(price_book_key("claude-haiku-4-5-20251001", cache_conflict))
+        invalid_family = {"models": {
+            "claude-opus-5-5": {"inputPerM": 5, "outputPerM": 25, "cacheReadPerM": None},
+            "claude-opus-5.5": {"inputPerM": 1, "outputPerM": 5},
+        }}
+        self.assertIsNone(price_book_key("claude-opus-5.5", invalid_family))
+        invalid_dated = {"models": {
+            "claude-sonnet-5-5-20260101": {"inputPerM": 2, "outputPerM": 10, "cacheReadPerM": None},
+            "claude-sonnet-5.5": {"inputPerM": 1, "outputPerM": 5},
+        }}
+        self.assertIsNone(price_book_key("claude-sonnet-5-5-20260101", invalid_dated))
+        invalid_required = {"models": {
+            "required-negative": {"inputPerM": -5, "outputPerM": 25},
+            "required-boolean": {"inputPerM": True, "outputPerM": 25},
+        }}
+        self.assertIsNone(price_book_key("required-negative", invalid_required))
+        self.assertIsNone(price_book_key("required-boolean", invalid_required))
 
     def test_all_five_categories_are_priced_before_sum_without_rounding(self):
         result = price_row(row(cache_write_1h_tokens=1000), BOOK)

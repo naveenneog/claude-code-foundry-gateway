@@ -196,6 +196,18 @@ def price_book_key(name, book):
     text = str(name or "")
     literal = text.lower()
     target = normalized_model_key(name)
+    poisoned = set()
+    for key, model in models.items():
+        normalized = normalized_model_key(key)
+        try:
+            effective_price_rates(model)
+        except ServiceError:
+            poisoned.add(normalized)
+            if len(normalized) > 8 and normalized[-8:].isdigit():
+                poisoned.add(normalized[:-8])
+    family_target = target[:-8] if len(target) > 8 and target[-8:].isdigit() else ""
+    if target in poisoned or (family_target and family_target in poisoned):
+        return None
     def has_conflicting_rates(matches):
         if len(matches) <= 1:
             return False
@@ -209,7 +221,6 @@ def price_book_key(name, book):
     normalized_matches = [key for key in models if normalized_model_key(key) == target]
     if has_conflicting_rates(normalized_matches):
         return None
-    family_target = target[:-8] if len(target) > 8 and target[-8:].isdigit() else ""
     if family_target and has_conflicting_rates([key for key in models if normalized_model_key(key) == family_target]):
         return None
     for key in models:

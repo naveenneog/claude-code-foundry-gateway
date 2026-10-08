@@ -339,6 +339,7 @@ foreach ($case in @(
 Assert 'business-unit shorter family remains unpriced' ($null -eq (ConvertTo-ClaudeBuUsd -Tokens 1000000 -Model 'claude-sonnet-5-2'))
 $savedPriceBook = $script:ClaudePriceBook
 $savedPriceBookDate = $script:ClaudePriceBookDate
+$savedPoisonedPriceFamilies = $script:ClaudePoisonedPriceFamilies
 $invalidOptionalBook = Join-Path ([IO.Path]::GetTempPath()) ('bu-invalid-price-book-' + [guid]::NewGuid().ToString('N') + '.json')
 try {
     [IO.File]::WriteAllText($invalidOptionalBook, (@{
@@ -355,11 +356,36 @@ try {
     Assert 'price-book import does not throw for invalid optional rates' (-not $importError) $importError
     Assert 'price-book import keeps valid entries when optional-rate siblings are invalid' ($script:ClaudePriceBook.ContainsKey('good') -and -not $script:ClaudePriceBook.ContainsKey('nullcache') -and -not $script:ClaudePriceBook.ContainsKey('negativecache') -and -not $script:ClaudePriceBook.ContainsKey('textcache'))
     Assert 'price-book import warnings name invalid optional rate keys and fields' ($warnings -match 'nullcache' -and $warnings -match 'negativecache' -and $warnings -match 'textcache' -and $warnings -match 'cacheReadPerM') $warnings
+    [IO.File]::WriteAllText($invalidOptionalBook, (@{
+        date = '2026-10-08'; source = 'test'; models = [ordered]@{
+            'claude-opus-5-5' = @{ inputPerM = 5; outputPerM = 25; cacheReadPerM = $null }
+            'claude-opus-5.5' = @{ inputPerM = 1; outputPerM = 5 }
+            'claude-sonnet-5-5-20260101' = @{ inputPerM = 2; outputPerM = 10; cacheReadPerM = $null }
+            'claude-sonnet-5.5' = @{ inputPerM = 1; outputPerM = 5 }
+            'required-negative' = @{ inputPerM = -5; outputPerM = 25 }
+            'required-boolean' = @{ inputPerM = $true; outputPerM = 25 }
+        }
+    } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+    $warnings = (Import-ClaudePriceBook -Path $invalidOptionalBook 3>&1 | Out-String)
+    Assert 'invalid optional rates poison sibling spellings instead of falling back' (
+        $null -eq (ConvertTo-ClaudeRequestUsd -Model 'claude-opus-5.5' -InputTokens 1000000 -OutputTokens 200000) -and
+        $null -eq (ConvertTo-ClaudeCacheUsd -Model 'claude-opus-5.5' -Tokens 1000000)
+    )
+    Assert 'invalid dated entries poison their family instead of falling back' ($null -eq (ConvertTo-ClaudeRequestUsd -Model 'claude-sonnet-5-5-20260101' -InputTokens 1000000))
+    Assert 'invalid required rates poison their families and leave converters unpriced' (
+        $null -eq (ConvertTo-ClaudeRequestUsd -Model 'required-negative' -InputTokens 1000000) -and
+        $null -eq (ConvertTo-ClaudeRequestUsd -Model 'required-boolean' -InputTokens 1000000)
+    )
+    $budgetError = ''
+    try { ConvertTo-ClaudeBuTokens -Usd 1000 -Model 'claude-opus-5.5' | Out-Null } catch { $budgetError = $_.Exception.Message }
+    Assert 'budget conversion refuses a poisoned family instead of writing fallback tokens' ($budgetError -match 'No price for') $budgetError
+    Assert 'poisoned-family warning names the family and says it is unpriced until fixed' ($warnings -match 'claudeopus55' -and $warnings -match 'unpriced until' -and $warnings -match 'cacheReadPerM') $warnings
 }
 finally {
     Remove-Item -LiteralPath $invalidOptionalBook -Force -ErrorAction SilentlyContinue
     $script:ClaudePriceBook = $savedPriceBook
     $script:ClaudePriceBookDate = $savedPriceBookDate
+    $script:ClaudePoisonedPriceFamilies = $savedPoisonedPriceFamilies
 }
 
 $setSrc = Get-Content $setPath -Raw

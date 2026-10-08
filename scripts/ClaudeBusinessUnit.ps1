@@ -58,6 +58,7 @@ $script:ClaudePriceBookDate = '2026-09-15'
 # ADR-0010 requires money to be decimal end to end - a double here would reach
 # the blended rate and stop the figures reproducing.
 $script:ClaudePriceBookPath = Join-Path (Split-Path $PSScriptRoot -Parent) 'config/price-book.json'
+$script:ClaudePoisonedPriceFamilies = @{}
 
 function Import-ClaudePriceBook {
     param([string]$Path = $script:ClaudePriceBookPath)
@@ -68,28 +69,48 @@ function Import-ClaudePriceBook {
     if (-not $doc.models) { throw "Price book '$Path' has no 'models' object. Delete it to fall back to the built-in rates." }
 
     $book = @{}
+    $poisoned = @{}
+    function Add-PoisonedPriceFamily([string]$ModelName, [string]$Field) {
+        $family = ConvertTo-ClaudePriceModelKey $ModelName
+        if ($family) {
+            $poisoned[$family] = $true
+            if ($family.Length -gt 8 -and $family.Substring($family.Length - 8) -match '^\d{8}$') {
+                $poisoned[$family.Substring(0, $family.Length - 8)] = $true
+            }
+            Write-Warning "Price book '$Path': model '$ModelName' has invalid $Field; normalized family '$family' is unpriced until the entry is fixed."
+        }
+    }
+    function Test-PriceRate([object]$Value) {
+        if ($null -eq $Value -or $Value -is [bool] -or $Value -is [string] -or
+            $Value -is [System.Collections.IEnumerable] -or $Value.GetType().FullName -eq 'System.Management.Automation.PSCustomObject') {
+            return $null
+        }
+        $parsed = [decimal]$Value
+        if ($parsed -lt 0) { return $null }
+        return $parsed
+    }
     foreach ($p in $doc.models.PSObject.Properties) {
         $m = $p.Value
-        if ($null -eq $m.inputPerM -or $null -eq $m.outputPerM) {
-            throw "Price book '$Path': model '$($p.Name)' is missing inputPerM or outputPerM."
+        $inputRate = Test-PriceRate $m.inputPerM
+        if ($null -eq $inputRate) {
+            Add-PoisonedPriceFamily $p.Name 'inputPerM'
+            continue
+        }
+        $outputRate = Test-PriceRate $m.outputPerM
+        if ($null -eq $outputRate) {
+            Add-PoisonedPriceFamily $p.Name 'outputPerM'
+            continue
         }
         $entry = @{
-            InputPerM  = [decimal]$m.inputPerM
-            OutputPerM = [decimal]$m.outputPerM
+            InputPerM  = $inputRate
+            OutputPerM = $outputRate
         }
         $skip = $false
         foreach ($optional in 'cacheReadPerM', 'cacheWrite5mPerM', 'cacheWrite1hPerM') {
             if ($null -ne $m.PSObject.Properties[$optional]) {
-                $value = $m.$optional
-                if ($null -eq $value -or $value -is [bool] -or $value -is [string] -or
-                    $value -is [System.Collections.IEnumerable] -or $value.GetType().FullName -eq 'System.Management.Automation.PSCustomObject') {
-                    Write-Warning "Price book '$Path': model '$($p.Name)' has invalid $optional; the model is unpriced in business-unit and Turnstile script paths."
-                    $skip = $true
-                    break
-                }
-                $parsed = [decimal]$value
-                if ($parsed -lt 0) {
-                    Write-Warning "Price book '$Path': model '$($p.Name)' has invalid $optional; the model is unpriced in business-unit and Turnstile script paths."
+                $parsed = Test-PriceRate $m.$optional
+                if ($null -eq $parsed) {
+                    Add-PoisonedPriceFamily $p.Name $optional
                     $skip = $true
                     break
                 }
@@ -98,9 +119,9 @@ function Import-ClaudePriceBook {
         }
         if (-not $skip) { $book[$p.Name] = $entry }
     }
-    if ($book.Keys.Count -eq 0) { throw "Price book '$Path' lists no models. Delete it to fall back to the built-in rates." }
 
     $script:ClaudePriceBook = $book
+    $script:ClaudePoisonedPriceFamilies = $poisoned
     if ($doc.date) { $script:ClaudePriceBookDate = [string]$doc.date }
     return $true
 }
@@ -133,10 +154,23 @@ function Get-ClaudeBusinessUnitPriceBook {
 
 function Resolve-ClaudePriceBookEntry {
     param([Parameter(Mandatory = $true)][string]$Model)
+    if (Test-ClaudePoisonedPriceFamily $Model) { return $null }
     $book = Get-ClaudeBusinessUnitPriceBook
     $key = Resolve-ClaudePriceBookKey -Name $Model -Book $book
     if (-not $key) { return $null }
+    if (Test-ClaudePoisonedPriceFamily $key) { return $null }
     return @{ Key = $key; Price = $script:ClaudePriceBook[$key] }
+}
+
+function Test-ClaudePoisonedPriceFamily {
+    param([AllowNull()][string]$Model)
+    $family = ConvertTo-ClaudePriceModelKey $Model
+    if (-not $family -or -not $script:ClaudePoisonedPriceFamilies) { return $false }
+    if ($script:ClaudePoisonedPriceFamilies.ContainsKey($family)) { return $true }
+    if ($family.Length -gt 8 -and $family.Substring($family.Length - 8) -match '^\d{8}$') {
+        return $script:ClaudePoisonedPriceFamilies.ContainsKey($family.Substring(0, $family.Length - 8))
+    }
+    return $false
 }
 
 function Test-ClaudeBuId {
