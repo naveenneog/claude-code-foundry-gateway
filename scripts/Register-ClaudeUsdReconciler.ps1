@@ -107,6 +107,16 @@ function Get-ClaudeUsdReconcilerJobPrincipalId {
     return ''
 }
 
+function Test-ClaudeUsdReconcilerStringIn {
+    param([AllowNull()][string]$Value, [string[]]$Candidates = @())
+    foreach ($candidate in @($Candidates)) {
+        if ([string]::Equals([string]$Value, [string]$candidate, [StringComparison]::OrdinalIgnoreCase)) {
+            return $true
+        }
+    }
+    return $false
+}
+
 function Get-ClaudeUsdReconcilerLeftoverCommands {
     param($Job, [string]$WorkspaceResourceId, [string]$GatewayResourceId, [string[]]$UsedEnvironmentNames = @(), [string[]]$UsedEnvironmentIds = @())
     $name = [string]$Job.name
@@ -124,7 +134,8 @@ function Get-ClaudeUsdReconcilerLeftoverCommands {
         $commands += "old identity principalId is unavailable; role assignment delete commands cannot be printed"
     }
     if ($identityName) { $commands += "az identity delete -g <resource-group> -n $identityName" }
-    $environmentStillUsed = ($envName -and $envName -in @($UsedEnvironmentNames)) -or ($envId -and $envId -in @($UsedEnvironmentIds))
+    $environmentStillUsed = ($envName -and (Test-ClaudeUsdReconcilerStringIn -Value $envName -Candidates $UsedEnvironmentNames)) -or
+        ($envId -and (Test-ClaudeUsdReconcilerStringIn -Value $envId -Candidates $UsedEnvironmentIds))
     if ($envName -and -not $environmentStillUsed) { $commands += "az containerapp env delete -g <resource-group> -n $envName" }
     return @($commands)
 }
@@ -283,7 +294,7 @@ finally { Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue }
 $usedEnvironmentNames = @([string]$outputs.environmentName.value | Where-Object { $_ })
 $usedEnvironmentIds = @($ExistingEnvironmentId | Where-Object { $_ })
 if ($ExistingEnvironmentId) { $usedEnvironmentNames += ($ExistingEnvironmentId -split '/')[-1] }
-$oldJobs = @($existingJobs | Where-Object { [string]$_.name -ne [string]$outputs.jobName.value })
+$oldJobs = @($existingJobs | Where-Object { -not [string]::Equals([string]$_.name, [string]$outputs.jobName.value, [StringComparison]::OrdinalIgnoreCase) })
 $run = $null
 $jobId = [string]$outputs.jobId.value
 if (-not $jobId) {

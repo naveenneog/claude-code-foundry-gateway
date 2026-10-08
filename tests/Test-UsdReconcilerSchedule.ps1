@@ -155,6 +155,8 @@ $shown = @{
 }
 $parserErrors = $null
 $registerAst = [System.Management.Automation.Language.Parser]::ParseFile($register, [ref]$null, [ref]$parserErrors)
+$registerText = Get-Content $register -Raw
+Assert 'Azure resource-name cleanup comparisons use explicit ordinal string equality' ($registerText -notmatch '\$envName\s+-and\s+\$envName\s+-in' -and $registerText -notmatch '\$envId\s+-and\s+\$envId\s+-in' -and $registerText -notmatch '\$_.name\s+-ne\s+\[string\]\$outputs\.jobName\.value') $registerText
 $utcAst = $registerAst.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'ConvertTo-ClaudeUsdReconcilerUtc' }, $true)
 if ($utcAst) {
     . ([scriptblock]::Create($utcAst.Extent.Text))
