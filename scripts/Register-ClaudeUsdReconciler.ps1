@@ -180,12 +180,17 @@ function Wait-ClaudeUsdReconcilerFirstSuccess {
         [Parameter(Mandatory = $true)][string]$JobName,
         [Parameter(Mandatory = $true)][datetime]$DeployStartedUtc,
         [Parameter(Mandatory = $true)][scriptblock]$Clock,
-        [Parameter(Mandatory = $true)][scriptblock]$Sleep
+        [Parameter(Mandatory = $true)][scriptblock]$Sleep,
+        [int]$RetryWindowMinutes = 12,
+        [int]$HardStopMinutes = 35,
+        [int]$MaxFailureRetries = 1000,
+        [string]$SuccessMessageSuffix = ''
     )
-    $retryUntil = $DeployStartedUtc.AddMinutes(12)
-    $hardStop = $DeployStartedUtc.AddMinutes(35)
+    $retryUntil = $DeployStartedUtc.AddMinutes($RetryWindowMinutes)
+    $hardStop = $DeployStartedUtc.AddMinutes($HardStopMinutes)
     $attempted = $false
     $lastFailed = ''
+    $failureRetries = 0
     $handledFailures = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     while ((& $Clock).ToUniversalTime() -lt $hardStop) {
         $now = (& $Clock).ToUniversalTime()
@@ -210,7 +215,7 @@ function Wait-ClaudeUsdReconcilerFirstSuccess {
         $success = @($executions | Where-Object { [string]$_.properties.status -eq 'Succeeded' } | Select-Object -Last 1)
         if ($success.Count) {
             $ended = try { ConvertTo-ClaudeUsdReconcilerUtc $success[0].properties.endTime } catch { (& $Clock).ToUniversalTime() }
-            Write-Host ("Run {0} succeeded at {1:HH:mm} UTC." -f ([string]$success[0].name), $ended) -ForegroundColor Green
+            Write-Host ("Run {0} succeeded at {1:HH:mm} UTC{2}" -f ([string]$success[0].name), $ended, $SuccessMessageSuffix) -ForegroundColor Green
             return [pscustomobject]@{ Status = 'Succeeded'; Execution = [string]$success[0].name; OldJobsKept = @() }
         }
         $active = @($executions | Where-Object { [string]$_.properties.status -in @('Running', 'Processing', 'Pending') })
@@ -221,6 +226,8 @@ function Wait-ClaudeUsdReconcilerFirstSuccess {
         if ($failed.Count) {
             $lastFailed = [string]$failed[0].name
             if ($handledFailures.Add($lastFailed)) {
+                if ($failureRetries -ge $MaxFailureRetries) { break }
+                $failureRetries++
                 $retryAt = $now.AddSeconds(60)
                 Write-Host ("Run {0} failed. Role assignments for a new job identity can take up to 10 minutes to take effect; starting another run at {1:HH:mm} UTC." -f $lastFailed, $retryAt) -ForegroundColor Yellow
                 & $Sleep 60
@@ -306,7 +313,10 @@ $needsSuccessfulRun = $RunNow -or $oldJobs.Count -gt 0
 if ($needsSuccessfulRun) {
     $run = Wait-ClaudeUsdReconcilerFirstSuccess -JobId $jobId -JobName ([string]$outputs.jobName.value) -DeployStartedUtc $deployStartedUtc -Clock $Clock -Sleep $Sleep
 }
+$finalRun = $null
 if (-not $needsSuccessfulRun -or $run.Status -eq 'Succeeded') {
+    $deletedOldJobCount = 0
+    $lastDeletionUtc = $null
     foreach ($job in $oldJobs) {
         $jobName = [string]$job.name
         $oldJobId = [string]$job.id
@@ -314,9 +324,17 @@ if (-not $needsSuccessfulRun -or $run.Status -eq 'Succeeded') {
         Assert-ClaudeUsdReconcilerRegisterValue JobId $oldJobId '^/subscriptions/[0-9a-fA-F-]{36}/resourceGroups/[-A-Za-z0-9._()]+/providers/Microsoft\.App/jobs/[-A-Za-z0-9]+$'
         az resource delete --ids $oldJobId | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "Deleting old USD reconciler job '$jobName' failed." }
+        $deletedOldJobCount++
+        $lastDeletionUtc = (& $Clock).ToUniversalTime()
         Write-Host "Deleted old USD reconciler job $jobName." -ForegroundColor Yellow
         foreach ($command in @(Get-ClaudeUsdReconcilerLeftoverCommands $job -WorkspaceResourceId $WorkspaceResourceId -GatewayResourceId $gatewayId -UsedEnvironmentNames $usedEnvironmentNames -UsedEnvironmentIds $usedEnvironmentIds)) {
             Write-Host "Leftover resource may be removable if unused: $command" -ForegroundColor DarkGray
+        }
+    }
+    if ($deletedOldJobCount -gt 0) {
+        $finalRun = Wait-ClaudeUsdReconcilerFirstSuccess -JobId $jobId -JobName ([string]$outputs.jobName.value) -DeployStartedUtc $lastDeletionUtc -Clock $Clock -Sleep $Sleep -RetryWindowMinutes 10 -HardStopMinutes 10 -MaxFailureRetries 1 -SuccessMessageSuffix ("; the dollar-budget state now comes from job {0}." -f [string]$outputs.jobName.value)
+        if ($finalRun.Status -ne 'Succeeded') {
+            Write-Warning ("Old USD reconciler jobs are deleted. The new job {0}'s next scheduled run writes the dollar-budget state. Read logs in the gateway workspace with: ContainerAppConsoleLogs | where JobName == '{0}' | order by TimeGenerated desc | take 50 ." -f [string]$outputs.jobName.value)
         }
     }
 }
@@ -348,5 +366,6 @@ elseif ($oldJobs.Count) {
     Commit = $RepositoryRef
     Image = $Image
     Run = $run
+    FinalRun = $finalRun
     OldJobsKept = $(if ($run -and $run.OldJobsKept) { @($run.OldJobsKept) } else { @() })
 }

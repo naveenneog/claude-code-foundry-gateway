@@ -43,7 +43,8 @@ exact streaming cache-creation detail remains **U13**.
   only after the replacement deploys. Cleanup uses core `az resource delete` and no longer suggests
   deleting the environment used by the replacement job; it now prints old identity role-assignment
   deletes with explicit workspace and gateway scopes before the identity delete. Upgrades now keep old jobs until the new
-  job has one successful post-deployment execution, and `-RunNow` uses ARM start/poll calls rather
+  job has one successful post-deployment execution, then start the new job once more after old-job deletion
+  so an old scheduled run cannot leave the last written state on the old code. `-RunNow` uses ARM start/poll calls rather
   than the Container Apps CLI extension. The scheduled job template now delegates gateway and
   workspace role assignments to the shared principal-id-keyed modules so a recreated per-gateway
   identity does not reuse role assignment names from the old principal

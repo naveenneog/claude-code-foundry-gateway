@@ -180,7 +180,7 @@ $cleanup = @(Invoke-Register @($old, $stable, $other) $shown -RestGets $firstFai
 $deployIndex = [array]::FindIndex($global:UsdCalls.ToArray(), [Predicate[string]]{ param($x) $x -like 'deployment group create*' })
 $deleteIndex = [array]::FindIndex($global:UsdCalls.ToArray(), [Predicate[string]]{ param($x) $x -like 'resource delete*job-usd-reconcile-old*' })
 Assert 'upgrade deletes old job only after a successful counted run and uses core az resource delete' ($global:UsdDeleted -contains $old.id -and $deployIndex -ge 0 -and $deleteIndex -gt ([array]::FindIndex($global:UsdCalls.ToArray(), [Predicate[string]]{ param($x) $x -like 'rest --method get*executions*' })) -and ($global:UsdCalls -join '|') -notmatch 'containerapp job delete') ($global:UsdCalls -join ' | ')
-Assert 'failed first execution starts another run before cleanup' (@($global:UsdCalls | Where-Object { $_ -like 'rest --method post*/start*' }).Count -eq 2 -and ($cleanup | Out-String) -match 'Run run-fail failed' -and ($cleanup | Out-String) -match 'Run run-ok succeeded')
+Assert 'failed first execution starts another run before cleanup' (@($global:UsdCalls | Where-Object { $_ -like 'rest --method post*/start*' }).Count -eq 3 -and ($cleanup | Out-String) -match 'Run run-fail failed' -and ($cleanup | Out-String) -match 'Run run-ok succeeded')
 Assert 'another gateway reconciler job is untouched' ($global:UsdDeleted -notcontains $other.id)
 $cleanupText = $cleanup | Out-String
 $workspaceRoleLine = $cleanupText.IndexOf('az role assignment delete --assignee 22222222-2222-2222-2222-222222222222 --scope /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.OperationalInsights/workspaces/log-test')
@@ -188,6 +188,19 @@ $gatewayRoleLine = $cleanupText.IndexOf('az role assignment delete --assignee 22
 $identityLine = $cleanupText.IndexOf('az identity delete')
 Assert 'cleanup prints old identity role assignment deletes before the identity delete' ($workspaceRoleLine -ge 0 -and $gatewayRoleLine -ge 0 -and $identityLine -gt $workspaceRoleLine -and $identityLine -gt $gatewayRoleLine) $cleanupText
 Assert 'cleanup prints leftover identity and environment delete commands' ($identityLine -ge 0 -and $cleanupText -match 'az containerapp env delete')
+$finalRun = @(Invoke-Register @($old, $stable) $shown -RestGets @(
+    @((New-Execution 'pre-delete-ok' Succeeded '2026-10-08T10:00:01Z' '2026-10-08T10:00:10Z')),
+    @((New-Execution 'pre-delete-ok' Succeeded '2026-10-08T10:00:01Z' '2026-10-08T10:00:10Z')),
+    @((New-Execution 'pre-delete-ok' Succeeded '2026-10-08T10:00:01Z' '2026-10-08T10:00:10Z'), (New-Execution 'post-delete-ok' Succeeded '2026-10-08T10:01:00Z' '2026-10-08T10:01:20Z'))
+))
+Assert 'after deleting old jobs the new job is started once more and only a post-delete execution satisfies the final wait' (@($global:UsdCalls | Where-Object { $_ -like 'rest --method post*/start*' }).Count -eq 2 -and ($finalRun | Out-String) -match 'state now comes from job job-usd-reconcile-stable' -and ($finalRun | Out-String) -notmatch 'Run pre-delete-ok succeeded at .*state now') ($finalRun | Out-String)
+Assert 'the final run is returned separately from the make-before-break run' (($finalRun[-1].Run.Execution -eq 'pre-delete-ok') -and ($finalRun[-1].FinalRun.Execution -eq 'post-delete-ok')) ($finalRun[-1] | ConvertTo-Json -Depth 10)
+$finalRunFailed = @(Invoke-Register @($old, $stable) $shown -RestGets @(
+    @((New-Execution 'pre-delete-ok' Succeeded '2026-10-08T10:00:01Z' '2026-10-08T10:00:10Z')),
+    @((New-Execution 'post-delete-fail' Failed '2026-10-08T10:01:00Z' '2026-10-08T10:01:20Z')),
+    @((New-Execution 'post-delete-fail' Failed '2026-10-08T10:01:00Z' '2026-10-08T10:01:20Z'))
+))
+Assert 'failed post-delete final run warns but does not throw after old jobs are deleted' ($global:UsdDeleted -contains $old.id -and ($finalRunFailed | Out-String) -match 'old USD reconciler jobs are deleted' -and $finalRunFailed[-1].FinalRun.Status -eq 'Failed') ($finalRunFailed | Out-String)
 $sharedEnvId = '/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.App/managedEnvironments/cae-shared'
 $shared = New-JobListItem 'job-usd-reconcile-shared'
 $sharedShown = @{
@@ -211,14 +224,14 @@ $oldThenNew = @(Invoke-Register @($old, $stable) $shown -RestGets @(
 ))
 Assert 'success before deployStartedUtc does not count' (($oldThenNew | Out-String) -notmatch 'Run old-ok succeeded' -and ($oldThenNew | Out-String) -match 'Run new-ok succeeded')
 $postFailure = @(Invoke-Register @($old, $stable) $shown -PostFailures 1 -RestGets @(@(New-Execution 'run-ok' Succeeded '2026-10-08T10:01:40Z' '2026-10-08T10:02:00Z')))
-Assert 'failed POST start is retried within the window and then reported by a later run' (@($global:UsdCalls | Where-Object { $_ -like 'rest --method post*/start*' }).Count -eq 2 -and ($postFailure | Out-String) -match 'Run run-ok succeeded')
+Assert 'failed POST start is retried within the window and then reported by a later run' (@($global:UsdCalls | Where-Object { $_ -like 'rest --method post*/start*' }).Count -eq 3 -and ($postFailure | Out-String) -match 'Run run-ok succeeded')
 $previousThenRunning = @(Invoke-Register @($old, $stable) $shown -RestGets @(
     @(New-Execution 'run-fail' Failed '2026-10-08T10:00:10Z' '2026-10-08T10:00:20Z'),
     @(New-Execution 'run-fail' Failed '2026-10-08T10:00:10Z' '2026-10-08T10:00:20Z'),
     @((New-Execution 'run-fail' Failed '2026-10-08T10:00:10Z' '2026-10-08T10:00:20Z'), (New-Execution 'run-new' Running '2026-10-08T10:01:35Z')),
     @((New-Execution 'run-fail' Failed '2026-10-08T10:00:10Z' '2026-10-08T10:00:20Z'), (New-Execution 'run-new' Succeeded '2026-10-08T10:01:35Z' '2026-10-08T10:02:00Z'))
 ))
-Assert 'same failed execution is handled once while a later execution appears' (@($global:UsdCalls | Where-Object { $_ -like 'rest --method post*/start*' }).Count -eq 2 -and ($previousThenRunning | Out-String) -match 'Run run-new succeeded')
+Assert 'same failed execution is handled once while a later execution appears' (@($global:UsdCalls | Where-Object { $_ -like 'rest --method post*/start*' }).Count -eq 3 -and ($previousThenRunning | Out-String) -match 'Run run-new succeeded')
 $rerun = @(Invoke-Register @($old, $stable) $shown -ExistingEnvironmentId $sharedEnvId -RestGets @(@(New-Execution 'run-fail' Failed '2026-10-08T10:00:10Z' '2026-10-08T10:00:20Z')) -RunNow)
 Assert 'no-success rerun command preserves operator parameters' (($rerun | Out-String) -match "-ExistingEnvironmentId '$([regex]::Escape($sharedEnvId))'" -and ($rerun | Out-String) -match "-Location 'eastus2'" -and ($rerun | Out-String) -match "-Image 'python:3.12.11-slim-bookworm'" -and ($rerun | Out-String) -match "-Cron '\*/5 \* \* \* \*'")
 Assert 'no Container Apps extension start or execution commands are used' (($global:UsdCalls -join '|') -notmatch 'containerapp job start|containerapp job execution')

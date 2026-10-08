@@ -185,9 +185,14 @@ first run of a new identity can therefore fail with HTTP 403 against Log
 Analytics before the next run succeeds.
 
 Older jobs for this gateway are deleted only after the replacement job has had
-one successful execution. If no new execution succeeds in the propagation window
-plus margin, the script leaves the old jobs running so `usd-budget-state` stays
-fresh, returns `Run.Status = Failed`, and prints the log query:
+one successful execution. After old jobs are deleted, the script starts the
+replacement job once more and waits for an execution that started after the last
+deletion, so `usd-budget-state` is written by the new code even if an old
+scheduled run began just before deletion completed. Live run 2 for P108 observed
+that race on 2026-10-08 (`docs/status/P108.md`, live run 2). If no new execution
+succeeds in the propagation window plus margin before deletion, the script leaves
+the old jobs running so `usd-budget-state` stays fresh, returns `Run.Status =
+Failed`, and prints the log query:
 
 ```kusto
 ContainerAppConsoleLogs
@@ -201,6 +206,11 @@ gateway are left untouched. Cleanup uses core `az resource delete --ids
 <job-resource-id>` and does not need the Container Apps CLI extension. The
 immediate `-RunNow` path uses the same ARM `az rest` start/poll flow and also
 needs no Container Apps CLI extension.
+
+If the post-deletion final run fails, the old jobs remain deleted and the script
+warns that the new job's next scheduled run writes the state. The returned object
+keeps the make-before-break run in `Run` and the post-deletion attempt in
+`FinalRun`.
 
 When an older job is deleted, the script prints explicit cleanup commands for
 the old identity's workspace-scoped `Log Analytics Reader` assignment and

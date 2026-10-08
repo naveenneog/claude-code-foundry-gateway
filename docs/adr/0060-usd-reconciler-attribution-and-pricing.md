@@ -74,6 +74,11 @@ are kept so state stays fresh and the operator gets the log query and rerun comm
 Job deletion uses core ARM resource deletion. The immediate `-RunNow` path uses the
 same ARM start/poll flow, not the Container Apps CLI extension.
 
+After deleting old jobs, the register script starts the replacement job once more
+and waits for a post-deletion success. Live run 2 for P108 showed that an old
+job can begin a scheduled run before deletion finishes and can overwrite the
+new state for one interval (`docs/status/P108.md`, live run 2, 2026-10-08).
+
 On `main`, each scheduled-reconciler registration created a commit-specific
 Container Apps job, optional environment and user-assigned identity. From this
 release, one job and one identity per gateway are updated in place. Older
