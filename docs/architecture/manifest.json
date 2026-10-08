@@ -418,7 +418,7 @@
         "scripts/Register-ClaudeUsdReconciler.ps1": "a253e2e0af780e2db0f63bf94b214a80f155cfe0b1dd4ac3a4d69724342c4fef",
         "scripts/Sync-ClaudeUsdBudgets.ps1": "f0d5c3d6d0fb2da6b06b75c38cfecad9773bdadb97803027645910696a1d3d5c",
         "scripts/flow/Budgets.ps1": "3ed6297fd227e6365f92f29e27ded8bd98947375ff7eab39e235682423c00cea",
-        "service/aum/aum_service/usd_budgets.py": "3116ebbf9b41b7256787876a5cc5f60cb9dbdb863a71772ffa05114fa723079c",
+        "service/aum/aum_service/usd_budgets.py": "5fa99c8ae7c89e94c10f17f98c247fd8a06027778ee6cee4523a2aaa5e0f6edd",
         "service/aum/aum_service/usd_reconcile.py": "130e68bbeea6d7da5f53eb0a266f8a5d238c5758ce0aa2f69ef538b52a8fc14c",
         "service/aum/aum_service/usd_service.py": "fe4098efe549e177354e7ae9091f3ae8f9b2b9445fafb20091f3ba1d09105184",
         "service/aum/function_app.py": "cc2ded40782dc82a0252449f1d46bbf74feb1282345ee0e1ef45e8f85da7f83a"
