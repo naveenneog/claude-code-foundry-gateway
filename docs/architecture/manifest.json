@@ -27,7 +27,7 @@
         "scripts/Connect-ClaudeTurnstile.ps1": "cc4e2c094aaab8ce75856a3ba770d844bd32333d4f8b42f53f91cabdd1129201",
         "scripts/Export-ClaudeTurnstileUsage.ps1": "d68e00c953f4bb47492b39862b263377d33ccdf39f15c0e26bb2fbfa783efdb6",
         "scripts/Grant-ClaudeGovernanceGraphAccess.ps1": "2313313010eef6867f730bbb1803b7a0a68113a3ad961f798627e274aff56b1a",
-        "scripts/Publish-ClaudeQueries.ps1": "dd94b1cb26d46f170bb6dd3db182959ed31adaa30ded3361693c5fceb4dfb3de",
+        "scripts/Publish-ClaudeQueries.ps1": "11c02390f693f95953cbcf53ae719ac012a98b2d7c8238722205e58de83b4d3c",
         "scripts/Setup-ClaudeWorkstation.ps1": "540c547d8af1dedc264bd5ac9575e413b2c3564f2554187c55025b3cbd7e0b95",
         "scripts/Sync-ClaudeAccess.ps1": "423e66dd6bf75c4c784d6e25512ac608cad9c34de97b1475e85559ed97eb0af5",
         "scripts/Sync-ClaudeProjection.ps1": "15f69ff44710887ba1379540aa7a7e263b229859338b4d66660239223872cad4",
@@ -66,7 +66,7 @@
         "infra/turnstile-schedule.bicep": "54d4b2d5897a14fd580887113f697fafc3cb2993b70b5cf7368adead956a9e36",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "resolver/src/entitlement.mjs": "1cdde9356db441d02c894024720f5f0ae926bd75e350515d861213cef260aed4",
-        "scripts/Publish-ClaudeQueries.ps1": "dd94b1cb26d46f170bb6dd3db182959ed31adaa30ded3361693c5fceb4dfb3de",
+        "scripts/Publish-ClaudeQueries.ps1": "11c02390f693f95953cbcf53ae719ac012a98b2d7c8238722205e58de83b4d3c",
         "scripts/get-foundry-token.ps1": "253049bb1d9c2066e9d1dcfeea4f1033d6f81569c222163a2db3777d46875ba4"
       },
       "outputs": [
@@ -264,7 +264,7 @@
         "scripts/ClaudeChargebackQuery.ps1": "2dc713c7bd244848e206e09860b791a4a2c713639dd1516e4003fd56559d75a5",
         "scripts/ClaudeChargebackStorage.ps1": "84ff430d005e37806a8be282ff5628bc011bc8ca9cc12b43203d5b1b3f9df4e1",
         "scripts/Invoke-ClaudeChargebackSchedule.ps1": "6e6dceac5c7d8f68340d4d8688fc4ff25ffa4e01feaf85bf26c115ad067a74ed",
-        "scripts/Publish-ClaudeQueries.ps1": "dd94b1cb26d46f170bb6dd3db182959ed31adaa30ded3361693c5fceb4dfb3de"
+        "scripts/Publish-ClaudeQueries.ps1": "11c02390f693f95953cbcf53ae719ac012a98b2d7c8238722205e58de83b4d3c"
       },
       "outputs": [
         {
