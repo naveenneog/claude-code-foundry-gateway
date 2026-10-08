@@ -156,16 +156,50 @@ Assert 'query publisher treats defaulted and explicit equal decimal-scale rates 
     (Get-ClaudeQueryEffectivePriceRateKey $scalePublisherA 'scaled.model') -eq
     (Get-ClaudeQueryEffectivePriceRateKey $scalePublisherB 'scaled-model')
 )
+function Test-UnsafeRepoPriceBookTouch {
+    param([Parameter(Mandatory = $true)][string]$Text)
+    $withoutProbeData = [regex]::Replace($Text, '(?s)\$knownBadPriceBookTouches\s*=\s*@\(.*?\)\s*\$knownSafePriceBookTouches\s*=\s*@\(.*?\)', '')
+    $direct = '(?is)(Set-Content|Out-File|WriteAllText|Delete|Remove-Item|Move-Item|Copy-Item|open\s*\()[^\r\n;]*(Join-Path\s+\$root\s+[''"]config[\\/]price-book\.json|Join-Path\s+\$root\s+[''"]config[''"]\s+[''"]price-book\.json|\$root[\\/]+config[\\/]+price-book\.json)'
+    if ($withoutProbeData -match $direct) { return $true }
+    if ($withoutProbeData -match '(?is)Path\(\s*root\s*,\s*[''"]config[''"]\s*,\s*[''"]price-book\.json[''"]\s*\)\.write_text\s*\(') { return $true }
+    $assigned = @([regex]::Matches($withoutProbeData, '(?im)^\s*(\$\w+)\s*=\s*(?:Join-Path\s+\$root\s+[''"]config[\\/]price-book\.json[''"]|Join-Path\s+\$root\s+[''"]config[''"]\s+[''"]price-book\.json[''"]|["'']\$root[\\/]config[\\/]price-book\.json["''])') |
+        ForEach-Object { [regex]::Escape($_.Groups[1].Value) })
+    foreach ($variable in $assigned) {
+        if ($withoutProbeData -match "(?is)(Set-Content|Out-File|WriteAllText|Delete|Remove-Item|Move-Item|Copy-Item|open\s*\(|write_text\s*\()[^\r\n;]*$variable\b") {
+            return $true
+        }
+    }
+    return $false
+}
+$knownBadPriceBookTouches = @(
+    "Copy-Item `$src (Join-Path `$root 'config\price-book.json')",
+    "`$book = Join-Path `$root 'config\price-book.json'; Remove-Item -LiteralPath `$book",
+    "Copy-Item `$src -Destination (Join-Path `$root 'config\price-book.json')",
+    "`$book = Join-Path `$root 'config' 'price-book.json'; Remove-Item `$book",
+    "Set-Content ""`$root\config\price-book.json"" 'x'",
+    "[IO.File]::Delete((Join-Path `$root 'config\price-book.json'))",
+    "'x' | Out-File (Join-Path `$root 'config\price-book.json')",
+    "from pathlib import Path; Path(root, 'config', 'price-book.json').write_text('x')"
+)
+$knownSafePriceBookTouches = @(
+    "`$book = Join-Path `$env:TEMP 'price-book.json'; Remove-Item -LiteralPath `$book",
+    "[IO.File]::WriteAllText((Join-Path ([IO.Path]::GetTempPath()) 'price-book.json'), 'x')"
+)
+foreach ($probe in $knownBadPriceBookTouches) {
+    Assert 'price-book guard flags known unsafe repo writes' (Test-UnsafeRepoPriceBookTouch $probe) $probe
+}
+foreach ($probe in $knownSafePriceBookTouches) {
+    Assert 'price-book guard ignores scratch-path writes' (-not (Test-UnsafeRepoPriceBookTouch $probe)) $probe
+}
 $testSourceRoots = @((Join-Path $root 'tests'), (Join-Path $root 'tests\aum_service'))
 $unsafePriceBookTouches = @()
 foreach ($sourceRoot in $testSourceRoots) {
     Get-ChildItem -LiteralPath $sourceRoot -Recurse -File -Include *.ps1,*.py | ForEach-Object {
-        $text = Get-Content -LiteralPath $_.FullName -Raw
-        $writesRepoPriceBook = $text -match '(?is)(Set-Content|WriteAllText|Remove-Item|Move-Item|Copy-Item|open\s*\()[^`r`n;]*(config[\\/]|Join-Path\s+\$root\s+[''"]config[\\/])price-book\.json'
-        $repoPriceVariable = [regex]::Match($text, '(?im)^\s*(\$\w+)\s*=\s*Join-Path\s+\$root\s+[''"]config[\\/]price-book\.json[''"]')
-        $writesRepoPriceVariable = $repoPriceVariable.Success -and $text -match ('(?is)(Set-Content|WriteAllText|Remove-Item|Move-Item|Copy-Item|open\s*\()[^`r`n;]*' + [regex]::Escape($repoPriceVariable.Groups[1].Value))
-        if ($writesRepoPriceBook -or $writesRepoPriceVariable) {
-            $unsafePriceBookTouches += $_.FullName.Substring($root.Length + 1)
+        if ($_.Name -notin 'Test-All.ps1', 'Test-RunnerIntegrity.ps1', 'Test-UsdBudgets.ps1') {
+            $text = Get-Content -LiteralPath $_.FullName -Raw
+            if (Test-UnsafeRepoPriceBookTouch $text) {
+                $unsafePriceBookTouches += $_.FullName.Substring($root.Length + 1)
+            }
         }
     }
 }

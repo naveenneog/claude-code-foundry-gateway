@@ -55,6 +55,50 @@ if ($sharded -or $LocalOnly) {
     }
 }
 
+function Get-TestAllFileHash {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
+function New-TestAllPriceBookSnapshot {
+    param([Parameter(Mandatory = $true)][string]$Root, [Parameter(Mandatory = $true)][string]$ScratchRoot)
+    $path = Join-Path $Root 'config\price-book.json'
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+        return [pscustomobject]@{ Exists = $false; Path = $path; Backup = ''; Sha256 = '' }
+    }
+    $backup = Join-Path $ScratchRoot 'operator-price-book.json'
+    New-Item -ItemType Directory -Path $ScratchRoot -Force | Out-Null
+    Copy-Item -LiteralPath $path -Destination $backup -Force
+    return [pscustomobject]@{ Exists = $true; Path = $path; Backup = $backup; Sha256 = Get-TestAllFileHash $path }
+}
+
+function Restore-TestAllPriceBookSnapshot {
+    param($Snapshot)
+    if ($Snapshot -and $Snapshot.Exists -and (Test-Path -LiteralPath $Snapshot.Backup -PathType Leaf)) {
+        New-Item -ItemType Directory -Path (Split-Path $Snapshot.Path -Parent) -Force | Out-Null
+        Copy-Item -LiteralPath $Snapshot.Backup -Destination $Snapshot.Path -Force
+    }
+}
+
+function Test-TestAllPriceBookSnapshot {
+    param($Snapshot, [Parameter(Mandatory = $true)][string]$SuiteName)
+    if (-not $Snapshot -or -not $Snapshot.Exists) { return '' }
+    $problem = ''
+    if (-not (Test-Path -LiteralPath $Snapshot.Path -PathType Leaf)) {
+        $problem = "config\price-book.json was deleted by $SuiteName"
+    }
+    elseif ((Get-TestAllFileHash $Snapshot.Path) -cne $Snapshot.Sha256) {
+        $problem = "config\price-book.json was modified by $SuiteName"
+    }
+    if ($problem) {
+        Restore-TestAllPriceBookSnapshot $Snapshot
+        return "$problem; restored the original operator price book."
+    }
+    return ''
+}
+
+$priceBookSnapshot = New-TestAllPriceBookSnapshot -Root $root -ScratchRoot $runDirectory
+
 function Invoke-Check {
     param(
         [string]$Name, [string]$Script, [hashtable]$Params = @{},
@@ -104,6 +148,8 @@ function Set-CheckFailure($check, [string]$Message) {
     $output = ''
     if ($check.Stdout -and $check.Stdout.IsCompletedSuccessfully) { $output += $check.Stdout.Result }
     if ($check.Stderr -and $check.Stderr.IsCompletedSuccessfully) { $output += $check.Stderr.Result }
+    $priceBookProblem = Test-TestAllPriceBookSnapshot $priceBookSnapshot $check.Name
+    if ($priceBookProblem) { $Message += " $priceBookProblem" }
     Set-CheckResult $check 'FAIL' ($output + "`n  FAIL - $Message")
 }
 
@@ -159,6 +205,11 @@ function Receive-Check($check) {
     if ($check.Process.HasExited -and $check.Stdout.IsCompleted -and $check.Stderr.IsCompleted) {
         $code = $check.Process.ExitCode
         $output = $check.Stdout.GetAwaiter().GetResult() + $check.Stderr.GetAwaiter().GetResult()
+        $priceBookProblem = Test-TestAllPriceBookSnapshot $priceBookSnapshot $check.Name
+        if ($priceBookProblem) {
+            $code = if ($code -ne 0) { $code } else { 1 }
+            $output += "`n  FAIL - $priceBookProblem"
+        }
         if ($code -ne 0) { $output += "`n  FAIL - process exited $code" }
         Set-CheckResult $check $(if ($code -eq 0) { 'PASS' } else { 'FAIL' }) $output $code
         Stop-CheckProcess $check
@@ -408,6 +459,7 @@ finally {
     foreach ($check in @($active.ToArray())) {
         try { Stop-CheckProcess $check } catch { Write-Warning $_.Exception.Message }
     }
+    Restore-TestAllPriceBookSnapshot $priceBookSnapshot
     Remove-Item -LiteralPath $runDirectory -Recurse -Force -ErrorAction SilentlyContinue
 }
 

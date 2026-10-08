@@ -42,12 +42,17 @@ try {
 function Invoke-Scenario {
     param(
         [string]$RunnerText, [hashtable]$Behaviour = @{}, [string[]]$Missing = @(),
-        [string[]]$Options = @('-ThrottleLimit', '3', '-CheckTimeoutSeconds', '60')
+        [string[]]$Options = @('-ThrottleLimit', '3', '-CheckTimeoutSeconds', '60'),
+        [string]$PriceBookContent = ''
     )
     $dir = Join-Path $scratch ([guid]::NewGuid().ToString('N') + " space's")
     $tests = Join-Path $dir 'tests'
     $marks = Join-Path $dir 'marks'
     New-Item -ItemType Directory -Path $tests, $marks, (Join-Path $dir 'scripts') -Force | Out-Null
+    if ($PriceBookContent) {
+        New-Item -ItemType Directory -Path (Join-Path $dir 'config') -Force | Out-Null
+        [IO.File]::WriteAllText((Join-Path $dir 'config\price-book.json'), $PriceBookContent)
+    }
     [IO.File]::WriteAllText((Join-Path $tests 'Test-All.ps1'), $RunnerText)
     foreach ($support in 'TestAll-Sharding.ps1', 'test-all-durations.json', 'test-all-local-only.json') {
         $supportPath = Join-Path $PSScriptRoot $support
@@ -204,6 +209,19 @@ try {
     $overlap = @($r.Ran | Where-Object { $_.Proc -ne $exclusive.Proc -and $_.Start -lt $exclusive.End -and $_.End -gt $exclusive.Start })
     Assert 'an exclusive check never overlaps another check' ($exclusive -and $overlap.Count -eq 0)
     Assert 'every process has a private scratch directory' (@($r.Ran.Temp | Sort-Object -Unique).Count -eq $r.Ran.Count)
+    $operatorBook = '{"models":{"keep":{"inputPerM":1,"outputPerM":5}}}'
+    $deleteBook = Invoke-Scenario $mini -PriceBookContent $operatorBook -Behaviour @{
+        'First.ps1' = "Remove-Item -LiteralPath (Join-Path (Split-Path `$PSScriptRoot -Parent) 'config\price-book.json') -Force; exit 0"
+    }
+    $deleteBookPath = Split-Path $deleteBook.Marks -Parent
+    $deleteBookContent = [IO.File]::ReadAllText((Join-Path $deleteBookPath 'config\price-book.json'))
+    Assert 'Test-All restores and fails the suite that deletes an operator price book' ($deleteBook.Exit -ne 0 -and $deleteBook.Output -match 'config\\price-book\.json was deleted by first' -and $deleteBookContent -ceq $operatorBook) $deleteBook.Output
+    $changeBook = Invoke-Scenario $mini -PriceBookContent $operatorBook -Behaviour @{
+        'Second.ps1' = "[IO.File]::WriteAllText((Join-Path (Split-Path `$PSScriptRoot -Parent) 'config\price-book.json'), 'changed'); exit 0"
+    }
+    $changeBookPath = Split-Path $changeBook.Marks -Parent
+    $changeBookContent = [IO.File]::ReadAllText((Join-Path $changeBookPath 'config\price-book.json'))
+    Assert 'Test-All restores and fails the suite that modifies an operator price book' ($changeBook.Exit -ne 0 -and $changeBook.Output -match 'config\\price-book\.json was modified by second' -and $changeBookContent -ceq $operatorBook) $changeBook.Output
 
     $shardRuns = @(
         Invoke-Scenario $mini -Options @('-ShardIndex', '0', '-ShardCount', '2', '-ThrottleLimit', '3')
