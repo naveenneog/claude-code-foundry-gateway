@@ -498,7 +498,7 @@ The sync job in `infra/projection-renewal.bicep` applies Entra tier and business
 schedule. It declares an internal Container Apps environment, a Container Apps job that runs every 2 hours by
 default (`-SyncInterval` sets 30 minutes to 12 hours, or manual; [ADR-0058](adr/0058-scheduled-projection-sync.md)), a
 container-scoped Cosmos SQL data-plane writer role, an email-backed action group and alerts. A
-scheduled job adds the no-success alert, which reads 2 x the interval + 15 minutes; failed-run and Graph-denied alerts remain.
+scheduled job adds the no-success alert, which fires after 2 x the interval + 15 minutes without a successful run; failed-run and Graph-denied alerts remain.
 The job writes destination-bound status records in the entitlement container. It is not required for
 switching.
 

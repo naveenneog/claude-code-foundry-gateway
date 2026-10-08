@@ -251,20 +251,43 @@ module gatewayReader 'projection-renewal-gateway-reader.bicep' = {
 // (U108). The fuzzy union with an empty table lets a rule deploy before the job's first console
 // line exists (U109). The quoted events are the last lines sync/src/apply-projection.mjs prints
 // (sync/src/events.mjs); tests/projection-renewal-runs.test.mjs matches them against real runs.
-// {window} is the minutes a rule reads: 45 for the failure rules, noSuccessMinutes for the no-success rule.
+// {window} is the minutes a rule reads: 45 for the failure rules, noSuccessRangeMinutes for the no-success rule.
 // Bicep does not interpolate ''' strings, so each rule joins renewalLogs and its query in a one-line string.
 var renewalLogs = '''
 union isfuzzy=true (datatable(TimeGenerated: datetime, JobName: string, Log: string) []), ContainerAppConsoleLogs
 | where TimeGenerated > ago({window}m) and JobName == "{jobName}"
 '''
 
-// A summarize without by returns one row; the last where keeps it only when no run succeeded (U108). Learn
-// requires a datetime column only for more than one violation; this rule counts one (U170).
+// A summarize without by returns one row, with a null LastSuccess when nothing matched; the last where keeps it
+// only when no run succeeded within {threshold} minutes (U108). Learn requires a datetime column only for more
+// than one violation; this rule counts one (U170).
 var noSuccessQuery = '''
 | where Log contains '"event":"projection-renewal-succeeded"'
-| summarize Succeeded = count()
-| where Succeeded == 0
+| summarize LastSuccess = max(TimeGenerated)
+| where isnull(LastSuccess) or LastSuccess < ago({threshold}m)
 '''
+
+// Azure Monitor accepts only these query ranges, in minutes: the deployment of PT75M was refused on 2026-10-08
+// with InvalidRequestContent, "Supported granularities are: 5, 10, 15, 30, 45, 60, 120, 180, 240, 300, 360, 720,
+// 1440, 2880" (U167). The no-success rule reads the smallest of them that covers noSuccessMinutes, and its query
+// compares the newest success with noSuccessMinutes, so the alert time stays 2 x the interval + 15 minutes.
+var supportedQueryRangeMinutes = [
+  5
+  10
+  15
+  30
+  45
+  60
+  120
+  180
+  240
+  300
+  360
+  720
+  1440
+  2880
+]
+var noSuccessRangeMinutes = first(filter(supportedQueryRangeMinutes, minutes => minutes >= noSuccessMinutes))
 
 var alertDefinitions = [
   {
@@ -297,12 +320,12 @@ resource noSuccessAlert 'Microsoft.Insights/scheduledQueryRules@2023-12-01' = if
     ]
     evaluationFrequency: 'PT5M'
     windowSize: 'PT5M'
-    overrideQueryTimeRange: 'PT${noSuccessMinutes}M'
+    overrideQueryTimeRange: 'PT${noSuccessRangeMinutes}M'
     severity: 2
     criteria: {
       allOf: [
         {
-          query: replace(replace('${renewalLogs}${noSuccessQuery}', '{jobName}', jobName), '{window}', string(noSuccessMinutes))
+          query: replace(replace(replace('${renewalLogs}${noSuccessQuery}', '{jobName}', jobName), '{window}', string(noSuccessRangeMinutes)), '{threshold}', string(noSuccessMinutes))
           timeAggregation: 'Count'
           operator: 'GreaterThan'
           threshold: 0

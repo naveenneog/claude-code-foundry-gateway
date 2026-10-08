@@ -43,7 +43,7 @@ exact streaming cache-creation detail remains **U13**.
   `-ExpectedStandardGroup`/`-ExpectedPremiumGroup` refuses groups other than the given object ids. An installer
   re-run stops before any write when the job's registry has public network access disabled.
   Each run writes only changed developers; an unattended run that would delete more than max(10, 10% of the
-  records) writes nothing and ends at stage `removal-ceiling`. The no-success alert reads 2 x the interval + 15
+  records) writes nothing and ends at stage `removal-ceiling`. The no-success alert fires after 2 x the interval + 15
   minutes under one rule name; the deploy script removes P97's `-no-success-45m` rule, whose query held the
   literal text `${renewalLogs}` because Bicep does not interpolate `'''` strings. The deploy script reports
   whether the job identity holds Microsoft Graph `GroupMember.Read.All` and never grants it.

@@ -208,6 +208,12 @@ Runs a month use 730 hours (`scripts/AzureRetailPrice.ps1`). Container Apps eval
 Intervals shorter than 30 minutes are refused. 24 hours is not offered: its no-success range, 2 x 1,440 + 15
 minutes, is longer than the 2 days a log search alert can read.
 
+The no-success alert fires when the newest successful run is older than the range in the table. Azure Monitor
+accepts only some query ranges: the P104 live run's 75-minute range was refused with "Supported granularities
+are: 5, 10, 15, 30, 45, 60, 120, 180, 240, 300, 360, 720, 1440, 2880" (2026-10-08, U167). The rule therefore
+queries the smallest of them that covers the range: 120 minutes for `30m`, 180 for `1h`, 300 for `2h`, 720 for
+`3h` and `4h`, 1,440 for `6h` and `8h`, and 2,880 for `12h`.
+
 Timing:
 
 - A developer added to a tier group gets access at the next run. A refusal the gateway cached for that

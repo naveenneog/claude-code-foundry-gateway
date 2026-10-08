@@ -14,6 +14,8 @@ function Assert($Label, [bool]$Condition, $Detail = '') {
 
 $work = Join-Path ([IO.Path]::GetTempPath()) ('projection-renewal-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force -Path $work | Out-Null
+# The interval table (P104) that the deploy script passes to the template.
+. (Join-Path $root 'scripts\ClaudeProjectionSchedule.ps1')
 
 # Each az bicep build takes about 13 s, nearly all of it CLI start-up, so the templates compile at once.
 $templateFiles = 'infra\projection-network.bicep', 'infra\projection-registry.bicep', 'infra\projection-renewal.bicep'
@@ -204,7 +206,7 @@ try {
             Assert "$($definition.name): it matches the job's $expected line" ($expected -and $query.Contains("'`"event`":`"$expected`"'")) $query
         }
         Assert 'the expiry-margin alert is removed because records persist until sync changes them' (-not (($definitions | ForEach-Object name) -contains 'expiry-margin-60m')) (($definitions | ForEach-Object name) -join ',')
-        # P104 (ADR-0058): the stale-success rule reads 2 x interval + 15 minutes, which the deploy script passes in
+        # P104 (ADR-0058): the stale-success rule fires after 2 x interval + 15 minutes, which the deploy script passes in
         # minutes; it has one name for every interval and exists only for a schedule.
         $bicepText = [IO.File]::ReadAllText((Join-Path $root 'infra\projection-renewal.bicep'))
         $rangeParameter = $renewalTemplate.parameters.noSuccessMinutes
@@ -217,9 +219,29 @@ try {
         $noSuccess = $res | Where-Object { $_.type -eq 'Microsoft.Insights/scheduledQueryRules' -and [string]$_.name -match 'no-success' } | Select-Object -First 1
         Assert 'the stale-success rule has one name for every interval' ([string]$noSuccess.name -ceq "[format('sqr-projection-{0}-no-success', parameters('namePrefix'))]") ([string]$noSuccess.name)
         $rangeQuery = [string]@($noSuccess.properties.criteria.allOf)[0].query
-        Assert 'the stale-success query and its time range read the no-success range' (
-            $rangeQuery -match "'\{window\}', string\(parameters\('noSuccessMinutes'\)\)" -and
-            [string]$noSuccess.properties.overrideQueryTimeRange -ceq "[format('PT{0}M', parameters('noSuccessMinutes'))]") "$rangeQuery | $($noSuccess.properties.overrideQueryTimeRange)"
+        # Azure Monitor accepts only these query ranges for a log search alert: the P104 live run's deployment of
+        # PT75M was refused on 2026-10-08 with ARM InvalidRequestContent, "Supported granularities are: 5, 10, 15,
+        # 30, 45, 60, 120, 180, 240, 300, 360, 720, 1440, 2880" (U167). The rule therefore reads the smallest accepted
+        # range that covers the no-success minutes and compares the newest success with the minutes themselves.
+        $accepted = @(5, 10, 15, 30, 45, 60, 120, 180, 240, 300, 360, 720, 1440, 2880)
+        $templateRanges = @($renewalTemplate.variables.supportedQueryRangeMinutes | ForEach-Object { [int]$_ })
+        Assert 'the template lists the query ranges Azure Monitor accepts' (($templateRanges -join ',') -ceq ($accepted -join ',')) ($templateRanges -join ',')
+        $rangeExpression = [string]$renewalTemplate.variables.noSuccessRangeMinutes
+        Assert 'the no-success query range is the first accepted range at or above the no-success minutes' (
+            $rangeExpression -match "^\[first\(filter\(variables\('supportedQueryRangeMinutes'\), lambda\('minutes', greaterOrEquals\(lambdaVariables\('minutes'\), parameters\('noSuccessMinutes'\)\)\)\)\)\]$") $rangeExpression
+        $chosenRanges = foreach ($interval in @(Get-ClaudeProjectionSyncIntervals | Where-Object { $_ -cne 'manual' })) {
+            $minutes = (ConvertTo-ClaudeProjectionSyncSchedule -Interval $interval).NoSuccessMinutes
+            "$interval=" + [string](@($templateRanges | Where-Object { $_ -ge $minutes }) | Select-Object -First 1)
+        }
+        Assert 'every interval gets an accepted range that covers its no-success minutes' (($chosenRanges -join ',') -ceq '30m=120,1h=180,2h=300,3h=720,4h=720,6h=1440,8h=1440,12h=2880') ($chosenRanges -join ',')
+        Assert 'the stale-success rule reads the accepted range and alerts on the no-success minutes' (
+            $rangeQuery -match "'\{window\}', string\(variables\('noSuccessRangeMinutes'\)\)" -and
+            $rangeQuery -match "'\{threshold\}', string\(parameters\('noSuccessMinutes'\)\)" -and
+            [string]$noSuccess.properties.overrideQueryTimeRange -ceq "[format('PT{0}M', variables('noSuccessRangeMinutes'))]") "$rangeQuery | $($noSuccess.properties.overrideQueryTimeRange)"
+        $noSuccessText = [string]$renewalTemplate.variables.noSuccessQuery
+        Assert 'the no-success query compares the newest success with the threshold, and an empty log alerts' (
+            $noSuccessText -match 'summarize LastSuccess = max\(TimeGenerated\)' -and
+            $noSuccessText -match '\| where isnull\(LastSuccess\) or LastSuccess < ago\(\{threshold\}m\)') $noSuccessText
         Assert 'the stale-success rule is evaluated every 5 minutes over 5-minute bins' ($noSuccess.properties.evaluationFrequency -eq 'PT5M' -and $noSuccess.properties.windowSize -eq 'PT5M')
         Assert 'the stale-success description names the range' ([string]$noSuccess.properties.description -match "parameters\('noSuccessMinutes'\)") ([string]$noSuccess.properties.description)
         $failureRules = @($res | Where-Object { $_.type -eq 'Microsoft.Insights/scheduledQueryRules' -and [string]$_.name -notmatch 'no-success' })

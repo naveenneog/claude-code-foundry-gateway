@@ -70,9 +70,12 @@ USD 0.00003 per run-second above the subscription's monthly free grant.
    assignments and prints whether it holds `GroupMember.Read.All`, and if not, the grant command. It writes
    nothing in Microsoft Graph. Until the grant, scheduled runs stop at the Graph stage, write nothing and fire
    the Graph-denied alert.
-4. **Alerts follow the interval.** The no-success rule reads 2 x interval + 15 minutes (75 minutes for `30m`,
-   24 hours 15 minutes for `12h`) through `overrideQueryTimeRange`, with a 5-minute window and evaluation, and
-   has one name for every interval. The deploy script removes the earlier `-no-success-45m` rule. P97's rule
+4. **Alerts follow the interval.** The no-success rule fires when the newest successful run is older than
+   2 x interval + 15 minutes (75 minutes for `30m`, 24 hours 15 minutes for `12h`), with a 5-minute window and
+   evaluation, and has one name for every interval. Azure Monitor accepts only some query ranges (5, 10, 15, 30,
+   45, 60, 120, 180, 240, 300, 360, 720, 1,440 and 2,880 minutes; it refused 75 minutes in the P104 live run,
+   U167), so `overrideQueryTimeRange` is the smallest of them that covers that time and the query compares the
+   newest success with it. The deploy script removes the earlier `-no-success-45m` rule. P97's rule
    query held the literal text `${renewalLogs}`, because Bicep does not interpolate `'''` strings; the rule
    joins its query in a one-line string, and `tests/Test-ProjectionRenewal.ps1` refuses `${` in any compiled
    rule query.
