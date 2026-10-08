@@ -71,5 +71,76 @@ if ($loaded) {
     }
 }
 
+# The deployed job, found by its claude-projection-prefix tag with core az resource commands (the installer
+# keeps its interval on a re-run; Set-ClaudeProjectionSyncSchedule.ps1 changes it).
+$lookupModule = Join-Path (Split-Path $PSScriptRoot -Parent) 'scripts\ClaudeProjectionSyncJob.ps1'
+Assert 'the job lookup module exists' (Test-Path -LiteralPath $lookupModule) $lookupModule
+if (Test-Path -LiteralPath $lookupModule) { . $lookupModule }
+$hasLookup = [bool](Get-Command Get-ClaudeProjectionSyncJob -ErrorAction SilentlyContinue)
+Assert 'it defines Get-ClaudeProjectionSyncJob' $hasLookup
+if ($hasLookup) {
+    $rgId = '/subscriptions/00000000-0000-4000-8000-000000000104/resourceGroups/rg-p104'
+    $global:P104Jobs = @{ Case = ''; Calls = $null }
+    function global:az {
+        $line = @($args | ForEach-Object { [string]$_ }) -join ' '
+        $state = $global:P104Jobs
+        $state.Calls.Add($line)
+        $global:LASTEXITCODE = 0
+        if ($line -ceq 'resource list -g rg-p104 --resource-type Microsoft.App/jobs -o json') {
+            if ($state.Case -eq 'list-fails') { $global:LASTEXITCODE = 1; return 'ERROR: (AuthorizationFailed) no read' }
+            $jobs = @(
+                @{ id = "$rgId/providers/Microsoft.App/jobs/caj-renew-a"; name = 'caj-renew-a'; tags = @{ 'claude-projection-prefix' = 'p104fixture' } }
+                @{ id = "$rgId/providers/Microsoft.App/jobs/caj-renew-b"; name = 'caj-renew-b'; tags = @{ 'claude-projection-prefix' = 'otherfixture' } }
+                @{ id = "$rgId/providers/Microsoft.App/jobs/job-reports"; name = 'job-reports'; tags = $null }
+            )
+            if ($state.Case -eq 'two-jobs') { $jobs += @{ id = "$rgId/providers/Microsoft.App/jobs/caj-renew-c"; name = 'caj-renew-c'; tags = @{ 'claude-projection-prefix' = 'p104fixture' } } }
+            if ($state.Case -eq 'no-job') { $jobs = @($jobs[1], $jobs[2]) }
+            return (ConvertTo-Json -Depth 5 @($jobs))
+        }
+        if ($line -ceq "resource show --ids $rgId/providers/Microsoft.App/jobs/caj-renew-a --api-version 2024-03-01 -o json") {
+            $trigger = if ($state.Case -eq 'manual') { 'Manual' } else { 'Schedule' }
+            $cron = if ($state.Case -eq 'odd-cron') { '15 */2 * * *' } else { '0 */2 * * *' }
+            $image = if ($state.Case -eq 'tag-image') { 'acrp104.azurecr.io/claude-projection-sync:latest' } else { 'acrp104.azurecr.io/claude-projection-sync@sha256:' + ('e' * 64) }
+            return (@{ id = "$rgId/providers/Microsoft.App/jobs/caj-renew-a"; name = 'caj-renew-a'; properties = @{
+                        configuration = @{ triggerType = $trigger; scheduleTriggerConfig = $(if ($trigger -eq 'Schedule') { @{ cronExpression = $cron } } else { $null }) }
+                        template = @{ containers = @(@{ name = 'projection-renewal'; image = $image; env = @(
+                                        @{ name = 'PROJECTION_STANDARD_GROUP_ID'; value = '10000000-0000-4000-8000-000000000001' }
+                                        @{ name = 'PROJECTION_PREMIUM_GROUP_ID'; value = 'none' }) }) } } } | ConvertTo-Json -Depth 8)
+        }
+        $global:LASTEXITCODE = 9
+        return "stub az has no answer for: $line"
+    }
+    function Find-Job([string]$Case, [string]$ResourceGroup = 'rg-p104', [string]$Prefix = 'p104fixture') {
+        $global:P104Jobs.Case = $Case
+        $global:P104Jobs.Calls = [Collections.Generic.List[string]]::new()
+        $failure = $null; $job = $null
+        try { $job = Get-ClaudeProjectionSyncJob -ResourceGroup $ResourceGroup -NamePrefix $Prefix } catch { $failure = $_.Exception.Message }
+        [pscustomobject]@{ Job = $job; Failure = $failure; Calls = @($global:P104Jobs.Calls) }
+    }
+    $found = Find-Job 'scheduled'
+    Assert 'the job tagged with the prefix is found, with its interval, digest and groups' (-not $found.Failure -and $found.Job.Name -ceq 'caj-renew-a' -and
+        $found.Job.Interval -ceq '2h' -and $found.Job.Cron -ceq '0 */2 * * *' -and $found.Job.TriggerType -ceq 'Schedule' -and $found.Job.ImageDigest -ceq ('sha256:' + ('e' * 64)) -and
+        $found.Job.StandardGroupId -ceq '10000000-0000-4000-8000-000000000001' -and $found.Job.PremiumGroupId -ceq 'none') "$($found.Failure) | $($found.Job | ConvertTo-Json -Compress)"
+    Assert 'the lookup uses core az resource commands, with no --query and no containerapp extension' ($found.Calls.Count -eq 2 -and
+        @($found.Calls | Where-Object { $_ -match '--query|^containerapp' }).Count -eq 0) ($found.Calls -join ' | ')
+    $manual = Find-Job 'manual'
+    Assert 'a manual job reads as manual' ($manual.Job.Interval -ceq 'manual' -and $manual.Job.Cron -ceq '') "$($manual.Failure) | $($manual.Job | ConvertTo-Json -Compress)"
+    $odd = Find-Job 'odd-cron'
+    Assert 'a cron that is not one of the intervals reads as no interval, with the cron kept' ($null -eq $odd.Job.Interval -and $odd.Job.Cron -ceq '15 */2 * * *') "$($odd.Job | ConvertTo-Json -Compress)"
+    $tagImage = Find-Job 'tag-image'
+    Assert 'an image without a digest reads as no digest' ($tagImage.Job -and $tagImage.Job.ImageDigest -ceq '') "$($tagImage.Job | ConvertTo-Json -Compress)"
+    $none = Find-Job 'no-job'
+    Assert 'no job with the prefix returns nothing' (-not $none.Failure -and $null -eq $none.Job -and $none.Calls.Count -eq 1) "$($none.Failure)"
+    $two = Find-Job 'two-jobs'
+    Assert 'two jobs with the prefix are refused, naming both' ($two.Failure -match 'caj-renew-a' -and $two.Failure -match 'caj-renew-c') $two.Failure
+    $listFails = Find-Job 'list-fails'
+    Assert 'a failed list stops with the az error' ($listFails.Failure -match 'AuthorizationFailed') $listFails.Failure
+    $badGroup = Find-Job 'scheduled' -ResourceGroup 'rg&calc'
+    Assert 'a resource group with cmd metacharacters is refused before any az call' ($badGroup.Failure -match 'rg&calc' -and $badGroup.Calls.Count -eq 0) $badGroup.Failure
+    $badPrefix = Find-Job 'scheduled' -Prefix 'P104_Fixture'
+    Assert 'a prefix the projection deployer refuses is refused before any az call' ($badPrefix.Failure -match 'P104_Fixture' -and $badPrefix.Calls.Count -eq 0) $badPrefix.Failure
+    Remove-Item Function:\az -ErrorAction SilentlyContinue
+}
+
 if ($fail) { Write-Host "$fail sync schedule assertion(s) failed." -ForegroundColor Red; exit 1 }
 Write-Host 'Sync schedule intervals map to one cron, range and run count.' -ForegroundColor Green

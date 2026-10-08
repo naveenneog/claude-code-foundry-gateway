@@ -314,6 +314,17 @@ try {
             '^resource delete ' { return }
             '^acr build' { if ($state.Case -eq 'tasks-refused') { $global:LASTEXITCODE = 1; return 'ERROR: (TasksOperationsNotAllowed) ACR Tasks requests are not permitted.' }; return }
             '^acr manifest show-metadata' { return (ConvertTo-Json $(if ($state.Case -eq 'bad-digest') { 'latest' } else { $digestBuilt })) }
+            # ADR-0058 decision 3: the job identity's Graph permission is read, never written.
+            '^ad sp show --id 00000003-0000-0000-c000-000000000000 -o json$' {
+                return (@{ id = '50000000-0000-4000-8000-000000000003'; appRoles = @(
+                            @{ id = '98830695-27a2-44f7-8c18-0c3ebc9698f6'; value = 'GroupMember.Read.All' }, @{ id = '60000000-0000-4000-8000-000000000001'; value = 'User.Read.All' }) } | ConvertTo-Json -Depth 4)
+            }
+            '^rest --method get --url https://graph\.microsoft\.com/v1\.0/servicePrincipals/40000000-0000-4000-8000-000000000002/appRoleAssignments -o json$' {
+                if ($state.Case -eq 'graph-unreadable') { $global:LASTEXITCODE = 1; return 'ERROR: Forbidden({"error":{"code":"Authorization_RequestDenied"}})' }
+                # Without the grant the identity holds another Graph role, so only the GroupMember.Read.All role id counts.
+                $roleId = if ($state.Case -eq 'graph-granted') { '98830695-27a2-44f7-8c18-0c3ebc9698f6' } else { '60000000-0000-4000-8000-000000000001' }
+                return (@{ value = @(@{ id = 'assignment-1'; resourceId = '50000000-0000-4000-8000-000000000003'; appRoleId = $roleId }) } | ConvertTo-Json -Depth 4)
+            }
         }
         $global:LASTEXITCODE = 9
         return "stub az has no answer for: $line"
@@ -379,6 +390,16 @@ try {
     Assert 'the receipt records the 2-hour default' ($receipt -and $receipt.triggerType -eq 'Schedule' -and $receipt.cronExpression -ceq '0 */2 * * *' -and $receipt.syncInterval -ceq '2h') ($receipt | ConvertTo-Json -Compress)
     Assert 'the receipt holds no secret' ($receipt -and -not (($receipt | ConvertTo-Json) -match '(?i)token|password|secret|key"'))
     Assert 'no Graph call when both groups are object ids' (-not ($run.Calls -match 'get-access-token'))
+    Assert 'the receipt records that the job identity does not hold the Graph permission yet' ($receipt -and $receipt.graphGrant -ceq 'missing') ($receipt | ConvertTo-Json -Compress)
+    Assert 'the Graph permission is read once and never written' (
+        @($run.Calls | Where-Object { $_ -match '^rest --method get --url https://graph\.microsoft\.com/v1\.0/servicePrincipals/40000000-0000-4000-8000-000000000002/appRoleAssignments' }).Count -eq 1 -and
+        @($run.Calls | Where-Object { $_ -match '^rest --method (?!get)' -or $_ -match '^ad app permission' }).Count -eq 0) ($run.Calls -join ' | ')
+    $granted = Invoke-DeployScenario 'graph-granted'
+    Assert 'a job identity that holds GroupMember.Read.All is reported as granted, with no grant step' (-not $granted.Failure -and $granted.Receipt.graphGrant -ceq 'held' -and
+        $granted.Output -match 'holds Microsoft Graph GroupMember\.Read\.All' -and $granted.Output -notmatch 'Grant-ClaudeProjectionRenewalGraphAccess\.ps1 -PrincipalId') "$($granted.Failure) | $($granted.Receipt.graphGrant)"
+    $unreadable = Invoke-DeployScenario 'graph-unreadable'
+    Assert 'a Graph permission that cannot be read does not stop the deployment and names the grant command' (-not $unreadable.Failure -and $unreadable.Receipt.graphGrant -ceq 'unknown' -and
+        $unreadable.Output -match 'could not read' -and $unreadable.Output -match 'Grant-ClaudeProjectionRenewalGraphAccess\.ps1 -PrincipalId 40000000-0000-4000-8000-000000000002') "$($unreadable.Failure) | $($unreadable.Receipt.graphGrant)"
 
     foreach ($case in @(
             @{ Name = 'an alert address with a command separator'; Change = @{ AlertEmail = @('ops@example.invalid&calc') }; Expect = 'AlertEmail' }

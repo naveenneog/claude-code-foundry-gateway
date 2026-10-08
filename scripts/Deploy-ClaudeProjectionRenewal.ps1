@@ -78,6 +78,7 @@ $root = Split-Path $PSScriptRoot -Parent
 . (Join-Path $PSScriptRoot 'ClaudeProjectionPackage.ps1')
 . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeProjectionSchedule.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeProjectionGraphGrant.ps1')
 Assert-ClaudeProjectionPowerShell
 
 $guid = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
@@ -254,7 +255,13 @@ $registry = Invoke-Deployment "projection-registry-$NamePrefix" 'infra/projectio
 if (-not $registry.acrName -or -not $registry.identityPrincipalId) { throw 'The registry deployment did not return the registry and identity.' }
 if ([string]$registry.acrName -cnotmatch '^[a-z0-9]{5,50}$') { throw "The registry deployment returned '$($registry.acrName)', not a registry name (5-50 lowercase letters or digits); the image was not built." }
 Ok "registry $($registry.acrName); job identity principal $($registry.identityPrincipalId)"
-Note "A tenant administrator can grant Graph access now, while the image builds: ./scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1 -PrincipalId $($registry.identityPrincipalId)"
+$graphGrant = Get-ClaudeProjectionGraphGrant -PrincipalId ([string]$registry.identityPrincipalId)
+$grantCommand = "./scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1 -PrincipalId $($registry.identityPrincipalId)"
+switch ($graphGrant.State) {
+    'held' { Ok 'the job identity holds Microsoft Graph GroupMember.Read.All' }
+    'missing' { Note "The job identity does not hold Microsoft Graph GroupMember.Read.All yet. A tenant administrator can grant it now, while the image builds: $grantCommand" }
+    default { Note "Could not read the job identity's Microsoft Graph permissions ($($graphGrant.Detail)). A tenant administrator can check and grant GroupMember.Read.All with: $grantCommand" }
+}
 
 Step 'Phase 2: sync image'
 if ($ImageDigest) {
@@ -317,19 +324,25 @@ $receipt = [ordered]@{
     imageDigest = $ImageDigest; imageTag = $ImageTag; entryPoint = $entryPoint
     actionGroupResourceId = [string]$renewal.actionGroupResourceId; identityPrincipalId = [string]$registry.identityPrincipalId
     workspaceResourceId = $WorkspaceResourceId; triggerType = $triggerType; syncInterval = $schedule.Interval
-    cronExpression = $schedule.Cron; noSuccessMinutes = $schedule.NoSuccessMinutes
+    cronExpression = $schedule.Cron; noSuccessMinutes = $schedule.NoSuccessMinutes; graphGrant = $graphGrant.State
 }
 New-Item -ItemType Directory -Force -Path (Split-Path $ReceiptPath -Parent) | Out-Null
 [IO.File]::WriteAllText($ReceiptPath, ($receipt | ConvertTo-Json -Depth 4), [Text.UTF8Encoding]::new($false))
 
 Step 'Next steps'
-Write-Host "    1. A Privileged Role Administrator or Global Administrator grants Microsoft Graph GroupMember.Read.All to the job identity, once:"
-Write-Host "       ./scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1 -PrincipalId $($registry.identityPrincipalId)"
-if ($triggerType -eq 'Manual') {
-    Write-Host "    2. The sync job runs only when started. Start it after the Graph grant:"
+if ($graphGrant.State -eq 'held') {
+    Write-Host "    1. The job identity holds Microsoft Graph GroupMember.Read.All; no grant is needed."
 }
 else {
-    Write-Host "    2. The sync job runs $runs. Until the grant, each run stops at the Graph stage and writes nothing. Start a run now with:"
+    Write-Host "    1. A Privileged Role Administrator or Global Administrator grants Microsoft Graph GroupMember.Read.All to the job identity, once:"
+    Write-Host "       $grantCommand"
+}
+$untilGrant = if ($graphGrant.State -eq 'held') { '' } else { ' Until the grant, each run stops at the Graph stage and writes nothing.' }
+if ($triggerType -eq 'Manual') {
+    Write-Host "    2. The sync job runs only when started.$untilGrant Start it with:"
+}
+else {
+    Write-Host "    2. The sync job runs $runs.$untilGrant Start a run now with:"
 }
 Write-Host "       az containerapp job start -g $ResourceGroup -n $($renewal.jobName)"
 Write-Host "    3. Each alert address receives a confirmation from Azure Monitor; an address not confirmed within 30 minutes receives no alerts (U116)."
