@@ -38,7 +38,10 @@ exact streaming cache-creation detail remains **U13**.
   month and the missed-run range; `-DeploySyncJob` is accepted and has no effect.
   `scripts/Deploy-ClaudeProjectionRenewal.ps1 -SyncInterval` replaces `-CronExpression`, which is refused with
   the interval it maps to, and `scripts/Set-ClaudeProjectionSyncSchedule.ps1 -Interval` changes a deployed job
-  without deploying its registry again (`-KeepRegistry`).
+  without deploying its registry again (`-KeepRegistry`). The schedule script keeps and prints the tier groups
+  that the job's deployment recorded, refuses a job whose groups differ from them, and with
+  `-ExpectedStandardGroup`/`-ExpectedPremiumGroup` refuses groups other than the given object ids. An installer
+  re-run stops before any write when the job's registry has public network access disabled.
   Each run writes only changed developers; an unattended run that would delete more than max(10, 10% of the
   records) writes nothing and ends at stage `removal-ceiling`. The no-success alert reads 2 x the interval + 15
   minutes under one rule name; the deploy script removes P97's `-no-success-45m` rule, whose query held the
