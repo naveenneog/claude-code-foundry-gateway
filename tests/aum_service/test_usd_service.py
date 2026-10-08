@@ -182,6 +182,8 @@ class UsdServiceTests(unittest.TestCase):
         self.assertLess(fallback, family)
         self.assertNotIn("family", query[fallback:family])
         self.assertIn("summarize metric_model=min(metric_model)", query)
+        self.assertIn("join kind=fullouter cached on day, user_id, family", query)
+        self.assertIn("join kind=leftouter group_totals on day, user_id, family", query)
         self.assertIn("deployment == group_deployment", query)
         self.assertIn("business_unit == group_business_unit", query)
         self.assertNotIn("family=family_of(coalesce(model, deployment))", query)
