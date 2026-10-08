@@ -34,9 +34,9 @@ Mutation 'named-value-length-preflight' $life 'Test-ApimNamedValueLength -Id "mo
 Mutation 'recorded-overrides-survive' $life '$entry = if ($old.Count) { $old[0] | ConvertTo-Json -Depth 20 | ConvertFrom-Json } else { [pscustomobject]@{} }' '$entry = [pscustomobject]@{}'
 Mutation 'root-models-are-the-live-union' $life 'Set-ClaudeRecordProperty $recordAfter ''models'' @($recorded.name)' 'Set-ClaudeRecordProperty $recordAfter ''models'' @(''stale-model'')'
 Mutation 'tier-records-are-scoped' $life '$names = @($permitted | Where-Object { $_.name -in $sets[$tier] } | ForEach-Object { $_.name })' '$names = @($permitted.name)'
-Mutation 'negative-price-refusal' $price '[decimal]$value -lt 0' '$false'
-Mutation 'ambiguous-price-refusal' $price '$rates.Count -gt 1' '$false'
-Mutation 'negotiated-deployment-price-wins' $price '[string]$Deployment.name -in $names' '$false'
+Mutation 'negative-price-refusal' $price '[decimal]$value -lt 0' '$false' 2
+Mutation 'ambiguous-price-refusal' $price '$rates.Count -gt 1' '$false' 3
+Mutation 'negotiated-deployment-price-wins' $price 'return [string](@(Sort-ClaudeFlowOrdinal -InputObject $matches)[0])' 'return [string]$matches[0]'
 Mutation 'unpriced-never-free' $price 'Detail = "unpriced ($reason); not free"' 'Detail = "free USD 0"'
 Mutation 'historical-price-retention' $life '$bookAfter = $book | ConvertTo-Json -Depth 40 | ConvertFrom-Json' '$bookAfter = $book | ConvertTo-Json -Depth 40 | ConvertFrom-Json; $bookAfter.models.PSObject.Properties.Remove(''retired'')'
 Mutation 'price-mapping-is-persisted' $life '$priceChanged = $true' '$priceChanged = $false'
@@ -128,6 +128,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $root "tests\$suiteFile") -Destination $suitePath
     Copy-Item -LiteralPath (Join-Path $root 'tests\ScriptImportCoverage.ps1') -Destination (Join-Path $shadow 'tests')
     Copy-Item -LiteralPath (Join-Path $root 'scripts') -Destination $shadow -Recurse
+    Copy-Item -LiteralPath (Join-Path $root 'config') -Destination $shadow -Recurse
     foreach ($file in 'Start-ClaudeGateway.ps1','Install-ClaudeGateway.ps1','.gitignore') { Copy-Item -LiteralPath (Join-Path $root $file) -Destination $shadow }
     & git -C $shadow init --quiet
     if ($LASTEXITCODE) { throw 'Cannot initialise the private mutation source repository.' }

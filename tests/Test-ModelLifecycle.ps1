@@ -291,7 +291,8 @@ try {
     Check 'deployment-specific negotiated price takes precedence over model mapping' {
         $b = Json $global:P70bookPath; Set-ClaudeRecordProperty $b.models 'sonnet' ([pscustomobject]@{ inputPerM = 1.5; outputPerM = 7.5 }); Save $global:P70bookPath $b
         $p = Plan
-        $p.Data.PriceBookAfter.models.sonnet.inputPerM -eq 1.5
+        $p.Data.PriceBookAfter.models.sonnet.inputPerM -eq 1.5 -and
+            $p.Data.PriceChanged -eq $true
     }
     Reset-State
     Check 'apply cannot run without preparation and snapshot' {
