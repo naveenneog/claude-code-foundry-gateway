@@ -931,8 +931,8 @@ $mutations = @(
     @{ Suite = 'Test-Observability.ps1'
        Name  = 'cache read is priced at the full input rate'
        File  = 'analytics/chargeback-cost.kql'
-       From  = 'let cache_read_multiplier = 0.1;'
-       To    = 'let cache_read_multiplier = 1.0;' }
+       From  = '(cache_read_tokens / 1000000.0) * cache_read_per_m'
+       To    = '(cache_read_tokens / 1000000.0) * input_per_m' }
 
     @{ Suite = 'Test-Observability.ps1'
        Name  = 'an unpriced model is costed at zero'
