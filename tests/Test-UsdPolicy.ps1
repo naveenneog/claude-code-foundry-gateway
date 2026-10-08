@@ -123,6 +123,29 @@ $item.unpriced_models = 'claude-haiku-5-5'
 $named['usd-budget-state'] = Pack $state
 $scalarModels = Evaluate
 Assert 'non-array unpriced models keep the generic 403 instead of becoming stale' ($scalarModels.http_status -eq 403 -and $scalarModels.code -eq 'usd_budget_unpriced' -and $scalarModels.message -eq $genericUnpriced)
+$item.price_book_date = '2026-10-08'
+$item.unpriced_models = @(@{ name = 'claude-haiku-5-5' })
+$named['usd-budget-state'] = Pack $state
+$objectModel = Evaluate
+Assert 'object unpriced model entries keep the generic 403 instead of stale state' ($objectModel.http_status -eq 403 -and $objectModel.code -eq 'usd_budget_unpriced' -and $objectModel.message -eq $genericUnpriced)
+$item.unpriced_models = @(, @('claude-haiku-5-5'))
+$named['usd-budget-state'] = Pack $state
+$arrayModel = Evaluate
+Assert 'array unpriced model entries keep the generic 403 instead of stale state' ($arrayModel.http_status -eq 403 -and $arrayModel.code -eq 'usd_budget_unpriced' -and $arrayModel.message -eq $genericUnpriced)
+$item.price_book_date = @{ value = '2026-10-08' }
+$item.unpriced_models = @('claude-haiku-5-5')
+$named['usd-budget-state'] = Pack $state
+$objectDate = Evaluate
+Assert 'object price book date keeps the generic 403 instead of stale state' ($objectDate.http_status -eq 403 -and $objectDate.code -eq 'usd_budget_unpriced' -and $objectDate.message -eq $genericUnpriced)
+$item.price_book_date = '2026-10-08'
+$item.unpriced_models = @('x' * 5000)
+$named['usd-budget-state'] = Pack $state
+$longModel = Evaluate
+Assert 'overlong unpriced model names keep bounded generic 403 text' ($longModel.http_status -eq 403 -and $longModel.code -eq 'usd_budget_unpriced' -and $longModel.message -eq $genericUnpriced -and $longModel.message.Length -lt 512)
+$item.unpriced_models = @("bad`u{0001}model")
+$named['usd-budget-state'] = Pack $state
+$controlModel = Evaluate
+Assert 'control-character unpriced model names keep bounded generic 403 text' ($controlModel.http_status -eq 403 -and $controlModel.code -eq 'usd_budget_unpriced' -and $controlModel.message -eq $genericUnpriced -and $controlModel.message.Length -lt 512)
 if ($fail) { Write-Host "$fail policy expression assertion(s) failed."; exit 1 }
 Write-Host 'Actual USD policy expression passed.'
 exit 0
