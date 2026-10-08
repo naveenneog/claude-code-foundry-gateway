@@ -57,7 +57,7 @@ function Get-ClaudeProjectionSyncJob {
     }
 }
 
-# What a redeployment of the job keeps (P104 council rounds 1-2): the alert addresses of the live action group,
+# What a redeployment of the job keeps (P104 council rounds 1-3): the alert addresses of the live action group,
 # the live registry SKU and network access, and the workspace, subnet, tier groups and schedule that the last
 # renewal deployment recorded. A failed deployment records parameters but no outputs, so its state is returned
 # and the callers decide; the job id that a successful deployment created binds a tagged job to it.
@@ -69,13 +69,15 @@ function Get-ClaudeProjectionSyncJobSettings {
     $registryName = "projection-registry-$NamePrefix"
     $registry = Invoke-ClaudeProjectionSyncAzJson -Arguments @('deployment', 'group', 'show', '-g', $ResourceGroup, '-n', $registryName, '-o', 'json') -What "deployment $registryName"
     $acrName = [string]$registry.properties.outputs.acrName.value
-    $acrSku = [string]$registry.properties.parameters.acrSku.value
-    $acrAccess = ''
-    if ($acrName -cmatch '^[a-z0-9]{5,50}$') {
-        $acr = Invoke-ClaudeProjectionSyncAzJson -Arguments @('acr', 'show', '-g', $ResourceGroup, '-n', $acrName, '-o', 'json') -What "registry $acrName"
-        $acrSku = [string]$acr.sku.name
-        $acrAccess = [string]$acr.publicNetworkAccess
+    # A failed registry deployment records no outputs; infra/projection-renewal.bicep requires acrName, so the
+    # renewal deployment names the registry the job pulls from (P104 council round 3).
+    if ($acrName -cnotmatch '^[a-z0-9]{5,50}$') { $acrName = [string]$renewal.properties.parameters.acrName.value }
+    if ($acrName -cnotmatch '^[a-z0-9]{5,50}$') {
+        throw "Neither deployment $registryName nor $renewalName records a registry name, so the registry's SKU and network access cannot be read. Nothing was changed. Redeploy the job with scripts/Deploy-ClaudeProjectionRenewal.ps1."
     }
+    $acr = Invoke-ClaudeProjectionSyncAzJson -Arguments @('acr', 'show', '-g', $ResourceGroup, '-n', $acrName, '-o', 'json') -What "registry $acrName"
+    $acrSku = [string]$acr.sku.name
+    $acrAccess = [string]$acr.publicNetworkAccess
     $groupName = "ag-projection-renewal-$NamePrefix"
     $actionGroup = Invoke-ClaudeProjectionSyncAzJson -Arguments @('monitor', 'action-group', 'show', '-g', $ResourceGroup, '-n', $groupName, '-o', 'json') -What "action group $groupName"
     $emails = @(@(@($actionGroup.emailReceivers) + @($actionGroup.properties.emailReceivers)) | Where-Object { $_ } |

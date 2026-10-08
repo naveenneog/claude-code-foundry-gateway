@@ -86,13 +86,21 @@ USD 0.00003 per run-second above the subscription's monthly free grant.
    identity are read from their deployment rather than deployed again, and it changes only the job that the
    `projection-renewal-<prefix>` deployment created, with that deployment's workspace, subnet and tier groups; a
    job whose groups differ from the recorded ones is refused. At the same interval it writes nothing unless the
-   alert rules or the recorded schedule differ from the template. The Azure CLI guide's renewal block takes
+   alert rules or the recorded schedule differ from the template. It prints the tier groups it keeps, and with
+   `-ExpectedStandardGroup` and `-ExpectedPremiumGroup` it stops before any write unless the job uses those
+   object ids. The Azure CLI guide's renewal block takes
    `SYNC_INTERVAL` with the same table, checked against `scripts/ClaudeProjectionSchedule.ps1` by
    `tests/Test-AzCommandsRenewal.ps1`. In the Azure portal, the script runs in Azure Cloud Shell; editing only
    the job's cron expression would leave the no-success alert on the old range.
 
 ## Consequences
 
+- Trust boundary (council round 3): a principal that can write to the projection resource group, such as a
+  Contributor, can change the job's image, environment and identity, and with them who gets access, without
+  these scripts; the next scheduled run applies the change. The same principal can make the job and its
+  `projection-renewal-<prefix>` deployment record agree, so comparing the two does not detect it. Azure RBAC on
+  the resource group limits who can do this, the activity log records each such write, and
+  `-ExpectedStandardGroup`/`-ExpectedPremiumGroup` check the groups against object ids the admin holds.
 - Adding a developer to a tier or business-unit group takes effect at the next run plus at most 60 seconds;
   removal at the next run plus at most `entitlement-cache-seconds`.
 - A run that takes longer than the interval overlaps the next execution. The later run waits up to 900 seconds

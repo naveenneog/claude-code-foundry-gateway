@@ -115,22 +115,23 @@ if ($hasLookup) {
         if ($line -ceq 'deployment group show -g rg-p104 -n projection-renewal-p104fixture -o json') {
             $renewalState = if ($state.Case -eq 'renewal-failed') { 'Failed' } else { 'Succeeded' }
             $renewalOutputs = if ($state.Case -eq 'renewal-failed') { $null } else { @{ jobResourceId = @{ value = "$rgId/providers/Microsoft.App/jobs/caj-renew-a" } } }
-            return (@{ properties = @{ provisioningState = $renewalState
-                        parameters = @{ logAnalyticsWorkspaceId = @{ value = "$rgId/providers/Microsoft.OperationalInsights/workspaces/law-custom" }
-                            containerAppsSubnetId = @{ value = "$rgId/providers/Microsoft.Network/virtualNetworks/vnet-p104/subnets/renewal" }
-                            actionGroupEmailReceivers = @{ value = @('deployed@example.invalid') }
-                            standardGroupId = @{ value = '10000000-0000-4000-8000-000000000001' }; premiumGroupId = @{ value = 'none' }
-                            cronExpression = @{ value = '0 */2 * * *' }; noSuccessMinutes = @{ value = 255 } }
-                        outputs = $renewalOutputs } } | ConvertTo-Json -Depth 8)
+            $renewalParameters = @{ logAnalyticsWorkspaceId = @{ value = "$rgId/providers/Microsoft.OperationalInsights/workspaces/law-custom" }
+                containerAppsSubnetId = @{ value = "$rgId/providers/Microsoft.Network/virtualNetworks/vnet-p104/subnets/renewal" }
+                actionGroupEmailReceivers = @{ value = @('deployed@example.invalid') }
+                standardGroupId = @{ value = '10000000-0000-4000-8000-000000000001' }; premiumGroupId = @{ value = 'none' }
+                cronExpression = @{ value = '0 */2 * * *' }; noSuccessMinutes = @{ value = 255 } }
+            # infra/projection-renewal.bicep requires acrName, so a renewal deployment records the registry it pulls from.
+            if ($state.Case -ne 'no-registry-name') { $renewalParameters.acrName = @{ value = 'acrp104' } }
+            return (@{ properties = @{ provisioningState = $renewalState; parameters = $renewalParameters; outputs = $renewalOutputs } } | ConvertTo-Json -Depth 8)
         }
         if ($line -ceq 'deployment group show -g rg-p104 -n projection-registry-p104fixture -o json') {
-            if ($state.Case -eq 'registry-failed') {
+            if ($state.Case -in 'registry-failed', 'no-registry-name') {
                 return (@{ properties = @{ provisioningState = 'Failed'; parameters = @{ acrSku = @{ value = 'Premium' } }; outputs = $null } } | ConvertTo-Json -Depth 8)
             }
             return (@{ properties = @{ provisioningState = 'Succeeded'; parameters = @{ acrSku = @{ value = 'Basic' } }; outputs = @{ acrName = @{ value = 'acrp104' }; acrSkuChosen = @{ value = 'Basic' } } } } | ConvertTo-Json -Depth 8)
         }
         if ($line -ceq 'acr show -g rg-p104 -n acrp104 -o json') {
-            $access = if ($state.Case -eq 'private-acr') { 'Disabled' } else { 'Enabled' }
+            $access = if ($state.Case -in 'private-acr', 'registry-failed') { 'Disabled' } else { 'Enabled' }
             return (@{ name = 'acrp104'; sku = @{ name = $(if ($state.Case -eq 'standard-acr') { 'Standard' } else { 'Premium' }) }; publicNetworkAccess = $access } | ConvertTo-Json -Depth 4)
         }
         if ($line -ceq 'monitor action-group show -g rg-p104 -n ag-projection-renewal-p104fixture -o json') {
@@ -198,9 +199,16 @@ if ($hasLookup) {
         $failedRenewal = Read-Settings 'renewal-failed'
         Assert 'a failed renewal deployment is reported as failed with no job id, not as another job' (-not $failedRenewal.Failure -and $failedRenewal.Settings.RenewalDeploymentState -ceq 'Failed' -and
             -not $failedRenewal.Settings.JobResourceId -and $failedRenewal.Settings.StandardGroupId -ceq '10000000-0000-4000-8000-000000000001') "$($failedRenewal.Failure) | $($failedRenewal.Settings | ConvertTo-Json -Compress)"
+        # P104 council round 3 (Coder): a failed registry deployment records no outputs; the renewal deployment's
+        # acrName names the registry, so its live SKU and network access are read rather than guessed.
         $failedRegistry = Read-Settings 'registry-failed'
-        Assert 'a failed registry deployment gives the SKU it was deployed with' (-not $failedRegistry.Failure -and $failedRegistry.Settings.AcrSku -ceq 'Premium' -and
-            $failedRegistry.Calls.Count -eq 3) "$($failedRegistry.Failure) | $($failedRegistry.Settings | ConvertTo-Json -Compress)"
+        Assert 'a failed registry deployment reads the live registry that the renewal deployment recorded, with its network access' (-not $failedRegistry.Failure -and
+            $failedRegistry.Settings.AcrSku -ceq 'Premium' -and $failedRegistry.Settings.RegistryPublicNetworkAccess -ceq 'Disabled' -and
+            @($failedRegistry.Calls | Where-Object { $_ -ceq 'acr show -g rg-p104 -n acrp104 -o json' }).Count -eq 1) "$($failedRegistry.Failure) | $($failedRegistry.Settings | ConvertTo-Json -Compress) | $($failedRegistry.Calls -join ' | ')"
+        $noName = Read-Settings 'no-registry-name'
+        Assert 'no registry name in either deployment stops the read before the alert group is read' ($noName.Failure -match 'registry name' -and
+            $noName.Failure -match 'projection-registry-p104fixture' -and $noName.Failure -match 'projection-renewal-p104fixture' -and $noName.Failure -match 'Nothing was changed' -and
+            @($noName.Calls | Where-Object { $_ -match '^(acr|monitor) ' }).Count -eq 0) "$($noName.Failure) | $($noName.Calls -join ' | ')"
     }
     Remove-Item Function:\az -ErrorAction SilentlyContinue
 }

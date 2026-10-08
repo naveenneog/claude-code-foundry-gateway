@@ -25,6 +25,14 @@
 .PARAMETER GatewayResourceGroup
     Resource group that contains the API Management gateway. Defaults to -ResourceGroup.
 
+.PARAMETER ExpectedStandardGroup
+    Object id of the standard tier group the job must use. With -ExpectedPremiumGroup, the script stops before
+    any write when the job or its renewal deployment names other groups. It does not change the groups;
+    scripts/Deploy-ClaudeProjectionRenewal.ps1 -StandardGroup does.
+
+.PARAMETER ExpectedPremiumGroup
+    Object id of the premium tier group the job must use, or none. Passed together with -ExpectedStandardGroup.
+
 .EXAMPLE
     pwsh -NoProfile -File ./scripts/Set-ClaudeProjectionSyncSchedule.ps1 -ResourceGroup rg-prod `
       -ApimName apim-prod -Interval 30m
@@ -35,7 +43,9 @@ param(
     [Parameter(Mandatory = $true)][string]$ApimName,
     [Parameter(Mandatory = $true)][string]$Interval,
     [string]$NamePrefix,
-    [string]$GatewayResourceGroup
+    [string]$GatewayResourceGroup,
+    [string]$ExpectedStandardGroup,
+    [string]$ExpectedPremiumGroup
 )
 
 $ErrorActionPreference = 'Stop'
@@ -44,6 +54,7 @@ trap {
 }
 
 . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeEntitlementGroups.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeProjectionSyncJob.ps1')
 
 $problems = [Collections.Generic.List[string]]::new()
@@ -59,6 +70,18 @@ if (-not [string]::IsNullOrWhiteSpace($NamePrefix) -and $NamePrefix -cnotmatch '
 }
 $newSchedule = $null
 try { $newSchedule = ConvertTo-ClaudeProjectionSyncSchedule -Interval $Interval } catch { $problems.Add("-Interval: $($_.Exception.Message)") }
+$expectsGroups = $PSBoundParameters.ContainsKey('ExpectedStandardGroup') -or $PSBoundParameters.ContainsKey('ExpectedPremiumGroup')
+if ($expectsGroups) {
+    if (-not ($PSBoundParameters.ContainsKey('ExpectedStandardGroup') -and $PSBoundParameters.ContainsKey('ExpectedPremiumGroup'))) {
+        $problems.Add('-ExpectedStandardGroup and -ExpectedPremiumGroup are checked together; pass both.')
+    }
+    if ($PSBoundParameters.ContainsKey('ExpectedStandardGroup') -and -not (Test-ClaudeEntitlementGroupGuid $ExpectedStandardGroup)) {
+        $problems.Add("-ExpectedStandardGroup '$ExpectedStandardGroup' is not a group object id.")
+    }
+    if ($PSBoundParameters.ContainsKey('ExpectedPremiumGroup') -and $ExpectedPremiumGroup -cne 'none' -and -not (Test-ClaudeEntitlementGroupGuid $ExpectedPremiumGroup)) {
+        $problems.Add("-ExpectedPremiumGroup '$ExpectedPremiumGroup' is not a group object id or none.")
+    }
+}
 if ($problems.Count) { throw ("Projection sync schedule change refused before any Azure call:`n  - " + ($problems -join "`n  - ")) }
 
 if ([string]::IsNullOrWhiteSpace($NamePrefix)) {
@@ -110,6 +133,13 @@ if (-not $sameGroups) {
     throw ("The job's tier groups (standard $($job.StandardGroupId), premium $($job.PremiumGroupId)) differ from those deployment $renewalDeployment recorded " +
         "(standard $standardGroup, premium $premiumGroup). Nothing was changed. Redeploy with scripts/Deploy-ClaudeProjectionRenewal.ps1 -StandardGroup <id> -PremiumGroup <id or none> to set the groups.")
 }
+# Whoever can write the job can also write its deployment record, so both can agree on other groups. An admin who
+# holds the intended object ids checks them here (P104 council round 3).
+if ($expectsGroups -and -not ([string]::Equals($standardGroup, $ExpectedStandardGroup, [StringComparison]::OrdinalIgnoreCase) -and
+        [string]::Equals($premiumGroup, $ExpectedPremiumGroup, [StringComparison]::OrdinalIgnoreCase))) {
+    throw ("The job and deployment $renewalDeployment use tier groups standard $standardGroup, premium $premiumGroup, not the expected standard $ExpectedStandardGroup, " +
+        "premium $ExpectedPremiumGroup. Nothing was changed. Redeploy with scripts/Deploy-ClaudeProjectionRenewal.ps1 -StandardGroup <id> -PremiumGroup <id or none> to set the groups.")
+}
 
 $currentCron = [string]$job.Cron
 $currentInterval = $job.Interval
@@ -148,6 +178,7 @@ else {
     Write-Output "Changing projection sync schedule for '$NamePrefix' from $currentWords to $toWords."
     Write-Output "The new schedule runs $($newSchedule.RunsPerMonth) times per 730-hour month; the no-success alert reads $($newSchedule.NoSuccessMinutes) minutes."
 }
+Write-Output "Keeping the tier groups that deployment $renewalDeployment recorded and the job uses: standard $standardGroup, premium $premiumGroup."
 
 $deployArgs = @{
     ResourceGroup = $ResourceGroup

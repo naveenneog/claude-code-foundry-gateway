@@ -245,6 +245,16 @@ them. `-WhatIf` shows the change without writing. In the Azure
 portal, run the same command in Azure Cloud Shell (PowerShell) from a clone of this repository. Changing the
 job's cron expression alone leaves the no-success alert on the old range.
 
+The script prints the tier groups it keeps. A principal with write access to the projection resource group, such
+as one with the Contributor role ("full access to manage all resources",
+[Azure built-in roles](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/privileged#contributor),
+updated 2026-07-01), can change the job's image, environment and identity without this script, and the next
+scheduled run applies the change. The same principal can make the job and its deployment record agree, so the
+script's comparison of the two does not detect such a change; the activity log records each write
+([Activity Log in Azure Monitor](https://learn.microsoft.com/azure/azure-monitor/fundamentals/activity-log),
+updated 2026-09-22). With `-ExpectedStandardGroup <object id> -ExpectedPremiumGroup <object id or none>`, the
+script also stops before any write unless the job uses those groups.
+
 The job needs Microsoft Graph application permission `GroupMember.Read.All`. The deploy script reads whether the
 job identity holds it, records `held`, `missing` or `unknown` in its receipt, and writes nothing in Graph. A
 Privileged Role Administrator or Global Administrator grants it once with

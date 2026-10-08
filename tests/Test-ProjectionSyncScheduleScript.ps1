@@ -25,6 +25,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $root 'scripts\ClaudeProjectionSchedule.ps1') -Destination (Join-Path $scripts 'ClaudeProjectionSchedule.ps1')
     Copy-Item -LiteralPath (Join-Path $root 'scripts\ClaudeProjectionSyncJob.ps1') -Destination (Join-Path $scripts 'ClaudeProjectionSyncJob.ps1')
     Copy-Item -LiteralPath (Join-Path $root 'scripts\ApimNamedValue.ps1') -Destination (Join-Path $scripts 'ApimNamedValue.ps1')
+    Copy-Item -LiteralPath (Join-Path $root 'scripts\ClaudeEntitlementGroups.ps1') -Destination (Join-Path $scripts 'ClaudeEntitlementGroups.ps1')
     if (Test-Path -LiteralPath $setScript -PathType Leaf) {
         Copy-Item -LiteralPath $setScript -Destination (Join-Path $scripts 'Set-ClaudeProjectionSyncSchedule.ps1')
     }
@@ -219,6 +220,28 @@ $calls += [pscustomobject]$record
             $portalCron.Deploy[0].SyncInterval -eq '30m') "$($portalCron.Failure) | $($portalCron.Output)"
         $noRecord = Invoke-ScheduleScenario -Scenario @{ DeployedJobId = '' } -Overrides @{}
         Assert 'a renewal deployment that records no job is refused before any deployment' ($noRecord.Failure -match 'projection-renewal-p104fixture' -and $noRecord.Deploy.Count -eq 0) "$($noRecord.Failure) | deploy calls $($noRecord.Deploy.Count)"
+        # P104 council round 3 (Security): the job and its deployment record sit inside the same Azure RBAC boundary,
+        # so the change names the tier groups it keeps, and an admin who holds the intended object ids can make the
+        # script refuse any other groups.
+        Assert 'the change names the tier groups it keeps' ($change.Output -match ('the job uses: standard ' + [regex]::Escape($standard) + ', premium ' + [regex]::Escape($premium))) $change.Output
+        $lettered = 'abcdef12-3456-4789-8abc-def012345678'
+        $expected = Invoke-ScheduleScenario -Scenario @{ Jobs = @(New-Job -StandardGroup $lettered); RecordedStandard = $lettered } -Overrides @{ ExpectedStandardGroup = $lettered.ToUpperInvariant(); ExpectedPremiumGroup = $premium }
+        Assert 'expected tier groups that match the job and its record let the change proceed, in any letter case' (-not $expected.Failure -and $expected.Deploy.Count -eq 1 -and
+            $expected.Deploy[0].StandardGroup -ceq $lettered) "$($expected.Failure) | $($expected.Output)"
+        $unexpected = Invoke-ScheduleScenario -Scenario @{} -Overrides @{ ExpectedStandardGroup = '44444444-4444-4444-8444-444444444444'; ExpectedPremiumGroup = $premium }
+        Assert 'an expected standard group that differs from the job and its record is refused before any deployment' ($unexpected.Failure -match '44444444-4444-4444-8444-444444444444' -and
+            $unexpected.Failure -match [regex]::Escape($standard) -and $unexpected.Failure -match 'Nothing was changed' -and $unexpected.Deploy.Count -eq 0) "$($unexpected.Failure) | deploy calls $($unexpected.Deploy.Count)"
+        $unexpectedPremium = Invoke-ScheduleScenario -Scenario @{} -Overrides @{ ExpectedStandardGroup = $standard; ExpectedPremiumGroup = 'none' }
+        Assert 'an expected premium none for a job with a premium group is refused before any deployment' ($unexpectedPremium.Failure -match [regex]::Escape($premium) -and
+            $unexpectedPremium.Failure -match 'Nothing was changed' -and $unexpectedPremium.Deploy.Count -eq 0) "$($unexpectedPremium.Failure) | deploy calls $($unexpectedPremium.Deploy.Count)"
+        $expectedNone = Invoke-ScheduleScenario -Scenario @{ Jobs = @(New-Job -PremiumGroup 'none'); RecordedPremium = 'none' } -Overrides @{ ExpectedStandardGroup = $standard; ExpectedPremiumGroup = 'none' }
+        Assert 'an expected premium none matches a job without a premium group' (-not $expectedNone.Failure -and $expectedNone.Deploy.Count -eq 1) "$($expectedNone.Failure) | $($expectedNone.Output)"
+        $oneExpected = Invoke-ScheduleScenario -Scenario @{} -Overrides @{ ExpectedStandardGroup = $standard }
+        Assert 'one expected tier group without the other is refused before any Azure call' ($oneExpected.Failure -match 'ExpectedPremiumGroup' -and
+            $oneExpected.Calls.Count -eq 0 -and $oneExpected.Deploy.Count -eq 0) "$($oneExpected.Failure) | calls $($oneExpected.Calls.Count)"
+        $notId = Invoke-ScheduleScenario -Scenario @{} -Overrides @{ ExpectedStandardGroup = 'claude-code-standard'; ExpectedPremiumGroup = $premium }
+        Assert 'an expected tier group that is not an object id is refused before any Azure call' ($notId.Failure -match 'claude-code-standard' -and $notId.Failure -match 'object id' -and
+            $notId.Calls.Count -eq 0) "$($notId.Failure) | calls $($notId.Calls.Count)"
         Assert 'the job lookup uses core az resource commands, with no query or containerapp extension' (($change.Calls -join ' | ') -match '^resource list -g rg-p104 --resource-type Microsoft.App/jobs -o json' -and ($change.Calls -join ' | ') -match 'resource show --ids .*/providers/Microsoft\.App/jobs/' -and ($change.Calls -join ' | ') -notmatch '--query|^containerapp') ($change.Calls -join ' | ')
 
         $same = Invoke-ScheduleScenario -Scenario @{} -Overrides @{ Interval = '2h' }
