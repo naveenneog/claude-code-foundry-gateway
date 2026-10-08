@@ -29,6 +29,7 @@
 #>
 
 . (Join-Path $PSScriptRoot 'ClaudeBudgetModes.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeModelPrices.ps1')
 
 # Claude's published list rates, per million tokens, retrieved 2026-09-15 from
 # https://platform.claude.com/docs/en/about-claude/pricing
@@ -90,30 +91,27 @@ function Import-ClaudePriceBook {
 # figures still look right.
 Import-ClaudePriceBook | Out-Null
 
-function ConvertTo-ClaudePriceModelKey {
-    param([AllowNull()][string]$Name)
-    return ([regex]::Replace([string]$Name, '[^A-Za-z0-9]', '')).ToLowerInvariant()
+function Get-ClaudeBusinessUnitPriceBook {
+    $models = [ordered]@{}
+    foreach ($key in $script:ClaudePriceBook.Keys) {
+        $models[$key] = [pscustomobject]@{
+            inputPerM = $script:ClaudePriceBook[$key].InputPerM
+            outputPerM = $script:ClaudePriceBook[$key].OutputPerM
+        }
+    }
+    return [pscustomobject]@{
+        date = $script:ClaudePriceBookDate
+        source = 'business-unit token conversion price book'
+        models = [pscustomobject]$models
+    }
 }
 
 function Resolve-ClaudePriceBookEntry {
     param([Parameter(Mandatory = $true)][string]$Model)
-    $literal = $Model.ToLowerInvariant()
-    $target = ConvertTo-ClaudePriceModelKey $Model
-    $names = @($script:ClaudePriceBook.Keys)
-    $exact = @($names | Where-Object { [string]::Equals($_.ToLowerInvariant(), $literal, [StringComparison]::Ordinal) })
-    if ($exact.Count -eq 1) { return @{ Key = [string]$exact[0]; Price = $script:ClaudePriceBook[$exact[0]] } }
-    $datedLiteral = [regex]::Replace($literal, '[-_.]*\d{8}$', '')
-    if (-not [string]::Equals($datedLiteral, $literal, [StringComparison]::Ordinal)) {
-        $datedExact = @($names | Where-Object { [string]::Equals($_.ToLowerInvariant(), $datedLiteral, [StringComparison]::Ordinal) })
-        if ($datedExact.Count -eq 1) { return @{ Key = [string]$datedExact[0]; Price = $script:ClaudePriceBook[$datedExact[0]] } }
-    }
-    $matches = @($names | Where-Object { [string]::Equals((ConvertTo-ClaudePriceModelKey $_), $target, [StringComparison]::Ordinal) })
-    if (-not $matches.Count -and $target.Length -gt 8 -and $target.Substring($target.Length - 8) -match '^\d{8}$') {
-        $family = $target.Substring(0, $target.Length - 8)
-        $matches = @($names | Where-Object { [string]::Equals((ConvertTo-ClaudePriceModelKey $_), $family, [StringComparison]::Ordinal) })
-    }
-    if ($matches.Count -eq 1) { return @{ Key = [string]$matches[0]; Price = $script:ClaudePriceBook[$matches[0]] } }
-    return $null
+    $book = Get-ClaudeBusinessUnitPriceBook
+    $key = Resolve-ClaudePriceBookKey -Name $Model -Book $book
+    if (-not $key) { return $null }
+    return @{ Key = $key; Price = $script:ClaudePriceBook[$key] }
 }
 
 function Test-ClaudeBuId {
