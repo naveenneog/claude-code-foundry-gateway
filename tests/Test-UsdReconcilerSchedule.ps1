@@ -31,13 +31,17 @@ $compiled = az bicep build --file (Join-Path $root 'infra\usd-reconciler-job.bic
 $suffixExpression = [string]$compiled.variables.suffix
 Assert 'compiled template suffix excludes repositoryRef' ($suffixExpression -match 'gatewayResourceId' -and $suffixExpression -match 'workspaceResourceId' -and $suffixExpression -notmatch 'repositoryRef') $suffixExpression
 Assert 'compiled resource names are unchanged by a different repositoryRef' ($suffixExpression -notmatch 'repositoryRef' -and ($compiled.resources | ConvertTo-Json -Depth 20) -match 'repositoryRef')
+$compiledJson = $compiled | ConvertTo-Json -Depth 80
+Assert 'template delegates workspace role assignment to the principalId-keyed access module' ($compiledJson -match 'usd-reconciler-logs-access-' -and $compiledJson -match "guid\(resourceId\('Microsoft\.OperationalInsights/workspaces', parameters\('workspaceName'\)\), parameters\('principalId'\), variables\('logsReader'\)\)") $compiledJson
+Assert 'template delegates gateway role assignment to the principalId-keyed access module' ($compiledJson -match 'usd-reconciler-gateway-access-' -and $compiledJson -match "guid\(resourceId\('Microsoft\.ApiManagement/service', parameters\('gatewayName'\)\), parameters\('principalId'\), parameters\('writerRoleDefinitionId'\)\)") $compiledJson
+Assert 'compiled role assignment names never key on the user-assigned identity resource id' ($compiledJson -notmatch 'guid\([^\r\n]*identity\.id') $compiledJson
 Assert 'template command and args are JSON arrays, not CLI inline args' ($template -match "(?s)command:\s*\[\s*'/bin/bash'\s*'-c'" -and $template -notmatch '--args')
 Assert 'template runs the shared USD command engine' ($template -match 'python3 -m aum_service.usd_command' -and $template -match '--managed-identity')
 Assert 'template fetches pinned repository ref' ($template.Contains('archive = f"{repo}/archive/{ref}.tar.gz"') -and $template -notmatch 'git clone.*main')
 Assert 'template uses user-assigned managed identity' ($template -match 'Microsoft.ManagedIdentity/userAssignedIdentities' -and $template -match "type: 'UserAssigned'")
 Assert 'gateway role has only named-value writer actions' ($template -match 'Microsoft.ApiManagement/service/namedValues/write' -and $template -notmatch 'Microsoft.ApiManagement/service/apis/write' -and $template -notmatch 'Microsoft.ApiManagement/service/policies/write')
-Assert 'gateway role assignment is scoped to the gateway resource' ($template -match 'scope: gateway' -and $template -match 'roleDefinitionId: writerRole.id')
-Assert 'workspace role is Log Analytics Reader' ($template -match "73c42c96-874c-492b-b04d-ab87d138a893" -and $template -match 'workspaceReader')
+Assert 'gateway role assignment is scoped to the gateway resource' ($template -match "module gatewayAccess 'aum-gateway-access.bicep'" -and $template -match 'writerRoleDefinitionId: writerRole.id')
+Assert 'workspace role is Log Analytics Reader' ($template -match "module logsAccess 'aum-logs-access.bicep'")
 Assert 'arguments carry no secrets' ($template -notmatch 'secretRef|connectionString|listKeys\(')
 Assert 'logs use diagnostic setting to workspace, not shared key' ($template -match 'diagnosticSettings' -and $template -notmatch 'workspaceKey|sharedKey')
 

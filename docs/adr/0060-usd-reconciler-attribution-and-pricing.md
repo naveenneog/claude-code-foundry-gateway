@@ -68,3 +68,14 @@ deleting older jobs for the same gateway. If no such run succeeds, the older job
 are kept so state stays fresh and the operator gets the log query and rerun command.
 Job deletion uses core ARM resource deletion. The immediate `-RunNow` path uses the
 same ARM start/poll flow, not the Container Apps CLI extension.
+
+On `main`, each scheduled-reconciler registration created a commit-specific
+Container Apps job, optional environment and user-assigned identity. From this
+release, one job and one identity per gateway are updated in place. Older
+identities keep their role assignments until those assignments are removed and
+the identity is deleted. The role assignment names are keyed by the runtime
+principal id through the shared gateway and Log Analytics access modules
+(`infra/aum-gateway-access.bicep`, `infra/aum-logs-access.bicep`). This naming
+changed before release. A gateway that deployed an earlier build of this branch
+could have hit Azure `RoleAssignmentExists` because the same assignment name
+cannot change principals, but no released build used that shape.

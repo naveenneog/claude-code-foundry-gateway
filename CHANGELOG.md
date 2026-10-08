@@ -41,7 +41,10 @@ exact streaming cache-creation detail remains **U13**.
   only after the replacement deploys. Cleanup uses core `az resource delete` and no longer suggests
   deleting the environment used by the replacement job; upgrades now keep old jobs until the new
   job has one successful post-deployment execution, and `-RunNow` uses ARM start/poll calls rather
-  than the Container Apps CLI extension ([ADR-0060](docs/adr/0060-usd-reconciler-attribution-and-pricing.md)).
+  than the Container Apps CLI extension. The scheduled job template now delegates gateway and
+  workspace role assignments to the shared principal-id-keyed modules so a recreated per-gateway
+  identity does not reuse role assignment names from the old principal
+  ([ADR-0060](docs/adr/0060-usd-reconciler-attribution-and-pricing.md)).
 
 - **P104 the projection sync job runs on an admin-set schedule.** Adding or removing a developer in an Entra
   tier group or business-unit group reaches the Cosmos projection at the sync job's next run, with no command

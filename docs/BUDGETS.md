@@ -164,7 +164,13 @@ there is no Azure CLI sign-in inside the container.
 
 Registering a newer commit updates the same per-gateway job in place: resource
 names are based on the resource group, gateway and workspace, not on
-`RepositoryRef`. Before deployment the register script inventories Container Apps
+`RepositoryRef`. On `main`, each commit created a separate job, optional
+environment and user-assigned identity; from this release the one job and one
+identity for the gateway are updated in place. Older identities retain their
+role assignments until cleanup removes the assignments and then the identity.
+The role-assignment naming changed before release, so a gateway that ran an
+earlier build of this branch could have seen Azure `RoleAssignmentExists`, but
+no released build used that shape. Before deployment the register script inventories Container Apps
 jobs in the resource group tagged `component=usd-reconciler`, reads each job's
 `GATEWAY_ID`, and remembers only jobs for this gateway. After the deployment succeeds it starts the replacement job with the ARM
 Container Apps Jobs Start API (`POST <job-id>/start?api-version=2024-03-01`)

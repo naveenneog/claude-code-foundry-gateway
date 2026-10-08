@@ -406,13 +406,13 @@
       "source": "docs/architecture/14-usd-budgets.json",
       "inputs": {
         "analytics/chargeback-ledger.kql": "3924ba7e4edb21d761b16254452c0509a2a9d27558033d7a980c5e201e22b2f5",
-        "docs/architecture/14-usd-budgets.json": "575fb8fb71cef9fee99088d91d0345d8154dad0c29717e1ad38fd6ea1a981ea8",
+        "docs/architecture/14-usd-budgets.json": "4c7ad0fb56be2007e7c428b5e7c350ce1e383f2ca8e42b0691fe73e0716d2d7e",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
         "infra/main.bicep": "c61ea3f911267fe8924debc455ad3e53fda10999cd47f478bd4a8a9ade54a985",
         "infra/policy.xml": "5fb03fa828da5684af4eff855fb18c52a166eb884cde80fdc21b8cd476040790",
-        "infra/usd-reconciler-job.bicep": "a7511e82c49fc67c6bf009e40f0501172192a46db83b789ae9ec4898128423e7",
+        "infra/usd-reconciler-job.bicep": "6e89879ee3c380600f61e15bf5faeff75ceaba27ffee07605a2e59519db3b186",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "scripts/ClaudeUsdBudgets.ps1": "7435987f2cd90b8456e0f85e231c5d82d46f640c950e4d5966e5feae8f1d400d",
         "scripts/Register-ClaudeUsdReconciler.ps1": "9d8bc0c05b7f3540ee4fcda0b8df9423e3d1da10658b972f7b71a146b7ece546",
@@ -426,7 +426,7 @@
       "outputs": [
         {
           "path": "docs/images/architecture/usd-budgets.png",
-          "sha256": "d5e7876c16dbc7b5b6c6937183f7442ff7677973ba5069b2e05b79ab1d48c508"
+          "sha256": "132725f9f4034340b0e4c60579f0a88ede3af7b4c939644be2d2a574e53ffdea"
         }
       ]
     },
