@@ -317,6 +317,12 @@ Another interval (`30m`, `1h`, `2h`, `3h`, `4h`, `6h`, `8h`, `12h`) or `manual`:
 .\scripts\Deploy-ClaudeProjectionRenewal.ps1 -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> -AlertEmail <address> -SyncInterval 30m
 ```
 
+Change the interval of a deployed job, keeping its image, tier groups and alert addresses:
+
+```powershell
+.\scripts\Set-ClaudeProjectionSyncSchedule.ps1 -ResourceGroup <rg> -ApimName <apim> -Interval 30m
+```
+
 Expected result: Deployment prints the job and action group, the Graph grant command and the `az containerapp job start` command. The job runs every 2 hours unless `-SyncInterval` sets another interval; a scheduled job adds the no-success alert, which reads 2 x the interval + 15 minutes. The renewal deployer refuses before any write while the gateway has no `entitlement-projection-prefix` for this prefix: the job writes records without `expiresAt`, which a resolver published before [ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md) refuses, and Step 2 publishes the current resolver before it records the prefix.
 
 Sources: [optional sync job](SECURE-PROJECTION.md#optional-sync-job-and-switch-evidence-p97), `scripts/Deploy-ClaudeProjectionRenewal.ps1`.

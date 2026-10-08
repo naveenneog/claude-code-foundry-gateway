@@ -29,6 +29,19 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P104 the projection sync job runs on an admin-set schedule.** Adding or removing a developer in an Entra
+  tier group or business-unit group reaches the Cosmos projection at the sync job's next run, with no command
+  ([ADR-0058](docs/adr/0058-scheduled-projection-sync.md)). `Install-ClaudeGateway.ps1` deploys the job with the
+  projection; `-ProjectionSyncInterval` takes `30m`, `1h`, `2h` (default), `3h`, `4h`, `6h`, `8h`, `12h`,
+  `manual` or `none`, and a re-run keeps the deployed job's interval. The review shows the interval, the runs a
+  month and the missed-run range; `-DeploySyncJob` is accepted and has no effect.
+  `scripts/Deploy-ClaudeProjectionRenewal.ps1 -SyncInterval` replaces `-CronExpression`, which is refused with
+  the interval it maps to, and `scripts/Set-ClaudeProjectionSyncSchedule.ps1 -Interval` changes a deployed job.
+  Each run writes only changed developers; an unattended run that would delete more than max(10, 10% of the
+  records) writes nothing and ends at stage `removal-ceiling`. The no-success alert reads 2 x the interval + 15
+  minutes under one rule name; the deploy script removes P97's `-no-success-45m` rule, whose query held the
+  literal text `${renewalLogs}` because Bicep does not interpolate `'''` strings. The deploy script reports
+  whether the job identity holds Microsoft Graph `GroupMember.Read.All` and never grants it.
 - **P103 user guides open with a Quickstart, and every other section is a disclosure (part 1).** README,
   SETUP, ARCHITECTURE and 38 guides open with an H1, a purpose line and a visible `## Quickstart` with its
   expected result. Every other section heading stays visible, with its body in one `<details>` block whose

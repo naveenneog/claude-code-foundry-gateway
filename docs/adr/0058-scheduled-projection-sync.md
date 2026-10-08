@@ -58,8 +58,9 @@ USD 0.00003 per run-second above the subscription's monthly free grant.
    `0 */12 * * *` (UTC). Anything shorter than 30 minutes is refused. `-CronExpression` is replaced by
    `-SyncInterval` in the deploy script; it is refused before any Azure call with the interval it maps to.
 2. **The installer deploys the job with the projection.** `-ProjectionSyncInterval` (default `2h`) replaces the
-   opt-in `-DeploySyncJob`, which is still accepted and changes nothing. `none` skips the job. The review lists
-   the interval, runs per month and cost.
+   opt-in `-DeploySyncJob`, which is still accepted and changes nothing. `none` skips the job. Without the
+   parameter, a re-run keeps the interval of the deployed job, found by its `claude-projection-prefix` tag
+   (`scripts/ClaudeProjectionSyncJob.ps1`). The review lists the interval, runs per month and cost.
 3. **The Graph grant stays with a tenant administrator.** The installer reads the job identity's app role
    assignments and prints whether it holds `GroupMember.Read.All`, and if not, the grant command. It writes
    nothing in Microsoft Graph. Until the grant, scheduled runs stop at the Graph stage, write nothing and fire
@@ -76,7 +77,10 @@ USD 0.00003 per run-second above the subscription's monthly free grant.
    business-unit changes are not limited. An attended `Sync-ClaudeAccess.ps1` run applies such a plan.
 6. **Changing the interval later.** `scripts/Set-ClaudeProjectionSyncSchedule.ps1 -Interval <value>` reads the
    deployed job and its action group and redeploys `infra/projection-renewal.bicep` with the same image
-   digest, so the trigger and the alert change together. The Azure CLI and portal steps are documented.
+   digest, so the trigger and the alert change together. The Azure CLI guide's renewal block takes
+   `SYNC_INTERVAL` with the same table, checked against `scripts/ClaudeProjectionSchedule.ps1` by
+   `tests/Test-AzCommandsRenewal.ps1`. In the Azure portal, the script runs in Azure Cloud Shell; editing only
+   the job's cron expression would leave the no-success alert on the old range.
 
 ## Consequences
 

@@ -15,8 +15,9 @@ An existing gateway, from PowerShell 7 at the repository root, in order:
 |---|---|
 | Deploy, populate and compare; named values keep serving | `./scripts/Deploy-ClaudeProjection.ps1 -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix>` |
 | Switch, after the resolver checks, the compare and switch evidence | `./scripts/Deploy-ClaudeProjection.ps1 -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> -FlipAfterCleanCompare` |
-| Publish one developer's change, after the Entra group change | `./scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim> -User <upn-or-object-id>` |
-| Optional, for very large directories: the sync job | `./scripts/Deploy-ClaudeProjectionRenewal.ps1 -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> -AlertEmail <address>` |
+| Publish one developer's change at once, after the Entra group change | `./scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim> -User <upn-or-object-id>` |
+| The sync job, which applies group changes every 2 hours by default ([below](#scheduled-sync-job-p104)) | `./scripts/Deploy-ClaudeProjectionRenewal.ps1 -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> -AlertEmail <address>` |
+| Change the sync job's interval | `./scripts/Set-ClaudeProjectionSyncSchedule.ps1 -ResourceGroup <rg> -ApimName <apim> -Interval <30m-12h or manual>` |
 
 Rollback refreshes and compares the named values, then sets `entitlement-source` back to `named-value`
 ([switch](#switch-to-the-projection-p95)). A rollback to named values holds only a population within their
@@ -111,7 +112,8 @@ resolver therefore cannot change who is entitled.
 
 ### Optional sync job and switch evidence (P97)
 
-Most changes use on-demand sync. Add or remove a developer in the Entra group, then run:
+The sync job applies group changes on its schedule ([Scheduled sync job](#scheduled-sync-job-p104)). To
+publish one developer's change at once, add or remove the developer in the Entra group, then run:
 
 ```powershell
 .\scripts\Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim> -User <name-or-object-id>
@@ -180,6 +182,73 @@ successful full sync status for this account, database, container and tenant to 
 24 hours, and no live entitlement record the resolver would refuse. Invalid live records refuse with
 a count and up to three SHA-256 object-id samples, never raw ids. A targeted sync writes a user-mode
 status record and does not count as switch evidence.
+
+### Scheduled sync job (P104)
+
+The sync job applies Entra group changes without an operator
+([ADR-0058](adr/0058-scheduled-projection-sync.md)). Each run reads the standard and premium tier groups and
+every business-unit group in the gateway's `bu-registry` through Microsoft Graph, compares them with the
+entitlement container and writes only the developers who were added, removed or moved to another tier or unit
+(`sync/src/plan.mjs`). Membership in a business-unit group alone gives no access.
+
+| `-SyncInterval` | Cron (UTC) | Runs a month | No-success alert range |
+|---|---|---|---|
+| `30m` | `*/30 * * * *` | 1,460 | 75 minutes |
+| `1h` | `0 * * * *` | 730 | 135 minutes |
+| `2h` (default) | `0 */2 * * *` | 365 | 255 minutes |
+| `3h` | `0 */3 * * *` | 243 | 375 minutes |
+| `4h` | `0 */4 * * *` | 183 | 495 minutes |
+| `6h` | `0 */6 * * *` | 122 | 735 minutes |
+| `8h` | `0 */8 * * *` | 91 | 975 minutes |
+| `12h` | `0 */12 * * *` | 61 | 1,455 minutes |
+| `manual` | none | runs only when started | no rule |
+
+Runs a month use 730 hours (`scripts/AzureRetailPrice.ps1`). Container Apps evaluates cron expressions in UTC
+([Jobs in Azure Container Apps](https://learn.microsoft.com/azure/container-apps/jobs), updated 2026-09-16).
+Intervals shorter than 30 minutes are refused. 24 hours is not offered: its no-success range, 2 x 1,440 + 15
+minutes, is longer than the 2 days a log search alert can read.
+
+Timing:
+
+- A developer added to a tier group gets access at the next run. A refusal the gateway cached for that
+  developer before the run lasts at most 60 seconds (`infra/policy.xml:162`).
+- A developer removed from every tier group loses access at the next run plus at most
+  `entitlement-cache-seconds`, the time the gateway caches an allowed answer (3,600 seconds by default, `infra/main.bicep:158`; `infra/policy.xml:140`).
+
+`Install-ClaudeGateway.ps1` deploys the job with the projection. `-ProjectionSyncInterval` takes the values
+above or `none`, which deploys no job. Without the parameter, a re-run keeps the interval of the deployed job,
+and a first install uses `2h`. The review before any write shows the interval, the runs a month and the
+missed-run range. `-DeploySyncJob` is still accepted and has no effect.
+
+Change the interval of a deployed job:
+
+```powershell
+.\scripts\Set-ClaudeProjectionSyncSchedule.ps1 -ResourceGroup <rg> -ApimName <apim> -Interval 30m
+```
+
+The script reads the deployed job's image digest, tier group ids and alert addresses, prints the change, and
+runs `scripts/Deploy-ClaudeProjectionRenewal.ps1` with the same image and the new `-SyncInterval`, so the job's
+schedule and the no-success alert change together. `-WhatIf` shows the change without writing. In the Azure
+portal, run the same command in Azure Cloud Shell (PowerShell) from a clone of this repository. Changing the
+job's cron expression alone leaves the no-success alert on the old range.
+
+The job needs Microsoft Graph application permission `GroupMember.Read.All`. The deploy script reads whether the
+job identity holds it, records `held`, `missing` or `unknown` in its receipt, and writes nothing in Graph. A
+Privileged Role Administrator or Global Administrator grants it once with
+`scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1 -PrincipalId <id>`. Until then each run stops at the Graph
+stage, writes nothing, and fires the Graph-denied alert.
+
+An unattended run that would delete more than max(10, 10% of the entitlement records) writes nothing and ends
+with stage `removal-ceiling`, which fires the failed-run alert. Additions, tier changes and business-unit changes
+have no limit. `Sync-ClaudeAccess.ps1` applies such a removal attended.
+
+A run that takes longer than the interval overlaps the next execution. The later run waits up to 900 seconds
+for the apply lock; if the earlier run still holds it, the later run stops before any write and the failed-run
+alert fires ([U165](UNKNOWNS.md)).
+
+Cost: USD 0.00003 per run-second for the job's 1 vCPU and 2 GiB (`eastus2` retail prices, read 2026-10-07)
+above the subscription's monthly Container Apps free grant of 180,000 vCPU-seconds and 360,000 GiB-seconds,
+which other Container Apps workloads share ([Billing in Azure Container Apps](https://learn.microsoft.com/azure/container-apps/billing), updated 2026-03-25).
 
 ### Switch to the projection (P95)
 
