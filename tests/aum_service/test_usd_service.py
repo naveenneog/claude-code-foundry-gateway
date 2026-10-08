@@ -173,6 +173,8 @@ class UsdServiceTests(unittest.TestCase):
                          "by day=startofday(timestamp), user_id, family, deployment, business_unit"):
             self.assertIn(fragment, query)
         self.assertIn("family=family_of(deployment)", query)
+        self.assertIn("| extend family=family_of(deployment)", query,
+                      "family must be computed in a separate extend after the deployment fallback")
         # KQL evaluates every expression of one extend against the input row, so a family computed in the same
         # extend that replaces `deployment` reads the original, empty DeploymentName (live harness, 2026-10-08).
         fallback = query.index("| extend deployment=iff(isempty(deployment),model,deployment)")
