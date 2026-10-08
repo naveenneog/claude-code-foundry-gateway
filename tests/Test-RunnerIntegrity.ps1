@@ -209,24 +209,30 @@ try {
     $overlap = @($r.Ran | Where-Object { $_.Proc -ne $exclusive.Proc -and $_.Start -lt $exclusive.End -and $_.End -gt $exclusive.Start })
     Assert 'an exclusive check never overlaps another check' ($exclusive -and $overlap.Count -eq 0)
     Assert 'every process has a private scratch directory' (@($r.Ran.Temp | Sort-Object -Unique).Count -eq $r.Ran.Count)
+    # A missing file reads as a marker, so a scenario whose book was lost fails its assertion instead of stopping the suite.
+    function Read-ScenarioText([string]$Path) { if (Test-Path -LiteralPath $Path -PathType Leaf) { [IO.File]::ReadAllText($Path) } else { '<missing>' } }
     $operatorBook = '{"models":{"keep":{"inputPerM":1,"outputPerM":5}}}'
     $deleteBook = Invoke-Scenario $mini -PriceBookContent $operatorBook -Behaviour @{
         'First.ps1' = "Remove-Item -LiteralPath (Join-Path (Split-Path `$PSScriptRoot -Parent) 'config\price-book.json') -Force; exit 0"
     }
     $deleteBookPath = Split-Path $deleteBook.Marks -Parent
-    $deleteBookContent = [IO.File]::ReadAllText((Join-Path $deleteBookPath 'config\price-book.json'))
+    $deleteBookContent = Read-ScenarioText (Join-Path $deleteBookPath 'config\price-book.json')
     Assert 'Test-All restores and fails the suite that deletes an operator price book' ($deleteBook.Exit -ne 0 -and $deleteBook.Output -match 'config\\price-book\.json was deleted by (first|[^;]*still running \([^)]*first)' -and $deleteBookContent -ceq $operatorBook) $deleteBook.Output
     $changeBook = Invoke-Scenario $mini -PriceBookContent $operatorBook -Behaviour @{
         'Second.ps1' = "[IO.File]::WriteAllText((Join-Path (Split-Path `$PSScriptRoot -Parent) 'config\price-book.json'), 'changed'); exit 0"
-        # The serial-lane check starts after every parallel check has finished: it must see the restored book.
-        'Exclusive.ps1' = "`$root = Split-Path `$PSScriptRoot -Parent; [IO.File]::WriteAllText((Join-Path `$root 'exclusive-saw.txt'), [IO.File]::ReadAllText((Join-Path `$root 'config\price-book.json'))); exit 0"
     }
     $changeBookPath = Split-Path $changeBook.Marks -Parent
-    $changeBookContent = [IO.File]::ReadAllText((Join-Path $changeBookPath 'config\price-book.json'))
-    $changeBookSaw = [IO.File]::ReadAllText((Join-Path (Split-Path $changeBook.Marks -Parent) 'exclusive-saw.txt'))
-    Assert 'a check that starts after the change runs against the restored operator price book' ($changeBookSaw -ceq $operatorBook) $changeBookSaw
+    $changeBookContent = Read-ScenarioText (Join-Path $changeBookPath 'config\price-book.json')
+    # One check at a time: the check after the writer must already see the restored book, not only the end of the run.
+    $laterBook = Invoke-Scenario $mini -PriceBookContent $operatorBook -Options @('-ThrottleLimit', '1', '-CheckTimeoutSeconds', '60') -Behaviour @{
+        'Second.ps1' = "[IO.File]::WriteAllText((Join-Path (Split-Path `$PSScriptRoot -Parent) 'config\price-book.json'), 'changed'); exit 0"
+        'Third.ps1' = "`$root = Split-Path `$PSScriptRoot -Parent; [IO.File]::WriteAllText((Join-Path `$root 'third-saw.txt'), [IO.File]::ReadAllText((Join-Path `$root 'config\price-book.json'))); exit 0"
+    }
+    $laterBookSaw = Read-ScenarioText (Join-Path (Split-Path $laterBook.Marks -Parent) 'third-saw.txt')
+    Assert 'a check that starts after the change runs against the restored operator price book' ($laterBook.Exit -ne 0 -and $laterBookSaw -ceq $operatorBook) "$laterBookSaw | $($laterBook.Output)"
+    foreach ($kept in [regex]::Matches($laterBook.Output, 'kept the changed file at (\S+?\.json)')) { Remove-Item -LiteralPath $kept.Groups[1].Value -Force -ErrorAction SilentlyContinue }
     $changeBookKept = [regex]::Match($changeBook.Output, 'kept the changed file at (\S+?\.json)')
-    Assert 'Test-All keeps the changed price book before restoring the original' ($changeBookKept.Success -and [IO.File]::ReadAllText($changeBookKept.Groups[1].Value) -ceq 'changed') $changeBook.Output
+    Assert 'Test-All keeps the changed price book before restoring the original' ($changeBookKept.Success -and (Read-ScenarioText $changeBookKept.Groups[1].Value) -ceq 'changed') $changeBook.Output
     if ($changeBookKept.Success) { Remove-Item -LiteralPath $changeBookKept.Groups[1].Value -Force -ErrorAction SilentlyContinue }
     Assert 'Test-All restores and fails the suite that modifies an operator price book' ($changeBook.Exit -ne 0 -and $changeBook.Output -match 'config\\price-book\.json was modified by (second|[^;]*still running \([^)]*second)' -and $changeBookContent -ceq $operatorBook) $changeBook.Output
     $createBook = Invoke-Scenario $mini -Behaviour @{
@@ -234,7 +240,7 @@ try {
     }
     $createBookPath = Join-Path (Split-Path $createBook.Marks -Parent) 'config\price-book.json'
     $createBookKept = [regex]::Match($createBook.Output, 'kept the changed file at (\S+?\.json)')
-    Assert 'Test-All keeps a price book a suite left behind before removing it' ($createBookKept.Success -and [IO.File]::ReadAllText($createBookKept.Groups[1].Value) -ceq 'left behind') $createBook.Output
+    Assert 'Test-All keeps a price book a suite left behind before removing it' ($createBookKept.Success -and (Read-ScenarioText $createBookKept.Groups[1].Value) -ceq 'left behind') $createBook.Output
     if ($createBookKept.Success) { Remove-Item -LiteralPath $createBookKept.Groups[1].Value -Force -ErrorAction SilentlyContinue }
     Assert 'Test-All removes and fails a price book a suite leaves where none existed' ($createBook.Exit -ne 0 -and $createBook.Output -match 'config\\price-book\.json was created by (first|[^;]*still running \([^)]*first)' -and -not (Test-Path -LiteralPath $createBookPath)) $createBook.Output
     # Checks run in parallel: the check whose completion finds the change may not be the writer, so the message also
@@ -243,7 +249,7 @@ try {
         'First.ps1' = "[IO.File]::WriteAllText((Join-Path (Split-Path `$PSScriptRoot -Parent) 'config\price-book.json'), 'changed'); Start-Sleep -Seconds 20; exit 0"
         'Second.ps1' = "`$book = Join-Path (Split-Path `$PSScriptRoot -Parent) 'config\price-book.json'; `$until = [DateTime]::UtcNow.AddSeconds(40); while ([DateTime]::UtcNow -lt `$until -and [IO.File]::ReadAllText(`$book) -ne 'changed') { Start-Sleep -Milliseconds 100 }; exit 0"
     }
-    $overlapBookContent = [IO.File]::ReadAllText((Join-Path (Split-Path $overlapBook.Marks -Parent) 'config\price-book.json'))
+    $overlapBookContent = Read-ScenarioText (Join-Path (Split-Path $overlapBook.Marks -Parent) 'config\price-book.json')
     Assert 'Test-All names the checks still running when the operator price book changed' ($overlapBook.Exit -ne 0 -and $overlapBook.Output -match 'config\\price-book\.json was modified by \S+ or by a check still running \([^)]*first' -and $overlapBookContent -ceq $operatorBook) $overlapBook.Output
     foreach ($kept in [regex]::Matches($overlapBook.Output, 'kept the changed file at (\S+?\.json)')) { Remove-Item -LiteralPath $kept.Groups[1].Value -Force -ErrorAction SilentlyContinue }
 
