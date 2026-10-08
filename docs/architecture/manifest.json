@@ -146,7 +146,7 @@
         "resolver/src/lookup.mjs": "d04392c5eb24a8a084d72f1e5dc72a61fd385992039118aba510c266c3027c3b",
         "scripts/ClaudeProjectionSwitch.ps1": "46f4c4d6bc8cef2cb253f6e8d1cf5ec7d8deee75b0bfd1d0a3957b262fca6425",
         "scripts/ClaudeRunner.ps1": "d3c55010e251cbc4e9ed155be4adc46a974f62c36708ce5acfdbf8f0b7ef1a68",
-        "scripts/Deploy-ClaudeProjectionRenewal.ps1": "3e6e36df8039169e47b95bda23d501a19aa1e97afd1b78ebfae554ab84b611e5",
+        "scripts/Deploy-ClaudeProjectionRenewal.ps1": "011efc936820e124ef354b7f239080f0f3aa5e2cc1886398a030cec62a14fe35",
         "scripts/Sync-ClaudeAccess.ps1": "8d69cfebf48431a3c7b6b8fdb41916acee824e426650f4bda77b70f8e16122fe",
         "scripts/Sync-ClaudeProjection.ps1": "67976f06318afec6f1e3b949e9ff6d5a4b1204201459ed0fc5f2e3e20cec2232",
         "sync/Dockerfile": "80ab80a331c8b97f903c30cf714cedfcc9969b8d8c24be0c58777ac7c7f3b382",
