@@ -487,7 +487,7 @@ function ConvertTo-ClaudeRequestUsd {
     .DESCRIPTION
         A request's categories are known, so it is priced exactly rather than
         through the blended mix a budget uses: input at base input, output at
-        the output rate, cache read at 0.1x base input. ADR-0010: categories
+        the output rate, cache read at the book's effective cache-read rate. ADR-0010: categories
         are priced separately and never summed before pricing, and money stays
         decimal.
 
@@ -510,8 +510,9 @@ function ConvertTo-ClaudeRequestUsd {
     $price = if ($resolved) { $resolved.Price } else { $null }
     if (-not $price) { return $null }
     $perToken = [decimal]1000000
+    $cacheReadPerM = if ($price.ContainsKey('CacheReadPerM')) { $price.CacheReadPerM } else { $price.InputPerM * [decimal]0.1 }
     $usd = (([decimal]$InputTokens / $perToken) * $price.InputPerM) +
            (([decimal]$OutputTokens / $perToken) * $price.OutputPerM) +
-           (([decimal]$CacheReadTokens / $perToken) * $price.InputPerM * [decimal]0.1)
+           (([decimal]$CacheReadTokens / $perToken) * $cacheReadPerM)
     return [math]::Round($usd, 6)
 }
