@@ -161,6 +161,7 @@ pinned commit, installs the AUM-service Python requirements, and runs the same P
 engine as `Sync-ClaudeUsdBudgets.ps1`: `python3 -m aum_service.usd_command
 --managed-identity`. It uses Azure Identity's managed-identity endpoint directly;
 there is no Azure CLI sign-in inside the container.
+On Windows, avoid resource group names with parentheses for this registration path because the `az.cmd` shim can parse an unquoted `)` as the end of a `cmd.exe` block before Azure CLI receives it.
 
 Registering a newer commit updates the same per-gateway job in place: resource
 names are based on the resource group, gateway and workspace, not on
