@@ -89,13 +89,13 @@ or invoice reconciliation. Null/unpriced is never $0.
    Active budgets pin their tariff. The AUM service rejects a different book
    while items exist (`service/aum/aum_service/usd_service.py:57-60`), and the
    scripts keep the stored book and warn with both dates
-   (`scripts/ClaudeUsdBudgets.ps1:63-71`). To replace the script-stored book,
+   (`scripts/ClaudeUsdBudgets.ps1:101-106`). To replace the script-stored book,
    record the approved dollar budgets, clear each dollar budget through the
    management surface that owns it, then write them again with the same setter
    commands. `Set-ClaudeBudget.ps1 -Clear` clears a person dollar budget. The
    first script write to a document with no budget items stores the current or
    `-PriceBookPath` book and stamps the item with that date
-   (`scripts/ClaudeUsdBudgets.ps1:63-80`). Dollar budgets are not enforced
+   (`scripts/ClaudeUsdBudgets.ps1:90-100`). Dollar budgets are not enforced
    between the clear and the rewrite; the existing token budgets still apply.
    With the AUM service, clear the budgets and then PUT `usd-price-book`.
 
@@ -289,7 +289,15 @@ still an observed-cost stop, not a hard invoice cap.
   but it is not a member's spend and does not make any scope unpriced. If the
   state lists a deployment such as `claude-opus-5-5`, add the missing model
   tariff; if it lists a dated model whose family is already present, update the
-  software because the normalized eight-digit match should price it.
+  software because the normalized eight-digit match should price it. A model is
+  also unpriced when an entry of its family has a missing `inputPerM` or
+  `outputPerM`, a rate that is negative or not a number, or is not an object,
+  and when two spellings of it have different rates; an invalid dated entry
+  also leaves its undated family unpriced
+  (`service/aum/aum_service/usd_budgets.py:196-243`). Adding another spelling
+  does not price such a family: the entry is corrected or removed in the book
+  the setters read (`config/price-book.json` or `-PriceBookPath`), and the
+  corrected book is adopted as in step 4 of [Enable and operate it](#enable-and-operate-it).
 - **Claude Haiku 5.5:** left unpriced by this book. Anthropic publishes two
   Haiku 5.5 tiers by prompt size, and the current reconciler aggregates rows by
   day rather than per-request prompt-size tier. Until U178 is resolved, an

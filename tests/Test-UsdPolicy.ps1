@@ -111,10 +111,10 @@ $genericUnpriced = 'Usage cannot be completely priced for this scope. Ask the ga
 $item.unpriced_models = @('claude-haiku-5-5')
 $named['usd-budget-state'] = Pack $state
 $namedModel = Evaluate
-Assert 'unpriced refusal names the model and price book date' ($namedModel.http_status -eq 403 -and $namedModel.code -eq 'usd_budget_unpriced' -and $namedModel.message -eq 'Usage of claude-haiku-5-5 cannot be priced with the price book dated 2026-10-08. Ask the gateway owner to add a price for it, then reconcile.')
+Assert 'unpriced refusal names the model and price book date' ($namedModel.http_status -eq 403 -and $namedModel.code -eq 'usd_budget_unpriced' -and $namedModel.message -eq 'Usage of claude-haiku-5-5 cannot be priced with the price book dated 2026-10-08. Ask the gateway owner to add or correct its price-book entry, then reconcile.')
 $item.unpriced_models = @('model-a','model-b','model-c','model-d','model-e','model-f','model-g')
 $named['usd-budget-state'] = Pack $state
-Assert 'unpriced refusal lists at most five models and a remaining count' ((Evaluate).message -eq 'Usage of model-a, model-b, model-c, model-d, model-e and 2 more cannot be priced with the price book dated 2026-10-08. Ask the gateway owner to add a price for them, then reconcile.')
+Assert 'unpriced refusal lists at most five models and a remaining count' ((Evaluate).message -eq 'Usage of model-a, model-b, model-c, model-d, model-e and 2 more cannot be priced with the price book dated 2026-10-08. Ask the gateway owner to add or correct their price-book entries, then reconcile.')
 $item.unpriced_models = $null
 $named['usd-budget-state'] = Pack $state
 $nullModels = Evaluate
