@@ -13,14 +13,16 @@ function Get-ClaudeProjectionGraphGrant {
     $previous = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
-        $graphText = (az ad sp show --id '00000003-0000-0000-c000-000000000000' -o json 2>&1 | Out-String)
-        if ($LASTEXITCODE -ne 0) { return [pscustomobject]@{ State = 'unknown'; Detail = "the Microsoft Graph service principal could not be read: $($graphText.Trim())" } }
-        $graph = $graphText | ConvertFrom-Json
+        # Lines az writes to stderr stay out of the parse: a warning with exit code 0 would otherwise break it.
+        $graphOutput = @(az ad sp show --id '00000003-0000-0000-c000-000000000000' -o json 2>&1)
+        if ($LASTEXITCODE -ne 0) { return [pscustomobject]@{ State = 'unknown'; Detail = "the Microsoft Graph service principal could not be read: $((($graphOutput | Out-String).Trim()))" } }
+        $graph = (@($graphOutput | Where-Object { $_ -isnot [Management.Automation.ErrorRecord] }) | Out-String) | ConvertFrom-Json
         $roleId = @($graph.appRoles | Where-Object { [string]::Equals([string]$_.value, $permission, [StringComparison]::Ordinal) } | ForEach-Object { [string]$_.id })[0]
         if (-not $graph.id -or -not $roleId) { return [pscustomobject]@{ State = 'unknown'; Detail = "Microsoft Graph lists no $permission application role." } }
-        $assignmentsText = (az rest --method get --url "https://graph.microsoft.com/v1.0/servicePrincipals/$PrincipalId/appRoleAssignments" -o json 2>&1 | Out-String)
-        if ($LASTEXITCODE -ne 0) { return [pscustomobject]@{ State = 'unknown'; Detail = "the identity's app role assignments could not be read: $($assignmentsText.Trim())" } }
-        $held = @(@(($assignmentsText | ConvertFrom-Json).value) | Where-Object {
+        $assignmentsOutput = @(az rest --method get --url "https://graph.microsoft.com/v1.0/servicePrincipals/$PrincipalId/appRoleAssignments" -o json 2>&1)
+        if ($LASTEXITCODE -ne 0) { return [pscustomobject]@{ State = 'unknown'; Detail = "the identity's app role assignments could not be read: $((($assignmentsOutput | Out-String).Trim()))" } }
+        $assignments = (@($assignmentsOutput | Where-Object { $_ -isnot [Management.Automation.ErrorRecord] }) | Out-String) | ConvertFrom-Json
+        $held = @(@($assignments.value) | Where-Object {
                 [string]::Equals([string]$_.resourceId, [string]$graph.id, [StringComparison]::OrdinalIgnoreCase) -and
                 [string]::Equals([string]$_.appRoleId, $roleId, [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0
         return [pscustomobject]@{ State = $(if ($held) { 'held' } else { 'missing' }); Detail = '' }

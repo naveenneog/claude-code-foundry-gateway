@@ -7,7 +7,9 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $fail = 0
+$count = 0
 function Assert($Label, [bool]$Condition, $Detail = '') {
+    $script:count++
     if ($Condition) { Write-Host "  [OK]   $Label" -ForegroundColor Green }
     else { Write-Host "  [FAIL] $Label$(if ($Detail) { " - $Detail" })" -ForegroundColor Red; $script:fail++ }
 }
@@ -185,5 +187,5 @@ Assert 'a resource with a P86 name but another type does not stop the block' ($o
 
 Write-Host ''
 if ($fail) { Write-Host "$fail assertion(s) failed." -ForegroundColor Red; exit 1 }
-Write-Host 'Azure CLI guide renewal block holds.' -ForegroundColor Green
+Write-Host "$count renewal block assertion(s) passed: the Azure CLI guide renewal block holds." -ForegroundColor Green
 exit 0

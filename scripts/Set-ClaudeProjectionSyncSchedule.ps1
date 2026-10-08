@@ -46,36 +46,6 @@ trap {
 . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeProjectionSyncJob.ps1')
 
-function Get-JsonAz {
-    param([Parameter(Mandatory = $true)][string[]]$Arguments, [Parameter(Mandatory = $true)][string]$What)
-    $previous = $ErrorActionPreference
-    try {
-        $ErrorActionPreference = 'Continue'
-        $global:LASTEXITCODE = 0
-        $output = @(az @Arguments 2>&1)
-        $code = $LASTEXITCODE
-    }
-    finally { $ErrorActionPreference = $previous }
-    if ($code -ne 0) {
-        $detail = ($output | Out-String).Trim()
-        throw "Could not read $What (az exit $code). $detail"
-    }
-    $text = ($output | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] } | Out-String).Trim()
-    if (-not $text) { return $null }
-    return ($text | ConvertFrom-Json)
-}
-
-function Get-EmailReceivers($ActionGroup) {
-    $receivers = @()
-    foreach ($source in @($ActionGroup.emailReceivers) + @($ActionGroup.properties.emailReceivers)) {
-        foreach ($receiver in @($source)) {
-            $email = ([string]$receiver.emailAddress).Trim()
-            if ($email) { $receivers += $email }
-        }
-    }
-    return @($receivers | Select-Object -Unique)
-}
-
 $problems = [Collections.Generic.List[string]]::new()
 if (-not $GatewayResourceGroup) { $GatewayResourceGroup = $ResourceGroup }
 foreach ($pair in @(@('-ResourceGroup', $ResourceGroup), @('-GatewayResourceGroup', $GatewayResourceGroup))) {
@@ -109,6 +79,18 @@ catch {
 if (-not $job) {
     throw "No Container Apps job in $ResourceGroup has tag claude-projection-prefix '$NamePrefix'. Remedy: deploy it with scripts/Deploy-ClaudeProjectionRenewal.ps1."
 }
+# Only the job that the projection-renewal deployment created keeps its settings through this script: a job that
+# merely carries the tag could otherwise pass its image and tier groups into the redeployment.
+# The workspace, subnet and alert addresses are kept too, so the redeployment moves no log route or alert scope.
+$renewalDeployment = "projection-renewal-$NamePrefix"
+$jobSettings = Get-ClaudeProjectionSyncJobSettings -ResourceGroup $ResourceGroup -NamePrefix $NamePrefix
+$recordedJobId = [string]$jobSettings.JobResourceId
+if (-not $recordedJobId) {
+    throw "Deployment $renewalDeployment in $ResourceGroup records no job. Nothing was changed. Redeploy the job with scripts/Deploy-ClaudeProjectionRenewal.ps1."
+}
+if (-not [string]::Equals($recordedJobId, [string]$job.Id, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "The job tagged claude-projection-prefix '$NamePrefix' is $($job.Name) ($($job.Id)), but deployment $renewalDeployment created $recordedJobId. Nothing was changed. Delete the job that is not in use, or redeploy with scripts/Deploy-ClaudeProjectionRenewal.ps1."
+}
 $imageDigest = [string]$job.ImageDigest
 if (-not $imageDigest) { throw "The deployed job image has no sha256 image digest. Redeploy with scripts/Deploy-ClaudeProjectionRenewal.ps1 so this script can preserve the exact image." }
 $standardGroup = [string]$job.StandardGroupId
@@ -121,15 +103,24 @@ $currentInterval = $job.Interval
 $currentWords = if ($currentInterval) { Format-ClaudeProjectionSyncInterval -Interval $currentInterval } else { 'a cron expression this script did not set' }
 
 $actionGroupName = "ag-projection-renewal-$NamePrefix"
-$actionGroup = Get-JsonAz -Arguments @('monitor', 'action-group', 'show', '-g', $ResourceGroup, '-n', $actionGroupName, '-o', 'json') -What "action group $actionGroupName"
-$emails = @(Get-EmailReceivers $actionGroup)
+$emails = @($jobSettings.AlertEmails)
 if (-not $emails.Count) {
     throw "Action group $actionGroupName has no email receivers. Add at least one email receiver, or redeploy the sync job with scripts/Deploy-ClaudeProjectionRenewal.ps1."
 }
 
 if ($currentInterval -and $currentInterval -ceq $newSchedule.Interval) {
-    Write-Output "The projection sync job already runs $(Format-ClaudeProjectionSyncInterval -Interval $newSchedule.Interval)."
-    return
+    # The same interval is in place only with the alert rules the template deploys for it: one no-success rule
+    # for a schedule, none for manual, and never P97's 45-minute rule. Otherwise the redeployment repairs them.
+    $ruleNames = @(Invoke-ClaudeProjectionSyncAzJson -Arguments @('resource', 'list', '-g', $ResourceGroup, '--resource-type', 'Microsoft.Insights/scheduledQueryRules', '-o', 'json') -What "the alert rules in $ResourceGroup" |
+            ForEach-Object { [string]$_.name })
+    $hasRule = { param($name) @($ruleNames | Where-Object { [string]::Equals($_, $name, [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0 }
+    $rulesInPlace = -not (& $hasRule "sqr-projection-$NamePrefix-no-success-45m") -and
+        ((& $hasRule "sqr-projection-$NamePrefix-no-success") -eq ($newSchedule.Interval -cne 'manual'))
+    if ($rulesInPlace) {
+        Write-Output "The projection sync job already runs $(Format-ClaudeProjectionSyncInterval -Interval $newSchedule.Interval)."
+        return
+    }
+    Write-Output "The projection sync job already runs $(Format-ClaudeProjectionSyncInterval -Interval $newSchedule.Interval), but its alert rules differ from the template; redeploying to repair them."
 }
 
 $toWords = Format-ClaudeProjectionSyncInterval -Interval $newSchedule.Interval
@@ -151,7 +142,10 @@ $deployArgs = @{
     PremiumGroup = $premiumGroup
     ImageDigest = $imageDigest
     SyncInterval = $newSchedule.Interval
+    KeepRegistry = $true
 }
+if ($jobSettings.WorkspaceResourceId) { $deployArgs['WorkspaceResourceId'] = [string]$jobSettings.WorkspaceResourceId }
+if ($jobSettings.RenewalSubnetId) { $deployArgs['RenewalSubnetId'] = [string]$jobSettings.RenewalSubnetId }
 if ($PSBoundParameters.ContainsKey('GatewayResourceGroup') -and $GatewayResourceGroup) { $deployArgs['GatewayResourceGroup'] = $GatewayResourceGroup }
 if ($WhatIfPreference) { $deployArgs['WhatIf'] = $true }
 

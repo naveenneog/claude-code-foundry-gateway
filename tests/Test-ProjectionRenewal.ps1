@@ -5,7 +5,9 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $fail = 0
+$count = 0
 function Assert($Label, [bool]$Condition, $Detail = '') {
+    $script:count++
     if ($Condition) { Write-Host "  [OK]   $Label" -ForegroundColor Green }
     else { Write-Host "  [FAIL] $Label$(if ($Detail) { " - $Detail" })" -ForegroundColor Red; $script:fail++ }
 }
@@ -316,6 +318,7 @@ try {
             '^acr manifest show-metadata' { return (ConvertTo-Json $(if ($state.Case -eq 'bad-digest') { 'latest' } else { $digestBuilt })) }
             # ADR-0058 decision 3: the job identity's Graph permission is read, never written.
             '^ad sp show --id 00000003-0000-0000-c000-000000000000 -o json$' {
+                if ($state.Case -eq 'graph-warns') { Write-Error 'WARNING: The command is in preview.' }
                 return (@{ id = '50000000-0000-4000-8000-000000000003'; appRoles = @(
                             @{ id = '98830695-27a2-44f7-8c18-0c3ebc9698f6'; value = 'GroupMember.Read.All' }, @{ id = '60000000-0000-4000-8000-000000000001'; value = 'User.Read.All' }) } | ConvertTo-Json -Depth 4)
             }
@@ -400,6 +403,15 @@ try {
     $unreadable = Invoke-DeployScenario 'graph-unreadable'
     Assert 'a Graph permission that cannot be read does not stop the deployment and names the grant command' (-not $unreadable.Failure -and $unreadable.Receipt.graphGrant -ceq 'unknown' -and
         $unreadable.Output -match 'could not read' -and $unreadable.Output -match 'Grant-ClaudeProjectionRenewalGraphAccess\.ps1 -PrincipalId 40000000-0000-4000-8000-000000000002') "$($unreadable.Failure) | $($unreadable.Receipt.graphGrant)"
+    $warns = Invoke-DeployScenario 'graph-warns'
+    Assert 'a warning az writes to stderr does not turn the Graph read into unknown' (-not $warns.Failure -and $warns.Receipt.graphGrant -ceq 'missing') "$($warns.Failure) | $($warns.Receipt.graphGrant)"
+    # P104 council round 1 (Architect): a schedule change keeps the registry; redeploying it would reset its SKU
+    # and network settings to the template's defaults.
+    $keptRegistry = Invoke-DeployScenario 'healthy' @{ KeepRegistry = $true; ImageDigest = $digestBuilt }
+    Assert '-KeepRegistry reads the registry deployment and writes no registry and no image' (-not $keptRegistry.Failure -and
+        (Get-CallIndex $keptRegistry '^deployment group create .*-n projection-registry-') -lt 0 -and (Get-CallIndex $keptRegistry '^acr build ') -lt 0 -and
+        (Get-CallIndex $keptRegistry '^deployment group show .*-n projection-registry-p94fixture ') -ge 0 -and
+        (Get-CallIndex $keptRegistry '^deployment group create .*-n projection-renewal-p94fixture ') -ge 0 -and $keptRegistry.Receipt.imageDigest -ceq $digestBuilt) "$($keptRegistry.Failure) | $($keptRegistry.Calls -join ' | ')"
 
     foreach ($case in @(
             @{ Name = 'an alert address with a command separator'; Change = @{ AlertEmail = @('ops@example.invalid&calc') }; Expect = 'AlertEmail' }
@@ -411,6 +423,7 @@ try {
             @{ Name = 'an interval shorter than 30 minutes'; Change = @{ SyncInterval = '15m' }; Expect = 'SyncInterval' }
             @{ Name = 'a 24-hour interval'; Change = @{ SyncInterval = '24h' }; Expect = 'SyncInterval' }
             @{ Name = 'the replaced -CronExpression, naming the interval it maps to'; Change = @{ CronExpression = '*/30 * * * *' }; Expect = '-CronExpression is replaced by -SyncInterval.*-SyncInterval 30m' }
+            @{ Name = '-KeepRegistry without -ImageDigest'; Change = @{ KeepRegistry = $true }; Expect = '-KeepRegistry needs -ImageDigest' }
             @{ Name = 'no standard group'; Change = @{ StandardGroup = 'none' }; Expect = 'StandardGroup' }
             @{ Name = 'the standard group as the premium group'; Change = @{ PremiumGroup = $standard.ToUpperInvariant() }; Expect = 'PremiumGroup' }
             @{ Name = 'a subnet id with parentheses, which cmd.exe re-reads'; Change = @{ RenewalSubnetId = "/subscriptions/$sub/resourceGroups/rg(p94)/providers/Microsoft.Network/virtualNetworks/vnet-p94fixture/subnets/renewal" }; Expect = 'RenewalSubnetId' }
@@ -511,5 +524,5 @@ finally { Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyCo
 
 Write-Host ''
 if ($fail) { Write-Host "$fail assertion(s) failed." -ForegroundColor Red; exit 1 }
-Write-Host 'Projection renewal templates and deploy script hold.' -ForegroundColor Green
+Write-Host "$count projection renewal assertion(s) passed: templates and deploy script hold." -ForegroundColor Green
 exit 0

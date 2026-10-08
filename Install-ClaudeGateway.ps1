@@ -944,13 +944,17 @@ $syncJobChoice = $null
 if ($EntitlementStore -eq 'projection') {
     if ($DeploySyncJob) { Write-Note '-DeploySyncJob is no longer needed: the sync job deploys with the projection, and -ProjectionSyncInterval none skips it (ADR-0058).' }
     $deployedSyncJob = $null
-    if (-not $PSBoundParameters.ContainsKey('ProjectionSyncInterval') -and ($ExistingApim -or $liveApimIdForDefaults)) {
+    if ($ExistingApim -or $liveApimIdForDefaults) {
         $deployedSyncJob = Get-ClaudeProjectionSyncJob -ResourceGroup $ResourceGroup -NamePrefix $projectionPrefix
     }
     $syncJobChoice = Resolve-ClaudeInstallerSyncInterval -Requested $ProjectionSyncInterval -DeployedJob $deployedSyncJob
     $ProjectionSyncInterval = $syncJobChoice.Interval
     Write-Host "  Sync job: $($syncJobChoice.Summary)" -ForegroundColor DarkGray
-    if ($syncJobChoice.Note) { Write-Warn2 $syncJobChoice.Note }
+    # A re-run keeps the deployed job's alert addresses, registry SKU, workspace and subnet; read before the review,
+    # so a read that fails stops the run before any write.
+    $syncJobSettings = if ($deployedSyncJob -and $ProjectionSyncInterval -ne 'none') { Get-ClaudeProjectionSyncJobSettings -ResourceGroup $ResourceGroup -NamePrefix $projectionPrefix } else { $null }
+    $syncJobInputs = Resolve-ClaudeInstallerSyncJobInputs -DeployedJob $deployedSyncJob -JobSettings $syncJobSettings -PublisherEmail $PublisherEmail
+    if ($syncJobSettings) { Write-Host "  Sync job alerts: $((@($syncJobInputs.AlertEmail)) -join ', ') (kept from the deployed job)" -ForegroundColor DarkGray }
 }
 else { $ProjectionSyncInterval = 'none' }
 
@@ -1696,7 +1700,8 @@ if ($EntitlementStore -eq 'projection') {
         -SubscriptionId $SubscriptionId -ProjectionResolverAppId $ProjectionResolverAppId -CompareBaseline $entitlementSync.CompareBaseline -ServingStore $entitlementSync.ServingStore -ResolverPublicByDefault:($ResolverInboundAccess -eq 'public' -and -not $PSBoundParameters.ContainsKey('ResolverInboundAccess')) -WhatIf:$WhatIfPreference | Out-Null
     if ($ProjectionSyncInterval -ne 'none' -and -not $WhatIfPreference) {
         $syncJobStatus = if (Invoke-ClaudeInstallerSyncJobDeployment -Root $root -ResourceGroup $ResourceGroup -ApimName $apimName -NamePrefix $projectionPrefix `
-            -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -AlertEmail $PublisherEmail -SubscriptionId $SubscriptionId -SyncInterval $ProjectionSyncInterval) { 'deployed' } else { 'failed' }
+            -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -AlertEmail $syncJobInputs.AlertEmail -SubscriptionId $SubscriptionId -SyncInterval $ProjectionSyncInterval `
+            -AcrSku $syncJobInputs.AcrSku -WorkspaceResourceId $syncJobInputs.WorkspaceResourceId -RenewalSubnetId $syncJobInputs.RenewalSubnetId) { 'deployed' } else { 'failed' }
         if ($syncJobStatus -eq 'deployed') { $syncJobGrant = Get-ClaudeInstallerSyncJobGrant -Root $root -NamePrefix $projectionPrefix }
     }
 }
@@ -1862,7 +1867,7 @@ if ($addressMode -eq 'custom') {
 }
 $projectionSteps = $null
 if ($EntitlementStore -eq 'projection') {
-    $projectionSteps = Get-ClaudeInstallerProjectionNextSteps -ResourceGroup $ResourceGroup -ApimName $apimName -NamePrefix $projectionPrefix -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -SubscriptionId $SubscriptionId -SyncInterval $ProjectionSyncInterval -SyncJobStatus $syncJobStatus -GraphGrant $syncJobGrant
+    $projectionSteps = Get-ClaudeInstallerProjectionNextSteps -ResourceGroup $ResourceGroup -ApimName $apimName -NamePrefix $projectionPrefix -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -SubscriptionId $SubscriptionId -SyncInterval $ProjectionSyncInterval -SyncJobStatus $syncJobStatus -GraphGrant $syncJobGrant -DeployedJobSchedule $syncJobChoice.KeptJob
     $nextSteps.Add($projectionSteps.Developer)
 }
 else {

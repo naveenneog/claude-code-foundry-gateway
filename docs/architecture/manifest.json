@@ -146,7 +146,7 @@
         "resolver/src/lookup.mjs": "d04392c5eb24a8a084d72f1e5dc72a61fd385992039118aba510c266c3027c3b",
         "scripts/ClaudeProjectionSwitch.ps1": "46f4c4d6bc8cef2cb253f6e8d1cf5ec7d8deee75b0bfd1d0a3957b262fca6425",
         "scripts/ClaudeRunner.ps1": "d3c55010e251cbc4e9ed155be4adc46a974f62c36708ce5acfdbf8f0b7ef1a68",
-        "scripts/Deploy-ClaudeProjectionRenewal.ps1": "011efc936820e124ef354b7f239080f0f3aa5e2cc1886398a030cec62a14fe35",
+        "scripts/Deploy-ClaudeProjectionRenewal.ps1": "225a7615fe37fd30159612b2aa08ebf62f131a0c230ae2b83edfb1e398a364fa",
         "scripts/Sync-ClaudeAccess.ps1": "423e66dd6bf75c4c784d6e25512ac608cad9c34de97b1475e85559ed97eb0af5",
         "scripts/Sync-ClaudeProjection.ps1": "15f69ff44710887ba1379540aa7a7e263b229859338b4d66660239223872cad4",
         "sync/Dockerfile": "80ab80a331c8b97f903c30cf714cedfcc9969b8d8c24be0c58777ac7c7f3b382",
@@ -471,7 +471,7 @@
       "id": "company-address",
       "source": "docs/architecture/15-company-address.json",
       "inputs": {
-        "Install-ClaudeGateway.ps1": "f7be6e0d791b0e611dd03fa9b6775bcfbfe2e78a91f3ad45a942946a263e6d81",
+        "Install-ClaudeGateway.ps1": "580e3aca755b0bb116f581f3ff12343ee4e03f6588db0d17c8b7b4edd622e6fd",
         "Start-ClaudeGateway.ps1": "86e92a50b603e0466f2d94ef03964f1ef8a511fe49262bfb694d6df32ad2d4dc",
         "docs/architecture/15-company-address.json": "83c08d15d71fcf6a002d004090b67ea77c858b70efa3718e8ff11aebae276981",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",

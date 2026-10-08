@@ -41,6 +41,12 @@
     A sha256 digest of an image already pushed to the registry as claude-projection-sync. Skips the
     build, for example after a docker build and push.
 
+.PARAMETER KeepRegistry
+    Reuses the registry and job identity that the projection-registry-<prefix> deployment created,
+    reading its outputs instead of deploying it again; requires -ImageDigest. A redeployment would reset
+    the registry's SKU and network settings to the template's values. Set-ClaudeProjectionSyncSchedule.ps1
+    passes it, so an interval change writes only the job and its alerts.
+
 .EXAMPLE
     pwsh -NoProfile -File ./scripts/Deploy-ClaudeProjectionRenewal.ps1 -ResourceGroup <rg> `
       -ApimName <apim> -NamePrefix <prefix> -AlertEmail ops@contoso.com
@@ -60,6 +66,7 @@ param(
     [string]$CronExpression,
     [string]$ImageTag,
     [string]$ImageDigest,
+    [switch]$KeepRegistry,
     [string]$WorkspaceResourceId,
     [string]$RenewalSubnetId,
     [string]$ReceiptPath,
@@ -117,6 +124,7 @@ try { $schedule = ConvertTo-ClaudeProjectionSyncSchedule -Interval $SyncInterval
 if (-not $ImageTag) { $ImageTag = 'sync-' + [DateTime]::UtcNow.ToString('yyyyMMddHHmmss') }
 if ($ImageTag -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$') { $problems.Add("-ImageTag '$ImageTag' is not an image tag.") }
 if ($ImageDigest -and $ImageDigest -cnotmatch '^sha256:[0-9a-f]{64}$') { $problems.Add('-ImageDigest is not sha256: followed by 64 lowercase hex digits.') }
+if ($KeepRegistry -and -not $ImageDigest) { $problems.Add('-KeepRegistry needs -ImageDigest: with the registry kept, no image is built, and the job runs the image that digest names.') }
 if ($WorkspaceResourceId -and $WorkspaceResourceId -notmatch '^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\.OperationalInsights/workspaces/[^/]+$') { $problems.Add('-WorkspaceResourceId is not a Log Analytics workspace resource id.') }
 $subnetPattern = '^/subscriptions/[0-9a-fA-F-]{36}/resourceGroups/[A-Za-z0-9._-]{1,90}/providers/Microsoft\.Network/virtualNetworks/[A-Za-z0-9._-]{2,64}/subnets/[A-Za-z0-9._-]{1,80}$'
 $bashAlternative = "On Windows az.cmd hands other characters to cmd.exe; the guide's renewal block (docs/AZ-COMMANDS.md, section 10) runs in Bash without that limit."
@@ -251,7 +259,13 @@ if (-not $PSCmdlet.ShouldProcess($ResourceGroup, "deploy the projection registry
 }
 
 Step 'Phase 1: registry and job identity'
-$registry = Invoke-Deployment "projection-registry-$NamePrefix" 'infra/projection-registry.bicep' @{ namePrefix = $NamePrefix; location = $location; acrSku = $AcrSku }
+$registry = if ($KeepRegistry) {
+    Note "Keeping the registry and job identity of deployment projection-registry-$NamePrefix; no registry write."
+    Get-DeploymentOutput "projection-registry-$NamePrefix"
+}
+else {
+    Invoke-Deployment "projection-registry-$NamePrefix" 'infra/projection-registry.bicep' @{ namePrefix = $NamePrefix; location = $location; acrSku = $AcrSku }
+}
 if (-not $registry.acrName -or -not $registry.identityPrincipalId) { throw 'The registry deployment did not return the registry and identity.' }
 if ([string]$registry.acrName -cnotmatch '^[a-z0-9]{5,50}$') { throw "The registry deployment returned '$($registry.acrName)', not a registry name (5-50 lowercase letters or digits); the image was not built." }
 Ok "registry $($registry.acrName); job identity principal $($registry.identityPrincipalId)"

@@ -1,7 +1,9 @@
 # P104: each sync job interval maps to one cron expression, one no-success range and one run count (ADR-0058).
 $ErrorActionPreference = 'Stop'
 $fail = 0
+$count = 0
 function Assert($Label, [bool]$Condition, $Detail = '') {
+    $script:count++
     if ($Condition) { Write-Host "  [OK]   $Label" -ForegroundColor Green }
     else { Write-Host "  [FAIL] $Label $Detail" -ForegroundColor Red; $script:fail++ }
 }
@@ -88,6 +90,8 @@ if ($hasLookup) {
         $global:LASTEXITCODE = 0
         if ($line -ceq 'resource list -g rg-p104 --resource-type Microsoft.App/jobs -o json') {
             if ($state.Case -eq 'list-fails') { $global:LASTEXITCODE = 1; return 'ERROR: (AuthorizationFailed) no read' }
+            # az can write a warning to stderr and still exit 0; the lookup parses stdout only.
+            if ($state.Case -eq 'warns') { Write-Error 'WARNING: This command is in preview and under development.' }
             $jobs = @(
                 @{ id = "$rgId/providers/Microsoft.App/jobs/caj-renew-a"; name = 'caj-renew-a'; tags = @{ 'claude-projection-prefix' = 'p104fixture' } }
                 @{ id = "$rgId/providers/Microsoft.App/jobs/caj-renew-b"; name = 'caj-renew-b'; tags = @{ 'claude-projection-prefix' = 'otherfixture' } }
@@ -106,6 +110,23 @@ if ($hasLookup) {
                         template = @{ containers = @(@{ name = 'projection-renewal'; image = $image; env = @(
                                         @{ name = 'PROJECTION_STANDARD_GROUP_ID'; value = '10000000-0000-4000-8000-000000000001' }
                                         @{ name = 'PROJECTION_PREMIUM_GROUP_ID'; value = 'none' }) }) } } } | ConvertTo-Json -Depth 8)
+        }
+        # The settings a redeployment keeps: the renewal deployment's parameters and job, the registry, the alert addresses.
+        if ($line -ceq 'deployment group show -g rg-p104 -n projection-renewal-p104fixture -o json') {
+            return (@{ properties = @{
+                        parameters = @{ logAnalyticsWorkspaceId = @{ value = "$rgId/providers/Microsoft.OperationalInsights/workspaces/law-custom" }
+                            containerAppsSubnetId = @{ value = "$rgId/providers/Microsoft.Network/virtualNetworks/vnet-p104/subnets/renewal" }
+                            actionGroupEmailReceivers = @{ value = @('deployed@example.invalid') } }
+                        outputs = @{ jobResourceId = @{ value = "$rgId/providers/Microsoft.App/jobs/caj-renew-a" } } } } | ConvertTo-Json -Depth 8)
+        }
+        if ($line -ceq 'deployment group show -g rg-p104 -n projection-registry-p104fixture -o json') {
+            return (@{ properties = @{ outputs = @{ acrName = @{ value = 'acrp104' }; acrSkuChosen = @{ value = 'Basic' } } } } | ConvertTo-Json -Depth 8)
+        }
+        if ($line -ceq 'acr show -g rg-p104 -n acrp104 -o json') {
+            return (@{ name = 'acrp104'; sku = @{ name = $(if ($state.Case -eq 'standard-acr') { 'Standard' } else { 'Premium' }) } } | ConvertTo-Json -Depth 4)
+        }
+        if ($line -ceq 'monitor action-group show -g rg-p104 -n ag-projection-renewal-p104fixture -o json') {
+            return (@{ name = 'ag-projection-renewal-p104fixture'; emailReceivers = @(@{ emailAddress = 'ops@example.invalid' }, @{ emailAddress = ' oncall@example.invalid ' }, @{ emailAddress = 'ops@example.invalid' }) } | ConvertTo-Json -Depth 6)
         }
         $global:LASTEXITCODE = 9
         return "stub az has no answer for: $line"
@@ -139,8 +160,33 @@ if ($hasLookup) {
     Assert 'a resource group with cmd metacharacters is refused before any az call' ($badGroup.Failure -match 'rg&calc' -and $badGroup.Calls.Count -eq 0) $badGroup.Failure
     $badPrefix = Find-Job 'scheduled' -Prefix 'P104_Fixture'
     Assert 'a prefix the projection deployer refuses is refused before any az call' ($badPrefix.Failure -match 'P104_Fixture' -and $badPrefix.Calls.Count -eq 0) $badPrefix.Failure
+    $warned = Find-Job 'warns'
+    Assert 'a warning az writes to stderr with exit code 0 does not break the lookup' (-not $warned.Failure -and $warned.Job.Name -ceq 'caj-renew-a') "$($warned.Failure)"
+
+    # P104 council round 1 (Coder): a redeployment keeps the alert addresses, the registry SKU, the workspace and the
+    # subnet; the renewal deployment's job id binds a tagged job to the deployment.
+    $hasSettings = [bool](Get-Command Get-ClaudeProjectionSyncJobSettings -ErrorAction SilentlyContinue)
+    Assert 'it defines Get-ClaudeProjectionSyncJobSettings' $hasSettings
+    if ($hasSettings) {
+        function Read-Settings([string]$Case) {
+            $global:P104Jobs.Case = $Case
+            $global:P104Jobs.Calls = [Collections.Generic.List[string]]::new()
+            $failure = $null; $settings = $null
+            try { $settings = Get-ClaudeProjectionSyncJobSettings -ResourceGroup 'rg-p104' -NamePrefix 'p104fixture' } catch { $failure = $_.Exception.Message }
+            [pscustomobject]@{ Settings = $settings; Failure = $failure; Calls = @($global:P104Jobs.Calls) }
+        }
+        $read = Read-Settings 'scheduled'
+        Assert 'the settings hold the job id, the live alert addresses, the live registry SKU, the workspace and the subnet' (-not $read.Failure -and
+            $read.Settings.JobResourceId -ceq "$rgId/providers/Microsoft.App/jobs/caj-renew-a" -and
+            ((@($read.Settings.AlertEmails) | Sort-Object) -join ',') -ceq 'oncall@example.invalid,ops@example.invalid' -and $read.Settings.AcrSku -ceq 'Premium' -and
+            $read.Settings.WorkspaceResourceId -ceq "$rgId/providers/Microsoft.OperationalInsights/workspaces/law-custom" -and
+            $read.Settings.RenewalSubnetId -ceq "$rgId/providers/Microsoft.Network/virtualNetworks/vnet-p104/subnets/renewal") "$($read.Failure) | $($read.Settings | ConvertTo-Json -Compress)"
+        Assert 'the settings are read with no --query' ($read.Calls.Count -eq 4 -and @($read.Calls | Where-Object { $_ -match '--query' }).Count -eq 0) ($read.Calls -join ' | ')
+        $standardAcr = Read-Settings 'standard-acr'
+        Assert 'a registry SKU the deploy script cannot keep is refused' ($standardAcr.Failure -match 'Standard' -and $standardAcr.Failure -match 'Basic or Premium') "$($standardAcr.Failure)"
+    }
     Remove-Item Function:\az -ErrorAction SilentlyContinue
 }
 
 if ($fail) { Write-Host "$fail sync schedule assertion(s) failed." -ForegroundColor Red; exit 1 }
-Write-Host 'Sync schedule intervals map to one cron, range and run count.' -ForegroundColor Green
+Write-Host "$count sync schedule assertion(s) passed: intervals map to one cron, range and run count." -ForegroundColor Green
