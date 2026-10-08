@@ -152,6 +152,14 @@ const SNAPSHOT_RECORDS = [
   { oid: USERS.di, tier: 'premium', businessUnit: '' },
 ];
 
+function generatedRecords(count) {
+  return Array.from({ length: count }, (_, i) => ({
+    oid: `50000000-0000-4000-8000-${String(i + 1).padStart(12, '0')}`,
+    tier: 'standard',
+    businessUnit: '',
+  }));
+}
+
 test('runner snapshot apply requires an account resource id that matches the Cosmos endpoint for switch evidence', () => {
   const missing = scenario('missing account id');
   const refusedMissing = snapshotRun(missing, '2026-10-04T09:50:00.000Z', SNAPSHOT_RECORDS);
@@ -263,6 +271,30 @@ test('a Graph refusal writes no record and no status, and prints the failure eve
   assert.equal(denied.json.stage, 'graph');
   assert.match(denied.json.error, /Authorization_RequestDenied/);
   assert.equal(readFileSync(where.store, 'utf8'), before);
+});
+
+test('a scheduled run refuses a Graph plan that deletes more than the unattended removal ceiling', () => {
+  const where = scenario('scheduled removal ceiling');
+  const seeded = snapshotRun(where, '2026-10-04T10:00:00.000Z', generatedRecords(110), { args: ['--account-resource-id', ACCOUNT] });
+  assert.equal(seeded.code, 0, seeded.stdout + seeded.stderr);
+  const beforeRecords = records(where);
+  const beforeStatuses = Object.values(JSON.parse(readFileSync(where.store, 'utf8')).docs)
+    .filter((d) => d.type === 'projection-reconciliation-status').length;
+  writeFileSync(join(where.dir, 'cosmos.log'), '');
+
+  const refused = jobRun(where, '2026-10-04T10:30:00.000Z');
+  assert.equal(refused.code, 2, refused.stdout + refused.stderr);
+  assert.equal(refused.json.event, 'projection-renewal-failed');
+  assert.equal(refused.json.stage, 'removal-ceiling');
+  assert.equal(refused.json.deletes, 110);
+  assert.equal(refused.json.existing, 110);
+  assert.equal(refused.json.limit, 11);
+  assert.match(refused.json.error, /110 planned deletion\(s\)/);
+  assert.match(refused.json.error, /nothing was written/);
+  assert.deepEqual(records(where), beforeRecords);
+  const docs = Object.values(JSON.parse(readFileSync(where.store, 'utf8')).docs);
+  assert.equal(docs.filter((d) => d.type === 'projection-reconciliation-status').length, beforeStatuses, 'no failed status was written');
+  assert.doesNotMatch(readFileSync(join(where.dir, 'cosmos.log'), 'utf8'), /bulk (Upsert|Delete)/);
 });
 
 test('an unreadable or secret registry writes nothing and reads no group', () => {

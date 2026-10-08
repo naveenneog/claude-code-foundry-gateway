@@ -1610,6 +1610,20 @@ p94_projection_renewal() {
     echo "Refused: ALERT_EMAIL is not one email address; nothing was deployed." >&2
     return 1
   fi
+  export SYNC_INTERVAL="${SYNC_INTERVAL:-2h}"
+  case "$SYNC_INTERVAL" in
+    30m) SYNC_CRON='*/30 * * * *'; NO_SUCCESS_MINUTES=75 ;;
+    1h) SYNC_CRON='0 * * * *'; NO_SUCCESS_MINUTES=135 ;;
+    2h) SYNC_CRON='0 */2 * * *'; NO_SUCCESS_MINUTES=255 ;;
+    3h) SYNC_CRON='0 */3 * * *'; NO_SUCCESS_MINUTES=375 ;;
+    4h) SYNC_CRON='0 */4 * * *'; NO_SUCCESS_MINUTES=495 ;;
+    6h) SYNC_CRON='0 */6 * * *'; NO_SUCCESS_MINUTES=735 ;;
+    8h) SYNC_CRON='0 */8 * * *'; NO_SUCCESS_MINUTES=975 ;;
+    12h) SYNC_CRON='0 */12 * * *'; NO_SUCCESS_MINUTES=1455 ;;
+    manual) SYNC_CRON=''; NO_SUCCESS_MINUTES=0 ;;
+    *) echo "Refused: SYNC_INTERVAL '$SYNC_INTERVAL' is not one of 30m, 1h, 2h, 3h, 4h, 6h, 8h, 12h, manual; the shortest interval is 30 minutes. Nothing was deployed." >&2
+       return 1 ;;
+  esac
   if ! RENEWAL_SUBNET_ID="$(az deployment group show -g "$GATEWAY_RG" -n "projection-network-${NAME_PREFIX}" --query "properties.outputs.renewalSubnetId.value" -o tsv)" || [ -z "$RENEWAL_SUBNET_ID" ]; then
     echo "Refused: the projection network has no renewal subnet; rerun the projection deployment block above. Nothing was deployed." >&2
     return 1
@@ -1665,12 +1679,19 @@ p94_projection_renewal() {
     return 1
   fi
   rm -f renewal-params.json
-  jq -n --arg namePrefix "$NAME_PREFIX" --arg location "$LOCATION" --arg cosmos "$COSMOS_ACCOUNT" --arg subnet "$RENEWAL_SUBNET_ID" --arg workspace "$WORKSPACE_ID" --arg email "$ALERT_EMAIL" --arg acr "$ACR_NAME" --arg identity "$IDENTITY_NAME" --arg digest "$IMAGE_DIGEST" --arg tenant "$TENANT_ID" --arg standard "$STANDARD_GROUP_ID" --arg premium "$PREMIUM_GROUP_ID" --arg gateway "$APIM_ID" '{"$schema":"https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#","contentVersion":"1.0.0.0",parameters:{namePrefix:{value:$namePrefix},location:{value:$location},cosmosAccountName:{value:$cosmos},containerAppsSubnetId:{value:$subnet},logAnalyticsWorkspaceId:{value:$workspace},actionGroupEmailReceivers:{value:[$email]},acrName:{value:$acr},identityName:{value:$identity},syncImageDigest:{value:$digest},tenantId:{value:$tenant},standardGroupId:{value:$standard},premiumGroupId:{value:$premium},gatewayResourceId:{value:$gateway}}}' > renewal-params.json || {
+  jq -n --arg namePrefix "$NAME_PREFIX" --arg location "$LOCATION" --arg cosmos "$COSMOS_ACCOUNT" --arg subnet "$RENEWAL_SUBNET_ID" --arg workspace "$WORKSPACE_ID" --arg email "$ALERT_EMAIL" --arg acr "$ACR_NAME" --arg identity "$IDENTITY_NAME" --arg digest "$IMAGE_DIGEST" --arg tenant "$TENANT_ID" --arg standard "$STANDARD_GROUP_ID" --arg premium "$PREMIUM_GROUP_ID" --arg gateway "$APIM_ID" --arg cron "$SYNC_CRON" --argjson noSuccess "$NO_SUCCESS_MINUTES" '{"$schema":"https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#","contentVersion":"1.0.0.0",parameters:{namePrefix:{value:$namePrefix},location:{value:$location},cosmosAccountName:{value:$cosmos},containerAppsSubnetId:{value:$subnet},logAnalyticsWorkspaceId:{value:$workspace},actionGroupEmailReceivers:{value:[$email]},acrName:{value:$acr},identityName:{value:$identity},syncImageDigest:{value:$digest},tenantId:{value:$tenant},standardGroupId:{value:$standard},premiumGroupId:{value:$premium},gatewayResourceId:{value:$gateway},cronExpression:{value:$cron},noSuccessMinutes:{value:$noSuccess}}}' > renewal-params.json || {
     rm -f renewal-params.json
     echo "Refused: renewal parameters could not be generated; the job was not deployed." >&2
     return 1
   }
   az deployment group create -g "$GATEWAY_RG" -n "projection-renewal-${NAME_PREFIX}" --template-file infra/projection-renewal.bicep --parameters @renewal-params.json -o none || return 1
+  RETIRED_RULES="sqr-projection-${NAME_PREFIX}-expiry-margin-60m sqr-projection-${NAME_PREFIX}-no-success-45m"
+  if [ "$SYNC_INTERVAL" = "manual" ]; then RETIRED_RULES="$RETIRED_RULES sqr-projection-${NAME_PREFIX}-no-success"; fi
+  for RULE in $RETIRED_RULES; do
+    if printf '%s\n' "$RG_RESOURCES" | grep -i -F -x -q "${RULE}"$'\t'"Microsoft.Insights/scheduledQueryRules"; then
+      az resource delete -g "$GATEWAY_RG" -n "$RULE" --resource-type Microsoft.Insights/scheduledQueryRules -o none || return 1
+    fi
+  done
   az deployment group show -g "$GATEWAY_RG" -n "projection-renewal-${NAME_PREFIX}" --query "properties.outputs.{job:jobResourceId.value,actionGroup:actionGroupResourceId.value}" -o json || return 1
   echo "Tenant administrator, once: ./scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1 -PrincipalId ${IDENTITY_PRINCIPAL_ID}"
 }
@@ -1678,7 +1699,7 @@ p94_projection_renewal
 # P89-PROJECTION-RENEWAL-END
 ```
 
-Expected result: the registry and the job identity deploy first, the image builds from the sync package (`sync/` and `resolver/src/entitlement.mjs`), and the job is pinned to the digest the registry reports. The default trigger is Manual; add `-CronExpression` when using the script to schedule it. The tier group ids come from the group receipts that section 5 records for the current `STANDARD_GROUP` and `PREMIUM_GROUP`, and one group for both tiers is refused. A resource group that still holds P86's renewal job, environment or `graph-read-failed` alert, matched by name and resource type, is refused before any deployment; [the projection runbook](SECURE-PROJECTION.md#optional-sync-job-and-switch-evidence-p97) lists the delete commands. The block prints the job and action group ids and the tenant administrator's Graph grant. Each alert address receives a confirmation email from Azure Monitor and receives no alerts until it is confirmed ([U116](UNKNOWNS.md#p94-research-before-implementation)). The job is optional switch support for very large directories; switch evidence needs a successful full sync in the last 24 hours, not three scheduled runs. ACR task runs are paused for subscriptions on Azure free credits ([U114](UNKNOWNS.md#p94-research-before-implementation)); there, `docker build` and `docker push` from the package directory replace `az acr build`. This mirrors `scripts/Deploy-ClaudeProjectionRenewal.ps1`, `infra/projection-registry.bicep` and `infra/projection-renewal.bicep` ([ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md)).
+Expected result: the registry and the job identity deploy first, the image builds from the sync package (`sync/` and `resolver/src/entitlement.mjs`), and the job is pinned to the digest the registry reports. By default the job runs every 2 hours. `SYNC_INTERVAL`, set before the block to `30m`, `1h`, `2h`, `3h`, `4h`, `6h`, `8h`, `12h` or `manual`, maps to the same cron expressions and no-success ranges as `scripts/ClaudeProjectionSchedule.ps1` ([ADR-0058](adr/0058-scheduled-projection-sync.md)); any other value is refused before a deployment. After the job deploys, the block removes `sqr-projection-<prefix>-expiry-margin-60m` and `sqr-projection-<prefix>-no-success-45m`, and for `manual` also `sqr-projection-<prefix>-no-success`, when they exist. To change the interval later, run the block again with another `SYNC_INTERVAL`, which builds a new image, or run `scripts/Set-ClaudeProjectionSyncSchedule.ps1`, which keeps the deployed image. The tier group ids come from the group receipts that section 5 records for the current `STANDARD_GROUP` and `PREMIUM_GROUP`, and one group for both tiers is refused. A resource group that still holds P86's renewal job, environment or `graph-read-failed` alert, matched by name and resource type, is refused before any deployment; [the projection runbook](SECURE-PROJECTION.md#optional-sync-job-and-switch-evidence-p97) lists the delete commands. The block prints the job and action group ids and the tenant administrator's Graph grant. Each alert address receives a confirmation email from Azure Monitor and receives no alerts until it is confirmed ([U116](UNKNOWNS.md#p94-research-before-implementation)). The job is optional switch support for very large directories; switch evidence needs a successful full sync in the last 24 hours, not three scheduled runs. ACR task runs are paused for subscriptions on Azure free credits ([U114](UNKNOWNS.md#p94-research-before-implementation)); there, `docker build` and `docker push` from the package directory replace `az acr build`. This mirrors `scripts/Deploy-ClaudeProjectionRenewal.ps1`, `infra/projection-registry.bicep` and `infra/projection-renewal.bicep` ([ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md)).
 
 Projection switch status.
 

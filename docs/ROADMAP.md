@@ -108,6 +108,9 @@ deployment by hand fails ([P94 status](status/P94.md#p94-the-p86-renewal-job-dep
 | P100 | Merged (`7b365f64`) with the owner's approval; ahead of the P99 merge at the owner's request | The update flow moves a named-value gateway to the Cosmos projection: `Update-ClaudeGateway.ps1` plans the move with the gateway's previous tier groups, business units and entitlement, checks quotas, regions, permissions and policy, shows the resources, network and cost, and applies the installer's deploy, populate, compare and switch on approval ([ADR-0054](adr/0054-update-flow-entitlement-migration.md), [P100 status](status/P100.md)) |
 | P101 | Merged (`44ebef3f`) with the owner's approval, [ADR-0057](adr/0057-one-sync-command.md) | One sync command for every store: `Sync-ClaudeAccess.ps1 -User` publishes one developer's change on a named-value gateway too (it refreshes the lists), reads the tier groups the gateway records in `entitlement-groups` (else the decision record, else the default names, as the P100 plan does) and records groups that came from parameters or this gateway's decision record, so gateways installed or moved by the installer gain it, and the AUM tool's developer add and remove publish through it (U25) |
 | P102 | Merged (`49fe7a3c`) with the owner's approval | Content safety for Claude requests: an optional Azure AI Content Safety resource and custom API Management policy fragment that screens the system prompt, tool descriptions and the newest turn before Claude Messages requests reach Foundry ([ADR-0055](adr/0055-content-safety-screening.md), [P102 status](status/P102.md)) |
+| P104 | In progress on `p104-scheduled-sync` ([ADR-0058](adr/0058-scheduled-projection-sync.md), [P104 status](status/P104.md)) | The projection sync job runs on a schedule the admin sets: the installer deploys it with the projection at an interval from 30 minutes to 12 hours (2 hours by default); a developer added to a tier or business-unit group in Microsoft Entra ID gets access at the next run, and one removed loses it at the next run plus at most `entitlement-cache-seconds`; a run writes only the developers whose membership changed, and an unattended run deletes no more than max(10, 10%) of the records; the no-success alert follows the interval |
+| P105 | Planned; after P104 | Several Foundry accounts or subscriptions behind one gateway: an API Management backend pool with circuit breakers, each caller pinned to one account so that a caller's requests reach the same prompt cache, and failover to another account; the Azure CLI and portal steps in the guides |
+| P106 | Planned | A token cost calculator in the cost workbook, and customer discounts set in the private price book (`config/price-book.json`, published by `scripts/Publish-ClaudeQueries.ps1`) |
 
 Follow-ups from the P94 council, not yet packets: `sync/package-lock.json` carries `sha1` integrity
 for 50 of its 53 packages because this workstation reaches npm only through a feed whose metadata
@@ -116,6 +119,11 @@ script reads the image digest back by tag, and the `az acr build` result would n
 `tests/Test-ProjectionPreflightNegative.ps1`, a manual suite outside Test-All, stops with "Mutation
 anchor missing: bounded raw output" because `f39524d` changed `Select-Object -Last 40` in
 `scripts/ClaudeRunner.ps1` to `-Last 39`, on `main` as well ([P94 council](status/P94.md#council)).
+
+Follow-ups from P104, not yet packets: `Update-ClaudeGateway.ps1` moves a named-value gateway to the
+projection without the sync job (migration 0004 has no job step), so the job is deployed afterwards with
+`scripts/Deploy-ClaudeProjectionRenewal.ps1` or an installer re-run; and no source read on 2026-10-08 shows an
+Azure portal edit of an existing job's cron expression, so the guides give the Azure Cloud Shell route.
 
 Follow-ups from the P95 council, not yet packets: `Install-ClaudeGateway.ps1`
 accepts `-FlipProjectionAfterCleanCompare` without `-DeployProjection` and then never reaches the
@@ -680,6 +688,12 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       budget and can be removed; the guided flow's Tier and Desktop sign-in changes name their snapshot
       under `backups/` and the write gate takes it
       ([P96 status](status/P96.md#p96-fixes-from-a-live-deployment-2026-10-05))
+- [ ] P104 the projection sync job runs on a schedule the admin sets — acceptance: choosing the projection in the
+      installer deploys the job at the chosen interval (default 2 hours; `30m` to `12h` or `manual`; shorter refused);
+      a scheduled run writes only changed developers and stops before deleting more than max(10, 10%) of the
+      records; the installer reports the Graph grant and prints its command; the interval changes later with
+      `scripts/Set-ClaudeProjectionSyncSchedule.ps1`; the no-success alert reads 2 x interval + 15 minutes; a live
+      install observes a scheduled execution ([P104 status](status/P104.md))
 - [ ] P103 quickstart first, sections as disclosures — part 1 merged (`5bb94762`); part 2 in progress. Acceptance: user-facing guides open with a short purpose and visible Quickstart, enrolled sections keep H2 anchors visible while folding bodies into native disclosures, permanent reference exceptions are documented in ADR-0056, and `tests/Test-DocStructure.ps1` protects quickstarts, details structure, anchors, links and line endings.
 - [x] P99 directory-scale snapshot transfer — acceptance: a snapshot of 500,000 records is applied and compared
       within its apply-by time, and the switch admits a gateway of that size, measured live; an ADR records

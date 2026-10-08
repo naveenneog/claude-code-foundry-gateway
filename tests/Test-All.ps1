@@ -286,6 +286,8 @@ Invoke-Check 'Projection runner transfer, compressed and parallel' 'Test-RunnerT
 Invoke-Check 'Projection sync scripts' 'Test-ProjectionSyncScripts.ps1'
 Invoke-Check 'Projection sync package and its import closure' 'Test-ProjectionPackage.ps1'
 Invoke-Check 'Projection renewal templates and deploy script' 'Test-ProjectionRenewal.ps1'
+Invoke-Check 'Projection sync job intervals' 'Test-ProjectionSyncSchedule.ps1'
+Invoke-Check 'Projection sync schedule change' 'Test-ProjectionSyncScheduleScript.ps1'
 Invoke-Check 'Projection renewal runs reach admission offline' 'Test-ProjectionRenewalRuns.ps1'
 Invoke-Check 'Projection switch evidence and switch function' 'Test-ProjectionSwitchEvidence.ps1'
 # Exclusive: it counts the switch backups that a run adds to the repository's onboarding folder, which

@@ -18,8 +18,8 @@ $installerStub = Join-Path $work 'Install-ClaudeGateway.ps1'
 $syncStub = Join-Path $work 'Sync-ClaudeAccess.ps1'
 # Stub scripts in a repository-local scratch folder: the verifier takes their paths, so no repository file is replaced.
 [IO.File]::WriteAllText($installerStub, (@(
-    'param($SubscriptionId, $FoundryAccount, $FoundryResourceGroup, $ResourceGroup, $Location, $NamePrefix, $Sku, $EntitlementStore, [switch]$Yes, $StandardGroup, $PremiumGroup)'
-    '$global:Live.Calls.Add("installer $ResourceGroup $NamePrefix $Sku EntitlementStore=$EntitlementStore yes=$Yes $StandardGroup $PremiumGroup")'
+    'param($SubscriptionId, $FoundryAccount, $FoundryResourceGroup, $ResourceGroup, $Location, $NamePrefix, $Sku, $EntitlementStore, [switch]$Yes, $StandardGroup, $PremiumGroup, $ProjectionSyncInterval)'
+    '$global:Live.Calls.Add("installer $ResourceGroup $NamePrefix $Sku EntitlementStore=$EntitlementStore yes=$Yes $StandardGroup $PremiumGroup interval=$ProjectionSyncInterval")'
     '$global:Live.Synced = $global:Live.Member'
 ) -join "`n"), [Text.UTF8Encoding]::new($false))
 [IO.File]::WriteAllText($syncStub, (@(
@@ -214,6 +214,14 @@ try {
     Reset-Live -Source 'named-value'; Invoke-Verifier
     Assert 'a gateway the installer left on named values fails the run, sends no request, and is still torn down' ($Exit -eq 1 -and $Output -match '"step":\s*"switch"' -and
         (At '^request ') -lt 0 -and (At '^az group delete --name rg-p98-live') -ge 0) "$Exit | $($global:Live.Calls -join ' ; ')"
+
+    # P104: the sync job's interval reaches the installer; without it the installer's default (2h) applies.
+    Reset-Live; Invoke-Verifier @{ ProjectionSyncInterval = '30m' }
+    Assert '-ProjectionSyncInterval reaches the installer' ((At '^installer rg-p98-live p98live BasicV2 .* interval=30m$') -ge 0 -and (At '^installer .* interval=$') -lt 0) ($global:Live.Calls -join ' ; ')
+    Reset-Live; Invoke-Verifier
+    Assert 'without -ProjectionSyncInterval the installer gets none, so its default applies' ((At '^installer rg-p98-live p98live BasicV2 .* interval=$') -ge 0) ($global:Live.Calls -join ' ; ')
+    Reset-Live; Invoke-Verifier @{ ProjectionSyncInterval = '2h;calc' }
+    Assert 'a -ProjectionSyncInterval outside the list is refused before any Azure call' ($Failure -match [regex]::Escape("-ProjectionSyncInterval '2h;calc' is not in the accepted form") -and $global:Live.Calls.Count -eq 0) "$Failure | $($global:Live.Calls -join ' ; ')"
 
     # P100: -MigrateWithUpdate installs on named values and moves the gateway with the update's plan and apply alone.
     Reset-Live -Source 'named-value'; Invoke-Verifier @{ MigrateWithUpdate = $true; UpdatePath = $updateStub }

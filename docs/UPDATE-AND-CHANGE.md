@@ -93,7 +93,9 @@ DNS. Do not delete the old gateway until rollback is no longer needed.
 The Cosmos projection is the installer's default store ([ADR-0052](adr/0052-cosmos-default-installer.md)). Named values hold about
 93 developers in business-unit membership and about 110 per tier list, and serve small organisations.
 Projection records persist until a sync removes or changes the person. A sync-job outage does not
-stop developers. Add or remove a developer in the Entra group, then run
+stop developers. `Update-ClaudeGateway.ps1` does not deploy the sync job; after the move, deploy it with
+`scripts/Deploy-ClaudeProjectionRenewal.ps1` or rerun the installer, which deploys it with the projection
+([scheduled sync job](SECURE-PROJECTION.md#scheduled-sync-job-p104)). Add or remove a developer in the Entra group, then run
 `scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim> -User <name-or-object-id>` for one
 person, or omit `-User` for everyone. The same command works for named values and the Cosmos projection;
 named values publish a whole-list refresh and report the developer's written tier. If the group change happened

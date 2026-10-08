@@ -188,7 +188,8 @@ The installer runs the projection deployer, `scripts/Deploy-ClaudeProjection.ps1
 private Cosmos and the resolver, populates from Entra, compares the projection
 against the named-value lists (or, on a new gateway, against the snapshot it applied) and leaves named
 values authoritative; the installer then runs it with `-FlipAfterCleanCompare` to switch. Projection records persist until a sync removes or changes the person; a sync-job outage does not
-stop developers. Add or remove a developer in the Entra group, then run
+stop developers. The installer also deploys the sync job, which applies Entra tier and business-unit group changes every 2 hours by default
+(`-ProjectionSyncInterval`, [scheduled sync job](SECURE-PROJECTION.md#scheduled-sync-job-p104)). To publish a change at once, add or remove a developer in the Entra group, then run
 `scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim> -User <name-or-object-id>` for one
 person, or omit `-User` for everyone. The same command works for named values and the Cosmos projection;
 named values publish a whole-list refresh and report the developer's written tier. If the group change happened
@@ -710,6 +711,7 @@ account and resource group, as the PowerShell installer's record does.
 
 The interactive installer's projection flags are separate from `deploy.ps1`:
 `-DeployProjection` and `-FlipProjectionAfterCleanCompare` remain accepted for existing scripts. Since P98, they do not change installer behavior: choosing `-EntitlementStore projection` deploys the projection, compares it, and switches through the shared switch.
+Since P104 the sync job deploys with the projection: `-ProjectionSyncInterval` takes `30m`, `1h`, `2h` (default), `3h`, `4h`, `6h`, `8h`, `12h`, `manual` or `none`, a re-run keeps the deployed job's interval, and `-DeploySyncJob` is accepted and has no effect ([ADR-0058](adr/0058-scheduled-projection-sync.md)).
 
 A staged deployment without switching uses the deployer directly, not the installer:
 

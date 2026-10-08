@@ -301,7 +301,7 @@ Sources: `scripts/Sync-ClaudeAccess.ps1`, `sync/src/plan.mjs`.
 
 ## Day-2 operation. Optional sync job for very large directories
 
-What it does: The optional job reads Graph inside the network and runs a full sync with the same write rules. Its trigger is Manual unless `-CronExpression` is supplied.
+What it does: The job reads Graph inside the network and runs a full sync with the same write rules. It runs every 2 hours by default; `-SyncInterval` sets `30m` to `12h`, or `manual` ([ADR-0058](adr/0058-scheduled-projection-sync.md)).
 
 Who: Operator deploys the job; Privileged Role Administrator or Global Administrator grants Graph permission.
 
@@ -311,13 +311,19 @@ Who: Operator deploys the job; Privileged Role Administrator or Global Administr
 az containerapp job start -g <rg> -n <job-name>
 ```
 
-Scheduled form:
+Another interval (`30m`, `1h`, `2h`, `3h`, `4h`, `6h`, `8h`, `12h`) or `manual`:
 
 ```powershell
-.\scripts\Deploy-ClaudeProjectionRenewal.ps1 -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> -AlertEmail <address> -CronExpression '<five fields>'
+.\scripts\Deploy-ClaudeProjectionRenewal.ps1 -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> -AlertEmail <address> -SyncInterval 30m
 ```
 
-Expected result: Deployment prints the job and action group, the Graph grant command and the `az containerapp job start` command. Manual trigger is the default; a schedule adds the stale-success alert. The renewal deployer refuses before any write while the gateway has no `entitlement-projection-prefix` for this prefix: the job writes records without `expiresAt`, which a resolver published before [ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md) refuses, and Step 2 publishes the current resolver before it records the prefix.
+Change the interval of a deployed job, keeping its image, tier groups and alert addresses:
+
+```powershell
+.\scripts\Set-ClaudeProjectionSyncSchedule.ps1 -ResourceGroup <rg> -ApimName <apim> -Interval 30m
+```
+
+Expected result: Deployment prints the job and action group, the Graph grant command and the `az containerapp job start` command. The job runs every 2 hours unless `-SyncInterval` sets another interval; a scheduled job adds the no-success alert, which fires after 2 x the interval + 15 minutes without a successful run. The renewal deployer refuses before any write while the gateway has no `entitlement-projection-prefix` for this prefix: the job writes records without `expiresAt`, which a resolver published before [ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md) refuses, and Step 2 publishes the current resolver before it records the prefix.
 
 Sources: [optional sync job](SECURE-PROJECTION.md#optional-sync-job-and-switch-evidence-p97), `scripts/Deploy-ClaudeProjectionRenewal.ps1`.
 

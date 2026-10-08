@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mergeMembership, planChanges, toDocument, validateSnapshot, validateTargetedSnapshot, compareWithSnapshot, createReconciliation } from '../src/plan.mjs';
+import { mergeMembership, planChanges, removalLimit, removalLimitExceeded, toDocument, validateSnapshot, validateTargetedSnapshot, compareWithSnapshot, createReconciliation } from '../src/plan.mjs';
 const lease = createReconciliation({ verifiedAt: new Date() });
 
 const A = '11111111-1111-1111-1111-111111111111';
@@ -66,6 +66,19 @@ test('someone removed from every group loses their record', () => {
   const existing = new Map([[A, { tier: 'standard' }], [C, { tier: 'premium' }]]);
   const plan = planChanges([{ oid: A, tier: 'standard' }], existing);
   assert.deepEqual(plan.toDelete, [C]);
+});
+
+test('unattended removal ceiling is max ten or ten percent of existing records', () => {
+  assert.equal(removalLimit(0), 10);
+  assert.equal(removalLimit(99), 10);
+  assert.equal(removalLimit(109), 10);
+  assert.equal(removalLimit(110), 11);
+  assert.equal(removalLimit(1000), 100);
+});
+
+test('unattended removal ceiling allows the limit and refuses only above it', () => {
+  assert.deepEqual(removalLimitExceeded({ deletes: 10, existing: 109 }), { exceeded: false, limit: 10 });
+  assert.deepEqual(removalLimitExceeded({ deletes: 11, existing: 109 }), { exceeded: true, limit: 10 });
 });
 
 test('orphans are kept only when asked, and reported', () => {

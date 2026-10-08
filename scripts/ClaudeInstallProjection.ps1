@@ -1,3 +1,5 @@
+# The sync job's intervals and its lookup by tag (ADR-0058).
+. (Join-Path $PSScriptRoot 'ClaudeProjectionSyncJob.ps1')
 
 # A plain token prints as it is. Anything else is single-quoted, with every single-quote character doubled
 # (PowerShell also reads U+2018-U+201B as single quotes), so a pasted rerun line passes the value and runs
@@ -139,15 +141,70 @@ function Assert-ClaudeInstallerProjectionPrerequisites {
 }
 
 function Get-ClaudeInstallerProjectionPlan {
-    param([switch]$WhatIf, [switch]$DeploySyncJob)
+    param([switch]$WhatIf, [string]$SyncInterval = 'none')
     $steps = @(
         'Check projection prerequisites',
         'Deploy projection resources',
         'Populate and compare the projection',
         'Switch entitlement-source to projection'
     )
-    if ($DeploySyncJob) { $steps += 'Deploy optional sync job' }
+    if ($SyncInterval -ne 'none') { $steps += "Deploy the sync job, running $(Format-ClaudeProjectionSyncInterval -Interval $SyncInterval)" }
     [pscustomobject]@{ Steps = $steps; Writes = $(if ($WhatIf) { @() } else { $steps }) }
+}
+
+# ADR-0058 decision 2: the sync job deploys with the projection. -ProjectionSyncInterval wins; a re-run keeps the
+# deployed job's interval; otherwise every 2 hours. A deployed cron outside the list stops the run until the
+# parameter names an interval. none deploys no job and leaves a deployed one as it is, and says so.
+function Resolve-ClaudeInstallerSyncInterval {
+    param([AllowEmptyString()][string]$Requested, [object]$DeployedJob)
+    $accepted = @(Get-ClaudeProjectionSyncIntervals) + 'none'
+    if ($Requested) {
+        $interval = $Requested.ToLowerInvariant()
+        if (-not @($accepted | Where-Object { [string]::Equals($_, $interval, [StringComparison]::Ordinal) }).Count) {
+            throw ("-ProjectionSyncInterval '{0}' is not one of: {1}. The shortest interval is 30 minutes." -f $Requested, ($accepted -join ', '))
+        }
+        $source = 'parameter'
+    }
+    elseif ($DeployedJob -and $DeployedJob.Interval) {
+        $interval = [string]$DeployedJob.Interval
+        $source = 'deployed job'
+    }
+    elseif ($DeployedJob) {
+        throw ("The deployed sync job {0} runs on cron '{1}', which is not one of the listed intervals. Pass -ProjectionSyncInterval with one of: {2}; none leaves the job as it is. Nothing was changed." -f `
+                $DeployedJob.Name, $DeployedJob.Cron, ($accepted -join ', '))
+    }
+    else {
+        $interval = Get-ClaudeProjectionSyncDefaultInterval
+        $source = 'default'
+    }
+    $keptJob = ''
+    if ($interval -eq 'none' -and $DeployedJob) {
+        $keptJob = if ($DeployedJob.Interval) { Format-ClaudeProjectionSyncInterval -Interval ([string]$DeployedJob.Interval) } else { "on cron '$($DeployedJob.Cron)'" }
+    }
+    $summary = switch ($interval) {
+        'none' {
+            if ($keptJob) { "not changed (-ProjectionSyncInterval none): the deployed job $($DeployedJob.Name) keeps its schedule ($keptJob); Set-ClaudeProjectionSyncSchedule.ps1 changes it" }
+            else { 'not deployed (-ProjectionSyncInterval none); group changes reach the projection when Sync-ClaudeAccess.ps1 runs' }
+        }
+        'manual' { 'deployed; it runs only when started with az containerapp job start' }
+        default {
+            $schedule = ConvertTo-ClaudeProjectionSyncSchedule -Interval $interval
+            '{0}, {1} runs a month at USD 0.00003 per run-second above the free Container Apps grant; missed-run alert after {2} minutes' -f `
+                (Format-ClaudeProjectionSyncInterval -Interval $interval), $schedule.RunsPerMonth, $schedule.NoSuccessMinutes
+        }
+    }
+    [pscustomobject]@{ Interval = $interval; Source = $source; Summary = $summary; KeptJob = $keptJob }
+}
+
+# The Graph grant state that scripts/Deploy-ClaudeProjectionRenewal.ps1 read and wrote to its receipt (ADR-0058
+# decision 3): held, missing or unknown; '' when there is no readable receipt or another value.
+function Get-ClaudeInstallerSyncJobGrant {
+    param([Parameter(Mandatory)][string]$Root, [Parameter(Mandatory)][string]$NamePrefix)
+    $path = Join-Path $Root "onboarding/projection-renewal-$NamePrefix.json"
+    if (-not (Test-Path -LiteralPath $path)) { return '' }
+    try { $grant = [string](Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -ErrorAction Stop).graphGrant } catch { return '' }
+    if (@('held', 'missing', 'unknown' | Where-Object { [string]::Equals($_, $grant, [StringComparison]::Ordinal) }).Count) { return $grant }
+    return ''
 }
 
 # Runs one repository script the way the installer does: its output goes to the console, a thrown
@@ -215,7 +272,43 @@ function Invoke-ClaudeInstallerProjectionDeployment {
     return $true
 }
 
-# The optional sync job (ADR-0051) is deployed after the switch. A failure leaves the projection and the
+# The deploy script's inputs that a re-run keeps from the deployed job (P104 council rounds 1-2): its alert
+# addresses, registry SKU, workspace and subnet, so the redeployment sends alerts to the same people and moves
+# nothing. A tagged job that a successful renewal deployment did not create, a registry SKU the deploy script
+# cannot deploy, and a registry closed to public access stop the run; a failed renewal deployment is deployed
+# again. A first install alerts the publisher address.
+function Resolve-ClaudeInstallerSyncJobInputs {
+    param([object]$DeployedJob, [object]$JobSettings, [Parameter(Mandatory)][AllowEmptyString()][string]$PublisherEmail)
+    if (-not $JobSettings) {
+        return [pscustomobject]@{ AlertEmail = @($PublisherEmail); AlertSource = 'the publisher address'; AcrSku = ''; WorkspaceResourceId = ''; RenewalSubnetId = ''; Note = '' }
+    }
+    $note = ''
+    if (-not [string]::Equals([string]$JobSettings.RenewalDeploymentState, 'Succeeded', [StringComparison]::Ordinal)) {
+        $note = "The last renewal deployment of this job is $($JobSettings.RenewalDeploymentState); this run deploys it again with the settings it recorded."
+    }
+    elseif ($DeployedJob -and -not [string]::Equals([string]$JobSettings.JobResourceId, [string]$DeployedJob.Id, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "The job tagged with this projection's prefix is $($DeployedJob.Name) ($($DeployedJob.Id)), but its renewal deployment created $($JobSettings.JobResourceId). Nothing was changed. Delete the job that is not in use, or pass -ProjectionSyncInterval none."
+    }
+    $acrSku = [string]$JobSettings.AcrSku
+    if ($acrSku -and -not @('Basic', 'Premium' | Where-Object { [string]::Equals($_, $acrSku, [StringComparison]::Ordinal) }).Count) {
+        throw "The sync job's registry is $acrSku; scripts/Deploy-ClaudeProjectionRenewal.ps1 deploys Basic or Premium, so a redeployment would change it. Nothing was changed. Pass -ProjectionSyncInterval none to leave the job as it is."
+    }
+    if ([string]::Equals([string]$JobSettings.RegistryPublicNetworkAccess, 'Disabled', [StringComparison]::OrdinalIgnoreCase)) {
+        throw ("The sync job's registry has public network access disabled, and the installer's redeployment of the registry would enable it. Nothing was changed. " +
+            "Pass -ProjectionSyncInterval none to leave the job as it is, or redeploy the job with scripts/Deploy-ClaudeProjectionRenewal.ps1 -KeepRegistry -ImageDigest <digest>.")
+    }
+    $emails = @(@($JobSettings.AlertEmails) | Where-Object { $_ })
+    [pscustomobject]@{
+        AlertEmail = $(if ($emails.Count) { $emails } else { @($PublisherEmail) })
+        AlertSource = $(if ($emails.Count) { 'kept from the deployed job' } else { 'the publisher address: the deployed action group has none' })
+        AcrSku = $acrSku
+        WorkspaceResourceId = [string]$JobSettings.WorkspaceResourceId
+        RenewalSubnetId = [string]$JobSettings.RenewalSubnetId
+        Note = $note
+    }
+}
+
+# The sync job (ADR-0058) is deployed after the switch. A failure leaves the projection and the
 # switch as they are, so it is reported with the rerun command rather than ending the install.
 function Invoke-ClaudeInstallerSyncJobDeployment {
     param(
@@ -225,17 +318,25 @@ function Invoke-ClaudeInstallerSyncJobDeployment {
         [Parameter(Mandatory)][string]$NamePrefix,
         [Parameter(Mandatory)][string]$StandardGroup,
         [Parameter(Mandatory)][string]$PremiumGroup,
-        [Parameter(Mandatory)][string]$AlertEmail,
+        [Parameter(Mandatory)][string[]]$AlertEmail,
+        [Parameter(Mandatory)][string]$SyncInterval,
         [string]$SubscriptionId,
+        # Kept from a deployed job on a re-run (P104 council round 1); empty means the deploy script's default.
+        [string]$AcrSku,
+        [string]$WorkspaceResourceId,
+        [string]$RenewalSubnetId,
         [scriptblock]$InvokeScript
     )
     $jobParameters = [ordered]@{ ResourceGroup = $ResourceGroup; ApimName = $ApimName; NamePrefix = $NamePrefix
-        StandardGroup = $StandardGroup; PremiumGroup = $PremiumGroup; AlertEmail = @($AlertEmail) }
+        StandardGroup = $StandardGroup; PremiumGroup = $PremiumGroup; AlertEmail = @($AlertEmail); SyncInterval = $SyncInterval }
     if ($SubscriptionId) { $jobParameters['SubscriptionId'] = $SubscriptionId }
+    if ($AcrSku) { $jobParameters['AcrSku'] = $AcrSku }
+    if ($WorkspaceResourceId) { $jobParameters['WorkspaceResourceId'] = $WorkspaceResourceId }
+    if ($RenewalSubnetId) { $jobParameters['RenewalSubnetId'] = $RenewalSubnetId }
     $scriptPath = Join-Path $Root 'scripts\Deploy-ClaudeProjectionRenewal.ps1'
     if ((Invoke-ClaudeInstallerScript -ScriptPath $scriptPath -Parameters $jobParameters -InvokeScript $InvokeScript) -ne 0) {
         $jobRerun = New-ClaudeInstallerCommandLine -Command '.\scripts\Deploy-ClaudeProjectionRenewal.ps1' -Parameters $jobParameters
-        Write-Warning "The optional sync job was not deployed; the projection and the switch are unaffected. Rerun: $jobRerun"
+        Write-Warning "The sync job was not deployed; the projection and the switch are unaffected. Rerun: $jobRerun"
         return $false
     }
     return $true
@@ -332,31 +433,74 @@ function Get-ClaudeInstallerResolverAccess {
 }
 
 function Get-ClaudeInstallerProjectionNextSteps {
-    # Two separate next steps: one developer's change (the group change, then a targeted sync), and the
-    # optional sync job, which the installer lists after the developer setup step.
-    param([Parameter(Mandatory)][string]$ResourceGroup, [Parameter(Mandatory)][string]$ApimName, [Parameter(Mandatory)][string]$NamePrefix, [string]$StandardGroup = 'claude-code-standard', [string]$PremiumGroup = 'claude-code-premium', [string]$SubscriptionId, [ValidateSet('not-requested','deployed','failed')][string]$SyncJobStatus = 'not-requested', [switch]$DeploySyncJob)
-    if ($DeploySyncJob -and $SyncJobStatus -eq 'not-requested') { $SyncJobStatus = 'deployed' }
-    $developer = [pscustomobject]@{ Title = 'Add or remove a developer in the projection'; Warn = $false; Detail = @(
-        '        Add or remove the developer in the Entra group first, then publish that one projection record:'
-        "        .\scripts\Sync-ClaudeAccess.ps1 -ResourceGroup $ResourceGroup -ApimName $ApimName -User <name-or-object-id>"
-    ) }
-    $syncParams = [ordered]@{ ResourceGroup = $ResourceGroup; ApimName = $ApimName; NamePrefix = $NamePrefix; StandardGroup = $StandardGroup; PremiumGroup = $PremiumGroup; AlertEmail = '<address>' }
+    # Two separate next steps: one developer's change, and the sync job (ADR-0058), which the installer lists
+    # after the developer setup step. With a scheduled job a group change needs no command; the targeted sync
+    # publishes it at once.
+    param(
+        [Parameter(Mandatory)][string]$ResourceGroup,
+        [Parameter(Mandatory)][string]$ApimName,
+        [Parameter(Mandatory)][string]$NamePrefix,
+        [string]$StandardGroup = 'claude-code-standard',
+        [string]$PremiumGroup = 'claude-code-premium',
+        [string]$SubscriptionId,
+        [string]$SyncInterval = 'none',
+        [ValidateSet('not-requested','deployed','failed')][string]$SyncJobStatus = 'not-requested',
+        [AllowEmptyString()][string]$GraphGrant = '',
+        # How a deployed job that this run left as it is (-ProjectionSyncInterval none) runs, in words.
+        [AllowEmptyString()][string]$DeployedJobSchedule = ''
+    )
+    $publish = "        .\scripts\Sync-ClaudeAccess.ps1 -ResourceGroup $ResourceGroup -ApimName $ApimName -User <name-or-object-id>"
+    $scheduled = $SyncJobStatus -eq 'deployed' -and $SyncInterval -notin @('none', 'manual')
+    $developer = if ($scheduled) {
+        [pscustomobject]@{ Title = 'Add or remove a developer in the projection'; Warn = $false; Detail = @(
+            "        Add or remove the developer in the Entra tier or business-unit group. The sync job applies the change at its next run, $(Format-ClaudeProjectionSyncInterval -Interval $SyncInterval):"
+            '        an added developer gets access within 60 seconds of that run, and a removed one loses it within entitlement-cache-seconds. To publish it at once:'
+            $publish
+        ) }
+    }
+    else {
+        [pscustomobject]@{ Title = 'Add or remove a developer in the projection'; Warn = $false; Detail = @(
+            '        Add or remove the developer in the Entra group first, then publish that one projection record:'
+            $publish
+        ) }
+    }
+    $jobInterval = if ($SyncInterval -eq 'none') { Get-ClaudeProjectionSyncDefaultInterval } else { $SyncInterval }
+    $syncParams = [ordered]@{ ResourceGroup = $ResourceGroup; ApimName = $ApimName; NamePrefix = $NamePrefix; StandardGroup = $StandardGroup; PremiumGroup = $PremiumGroup; AlertEmail = '<address>'; SyncInterval = $jobInterval }
     if ($SubscriptionId) { $syncParams['SubscriptionId'] = $SubscriptionId }
     $syncCommand = New-ClaudeInstallerCommandLine -Command '.\scripts\Deploy-ClaudeProjectionRenewal.ps1' -Parameters $syncParams
-    $syncJob = if ($SyncJobStatus -eq 'deployed') {
-        [pscustomobject]@{ Title = 'Optional: the sync job is deployed'; Warn = $false; Detail = @(
-            '        A Privileged Role Administrator or Global Administrator grants its Microsoft Graph permission with the command the deployment printed; then start it with az containerapp job start.'
-        ) }
-    } elseif ($SyncJobStatus -eq 'failed') {
-        [pscustomobject]@{ Title = 'Optional: the sync job was not deployed'; Warn = $true; Detail = @(
-            '        The projection is serving, but the optional sync job failed. Rerun it after fixing the printed error:'
-            "        $syncCommand"
-        ) }
-    } else {
-        [pscustomobject]@{ Title = 'Optional: the sync job for very large directories'; Warn = $false; Detail = @(
-            '        For very large directories, the job reads Microsoft Graph inside the network instead of sending a snapshot through the runner:'
-            "        $syncCommand"
-        ) }
+    $scheduleCommand = New-ClaudeInstallerCommandLine -Command '.\scripts\Set-ClaudeProjectionSyncSchedule.ps1' -Parameters ([ordered]@{ ResourceGroup = $ResourceGroup; ApimName = $ApimName; Interval = '<interval>' })
+    $syncJob = switch ($SyncJobStatus) {
+        'deployed' {
+            $title = if ($SyncInterval -eq 'manual') { 'The sync job is deployed; it runs only when started' } else { "The sync job runs $(Format-ClaudeProjectionSyncInterval -Interval $SyncInterval)" }
+            $grant = if ($GraphGrant -ceq 'held') { @('        Its identity holds Microsoft Graph GroupMember.Read.All.') } else { @(
+                    '        A Privileged Role Administrator or Global Administrator grants its identity Microsoft Graph GroupMember.Read.All once,'
+                    '        with the command the deployment printed. Until then each run stops at the Graph stage and writes nothing.') }
+            [pscustomobject]@{ Title = $title; Warn = ($GraphGrant -cne 'held'); Detail = @($grant) + @(
+                    '        Change the interval (30m, 1h, 2h, 3h, 4h, 6h, 8h, 12h or manual):'
+                    "        $scheduleCommand"
+                    '        Start a run now with az containerapp job start; the deployment printed the job name.'
+                ) }
+        }
+        'failed' {
+            [pscustomobject]@{ Title = 'The sync job was not deployed'; Warn = $true; Detail = @(
+                '        The projection is serving, but the sync job failed. Rerun it after fixing the printed error:'
+                "        $syncCommand"
+            ) }
+        }
+        default {
+            if ($DeployedJobSchedule) {
+                [pscustomobject]@{ Title = 'The deployed sync job was left as it is (-ProjectionSyncInterval none)'; Warn = $false; Detail = @(
+                    "        It runs $DeployedJobSchedule. Change or stop its schedule (30m, 1h, 2h, 3h, 4h, 6h, 8h, 12h or manual):"
+                    "        $scheduleCommand"
+                ) }
+            }
+            else {
+                [pscustomobject]@{ Title = 'No sync job (-ProjectionSyncInterval none)'; Warn = $false; Detail = @(
+                    '        Group changes reach the projection when Sync-ClaudeAccess.ps1 runs. The sync job applies them on a schedule:'
+                    "        $syncCommand"
+                ) }
+            }
+        }
     }
     return [pscustomobject]@{ Developer = $developer; SyncJob = $syncJob }
 }

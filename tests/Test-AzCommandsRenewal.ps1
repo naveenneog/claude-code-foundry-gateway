@@ -7,7 +7,9 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $fail = 0
+$count = 0
 function Assert($Label, [bool]$Condition, $Detail = '') {
+    $script:count++
     if ($Condition) { Write-Host "  [OK]   $Label" -ForegroundColor Green }
     else { Write-Host "  [FAIL] $Label$(if ($Detail) { " - $Detail" })" -ForegroundColor Red; $script:fail++ }
 }
@@ -42,7 +44,9 @@ case "$args" in
   "resource list -g rg "*)
     printf 'cosmos-prefix\tMicrosoft.DocumentDB/databaseAccounts\nacrprefix\tMicrosoft.ContainerRegistry/registries\nid-projection-renewal-prefix\tMicrosoft.ManagedIdentity/userAssignedIdentities\nag-projection-renewal-prefix\tmicrosoft.insights/actiongroups\nsqr-projection-prefix-no-success-45m\tmicrosoft.insights/scheduledqueryrules\n'
     if [ "${P94_SCENARIO:-}" = "p86-leftovers" ]; then printf 'caj-projection-renewal-prefix\tMicrosoft.App/jobs\ncae-projection-prefix\tmicrosoft.app/managedenvironments\n'; fi
-    if [ "${P94_SCENARIO:-}" = "p86-name-other-type" ]; then printf 'cae-projection-prefix\tMicrosoft.Network/networkSecurityGroups\n'; fi ;;
+    if [ "${P94_SCENARIO:-}" = "p86-name-other-type" ]; then printf 'cae-projection-prefix\tMicrosoft.Network/networkSecurityGroups\n'; fi
+    if [ "${P94_SCENARIO:-}" = "p104-rule" ]; then printf 'sqr-projection-prefix-no-success\tmicrosoft.insights/scheduledqueryrules\n'; fi ;;
+  "resource delete "*) printf 'delete %s\n' "$*" >> "$P94_WRITES" ;;
   "monitor log-analytics workspace list "*)
     printf '/subscriptions/sub/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/law\n'
     if [ "${P94_SCENARIO:-}" = "two-workspaces" ]; then printf '/subscriptions/sub/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/law2\n'; fi ;;
@@ -111,7 +115,7 @@ $jq = & $bash -lc 'command -v jq >/dev/null && echo yes'
 Assert 'Git Bash has jq' ($jq -match 'yes')
 
 $healthy = Invoke-RenewalBlock 'healthy'
-$writes = @($healthy.Writes -split "`n" | Where-Object { $_ })
+$writes = @($healthy.Writes -split "`n" | Where-Object { $_ -and $_ -notmatch '^delete ' })
 Assert 'a healthy run completes' ($healthy.Exit -eq 0) $healthy.Output
 Assert 'registry, then build, then the job' ($writes.Count -eq 3 -and $writes[0] -match '^create .*-n projection-registry-prefix ' -and $writes[1] -match '^build ' -and $writes[2] -match '^create .*-n projection-renewal-prefix ') ($writes -join ' | ')
 $calls = @($healthy.Calls -split "`n" | Where-Object { $_ })
@@ -139,8 +143,27 @@ Assert 'the job gets the tier group ids, the gateway and the alert address' ((& 
 Assert 'the tenant administrator step names the job identity' ($healthy.Output -match 'Grant-ClaudeProjectionRenewalGraphAccess\.ps1 -PrincipalId 40000000-0000-4000-8000-000000000002')
 Assert 'the tier group ids come from the group receipts, with no directory lookup' ($healthy.Calls -notmatch '(?m)^ad group ') (($healthy.Calls -split "`n" | Where-Object { $_ -match '^ad ' }) -join ' | ')
 
+# P104 (ADR-0058): the block takes SYNC_INTERVAL with the cron and no-success range of the PowerShell path,
+# and removes the rules the template no longer declares after the job deploys.
+. (Join-Path $root 'scripts\ClaudeProjectionSchedule.ps1')
+$intervalLines = [regex]::Matches($block, "(?m)^\s+([0-9a-z]+)\) SYNC_CRON='([^']*)'; NO_SUCCESS_MINUTES=(\d+) ;;")
+$fromBlock = @($intervalLines | ForEach-Object { "$($_.Groups[1].Value)|$($_.Groups[2].Value)|$($_.Groups[3].Value)" }) -join ','
+$fromModule = @(Get-ClaudeProjectionSyncIntervals | ForEach-Object { $s = ConvertTo-ClaudeProjectionSyncSchedule -Interval $_; "$($s.Interval)|$($s.Cron)|$($s.NoSuccessMinutes)" }) -join ','
+Assert 'the block maps each interval to the cron and range of scripts/ClaudeProjectionSchedule.ps1' ($intervalLines.Count -eq 9 -and $fromBlock -ceq $fromModule) "$fromBlock <> $fromModule"
+Assert 'the job runs every 2 hours by default, with its no-success range' ((& $value 'cronExpression') -ceq '0 */2 * * *' -and (& $value 'noSuccessMinutes') -eq 255) "$(& $value 'cronExpression') / $(& $value 'noSuccessMinutes')"
+$deleteAt = $healthy.Writes.IndexOf('delete resource delete -g rg -n sqr-projection-prefix-no-success-45m --resource-type Microsoft.Insights/scheduledQueryRules')
+Assert 'the retired 45-minute rule is removed after the job deploys' ($deleteAt -gt $healthy.Writes.IndexOf('projection-renewal-prefix') -and $healthy.Writes.IndexOf('projection-renewal-prefix') -ge 0) $healthy.Writes
+$thirty = Invoke-RenewalBlock 'healthy' @{ SYNC_INTERVAL = '30m' }
+Assert 'SYNC_INTERVAL=30m deploys its cron and a 75-minute range' ($thirty.Exit -eq 0 -and $thirty.Params.parameters.cronExpression.value -ceq '*/30 * * * *' -and $thirty.Params.parameters.noSuccessMinutes.value -eq 75) $thirty.Output.Trim()
+$keepRule = Invoke-RenewalBlock 'p104-rule' @{ SYNC_INTERVAL = '4h' }
+Assert 'a scheduled run keeps the no-success rule its template deploys' ($keepRule.Exit -eq 0 -and $keepRule.Writes -notmatch 'sqr-projection-prefix-no-success ') $keepRule.Writes
+$toManual = Invoke-RenewalBlock 'p104-rule' @{ SYNC_INTERVAL = 'manual' }
+Assert 'SYNC_INTERVAL=manual deploys no schedule and removes the no-success rule' ($toManual.Exit -eq 0 -and $toManual.Params.parameters.cronExpression.value -ceq '' -and
+    $toManual.Params.parameters.noSuccessMinutes.value -eq 0 -and $toManual.Writes -match 'resource delete -g rg -n sqr-projection-prefix-no-success --resource-type') "$($toManual.Output.Trim()) | $($toManual.Writes)"
+
 foreach ($case in @(
         @{ Name = 'an alert address with a command separator'; Scenario = 'healthy'; Environment = @{ ALERT_EMAIL = 'ops@example.invalid&calc' }; Expect = 'ALERT_EMAIL' }
+        @{ Name = 'an interval shorter than 30 minutes'; Scenario = 'healthy'; Environment = @{ SYNC_INTERVAL = '15m' }; Expect = "SYNC_INTERVAL '15m'" }
         @{ Name = 'the alert address placeholder'; Scenario = 'healthy'; Environment = @{ ALERT_EMAIL = '<alert-email>' }; Expect = 'ALERT_EMAIL' }
         @{ Name = 'a network without the renewal subnet'; Scenario = 'no-subnet'; Environment = @{}; Expect = 'renewal subnet' }
         @{ Name = 'two workspaces in the gateway resource group'; Scenario = 'two-workspaces'; Environment = @{}; Expect = 'WORKSPACE_ID' }
@@ -164,5 +187,5 @@ Assert 'a resource with a P86 name but another type does not stop the block' ($o
 
 Write-Host ''
 if ($fail) { Write-Host "$fail assertion(s) failed." -ForegroundColor Red; exit 1 }
-Write-Host 'Azure CLI guide renewal block holds.' -ForegroundColor Green
+Write-Host "$count renewal block assertion(s) passed: the Azure CLI guide renewal block holds." -ForegroundColor Green
 exit 0

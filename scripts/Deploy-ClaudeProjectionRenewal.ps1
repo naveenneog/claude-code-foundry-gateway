@@ -5,9 +5,10 @@
 .DESCRIPTION
     Runs after scripts/Deploy-ClaudeProjection.ps1, in the same resource group, and reads that
     deployment's outputs: the Cosmos account and the projection network with its renewal subnet.
-    The job is manual by default and can be started on demand with az containerapp job start.
-    -CronExpression switches it to a schedule for tenants where a tenant administrator grants
-    Microsoft Graph GroupMember.Read.All to the job identity.
+    The job runs every 2 hours by default. -SyncInterval sets 30m, 1h, 2h, 3h, 4h, 6h, 8h, 12h or
+    manual; anything shorter than 30 minutes is refused (ADR-0058). Each run reads the tier and
+    business-unit groups through Microsoft Graph, which needs GroupMember.Read.All granted to the job
+    identity by a tenant administrator. az containerapp job start runs it on demand.
     Three phases, each safe to rerun:
 
       1. infra/projection-registry.bicep: the registry, the job's user-assigned identity and its
@@ -25,6 +26,11 @@
 .PARAMETER AlertEmail
     Email addresses for the renewal alerts. Each one receives a confirmation from Azure Monitor.
 
+.PARAMETER SyncInterval
+    How often the job runs: 30m, 1h, 2h (default), 3h, 4h, 6h, 8h, 12h, or manual for on-demand runs
+    only. The no-success alert reads 2 x the interval + 15 minutes; a manual job has none. Replaces
+    -CronExpression, which is refused with the interval it maps to.
+
 .PARAMETER StandardGroup
     The standard tier group: an object id, or a display name resolved to one through Graph.
 
@@ -34,6 +40,12 @@
 .PARAMETER ImageDigest
     A sha256 digest of an image already pushed to the registry as claude-projection-sync. Skips the
     build, for example after a docker build and push.
+
+.PARAMETER KeepRegistry
+    Reuses the registry and job identity that the projection-registry-<prefix> deployment created,
+    reading its outputs instead of deploying it again; requires -ImageDigest. A redeployment would reset
+    the registry's SKU and network settings to the template's values. Set-ClaudeProjectionSyncSchedule.ps1
+    passes it, so an interval change writes only the job and its alerts.
 
 .EXAMPLE
     pwsh -NoProfile -File ./scripts/Deploy-ClaudeProjectionRenewal.ps1 -ResourceGroup <rg> `
@@ -50,9 +62,11 @@ param(
     [string]$StandardGroup = 'claude-code-standard',
     [string]$PremiumGroup = 'claude-code-premium',
     [ValidateSet('Basic', 'Premium')][string]$AcrSku = 'Basic',
-    [string]$CronExpression = '',
+    [string]$SyncInterval = '2h',
+    [string]$CronExpression,
     [string]$ImageTag,
     [string]$ImageDigest,
+    [switch]$KeepRegistry,
     [string]$WorkspaceResourceId,
     [string]$RenewalSubnetId,
     [string]$ReceiptPath,
@@ -70,6 +84,8 @@ $root = Split-Path $PSScriptRoot -Parent
 . (Join-Path $PSScriptRoot 'ClaudeProjectionChecks.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeProjectionPackage.ps1')
 . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeProjectionSchedule.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeProjectionGraphGrant.ps1')
 Assert-ClaudeProjectionPowerShell
 
 $guid = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
@@ -98,10 +114,17 @@ foreach ($email in $emails) {
 if ([string]::IsNullOrWhiteSpace($StandardGroup) -or $StandardGroup -eq 'none') { $problems.Add('-StandardGroup is required: the job reads its members on every run.') }
 if ([string]::IsNullOrWhiteSpace($PremiumGroup)) { $problems.Add('-PremiumGroup is a group or none.') }
 elseif ($PremiumGroup -ne 'none' -and ([string]$StandardGroup).Trim() -eq $PremiumGroup.Trim()) { $problems.Add('-PremiumGroup names the standard group: premium membership takes precedence, so every standard member would be premium. Pass two groups, or -PremiumGroup none.') }
-if ($CronExpression -ne '' -and $CronExpression -notmatch '^[0-9*/,-]+( [0-9*/,-]+){4}$') { $problems.Add("-CronExpression '$CronExpression' is not five cron fields.") }
+if ($PSBoundParameters.ContainsKey('CronExpression')) {
+    $mapped = ConvertFrom-ClaudeProjectionSyncCron -Cron $CronExpression
+    $replacement = if ($mapped) { "'$CronExpression' is -SyncInterval $mapped." } else { "'$CronExpression' is not one of its schedules; pass -SyncInterval $((Get-ClaudeProjectionSyncIntervals) -join ', ')." }
+    $problems.Add("-CronExpression is replaced by -SyncInterval (ADR-0058): $replacement")
+}
+$schedule = $null
+try { $schedule = ConvertTo-ClaudeProjectionSyncSchedule -Interval $SyncInterval } catch { $problems.Add("-SyncInterval: $($_.Exception.Message)") }
 if (-not $ImageTag) { $ImageTag = 'sync-' + [DateTime]::UtcNow.ToString('yyyyMMddHHmmss') }
 if ($ImageTag -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$') { $problems.Add("-ImageTag '$ImageTag' is not an image tag.") }
 if ($ImageDigest -and $ImageDigest -cnotmatch '^sha256:[0-9a-f]{64}$') { $problems.Add('-ImageDigest is not sha256: followed by 64 lowercase hex digits.') }
+if ($KeepRegistry -and -not $ImageDigest) { $problems.Add('-KeepRegistry needs -ImageDigest: with the registry kept, no image is built, and the job runs the image that digest names.') }
 if ($WorkspaceResourceId -and $WorkspaceResourceId -notmatch '^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\.OperationalInsights/workspaces/[^/]+$') { $problems.Add('-WorkspaceResourceId is not a Log Analytics workspace resource id.') }
 $subnetPattern = '^/subscriptions/[0-9a-fA-F-]{36}/resourceGroups/[A-Za-z0-9._-]{1,90}/providers/Microsoft\.Network/virtualNetworks/[A-Za-z0-9._-]{2,64}/subnets/[A-Za-z0-9._-]{1,80}$'
 $bashAlternative = "On Windows az.cmd hands other characters to cmd.exe; the guide's renewal block (docs/AZ-COMMANDS.md, section 10) runs in Bash without that limit."
@@ -227,19 +250,32 @@ if ($premiumGroupId -eq $standardGroupId) {
 $accountResourceId = "/subscriptions/$($account.id)/resourceGroups/$ResourceGroup/providers/Microsoft.DocumentDB/databaseAccounts/$cosmosAccount"
 Ok "Cosmos $cosmosAccount; renewal subnet in $location; gateway $ApimName; standard $standardGroupId; premium $premiumGroupId"
 
-$triggerType = if ($CronExpression -eq '') { 'Manual' } else { 'Schedule' }
-$triggerDescription = if ($triggerType -eq 'Manual') { 'manual, on demand' } else { "scheduled by '$CronExpression'" }
+$triggerType = if ($schedule.Cron -eq '') { 'Manual' } else { 'Schedule' }
+$runs = Format-ClaudeProjectionSyncInterval -Interval $schedule.Interval
+$triggerDescription = if ($triggerType -eq 'Manual') { 'manual, on demand' } else { "$runs (cron '$($schedule.Cron)', UTC)" }
 if (-not $PSCmdlet.ShouldProcess($ResourceGroup, "deploy the projection registry, build the sync image and deploy the optional sync job ($triggerDescription)")) {
     Note "WhatIf: projection-registry-$NamePrefix, az acr build $repository`:$ImageTag, projection-renewal-$NamePrefix on $RenewalSubnetId as $triggerDescription. No Azure writes."
     return
 }
 
 Step 'Phase 1: registry and job identity'
-$registry = Invoke-Deployment "projection-registry-$NamePrefix" 'infra/projection-registry.bicep' @{ namePrefix = $NamePrefix; location = $location; acrSku = $AcrSku }
+$registry = if ($KeepRegistry) {
+    Note "Keeping the registry and job identity of deployment projection-registry-$NamePrefix; no registry write."
+    Get-DeploymentOutput "projection-registry-$NamePrefix"
+}
+else {
+    Invoke-Deployment "projection-registry-$NamePrefix" 'infra/projection-registry.bicep' @{ namePrefix = $NamePrefix; location = $location; acrSku = $AcrSku }
+}
 if (-not $registry.acrName -or -not $registry.identityPrincipalId) { throw 'The registry deployment did not return the registry and identity.' }
 if ([string]$registry.acrName -cnotmatch '^[a-z0-9]{5,50}$') { throw "The registry deployment returned '$($registry.acrName)', not a registry name (5-50 lowercase letters or digits); the image was not built." }
 Ok "registry $($registry.acrName); job identity principal $($registry.identityPrincipalId)"
-Note "A tenant administrator can grant Graph access now, while the image builds: ./scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1 -PrincipalId $($registry.identityPrincipalId)"
+$graphGrant = Get-ClaudeProjectionGraphGrant -PrincipalId ([string]$registry.identityPrincipalId)
+$grantCommand = "./scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1 -PrincipalId $($registry.identityPrincipalId)"
+switch ($graphGrant.State) {
+    'held' { Ok 'the job identity holds Microsoft Graph GroupMember.Read.All' }
+    'missing' { Note "The job identity does not hold Microsoft Graph GroupMember.Read.All yet. A tenant administrator can grant it now, while the image builds: $grantCommand" }
+    default { Note "Could not read the job identity's Microsoft Graph permissions ($($graphGrant.Detail)). A tenant administrator can check and grant GroupMember.Read.All with: $grantCommand" }
+}
 
 Step 'Phase 2: sync image'
 if ($ImageDigest) {
@@ -271,17 +307,18 @@ $renewal = Invoke-Deployment "projection-renewal-$NamePrefix" 'infra/projection-
     namePrefix = $NamePrefix; location = $location; cosmosAccountName = $cosmosAccount
     containerAppsSubnetId = $RenewalSubnetId; logAnalyticsWorkspaceId = $WorkspaceResourceId
     actionGroupEmailReceivers = @($emails); acrName = $registry.acrName; identityName = $registry.identityName
-    syncImageDigest = $ImageDigest; cronExpression = $CronExpression; tenantId = $tenantId
+    syncImageDigest = $ImageDigest; cronExpression = $schedule.Cron; noSuccessMinutes = $schedule.NoSuccessMinutes; tenantId = $tenantId
     standardGroupId = $standardGroupId; premiumGroupId = $premiumGroupId; gatewayResourceId = $gatewayId
     entrypoint = $entryPoint
 }
 if (-not $renewal.jobResourceId -or -not $renewal.actionGroupResourceId) { throw 'The renewal deployment did not return the job and the action group.' }
-Ok "optional sync job $($renewal.jobName) trigger $triggerType$(if ($CronExpression) { " '$CronExpression'" }); action group $($renewal.actionGroupResourceId)"
+Ok "sync job $($renewal.jobName) runs $triggerDescription; action group $($renewal.actionGroupResourceId)"
 # An incremental deployment leaves rules that the template no longer declares. ADR-0051 retired the P94
-# expiry-margin rule, which reads an expiry that a run no longer prints and so fires on every success, and
-# keeps the no-success rule only for a scheduled job.
-$retiredRules = @("sqr-projection-$NamePrefix-expiry-margin-60m")
-if ($triggerType -eq 'Manual') { $retiredRules += "sqr-projection-$NamePrefix-no-success-45m" }
+# expiry-margin rule, which reads an expiry that a run no longer prints and so fires on every success.
+# ADR-0058 gave the no-success rule one name for every interval, which retires P97's 45-minute name, and a
+# manual job has no no-success rule.
+$retiredRules = @("sqr-projection-$NamePrefix-expiry-margin-60m", "sqr-projection-$NamePrefix-no-success-45m")
+if ($triggerType -eq 'Manual') { $retiredRules += "sqr-projection-$NamePrefix-no-success" }
 foreach ($rule in $retiredRules) {
     if (@($present | Where-Object { $_.name -eq $rule -and $_.type -eq 'Microsoft.Insights/scheduledQueryRules' }).Count) {
         $null = Invoke-ClaudeNetworkAz @('resource', 'delete', '-g', $ResourceGroup, '-n', $rule, '--resource-type', 'Microsoft.Insights/scheduledQueryRules')
@@ -300,15 +337,27 @@ $receipt = [ordered]@{
     reconcilerResourceId = [string]$renewal.jobResourceId; jobName = [string]$renewal.jobName
     imageDigest = $ImageDigest; imageTag = $ImageTag; entryPoint = $entryPoint
     actionGroupResourceId = [string]$renewal.actionGroupResourceId; identityPrincipalId = [string]$registry.identityPrincipalId
-    workspaceResourceId = $WorkspaceResourceId; triggerType = $triggerType; cronExpression = $CronExpression
+    workspaceResourceId = $WorkspaceResourceId; triggerType = $triggerType; syncInterval = $schedule.Interval
+    cronExpression = $schedule.Cron; noSuccessMinutes = $schedule.NoSuccessMinutes; graphGrant = $graphGrant.State
 }
 New-Item -ItemType Directory -Force -Path (Split-Path $ReceiptPath -Parent) | Out-Null
 [IO.File]::WriteAllText($ReceiptPath, ($receipt | ConvertTo-Json -Depth 4), [Text.UTF8Encoding]::new($false))
 
 Step 'Next steps'
-Write-Host "    1. A Privileged Role Administrator or Global Administrator grants Microsoft Graph GroupMember.Read.All to the job identity, once:"
-Write-Host "       ./scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1 -PrincipalId $($registry.identityPrincipalId)"
-Write-Host "    2. This optional sync job is manual unless -CronExpression was supplied. Start it on demand after the Graph grant:"
+if ($graphGrant.State -eq 'held') {
+    Write-Host "    1. The job identity holds Microsoft Graph GroupMember.Read.All; no grant is needed."
+}
+else {
+    Write-Host "    1. A Privileged Role Administrator or Global Administrator grants Microsoft Graph GroupMember.Read.All to the job identity, once:"
+    Write-Host "       $grantCommand"
+}
+$untilGrant = if ($graphGrant.State -eq 'held') { '' } else { ' Until the grant, each run stops at the Graph stage and writes nothing.' }
+if ($triggerType -eq 'Manual') {
+    Write-Host "    2. The sync job runs only when started.$untilGrant Start it with:"
+}
+else {
+    Write-Host "    2. The sync job runs $runs.$untilGrant Start a run now with:"
+}
 Write-Host "       az containerapp job start -g $ResourceGroup -n $($renewal.jobName)"
 Write-Host "    3. Each alert address receives a confirmation from Azure Monitor; an address not confirmed within 30 minutes receives no alerts (U116)."
 Write-Host "       Runs: az containerapp job execution list -g $ResourceGroup -n $($renewal.jobName) -o table"

@@ -33,6 +33,11 @@ param syncImageDigest string
 @description('Five-field cron expression for an optional scheduled sync. Empty means a manual on-demand job.')
 param cronExpression string = ''
 
+@description('Minutes the no-success alert reads: 2 x the sync interval + 15 (scripts/ClaudeProjectionSchedule.ps1, ADR-0058). 0 deploys no no-success rule. Azure Monitor reads at most two days.')
+@minValue(0)
+@maxValue(2880)
+param noSuccessMinutes int = 0
+
 @description('Entra tenant id written to every projection record.')
 param tenantId string = subscription().tenantId
 
@@ -56,6 +61,7 @@ var environmentName = 'cae-renew-${uniqueString(resourceGroup().id, namePrefix)}
 var jobName = 'caj-renew-${uniqueString(resourceGroup().id, namePrefix)}'
 var actionGroupName = 'ag-projection-renewal-${namePrefix}'
 var isScheduled = !empty(cronExpression)
+var watchesSuccess = isScheduled && noSuccessMinutes > 0
 var tags = {
   'claude-projection-prefix': namePrefix
 }
@@ -245,10 +251,43 @@ module gatewayReader 'projection-renewal-gateway-reader.bicep' = {
 // (U108). The fuzzy union with an empty table lets a rule deploy before the job's first console
 // line exists (U109). The quoted events are the last lines sync/src/apply-projection.mjs prints
 // (sync/src/events.mjs); tests/projection-renewal-runs.test.mjs matches them against real runs.
+// {window} is the minutes a rule reads: 45 for the failure rules, noSuccessRangeMinutes for the no-success rule.
+// Bicep does not interpolate ''' strings, so each rule joins renewalLogs and its query in a one-line string.
 var renewalLogs = '''
 union isfuzzy=true (datatable(TimeGenerated: datetime, JobName: string, Log: string) []), ContainerAppConsoleLogs
-| where TimeGenerated > ago(45m) and JobName == "{jobName}"
+| where TimeGenerated > ago({window}m) and JobName == "{jobName}"
 '''
+
+// A summarize without by returns one row, with a null LastSuccess when nothing matched; the last where keeps it
+// only when no run succeeded within {threshold} minutes (U108). Learn requires a datetime column only for more
+// than one violation; this rule counts one (U170).
+var noSuccessQuery = '''
+| where Log contains '"event":"projection-renewal-succeeded"'
+| summarize LastSuccess = max(TimeGenerated)
+| where isnull(LastSuccess) or LastSuccess < ago({threshold}m)
+'''
+
+// Azure Monitor accepts only these query ranges, in minutes: the deployment of PT75M was refused on 2026-10-08
+// with InvalidRequestContent, "Supported granularities are: 5, 10, 15, 30, 45, 60, 120, 180, 240, 300, 360, 720,
+// 1440, 2880" (U167). The no-success rule reads the smallest of them that covers noSuccessMinutes, and its query
+// compares the newest success with noSuccessMinutes, so the alert time stays 2 x the interval + 15 minutes.
+var supportedQueryRangeMinutes = [
+  5
+  10
+  15
+  30
+  45
+  60
+  120
+  180
+  240
+  300
+  360
+  720
+  1440
+  2880
+]
+var noSuccessRangeMinutes = first(filter(supportedQueryRangeMinutes, minutes => minutes >= noSuccessMinutes))
 
 var alertDefinitions = [
   {
@@ -270,26 +309,23 @@ var alertDefinitions = [
   }
 ]
 
-resource noSuccessAlert 'Microsoft.Insights/scheduledQueryRules@2023-12-01' = if (isScheduled) {
-  name: 'sqr-projection-${namePrefix}-no-success-45m'
+resource noSuccessAlert 'Microsoft.Insights/scheduledQueryRules@2023-12-01' = if (watchesSuccess) {
+  name: 'sqr-projection-${namePrefix}-no-success'
   location: location
   properties: {
-    description: 'No successful scheduled projection sync in 45 minutes.'
+    description: 'No successful scheduled projection sync in ${noSuccessMinutes} minutes.'
     enabled: true
     scopes: [
       logAnalyticsWorkspaceId
     ]
     evaluationFrequency: 'PT5M'
-    windowSize: 'PT45M'
+    windowSize: 'PT5M'
+    overrideQueryTimeRange: 'PT${noSuccessRangeMinutes}M'
     severity: 2
     criteria: {
       allOf: [
         {
-          query: replace('''${renewalLogs}
-| where Log contains '"event":"projection-renewal-succeeded"'
-| summarize Succeeded = count()
-| where Succeeded == 0
-''', '{jobName}', jobName)
+          query: replace(replace(replace('${renewalLogs}${noSuccessQuery}', '{jobName}', jobName), '{window}', string(noSuccessRangeMinutes)), '{threshold}', string(noSuccessMinutes))
           timeAggregation: 'Count'
           operator: 'GreaterThan'
           threshold: 0
@@ -323,7 +359,7 @@ resource alerts 'Microsoft.Insights/scheduledQueryRules@2023-12-01' = [for alert
     criteria: {
       allOf: [
         {
-          query: replace('${renewalLogs}${alert.query}', '{jobName}', jobName)
+          query: replace(replace('${renewalLogs}${alert.query}', '{jobName}', jobName), '{window}', '45')
           timeAggregation: 'Count'
           operator: 'GreaterThan'
           threshold: 0

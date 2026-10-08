@@ -25,6 +25,9 @@
       c. Runs the same command with -Apply -ApprovedPlanFingerprint <the plan's fingerprint>.
     After step 4 it checks that entitlement-groups holds the object ids of the run's two tier groups.
 
+    With -ProjectionSyncInterval (P104), step 3 passes it to the installer, which deploys the sync job on that
+    schedule; without it the installer's default, every 2 hours, applies.
+
     With -Teardown, whatever happened: deletes only objects this run can prove it created: the gateway
     identity's role assignments on the Foundry account and resolver app only when the disposable resource
     group was created by this run, the resource group, and the tier groups this run created.
@@ -48,6 +51,8 @@ param(
     [switch]$UseCurrentAzLogin,
     [switch]$Teardown,
     [switch]$MigrateWithUpdate,
+    # P104: passed to the installer; without it the installer deploys the sync job every 2 hours.
+    [string]$ProjectionSyncInterval,
     # Tests point these at stubs; a live run uses the repository's scripts.
     [Parameter(DontShow)][string]$InstallerPath,
     [Parameter(DontShow)][string]$SyncAccessPath,
@@ -114,6 +119,7 @@ Assert-Form Location $Location '\A[a-z0-9]{2,40}\z'
 Assert-Form FoundryAccount $FoundryAccount '\A[A-Za-z0-9][A-Za-z0-9-]{1,62}\z'
 Assert-Form FoundryResourceGroup $FoundryResourceGroup '\A[A-Za-z0-9._-]{1,90}\z'
 if ($Model) { Assert-Form Model $Model '\A[A-Za-z0-9._-]{1,64}\z' }
+if ($ProjectionSyncInterval) { Assert-Form ProjectionSyncInterval $ProjectionSyncInterval '\A(30m|1h|2h|3h|4h|6h|8h|12h|manual|none)\z' }
 if (-not $ResourceGroup) { $ResourceGroup = 'rg-claude-live-' + [guid]::NewGuid().ToString('N').Substring(0, 10) }
 if (-not $NamePrefix) { $NamePrefix = 'clive' + [guid]::NewGuid().ToString('N').Substring(0, 10) }
 Assert-Form ResourceGroup $ResourceGroup '\A[A-Za-z0-9._-]{1,90}\z'
@@ -174,6 +180,7 @@ try {
     $installerArgs = @{ SubscriptionId = $SubscriptionId; FoundryAccount = $FoundryAccount; FoundryResourceGroup = $FoundryResourceGroup
         ResourceGroup = $ResourceGroup; Location = $Location; NamePrefix = $NamePrefix; Sku = 'BasicV2'; Yes = $true; StandardGroup = $StandardGroup; PremiumGroup = $PremiumGroup }
     if ($MigrateWithUpdate) { $installerArgs.EntitlementStore = 'named-value' }
+    if ($ProjectionSyncInterval) { $installerArgs.ProjectionSyncInterval = $ProjectionSyncInterval }
     $installerStarted = $true
     & $InstallerPath @installerArgs
     $resourceGroupCreated = $true

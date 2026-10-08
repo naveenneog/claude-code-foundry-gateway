@@ -413,7 +413,7 @@
       "tone": "amber",
       "title": "10 · Optional sync job and switch evidence",
       "lines": [
-        "[[deploy-renewal]]: optional job; Manual default; cron optional.",
+        "[[deploy-renewal]]: every 2 h by default; 30m-12h or manual.",
         "[[registry-template]]: [[acr]], [[renewal-identity]], AcrPull.",
         "[[renewal-template]]: [[cae-env]], [[cae-job]], [[cosmos-writer]].",
         "Logs and alerts: [[renewal-logs]], [[renewal-alerts]].",

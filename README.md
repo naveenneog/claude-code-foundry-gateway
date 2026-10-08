@@ -108,7 +108,9 @@ explains created, reused and optional resources.
 >
 > Projection deployment requires PowerShell 7. Its [read-only preflight](docs/SECURE-PROJECTION.md#one-command-deployment)
 > runs before Azure writes. Projection records persist until a sync deletes or changes them,
-> so a sync-job outage does not stop developers. `scripts/Sync-ClaudeAccess.ps1 -User`
+> so a sync-job outage does not stop developers. The installer deploys the sync job, which applies
+> Entra tier and business-unit group changes every 2 hours by default (`-ProjectionSyncInterval`, 30 minutes
+> to 12 hours). `scripts/Sync-ClaudeAccess.ps1 -User`
 > publishes one developer's change on either entitlement store: named values run a full allow-list refresh and the
 > projection uses the in-VNet runner. Without `-User` it refreshes everyone.
 > `scripts/Deploy-ClaudeProjection.ps1 -FlipAfterCleanCompare` switches without deploying
