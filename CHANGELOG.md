@@ -50,8 +50,8 @@ exact streaming cache-creation detail remains **U13**.
   identity does not reuse role assignment names from the old principal.
   Cache-read metrics are allocated once per day, user and model family; a price book with two keys of one
   normalised form is refused when it is written, a stored book keeps working (equal rates are one entry;
-  conflicting or invalid rates leave that model family unpriced, and the business-unit and Turnstile scripts
-  warn instead of stopping), and named-value gateways keep the current-membership
+  conflicting or invalid rates leave that model family unpriced; for an invalid rate the business-unit and
+  Turnstile scripts warn instead of stopping), and named-value gateways keep the current-membership
   attribution rule ([ADR-0060](docs/adr/0060-usd-reconciler-attribution-and-pricing.md)).
 - **P108 script-managed USD price books now follow the AUM pinning rule.** Clearing the last budget item leaves a valid document, and the next write stores the current price book; active budgets keep their stored book and print a warning when a different one is offered.
 

@@ -93,6 +93,11 @@ class DollarArithmeticTests(unittest.TestCase):
             "scaled-model": {"inputPerM": "0.8", "outputPerM": "4", "cacheWrite5mPerM": "1.000"},
         }}
         self.assertEqual("scaled-model", price_book_key("scaled-model", scaled_equal))
+        mixed_case = {"models": {
+            "A_z": {"inputPerM": 1, "outputPerM": 5},
+            "a-z": {"inputPerM": 1, "outputPerM": 5},
+        }}
+        self.assertEqual("a-z", price_book_key("az", mixed_case))
         conflict = deepcopy(book)
         conflict["models"]["claude-haiku-4-5"] = {"inputPerM": 2, "outputPerM": 5}
         self.assertIsNone(price_book_key("claude-haiku-4-5-20251001", conflict))
@@ -102,7 +107,8 @@ class DollarArithmeticTests(unittest.TestCase):
         }}
         self.assertIsNone(price_book_key("claude-haiku-4-5-20251001", cache_conflict))
         rate_conflicts = {
-            "inputPerM": ({"inputPerM": 1, "outputPerM": 5}, {"inputPerM": 2, "outputPerM": 5}),
+            "inputPerM": ({"inputPerM": 1, "outputPerM": 5, "cacheReadPerM": "0.1", "cacheWrite5mPerM": "1.25", "cacheWrite1hPerM": "2"},
+                          {"inputPerM": 2, "outputPerM": 5, "cacheReadPerM": "0.1", "cacheWrite5mPerM": "1.25", "cacheWrite1hPerM": "2"}),
             "outputPerM": ({"inputPerM": 1, "outputPerM": 5}, {"inputPerM": 1, "outputPerM": 6}),
             "cacheReadPerM": ({"inputPerM": 1, "outputPerM": 5}, {"inputPerM": 1, "outputPerM": 5, "cacheReadPerM": "0.05"}),
             "cacheWrite5mPerM": ({"inputPerM": 1, "outputPerM": 5}, {"inputPerM": 1, "outputPerM": 5, "cacheWrite5mPerM": "2"}),
@@ -124,12 +130,18 @@ class DollarArithmeticTests(unittest.TestCase):
             "claude-sonnet-5.5": {"inputPerM": 1, "outputPerM": 5},
         }}
         self.assertIsNone(price_book_key("claude-sonnet-5-5-20260101", invalid_dated))
+        self.assertIsNone(price_book_key("claude-sonnet-5.5", invalid_dated))
         invalid_required = {"models": {
             "required-negative": {"inputPerM": -5, "outputPerM": 25},
+            "required.negative": {"inputPerM": 1, "outputPerM": 5},
             "required-boolean": {"inputPerM": True, "outputPerM": 25},
+            "required-output": {"inputPerM": 1, "outputPerM": "x"},
+            "required.output": {"inputPerM": 1, "outputPerM": 5},
         }}
         self.assertIsNone(price_book_key("required-negative", invalid_required))
         self.assertIsNone(price_book_key("required-boolean", invalid_required))
+        self.assertIsNone(price_book_key("required.negative", invalid_required))
+        self.assertIsNone(price_book_key("required.output", invalid_required))
 
     def test_all_five_categories_are_priced_before_sum_without_rounding(self):
         result = price_row(row(cache_write_1h_tokens=1000), BOOK)

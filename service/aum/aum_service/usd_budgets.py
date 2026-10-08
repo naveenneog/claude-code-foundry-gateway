@@ -237,7 +237,9 @@ def price_book_key(name, book):
             except ServiceError:
                 return None
         if len(rates) == 1:
-            return sorted(matches)[0]
+            # The order of scripts/flow/FlowContract.ps1 Sort-ClaudeFlowOrdinal (P76): code points ignoring
+            # case, then code points, so PowerShell and Python name the same equal-rate spelling.
+            return sorted(matches, key=lambda key: (key.upper(), key))[0]
     return matches[0] if len(matches) == 1 else None
 
 
