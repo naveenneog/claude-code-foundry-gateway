@@ -337,6 +337,30 @@ foreach ($case in @(
     Assert "business-unit price parity for $($case[0])" ($actual -eq $expected) "actual $actual expected $expected"
 }
 Assert 'business-unit shorter family remains unpriced' ($null -eq (ConvertTo-ClaudeBuUsd -Tokens 1000000 -Model 'claude-sonnet-5-2'))
+$savedPriceBook = $script:ClaudePriceBook
+$savedPriceBookDate = $script:ClaudePriceBookDate
+$invalidOptionalBook = Join-Path ([IO.Path]::GetTempPath()) ('bu-invalid-price-book-' + [guid]::NewGuid().ToString('N') + '.json')
+try {
+    [IO.File]::WriteAllText($invalidOptionalBook, (@{
+        date = '2026-10-08'; source = 'test'; models = [ordered]@{
+            good = @{ inputPerM = 2; outputPerM = 10; cacheReadPerM = 0.2 }
+            nullcache = @{ inputPerM = 2; outputPerM = 10; cacheReadPerM = $null }
+            negativecache = @{ inputPerM = 2; outputPerM = 10; cacheReadPerM = -0.5 }
+            textcache = @{ inputPerM = 2; outputPerM = 10; cacheReadPerM = 'oops' }
+        }
+    } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+    $importError = ''
+    $warnings = ''
+    try { $warnings = (Import-ClaudePriceBook -Path $invalidOptionalBook 3>&1 | Out-String) } catch { $importError = $_.Exception.Message }
+    Assert 'price-book import does not throw for invalid optional rates' (-not $importError) $importError
+    Assert 'price-book import keeps valid entries when optional-rate siblings are invalid' ($script:ClaudePriceBook.ContainsKey('good') -and -not $script:ClaudePriceBook.ContainsKey('nullcache') -and -not $script:ClaudePriceBook.ContainsKey('negativecache') -and -not $script:ClaudePriceBook.ContainsKey('textcache'))
+    Assert 'price-book import warnings name invalid optional rate keys and fields' ($warnings -match 'nullcache' -and $warnings -match 'negativecache' -and $warnings -match 'textcache' -and $warnings -match 'cacheReadPerM') $warnings
+}
+finally {
+    Remove-Item -LiteralPath $invalidOptionalBook -Force -ErrorAction SilentlyContinue
+    $script:ClaudePriceBook = $savedPriceBook
+    $script:ClaudePriceBookDate = $savedPriceBookDate
+}
 
 $setSrc = Get-Content $setPath -Raw
 Assert 'the writer takes a decimal budget' ($setSrc -match '\[decimal\]\$MonthlyBudgetUsd')

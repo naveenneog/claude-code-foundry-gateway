@@ -73,15 +73,30 @@ function Import-ClaudePriceBook {
         if ($null -eq $m.inputPerM -or $null -eq $m.outputPerM) {
             throw "Price book '$Path': model '$($p.Name)' is missing inputPerM or outputPerM."
         }
-        $book[$p.Name] = @{
+        $entry = @{
             InputPerM  = [decimal]$m.inputPerM
             OutputPerM = [decimal]$m.outputPerM
         }
+        $skip = $false
         foreach ($optional in 'cacheReadPerM', 'cacheWrite5mPerM', 'cacheWrite1hPerM') {
             if ($null -ne $m.PSObject.Properties[$optional]) {
-                $book[$p.Name][$optional.Substring(0, 1).ToUpperInvariant() + $optional.Substring(1)] = [decimal]$m.$optional
+                $value = $m.$optional
+                if ($null -eq $value -or $value -is [bool] -or $value -is [string] -or
+                    $value -is [System.Collections.IEnumerable] -or $value.GetType().FullName -eq 'System.Management.Automation.PSCustomObject') {
+                    Write-Warning "Price book '$Path': model '$($p.Name)' has invalid $optional; the model is unpriced in business-unit and Turnstile script paths."
+                    $skip = $true
+                    break
+                }
+                $parsed = [decimal]$value
+                if ($parsed -lt 0) {
+                    Write-Warning "Price book '$Path': model '$($p.Name)' has invalid $optional; the model is unpriced in business-unit and Turnstile script paths."
+                    $skip = $true
+                    break
+                }
+                $entry[$optional.Substring(0, 1).ToUpperInvariant() + $optional.Substring(1)] = $parsed
             }
         }
+        if (-not $skip) { $book[$p.Name] = $entry }
     }
     if ($book.Keys.Count -eq 0) { throw "Price book '$Path' lists no models. Delete it to fall back to the built-in rates." }
 
