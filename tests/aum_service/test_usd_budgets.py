@@ -272,6 +272,14 @@ class DollarDecisionTests(unittest.TestCase):
         self.assertEqual("stop", state["items"]["department:payroll"]["status"])
         self.assertEqual("0.02802", state["items"]["department:payroll"]["spent_usd"])
 
+    def test_named_value_gateway_uses_current_membership_before_stamp(self):
+        config = configured()
+        config["bu-members"] = "," + PERSON + "=finance,"
+        state = calculate_state(config, [row(business_unit="payroll")], NOW)
+        self.assertEqual("allow", state["items"]["organization:finance"]["status"])
+        self.assertEqual("0.02802", state["items"]["organization:finance"]["spent_usd"])
+        self.assertEqual("0", state["items"]["department:payroll"]["spent_usd"])
+
     def test_projection_charges_each_stamped_unit_when_user_moves_in_a_day(self):
         config = configured()
         config["entitlement-source"] = "projection"
