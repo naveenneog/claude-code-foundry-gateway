@@ -3144,7 +3144,7 @@ $caught = 0
 
 try {
     New-Item -ItemType Directory -Path $sandbox -Force | Out-Null
-    foreach ($d in 'infra', 'scripts', 'tests', 'analytics', 'sync', 'resolver', 'cli') {
+    foreach ($d in 'infra', 'scripts', 'tests', 'analytics', 'sync', 'resolver', 'cli', 'service') {
         if (Test-Path (Join-Path $root $d)) {
             Copy-Item (Join-Path $root $d) $sandbox -Recurse -Force
         }
@@ -3153,6 +3153,8 @@ try {
     # back to the template.
     Copy-Item (Join-Path $root 'Install-ClaudeGateway.ps1') $sandbox -Force
     Copy-Item (Join-Path $root 'README.md') $sandbox -Force
+    # Test-UsdBudgets.ps1 checks the CHANGELOG wording against the price-book rules.
+    Copy-Item (Join-Path $root 'CHANGELOG.md') $sandbox -Force
     # The developer-facing guide, which carries the Desktop gateway sign-in step
     # and the FAQ, both of which are asserted against.
     Copy-Item (Join-Path $root 'DEVELOPER.md') $sandbox -Force
