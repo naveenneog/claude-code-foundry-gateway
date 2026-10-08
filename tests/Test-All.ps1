@@ -82,7 +82,16 @@ function Restore-TestAllPriceBookSnapshot {
 
 function Test-TestAllPriceBookSnapshot {
     param($Snapshot, [Parameter(Mandatory = $true)][string]$SuiteName)
-    if (-not $Snapshot -or -not $Snapshot.Exists) { return '' }
+    if (-not $Snapshot) { return '' }
+    if (-not $Snapshot.Exists) {
+        # No operator book existed when the run started: a book now is a suite's leftover, which would price real requests.
+        if (Test-Path -LiteralPath $Snapshot.Path -PathType Leaf) {
+            $removal = 'removed it'
+            try { Remove-Item -LiteralPath $Snapshot.Path -Force -ErrorAction Stop } catch { $removal = "could not remove it ($($_.Exception.Message))" }
+            return "config\price-book.json was created by $SuiteName; $removal, because no operator price book existed when the run started."
+        }
+        return ''
+    }
     $problem = ''
     if (-not (Test-Path -LiteralPath $Snapshot.Path -PathType Leaf)) {
         $problem = "config\price-book.json was deleted by $SuiteName"

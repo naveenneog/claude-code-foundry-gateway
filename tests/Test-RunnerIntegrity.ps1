@@ -222,6 +222,11 @@ try {
     $changeBookPath = Split-Path $changeBook.Marks -Parent
     $changeBookContent = [IO.File]::ReadAllText((Join-Path $changeBookPath 'config\price-book.json'))
     Assert 'Test-All restores and fails the suite that modifies an operator price book' ($changeBook.Exit -ne 0 -and $changeBook.Output -match 'config\\price-book\.json was modified by second' -and $changeBookContent -ceq $operatorBook) $changeBook.Output
+    $createBook = Invoke-Scenario $mini -Behaviour @{
+        'First.ps1' = "`$config = Join-Path (Split-Path `$PSScriptRoot -Parent) 'config'; New-Item -ItemType Directory -Path `$config -Force | Out-Null; [IO.File]::WriteAllText((Join-Path `$config 'price-book.json'), 'left behind'); exit 0"
+    }
+    $createBookPath = Join-Path (Split-Path $createBook.Marks -Parent) 'config\price-book.json'
+    Assert 'Test-All removes and fails a price book a suite leaves where none existed' ($createBook.Exit -ne 0 -and $createBook.Output -match 'config\\price-book\.json was created by first' -and -not (Test-Path -LiteralPath $createBookPath)) $createBook.Output
 
     $shardRuns = @(
         Invoke-Scenario $mini -Options @('-ShardIndex', '0', '-ShardCount', '2', '-ThrottleLimit', '3')
