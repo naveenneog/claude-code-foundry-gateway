@@ -193,8 +193,6 @@ def normalized_model_key(value):
 
 def price_book_key(name, book):
     models = book.get("models", {}) if isinstance(book, dict) else {}
-    text = str(name or "")
-    literal = text.lower()
     target = normalized_model_key(name)
     poisoned = set()
     for key, model in models.items():
@@ -223,14 +221,6 @@ def price_book_key(name, book):
         return None
     if family_target and has_conflicting_rates([key for key in models if normalized_model_key(key) == family_target]):
         return None
-    for key in models:
-        if key.lower() == literal:
-            return key
-    dated_literal = re.sub(r"[-_.]*\d{8}$", "", literal)
-    if dated_literal != literal:
-        for key in models:
-            if key.lower() == dated_literal:
-                return key
     if not target:
         return None
     matches = normalized_matches

@@ -91,7 +91,6 @@ function ConvertTo-ClaudePriceModelKey {
 
 function Resolve-ClaudePriceBookKey {
     param([Parameter(Mandatory = $true)][string]$Name, [Parameter(Mandatory = $true)]$Book)
-    $literal = $Name.ToLowerInvariant()
     $target = ConvertTo-ClaudePriceModelKey $Name
     if (-not $target) { return '' }
     $names = @($Book.models.PSObject.Properties.Name)
@@ -111,13 +110,6 @@ function Resolve-ClaudePriceBookKey {
             }))
             if ($rates.Count -gt 1) { return '' }
         }
-    }
-    $exact = @($names | Where-Object { [string]::Equals($_.ToLowerInvariant(), $literal, [StringComparison]::Ordinal) })
-    if ($exact.Count -eq 1) { return [string]$exact[0] }
-    $datedLiteral = [regex]::Replace($literal, '[-_.]*\d{8}$', '')
-    if (-not [string]::Equals($datedLiteral, $literal, [StringComparison]::Ordinal)) {
-        $datedExact = @($names | Where-Object { [string]::Equals($_.ToLowerInvariant(), $datedLiteral, [StringComparison]::Ordinal) })
-        if ($datedExact.Count -eq 1) { return [string]$datedExact[0] }
     }
     $matches = $normalizedMatches
     if (-not $matches.Count -and $target.Length -gt 8 -and $target.Substring($target.Length - 8) -match '^\d{8}$') {
