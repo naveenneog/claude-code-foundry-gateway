@@ -88,6 +88,9 @@ class DollarArithmeticTests(unittest.TestCase):
         duplicate["models"]["claude-haiku-4-5"] = {"inputPerM": 1, "outputPerM": 5}
         self.assertEqual("claude-haiku-4-5", price_book_key("claude-haiku-4-5", duplicate))
         self.assertEqual("claude-haiku-4-5", price_book_key("claude_haiku_4_5", duplicate))
+        conflict = deepcopy(book)
+        conflict["models"]["claude-haiku-4-5"] = {"inputPerM": 2, "outputPerM": 5}
+        self.assertIsNone(price_book_key("claude-haiku-4-5-20251001", conflict))
 
     def test_all_five_categories_are_priced_before_sum_without_rounding(self):
         result = price_row(row(cache_write_1h_tokens=1000), BOOK)

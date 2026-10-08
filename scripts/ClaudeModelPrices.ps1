@@ -100,7 +100,17 @@ function Resolve-ClaudePriceBookKey {
         $rates = @(Sort-ClaudeFlowOrdinal -Unique -InputObject @($normalizedMatches | ForEach-Object {
             Get-ClaudeEffectivePriceRateKey $Book.models.$_
         }))
-        if ($rates.Count -gt 1) { throw "Conflicting price entries for '$Name': $($normalizedMatches -join ', '). A deployment-specific price resolves this ambiguity." }
+        if ($rates.Count -gt 1) { return '' }
+    }
+    if ($target.Length -gt 8 -and $target.Substring($target.Length - 8) -match '^\d{8}$') {
+        $familyBeforeMatch = $target.Substring(0, $target.Length - 8)
+        $familyConflicts = @($names | Where-Object { [string]::Equals((ConvertTo-ClaudePriceModelKey $_), $familyBeforeMatch, [StringComparison]::Ordinal) })
+        if ($familyConflicts.Count -gt 1) {
+            $rates = @(Sort-ClaudeFlowOrdinal -Unique -InputObject @($familyConflicts | ForEach-Object {
+                Get-ClaudeEffectivePriceRateKey $Book.models.$_
+            }))
+            if ($rates.Count -gt 1) { return '' }
+        }
     }
     $exact = @($names | Where-Object { [string]::Equals($_.ToLowerInvariant(), $literal, [StringComparison]::Ordinal) })
     if ($exact.Count -eq 1) { return [string]$exact[0] }
@@ -119,7 +129,7 @@ function Resolve-ClaudePriceBookKey {
         $rates = @(Sort-ClaudeFlowOrdinal -Unique -InputObject @($matches | ForEach-Object {
             Get-ClaudeEffectivePriceRateKey $Book.models.$_
         }))
-        if ($rates.Count -gt 1) { throw "Conflicting price entries for '$Name': $($matches -join ', '). A deployment-specific price resolves this ambiguity." }
+        if ($rates.Count -gt 1) { return '' }
         return [string](@(Sort-ClaudeFlowOrdinal -InputObject $matches)[0])
     }
     return ''

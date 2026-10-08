@@ -504,7 +504,12 @@ try {
         $withoutOpus55 = [pscustomobject]@{ date = '2026-10-08'; source = 'test tariff'; models = [pscustomobject]@{
             'claude-opus-5' = [pscustomobject]@{ inputPerM = 5; outputPerM = 25 }
         } }
-        -not (Get-ClaudeDeploymentPrice ([pscustomobject]@{ name = 'claude-opus-5-5'; model = 'claude-opus-5-5'; sku = 'GlobalStandard' }) $withoutOpus55).SourceKey
+        $conflict = [pscustomobject]@{ date = '2026-10-08'; source = 'test tariff'; models = [pscustomobject]@{
+            'claude-haiku-4.5' = [pscustomobject]@{ inputPerM = 1; outputPerM = 5 }
+            'claude-haiku-4-5' = [pscustomobject]@{ inputPerM = 2; outputPerM = 5 }
+        } }
+        (-not (Get-ClaudeDeploymentPrice ([pscustomobject]@{ name = 'claude-opus-5-5'; model = 'claude-opus-5-5'; sku = 'GlobalStandard' }) $withoutOpus55).SourceKey) -and
+            (-not (Get-ClaudeDeploymentPrice ([pscustomobject]@{ name = 'claude-haiku-4-5-20251001'; model = 'claude-haiku-4-5-20251001'; sku = 'GlobalStandard' }) $conflict).SourceKey)
     }
     Check 'PowerShell price book allows equal-rate duplicate normalized keys and uses ordinal comparison' {
         $dup = Join-Path $scratch 'duplicate-price-book.json'
