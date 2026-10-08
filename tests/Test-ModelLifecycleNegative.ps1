@@ -36,7 +36,8 @@ Mutation 'root-models-are-the-live-union' $life 'Set-ClaudeRecordProperty $recor
 Mutation 'tier-records-are-scoped' $life '$names = @($permitted | Where-Object { $_.name -in $sets[$tier] } | ForEach-Object { $_.name })' '$names = @($permitted.name)'
 Mutation 'negative-price-refusal' $price '[decimal]$value -lt 0' '$false' 2
 Mutation 'ambiguous-price-refusal' $price '$rates.Count -gt 1' '$false' 3
-Mutation 'negotiated-deployment-price-wins' $price 'return [string](@(Sort-ClaudeFlowOrdinal -InputObject $matches)[0])' 'return [string]$matches[0]'
+Mutation 'negotiated-deployment-price-wins' $price '$key = Resolve-ClaudePriceBookKey -Name ([string]$Deployment.name) -Book $Book' '$key = '''''
+Mutation 'equal-rate-spellings-take-ordinal-first' $price 'return [string](@(Sort-ClaudeFlowOrdinal -InputObject $matches)[0])' 'return [string]$matches[0]'
 Mutation 'unpriced-never-free' $price 'Detail = "unpriced ($reason); not free"' 'Detail = "free USD 0"'
 Mutation 'historical-price-retention' $life '$bookAfter = $book | ConvertTo-Json -Depth 40 | ConvertFrom-Json' '$bookAfter = $book | ConvertTo-Json -Depth 40 | ConvertFrom-Json; $bookAfter.models.PSObject.Properties.Remove(''retired'')'
 Mutation 'price-mapping-is-persisted' $life '$priceChanged = $true' '$priceChanged = $false'
@@ -128,7 +129,12 @@ try {
     Copy-Item -LiteralPath (Join-Path $root "tests\$suiteFile") -Destination $suitePath
     Copy-Item -LiteralPath (Join-Path $root 'tests\ScriptImportCoverage.ps1') -Destination (Join-Path $shadow 'tests')
     Copy-Item -LiteralPath (Join-Path $root 'scripts') -Destination $shadow -Recurse
-    Copy-Item -LiteralPath (Join-Path $root 'config') -Destination $shadow -Recurse
+    # Tracked configuration only: an operator's gitignored config\price-book.json must not change the suite's results.
+    foreach ($tracked in @(& git -C $root ls-files -- config)) {
+        $trackedTarget = Join-Path $shadow $tracked
+        New-Item -ItemType Directory -Path (Split-Path $trackedTarget -Parent) -Force | Out-Null
+        Copy-Item -LiteralPath (Join-Path $root $tracked) -Destination $trackedTarget
+    }
     foreach ($file in 'Start-ClaudeGateway.ps1','Install-ClaudeGateway.ps1','.gitignore') { Copy-Item -LiteralPath (Join-Path $root $file) -Destination $shadow }
     & git -C $shadow init --quiet
     if ($LASTEXITCODE) { throw 'Cannot initialise the private mutation source repository.' }
