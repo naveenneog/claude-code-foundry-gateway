@@ -102,7 +102,9 @@ let metered =
         cache_read_tokens = 0.0,
         cache_read_usd = 0.0,
         category = "metered",
-        priced_ok = isnotnull(input_per_m)
+        // A rate the per-key reduction left null (conflicting book entries) prices its category as
+        // null, which the final usd sum treats as 0; priced_ok is what reports count as unpriced.
+        priced_ok = isnotnull(input_per_m) and isnotnull(output_per_m)
     | project day, user_id, actor, business_unit_at_time, tier, model, client_surface,
               requests, prompt_tokens, completion_tokens, cache_read_tokens,
               prompt_usd, completion_usd, cache_read_usd, category, priced_ok;
@@ -156,7 +158,7 @@ let cached =
         prompt_usd = 0.0,
         completion_usd = 0.0,
         category = "cache_read",
-        priced_ok = isnotnull(input_per_m)
+        priced_ok = isnotnull(cache_read_per_m)
     | project day, user_id, actor, business_unit_at_time, tier, model, client_surface,
               requests, prompt_tokens, completion_tokens, cache_read_tokens,
               prompt_usd, completion_usd, cache_read_usd, category, priced_ok;

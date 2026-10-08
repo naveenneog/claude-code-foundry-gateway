@@ -135,6 +135,11 @@ Assert 'chargeback KQL does not use a broad prefix price match' ($kql -notmatch 
 Assert 'chargeback KQL reduces price rows to one normalized key before joins' ($kql -match 'input_rates = make_set' -and $kql -match 'output_rates = make_set' -and $kql -match 'by k' -and $kql -match 'array_length\(input_rates\) == 1')
 Assert 'chargeback KQL publishes and reduces cache-read rates from the price book' ($kql -match 'cache_read_per_m: real' -and $kql -match 'cache_read_rates = make_set\(cache_read_per_m, 2\)' -and $kql -match 'array_length\(cache_read_rates\) == 1')
 Assert 'chargeback KQL prices cache reads from the effective cache-read rate, not a fixed multiplier' ($kql -notmatch 'cache_read_multiplier' -and $kql -match 'cache_read_per_m' -and $kql -match 'cache_read_tokens / 1000000\.0\) \* cache_read_per_m')
+# A rate the per-key reduction nulls (conflicting rates) must mark the row unpriced: usd coalesces a null category cost
+# to 0, so priced_ok is the only signal a report has (ClaudeChargebackQuery.ps1 counts UnpricedRows from it).
+Assert 'chargeback KQL marks a metered row priced only when both its input and output rates exist' ($kql -match 'priced_ok = isnotnull\(input_per_m\) and isnotnull\(output_per_m\)')
+Assert 'chargeback KQL marks a cache row priced only when its cache-read rate exists' ($kql -match 'priced_ok = isnotnull\(cache_read_per_m\)')
+Assert 'chargeback KQL derives no priced_ok from the input rate alone' (@([regex]::Matches($kql, 'priced_ok = isnotnull\(input_per_m\)\s*\r?\n')).Count -eq 0)
 $publisher = Get-Content (Join-Path $root 'scripts\Publish-ClaudeQueries.ps1') -Raw
 Assert 'query publisher formats price numbers with invariant culture' ($publisher -match 'InvariantCulture' -and $publisher -match 'ToString\(')
 Assert 'query publisher refuses duplicate normalized price keys' ($publisher -match 'Duplicate normalized price-book key' -and $publisher -match 'ConvertTo-ClaudeQueryPriceKey')

@@ -36,11 +36,16 @@ key followed by exactly eight digits, so `claude-haiku-4-5-20251001` matches
 `claude-haiku-4.5`. A shorter family does not match: `claude-opus-5-5` requires
 its own price-book entry and never inherits `claude-opus-5`.
 
-Cache-read metrics are per user/model and have no business-unit dimension. For
-streaming rows, the reconciler assigns the metric remainder for a day/user/model
-family to the latest stamped ledger row in that group. Metric-only rows use the
-user's latest stamped unit in the query window; if no ledger row identifies the
-unit, they count for the person scope only and are reported as `unit_unknown`.
+Cache-read metrics are per user and deployment and have no business-unit
+dimension. For streaming rows, the reconciler assigns the metric remainder for a
+day, user and model family to the latest stamped ledger row in that group. A
+metric-only row carries the user's latest stamp in the query window. The store
+then decides the unit, as for every row: on a projection gateway the stamp, on a
+named-value gateway the user's current `bu-members` unit, else the stamp
+(`service/aum/aum_service/usd_budgets.py`, `calculate_state`). A metric-only row
+whose user has no stamp in the window and, on a named-value gateway, no
+`bu-members` unit counts for the person scope only and is reported as
+`unit_unknown`.
 
 | Control | Exact about | Delay / limitation |
 |---|---|---|

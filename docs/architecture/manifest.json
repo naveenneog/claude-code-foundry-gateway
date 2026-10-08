@@ -6,7 +6,7 @@
       "source": "docs/architecture/01-system.json",
       "inputs": {
         "Start-ClaudeGateway.ps1": "86e92a50b603e0466f2d94ef03964f1ef8a511fe49262bfb694d6df32ad2d4dc",
-        "analytics/chargeback-cost.kql": "6d28829b3a62fa9d297fa054224f00c6aadb09c5782fa8702a4a0d81140a3b25",
+        "analytics/chargeback-cost.kql": "ff0fb4c586b25b00d5237a7dd246d8652d93b1a7ede1347f3a4279c5823303dd",
         "analytics/chargeback-ledger.kql": "3924ba7e4edb21d761b16254452c0509a2a9d27558033d7a980c5e201e22b2f5",
         "docs/architecture/01-system.json": "104e5c44f8fb3e219304e235f37e9064ff08a8ff4b923b835de82f20ec865f8f",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
@@ -250,7 +250,7 @@
       "id": "chargeback-reports",
       "source": "docs/architecture/08-chargeback-reports.json",
       "inputs": {
-        "analytics/chargeback-cost.kql": "6d28829b3a62fa9d297fa054224f00c6aadb09c5782fa8702a4a0d81140a3b25",
+        "analytics/chargeback-cost.kql": "ff0fb4c586b25b00d5237a7dd246d8652d93b1a7ede1347f3a4279c5823303dd",
         "analytics/chargeback-ledger.kql": "3924ba7e4edb21d761b16254452c0509a2a9d27558033d7a980c5e201e22b2f5",
         "docs/architecture/08-chargeback-reports.json": "6081e4f195e619c67b888221f5e88894c923aeb8306107fe4b97f99bedb1d358",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
