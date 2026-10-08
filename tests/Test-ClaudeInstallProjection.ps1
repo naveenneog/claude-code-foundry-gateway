@@ -359,6 +359,9 @@ Assert 'the job deploys unless the interval is none; -DeploySyncJob is accepted 
     $wiring -match "if \(\`$ProjectionSyncInterval -ne 'none' -and -not \`$WhatIfPreference\)" -and $wiring -match '\[switch\]\$DeploySyncJob' -and
     $wiring -notmatch 'if \(\$DeploySyncJob -and' -and $wiring -match 'DeploySyncJob is no longer needed')
 Assert 'the review lists the sync job choice' ($wiring -match "Insert\(\`$storeRow \+ 1, 'Sync job'")
+$earlyIntervalCheck = $wiring.IndexOf('Resolve-ClaudeInstallerSyncInterval -Requested $ProjectionSyncInterval -DeployedJob $null')
+$prerequisiteCheck = $wiring.IndexOf('Test-ClaudePrerequisites -Mode Admin')
+Assert 'a -ProjectionSyncInterval outside the list is refused before the prerequisite check and any Azure call' ($earlyIntervalCheck -ge 0 -and $prerequisiteCheck -gt $earlyIntervalCheck) "early check at $earlyIntervalCheck; prerequisites at $prerequisiteCheck"
 Assert 'the next steps read the Graph grant from the job receipt' ((Get-CallArgument 'Get-ClaudeInstallerProjectionNextSteps' 'GraphGrant') -eq '$syncJobGrant' -and
     $wiring -match 'Get-ClaudeInstallerSyncJobGrant -Root \$root -NamePrefix \$projectionPrefix')
 Assert 'the resolver access is read strictly, not through the error-swallowing helper' ($wiring -match 'Get-ClaudeInstallerResolverAccess' -and $wiring -notmatch 'Invoke-AzOptional \{ az functionapp show')

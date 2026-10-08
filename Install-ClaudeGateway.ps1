@@ -295,6 +295,8 @@ Write-Host ' Nothing is created until you confirm the summary.' -ForegroundColor
 . (Join-Path $root 'scripts/ClaudeChoice.ps1')
 . (Join-Path $root 'scripts/ClaudeInstallProjection.ps1')
 . (Join-Path $root 'scripts/ClaudeGatewayRegion.ps1')
+# ADR-0058: a sync interval outside the list stops here, before any Azure call; the choice is made with the store.
+if ($PSBoundParameters.ContainsKey('ProjectionSyncInterval')) { $null = Resolve-ClaudeInstallerSyncInterval -Requested $ProjectionSyncInterval -DeployedJob $null }
 if (-not (Test-ClaudePrerequisites -Mode Admin)) { return }
 if ($DeployProjection) { Write-Note '-DeployProjection is accepted for compatibility; since P98, choosing -EntitlementStore projection always deploys and switches the projection.' }
 if ($FlipProjectionAfterCleanCompare) { Write-Note '-FlipProjectionAfterCleanCompare is accepted for compatibility; since P98, the installer switch is part of -EntitlementStore projection.' }
