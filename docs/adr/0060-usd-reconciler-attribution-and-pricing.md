@@ -49,6 +49,12 @@ one-hour cache write, applying the same defaults as the reconciler (cache read 0
 published price table to one row per normalized key before joining and sets every rate with conflicting values
 to null, so a malformed query cannot duplicate spend rows or price a conflicted family as zero.
 
+A stored budget book never stops reconciliation. The reconciler and the business-unit and Turnstile scripts leave
+a family unpriced when any of its entries has a missing, negative or non-numeric rate or is not an object; the
+family without its eight-digit date is unpriced too, and no other spelling or dated entry prices it. Among
+spellings of one family whose five effective rates are equal, the entry used is the first key in code-point
+order (P76). The business-unit scripts refuse a book that lists no models.
+
 The cache-read metric has no business-unit dimension. The reconciler therefore groups ledger rows and metrics
 by day, user and the normalized deployment family named by the request. The ledger first falls back from an
 empty `DeploymentName` to `ModelName`, then derives the family from that deployment value, so a custom
