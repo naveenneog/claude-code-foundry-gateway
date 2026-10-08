@@ -27,18 +27,30 @@ capacity guard is unchanged, but it now counts those finer rows; an overflow sti
 `usd_usage_capacity` and applies no partial spend.
 
 For a projection gateway, a row's leaf is the stamped unit, with an empty stamp treated as `unassigned`.
-For a named-value gateway, today's membership still wins and falls back to the stamp. A user can therefore
-produce one row per unit in a day, and each row is charged only through that row's leaf and its parent.
+For a named-value gateway, today's membership still wins and falls back to the stamp, matching the chargeback
+workbook's `coalesce(unit_now, stamp)` attribution. Consequence: on named-value gateways, moving a person can
+shift earlier period spend into the new unit and stop that unit immediately; changing named-value attribution to
+the stamped unit needs a follow-up ADR and workbook change.
 
 A row without a user id is not the spend of any unit member or person. It counts toward no scope, adds no
-unpriced problem to any scope, and the reconciliation result reports the count and token totals. Rows with a
-user and a unit outside a scope are simply outside that scope's spend.
+unpriced problem to any scope, and the reconciliation result reports the count and token totals. A cache-metric
+row with a user but no ledger row in the query window counts for that person only; it is reported as
+`unit_unknown_usage` and never silently assigned to `unassigned`. These cases can under-count enforced unit
+scopes when identity or unit tracing is broken, so operators must monitor the reported rows.
 
-Model price matching uses one rule in Python and the PowerShell model price reader: normalize by lowercasing
-and keeping only letters and digits. A name matches a price-book key when the normalized strings are equal,
-or when the normalized name is the normalized key followed by exactly eight digits. A shorter family never
-matches: `claude-opus-5-5` is not `claude-opus-5`. The chargeback KQL uses the same exact-or-eight-digit
-rule rather than a broad prefix match.
+Model price matching has three implementations held together by parity tests: Python, PowerShell and KQL.
+Each normalizes by lowercasing and keeping only letters and digits. A name matches a price-book key when the
+normalized strings are equal, or when the normalized name is the normalized key followed by exactly eight
+digits. A shorter family never matches: `claude-opus-5-5` is not `claude-opus-5`. Price books loaded for
+budgets, model lifecycle and query publication reject duplicate normalized keys. The chargeback KQL reduces
+the published price table to one row per normalized key before joining, so a malformed query cannot duplicate
+spend rows.
+
+The cache-read metric has no business-unit dimension. The reconciler therefore groups ledger rows and metrics
+by day, user and normalized model family. When all requests in that group have body cache-read counts, the
+metric is ignored. Otherwise the group cache total is `max(sum(body_reads), metric_reads)`, and only the
+remainder beyond row body counts is assigned to the latest stamped ledger row in the group. A metric-only group
+uses the user's latest stamped unit in the query window; without one it is person-only and `unit_unknown`.
 
 An unpriced row is never $0 and marks only scopes that own that row. The compact policy-facing state keeps
 the same `compact-v1` item shape and `policy_revision`; the userless-row report is emitted only when such

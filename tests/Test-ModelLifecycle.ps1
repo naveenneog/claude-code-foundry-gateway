@@ -285,7 +285,7 @@ try {
         Set-ClaudeRecordProperty $b.models 'claude-haiku-4-5' ([pscustomobject]@{ inputPerM = 99; outputPerM = 5 })
         $global:P70rawDeployments[3].name = 'quick'
         Save $global:P70bookPath $b
-        Reject { Plan @{ quick = 'both'; 'next.opus' = 'premium' } } 'ambiguous|conflict'
+        Reject { Plan @{ quick = 'both'; 'next.opus' = 'premium' } } 'ambiguous|conflict|duplicate normalized'
     }
     Reset-State
     Check 'deployment-specific negotiated price takes precedence over model mapping' {
@@ -361,9 +361,9 @@ try {
         $r = Json $global:P70recordPath
         ($r.tiers.standard.models -join ',') -eq 'claude-haiku-4-5,sonnet' -and $r.tiers.standard.tokensPerMinute -eq 20000 -and 'next.opus' -in $r.tiers.premium.models
     }
-    Check 'price mapping adds deployed Haiku spelling without losing historical prices or metadata' {
+    Check 'price mapping preserves historical Haiku price without adding a duplicate normalized key' {
         $b = Json $global:P70bookPath
-        $b.models.'claude-haiku-4-5'.inputPerM -eq 1 -and $b.models.retired.outputPerM -eq 15 -and $b.privateNote -eq 'keep' -and $b.date -eq '2026-09-15'
+        $null -eq $b.models.PSObject.Properties['claude-haiku-4-5'] -and $b.models.'claude-haiku-4.5'.inputPerM -eq 1 -and $b.models.retired.outputPerM -eq 15 -and $b.privateNote -eq 'keep' -and $b.date -eq '2026-09-15'
     }
     Check 'Opus 5.5 stays unpriced instead of inheriting Opus 5 rates' { 'next.opus' -notin (Json $global:P70bookPath).models.PSObject.Properties.Name }
     Check 'both complete device profile families are generated' {
@@ -475,20 +475,25 @@ try {
         $cases = @(
             @('claude-fable-5', 'claude-fable-5'),
             @('claude-fable-5-1', 'claude-fable-5-1'),
-            @('claude-haiku-4-5', 'claude-haiku-4-5'),
-            @('claude-haiku-4-5-20251001', 'claude-haiku-4-5'),
+            @('claude_haiku_4_5', 'claude-haiku-4.5'),
+            @('claude-haiku-4-5', 'claude-haiku-4.5'),
+            @('claude-haiku-4-5-2025-10-01', 'claude-haiku-4.5'),
+            @('claude-haiku-4-5-20251001', 'claude-haiku-4.5'),
             @('claude-haiku-5-5', ''),
             @('claude-opus-4-1', 'claude-opus-4-1'),
             @('claude-opus-4-5', 'claude-opus-4-5'),
             @('claude-opus-4-6', 'claude-opus-4-6'),
             @('claude-opus-4-7', 'claude-opus-4-7'),
-            @('claude-opus-4-8', 'claude-opus-4-8'),
+            @('claude-opus-4-8', 'claude-opus-4.8'),
+            @('claude-opus-4-8-2026-01-01', 'claude-opus-4.8'),
             @('claude-opus-5-5', 'claude-opus-5-5'),
             @('claude-sonnet-4-5', 'claude-sonnet-4-5'),
             @('claude-sonnet-4-6', 'claude-sonnet-4-6'),
+            @('CLAUDE SONNET 5', 'claude-sonnet-5'),
             @('Claude-Sonnet-5', 'claude-sonnet-5'),
             @('claude-sonnet-5-5', 'claude-sonnet-5-5'),
             @('claude-sonnet-5-2', ''),
+            @('claude-sonnet-5-123456', ''),
             @('gpt-5', '')
         )
         foreach ($case in $cases) {
@@ -500,6 +505,15 @@ try {
             'claude-opus-5' = [pscustomobject]@{ inputPerM = 5; outputPerM = 25 }
         } }
         -not (Get-ClaudeDeploymentPrice ([pscustomobject]@{ name = 'claude-opus-5-5'; model = 'claude-opus-5-5'; sku = 'GlobalStandard' }) $withoutOpus55).SourceKey
+    }
+    Check 'PowerShell price book refuses duplicate normalized keys and uses ordinal comparison' {
+        $dup = Join-Path $scratch 'duplicate-price-book.json'
+        Save $dup ([ordered]@{ date = '2026-10-08'; source = 'test'; models = [ordered]@{
+            'claude-haiku-4.5' = @{ inputPerM = 1; outputPerM = 5 }
+            'claude-haiku-4-5' = @{ inputPerM = 1; outputPerM = 5 }
+        } })
+        (Reject { Get-ClaudeModelPriceBook $dup } 'claude-haiku-4.5.*claude-haiku-4-5|duplicate|normal') -and
+            -not [string]::Equals('claude-opus-5', "claude-opus-5$([char]0x00ad)", [StringComparison]::Ordinal)
     }
     Check 'oversized model lists fail before backup or writes' {
         $extra = 1..85 | ForEach-Object { 'missing-' + $_.ToString('000') + ('x' * 45) }

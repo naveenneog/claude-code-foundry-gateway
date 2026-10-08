@@ -107,6 +107,7 @@ def parse_budgets(raw):
     book = doc["price_book"]
     if not isinstance(book, dict) or not isinstance(book.get("models"), dict) or not book["models"]:
         raise invalid("USD budgets require a nonempty dated price book")
+    validate_price_book(book)
     try:
         datetime.strptime(book["date"], "%Y-%m-%d")
     except (ValueError, TypeError, KeyError) as error:
@@ -123,6 +124,29 @@ def parse_budgets(raw):
         if item["price_book_date"] != book["date"]:
             raise invalid("Every budget must reference the stored price-book date")
     return doc
+
+
+def effective_price_rates(model):
+    base = rate(model.get("inputPerM"))
+    return (
+        base,
+        rate(model.get("outputPerM")),
+        rate(model.get("cacheReadPerM", base * Decimal("0.1"))),
+        rate(model.get("cacheWrite5mPerM", base * Decimal("1.25"))),
+        rate(model.get("cacheWrite1hPerM", base * Decimal("2"))),
+    )
+
+
+def validate_price_book(book):
+    seen = {}
+    for key, model in book.get("models", {}).items():
+        normalized = normalized_model_key(key)
+        if normalized in seen:
+            raise invalid(f"Duplicate normalized price-book key: {seen[normalized]} and {key}")
+        seen[normalized] = key
+        if not isinstance(model, dict):
+            raise invalid("Price book model entries must be objects")
+        effective_price_rates(model)
 
 
 def check_authority(values):
@@ -174,7 +198,7 @@ def price_book_key(name, book):
     literal = text.lower()
     target = normalized_model_key(name)
     normalized_matches = [key for key in models if normalized_model_key(key) == target]
-    if len({json.dumps(models[key], sort_keys=True, separators=(",", ":")) for key in normalized_matches}) > 1:
+    if len({effective_price_rates(models[key]) for key in normalized_matches}) > 1:
         return None
     for key in models:
         if key.lower() == literal:
@@ -190,6 +214,8 @@ def price_book_key(name, book):
     if not matches and len(target) > 8 and target[-8:].isdigit():
         family = target[:-8]
         matches = [key for key in models if normalized_model_key(key) == family]
+    if len(matches) > 1 and len({effective_price_rates(models[key]) for key in matches}) == 1:
+        return sorted(matches)[0]
     return matches[0] if len(matches) == 1 else None
 
 
@@ -203,11 +229,11 @@ def price_row(row, book):
         raise ServiceError(503, "usd_unpriced", "Deployment has no explicit price-book entry")
     with localcontext() as ctx:
         ctx.prec = 50
-        base = rate(model.get("inputPerM"))
-        rates = {"prompt": base, "completion": rate(model.get("outputPerM")),
-                 "cache_read": rate(model.get("cacheReadPerM", base * Decimal("0.1"))),
-                 "cache_write_5m": rate(model.get("cacheWrite5mPerM", base * Decimal("1.25"))),
-                 "cache_write_1h": rate(model.get("cacheWrite1hPerM", base * Decimal("2")))}
+        base, output, cache_read, cache_write_5m, cache_write_1h = effective_price_rates(model)
+        rates = {"prompt": base, "completion": output,
+                 "cache_read": cache_read,
+                 "cache_write_5m": cache_write_5m,
+                 "cache_write_1h": cache_write_1h}
         geo = row.get("inference_geo", "unknown")
         geography_known = geo in ("global", "us")
         multiplier = Decimal("1.1") if geo == "us" else Decimal(1)
@@ -247,6 +273,9 @@ def calculate_state(values, rows, now, freshness_seconds=900):
     userless_rows = set()
     userless_totals = {key: Decimal(0) for key in (
         "prompt_tokens", "completion_tokens", "cache_read_tokens", "cache_write_5m_tokens", "cache_write_1h_tokens")}
+    unit_unknown_rows = set()
+    unit_unknown_totals = {key: Decimal(0) for key in (
+        "prompt_tokens", "completion_tokens", "cache_read_tokens", "cache_write_5m_tokens", "cache_write_1h_tokens")}
     for key, budget in doc["items"].items():
         kind, target = key.split(":", 1)
         config.require_target(kind, target)
@@ -276,6 +305,12 @@ def calculate_state(values, rows, now, freshness_seconds=900):
             if kind == "user":
                 matches = user == target
             else:
+                if row.get("unit_unknown") is True:
+                    if row_id not in unit_unknown_rows:
+                        unit_unknown_rows.add(row_id)
+                        for total_key in unit_unknown_totals:
+                            unit_unknown_totals[total_key] += quantity(row.get(total_key))
+                    continue
                 matches = target == leaf or target == config.parents.get(leaf)
             if not matches:
                 continue
@@ -315,6 +350,10 @@ def calculate_state(values, rows, now, freshness_seconds=900):
     if userless_rows:
         state["userless_usage"] = {"rows": len(userless_rows), **{
             key: money(value) for key, value in userless_totals.items()
+        }}
+    if unit_unknown_rows:
+        state["unit_unknown_usage"] = {"rows": len(unit_unknown_rows), **{
+            key: money(value) for key, value in unit_unknown_totals.items()
         }}
     encode_state(state)
     return state

@@ -61,7 +61,12 @@ let cache_read_multiplier = 0.1;
 // than a zero one: zero is a claim, null is the truth, and the workbook counts
 // the nulls on their own tile.
 let norm = (m: string) { tolower(replace_regex(m, @"[^A-Za-z0-9]", "")) };
-let priced = price | extend k = norm(model);
+let priced = price
+| extend k = norm(model)
+| summarize input_rates = make_set(input_per_m, 2), output_rates = make_set(output_per_m, 2) by k
+| extend input_per_m = iff(array_length(input_rates) == 1, todouble(input_rates[0]), real(null)),
+         output_per_m = iff(array_length(output_rates) == 1, todouble(output_rates[0]), real(null))
+| project k, input_per_m, output_per_m;
 let priced_exact = priced | project exact_k = k, exact_input_per_m = input_per_m, exact_output_per_m = output_per_m;
 let priced_dated = priced | project dated_k = k, dated_input_per_m = input_per_m, dated_output_per_m = output_per_m;
 //

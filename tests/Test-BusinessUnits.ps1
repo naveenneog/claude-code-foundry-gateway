@@ -323,6 +323,7 @@ foreach ($model in $ClaudePriceBook.Keys) {
 }
 Assert 'every price book rate is decimal' ($badPrices.Count -eq 0) ($badPrices -join ', ')
 Assert 'and the book is not empty'        ($ClaudePriceBook.Keys.Count -ge 4)
+Assert 'budget conversion uses normalized model price matching' ((ConvertTo-ClaudeBuTokens -Usd 1 -Model 'claude_haiku_4_5').BlendedUsdPerM -gt 0)
 
 $setSrc = Get-Content $setPath -Raw
 Assert 'the writer takes a decimal budget' ($setSrc -match '\[decimal\]\$MonthlyBudgetUsd')

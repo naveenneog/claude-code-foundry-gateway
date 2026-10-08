@@ -36,6 +36,14 @@ function Get-ClaudeModelPriceBook {
             if ([decimal]$value -lt 0) { throw "Price book '$Path': '$($p.Name)' has a negative $key rate." }
         }
     }
+    $seen = @{}
+    foreach ($p in $doc.models.PSObject.Properties) {
+        $key = ConvertTo-ClaudePriceModelKey $p.Name
+        if ($seen.ContainsKey($key)) {
+            throw "Duplicate normalized price-book key '$key' in '$Path': $($seen[$key]) and $($p.Name)."
+        }
+        $seen[$key] = $p.Name
+    }
     return $doc
 }
 
@@ -50,7 +58,7 @@ function Resolve-ClaudePriceBookKey {
     $target = ConvertTo-ClaudePriceModelKey $Name
     if (-not $target) { return '' }
     $names = @($Book.models.PSObject.Properties.Name)
-    $normalizedMatches = @($names | Where-Object { (ConvertTo-ClaudePriceModelKey $_) -ceq $target })
+    $normalizedMatches = @($names | Where-Object { [string]::Equals((ConvertTo-ClaudePriceModelKey $_), $target, [StringComparison]::Ordinal) })
     if ($normalizedMatches.Count -gt 1) {
         $rates = @(Sort-ClaudeFlowOrdinal -Unique -InputObject @($normalizedMatches | ForEach-Object {
             $rate = $Book.models.$_
@@ -65,17 +73,17 @@ function Resolve-ClaudePriceBookKey {
         }))
         if ($rates.Count -gt 1) { throw "Conflicting price entries for '$Name': $($normalizedMatches -join ', '). A deployment-specific price resolves this ambiguity." }
     }
-    $exact = @($names | Where-Object { $_.ToLowerInvariant() -ceq $literal })
+    $exact = @($names | Where-Object { [string]::Equals($_.ToLowerInvariant(), $literal, [StringComparison]::Ordinal) })
     if ($exact.Count -eq 1) { return [string]$exact[0] }
     $datedLiteral = [regex]::Replace($literal, '[-_.]*\d{8}$', '')
-    if ($datedLiteral -cne $literal) {
-        $datedExact = @($names | Where-Object { $_.ToLowerInvariant() -ceq $datedLiteral })
+    if (-not [string]::Equals($datedLiteral, $literal, [StringComparison]::Ordinal)) {
+        $datedExact = @($names | Where-Object { [string]::Equals($_.ToLowerInvariant(), $datedLiteral, [StringComparison]::Ordinal) })
         if ($datedExact.Count -eq 1) { return [string]$datedExact[0] }
     }
     $matches = $normalizedMatches
     if (-not $matches.Count -and $target.Length -gt 8 -and $target.Substring($target.Length - 8) -match '^\d{8}$') {
         $family = $target.Substring(0, $target.Length - 8)
-        $matches = @($names | Where-Object { (ConvertTo-ClaudePriceModelKey $_) -ceq $family })
+        $matches = @($names | Where-Object { [string]::Equals((ConvertTo-ClaudePriceModelKey $_), $family, [StringComparison]::Ordinal) })
     }
     if ($matches.Count -eq 1) { return [string]$matches[0] }
     if ($matches.Count -gt 1) {

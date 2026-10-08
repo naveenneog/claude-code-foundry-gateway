@@ -130,13 +130,28 @@ function New-PriceBlock {
     $pb = Get-Content $path -Raw | ConvertFrom-Json
     $models = @($pb.models.PSObject.Properties)
     if (-not $models.Count) { throw "The price book at $path has no models, so nothing could be priced." }
+    $seen = @{}
+    foreach ($model in $models) {
+        $key = ConvertTo-ClaudeQueryPriceKey $model.Name
+        if ($seen.ContainsKey($key)) {
+            throw "Duplicate normalized price-book key '$key' in $path: $($seen[$key]) and $($model.Name)."
+        }
+        $seen[$key] = $model.Name
+    }
 
     $rows = @($models | ForEach-Object {
-        '    "{0}", {1}, {2}' -f $_.Name, $_.Value.inputPerM, $_.Value.outputPerM
+        '    "{0}", {1}, {2}' -f $_.Name,
+            ([decimal]$_.Value.inputPerM).ToString([Globalization.CultureInfo]::InvariantCulture),
+            ([decimal]$_.Value.outputPerM).ToString([Globalization.CultureInfo]::InvariantCulture)
     }) -join ",`n"
 
     return ("let price_book_date = `"{0}`";`n" -f $pb.date) +
            "let price = datatable(model: string, input_per_m: real, output_per_m: real) [`n$rows`n];"
+}
+
+function ConvertTo-ClaudeQueryPriceKey {
+    param([AllowNull()][string]$Name)
+    return ([regex]::Replace([string]$Name, '[^A-Za-z0-9]', '')).ToLowerInvariant()
 }
 
 function New-MembershipBlock {

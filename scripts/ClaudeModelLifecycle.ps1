@@ -248,7 +248,8 @@ function New-ClaudeModelPlan {
         $actions += New-ClaudeFlowAction -Verb Check -Target $d.name -Detail "$($d.model), version $($d.version), $($d.sku), capacity $($d.capacity), $($d.state); record: $recordState; tiers $(if ($tiers) { $tiers } else { 'none' }); $($price.Detail)"
         $prices += [pscustomobject]@{ Deployment = $d.name; Price = $price }
         if ($d.name -notin @($permitted.name)) { continue }
-        if ($price.SourceKey -and $price.SourceKey -ne $d.name) {
+        if ($price.SourceKey -and $price.SourceKey -ne $d.name -and
+            -not [string]::Equals((ConvertTo-ClaudePriceModelKey $price.SourceKey), (ConvertTo-ClaudePriceModelKey $d.name), [StringComparison]::Ordinal)) {
             Set-ClaudeRecordProperty $bookAfter.models $d.name ($book.models.($price.SourceKey) | ConvertTo-Json -Depth 20 | ConvertFrom-Json)
             $priceChanged = $true
             $actions += New-ClaudeFlowAction -Verb Write -Target "$PriceBookPath [$($d.name)]" -Detail "copy dated rate from $($price.SourceKey); existing prices retained"

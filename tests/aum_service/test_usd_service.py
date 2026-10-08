@@ -164,11 +164,20 @@ class UsdServiceTests(unittest.TestCase):
         query = usage_query(self.arm.base, NOW)
         for fragment in ("ClaudeChargeback(", "Prompt Cached Tokens", 'Properties["Service ID"]',
                          "apim-test", "cache_write_5m_tokens", "cache_write_1h_tokens",
-                         "cache_read_known", "take 1001", "gateway_id", "by day=startofday(timestamp), user_id, deployment, business_unit"):
+                         "cache_read_known", "take 1001", "gateway_id", "family_of", "latest_unit",
+                         "remainder_reads", "unit_unknown",
+                         "by day=startofday(timestamp), user_id, family, deployment, business_unit"):
             self.assertIn(fragment, query)
         self.assertNotIn("make_set(business_unit", query)
         self.assertNotIn("sum(usd)", query)
         self.assertNotIn("sum(total_tokens)", query)
+
+    def test_usage_query_can_target_fixture_names_for_live_harness(self):
+        query = usage_query(self.arm.base, NOW, chargeback="ChargebackFixture", metrics="MetricsFixture")
+        self.assertIn("ChargebackFixture(_from, _to)", query)
+        self.assertIn("let cached = MetricsFixture", query)
+        self.assertNotIn("ClaudeChargeback(", query)
+        self.assertNotIn("let cached = AppMetrics", query)
 
 
 if __name__ == "__main__":

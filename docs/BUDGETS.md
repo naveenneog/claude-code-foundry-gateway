@@ -36,6 +36,12 @@ key followed by exactly eight digits, so `claude-haiku-4-5-20251001` matches
 `claude-haiku-4.5`. A shorter family does not match: `claude-opus-5-5` requires
 its own price-book entry and never inherits `claude-opus-5`.
 
+Cache-read metrics are per user/model and have no business-unit dimension. For
+streaming rows, the reconciler assigns the metric remainder for a day/user/model
+family to the latest stamped ledger row in that group. Metric-only rows use the
+user's latest stamped unit in the query window; if no ledger row identifies the
+unit, they count for the person scope only and are reported as `unit_unknown`.
+
 | Control | Exact about | Delay / limitation |
 |---|---|---|
 | Existing token limiter | Its configured token allowance | Distributed estimates; does not count cache; retained as the realtime guard |
@@ -241,6 +247,16 @@ still an observed-cost stop, not a hard invoice cap.
   day rather than per-request prompt-size tier. Until U178 is resolved, an
   enforced scope whose own rows use `claude-haiku-5-5` returns
   `usd_budget_unpriced` naming `claude-haiku-5-5`.
+- **Attribution gaps:** rows without a user and metric-only rows without a unit
+  do not count for any unit scope. To inspect them in a scheduled job's output:
+
+  ```kusto
+  ContainerAppConsoleLogs
+  | where JobName == '<job>'
+  | where Log contains 'userless_usage' or Log contains 'unit_unknown_usage'
+  | order by TimeGenerated desc
+  | take 50
+  ```
 - **Stale:** missing, expired or mismatched state returns 503
   `usd_budget_state_stale` for enforced scopes. Snapshots expire after 15 minutes.
   A telemetry outage preserves the last decision until expiry; it never refreshes

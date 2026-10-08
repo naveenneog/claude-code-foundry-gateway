@@ -51,20 +51,25 @@ class DollarArithmeticTests(unittest.TestCase):
         cases = {
             "claude-fable-5": "claude-fable-5",
             "claude-fable-5-1": "claude-fable-5-1",
-            "claude-haiku-4-5": "claude-haiku-4-5",
-            "claude-haiku-4-5-20251001": "claude-haiku-4-5",
+            "claude_haiku_4_5": "claude-haiku-4.5",
+            "claude-haiku-4-5": "claude-haiku-4.5",
+            "claude-haiku-4-5-2025-10-01": "claude-haiku-4.5",
+            "claude-haiku-4-5-20251001": "claude-haiku-4.5",
             "claude-haiku-5-5": None,
             "claude-opus-4-1": "claude-opus-4-1",
             "claude-opus-4-5": "claude-opus-4-5",
             "claude-opus-4-6": "claude-opus-4-6",
             "claude-opus-4-7": "claude-opus-4-7",
-            "claude-opus-4-8": "claude-opus-4-8",
+            "claude-opus-4-8": "claude-opus-4.8",
+            "claude-opus-4-8-2026-01-01": "claude-opus-4.8",
             "claude-opus-5-5": "claude-opus-5-5",
             "claude-sonnet-4-5": "claude-sonnet-4-5",
             "claude-sonnet-4-6": "claude-sonnet-4-6",
+            "CLAUDE SONNET 5": "claude-sonnet-5",
             "Claude-Sonnet-5": "claude-sonnet-5",
             "claude-sonnet-5-5": "claude-sonnet-5-5",
             "claude-sonnet-5-2": None,
+            "claude-sonnet-5-123456": None,
             "gpt-5": None,
         }
         for name, expected in cases.items():
@@ -79,6 +84,10 @@ class DollarArithmeticTests(unittest.TestCase):
         without_sonnet_55 = deepcopy(book)
         del without_sonnet_55["models"]["claude-sonnet-5-5"]
         self.assertIsNone(price_book_key("claude-sonnet-5-5", without_sonnet_55))
+        duplicate = deepcopy(book)
+        duplicate["models"]["claude-haiku-4-5"] = {"inputPerM": 1, "outputPerM": 5}
+        self.assertEqual("claude-haiku-4-5", price_book_key("claude-haiku-4-5", duplicate))
+        self.assertEqual("claude-haiku-4-5", price_book_key("claude_haiku_4_5", duplicate))
 
     def test_all_five_categories_are_priced_before_sum_without_rounding(self):
         result = price_row(row(cache_write_1h_tokens=1000), BOOK)
@@ -149,6 +158,12 @@ class DollarDocumentTests(unittest.TestCase):
                     base64.b64encode(b'{"schema_version":2}').decode()):
             with self.subTest(raw=raw), self.assertRaises(ServiceError):
                 parse_budgets(raw)
+
+    def test_price_book_duplicate_normalized_keys_are_rejected(self):
+        doc = document()
+        doc["price_book"]["models"]["claude_sonnet_5"] = {"inputPerM": "2", "outputPerM": "10"}
+        with self.assertRaisesRegex(ServiceError, "claude-sonnet-5"):
+            parse_budgets(encode_document(doc))
 
     def test_capacity_overflow_and_duplicate_keys_are_rejected(self):
         with self.assertRaises(ServiceError):
@@ -284,6 +299,19 @@ class DollarDecisionTests(unittest.TestCase):
         self.assertEqual("unpriced", item["status"])
         self.assertIsNone(item["spent_usd"])
         self.assertEqual(["claude-haiku-5-5"], item["unpriced_models"])
+
+    def test_unit_unknown_metric_row_counts_only_for_person_and_is_reported(self):
+        state = calculate_state(configured(), [row(
+            business_unit="", unit_unknown=True, deployment="claude-sonnet-5", model="claude-sonnet-5",
+            prompt_tokens=0, completion_tokens=0, cache_read_tokens=1000,
+            cache_write_5m_tokens=0, cache_write_1h_tokens=0,
+        )], NOW)
+        self.assertEqual("0", state["items"]["organization:finance"]["spent_usd"])
+        self.assertEqual("0", state["items"]["department:payroll"]["spent_usd"])
+        self.assertEqual("0.0002", state["items"]["user:" + PERSON]["spent_usd"])
+        self.assertEqual({"rows": 1, "prompt_tokens": "0", "completion_tokens": "0",
+                          "cache_read_tokens": "1000", "cache_write_5m_tokens": "0",
+                          "cache_write_1h_tokens": "0"}, state["unit_unknown_usage"])
 
     def test_unattributed_zero_usage_failure_is_not_invented_spend(self):
         failed = row(user_id="", business_unit="", model="", deployment="", prompt_tokens=0,

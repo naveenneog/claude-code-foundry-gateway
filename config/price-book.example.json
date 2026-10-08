@@ -20,10 +20,6 @@
       "inputPerM": 1.0,
       "outputPerM": 5.0
     },
-    "claude-haiku-4-5": {
-      "inputPerM": 1.0,
-      "outputPerM": 5.0
-    },
     "claude-opus-4-1": {
       "inputPerM": 15.0,
       "outputPerM": 75.0
@@ -41,10 +37,6 @@
       "outputPerM": 25.0
     },
     "claude-opus-4.8": {
-      "inputPerM": 5.0,
-      "outputPerM": 25.0
-    },
-    "claude-opus-4-8": {
       "inputPerM": 5.0,
       "outputPerM": 25.0
     },

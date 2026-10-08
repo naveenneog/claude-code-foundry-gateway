@@ -90,6 +90,32 @@ function Import-ClaudePriceBook {
 # figures still look right.
 Import-ClaudePriceBook | Out-Null
 
+function ConvertTo-ClaudePriceModelKey {
+    param([AllowNull()][string]$Name)
+    return ([regex]::Replace([string]$Name, '[^A-Za-z0-9]', '')).ToLowerInvariant()
+}
+
+function Resolve-ClaudePriceBookEntry {
+    param([Parameter(Mandatory = $true)][string]$Model)
+    $literal = $Model.ToLowerInvariant()
+    $target = ConvertTo-ClaudePriceModelKey $Model
+    $names = @($script:ClaudePriceBook.Keys)
+    $exact = @($names | Where-Object { [string]::Equals($_.ToLowerInvariant(), $literal, [StringComparison]::Ordinal) })
+    if ($exact.Count -eq 1) { return @{ Key = [string]$exact[0]; Price = $script:ClaudePriceBook[$exact[0]] } }
+    $datedLiteral = [regex]::Replace($literal, '[-_.]*\d{8}$', '')
+    if (-not [string]::Equals($datedLiteral, $literal, [StringComparison]::Ordinal)) {
+        $datedExact = @($names | Where-Object { [string]::Equals($_.ToLowerInvariant(), $datedLiteral, [StringComparison]::Ordinal) })
+        if ($datedExact.Count -eq 1) { return @{ Key = [string]$datedExact[0]; Price = $script:ClaudePriceBook[$datedExact[0]] } }
+    }
+    $matches = @($names | Where-Object { [string]::Equals((ConvertTo-ClaudePriceModelKey $_), $target, [StringComparison]::Ordinal) })
+    if (-not $matches.Count -and $target.Length -gt 8 -and $target.Substring($target.Length - 8) -match '^\d{8}$') {
+        $family = $target.Substring(0, $target.Length - 8)
+        $matches = @($names | Where-Object { [string]::Equals((ConvertTo-ClaudePriceModelKey $_), $family, [StringComparison]::Ordinal) })
+    }
+    if ($matches.Count -eq 1) { return @{ Key = [string]$matches[0]; Price = $script:ClaudePriceBook[$matches[0]] } }
+    return $null
+}
+
 function Test-ClaudeBuId {
     <#
     .SYNOPSIS
@@ -383,7 +409,8 @@ function ConvertTo-ClaudeBuTokens {
     if ($Usd -le 0) { throw "A monthly budget must be greater than zero." }
     if ($OutputShare -lt 0 -or $OutputShare -ge 1) { throw "OutputShare must be between 0 and 1." }
 
-    $price = $script:ClaudePriceBook[$Model]
+    $resolved = Resolve-ClaudePriceBookEntry $Model
+    $price = if ($resolved) { $resolved.Price } else { $null }
     if (-not $price) {
         throw ("No price for '$Model'. Known models: " + (($script:ClaudePriceBook.Keys | Sort-Object) -join ', ') + ".")
     }
@@ -419,7 +446,8 @@ function ConvertTo-ClaudeCacheUsd {
         [Parameter(Mandatory = $true)][long]$Tokens,
         [string]$Model = 'claude-sonnet-5'
     )
-    $price = $script:ClaudePriceBook[$Model]
+    $resolved = Resolve-ClaudePriceBookEntry $Model
+    $price = if ($resolved) { $resolved.Price } else { $null }
     if (-not $price) { return $null }
     # 0.1x base input, per Claude's published cache rates.
     return [math]::Round(([decimal]$Tokens / [decimal]1000000) * $price.InputPerM * [decimal]0.1, 2)
@@ -436,7 +464,8 @@ function ConvertTo-ClaudeBuUsd {
         [string]$Model = 'claude-sonnet-5',
         [decimal]$OutputShare = 0.2
     )
-    $price = $script:ClaudePriceBook[$Model]
+    $resolved = Resolve-ClaudePriceBookEntry $Model
+    $price = if ($resolved) { $resolved.Price } else { $null }
     if (-not $price) { return $null }
     $blendedPerM = ($price.InputPerM * (1 - $OutputShare)) + ($price.OutputPerM * $OutputShare)
     return [math]::Round(([decimal]$Tokens / [decimal]1000000) * $blendedPerM, 2)
@@ -469,7 +498,8 @@ function ConvertTo-ClaudeRequestUsd {
     if ($InputTokens -lt 0 -or $OutputTokens -lt 0 -or $CacheReadTokens -lt 0) {
         throw "A token count cannot be negative (input $InputTokens, output $OutputTokens, cache read $CacheReadTokens)."
     }
-    $price = $script:ClaudePriceBook[$Model]
+    $resolved = Resolve-ClaudePriceBookEntry $Model
+    $price = if ($resolved) { $resolved.Price } else { $null }
     if (-not $price) { return $null }
     $perToken = [decimal]1000000
     $usd = (([decimal]$InputTokens / $perToken) * $price.InputPerM) +
