@@ -22,6 +22,9 @@ try {
     New-Item -ItemType Directory (Join-Path $baseline 'scripts') -Force | Out-Null
     Get-ChildItem (Join-Path $root 'scripts') -Filter '*ClaudeChargeback*.ps1' | Copy-Item -Destination (Join-Path $baseline 'scripts')
     Copy-Item (Join-Path $root 'scripts\ClaudeBusinessUnit.ps1') (Join-Path $baseline 'scripts')
+    Copy-Item (Join-Path $root 'scripts\ClaudeModelPrices.ps1') (Join-Path $baseline 'scripts')
+    New-Item -ItemType Directory (Join-Path $baseline 'scripts\flow') -Force | Out-Null
+    Copy-Item (Join-Path $root 'scripts\flow\FlowContract.ps1') (Join-Path $baseline 'scripts\flow')
     Copy-Item (Join-Path $root 'scripts\ClaudeBudgetModes.ps1') (Join-Path $baseline 'scripts')
     Copy-Item (Join-Path $root 'scripts\ClaudeChoice.ps1') (Join-Path $baseline 'scripts')
     New-Item -ItemType Directory (Join-Path $baseline 'infra') | Out-Null
