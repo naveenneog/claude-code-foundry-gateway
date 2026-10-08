@@ -327,7 +327,8 @@ def calculate_state(values, rows, now, freshness_seconds=900):
             if kind == "user":
                 matches = user == target
             else:
-                if row.get("unit_unknown") is True:
+                if (row.get("unit_unknown") is True
+                        and (config.values.get("entitlement-source") == "projection" or user not in config.members)):
                     if row_id not in unit_unknown_rows:
                         unit_unknown_rows.add(row_id)
                         for total_key in unit_unknown_totals:

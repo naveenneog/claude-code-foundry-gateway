@@ -324,8 +324,21 @@ class DollarDecisionTests(unittest.TestCase):
         self.assertIsNone(item["spent_usd"])
         self.assertEqual(["claude-haiku-5-5"], item["unpriced_models"])
 
-    def test_unit_unknown_metric_row_counts_only_for_person_and_is_reported(self):
+    def test_unit_unknown_metric_row_uses_named_value_membership_for_units(self):
         state = calculate_state(configured(), [row(
+            business_unit="", unit_unknown=True, deployment="claude-sonnet-5", model="claude-sonnet-5",
+            prompt_tokens=0, completion_tokens=0, cache_read_tokens=1000,
+            cache_write_5m_tokens=0, cache_write_1h_tokens=0,
+        )], NOW)
+        self.assertEqual("0.0002", state["items"]["organization:finance"]["spent_usd"])
+        self.assertEqual("0.0002", state["items"]["department:payroll"]["spent_usd"])
+        self.assertEqual("0.0002", state["items"]["user:" + PERSON]["spent_usd"])
+        self.assertNotIn("unit_unknown_usage", state)
+
+    def test_unit_unknown_metric_row_counts_only_for_person_and_is_reported_on_projection(self):
+        config = configured()
+        config["entitlement-source"] = "projection"
+        state = calculate_state(config, [row(
             business_unit="", unit_unknown=True, deployment="claude-sonnet-5", model="claude-sonnet-5",
             prompt_tokens=0, completion_tokens=0, cache_read_tokens=1000,
             cache_write_5m_tokens=0, cache_write_1h_tokens=0,
