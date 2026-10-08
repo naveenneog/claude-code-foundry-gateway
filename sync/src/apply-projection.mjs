@@ -33,7 +33,7 @@
  *        [--whatif] [--allow-empty] [--keep-orphans]
  */
 import { readFileSync } from 'node:fs';
-import { mergeMembership, planChanges, toDocument, toStatusDocument, validateSnapshot, validateTargetedSnapshot, compareWithGateway, compareWithSnapshot, createReconciliation, normalizeJobSettings, validateJobSettings, statusPartitionKey, STATUS_RECORD_TYPE } from './plan.mjs';
+import { mergeMembership, planChanges, removalLimitExceeded, toDocument, toStatusDocument, validateSnapshot, validateTargetedSnapshot, compareWithGateway, compareWithSnapshot, createReconciliation, normalizeJobSettings, validateJobSettings, statusPartitionKey, STATUS_RECORD_TYPE } from './plan.mjs';
 import { acquireApplyLock, validateLockWait } from './apply-lock.mjs';
 import { resolveGroupId, getTransitiveMembers } from './graph.mjs';
 import { readGatewayUnits, sortUnitsByDepth } from './business-units.mjs';
@@ -65,10 +65,10 @@ const accountRemedy = 'Remedy: rerun scripts/Sync-ClaudeAccess.ps1 -ResourceGrou
 
 // The remedy is also a field of its own: scripts/ClaudeRunner.ps1 shows it to the operator, while the
 // error, which can name holders and counts, stays in the sanitized diagnostics.
-function fail(message, code = 1, stage = 'config') {
+function fail(message, code = 1, stage = 'config', fields = {}) {
   const at = message.indexOf(' Remedy: ');
   const remedy = at >= 0 ? message.slice(at + 1) : undefined;
-  console.log(JSON.stringify({ ok: false, error: message, stage, ...(remedy ? { remedy } : {}), ...(renewal ? { event: RENEWAL_FAILED } : {}) }));
+  console.log(JSON.stringify({ ok: false, error: message, stage, ...fields, ...(remedy ? { remedy } : {}), ...(renewal ? { event: RENEWAL_FAILED } : {}) }));
   process.exit(code);
 }
 
@@ -87,9 +87,9 @@ async function releaseActiveLock() {
 }
 
 // Every refusal after the lock is taken releases it first: process.exit skips finally.
-async function failAfterLock(message, code, stage) {
+async function failAfterLock(message, code, stage, fields = {}) {
   await releaseActiveLock();
-  fail(message, code, stage);
+  fail(message, code, stage, fields);
 }
 
 // One stage of a run. An error ends the run with the stage named, before anything after it is written.
@@ -332,6 +332,18 @@ try {
   }
   const plan = planChanges(records, existing, { allowEmpty: userOid ? true : flag('--allow-empty'), keepOrphans: userOid ? false : flag('--keep-orphans'), refresh: false });
   if (plan.refused) await failAfterLock(`${plan.reason}. ${emptyRemedy}`, 2, 'plan');
+  if (renewal && scope === 'full') {
+    const deletes = plan.toDelete.length;
+    const check = removalLimitExceeded({ deletes, existing: existing.size });
+    if (check.exceeded) {
+      await failAfterLock(
+        `${deletes} planned deletion(s) exceeds the unattended removal ceiling; ${existing.size} existing entitlement record(s), the limit is ${check.limit}; nothing was written. Remedy: check the tier and business-unit groups, then apply the change attended with scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim>, which has no limit.`,
+        2,
+        'removal-ceiling',
+        { deletes, existing: existing.size, limit: check.limit },
+      );
+    }
+  }
 
   const summary = {
     ok: true, source, whatIf, resolved: records.length, existing: existing.size,
@@ -439,4 +451,3 @@ function createLockClock() {
     return new Date(current);
   };
 }
-
