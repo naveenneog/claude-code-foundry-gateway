@@ -56,13 +56,35 @@ Capture {
 }
 Assert 'PowerShell 7 is required before projection deployment' ($Failure -match 'PowerShell 7' -and $Failure -match 'pwsh') $Failure
 
-$whatIf = Get-ClaudeInstallerProjectionPlan -WhatIf -DeploySyncJob
-Assert '-WhatIf lists projection deployment, populate, compare, switch and optional job' (
+$whatIf = Get-ClaudeInstallerProjectionPlan -WhatIf -SyncInterval 2h
+Assert '-WhatIf lists projection deployment, populate, compare, switch and the sync job with its interval' (
     (($whatIf.Steps -join '|') -match 'Deploy projection resources' -and
      ($whatIf.Steps -join '|') -match 'Populate and compare' -and
      ($whatIf.Steps -join '|') -match 'Switch entitlement-source to projection' -and
-     ($whatIf.Steps -join '|') -match 'Deploy optional sync job') -and -not $whatIf.Writes
+     ($whatIf.Steps -join '|') -match 'Deploy the sync job, running every 2 hours') -and -not $whatIf.Writes
 ) ($whatIf | ConvertTo-Json -Depth 4)
+$noJobPlan = Get-ClaudeInstallerProjectionPlan -SyncInterval none
+Assert '-ProjectionSyncInterval none plans no sync job' ($noJobPlan.Steps.Count -eq 4 -and -not (($noJobPlan.Steps -join '|') -match 'sync job')) ($noJobPlan | ConvertTo-Json -Depth 4)
+$manualPlan = Get-ClaudeInstallerProjectionPlan -SyncInterval manual
+Assert 'a manual job is planned as running only when started' ((($manualPlan.Steps -join '|') -match 'Deploy the sync job, running only when started')) ($manualPlan | ConvertTo-Json -Depth 4)
+
+# P104 (ADR-0058 decision 2): -ProjectionSyncInterval, else the deployed job's interval on a re-run, else 2h.
+$deployedJob = { param($Interval, $Cron) [pscustomobject]@{ Name = 'caj-renew-p98'; Interval = $Interval; Cron = $Cron } }
+$fresh = Resolve-ClaudeInstallerSyncInterval -Requested '' -DeployedJob $null
+Assert 'a new projection gets the sync job every 2 hours by default' ($fresh.Interval -ceq '2h' -and $fresh.Source -ceq 'default' -and
+    $fresh.Summary -match 'every 2 hours' -and $fresh.Summary -match '365 runs a month' -and $fresh.Summary -match '0\.00003') ($fresh | ConvertTo-Json -Compress)
+$kept = Resolve-ClaudeInstallerSyncInterval -Requested '' -DeployedJob (& $deployedJob '30m' '*/30 * * * *')
+Assert "a re-run keeps the deployed job's interval" ($kept.Interval -ceq '30m' -and $kept.Source -ceq 'deployed job' -and $kept.Summary -match 'every 30 minutes' -and $kept.Summary -match '1460 runs a month') ($kept | ConvertTo-Json -Compress)
+$chosen = Resolve-ClaudeInstallerSyncInterval -Requested '4h' -DeployedJob (& $deployedJob '30m' '*/30 * * * *')
+Assert '-ProjectionSyncInterval wins over the deployed job' ($chosen.Interval -ceq '4h' -and $chosen.Source -ceq 'parameter') ($chosen | ConvertTo-Json -Compress)
+$oddCron = Resolve-ClaudeInstallerSyncInterval -Requested '' -DeployedJob (& $deployedJob $null '15 */2 * * *')
+Assert 'a deployed cron outside the intervals is replaced by 2h, and the note says so' ($oddCron.Interval -ceq '2h' -and $oddCron.Note -match '15 \*/2 \* \* \*' -and $oddCron.Note -match '-ProjectionSyncInterval') ($oddCron | ConvertTo-Json -Compress)
+$manualChoice = Resolve-ClaudeInstallerSyncInterval -Requested 'manual' -DeployedJob $null
+Assert 'manual deploys the job with no schedule' ($manualChoice.Interval -ceq 'manual' -and $manualChoice.Summary -match 'only when started') ($manualChoice | ConvertTo-Json -Compress)
+$noneChoice = Resolve-ClaudeInstallerSyncInterval -Requested 'NONE' -DeployedJob $null
+Assert 'none skips the job, in any case, and says how group changes are published' ($noneChoice.Interval -ceq 'none' -and $noneChoice.Summary -match 'not deployed' -and $noneChoice.Summary -match 'Sync-ClaudeAccess\.ps1') ($noneChoice | ConvertTo-Json -Compress)
+Capture { Resolve-ClaudeInstallerSyncInterval -Requested '15m' -DeployedJob $null }
+Assert 'an interval under 30 minutes is refused with the accepted values, none included' ($Failure -match "'15m'" -and $Failure -match '30m, 1h, 2h, 3h, 4h, 6h, 8h, 12h, manual, none') $Failure
 
 $calls = [System.Collections.Generic.List[object]]::new()
 $everyCall = [System.Collections.Generic.List[object]]::new()
@@ -103,9 +125,10 @@ Assert '-WhatIf previews the deployment only: the switch reads resources that a 
 
 $calls.Clear()
 Invoke-ClaudeInstallerSyncJobDeployment -Root $root -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 -StandardGroup std -PremiumGroup prem `
-    -AlertEmail 'ops@contoso.example' -SubscriptionId 00000000-0000-4000-8000-000000000001 -InvokeScript $record 6>$null | Out-Null
-Assert 'the optional sync job gets its alert address, the tier groups and the prefix' ($calls.Count -eq 1 -and $calls[0].Path -match 'Deploy-ClaudeProjectionRenewal\.ps1$' -and
-    (& $named $calls[0] '-AlertEmail') -eq 'ops@contoso.example' -and (& $named $calls[0] '-StandardGroup') -eq 'std' -and (& $named $calls[0] '-PremiumGroup') -eq 'prem' -and (& $named $calls[0] '-NamePrefix') -eq 'p98') ($calls | ConvertTo-Json -Depth 5)
+    -AlertEmail 'ops@contoso.example' -SubscriptionId 00000000-0000-4000-8000-000000000001 -SyncInterval 30m -InvokeScript $record 6>$null | Out-Null
+Assert 'the sync job gets its alert address, the tier groups, the prefix and the interval' ($calls.Count -eq 1 -and $calls[0].Path -match 'Deploy-ClaudeProjectionRenewal\.ps1$' -and
+    (& $named $calls[0] '-AlertEmail') -eq 'ops@contoso.example' -and (& $named $calls[0] '-StandardGroup') -eq 'std' -and (& $named $calls[0] '-PremiumGroup') -eq 'prem' -and (& $named $calls[0] '-NamePrefix') -eq 'p98' -and
+    (& $named $calls[0] '-SyncInterval') -eq '30m') ($calls | ConvertTo-Json -Depth 5)
 
 $calls.Clear()
 $okSnapshot = Invoke-ClaudeInstallerProjectionDeployment -Root $root -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 `
@@ -117,9 +140,9 @@ Assert 'snapshot baseline is passed to deploy and switch, and rerun commands quo
 
 $calls.Clear()
 $warnings = @(Invoke-ClaudeInstallerSyncJobDeployment -Root $root -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 -StandardGroup 'std group' -PremiumGroup prem `
-    -AlertEmail 'ops team@contoso.example' -SubscriptionId 00000000-0000-4000-8000-000000000001 -InvokeScript { param($ScriptPath, $Arguments) $calls.Add([pscustomobject]@{ Path = $ScriptPath; Args = $Arguments }); 9 } 3>&1)
-Assert 'a failed optional sync job returns false and warns with the full quoted rerun command' (($warnings -contains $false) -and (($warnings | Out-String) -match "-StandardGroup 'std group'" -and ($warnings | Out-String) -match "-SubscriptionId 00000000-0000-4000-8000-000000000001" -and ($warnings | Out-String) -match "-AlertEmail 'ops team@contoso.example'")) (($warnings | Out-String) + ($calls | ConvertTo-Json -Depth 5))
-$failedStep = Get-ClaudeInstallerProjectionNextSteps -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 -StandardGroup 'std group' -PremiumGroup prem -SubscriptionId 00000000-0000-4000-8000-000000000001 -SyncJobStatus failed
+    -AlertEmail 'ops team@contoso.example' -SubscriptionId 00000000-0000-4000-8000-000000000001 -SyncInterval 2h -InvokeScript { param($ScriptPath, $Arguments) $calls.Add([pscustomobject]@{ Path = $ScriptPath; Args = $Arguments }); 9 } 3>&1)
+Assert 'a failed sync job returns false and warns with the full quoted rerun command' (($warnings -contains $false) -and (($warnings | Out-String) -match "-StandardGroup 'std group'" -and ($warnings | Out-String) -match "-SubscriptionId 00000000-0000-4000-8000-000000000001" -and ($warnings | Out-String) -match "-AlertEmail 'ops team@contoso.example'" -and ($warnings | Out-String) -match '-SyncInterval 2h')) (($warnings | Out-String) + ($calls | ConvertTo-Json -Depth 5))
+$failedStep = Get-ClaudeInstallerProjectionNextSteps -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 -StandardGroup 'std group' -PremiumGroup prem -SubscriptionId 00000000-0000-4000-8000-000000000001 -SyncInterval 2h -SyncJobStatus failed
 $calls.Clear()
 $resolverApp = '11111111-2222-4333-8444-555555555555'
 $null = Invoke-ClaudeInstallerProjectionDeployment -Root $root -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 `
@@ -143,7 +166,7 @@ $boundScripts = @($everyCall | ForEach-Object { Split-Path $_.Path -Leaf } | Sor
 Assert 'every argument the installer passes is a parameter of the real deployer, with a value its set allows' (
     $everyCall.Count -ge 6 -and ($boundScripts -join ',') -eq 'Deploy-ClaudeProjection.ps1,Deploy-ClaudeProjectionRenewal.ps1' -and -not $bindProblems.Count
 ) "$($everyCall.Count) call(s) to $($boundScripts -join ', ') | $($bindProblems -join '; ')"
-Assert 'sync-job failure next steps do not report the job as deployed and include the rerun command' ($failedStep.SyncJob.Title -match 'not deployed' -and ((@($failedStep.SyncJob.Detail) -join "`n") -match "-StandardGroup 'std group'")) ((@($failedStep.SyncJob.Detail) -join "`n"))
+Assert 'sync-job failure next steps do not report the job as deployed and include the rerun command' ($failedStep.SyncJob.Title -match 'not deployed' -and ((@($failedStep.SyncJob.Detail) -join "`n") -match "-StandardGroup 'std group'") -and ((@($failedStep.SyncJob.Detail) -join "`n") -match '-SyncInterval 2h')) ((@($failedStep.SyncJob.Detail) -join "`n"))
 # The live run of 2026-10-06 failed here: a string array splatted into a script binds by position, so the
 # deployer received the name prefix as -Sku. This runs the real helper against a real script.
 $probe = Join-Path ([IO.Path]::GetTempPath()) ('installer-probe-' + [guid]::NewGuid().ToString('N') + '.ps1')
@@ -163,7 +186,7 @@ Assert 'the approval summary lists the projection steps before the -WhatIf stop,
 Assert 'new projection gateways skip the named-value Sync-ClaudeAccess step' (-not (Test-ClaudeInstallerShouldSyncNamedValues -EntitlementStore projection -NewGateway $true))
 Assert 'named-value gateways still run Sync-ClaudeAccess' (Test-ClaudeInstallerShouldSyncNamedValues -EntitlementStore 'named-value' -NewGateway $true)
 
-$steps = Get-ClaudeInstallerProjectionNextSteps -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 -DeploySyncJob:$false
+$steps = Get-ClaudeInstallerProjectionNextSteps -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 -SyncInterval none
 $developer = @($steps.Developer.Detail) -join "`n"
 $job = @($steps.SyncJob.Detail) -join "`n"
 Assert 'the projection developer step is the group change and the targeted sync, and nothing else' (
@@ -171,14 +194,32 @@ Assert 'the projection developer step is the group change and the targeted sync,
     $developer -match 'Sync-ClaudeAccess\.ps1 -ResourceGroup rg-p98 -ApimName apim-p98 -User <name-or-object-id>' -and
     $developer -match 'Entra group first' -and $developer -notmatch 'New-OnboardingEmail|Deploy-ClaudeProjectionRenewal'
 ) $developer
-Assert 'the optional sync job is its own step, with the full deploy command' (
-    $steps.SyncJob.Title -match '^Optional' -and
-    $job -match 'very large directories' -and
-    $job -match 'Deploy-ClaudeProjectionRenewal\.ps1 -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 -StandardGroup claude-code-standard -PremiumGroup claude-code-premium -AlertEmail' -and $job -notmatch '<prefix>'
+Assert 'without a sync job, its step says so and gives the deploy command with the default interval' (
+    $steps.SyncJob.Title -match '^No sync job' -and $job -match 'Sync-ClaudeAccess\.ps1' -and
+    $job -match "Deploy-ClaudeProjectionRenewal\.ps1 -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 -StandardGroup claude-code-standard -PremiumGroup claude-code-premium -AlertEmail '<address>' -SyncInterval 2h" -and $job -notmatch '<prefix>'
 ) $job
-$deployed = Get-ClaudeInstallerProjectionNextSteps -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 -DeploySyncJob
+$deployed = Get-ClaudeInstallerProjectionNextSteps -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 -SyncInterval 2h -SyncJobStatus deployed -GraphGrant missing
 $deployedJob = @($deployed.SyncJob.Detail) -join "`n"
-Assert 'a deployed sync job step names the Graph grant and how to start the job' ($deployedJob -match 'Privileged Role Administrator or Global Administrator' -and $deployedJob -match 'az containerapp job start') $deployedJob
+$scheduledDeveloper = @($deployed.Developer.Detail) -join "`n"
+Assert 'a deployed job step names its interval, the Graph grant, how to change the interval and how to start a run' ($deployed.SyncJob.Title -match 'runs every 2 hours' -and
+    $deployedJob -match 'Privileged Role Administrator or Global Administrator' -and $deployedJob -match 'Set-ClaudeProjectionSyncSchedule\.ps1 -ResourceGroup rg-p98 -ApimName apim-p98 -Interval' -and
+    $deployedJob -match 'az containerapp job start') $deployedJob
+Assert 'with a scheduled job, a group change needs no command; the targeted sync publishes at once' ($scheduledDeveloper -match 'tier or business-unit group' -and
+    $scheduledDeveloper -match 'next run, every 2 hours' -and $scheduledDeveloper -match 'Sync-ClaudeAccess\.ps1 -ResourceGroup rg-p98 -ApimName apim-p98 -User <name-or-object-id>') $scheduledDeveloper
+$granted = Get-ClaudeInstallerProjectionNextSteps -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 -SyncInterval 30m -SyncJobStatus deployed -GraphGrant held
+$grantedJob = @($granted.SyncJob.Detail) -join "`n"
+Assert 'a job whose identity holds the grant needs no grant step' ($granted.SyncJob.Title -match 'every 30 minutes' -and $grantedJob -match 'holds Microsoft Graph GroupMember\.Read\.All' -and $grantedJob -notmatch 'Privileged Role Administrator') $grantedJob
+$grantRoot = Join-Path ([IO.Path]::GetTempPath()) ('p104-grant-' + [guid]::NewGuid().ToString('N'))
+$grantReceipt = Join-Path $grantRoot 'onboarding\projection-renewal-p98.json'
+New-Item -ItemType Directory -Force -Path (Split-Path $grantReceipt -Parent) | Out-Null
+Assert 'no job receipt reads as an unknown grant' ((Get-ClaudeInstallerSyncJobGrant -Root $grantRoot -NamePrefix p98) -ceq '')
+[IO.File]::WriteAllText($grantReceipt, '{"kind":"claude-projection-renewal-receipt","graphGrant":"held"}')
+Assert 'the job receipt gives the Graph grant the deployment read' ((Get-ClaudeInstallerSyncJobGrant -Root $grantRoot -NamePrefix p98) -ceq 'held')
+[IO.File]::WriteAllText($grantReceipt, 'not json')
+Assert 'an unreadable receipt reads as an unknown grant' ((Get-ClaudeInstallerSyncJobGrant -Root $grantRoot -NamePrefix p98) -ceq '')
+[IO.File]::WriteAllText($grantReceipt, '{"graphGrant":"granted-by-hand"}')
+Assert 'a grant value the deploy script does not write reads as unknown' ((Get-ClaudeInstallerSyncJobGrant -Root $grantRoot -NamePrefix p98) -ceq '')
+Remove-Item -LiteralPath $grantRoot -Recurse -Force
 $module = [IO.File]::ReadAllText((Join-Path $root 'scripts\ClaudeInstallProjection.ps1'))
 $sendSetup = $installerText.IndexOf("Title = 'Send them the setup'")
 $jobStep = $installerText.IndexOf('$nextSteps.Add($projectionSteps.SyncJob)')
@@ -296,6 +337,22 @@ Assert 'the deployment gets the decided baseline, the serving store and the reco
     (Get-CallArgument 'Invoke-ClaudeInstallerSyncJobDeployment' 'NamePrefix') -eq '$projectionPrefix' -and
     (Get-CallArgument 'Get-ClaudeInstallerProjectionNextSteps' 'NamePrefix') -eq '$projectionPrefix')
 Assert 'the store choice knows the live store' ((Get-CallArgument 'Resolve-ClaudeInstallerEntitlementStore' 'LiveStore') -eq '$liveEntitlementSource')
+# P104 (ADR-0058 decision 2): one interval reaches the plan, the deployment and the next steps; a re-run reads the
+# deployed job only when -ProjectionSyncInterval is not given; -DeploySyncJob is accepted and decides nothing.
+Assert 'the installer passes the chosen interval to the plan, the job deployment and the next steps' (
+    (Get-CallArgument 'Get-ClaudeInstallerProjectionPlan' 'SyncInterval') -eq '$ProjectionSyncInterval' -and
+    (Get-CallArgument 'Invoke-ClaudeInstallerSyncJobDeployment' 'SyncInterval') -eq '$ProjectionSyncInterval' -and
+    (Get-CallArgument 'Get-ClaudeInstallerProjectionNextSteps' 'SyncInterval') -eq '$ProjectionSyncInterval')
+Assert 'the installer reads the deployed job only when -ProjectionSyncInterval is not given' (
+    (Get-CallArgument 'Resolve-ClaudeInstallerSyncInterval' 'Requested') -eq '$ProjectionSyncInterval' -and
+    $wiring -match "-not \`$PSBoundParameters\.ContainsKey\('ProjectionSyncInterval'\)" -and
+    (Get-CallArgument 'Get-ClaudeProjectionSyncJob' 'NamePrefix') -eq '$projectionPrefix')
+Assert 'the job deploys unless the interval is none; -DeploySyncJob is accepted and decides nothing' (
+    $wiring -match "if \(\`$ProjectionSyncInterval -ne 'none' -and -not \`$WhatIfPreference\)" -and $wiring -match '\[switch\]\$DeploySyncJob' -and
+    $wiring -notmatch 'if \(\$DeploySyncJob -and' -and $wiring -match 'DeploySyncJob is no longer needed')
+Assert 'the review lists the sync job choice' ($wiring -match "Insert\(\`$storeRow \+ 1, 'Sync job'")
+Assert 'the next steps read the Graph grant from the job receipt' ((Get-CallArgument 'Get-ClaudeInstallerProjectionNextSteps' 'GraphGrant') -eq '$syncJobGrant' -and
+    $wiring -match 'Get-ClaudeInstallerSyncJobGrant -Root \$root -NamePrefix \$projectionPrefix')
 Assert 'the resolver access is read strictly, not through the error-swallowing helper' ($wiring -match 'Get-ClaudeInstallerResolverAccess' -and $wiring -notmatch 'Invoke-AzOptional \{ az functionapp show')
 
 Write-Host ''

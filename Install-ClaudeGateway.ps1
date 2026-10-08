@@ -64,6 +64,7 @@ param(
     [switch]$DeployProjection,
     [switch]$FlipProjectionAfterCleanCompare,
     [switch]$DeploySyncJob,
+    [string]$ProjectionSyncInterval,
     [string]$ProjectionResolverAppId,
     [switch]$DeployContentSafety,
     [ValidateSet('block','audit','off')]
@@ -935,6 +936,22 @@ if ($EntitlementStore -eq 'projection') {
     }
 }
 
+# The projection sync job (ADR-0058): it deploys with the projection and applies Entra group changes on a
+# schedule. -ProjectionSyncInterval wins; a re-run keeps the deployed job's interval; otherwise every 2 hours.
+$syncJobChoice = $null
+if ($EntitlementStore -eq 'projection') {
+    if ($DeploySyncJob) { Write-Note '-DeploySyncJob is no longer needed: the sync job deploys with the projection, and -ProjectionSyncInterval none skips it (ADR-0058).' }
+    $deployedSyncJob = $null
+    if (-not $PSBoundParameters.ContainsKey('ProjectionSyncInterval') -and ($ExistingApim -or $liveApimIdForDefaults)) {
+        $deployedSyncJob = Get-ClaudeProjectionSyncJob -ResourceGroup $ResourceGroup -NamePrefix $projectionPrefix
+    }
+    $syncJobChoice = Resolve-ClaudeInstallerSyncInterval -Requested $ProjectionSyncInterval -DeployedJob $deployedSyncJob
+    $ProjectionSyncInterval = $syncJobChoice.Interval
+    Write-Host "  Sync job: $($syncJobChoice.Summary)" -ForegroundColor DarkGray
+    if ($syncJobChoice.Note) { Write-Warn2 $syncJobChoice.Note }
+}
+else { $ProjectionSyncInterval = 'none' }
+
 # Revocation window. The gateway holds an entitlement answer rather than asking
 # on every request, so someone removed from the directory keeps working for up
 # to this long. Shorter is safer and costs more, because cost follows cache
@@ -1309,6 +1326,10 @@ $rows = [ordered]@{
 if ($pendingDeployment) {
     $rows.Insert(2, 'Claude deployment', ("{0} v{1} on {2}, {3} capacity {4} - deployed first, after you confirm" -f $pendingDeployment.model, $pendingDeployment.version, $pendingDeployment.account, $pendingDeployment.sku, $pendingDeployment.capacity))
 }
+if ($syncJobChoice) {
+    $storeRow = [Array]::IndexOf(@($rows.Keys), 'Entitlement store')
+    $rows.Insert($storeRow + 1, 'Sync job', $syncJobChoice.Summary)
+}
 foreach ($k in $rows.Keys) {
     if ([string]::IsNullOrWhiteSpace($k)) { Write-Host '' ; continue }
     Write-Host ("  {0,-24} {1}" -f $k, $rows[$k])
@@ -1317,7 +1338,7 @@ if ($EntitlementStore -eq 'projection') {
     # Choosing projection deploys and switches it (ADR-0052); the summary is the approval, so it names the steps.
     Write-Host ''
     Write-Host '  After the gateway, the Cosmos projection:' -ForegroundColor DarkGray
-    foreach ($step in (Get-ClaudeInstallerProjectionPlan -DeploySyncJob:$DeploySyncJob).Steps) { Write-Host "    - $step" -ForegroundColor DarkGray }
+    foreach ($step in (Get-ClaudeInstallerProjectionPlan -SyncInterval $ProjectionSyncInterval).Steps) { Write-Host "    - $step" -ForegroundColor DarkGray }
 }
 Write-Host ''
 if ($ExistingApim) {
@@ -1665,14 +1686,16 @@ switch ($entitlementSync.Reason) {
 }
 
 $syncJobStatus = 'not-requested'
+$syncJobGrant = ''
 if ($EntitlementStore -eq 'projection') {
     Write-Step 'Projection deployment'
     Invoke-ClaudeInstallerProjectionDeployment -Root $root -ResourceGroup $ResourceGroup -ApimName $apimName -NamePrefix $projectionPrefix `
         -Location $Location -Sku $Sku -ResolverInboundAccess $ResolverInboundAccess -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup `
         -SubscriptionId $SubscriptionId -ProjectionResolverAppId $ProjectionResolverAppId -CompareBaseline $entitlementSync.CompareBaseline -ServingStore $entitlementSync.ServingStore -ResolverPublicByDefault:($ResolverInboundAccess -eq 'public' -and -not $PSBoundParameters.ContainsKey('ResolverInboundAccess')) -WhatIf:$WhatIfPreference | Out-Null
-    if ($DeploySyncJob -and -not $WhatIfPreference) {
+    if ($ProjectionSyncInterval -ne 'none' -and -not $WhatIfPreference) {
         $syncJobStatus = if (Invoke-ClaudeInstallerSyncJobDeployment -Root $root -ResourceGroup $ResourceGroup -ApimName $apimName -NamePrefix $projectionPrefix `
-            -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -AlertEmail $PublisherEmail -SubscriptionId $SubscriptionId) { 'deployed' } else { 'failed' }
+            -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -AlertEmail $PublisherEmail -SubscriptionId $SubscriptionId -SyncInterval $ProjectionSyncInterval) { 'deployed' } else { 'failed' }
+        if ($syncJobStatus -eq 'deployed') { $syncJobGrant = Get-ClaudeInstallerSyncJobGrant -Root $root -NamePrefix $projectionPrefix }
     }
 }
 
@@ -1837,7 +1860,7 @@ if ($addressMode -eq 'custom') {
 }
 $projectionSteps = $null
 if ($EntitlementStore -eq 'projection') {
-    $projectionSteps = Get-ClaudeInstallerProjectionNextSteps -ResourceGroup $ResourceGroup -ApimName $apimName -NamePrefix $projectionPrefix -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -SubscriptionId $SubscriptionId -SyncJobStatus $syncJobStatus -DeploySyncJob:$DeploySyncJob
+    $projectionSteps = Get-ClaudeInstallerProjectionNextSteps -ResourceGroup $ResourceGroup -ApimName $apimName -NamePrefix $projectionPrefix -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -SubscriptionId $SubscriptionId -SyncInterval $ProjectionSyncInterval -SyncJobStatus $syncJobStatus -GraphGrant $syncJobGrant
     $nextSteps.Add($projectionSteps.Developer)
 }
 else {
