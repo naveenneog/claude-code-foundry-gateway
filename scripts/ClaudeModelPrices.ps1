@@ -46,10 +46,33 @@ function ConvertTo-ClaudePriceModelKey {
 
 function Resolve-ClaudePriceBookKey {
     param([Parameter(Mandatory = $true)][string]$Name, [Parameter(Mandatory = $true)]$Book)
+    $literal = $Name.ToLowerInvariant()
     $target = ConvertTo-ClaudePriceModelKey $Name
     if (-not $target) { return '' }
     $names = @($Book.models.PSObject.Properties.Name)
-    $matches = @($names | Where-Object { (ConvertTo-ClaudePriceModelKey $_) -ceq $target })
+    $normalizedMatches = @($names | Where-Object { (ConvertTo-ClaudePriceModelKey $_) -ceq $target })
+    if ($normalizedMatches.Count -gt 1) {
+        $rates = @(Sort-ClaudeFlowOrdinal -Unique -InputObject @($normalizedMatches | ForEach-Object {
+            $rate = $Book.models.$_
+            $cacheRead = if ($null -ne $rate.PSObject.Properties['cacheReadPerM']) { [decimal]$rate.cacheReadPerM } else { [decimal]$rate.inputPerM * [decimal]0.1 }
+            $cacheWrite5m = if ($null -ne $rate.PSObject.Properties['cacheWrite5mPerM']) { [decimal]$rate.cacheWrite5mPerM } else { [decimal]$rate.inputPerM * [decimal]1.25 }
+            $cacheWrite1h = if ($null -ne $rate.PSObject.Properties['cacheWrite1hPerM']) { [decimal]$rate.cacheWrite1hPerM } else { [decimal]$rate.inputPerM * [decimal]2 }
+            '{0}:{1}:{2}:{3}:{4}' -f ([decimal]$rate.inputPerM).ToString([Globalization.CultureInfo]::InvariantCulture),
+                ([decimal]$rate.outputPerM).ToString([Globalization.CultureInfo]::InvariantCulture),
+                $cacheRead.ToString([Globalization.CultureInfo]::InvariantCulture),
+                $cacheWrite5m.ToString([Globalization.CultureInfo]::InvariantCulture),
+                $cacheWrite1h.ToString([Globalization.CultureInfo]::InvariantCulture)
+        }))
+        if ($rates.Count -gt 1) { throw "Conflicting price entries for '$Name': $($normalizedMatches -join ', '). A deployment-specific price resolves this ambiguity." }
+    }
+    $exact = @($names | Where-Object { $_.ToLowerInvariant() -ceq $literal })
+    if ($exact.Count -eq 1) { return [string]$exact[0] }
+    $datedLiteral = [regex]::Replace($literal, '[-_.]*\d{8}$', '')
+    if ($datedLiteral -cne $literal) {
+        $datedExact = @($names | Where-Object { $_.ToLowerInvariant() -ceq $datedLiteral })
+        if ($datedExact.Count -eq 1) { return [string]$datedExact[0] }
+    }
+    $matches = $normalizedMatches
     if (-not $matches.Count -and $target.Length -gt 8 -and $target.Substring($target.Length - 8) -match '^\d{8}$') {
         $family = $target.Substring(0, $target.Length - 8)
         $matches = @($names | Where-Object { (ConvertTo-ClaudePriceModelKey $_) -ceq $family })

@@ -3,6 +3,7 @@ from copy import deepcopy
 from datetime import UTC, datetime
 from decimal import Decimal
 import json
+from pathlib import Path
 import unittest
 
 from aum_service.errors import ServiceError
@@ -46,17 +47,23 @@ def configured(doc=None):
 
 class DollarArithmeticTests(unittest.TestCase):
     def test_model_price_matching_uses_one_normalized_dated_rule(self):
-        book = {"date": "2026-10-08", "models": {
-            "claude-haiku-4.5": {"inputPerM": "1", "outputPerM": "5"},
-            "claude-opus-5": {"inputPerM": "5", "outputPerM": "25"},
-            "claude-opus-5-5": {"inputPerM": "4", "outputPerM": "20"},
-            "claude-sonnet-5": {"inputPerM": "2", "outputPerM": "10"},
-        }}
+        book = json.loads(Path(__file__).parents[2].joinpath("config", "price-book.example.json").read_text())
         cases = {
-            "claude-haiku-4-5": "claude-haiku-4.5",
-            "claude-haiku-4-5-20251001": "claude-haiku-4.5",
+            "claude-fable-5": "claude-fable-5",
+            "claude-fable-5-1": "claude-fable-5-1",
+            "claude-haiku-4-5": "claude-haiku-4-5",
+            "claude-haiku-4-5-20251001": "claude-haiku-4-5",
+            "claude-haiku-5-5": None,
+            "claude-opus-4-1": "claude-opus-4-1",
+            "claude-opus-4-5": "claude-opus-4-5",
+            "claude-opus-4-6": "claude-opus-4-6",
+            "claude-opus-4-7": "claude-opus-4-7",
+            "claude-opus-4-8": "claude-opus-4-8",
             "claude-opus-5-5": "claude-opus-5-5",
+            "claude-sonnet-4-5": "claude-sonnet-4-5",
+            "claude-sonnet-4-6": "claude-sonnet-4-6",
             "Claude-Sonnet-5": "claude-sonnet-5",
+            "claude-sonnet-5-5": "claude-sonnet-5-5",
             "claude-sonnet-5-2": None,
             "gpt-5": None,
         }
@@ -66,6 +73,12 @@ class DollarArithmeticTests(unittest.TestCase):
         without_opus_55 = deepcopy(book)
         del without_opus_55["models"]["claude-opus-5-5"]
         self.assertIsNone(price_book_key("claude-opus-5-5", without_opus_55))
+        without_fable_51 = deepcopy(book)
+        del without_fable_51["models"]["claude-fable-5-1"]
+        self.assertIsNone(price_book_key("claude-fable-5-1", without_fable_51))
+        without_sonnet_55 = deepcopy(book)
+        del without_sonnet_55["models"]["claude-sonnet-5-5"]
+        self.assertIsNone(price_book_key("claude-sonnet-5-5", without_sonnet_55))
 
     def test_all_five_categories_are_priced_before_sum_without_rounding(self):
         result = price_row(row(cache_write_1h_tokens=1000), BOOK)
@@ -264,6 +277,13 @@ class DollarDecisionTests(unittest.TestCase):
         self.assertEqual([], state["items"]["organization:finance"]["unpriced_models"])
         owned = calculate_state(configured(), [row(deployment="unknown", model="unknown")], NOW)
         self.assertEqual(["unknown"], owned["items"]["department:payroll"]["unpriced_models"])
+
+    def test_tiered_haiku_55_stays_unpriced_and_named(self):
+        state = calculate_state(configured(), [row(deployment="claude-haiku-5-5", model="claude-haiku-5-5")], NOW)
+        item = state["items"]["department:payroll"]
+        self.assertEqual("unpriced", item["status"])
+        self.assertIsNone(item["spent_usd"])
+        self.assertEqual(["claude-haiku-5-5"], item["unpriced_models"])
 
     def test_unattributed_zero_usage_failure_is_not_invented_spend(self):
         failed = row(user_id="", business_unit="", model="", deployment="", prompt_tokens=0,

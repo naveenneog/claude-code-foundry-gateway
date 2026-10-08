@@ -72,7 +72,11 @@ or invoice reconciliation. Null/unpriced is never $0.
 4. Approve the budget and select the tariff. On first use the scripts read
    `config/price-book.json`, or the shipped example if absent, and print the
    source. `-PriceBookPath` chooses a different file. Existing dollar budgets
-   keep their stored tariff; changing local prices does not silently reprice them.
+   keep their stored tariff because `usd-budgets` embeds the whole dated
+   `price_book` document with the budget item. Changing local prices, or
+   updating this repository's example book, does not silently reprice them.
+   To rewrite a budget with the current book, run the same setter again with the
+   approved amount, for example:
 
    ```powershell
    .\scripts\Set-ClaudeBusinessUnit.ps1 -Id finance -MonthlyBudgetUsd 25 `
@@ -80,6 +84,10 @@ or invoice reconciliation. Null/unpriced is never $0.
    .\scripts\Set-ClaudeBudget.ps1 -User '<approved-person-object-id>' -DailyUsd 2 `
        -ResourceGroup $rg -ApimName $apim
    ```
+
+   An existing budget written with an older book still lacks newly added model
+   entries, such as later Foundry deployments, until it is rewritten and then
+   reconciled.
 
 5. Reconcile now, or wait for the timer. Direct invocation uses Azure CLI
    sign-in and ETags; the service adds its lease/audit. Both refuse Turnstile
@@ -195,6 +203,11 @@ still an observed-cost stop, not a hard invoice cap.
   `claude-opus-5-5`, add the missing model tariff; if it lists a dated model
   whose family is already present, update the software because the normalized
   eight-digit match should price it.
+- **Claude Haiku 5.5:** left unpriced by this book. Anthropic publishes two
+  Haiku 5.5 tiers by prompt size, and the current reconciler aggregates rows by
+  day rather than per-request prompt-size tier. Until U178 is resolved, an
+  enforced scope whose own rows use `claude-haiku-5-5` returns
+  `usd_budget_unpriced` naming `claude-haiku-5-5`.
 - **Stale:** missing, expired or mismatched state returns 503
   `usd_budget_state_stale` for enforced scopes. Snapshots expire after 15 minutes.
   A telemetry outage preserves the last decision until expiry; it never refreshes

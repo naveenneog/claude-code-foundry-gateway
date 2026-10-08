@@ -50,6 +50,11 @@ Projection-backed budgets no longer fail every strict/allowance unit because one
 month or because a refused request has no user. The row cap can be reached sooner because the query groups by
 stamped unit as well as day, user and deployment.
 
-`claude-haiku-4-5` and `claude-haiku-4-5-20251001` price from `claude-haiku-4.5`; `claude-opus-5-5` needs its
-own tariff. The shipped example book adds that entry from Anthropic's published pricing page retrieved
-2026-10-08.
+`claude-haiku-4-5` and `claude-haiku-4-5-20251001` price from the Foundry-style
+`claude-haiku-4-5` entry when a new book includes it, while older budget documents
+that still contain only `claude-haiku-4.5` can still price the same normalized family.
+Distinct families need their own tariffs: `claude-opus-5-5`, `claude-sonnet-5-5`
+and `claude-fable-5-1` never inherit their shorter-family keys. The shipped example
+book adds every 2026-10-08 eastus2 Foundry Claude catalog model whose Anthropic list
+price is a single tariff. `claude-haiku-5-5` stays unpriced until U178 splits usage
+by prompt-size tier.

@@ -34,8 +34,9 @@ exact streaming cache-creation detail remains **U13**.
   developer who moves units during a day produces one row per unit instead of an ambiguous month-long
   `unattributed-usage` stop. Rows without a user id are reported in the reconciler output and charge no
   scope. The reconciler, model price reader and chargeback KQL share the normalized exact-or-eight-digit
-  dated model match, and the shipped price book adds `claude-opus-5-5` from Anthropic's list pricing
-  retrieved 2026-10-08 ([ADR-0060](docs/adr/0060-usd-reconciler-attribution-and-pricing.md)).
+  dated model match. The shipped price book covers every 2026-10-08 eastus2 Foundry Claude catalog
+  model with a single Anthropic list tariff, and deliberately leaves tiered `claude-haiku-5-5`
+  unpriced until U178 splits usage by prompt size ([ADR-0060](docs/adr/0060-usd-reconciler-attribution-and-pricing.md)).
 
 - **P104 the projection sync job runs on an admin-set schedule.** Adding or removing a developer in an Entra
   tier group or business-unit group reaches the Cosmos projection at the sync job's next run, with no command

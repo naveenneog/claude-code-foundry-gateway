@@ -471,17 +471,23 @@ try {
         @($qs | Where-Object Key -eq 'models.tiers.next~opus')[0].Question -match 'unpriced' -and @($qs | Where-Object Key -eq 'models.tiers.claude-haiku-4-5')[0].Question -match 'per million'
     }
     Check 'PowerShell price matching uses the same normalized dated model fixture' {
-        $book = [pscustomobject]@{ date = '2026-10-08'; source = 'test tariff'; models = [pscustomobject]@{
-            'claude-haiku-4.5' = [pscustomobject]@{ inputPerM = 1; outputPerM = 5 }
-            'claude-opus-5' = [pscustomobject]@{ inputPerM = 5; outputPerM = 25 }
-            'claude-opus-5-5' = [pscustomobject]@{ inputPerM = 4; outputPerM = 20 }
-            'claude-sonnet-5' = [pscustomobject]@{ inputPerM = 2; outputPerM = 10 }
-        } }
+        $book = Get-ClaudeModelPriceBook (Join-Path $root 'config\price-book.example.json')
         $cases = @(
-            @('claude-haiku-4-5', 'claude-haiku-4.5'),
-            @('claude-haiku-4-5-20251001', 'claude-haiku-4.5'),
+            @('claude-fable-5', 'claude-fable-5'),
+            @('claude-fable-5-1', 'claude-fable-5-1'),
+            @('claude-haiku-4-5', 'claude-haiku-4-5'),
+            @('claude-haiku-4-5-20251001', 'claude-haiku-4-5'),
+            @('claude-haiku-5-5', ''),
+            @('claude-opus-4-1', 'claude-opus-4-1'),
+            @('claude-opus-4-5', 'claude-opus-4-5'),
+            @('claude-opus-4-6', 'claude-opus-4-6'),
+            @('claude-opus-4-7', 'claude-opus-4-7'),
+            @('claude-opus-4-8', 'claude-opus-4-8'),
             @('claude-opus-5-5', 'claude-opus-5-5'),
+            @('claude-sonnet-4-5', 'claude-sonnet-4-5'),
+            @('claude-sonnet-4-6', 'claude-sonnet-4-6'),
             @('Claude-Sonnet-5', 'claude-sonnet-5'),
+            @('claude-sonnet-5-5', 'claude-sonnet-5-5'),
             @('claude-sonnet-5-2', ''),
             @('gpt-5', '')
         )
