@@ -56,6 +56,8 @@ if (-not $Live) {
         if ($joined -like 'apim nv show *entitlement-resolver-url*') { return 'https://resolver-not-deployed.invalid' }
         if ($joined -like 'apim nv show *entitlement-resolver-audience*') { return 'https://resolver-not-deployed.invalid' }
         if ($joined -like 'apim nv show *entitlement-cache-seconds*') { $global:LASTEXITCODE = 3; return }
+        # P104: a re-run reads the deployed sync job by tag; these gateways have none, which Azure answers with [].
+        if ($joined -like 'resource list -g * --resource-type Microsoft.App/jobs -o json') { return '[]' }
         $global:P72DriverUnexpected.Add($joined)
         $global:LASTEXITCODE = 2
     }
