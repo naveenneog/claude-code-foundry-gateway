@@ -57,9 +57,10 @@ metric is ignored. Otherwise the group cache total is `max(sum(body_reads), metr
 remainder beyond row body counts is assigned to the latest stamped ledger row in the group. A metric-only group
 uses the user's latest stamped unit in the query window; without one it is person-only and `unit_unknown`.
 If a ledger row has an empty `DeploymentName` while the request used a custom deployment name, the ledger family
-falls back to the served model and cannot join that custom-deployment metric; the request remains priced from
-the ledger row and the unmatched metric is reported as a metric-only `unit_unknown`/person row rather than
-silently merged into the wrong deployment.
+falls back to the served model and cannot join that custom-deployment metric. The request remains priced from
+the ledger row. Because the same user has a ledger stamp, the unmatched metric can use the user's latest stamped unit,
+and those reads can be counted twice with that day's body reads. If all ledger reads are known for that family that day, the metric is ignored and streamed reads can be lost, matching `main`; U180 records the residual
+assumption and detector.
 
 An unpriced row is never $0 and marks only scopes that own that row. The compact policy-facing state keeps
 the same `compact-v1` item shape and `policy_revision`; the userless-row report is emitted only when such

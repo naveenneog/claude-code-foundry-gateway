@@ -195,6 +195,20 @@ Assert 'live USD query harness covers the next UTC day metric' ($harness -match 
 Assert 'live USD query harness prints returned rows on failure' ($harness -match 'Write-ReturnedRows')
 Assert 'live USD query harness asserts rows have non-null day and users where required' ($harness -match 'every row has a day' -and $harness -match 'non-userless row has a user')
 Assert 'live USD query harness covers duplicate metric spellings and tied latest rows' ($harness -match 'claude-haiku-4.5' -and $harness -match 'tie-a' -and $harness -match 'tie-b')
+$adr60 = Get-Content (Join-Path $root 'docs\adr\0060-usd-reconciler-attribution-and-pricing.md') -Raw
+Assert 'ADR-0060 records the residual empty-deployment custom-metric double-count assumption' (
+    $adr60 -match 'latest stamped unit' -and
+    $adr60 -match 'counted twice' -and
+    $adr60 -match 'all .*reads are known.*metric is ignored' -and
+    $adr60 -notmatch 'metric-only `unit_unknown`/person row'
+) $adr60
+$unknowns = Get-Content (Join-Path $root 'docs\UNKNOWNS.md') -Raw
+Assert 'UNKNOWNS records the empty DeploymentName custom deployment residual detector' (
+    $unknowns -match 'U180 \| ASSUMED' -and
+    $unknowns -match 'empty `DeploymentName`' -and
+    $unknowns -match 'custom deployment names' -and
+    $unknowns -match 'live harness'
+) $unknowns
 
 $dupBook = [pscustomobject]@{ date = '2026-10-08'; models = [pscustomobject]@{
     'claude-haiku-4.5' = [pscustomobject]@{ inputPerM = 1; outputPerM = 5 }
