@@ -101,6 +101,19 @@ class DollarArithmeticTests(unittest.TestCase):
             "claude-haiku-4-5": {"inputPerM": 1, "outputPerM": 5, "cacheReadPerM": "0.05"},
         }}
         self.assertIsNone(price_book_key("claude-haiku-4-5-20251001", cache_conflict))
+        rate_conflicts = {
+            "inputPerM": ({"inputPerM": 1, "outputPerM": 5}, {"inputPerM": 2, "outputPerM": 5}),
+            "outputPerM": ({"inputPerM": 1, "outputPerM": 5}, {"inputPerM": 1, "outputPerM": 6}),
+            "cacheReadPerM": ({"inputPerM": 1, "outputPerM": 5}, {"inputPerM": 1, "outputPerM": 5, "cacheReadPerM": "0.05"}),
+            "cacheWrite5mPerM": ({"inputPerM": 1, "outputPerM": 5}, {"inputPerM": 1, "outputPerM": 5, "cacheWrite5mPerM": "2"}),
+            "cacheWrite1hPerM": ({"inputPerM": 1, "outputPerM": 5}, {"inputPerM": 1, "outputPerM": 5, "cacheWrite1hPerM": "3"}),
+        }
+        for field, (left, right) in rate_conflicts.items():
+            with self.subTest(rate=field):
+                self.assertIsNone(price_book_key("rate-family-20260101", {"models": {
+                    "rate.family": left,
+                    "rate-family": right,
+                }}))
         invalid_family = {"models": {
             "claude-opus-5-5": {"inputPerM": 5, "outputPerM": 25, "cacheReadPerM": None},
             "claude-opus-5.5": {"inputPerM": 1, "outputPerM": 5},

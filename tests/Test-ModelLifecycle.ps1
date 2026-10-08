@@ -547,6 +547,24 @@ try {
         } })
         Reject { Get-ClaudeModelPriceBook $dup } 'conflicting|Duplicate normalized'
     }
+    Check 'PowerShell resolver refuses duplicate families that differ in any one effective rate' {
+        $cases = @(
+            @('inputPerM', @{ inputPerM = 1; outputPerM = 5 }, @{ inputPerM = 2; outputPerM = 5 }),
+            @('outputPerM', @{ inputPerM = 1; outputPerM = 5 }, @{ inputPerM = 1; outputPerM = 6 }),
+            @('cacheReadPerM', @{ inputPerM = 1; outputPerM = 5 }, @{ inputPerM = 1; outputPerM = 5; cacheReadPerM = 0.05 }),
+            @('cacheWrite5mPerM', @{ inputPerM = 1; outputPerM = 5 }, @{ inputPerM = 1; outputPerM = 5; cacheWrite5mPerM = 2 }),
+            @('cacheWrite1hPerM', @{ inputPerM = 1; outputPerM = 5 }, @{ inputPerM = 1; outputPerM = 5; cacheWrite1hPerM = 3 })
+        )
+        foreach ($case in $cases) {
+            $book = [pscustomobject]@{ date = '2026-10-08'; source = 'test'; models = [pscustomobject]@{
+                'rate.family' = [pscustomobject]$case[1]
+                'rate-family' = [pscustomobject]$case[2]
+            } }
+            $actual = (Get-ClaudeDeploymentPrice ([pscustomobject]@{ name = 'rate-family-20260101'; model = 'rate-family-20260101'; sku = 'GlobalStandard' }) $book).SourceKey
+            if ($actual) { throw "$($case[0]) conflict resolved to '$actual'" }
+        }
+        $true
+    }
     Check 'oversized model lists fail before backup or writes' {
         $extra = 1..85 | ForEach-Object { 'missing-' + $_.ToString('000') + ('x' * 45) }
         $global:P70nvs['models-standard'] = ',sonnet,' + ($extra -join ',') + ','

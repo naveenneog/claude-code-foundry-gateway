@@ -221,6 +221,21 @@ try {
     } } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
     $conflictingDuplicate = Get-Thrown { New-PriceBlock -Path $tempPublishBook }
     Assert 'query publisher behaviorally refuses duplicate normalized keys with conflicting effective rates' ($conflictingDuplicate -match 'Duplicate normalized price-book key' -and $conflictingDuplicate -match 'claude-haiku-4\.5' -and $conflictingDuplicate -match 'claude-haiku-4-5') $conflictingDuplicate
+    $rateConflictCases = @(
+        @('inputPerM', @{ inputPerM = 1; outputPerM = 5 }, @{ inputPerM = 2; outputPerM = 5 }),
+        @('outputPerM', @{ inputPerM = 1; outputPerM = 5 }, @{ inputPerM = 1; outputPerM = 6 }),
+        @('cacheReadPerM', @{ inputPerM = 1; outputPerM = 5 }, @{ inputPerM = 1; outputPerM = 5; cacheReadPerM = 0.05 }),
+        @('cacheWrite5mPerM', @{ inputPerM = 1; outputPerM = 5 }, @{ inputPerM = 1; outputPerM = 5; cacheWrite5mPerM = 2 }),
+        @('cacheWrite1hPerM', @{ inputPerM = 1; outputPerM = 5 }, @{ inputPerM = 1; outputPerM = 5; cacheWrite1hPerM = 3 })
+    )
+    foreach ($case in $rateConflictCases) {
+        [IO.File]::WriteAllText($tempPublishBook, (@{ date = '2026-10-08'; models = [ordered]@{
+            'rate.family' = $case[1]
+            'rate-family' = $case[2]
+        } } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+        $rateConflict = Get-Thrown { New-PriceBlock -Path $tempPublishBook }
+        Assert "query publisher refuses duplicate normalized keys that differ only in $($case[0])" ($rateConflict -match 'Duplicate normalized price-book key' -and $rateConflict -match 'rate.family' -and $rateConflict -match 'rate-family') $rateConflict
+    }
 }
 finally { Remove-Item -LiteralPath $tempPublishBook -Force -ErrorAction SilentlyContinue }
 $harness = Get-Content (Join-Path $root 'scripts\Test-ClaudeUsdUsageQuery.ps1') -Raw
