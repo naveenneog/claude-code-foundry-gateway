@@ -78,15 +78,7 @@ function Note($m) { Write-Host "         $m" -ForegroundColor DarkGray }
 
 function Resolve-ClaudeProjectionUserObjectId {
     param([Parameter(Mandatory)][string]$Identity, [Parameter(Mandatory)][string]$Token)
-    $guid = '^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$'
-    if ($Identity -match $guid) { return $Identity.ToLowerInvariant() }
-    if ($Identity -notmatch "^[A-Za-z0-9.!#`$%&'*+/=?^_``{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$") {
-        throw '-User must be an object id GUID or a valid user principal name. Remedy: pass the user''s object id or user principal name, for example -User dev@contoso.com.'
-    }
-    $encoded = [uri]::EscapeDataString($Identity)
-    $user = Invoke-ClaudeGraphRead -Uri "https://graph.microsoft.com/v1.0/users/${encoded}?`$select=id" -Token $Token
-    if (-not $user -or [string]$user.id -notmatch $guid) { throw "Graph did not return a valid object id for user '$Identity'." }
-    return ([string]$user.id).ToLowerInvariant()
+    return Resolve-ClaudeGraphUserObjectId -Identity $Identity -Token $Token
 }
 
 function Invoke-ClaudeProjectionCheckMemberGroups {

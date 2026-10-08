@@ -111,7 +111,8 @@ explains created, reused and optional resources.
 > so a sync-job outage does not stop developers. The installer deploys the sync job, which applies
 > Entra tier and business-unit group changes every 2 hours by default (`-ProjectionSyncInterval`, 30 minutes
 > to 12 hours). `scripts/Sync-ClaudeAccess.ps1 -User`
-> refreshes one developer through the in-VNet runner; without `-User` it refreshes everyone.
+> publishes one developer's change on either entitlement store: named values run a full allow-list refresh and the
+> projection uses the in-VNet runner. Without `-User` it refreshes everyone.
 > `scripts/Deploy-ClaudeProjection.ps1 -FlipAfterCleanCompare` switches without deploying
 > anything, after resolver checks, drift check, runner compare and Cosmos switch evidence
 > ([ADR-0051](docs/adr/0051-persistent-sync-based-cosmos-entitlement.md)).

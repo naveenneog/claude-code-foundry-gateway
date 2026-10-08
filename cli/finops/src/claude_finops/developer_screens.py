@@ -132,8 +132,10 @@ class DeveloperPicker(ModalScreen):
                     "Direct permits an empty allow list only for a changed tier whose last member was removed. "
                     + result["token_note"])
                 if apply:
+                    warning = result.get("publication", {}).get("publication_warning")
                     result["message"] = (
                         f"Removed {result['confirm_upn']}. {result['publication_path']}. "
+                        f"{warning + ' ' if warning else ''}"
                         "Done refreshes People (estimate 3-10 s); observed usage can remain after removal.")
                 return result
 

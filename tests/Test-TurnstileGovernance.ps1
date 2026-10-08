@@ -188,6 +188,7 @@ $applyLib = Get-Content (Join-Path $root 'scripts/ClaudeTurnstileApply.ps1') -Ra
 $grantGraph = Get-Content (Join-Path $root 'scripts/Grant-ClaudeGovernanceGraphAccess.ps1') -Raw
 $schedulePass = Get-Content (Join-Path $root 'scripts/Invoke-ClaudeTurnstileSchedule.ps1') -Raw
 $jobTemplate = Get-Content (Join-Path $root 'infra/turnstile-schedule.bicep') -Raw
+Assert 'Turnstile apply records its authoritative tier groups through the real sync command' ($applyLib -match 'Sync-ClaudeAccess\.ps1[\s\S]+-RecordGroups')
 
 # P46: mode metadata is independent of the legacy registry and survives seeding.
 $modeRegistry = @(

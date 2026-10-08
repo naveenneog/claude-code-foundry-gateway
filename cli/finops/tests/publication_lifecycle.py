@@ -40,7 +40,7 @@ ATTRIBUTE_EXCEPTIONS = {
 }
 
 ATTRIBUTE_CONTEXTS = {
-    ('developer_screens.py', 'DeveloperPicker.open_remove_form'): '9393909584c2a0abd3811ea3326e7f32d8230df681fff41cd91096727654c8d2',
+    ('developer_screens.py', 'DeveloperPicker.open_remove_form'): '1fa0c7a995495885adedf26d5b401ebe4c1baf9aad2bbb0819c85a23c9feac04',
     ('tui.py', 'FinOpsApp.exit'): '0eca6d4250b8710094eaaa8e70580877c24e3355105e486982bd06668431c611',
     ('tui.py', 'FinOpsApp.saving'): '44059bf94d3104848136e785f478afbcceee274b20f58b1ba2b0e52a101fd007',
     ('tui.py', 'FinOpsApp.run_mutation'): 'dfd8fa28b3de4eb3cecb89af356b8c8fd338d7e3098f138f4b2815f795a305cb',

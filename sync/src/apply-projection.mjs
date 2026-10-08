@@ -350,6 +350,7 @@ try {
     toWrite: plan.toWrite.length, toDelete: plan.toDelete.length, keptOrphans: plan.keptOrphans.length, unchanged: plan.unchanged,
     excludedByNewerTargetedSync,
   };
+  if (userOid) summary.userRecord = records.find((r) => r.oid === userOid) ?? null;
   if (whatIf) { console.log(JSON.stringify(summary)); process.exit(0); }
   // ADR-0051 decision 4: an old file cannot restore old membership. The lock wait can outlast the
   // apply-by time checked when the snapshot was read, so it is checked again before the first write.

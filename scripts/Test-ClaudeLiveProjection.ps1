@@ -61,6 +61,53 @@ if (-not $SyncAccessPath) { $SyncAccessPath = Join-Path $root 'scripts\Sync-Clau
 if (-not $UpdatePath) { $UpdatePath = Join-Path $root 'Update-ClaudeGateway.ps1' }
 $results = [System.Collections.Generic.List[object]]::new()
 . (Join-Path $PSScriptRoot 'ClaudeLiveHarness.ps1')
+function ConvertTo-LiveOutputText([object[]]$Output) {
+    return (@($Output) | ForEach-Object {
+        if ($_ -is [Management.Automation.InformationRecord]) { [string]$_.MessageData }
+        elseif ($_ -is [string]) { $_ }
+    } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join "`n"
+}
+function Invoke-AccessSyncResult([hashtable]$Arguments) {
+    $output = @(& $SyncAccessPath @Arguments *>&1)
+    $tierObjects = @($output | Where-Object { $_ -and $_.PSObject.Properties['published_tier'] })
+    $tier = if ($tierObjects.Count) { [string]$tierObjects[$tierObjects.Count - 1].published_tier } else { '' }
+    return [pscustomobject]@{ Output = (ConvertTo-LiveOutputText $output); Tier = $tier.ToLowerInvariant() }
+}
+function Invoke-AccessSyncText([hashtable]$Arguments) {
+    return (Invoke-AccessSyncResult $Arguments).Output
+}
+function Get-SyncPrintedTier([AllowEmptyString()][string]$Output) {
+    $found = [regex]::Matches([string]$Output, '(?im)developer tier as written:\s*(standard|premium|none)\b')
+    if ($found.Count) { return $found[$found.Count - 1].Groups[1].Value.ToLowerInvariant() }
+    return ''
+}
+function Invoke-AccessSyncUntilTier([hashtable]$Arguments, [string]$ExpectedTier, [DateTime]$ChangedAt, [string]$Step) {
+    $deadline = $ChangedAt.AddSeconds($ChangeWaitSeconds)
+    $lastTier = ''
+    $lastOutput = ''
+    do {
+        $syncResult = Invoke-AccessSyncResult $Arguments
+        $lastOutput = $syncResult.Output
+        $lastTier = $syncResult.Tier
+        if (-not $lastTier) {
+            Add-Result $Step $false "Sync-ClaudeAccess printed no developer tier as written '$ExpectedTier'."
+            throw "$Step printed no developer tier as written '$ExpectedTier'."
+        }
+        if ($lastTier -eq $ExpectedTier) {
+            return [pscustomobject]@{ Tier = $lastTier; Seconds = [Math]::Round(((Get-Date) - $ChangedAt).TotalSeconds, 1); Output = $lastOutput }
+        }
+        if ((Get-Date) -lt $deadline) { Start-Sleep -Seconds $PollSeconds }
+    } while ((Get-Date) -lt $deadline)
+    Add-Result $Step $false "expected tier $ExpectedTier; last printed tier $lastTier after $ChangeWaitSeconds second(s)."
+    throw "$Step expected tier $ExpectedTier; last printed tier $lastTier after $ChangeWaitSeconds second(s)."
+}
+function Assert-SyncTierText([string]$Output, [string]$ExpectedTier, [string]$Step) {
+    $tier = Get-SyncPrintedTier $Output
+    if ($tier -ne $ExpectedTier) {
+        Add-Result $Step $false "Sync-ClaudeAccess printed no developer tier as written '$ExpectedTier'."
+        throw "$Step printed no developer tier as written '$ExpectedTier'."
+    }
+}
 $guid = '\A[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\z'
 Assert-Form SubscriptionId $SubscriptionId $guid
 Assert-Form Location $Location '\A[a-z0-9]{2,40}\z'
@@ -88,6 +135,7 @@ $resourceGroupCreated = $false
 $installerStarted = $false
 $failed = $false
 $originalSubscription = $null
+$projectionDeploymentReached = $false
 
 try {
     Write-Host "`n==> Subscription and resource group" -ForegroundColor Cyan
@@ -129,6 +177,7 @@ try {
     $installerStarted = $true
     & $InstallerPath @installerArgs
     $resourceGroupCreated = $true
+    if (-not $MigrateWithUpdate) { $projectionDeploymentReached = $true }
     Add-Result 'installer' $true $apimName
 
     if (-not $Model) {
@@ -145,11 +194,46 @@ try {
         Add-Result 'named values' $true 'entitlement-source named-value'
         Wait-GatewayStatus $url $Model 200 'entitled request on named values'
 
+        $fullSyncOutput = Invoke-AccessSyncText @{ ResourceGroup = $ResourceGroup; ApimName = $apimName }
+        if ($fullSyncOutput -match '(?i)\b(projection|cosmos)\b') {
+            Add-Result 'named-value full sync' $false 'named-value sync output named another store'
+            throw 'named-value sync output named another store.'
+        }
+        $recordedNamedValueGroups = Invoke-Az @('apim', 'nv', 'show', '-g', $ResourceGroup, '--service-name', $apimName, '--named-value-id', 'entitlement-groups', '--query', 'value', '-o', 'tsv', '--subscription', $SubscriptionId)
+        $expectedNamedValueGroups = "standard=$($groupIds[$StandardGroup]),premium=$($groupIds[$PremiumGroup])".ToLowerInvariant()
+        if ($recordedNamedValueGroups -ne $expectedNamedValueGroups) {
+            Add-Result 'named-value groups recorded' $false "entitlement-groups '$recordedNamedValueGroups', expected '$expectedNamedValueGroups'"
+            throw 'The named-value sync did not record the tier groups.'
+        }
+        Add-Result 'named-value groups recorded' $true $recordedNamedValueGroups
+
+        Invoke-Az @('ad', 'group', 'member', 'remove', '--group', $groupIds[$StandardGroup], '--member-id', $userId) | Out-Null
+        $removedAt = Get-Date
+        Wait-Membership $groupIds[$StandardGroup] $userId 'false'
+        # This disposable run's standard tier intentionally becomes empty after the removal. The named-value sync
+        # normally refuses to empty a tier that still has listed users, so the live proof must explicitly allow
+        # emptying only the standard tier for this targeted removal.
+        $removedSync = Invoke-AccessSyncUntilTier -Arguments @{ ResourceGroup = $ResourceGroup; ApimName = $apimName; User = $userId; AllowEmptyStandard = $true } -ExpectedTier 'none' -ChangedAt $removedAt -Step 'named-value removed sync tier'
+        $removedSeconds = $removedSync.Seconds
+        Add-Result 'named-value removed sync lag' $true "$removedSeconds second(s) from membership removal to tier none (U157)"
+        Wait-GatewayStatus $url $Model 403 'removed on named values, then targeted sync'
+
+        Invoke-Az @('ad', 'group', 'member', 'add', '--group', $groupIds[$StandardGroup], '--member-id', $userId) | Out-Null
+        $addedAt = Get-Date
+        Wait-Membership $groupIds[$StandardGroup] $userId 'true'
+        $addedSync = Invoke-AccessSyncUntilTier -Arguments @{ ResourceGroup = $ResourceGroup; ApimName = $apimName; User = $userId } -ExpectedTier 'standard' -ChangedAt $addedAt -Step 'named-value re-added sync tier'
+        $addedSeconds = $addedSync.Seconds
+        Add-Result 'named-value re-added sync lag' $true "$addedSeconds second(s) from membership add to tier standard (U157)"
+        Wait-GatewayStatus $url $Model 200 're-added on named values, then targeted sync'
+
         Write-Host "`n==> Update: the plan, then its apply" -ForegroundColor Cyan
         # The plan's review text comes back on the output stream with the result; printed, it keeps the planned
         # resources, cost and time in the run's log.
-        $planOutput = @(& $UpdatePath -ResourceGroup $ResourceGroup -ApimName $apimName)
-        foreach ($text in @($planOutput | Where-Object { $_ -is [string] })) { Write-Host $text }
+        $planOutput = @(& $UpdatePath -ResourceGroup $ResourceGroup -ApimName $apimName *>&1)
+        foreach ($text in @($planOutput | Where-Object { $_ -is [string] -or $_ -is [Management.Automation.InformationRecord] })) {
+            $line = if ($text -is [Management.Automation.InformationRecord]) { [string]$text.MessageData } else { [string]$text }
+            if ($line) { Write-Host $line }
+        }
         $plan = @($planOutput | Where-Object { $_ -isnot [string] -and $_.PSObject.Properties['Fingerprint'] })[0]
         $move = @(@($plan.Plans) | Where-Object { $_.Step -eq '0004-entitlement-projection' })[0]
         $fingerprint = [string]$plan.Fingerprint
@@ -159,6 +243,7 @@ try {
         }
         Add-Result 'update plan' $true "fingerprint $fingerprint, $(@($move.Actions).Count) action(s)"
         & $UpdatePath -ResourceGroup $ResourceGroup -ApimName $apimName -Apply -ApprovedPlanFingerprint $fingerprint | Out-Null
+        $projectionDeploymentReached = $true
         Add-Result 'update apply' $true $fingerprint
     }
 
@@ -224,7 +309,27 @@ finally {
                 }
             }
             else {
-                $teardownLeft.Add("Resolver app was not deleted because entitlement-resolver-audience could not be read from $apimName. Remove with: az ad app delete --id <app-id-from-entitlement-resolver-audience>")
+                $appListJson = Invoke-Az @('ad', 'app', 'list', '--display-name', $expectedResolverDisplayName, '--query', '[].{appId:appId,displayName:displayName}', '-o', 'json') -AllowFailure
+                $resolverApps = @()
+                if ($null -eq $appListJson) {
+                    $teardownLeft.Add("Resolver app lookup by display name '$expectedResolverDisplayName' failed. Finish by hand with: az ad app list --display-name $expectedResolverDisplayName; az ad app delete --id <appId>")
+                }
+                else {
+                    try {
+                        $resolverApps = @($appListJson | ConvertFrom-Json -ErrorAction Stop | Where-Object { [string]$_.displayName -eq $expectedResolverDisplayName -and [string]$_.appId -match $guid })
+                    }
+                    catch {
+                        $teardownLeft.Add("Resolver app lookup by display name '$expectedResolverDisplayName' returned output that was not JSON. Finish by hand with: az ad app list --display-name $expectedResolverDisplayName; az ad app delete --id <appId>")
+                    }
+                }
+                if ($resolverApps.Count -eq 1) {
+                    $resolverAppId = [string]$resolverApps[0].appId
+                    [void](Invoke-TeardownAz "Resolver app $resolverAppId" @('ad', 'app', 'delete', '--id', $resolverAppId) "az ad app delete --id $resolverAppId" $teardownLeft)
+                }
+                elseif ($resolverApps.Count -gt 1) {
+                    $commands = @($resolverApps | ForEach-Object { "az ad app delete --id $($_.appId)" })
+                    $teardownLeft.Add("Resolver app lookup by display name '$expectedResolverDisplayName' found more than one exact match: $((@($resolverApps | ForEach-Object appId)) -join ', '). Remove with: $($commands -join '; ')")
+                }
             }
             [void](Invoke-TeardownAz "Resource group $ResourceGroup" @('group', 'delete', '--name', $ResourceGroup, '--yes', '--no-wait', '--subscription', $SubscriptionId) "az group delete --name $ResourceGroup --yes --subscription $SubscriptionId" $teardownLeft)
         }
@@ -233,7 +338,7 @@ finally {
         }
         $teardownOk = $teardownLeft.Count -eq 0
         if (-not $teardownOk) { $failed = $true }
-        $detail = if ($teardownOk) { "deleted $ResourceGroup (if created), resolver app from entitlement-resolver-audience, role assignments, and $($createdGroups.Count) group(s) created by this run" } else { $teardownLeft -join ' ' }
+        $detail = if ($teardownOk) { "deleted $ResourceGroup (if created), resolver app found by entitlement-resolver-audience or exact display name, role assignments, and $($createdGroups.Count) group(s) created by this run" } else { $teardownLeft -join ' ' }
         Add-Result 'teardown' $teardownOk $detail
     }
     if ($UseCurrentAzLogin -and $originalSubscription -match $guid -and $originalSubscription -ne $SubscriptionId) {
