@@ -716,8 +716,8 @@ $mutations = @(
     @{ Suite = 'Test-ModelsAndPlugins.ps1'
        Name  = 'price book rates stop being decimal'
        File  = 'scripts/ClaudeBusinessUnit.ps1'
-       From  = 'InputPerM  = [decimal]$m.inputPerM'
-       To    = 'InputPerM  = $m.inputPerM' }
+       From  = '$parsed = [decimal]$Value'
+       To    = '$parsed = $Value' }
 
     @{ Suite = 'Test-ModelsAndPlugins.ps1'
        Name  = 'a malformed price book is silently ignored'
