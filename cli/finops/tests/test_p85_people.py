@@ -43,6 +43,7 @@ async def test_remove_person_preview_confirm_apply_and_refresh(monkeypatch, tmp_
         if kind == "direct":
             assert state.calls == [("developer_publish", None, {
                 "standard_group": "contoso-standard", "premium_group": "contoso-premium",
+                "user": USER,
                 "allow_empty_standard": True,
             })]
         else:
@@ -193,7 +194,7 @@ async def test_add_person_preview_apply_and_refresh(monkeypatch, tmp_path, kind)
         await settle(app, pilot)
         assert state.directory.writes == membership_writes(state, remove=False)
         expected = ("developer_publish", None, {
-            "standard_group": "contoso-standard", "premium_group": "contoso-premium",
+            "standard_group": "contoso-standard", "premium_group": "contoso-premium", "user": USER,
         }) if kind == "direct" else ("delegated_publish", None, {})
         assert state.calls == [expected]
         reads = state.people_reads

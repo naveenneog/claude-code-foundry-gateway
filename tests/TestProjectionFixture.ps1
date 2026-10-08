@@ -270,6 +270,7 @@ function az {
         if ($command -match 'apply-projection\.mjs .*--compare-snapshot ') { return '{"ok":true,"mode":"compare-snapshot","compared":1,"differences":0,"byKind":{},"sample":[]}' }
         if ($command -match 'apply-projection\.mjs .*--compare ') { return '{"ok":true,"mode":"compare","gateway":"apim-p84","compared":1,"projectionRecords":1,"differences":0,"byKind":{},"sample":[]}' }
         if ($FixtureCase -eq 'apply-excluded' -and $command -match 'apply-projection\.mjs .*--snapshot ') { return '{"ok":true,"written":0,"deleted":0,"unchanged":1,"excludedByNewerTargetedSync":2}' }
+        if ($command -match 'apply-projection\.mjs .*--snapshot ' -and $command -match '--user 30000000-0000-4000-8000-000000000001') { return '{"ok":true,"written":1,"deleted":0,"unchanged":0,"excludedByNewerTargetedSync":0,"userRecord":{"oid":"30000000-0000-4000-8000-000000000001","tier":"standard","businessUnit":""}}' }
         if ($command -match 'check-admission\.mjs ') {
             switch ($FixtureCase) {
                 'admission-no-full-sync' { return '{"ok":false,"mode":"switch-evidence","newestFullSync":null,"invalidCount":0,"reason":"no full sync within 24 hours for this account and tenant"}' }
@@ -320,11 +321,15 @@ function Invoke-RestMethod {
         if ($FixtureCase -in @('401','403','network','group-error')) { throw "Graph $FixtureCase lookup failed" }
         if ($FixtureCase -eq 'group-shape') { return [pscustomobject]@{} }
         if ($FixtureCase -eq 'group-missing' -or ($FixtureCase -eq 'standard-missing' -and $url -match 'claude-code-standard') -or ($FixtureCase -eq 'premium-missing' -and $url -match 'claude-code-premium')) { return [pscustomobject]@{ value = @() } }
-        $groups = @([pscustomobject]@{ id = $(if ($url -match 'claude-code-premium') { $FixturePremiumGroupId } else { $FixtureGroupId }); displayName = 'fixture' })
+        $groups = @([pscustomobject]@{ id = $(if ($url -match 'claude-code-premium' -or $url -match [regex]::Escape($FixturePremiumGroupId)) { $FixturePremiumGroupId } else { $FixtureGroupId }); displayName = 'fixture' })
         if ($FixtureCase -eq 'group-duplicate') { $groups += [pscustomobject]@{ id = $FixtureApp; displayName = 'fixture' } }
         if ($FixtureCase -eq 'group-no-id') { $groups[0].id = '' }
         if ($FixtureCase -eq 'group-null-nextlink') { return [pscustomobject]@{ value=$groups; '@odata.nextLink'=$null } }
         return [pscustomobject]@{ value = $groups }
+    }
+    if ($url -like 'https://graph.microsoft.com/v1.0/users/*?$select=id') {
+        if ($url -match '/users/missing@contoso\.com\?') { return [pscustomobject]@{} }
+        return [pscustomobject]@{ id = $FixtureGroupId }
     }
     if ($url -like 'https://graph.microsoft.com/v1.0/groups/*/transitiveMembers/*') {
         if ($FixtureCase -eq 'member-error') { throw 'Graph 403 membership denied' }

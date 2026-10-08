@@ -29,6 +29,18 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P101 one sync command for every store.** `scripts/Sync-ClaudeAccess.ps1 -User <upn-or-object-id>` now works
+  on named-value and projection gateways. The sync resolves tier groups from parameters, then the gateway
+  `entitlement-groups` named value, then the gateway decision record, then the default group names; a missing
+  recorded group stops before writes with the `-StandardGroup`, `-PremiumGroup` and `-RecordGroups` remedy.
+  A sync records `entitlement-groups` (object IDs only) when each tier came from a parameter, the gateway's own
+  `entitlement-groups` or this gateway's decision record and its list was written; a default-name fallback or a
+  tier list skipped by the empty-tier guard is synced but recorded only with `-RecordGroups`. `-RecordGroups` is
+  also required to replace recorded groups, and a decision record that disagrees with `entitlement-groups` stops
+  the sync before any write. The sync prints each tier's display name, object ID and source, and refuses equal
+  standard and premium IDs. AUM Direct developer publication passes the developer object ID as `-User`, compares
+  the returned `published_tier` with the requested outcome and retries for Microsoft Graph lag before warning.
+  The Turnstile apply records its tier groups with `-RecordGroups` ([ADR-0057](docs/adr/0057-one-sync-command.md)).
 - **P103 user guides open with a Quickstart, and every other section is a disclosure (part 1).** README,
   SETUP, ARCHITECTURE and 38 guides open with an H1, a purpose line and a visible `## Quickstart` with its
   expected result. Every other section heading stays visible, with its body in one `<details>` block whose

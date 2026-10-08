@@ -94,6 +94,15 @@ class ManagementFixture:
         elif action == "usd_budget":
             self.usd["items"] = [dict(scope_type=params["scope_type"], scope_id=params["scope_id"],
                                       amount_usd=body["amount_usd"], period=body["period"])]
+        elif action == "developer_publish":
+            if USER in self.directory.group_members.get(PREMIUM, set()):
+                return dict(verified=True, published=True, audit_id="audit-1", revision="revision-2",
+                            published_tier="premium")
+            if USER in self.directory.group_members.get(STANDARD, set()):
+                return dict(verified=True, published=True, audit_id="audit-1", revision="revision-2",
+                            published_tier="standard")
+            return dict(verified=True, published=True, audit_id="audit-1", revision="revision-2",
+                        published_tier="none")
         else:
             assert action in {"developer_publish", "delegated_publish"}, action
         return dict(verified=True, published=True, audit_id="audit-1", revision="revision-2")

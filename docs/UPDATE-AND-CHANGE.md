@@ -95,8 +95,10 @@ The Cosmos projection is the installer's default store ([ADR-0052](adr/0052-cosm
 Projection records persist until a sync removes or changes the person. A sync-job outage does not
 stop developers. Add or remove a developer in the Entra group, then run
 `scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim> -User <name-or-object-id>` for one
-person, or omit `-User` for everyone. Removal takes effect after the sync plus at most
-`entitlement-cache-seconds`; disabled Entra accounts lose access when their current token expires,
+person, or omit `-User` for everyone. The same command works for named values and the Cosmos projection;
+named values publish a whole-list refresh and report the developer's written tier. If the group change happened
+seconds ago, Microsoft Graph can still report the previous membership; rerun the sync until it reports the expected
+`published_tier`, then allow at most `entitlement-cache-seconds` for the gateway cache. Disabled Entra accounts lose access when their current token expires,
 60 to 90 minutes by default (Microsoft Learn access tokens, updated 2026-07-17:
 https://learn.microsoft.com/entra/identity-platform/access-tokens).
 

@@ -57,6 +57,12 @@ function Get-Facts([hashtable]$Extra = @{}) {
 . (Join-Path $root 'scripts\flow\lib\LifecycleCommon.ps1')
 . (Join-Path $root 'scripts\ClaudeEntitlementMigration.ps1')
 
+$migrationSource = [IO.File]::ReadAllText((Join-Path $root 'scripts\ClaudeEntitlementMigration.ps1'))
+$resolveStart = $migrationSource.IndexOf('function Resolve-ClaudeMigrationGroup')
+$resolveEnd = $migrationSource.IndexOf('# A snapshot', $resolveStart)
+$resolveBody = if ($resolveStart -ge 0 -and $resolveEnd -gt $resolveStart) { $migrationSource.Substring($resolveStart, $resolveEnd - $resolveStart) } else { '' }
+Assert 'migration 0004 resolves tier groups through the shared resolver' ($resolveBody.Contains('Resolve-ClaudeEntitlementGroupCandidate')) $resolveBody
+
 Write-Host 'P100 previous values: groups, prefix, developers'
 Get-Facts
 $f = $CapturedResult

@@ -720,9 +720,10 @@ CLI equivalent:
 $user = az ad user show --id amara@contoso.com --query id -o tsv
 $standard = az ad group show --group <standard-tier-group> --query id -o tsv
 az ad group member add --group $standard --member-id $user
-.\scripts\Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim>
+.\scripts\Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim> -User $user
 ```
-Direct refresh refuses when Turnstile owns publication.
+Direct refresh refuses when Turnstile owns publication. The same `-User` command works for named values and the
+Cosmos projection; named values publish a whole-list refresh and report the developer's written tier.
 
 #### Manual Azure portal and Azure CLI path
 

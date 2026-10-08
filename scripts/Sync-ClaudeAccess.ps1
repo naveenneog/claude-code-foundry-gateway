@@ -40,21 +40,16 @@ param(
     [switch]$AllowEmptyPremium,
     [switch]$WhatIf,
     [ValidateSet('auto','named-value','projection')][string]$Store = 'auto',
-    [string]$User
+    [string]$User,
+    [switch]$RecordGroups
 )
 
 $ErrorActionPreference = 'Stop'
 
-# The groups recorded for this gateway, then the default names. A fixed default published the
-# tenant's claude-code-* groups to a gateway installed with other group names.
-if (-not $StandardGroup) { $StandardGroup = [string](& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') StandardGroup -ForApimName $ApimName 3>$null) }
-if (-not $PremiumGroup) { $PremiumGroup = [string](& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') PremiumGroup -ForApimName $ApimName 3>$null) }
-if (-not $StandardGroup) { $StandardGroup = 'claude-code-standard' }
-if (-not $PremiumGroup) { $PremiumGroup = 'claude-code-premium' }
-
 . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
 
 . (Join-Path $PSScriptRoot 'ClaudeGraphMembership.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeEntitlementGroups.ps1')
 
 function Invoke-ClaudeProjectionAccessSync {
     param(
@@ -91,13 +86,21 @@ function Invoke-ClaudeProjectionAccessSync {
         $exportOutput = & pwsh @exportArgs 2>&1
         if ($LASTEXITCODE -ne 0) { throw "Projection snapshot export failed (exit $LASTEXITCODE): $(($exportOutput | Select-Object -Last 12) -join "`n")" }
         $targetUserOid = $null
+        $targetSnapshotRecord = $null
         if ($User) {
             $snap = Get-Content -LiteralPath $snapshot -Raw | ConvertFrom-Json
             if (-not $snap.user -or [string]$snap.scope -ne 'user') { throw 'Targeted projection export did not produce a user-scoped snapshot.' }
             $targetUserOid = [string]$snap.user
+            $targetSnapshotRecord = @($snap.records | Where-Object { [string]$_.oid -eq $targetUserOid } | Select-Object -First 1)
         }
         if ($WhatIf) {
             Write-Host "  [WhatIf] Projection snapshot exported to $snapshot; runner was not started and Cosmos was not changed." -ForegroundColor DarkGray
+            if ($targetUserOid) {
+                $publishedTier = if ($targetSnapshotRecord -and $targetSnapshotRecord.tier) { [string]$targetSnapshotRecord.tier } else { 'none' }
+                Write-Host "Developer tier as written: $publishedTier" -ForegroundColor Green
+                Write-Host "Microsoft Graph can report a membership change a few minutes late; if this developer's groups changed just now and the tier is the previous one, run this command again." -ForegroundColor DarkGray
+                [pscustomobject]@{ published_tier = $publishedTier; user = $targetUserOid }
+            }
             return
         }
         $runner = "aci-projtest-$prefix"
@@ -117,6 +120,16 @@ function Invoke-ClaudeProjectionAccessSync {
         $raw = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $runner -Command $command
         $result = ConvertFrom-ClaudeRunnerResult -RawOutput $raw -Step 'projection apply'
         Write-Host ("Projection sync complete: written={0} deleted={1} unchanged={2}" -f ([int]$result.written), ([int]$result.deleted), ([int]$result.unchanged)) -ForegroundColor Green
+        if ($targetUserOid) {
+            $appliedRecord = $null
+            if ($result.PSObject.Properties['userRecord']) { $appliedRecord = $result.userRecord }
+            $publishedTier = if ($appliedRecord -and $appliedRecord.PSObject.Properties['tier'] -and $appliedRecord.tier) { [string]$appliedRecord.tier }
+                elseif ($targetSnapshotRecord -and $targetSnapshotRecord.tier) { [string]$targetSnapshotRecord.tier }
+                else { 'none' }
+            Write-Host "Developer tier as written: $publishedTier" -ForegroundColor Green
+            Write-Host "Microsoft Graph can report a membership change a few minutes late; if this developer's groups changed just now and the tier is the previous one, run this command again." -ForegroundColor DarkGray
+            [pscustomobject]@{ published_tier = $publishedTier; user = $targetUserOid }
+        }
         $excluded = [int]$result.excludedByNewerTargetedSync
         if ($excluded -gt 0) {
             Write-Host ("  {0} user(s) changed by a targeted sync while this full sync ran were left out of it (ADR-0051 decision 11). Remedy: rerun scripts/Sync-ClaudeAccess.ps1 -ResourceGroup {1} -ApimName {2} after five minutes, or with -User for each of them." -f $excluded, $ResourceGroup, $ApimName) -ForegroundColor Yellow
@@ -137,9 +150,71 @@ if ($selectedStore -eq 'auto') {
     $source = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-source' -FailOnError
     $selectedStore = if ($source -eq 'projection') { 'projection' } else { 'named-value' }
 }
-if ($User -and $selectedStore -eq 'named-value') { throw '-User cannot be used with -Store named-value because named values are rewritten whole.' }
+
+$graphToken = Get-GraphToken
+$groupResolution = Resolve-ClaudeEntitlementGroupsForSync -ResourceGroup $ResourceGroup -ApimName $ApimName -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup `
+    -GetNamedValue { param($Id) Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id $Id -FailOnError } `
+    -FindGroup { param($Value) Get-ClaudeGraphGroup -GroupName $Value -Token $graphToken }
+
+function Assert-RecordGroupChangeAllowed {
+    param([string]$Tier, [string]$Explicit, [string]$Recorded, [string]$Resolved)
+    if (-not $Explicit -or -not $Recorded) { return }
+    if ([string]::Equals($Recorded, $Resolved, [StringComparison]::OrdinalIgnoreCase)) { return }
+    if ($RecordGroups) { return }
+    $switch = if ($Tier -eq 'standard') { '-StandardGroup' } else { '-PremiumGroup' }
+    throw "The gateway records $Tier group '$Recorded' in entitlement-groups, but $switch resolved to '$Resolved'. Remedy: rerun with -RecordGroups to replace entitlement-groups after a successful sync. Nothing was written."
+}
+Assert-RecordGroupChangeAllowed -Tier standard -Explicit $StandardGroup -Recorded ([string]$groupResolution.Recorded['standard']) -Resolved ([string]$groupResolution.Standard.Id)
+Assert-RecordGroupChangeAllowed -Tier premium -Explicit $PremiumGroup -Recorded ([string]$groupResolution.Recorded['premium']) -Resolved ([string]$groupResolution.Premium.Id)
+
+function Assert-DecisionRecordMatchesEntitlementGroups {
+    param([string]$Tier, [string]$Recorded, [object]$Decision)
+    if (-not $Recorded -or -not $Decision -or -not $Decision.Id) { return }
+    if ([string]::Equals($Recorded, [string]$Decision.Id, [StringComparison]::OrdinalIgnoreCase)) { return }
+    if ($RecordGroups) { return }
+    throw "The gateway records $Tier group '$Recorded' in entitlement-groups, but this gateway's decision record resolves to '$([string]$Decision.Id)'. Remedy: rerun with -RecordGroups to replace entitlement-groups after a successful sync, or restore the recorded group. Nothing was written."
+}
+Assert-DecisionRecordMatchesEntitlementGroups -Tier standard -Recorded ([string]$groupResolution.Recorded['standard']) -Decision $groupResolution.DecisionStandard
+Assert-DecisionRecordMatchesEntitlementGroups -Tier premium -Recorded ([string]$groupResolution.Recorded['premium']) -Decision $groupResolution.DecisionPremium
+
+$StandardGroup = [string]$groupResolution.Standard.Argument
+$PremiumGroup = [string]$groupResolution.Premium.Argument
+$targetUserOid = if ($User) { Resolve-ClaudeGraphUserObjectId -Identity $User -Token $graphToken } else { '' }
+
+Write-Host "Tier groups resolved:" -ForegroundColor Cyan
+foreach ($resolvedGroup in @($groupResolution.Standard, $groupResolution.Premium)) {
+    Write-Host ("  {0,-8} {1,-36} {2,-36} {3}" -f $resolvedGroup.Tier, $resolvedGroup.DisplayName, $resolvedGroup.Id, $resolvedGroup.Source) -ForegroundColor DarkGray
+}
+
+function Get-ClaudeNamedValueTierForUser {
+    param([string]$UserObjectId, [string]$StandardList, [string]$PremiumList)
+    $needle = ",$($UserObjectId.ToLowerInvariant()),"
+    if (([string]$PremiumList).ToLowerInvariant().Contains($needle)) { return 'premium' }
+    if (([string]$StandardList).ToLowerInvariant().Contains($needle)) { return 'standard' }
+    return 'none'
+}
+
+$skippedTierWrites = [Collections.Generic.List[string]]::new()
+function Set-ClaudeEntitlementGroupsIfNeeded {
+    if ($WhatIf) { return }
+    $recordReasons = [Collections.Generic.List[string]]::new()
+    foreach ($resolvedGroup in @($groupResolution.Standard, $groupResolution.Premium)) {
+        if ($resolvedGroup.Source -eq 'default name') { $recordReasons.Add("$($resolvedGroup.Tier) came from the default name fallback") }
+    }
+    foreach ($tierName in @($skippedTierWrites)) { $recordReasons.Add("$tierName list was skipped by the empty-tier guard") }
+    if ($recordReasons.Count -and -not $RecordGroups) {
+        Write-Host ("Not recording entitlement-groups: {0}. Rerun with -RecordGroups after verifying the tier groups are this gateway's intended groups." -f ($recordReasons -join '; ')) -ForegroundColor Yellow
+        return
+    }
+    $wanted = ConvertTo-ClaudeEntitlementGroups -StandardId ([string]$groupResolution.Standard.Id) -PremiumId ([string]$groupResolution.Premium.Id)
+    if ($RecordGroups -or -not $groupResolution.Raw -or $groupResolution.Raw -ne $wanted) {
+        Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-groups' -Value $wanted
+    }
+}
+
 if ($selectedStore -eq 'projection') {
     Invoke-ClaudeProjectionAccessSync -ApimName $ApimName -ResourceGroup $ResourceGroup -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -User $User -AllowEmpty:$AllowEmpty -WhatIf:$WhatIf
+    Set-ClaudeEntitlementGroupsIfNeeded
     return
 }
 
@@ -172,8 +247,6 @@ $seen = @{}
 # Every value is resolved and checked against the 4,096-character limit before the first write, so a list
 # that does not fit leaves every named value as it was, rather than some lists refreshed beside others stale.
 $pendingWrites = [Collections.Generic.List[object]]::new()
-$graphToken = Get-GraphToken
-
 foreach ($t in $tiers) {
     $members = @(Get-GroupMemberOids -GroupName $t.Group -Token $graphToken)
 
@@ -210,8 +283,7 @@ foreach ($t in $tiers) {
     # resolving to empty while APIM still holds entries for it.
     $allowEmptyTier = $AllowEmpty -or ($t.Name -eq 'standard' -and $AllowEmptyStandard) -or ($t.Name -eq 'premium' -and $AllowEmptyPremium)
     if (-not $effective.Count -and -not $allowEmptyTier -and -not $WhatIf) {
-        $current = az apim nv show -g $ResourceGroup --service-name $ApimName `
-            --named-value-id $t.NamedValue --query value -o tsv 2>$null
+        $current = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id $t.NamedValue -FailOnError
         if ($current -and $current.Trim().Trim(',')) {
             Write-Host ''
             Write-Warning ("$($t.Group) resolved to 0 members, but '$($t.NamedValue)' currently entitles " +
@@ -219,6 +291,7 @@ foreach ($t in $tiers) {
             Write-Host "  If the group really is empty, re-run with -AllowEmpty." -ForegroundColor DarkGray
             Write-Host "  Otherwise check the group name and that you can read its membership." -ForegroundColor DarkGray
             Write-Host ''
+            $skippedTierWrites.Add($t.Name)
             continue
         }
     }
@@ -282,7 +355,7 @@ else {
     # Same guard as entitlement: a lookup that resolved nothing must not wipe a
     # map that currently assigns people, because the result is silent and the
     # symptom is spend landing on no budget.
-    $currentBu = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-members'
+    $currentBu = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-members' -FailOnError
     $currentCount = @(ConvertFrom-ClaudeBuMembers $currentBu).Keys.Count
 
     if (-not $buMap.Keys.Count -and -not $AllowEmpty -and -not $WhatIf -and $currentCount) {
@@ -306,6 +379,21 @@ else {
 
 foreach ($write in $pendingWrites) { Test-ApimNamedValueLength -Id $write.Id -Value $write.Value }
 foreach ($write in $pendingWrites) { Set-NamedValue -Id $write.Id -Value $write.Value }
+Set-ClaudeEntitlementGroupsIfNeeded
+
+if ($targetUserOid) {
+    $standardList = if ($WhatIf) { [string]@($pendingWrites | Where-Object Id -eq 'allow-standard' | Select-Object -First 1).Value } else { Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'allow-standard' -FailOnError }
+    $premiumList = if ($WhatIf) { [string]@($pendingWrites | Where-Object Id -eq 'allow-premium' | Select-Object -First 1).Value } else { Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'allow-premium' -FailOnError }
+    $publishedTier = Get-ClaudeNamedValueTierForUser -UserObjectId $targetUserOid -StandardList $standardList -PremiumList $premiumList
+    Write-Host "Developer tier as written: $publishedTier" -ForegroundColor Green
+    if ($skippedTierWrites.Count) {
+        Write-Host "A tier write was skipped by the empty-tier guard; rerun with -AllowEmptyStandard, -AllowEmptyPremium or -AllowEmpty if the group really is empty." -ForegroundColor DarkGray
+    }
+    else {
+        Write-Host "Microsoft Graph can report a membership change a few minutes late; if this developer's groups changed just now and the tier is the previous one, run this command again." -ForegroundColor DarkGray
+    }
+    [pscustomobject]@{ published_tier = $publishedTier; user = $targetUserOid }
+}
 
 Write-Host "Done. $($seen.Count) identity(ies) authorised." -ForegroundColor Green
 Write-Host "Anyone not listed receives HTTP 403 from the gateway." -ForegroundColor DarkGray

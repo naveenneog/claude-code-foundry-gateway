@@ -118,8 +118,8 @@ Most changes use on-demand sync. Add or remove a developer in the Entra group, t
 ```
 
 Without `-User`, the script syncs every entitled person. `-Store auto` follows the gateway's
-`entitlement-source`; `-Store named-value` refreshes the named-value lists before rollback. A
-projection sync reads the gateway named value `entitlement-projection-prefix`, exports a fresh
+`entitlement-source`; named values refresh the whole allow-list and report the requested developer's written
+tier, while the projection sync reads the gateway named value `entitlement-projection-prefix`, exports a fresh
 snapshot with the operator's Microsoft Entra sign-in, starts the in-VNet runner when it has stopped,
 and writes Cosmos from inside the VNet. The runner uses `sleep 10800` and restart policy `Never`;
 `az container start` starts a container group whose containers terminated on their own (Microsoft
@@ -660,8 +660,9 @@ Endpoints**), save, and repeat the verification above.
 A successful full sync supplies switch evidence for 24 hours. The deployer, installer and guided
 Entitlement step switch through `Invoke-ClaudeProjectionSwitch`, which deploys and applies nothing.
 Evidence is read through the in-VNet runner and is destination-bound to the Cosmos account, database,
-container and tenant. It requires no renewal receipt and no job definition. A targeted `-User` sync is
-for one developer and does not count as switch evidence.
+container and tenant. It requires no renewal receipt and no job definition. A targeted projection `-User` sync is
+for one developer and does not count as switch evidence; named-value `-User` runs a whole-list refresh because
+named values are rewritten as complete lists.
 
 The switch refuses when a live entitlement record is one the resolver would refuse: wrong tenant,
 unknown tier, malformed generation, missing or future `lastVerifiedAt`, or a status record reached

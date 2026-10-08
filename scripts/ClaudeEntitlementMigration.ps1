@@ -8,6 +8,7 @@
 # ConvertTo-ClaudeArmRegionName: az apim show gives 'East US 2'; ARM, the Retail Prices API and the usage
 # reads take 'eastus2' (as Install-ClaudeGateway.ps1 converts an existing gateway's region).
 . (Join-Path $PSScriptRoot 'ClaudeGatewayRegion.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeEntitlementGroups.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeRunnerTransferModel.ps1')
 
 function Test-ClaudeMigrationGuid([AllowEmptyString()][string]$Value) {
@@ -20,49 +21,23 @@ function ConvertFrom-ClaudeEntitlementList([AllowEmptyString()][string]$Value) {
         Where-Object { Test-ClaudeMigrationGuid $_ } | Select-Object -Unique)
 }
 
-# entitlement-groups (ADR-0054): 'standard=<object id>,premium=<object id>|none'. Only object ids, so the
-# value passes az.cmd and cmd.exe unchanged; names are read back from Graph.
-function ConvertFrom-ClaudeEntitlementGroups([AllowEmptyString()][string]$Value) {
-    $result = @{}
-    foreach ($pair in ([string]$Value -split ',')) {
-        if ($pair -match '^\s*(standard|premium)=([0-9a-fA-F-]{36}|none)\s*$') {
-            $id = $Matches[2].ToLowerInvariant()
-            if ($id -eq 'none' -or (Test-ClaudeMigrationGuid $id)) { $result[$Matches[1]] = $id }
-        }
-    }
-    return $result
-}
-
-function ConvertTo-ClaudeEntitlementGroups([Parameter(Mandatory)][string]$StandardId, [AllowEmptyString()][string]$PremiumId) {
-    if (-not (Test-ClaudeMigrationGuid $StandardId)) { throw "entitlement-groups needs the standard group's object id, not '$StandardId'." }
-    $premium = if ($PremiumId) { $PremiumId } else { 'none' }
-    if ($premium -ne 'none' -and -not (Test-ClaudeMigrationGuid $premium)) { throw "entitlement-groups needs the premium group's object id or none, not '$PremiumId'." }
-    return "standard=$($StandardId.ToLowerInvariant()),premium=$($premium.ToLowerInvariant())"
-}
-
 # The first candidate that Graph finds wins. A candidate 'none' says the tier has no group. A value the operator
 # passed, the gateway records or the gateway's decision record names is not replaced by a later candidate when
 # Graph cannot find it: a typo or a deleted group would otherwise select another group, such as the default name,
 # with no sign in the plan. Only the default names are a fallback.
 function Resolve-ClaudeMigrationGroup {
     param([Parameter(Mandatory)][string]$Tier, [object[]]$Candidates, [Parameter(Mandatory)][scriptblock]$FindGroup)
-    foreach ($candidate in $Candidates) {
-        if (-not $candidate.Value) { continue }
-        if ($candidate.Value -eq 'none') {
-            return [pscustomobject]@{ Tier = $Tier; Name = ''; Id = ''; Source = $candidate.Source; Found = $false; Absent = $true; Missing = ''; Members = @() }
-        }
-        $group = & $FindGroup $candidate.Value
-        if ($group -and $group.Id) {
-            $members = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-            foreach ($member in @($group.Members)) { if ($member) { $null = $members.Add(([string]$member).ToLowerInvariant()) } }
-            return [pscustomobject]@{ Tier = $Tier; Name = [string]$group.Name; Id = ([string]$group.Id).ToLowerInvariant(); Source = $candidate.Source; Found = $true; Absent = $false
-                Missing = ''; Members = @($members) }
-        }
-        if ($candidate.Authoritative) {
-            return [pscustomobject]@{ Tier = $Tier; Name = ''; Id = ''; Source = $candidate.Source; Found = $false; Absent = $false; Missing = [string]$candidate.Value; Members = @() }
-        }
+    $resolved = Resolve-ClaudeEntitlementGroupCandidate -Tier $Tier -Candidates $Candidates -FindGroup $FindGroup
+    $members = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    if ($resolved.Found -and $resolved.Group) {
+        foreach ($member in @($resolved.Group.Members)) { if ($member) { $null = $members.Add(([string]$member).ToLowerInvariant()) } }
     }
-    return [pscustomobject]@{ Tier = $Tier; Name = ''; Id = ''; Source = ''; Found = $false; Absent = $false; Missing = ''; Members = @() }
+    $name = ''
+    if ($resolved.Found -and $resolved.Group -and $resolved.Group.PSObject.Properties['Name']) { $name = [string]$resolved.Group.Name }
+    [pscustomobject]@{
+        Tier = $Tier; Name = $name; Id = [string]$resolved.Id; Source = [string]$resolved.Source; Found = [bool]$resolved.Found
+        Absent = [bool]$resolved.Absent; Missing = [string]$resolved.Missing; Members = @($members)
+    }
 }
 
 # A snapshot takes about 127 bytes a record (63,150,738 bytes for 500,000, measured 2026-10-06). The runner sends it
