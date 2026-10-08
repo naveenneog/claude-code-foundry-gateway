@@ -96,6 +96,11 @@ class DollarArithmeticTests(unittest.TestCase):
         conflict = deepcopy(book)
         conflict["models"]["claude-haiku-4-5"] = {"inputPerM": 2, "outputPerM": 5}
         self.assertIsNone(price_book_key("claude-haiku-4-5-20251001", conflict))
+        cache_conflict = {"models": {
+            "claude-haiku-4.5": {"inputPerM": 1, "outputPerM": 5},
+            "claude-haiku-4-5": {"inputPerM": 1, "outputPerM": 5, "cacheReadPerM": "0.05"},
+        }}
+        self.assertIsNone(price_book_key("claude-haiku-4-5-20251001", cache_conflict))
 
     def test_all_five_categories_are_priced_before_sum_without_rounding(self):
         result = price_row(row(cache_write_1h_tokens=1000), BOOK)
