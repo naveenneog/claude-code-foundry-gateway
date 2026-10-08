@@ -33,8 +33,8 @@ exact streaming cache-creation detail remains **U13**.
   on named-value and projection gateways. The sync resolves tier groups from parameters, then the gateway
   `entitlement-groups` named value, then the gateway decision record, then the default group names; a missing
   recorded group stops before writes with the `-StandardGroup`, `-PremiumGroup` and `-RecordGroups` remedy.
-  A sync records `entitlement-groups` (object IDs only) when each tier came from a parameter, the gateway's own
-  `entitlement-groups` or this gateway's decision record and its list was written; a default-name fallback or a
+  A sync records `entitlement-groups` (object IDs only) when each tier came from a parameter or this gateway's
+  decision record and its list was written; a default-name fallback or a
   tier list skipped by the empty-tier guard is synced but recorded only with `-RecordGroups`. `-RecordGroups` is
   also required to replace recorded groups, and a decision record that disagrees with `entitlement-groups` stops
   the sync before any write. The sync prints each tier's display name, object ID and source, and refuses equal

@@ -1,7 +1,7 @@
 # ADR-0057: One sync command for every entitlement store
 
 Status: Accepted (2026-10-07), at the owner's request of 2026-10-06 for the same user sync command on a
-named-value gateway and on the Cosmos projection.
+named-value gateway and on the Cosmos projection. Merged on 2026-10-08 (`44ebef3f`).
 
 ## Context
 
