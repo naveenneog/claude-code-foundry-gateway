@@ -470,6 +470,31 @@ try {
         $qs = @(Get-ClaudeModelQuestions -Record $global:P70record -Discovery $state -PriceBook (Get-ClaudeModelPriceBook $global:P70bookPath))
         @($qs | Where-Object Key -eq 'models.tiers.next~opus')[0].Question -match 'unpriced' -and @($qs | Where-Object Key -eq 'models.tiers.claude-haiku-4-5')[0].Question -match 'per million'
     }
+    Check 'PowerShell price matching uses the same normalized dated model fixture' {
+        $book = [pscustomobject]@{ date = '2026-10-08'; source = 'test tariff'; models = [pscustomobject]@{
+            'claude-haiku-4.5' = [pscustomobject]@{ inputPerM = 1; outputPerM = 5 }
+            'claude-opus-5' = [pscustomobject]@{ inputPerM = 5; outputPerM = 25 }
+            'claude-opus-5-5' = [pscustomobject]@{ inputPerM = 4; outputPerM = 20 }
+            'claude-sonnet-5' = [pscustomobject]@{ inputPerM = 2; outputPerM = 10 }
+        } }
+        $cases = @(
+            @('claude-haiku-4-5', 'claude-haiku-4.5'),
+            @('claude-haiku-4-5-20251001', 'claude-haiku-4.5'),
+            @('claude-opus-5-5', 'claude-opus-5-5'),
+            @('Claude-Sonnet-5', 'claude-sonnet-5'),
+            @('claude-sonnet-5-2', ''),
+            @('gpt-5', '')
+        )
+        foreach ($case in $cases) {
+            $deployment = [pscustomobject]@{ name = $case[0]; model = $case[0]; sku = 'GlobalStandard' }
+            $actual = (Get-ClaudeDeploymentPrice $deployment $book).SourceKey
+            if ($actual -cne $case[1]) { throw "$($case[0]) matched '$actual', expected '$($case[1])'" }
+        }
+        $withoutOpus55 = [pscustomobject]@{ date = '2026-10-08'; source = 'test tariff'; models = [pscustomobject]@{
+            'claude-opus-5' = [pscustomobject]@{ inputPerM = 5; outputPerM = 25 }
+        } }
+        -not (Get-ClaudeDeploymentPrice ([pscustomobject]@{ name = 'claude-opus-5-5'; model = 'claude-opus-5-5'; sku = 'GlobalStandard' }) $withoutOpus55).SourceKey
+    }
     Check 'oversized model lists fail before backup or writes' {
         $extra = 1..85 | ForEach-Object { 'missing-' + $_.ToString('000') + ('x' * 45) }
         $global:P70nvs['models-standard'] = ',sonnet,' + ($extra -join ',') + ','

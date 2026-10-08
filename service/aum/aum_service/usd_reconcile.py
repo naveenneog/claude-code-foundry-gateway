@@ -28,9 +28,9 @@ let metered = ClaudeChargeback(_from, _to)
     missing_reads=countif(not(coalesce(cache_read_known,false))),
     missing_writes=countif(not(coalesce(cache_write_known,false))),
     not_body=countif(usage_source != "body"), geographies=make_set(inference_geo, 2),
-    units=make_set(business_unit, 2), models=make_set(model, 2),
+    models=make_set(model, 2),
     ingestion_delay_seconds=max(datetime_diff('second', ingested_at, timestamp))
-    by day=startofday(timestamp), user_id, deployment;
+    by day=startofday(timestamp), user_id, deployment, business_unit=coalesce(business_unit, "unassigned");
 let cached = AppMetrics
 | where TimeGenerated >= _from and TimeGenerated < _to
 | where Name == "Prompt Cached Tokens"
@@ -40,7 +40,7 @@ let cached = AppMetrics
 metered | join kind=fullouter cached on day, user_id, deployment
 | project day=coalesce(day,day1), user_id=coalesce(user_id,user_id1),
     deployment=coalesce(deployment,deployment1), model=tostring(models[0]),
-    business_unit=iff(array_length(units) == 1,tostring(units[0]),''),
+    business_unit=coalesce(business_unit, "unassigned"),
     prompt_tokens=coalesce(prompt_tokens,0), completion_tokens=coalesce(completion_tokens,0),
     cache_read_tokens=iff(isnotnull(missing_reads) and missing_reads == 0,
         coalesce(body_reads,0),max_of(coalesce(body_reads,0),coalesce(metric_reads,0))),

@@ -1,6 +1,6 @@
 {
-  "date": "2026-09-16",
-  "source": "list price, https://platform.claude.com/docs/en/about-claude/pricing",
+  "date": "2026-10-08",
+  "source": "list price, https://platform.claude.com/docs/en/about-claude/pricing, retrieved 2026-10-08",
   "models": {
     "claude-haiku-4.5": {
       "inputPerM": 1.0,
@@ -13,6 +13,13 @@
     "claude-opus-5": {
       "inputPerM": 5.0,
       "outputPerM": 25.0
+    },
+    "claude-opus-5-5": {
+      "inputPerM": 4.0,
+      "outputPerM": 20.0,
+      "cacheReadPerM": 0.20,
+      "cacheWrite5mPerM": 5.0,
+      "cacheWrite1hPerM": 8.0
     },
     "claude-sonnet-5": {
       "inputPerM": 2.0,

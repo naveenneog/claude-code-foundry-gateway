@@ -113,6 +113,10 @@ foreach ($script in 'Set-ClaudeBusinessUnit.ps1', 'Set-ClaudeBudget.ps1') {
     $source = Get-Content (Join-Path $root "scripts\$script") -Raw
     Assert "$script stores dollars through the guarded shared USD writer" ($source -match 'Set-ClaudeUsdBudget')
 }
+$kql = Get-Content (Join-Path $root 'analytics\chargeback-cost.kql') -Raw
+Assert 'chargeback KQL normalizes model names to lowercase letters and digits' ($kql -match 'replace_regex\(m, @"\[\^A-Za-z0-9\]"')
+Assert 'chargeback KQL matches a dated model by exactly eight trailing digits' ($kql -match '\\d\{8\}' -and $kql -match 'substring\(')
+Assert 'chargeback KQL does not use a broad prefix price match' ($kql -notmatch 'startswith\(|hasprefix')
 Write-Host ''
 if ($fail) { Write-Host "$fail USD assertion(s) failed." -ForegroundColor Red; exit 1 }
 Write-Host 'USD script and gateway contracts passed.' -ForegroundColor Green

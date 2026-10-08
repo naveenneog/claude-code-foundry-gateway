@@ -8,7 +8,7 @@ import unittest
 from aum_service.errors import ServiceError
 from aum_service.usd_budgets import (
     calculate_state, check_authority, decode_document, encode_document,
-    parse_budgets, price_row, source_revision,
+    parse_budgets, price_book_key, price_row, source_revision,
 )
 from test_registry import values
 from test_identity import PERSON
@@ -45,6 +45,28 @@ def configured(doc=None):
 
 
 class DollarArithmeticTests(unittest.TestCase):
+    def test_model_price_matching_uses_one_normalized_dated_rule(self):
+        book = {"date": "2026-10-08", "models": {
+            "claude-haiku-4.5": {"inputPerM": "1", "outputPerM": "5"},
+            "claude-opus-5": {"inputPerM": "5", "outputPerM": "25"},
+            "claude-opus-5-5": {"inputPerM": "4", "outputPerM": "20"},
+            "claude-sonnet-5": {"inputPerM": "2", "outputPerM": "10"},
+        }}
+        cases = {
+            "claude-haiku-4-5": "claude-haiku-4.5",
+            "claude-haiku-4-5-20251001": "claude-haiku-4.5",
+            "claude-opus-5-5": "claude-opus-5-5",
+            "Claude-Sonnet-5": "claude-sonnet-5",
+            "claude-sonnet-5-2": None,
+            "gpt-5": None,
+        }
+        for name, expected in cases.items():
+            with self.subTest(name=name):
+                self.assertEqual(expected, price_book_key(name, book))
+        without_opus_55 = deepcopy(book)
+        del without_opus_55["models"]["claude-opus-5-5"]
+        self.assertIsNone(price_book_key("claude-opus-5-5", without_opus_55))
+
     def test_all_five_categories_are_priced_before_sum_without_rounding(self):
         result = price_row(row(cache_write_1h_tokens=1000), BOOK)
         self.assertEqual("0.03202", result["known_usd"])
@@ -92,6 +114,13 @@ class DollarArithmeticTests(unittest.TestCase):
 
     def test_deployment_price_wins_over_requested_alias(self):
         self.assertEqual("0.02802", price_row(row(model="client-alias"), BOOK)["known_usd"])
+
+    def test_dated_deployment_uses_price_book_family_without_prefix_shortening(self):
+        book = deepcopy(BOOK)
+        book["models"]["claude-opus-5"] = {"inputPerM": "5", "outputPerM": "25"}
+        self.assertEqual("0.02802", price_row(row(deployment="claude-sonnet-5-20251001"), book)["known_usd"])
+        with self.assertRaises(ServiceError):
+            price_row(row(model="claude-opus-5-5", deployment="claude-opus-5-5"), book)
 
 
 class DollarDocumentTests(unittest.TestCase):
@@ -202,10 +231,39 @@ class DollarDecisionTests(unittest.TestCase):
         self.assertEqual("stop", state["items"]["department:payroll"]["status"])
         self.assertEqual("0.02802", state["items"]["department:payroll"]["spent_usd"])
 
-    def test_unknown_attribution_is_not_ignored(self):
-        state = calculate_state(configured(), [row(user_id="", business_unit="")], NOW)
-        self.assertEqual("unpriced", state["items"]["organization:finance"]["status"])
-        self.assertFalse(state["items"]["organization:finance"]["exact"])
+    def test_projection_charges_each_stamped_unit_when_user_moves_in_a_day(self):
+        config = configured()
+        config["entitlement-source"] = "projection"
+        config["bu-registry"] = ",finance=Finance:1000,payroll=Payroll:1000,"
+        config["bu-parents"] = ",payroll=finance,"
+        state = calculate_state(config, [
+            row(business_unit="finance", prompt_tokens=10, completion_tokens=0, cache_read_tokens=0,
+                cache_write_5m_tokens=0),
+            row(business_unit="payroll", prompt_tokens=10, completion_tokens=0, cache_read_tokens=0,
+                cache_write_5m_tokens=0),
+        ], NOW)
+        self.assertEqual("0.00004", state["items"]["organization:finance"]["spent_usd"])
+        self.assertEqual("0.00002", state["items"]["department:payroll"]["spent_usd"])
+        self.assertEqual([], state["items"]["organization:finance"]["unpriced_models"])
+
+    def test_rows_without_user_are_reported_but_not_charged_or_unpriced(self):
+        state = calculate_state(configured(), [row(user_id="", business_unit="payroll")], NOW)
+        self.assertEqual("allow", state["items"]["organization:finance"]["status"])
+        self.assertEqual("0", state["items"]["organization:finance"]["spent_usd"])
+        self.assertEqual([], state["items"]["organization:finance"]["unpriced_models"])
+        self.assertEqual({"rows": 1, "prompt_tokens": "10", "completion_tokens": "100",
+                          "cache_read_tokens": "10000", "cache_write_5m_tokens": "10000",
+                          "cache_write_1h_tokens": "0"}, state["userless_usage"])
+
+    def test_unpriced_models_are_limited_to_the_scope_owning_the_row(self):
+        config = configured()
+        config["entitlement-source"] = "projection"
+        state = calculate_state(config, [row(business_unit="external", deployment="unknown", model="unknown")], NOW)
+        self.assertEqual("allow", state["items"]["organization:finance"]["status"])
+        self.assertEqual("0", state["items"]["organization:finance"]["spent_usd"])
+        self.assertEqual([], state["items"]["organization:finance"]["unpriced_models"])
+        owned = calculate_state(configured(), [row(deployment="unknown", model="unknown")], NOW)
+        self.assertEqual(["unknown"], owned["items"]["department:payroll"]["unpriced_models"])
 
     def test_unattributed_zero_usage_failure_is_not_invented_spend(self):
         failed = row(user_id="", business_unit="", model="", deployment="", prompt_tokens=0,
@@ -220,6 +278,7 @@ class DollarDecisionTests(unittest.TestCase):
         self.assertEqual(state, calculate_state(config, [row()], NOW))
         self.assertEqual("2026-09-25T12:15:00Z", state["valid_until"])
         self.assertEqual(source_revision(config), state["source_revision"])
+        self.assertNotIn("userless_usage", state)
 
     def test_twenty_unit_decisions_fit_the_existing_named_value_boundary(self):
         doc = document()

@@ -39,20 +39,38 @@ function Get-ClaudeModelPriceBook {
     return $doc
 }
 
-function Get-ClaudeDeploymentPrice {
-    param([Parameter(Mandatory = $true)]$Deployment, [Parameter(Mandatory = $true)]$Book)
+function ConvertTo-ClaudePriceModelKey {
+    param([AllowNull()][string]$Name)
+    return ([regex]::Replace([string]$Name, '[^A-Za-z0-9]', '')).ToLowerInvariant()
+}
+
+function Resolve-ClaudePriceBookKey {
+    param([Parameter(Mandatory = $true)][string]$Name, [Parameter(Mandatory = $true)]$Book)
+    $target = ConvertTo-ClaudePriceModelKey $Name
+    if (-not $target) { return '' }
     $names = @($Book.models.PSObject.Properties.Name)
-    $key = ''
-    if ([string]$Deployment.name -in $names) { $key = [string]$Deployment.name }
-    elseif ($Deployment.sku -eq 'GlobalStandard') {
-        $normal = ([string]$Deployment.model -replace '(?<=\d)\.(?=\d)', '-')
-        $candidates = @($names | Where-Object { ($_ -replace '(?<=\d)\.(?=\d)', '-') -eq $normal })
-        $rates = @(Sort-ClaudeFlowOrdinal -Unique -InputObject @($candidates | ForEach-Object {
+    $matches = @($names | Where-Object { (ConvertTo-ClaudePriceModelKey $_) -ceq $target })
+    if (-not $matches.Count -and $target.Length -gt 8 -and $target.Substring($target.Length - 8) -match '^\d{8}$') {
+        $family = $target.Substring(0, $target.Length - 8)
+        $matches = @($names | Where-Object { (ConvertTo-ClaudePriceModelKey $_) -ceq $family })
+    }
+    if ($matches.Count -eq 1) { return [string]$matches[0] }
+    if ($matches.Count -gt 1) {
+        $rates = @(Sort-ClaudeFlowOrdinal -Unique -InputObject @($matches | ForEach-Object {
             $rate = $Book.models.$_
             '{0}:{1}' -f ([decimal]$rate.inputPerM).ToString([Globalization.CultureInfo]::InvariantCulture), ([decimal]$rate.outputPerM).ToString([Globalization.CultureInfo]::InvariantCulture)
         }))
-        if ($rates.Count -gt 1) { throw "Conflicting price entries for '$($Deployment.model)': $($candidates -join ', '). A deployment-specific price resolves this ambiguity." }
-        if ($candidates.Count) { $key = @(Sort-ClaudeFlowOrdinal -InputObject $candidates)[0] }
+        if ($rates.Count -gt 1) { throw "Conflicting price entries for '$Name': $($matches -join ', '). A deployment-specific price resolves this ambiguity." }
+        return [string](@(Sort-ClaudeFlowOrdinal -InputObject $matches)[0])
+    }
+    return ''
+}
+
+function Get-ClaudeDeploymentPrice {
+    param([Parameter(Mandatory = $true)]$Deployment, [Parameter(Mandatory = $true)]$Book)
+    $key = Resolve-ClaudePriceBookKey -Name ([string]$Deployment.name) -Book $Book
+    if (-not $key -and $Deployment.sku -eq 'GlobalStandard') {
+        $key = Resolve-ClaudePriceBookKey -Name ([string]$Deployment.model) -Book $Book
     }
     if (-not $key) {
         $reason = if ($Deployment.model -eq 'claude-opus-5-5') {

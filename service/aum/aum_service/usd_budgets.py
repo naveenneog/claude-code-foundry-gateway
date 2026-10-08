@@ -14,6 +14,7 @@ USD_NAMES = ("usd-budgets", "bu-modes", "bu-parents", "bu-members",
              "entitlement-source", "turnstile-integration")
 DECIMAL = re.compile(r"^[0-9]{1,12}(?:\.[0-9]{1,9})?$")
 SCOPE = re.compile(r"^(organization|department|user):([a-z0-9-]{1,100})$")
+MODEL_KEY = re.compile(r"[^a-z0-9]", re.I)
 
 
 class JsonNumber(str):
@@ -163,11 +164,28 @@ def money(value):
     return format(value, "f").rstrip("0").rstrip(".") if "." in format(value, "f") else format(value, "f")
 
 
+def normalized_model_key(value):
+    return MODEL_KEY.sub("", str(value or "")).lower()
+
+
+def price_book_key(name, book):
+    models = book.get("models", {}) if isinstance(book, dict) else {}
+    target = normalized_model_key(name)
+    if not target:
+        return None
+    matches = [key for key in models if normalized_model_key(key) == target]
+    if not matches and len(target) > 8 and target[-8:].isdigit():
+        family = target[:-8]
+        matches = [key for key in models if normalized_model_key(key) == family]
+    return matches[0] if len(matches) == 1 else None
+
+
 def price_row(row, book):
     if row.get("ambiguous_model"):
         raise ServiceError(503, "usd_unpriced", "A deployment served multiple model versions in this period")
     deployment = row.get("deployment") or row.get("model")
-    model = book.get("models", {}).get(deployment)
+    key = price_book_key(deployment, book)
+    model = book.get("models", {}).get(key)
     if not isinstance(model, dict):
         raise ServiceError(503, "usd_unpriced", "Deployment has no explicit price-book entry")
     with localcontext() as ctx:
@@ -213,6 +231,9 @@ def calculate_state(values, rows, now, freshness_seconds=900):
              "policy_revision": hashlib.sha256("\n".join(values.get(k, "") for k in USD_NAMES[:-1]).encode("utf-8")).hexdigest(),
              "reconciled_at": timestamp(now), "valid_until": timestamp(now + timedelta(seconds=freshness_seconds)),
              "items": {}}
+    userless_rows = set()
+    userless_totals = {key: Decimal(0) for key in (
+        "prompt_tokens", "completion_tokens", "cache_read_tokens", "cache_write_5m_tokens", "cache_write_1h_tokens")}
     for key, budget in doc["items"].items():
         kind, target = key.split(":", 1)
         config.require_target(kind, target)
@@ -228,17 +249,17 @@ def calculate_state(values, rows, now, freshness_seconds=900):
                 raise ServiceError(503, "usd_invalid_usage", "Ledger rows need an explicit UTC day") from error
             if not start <= observed < min(end, now + timedelta(microseconds=1)):
                 continue
+            row_id = id(row)
             user = row.get("user_id")
-            leaf = (row.get("business_unit") if config.values.get("entitlement-source") == "projection"
-                    else config.members.get(user, row.get("business_unit")))
-            if not user or not leaf:
-                if not row.get("model") and not row.get("deployment") and all(
-                    quantity(row.get(k + "_tokens")) == 0
-                    for k in ("prompt", "completion", "cache_read", "cache_write_5m", "cache_write_1h")
-                ):
-                    continue
-                problems.add("unattributed-usage")
+            if not user:
+                if row_id not in userless_rows:
+                    userless_rows.add(row_id)
+                    for total_key in userless_totals:
+                        userless_totals[total_key] += quantity(row.get(total_key))
                 continue
+            stamped = row.get("business_unit") or "unassigned"
+            leaf = (stamped if config.values.get("entitlement-source") == "projection"
+                    else config.members.get(user, stamped))
             if kind == "user":
                 matches = user == target
             else:
@@ -278,5 +299,9 @@ def calculate_state(values, rows, now, freshness_seconds=900):
             "exact": exact and not problems, "cache_read_known": read_known and not problems,
             "cache_write_known": write_known and not problems, "unpriced_models": sorted(problems),
         }
+    if userless_rows:
+        state["userless_usage"] = {"rows": len(userless_rows), **{
+            key: money(value) for key, value in userless_totals.items()
+        }}
     encode_state(state)
     return state

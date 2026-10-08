@@ -29,6 +29,13 @@ date**, as well as their existing approximate token quota. An optional reconcile
 prices observed input, output, cache reads and known 5-minute/1-hour cache writes
 separately with Decimal, then publishes a gateway decision.
 
+The reconciler prices deployment/model names through the same normalized rule as
+the chargeback query: lower-case the name and keep only letters and digits. A
+dated model version also matches when the normalized name is the normalized price
+key followed by exactly eight digits, so `claude-haiku-4-5-20251001` matches
+`claude-haiku-4.5`. A shorter family does not match: `claude-opus-5-5` requires
+its own price-book entry and never inherits `claude-opus-5`.
+
 | Control | Exact about | Delay / limitation |
 |---|---|---|
 | Existing token limiter | Its configured token allowance | Distributed estimates; does not count cache; retained as the realtime guard |
@@ -180,8 +187,14 @@ still an observed-cost stop, not a hard invoice cap.
 - **Notify:** this scope never blocks for USD, including when its snapshot
   is missing/expired; `x-claude-usd-budget-notice` is advisory. Other enforced
   scopes and the existing token guards can still refuse.
-- **Unpriced:** enforced scopes return 403 `usd_budget_unpriced`, with the
-  unpriced models/attribution problem. Repair the tariff/telemetry, then reconcile.
+- **Unpriced:** enforced scopes return 403 `usd_budget_unpriced` only for their
+  own rows whose model cannot be priced. Repair the dated price book or the
+  deployment/model telemetry, then reconcile. A row without a user id is reported
+  in the reconciliation output with token totals, but it is not a member's spend
+  and does not make any scope unpriced. If the state lists a deployment such as
+  `claude-opus-5-5`, add the missing model tariff; if it lists a dated model
+  whose family is already present, update the software because the normalized
+  eight-digit match should price it.
 - **Stale:** missing, expired or mismatched state returns 503
   `usd_budget_state_stale` for enforced scopes. Snapshots expire after 15 minutes.
   A telemetry outage preserves the last decision until expiry; it never refreshes
