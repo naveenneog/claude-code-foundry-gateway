@@ -613,7 +613,7 @@
                                 }
                                 if (modelCount &gt; 0) {
                                     var more = unpriced.Count - modelCount;
-                                    if (more &gt; 0) { names += " and " + more.ToString(System.Globalization.CultureInfo.InvariantCulture) + " more"; }
+                                    if (more &gt; 0) { names += " and " + more.ToString() + " more"; }
                                     var pronoun = (modelCount == 1 &amp;&amp; more == 0) ? "it" : "them";
                                     unpricedMessage = "Usage of " + names + " cannot be priced with the price book dated " + priceBookDate + ". Ask the gateway owner to add a price for " + pronoun + ", then reconcile.";
                                 }
