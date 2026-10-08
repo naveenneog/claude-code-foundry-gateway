@@ -599,14 +599,24 @@
                         var unpricedMessage = "Usage cannot be completely priced for this scope. Ask the gateway owner to correct the dated price book.";
                         if (status == "unpriced") {
                             var unpriced = item["unpriced_models"] as JArray;
-                            var priceBookDate = (string)item["price_book_date"];
+                            var priceBookDateToken = item["price_book_date"];
+                            var priceBookDate = (priceBookDateToken != null &amp;&amp; priceBookDateToken.Type == JTokenType.String) ? (string)priceBookDateToken : "";
                             if (unpriced != null &amp;&amp; unpriced.Count &gt; 0 &amp;&amp; !string.IsNullOrEmpty(priceBookDate)) {
                                 var names = "";
                                 var modelCount = 0;
                                 foreach (var modelToken in unpriced) {
                                     if (modelCount &gt;= 5) { break; }
+                                    if (modelToken == null || modelToken.Type != JTokenType.String) { continue; }
                                     var model = (string)modelToken;
-                                    if (string.IsNullOrEmpty(model)) { continue; }
+                                    if (string.IsNullOrEmpty(model) || model.Length &gt; 64) { continue; }
+                                    var validModel = true;
+                                    foreach (var ch in model) {
+                                        if (!((ch &gt;= 'A' &amp;&amp; ch &lt;= 'Z') || (ch &gt;= 'a' &amp;&amp; ch &lt;= 'z') || (ch &gt;= '0' &amp;&amp; ch &lt;= '9') || ch == '.' || ch == '_' || ch == '-')) {
+                                            validModel = false;
+                                            break;
+                                        }
+                                    }
+                                    if (!validModel) { continue; }
                                     if (names.Length &gt; 0) { names += ", "; }
                                     names += model;
                                     modelCount++;
