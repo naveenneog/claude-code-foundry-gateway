@@ -69,22 +69,30 @@ $manualPlan = Get-ClaudeInstallerProjectionPlan -SyncInterval manual
 Assert 'a manual job is planned as running only when started' ((($manualPlan.Steps -join '|') -match 'Deploy the sync job, running only when started')) ($manualPlan | ConvertTo-Json -Depth 4)
 
 # P104 (ADR-0058 decision 2): -ProjectionSyncInterval, else the deployed job's interval on a re-run, else 2h.
+# Each choice runs through Capture, so a refusal fails its own assertion instead of ending the suite.
 $deployedJob = { param($Interval, $Cron) [pscustomobject]@{ Name = 'caj-renew-p98'; Interval = $Interval; Cron = $Cron } }
-$fresh = Resolve-ClaudeInstallerSyncInterval -Requested '' -DeployedJob $null
-Assert 'a new projection gets the sync job every 2 hours by default' ($fresh.Interval -ceq '2h' -and $fresh.Source -ceq 'default' -and
-    $fresh.Summary -match 'every 2 hours' -and $fresh.Summary -match '365 runs a month' -and $fresh.Summary -match '0\.00003') ($fresh | ConvertTo-Json -Compress)
-$kept = Resolve-ClaudeInstallerSyncInterval -Requested '' -DeployedJob (& $deployedJob '30m' '*/30 * * * *')
-Assert "a re-run keeps the deployed job's interval" ($kept.Interval -ceq '30m' -and $kept.Source -ceq 'deployed job' -and $kept.Summary -match 'every 30 minutes' -and $kept.Summary -match '1460 runs a month') ($kept | ConvertTo-Json -Compress)
-$chosen = Resolve-ClaudeInstallerSyncInterval -Requested '4h' -DeployedJob (& $deployedJob '30m' '*/30 * * * *')
-Assert '-ProjectionSyncInterval wins over the deployed job' ($chosen.Interval -ceq '4h' -and $chosen.Source -ceq 'parameter') ($chosen | ConvertTo-Json -Compress)
-$oddCron = Resolve-ClaudeInstallerSyncInterval -Requested '' -DeployedJob (& $deployedJob $null '15 */2 * * *')
-Assert 'a deployed cron outside the intervals is replaced by 2h, and the note says so' ($oddCron.Interval -ceq '2h' -and $oddCron.Note -match '15 \*/2 \* \* \*' -and $oddCron.Note -match '-ProjectionSyncInterval') ($oddCron | ConvertTo-Json -Compress)
-$manualChoice = Resolve-ClaudeInstallerSyncInterval -Requested 'manual' -DeployedJob $null
-Assert 'manual deploys the job with no schedule' ($manualChoice.Interval -ceq 'manual' -and $manualChoice.Summary -match 'only when started') ($manualChoice | ConvertTo-Json -Compress)
-$noneChoice = Resolve-ClaudeInstallerSyncInterval -Requested 'NONE' -DeployedJob $null
-Assert 'none skips the job, in any case, and says how group changes are published' ($noneChoice.Interval -ceq 'none' -and $noneChoice.Summary -match 'not deployed' -and $noneChoice.Summary -match 'Sync-ClaudeAccess\.ps1') ($noneChoice | ConvertTo-Json -Compress)
-Capture { Resolve-ClaudeInstallerSyncInterval -Requested '15m' -DeployedJob $null }
-Assert 'an interval under 30 minutes is refused with the accepted values, none included' ($Failure -match "'15m'" -and $Failure -match '30m, 1h, 2h, 3h, 4h, 6h, 8h, 12h, manual, none') $Failure
+function Get-SyncChoice([string]$Requested, $DeployedJob) {
+    Capture { Resolve-ClaudeInstallerSyncInterval -Requested $Requested -DeployedJob $DeployedJob }
+    [pscustomobject]@{ Choice = $script:Result; Failure = $script:Failure }
+}
+$fresh = Get-SyncChoice '' $null
+Assert 'a new projection gets the sync job every 2 hours by default' (-not $fresh.Failure -and $fresh.Choice.Interval -ceq '2h' -and $fresh.Choice.Source -ceq 'default' -and
+    $fresh.Choice.Summary -match 'every 2 hours' -and $fresh.Choice.Summary -match '365 runs a month' -and $fresh.Choice.Summary -match '0\.00003') "$($fresh.Failure) | $($fresh.Choice | ConvertTo-Json -Compress)"
+$kept = Get-SyncChoice '' (& $deployedJob '30m' '*/30 * * * *')
+Assert "a re-run keeps the deployed job's interval" (-not $kept.Failure -and $kept.Choice.Interval -ceq '30m' -and $kept.Choice.Source -ceq 'deployed job' -and
+    $kept.Choice.Summary -match 'every 30 minutes' -and $kept.Choice.Summary -match '1460 runs a month') "$($kept.Failure) | $($kept.Choice | ConvertTo-Json -Compress)"
+$chosen = Get-SyncChoice '4h' (& $deployedJob '30m' '*/30 * * * *')
+Assert '-ProjectionSyncInterval wins over the deployed job' (-not $chosen.Failure -and $chosen.Choice.Interval -ceq '4h' -and $chosen.Choice.Source -ceq 'parameter') "$($chosen.Failure) | $($chosen.Choice | ConvertTo-Json -Compress)"
+$oddCron = Get-SyncChoice '' (& $deployedJob $null '15 */2 * * *')
+Assert 'a deployed cron outside the intervals is replaced by 2h, and the note says so' (-not $oddCron.Failure -and $oddCron.Choice.Interval -ceq '2h' -and
+    $oddCron.Choice.Note -match '15 \*/2 \* \* \*' -and $oddCron.Choice.Note -match '-ProjectionSyncInterval') "$($oddCron.Failure) | $($oddCron.Choice | ConvertTo-Json -Compress)"
+$manualChoice = Get-SyncChoice 'manual' $null
+Assert 'manual deploys the job with no schedule' (-not $manualChoice.Failure -and $manualChoice.Choice.Interval -ceq 'manual' -and $manualChoice.Choice.Summary -match 'only when started') "$($manualChoice.Failure) | $($manualChoice.Choice | ConvertTo-Json -Compress)"
+$noneChoice = Get-SyncChoice 'NONE' $null
+Assert 'none skips the job, in any case, and says how group changes are published' (-not $noneChoice.Failure -and $noneChoice.Choice.Interval -ceq 'none' -and
+    $noneChoice.Choice.Summary -match 'not deployed' -and $noneChoice.Choice.Summary -match 'Sync-ClaudeAccess\.ps1') "$($noneChoice.Failure) | $($noneChoice.Choice | ConvertTo-Json -Compress)"
+$tooShort = Get-SyncChoice '15m' $null
+Assert 'an interval under 30 minutes is refused with the accepted values, none included' ($tooShort.Failure -match "'15m'" -and $tooShort.Failure -match '30m, 1h, 2h, 3h, 4h, 6h, 8h, 12h, manual, none') $tooShort.Failure
 
 $calls = [System.Collections.Generic.List[object]]::new()
 $everyCall = [System.Collections.Generic.List[object]]::new()
