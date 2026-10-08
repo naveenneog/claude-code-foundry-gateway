@@ -31,6 +31,38 @@ function ConvertTo-ClaudeUsdValue {
     return $value
 }
 
+function ConvertTo-ClaudeUsdPriceKey {
+    param([AllowNull()][string]$Name)
+    return ([regex]::Replace([string]$Name, '[^A-Za-z0-9]', '')).ToLowerInvariant()
+}
+
+function Get-ClaudeUsdEffectiveRateKey {
+    param($Entry)
+    if ($null -eq $Entry.inputPerM -or $null -eq $Entry.outputPerM) { throw 'price entry is missing inputPerM or outputPerM' }
+    $input = [decimal]$Entry.inputPerM
+    $output = [decimal]$Entry.outputPerM
+    $read = if ($null -ne $Entry.PSObject.Properties['cacheReadPerM']) { [decimal]$Entry.cacheReadPerM } else { $input * [decimal]0.1 }
+    $write5m = if ($null -ne $Entry.PSObject.Properties['cacheWrite5mPerM']) { [decimal]$Entry.cacheWrite5mPerM } else { $input * [decimal]1.25 }
+    $write1h = if ($null -ne $Entry.PSObject.Properties['cacheWrite1hPerM']) { [decimal]$Entry.cacheWrite1hPerM } else { $input * [decimal]2 }
+    return '{0}:{1}:{2}:{3}:{4}' -f $input.ToString([Globalization.CultureInfo]::InvariantCulture),
+        $output.ToString([Globalization.CultureInfo]::InvariantCulture),
+        $read.ToString([Globalization.CultureInfo]::InvariantCulture),
+        $write5m.ToString([Globalization.CultureInfo]::InvariantCulture),
+        $write1h.ToString([Globalization.CultureInfo]::InvariantCulture)
+}
+
+function Assert-ClaudeUsdPriceBookWritable {
+    param($PriceBook)
+    if (-not $PriceBook.date -or -not $PriceBook.models) { throw 'A dated USD price book is required.' }
+    $seen = @{}
+    foreach ($p in @($PriceBook.models.PSObject.Properties)) {
+        $key = ConvertTo-ClaudeUsdPriceKey $p.Name
+        [void](Get-ClaudeUsdEffectiveRateKey $p.Value)
+        if ($seen.ContainsKey($key)) { throw "Duplicate normalized price-book key '$key': $($seen[$key]) and $($p.Name)." }
+        $seen[$key] = $p.Name
+    }
+}
+
 function New-ClaudeUsdBudgetValue {
     param(
         [AllowNull()][string]$Value,
@@ -50,7 +82,7 @@ function New-ClaudeUsdBudgetValue {
     $doc = ConvertFrom-ClaudeUsdValue $Value
     if (-not $doc.schema_version) {
         if ($Clear) { return 'e30=' }
-        if (-not $PriceBook.date -or -not $PriceBook.models) { throw 'A dated USD price book is required.' }
+        Assert-ClaudeUsdPriceBookWritable $PriceBook
         $date = [datetime]::MinValue
         if (-not [datetime]::TryParseExact([string]$PriceBook.date, 'yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture,
             [Globalization.DateTimeStyles]::None, [ref]$date)) { throw 'USD price book date must be YYYY-MM-DD.' }
@@ -97,6 +129,7 @@ function Get-ClaudeUsdPriceBook {
         if (-not (Test-Path $Path)) { $Path = Join-Path $base 'config\price-book.example.json' }
     }
     $book = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+    Assert-ClaudeUsdPriceBookWritable $book
     Write-Host ("  USD tariff source: {0}; dated {1}. Existing USD budgets keep their stored tariff." -f $Path, $book.date)
     return $book
 }

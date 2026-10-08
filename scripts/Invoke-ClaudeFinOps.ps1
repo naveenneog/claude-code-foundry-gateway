@@ -210,6 +210,7 @@ switch ([string]$request.action) {
             if ($doc.items -and $doc.items.PSObject.Properties.Count -and ($doc.price_book | ConvertTo-Json -Depth 30 -Compress) -cne ($request.body.price_book | ConvertTo-Json -Depth 30 -Compress)) {
                 throw 'Active USD budgets pin their tariff; clear them before replacing the price book.'
             }
+            Assert-ClaudeUsdPriceBookWritable $request.body.price_book
             $next = [pscustomobject]@{ schema_version = 1; price_book = $request.body.price_book; items = $(if ($doc.items) { $doc.items } else { [pscustomobject]@{} }) }
             $encoded = ConvertTo-ClaudeUsdValue $next
             $result = Invoke-VerifiedChange @{ 'usd-budgets'=$encoded } {

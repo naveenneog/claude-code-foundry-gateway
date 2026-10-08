@@ -121,12 +121,20 @@ Assert 'chargeback KQL reduces price rows to one normalized key before joins' ($
 $publisher = Get-Content (Join-Path $root 'scripts\Publish-ClaudeQueries.ps1') -Raw
 Assert 'query publisher formats price numbers with invariant culture' ($publisher -match 'InvariantCulture' -and $publisher -match 'ToString\(')
 Assert 'query publisher refuses duplicate normalized price keys' ($publisher -match 'Duplicate normalized price-book key' -and $publisher -match 'ConvertTo-ClaudeQueryPriceKey')
+Assert 'query publisher allows equal-rate duplicate price keys with a warning' ($publisher -match 'Write-Warning' -and $publisher -match 'Duplicate normalized price-book key')
 $harness = Get-Content (Join-Path $root 'scripts\Test-ClaudeUsdUsageQuery.ps1') -Raw
 Assert 'live USD query harness compares dates as UTC yyyy-MM-dd strings' ($harness -match "ToUniversalTime\(\)\.ToString\('yyyy-MM-dd'")
 Assert 'live USD query harness covers the next UTC day metric' ($harness -match '2026, 10, 9, 2')
 Assert 'live USD query harness prints returned rows on failure' ($harness -match 'Write-ReturnedRows')
 Assert 'live USD query harness asserts rows have non-null day and users where required' ($harness -match 'every row has a day' -and $harness -match 'non-userless row has a user')
 Assert 'live USD query harness covers duplicate metric spellings and tied latest rows' ($harness -match 'claude-haiku-4.5' -and $harness -match 'tie-a' -and $harness -match 'tie-b')
+
+$dupBook = [pscustomobject]@{ date = '2026-10-08'; models = [pscustomobject]@{
+    'claude-haiku-4.5' = [pscustomobject]@{ inputPerM = 1; outputPerM = 5 }
+    'claude-haiku-4-5' = [pscustomobject]@{ inputPerM = 1; outputPerM = 5 }
+} }
+$rawDup = Invoke-Value { New-ClaudeUsdBudgetValue -Value 'e30=' -ScopeType organization -ScopeId finance -AmountUsd 1 -Period month -PriceBook $dupBook }
+Assert 'USD budget writer refuses even equal-rate duplicate normalized price keys' ($rawDup -match 'Duplicate normalized price-book key')
 Write-Host ''
 if ($fail) { Write-Host "$fail USD assertion(s) failed." -ForegroundColor Red; exit 1 }
 Write-Host 'USD script and gateway contracts passed.' -ForegroundColor Green

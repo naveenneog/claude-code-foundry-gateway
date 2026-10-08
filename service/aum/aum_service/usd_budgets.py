@@ -107,7 +107,6 @@ def parse_budgets(raw):
     book = doc["price_book"]
     if not isinstance(book, dict) or not isinstance(book.get("models"), dict) or not book["models"]:
         raise invalid("USD budgets require a nonempty dated price book")
-    validate_price_book(book)
     try:
         datetime.strptime(book["date"], "%Y-%m-%d")
     except (ValueError, TypeError, KeyError) as error:
@@ -198,8 +197,15 @@ def price_book_key(name, book):
     literal = text.lower()
     target = normalized_model_key(name)
     normalized_matches = [key for key in models if normalized_model_key(key) == target]
-    if len({effective_price_rates(models[key]) for key in normalized_matches}) > 1:
-        return None
+    if len(normalized_matches) > 1:
+        rates = set()
+        for key in normalized_matches:
+            try:
+                rates.add(effective_price_rates(models[key]))
+            except ServiceError:
+                return None
+        if len(rates) > 1:
+            return None
     for key in models:
         if key.lower() == literal:
             return key
@@ -214,8 +220,15 @@ def price_book_key(name, book):
     if not matches and len(target) > 8 and target[-8:].isdigit():
         family = target[:-8]
         matches = [key for key in models if normalized_model_key(key) == family]
-    if len(matches) > 1 and len({effective_price_rates(models[key]) for key in matches}) == 1:
-        return sorted(matches)[0]
+    if len(matches) > 1:
+        rates = set()
+        for key in matches:
+            try:
+                rates.add(effective_price_rates(models[key]))
+            except ServiceError:
+                return None
+        if len(rates) == 1:
+            return sorted(matches)[0]
     return matches[0] if len(matches) == 1 else None
 
 

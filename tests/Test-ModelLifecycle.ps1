@@ -506,13 +506,14 @@ try {
         } }
         -not (Get-ClaudeDeploymentPrice ([pscustomobject]@{ name = 'claude-opus-5-5'; model = 'claude-opus-5-5'; sku = 'GlobalStandard' }) $withoutOpus55).SourceKey
     }
-    Check 'PowerShell price book refuses duplicate normalized keys and uses ordinal comparison' {
+    Check 'PowerShell price book allows equal-rate duplicate normalized keys and uses ordinal comparison' {
         $dup = Join-Path $scratch 'duplicate-price-book.json'
         Save $dup ([ordered]@{ date = '2026-10-08'; source = 'test'; models = [ordered]@{
             'claude-haiku-4.5' = @{ inputPerM = 1; outputPerM = 5 }
             'claude-haiku-4-5' = @{ inputPerM = 1; outputPerM = 5 }
         } })
-        (Reject { Get-ClaudeModelPriceBook $dup } 'claude-haiku-4.5.*claude-haiku-4-5|duplicate|normal') -and
+        $book = Get-ClaudeModelPriceBook $dup
+        $book.models.'claude-haiku-4.5'.inputPerM -eq 1 -and
             -not [string]::Equals('claude-opus-5', "claude-opus-5$([char]0x00ad)", [StringComparison]::Ordinal)
     }
     Check 'oversized model lists fail before backup or writes' {

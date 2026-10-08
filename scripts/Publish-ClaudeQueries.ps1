@@ -134,9 +134,19 @@ function New-PriceBlock {
     foreach ($model in $models) {
         $key = ConvertTo-ClaudeQueryPriceKey $model.Name
         if ($seen.ContainsKey($key)) {
-            throw "Duplicate normalized price-book key '$key' in $path: $($seen[$key]) and $($model.Name)."
+            $previous = $seen[$key]
+            $previousRate = '{0}:{1}' -f
+                ([decimal]$previous.Value.inputPerM).ToString([Globalization.CultureInfo]::InvariantCulture),
+                ([decimal]$previous.Value.outputPerM).ToString([Globalization.CultureInfo]::InvariantCulture)
+            $currentRate = '{0}:{1}' -f
+                ([decimal]$model.Value.inputPerM).ToString([Globalization.CultureInfo]::InvariantCulture),
+                ([decimal]$model.Value.outputPerM).ToString([Globalization.CultureInfo]::InvariantCulture)
+            if ($previousRate -ne $currentRate) {
+                throw "Duplicate normalized price-book key '$key' in $path has conflicting rates: $($previous.Name) and $($model.Name)."
+            }
+            Write-Warning "Duplicate normalized price-book key '$key' in $path has equal rates: $($previous.Name) and $($model.Name)."
         }
-        $seen[$key] = $model.Name
+        else { $seen[$key] = $model }
     }
 
     $rows = @($models | ForEach-Object {

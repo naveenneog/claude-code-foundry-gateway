@@ -162,8 +162,21 @@ class DollarDocumentTests(unittest.TestCase):
     def test_price_book_duplicate_normalized_keys_are_rejected(self):
         doc = document()
         doc["price_book"]["models"]["claude_sonnet_5"] = {"inputPerM": "2", "outputPerM": "10"}
-        with self.assertRaisesRegex(ServiceError, "claude-sonnet-5"):
-            parse_budgets(encode_document(doc))
+        self.assertEqual(doc, parse_budgets(encode_document(doc)))
+
+    def test_existing_price_book_conflicts_are_scope_local_unpriced_not_global(self):
+        doc = document()
+        doc["price_book"]["models"]["claude_sonnet_5"] = {"inputPerM": "3", "outputPerM": "10"}
+        state = calculate_state(configured(doc), [row(deployment="claude-sonnet-5", model="claude-sonnet-5")], NOW)
+        self.assertEqual("unpriced", state["items"]["department:payroll"]["status"])
+        self.assertEqual(["claude-sonnet-5"], state["items"]["department:payroll"]["unpriced_models"])
+
+    def test_existing_price_book_invalid_model_entry_is_scope_local_unpriced(self):
+        doc = document()
+        doc["price_book"]["models"]["broken-model"] = {"inputPerM": "2"}
+        state = calculate_state(configured(doc), [row(deployment="broken-model", model="broken-model")], NOW)
+        self.assertEqual("unpriced", state["items"]["department:payroll"]["status"])
+        self.assertEqual(["broken-model"], state["items"]["department:payroll"]["unpriced_models"])
 
     def test_capacity_overflow_and_duplicate_keys_are_rejected(self):
         with self.assertRaises(ServiceError):

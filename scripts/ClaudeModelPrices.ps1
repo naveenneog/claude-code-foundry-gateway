@@ -39,9 +39,7 @@ function Get-ClaudeModelPriceBook {
     $seen = @{}
     foreach ($p in $doc.models.PSObject.Properties) {
         $key = ConvertTo-ClaudePriceModelKey $p.Name
-        if ($seen.ContainsKey($key)) {
-            throw "Duplicate normalized price-book key '$key' in '$Path': $($seen[$key]) and $($p.Name)."
-        }
+        if ($seen.ContainsKey($key)) { Write-Warning "Duplicate normalized price-book key '$key' in '$Path': $($seen[$key]) and $($p.Name)." }
         $seen[$key] = $p.Name
     }
     return $doc
