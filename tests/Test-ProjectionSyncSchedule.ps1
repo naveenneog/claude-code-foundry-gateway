@@ -113,17 +113,25 @@ if ($hasLookup) {
         }
         # The settings a redeployment keeps: the renewal deployment's parameters and job, the registry, the alert addresses.
         if ($line -ceq 'deployment group show -g rg-p104 -n projection-renewal-p104fixture -o json') {
-            return (@{ properties = @{
+            $renewalState = if ($state.Case -eq 'renewal-failed') { 'Failed' } else { 'Succeeded' }
+            $renewalOutputs = if ($state.Case -eq 'renewal-failed') { $null } else { @{ jobResourceId = @{ value = "$rgId/providers/Microsoft.App/jobs/caj-renew-a" } } }
+            return (@{ properties = @{ provisioningState = $renewalState
                         parameters = @{ logAnalyticsWorkspaceId = @{ value = "$rgId/providers/Microsoft.OperationalInsights/workspaces/law-custom" }
                             containerAppsSubnetId = @{ value = "$rgId/providers/Microsoft.Network/virtualNetworks/vnet-p104/subnets/renewal" }
-                            actionGroupEmailReceivers = @{ value = @('deployed@example.invalid') } }
-                        outputs = @{ jobResourceId = @{ value = "$rgId/providers/Microsoft.App/jobs/caj-renew-a" } } } } | ConvertTo-Json -Depth 8)
+                            actionGroupEmailReceivers = @{ value = @('deployed@example.invalid') }
+                            standardGroupId = @{ value = '10000000-0000-4000-8000-000000000001' }; premiumGroupId = @{ value = 'none' }
+                            cronExpression = @{ value = '0 */2 * * *' }; noSuccessMinutes = @{ value = 255 } }
+                        outputs = $renewalOutputs } } | ConvertTo-Json -Depth 8)
         }
         if ($line -ceq 'deployment group show -g rg-p104 -n projection-registry-p104fixture -o json') {
-            return (@{ properties = @{ outputs = @{ acrName = @{ value = 'acrp104' }; acrSkuChosen = @{ value = 'Basic' } } } } | ConvertTo-Json -Depth 8)
+            if ($state.Case -eq 'registry-failed') {
+                return (@{ properties = @{ provisioningState = 'Failed'; parameters = @{ acrSku = @{ value = 'Premium' } }; outputs = $null } } | ConvertTo-Json -Depth 8)
+            }
+            return (@{ properties = @{ provisioningState = 'Succeeded'; parameters = @{ acrSku = @{ value = 'Basic' } }; outputs = @{ acrName = @{ value = 'acrp104' }; acrSkuChosen = @{ value = 'Basic' } } } } | ConvertTo-Json -Depth 8)
         }
         if ($line -ceq 'acr show -g rg-p104 -n acrp104 -o json') {
-            return (@{ name = 'acrp104'; sku = @{ name = $(if ($state.Case -eq 'standard-acr') { 'Standard' } else { 'Premium' }) } } | ConvertTo-Json -Depth 4)
+            $access = if ($state.Case -eq 'private-acr') { 'Disabled' } else { 'Enabled' }
+            return (@{ name = 'acrp104'; sku = @{ name = $(if ($state.Case -eq 'standard-acr') { 'Standard' } else { 'Premium' }) }; publicNetworkAccess = $access } | ConvertTo-Json -Depth 4)
         }
         if ($line -ceq 'monitor action-group show -g rg-p104 -n ag-projection-renewal-p104fixture -o json') {
             return (@{ name = 'ag-projection-renewal-p104fixture'; emailReceivers = @(@{ emailAddress = 'ops@example.invalid' }, @{ emailAddress = ' oncall@example.invalid ' }, @{ emailAddress = 'ops@example.invalid' }) } | ConvertTo-Json -Depth 6)
@@ -176,14 +184,23 @@ if ($hasLookup) {
             [pscustomobject]@{ Settings = $settings; Failure = $failure; Calls = @($global:P104Jobs.Calls) }
         }
         $read = Read-Settings 'scheduled'
-        Assert 'the settings hold the job id, the live alert addresses, the live registry SKU, the workspace and the subnet' (-not $read.Failure -and
-            $read.Settings.JobResourceId -ceq "$rgId/providers/Microsoft.App/jobs/caj-renew-a" -and
+        Assert 'the settings hold the job id, the live alert addresses, the live registry SKU and access, the workspace, the subnet and the recorded groups and schedule' (-not $read.Failure -and
+            $read.Settings.RenewalDeploymentState -ceq 'Succeeded' -and $read.Settings.JobResourceId -ceq "$rgId/providers/Microsoft.App/jobs/caj-renew-a" -and
             ((@($read.Settings.AlertEmails) | Sort-Object) -join ',') -ceq 'oncall@example.invalid,ops@example.invalid' -and $read.Settings.AcrSku -ceq 'Premium' -and
+            $read.Settings.RegistryPublicNetworkAccess -ceq 'Enabled' -and
             $read.Settings.WorkspaceResourceId -ceq "$rgId/providers/Microsoft.OperationalInsights/workspaces/law-custom" -and
-            $read.Settings.RenewalSubnetId -ceq "$rgId/providers/Microsoft.Network/virtualNetworks/vnet-p104/subnets/renewal") "$($read.Failure) | $($read.Settings | ConvertTo-Json -Compress)"
+            $read.Settings.RenewalSubnetId -ceq "$rgId/providers/Microsoft.Network/virtualNetworks/vnet-p104/subnets/renewal" -and
+            $read.Settings.StandardGroupId -ceq '10000000-0000-4000-8000-000000000001' -and $read.Settings.PremiumGroupId -ceq 'none' -and
+            $read.Settings.RecordedCron -ceq '0 */2 * * *' -and $read.Settings.RecordedNoSuccessMinutes -eq 255) "$($read.Failure) | $($read.Settings | ConvertTo-Json -Compress)"
         Assert 'the settings are read with no --query' ($read.Calls.Count -eq 4 -and @($read.Calls | Where-Object { $_ -match '--query' }).Count -eq 0) ($read.Calls -join ' | ')
         $standardAcr = Read-Settings 'standard-acr'
-        Assert 'a registry SKU the deploy script cannot keep is refused' ($standardAcr.Failure -match 'Standard' -and $standardAcr.Failure -match 'Basic or Premium') "$($standardAcr.Failure)"
+        Assert 'the live registry SKU is returned as read; the installer decides what it can keep' (-not $standardAcr.Failure -and $standardAcr.Settings.AcrSku -ceq 'Standard') "$($standardAcr.Failure)"
+        $failedRenewal = Read-Settings 'renewal-failed'
+        Assert 'a failed renewal deployment is reported as failed with no job id, not as another job' (-not $failedRenewal.Failure -and $failedRenewal.Settings.RenewalDeploymentState -ceq 'Failed' -and
+            -not $failedRenewal.Settings.JobResourceId -and $failedRenewal.Settings.StandardGroupId -ceq '10000000-0000-4000-8000-000000000001') "$($failedRenewal.Failure) | $($failedRenewal.Settings | ConvertTo-Json -Compress)"
+        $failedRegistry = Read-Settings 'registry-failed'
+        Assert 'a failed registry deployment gives the SKU it was deployed with' (-not $failedRegistry.Failure -and $failedRegistry.Settings.AcrSku -ceq 'Premium' -and
+            $failedRegistry.Calls.Count -eq 3) "$($failedRegistry.Failure) | $($failedRegistry.Settings | ConvertTo-Json -Compress)"
     }
     Remove-Item Function:\az -ErrorAction SilentlyContinue
 }

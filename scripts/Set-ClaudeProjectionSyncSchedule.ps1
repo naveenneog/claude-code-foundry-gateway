@@ -84,6 +84,10 @@ if (-not $job) {
 # The workspace, subnet and alert addresses are kept too, so the redeployment moves no log route or alert scope.
 $renewalDeployment = "projection-renewal-$NamePrefix"
 $jobSettings = Get-ClaudeProjectionSyncJobSettings -ResourceGroup $ResourceGroup -NamePrefix $NamePrefix
+# A failed deployment records no job, so nothing it holds can be confirmed (P104 council round 2).
+if (-not [string]::Equals([string]$jobSettings.RenewalDeploymentState, 'Succeeded', [StringComparison]::Ordinal)) {
+    throw "The last deployment $renewalDeployment in $ResourceGroup is $($jobSettings.RenewalDeploymentState), so its job, tier groups and workspace cannot be confirmed. Nothing was changed. Redeploy the job with scripts/Deploy-ClaudeProjectionRenewal.ps1, or rerun the installer."
+}
 $recordedJobId = [string]$jobSettings.JobResourceId
 if (-not $recordedJobId) {
     throw "Deployment $renewalDeployment in $ResourceGroup records no job. Nothing was changed. Redeploy the job with scripts/Deploy-ClaudeProjectionRenewal.ps1."
@@ -93,10 +97,19 @@ if (-not [string]::Equals($recordedJobId, [string]$job.Id, [StringComparison]::O
 }
 $imageDigest = [string]$job.ImageDigest
 if (-not $imageDigest) { throw "The deployed job image has no sha256 image digest. Redeploy with scripts/Deploy-ClaudeProjectionRenewal.ps1 so this script can preserve the exact image." }
-$standardGroup = [string]$job.StandardGroupId
-$premiumGroup = [string]$job.PremiumGroupId
-if (-not $standardGroup) { throw "The deployed job is missing PROJECTION_STANDARD_GROUP_ID. Redeploy it with scripts/Deploy-ClaudeProjectionRenewal.ps1." }
-if (-not $premiumGroup) { throw "The deployed job is missing PROJECTION_PREMIUM_GROUP_ID. Redeploy it with scripts/Deploy-ClaudeProjectionRenewal.ps1." }
+if (-not [string]$job.StandardGroupId) { throw "The deployed job is missing PROJECTION_STANDARD_GROUP_ID. Redeploy it with scripts/Deploy-ClaudeProjectionRenewal.ps1." }
+if (-not [string]$job.PremiumGroupId) { throw "The deployed job is missing PROJECTION_PREMIUM_GROUP_ID. Redeploy it with scripts/Deploy-ClaudeProjectionRenewal.ps1." }
+# The tier groups come from the deployment's record; the job's settings can be edited outside it, so a difference
+# stops the change rather than carrying an edited group into the redeployment (P104 council round 2).
+$standardGroup = [string]$jobSettings.StandardGroupId
+$premiumGroup = [string]$jobSettings.PremiumGroupId
+$sameGroups = $standardGroup -and $premiumGroup -and
+    [string]::Equals($standardGroup, [string]$job.StandardGroupId, [StringComparison]::OrdinalIgnoreCase) -and
+    [string]::Equals($premiumGroup, [string]$job.PremiumGroupId, [StringComparison]::OrdinalIgnoreCase)
+if (-not $sameGroups) {
+    throw ("The job's tier groups (standard $($job.StandardGroupId), premium $($job.PremiumGroupId)) differ from those deployment $renewalDeployment recorded " +
+        "(standard $standardGroup, premium $premiumGroup). Nothing was changed. Redeploy with scripts/Deploy-ClaudeProjectionRenewal.ps1 -StandardGroup <id> -PremiumGroup <id or none> to set the groups.")
+}
 
 $currentCron = [string]$job.Cron
 $currentInterval = $job.Interval
@@ -116,11 +129,14 @@ if ($currentInterval -and $currentInterval -ceq $newSchedule.Interval) {
     $hasRule = { param($name) @($ruleNames | Where-Object { [string]::Equals($_, $name, [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0 }
     $rulesInPlace = -not (& $hasRule "sqr-projection-$NamePrefix-no-success-45m") -and
         ((& $hasRule "sqr-projection-$NamePrefix-no-success") -eq ($newSchedule.Interval -cne 'manual'))
-    if ($rulesInPlace) {
+    # A cron edited outside the deployment leaves the no-success range of the recorded schedule.
+    $recordedInPlace = [string]::Equals([string]$jobSettings.RecordedCron, $newSchedule.Cron, [StringComparison]::Ordinal) -and
+        [int]$jobSettings.RecordedNoSuccessMinutes -eq [int]$newSchedule.NoSuccessMinutes
+    if ($rulesInPlace -and $recordedInPlace) {
         Write-Output "The projection sync job already runs $(Format-ClaudeProjectionSyncInterval -Interval $newSchedule.Interval)."
         return
     }
-    Write-Output "The projection sync job already runs $(Format-ClaudeProjectionSyncInterval -Interval $newSchedule.Interval), but its alert rules differ from the template; redeploying to repair them."
+    Write-Output "The projection sync job already runs $(Format-ClaudeProjectionSyncInterval -Interval $newSchedule.Interval), but its alert rules or its recorded schedule differ from the template; redeploying to repair them."
 }
 
 $toWords = Format-ClaudeProjectionSyncInterval -Interval $newSchedule.Interval

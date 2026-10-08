@@ -954,7 +954,8 @@ if ($EntitlementStore -eq 'projection') {
     # so a read that fails stops the run before any write.
     $syncJobSettings = if ($deployedSyncJob -and $ProjectionSyncInterval -ne 'none') { Get-ClaudeProjectionSyncJobSettings -ResourceGroup $ResourceGroup -NamePrefix $projectionPrefix } else { $null }
     $syncJobInputs = Resolve-ClaudeInstallerSyncJobInputs -DeployedJob $deployedSyncJob -JobSettings $syncJobSettings -PublisherEmail $PublisherEmail
-    if ($syncJobSettings) { Write-Host "  Sync job alerts: $((@($syncJobInputs.AlertEmail)) -join ', ') (kept from the deployed job)" -ForegroundColor DarkGray }
+    if ($syncJobSettings) { Write-Host "  Sync job alerts: $((@($syncJobInputs.AlertEmail)) -join ', ') ($($syncJobInputs.AlertSource))" -ForegroundColor DarkGray }
+    if ($syncJobInputs.Note) { Write-Warn2 $syncJobInputs.Note }
 }
 else { $ProjectionSyncInterval = 'none' }
 

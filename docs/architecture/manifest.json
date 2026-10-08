@@ -471,7 +471,7 @@
       "id": "company-address",
       "source": "docs/architecture/15-company-address.json",
       "inputs": {
-        "Install-ClaudeGateway.ps1": "580e3aca755b0bb116f581f3ff12343ee4e03f6588db0d17c8b7b4edd622e6fd",
+        "Install-ClaudeGateway.ps1": "d42a7ae57f613987e94ea4a7c53f8c8771ebc23904a3d71644dc5ca44620bde1",
         "Start-ClaudeGateway.ps1": "86e92a50b603e0466f2d94ef03964f1ef8a511fe49262bfb694d6df32ad2d4dc",
         "docs/architecture/15-company-address.json": "83c08d15d71fcf6a002d004090b67ea77c858b70efa3718e8ff11aebae276981",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",

@@ -221,7 +221,10 @@ and a first install uses `2h`. A deployed cron outside the table stops a re-run 
 `-ProjectionSyncInterval` names an interval. With `none`, a deployed job is left as it is, and the review and
 next steps name its schedule. A re-run that redeploys the job keeps its alert addresses (from the live action
 group), its registry SKU, and the workspace and subnet of its renewal deployment, and changes only the job that
-deployment created. The review before any write shows the interval, the runs a month and the
+deployment created. When the action group has no address, the run uses the publisher address and says so. A
+registry with public network access disabled, or a SKU other than Basic or Premium, stops the re-run before any
+write, because the registry template would change it. A failed renewal deployment is deployed again with the
+settings it recorded. The review before any write shows the interval, the runs a month and the
 missed-run range. `-DeploySyncJob` is still accepted and has no effect.
 
 Change the interval of a deployed job:
@@ -230,14 +233,15 @@ Change the interval of a deployed job:
 .\scripts\Set-ClaudeProjectionSyncSchedule.ps1 -ResourceGroup <rg> -ApimName <apim> -Interval 30m
 ```
 
-The script reads the deployed job's image digest, tier group ids and alert addresses, prints the change, and
-runs `scripts/Deploy-ClaudeProjectionRenewal.ps1` with the same image, the new `-SyncInterval` and `-KeepRegistry`,
-so the job's schedule and the no-success alert change together and the registry is not deployed again. It keeps
-the workspace and subnet of the renewal deployment, and changes only the job that the
-`projection-renewal-<prefix>` deployment created. When the job already runs at the requested interval, the script
-writes nothing unless the alert rules differ from the template (a scheduled job has one no-success rule, a manual
-job none, and neither keeps P97's 45-minute rule); then it redeploys to repair them. `-WhatIf` shows the change
-without writing. In the Azure
+The script reads the deployed job's image digest and alert addresses, and the tier groups, workspace and subnet
+that the `projection-renewal-<prefix>` deployment recorded. It prints the change and runs
+`scripts/Deploy-ClaudeProjectionRenewal.ps1` with the same image, the new `-SyncInterval` and `-KeepRegistry`, so
+the job's schedule and the no-success alert change together and the registry is not deployed again. It changes
+only the job that deployment created, refuses a job whose tier groups differ from the recorded ones, and refuses
+while the last renewal deployment has not succeeded. When the job already runs at the requested interval, the
+script writes nothing unless the alert rules or the recorded schedule differ from the template (a scheduled job
+has one no-success rule, a manual job none, and neither keeps P97's 45-minute rule); then it redeploys to repair
+them. `-WhatIf` shows the change without writing. In the Azure
 portal, run the same command in Azure Cloud Shell (PowerShell) from a clone of this repository. Changing the
 job's cron expression alone leaves the no-success alert on the old range.
 

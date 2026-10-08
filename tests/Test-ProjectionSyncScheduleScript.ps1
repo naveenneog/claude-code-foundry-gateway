@@ -132,10 +132,19 @@ $calls += [pscustomobject]$record
         }
         if ($line -ceq 'deployment group show -g rg-p104 -n projection-renewal-p104fixture -o json') {
             $deployedJob = if ($global:ProjectionScheduleScenario.ContainsKey('DeployedJobId')) { $global:ProjectionScheduleScenario.DeployedJobId } else { "$rgId/providers/Microsoft.App/jobs/caj-renew-p104fixture" }
-            return (@{ properties = @{
+            $scenario = $global:ProjectionScheduleScenario
+            $recordedStandard = if ($scenario.ContainsKey('RecordedStandard')) { $scenario.RecordedStandard } else { $standard }
+            $recordedPremium = if ($scenario.ContainsKey('RecordedPremium')) { $scenario.RecordedPremium } else { $premium }
+            $recordedCron = if ($scenario.ContainsKey('RecordedCron')) { $scenario.RecordedCron } else { '0 */2 * * *' }
+            $recordedMinutes = if ($scenario.ContainsKey('RecordedMinutes')) { $scenario.RecordedMinutes } else { 255 }
+            $deploymentState = if ($scenario.ContainsKey('DeploymentState')) { $scenario.DeploymentState } else { 'Succeeded' }
+            $outputs = if ($deploymentState -eq 'Succeeded') { @{ jobResourceId = @{ type = 'String'; value = $deployedJob } } } else { $null }
+            return (@{ properties = @{ provisioningState = $deploymentState
                         parameters = @{ logAnalyticsWorkspaceId = @{ value = "$rgId/providers/Microsoft.OperationalInsights/workspaces/law-custom" }
-                            containerAppsSubnetId = @{ value = "$rgId/providers/Microsoft.Network/virtualNetworks/vnet-p104/subnets/renewal" } }
-                        outputs = @{ jobResourceId = @{ type = 'String'; value = $deployedJob } } } } | ConvertTo-Json -Depth 6)
+                            containerAppsSubnetId = @{ value = "$rgId/providers/Microsoft.Network/virtualNetworks/vnet-p104/subnets/renewal" }
+                            standardGroupId = @{ value = $recordedStandard }; premiumGroupId = @{ value = $recordedPremium }
+                            cronExpression = @{ value = $recordedCron }; noSuccessMinutes = @{ value = $recordedMinutes } }
+                        outputs = $outputs } } | ConvertTo-Json -Depth 6)
         }
         if ($line -ceq 'deployment group show -g rg-p104 -n projection-registry-p104fixture -o json') {
             return (@{ properties = @{ outputs = @{ acrName = @{ value = 'acrp104' } } } } | ConvertTo-Json -Depth 6)
@@ -197,6 +206,17 @@ $calls += [pscustomobject]$record
         $impostor = Invoke-ScheduleScenario -Scenario @{ DeployedJobId = "$rgId/providers/Microsoft.App/jobs/caj-renew-other" } -Overrides @{}
         Assert 'a tagged job that the renewal deployment did not create is refused before any deployment' ($impostor.Failure -match 'projection-renewal-p104fixture' -and
             $impostor.Failure -match 'caj-renew-p104fixture' -and $impostor.Failure -match 'Nothing was changed' -and $impostor.Deploy.Count -eq 0) "$($impostor.Failure) | deploy calls $($impostor.Deploy.Count)"
+        # P104 council round 2: the tier groups come from the deployment's record (Security); a failed deployment and
+        # a schedule edited outside the deployment are named (Coder).
+        $groupDrift = Invoke-ScheduleScenario -Scenario @{ RecordedStandard = '33333333-3333-4333-8333-333333333333' } -Overrides @{}
+        Assert 'tier groups on the job that differ from the deployment record are refused before any deployment' ($groupDrift.Failure -match 'differ' -and
+            $groupDrift.Failure -match '33333333-3333-4333-8333-333333333333' -and $groupDrift.Failure -match 'Nothing was changed' -and $groupDrift.Deploy.Count -eq 0) "$($groupDrift.Failure) | deploy calls $($groupDrift.Deploy.Count)"
+        $failedDeployment = Invoke-ScheduleScenario -Scenario @{ DeploymentState = 'Failed' } -Overrides @{}
+        Assert 'a failed renewal deployment is named and refused before any deployment' ($failedDeployment.Failure -match 'Failed' -and
+            $failedDeployment.Failure -notmatch 'created \.' -and $failedDeployment.Failure -match 'Deploy-ClaudeProjectionRenewal\.ps1' -and $failedDeployment.Deploy.Count -eq 0) "$($failedDeployment.Failure) | deploy calls $($failedDeployment.Deploy.Count)"
+        $portalCron = Invoke-ScheduleScenario -Scenario @{ Jobs = @(New-Job -Cron '*/30 * * * *') } -Overrides @{ Interval = '30m' }
+        Assert 'a cron edited outside the deployment is repaired at the same interval, so the alert range follows' (-not $portalCron.Failure -and $portalCron.Deploy.Count -eq 1 -and
+            $portalCron.Deploy[0].SyncInterval -eq '30m') "$($portalCron.Failure) | $($portalCron.Output)"
         $noRecord = Invoke-ScheduleScenario -Scenario @{ DeployedJobId = '' } -Overrides @{}
         Assert 'a renewal deployment that records no job is refused before any deployment' ($noRecord.Failure -match 'projection-renewal-p104fixture' -and $noRecord.Deploy.Count -eq 0) "$($noRecord.Failure) | deploy calls $($noRecord.Deploy.Count)"
         Assert 'the job lookup uses core az resource commands, with no query or containerapp extension' (($change.Calls -join ' | ') -match '^resource list -g rg-p104 --resource-type Microsoft.App/jobs -o json' -and ($change.Calls -join ' | ') -match 'resource show --ids .*/providers/Microsoft\.App/jobs/' -and ($change.Calls -join ' | ') -notmatch '--query|^containerapp') ($change.Calls -join ' | ')
@@ -210,7 +230,7 @@ $calls += [pscustomobject]$record
         Assert 'the same scheduled interval without the no-success rule redeploys' (-not $noRule.Failure -and $noRule.Deploy.Count -eq 1) "$($noRule.Failure) | $($noRule.Output)"
         $manualWithRule = Invoke-ScheduleScenario -Scenario @{ Jobs = @(New-Job -Cron '') } -Overrides @{ Interval = 'manual' }
         Assert 'a manual job that still has a no-success rule redeploys to remove it' (-not $manualWithRule.Failure -and $manualWithRule.Deploy.Count -eq 1) "$($manualWithRule.Failure) | $($manualWithRule.Output)"
-        $manualClean = Invoke-ScheduleScenario -Scenario @{ Jobs = @(New-Job -Cron ''); Rules = @('sqr-projection-p104fixture-renewal-failed') } -Overrides @{ Interval = 'manual' }
+        $manualClean = Invoke-ScheduleScenario -Scenario @{ Jobs = @(New-Job -Cron ''); Rules = @('sqr-projection-p104fixture-renewal-failed'); RecordedCron = ''; RecordedMinutes = 0 } -Overrides @{ Interval = 'manual' }
         Assert 'a manual job without a no-success rule is already in place' (-not $manualClean.Failure -and $manualClean.Deploy.Count -eq 0 -and $manualClean.Output -match 'already runs only when started') "$($manualClean.Failure) | $($manualClean.Output)"
 
         foreach ($bad in @('15m', '24h', '2h;')) {
@@ -234,7 +254,7 @@ $calls += [pscustomobject]$record
         $twoJobs = Invoke-ScheduleScenario -Scenario @{ Jobs = @(New-Job; New-Job) } -Overrides @{}
         Assert 'two matching jobs are refused with the deploy remedy' ($twoJobs.Failure -match 'More than one Container Apps job' -and $twoJobs.Failure -match 'Deploy-ClaudeProjectionRenewal\.ps1' -and $twoJobs.Deploy.Count -eq 0) $twoJobs.Failure
 
-        $nonePremium = Invoke-ScheduleScenario -Scenario @{ Jobs = @(New-Job -PremiumGroup 'none') } -Overrides @{}
+        $nonePremium = Invoke-ScheduleScenario -Scenario @{ Jobs = @(New-Job -PremiumGroup 'none'); RecordedPremium = 'none' } -Overrides @{}
         Assert 'premium none is passed through' (-not $nonePremium.Failure -and $nonePremium.Deploy[0].PremiumGroup -eq 'none') "$($nonePremium.Failure) | $($nonePremium.Deploy[0] | ConvertTo-Json -Compress)"
 
         $whatIf = Invoke-ScheduleScenario -Scenario @{} -Overrides @{ WhatIf = $true }

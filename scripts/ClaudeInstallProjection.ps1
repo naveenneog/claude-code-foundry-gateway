@@ -272,23 +272,39 @@ function Invoke-ClaudeInstallerProjectionDeployment {
     return $true
 }
 
-# The deploy script's inputs that a re-run keeps from the deployed job (P104 council round 1): its alert addresses,
-# registry SKU, workspace and subnet, so the redeployment sends alerts to the same people and moves nothing. Only
-# the job that the projection-renewal deployment created is kept; a first install alerts the publisher address.
+# The deploy script's inputs that a re-run keeps from the deployed job (P104 council rounds 1-2): its alert
+# addresses, registry SKU, workspace and subnet, so the redeployment sends alerts to the same people and moves
+# nothing. A tagged job that a successful renewal deployment did not create, a registry SKU the deploy script
+# cannot deploy, and a registry closed to public access stop the run; a failed renewal deployment is deployed
+# again. A first install alerts the publisher address.
 function Resolve-ClaudeInstallerSyncJobInputs {
     param([object]$DeployedJob, [object]$JobSettings, [Parameter(Mandatory)][AllowEmptyString()][string]$PublisherEmail)
     if (-not $JobSettings) {
-        return [pscustomobject]@{ AlertEmail = @($PublisherEmail); AcrSku = ''; WorkspaceResourceId = ''; RenewalSubnetId = '' }
+        return [pscustomobject]@{ AlertEmail = @($PublisherEmail); AlertSource = 'the publisher address'; AcrSku = ''; WorkspaceResourceId = ''; RenewalSubnetId = ''; Note = '' }
     }
-    if ($DeployedJob -and -not [string]::Equals([string]$JobSettings.JobResourceId, [string]$DeployedJob.Id, [StringComparison]::OrdinalIgnoreCase)) {
+    $note = ''
+    if (-not [string]::Equals([string]$JobSettings.RenewalDeploymentState, 'Succeeded', [StringComparison]::Ordinal)) {
+        $note = "The last renewal deployment of this job is $($JobSettings.RenewalDeploymentState); this run deploys it again with the settings it recorded."
+    }
+    elseif ($DeployedJob -and -not [string]::Equals([string]$JobSettings.JobResourceId, [string]$DeployedJob.Id, [StringComparison]::OrdinalIgnoreCase)) {
         throw "The job tagged with this projection's prefix is $($DeployedJob.Name) ($($DeployedJob.Id)), but its renewal deployment created $($JobSettings.JobResourceId). Nothing was changed. Delete the job that is not in use, or pass -ProjectionSyncInterval none."
+    }
+    $acrSku = [string]$JobSettings.AcrSku
+    if ($acrSku -and -not @('Basic', 'Premium' | Where-Object { [string]::Equals($_, $acrSku, [StringComparison]::Ordinal) }).Count) {
+        throw "The sync job's registry is $acrSku; scripts/Deploy-ClaudeProjectionRenewal.ps1 deploys Basic or Premium, so a redeployment would change it. Nothing was changed. Pass -ProjectionSyncInterval none to leave the job as it is."
+    }
+    if ([string]::Equals([string]$JobSettings.RegistryPublicNetworkAccess, 'Disabled', [StringComparison]::OrdinalIgnoreCase)) {
+        throw ("The sync job's registry has public network access disabled, and the installer's redeployment of the registry would enable it. Nothing was changed. " +
+            "Pass -ProjectionSyncInterval none to leave the job as it is, or redeploy the job with scripts/Deploy-ClaudeProjectionRenewal.ps1 -KeepRegistry -ImageDigest <digest>.")
     }
     $emails = @(@($JobSettings.AlertEmails) | Where-Object { $_ })
     [pscustomobject]@{
         AlertEmail = $(if ($emails.Count) { $emails } else { @($PublisherEmail) })
-        AcrSku = [string]$JobSettings.AcrSku
+        AlertSource = $(if ($emails.Count) { 'kept from the deployed job' } else { 'the publisher address: the deployed action group has none' })
+        AcrSku = $acrSku
         WorkspaceResourceId = [string]$JobSettings.WorkspaceResourceId
         RenewalSubnetId = [string]$JobSettings.RenewalSubnetId
+        Note = $note
     }
 }
 

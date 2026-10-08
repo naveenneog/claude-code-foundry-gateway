@@ -57,9 +57,10 @@ function Get-ClaudeProjectionSyncJob {
     }
 }
 
-# What a redeployment of the job keeps (P104 council round 1): the alert addresses of the live action group, the
-# live registry SKU, and the workspace and subnet that the last renewal deployment used. The job id that
-# deployment created binds a tagged job to it.
+# What a redeployment of the job keeps (P104 council rounds 1-2): the alert addresses of the live action group,
+# the live registry SKU and network access, and the workspace, subnet, tier groups and schedule that the last
+# renewal deployment recorded. A failed deployment records parameters but no outputs, so its state is returned
+# and the callers decide; the job id that a successful deployment created binds a tagged job to it.
 function Get-ClaudeProjectionSyncJobSettings {
     param([Parameter(Mandatory = $true)][string]$ResourceGroup, [Parameter(Mandatory = $true)][string]$NamePrefix)
     Assert-ClaudeProjectionSyncJobScope -ResourceGroup $ResourceGroup -NamePrefix $NamePrefix
@@ -68,22 +69,31 @@ function Get-ClaudeProjectionSyncJobSettings {
     $registryName = "projection-registry-$NamePrefix"
     $registry = Invoke-ClaudeProjectionSyncAzJson -Arguments @('deployment', 'group', 'show', '-g', $ResourceGroup, '-n', $registryName, '-o', 'json') -What "deployment $registryName"
     $acrName = [string]$registry.properties.outputs.acrName.value
-    if ($acrName -cnotmatch '^[a-z0-9]{5,50}$') { throw "Deployment $registryName records no registry name; nothing was changed." }
-    $acr = Invoke-ClaudeProjectionSyncAzJson -Arguments @('acr', 'show', '-g', $ResourceGroup, '-n', $acrName, '-o', 'json') -What "registry $acrName"
-    $acrSku = [string]$acr.sku.name
-    if (-not @('Basic', 'Premium' | Where-Object { [string]::Equals($_, $acrSku, [StringComparison]::Ordinal) }).Count) {
-        throw "Registry $acrName is $acrSku; scripts/Deploy-ClaudeProjectionRenewal.ps1 deploys Basic or Premium, so a redeployment would change it. Nothing was changed."
+    $acrSku = [string]$registry.properties.parameters.acrSku.value
+    $acrAccess = ''
+    if ($acrName -cmatch '^[a-z0-9]{5,50}$') {
+        $acr = Invoke-ClaudeProjectionSyncAzJson -Arguments @('acr', 'show', '-g', $ResourceGroup, '-n', $acrName, '-o', 'json') -What "registry $acrName"
+        $acrSku = [string]$acr.sku.name
+        $acrAccess = [string]$acr.publicNetworkAccess
     }
     $groupName = "ag-projection-renewal-$NamePrefix"
     $actionGroup = Invoke-ClaudeProjectionSyncAzJson -Arguments @('monitor', 'action-group', 'show', '-g', $ResourceGroup, '-n', $groupName, '-o', 'json') -What "action group $groupName"
     $emails = @(@(@($actionGroup.emailReceivers) + @($actionGroup.properties.emailReceivers)) | Where-Object { $_ } |
             ForEach-Object { ([string]$_.emailAddress).Trim() } | Where-Object { $_ } | Select-Object -Unique)
     $parameters = $renewal.properties.parameters
+    $recordedMinutes = 0
+    if ($null -ne $parameters.noSuccessMinutes.value) { $recordedMinutes = [int]$parameters.noSuccessMinutes.value }
     [pscustomobject]@{
+        RenewalDeploymentState = [string]$renewal.properties.provisioningState
         JobResourceId = [string]$renewal.properties.outputs.jobResourceId.value
         AlertEmails = $emails
         AcrSku = $acrSku
+        RegistryPublicNetworkAccess = $acrAccess
         WorkspaceResourceId = [string]$parameters.logAnalyticsWorkspaceId.value
         RenewalSubnetId = [string]$parameters.containerAppsSubnetId.value
+        StandardGroupId = [string]$parameters.standardGroupId.value
+        PremiumGroupId = [string]$parameters.premiumGroupId.value
+        RecordedCron = [string]$parameters.cronExpression.value
+        RecordedNoSuccessMinutes = $recordedMinutes
     }
 }

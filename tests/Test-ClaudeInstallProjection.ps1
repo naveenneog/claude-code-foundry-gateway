@@ -159,21 +159,31 @@ Assert 'a re-run passes the kept alert addresses, registry SKU, workspace and su
     $calls[0].Args['WorkspaceResourceId'] -match '/workspaces/law-custom$' -and $calls[0].Args['RenewalSubnetId'] -match '/subnets/renewal$') ($calls | ConvertTo-Json -Depth 5)
 
 # P104 council round 1 (Coder): a re-run keeps what the deployed job was deployed with.
-$kept = [pscustomobject]@{ JobResourceId = '/subscriptions/s/resourceGroups/rg-p98/providers/Microsoft.App/jobs/caj-renew-p98'; AlertEmails = @('ops@contoso.example', 'oncall@contoso.example')
+$kept = [pscustomobject]@{ RenewalDeploymentState = 'Succeeded'; RegistryPublicNetworkAccess = 'Enabled'; JobResourceId = '/subscriptions/s/resourceGroups/rg-p98/providers/Microsoft.App/jobs/caj-renew-p98'; AlertEmails = @('ops@contoso.example', 'oncall@contoso.example')
     AcrSku = 'Premium'; WorkspaceResourceId = '/w/law-custom'; RenewalSubnetId = '/s/renewal' }
 $jobFound = [pscustomobject]@{ Id = '/subscriptions/s/resourceGroups/rg-p98/providers/Microsoft.App/jobs/caj-renew-p98'; Name = 'caj-renew-p98' }
 Capture { Resolve-ClaudeInstallerSyncJobInputs -DeployedJob $jobFound -JobSettings $kept -PublisherEmail 'publisher@contoso.example' }
 Assert 'a re-run keeps the deployed job''s alert addresses, registry SKU, workspace and subnet' (-not $Failure -and ((@($Result.AlertEmail)) -join ',') -ceq 'ops@contoso.example,oncall@contoso.example' -and
-    $Result.AcrSku -ceq 'Premium' -and $Result.WorkspaceResourceId -ceq '/w/law-custom' -and $Result.RenewalSubnetId -ceq '/s/renewal') "$Failure | $($Result | ConvertTo-Json -Compress)"
+    $Result.AcrSku -ceq 'Premium' -and $Result.WorkspaceResourceId -ceq '/w/law-custom' -and $Result.RenewalSubnetId -ceq '/s/renewal' -and $Result.AlertSource -ceq 'kept from the deployed job') "$Failure | $($Result | ConvertTo-Json -Compress)"
 Capture { Resolve-ClaudeInstallerSyncJobInputs -DeployedJob $null -JobSettings $null -PublisherEmail 'publisher@contoso.example' }
 Assert 'a first install alerts the publisher address with the template defaults' (-not $Failure -and ((@($Result.AlertEmail)) -join ',') -ceq 'publisher@contoso.example' -and
     -not $Result.AcrSku -and -not $Result.WorkspaceResourceId -and -not $Result.RenewalSubnetId) "$Failure | $($Result | ConvertTo-Json -Compress)"
-$noReceivers = [pscustomobject]@{ JobResourceId = $jobFound.Id; AlertEmails = @(); AcrSku = 'Basic'; WorkspaceResourceId = ''; RenewalSubnetId = '' }
+$noReceivers = [pscustomobject]@{ RenewalDeploymentState = 'Succeeded'; RegistryPublicNetworkAccess = 'Enabled'; JobResourceId = $jobFound.Id; AlertEmails = @(); AcrSku = 'Basic'; WorkspaceResourceId = ''; RenewalSubnetId = '' }
 Capture { Resolve-ClaudeInstallerSyncJobInputs -DeployedJob $jobFound -JobSettings $noReceivers -PublisherEmail 'publisher@contoso.example' }
-Assert 'a deployed job with no alert address gets the publisher address' (-not $Failure -and ((@($Result.AlertEmail)) -join ',') -ceq 'publisher@contoso.example' -and $Result.AcrSku -ceq 'Basic') "$Failure | $($Result | ConvertTo-Json -Compress)"
-$otherJob = [pscustomobject]@{ JobResourceId = '/subscriptions/s/resourceGroups/rg-p98/providers/Microsoft.App/jobs/caj-renew-other'; AlertEmails = @('ops@contoso.example'); AcrSku = 'Basic'; WorkspaceResourceId = ''; RenewalSubnetId = '' }
+Assert 'a deployed job with no alert address gets the publisher address, and the run says so' (-not $Failure -and ((@($Result.AlertEmail)) -join ',') -ceq 'publisher@contoso.example' -and $Result.AcrSku -ceq 'Basic' -and $Result.AlertSource -match 'action group has none') "$Failure | $($Result | ConvertTo-Json -Compress)"
+$otherJob = [pscustomobject]@{ RenewalDeploymentState = 'Succeeded'; RegistryPublicNetworkAccess = 'Enabled'; JobResourceId = '/subscriptions/s/resourceGroups/rg-p98/providers/Microsoft.App/jobs/caj-renew-other'; AlertEmails = @('ops@contoso.example'); AcrSku = 'Basic'; WorkspaceResourceId = ''; RenewalSubnetId = '' }
 Capture { Resolve-ClaudeInstallerSyncJobInputs -DeployedJob $jobFound -JobSettings $otherJob -PublisherEmail 'publisher@contoso.example' }
 Assert 'a tagged job that the renewal deployment did not create stops the re-run' ($Failure -match 'caj-renew-p98' -and $Failure -match 'caj-renew-other' -and $Failure -match 'Nothing was changed') $Failure
+$failedRenewal = [pscustomobject]@{ RenewalDeploymentState = 'Failed'; RegistryPublicNetworkAccess = 'Enabled'; JobResourceId = ''; AlertEmails = @('ops@contoso.example'); AcrSku = 'Premium'; WorkspaceResourceId = '/w/law-custom'; RenewalSubnetId = '/s/renewal' }
+Capture { Resolve-ClaudeInstallerSyncJobInputs -DeployedJob $jobFound -JobSettings $failedRenewal -PublisherEmail 'publisher@contoso.example' }
+Assert 'a failed renewal deployment does not read as another job; the re-run deploys it again and says so' (-not $Failure -and $Result.Note -match 'Failed' -and
+    $Result.WorkspaceResourceId -ceq '/w/law-custom' -and $Result.AcrSku -ceq 'Premium') "$Failure | $($Result | ConvertTo-Json -Compress)"
+$standardSku = [pscustomobject]@{ RenewalDeploymentState = 'Succeeded'; RegistryPublicNetworkAccess = 'Enabled'; JobResourceId = $jobFound.Id; AlertEmails = @('ops@contoso.example'); AcrSku = 'Standard'; WorkspaceResourceId = ''; RenewalSubnetId = '' }
+Capture { Resolve-ClaudeInstallerSyncJobInputs -DeployedJob $jobFound -JobSettings $standardSku -PublisherEmail 'publisher@contoso.example' }
+Assert 'a registry SKU the deploy script cannot keep stops the re-run' ($Failure -match 'Standard' -and $Failure -match 'Basic or Premium' -and $Failure -match 'Nothing was changed') $Failure
+$privateRegistry = [pscustomobject]@{ RenewalDeploymentState = 'Succeeded'; RegistryPublicNetworkAccess = 'Disabled'; JobResourceId = $jobFound.Id; AlertEmails = @('ops@contoso.example'); AcrSku = 'Premium'; WorkspaceResourceId = ''; RenewalSubnetId = '' }
+Capture { Resolve-ClaudeInstallerSyncJobInputs -DeployedJob $jobFound -JobSettings $privateRegistry -PublisherEmail 'publisher@contoso.example' }
+Assert 'a registry with public network access disabled stops the re-run, which would open it' ($Failure -match 'public network access' -and $Failure -match '-KeepRegistry' -and $Failure -match 'Nothing was changed') $Failure
 
 $calls.Clear()
 $okSnapshot = Invoke-ClaudeInstallerProjectionDeployment -Root $root -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 `
@@ -408,7 +418,8 @@ Assert 'a re-run reads the deployed job''s settings before the review and passes
     (Get-CallArgument 'Invoke-ClaudeInstallerSyncJobDeployment' 'AlertEmail') -eq '$syncJobInputs.AlertEmail' -and
     (Get-CallArgument 'Invoke-ClaudeInstallerSyncJobDeployment' 'AcrSku') -eq '$syncJobInputs.AcrSku' -and
     (Get-CallArgument 'Invoke-ClaudeInstallerSyncJobDeployment' 'WorkspaceResourceId') -eq '$syncJobInputs.WorkspaceResourceId' -and
-    (Get-CallArgument 'Invoke-ClaudeInstallerSyncJobDeployment' 'RenewalSubnetId') -eq '$syncJobInputs.RenewalSubnetId')
+    (Get-CallArgument 'Invoke-ClaudeInstallerSyncJobDeployment' 'RenewalSubnetId') -eq '$syncJobInputs.RenewalSubnetId' -and
+    $wiring -match '\(\$\(\$syncJobInputs\.AlertSource\)\)' -and $wiring -match 'if \(\$syncJobInputs\.Note\) \{ Write-Warn2 \$syncJobInputs\.Note \}')
 $earlyIntervalCheck = $wiring.IndexOf('Resolve-ClaudeInstallerSyncInterval -Requested $ProjectionSyncInterval -DeployedJob $null')
 $prerequisiteCheck = $wiring.IndexOf('Test-ClaudePrerequisites -Mode Admin')
 Assert 'a -ProjectionSyncInterval outside the list is refused before the prerequisite check and any Azure call' ($earlyIntervalCheck -ge 0 -and $prerequisiteCheck -gt $earlyIntervalCheck) "early check at $earlyIntervalCheck; prerequisites at $prerequisiteCheck"
