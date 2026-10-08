@@ -57,6 +57,13 @@ entry used is the first in the order of `Sort-ClaudeFlowOrdinal` (P76): the inva
 by UTF-16 code units, then the key itself; Python reproduces it. The business-unit scripts refuse a book that lists
 no models.
 
+Python's one-to-one fold is a best effort, not a byte-identical port of .NET's `ToUpperInvariant`: for a handful of
+non-ASCII characters whose Unicode full and simple uppercase mappings differ (U+1FB3 among them), the two readers
+can pick a different source spelling among equal-rate duplicate keys (U181). Every price-book model and deployment
+identifier seen in the shipped book and the Foundry catalogue (U176) is ASCII, and the readers already agree for
+realistic non-ASCII cases (accents, ligatures, astral characters); the residual is documented and pinned by a test,
+not chased further.
+
 The cache-read metric has no business-unit dimension. The reconciler therefore groups ledger rows and metrics
 by day, user and the normalized deployment family named by the request. The ledger first falls back from an
 empty `DeploymentName` to `ModelName`, then derives the family from that deployment value, so a custom

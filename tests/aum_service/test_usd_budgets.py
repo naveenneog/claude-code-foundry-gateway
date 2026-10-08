@@ -109,6 +109,15 @@ class DollarArithmeticTests(unittest.TestCase):
             "a\U0001F600b": {"inputPerM": 1, "outputPerM": 5},
         }}
         self.assertEqual("a\U0001F600b", price_book_key("ab", astral))
+        # U181 (ASSUMED): Python's full Unicode uppercase mapping expands U+1FB3 to two characters ("ΑΙ"), which
+        # falls back to the unfolded character, while .NET's ToUpperInvariant has a one-to-one simple mapping to
+        # U+1FBC; the readers disagree on this pair. Pinned, not chased further: both entries carry equal rates
+        # (the precondition for reaching this tie), so no price differs either way.
+        archaic_greek = {"models": {
+            "a\u1fb3b": {"inputPerM": 1, "outputPerM": 5},
+            "a\u1fb8b": {"inputPerM": 1, "outputPerM": 5},
+        }}
+        self.assertEqual("a\u1fb3b", price_book_key("ab", archaic_greek))
         conflict = deepcopy(book)
         conflict["models"]["claude-haiku-4-5"] = {"inputPerM": 2, "outputPerM": 5}
         self.assertIsNone(price_book_key("claude-haiku-4-5-20251001", conflict))

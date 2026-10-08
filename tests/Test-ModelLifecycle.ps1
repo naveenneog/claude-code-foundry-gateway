@@ -550,6 +550,13 @@ try {
                 "a$([char]0xFF01)b" = [pscustomobject]@{ inputPerM = 1; outputPerM = 5 }
                 "a$([char]::ConvertFromUtf32(0x1F600))b" = [pscustomobject]@{ inputPerM = 1; outputPerM = 5 }
             } })) -ceq "a$([char]::ConvertFromUtf32(0x1F600))b" -and
+            # U181 (ASSUMED): .NET's ToUpperInvariant has a one-to-one simple mapping U+1FB3 -> U+1FBC; Python's
+            # full uppercase mapping expands U+1FB3 to two characters and falls back to the unfolded character, so
+            # the two readers disagree on this pair. Pinned, not chased further: both entries carry equal rates.
+            (Resolve-ClaudePriceBookKey -Name 'ab' -Book ([pscustomobject]@{ date = '2026-10-08'; source = 'test'; models = [pscustomobject]@{
+                "a$([char]0x1FB3)b" = [pscustomobject]@{ inputPerM = 1; outputPerM = 5 }
+                "a$([char]0x1FB8)b" = [pscustomobject]@{ inputPerM = 1; outputPerM = 5 }
+            } })) -ceq "a$([char]0x1FB8)b" -and
             -not (Resolve-ClaudePriceBookKey -Name ("claude$([char]0x0301)-opus-5") -Book $accentBook)
     }
     Check 'PowerShell price book refuses duplicate normalized keys with different cache rates' {
