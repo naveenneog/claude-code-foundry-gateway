@@ -229,6 +229,7 @@ Assert 'live USD query harness covers the next UTC day metric' ($harness -match 
 Assert 'live USD query harness prints returned rows on failure' ($harness -match 'Write-ReturnedRows')
 Assert 'live USD query harness asserts rows have non-null day and users where required' ($harness -match 'every row has a day' -and $harness -match 'non-userless row has a user')
 Assert 'live USD query harness covers duplicate metric spellings and tied latest rows' ($harness -match 'claude-haiku-4.5' -and $harness -match 'tie-a' -and $harness -match 'tie-b')
+Assert 'live USD query harness characterizes empty-deployment custom-metric residuals' ($harness -match 'residual empty deployment custom metric is a latest-stamp metric-only row and body reads remain' -and $harness -match 'known-read family ignores same-family metric residual')
 $adr60 = Get-Content (Join-Path $root 'docs\adr\0060-usd-reconciler-attribution-and-pricing.md') -Raw
 Assert 'ADR-0060 records the residual empty-deployment custom-metric double-count assumption' (
     $adr60 -match 'latest stamped unit' -and
