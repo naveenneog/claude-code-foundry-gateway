@@ -47,10 +47,16 @@ the published price table to one row per normalized key before joining, so a mal
 spend rows.
 
 The cache-read metric has no business-unit dimension. The reconciler therefore groups ledger rows and metrics
-by day, user and normalized model family. When all requests in that group have body cache-read counts, the
+by day, user and the normalized deployment family named by the request. The ledger first falls back from an
+empty `DeploymentName` to `ModelName`, then derives the family from that deployment value, so a custom
+deployment such as `prod-big` joins the gateway metric whose `Model` dimension is also `prod-big`. When all requests in that group have body cache-read counts, the
 metric is ignored. Otherwise the group cache total is `max(sum(body_reads), metric_reads)`, and only the
 remainder beyond row body counts is assigned to the latest stamped ledger row in the group. A metric-only group
 uses the user's latest stamped unit in the query window; without one it is person-only and `unit_unknown`.
+If a ledger row has an empty `DeploymentName` while the request used a custom deployment name, the ledger family
+falls back to the served model and cannot join that custom-deployment metric; the request remains priced from
+the ledger row and the unmatched metric is reported as a metric-only `unit_unknown`/person row rather than
+silently merged into the wrong deployment.
 
 An unpriced row is never $0 and marks only scopes that own that row. The compact policy-facing state keeps
 the same `compact-v1` item shape and `policy_revision`; the userless-row report is emitted only when such

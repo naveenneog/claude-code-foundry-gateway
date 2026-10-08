@@ -172,9 +172,11 @@ class UsdServiceTests(unittest.TestCase):
                          "coalesce(metric_rows,0) > 0",
                          "by day=startofday(timestamp), user_id, family, deployment, business_unit"):
             self.assertIn(fragment, query)
+        self.assertIn("family=family_of(deployment)", query)
         self.assertIn("summarize metric_model=min(metric_model)", query)
         self.assertIn("deployment == group_deployment", query)
         self.assertIn("business_unit == group_business_unit", query)
+        self.assertNotIn("family=family_of(coalesce(model, deployment))", query)
         self.assertNotIn("make_set(business_unit", query)
         self.assertNotIn("sum(usd)", query)
         self.assertNotIn("sum(total_tokens)", query)
