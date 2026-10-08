@@ -168,8 +168,10 @@ class UsdServiceTests(unittest.TestCase):
                          "remainder_reads", "unit_unknown",
                          "day=coalesce(day, day1)", "user_id=coalesce(user_id, user_id1)",
                          "family=coalesce(family, family1)",
+                         "cached_by_model", "max_metric_reads",
                          "by day=startofday(timestamp), user_id, family, deployment, business_unit"):
             self.assertIn(fragment, query)
+        self.assertIn("summarize metric_model=min(metric_model)", query)
         self.assertNotIn("make_set(business_unit", query)
         self.assertNotIn("sum(usd)", query)
         self.assertNotIn("sum(total_tokens)", query)
@@ -177,7 +179,7 @@ class UsdServiceTests(unittest.TestCase):
     def test_usage_query_can_target_fixture_names_for_live_harness(self):
         query = usage_query(self.arm.base, NOW, chargeback="ChargebackFixture", metrics="MetricsFixture")
         self.assertIn("ChargebackFixture(_from, _to)", query)
-        self.assertIn("let cached = MetricsFixture", query)
+        self.assertIn("let cached_by_model = MetricsFixture", query)
         self.assertNotIn("ClaudeChargeback(", query)
         self.assertNotIn("let cached = AppMetrics", query)
 

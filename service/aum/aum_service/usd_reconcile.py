@@ -47,13 +47,21 @@ let metered = ledger
     ingestion_delay_seconds=max(datetime_diff('second', ingested_at, timestamp)),
     latest_request=max(timestamp)
     by day=startofday(timestamp), user_id, family, deployment, business_unit;
-let cached = {metrics}
+let cached_by_model = {metrics}
 | where TimeGenerated >= _from and TimeGenerated < _to
 | where Name == "Prompt Cached Tokens"
 | where tostring(Properties["Service ID"]) == {literal(gateway.split('/')[-1])}
 | extend family=family_of(tostring(Properties.Model))
-| summarize metric_reads=sum(tolong(Sum)), metric_rows=count()
+| summarize model_reads=sum(tolong(Sum)), model_rows=count()
     by day=startofday(TimeGenerated), user_id=tostring(Properties.UserId), family, metric_model=tostring(Properties.Model);
+let max_metric_reads = cached_by_model
+| summarize max_model_reads=max(model_reads), metric_reads=sum(model_reads), metric_rows=sum(model_rows)
+    by day, user_id, family;
+let cached = cached_by_model
+| join kind=inner max_metric_reads on day, user_id, family
+| where model_reads == max_model_reads
+| summarize metric_model=min(metric_model), metric_reads=take_any(metric_reads), metric_rows=take_any(metric_rows)
+    by day, user_id, family;
 let group_totals = metered
 | summarize total_body_reads=sum(body_reads), total_missing_reads=sum(missing_reads), group_latest=max(latest_request)
     by day, user_id, family
