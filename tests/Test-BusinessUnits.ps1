@@ -380,6 +380,10 @@ try {
     try { ConvertTo-ClaudeBuTokens -Usd 1000 -Model 'claude-opus-5.5' | Out-Null } catch { $budgetError = $_.Exception.Message }
     Assert 'budget conversion refuses a poisoned family instead of writing fallback tokens' ($budgetError -match 'No price for') $budgetError
     Assert 'poisoned-family warning names the family and says it is unpriced until fixed' ($warnings -match 'claudeopus55' -and $warnings -match 'unpriced until' -and $warnings -match 'cacheReadPerM') $warnings
+    [IO.File]::WriteAllText($invalidOptionalBook, (@{ date = '2026-10-08'; source = 'test'; models = @{} } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+    $emptyError = ''
+    try { Import-ClaudePriceBook -Path $invalidOptionalBook 3>$null | Out-Null } catch { $emptyError = $_.Exception.Message }
+    Assert 'a price book that lists no models is refused with the remedy' ($emptyError -match 'lists no models' -and $emptyError -match 'Delete it') $emptyError
 }
 finally {
     Remove-Item -LiteralPath $invalidOptionalBook -Force -ErrorAction SilentlyContinue

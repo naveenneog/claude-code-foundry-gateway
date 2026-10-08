@@ -67,6 +67,8 @@ function Import-ClaudePriceBook {
 
     $doc = Get-Content $Path -Raw | ConvertFrom-Json
     if (-not $doc.models) { throw "Price book '$Path' has no 'models' object. Delete it to fall back to the built-in rates." }
+    # A book whose entries are all invalid still imports, with every family unpriced; a book with no entries is refused.
+    if (-not @($doc.models.PSObject.Properties).Count) { throw "Price book '$Path' lists no models. Delete it to fall back to the built-in rates." }
 
     $book = @{}
     $poisoned = @{}
