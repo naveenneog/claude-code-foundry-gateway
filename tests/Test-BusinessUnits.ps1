@@ -363,7 +363,10 @@ try {
             'claude-sonnet-5-5-20260101' = @{ inputPerM = 2; outputPerM = 10; cacheReadPerM = $null }
             'claude-sonnet-5.5' = @{ inputPerM = 1; outputPerM = 5 }
             'required-negative' = @{ inputPerM = -5; outputPerM = 25 }
+            'required.negative' = @{ inputPerM = 1; outputPerM = 5 }
             'required-boolean' = @{ inputPerM = $true; outputPerM = 25 }
+            'required-output' = @{ inputPerM = 1; outputPerM = 'x' }
+            'required.output' = @{ inputPerM = 1; outputPerM = 5 }
         }
     } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
     $warnings = (Import-ClaudePriceBook -Path $invalidOptionalBook 3>&1 | Out-String)
@@ -372,6 +375,11 @@ try {
         $null -eq (ConvertTo-ClaudeCacheUsd -Model 'claude-opus-5.5' -Tokens 1000000)
     )
     Assert 'invalid dated entries poison their family instead of falling back' ($null -eq (ConvertTo-ClaudeRequestUsd -Model 'claude-sonnet-5-5-20260101' -InputTokens 1000000))
+    Assert 'an invalid dated entry also leaves its undated family unpriced' ($null -eq (ConvertTo-ClaudeRequestUsd -Model 'claude-sonnet-5.5' -InputTokens 1000000))
+    Assert 'an invalid required rate leaves a valid sibling spelling unpriced' (
+        $null -eq (ConvertTo-ClaudeRequestUsd -Model 'required.negative' -InputTokens 1000000) -and
+        $null -eq (ConvertTo-ClaudeRequestUsd -Model 'required.output' -InputTokens 1000000)
+    )
     Assert 'invalid required rates poison their families and leave converters unpriced' (
         $null -eq (ConvertTo-ClaudeRequestUsd -Model 'required-negative' -InputTokens 1000000) -and
         $null -eq (ConvertTo-ClaudeRequestUsd -Model 'required-boolean' -InputTokens 1000000)
@@ -379,11 +387,28 @@ try {
     $budgetError = ''
     try { ConvertTo-ClaudeBuTokens -Usd 1000 -Model 'claude-opus-5.5' | Out-Null } catch { $budgetError = $_.Exception.Message }
     Assert 'budget conversion refuses a poisoned family instead of writing fallback tokens' ($budgetError -match 'No price for') $budgetError
+    Assert 'the poisoned-family refusal names the invalid entry, its field and the price book' ($budgetError -match "entry 'claude-opus-5-5'" -and $budgetError -match 'cacheReadPerM' -and $budgetError.Contains($invalidOptionalBook)) $budgetError
     Assert 'poisoned-family warning names the family and says it is unpriced until fixed' ($warnings -match 'claudeopus55' -and $warnings -match 'unpriced until' -and $warnings -match 'cacheReadPerM') $warnings
     [IO.File]::WriteAllText($invalidOptionalBook, (@{ date = '2026-10-08'; source = 'test'; models = @{} } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
     $emptyError = ''
     try { Import-ClaudePriceBook -Path $invalidOptionalBook 3>$null | Out-Null } catch { $emptyError = $_.Exception.Message }
     Assert 'a price book that lists no models is refused with the remedy' ($emptyError -match 'lists no models' -and $emptyError -match 'Delete it') $emptyError
+    [IO.File]::WriteAllText($invalidOptionalBook, '{"date":"2026-10-08","source":"test","models":{"huge":{"inputPerM":1e30,"outputPerM":5},"too-high":{"inputPerM":2000000,"outputPerM":5},"arrayed":[{"inputPerM":1,"outputPerM":5}],"fine":{"inputPerM":1,"outputPerM":5}}}', [Text.UTF8Encoding]::new($false))
+    $rangeError = ''
+    try { & { $ErrorActionPreference = 'Stop'; Import-ClaudePriceBook -Path $invalidOptionalBook 3>$null | Out-Null } } catch { $rangeError = $_.Exception.Message }
+    Assert 'an out-of-range rate or a non-object entry leaves only its family unpriced, without stopping the import' (
+        -not $rangeError -and
+        $null -eq (ConvertTo-ClaudeRequestUsd -Model 'huge' -InputTokens 1000000) -and
+        $null -eq (ConvertTo-ClaudeRequestUsd -Model 'too-high' -InputTokens 1000000) -and
+        $null -eq (ConvertTo-ClaudeRequestUsd -Model 'arrayed' -InputTokens 1000000) -and
+        $null -ne (ConvertTo-ClaudeRequestUsd -Model 'fine' -InputTokens 1000000)
+    ) $rangeError
+    foreach ($badModels in '"abc"', '[{"inputPerM":1,"outputPerM":5}]') {
+        [IO.File]::WriteAllText($invalidOptionalBook, '{"date":"2026-10-08","source":"test","models":' + $badModels + '}', [Text.UTF8Encoding]::new($false))
+        $modelsError = ''
+        try { Import-ClaudePriceBook -Path $invalidOptionalBook 3>$null | Out-Null } catch { $modelsError = $_.Exception.Message }
+        Assert "a price book whose models value is not an object is refused: $badModels" ($modelsError -match "has no 'models' object") $modelsError
+    }
 }
 finally {
     Remove-Item -LiteralPath $invalidOptionalBook -Force -ErrorAction SilentlyContinue

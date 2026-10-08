@@ -215,6 +215,7 @@ try {
     [IO.File]::WriteAllText($tempPublishBook, (@{ date = '2026-10-08'; models = @{ 'my-typo' = @{ inputPerM = 3; outputPerM = 15; cacheReadPerM = 'oops' } } } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
     $invalidRate = Get-Thrown { New-PriceBlock -Path $tempPublishBook }
     Assert 'query publisher refuses a non-numeric optional rate with the key and field' ($invalidRate -match 'my-typo' -and $invalidRate -match 'cacheReadPerM') $invalidRate
+    Assert 'query publisher rate refusals name the price book file' ($missingRate.Contains($tempPublishBook) -and $invalidRate.Contains($tempPublishBook)) "$missingRate | $invalidRate"
     [IO.File]::WriteAllText($tempPublishBook, (@{ date = '2026-10-08'; models = [ordered]@{
         'claude-haiku-4.5' = @{ inputPerM = 1; outputPerM = 5 }
         'claude-haiku-4-5' = @{ inputPerM = 1; outputPerM = 5; cacheReadPerM = 0.05 }
@@ -222,7 +223,7 @@ try {
     $conflictingDuplicate = Get-Thrown { New-PriceBlock -Path $tempPublishBook }
     Assert 'query publisher behaviorally refuses duplicate normalized keys with conflicting effective rates' ($conflictingDuplicate -match 'Duplicate normalized price-book key' -and $conflictingDuplicate -match 'claude-haiku-4\.5' -and $conflictingDuplicate -match 'claude-haiku-4-5') $conflictingDuplicate
     $rateConflictCases = @(
-        @('inputPerM', @{ inputPerM = 1; outputPerM = 5 }, @{ inputPerM = 2; outputPerM = 5 }),
+        @('inputPerM', @{ inputPerM = 1; outputPerM = 5; cacheReadPerM = 0.1; cacheWrite5mPerM = 1.25; cacheWrite1hPerM = 2 }, @{ inputPerM = 2; outputPerM = 5; cacheReadPerM = 0.1; cacheWrite5mPerM = 1.25; cacheWrite1hPerM = 2 }),
         @('outputPerM', @{ inputPerM = 1; outputPerM = 5 }, @{ inputPerM = 1; outputPerM = 6 }),
         @('cacheReadPerM', @{ inputPerM = 1; outputPerM = 5 }, @{ inputPerM = 1; outputPerM = 5; cacheReadPerM = 0.05 }),
         @('cacheWrite5mPerM', @{ inputPerM = 1; outputPerM = 5 }, @{ inputPerM = 1; outputPerM = 5; cacheWrite5mPerM = 2 }),

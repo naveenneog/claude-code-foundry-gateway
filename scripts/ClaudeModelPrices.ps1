@@ -47,6 +47,7 @@ function Get-ClaudeModelPriceBook {
         }
     }
     $seen = @{}
+    $spellings = [ordered]@{}
     foreach ($p in $doc.models.PSObject.Properties) {
         $key = ConvertTo-ClaudePriceModelKey $p.Name
         if ($seen.ContainsKey($key)) {
@@ -57,9 +58,17 @@ function Get-ClaudeModelPriceBook {
             if (-not [string]::Equals($previousRate, $currentRate, [StringComparison]::Ordinal)) {
                 throw "Duplicate normalized price-book key '$key' in '$Path' has conflicting rates: $previousName and $($p.Name)."
             }
-            Write-Warning "Duplicate normalized price-book key '$key' in '$Path': $previousName and $($p.Name)."
+            $spellings[$key] = @($spellings[$key]) + @($p.Name)
         }
-        else { $seen[$key] = $p.Name }
+        else { $seen[$key] = $p.Name; $spellings[$key] = @($p.Name) }
+    }
+    foreach ($key in @($spellings.Keys)) {
+        $names = @($spellings[$key])
+        if ($names.Count -gt 1) {
+            # Resolve-ClaudePriceBookKey uses the first equal-rate spelling in Sort-ClaudeFlowOrdinal order (P76).
+            $used = @(Sort-ClaudeFlowOrdinal -InputObject $names)[0]
+            Write-Warning "Duplicate normalized price-book key '$key' in '$Path': $($names -join ', ') have equal effective rates; '$used' is used."
+        }
     }
     return $doc
 }

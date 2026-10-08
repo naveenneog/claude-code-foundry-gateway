@@ -538,6 +538,10 @@ try {
         } }
         $book.models.'claude-haiku-4.5'.inputPerM -eq 0.8 -and
             (Resolve-ClaudePriceBookKey -Name 'scaled-model' -Book $scaleBook) -eq 'scaled-model' -and
+            (Resolve-ClaudePriceBookKey -Name 'az' -Book ([pscustomobject]@{ date = '2026-10-08'; source = 'test'; models = [pscustomobject]@{
+                'A_z' = [pscustomobject]@{ inputPerM = 1; outputPerM = 5 }
+                'a-z' = [pscustomobject]@{ inputPerM = 1; outputPerM = 5 }
+            } })) -ceq 'a-z' -and
             -not (Resolve-ClaudePriceBookKey -Name ("claude$([char]0x0301)-opus-5") -Book $accentBook)
     }
     Check 'PowerShell price book refuses duplicate normalized keys with different cache rates' {
@@ -548,9 +552,21 @@ try {
         } })
         Reject { Get-ClaudeModelPriceBook $dup } 'conflicting|Duplicate normalized'
     }
+    Check 'an equal-rate duplicate warning names every spelling and the one in use' {
+        $dup = Join-Path $scratch 'duplicate-warning-price-book.json'
+        Save $dup ([ordered]@{ date = '2026-10-08'; source = 'test'; models = [ordered]@{
+            'claude_haiku_4_5' = @{ inputPerM = 1; outputPerM = 5 }
+            'claude-haiku-4.5' = @{ inputPerM = 1; outputPerM = 5 }
+            'claude-haiku-4-5' = @{ inputPerM = 1.0; outputPerM = 5 }
+        } })
+        $warnings = @(Get-ClaudeModelPriceBook $dup 3>&1 | Where-Object { $_ -is [Management.Automation.WarningRecord] } | ForEach-Object { $_.Message })
+        $warnings.Count -eq 1 -and $warnings[0] -match 'equal effective rates' -and
+            $warnings[0].Contains('claude_haiku_4_5') -and $warnings[0].Contains('claude-haiku-4.5') -and
+            $warnings[0].Contains("'claude-haiku-4-5' is used")
+    }
     Check 'PowerShell resolver refuses duplicate families that differ in any one effective rate' {
         $cases = @(
-            @('inputPerM', @{ inputPerM = 1; outputPerM = 5 }, @{ inputPerM = 2; outputPerM = 5 }),
+            @('inputPerM', @{ inputPerM = 1; outputPerM = 5; cacheReadPerM = 0.1; cacheWrite5mPerM = 1.25; cacheWrite1hPerM = 2 }, @{ inputPerM = 2; outputPerM = 5; cacheReadPerM = 0.1; cacheWrite5mPerM = 1.25; cacheWrite1hPerM = 2 }),
             @('outputPerM', @{ inputPerM = 1; outputPerM = 5 }, @{ inputPerM = 1; outputPerM = 6 }),
             @('cacheReadPerM', @{ inputPerM = 1; outputPerM = 5 }, @{ inputPerM = 1; outputPerM = 5; cacheReadPerM = 0.05 }),
             @('cacheWrite5mPerM', @{ inputPerM = 1; outputPerM = 5 }, @{ inputPerM = 1; outputPerM = 5; cacheWrite5mPerM = 2 }),

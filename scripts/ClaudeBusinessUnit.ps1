@@ -66,7 +66,7 @@ function Import-ClaudePriceBook {
     if (-not (Test-Path $Path)) { return $false }
 
     $doc = Get-Content $Path -Raw | ConvertFrom-Json
-    if (-not $doc.models) { throw "Price book '$Path' has no 'models' object. Delete it to fall back to the built-in rates." }
+    if (-not $doc.models -or $doc.models -isnot [System.Management.Automation.PSCustomObject]) { throw "Price book '$Path' has no 'models' object. Delete it to fall back to the built-in rates." }
     # A book whose entries are all invalid still imports, with every family unpriced; a book with no entries is refused.
     if (-not @($doc.models.PSObject.Properties).Count) { throw "Price book '$Path' lists no models. Delete it to fall back to the built-in rates." }
 
@@ -75,9 +75,11 @@ function Import-ClaudePriceBook {
     function Add-PoisonedPriceFamily([string]$ModelName, [string]$Field) {
         $family = ConvertTo-ClaudePriceModelKey $ModelName
         if ($family) {
-            $poisoned[$family] = $true
+            # The value is the reason a refusal gives for every name in the family.
+            $reason = "entry '$ModelName' in price book '$Path' has invalid $Field"
+            $poisoned[$family] = $reason
             if ($family.Length -gt 8 -and $family.Substring($family.Length - 8) -match '^\d{8}$') {
-                $poisoned[$family.Substring(0, $family.Length - 8)] = $true
+                $poisoned[$family.Substring(0, $family.Length - 8)] = $reason
             }
             Write-Warning "Price book '$Path': model '$ModelName' has invalid $Field; normalized family '$family' is unpriced until the entry is fixed."
         }
@@ -87,12 +89,17 @@ function Import-ClaudePriceBook {
             $Value -is [System.Collections.IEnumerable] -or $Value.GetType().FullName -eq 'System.Management.Automation.PSCustomObject') {
             return $null
         }
-        $parsed = [decimal]$Value
-        if ($parsed -lt 0) { return $null }
+        # The reconciler's bounds (service/aum/aum_service/usd_budgets.py rate): 0 to 1,000,000 per million tokens.
+        try { $parsed = [decimal]$Value } catch { return $null }
+        if ($parsed -lt 0 -or $parsed -gt 1000000) { return $null }
         return $parsed
     }
     foreach ($p in $doc.models.PSObject.Properties) {
         $m = $p.Value
+        if ($m -isnot [System.Management.Automation.PSCustomObject]) {
+            Add-PoisonedPriceFamily $p.Name 'shape (the entry is not an object)'
+            continue
+        }
         $inputRate = Test-PriceRate $m.inputPerM
         if ($null -eq $inputRate) {
             Add-PoisonedPriceFamily $p.Name 'inputPerM'
@@ -166,13 +173,19 @@ function Resolve-ClaudePriceBookEntry {
 
 function Test-ClaudePoisonedPriceFamily {
     param([AllowNull()][string]$Model)
+    return [bool](Get-ClaudePoisonedPriceFamilyReason $Model)
+}
+
+function Get-ClaudePoisonedPriceFamilyReason {
+    param([AllowNull()][string]$Model)
     $family = ConvertTo-ClaudePriceModelKey $Model
-    if (-not $family -or -not $script:ClaudePoisonedPriceFamilies) { return $false }
-    if ($script:ClaudePoisonedPriceFamilies.ContainsKey($family)) { return $true }
+    if (-not $family -or -not $script:ClaudePoisonedPriceFamilies) { return '' }
+    if ($script:ClaudePoisonedPriceFamilies.ContainsKey($family)) { return [string]$script:ClaudePoisonedPriceFamilies[$family] }
     if ($family.Length -gt 8 -and $family.Substring($family.Length - 8) -match '^\d{8}$') {
-        return $script:ClaudePoisonedPriceFamilies.ContainsKey($family.Substring(0, $family.Length - 8))
+        $undated = $family.Substring(0, $family.Length - 8)
+        if ($script:ClaudePoisonedPriceFamilies.ContainsKey($undated)) { return [string]$script:ClaudePoisonedPriceFamilies[$undated] }
     }
-    return $false
+    return ''
 }
 
 function Test-ClaudeBuId {
@@ -471,6 +484,8 @@ function ConvertTo-ClaudeBuTokens {
     $resolved = Resolve-ClaudePriceBookEntry $Model
     $price = if ($resolved) { $resolved.Price } else { $null }
     if (-not $price) {
+        $poisonReason = Get-ClaudePoisonedPriceFamilyReason $Model
+        if ($poisonReason) { throw "No price for '$Model': $poisonReason. Its model family stays unpriced until that entry is corrected." }
         throw ("No price for '$Model'. Known models: " + (($script:ClaudePriceBook.Keys | Sort-Object) -join ', ') + ".")
     }
 
