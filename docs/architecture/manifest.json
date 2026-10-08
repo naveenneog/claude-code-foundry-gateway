@@ -418,7 +418,7 @@
         "scripts/Register-ClaudeUsdReconciler.ps1": "a253e2e0af780e2db0f63bf94b214a80f155cfe0b1dd4ac3a4d69724342c4fef",
         "scripts/Sync-ClaudeUsdBudgets.ps1": "f0d5c3d6d0fb2da6b06b75c38cfecad9773bdadb97803027645910696a1d3d5c",
         "scripts/flow/Budgets.ps1": "3ed6297fd227e6365f92f29e27ded8bd98947375ff7eab39e235682423c00cea",
-        "service/aum/aum_service/usd_budgets.py": "9bd79b60690e89cc48a4b6ae9cd5c107a2a39c4d3249b8cf8507586ea0978edc",
+        "service/aum/aum_service/usd_budgets.py": "3116ebbf9b41b7256787876a5cc5f60cb9dbdb863a71772ffa05114fa723079c",
         "service/aum/aum_service/usd_reconcile.py": "130e68bbeea6d7da5f53eb0a266f8a5d238c5758ce0aa2f69ef538b52a8fc14c",
         "service/aum/aum_service/usd_service.py": "fe4098efe549e177354e7ae9091f3ae8f9b2b9445fafb20091f3ba1d09105184",
         "service/aum/function_app.py": "cc2ded40782dc82a0252449f1d46bbf74feb1282345ee0e1ef45e8f85da7f83a"
@@ -515,7 +515,7 @@
         "scripts/ClaudeDesktopSignIn.ps1": "00f6f2b38f15b589d47ec8cb048391910fed44131085fa4a865e0e802df7fe3e",
         "scripts/ClaudeModelDeployment.ps1": "923e984a458ddd9a1d0846958095f2a0e30d61ffa73b19800bff370eadf05269",
         "scripts/ClaudeModelLifecycle.ps1": "a4e4cfc5f31cc07bb42e223bb20d763baeaecad746ce16152184010b2b8e84b2",
-        "scripts/ClaudeModelPrices.ps1": "660d3a204a00536678287eccd06592b2ae12cd7047c32f9ebf0b2a3834582eec",
+        "scripts/ClaudeModelPrices.ps1": "7e365019d82624e296c333d77826bb85b0bed152775a2976ddc612982ec0ad02",
         "scripts/ClaudeModelProfiles.ps1": "4a032924987f56f118e2deefe21673bfa5583c06dd56164a753b151c9d2a1549",
         "scripts/ClaudeTurnstileGovernance.ps1": "e0153a479a9bd3f5c17b5a9a9fc043177ea822469da73478a452c1e2428a4f7a",
         "scripts/New-ClaudeCodePolicy.ps1": "28caaf2a489f4645ff0f7f9e883dddc695e4695c5bd9161143daa51fd655f004",
