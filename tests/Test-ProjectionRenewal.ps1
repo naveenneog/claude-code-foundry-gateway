@@ -182,10 +182,17 @@ try {
         Assert 'the job name is put into each query' ([string]$criterion.query -match "replace\(" -and [string]$criterion.query -match "'\{jobName\}', variables\('jobName'\)") ([string]$criterion.query)
         Assert 'a rule fires when its query returns any row' ($criterion.timeAggregation -eq 'Count' -and $criterion.operator -eq 'GreaterThan' -and [int]$criterion.threshold -eq 0 -and -not $criterion.Contains('metricMeasureColumn'))
         Assert 'each rule notifies the action group' ([string](@($rule.properties.actions.actionGroups)[0]) -match 'actionGroups')
+        # Bicep does not interpolate ''' strings: a query written as '''${renewalLogs}...''' deploys that text
+        # literally (P104 found the P97 no-success rule in this state).
+        $ruleQueries = @($res | Where-Object { $_.type -eq 'Microsoft.Insights/scheduledQueryRules' } | ForEach-Object { [string]@($_.properties.criteria.allOf)[0].query })
+        $literalQueries = @($ruleQueries | Where-Object { $_ -match '\$\{' })
+        Assert 'no rule query holds Bicep text that was not interpolated' ($ruleQueries.Count -ge 2 -and $literalQueries.Count -eq 0) ($literalQueries -join ' | ')
+        Assert 'the no-success query is a template variable joined to the shared log query' (-not [string]::IsNullOrWhiteSpace([string]$renewalTemplate.variables.noSuccessQuery)) 'variables.noSuccessQuery is missing'
         $events = [IO.File]::ReadAllText((Join-Path $root 'sync\src\events.mjs'))
         $succeeded = [regex]::Match($events, "RENEWAL_SUCCEEDED = '([^']+)'").Groups[1].Value
         $failedEvent = [regex]::Match($events, "RENEWAL_FAILED = '([^']+)'").Groups[1].Value
-        foreach ($definition in $definitions) {
+        $queryChecks = @($definitions) + @([pscustomobject]@{ name = 'no-success'; query = [string]$renewalTemplate.variables.noSuccessQuery })
+        foreach ($definition in $queryChecks) {
             $query = $base + [string]$definition.query
             $lines = @($query -split "`r?`n" | Where-Object { $_.Trim() })
             Assert "$($definition.name): no legacy table or column" ($query -notmatch '_CL\b|Log_s\b')
@@ -195,7 +202,27 @@ try {
             Assert "$($definition.name): it matches the job's $expected line" ($expected -and $query.Contains("'`"event`":`"$expected`"'")) $query
         }
         Assert 'the expiry-margin alert is removed because records persist until sync changes them' (-not (($definitions | ForEach-Object name) -contains 'expiry-margin-60m')) (($definitions | ForEach-Object name) -join ',')
-        Assert 'the stale-success alert is conditional on a schedule' ([IO.File]::ReadAllText((Join-Path $root 'infra\projection-renewal.bicep')) -match "resource noSuccessAlert 'Microsoft\.Insights/scheduledQueryRules@2023-12-01' = if \(isScheduled\)" -and $renewalTemplate.parameters.cronExpression.defaultValue -eq '')
+        # P104 (ADR-0058): the stale-success rule reads 2 x interval + 15 minutes, which the deploy script passes in
+        # minutes; it has one name for every interval and exists only for a schedule.
+        $bicepText = [IO.File]::ReadAllText((Join-Path $root 'infra\projection-renewal.bicep'))
+        $rangeParameter = $renewalTemplate.parameters.noSuccessMinutes
+        Assert 'the template takes the no-success range in minutes, from 0 to two days' ($rangeParameter -and $rangeParameter.type -eq 'int' -and
+            $rangeParameter.defaultValue -eq 0 -and $rangeParameter.minValue -eq 0 -and $rangeParameter.maxValue -eq 2880) ($rangeParameter | ConvertTo-Json -Compress)
+        Assert 'the stale-success alert exists only for a schedule with a range' (
+            $bicepText -match "resource noSuccessAlert 'Microsoft\.Insights/scheduledQueryRules@2023-12-01' = if \(watchesSuccess\)" -and
+            $bicepText -match '(?m)^var watchesSuccess = isScheduled && noSuccessMinutes > 0\s*$' -and $renewalTemplate.parameters.cronExpression.defaultValue -eq '')
+        Assert 'each query reads the range it is given' ($base -match 'TimeGenerated > ago\(\{window\}m\)') $base
+        $noSuccess = $res | Where-Object { $_.type -eq 'Microsoft.Insights/scheduledQueryRules' -and [string]$_.name -match 'no-success' } | Select-Object -First 1
+        Assert 'the stale-success rule has one name for every interval' ([string]$noSuccess.name -ceq "[format('sqr-projection-{0}-no-success', parameters('namePrefix'))]") ([string]$noSuccess.name)
+        $rangeQuery = [string]@($noSuccess.properties.criteria.allOf)[0].query
+        Assert 'the stale-success query and its time range read the no-success range' (
+            $rangeQuery -match "'\{window\}', string\(parameters\('noSuccessMinutes'\)\)" -and
+            [string]$noSuccess.properties.overrideQueryTimeRange -ceq "[format('PT{0}M', parameters('noSuccessMinutes'))]") "$rangeQuery | $($noSuccess.properties.overrideQueryTimeRange)"
+        Assert 'the stale-success rule is evaluated every 5 minutes over 5-minute bins' ($noSuccess.properties.evaluationFrequency -eq 'PT5M' -and $noSuccess.properties.windowSize -eq 'PT5M')
+        Assert 'the stale-success description names the range' ([string]$noSuccess.properties.description -match "parameters\('noSuccessMinutes'\)") ([string]$noSuccess.properties.description)
+        $failureRules = @($res | Where-Object { $_.type -eq 'Microsoft.Insights/scheduledQueryRules' -and [string]$_.name -notmatch 'no-success' })
+        Assert 'the failed-run and Graph-denied rules keep their 45-minute range' ($failureRules.Count -ge 1 -and @($failureRules | Where-Object {
+            $_.properties.windowSize -ne 'PT45M' -or [string]@($_.properties.criteria.allOf)[0].query -notmatch "'\{window\}', '45'" }).Count -eq 0) (@($failureRules | ForEach-Object { [string]@($_.properties.criteria.allOf)[0].query }) -join ' | ')
     }
 
     Write-Host ''
@@ -262,8 +289,10 @@ try {
                 $items = @(
                     @{ name = 'cosmos-p94fixture'; type = 'Microsoft.DocumentDB/databaseAccounts' }, @{ name = 'acrp94fixture'; type = 'Microsoft.ContainerRegistry/registries' }
                     @{ name = 'id-projection-renewal-p94fixture'; type = 'Microsoft.ManagedIdentity/userAssignedIdentities' }, @{ name = 'ag-projection-renewal-p94fixture'; type = 'microsoft.insights/actiongroups' }
-                    @{ name = 'sqr-projection-p94fixture-no-success-45m'; type = 'microsoft.insights/scheduledqueryrules' }
                 )
+                # A P97 scheduled deployment left the 45-minute rule; a P104 one leaves the rule under its one name (ADR-0058).
+                $noSuccessRule = if ($state.Case -eq 'scheduled-p104') { 'sqr-projection-p94fixture-no-success' } else { 'sqr-projection-p94fixture-no-success-45m' }
+                $items += @{ name = $noSuccessRule; type = 'microsoft.insights/scheduledqueryrules' }
                 if ($state.Case -eq 'p86-leftovers') {
                     $items += @(@{ name = 'caj-projection-renewal-p94fixture'; type = 'Microsoft.App/jobs' }, @{ name = 'cae-projection-p94fixture'; type = 'Microsoft.App/managedEnvironments' }, @{ name = 'sqr-projection-p94fixture-graph-read-failed'; type = 'microsoft.insights/scheduledqueryrules' })
                 }
@@ -338,7 +367,7 @@ try {
     Assert 'the job gets the tier group ids and the gateway' ((& $value 'standardGroupId') -eq $standard -and (& $value 'premiumGroupId') -eq $premium -and (& $value 'gatewayResourceId') -match 'Microsoft\.ApiManagement/service/apim-p94$')
     Assert 'the job deploys in the network region and the signed-in tenant' ((& $value 'location') -eq 'eastus2' -and (& $value 'tenantId') -eq $tenant)
     Assert 'the tenant administrator step names the job identity' ($run.Output -match 'Grant-ClaudeProjectionRenewalGraphAccess\.ps1 -PrincipalId 40000000-0000-4000-8000-000000000002')
-    Assert 'the output names optional on-demand operation without admission-wait text' ($run.Output -match 'optional sync job' -and $run.Output -match 'az containerapp job start' -and $run.Output -notmatch '60-90 minutes|three successful runs')
+    Assert 'the output names the schedule and on-demand operation without admission-wait text' ($run.Output -match 'sync job' -and $run.Output -match 'every 2 hours' -and $run.Output -match 'az containerapp job start' -and $run.Output -notmatch '60-90 minutes|three successful runs')
     $receipt = $run.Receipt
     Assert 'the receipt records what the switch needs' ($receipt -and $receipt.kind -eq 'claude-projection-renewal-receipt' -and $receipt.reconcilerResourceId -match '/Microsoft\.App/jobs/caj-renew-p94$' -and
         $receipt.imageDigest -ceq $digestBuilt -and $receipt.runnerName -eq 'aci-projtest-p94fixture' -and $receipt.cosmosAccount -eq 'cosmos-p94fixture' -and
@@ -346,7 +375,8 @@ try {
         $receipt.actionGroupResourceId -match '/actionGroups/')
     Assert 'the receipt records the settings the job runs with' ($receipt -and $receipt.standardGroupId -ceq $standard -and $receipt.premiumGroupId -ceq $premium -and
         $receipt.gatewayResourceId -match 'Microsoft\.ApiManagement/service/apim-p94$' -and $receipt.identityClientId -eq '40000000-0000-4000-8000-000000000001') ($receipt | ConvertTo-Json -Compress)
-    Assert 'the receipt records a manual trigger by default' ($receipt -and $receipt.triggerType -eq 'Manual' -and $receipt.cronExpression -eq '') ($receipt | ConvertTo-Json -Compress)
+    Assert 'the job runs every 2 hours by default (ADR-0058)' ((& $value 'cronExpression') -ceq '0 */2 * * *' -and (& $value 'noSuccessMinutes') -eq 255) "$(& $value 'cronExpression') / $(& $value 'noSuccessMinutes')"
+    Assert 'the receipt records the 2-hour default' ($receipt -and $receipt.triggerType -eq 'Schedule' -and $receipt.cronExpression -ceq '0 */2 * * *' -and $receipt.syncInterval -ceq '2h') ($receipt | ConvertTo-Json -Compress)
     Assert 'the receipt holds no secret' ($receipt -and -not (($receipt | ConvertTo-Json) -match '(?i)token|password|secret|key"'))
     Assert 'no Graph call when both groups are object ids' (-not ($run.Calls -match 'get-access-token'))
 
@@ -356,7 +386,10 @@ try {
             @{ Name = 'a resource group with cmd metacharacters'; Change = @{ ResourceGroup = 'rg&echo' }; Expect = 'ResourceGroup' }
             @{ Name = 'a prefix the projection deployer refuses'; Change = @{ NamePrefix = 'P94_Fixture' }; Expect = 'NamePrefix' }
             @{ Name = 'a malformed digest'; Change = @{ ImageDigest = 'sha256:abc' }; Expect = 'ImageDigest' }
-            @{ Name = 'a cron with a separator'; Change = @{ CronExpression = '*/30 * * * *;' }; Expect = 'CronExpression' }
+            @{ Name = 'an interval with a separator'; Change = @{ SyncInterval = '2h;' }; Expect = 'SyncInterval' }
+            @{ Name = 'an interval shorter than 30 minutes'; Change = @{ SyncInterval = '15m' }; Expect = 'SyncInterval' }
+            @{ Name = 'a 24-hour interval'; Change = @{ SyncInterval = '24h' }; Expect = 'SyncInterval' }
+            @{ Name = 'the replaced -CronExpression, naming the interval it maps to'; Change = @{ CronExpression = '*/30 * * * *' }; Expect = '-CronExpression is replaced by -SyncInterval.*-SyncInterval 30m' }
             @{ Name = 'no standard group'; Change = @{ StandardGroup = 'none' }; Expect = 'StandardGroup' }
             @{ Name = 'the standard group as the premium group'; Change = @{ PremiumGroup = $standard.ToUpperInvariant() }; Expect = 'PremiumGroup' }
             @{ Name = 'a subnet id with parentheses, which cmd.exe re-reads'; Change = @{ RenewalSubnetId = "/subscriptions/$sub/resourceGroups/rg(p94)/providers/Microsoft.Network/virtualNetworks/vnet-p94fixture/subnets/renewal" }; Expect = 'RenewalSubnetId' }
@@ -381,16 +414,35 @@ try {
         $leftovers.Failure.IndexOf('Microsoft.App/jobs') -lt $leftovers.Failure.IndexOf('Microsoft.App/managedEnvironments')) "$($leftovers.Failure) | writes $(Get-WriteCount $leftovers)"
     $otherType = Invoke-DeployScenario 'p86-name-other-type'
     Assert 'a resource with a P86 name but another type does not stop the deploy' (-not $otherType.Failure -and (Get-WriteCount $otherType) -gt 0) $otherType.Failure
-    $upgrade = Invoke-DeployScenario 'upgrade-from-p95'
+    $upgrade = Invoke-DeployScenario 'upgrade-from-p95' @{ SyncInterval = 'manual' }
     $deleted = @($upgrade.Calls | Where-Object { $_ -match '^resource delete ' })
     $upgradeJobAt = Get-CallIndex $upgrade '^deployment group create .*-n projection-renewal-p94fixture '
     Assert 'a manual redeploy over P94 or P95 removes the retired expiry and no-success alert rules, after the job deploys' (-not $upgrade.Failure -and $deleted.Count -eq 2 -and
         ($deleted -join ' ') -match 'resource delete -g rg-p94 -n sqr-projection-p94fixture-expiry-margin-60m --resource-type Microsoft\.Insights/scheduledQueryRules' -and
         ($deleted -join ' ') -match 'resource delete -g rg-p94 -n sqr-projection-p94fixture-no-success-45m --resource-type Microsoft\.Insights/scheduledQueryRules' -and
         $upgradeJobAt -ge 0 -and (Get-CallIndex $upgrade '^resource delete ') -gt $upgradeJobAt) "$($upgrade.Failure) | $($deleted -join ' | ')"
-    $scheduledUpgrade = Invoke-DeployScenario 'upgrade-from-p95' @{ CronExpression = '*/30 * * * *' }
+    $scheduledUpgrade = Invoke-DeployScenario 'upgrade-from-p95' @{ SyncInterval = '30m' }
     $deletedScheduled = @($scheduledUpgrade.Calls | Where-Object { $_ -match '^resource delete ' })
-    Assert 'a scheduled redeploy keeps the no-success rule its template deploys and removes only the expiry rule' (-not $scheduledUpgrade.Failure -and $deletedScheduled.Count -eq 1 -and $deletedScheduled[0] -match 'sqr-projection-p94fixture-expiry-margin-60m') "$($scheduledUpgrade.Failure) | $($deletedScheduled -join ' | ')"
+    Assert 'a scheduled redeploy over P95 removes the expiry rule and the 45-minute rule, whose name P104 retired' (-not $scheduledUpgrade.Failure -and $deletedScheduled.Count -eq 2 -and
+        ($deletedScheduled -join ' ') -match 'sqr-projection-p94fixture-expiry-margin-60m' -and ($deletedScheduled -join ' ') -match 'sqr-projection-p94fixture-no-success-45m ') "$($scheduledUpgrade.Failure) | $($deletedScheduled -join ' | ')"
+    $toManual = Invoke-DeployScenario 'scheduled-p104' @{ SyncInterval = 'manual' }
+    $deletedToManual = @($toManual.Calls | Where-Object { $_ -match '^resource delete ' })
+    Assert 'a manual redeploy of a scheduled P104 job removes its no-success rule' (-not $toManual.Failure -and $deletedToManual.Count -eq 1 -and
+        $deletedToManual[0] -match 'resource delete -g rg-p94 -n sqr-projection-p94fixture-no-success --resource-type Microsoft\.Insights/scheduledQueryRules') "$($toManual.Failure) | $($deletedToManual -join ' | ')"
+    $stillScheduled = Invoke-DeployScenario 'scheduled-p104' @{ SyncInterval = '4h' }
+    $deletedStill = @($stillScheduled.Calls | Where-Object { $_ -match '^resource delete ' })
+    Assert 'a scheduled redeploy keeps the no-success rule its template deploys' (-not $stillScheduled.Failure -and $deletedStill.Count -eq 0) "$($stillScheduled.Failure) | $($deletedStill -join ' | ')"
+    foreach ($case in @(
+            @{ Interval = 'manual'; Cron = ''; Range = 0; Trigger = 'Manual' }
+            @{ Interval = '30m'; Cron = '*/30 * * * *'; Range = 75; Trigger = 'Schedule' }
+            @{ Interval = '12h'; Cron = '0 */12 * * *'; Range = 1455; Trigger = 'Schedule' }
+        )) {
+        $intervalRun = Invoke-DeployScenario 'healthy' @{ SyncInterval = $case.Interval }
+        $deployed = $intervalRun.Params['projection-renewal-p94fixture']
+        Assert "-SyncInterval $($case.Interval) deploys '$($case.Cron)' with a $($case.Range)-minute no-success range" (-not $intervalRun.Failure -and $deployed -and
+            $deployed.parameters.cronExpression.value -ceq $case.Cron -and $deployed.parameters.noSuccessMinutes.value -eq $case.Range -and
+            $intervalRun.Receipt.triggerType -eq $case.Trigger -and $intervalRun.Receipt.syncInterval -ceq $case.Interval) "$($intervalRun.Failure) | $($intervalRun.Receipt | ConvertTo-Json -Compress)"
+    }
     $oddSubnet = Invoke-DeployScenario 'odd-subnet-output'
     Assert 'a renewal subnet from the network output is checked like -RenewalSubnetId before it reaches az' ($oddSubnet.Failure -match 'returned renewal subnet' -and $oddSubnet.Failure -match 'docs/AZ-COMMANDS\.md' -and
         (Get-CallIndex $oddSubnet '^network vnet show') -lt 0 -and (Get-WriteCount $oddSubnet) -eq 0) "$($oddSubnet.Failure) | writes $(Get-WriteCount $oddSubnet)"

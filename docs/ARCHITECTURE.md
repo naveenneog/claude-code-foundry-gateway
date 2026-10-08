@@ -494,10 +494,11 @@ so old membership cannot be replayed. Apply writes only added, moved or changed 
 orphans during a full sync. Targeted sync writes or deletes one person's record and reads only that
 person's memberships. A partial write can leave mixed generations and exits nonzero.
 
-The optional sync job in `infra/projection-renewal.bicep` is for very large directories. It declares
-an internal Container Apps environment, a Container Apps job with Manual trigger by default, a
+The sync job in `infra/projection-renewal.bicep` applies Entra tier and business-unit group changes on a
+schedule. It declares an internal Container Apps environment, a Container Apps job that runs every 2 hours by
+default (`-SyncInterval` sets 30 minutes to 12 hours, or manual; [ADR-0058](adr/0058-scheduled-projection-sync.md)), a
 container-scoped Cosmos SQL data-plane writer role, an email-backed action group and alerts. A
-`-CronExpression` schedule adds the stale-success alert; failed-run and Graph-denied alerts remain.
+scheduled job adds the no-success alert, which reads 2 x the interval + 15 minutes; failed-run and Graph-denied alerts remain.
 The job writes destination-bound status records in the entitlement container. It is not required for
 switching.
 

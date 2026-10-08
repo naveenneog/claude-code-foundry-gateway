@@ -141,8 +141,8 @@ directories:
 It deploys the registry and the job's identity, builds the image with `az acr build` from the sync package, which
 holds `sync/` and `resolver/src/entitlement.mjs` at their repository paths, reads the image digest back
 with `az acr manifest show-metadata`, then deploys the job with that digest
-([ADR-0049](adr/0049-projection-renewal-deployment.md)). Its trigger is Manual by default;
-`-CronExpression '<five fields>'` adds a schedule. A manual run starts with `az containerapp job start`. The job needs Microsoft Graph application
+([ADR-0049](adr/0049-projection-renewal-deployment.md)). It runs every 2 hours by default; `-SyncInterval` sets
+`30m`, `1h`, `2h`, `3h`, `4h`, `6h`, `8h`, `12h` or `manual` ([ADR-0058](adr/0058-scheduled-projection-sync.md)). A run on demand starts with `az containerapp job start`. The job needs Microsoft Graph application
 permission `GroupMember.Read.All`, granted by a Privileged Role Administrator or Global Administrator
 through `scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1`. A full sync through the runner sends its
 snapshot with `Send-RunnerFile` (`scripts/ClaudeRunner.ps1`): gzip-compressed, in base64url parts of one

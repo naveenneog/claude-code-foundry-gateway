@@ -42,6 +42,18 @@ function ConvertTo-ClaudeProjectionSyncSchedule {
     }
 }
 
+# How an interval reads in output: every 30 minutes, every hour, every N hours, or only when started.
+function Format-ClaudeProjectionSyncInterval {
+    param([Parameter(Mandatory = $true)][AllowEmptyString()][string]$Interval)
+    $schedule = ConvertTo-ClaudeProjectionSyncSchedule -Interval $Interval
+    switch ($schedule.Minutes) {
+        0 { 'only when started' }
+        30 { 'every 30 minutes' }
+        60 { 'every hour' }
+        default { 'every {0} hours' -f ($schedule.Minutes / 60) }
+    }
+}
+
 # The interval a deployed job runs at, from its cron expression: manual when it has none, and nothing when the
 # expression is not one of the intervals above.
 function ConvertFrom-ClaudeProjectionSyncCron {

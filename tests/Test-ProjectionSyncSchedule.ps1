@@ -50,6 +50,25 @@ if ($loaded) {
         Assert "'$bad' is refused with the accepted values" (
             $message -match [regex]::Escape("'$bad'") -and $message -match '30m, 1h, 2h, 3h, 4h, 6h, 8h, 12h, manual' -and $message -match '30 minutes') $message
     }
+
+    # The words an operator reads in the deploy output, the installer review and the schedule script.
+    $hasWords = [bool](Get-Command Format-ClaudeProjectionSyncInterval -ErrorAction SilentlyContinue)
+    Assert 'it defines Format-ClaudeProjectionSyncInterval' $hasWords
+    if ($hasWords) {
+        $wordCases = @(
+            @{ Interval = '30m'; Words = 'every 30 minutes' }, @{ Interval = '1h'; Words = 'every hour' }, @{ Interval = '2h'; Words = 'every 2 hours' }
+            @{ Interval = '3h'; Words = 'every 3 hours' }, @{ Interval = '4h'; Words = 'every 4 hours' }, @{ Interval = '6h'; Words = 'every 6 hours' }
+            @{ Interval = '8h'; Words = 'every 8 hours' }, @{ Interval = '12h'; Words = 'every 12 hours' }, @{ Interval = 'manual'; Words = 'only when started' }
+            @{ Interval = '2H'; Words = 'every 2 hours' }
+        )
+        Assert 'the word cases are ten interval and wording pairs' ($wordCases.Count -eq 10 -and @($wordCases | Where-Object { $_ -isnot [hashtable] }).Count -eq 0)
+        foreach ($case in $wordCases) {
+            $words = Format-ClaudeProjectionSyncInterval -Interval $case.Interval
+            Assert "$($case.Interval) reads '$($case.Words)'" ($words -ceq $case.Words) "got '$words'"
+        }
+        $message = Get-Refusal { Format-ClaudeProjectionSyncInterval -Interval '15m' }
+        Assert 'an interval that is not listed has no words' ($message -match "'15m'" -and $message -match '30 minutes') $message
+    }
 }
 
 if ($fail) { Write-Host "$fail sync schedule assertion(s) failed." -ForegroundColor Red; exit 1 }

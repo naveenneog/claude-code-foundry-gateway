@@ -56,7 +56,7 @@ USD 0.00003 per run-second above the subscription's monthly free grant.
 1. **Intervals.** `30m`, `1h`, `2h` (default), `3h`, `4h`, `6h`, `8h`, `12h` or `manual`, mapped to
    `*/30 * * * *`, `0 * * * *`, `0 */2 * * *`, `0 */3 * * *`, `0 */4 * * *`, `0 */6 * * *`, `0 */8 * * *` and
    `0 */12 * * *` (UTC). Anything shorter than 30 minutes is refused. `-CronExpression` is replaced by
-   `-SyncInterval` in the deploy script.
+   `-SyncInterval` in the deploy script; it is refused before any Azure call with the interval it maps to.
 2. **The installer deploys the job with the projection.** `-ProjectionSyncInterval` (default `2h`) replaces the
    opt-in `-DeploySyncJob`, which is still accepted and changes nothing. `none` skips the job. The review lists
    the interval, runs per month and cost.
@@ -65,8 +65,11 @@ USD 0.00003 per run-second above the subscription's monthly free grant.
    nothing in Microsoft Graph. Until the grant, scheduled runs stop at the Graph stage, write nothing and fire
    the Graph-denied alert.
 4. **Alerts follow the interval.** The no-success rule reads 2 x interval + 15 minutes (75 minutes for `30m`,
-   24 hours 15 minutes for `12h`) and has one name for every interval. The deploy script removes the earlier
-   `-no-success-45m` rule.
+   24 hours 15 minutes for `12h`) through `overrideQueryTimeRange`, with a 5-minute window and evaluation, and
+   has one name for every interval. The deploy script removes the earlier `-no-success-45m` rule. P97's rule
+   query held the literal text `${renewalLogs}`, because Bicep does not interpolate `'''` strings; the rule
+   joins its query in a one-line string, and `tests/Test-ProjectionRenewal.ps1` refuses `${` in any compiled
+   rule query.
 5. **A removal ceiling for unattended runs.** In job mode (`--graph`), a plan that deletes more than
    max(10, 10% of the existing entitlement records) writes nothing and ends with `projection-renewal-failed`,
    stage `removal-ceiling`, and both counts; the failed-run alert fires. Additions, tier changes and
@@ -79,8 +82,9 @@ USD 0.00003 per run-second above the subscription's monthly free grant.
 
 - Adding a developer to a tier or business-unit group takes effect at the next run plus at most 60 seconds;
   removal at the next run plus at most `entitlement-cache-seconds`.
-- A run that takes longer than the interval overlaps the next execution; the apply lock serialises writes, and
-  the later run stops without writing (U165).
+- A run that takes longer than the interval overlaps the next execution. The later run waits up to 900 seconds
+  for the apply lock; if the earlier run still holds it, the later run stops before any write and the failed-run
+  alert fires (U165).
 - Cost: 1,460 runs a month at `30m` and 365 at `2h`, at 730 hours a month (`scripts/AzureRetailPrice.ps1:281-295`). The first 180,000 run-seconds a month are inside the
   subscription's free grant when nothing else uses it (U168).
 - U17 stays open: the positive scheduled path is proven offline and in a tenant where the grant can be given.
