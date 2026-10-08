@@ -268,28 +268,28 @@ Assert 'TROUBLESHOOTING gives the add-or-correct remedy and every cause of an un
 Assert 'BUDGETS says another spelling does not price an unpriced family and names the rate bounds' ($budgetsText -match 'Adding another spelling\s+does not price such a family' -and $budgetsText -match 'above\s+1,000,000')
 Assert 'the CHANGELOG says only invalid rates warn in the business-unit and Turnstile scripts' ($changelogText -match 'for an invalid rate the business-unit and\s+Turnstile scripts warn' -and $changelogText -notmatch 'conflicting rates leave that model unpriced\)')
 Assert 'ADR-0060 states the rate bounds and the shared ordinal order' ($adr60 -match 'above\s+1,000,000' -and $adr60 -match 'Sort-ClaudeFlowOrdinal' -and $adr60 -match 'UTF-16')
-function Test-CitedAnchor([string]$DocPath, [string]$File, [string]$Anchor) {
+function Test-CitedRange([string]$DocPath, [string]$File, [string]$FirstLine, [string]$Holds) {
+    # True when the document cites a range of File whose first line holds FirstLine and whose lines hold Holds.
     $doc = Get-Content (Join-Path $root $DocPath) -Raw
     $lines = @(Get-Content (Join-Path $root ($File -replace '/', '\')))
-    $found = $false
     foreach ($m in [regex]::Matches($doc, [regex]::Escape($File) + ':(\d+)(?:-(\d+))?')) {
         $start = [int]$m.Groups[1].Value; $end = if ($m.Groups[2].Success) { [int]$m.Groups[2].Value } else { $start }
-        if ($start -lt 1 -or $end -lt $start -or $end -gt $lines.Count) { return $false }
-        if ((($lines[($start - 1)..($end - 1)]) -join "`n").Contains($Anchor)) { $found = $true }
+        if ($start -lt 1 -or $end -lt $start -or $end -gt $lines.Count) { continue }
+        if ($lines[$start - 1].Contains($FirstLine) -and (($lines[($start - 1)..($end - 1)]) -join "`n").Contains($Holds)) { return $true }
     }
-    return $found
+    return $false
 }
 foreach ($cited in @(
-    @('docs\TROUBLESHOOTING.md', 'service/aum/aum_service/usd_budgets.py', 'def price_book_key'),
-    @('docs\TROUBLESHOOTING.md', 'scripts/ClaudeUsdBudgets.ps1', 'Active USD budgets pin their tariff'),
-    @('docs\TROUBLESHOOTING.md', 'scripts/Publish-ClaudeQueries.ps1', 'function New-PriceBlock'),
-    @('docs\TROUBLESHOOTING.md', 'infra/policy.xml', 'policy_revision'),
-    @('docs\TROUBLESHOOTING.md', 'infra/policy.xml', 'usd_budget_state_stale'),
-    @('docs\BUDGETS.md', 'scripts/ClaudeUsdBudgets.ps1', 'Assert-ClaudeUsdPriceBookWritable'),
-    @('docs\BUDGETS.md', 'scripts/ClaudeUsdBudgets.ps1', 'Active USD budgets pin their tariff'),
-    @('docs\BUDGETS.md', 'service/aum/aum_service/usd_budgets.py', 'def price_book_key')
+    @('docs\TROUBLESHOOTING.md', 'service/aum/aum_service/usd_budgets.py', 'def price_book_key', 'return matches[0] if len(matches) == 1 else None'),
+    @('docs\TROUBLESHOOTING.md', 'scripts/ClaudeUsdBudgets.ps1', 'elseif (-not $Clear -and $hasItems -and $hasOfferedBook)', 'Active USD budgets pin their tariff'),
+    @('docs\TROUBLESHOOTING.md', 'scripts/Publish-ClaudeQueries.ps1', 'function New-PriceBlock', 'let price = datatable'),
+    @('docs\TROUBLESHOOTING.md', 'infra/policy.xml', 'var state = JObject.Parse', 'until > asof.AddSeconds(900)'),
+    @('docs\TROUBLESHOOTING.md', 'infra/policy.xml', '} catch {', 'usd_budget_state_stale'),
+    @('docs\BUDGETS.md', 'scripts/ClaudeUsdBudgets.ps1', 'if (-not $doc.schema_version)', '$doc.price_book = $PriceBook'),
+    @('docs\BUDGETS.md', 'scripts/ClaudeUsdBudgets.ps1', 'elseif (-not $Clear -and $hasItems -and $hasOfferedBook)', 'Active USD budgets pin their tariff'),
+    @('docs\BUDGETS.md', 'service/aum/aum_service/usd_budgets.py', 'def price_book_key', 'return matches[0] if len(matches) == 1 else None')
 )) {
-    Assert "$($cited[0]) cites $($cited[1]) lines that hold '$($cited[2])'" (Test-CitedAnchor $cited[0] $cited[1] $cited[2])
+    Assert "$($cited[0]) cites the $($cited[1]) range that starts at '$($cited[2])'" (Test-CitedRange $cited[0] $cited[1] $cited[2] $cited[3])
 }$unknowns = Get-Content (Join-Path $root 'docs\UNKNOWNS.md') -Raw
 Assert 'UNKNOWNS records the empty DeploymentName custom deployment residual detector' (
     $unknowns -match 'U180 \| ASSUMED' -and
