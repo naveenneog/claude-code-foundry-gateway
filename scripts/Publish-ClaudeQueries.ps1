@@ -199,8 +199,11 @@ function Get-ClaudeQueryPriceRate {
         $value -is [System.Collections.IEnumerable] -or $value.GetType().FullName -eq 'System.Management.Automation.PSCustomObject') {
         throw "$label needs numeric $Field."
     }
-    $parsed = [decimal]$value
-    if ($parsed -lt 0) { throw "$label has negative $Field." }
+    # The sign is read before the decimal conversion, which turns -1e-30 into 0. The bounds are the reconciler's
+    # (service/aum/aum_service/usd_budgets.py rate): 0 to 1,000,000 per million tokens.
+    if ($value -lt 0) { throw "$label has negative $Field." }
+    try { $parsed = [decimal]$value } catch { throw "$label needs numeric $Field within the decimal range." }
+    if ($parsed -gt 1000000) { throw "$label has $Field above 1,000,000 per million tokens." }
     return $parsed
 }
 

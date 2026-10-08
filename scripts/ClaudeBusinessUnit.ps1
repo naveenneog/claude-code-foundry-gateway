@@ -90,6 +90,8 @@ function Import-ClaudePriceBook {
             return $null
         }
         # The reconciler's bounds (service/aum/aum_service/usd_budgets.py rate): 0 to 1,000,000 per million tokens.
+        # The sign is read before the decimal conversion, which turns -1e-30 into 0.
+        if ($Value -lt 0) { return $null }
         try { $parsed = [decimal]$Value } catch { return $null }
         if ($parsed -lt 0 -or $parsed -gt 1000000) { return $null }
         return $parsed

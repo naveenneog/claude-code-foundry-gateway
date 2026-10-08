@@ -189,6 +189,13 @@ def money(value):
     return format(value, "f").rstrip("0").rstrip(".") if "." in format(value, "f") else format(value, "f")
 
 
+def _ordinal_sort_key(key):
+    # The order of scripts/flow/FlowContract.ps1 Sort-ClaudeFlowOrdinal (P76): .NET ToUpperInvariant, a one-to-one
+    # uppercase (str.upper() can expand one character, as ß to SS), compared by UTF-16 code units, then the key itself.
+    folded = "".join(ch.upper() if len(ch.upper()) == 1 else ch for ch in key)
+    return (folded.encode("utf-16-be", "surrogatepass"), key.encode("utf-16-be", "surrogatepass"))
+
+
 def normalized_model_key(value):
     return MODEL_KEY.sub("", str(value or "")).lower()
 
@@ -237,9 +244,7 @@ def price_book_key(name, book):
             except ServiceError:
                 return None
         if len(rates) == 1:
-            # The order of scripts/flow/FlowContract.ps1 Sort-ClaudeFlowOrdinal (P76): code points ignoring
-            # case, then code points, so PowerShell and Python name the same equal-rate spelling.
-            return sorted(matches, key=lambda key: (key.upper(), key))[0]
+            return sorted(matches, key=_ordinal_sort_key)[0]
     return matches[0] if len(matches) == 1 else None
 
 

@@ -98,6 +98,17 @@ class DollarArithmeticTests(unittest.TestCase):
             "a-z": {"inputPerM": 1, "outputPerM": 5},
         }}
         self.assertEqual("a-z", price_book_key("az", mixed_case))
+        # The answers Sort-ClaudeFlowOrdinal gives: simple one-to-one uppercase, compared by UTF-16 code units.
+        unicode_case = {"models": {
+            "a\u00df-b": {"inputPerM": 1, "outputPerM": 5},
+            "a_b": {"inputPerM": 1, "outputPerM": 5},
+        }}
+        self.assertEqual("a_b", price_book_key("ab", unicode_case))
+        astral = {"models": {
+            "a\uff01b": {"inputPerM": 1, "outputPerM": 5},
+            "a\U0001F600b": {"inputPerM": 1, "outputPerM": 5},
+        }}
+        self.assertEqual("a\U0001F600b", price_book_key("ab", astral))
         conflict = deepcopy(book)
         conflict["models"]["claude-haiku-4-5"] = {"inputPerM": 2, "outputPerM": 5}
         self.assertIsNone(price_book_key("claude-haiku-4-5-20251001", conflict))

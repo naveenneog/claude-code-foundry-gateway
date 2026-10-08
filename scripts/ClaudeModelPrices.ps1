@@ -33,7 +33,7 @@ function Get-ClaudeModelPriceBook {
                 $value -is [System.Collections.IEnumerable] -or $value.GetType().FullName -eq 'System.Management.Automation.PSCustomObject') {
                 throw "Price book '$Path': '$($p.Name)' needs a numeric $key rate."
             }
-            if ([decimal]$value -lt 0) { throw "Price book '$Path': '$($p.Name)' has a negative $key rate." }
+            if ($value -lt 0 -or [decimal]$value -lt 0) { throw "Price book '$Path': '$($p.Name)' has a negative $key rate." }
         }
         foreach ($key in 'cacheReadPerM', 'cacheWrite5mPerM', 'cacheWrite1hPerM') {
             if ($null -ne $p.Value.PSObject.Properties[$key]) {
@@ -42,7 +42,7 @@ function Get-ClaudeModelPriceBook {
                     $value -is [System.Collections.IEnumerable] -or $value.GetType().FullName -eq 'System.Management.Automation.PSCustomObject') {
                     throw "Price book '$Path': '$($p.Name)' needs a numeric $key rate."
                 }
-                if ([decimal]$value -lt 0) { throw "Price book '$Path': '$($p.Name)' has a negative $key rate." }
+                if ($value -lt 0 -or [decimal]$value -lt 0) { throw "Price book '$Path': '$($p.Name)' has a negative $key rate." }
             }
         }
     }

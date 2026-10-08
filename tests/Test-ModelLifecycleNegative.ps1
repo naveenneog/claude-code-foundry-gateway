@@ -34,7 +34,7 @@ Mutation 'named-value-length-preflight' $life 'Test-ApimNamedValueLength -Id "mo
 Mutation 'recorded-overrides-survive' $life '$entry = if ($old.Count) { $old[0] | ConvertTo-Json -Depth 20 | ConvertFrom-Json } else { [pscustomobject]@{} }' '$entry = [pscustomobject]@{}'
 Mutation 'root-models-are-the-live-union' $life 'Set-ClaudeRecordProperty $recordAfter ''models'' @($recorded.name)' 'Set-ClaudeRecordProperty $recordAfter ''models'' @(''stale-model'')'
 Mutation 'tier-records-are-scoped' $life '$names = @($permitted | Where-Object { $_.name -in $sets[$tier] } | ForEach-Object { $_.name })' '$names = @($permitted.name)'
-Mutation 'negative-price-refusal' $price '[decimal]$value -lt 0' '$false' 2
+Mutation 'negative-price-refusal' $price '$value -lt 0 -or [decimal]$value -lt 0' '$false' 2
 Mutation 'ambiguous-price-refusal' $price '$rates.Count -gt 1' '$false' 3
 Mutation 'negotiated-deployment-price-wins' $price '$key = Resolve-ClaudePriceBookKey -Name ([string]$Deployment.name) -Book $Book' '$key = '''''
 Mutation 'equal-rate-spellings-take-ordinal-first' $price 'return [string](@(Sort-ClaudeFlowOrdinal -InputObject $matches)[0])' 'return [string]$matches[0]'

@@ -542,6 +542,14 @@ try {
                 'A_z' = [pscustomobject]@{ inputPerM = 1; outputPerM = 5 }
                 'a-z' = [pscustomobject]@{ inputPerM = 1; outputPerM = 5 }
             } })) -ceq 'a-z' -and
+            (Resolve-ClaudePriceBookKey -Name 'ab' -Book ([pscustomobject]@{ date = '2026-10-08'; source = 'test'; models = [pscustomobject]@{
+                "a$([char]0x00DF)-b" = [pscustomobject]@{ inputPerM = 1; outputPerM = 5 }
+                'a_b' = [pscustomobject]@{ inputPerM = 1; outputPerM = 5 }
+            } })) -ceq 'a_b' -and
+            (Resolve-ClaudePriceBookKey -Name 'ab' -Book ([pscustomobject]@{ date = '2026-10-08'; source = 'test'; models = [pscustomobject]@{
+                "a$([char]0xFF01)b" = [pscustomobject]@{ inputPerM = 1; outputPerM = 5 }
+                "a$([char]::ConvertFromUtf32(0x1F600))b" = [pscustomobject]@{ inputPerM = 1; outputPerM = 5 }
+            } })) -ceq "a$([char]::ConvertFromUtf32(0x1F600))b" -and
             -not (Resolve-ClaudePriceBookKey -Name ("claude$([char]0x0301)-opus-5") -Book $accentBook)
     }
     Check 'PowerShell price book refuses duplicate normalized keys with different cache rates' {
@@ -551,6 +559,11 @@ try {
             'claude-haiku-4-5' = @{ inputPerM = 1; outputPerM = 5; cacheReadPerM = 0.05 }
         } })
         Reject { Get-ClaudeModelPriceBook $dup } 'conflicting|Duplicate normalized'
+    }
+    Check 'PowerShell price book refuses a negative rate too small for a decimal' {
+        $tiny = Join-Path $scratch 'tiny-negative-price-book.json'
+        [IO.File]::WriteAllText($tiny, '{"date":"2026-10-08","source":"test","models":{"tiny":{"inputPerM":-1e-30,"outputPerM":5}}}')
+        Reject { Get-ClaudeModelPriceBook $tiny } 'negative'
     }
     Check 'an equal-rate duplicate warning names every spelling and the one in use' {
         $dup = Join-Path $scratch 'duplicate-warning-price-book.json'

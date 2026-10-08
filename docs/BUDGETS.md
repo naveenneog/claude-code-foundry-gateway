@@ -291,10 +291,10 @@ still an observed-cost stop, not a hard invoice cap.
   tariff; if it lists a dated model whose family is already present, update the
   software because the normalized eight-digit match should price it. A model is
   also unpriced when an entry of its family has a missing `inputPerM` or
-  `outputPerM`, a rate that is negative or not a number, or is not an object,
-  and when two spellings of it have different rates; an invalid dated entry
-  also leaves its undated family unpriced
-  (`service/aum/aum_service/usd_budgets.py:196-243`). Adding another spelling
+  `outputPerM`, a rate that is negative, above 1,000,000 or not a number, or is
+  not an object, and when two spellings of it have different rates; an invalid
+  dated entry also leaves its undated family unpriced
+  (`service/aum/aum_service/usd_budgets.py:203-248`). Adding another spelling
   does not price such a family: the entry is corrected or removed in the book
   the setters read (`config/price-book.json` or `-PriceBookPath`), and the
   corrected book is adopted as in step 4 of [Enable and operate it](#enable-and-operate-it).

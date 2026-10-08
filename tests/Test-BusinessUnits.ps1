@@ -393,13 +393,14 @@ try {
     $emptyError = ''
     try { Import-ClaudePriceBook -Path $invalidOptionalBook 3>$null | Out-Null } catch { $emptyError = $_.Exception.Message }
     Assert 'a price book that lists no models is refused with the remedy' ($emptyError -match 'lists no models' -and $emptyError -match 'Delete it') $emptyError
-    [IO.File]::WriteAllText($invalidOptionalBook, '{"date":"2026-10-08","source":"test","models":{"huge":{"inputPerM":1e30,"outputPerM":5},"too-high":{"inputPerM":2000000,"outputPerM":5},"arrayed":[{"inputPerM":1,"outputPerM":5}],"fine":{"inputPerM":1,"outputPerM":5}}}', [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText($invalidOptionalBook, '{"date":"2026-10-08","source":"test","models":{"huge":{"inputPerM":1e30,"outputPerM":5},"too-high":{"inputPerM":2000000,"outputPerM":5},"tiny-negative":{"inputPerM":-1e-30,"outputPerM":5},"arrayed":[{"inputPerM":1,"outputPerM":5}],"fine":{"inputPerM":1,"outputPerM":5}}}', [Text.UTF8Encoding]::new($false))
     $rangeError = ''
     try { & { $ErrorActionPreference = 'Stop'; Import-ClaudePriceBook -Path $invalidOptionalBook 3>$null | Out-Null } } catch { $rangeError = $_.Exception.Message }
     Assert 'an out-of-range rate or a non-object entry leaves only its family unpriced, without stopping the import' (
         -not $rangeError -and
         $null -eq (ConvertTo-ClaudeRequestUsd -Model 'huge' -InputTokens 1000000) -and
         $null -eq (ConvertTo-ClaudeRequestUsd -Model 'too-high' -InputTokens 1000000) -and
+        $null -eq (ConvertTo-ClaudeRequestUsd -Model 'tiny-negative' -InputTokens 1000000) -and
         $null -eq (ConvertTo-ClaudeRequestUsd -Model 'arrayed' -InputTokens 1000000) -and
         $null -ne (ConvertTo-ClaudeRequestUsd -Model 'fine' -InputTokens 1000000)
     ) $rangeError
