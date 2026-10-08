@@ -63,8 +63,10 @@ let cached = cached_by_model
 | summarize metric_model=min(metric_model), metric_reads=take_any(metric_reads), metric_rows=take_any(metric_rows)
     by day, user_id, family;
 let group_totals = metered
-| summarize total_body_reads=sum(body_reads), total_missing_reads=sum(missing_reads), group_latest=max(latest_request)
+| summarize total_body_reads=sum(body_reads), total_missing_reads=sum(missing_reads),
+    arg_max(latest_request, deployment, business_unit)
     by day, user_id, family
+| extend group_latest=latest_request, group_deployment=deployment, group_business_unit=business_unit
 | join kind=fullouter cached on day, user_id, family
 | extend day=coalesce(day, day1), user_id=coalesce(user_id, user_id1), family=coalesce(family, family1)
 | project-away day1, user_id1, family1
@@ -75,7 +77,7 @@ let metered_rows = metered
 | extend remainder_reads=max_of(group_cache_read_total - total_body_reads, 0)
 | project day, user_id, deployment, model=tostring(models[0]), business_unit,
     prompt_tokens=coalesce(prompt_tokens,0), completion_tokens=coalesce(completion_tokens,0),
-    cache_read_tokens=coalesce(body_reads,0) + iff(latest_request == group_latest, remainder_reads, 0),
+    cache_read_tokens=coalesce(body_reads,0) + iff(latest_request == group_latest and deployment == group_deployment and business_unit == group_business_unit, remainder_reads, 0),
     cache_write_5m_tokens=coalesce(cache_write_5m_tokens,0),
     cache_write_1h_tokens=coalesce(cache_write_1h_tokens,0),
     cache_read_known=isnotnull(missing_reads) and (missing_reads == 0 or metric_rows > 0 or remainder_reads > 0),

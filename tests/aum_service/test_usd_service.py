@@ -165,13 +165,15 @@ class UsdServiceTests(unittest.TestCase):
         for fragment in ("ClaudeChargeback(", "Prompt Cached Tokens", 'Properties["Service ID"]',
                          "apim-test", "cache_write_5m_tokens", "cache_write_1h_tokens",
                          "cache_read_known", "take 1001", "gateway_id", "family_of", "latest_unit",
-                         "remainder_reads", "unit_unknown",
+                         "remainder_reads", "unit_unknown", "group_deployment", "group_business_unit",
                          "day=coalesce(day, day1)", "user_id=coalesce(user_id, user_id1)",
                          "family=coalesce(family, family1)",
                          "cached_by_model", "max_metric_reads",
                          "by day=startofday(timestamp), user_id, family, deployment, business_unit"):
             self.assertIn(fragment, query)
         self.assertIn("summarize metric_model=min(metric_model)", query)
+        self.assertIn("deployment == group_deployment", query)
+        self.assertIn("business_unit == group_business_unit", query)
         self.assertNotIn("make_set(business_unit", query)
         self.assertNotIn("sum(usd)", query)
         self.assertNotIn("sum(total_tokens)", query)
