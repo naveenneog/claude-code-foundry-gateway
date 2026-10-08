@@ -6,7 +6,7 @@
       "source": "docs/architecture/01-system.json",
       "inputs": {
         "Start-ClaudeGateway.ps1": "86e92a50b603e0466f2d94ef03964f1ef8a511fe49262bfb694d6df32ad2d4dc",
-        "analytics/chargeback-cost.kql": "8d8a66a8980348851f37889579bf019666b229105bb4e64caae02c474de080b1",
+        "analytics/chargeback-cost.kql": "b07374de006d4fd532b4e4da33b19ec71aef131e54fd9c38afe2707f64ceef74",
         "analytics/chargeback-ledger.kql": "3924ba7e4edb21d761b16254452c0509a2a9d27558033d7a980c5e201e22b2f5",
         "docs/architecture/01-system.json": "104e5c44f8fb3e219304e235f37e9064ff08a8ff4b923b835de82f20ec865f8f",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
@@ -250,7 +250,7 @@
       "id": "chargeback-reports",
       "source": "docs/architecture/08-chargeback-reports.json",
       "inputs": {
-        "analytics/chargeback-cost.kql": "8d8a66a8980348851f37889579bf019666b229105bb4e64caae02c474de080b1",
+        "analytics/chargeback-cost.kql": "b07374de006d4fd532b4e4da33b19ec71aef131e54fd9c38afe2707f64ceef74",
         "analytics/chargeback-ledger.kql": "3924ba7e4edb21d761b16254452c0509a2a9d27558033d7a980c5e201e22b2f5",
         "docs/architecture/08-chargeback-reports.json": "6081e4f195e619c67b888221f5e88894c923aeb8306107fe4b97f99bedb1d358",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
@@ -418,8 +418,8 @@
         "scripts/Register-ClaudeUsdReconciler.ps1": "734f172331ea0e7e5eb130861921766cd9b23d6ca1719a9026fb5a14b3820b5e",
         "scripts/Sync-ClaudeUsdBudgets.ps1": "f0d5c3d6d0fb2da6b06b75c38cfecad9773bdadb97803027645910696a1d3d5c",
         "scripts/flow/Budgets.ps1": "3ed6297fd227e6365f92f29e27ded8bd98947375ff7eab39e235682423c00cea",
-        "service/aum/aum_service/usd_budgets.py": "fd87a036f01dd0fbc465e126c4db1e4e5cae281dedd35f69f31a1c0fe26e4a9e",
-        "service/aum/aum_service/usd_reconcile.py": "bb2e075eea03dd65fd78473324f32b87cee0fadd508cfd233458f1befa7cbfd4",
+        "service/aum/aum_service/usd_budgets.py": "6b950c32a9d504b677471392a838f1d8eac90e7a91e3fb7cf280ad87faf9d333",
+        "service/aum/aum_service/usd_reconcile.py": "cc2ea3eb5602e344891fd59615b9567275eafc9406fabc5d2113c5d011491150",
         "service/aum/aum_service/usd_service.py": "f515fff6864ae8da0398d8c6c31e5f4446ac93ad1c1e11d95654fb3d367a4067",
         "service/aum/function_app.py": "cc2ded40782dc82a0252449f1d46bbf74feb1282345ee0e1ef45e8f85da7f83a"
       },
@@ -515,7 +515,7 @@
         "scripts/ClaudeDesktopSignIn.ps1": "00f6f2b38f15b589d47ec8cb048391910fed44131085fa4a865e0e802df7fe3e",
         "scripts/ClaudeModelDeployment.ps1": "923e984a458ddd9a1d0846958095f2a0e30d61ffa73b19800bff370eadf05269",
         "scripts/ClaudeModelLifecycle.ps1": "58dfc8b64dbd890093851cc113a3a43dc84694720998398f690918dfd907c53b",
-        "scripts/ClaudeModelPrices.ps1": "7c70c71e0505e53f3bf8b6b6ae5b3fc8deb0482c55a9b76c29cdb75ad56deffe",
+        "scripts/ClaudeModelPrices.ps1": "5da06e9c9b0b654ecea436623aa88d7e1b4cd5ecf88de8e52c465bb42952b30b",
         "scripts/ClaudeModelProfiles.ps1": "4a032924987f56f118e2deefe21673bfa5583c06dd56164a753b151c9d2a1549",
         "scripts/ClaudeTurnstileGovernance.ps1": "e0153a479a9bd3f5c17b5a9a9fc043177ea822469da73478a452c1e2428a4f7a",
         "scripts/New-ClaudeCodePolicy.ps1": "28caaf2a489f4645ff0f7f9e883dddc695e4695c5bd9161143daa51fd655f004",
