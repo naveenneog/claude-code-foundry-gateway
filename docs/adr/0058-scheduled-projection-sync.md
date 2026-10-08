@@ -1,6 +1,6 @@
 # ADR-0058: The projection sync job runs on a schedule the admin sets
 
-- **Status:** Accepted. The owner asked on 2026-10-07 for an admin-set interval, 2 hours as the default and
+- **Status:** Accepted; merged on 2026-10-08 (`f4ffe454`). The owner asked on 2026-10-07 for an admin-set interval, 2 hours as the default and
   30 minutes as the shortest, with the job deployed by the installer whenever the projection is chosen.
 - **Date:** 2026-10-08
 - **Packet:** P104
