@@ -220,6 +220,16 @@ class DollarDocumentTests(unittest.TestCase):
         self.assertEqual("unpriced", state["items"]["department:payroll"]["status"])
         self.assertEqual(["broken-model"], state["items"]["department:payroll"]["unpriced_models"])
 
+    def test_existing_price_book_non_object_entry_is_scope_local_unpriced(self):
+        for broken in (5, "2", [2, 10], None):
+            with self.subTest(entry=broken):
+                doc = document()
+                doc["price_book"]["models"]["broken-model"] = broken
+                self.assertEqual("claude-sonnet-5", price_book_key("claude-sonnet-5", doc["price_book"]))
+                state = calculate_state(configured(doc), [row(deployment="broken-model", model="broken-model")], NOW)
+                self.assertEqual("unpriced", state["items"]["department:payroll"]["status"])
+                self.assertEqual(["broken-model"], state["items"]["department:payroll"]["unpriced_models"])
+
     def test_capacity_overflow_and_duplicate_keys_are_rejected(self):
         with self.assertRaises(ServiceError):
             encode_document({"oversized": "x" * 5000})

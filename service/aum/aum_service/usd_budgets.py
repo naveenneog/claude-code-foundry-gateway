@@ -126,6 +126,8 @@ def parse_budgets(raw):
 
 
 def effective_price_rates(model):
+    if not isinstance(model, dict):
+        raise ServiceError(503, "usd_unpriced", "Required category price is missing or invalid")
     base = rate(model.get("inputPerM"))
     return (
         base,
