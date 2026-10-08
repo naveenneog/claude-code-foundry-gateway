@@ -523,8 +523,11 @@ try {
             'claude-haiku-4-5' = @{ inputPerM = 0.80; outputPerM = 5.0; cacheWrite5mPerM = 1 }
         } })
         $book = Get-ClaudeModelPriceBook $dup
+        $accentBook = [pscustomobject]@{ date = '2026-10-08'; source = 'test'; models = [pscustomobject]@{
+            "claud$([char]0x00e9)-opus-5" = [pscustomobject]@{ inputPerM = 1; outputPerM = 5 }
+        } }
         $book.models.'claude-haiku-4.5'.inputPerM -eq 0.8 -and
-            -not [string]::Equals('claude-opus-5', "claude-opus-5$([char]0x00ad)", [StringComparison]::Ordinal)
+            -not (Resolve-ClaudePriceBookKey -Name ("claude$([char]0x0301)-opus-5") -Book $accentBook)
     }
     Check 'PowerShell price book refuses duplicate normalized keys with different cache rates' {
         $dup = Join-Path $scratch 'duplicate-cache-price-book.json'
