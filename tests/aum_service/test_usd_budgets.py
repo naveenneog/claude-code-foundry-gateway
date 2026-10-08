@@ -88,6 +88,11 @@ class DollarArithmeticTests(unittest.TestCase):
         duplicate["models"]["claude-haiku-4-5"] = {"inputPerM": 1, "outputPerM": 5}
         self.assertEqual("claude-haiku-4-5", price_book_key("claude-haiku-4-5", duplicate))
         self.assertEqual("claude-haiku-4-5", price_book_key("claude_haiku_4_5", duplicate))
+        scaled_equal = {"models": {
+            "scaled.model": {"inputPerM": "0.8", "outputPerM": "4"},
+            "scaled-model": {"inputPerM": "0.8", "outputPerM": "4", "cacheWrite5mPerM": "1.000"},
+        }}
+        self.assertEqual("scaled-model", price_book_key("scaled-model", scaled_equal))
         conflict = deepcopy(book)
         conflict["models"]["claude-haiku-4-5"] = {"inputPerM": 2, "outputPerM": 5}
         self.assertIsNone(price_book_key("claude-haiku-4-5-20251001", conflict))

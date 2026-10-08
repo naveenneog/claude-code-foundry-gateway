@@ -526,7 +526,12 @@ try {
         $accentBook = [pscustomobject]@{ date = '2026-10-08'; source = 'test'; models = [pscustomobject]@{
             "claud$([char]0x00e9)-opus-5" = [pscustomobject]@{ inputPerM = 1; outputPerM = 5 }
         } }
+        $scaleBook = [pscustomobject]@{ date = '2026-10-08'; source = 'test'; models = [pscustomobject]@{
+            'scaled.model' = [pscustomobject]@{ inputPerM = [decimal]'0.8'; outputPerM = [decimal]'4' }
+            'scaled-model' = [pscustomobject]@{ inputPerM = [decimal]'0.8'; outputPerM = [decimal]'4'; cacheWrite5mPerM = [decimal]'1.000' }
+        } }
         $book.models.'claude-haiku-4.5'.inputPerM -eq 0.8 -and
+            (Resolve-ClaudePriceBookKey -Name 'scaled-model' -Book $scaleBook) -eq 'scaled-model' -and
             -not (Resolve-ClaudePriceBookKey -Name ("claude$([char]0x0301)-opus-5") -Book $accentBook)
     }
     Check 'PowerShell price book refuses duplicate normalized keys with different cache rates' {

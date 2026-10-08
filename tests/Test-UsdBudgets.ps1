@@ -150,6 +150,12 @@ foreach ($fn in 'Format-ClaudeQueryDecimal', 'Get-ClaudeQueryPriceRate', 'Get-Cl
     $fnAst = $publishAst.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $fn }, $true)
     if ($fnAst) { . ([scriptblock]::Create($fnAst.Extent.Text)) }
 }
+$scalePublisherA = [pscustomobject]@{ inputPerM = [decimal]'0.8'; outputPerM = [decimal]'4' }
+$scalePublisherB = [pscustomobject]@{ inputPerM = [decimal]'0.8'; outputPerM = [decimal]'4'; cacheWrite5mPerM = [decimal]'1.000' }
+Assert 'query publisher treats defaulted and explicit equal decimal-scale rates as the same effective rate' (
+    (Get-ClaudeQueryEffectivePriceRateKey $scalePublisherA 'scaled.model') -eq
+    (Get-ClaudeQueryEffectivePriceRateKey $scalePublisherB 'scaled-model')
+)
 $testSourceRoots = @((Join-Path $root 'tests'), (Join-Path $root 'tests\aum_service'))
 $unsafePriceBookTouches = @()
 foreach ($sourceRoot in $testSourceRoots) {
