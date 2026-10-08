@@ -135,8 +135,8 @@ function New-PriceBlock {
         $key = ConvertTo-ClaudeQueryPriceKey $model.Name
         if ($seen.ContainsKey($key)) {
             $previous = $seen[$key]
-            $previousRate = Get-ClaudeQueryEffectivePriceRateKey $previous.Value
-            $currentRate = Get-ClaudeQueryEffectivePriceRateKey $model.Value
+            $previousRate = Get-ClaudeQueryEffectivePriceRateKey $previous.Value $previous.Name
+            $currentRate = Get-ClaudeQueryEffectivePriceRateKey $model.Value $model.Name
             if ($previousRate -ne $currentRate) {
                 throw "Duplicate normalized price-book key '$key' in $path has conflicting rates: $($previous.Name) and $($model.Name)."
             }
@@ -146,7 +146,7 @@ function New-PriceBlock {
     }
 
     $rows = @($models | ForEach-Object {
-        $rates = Get-ClaudeQueryEffectivePriceRates $_.Value
+        $rates = Get-ClaudeQueryEffectivePriceRates $_.Value $_.Name
         '    "{0}", {1}, {2}, {3}, {4}, {5}' -f $_.Name,
             (Format-ClaudeQueryDecimal $rates[0]),
             (Format-ClaudeQueryDecimal $rates[1]),
@@ -165,18 +165,40 @@ function Format-ClaudeQueryDecimal {
 }
 
 function Get-ClaudeQueryEffectivePriceRates {
-    param([Parameter(Mandatory = $true)]$Rate)
-    $inputRate = [decimal]$Rate.inputPerM
-    $outputRate = [decimal]$Rate.outputPerM
-    $cacheRead = if ($null -ne $Rate.PSObject.Properties['cacheReadPerM']) { [decimal]$Rate.cacheReadPerM } else { $inputRate * [decimal]0.1 }
-    $cacheWrite5m = if ($null -ne $Rate.PSObject.Properties['cacheWrite5mPerM']) { [decimal]$Rate.cacheWrite5mPerM } else { $inputRate * [decimal]1.25 }
-    $cacheWrite1h = if ($null -ne $Rate.PSObject.Properties['cacheWrite1hPerM']) { [decimal]$Rate.cacheWrite1hPerM } else { $inputRate * [decimal]2 }
+    param([Parameter(Mandatory = $true)]$Rate, [Parameter(Mandatory = $true)][string]$ModelName)
+    $inputRate = Get-ClaudeQueryPriceRate -Rate $Rate -ModelName $ModelName -Field 'inputPerM' -Required
+    $outputRate = Get-ClaudeQueryPriceRate -Rate $Rate -ModelName $ModelName -Field 'outputPerM' -Required
+    $cacheRead = Get-ClaudeQueryPriceRate -Rate $Rate -ModelName $ModelName -Field 'cacheReadPerM' -Default ($inputRate * [decimal]0.1)
+    $cacheWrite5m = Get-ClaudeQueryPriceRate -Rate $Rate -ModelName $ModelName -Field 'cacheWrite5mPerM' -Default ($inputRate * [decimal]1.25)
+    $cacheWrite1h = Get-ClaudeQueryPriceRate -Rate $Rate -ModelName $ModelName -Field 'cacheWrite1hPerM' -Default ($inputRate * [decimal]2)
     return @($inputRate, $outputRate, $cacheRead, $cacheWrite5m, $cacheWrite1h)
 }
 
 function Get-ClaudeQueryEffectivePriceRateKey {
-    param([Parameter(Mandatory = $true)]$Rate)
-    return ((Get-ClaudeQueryEffectivePriceRates $Rate) | ForEach-Object { Format-ClaudeQueryDecimal $_ }) -join ':'
+    param([Parameter(Mandatory = $true)]$Rate, [Parameter(Mandatory = $true)][string]$ModelName)
+    return ((Get-ClaudeQueryEffectivePriceRates $Rate $ModelName) | ForEach-Object { Format-ClaudeQueryDecimal $_ }) -join ':'
+}
+
+function Get-ClaudeQueryPriceRate {
+    param(
+        [Parameter(Mandatory = $true)]$Rate,
+        [Parameter(Mandatory = $true)][string]$ModelName,
+        [Parameter(Mandatory = $true)][string]$Field,
+        [decimal]$Default,
+        [switch]$Required
+    )
+    if ($null -eq $Rate.PSObject.Properties[$Field]) {
+        if ($Required) { throw "Price book model '$ModelName' is missing numeric $Field." }
+        return $Default
+    }
+    $value = $Rate.$Field
+    if ($null -eq $value -or $value -is [bool] -or $value -is [string] -or
+        $value -is [System.Collections.IEnumerable] -or $value.GetType().FullName -eq 'System.Management.Automation.PSCustomObject') {
+        throw "Price book model '$ModelName' needs numeric $Field."
+    }
+    $parsed = [decimal]$value
+    if ($parsed -lt 0) { throw "Price book model '$ModelName' has negative $Field." }
+    return $parsed
 }
 
 function ConvertTo-ClaudeQueryPriceKey {

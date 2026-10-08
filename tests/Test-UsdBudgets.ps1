@@ -140,6 +140,21 @@ Assert 'query publisher formats price numbers with invariant culture' ($publishe
 Assert 'query publisher refuses duplicate normalized price keys' ($publisher -match 'Duplicate normalized price-book key' -and $publisher -match 'ConvertTo-ClaudeQueryPriceKey')
 Assert 'query publisher allows equal-rate duplicate price keys with a warning' ($publisher -match 'Write-Warning' -and $publisher -match 'Duplicate normalized price-book key')
 Assert 'query publisher compares all five effective price rates' ($publisher -match 'cacheReadPerM' -and $publisher -match 'cacheWrite5mPerM' -and $publisher -match 'cacheWrite1hPerM')
+$publishAst = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'scripts\Publish-ClaudeQueries.ps1'), [ref]$null, [ref]$null)
+foreach ($fn in 'Format-ClaudeQueryDecimal', 'Get-ClaudeQueryPriceRate', 'Get-ClaudeQueryEffectivePriceRates', 'Get-ClaudeQueryEffectivePriceRateKey', 'ConvertTo-ClaudeQueryPriceKey', 'New-PriceBlock') {
+    $fnAst = $publishAst.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $fn }, $true)
+    if ($fnAst) { . ([scriptblock]::Create($fnAst.Extent.Text)) }
+}
+$tempPublishBook = Join-Path $root 'config\price-book.json'
+try {
+    [IO.File]::WriteAllText($tempPublishBook, (@{ date = '2026-10-08'; models = @{ 'my-typo' = @{ inputPerM = 3 } } } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+    $missingRate = Get-Thrown { New-PriceBlock }
+    Assert 'query publisher refuses a missing required rate before formatting it as zero' ($missingRate -match 'my-typo' -and $missingRate -match 'outputPerM') $missingRate
+    [IO.File]::WriteAllText($tempPublishBook, (@{ date = '2026-10-08'; models = @{ 'my-typo' = @{ inputPerM = 3; outputPerM = 15; cacheReadPerM = 'oops' } } } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+    $invalidRate = Get-Thrown { New-PriceBlock }
+    Assert 'query publisher refuses a non-numeric optional rate with the key and field' ($invalidRate -match 'my-typo' -and $invalidRate -match 'cacheReadPerM') $invalidRate
+}
+finally { Remove-Item -LiteralPath $tempPublishBook -Force -ErrorAction SilentlyContinue }
 $harness = Get-Content (Join-Path $root 'scripts\Test-ClaudeUsdUsageQuery.ps1') -Raw
 Assert 'live USD query harness compares dates as UTC yyyy-MM-dd strings' ($harness -match "ToUniversalTime\(\)\.ToString\('yyyy-MM-dd'")
 Assert 'live USD query harness covers the next UTC day metric' ($harness -match '2026, 10, 9, 2')
