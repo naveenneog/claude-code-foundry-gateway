@@ -28,7 +28,7 @@ param existingEnvironmentId string = ''
 @description('Tags applied to owned resources.')
 param tags object = {}
 
-var suffix = take(uniqueString(resourceGroup().id, gatewayResourceId, workspaceResourceId, repositoryRef), 10)
+var suffix = take(uniqueString(resourceGroup().id, gatewayResourceId, workspaceResourceId), 10)
 var gatewayName = last(split(gatewayResourceId, '/'))
 var workspaceName = last(split(workspaceResourceId, '/'))
 

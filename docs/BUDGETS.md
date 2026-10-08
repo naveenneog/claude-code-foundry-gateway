@@ -162,6 +162,17 @@ engine as `Sync-ClaudeUsdBudgets.ps1`: `python3 -m aum_service.usd_command
 --managed-identity`. It uses Azure Identity's managed-identity endpoint directly;
 there is no Azure CLI sign-in inside the container.
 
+Registering a newer commit updates the same per-gateway job in place: resource
+names are based on the resource group, gateway and workspace, not on
+`RepositoryRef`. Before deployment the register script inventories Container Apps
+jobs in the resource group tagged `component=usd-reconciler`, reads each job's
+`GATEWAY_ID`, and remembers only jobs for this gateway. After the deployment
+succeeds it deletes older jobs for this gateway only, then prints the old identity
+and Container Apps environment names with `az identity delete` and
+`az containerapp env delete` commands for an operator to run if those resources
+are unused. A failed deployment deletes nothing, and jobs for another gateway are
+left untouched.
+
 Permissions are deliberately narrow:
 
 - the custom **Claude USD reconciler writer** role is assigned on the selected gateway

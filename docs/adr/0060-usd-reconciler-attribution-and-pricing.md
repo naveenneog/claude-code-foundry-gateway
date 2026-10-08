@@ -58,3 +58,10 @@ and `claude-fable-5-1` never inherit their shorter-family keys. The shipped exam
 book adds every 2026-10-08 eastus2 Foundry Claude catalog model whose Anthropic list
 price is a single tariff. `claude-haiku-5-5` stays unpriced until U178 splits usage
 by prompt-size tier.
+
+The standalone scheduled reconciler is also per gateway, not per commit. Its
+Container Apps job, identity and default environment suffix excludes `repositoryRef`,
+so a registration at a newer commit changes `REPO_REF` on the same job. The
+register script removes older jobs for the same gateway only after the replacement
+deployment succeeds, and only prints manual cleanup commands for the old identity
+and environment because those resources may be shared.
