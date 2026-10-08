@@ -110,11 +110,11 @@ if ($hasLookup) {
         $global:LASTEXITCODE = 9
         return "stub az has no answer for: $line"
     }
-    function Find-Job([string]$Case, [string]$ResourceGroup = 'rg-p104', [string]$Prefix = 'p104fixture') {
+    function Find-Job([string]$Case, [string]$Group = 'rg-p104', [string]$Prefix = 'p104fixture') {
         $global:P104Jobs.Case = $Case
         $global:P104Jobs.Calls = [Collections.Generic.List[string]]::new()
         $failure = $null; $job = $null
-        try { $job = Get-ClaudeProjectionSyncJob -ResourceGroup $ResourceGroup -NamePrefix $Prefix } catch { $failure = $_.Exception.Message }
+        try { $job = Get-ClaudeProjectionSyncJob -ResourceGroup $Group -NamePrefix $Prefix } catch { $failure = $_.Exception.Message }
         [pscustomobject]@{ Job = $job; Failure = $failure; Calls = @($global:P104Jobs.Calls) }
     }
     $found = Find-Job 'scheduled'
@@ -135,7 +135,7 @@ if ($hasLookup) {
     Assert 'two jobs with the prefix are refused, naming both' ($two.Failure -match 'caj-renew-a' -and $two.Failure -match 'caj-renew-c') $two.Failure
     $listFails = Find-Job 'list-fails'
     Assert 'a failed list stops with the az error' ($listFails.Failure -match 'AuthorizationFailed') $listFails.Failure
-    $badGroup = Find-Job 'scheduled' -ResourceGroup 'rg&calc'
+    $badGroup = Find-Job 'scheduled' -Group 'rg&calc'
     Assert 'a resource group with cmd metacharacters is refused before any az call' ($badGroup.Failure -match 'rg&calc' -and $badGroup.Calls.Count -eq 0) $badGroup.Failure
     $badPrefix = Find-Job 'scheduled' -Prefix 'P104_Fixture'
     Assert 'a prefix the projection deployer refuses is refused before any az call' ($badPrefix.Failure -match 'P104_Fixture' -and $badPrefix.Calls.Count -eq 0) $badPrefix.Failure
