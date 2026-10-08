@@ -27,7 +27,7 @@
         "scripts/Connect-ClaudeTurnstile.ps1": "cc4e2c094aaab8ce75856a3ba770d844bd32333d4f8b42f53f91cabdd1129201",
         "scripts/Export-ClaudeTurnstileUsage.ps1": "d68e00c953f4bb47492b39862b263377d33ccdf39f15c0e26bb2fbfa783efdb6",
         "scripts/Grant-ClaudeGovernanceGraphAccess.ps1": "2313313010eef6867f730bbb1803b7a0a68113a3ad961f798627e274aff56b1a",
-        "scripts/Publish-ClaudeQueries.ps1": "d41be98a83d18f6ae282f81960bedf4215084713b20813af9eec51e18ddab04c",
+        "scripts/Publish-ClaudeQueries.ps1": "88198be25c571230deb980674865692189b2a69d1225ba722276c889d504ac5f",
         "scripts/Setup-ClaudeWorkstation.ps1": "540c547d8af1dedc264bd5ac9575e413b2c3564f2554187c55025b3cbd7e0b95",
         "scripts/Sync-ClaudeAccess.ps1": "423e66dd6bf75c4c784d6e25512ac608cad9c34de97b1475e85559ed97eb0af5",
         "scripts/Sync-ClaudeProjection.ps1": "15f69ff44710887ba1379540aa7a7e263b229859338b4d66660239223872cad4",
@@ -66,7 +66,7 @@
         "infra/turnstile-schedule.bicep": "54d4b2d5897a14fd580887113f697fafc3cb2993b70b5cf7368adead956a9e36",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "resolver/src/entitlement.mjs": "1cdde9356db441d02c894024720f5f0ae926bd75e350515d861213cef260aed4",
-        "scripts/Publish-ClaudeQueries.ps1": "d41be98a83d18f6ae282f81960bedf4215084713b20813af9eec51e18ddab04c",
+        "scripts/Publish-ClaudeQueries.ps1": "88198be25c571230deb980674865692189b2a69d1225ba722276c889d504ac5f",
         "scripts/get-foundry-token.ps1": "253049bb1d9c2066e9d1dcfeea4f1033d6f81569c222163a2db3777d46875ba4"
       },
       "outputs": [
@@ -264,7 +264,7 @@
         "scripts/ClaudeChargebackQuery.ps1": "2dc713c7bd244848e206e09860b791a4a2c713639dd1516e4003fd56559d75a5",
         "scripts/ClaudeChargebackStorage.ps1": "84ff430d005e37806a8be282ff5628bc011bc8ca9cc12b43203d5b1b3f9df4e1",
         "scripts/Invoke-ClaudeChargebackSchedule.ps1": "6e6dceac5c7d8f68340d4d8688fc4ff25ffa4e01feaf85bf26c115ad067a74ed",
-        "scripts/Publish-ClaudeQueries.ps1": "d41be98a83d18f6ae282f81960bedf4215084713b20813af9eec51e18ddab04c"
+        "scripts/Publish-ClaudeQueries.ps1": "88198be25c571230deb980674865692189b2a69d1225ba722276c889d504ac5f"
       },
       "outputs": [
         {
@@ -418,7 +418,7 @@
         "scripts/Register-ClaudeUsdReconciler.ps1": "a253e2e0af780e2db0f63bf94b214a80f155cfe0b1dd4ac3a4d69724342c4fef",
         "scripts/Sync-ClaudeUsdBudgets.ps1": "f0d5c3d6d0fb2da6b06b75c38cfecad9773bdadb97803027645910696a1d3d5c",
         "scripts/flow/Budgets.ps1": "3ed6297fd227e6365f92f29e27ded8bd98947375ff7eab39e235682423c00cea",
-        "service/aum/aum_service/usd_budgets.py": "108aaf6d1923fbc788c49581846af136498da2f78d94d1234c96b1b3ca2c2d2f",
+        "service/aum/aum_service/usd_budgets.py": "d9a45bd5c64268b238355506dcba279d9cc73d26d2a897c8b642a3b258fcc16c",
         "service/aum/aum_service/usd_reconcile.py": "130e68bbeea6d7da5f53eb0a266f8a5d238c5758ce0aa2f69ef538b52a8fc14c",
         "service/aum/aum_service/usd_service.py": "fe4098efe549e177354e7ae9091f3ae8f9b2b9445fafb20091f3ba1d09105184",
         "service/aum/function_app.py": "cc2ded40782dc82a0252449f1d46bbf74feb1282345ee0e1ef45e8f85da7f83a"
@@ -515,7 +515,7 @@
         "scripts/ClaudeDesktopSignIn.ps1": "00f6f2b38f15b589d47ec8cb048391910fed44131085fa4a865e0e802df7fe3e",
         "scripts/ClaudeModelDeployment.ps1": "923e984a458ddd9a1d0846958095f2a0e30d61ffa73b19800bff370eadf05269",
         "scripts/ClaudeModelLifecycle.ps1": "a4e4cfc5f31cc07bb42e223bb20d763baeaecad746ce16152184010b2b8e84b2",
-        "scripts/ClaudeModelPrices.ps1": "d4451db721017b8cea5cee4e8d9cd3c586ebaddf41be1eed1c137e95e5e8791b",
+        "scripts/ClaudeModelPrices.ps1": "072e1e7926d07990bc888ef892daa1ee4e58680c6d1442d94f16e6e3d5cc1cc6",
         "scripts/ClaudeModelProfiles.ps1": "4a032924987f56f118e2deefe21673bfa5583c06dd56164a753b151c9d2a1549",
         "scripts/ClaudeTurnstileGovernance.ps1": "e0153a479a9bd3f5c17b5a9a9fc043177ea822469da73478a452c1e2428a4f7a",
         "scripts/New-ClaudeCodePolicy.ps1": "28caaf2a489f4645ff0f7f9e883dddc695e4695c5bd9161143daa51fd655f004",
