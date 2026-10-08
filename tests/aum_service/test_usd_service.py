@@ -169,6 +169,7 @@ class UsdServiceTests(unittest.TestCase):
                          "day=coalesce(day, day1)", "user_id=coalesce(user_id, user_id1)",
                          "family=coalesce(family, family1)",
                          "cached_by_model", "max_metric_reads",
+                         "coalesce(metric_rows,0) > 0",
                          "by day=startofday(timestamp), user_id, family, deployment, business_unit"):
             self.assertIn(fragment, query)
         self.assertIn("summarize metric_model=min(metric_model)", query)

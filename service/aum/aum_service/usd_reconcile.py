@@ -80,7 +80,7 @@ let metered_rows = metered
     cache_read_tokens=coalesce(body_reads,0) + iff(latest_request == group_latest and deployment == group_deployment and business_unit == group_business_unit, remainder_reads, 0),
     cache_write_5m_tokens=coalesce(cache_write_5m_tokens,0),
     cache_write_1h_tokens=coalesce(cache_write_1h_tokens,0),
-    cache_read_known=isnotnull(missing_reads) and (missing_reads == 0 or metric_rows > 0 or remainder_reads > 0),
+    cache_read_known=isnotnull(missing_reads) and (missing_reads == 0 or coalesce(metric_rows,0) > 0 or remainder_reads > 0),
     cache_write_known=isnotnull(missing_writes) and missing_writes == 0,
     inference_geo=iff(array_length(geographies) == 1,tostring(geographies[0]),'unknown'),
     usage_source=iff(isnotnull(not_body) and not_body == 0,'body','log+metric'),
