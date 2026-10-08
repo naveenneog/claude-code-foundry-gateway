@@ -508,17 +508,22 @@ try {
             'claude-haiku-4.5' = [pscustomobject]@{ inputPerM = 1; outputPerM = 5 }
             'claude-haiku-4-5' = [pscustomobject]@{ inputPerM = 2; outputPerM = 5 }
         } }
+        $cacheWriteConflict = [pscustomobject]@{ date = '2026-10-08'; source = 'test tariff'; models = [pscustomobject]@{
+            'claude-opus-4.8' = [pscustomobject]@{ inputPerM = 5; outputPerM = 25; cacheWrite5mPerM = 6.25 }
+            'claude-opus-4-8' = [pscustomobject]@{ inputPerM = 5.0; outputPerM = 25.0; cacheWrite5mPerM = 7.50 }
+        } }
         (-not (Get-ClaudeDeploymentPrice ([pscustomobject]@{ name = 'claude-opus-5-5'; model = 'claude-opus-5-5'; sku = 'GlobalStandard' }) $withoutOpus55).SourceKey) -and
-            (-not (Get-ClaudeDeploymentPrice ([pscustomobject]@{ name = 'claude-haiku-4-5-20251001'; model = 'claude-haiku-4-5-20251001'; sku = 'GlobalStandard' }) $conflict).SourceKey)
+            (-not (Get-ClaudeDeploymentPrice ([pscustomobject]@{ name = 'claude-haiku-4-5-20251001'; model = 'claude-haiku-4-5-20251001'; sku = 'GlobalStandard' }) $conflict).SourceKey) -and
+            (-not (Get-ClaudeDeploymentPrice ([pscustomobject]@{ name = 'claude-opus-4-8'; model = 'claude-opus-4-8'; sku = 'GlobalStandard' }) $cacheWriteConflict).SourceKey)
     }
     Check 'PowerShell price book allows equal-rate duplicate normalized keys and uses ordinal comparison' {
         $dup = Join-Path $scratch 'duplicate-price-book.json'
         Save $dup ([ordered]@{ date = '2026-10-08'; source = 'test'; models = [ordered]@{
-            'claude-haiku-4.5' = @{ inputPerM = 1; outputPerM = 5 }
-            'claude-haiku-4-5' = @{ inputPerM = 1; outputPerM = 5 }
+            'claude-haiku-4.5' = @{ inputPerM = 0.8; outputPerM = 5; cacheWrite5mPerM = 1.000 }
+            'claude-haiku-4-5' = @{ inputPerM = 0.80; outputPerM = 5.0; cacheWrite5mPerM = 1 }
         } })
         $book = Get-ClaudeModelPriceBook $dup
-        $book.models.'claude-haiku-4.5'.inputPerM -eq 1 -and
+        $book.models.'claude-haiku-4.5'.inputPerM -eq 0.8 -and
             -not [string]::Equals('claude-opus-5', "claude-opus-5$([char]0x00ad)", [StringComparison]::Ordinal)
     }
     Check 'PowerShell price book refuses duplicate normalized keys with different cache rates' {
