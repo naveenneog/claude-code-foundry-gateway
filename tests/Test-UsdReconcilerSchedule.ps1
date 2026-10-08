@@ -50,6 +50,7 @@ $global:UsdJobs = @()
 $global:UsdShown = @{}
 $global:UsdDeploymentFails = $false
 $global:UsdDeleted = @()
+$global:UsdDeploymentEnvironmentName = 'cae-usd-reconcile-stable'
 function New-JobListItem($Name) {
     [pscustomobject]@{
         id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.App/jobs/$Name"
@@ -84,20 +85,21 @@ function global:az {
     }
     if ($line -like 'deployment group create*') {
         if ($global:UsdDeploymentFails) { $global:LASTEXITCODE = 1; return 'denied' }
-        return (@{ jobName = @{ value = 'job-usd-reconcile-stable' }; environmentName = @{ value = 'cae-usd-reconcile-stable' }; principalId = @{ value = 'principal' }; cronExpression = @{ value = '*/5 * * * *' } } | ConvertTo-Json -Depth 10 -Compress)
+        return (@{ jobName = @{ value = 'job-usd-reconcile-stable' }; environmentName = @{ value = $global:UsdDeploymentEnvironmentName }; principalId = @{ value = 'principal' }; cronExpression = @{ value = '*/5 * * * *' } } | ConvertTo-Json -Depth 10 -Compress)
     }
-    if ($line -like 'containerapp job delete*') {
-        $global:UsdDeleted += [string]$args[[array]::IndexOf($args, '-n') + 1]
+    if ($line -like 'resource delete*') {
+        $global:UsdDeleted += [string]$args[[array]::IndexOf($args, '--ids') + 1]
         return ''
     }
     throw "Unexpected az call: $line"
 }
-function Invoke-Register($Jobs, $Shown, [switch]$FailDeploy) {
+function Invoke-Register($Jobs, $Shown, [switch]$FailDeploy, [string]$ExistingEnvironmentId = '', [string]$OutputEnvironmentName = '') {
     $global:UsdCalls.Clear(); $global:UsdDeleted = @(); $global:UsdJobs = $Jobs; $global:UsdShown = $Shown; $global:UsdDeploymentFails = [bool]$FailDeploy
+    $global:UsdDeploymentEnvironmentName = if ($OutputEnvironmentName) { $OutputEnvironmentName } elseif ($ExistingEnvironmentId) { ($ExistingEnvironmentId -split '/')[-1] } else { 'cae-usd-reconcile-stable' }
     & $register -ResourceGroup rg-test -ApimName apim-test `
         -WorkspaceResourceId '/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.OperationalInsights/workspaces/log-test' `
         -WorkspaceCustomerId '11111111-1111-1111-1111-111111111111' `
-        -RepositoryUrl 'https://github.com/contoso/gateway.git' -RepositoryRef ('b' * 40) -Location eastus2 *>&1
+        -RepositoryUrl 'https://github.com/contoso/gateway.git' -RepositoryRef ('b' * 40) -Location eastus2 -ExistingEnvironmentId $ExistingEnvironmentId *>&1
 }
 $gateway = '/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.ApiManagement/service/apim-test'
 $otherGateway = '/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.ApiManagement/service/apim-other'
@@ -110,13 +112,23 @@ $shown = @{
     $other.id = New-JobDetail 'job-usd-reconcile-other' $otherGateway
 }
 $none = @(Invoke-Register @() @{})
-Assert 'no earlier job means no delete' ($global:UsdDeleted.Count -eq 0 -and ($global:UsdCalls -join '|') -notmatch 'containerapp job delete')
+Assert 'no earlier job means no delete' ($global:UsdDeleted.Count -eq 0 -and ($global:UsdCalls -join '|') -notmatch 'containerapp job delete|resource delete')
 $cleanup = @(Invoke-Register @($old, $stable, $other) $shown)
 $deployIndex = [array]::FindIndex($global:UsdCalls.ToArray(), [Predicate[string]]{ param($x) $x -like 'deployment group create*' })
-$deleteIndex = [array]::FindIndex($global:UsdCalls.ToArray(), [Predicate[string]]{ param($x) $x -like 'containerapp job delete*job-usd-reconcile-old*' })
-Assert 'earlier job for this gateway is deleted after successful deploy' ($global:UsdDeleted -contains 'job-usd-reconcile-old' -and $deployIndex -ge 0 -and $deleteIndex -gt $deployIndex) ($global:UsdCalls -join ' | ')
-Assert 'another gateway reconciler job is untouched' ($global:UsdDeleted -notcontains 'job-usd-reconcile-other')
+$deleteIndex = [array]::FindIndex($global:UsdCalls.ToArray(), [Predicate[string]]{ param($x) $x -like 'resource delete*job-usd-reconcile-old*' })
+Assert 'earlier job for this gateway is deleted after successful deploy with core az resource delete' ($global:UsdDeleted -contains $old.id -and $deployIndex -ge 0 -and $deleteIndex -gt $deployIndex -and ($global:UsdCalls -join '|') -notmatch 'containerapp job delete') ($global:UsdCalls -join ' | ')
+Assert 'another gateway reconciler job is untouched' ($global:UsdDeleted -notcontains $other.id)
 Assert 'cleanup prints leftover identity and environment delete commands' (($cleanup | Out-String) -match 'az identity delete' -and ($cleanup | Out-String) -match 'az containerapp env delete')
+$sharedEnvId = '/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.App/managedEnvironments/cae-shared'
+$shared = New-JobListItem 'job-usd-reconcile-shared'
+$sharedShown = @{
+    $shared.id = New-JobDetail 'job-usd-reconcile-shared' $gateway $sharedEnvId
+    $stable.id = New-JobDetail 'job-usd-reconcile-stable' $gateway $sharedEnvId
+}
+$sharedCleanup = @(Invoke-Register @($shared, $stable) $sharedShown -ExistingEnvironmentId $sharedEnvId)
+Assert 'cleanup does not print an environment delete for the environment passed to the new deployment' (($sharedCleanup | Out-String) -match 'az identity delete' -and ($sharedCleanup | Out-String) -notmatch 'az containerapp env delete')
+$sameOutputEnv = @(Invoke-Register @($shared, $stable) $sharedShown -OutputEnvironmentName 'cae-shared')
+Assert 'cleanup does not print an environment delete for the environment returned by the deployment' (($sameOutputEnv | Out-String) -match 'az identity delete' -and ($sameOutputEnv | Out-String) -notmatch 'az containerapp env delete')
 $failed = Throws { Invoke-Register @($old, $stable) $shown -FailDeploy }
 Assert 'failed deployment does not delete earlier jobs' ($failed -and $global:UsdDeleted.Count -eq 0) $failed
 

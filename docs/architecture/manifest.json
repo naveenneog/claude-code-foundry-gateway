@@ -415,7 +415,7 @@
         "infra/usd-reconciler-job.bicep": "9f95d016571b8d00149d1b68889ae765cb9a41453b718fe03b91ca1748bd6433",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "scripts/ClaudeUsdBudgets.ps1": "7435987f2cd90b8456e0f85e231c5d82d46f640c950e4d5966e5feae8f1d400d",
-        "scripts/Register-ClaudeUsdReconciler.ps1": "bf3232941497784425dedffec872a3c2f5e50c88179702e44308251484bce000",
+        "scripts/Register-ClaudeUsdReconciler.ps1": "0f698653dbf7953d37d88a0aab884793b505913c04be55197215a482541e79bb",
         "scripts/Sync-ClaudeUsdBudgets.ps1": "f0d5c3d6d0fb2da6b06b75c38cfecad9773bdadb97803027645910696a1d3d5c",
         "scripts/flow/Budgets.ps1": "3ed6297fd227e6365f92f29e27ded8bd98947375ff7eab39e235682423c00cea",
         "service/aum/aum_service/usd_budgets.py": "5d707a55e604668eacfb4f55617e6dd3c9f3b7a35f0a1ea600810b4e28ba340d",

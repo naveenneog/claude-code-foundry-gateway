@@ -170,8 +170,13 @@ jobs in the resource group tagged `component=usd-reconciler`, reads each job's
 succeeds it deletes older jobs for this gateway only, then prints the old identity
 and Container Apps environment names with `az identity delete` and
 `az containerapp env delete` commands for an operator to run if those resources
-are unused. A failed deployment deletes nothing, and jobs for another gateway are
-left untouched.
+are unused. It does not print an environment delete command for the environment
+the replacement deployment uses. A failed deployment deletes nothing, and jobs
+for another gateway are left untouched. The cleanup uses core `az resource
+delete --ids <job-resource-id>` and does not need the Container Apps CLI
+extension. `-RunNow` still uses `az containerapp job start` and
+`az containerapp job execution show`, so that optional immediate execution path
+does need the extension.
 
 Permissions are deliberately narrow:
 

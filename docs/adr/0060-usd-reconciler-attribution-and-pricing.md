@@ -64,4 +64,6 @@ Container Apps job, identity and default environment suffix excludes `repository
 so a registration at a newer commit changes `REPO_REF` on the same job. The
 register script removes older jobs for the same gateway only after the replacement
 deployment succeeds, and only prints manual cleanup commands for the old identity
-and environment because those resources may be shared.
+and an unused old environment because those resources may be shared. Job deletion
+uses core ARM resource deletion; the optional `-RunNow` path still uses the
+Container Apps CLI extension.

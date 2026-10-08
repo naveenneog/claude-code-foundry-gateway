@@ -75,7 +75,7 @@ function Get-ClaudeUsdReconcilerJobsForGateway {
 }
 
 function Get-ClaudeUsdReconcilerLeftoverCommands {
-    param($Job)
+    param($Job, [string[]]$UsedEnvironmentNames = @(), [string[]]$UsedEnvironmentIds = @())
     $name = [string]$Job.name
     $suffix = if ($name -match '^job-usd-reconcile-(.+)$') { $Matches[1] } else { '' }
     $envId = [string]$Job.properties.environmentId
@@ -83,7 +83,8 @@ function Get-ClaudeUsdReconcilerLeftoverCommands {
     $identityName = if ($suffix) { "id-usd-reconcile-$suffix" } else { '' }
     $commands = @()
     if ($identityName) { $commands += "az identity delete -g <resource-group> -n $identityName" }
-    if ($envName) { $commands += "az containerapp env delete -g <resource-group> -n $envName" }
+    $environmentStillUsed = ($envName -and $envName -in @($UsedEnvironmentNames)) -or ($envId -and $envId -in @($UsedEnvironmentIds))
+    if ($envName -and -not $environmentStillUsed) { $commands += "az containerapp env delete -g <resource-group> -n $envName" }
     return @($commands)
 }
 
@@ -139,14 +140,19 @@ try {
 }
 finally { Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue }
 
+$usedEnvironmentNames = @([string]$outputs.environmentName.value | Where-Object { $_ })
+$usedEnvironmentIds = @($ExistingEnvironmentId | Where-Object { $_ })
+if ($ExistingEnvironmentId) { $usedEnvironmentNames += ($ExistingEnvironmentId -split '/')[-1] }
 $oldJobs = @($existingJobs | Where-Object { [string]$_.name -ne [string]$outputs.jobName.value })
 foreach ($job in $oldJobs) {
     $jobName = [string]$job.name
+    $jobId = [string]$job.id
     Assert-ClaudeUsdReconcilerRegisterValue JobName $jobName '^[-A-Za-z0-9]{1,63}$'
-    az containerapp job delete -g $ResourceGroup -n $jobName --yes | Out-Null
+    Assert-ClaudeUsdReconcilerRegisterValue JobId $jobId '^/subscriptions/[0-9a-fA-F-]{36}/resourceGroups/[-A-Za-z0-9._()]+/providers/Microsoft\.App/jobs/[-A-Za-z0-9]+$'
+    az resource delete --ids $jobId | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "Deleting old USD reconciler job '$jobName' failed." }
     Write-Host "Deleted old USD reconciler job $jobName." -ForegroundColor Yellow
-    foreach ($command in @(Get-ClaudeUsdReconcilerLeftoverCommands $job)) {
+    foreach ($command in @(Get-ClaudeUsdReconcilerLeftoverCommands $job -UsedEnvironmentNames $usedEnvironmentNames -UsedEnvironmentIds $usedEnvironmentIds)) {
         Write-Host "Leftover resource may be removable if unused: $command" -ForegroundColor DarkGray
     }
 }
