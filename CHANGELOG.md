@@ -41,7 +41,8 @@ exact streaming cache-creation detail remains **U13**.
   403 fallback for malformed older state. Registering the standalone scheduled reconciler
   at a newer commit now updates the same per-gateway job and removes older jobs for that gateway
   only after the replacement deploys. Cleanup uses core `az resource delete` and no longer suggests
-  deleting the environment used by the replacement job; upgrades now keep old jobs until the new
+  deleting the environment used by the replacement job; it now prints old identity role-assignment
+  deletes with explicit workspace and gateway scopes before the identity delete. Upgrades now keep old jobs until the new
   job has one successful post-deployment execution, and `-RunNow` uses ARM start/poll calls rather
   than the Container Apps CLI extension. The scheduled job template now delegates gateway and
   workspace role assignments to the shared principal-id-keyed modules so a recreated per-gateway

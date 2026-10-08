@@ -92,14 +92,37 @@ function Get-ClaudeUsdReconcilerJobsForGateway {
     return @($matches)
 }
 
+function Get-ClaudeUsdReconcilerJobPrincipalId {
+    param($Job)
+    if (-not ($Job -and $Job.PSObject.Properties.Name -contains 'identity' -and $Job.identity)) { return '' }
+    if (-not ($Job.identity.PSObject.Properties.Name -contains 'userAssignedIdentities' -and $Job.identity.userAssignedIdentities)) { return '' }
+    foreach ($entry in @($Job.identity.userAssignedIdentities.PSObject.Properties)) {
+        $candidate = ''
+        if ($entry.Value -and $entry.Value.PSObject.Properties.Name -contains 'principalId') {
+            $candidate = [string]$entry.Value.principalId
+        }
+        $parsed = [guid]::Empty
+        if ($candidate -and [guid]::TryParse($candidate, [ref]$parsed)) { return $candidate }
+    }
+    return ''
+}
+
 function Get-ClaudeUsdReconcilerLeftoverCommands {
-    param($Job, [string[]]$UsedEnvironmentNames = @(), [string[]]$UsedEnvironmentIds = @())
+    param($Job, [string]$WorkspaceResourceId, [string]$GatewayResourceId, [string[]]$UsedEnvironmentNames = @(), [string[]]$UsedEnvironmentIds = @())
     $name = [string]$Job.name
     $suffix = if ($name -match '^job-usd-reconcile-(.+)$') { $Matches[1] } else { '' }
     $envId = [string]$Job.properties.environmentId
     $envName = if ($envId) { ($envId -split '/')[-1] } elseif ($suffix) { "cae-usd-reconcile-$suffix" } else { '' }
     $identityName = if ($suffix) { "id-usd-reconcile-$suffix" } else { '' }
     $commands = @()
+    $principalId = Get-ClaudeUsdReconcilerJobPrincipalId $Job
+    if ($principalId) {
+        $commands += "az role assignment delete --assignee $principalId --scope $WorkspaceResourceId"
+        $commands += "az role assignment delete --assignee $principalId --scope $GatewayResourceId"
+    }
+    elseif ($identityName) {
+        $commands += "old identity principalId is unavailable; role assignment delete commands cannot be printed"
+    }
     if ($identityName) { $commands += "az identity delete -g <resource-group> -n $identityName" }
     $environmentStillUsed = ($envName -and $envName -in @($UsedEnvironmentNames)) -or ($envId -and $envId -in @($UsedEnvironmentIds))
     if ($envName -and -not $environmentStillUsed) { $commands += "az containerapp env delete -g <resource-group> -n $envName" }
@@ -281,7 +304,7 @@ if (-not $needsSuccessfulRun -or $run.Status -eq 'Succeeded') {
         az resource delete --ids $oldJobId | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "Deleting old USD reconciler job '$jobName' failed." }
         Write-Host "Deleted old USD reconciler job $jobName." -ForegroundColor Yellow
-        foreach ($command in @(Get-ClaudeUsdReconcilerLeftoverCommands $job -UsedEnvironmentNames $usedEnvironmentNames -UsedEnvironmentIds $usedEnvironmentIds)) {
+        foreach ($command in @(Get-ClaudeUsdReconcilerLeftoverCommands $job -WorkspaceResourceId $WorkspaceResourceId -GatewayResourceId $gatewayId -UsedEnvironmentNames $usedEnvironmentNames -UsedEnvironmentIds $usedEnvironmentIds)) {
             Write-Host "Leftover resource may be removable if unused: $command" -ForegroundColor DarkGray
         }
     }

@@ -67,10 +67,16 @@ function New-JobListItem($Name) {
         tags = [pscustomobject]@{ component = 'usd-reconciler' }
     }
 }
-function New-JobDetail($Name, $Gateway, $EnvironmentId = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.App/managedEnvironments/cae-$Name") {
+function New-JobDetail($Name, $Gateway, $EnvironmentId = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.App/managedEnvironments/cae-$Name", $PrincipalId = '22222222-2222-2222-2222-222222222222') {
+    $identityId = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-$Name"
     [pscustomobject]@{
         id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.App/jobs/$Name"
         name = $Name
+        identity = [pscustomobject]@{
+            userAssignedIdentities = [pscustomobject]@{
+                $identityId = [pscustomobject]@{ principalId = $PrincipalId }
+            }
+        }
         properties = [pscustomobject]@{
             environmentId = $EnvironmentId
             template = [pscustomobject]@{ containers = @([pscustomobject]@{ env = @(
@@ -174,7 +180,12 @@ $deleteIndex = [array]::FindIndex($global:UsdCalls.ToArray(), [Predicate[string]
 Assert 'upgrade deletes old job only after a successful counted run and uses core az resource delete' ($global:UsdDeleted -contains $old.id -and $deployIndex -ge 0 -and $deleteIndex -gt ([array]::FindIndex($global:UsdCalls.ToArray(), [Predicate[string]]{ param($x) $x -like 'rest --method get*executions*' })) -and ($global:UsdCalls -join '|') -notmatch 'containerapp job delete') ($global:UsdCalls -join ' | ')
 Assert 'failed first execution starts another run before cleanup' (@($global:UsdCalls | Where-Object { $_ -like 'rest --method post*/start*' }).Count -eq 2 -and ($cleanup | Out-String) -match 'Run run-fail failed' -and ($cleanup | Out-String) -match 'Run run-ok succeeded')
 Assert 'another gateway reconciler job is untouched' ($global:UsdDeleted -notcontains $other.id)
-Assert 'cleanup prints leftover identity and environment delete commands' (($cleanup | Out-String) -match 'az identity delete' -and ($cleanup | Out-String) -match 'az containerapp env delete')
+$cleanupText = $cleanup | Out-String
+$workspaceRoleLine = $cleanupText.IndexOf('az role assignment delete --assignee 22222222-2222-2222-2222-222222222222 --scope /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.OperationalInsights/workspaces/log-test')
+$gatewayRoleLine = $cleanupText.IndexOf('az role assignment delete --assignee 22222222-2222-2222-2222-222222222222 --scope /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.ApiManagement/service/apim-test')
+$identityLine = $cleanupText.IndexOf('az identity delete')
+Assert 'cleanup prints old identity role assignment deletes before the identity delete' ($workspaceRoleLine -ge 0 -and $gatewayRoleLine -ge 0 -and $identityLine -gt $workspaceRoleLine -and $identityLine -gt $gatewayRoleLine) $cleanupText
+Assert 'cleanup prints leftover identity and environment delete commands' ($identityLine -ge 0 -and $cleanupText -match 'az containerapp env delete')
 $sharedEnvId = '/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.App/managedEnvironments/cae-shared'
 $shared = New-JobListItem 'job-usd-reconcile-shared'
 $sharedShown = @{

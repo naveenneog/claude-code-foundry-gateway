@@ -201,6 +201,16 @@ gateway are left untouched. Cleanup uses core `az resource delete --ids
 immediate `-RunNow` path uses the same ARM `az rest` start/poll flow and also
 needs no Container Apps CLI extension.
 
+When an older job is deleted, the script prints explicit cleanup commands for
+the old identity's workspace-scoped `Log Analytics Reader` assignment and
+gateway-scoped writer assignment before it prints the identity delete command.
+The scopes are included because Azure CLI role-assignment delete searches the
+subscription scope when `--scope` is omitted, while these assignments live on
+resources (Azure CLI `role/custom.py`, read 2026-10-08). Deleting a managed
+identity without removing its role assignments leaves "Identity not found"
+entries in RBAC until the assignments are removed (Microsoft Learn
+Troubleshoot Azure RBAC, updated 2026-05-24, read 2026-10-08).
+
 Permissions are deliberately narrow:
 
 - the custom **Claude USD reconciler writer** role is assigned on the selected gateway
