@@ -53,6 +53,7 @@ $global:UsdDeleted = @()
 $global:UsdDeploymentEnvironmentName = 'cae-usd-reconcile-stable'
 $global:UsdNow = [datetime]'2026-10-08T10:00:00Z'
 $global:UsdRestGets = @()
+$global:UsdGetCount = 0
 $global:UsdRestPostFailures = 0
 $global:UsdPostCount = 0
 function New-JobListItem($Name) {
@@ -80,8 +81,8 @@ function New-Execution($Name, $Status, $Start, $End = $null) {
         name = $Name
         properties = [pscustomobject]@{
             status = $Status
-            startTime = ([datetime]$Start).ToUniversalTime().ToString('o')
-            endTime = $(if ($End) { ([datetime]$End).ToUniversalTime().ToString('o') } else { $null })
+            startTime = ([datetime]$Start).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss+00:00", [Globalization.CultureInfo]::InvariantCulture)
+            endTime = $(if ($End) { ([datetime]$End).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss+00:00", [Globalization.CultureInfo]::InvariantCulture) } else { $null })
         }
     }
 }
@@ -115,7 +116,8 @@ function global:az {
         return ''
     }
     if ($line -like 'rest --method get*executions*') {
-        $index = [math]::Min($global:UsdRestGets.Count - 1, [math]::Max(0, $global:UsdPostCount - 1))
+        $index = [math]::Min($global:UsdRestGets.Count - 1, $global:UsdGetCount)
+        $global:UsdGetCount++
         $value = if ($global:UsdRestGets.Count) { @($global:UsdRestGets[$index]) } else { @() }
         return (@{ value = $value } | ConvertTo-Json -Depth 20 -Compress)
     }
@@ -124,7 +126,7 @@ function global:az {
 function Invoke-Register($Jobs, $Shown, [switch]$FailDeploy, [string]$ExistingEnvironmentId = '', [string]$OutputEnvironmentName = '', $RestGets = @(@(New-Execution 'run-ok' Succeeded '2026-10-08T10:00:20Z' '2026-10-08T10:00:40Z')), [int]$PostFailures = 0, [switch]$RunNow) {
     $global:UsdCalls.Clear(); $global:UsdDeleted = @(); $global:UsdJobs = $Jobs; $global:UsdShown = $Shown; $global:UsdDeploymentFails = [bool]$FailDeploy
     $global:UsdDeploymentEnvironmentName = if ($OutputEnvironmentName) { $OutputEnvironmentName } elseif ($ExistingEnvironmentId) { ($ExistingEnvironmentId -split '/')[-1] } else { 'cae-usd-reconcile-stable' }
-    $global:UsdNow = [datetime]'2026-10-08T10:00:00Z'; $global:UsdRestGets = @($RestGets); $global:UsdRestPostFailures = $PostFailures; $global:UsdPostCount = 0
+    $global:UsdNow = [datetime]'2026-10-08T10:00:00Z'; $global:UsdRestGets = @($RestGets); $global:UsdGetCount = 0; $global:UsdRestPostFailures = $PostFailures; $global:UsdPostCount = 0
     & $register -ResourceGroup rg-test -ApimName apim-test `
         -WorkspaceResourceId '/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.OperationalInsights/workspaces/log-test' `
         -WorkspaceCustomerId '11111111-1111-1111-1111-111111111111' `
@@ -141,9 +143,24 @@ $shown = @{
     $stable.id = New-JobDetail 'job-usd-reconcile-stable' $gateway
     $other.id = New-JobDetail 'job-usd-reconcile-other' $otherGateway
 }
+$parserErrors = $null
+$registerAst = [System.Management.Automation.Language.Parser]::ParseFile($register, [ref]$null, [ref]$parserErrors)
+$utcAst = $registerAst.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'ConvertTo-ClaudeUsdReconcilerUtc' }, $true)
+if ($utcAst) {
+    . ([scriptblock]::Create($utcAst.Extent.Text))
+    $local = [datetime]::SpecifyKind([datetime]'2026-10-08T15:30:00', [DateTimeKind]::Local)
+    Assert 'execution time helper keeps +00:00 strings as UTC' ((ConvertTo-ClaudeUsdReconcilerUtc '2026-10-08T10:00:00+00:00').ToString('o') -eq '2026-10-08T10:00:00.0000000Z')
+    Assert 'execution time helper converts offset strings through DateTimeOffset' ((ConvertTo-ClaudeUsdReconcilerUtc '2026-10-08T15:30:00+05:30').ToString('o') -eq '2026-10-08T10:00:00.0000000Z')
+    Assert 'execution time helper converts Local DateTime directly' ((ConvertTo-ClaudeUsdReconcilerUtc $local).ToString('o') -eq $local.ToUniversalTime().ToString('o'))
+    Assert 'execution time helper preserves Utc DateTime' ((ConvertTo-ClaudeUsdReconcilerUtc ([datetime]'2026-10-08T10:00:00Z')).ToString('o') -eq '2026-10-08T10:00:00.0000000Z')
+}
+else {
+    Assert 'execution time helper exists' $false 'ConvertTo-ClaudeUsdReconcilerUtc missing'
+}
 $none = @(Invoke-Register @() @{})
 Assert 'no earlier job and no RunNow means no delete and no ARM start/poll' ($global:UsdDeleted.Count -eq 0 -and ($global:UsdCalls -join '|') -notmatch 'containerapp job delete|resource delete|/start\?|/executions\?')
 $firstFailedThenSucceeded = @(
+    @(New-Execution 'run-fail' Failed '2026-10-08T10:00:10Z' '2026-10-08T10:00:20Z'),
     @(New-Execution 'run-fail' Failed '2026-10-08T10:00:10Z' '2026-10-08T10:00:20Z'),
     @((New-Execution 'run-fail' Failed '2026-10-08T10:00:10Z' '2026-10-08T10:00:20Z'), (New-Execution 'run-ok' Succeeded '2026-10-08T10:01:40Z' '2026-10-08T10:02:00Z'))
 )
@@ -168,6 +185,7 @@ $failed = Throws { Invoke-Register @($old, $stable) $shown -FailDeploy }
 Assert 'failed deployment does not delete earlier jobs' ($failed -and $global:UsdDeleted.Count -eq 0) $failed
 $noSuccess = @(Invoke-Register @($old, $stable) $shown -RestGets @(@(New-Execution 'run-fail' Failed '2026-10-08T10:00:10Z' '2026-10-08T10:00:20Z')))
 Assert 'upgrade keeps old job and reports logs when no new run succeeds' ($global:UsdDeleted.Count -eq 0 -and ($noSuccess | Out-String) -match 'kept' -and ($noSuccess | Out-String) -match 'ContainerAppConsoleLogs' -and ($noSuccess | Out-String) -match 'Status=Failed') ($noSuccess | Out-String)
+Assert 'last failed execution after retry window stops without polling to hard cap' ($global:UsdNow -le ([datetime]'2026-10-08T10:13:30Z')) ("clock=$global:UsdNow gets=$global:UsdGetCount")
 $scheduledAfterEmptyStart = @(Invoke-Register @($old, $stable) $shown -RestGets @(@(New-Execution 'scheduled-ok' Succeeded '2026-10-08T10:00:30Z' '2026-10-08T10:00:50Z')))
 Assert 'empty POST body with scheduled success counts and deletes old job' ($global:UsdDeleted -contains $old.id -and ($scheduledAfterEmptyStart | Out-String) -match 'scheduled-ok')
 $oldThenNew = @(Invoke-Register @($old, $stable) $shown -RestGets @(
@@ -177,6 +195,15 @@ $oldThenNew = @(Invoke-Register @($old, $stable) $shown -RestGets @(
 Assert 'success before deployStartedUtc does not count' (($oldThenNew | Out-String) -notmatch 'Run old-ok succeeded' -and ($oldThenNew | Out-String) -match 'Run new-ok succeeded')
 $postFailure = @(Invoke-Register @($old, $stable) $shown -PostFailures 1 -RestGets @(@(New-Execution 'run-ok' Succeeded '2026-10-08T10:01:40Z' '2026-10-08T10:02:00Z')))
 Assert 'failed POST start is retried within the window and then reported by a later run' (@($global:UsdCalls | Where-Object { $_ -like 'rest --method post*/start*' }).Count -eq 2 -and ($postFailure | Out-String) -match 'Run run-ok succeeded')
+$previousThenRunning = @(Invoke-Register @($old, $stable) $shown -RestGets @(
+    @(New-Execution 'run-fail' Failed '2026-10-08T10:00:10Z' '2026-10-08T10:00:20Z'),
+    @(New-Execution 'run-fail' Failed '2026-10-08T10:00:10Z' '2026-10-08T10:00:20Z'),
+    @((New-Execution 'run-fail' Failed '2026-10-08T10:00:10Z' '2026-10-08T10:00:20Z'), (New-Execution 'run-new' Running '2026-10-08T10:01:35Z')),
+    @((New-Execution 'run-fail' Failed '2026-10-08T10:00:10Z' '2026-10-08T10:00:20Z'), (New-Execution 'run-new' Succeeded '2026-10-08T10:01:35Z' '2026-10-08T10:02:00Z'))
+))
+Assert 'same failed execution is handled once while a later execution appears' (@($global:UsdCalls | Where-Object { $_ -like 'rest --method post*/start*' }).Count -eq 2 -and ($previousThenRunning | Out-String) -match 'Run run-new succeeded')
+$rerun = @(Invoke-Register @($old, $stable) $shown -ExistingEnvironmentId $sharedEnvId -RestGets @(@(New-Execution 'run-fail' Failed '2026-10-08T10:00:10Z' '2026-10-08T10:00:20Z')) -RunNow)
+Assert 'no-success rerun command preserves operator parameters' (($rerun | Out-String) -match "-ExistingEnvironmentId '$([regex]::Escape($sharedEnvId))'" -and ($rerun | Out-String) -match "-Location 'eastus2'" -and ($rerun | Out-String) -match "-Image 'python:3.12.11-slim-bookworm'" -and ($rerun | Out-String) -match "-Cron '\*/5 \* \* \* \*'")
 Assert 'no Container Apps extension start or execution commands are used' (($global:UsdCalls -join '|') -notmatch 'containerapp job start|containerapp job execution')
 
 if ($fail) { throw "$fail USD reconciler schedule assertion(s) failed." }

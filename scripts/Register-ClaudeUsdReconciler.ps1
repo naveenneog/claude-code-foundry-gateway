@@ -128,6 +128,18 @@ function Get-ClaudeUsdReconcilerExecutions {
     return @($result)
 }
 
+function ConvertTo-ClaudeUsdReconcilerUtc {
+    param([Parameter(Mandatory = $true)][object]$Value)
+    if ($Value -is [DateTimeOffset]) { return $Value.UtcDateTime }
+    if ($Value -is [datetime]) {
+        if ($Value.Kind -eq [DateTimeKind]::Unspecified) {
+            return [DateTime]::SpecifyKind($Value, [DateTimeKind]::Utc)
+        }
+        return $Value.ToUniversalTime()
+    }
+    return ([DateTimeOffset]::Parse([string]$Value, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal)).UtcDateTime
+}
+
 function Wait-ClaudeUsdReconcilerFirstSuccess {
     param(
         [Parameter(Mandatory = $true)][string]$JobId,
@@ -140,46 +152,56 @@ function Wait-ClaudeUsdReconcilerFirstSuccess {
     $hardStop = $DeployStartedUtc.AddMinutes(35)
     $attempted = $false
     $lastFailed = ''
+    $handledFailures = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     while ((& $Clock).ToUniversalTime() -lt $hardStop) {
         $now = (& $Clock).ToUniversalTime()
-        if (-not $attempted -or ($lastFailed -and $now -lt $retryUntil)) {
-            if ($lastFailed) {
-                Write-Host ("Run {0} failed. Role assignments for a new job identity can take up to 10 minutes to take effect; starting another run at {1:HH:mm} UTC." -f $lastFailed, $now) -ForegroundColor Yellow
-                & $Sleep 60
-            }
-            if (-not (Start-ClaudeUsdReconcilerExecution -JobId $JobId)) {
-                $lastFailed = 'start'
+        if (-not $attempted) {
+            if (Start-ClaudeUsdReconcilerExecution -JobId $JobId) {
                 $attempted = $true
+            }
+            else {
+                if ($now -ge $retryUntil) { break }
                 & $Sleep 60
                 continue
             }
-            $attempted = $true
-            $lastFailed = ''
         }
         & $Sleep 15
         $executions = @(Get-ClaudeUsdReconcilerExecutions -JobId $JobId | Where-Object {
             try {
-                $start = [datetime]::Parse([string]$_.properties.startTime, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal).ToUniversalTime()
+                $start = ConvertTo-ClaudeUsdReconcilerUtc $_.properties.startTime
                 $start -ge $DeployStartedUtc
             }
             catch { $false }
-        } | Sort-Object { [datetime]::Parse([string]$_.properties.startTime, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal).ToUniversalTime() })
+        } | Sort-Object { ConvertTo-ClaudeUsdReconcilerUtc $_.properties.startTime })
         $success = @($executions | Where-Object { [string]$_.properties.status -eq 'Succeeded' } | Select-Object -Last 1)
         if ($success.Count) {
-            $ended = try { [datetime]::Parse([string]$success[0].properties.endTime, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal).ToUniversalTime() } catch { (& $Clock).ToUniversalTime() }
+            $ended = try { ConvertTo-ClaudeUsdReconcilerUtc $success[0].properties.endTime } catch { (& $Clock).ToUniversalTime() }
             Write-Host ("Run {0} succeeded at {1:HH:mm} UTC." -f ([string]$success[0].name), $ended) -ForegroundColor Green
             return [pscustomobject]@{ Status = 'Succeeded'; Execution = [string]$success[0].name; OldJobsKept = @() }
         }
         $active = @($executions | Where-Object { [string]$_.properties.status -in @('Running', 'Processing', 'Pending') })
+        if ($active.Count) { continue }
+        $now = (& $Clock).ToUniversalTime()
+        if ($now -ge $retryUntil) { break }
         $failed = @($executions | Where-Object { [string]$_.properties.status -eq 'Failed' } | Select-Object -Last 1)
-        if ($failed.Count -and -not $active.Count) {
+        if ($failed.Count) {
             $lastFailed = [string]$failed[0].name
-        }
-        elseif ((& $Clock).ToUniversalTime() -ge $retryUntil -and -not $active.Count) {
-            break
+            if ($handledFailures.Add($lastFailed)) {
+                $retryAt = $now.AddSeconds(60)
+                Write-Host ("Run {0} failed. Role assignments for a new job identity can take up to 10 minutes to take effect; starting another run at {1:HH:mm} UTC." -f $lastFailed, $retryAt) -ForegroundColor Yellow
+                & $Sleep 60
+                if (-not (Start-ClaudeUsdReconcilerExecution -JobId $JobId)) {
+                    $attempted = $false
+                }
+            }
         }
     }
     return [pscustomobject]@{ Status = 'Failed'; Execution = $lastFailed; OldJobsKept = @() }
+}
+
+function Format-ClaudeUsdReconcilerArgument {
+    param([AllowNull()][string]$Value)
+    return "'" + ([string]$Value).Replace("'", "''") + "'"
 }
 
 if (-not (az account show --query id -o tsv 2>$null)) { throw 'Not signed in. Run: az login.' }
@@ -267,7 +289,21 @@ if (-not $needsSuccessfulRun -or $run.Status -eq 'Succeeded') {
 elseif ($oldJobs.Count) {
     $kept = @($oldJobs | ForEach-Object { [string]$_.name })
     $run.OldJobsKept = $kept
-    Write-Warning ("New USD reconciler job {0} has not succeeded; kept old job(s) {1} so the dollar-budget state stays fresh. Read logs in the gateway workspace with: ContainerAppConsoleLogs | where JobName == '{0}' | order by TimeGenerated desc | take 50 . Rerun: .\scripts\Register-ClaudeUsdReconciler.ps1 -ResourceGroup {2} -ApimName {3} -WorkspaceResourceId '{4}' -WorkspaceCustomerId {5} -RepositoryUrl {6} -RepositoryRef {7}" -f [string]$outputs.jobName.value, ($kept -join ', '), $ResourceGroup, $ApimName, $WorkspaceResourceId, $WorkspaceCustomerId, $RepositoryUrl, $RepositoryRef)
+    $rerunParts = @(
+        '.\scripts\Register-ClaudeUsdReconciler.ps1',
+        '-ResourceGroup', (Format-ClaudeUsdReconcilerArgument $ResourceGroup),
+        '-ApimName', (Format-ClaudeUsdReconcilerArgument $ApimName),
+        '-WorkspaceResourceId', (Format-ClaudeUsdReconcilerArgument $WorkspaceResourceId),
+        '-WorkspaceCustomerId', (Format-ClaudeUsdReconcilerArgument $WorkspaceCustomerId),
+        '-RepositoryUrl', (Format-ClaudeUsdReconcilerArgument $RepositoryUrl),
+        '-RepositoryRef', (Format-ClaudeUsdReconcilerArgument $RepositoryRef),
+        '-Cron', (Format-ClaudeUsdReconcilerArgument $Cron),
+        '-Image', (Format-ClaudeUsdReconcilerArgument $Image),
+        '-Location', (Format-ClaudeUsdReconcilerArgument $Location)
+    )
+    if ($ExistingEnvironmentId) { $rerunParts += @('-ExistingEnvironmentId', (Format-ClaudeUsdReconcilerArgument $ExistingEnvironmentId)) }
+    if ($RunNow) { $rerunParts += '-RunNow' }
+    Write-Warning ("New USD reconciler job {0} has not succeeded; kept old job(s) {1} so the dollar-budget state stays fresh. Read logs in the gateway workspace with: ContainerAppConsoleLogs | where JobName == '{0}' | order by TimeGenerated desc | take 50 . Rerun: {2}" -f [string]$outputs.jobName.value, ($kept -join ', '), ($rerunParts -join ' '))
 }
 
 [pscustomobject][ordered]@{
