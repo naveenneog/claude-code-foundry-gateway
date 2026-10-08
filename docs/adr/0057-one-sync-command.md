@@ -40,7 +40,7 @@ a full snapshot. U25 records that this path is not measured live.
    Graph does not find stops the sync before any write; the record and default names are not used in its place.
    `premium=none` means the gateway has no premium group.
 3. A gateway without `entitlement-groups` gets it after its first successful sync only when each tier came from a
-   parameter, this gateway's decision record or the gateway's own `entitlement-groups`, and the tier write was not
+   parameter or this gateway's decision record, and the tier write was not
    skipped by the empty-tier guard; a default-name fallback syncs but does not pin those names unless
    `-RecordGroups` is explicit. When `-StandardGroup`, `-PremiumGroup` or this gateway's decision record resolve to
    other groups than the gateway records, the sync refuses before any write and names `-RecordGroups`; with
