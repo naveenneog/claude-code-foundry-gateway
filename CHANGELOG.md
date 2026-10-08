@@ -49,6 +49,7 @@ exact streaming cache-creation detail remains **U13**.
   workspace role assignments to the shared principal-id-keyed modules so a recreated per-gateway
   identity does not reuse role assignment names from the old principal
   ([ADR-0060](docs/adr/0060-usd-reconciler-attribution-and-pricing.md)).
+- **P108 script-managed USD price books now follow the AUM pinning rule.** Clearing the last budget item leaves a valid document, and the next write stores the current price book; active budgets keep their stored book and print a warning when a different one is offered.
 
 - **P104 the projection sync job runs on an admin-set schedule.** Adding or removing a developer in an Entra
   tier group or business-unit group reaches the Cosmos projection at the sync job's next run, with no command

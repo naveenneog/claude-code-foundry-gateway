@@ -64,6 +64,9 @@ book adds every 2026-10-08 eastus2 Foundry Claude catalog model whose Anthropic 
 price is a single tariff. `claude-haiku-5-5` stays unpriced until U178 splits usage
 by prompt-size tier.
 
+The price book is pinned while budget items exist. The script path now follows
+the AUM service rule: clear active budgets before replacing the stored book.
+
 The standalone scheduled reconciler is also per gateway, not per commit. Its
 Container Apps job, identity and default environment suffix excludes `repositoryRef`,
 so a registration at a newer commit changes `REPO_REF` on the same job. Because a

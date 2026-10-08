@@ -75,8 +75,18 @@ or invoice reconciliation. Null/unpriced is never $0.
    keep their stored tariff because `usd-budgets` embeds the whole dated
    `price_book` document with the budget item. Changing local prices, or
    updating this repository's example book, does not silently reprice them.
-   To rewrite a budget with the current book, run the same setter again with the
-   approved amount, for example:
+   Active budgets pin their tariff. The AUM service rejects a different book
+   while items exist (`service/aum/aum_service/usd_service.py:57-60`), and the
+   scripts keep the stored book and warn with both dates
+   (`scripts/ClaudeUsdBudgets.ps1:63-71`). To replace the script-stored book,
+   record the approved dollar budgets, clear each dollar budget through the
+   management surface that owns it, then write them again with the same setter
+   commands. `Set-ClaudeBudget.ps1 -Clear` clears a person dollar budget. The
+   first script write to a document with no budget items stores the current or
+   `-PriceBookPath` book and stamps the item with that date
+   (`scripts/ClaudeUsdBudgets.ps1:63-80`). Dollar budgets are not enforced
+   between the clear and the rewrite; the existing token budgets still apply.
+   With the AUM service, clear the budgets and then PUT `usd-price-book`.
 
    ```powershell
    .\scripts\Set-ClaudeBusinessUnit.ps1 -Id finance -MonthlyBudgetUsd 25 `
@@ -86,8 +96,8 @@ or invoice reconciliation. Null/unpriced is never $0.
    ```
 
    An existing budget written with an older book still lacks newly added model
-   entries, such as later Foundry deployments, until it is rewritten and then
-   reconciled.
+   entries, such as later Foundry deployments, until the document has no budget
+   items, the budget is written with the current book, and reconciliation runs.
 
 5. Reconcile now, or wait for the timer. Direct invocation uses Azure CLI
    sign-in and ETags; the service adds its lease/audit. Both refuse Turnstile
