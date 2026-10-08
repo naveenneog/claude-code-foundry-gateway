@@ -57,7 +57,11 @@ if ($sharded -or $LocalOnly) {
 
 function Get-TestAllFileHash {
     param([Parameter(Mandatory = $true)][string]$Path)
-    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+    # A suite may be writing the file at this moment; a sharing violation is retried briefly.
+    for ($attempt = 1; ; $attempt++) {
+        try { return (Get-FileHash -LiteralPath $Path -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant() }
+        catch { if ($attempt -ge 5) { throw }; Start-Sleep -Milliseconds 100 }
+    }
 }
 
 function New-TestAllPriceBookSnapshot {
@@ -82,15 +86,15 @@ function Restore-TestAllPriceBookSnapshot {
 
 function Save-TestAllChangedPriceBook {
     # The changed or left-behind file may be the operator's own edit made during the run: it is kept outside the
-    # repository and the run directory, and the failure names the copy.
+    # repository and the run directory, and the failure names the copy. Without a copy the file is left in place.
     param([Parameter(Mandatory = $true)][string]$Path, [switch]$Move)
     $kept = Join-Path ([IO.Path]::GetTempPath()) ('price-book-changed-during-tests-' + [DateTime]::UtcNow.ToString('yyyyMMddHHmmss') + '-' + [guid]::NewGuid().ToString('N').Substring(0, 8) + '.json')
     try {
         if ($Move) { Move-Item -LiteralPath $Path -Destination $kept -Force -ErrorAction Stop }
         else { Copy-Item -LiteralPath $Path -Destination $kept -Force -ErrorAction Stop }
-        return "kept the changed file at $kept"
+        return [pscustomobject]@{ Kept = $true; Text = "kept the changed file at `"$kept`"" }
     }
-    catch { return "could not keep the changed file ($($_.Exception.Message))" }
+    catch { return [pscustomobject]@{ Kept = $false; Text = "could not keep the changed file ($($_.Exception.Message)), so it was left in place" } }
 }
 
 function Test-TestAllPriceBookSnapshot {
@@ -103,12 +107,9 @@ function Test-TestAllPriceBookSnapshot {
     if (-not $Snapshot.Exists) {
         # No operator book existed when the run started: a book now is a suite's leftover, which would price real requests.
         if (Test-Path -LiteralPath $Snapshot.Path -PathType Leaf) {
-            $kept = Save-TestAllChangedPriceBook -Path $Snapshot.Path -Move
-            $removal = 'removed it'
-            if (Test-Path -LiteralPath $Snapshot.Path -PathType Leaf) {
-                try { Remove-Item -LiteralPath $Snapshot.Path -Force -ErrorAction Stop } catch { $removal = "could not remove it ($($_.Exception.Message))" }
-            }
-            return "config\price-book.json was created by $SuiteName; $removal and $kept, because no operator price book existed when the run started."
+            $save = Save-TestAllChangedPriceBook -Path $Snapshot.Path -Move
+            if (-not $save.Kept) { return "config\price-book.json was created by $SuiteName; $($save.Text)." }
+            return "config\price-book.json was created by $SuiteName; removed it and $($save.Text), because no operator price book existed when the run started."
         }
         return ''
     }
@@ -120,7 +121,12 @@ function Test-TestAllPriceBookSnapshot {
         $problem = "config\price-book.json was modified by $SuiteName"
     }
     if ($problem) {
-        $kept = if (Test-Path -LiteralPath $Snapshot.Path -PathType Leaf) { ' and ' + (Save-TestAllChangedPriceBook -Path $Snapshot.Path) } else { '' }
+        $kept = ''
+        if (Test-Path -LiteralPath $Snapshot.Path -PathType Leaf) {
+            $save = Save-TestAllChangedPriceBook -Path $Snapshot.Path
+            if (-not $save.Kept) { return "$problem; $($save.Text)." }
+            $kept = " and $($save.Text)"
+        }
         Restore-TestAllPriceBookSnapshot $Snapshot
         return "$problem; restored the original operator price book$kept."
     }
