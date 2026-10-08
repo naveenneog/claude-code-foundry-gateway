@@ -592,6 +592,60 @@ function runGraphWithConcurrentStatus({ name, mode }) {
   return { result, summary, store, target, otherUser };
 }
 
+function runGraphRemovalScenario({ name, existing, graphUsers, tierFor = () => 'standard' }) {
+  const dir = join(work, name.replace(/[^a-z0-9]+/gi, '-'));
+  rmSync(dir, { recursive: true, force: true });
+  mkdirSync(dir, { recursive: true });
+  const store = join(dir, 'cosmos.json');
+  const log = join(dir, 'cosmos.log');
+  writeFileSync(store, JSON.stringify({ docs: entitlementDocs(existing, tierFor) }));
+  writeFileSync(log, '');
+  const group = '11111111-1111-4111-8111-111111111111';
+  const result = spawnSync(process.execPath, [
+    '--import', graphPreloadUrl, '--loader', loaderUrl, script,
+    '--cosmos', cosmos, '--tenant', tenant, '--account-resource-id', account,
+    '--graph', '--standard', group, '--premium', 'none',
+  ], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      FAKE_COSMOS_STORE: store,
+      FAKE_COSMOS_LOG: log,
+      FAKE_GRAPH_TENANT: tenant,
+      FAKE_GRAPH_ACCOUNT_RESOURCE_ID: account,
+      FAKE_GRAPH_GROUP_ID: group,
+      FAKE_GRAPH_USERS: graphUsers.join(','),
+      PROJECTION_ACCOUNT_RESOURCE_ID: '',
+      PROJECTION_STANDARD_GROUP_ID: '',
+      PROJECTION_PREMIUM_GROUP_ID: '',
+      PROJECTION_GATEWAY_RESOURCE_ID: '',
+    },
+  });
+  const summary = JSON.parse(result.stdout.trim().split(/\r?\n/).filter((line) => line.startsWith('{')).at(-1));
+  return { result, summary, store, log };
+}
+
+function graphOids(count, start = 1) {
+  return Array.from({ length: count }, (_, i) => `33333333-3333-4333-8333-${String(start + i).padStart(12, '0')}`);
+}
+
+function entitlementDocs(oids, tierFor = () => 'standard') {
+  return Object.fromEntries(oids.map((oid, index) => [`${oid}|${oid}`, {
+    id: oid,
+    oid,
+    tenantId: tenant,
+    tier: tierFor(oid, index),
+    businessUnit: '',
+  }]));
+}
+
+function entitlementOids(docs) {
+  return docs
+    .filter((d) => d.type !== 'projection-reconciliation-status' && d.type !== 'projection-apply-lock')
+    .map((d) => d.oid)
+    .sort();
+}
+
 test('a concurrent targeted sync during graph full apply excludes that user from writes and deletes', () => {
   const { result, summary, store, target, otherUser } = runGraphWithConcurrentStatus({ name: 'graph concurrent user', mode: 'user' });
   assert.equal(result.status, 0, result.stdout + result.stderr);
@@ -607,6 +661,83 @@ test('a concurrent full sync during graph full apply refuses before writing user
   assert.match(summary.error, /newer full sync finished after this snapshot was taken/);
   const docs = Object.values(JSON.parse(readFileSync(store, 'utf8')).docs);
   assert.equal(docs.some((d) => [target, otherUser].includes(d.oid) && d.type !== 'projection-reconciliation-status'), false);
+});
+
+test('graph full apply refuses deleting more than the unattended removal ceiling and writes nothing', () => {
+  const existing = graphOids(110);
+  const kept = existing.slice(0, 98);
+  const { result, summary, store, log } = runGraphRemovalScenario({
+    name: 'graph removal ceiling refused',
+    existing,
+    graphUsers: kept,
+  });
+  assert.equal(result.status, 2, result.stdout + result.stderr);
+  assert.equal(summary.event, 'projection-renewal-failed');
+  assert.equal(summary.stage, 'removal-ceiling');
+  assert.equal(summary.deletes, 12);
+  assert.equal(summary.existing, 110);
+  assert.equal(summary.limit, 11);
+  assert.match(summary.error, /12 planned deletion\(s\)/);
+  assert.match(summary.error, /110 existing entitlement record\(s\)/);
+  assert.match(summary.error, /limit is 11/);
+  assert.match(summary.error, /nothing was written/);
+  assert.match(summary.error, /check the tier and business-unit groups/);
+  assert.match(summary.error, /scripts\/Sync-ClaudeAccess\.ps1 -ResourceGroup <rg> -ApimName <apim>/);
+  const docs = Object.values(JSON.parse(readFileSync(store, 'utf8')).docs);
+  assert.deepEqual(entitlementOids(docs), existing);
+  assert.equal(docs.some((d) => d.type === 'projection-reconciliation-status'), false, 'no status was written');
+  const calls = readFileSync(log, 'utf8');
+  assert.doesNotMatch(calls, /bulk (Upsert|Delete)/);
+});
+
+test('graph full apply may delete exactly the unattended removal ceiling', () => {
+  const existing = graphOids(110);
+  const kept = existing.slice(0, 99);
+  const { result, summary, store } = runGraphRemovalScenario({
+    name: 'graph removal ceiling equal allowed',
+    existing,
+    graphUsers: kept,
+  });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(summary.deleted, 11);
+  assert.equal(summary.event, 'projection-renewal-succeeded');
+  assert.deepEqual(entitlementOids(Object.values(JSON.parse(readFileSync(store, 'utf8')).docs)), kept);
+});
+
+test('snapshot full apply may delete more than the unattended removal ceiling', () => {
+  const existing = graphOids(110);
+  const kept = existing.slice(0, 98);
+  const snap = fullSnapshot({
+    verifiedAt: new Date(Date.now() - 60_000).toISOString(),
+    records: kept.map((oid) => ({ oid, tier: 'standard', businessUnit: '' })),
+  });
+  const { result, summary, store } = runApplyWithFake({
+    name: 'snapshot removal ceiling not capped',
+    docs: entitlementDocs(existing),
+    snapshot: snap,
+  });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(summary.deleted, 12);
+  assert.deepEqual(entitlementOids(Object.values(JSON.parse(readFileSync(store, 'utf8')).docs)), kept);
+});
+
+test('graph full apply does not limit additions and tier changes', () => {
+  const existing = graphOids(110);
+  const added = graphOids(20, 300);
+  const graphUsers = [...existing, ...added];
+  const { result, summary, store } = runGraphRemovalScenario({
+    name: 'graph additions and tier changes uncapped',
+    existing,
+    graphUsers,
+    tierFor: (_oid, index) => index < 60 ? 'premium' : 'standard',
+  });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(summary.toDelete, 0);
+  assert.equal(summary.toWrite, 80);
+  assert.equal(summary.event, 'projection-renewal-succeeded');
+  const docs = Object.values(JSON.parse(readFileSync(store, 'utf8')).docs);
+  assert.equal(entitlementOids(docs).length, 130);
+  assert.equal(docs.find((d) => d.oid === existing[0]).tier, 'standard');
 });
 
 test('an unexpired apply lock times out without writes or status', () => {

@@ -35,7 +35,7 @@
         "scripts/flow/Foundation.ps1": "b7c2a9dadb4edfbe131e43a242af710567a59daed83c37884cea1dfa7edfd1f4",
         "scripts/flow/Guide.ps1": "73bb63882ee1726fd8528e5e3045ecf6fd57a89dfa82a32f6e190cd2494461db",
         "scripts/flow/Verify.ps1": "7a8b05c6848499a8fbc26d87c90f4f3bfaa899538eeb1e6c068dd7bedda847fa",
-        "sync/src/apply-projection.mjs": "e12e55b2ef9514483083ee09e638bfd6e85623f2685103a68b4440a6abc1e0a7"
+        "sync/src/apply-projection.mjs": "71ff7222bf518a7c5efaa58bdb7c9a580fe57672c7264b57a9f4fecdcdfbe047"
       },
       "outputs": [
         {
@@ -151,12 +151,12 @@
         "scripts/Sync-ClaudeProjection.ps1": "67976f06318afec6f1e3b949e9ff6d5a4b1204201459ed0fc5f2e3e20cec2232",
         "sync/Dockerfile": "80ab80a331c8b97f903c30cf714cedfcc9969b8d8c24be0c58777ac7c7f3b382",
         "sync/src/apply-lock.mjs": "c477f98ab719567b04b6981017dd4dc4c0a40b8b4a6d98145d320d958d73e9b0",
-        "sync/src/apply-projection.mjs": "e12e55b2ef9514483083ee09e638bfd6e85623f2685103a68b4440a6abc1e0a7",
+        "sync/src/apply-projection.mjs": "71ff7222bf518a7c5efaa58bdb7c9a580fe57672c7264b57a9f4fecdcdfbe047",
         "sync/src/business-units.mjs": "45df91c836676e6ad32a2d1b7f730c51b01e4210a22b716ce118c8bc6298ff31",
         "sync/src/check-admission.mjs": "260384604cc5f6a77a5178fde7b76d9ab4c31e0e31a0629fa4435edc7457f06e",
         "sync/src/events.mjs": "4e2fae2fb8370d83c3bb798d8bd6f22d9db501c3a8730f8283bdab30bcb9db3f",
         "sync/src/graph.mjs": "de6c2dc421d1882a26d456dcfc1e6d908b32d17c3435663ebb513892b7c1f8ab",
-        "sync/src/plan.mjs": "697bd898814fcf05ca6cfa24314a54991dc5d8007cd0bdf7d98458664f247618"
+        "sync/src/plan.mjs": "9281c3b2f78ed30fc6a9112642c8469f987718530d2190fba86c7238f0d3faf1"
       },
       "outputs": [
         {

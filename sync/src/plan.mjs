@@ -110,6 +110,15 @@ export function planChanges(resolved, existing, { allowEmpty = false, keepOrphan
   };
 }
 
+export function removalLimit(existing) {
+  return Math.max(10, Math.floor(existing / 10));
+}
+
+export function removalLimitExceeded({ deletes, existing }) {
+  const limit = removalLimit(existing);
+  return { exceeded: deletes > limit, limit };
+}
+
 /**
  * The stored document. Same shape the PowerShell sync writes and the resolver
  * reads: id and partition key are both the object id, so a lookup is a point
