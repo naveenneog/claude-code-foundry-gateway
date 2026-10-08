@@ -516,6 +516,14 @@ try {
         $book.models.'claude-haiku-4.5'.inputPerM -eq 1 -and
             -not [string]::Equals('claude-opus-5', "claude-opus-5$([char]0x00ad)", [StringComparison]::Ordinal)
     }
+    Check 'PowerShell price book refuses duplicate normalized keys with different cache rates' {
+        $dup = Join-Path $scratch 'duplicate-cache-price-book.json'
+        Save $dup ([ordered]@{ date = '2026-10-08'; source = 'test'; models = [ordered]@{
+            'claude-haiku-4.5' = @{ inputPerM = 1; outputPerM = 5; cacheReadPerM = 0.1 }
+            'claude-haiku-4-5' = @{ inputPerM = 1; outputPerM = 5; cacheReadPerM = 0.05 }
+        } })
+        Reject { Get-ClaudeModelPriceBook $dup } 'conflicting|Duplicate normalized'
+    }
     Check 'oversized model lists fail before backup or writes' {
         $extra = 1..85 | ForEach-Object { 'missing-' + $_.ToString('000') + ('x' * 45) }
         $global:P70nvs['models-standard'] = ',sonnet,' + ($extra -join ',') + ','

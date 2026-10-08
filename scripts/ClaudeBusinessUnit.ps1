@@ -34,9 +34,9 @@
 # Claude's published list rates, per million tokens, retrieved 2026-09-15 from
 # https://platform.claude.com/docs/en/about-claude/pricing
 #
-# Only base input and output are stored. The cache rates are multipliers of base
-# input - read 0.1x, five-minute write 1.25x, one-hour write 2x - so recording
-# them separately would be three more numbers to keep current for no gain.
+# Older books stored only base input and output. Current books may also carry
+# explicit cache rates because newer Claude families do not all use the same
+# cache-read multiplier. Missing cache rates keep the historical defaults.
 #
 # Azure bills Claude as a single aggregated Claude Consumption Unit meter where
 # 100 CCU is $1.00, and private-offer discounts are applied before that
@@ -77,6 +77,11 @@ function Import-ClaudePriceBook {
             InputPerM  = [decimal]$m.inputPerM
             OutputPerM = [decimal]$m.outputPerM
         }
+        foreach ($optional in 'cacheReadPerM', 'cacheWrite5mPerM', 'cacheWrite1hPerM') {
+            if ($null -ne $m.PSObject.Properties[$optional]) {
+                $book[$p.Name][$optional.Substring(0, 1).ToUpperInvariant() + $optional.Substring(1)] = [decimal]$m.$optional
+            }
+        }
     }
     if ($book.Keys.Count -eq 0) { throw "Price book '$Path' lists no models. Delete it to fall back to the built-in rates." }
 
@@ -97,6 +102,11 @@ function Get-ClaudeBusinessUnitPriceBook {
         $models[$key] = [pscustomobject]@{
             inputPerM = $script:ClaudePriceBook[$key].InputPerM
             outputPerM = $script:ClaudePriceBook[$key].OutputPerM
+        }
+        foreach ($pair in @(@('CacheReadPerM', 'cacheReadPerM'), @('CacheWrite5mPerM', 'cacheWrite5mPerM'), @('CacheWrite1hPerM', 'cacheWrite1hPerM'))) {
+            if ($script:ClaudePriceBook[$key].ContainsKey($pair[0])) {
+                $models[$key] | Add-Member -NotePropertyName $pair[1] -NotePropertyValue $script:ClaudePriceBook[$key][$pair[0]]
+            }
         }
     }
     return [pscustomobject]@{
@@ -431,12 +441,12 @@ function ConvertTo-ClaudeBuTokens {
 function ConvertTo-ClaudeCacheUsd {
     <#
     .SYNOPSIS
-        Prices cache-read tokens, which are 0.1x the base input rate.
+        Prices cache-read tokens with the book's effective cache-read rate.
 
     .DESCRIPTION
         Priced on its own rather than folded into the blended figure, because
         the blend assumes an input/output mix and a cache read is neither. It
-        is a third category at a tenth of base input, and ADR-0010 requires the
+        is a third category, and ADR-0010 requires the
         categories to be priced separately and never summed before pricing.
     #>
     [CmdletBinding()]
@@ -447,8 +457,8 @@ function ConvertTo-ClaudeCacheUsd {
     $resolved = Resolve-ClaudePriceBookEntry $Model
     $price = if ($resolved) { $resolved.Price } else { $null }
     if (-not $price) { return $null }
-    # 0.1x base input, per Claude's published cache rates.
-    return [math]::Round(([decimal]$Tokens / [decimal]1000000) * $price.InputPerM * [decimal]0.1, 2)
+    $cacheReadPerM = if ($price.ContainsKey('CacheReadPerM')) { $price.CacheReadPerM } else { $price.InputPerM * [decimal]0.1 }
+    return [math]::Round(([decimal]$Tokens / [decimal]1000000) * $cacheReadPerM, 2)
 }
 
 function ConvertTo-ClaudeBuUsd {

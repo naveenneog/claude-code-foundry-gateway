@@ -42,9 +42,12 @@ Model price matching has three implementations held together by parity tests: Py
 Each normalizes by lowercasing and keeping only letters and digits. A name matches a price-book key when the
 normalized strings are equal, or when the normalized name is the normalized key followed by exactly eight
 digits. A shorter family never matches: `claude-opus-5-5` is not `claude-opus-5`. Price books loaded for
-budgets, model lifecycle and query publication reject duplicate normalized keys. The chargeback KQL reduces
-the published price table to one row per normalized key before joining, so a malformed query cannot duplicate
-spend rows.
+budgets reject duplicate normalized keys. The model lifecycle and query publisher allow duplicate normalized
+keys only when all five effective rates are identical: input, output, cache read, five-minute cache write and
+one-hour cache write, applying the same defaults as the reconciler (cache read 0.1x input, 5m write 1.25x input,
+1h write 2x input). If any effective rate differs, they refuse the book. The chargeback KQL reduces the
+published price table to one row per normalized key before joining and sets every rate with conflicting values
+to null, so a malformed query cannot duplicate spend rows or price a conflicted family as zero.
 
 The cache-read metric has no business-unit dimension. The reconciler therefore groups ledger rows and metrics
 by day, user and the normalized deployment family named by the request. The ledger first falls back from an

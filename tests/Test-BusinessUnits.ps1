@@ -379,6 +379,17 @@ Assert 'and keys it on the object id'              ($getSrc -match 'cache_read =
 # with the field renamed away.
 Assert 'cache is a field of its own, beside tokens_used' ($getSrc -match 'tokens_cache_read = \$cacheRead')
 Assert 'and is priced at the cache rate, not the blend' ($getSrc -match 'ConvertTo-ClaudeCacheUsd -Tokens \$cacheRead')
+$cacheBookPath = Join-Path ([IO.Path]::GetTempPath()) ('bu-cache-book-' + [guid]::NewGuid().ToString('N') + '.json')
+try {
+    [IO.File]::WriteAllText($cacheBookPath, (@{
+        date = '2026-10-08'; source = 'test'; models = @{
+            'test-cache-model' = @{ inputPerM = 2; outputPerM = 10; cacheReadPerM = 0.05 }
+        }
+    } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+    Import-ClaudePriceBook -Path $cacheBookPath | Out-Null
+    Assert 'cache USD conversion uses explicit cacheReadPerM when the book supplies it' ((ConvertTo-ClaudeCacheUsd -Tokens 1000000 -Model 'test-cache-model') -eq 0.05)
+}
+finally { Remove-Item -LiteralPath $cacheBookPath -Force -ErrorAction SilentlyContinue }
 
 # Cache write stays unattributed - it exists only in the response body, and
 # reading that in outbound ends streaming. The report has to say so rather than

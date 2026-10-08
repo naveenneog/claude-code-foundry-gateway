@@ -135,12 +135,8 @@ function New-PriceBlock {
         $key = ConvertTo-ClaudeQueryPriceKey $model.Name
         if ($seen.ContainsKey($key)) {
             $previous = $seen[$key]
-            $previousRate = '{0}:{1}' -f
-                ([decimal]$previous.Value.inputPerM).ToString([Globalization.CultureInfo]::InvariantCulture),
-                ([decimal]$previous.Value.outputPerM).ToString([Globalization.CultureInfo]::InvariantCulture)
-            $currentRate = '{0}:{1}' -f
-                ([decimal]$model.Value.inputPerM).ToString([Globalization.CultureInfo]::InvariantCulture),
-                ([decimal]$model.Value.outputPerM).ToString([Globalization.CultureInfo]::InvariantCulture)
+            $previousRate = Get-ClaudeQueryEffectivePriceRateKey $previous.Value
+            $currentRate = Get-ClaudeQueryEffectivePriceRateKey $model.Value
             if ($previousRate -ne $currentRate) {
                 throw "Duplicate normalized price-book key '$key' in $path has conflicting rates: $($previous.Name) and $($model.Name)."
             }
@@ -150,13 +146,37 @@ function New-PriceBlock {
     }
 
     $rows = @($models | ForEach-Object {
-        '    "{0}", {1}, {2}' -f $_.Name,
-            ([decimal]$_.Value.inputPerM).ToString([Globalization.CultureInfo]::InvariantCulture),
-            ([decimal]$_.Value.outputPerM).ToString([Globalization.CultureInfo]::InvariantCulture)
+        $rates = Get-ClaudeQueryEffectivePriceRates $_.Value
+        '    "{0}", {1}, {2}, {3}, {4}, {5}' -f $_.Name,
+            (Format-ClaudeQueryDecimal $rates[0]),
+            (Format-ClaudeQueryDecimal $rates[1]),
+            (Format-ClaudeQueryDecimal $rates[2]),
+            (Format-ClaudeQueryDecimal $rates[3]),
+            (Format-ClaudeQueryDecimal $rates[4])
     }) -join ",`n"
 
     return ("let price_book_date = `"{0}`";`n" -f $pb.date) +
-           "let price = datatable(model: string, input_per_m: real, output_per_m: real) [`n$rows`n];"
+           "let price = datatable(model: string, input_per_m: real, output_per_m: real, cache_read_per_m: real, cache_write_5m_per_m: real, cache_write_1h_per_m: real) [`n$rows`n];"
+}
+
+function Format-ClaudeQueryDecimal {
+    param([Parameter(Mandatory = $true)][decimal]$Value)
+    return $Value.ToString('G29', [Globalization.CultureInfo]::InvariantCulture)
+}
+
+function Get-ClaudeQueryEffectivePriceRates {
+    param([Parameter(Mandatory = $true)]$Rate)
+    $inputRate = [decimal]$Rate.inputPerM
+    $outputRate = [decimal]$Rate.outputPerM
+    $cacheRead = if ($null -ne $Rate.PSObject.Properties['cacheReadPerM']) { [decimal]$Rate.cacheReadPerM } else { $inputRate * [decimal]0.1 }
+    $cacheWrite5m = if ($null -ne $Rate.PSObject.Properties['cacheWrite5mPerM']) { [decimal]$Rate.cacheWrite5mPerM } else { $inputRate * [decimal]1.25 }
+    $cacheWrite1h = if ($null -ne $Rate.PSObject.Properties['cacheWrite1hPerM']) { [decimal]$Rate.cacheWrite1hPerM } else { $inputRate * [decimal]2 }
+    return @($inputRate, $outputRate, $cacheRead, $cacheWrite5m, $cacheWrite1h)
+}
+
+function Get-ClaudeQueryEffectivePriceRateKey {
+    param([Parameter(Mandatory = $true)]$Rate)
+    return ((Get-ClaudeQueryEffectivePriceRates $Rate) | ForEach-Object { Format-ClaudeQueryDecimal $_ }) -join ':'
 }
 
 function ConvertTo-ClaudeQueryPriceKey {

@@ -36,8 +36,8 @@ let _from = ago(1d);
 let _to = now();
 // PRICE-BOOK-BEGIN
 let price_book_date = "unpublished";
-let price = datatable(model: string, input_per_m: real, output_per_m: real) [
-    "", real(null), real(null)
+let price = datatable(model: string, input_per_m: real, output_per_m: real, cache_read_per_m: real, cache_write_5m_per_m: real, cache_write_1h_per_m: real) [
+    "", real(null), real(null), real(null), real(null), real(null)
 ];
 // PRICE-BOOK-END
 // MEMBERSHIP-BEGIN
@@ -46,12 +46,6 @@ let membership = datatable(oid: string, unit: string, parent: string) [
     "", "", ""
 ];
 // MEMBERSHIP-END
-//
-// Cache read is a third category at a tenth of base input, per Claude's
-// published rates. ADR-0010 requires the categories to be priced separately and
-// never summed before pricing, because a blended rate applied to a cache read
-// overstates it tenfold.
-let cache_read_multiplier = 0.1;
 //
 // Model names on the wire carry a deployment suffix the price book does not
 // have - measured 2026-09-17, the console reports claude-haiku-4-5-20251001
@@ -63,12 +57,21 @@ let cache_read_multiplier = 0.1;
 let norm = (m: string) { tolower(replace_regex(m, @"[^A-Za-z0-9]", "")) };
 let priced = price
 | extend k = norm(model)
-| summarize input_rates = make_set(input_per_m, 2), output_rates = make_set(output_per_m, 2) by k
+| summarize input_rates = make_set(input_per_m, 2), output_rates = make_set(output_per_m, 2),
+    cache_read_rates = make_set(cache_read_per_m, 2), cache_write_5m_rates = make_set(cache_write_5m_per_m, 2),
+    cache_write_1h_rates = make_set(cache_write_1h_per_m, 2) by k
 | extend input_per_m = iff(array_length(input_rates) == 1, todouble(input_rates[0]), real(null)),
-         output_per_m = iff(array_length(output_rates) == 1, todouble(output_rates[0]), real(null))
-| project k, input_per_m, output_per_m;
-let priced_exact = priced | project exact_k = k, exact_input_per_m = input_per_m, exact_output_per_m = output_per_m;
-let priced_dated = priced | project dated_k = k, dated_input_per_m = input_per_m, dated_output_per_m = output_per_m;
+         output_per_m = iff(array_length(output_rates) == 1, todouble(output_rates[0]), real(null)),
+         cache_read_per_m = iff(array_length(cache_read_rates) == 1, todouble(cache_read_rates[0]), real(null)),
+         cache_write_5m_per_m = iff(array_length(cache_write_5m_rates) == 1, todouble(cache_write_5m_rates[0]), real(null)),
+         cache_write_1h_per_m = iff(array_length(cache_write_1h_rates) == 1, todouble(cache_write_1h_rates[0]), real(null))
+| project k, input_per_m, output_per_m, cache_read_per_m, cache_write_5m_per_m, cache_write_1h_per_m;
+let priced_exact = priced | project exact_k = k, exact_input_per_m = input_per_m, exact_output_per_m = output_per_m,
+    exact_cache_read_per_m = cache_read_per_m, exact_cache_write_5m_per_m = cache_write_5m_per_m,
+    exact_cache_write_1h_per_m = cache_write_1h_per_m;
+let priced_dated = priced | project dated_k = k, dated_input_per_m = input_per_m, dated_output_per_m = output_per_m,
+    dated_cache_read_per_m = cache_read_per_m, dated_cache_write_5m_per_m = cache_write_5m_per_m,
+    dated_cache_write_1h_per_m = cache_write_1h_per_m;
 //
 // Today's mapping, keyed by object id. A team rolls up to its parent, so a unit
 // owner sees their teams' spend inside their own total the way the console
@@ -90,7 +93,8 @@ let metered =
     | join kind=leftouter priced_exact on $left.k == $right.exact_k
     | join kind=leftouter priced_dated on $left.dated_k == $right.dated_k
     | extend input_per_m = coalesce(exact_input_per_m, dated_input_per_m),
-             output_per_m = coalesce(exact_output_per_m, dated_output_per_m)
+             output_per_m = coalesce(exact_output_per_m, dated_output_per_m),
+             cache_read_per_m = coalesce(exact_cache_read_per_m, dated_cache_read_per_m)
     | extend
         prompt_usd = iff(isnull(input_per_m), real(null), (prompt_tokens / 1000000.0) * input_per_m),
         completion_usd = iff(isnull(output_per_m), real(null), (completion_tokens / 1000000.0) * output_per_m)
@@ -138,9 +142,10 @@ let cached =
     | join kind=leftouter priced_exact on $left.k == $right.exact_k
     | join kind=leftouter priced_dated on $left.dated_k == $right.dated_k
     | extend input_per_m = coalesce(exact_input_per_m, dated_input_per_m),
-             output_per_m = coalesce(exact_output_per_m, dated_output_per_m)
-    | extend cache_read_usd = iff(isnull(input_per_m), real(null),
-                                  (cache_read_tokens / 1000000.0) * input_per_m * cache_read_multiplier)
+             output_per_m = coalesce(exact_output_per_m, dated_output_per_m),
+             cache_read_per_m = coalesce(exact_cache_read_per_m, dated_cache_read_per_m)
+    | extend cache_read_usd = iff(isnull(cache_read_per_m), real(null),
+                                  (cache_read_tokens / 1000000.0) * cache_read_per_m)
     | extend
         business_unit_at_time = coalesce(business_unit_at_time, "unassigned"),
         actor = coalesce(actor, "unattributed"),

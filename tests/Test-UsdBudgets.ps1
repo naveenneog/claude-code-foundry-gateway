@@ -133,10 +133,13 @@ Assert 'chargeback KQL normalizes model names to lowercase letters and digits' (
 Assert 'chargeback KQL matches a dated model by exactly eight trailing digits' ($kql -match '\\d\{8\}' -and $kql -match 'substring\(')
 Assert 'chargeback KQL does not use a broad prefix price match' ($kql -notmatch 'startswith\(|hasprefix')
 Assert 'chargeback KQL reduces price rows to one normalized key before joins' ($kql -match 'input_rates = make_set' -and $kql -match 'output_rates = make_set' -and $kql -match 'by k' -and $kql -match 'array_length\(input_rates\) == 1')
+Assert 'chargeback KQL publishes and reduces cache-read rates from the price book' ($kql -match 'cache_read_per_m: real' -and $kql -match 'cache_read_rates = make_set\(cache_read_per_m, 2\)' -and $kql -match 'array_length\(cache_read_rates\) == 1')
+Assert 'chargeback KQL prices cache reads from the effective cache-read rate, not a fixed multiplier' ($kql -notmatch 'cache_read_multiplier' -and $kql -match 'cache_read_per_m' -and $kql -match 'cache_read_tokens / 1000000\.0\) \* cache_read_per_m')
 $publisher = Get-Content (Join-Path $root 'scripts\Publish-ClaudeQueries.ps1') -Raw
 Assert 'query publisher formats price numbers with invariant culture' ($publisher -match 'InvariantCulture' -and $publisher -match 'ToString\(')
 Assert 'query publisher refuses duplicate normalized price keys' ($publisher -match 'Duplicate normalized price-book key' -and $publisher -match 'ConvertTo-ClaudeQueryPriceKey')
 Assert 'query publisher allows equal-rate duplicate price keys with a warning' ($publisher -match 'Write-Warning' -and $publisher -match 'Duplicate normalized price-book key')
+Assert 'query publisher compares all five effective price rates' ($publisher -match 'cacheReadPerM' -and $publisher -match 'cacheWrite5mPerM' -and $publisher -match 'cacheWrite1hPerM')
 $harness = Get-Content (Join-Path $root 'scripts\Test-ClaudeUsdUsageQuery.ps1') -Raw
 Assert 'live USD query harness compares dates as UTC yyyy-MM-dd strings' ($harness -match "ToUniversalTime\(\)\.ToString\('yyyy-MM-dd'")
 Assert 'live USD query harness covers the next UTC day metric' ($harness -match '2026, 10, 9, 2')
