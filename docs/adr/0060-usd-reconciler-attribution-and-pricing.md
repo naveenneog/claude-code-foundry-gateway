@@ -1,6 +1,6 @@
 # ADR-0060: USD reconciliation attributes stamped units and uses normalized model prices
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-08
 - **Packet:** P108
 - **Amends:** ADR-0026
