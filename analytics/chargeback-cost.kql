@@ -36,8 +36,8 @@ let _from = ago(1d);
 let _to = now();
 // PRICE-BOOK-BEGIN
 let price_book_date = "unpublished";
-let price = datatable(model: string, input_per_m: real, output_per_m: real) [
-    "", real(null), real(null)
+let price = datatable(model: string, input_per_m: real, output_per_m: real, cache_read_per_m: real, cache_write_5m_per_m: real, cache_write_1h_per_m: real) [
+    "", real(null), real(null), real(null), real(null), real(null)
 ];
 // PRICE-BOOK-END
 // MEMBERSHIP-BEGIN
@@ -47,12 +47,6 @@ let membership = datatable(oid: string, unit: string, parent: string) [
 ];
 // MEMBERSHIP-END
 //
-// Cache read is a third category at a tenth of base input, per Claude's
-// published rates. ADR-0010 requires the categories to be priced separately and
-// never summed before pricing, because a blended rate applied to a cache read
-// overstates it tenfold.
-let cache_read_multiplier = 0.1;
-//
 // Model names on the wire carry a deployment suffix the price book does not
 // have - measured 2026-09-17, the console reports claude-haiku-4-5-20251001
 // where the book holds claude-haiku-4.5. Normalising both sides to letters and
@@ -61,7 +55,23 @@ let cache_read_multiplier = 0.1;
 // than a zero one: zero is a claim, null is the truth, and the workbook counts
 // the nulls on their own tile.
 let norm = (m: string) { tolower(replace_regex(m, @"[^A-Za-z0-9]", "")) };
-let priced = price | extend k = norm(model);
+let priced = price
+| extend k = norm(model)
+| summarize input_rates = make_set(input_per_m, 2), output_rates = make_set(output_per_m, 2),
+    cache_read_rates = make_set(cache_read_per_m, 2), cache_write_5m_rates = make_set(cache_write_5m_per_m, 2),
+    cache_write_1h_rates = make_set(cache_write_1h_per_m, 2) by k
+| extend input_per_m = iff(array_length(input_rates) == 1, todouble(input_rates[0]), real(null)),
+         output_per_m = iff(array_length(output_rates) == 1, todouble(output_rates[0]), real(null)),
+         cache_read_per_m = iff(array_length(cache_read_rates) == 1, todouble(cache_read_rates[0]), real(null)),
+         cache_write_5m_per_m = iff(array_length(cache_write_5m_rates) == 1, todouble(cache_write_5m_rates[0]), real(null)),
+         cache_write_1h_per_m = iff(array_length(cache_write_1h_rates) == 1, todouble(cache_write_1h_rates[0]), real(null))
+| project k, input_per_m, output_per_m, cache_read_per_m, cache_write_5m_per_m, cache_write_1h_per_m;
+let priced_exact = priced | project exact_k = k, exact_input_per_m = input_per_m, exact_output_per_m = output_per_m,
+    exact_cache_read_per_m = cache_read_per_m, exact_cache_write_5m_per_m = cache_write_5m_per_m,
+    exact_cache_write_1h_per_m = cache_write_1h_per_m;
+let priced_dated = priced | project dated_k = k, dated_input_per_m = input_per_m, dated_output_per_m = output_per_m,
+    dated_cache_read_per_m = cache_read_per_m, dated_cache_write_5m_per_m = cache_write_5m_per_m,
+    dated_cache_write_1h_per_m = cache_write_1h_per_m;
 //
 // Today's mapping, keyed by object id. A team rolls up to its parent, so a unit
 // owner sees their teams' spend inside their own total the way the console
@@ -79,7 +89,12 @@ let metered =
         requests = count()
         by day = startofday(timestamp), user_id, actor, business_unit_at_time = business_unit, tier, model, client_surface
     | extend k = norm(model)
-    | join kind=leftouter priced on k
+    | extend dated_k = iff(strlen(k) > 8 and substring(k, strlen(k) - 8, 8) matches regex @"^\d{8}$", substring(k, 0, strlen(k) - 8), "")
+    | join kind=leftouter priced_exact on $left.k == $right.exact_k
+    | join kind=leftouter priced_dated on $left.dated_k == $right.dated_k
+    | extend input_per_m = coalesce(exact_input_per_m, dated_input_per_m),
+             output_per_m = coalesce(exact_output_per_m, dated_output_per_m),
+             cache_read_per_m = coalesce(exact_cache_read_per_m, dated_cache_read_per_m)
     | extend
         prompt_usd = iff(isnull(input_per_m), real(null), (prompt_tokens / 1000000.0) * input_per_m),
         completion_usd = iff(isnull(output_per_m), real(null), (completion_tokens / 1000000.0) * output_per_m)
@@ -87,7 +102,9 @@ let metered =
         cache_read_tokens = 0.0,
         cache_read_usd = 0.0,
         category = "metered",
-        priced_ok = isnotnull(input_per_m)
+        // A rate the per-key reduction left null (conflicting book entries) prices its category as
+        // null, which the final usd sum treats as 0; priced_ok is what reports count as unpriced.
+        priced_ok = isnotnull(input_per_m) and isnotnull(output_per_m)
     | project day, user_id, actor, business_unit_at_time, tier, model, client_surface,
               requests, prompt_tokens, completion_tokens, cache_read_tokens,
               prompt_usd, completion_usd, cache_read_usd, category, priced_ok;
@@ -123,9 +140,14 @@ let cached =
     | where cache_read_tokens > 0
     | join kind=leftouter unit_of on user_id
     | extend k = norm(model)
-    | join kind=leftouter priced on k
-    | extend cache_read_usd = iff(isnull(input_per_m), real(null),
-                                  (cache_read_tokens / 1000000.0) * input_per_m * cache_read_multiplier)
+    | extend dated_k = iff(strlen(k) > 8 and substring(k, strlen(k) - 8, 8) matches regex @"^\d{8}$", substring(k, 0, strlen(k) - 8), "")
+    | join kind=leftouter priced_exact on $left.k == $right.exact_k
+    | join kind=leftouter priced_dated on $left.dated_k == $right.dated_k
+    | extend input_per_m = coalesce(exact_input_per_m, dated_input_per_m),
+             output_per_m = coalesce(exact_output_per_m, dated_output_per_m),
+             cache_read_per_m = coalesce(exact_cache_read_per_m, dated_cache_read_per_m)
+    | extend cache_read_usd = iff(isnull(cache_read_per_m), real(null),
+                                  (cache_read_tokens / 1000000.0) * cache_read_per_m)
     | extend
         business_unit_at_time = coalesce(business_unit_at_time, "unassigned"),
         actor = coalesce(actor, "unattributed"),
@@ -136,7 +158,7 @@ let cached =
         prompt_usd = 0.0,
         completion_usd = 0.0,
         category = "cache_read",
-        priced_ok = isnotnull(input_per_m)
+        priced_ok = isnotnull(cache_read_per_m)
     | project day, user_id, actor, business_unit_at_time, tier, model, client_surface,
               requests, prompt_tokens, completion_tokens, cache_read_tokens,
               prompt_usd, completion_usd, cache_read_usd, category, priced_ok;

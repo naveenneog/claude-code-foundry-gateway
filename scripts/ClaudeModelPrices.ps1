@@ -33,26 +33,114 @@ function Get-ClaudeModelPriceBook {
                 $value -is [System.Collections.IEnumerable] -or $value.GetType().FullName -eq 'System.Management.Automation.PSCustomObject') {
                 throw "Price book '$Path': '$($p.Name)' needs a numeric $key rate."
             }
-            if ([decimal]$value -lt 0) { throw "Price book '$Path': '$($p.Name)' has a negative $key rate." }
+            if ($value -lt 0 -or [decimal]$value -lt 0) { throw "Price book '$Path': '$($p.Name)' has a negative $key rate." }
+        }
+        foreach ($key in 'cacheReadPerM', 'cacheWrite5mPerM', 'cacheWrite1hPerM') {
+            if ($null -ne $p.Value.PSObject.Properties[$key]) {
+                $value = $p.Value.$key
+                if ($null -eq $value -or $value -is [bool] -or $value -is [string] -or
+                    $value -is [System.Collections.IEnumerable] -or $value.GetType().FullName -eq 'System.Management.Automation.PSCustomObject') {
+                    throw "Price book '$Path': '$($p.Name)' needs a numeric $key rate."
+                }
+                if ($value -lt 0 -or [decimal]$value -lt 0) { throw "Price book '$Path': '$($p.Name)' has a negative $key rate." }
+            }
+        }
+    }
+    $seen = @{}
+    $spellings = [ordered]@{}
+    foreach ($p in $doc.models.PSObject.Properties) {
+        $key = ConvertTo-ClaudePriceModelKey $p.Name
+        if ($seen.ContainsKey($key)) {
+            $previousName = $seen[$key]
+            $previous = $doc.models.$previousName
+            $previousRate = Get-ClaudeEffectivePriceRateKey $previous
+            $currentRate = Get-ClaudeEffectivePriceRateKey $p.Value
+            if (-not [string]::Equals($previousRate, $currentRate, [StringComparison]::Ordinal)) {
+                throw "Duplicate normalized price-book key '$key' in '$Path' has conflicting rates: $previousName and $($p.Name)."
+            }
+            $spellings[$key] = @($spellings[$key]) + @($p.Name)
+        }
+        else { $seen[$key] = $p.Name; $spellings[$key] = @($p.Name) }
+    }
+    foreach ($key in @($spellings.Keys)) {
+        $names = @($spellings[$key])
+        if ($names.Count -gt 1) {
+            # Resolve-ClaudePriceBookKey uses the first equal-rate spelling in Sort-ClaudeFlowOrdinal order (P76).
+            $used = @(Sort-ClaudeFlowOrdinal -InputObject $names)[0]
+            Write-Warning "Duplicate normalized price-book key '$key' in '$Path': $($names -join ', ') have equal effective rates; '$used' is used."
         }
     }
     return $doc
 }
 
+function Format-ClaudeInvariantDecimal {
+    param([Parameter(Mandatory = $true)][decimal]$Value)
+    return $Value.ToString('G29', [Globalization.CultureInfo]::InvariantCulture)
+}
+
+function Get-ClaudeEffectivePriceRates {
+    param([Parameter(Mandatory = $true)]$Rate)
+    $inputRate = [decimal]$Rate.inputPerM
+    $outputRate = [decimal]$Rate.outputPerM
+    $cacheRead = if ($null -ne $Rate.PSObject.Properties['cacheReadPerM']) { [decimal]$Rate.cacheReadPerM } else { $inputRate * [decimal]0.1 }
+    $cacheWrite5m = if ($null -ne $Rate.PSObject.Properties['cacheWrite5mPerM']) { [decimal]$Rate.cacheWrite5mPerM } else { $inputRate * [decimal]1.25 }
+    $cacheWrite1h = if ($null -ne $Rate.PSObject.Properties['cacheWrite1hPerM']) { [decimal]$Rate.cacheWrite1hPerM } else { $inputRate * [decimal]2 }
+    return @($inputRate, $outputRate, $cacheRead, $cacheWrite5m, $cacheWrite1h)
+}
+
+function Get-ClaudeEffectivePriceRateKey {
+    param([Parameter(Mandatory = $true)]$Rate)
+    return ((Get-ClaudeEffectivePriceRates $Rate) | ForEach-Object { Format-ClaudeInvariantDecimal $_ }) -join ':'
+}
+
+function ConvertTo-ClaudePriceModelKey {
+    param([AllowNull()][string]$Name)
+    return ([regex]::Replace([string]$Name, '[^A-Za-z0-9]', '')).ToLowerInvariant()
+}
+
+function Resolve-ClaudePriceBookKey {
+    param([Parameter(Mandatory = $true)][string]$Name, [Parameter(Mandatory = $true)]$Book)
+    $target = ConvertTo-ClaudePriceModelKey $Name
+    if (-not $target) { return '' }
+    $names = @($Book.models.PSObject.Properties.Name)
+    $normalizedMatches = @($names | Where-Object { [string]::Equals((ConvertTo-ClaudePriceModelKey $_), $target, [StringComparison]::Ordinal) })
+    if ($normalizedMatches.Count -gt 1) {
+        $rates = @(Sort-ClaudeFlowOrdinal -Unique -InputObject @($normalizedMatches | ForEach-Object {
+            Get-ClaudeEffectivePriceRateKey $Book.models.$_
+        }))
+        if ($rates.Count -gt 1) { return '' }
+    }
+    if ($target.Length -gt 8 -and $target.Substring($target.Length - 8) -match '^\d{8}$') {
+        $familyBeforeMatch = $target.Substring(0, $target.Length - 8)
+        $familyConflicts = @($names | Where-Object { [string]::Equals((ConvertTo-ClaudePriceModelKey $_), $familyBeforeMatch, [StringComparison]::Ordinal) })
+        if ($familyConflicts.Count -gt 1) {
+            $rates = @(Sort-ClaudeFlowOrdinal -Unique -InputObject @($familyConflicts | ForEach-Object {
+                Get-ClaudeEffectivePriceRateKey $Book.models.$_
+            }))
+            if ($rates.Count -gt 1) { return '' }
+        }
+    }
+    $matches = $normalizedMatches
+    if (-not $matches.Count -and $target.Length -gt 8 -and $target.Substring($target.Length - 8) -match '^\d{8}$') {
+        $family = $target.Substring(0, $target.Length - 8)
+        $matches = @($names | Where-Object { [string]::Equals((ConvertTo-ClaudePriceModelKey $_), $family, [StringComparison]::Ordinal) })
+    }
+    if ($matches.Count -eq 1) { return [string]$matches[0] }
+    if ($matches.Count -gt 1) {
+        $rates = @(Sort-ClaudeFlowOrdinal -Unique -InputObject @($matches | ForEach-Object {
+            Get-ClaudeEffectivePriceRateKey $Book.models.$_
+        }))
+        if ($rates.Count -gt 1) { return '' }
+        return [string](@(Sort-ClaudeFlowOrdinal -InputObject $matches)[0])
+    }
+    return ''
+}
+
 function Get-ClaudeDeploymentPrice {
     param([Parameter(Mandatory = $true)]$Deployment, [Parameter(Mandatory = $true)]$Book)
-    $names = @($Book.models.PSObject.Properties.Name)
-    $key = ''
-    if ([string]$Deployment.name -in $names) { $key = [string]$Deployment.name }
-    elseif ($Deployment.sku -eq 'GlobalStandard') {
-        $normal = ([string]$Deployment.model -replace '(?<=\d)\.(?=\d)', '-')
-        $candidates = @($names | Where-Object { ($_ -replace '(?<=\d)\.(?=\d)', '-') -eq $normal })
-        $rates = @(Sort-ClaudeFlowOrdinal -Unique -InputObject @($candidates | ForEach-Object {
-            $rate = $Book.models.$_
-            '{0}:{1}' -f ([decimal]$rate.inputPerM).ToString([Globalization.CultureInfo]::InvariantCulture), ([decimal]$rate.outputPerM).ToString([Globalization.CultureInfo]::InvariantCulture)
-        }))
-        if ($rates.Count -gt 1) { throw "Conflicting price entries for '$($Deployment.model)': $($candidates -join ', '). A deployment-specific price resolves this ambiguity." }
-        if ($candidates.Count) { $key = @(Sort-ClaudeFlowOrdinal -InputObject $candidates)[0] }
+    $key = Resolve-ClaudePriceBookKey -Name ([string]$Deployment.name) -Book $Book
+    if (-not $key -and $Deployment.sku -eq 'GlobalStandard') {
+        $key = Resolve-ClaudePriceBookKey -Name ([string]$Deployment.model) -Book $Book
     }
     if (-not $key) {
         $reason = if ($Deployment.model -eq 'claude-opus-5-5') {

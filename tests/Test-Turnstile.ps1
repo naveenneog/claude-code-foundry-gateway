@@ -26,6 +26,8 @@ function Throws([scriptblock]$Block) { try { & $Block | Out-Null; return $false 
 $script:ClaudePriceBook = @{
     'claude-sonnet-5' = @{ InputPerM = [decimal]2.0; OutputPerM = [decimal]10.0 }
     'claude-opus-5'   = @{ InputPerM = [decimal]5.0; OutputPerM = [decimal]25.0 }
+    'claude-opus-5-5' = @{ InputPerM = [decimal]4.0; OutputPerM = [decimal]20.0; CacheReadPerM = [decimal]0.20 }
+    'claude-fable-5-1' = @{ InputPerM = [decimal]10.0; OutputPerM = [decimal]50.0; CacheReadPerM = [decimal]0.25 }
 }
 
 $lib = (Get-Content (Join-Path $root 'scripts/ClaudeTurnstile.ps1') -Raw) + (Get-Content (Join-Path $root 'scripts/ClaudeTurnstileGovernance.ps1') -Raw)
@@ -86,6 +88,8 @@ Assert 'a request is priced category by category'            ($e['estimated_cost
 Assert 'at six places, not two'                              ((ConvertTo-ClaudeRequestUsd -Model 'claude-sonnet-5' -InputTokens 16 -OutputTokens 4) -eq [decimal]0.000072)
 Assert 'money stays decimal'                                 ((ConvertTo-ClaudeRequestUsd -Model 'claude-sonnet-5' -InputTokens 1) -is [decimal])
 Assert 'cache read is a tenth of base input'                 ((ConvertTo-ClaudeRequestUsd -Model 'claude-sonnet-5' -CacheReadTokens 1000000) -eq [decimal]0.2)
+Assert 'request pricing uses an explicit cache-read rate for Opus 5.5' ((ConvertTo-ClaudeRequestUsd -Model 'claude-opus-5-5' -CacheReadTokens 1000000) -eq [decimal]0.2)
+Assert 'request pricing uses an explicit cache-read rate for Fable 5.1' ((ConvertTo-ClaudeRequestUsd -Model 'claude-fable-5-1' -CacheReadTokens 1000000) -eq [decimal]0.25)
 Assert 'an unknown model is unpriced, not free'              ($null -eq (ConvertTo-ClaudeRequestUsd -Model 'claude-next' -InputTokens 5))
 Assert 'and its event carries no cost'                       (-not (ConvertTo-ClaudeTurnstileEvent -Row (New-Row @{ model = 'claude-next' })).Contains('estimated_cost'))
 Assert 'Turnstile pricing sends no cost at all'              (-not (ConvertTo-ClaudeTurnstileEvent -Row (New-Row) -PriceSource Turnstile).Contains('estimated_cost'))

@@ -7,7 +7,7 @@ from .service import reason
 from .transactions import apply_values
 from .usd_budgets import (
     calculate_state, check_authority, decode_state, dollars, encode_document,
-    parse_budgets, price_row, source_revision,
+    parse_budgets, price_row, source_revision, validate_price_book,
 )
 
 
@@ -57,6 +57,7 @@ class UsdBudgets:
             if doc.get("items") and doc.get("price_book") != body["price_book"]:
                 raise Conflict("Active budgets pin their tariff; clear them explicitly before replacing the price book",
                                "usd_price_book_pinned")
+            validate_price_book(body["price_book"])
             doc = {"schema_version": 1, "price_book": body["price_book"], "items": doc.get("items", {})}
             parse_budgets(encode_document(doc))
             for model in doc["price_book"]["models"]:

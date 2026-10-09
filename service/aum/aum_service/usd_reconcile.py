@@ -10,17 +10,32 @@ from .usd_budgets import (
 from .workflows import SYSTEM
 
 
-def usage_query(gateway_base, now):
+def usage_query(gateway_base, now, chargeback="ClaudeChargeback", metrics="AppMetrics"):
     gateway = gateway_base.removeprefix("https://management.azure.com")
     if not gateway.startswith("/subscriptions/") or "/providers/Microsoft.ApiManagement/service/" not in gateway:
         raise ServiceError(503, "usd_gateway_unknown", "USD reconciliation needs a specific gateway resource id")
     start = now.astimezone(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    if not chargeback.replace("_", "").isalnum() or not metrics.replace("_", "").isalnum():
+        raise ServiceError(503, "usd_invalid_usage_query", "USD query fixture names must be identifiers")
     return f"""let _from = datetime({timestamp(start)});
 let _to = datetime({timestamp(now)});
-let metered = ClaudeChargeback(_from, _to)
+let norm = (m: string) {{ tolower(replace_regex(m, @"[^A-Za-z0-9]", "")) }};
+let family_of = (m: string) {{
+    let k = norm(m);
+    iff(strlen(k) > 8 and substring(k, strlen(k) - 8, 8) matches regex @"^\\d{{8}}$", substring(k, 0, strlen(k) - 8), k)
+}};
+let ledger = {chargeback}(_from, _to)
 | where timestamp >= _from and timestamp < _to
 | where gateway_id =~ {literal(gateway)}
-| extend deployment=iff(isempty(deployment),model,deployment)
+| extend deployment=iff(isempty(deployment),model,deployment),
+         business_unit=coalesce(business_unit, "unassigned")
+| extend family=family_of(deployment);
+let latest_unit =
+    ledger
+    | where user_id != ""
+    | summarize arg_max(timestamp, business_unit) by user_id
+    | project user_id, latest_business_unit=business_unit;
+let metered = ledger
 | summarize prompt_tokens=sum(tolong(prompt_tokens)), completion_tokens=sum(tolong(completion_tokens)),
     body_reads=sum(tolong(cache_read_tokens)),
     cache_write_5m_tokens=sum(tolong(cache_write_5m_tokens)),
@@ -28,29 +43,66 @@ let metered = ClaudeChargeback(_from, _to)
     missing_reads=countif(not(coalesce(cache_read_known,false))),
     missing_writes=countif(not(coalesce(cache_write_known,false))),
     not_body=countif(usage_source != "body"), geographies=make_set(inference_geo, 2),
-    units=make_set(business_unit, 2), models=make_set(model, 2),
-    ingestion_delay_seconds=max(datetime_diff('second', ingested_at, timestamp))
-    by day=startofday(timestamp), user_id, deployment;
-let cached = AppMetrics
+    models=make_set(model, 2),
+    ingestion_delay_seconds=max(datetime_diff('second', ingested_at, timestamp)),
+    latest_request=max(timestamp)
+    by day=startofday(timestamp), user_id, family, deployment, business_unit;
+let cached_by_model = {metrics}
 | where TimeGenerated >= _from and TimeGenerated < _to
 | where Name == "Prompt Cached Tokens"
 | where tostring(Properties["Service ID"]) == {literal(gateway.split('/')[-1])}
-| summarize metric_reads=sum(tolong(Sum)), metric_rows=count()
-    by day=startofday(TimeGenerated), user_id=tostring(Properties.UserId), deployment=tostring(Properties.Model);
-metered | join kind=fullouter cached on day, user_id, deployment
-| project day=coalesce(day,day1), user_id=coalesce(user_id,user_id1),
-    deployment=coalesce(deployment,deployment1), model=tostring(models[0]),
-    business_unit=iff(array_length(units) == 1,tostring(units[0]),''),
+| extend family=family_of(tostring(Properties.Model))
+| summarize model_reads=sum(tolong(Sum)), model_rows=count()
+    by day=startofday(TimeGenerated), user_id=tostring(Properties.UserId), family, metric_model=tostring(Properties.Model);
+let max_metric_reads = cached_by_model
+| summarize max_model_reads=max(model_reads), metric_reads=sum(model_reads), metric_rows=sum(model_rows)
+    by day, user_id, family;
+let cached = cached_by_model
+| join kind=inner max_metric_reads on day, user_id, family
+| where model_reads == max_model_reads
+| summarize metric_model=min(metric_model), metric_reads=take_any(metric_reads), metric_rows=take_any(metric_rows)
+    by day, user_id, family;
+let group_totals = metered
+| summarize total_body_reads=sum(body_reads), total_missing_reads=sum(missing_reads),
+    arg_max(latest_request, deployment, business_unit)
+    by day, user_id, family
+| extend group_latest=latest_request, group_deployment=deployment, group_business_unit=business_unit
+| join kind=fullouter cached on day, user_id, family
+| extend day=coalesce(day, day1), user_id=coalesce(user_id, user_id1), family=coalesce(family, family1)
+| project-away day1, user_id1, family1
+| extend group_cache_read_total=iff(isnotnull(total_missing_reads) and total_missing_reads == 0,
+    coalesce(total_body_reads,0), max_of(coalesce(total_body_reads,0), coalesce(metric_reads,0)));
+let metered_rows = metered
+| join kind=leftouter group_totals on day, user_id, family
+| extend remainder_reads=max_of(group_cache_read_total - total_body_reads, 0)
+| project day, user_id, deployment, model=tostring(models[0]), business_unit,
     prompt_tokens=coalesce(prompt_tokens,0), completion_tokens=coalesce(completion_tokens,0),
-    cache_read_tokens=iff(isnotnull(missing_reads) and missing_reads == 0,
-        coalesce(body_reads,0),max_of(coalesce(body_reads,0),coalesce(metric_reads,0))),
+    cache_read_tokens=coalesce(body_reads,0) + iff(latest_request == group_latest and deployment == group_deployment and business_unit == group_business_unit, remainder_reads, 0),
     cache_write_5m_tokens=coalesce(cache_write_5m_tokens,0),
     cache_write_1h_tokens=coalesce(cache_write_1h_tokens,0),
-    cache_read_known=isnotnull(missing_reads) and (missing_reads == 0 or metric_rows > 0),
+    cache_read_known=isnotnull(missing_reads) and (missing_reads == 0 or coalesce(metric_rows,0) > 0 or remainder_reads > 0),
     cache_write_known=isnotnull(missing_writes) and missing_writes == 0,
     inference_geo=iff(array_length(geographies) == 1,tostring(geographies[0]),'unknown'),
     usage_source=iff(isnotnull(not_body) and not_body == 0,'body','log+metric'),
-    ambiguous_model=array_length(models) > 1, ingestion_delay_seconds
+    ambiguous_model=array_length(models) > 1, ingestion_delay_seconds,
+    unit_unknown=false;
+let metric_only_rows = group_totals
+| where isnull(total_body_reads) and isnotnull(metric_reads)
+| join kind=leftouter latest_unit on user_id
+| project day, user_id, deployment=metric_model, model=metric_model,
+    business_unit=coalesce(latest_business_unit, ""),
+    prompt_tokens=0, completion_tokens=0,
+    cache_read_tokens=group_cache_read_total,
+    cache_write_5m_tokens=0,
+    cache_write_1h_tokens=0,
+    cache_read_known=true,
+    cache_write_known=true,
+    inference_geo="unknown",
+    usage_source="metric",
+    ambiguous_model=false,
+    ingestion_delay_seconds=long(null),
+    unit_unknown=isempty(latest_business_unit);
+union metered_rows, metric_only_rows
 | take 1001"""
 
 

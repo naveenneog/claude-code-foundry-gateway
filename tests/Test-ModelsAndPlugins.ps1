@@ -73,7 +73,7 @@ Assert 'and there is still a built-in fallback' ($h -match "'claude-sonnet-5'\s*
 # ConvertFrom-Json yields doubles. ADR-0010 requires decimal end to end, and a
 # double here would reach the blended rate and stop figures reproducing.
 Assert 'file rates are cast to decimal' `
-    ($h -match 'InputPerM\s*=\s*\[decimal\]\$m\.inputPerM' -and $h -match 'OutputPerM\s*=\s*\[decimal\]\$m\.outputPerM')
+    ($h -match '\$inputRate = Test-PriceRate \$m\.inputPerM' -and $h -match '\$outputRate = Test-PriceRate \$m\.outputPerM' -and $h -match '\[decimal\]\$Value')
 
 # Behavioural: load an example book and check what comes back.
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ("pb-" + [guid]::NewGuid().ToString('N') + '.json')

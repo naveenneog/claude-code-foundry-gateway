@@ -29,13 +29,14 @@
 #>
 
 . (Join-Path $PSScriptRoot 'ClaudeBudgetModes.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeModelPrices.ps1')
 
 # Claude's published list rates, per million tokens, retrieved 2026-09-15 from
 # https://platform.claude.com/docs/en/about-claude/pricing
 #
-# Only base input and output are stored. The cache rates are multipliers of base
-# input - read 0.1x, five-minute write 1.25x, one-hour write 2x - so recording
-# them separately would be three more numbers to keep current for no gain.
+# Older books stored only base input and output. Current books may also carry
+# explicit cache rates because newer Claude families do not all use the same
+# cache-read multiplier. Missing cache rates keep the historical defaults.
 #
 # Azure bills Claude as a single aggregated Claude Consumption Unit meter where
 # 100 CCU is $1.00, and private-offer discounts are applied before that
@@ -57,6 +58,7 @@ $script:ClaudePriceBookDate = '2026-09-15'
 # ADR-0010 requires money to be decimal end to end - a double here would reach
 # the blended rate and stop the figures reproducing.
 $script:ClaudePriceBookPath = Join-Path (Split-Path $PSScriptRoot -Parent) 'config/price-book.json'
+$script:ClaudePoisonedPriceFamilies = @{}
 
 function Import-ClaudePriceBook {
     param([string]$Path = $script:ClaudePriceBookPath)
@@ -64,22 +66,73 @@ function Import-ClaudePriceBook {
     if (-not (Test-Path $Path)) { return $false }
 
     $doc = Get-Content $Path -Raw | ConvertFrom-Json
-    if (-not $doc.models) { throw "Price book '$Path' has no 'models' object. Delete it to fall back to the built-in rates." }
+    if (-not $doc.models -or $doc.models -isnot [System.Management.Automation.PSCustomObject]) { throw "Price book '$Path' has no 'models' object. Delete it to fall back to the built-in rates." }
+    # A book whose entries are all invalid still imports, with every family unpriced; a book with no entries is refused.
+    if (-not @($doc.models.PSObject.Properties).Count) { throw "Price book '$Path' lists no models. Delete it to fall back to the built-in rates." }
 
     $book = @{}
-    foreach ($p in $doc.models.PSObject.Properties) {
-        $m = $p.Value
-        if ($null -eq $m.inputPerM -or $null -eq $m.outputPerM) {
-            throw "Price book '$Path': model '$($p.Name)' is missing inputPerM or outputPerM."
-        }
-        $book[$p.Name] = @{
-            InputPerM  = [decimal]$m.inputPerM
-            OutputPerM = [decimal]$m.outputPerM
+    $poisoned = @{}
+    function Add-PoisonedPriceFamily([string]$ModelName, [string]$Field) {
+        $family = ConvertTo-ClaudePriceModelKey $ModelName
+        if ($family) {
+            # The value is the reason a refusal gives for every name in the family.
+            $reason = "entry '$ModelName' in price book '$Path' has invalid $Field"
+            $poisoned[$family] = $reason
+            if ($family.Length -gt 8 -and $family.Substring($family.Length - 8) -match '^\d{8}$') {
+                $poisoned[$family.Substring(0, $family.Length - 8)] = $reason
+            }
+            Write-Warning "Price book '$Path': model '$ModelName' has invalid $Field; normalized family '$family' is unpriced until the entry is fixed."
         }
     }
-    if ($book.Keys.Count -eq 0) { throw "Price book '$Path' lists no models. Delete it to fall back to the built-in rates." }
+    function Test-PriceRate([object]$Value) {
+        if ($null -eq $Value -or $Value -is [bool] -or $Value -is [string] -or
+            $Value -is [System.Collections.IEnumerable] -or $Value.GetType().FullName -eq 'System.Management.Automation.PSCustomObject') {
+            return $null
+        }
+        # The reconciler's bounds (service/aum/aum_service/usd_budgets.py rate): 0 to 1,000,000 per million tokens.
+        # The sign is read before the decimal conversion, which turns -1e-30 into 0.
+        if ($Value -lt 0) { return $null }
+        try { $parsed = [decimal]$Value } catch { return $null }
+        if ($parsed -lt 0 -or $parsed -gt 1000000) { return $null }
+        return $parsed
+    }
+    foreach ($p in $doc.models.PSObject.Properties) {
+        $m = $p.Value
+        if ($m -isnot [System.Management.Automation.PSCustomObject]) {
+            Add-PoisonedPriceFamily $p.Name 'shape (the entry is not an object)'
+            continue
+        }
+        $inputRate = Test-PriceRate $m.inputPerM
+        if ($null -eq $inputRate) {
+            Add-PoisonedPriceFamily $p.Name 'inputPerM'
+            continue
+        }
+        $outputRate = Test-PriceRate $m.outputPerM
+        if ($null -eq $outputRate) {
+            Add-PoisonedPriceFamily $p.Name 'outputPerM'
+            continue
+        }
+        $entry = @{
+            InputPerM  = $inputRate
+            OutputPerM = $outputRate
+        }
+        $skip = $false
+        foreach ($optional in 'cacheReadPerM', 'cacheWrite5mPerM', 'cacheWrite1hPerM') {
+            if ($null -ne $m.PSObject.Properties[$optional]) {
+                $parsed = Test-PriceRate $m.$optional
+                if ($null -eq $parsed) {
+                    Add-PoisonedPriceFamily $p.Name $optional
+                    $skip = $true
+                    break
+                }
+                $entry[$optional.Substring(0, 1).ToUpperInvariant() + $optional.Substring(1)] = $parsed
+            }
+        }
+        if (-not $skip) { $book[$p.Name] = $entry }
+    }
 
     $script:ClaudePriceBook = $book
+    $script:ClaudePoisonedPriceFamilies = $poisoned
     if ($doc.date) { $script:ClaudePriceBookDate = [string]$doc.date }
     return $true
 }
@@ -89,6 +142,53 @@ function Import-ClaudePriceBook {
 # book that is being ignored is worse than one that is missing, because the
 # figures still look right.
 Import-ClaudePriceBook | Out-Null
+
+function Get-ClaudeBusinessUnitPriceBook {
+    $models = [ordered]@{}
+    foreach ($key in $script:ClaudePriceBook.Keys) {
+        $models[$key] = [pscustomobject]@{
+            inputPerM = $script:ClaudePriceBook[$key].InputPerM
+            outputPerM = $script:ClaudePriceBook[$key].OutputPerM
+        }
+        foreach ($pair in @(@('CacheReadPerM', 'cacheReadPerM'), @('CacheWrite5mPerM', 'cacheWrite5mPerM'), @('CacheWrite1hPerM', 'cacheWrite1hPerM'))) {
+            if ($script:ClaudePriceBook[$key].ContainsKey($pair[0])) {
+                $models[$key] | Add-Member -NotePropertyName $pair[1] -NotePropertyValue $script:ClaudePriceBook[$key][$pair[0]]
+            }
+        }
+    }
+    return [pscustomobject]@{
+        date = $script:ClaudePriceBookDate
+        source = 'business-unit token conversion price book'
+        models = [pscustomobject]$models
+    }
+}
+
+function Resolve-ClaudePriceBookEntry {
+    param([Parameter(Mandatory = $true)][string]$Model)
+    if (Test-ClaudePoisonedPriceFamily $Model) { return $null }
+    $book = Get-ClaudeBusinessUnitPriceBook
+    $key = Resolve-ClaudePriceBookKey -Name $Model -Book $book
+    if (-not $key) { return $null }
+    if (Test-ClaudePoisonedPriceFamily $key) { return $null }
+    return @{ Key = $key; Price = $script:ClaudePriceBook[$key] }
+}
+
+function Test-ClaudePoisonedPriceFamily {
+    param([AllowNull()][string]$Model)
+    return [bool](Get-ClaudePoisonedPriceFamilyReason $Model)
+}
+
+function Get-ClaudePoisonedPriceFamilyReason {
+    param([AllowNull()][string]$Model)
+    $family = ConvertTo-ClaudePriceModelKey $Model
+    if (-not $family -or -not $script:ClaudePoisonedPriceFamilies) { return '' }
+    if ($script:ClaudePoisonedPriceFamilies.ContainsKey($family)) { return [string]$script:ClaudePoisonedPriceFamilies[$family] }
+    if ($family.Length -gt 8 -and $family.Substring($family.Length - 8) -match '^\d{8}$') {
+        $undated = $family.Substring(0, $family.Length - 8)
+        if ($script:ClaudePoisonedPriceFamilies.ContainsKey($undated)) { return [string]$script:ClaudePoisonedPriceFamilies[$undated] }
+    }
+    return ''
+}
 
 function Test-ClaudeBuId {
     <#
@@ -383,8 +483,11 @@ function ConvertTo-ClaudeBuTokens {
     if ($Usd -le 0) { throw "A monthly budget must be greater than zero." }
     if ($OutputShare -lt 0 -or $OutputShare -ge 1) { throw "OutputShare must be between 0 and 1." }
 
-    $price = $script:ClaudePriceBook[$Model]
+    $resolved = Resolve-ClaudePriceBookEntry $Model
+    $price = if ($resolved) { $resolved.Price } else { $null }
     if (-not $price) {
+        $poisonReason = Get-ClaudePoisonedPriceFamilyReason $Model
+        if ($poisonReason) { throw "No price for '$Model': $poisonReason. Its model family stays unpriced until that entry is corrected." }
         throw ("No price for '$Model'. Known models: " + (($script:ClaudePriceBook.Keys | Sort-Object) -join ', ') + ".")
     }
 
@@ -406,12 +509,12 @@ function ConvertTo-ClaudeBuTokens {
 function ConvertTo-ClaudeCacheUsd {
     <#
     .SYNOPSIS
-        Prices cache-read tokens, which are 0.1x the base input rate.
+        Prices cache-read tokens with the book's effective cache-read rate.
 
     .DESCRIPTION
         Priced on its own rather than folded into the blended figure, because
         the blend assumes an input/output mix and a cache read is neither. It
-        is a third category at a tenth of base input, and ADR-0010 requires the
+        is a third category, and ADR-0010 requires the
         categories to be priced separately and never summed before pricing.
     #>
     [CmdletBinding()]
@@ -419,10 +522,11 @@ function ConvertTo-ClaudeCacheUsd {
         [Parameter(Mandatory = $true)][long]$Tokens,
         [string]$Model = 'claude-sonnet-5'
     )
-    $price = $script:ClaudePriceBook[$Model]
+    $resolved = Resolve-ClaudePriceBookEntry $Model
+    $price = if ($resolved) { $resolved.Price } else { $null }
     if (-not $price) { return $null }
-    # 0.1x base input, per Claude's published cache rates.
-    return [math]::Round(([decimal]$Tokens / [decimal]1000000) * $price.InputPerM * [decimal]0.1, 2)
+    $cacheReadPerM = if ($price.ContainsKey('CacheReadPerM')) { $price.CacheReadPerM } else { $price.InputPerM * [decimal]0.1 }
+    return [math]::Round(([decimal]$Tokens / [decimal]1000000) * $cacheReadPerM, 2)
 }
 
 function ConvertTo-ClaudeBuUsd {
@@ -436,7 +540,8 @@ function ConvertTo-ClaudeBuUsd {
         [string]$Model = 'claude-sonnet-5',
         [decimal]$OutputShare = 0.2
     )
-    $price = $script:ClaudePriceBook[$Model]
+    $resolved = Resolve-ClaudePriceBookEntry $Model
+    $price = if ($resolved) { $resolved.Price } else { $null }
     if (-not $price) { return $null }
     $blendedPerM = ($price.InputPerM * (1 - $OutputShare)) + ($price.OutputPerM * $OutputShare)
     return [math]::Round(([decimal]$Tokens / [decimal]1000000) * $blendedPerM, 2)
@@ -450,7 +555,7 @@ function ConvertTo-ClaudeRequestUsd {
     .DESCRIPTION
         A request's categories are known, so it is priced exactly rather than
         through the blended mix a budget uses: input at base input, output at
-        the output rate, cache read at 0.1x base input. ADR-0010: categories
+        the output rate, cache read at the book's effective cache-read rate. ADR-0010: categories
         are priced separately and never summed before pricing, and money stays
         decimal.
 
@@ -469,11 +574,13 @@ function ConvertTo-ClaudeRequestUsd {
     if ($InputTokens -lt 0 -or $OutputTokens -lt 0 -or $CacheReadTokens -lt 0) {
         throw "A token count cannot be negative (input $InputTokens, output $OutputTokens, cache read $CacheReadTokens)."
     }
-    $price = $script:ClaudePriceBook[$Model]
+    $resolved = Resolve-ClaudePriceBookEntry $Model
+    $price = if ($resolved) { $resolved.Price } else { $null }
     if (-not $price) { return $null }
     $perToken = [decimal]1000000
+    $cacheReadPerM = if ($price.ContainsKey('CacheReadPerM')) { $price.CacheReadPerM } else { $price.InputPerM * [decimal]0.1 }
     $usd = (([decimal]$InputTokens / $perToken) * $price.InputPerM) +
            (([decimal]$OutputTokens / $perToken) * $price.OutputPerM) +
-           (([decimal]$CacheReadTokens / $perToken) * $price.InputPerM * [decimal]0.1)
+           (([decimal]$CacheReadTokens / $perToken) * $cacheReadPerM)
     return [math]::Round($usd, 6)
 }

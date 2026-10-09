@@ -29,6 +29,24 @@ date**, as well as their existing approximate token quota. An optional reconcile
 prices observed input, output, cache reads and known 5-minute/1-hour cache writes
 separately with Decimal, then publishes a gateway decision.
 
+The reconciler prices deployment/model names through the same normalized rule as
+the chargeback query: lower-case the name and keep only letters and digits. A
+dated model version also matches when the normalized name is the normalized price
+key followed by exactly eight digits, so `claude-haiku-4-5-20251001` matches
+`claude-haiku-4.5`. A shorter family does not match: `claude-opus-5-5` requires
+its own price-book entry and never inherits `claude-opus-5`.
+
+Cache-read metrics are per user and deployment and have no business-unit
+dimension. For streaming rows, the reconciler assigns the metric remainder for a
+day, user and model family to the latest stamped ledger row in that group. A
+metric-only row carries the user's latest stamp in the query window. The store
+then decides the unit, as for every row: on a projection gateway the stamp, on a
+named-value gateway the user's current `bu-members` unit, else the stamp
+(`service/aum/aum_service/usd_budgets.py`, `calculate_state`). A metric-only row
+whose user has no stamp in the window and, on a named-value gateway, no
+`bu-members` unit counts for the person scope only and is reported as
+`unit_unknown`.
+
 | Control | Exact about | Delay / limitation |
 |---|---|---|
 | Existing token limiter | Its configured token allowance | Distributed estimates; does not count cache; retained as the realtime guard |
@@ -65,7 +83,21 @@ or invoice reconciliation. Null/unpriced is never $0.
 4. Approve the budget and select the tariff. On first use the scripts read
    `config/price-book.json`, or the shipped example if absent, and print the
    source. `-PriceBookPath` chooses a different file. Existing dollar budgets
-   keep their stored tariff; changing local prices does not silently reprice them.
+   keep their stored tariff because `usd-budgets` embeds the whole dated
+   `price_book` document with the budget item. Changing local prices, or
+   updating this repository's example book, does not silently reprice them.
+   Active budgets pin their tariff. The AUM service rejects a different book
+   while items exist (`service/aum/aum_service/usd_service.py:57-60`), and the
+   scripts keep the stored book and warn with both dates
+   (`scripts/ClaudeUsdBudgets.ps1:101-106`). To replace the script-stored book,
+   record the approved dollar budgets, clear each dollar budget through the
+   management surface that owns it, then write them again with the same setter
+   commands. `Set-ClaudeBudget.ps1 -Clear` clears a person dollar budget. The
+   first script write to a document with no budget items stores the current or
+   `-PriceBookPath` book and stamps the item with that date
+   (`scripts/ClaudeUsdBudgets.ps1:90-100`). Dollar budgets are not enforced
+   between the clear and the rewrite; the existing token budgets still apply.
+   With the AUM service, clear the budgets and then PUT `usd-price-book`.
 
    ```powershell
    .\scripts\Set-ClaudeBusinessUnit.ps1 -Id finance -MonthlyBudgetUsd 25 `
@@ -73,6 +105,10 @@ or invoice reconciliation. Null/unpriced is never $0.
    .\scripts\Set-ClaudeBudget.ps1 -User '<approved-person-object-id>' -DailyUsd 2 `
        -ResourceGroup $rg -ApimName $apim
    ```
+
+   An existing budget written with an older book still lacks newly added model
+   entries, such as later Foundry deployments, until the document has no budget
+   items, the budget is written with the current book, and reconciliation runs.
 
 5. Reconcile now, or wait for the timer. Direct invocation uses Azure CLI
    sign-in and ETags; the service adds its lease/audit. Both refuse Turnstile
@@ -146,6 +182,66 @@ pinned commit, installs the AUM-service Python requirements, and runs the same P
 engine as `Sync-ClaudeUsdBudgets.ps1`: `python3 -m aum_service.usd_command
 --managed-identity`. It uses Azure Identity's managed-identity endpoint directly;
 there is no Azure CLI sign-in inside the container.
+On Windows, avoid resource group names with parentheses for this registration path because the `az.cmd` shim can parse an unquoted `)` as the end of a `cmd.exe` block before Azure CLI receives it.
+
+Registering a newer commit updates the same per-gateway job in place: resource
+names are based on the resource group, gateway and workspace, not on
+`RepositoryRef`. On `main`, each commit created a separate job, optional
+environment and user-assigned identity; from this release the one job and one
+identity for the gateway are updated in place. Older identities retain their
+role assignments until cleanup removes the assignments and then the identity.
+The role-assignment naming changed before release, so a gateway that ran an
+earlier build of this branch could have seen Azure `RoleAssignmentExists`, but
+no released build used that shape. Before deployment the register script inventories Container Apps
+jobs in the resource group tagged `component=usd-reconciler`, reads each job's
+`GATEWAY_ID`, and remembers only jobs for this gateway. After the deployment succeeds it starts the replacement job with the ARM
+Container Apps Jobs Start API (`POST <job-id>/start?api-version=2024-03-01`)
+and polls the job executions API. Microsoft documents that the start call can
+return either 200 with a job execution body or 202 with only headers, so the
+script waits for any execution that started after the deployment began to
+succeed rather than trusting the start response body. Microsoft also documents
+that Azure RBAC role assignment changes can take up to 10 minutes to take
+effect (Troubleshoot Azure RBAC, updated 2026-05-24, read 2026-10-08). The
+first run of a new identity can therefore fail with HTTP 403 against Log
+Analytics before the next run succeeds.
+
+Older jobs for this gateway are deleted only after the replacement job has had
+one successful execution. After old jobs are deleted, the script starts the
+replacement job once more and waits for an execution that started after the last
+deletion, so `usd-budget-state` is written by the new code even if an old
+scheduled run began just before deletion completed. Live run 2 for P108 observed
+that race on 2026-10-08 (`docs/status/P108.md`, live run 2). If no new execution
+succeeds in the propagation window plus margin before deletion, the script leaves
+the old jobs running so `usd-budget-state` stays fresh, returns `Run.Status =
+Failed`, and prints the log query:
+
+```kusto
+ContainerAppConsoleLogs
+| where JobName == '<new job>'
+| order by TimeGenerated desc
+| take 50
+```
+
+It also prints the rerun command with the same parameters. Jobs for another
+gateway are left untouched. Cleanup uses core `az resource delete --ids
+<job-resource-id>` and does not need the Container Apps CLI extension. The
+immediate `-RunNow` path uses the same ARM `az rest` start/poll flow and also
+needs no Container Apps CLI extension.
+
+If the post-deletion final run fails, the old jobs remain deleted and the script
+warns that the new job's next scheduled run writes the state. The returned object
+keeps the make-before-break run in `Run` and the post-deletion attempt in
+`FinalRun`.
+
+When an older job is deleted, the script prints explicit cleanup commands for
+the old identity's workspace-scoped `Log Analytics Reader` assignment and
+gateway-scoped writer assignment before it prints the identity delete command.
+The scopes are included because Azure CLI role-assignment delete searches the
+subscription scope when `--scope` is omitted, while these assignments live on
+resources (Azure CLI `role/custom.py`, read 2026-10-08). Deleting a managed
+identity without removing its role assignments leaves "Identity not found"
+entries in RBAC until the assignments are removed (Microsoft Learn
+Troubleshoot Azure RBAC, updated 2026-05-24, read 2026-10-08).
 
 Permissions are deliberately narrow:
 
@@ -180,8 +276,43 @@ still an observed-cost stop, not a hard invoice cap.
 - **Notify:** this scope never blocks for USD, including when its snapshot
   is missing/expired; `x-claude-usd-budget-notice` is advisory. Other enforced
   scopes and the existing token guards can still refuse.
-- **Unpriced:** enforced scopes return 403 `usd_budget_unpriced`, with the
-  unpriced models/attribution problem. Repair the tariff/telemetry, then reconcile.
+- **Unpriced:** enforced scopes return 403 `usd_budget_unpriced` only for their
+  own rows whose model cannot be priced. The 403 body carries
+  `unpriced_models` and `price_book_date`; this release's policy text also names
+  up to five unpriced models and the dated book. Repair the dated price book or
+  the deployment/model telemetry, then reconcile. Existing gateways receive the
+  new text only after `scripts/Set-GatewayPolicy.ps1` uploads the policy or an
+  installer rerun writes it; `Update-ClaudeGateway.ps1` migration 0002 treats a
+  policy with lifecycle markers as current
+  (`scripts/flow/migrations/0002-policy-and-named-values.ps1:19-20,76`). A row
+  without a user id is reported in the reconciliation output with token totals,
+  but it is not a member's spend and does not make any scope unpriced. If the
+  state lists a deployment such as `claude-opus-5-5`, add the missing model
+  tariff; if it lists a dated model whose family is already present, update the
+  software because the normalized eight-digit match should price it. A model is
+  also unpriced when an entry of its family has a missing `inputPerM` or
+  `outputPerM`, a rate that is negative, above 1,000,000 or not a number, or is
+  not an object, and when two spellings of it have different rates; an invalid
+  dated entry also leaves its undated family unpriced
+  (`service/aum/aum_service/usd_budgets.py:203-248`). Adding another spelling
+  does not price such a family: the entry is corrected or removed in the book
+  the setters read (`config/price-book.json` or `-PriceBookPath`), and the
+  corrected book is adopted as in step 4 of [Enable and operate it](#enable-and-operate-it).
+- **Claude Haiku 5.5:** left unpriced by this book. Anthropic publishes two
+  Haiku 5.5 tiers by prompt size, and the current reconciler aggregates rows by
+  day rather than per-request prompt-size tier. Until U178 is resolved, an
+  enforced scope whose own rows use `claude-haiku-5-5` returns
+  `usd_budget_unpriced` naming `claude-haiku-5-5`.
+- **Attribution gaps:** rows without a user and metric-only rows without a unit
+  do not count for any unit scope. To inspect them in a scheduled job's output:
+
+  ```kusto
+  ContainerAppConsoleLogs
+  | where JobName == '<job>'
+  | where Log contains 'userless_usage' or Log contains 'unit_unknown_usage'
+  | order by TimeGenerated desc
+  | take 50
+  ```
 - **Stale:** missing, expired or mismatched state returns 503
   `usd_budget_state_stale` for enforced scopes. Snapshots expire after 15 minutes.
   A telemetry outage preserves the last decision until expiry; it never refreshes

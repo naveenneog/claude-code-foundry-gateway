@@ -29,6 +29,32 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P108 dollar budget reconciliation now prices and attributes Foundry usage by the row that owns it.**
+  USD reconciliation groups usage by stamped business unit as well as day, user and deployment, so a
+  developer who moves units during a day produces one row per unit instead of an ambiguous month-long
+  `unattributed-usage` stop. Rows without a user id are reported in the reconciler output and charge no
+  scope. The reconciler, model price reader and chargeback KQL share the normalized exact-or-eight-digit
+  dated model match. The shipped price book covers every 2026-10-08 eastus2 Foundry Claude catalog
+  model with a single Anthropic list tariff, and deliberately leaves tiered `claude-haiku-5-5`
+  unpriced until U178 splits usage by prompt size. The gateway's `usd_budget_unpriced` message now
+  names the model list and price-book date when the reconciled state carries them, with a generic
+  403 fallback for malformed older state. Registering the standalone scheduled reconciler
+  at a newer commit now updates the same per-gateway job and removes older jobs for that gateway
+  only after the replacement deploys. Cleanup uses core `az resource delete` and no longer suggests
+  deleting the environment used by the replacement job; it now prints old identity role-assignment
+  deletes with explicit workspace and gateway scopes before the identity delete. Upgrades now keep old jobs until the new
+  job has one successful post-deployment execution, then start the new job once more after old-job deletion
+  so an old scheduled run cannot leave the last written state on the old code. `-RunNow` uses ARM start/poll calls rather
+  than the Container Apps CLI extension. The scheduled job template now delegates gateway and
+  workspace role assignments to the shared principal-id-keyed modules so a recreated per-gateway
+  identity does not reuse role assignment names from the old principal.
+  Cache-read metrics are allocated once per day, user and model family; a price book with two keys of one
+  normalised form is refused when it is written, a stored book keeps working (equal rates are one entry;
+  conflicting or invalid rates leave that model family unpriced; for an invalid rate the business-unit and
+  Turnstile scripts warn instead of stopping), and named-value gateways keep the current-membership
+  attribution rule ([ADR-0060](docs/adr/0060-usd-reconciler-attribution-and-pricing.md)).
+- **P108 script-managed USD price books now follow the AUM pinning rule.** Clearing the last budget item leaves a valid document, and the next write stores the current price book; active budgets keep their stored book and print a warning when a different one is offered.
+
 - **P104 the projection sync job runs on an admin-set schedule.** Adding or removing a developer in an Entra
   tier group or business-unit group reaches the Cosmos projection at the sync job's next run, with no command
   ([ADR-0058](docs/adr/0058-scheduled-projection-sync.md)). `Install-ClaudeGateway.ps1` deploys the job with the

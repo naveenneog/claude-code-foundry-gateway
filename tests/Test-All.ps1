@@ -55,6 +55,90 @@ if ($sharded -or $LocalOnly) {
     }
 }
 
+function Get-TestAllFileHash {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    # A suite may be writing the file at this moment; a sharing violation is retried briefly.
+    for ($attempt = 1; ; $attempt++) {
+        try { return (Get-FileHash -LiteralPath $Path -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant() }
+        catch { if ($attempt -ge 5) { throw }; Start-Sleep -Milliseconds 100 }
+    }
+}
+
+function New-TestAllPriceBookSnapshot {
+    param([Parameter(Mandatory = $true)][string]$Root, [Parameter(Mandatory = $true)][string]$ScratchRoot)
+    $path = Join-Path $Root 'config\price-book.json'
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+        return [pscustomobject]@{ Exists = $false; Path = $path; Backup = ''; Sha256 = '' }
+    }
+    $backup = Join-Path $ScratchRoot 'operator-price-book.json'
+    New-Item -ItemType Directory -Path $ScratchRoot -Force | Out-Null
+    Copy-Item -LiteralPath $path -Destination $backup -Force
+    return [pscustomobject]@{ Exists = $true; Path = $path; Backup = $backup; Sha256 = Get-TestAllFileHash $path }
+}
+
+function Restore-TestAllPriceBookSnapshot {
+    param($Snapshot)
+    if ($Snapshot -and $Snapshot.Exists -and (Test-Path -LiteralPath $Snapshot.Backup -PathType Leaf)) {
+        New-Item -ItemType Directory -Path (Split-Path $Snapshot.Path -Parent) -Force | Out-Null
+        Copy-Item -LiteralPath $Snapshot.Backup -Destination $Snapshot.Path -Force
+    }
+}
+
+function Save-TestAllChangedPriceBook {
+    # The changed or left-behind file may be the operator's own edit made during the run: it is kept outside the
+    # repository and the run directory, and the failure names the copy. Without a copy the file is left in place.
+    param([Parameter(Mandatory = $true)][string]$Path, [switch]$Move)
+    $kept = Join-Path ([IO.Path]::GetTempPath()) ('price-book-changed-during-tests-' + [DateTime]::UtcNow.ToString('yyyyMMddHHmmss') + '-' + [guid]::NewGuid().ToString('N').Substring(0, 8) + '.json')
+    try {
+        if ($Move) { Move-Item -LiteralPath $Path -Destination $kept -Force -ErrorAction Stop }
+        else { Copy-Item -LiteralPath $Path -Destination $kept -Force -ErrorAction Stop }
+        return [pscustomobject]@{ Kept = $true; Text = "kept the changed file at `"$kept`"" }
+    }
+    catch { return [pscustomobject]@{ Kept = $false; Text = "could not keep the changed file ($($_.Exception.Message)), so it was left in place" } }
+}
+
+function Test-TestAllPriceBookSnapshot {
+    # Checks run in parallel, so a change found when one check finishes may come from a check still running;
+    # the message names those checks as well.
+    param($Snapshot, [Parameter(Mandatory = $true)][string]$SuiteName, [string[]]$Running = @())
+    if (-not $Snapshot) { return '' }
+    $Running = @($Running | Where-Object { $_ })
+    if ($Running.Count) { $SuiteName = "$SuiteName or by a check still running ($($Running -join ', '))" }
+    if (-not $Snapshot.Exists) {
+        # No operator book existed when the run started: a book now is a suite's leftover, which would price real requests.
+        if (Test-Path -LiteralPath $Snapshot.Path -PathType Leaf) {
+            $save = Save-TestAllChangedPriceBook -Path $Snapshot.Path -Move
+            if (-not $save.Kept) { return "config\price-book.json was created by $SuiteName; $($save.Text)." }
+            return "config\price-book.json was created by $SuiteName; removed it and $($save.Text), because no operator price book existed when the run started."
+        }
+        return ''
+    }
+    $problem = ''
+    if (-not (Test-Path -LiteralPath $Snapshot.Path -PathType Leaf)) {
+        $problem = "config\price-book.json was deleted by $SuiteName"
+    }
+    elseif ((Get-TestAllFileHash $Snapshot.Path) -cne $Snapshot.Sha256) {
+        $problem = "config\price-book.json was modified by $SuiteName"
+    }
+    if ($problem) {
+        $kept = ''
+        if (Test-Path -LiteralPath $Snapshot.Path -PathType Leaf) {
+            $save = Save-TestAllChangedPriceBook -Path $Snapshot.Path
+            if (-not $save.Kept) { return "$problem; $($save.Text)." }
+            $kept = " and $($save.Text)"
+        }
+        Restore-TestAllPriceBookSnapshot $Snapshot
+        return "$problem; restored the original operator price book$kept."
+    }
+    return ''
+}
+
+function Get-TestAllOtherRunningCheckName($check) {
+    return @($active | Where-Object { -not [object]::ReferenceEquals($_, $check) } | ForEach-Object { [string]$_.Name })
+}
+
+$priceBookSnapshot = New-TestAllPriceBookSnapshot -Root $root -ScratchRoot $runDirectory
+
 function Invoke-Check {
     param(
         [string]$Name, [string]$Script, [hashtable]$Params = @{},
@@ -104,6 +188,8 @@ function Set-CheckFailure($check, [string]$Message) {
     $output = ''
     if ($check.Stdout -and $check.Stdout.IsCompletedSuccessfully) { $output += $check.Stdout.Result }
     if ($check.Stderr -and $check.Stderr.IsCompletedSuccessfully) { $output += $check.Stderr.Result }
+    $priceBookProblem = Test-TestAllPriceBookSnapshot $priceBookSnapshot $check.Name (Get-TestAllOtherRunningCheckName $check)
+    if ($priceBookProblem) { $Message += " $priceBookProblem" }
     Set-CheckResult $check 'FAIL' ($output + "`n  FAIL - $Message")
 }
 
@@ -159,6 +245,11 @@ function Receive-Check($check) {
     if ($check.Process.HasExited -and $check.Stdout.IsCompleted -and $check.Stderr.IsCompleted) {
         $code = $check.Process.ExitCode
         $output = $check.Stdout.GetAwaiter().GetResult() + $check.Stderr.GetAwaiter().GetResult()
+        $priceBookProblem = Test-TestAllPriceBookSnapshot $priceBookSnapshot $check.Name (Get-TestAllOtherRunningCheckName $check)
+        if ($priceBookProblem) {
+            $code = if ($code -ne 0) { $code } else { 1 }
+            $output += "`n  FAIL - $priceBookProblem"
+        }
         if ($code -ne 0) { $output += "`n  FAIL - process exited $code" }
         Set-CheckResult $check $(if ($code -eq 0) { 'PASS' } else { 'FAIL' }) $output $code
         Stop-CheckProcess $check
@@ -408,6 +499,8 @@ finally {
     foreach ($check in @($active.ToArray())) {
         try { Stop-CheckProcess $check } catch { Write-Warning $_.Exception.Message }
     }
+    $finalPriceBookProblem = Test-TestAllPriceBookSnapshot $priceBookSnapshot 'a check or another process during the run'
+    if ($finalPriceBookProblem) { Write-Warning $finalPriceBookProblem }
     Remove-Item -LiteralPath $runDirectory -Recurse -Force -ErrorAction SilentlyContinue
 }
 

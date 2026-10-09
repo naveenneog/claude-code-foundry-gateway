@@ -716,8 +716,8 @@ $mutations = @(
     @{ Suite = 'Test-ModelsAndPlugins.ps1'
        Name  = 'price book rates stop being decimal'
        File  = 'scripts/ClaudeBusinessUnit.ps1'
-       From  = 'InputPerM  = [decimal]$m.inputPerM'
-       To    = 'InputPerM  = $m.inputPerM' }
+       From  = '$parsed = [decimal]$Value'
+       To    = '$parsed = $Value' }
 
     @{ Suite = 'Test-ModelsAndPlugins.ps1'
        Name  = 'a malformed price book is silently ignored'
@@ -931,8 +931,8 @@ $mutations = @(
     @{ Suite = 'Test-Observability.ps1'
        Name  = 'cache read is priced at the full input rate'
        File  = 'analytics/chargeback-cost.kql'
-       From  = 'let cache_read_multiplier = 0.1;'
-       To    = 'let cache_read_multiplier = 1.0;' }
+       From  = '(cache_read_tokens / 1000000.0) * cache_read_per_m'
+       To    = '(cache_read_tokens / 1000000.0) * input_per_m' }
 
     @{ Suite = 'Test-Observability.ps1'
        Name  = 'an unpriced model is costed at zero'
@@ -3144,7 +3144,7 @@ $caught = 0
 
 try {
     New-Item -ItemType Directory -Path $sandbox -Force | Out-Null
-    foreach ($d in 'infra', 'scripts', 'tests', 'analytics', 'sync', 'resolver', 'cli') {
+    foreach ($d in 'infra', 'scripts', 'tests', 'analytics', 'sync', 'resolver', 'cli', 'service') {
         if (Test-Path (Join-Path $root $d)) {
             Copy-Item (Join-Path $root $d) $sandbox -Recurse -Force
         }
@@ -3153,6 +3153,8 @@ try {
     # back to the template.
     Copy-Item (Join-Path $root 'Install-ClaudeGateway.ps1') $sandbox -Force
     Copy-Item (Join-Path $root 'README.md') $sandbox -Force
+    # Test-UsdBudgets.ps1 checks the CHANGELOG wording against the price-book rules.
+    Copy-Item (Join-Path $root 'CHANGELOG.md') $sandbox -Force
     # The developer-facing guide, which carries the Desktop gateway sign-in step
     # and the FAQ, both of which are asserted against.
     Copy-Item (Join-Path $root 'DEVELOPER.md') $sandbox -Force

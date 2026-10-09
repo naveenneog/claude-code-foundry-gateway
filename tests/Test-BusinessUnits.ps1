@@ -323,6 +323,100 @@ foreach ($model in $ClaudePriceBook.Keys) {
 }
 Assert 'every price book rate is decimal' ($badPrices.Count -eq 0) ($badPrices -join ', ')
 Assert 'and the book is not empty'        ($ClaudePriceBook.Keys.Count -ge 4)
+Assert 'budget conversion uses normalized model price matching' ((ConvertTo-ClaudeBuTokens -Usd 1 -Model 'claude_haiku_4_5').BlendedUsdPerM -gt 0)
+$helperSource = Get-Content $helper -Raw
+Assert 'business unit pricing reuses the shared model price matcher' ($helperSource -match 'ClaudeModelPrices\.ps1' -and $helperSource -match 'Resolve-ClaudePriceBookKey' -and $helperSource -notmatch 'function ConvertTo-ClaudePriceModelKey')
+foreach ($case in @(
+    @('claude_haiku_4_5', 'claude-haiku-4.5'),
+    @('claude-haiku-4-5-2025-10-01', 'claude-haiku-4.5'),
+    @('claude-opus-4-8-2026-01-01', 'claude-opus-4.8'),
+    @('CLAUDE SONNET 5', 'claude-sonnet-5')
+)) {
+    $actual = ConvertTo-ClaudeBuUsd -Tokens 1000000 -Model $case[0]
+    $expected = ConvertTo-ClaudeBuUsd -Tokens 1000000 -Model $case[1]
+    Assert "business-unit price parity for $($case[0])" ($actual -eq $expected) "actual $actual expected $expected"
+}
+Assert 'business-unit shorter family remains unpriced' ($null -eq (ConvertTo-ClaudeBuUsd -Tokens 1000000 -Model 'claude-sonnet-5-2'))
+$savedPriceBook = $script:ClaudePriceBook
+$savedPriceBookDate = $script:ClaudePriceBookDate
+$savedPoisonedPriceFamilies = $script:ClaudePoisonedPriceFamilies
+$invalidOptionalBook = Join-Path ([IO.Path]::GetTempPath()) ('bu-invalid-price-book-' + [guid]::NewGuid().ToString('N') + '.json')
+try {
+    [IO.File]::WriteAllText($invalidOptionalBook, (@{
+        date = '2026-10-08'; source = 'test'; models = [ordered]@{
+            good = @{ inputPerM = 2; outputPerM = 10; cacheReadPerM = 0.2 }
+            nullcache = @{ inputPerM = 2; outputPerM = 10; cacheReadPerM = $null }
+            negativecache = @{ inputPerM = 2; outputPerM = 10; cacheReadPerM = -0.5 }
+            textcache = @{ inputPerM = 2; outputPerM = 10; cacheReadPerM = 'oops' }
+        }
+    } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+    $importError = ''
+    $warnings = ''
+    try { $warnings = (Import-ClaudePriceBook -Path $invalidOptionalBook 3>&1 | Out-String) } catch { $importError = $_.Exception.Message }
+    Assert 'price-book import does not throw for invalid optional rates' (-not $importError) $importError
+    Assert 'price-book import keeps valid entries when optional-rate siblings are invalid' ($script:ClaudePriceBook.ContainsKey('good') -and -not $script:ClaudePriceBook.ContainsKey('nullcache') -and -not $script:ClaudePriceBook.ContainsKey('negativecache') -and -not $script:ClaudePriceBook.ContainsKey('textcache'))
+    Assert 'price-book import warnings name invalid optional rate keys and fields' ($warnings -match 'nullcache' -and $warnings -match 'negativecache' -and $warnings -match 'textcache' -and $warnings -match 'cacheReadPerM') $warnings
+    [IO.File]::WriteAllText($invalidOptionalBook, (@{
+        date = '2026-10-08'; source = 'test'; models = [ordered]@{
+            'claude-opus-5-5' = @{ inputPerM = 5; outputPerM = 25; cacheReadPerM = $null }
+            'claude-opus-5.5' = @{ inputPerM = 1; outputPerM = 5 }
+            'claude-sonnet-5-5-20260101' = @{ inputPerM = 2; outputPerM = 10; cacheReadPerM = $null }
+            'claude-sonnet-5.5' = @{ inputPerM = 1; outputPerM = 5 }
+            'required-negative' = @{ inputPerM = -5; outputPerM = 25 }
+            'required.negative' = @{ inputPerM = 1; outputPerM = 5 }
+            'required-boolean' = @{ inputPerM = $true; outputPerM = 25 }
+            'required-output' = @{ inputPerM = 1; outputPerM = 'x' }
+            'required.output' = @{ inputPerM = 1; outputPerM = 5 }
+        }
+    } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+    $warnings = (Import-ClaudePriceBook -Path $invalidOptionalBook 3>&1 | Out-String)
+    Assert 'invalid optional rates poison sibling spellings instead of falling back' (
+        $null -eq (ConvertTo-ClaudeRequestUsd -Model 'claude-opus-5.5' -InputTokens 1000000 -OutputTokens 200000) -and
+        $null -eq (ConvertTo-ClaudeCacheUsd -Model 'claude-opus-5.5' -Tokens 1000000)
+    )
+    Assert 'invalid dated entries poison their family instead of falling back' ($null -eq (ConvertTo-ClaudeRequestUsd -Model 'claude-sonnet-5-5-20260101' -InputTokens 1000000))
+    Assert 'an invalid dated entry also leaves its undated family unpriced' ($null -eq (ConvertTo-ClaudeRequestUsd -Model 'claude-sonnet-5.5' -InputTokens 1000000))
+    Assert 'an invalid required rate leaves a valid sibling spelling unpriced' (
+        $null -eq (ConvertTo-ClaudeRequestUsd -Model 'required.negative' -InputTokens 1000000) -and
+        $null -eq (ConvertTo-ClaudeRequestUsd -Model 'required.output' -InputTokens 1000000)
+    )
+    Assert 'invalid required rates poison their families and leave converters unpriced' (
+        $null -eq (ConvertTo-ClaudeRequestUsd -Model 'required-negative' -InputTokens 1000000) -and
+        $null -eq (ConvertTo-ClaudeRequestUsd -Model 'required-boolean' -InputTokens 1000000)
+    )
+    $budgetError = ''
+    try { ConvertTo-ClaudeBuTokens -Usd 1000 -Model 'claude-opus-5.5' | Out-Null } catch { $budgetError = $_.Exception.Message }
+    Assert 'budget conversion refuses a poisoned family instead of writing fallback tokens' ($budgetError -match 'No price for') $budgetError
+    Assert 'the poisoned-family refusal names the invalid entry, its field and the price book' ($budgetError -match "entry 'claude-opus-5-5'" -and $budgetError -match 'cacheReadPerM' -and $budgetError.Contains($invalidOptionalBook)) $budgetError
+    Assert 'poisoned-family warning names the family and says it is unpriced until fixed' ($warnings -match 'claudeopus55' -and $warnings -match 'unpriced until' -and $warnings -match 'cacheReadPerM') $warnings
+    [IO.File]::WriteAllText($invalidOptionalBook, (@{ date = '2026-10-08'; source = 'test'; models = @{} } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+    $emptyError = ''
+    try { Import-ClaudePriceBook -Path $invalidOptionalBook 3>$null | Out-Null } catch { $emptyError = $_.Exception.Message }
+    Assert 'a price book that lists no models is refused with the remedy' ($emptyError -match 'lists no models' -and $emptyError -match 'Delete it') $emptyError
+    [IO.File]::WriteAllText($invalidOptionalBook, '{"date":"2026-10-08","source":"test","models":{"huge":{"inputPerM":1e30,"outputPerM":5},"too-high":{"inputPerM":2000000,"outputPerM":5},"tiny-negative":{"inputPerM":-1e-30,"outputPerM":5},"arrayed":[{"inputPerM":1,"outputPerM":5}],"fine":{"inputPerM":1,"outputPerM":5}}}', [Text.UTF8Encoding]::new($false))
+    $rangeError = ''
+    try { & { $ErrorActionPreference = 'Stop'; Import-ClaudePriceBook -Path $invalidOptionalBook 3>$null | Out-Null } } catch { $rangeError = $_.Exception.Message }
+    Assert 'an out-of-range rate or a non-object entry leaves only its family unpriced, without stopping the import' (
+        -not $rangeError -and
+        $null -eq (ConvertTo-ClaudeRequestUsd -Model 'huge' -InputTokens 1000000) -and
+        $null -eq (ConvertTo-ClaudeRequestUsd -Model 'too-high' -InputTokens 1000000) -and
+        $null -eq (ConvertTo-ClaudeRequestUsd -Model 'tiny-negative' -InputTokens 1000000) -and
+        $null -eq (ConvertTo-ClaudeRequestUsd -Model 'arrayed' -InputTokens 1000000) -and
+        $null -ne (ConvertTo-ClaudeRequestUsd -Model 'fine' -InputTokens 1000000)
+    ) $rangeError
+    foreach ($badModels in '"abc"', '[{"inputPerM":1,"outputPerM":5}]') {
+        [IO.File]::WriteAllText($invalidOptionalBook, '{"date":"2026-10-08","source":"test","models":' + $badModels + '}', [Text.UTF8Encoding]::new($false))
+        $modelsError = ''
+        try { Import-ClaudePriceBook -Path $invalidOptionalBook 3>$null | Out-Null } catch { $modelsError = $_.Exception.Message }
+        Assert "a price book whose models value is not an object is refused: $badModels" ($modelsError -match "has no 'models' object") $modelsError
+    }
+}
+finally {
+    Remove-Item -LiteralPath $invalidOptionalBook -Force -ErrorAction SilentlyContinue
+    $script:ClaudePriceBook = $savedPriceBook
+    $script:ClaudePriceBookDate = $savedPriceBookDate
+    $script:ClaudePoisonedPriceFamilies = $savedPoisonedPriceFamilies
+}
 
 $setSrc = Get-Content $setPath -Raw
 Assert 'the writer takes a decimal budget' ($setSrc -match '\[decimal\]\$MonthlyBudgetUsd')
@@ -365,6 +459,17 @@ Assert 'and keys it on the object id'              ($getSrc -match 'cache_read =
 # with the field renamed away.
 Assert 'cache is a field of its own, beside tokens_used' ($getSrc -match 'tokens_cache_read = \$cacheRead')
 Assert 'and is priced at the cache rate, not the blend' ($getSrc -match 'ConvertTo-ClaudeCacheUsd -Tokens \$cacheRead')
+$cacheBookPath = Join-Path ([IO.Path]::GetTempPath()) ('bu-cache-book-' + [guid]::NewGuid().ToString('N') + '.json')
+try {
+    [IO.File]::WriteAllText($cacheBookPath, (@{
+        date = '2026-10-08'; source = 'test'; models = @{
+            'test-cache-model' = @{ inputPerM = 2; outputPerM = 10; cacheReadPerM = 0.05 }
+        }
+    } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+    Import-ClaudePriceBook -Path $cacheBookPath | Out-Null
+    Assert 'cache USD conversion uses explicit cacheReadPerM when the book supplies it' ((ConvertTo-ClaudeCacheUsd -Tokens 1000000 -Model 'test-cache-model') -eq 0.05)
+}
+finally { Remove-Item -LiteralPath $cacheBookPath -Force -ErrorAction SilentlyContinue }
 
 # Cache write stays unattributed - it exists only in the response body, and
 # reading that in outbound ends streaming. The report has to say so rather than
