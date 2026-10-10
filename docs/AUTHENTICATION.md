@@ -1,12 +1,29 @@
 # Authentication types, measured
 
-The gateway accepts one kind of credential: a Microsoft Entra ID access token
-whose audience is `https://cognitiveservices.azure.com` or `https://ai.azure.com`.
-How a caller obtains that token differs by who the caller is, and the
-differences matter for token lifetime, for Conditional Access, and for how
-access is taken away.
+The default developer path uses a Microsoft Entra access token with the Cognitive
+Services or AI audience. Optional Desktop sign-in profiles record their token type
+and gateway audience separately ([Desktop sign-in](../DEVELOPER.md#letting-desktop-do-the-sign-in-itself),
+[ADR-0027](adr/0027-claude-desktop-sign-in-choice.md)). Token acquisition,
+lifetime, Conditional Access and revocation differ by caller type.
+## Quickstart
+
+The reviewer has Reader access to the gateway resources and permission to inspect the relevant Entra users, groups and enterprise applications. The deployment target comes from [Operations](OPERATIONS.md#1-select-the-gateway-and-workspace).
+
+```powershell
+$gateway = Get-Content .\onboarding\claude-gateway.json -Raw | ConvertFrom-Json
+$rg = $gateway.resourceGroup
+$apim = $gateway.apimName
+.\scripts\Test-ClaudeHealth.ps1 -ResourceGroup $rg -ApimName $apim
+.\scripts\Compare-ClaudeEntitlement.ps1 -ResourceGroup $rg -ApimName $apim
+```
+
+**Expected result:** the health command runs its read-only checks (SKU, entitlement sync, named-value headroom, model prices, Foundry bypass and business units) and sends no model request ([`Test-ClaudeHealth.ps1`](../scripts/Test-ClaudeHealth.ps1)); the entitlement comparison identifies whether the selected gateway's published store matches directory membership. Revocation still requires a fresh request from the affected identity or the projection verification path below.
 
 ## Prerequisites for a review
+
+<details>
+
+<summary>Gateway reads, portal blades and measured scope</summary>
 
 Use Reader access to the gateway and its supporting resources, and permission
 to inspect the relevant Entra groups/applications. No Foundry inference role is
@@ -32,7 +49,13 @@ without spending model capacity, the request asked for a model its tier may not
 call. The gateway then authenticates the caller and resolves entitlement before
 it refuses, so a `403 model_not_allowed` means *authenticated and entitled*.
 
+</details>
+
 ## The matrix
+
+<details>
+
+<summary>Caller token types, lifetimes and gateway outcomes</summary>
 
 | Caller | How it gets the token | At the gateway | Token lifetime | Status |
 |---|---|---|---|---|
@@ -45,7 +68,13 @@ it refuses, so a `403 model_not_allowed` means *authenticated and entitled*.
 | Developer, device code sign-in | `az login --use-device-code` | Not run here: it needs a person to enter the code | | not measured |
 | Workload identity federation | For example GitHub Actions OIDC | Not run here | | not measured |
 
+</details>
+
 ## What takes access away
+
+<details>
+
+<summary>Entitlement publication, cache expiry and revocation steps</summary>
 
 **The gateway's entitlement check, not token expiry.** A service principal's
 token lived for about 24 hours, so deleting its secret leaves a working token in
@@ -56,11 +85,13 @@ for `entitlement-cache-seconds`. The same holds for people: removing a developer
 from the Entra group does nothing until the sync publishes it and the cached
 answer expires.
 
-Since the 2026-09-24 hardening, both caches are also clipped to the record's
-absolute lease. A complete observation grants at most two hours from scan
-start; an expired record returns `503`, even on a cache hit. This bounds new
-admission, not an already-running stream. The named-value default has no such
-lease: if sync stops, stale membership stays until replaced.
+Projection records persist until a sync deletes or changes them. Removal takes
+effect after publication plus at most `entitlement-cache-seconds`; a sync-job
+outage does not expire existing access. Exported snapshots retain their apply-by
+deadline, which is separate from the lifetime of applied records
+([ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md)). The installer
+selects the projection by default; named values remain available within their
+capacity ([ADR-0052](adr/0052-cosmos-default-installer.md)).
 
 **Revocation procedure:** remove every effective tier/group path, publish to the
 active store, verify the removed identity is refused, and audit direct Foundry
@@ -70,16 +101,22 @@ invalidating an already-issued bearer token. See
 
 **Verify:** named-value admins compare with `scripts/Compare-ClaudeEntitlement.ps1`;
 projection admins use the private runner comparison and expiry checks in
-[Private projection](SECURE-PROJECTION.md#verify). In the portal, inspect Entra
+[projection workbook](PROJECTION-WORKBOOK.md#step-5-verify-requests). In the portal, inspect Entra
 All members and the published store. A portal membership removal alone is not
 proof of refusal.
 
+</details>
+
 ## What data lives where
+
+<details>
+
+<summary>Storage locations, retention owners and token handling</summary>
 
 | Location | Data | Who governs retention/access |
 |---|---|---|
 | Developer device | Entra token cache, client settings, local conversation history and tool files | Device/identity policies and client retention |
-| APIM configuration | Tier/unit limits and, by default, identity membership lists | Azure RBAC; do not put keys in plain named values |
+| APIM configuration | Tier and unit limits, resolver metadata and membership lists when the named-value store is selected | Azure RBAC; do not put keys in plain named values |
 | Log Analytics / Application Insights | Request/token telemetry, user IDs/names, unit, model and client metadata | Workspace/table access, retention and diagnostics settings |
 | Optional Cosmos projection | Identity, tier, unit, authorization and freshness metadata | Container-scoped data roles and private networking |
 | Optional Turnstile/PostgreSQL | Exported usage/cost, catalog, budgets, people and console session/account data | Turnstile roles, database access and its backup/retention policy |
@@ -96,7 +133,13 @@ Entra tokens remain bearer credentials. Signing claims protects their integrity,
 not a stolen token against replay. Keep diagnostic exports private; never print
 the full token or share user claims in a public issue.
 
+</details>
+
 ## Things that surprised us
+
+<details>
+
+<summary>Secret policy, propagation and audience gotchas</summary>
 
 | Symptom | Cause | What to do |
 |---|---|---|
@@ -104,7 +147,13 @@ the full token or share user claims in a public issue.
 | A new secret is refused for the first seconds | Propagation. A token was issued 20 seconds after the secret was created | Retry for up to a minute before treating it as wrong |
 | A signed-in developer gets `401 A Microsoft Entra ID token is required. Run 'az login'.` | The token has the wrong audience. The message is the same as for no token at all | Check the client requests `https://cognitiveservices.azure.com`; `az account get-access-token --resource https://cognitiveservices.azure.com` shows what it would get |
 
+</details>
+
 ## Conditional Access
+
+<details>
+
+<summary>Device-code blocks, helper route and workload caveats</summary>
 
 Device code sign-in happens on a second device, so a policy that requires a
 compliant or joined device, or that blocks the device code flow, stops it. That
@@ -117,6 +166,8 @@ do not infer that a user MFA policy protects a service principal.
 Microsoft's guidance is that organisations "get as close as possible to a
 unilateral block on device code flow"
 ([Block authentication flows with Conditional Access](https://learn.microsoft.com/entra/identity/conditional-access/policy-block-authentication-flows)).
+
+</details>
 
 ## Next steps
 

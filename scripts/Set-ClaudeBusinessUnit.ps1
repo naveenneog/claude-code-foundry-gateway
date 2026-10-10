@@ -140,7 +140,7 @@ $parentsRaw = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimNa
 if ($null -eq $parentsRaw) {
     throw "bu-parents not found on $ApimName. Redeploy with the current template first."
 }
-$parents = ConvertFrom-ClaudeBuParents $parentsRaw
+$parents = ConvertFrom-ClaudeBuParents $parentsRaw -ExactKeys
 $modesRaw = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-modes'
 $modes = ConvertFrom-ClaudeBuModes $modesRaw
 
@@ -182,8 +182,12 @@ if ($List) {
     exit 0
 }
 
-Test-ClaudeBuId $Id
-$existing = @($registry | Where-Object { $_.Id -eq $Id })
+Test-ClaudeBuId $Id -Registry @($registry | ForEach-Object Id)
+if ($null -ne $requestedMode -and $Id -cnotmatch '^[a-z0-9][a-z0-9-]*$') {
+    throw ("Budget modes accept only lower-case identifiers, so '$Id' cannot have one. " +
+           "A unit with a lower-case identifier for the same group can; see docs/BUSINESS-UNITS.md.")
+}
+$existing = @($registry | Where-Object { $_.Id -ceq $Id })
 $before = $registry.Count
 $originalUsdKind = if ($parents[$Id]) { 'department' } else { 'organization' }
 $originalUsdParent = [string]$parents[$Id]
@@ -196,13 +200,13 @@ if (-not $Remove -or $existing.Count) {
 
 if ($Remove) {
     if (-not $existing.Count) { Write-Host "No business unit '$Id'. Nothing to remove." -ForegroundColor DarkGray; exit 0 }
-    $registry = @($registry | Where-Object { $_.Id -ne $Id })
+    $registry = @($registry | Where-Object { $_.Id -cne $Id })
     $action = "removed (was $($existing[0].Group), $('{0:n0}' -f $existing[0].TokensPerMonth) tokens/month)"
 
     # A team pointing at a unit that no longer exists would look up a quota of
     # zero and quietly stop cascading. Promote those teams to top level and say
     # so, rather than leaving a dangling parent.
-    $orphans = @($parents.Keys | Where-Object { $parents[$_] -eq $Id })
+    $orphans = @($parents.Keys | Where-Object { $parents[$_] -ceq $Id })
     $parents.Remove($Id)
     $modes.Remove($Id)
     foreach ($o in $orphans) { $parents.Remove($o) }
@@ -216,7 +220,7 @@ else {
     }
 
     $targetGroup = if ($Group) { $Group } else { $existing[0].Group }
-    if ($targetGroup -match '[,:]') { throw "An Entra group name cannot contain a comma or a colon: '$targetGroup'." }
+    if ($targetGroup -match '[,:=&|<>^%!"\r\n]') { throw "An Entra group name cannot contain , : = & | < > ^ % ! "" or a line break, which the registry or the Azure CLI cannot carry: '$targetGroup'." }
 
     # Verify the group exists before writing the registry. A typo here is
     # invisible afterwards: the unit is created, the sync resolves it to nobody,
@@ -252,7 +256,7 @@ else {
             $parentAction = 'no parent - this is now a top-level business unit'
         }
         else {
-            Test-ClaudeBuId $Parent
+            Test-ClaudeBuId $Parent -Registry @($registry | ForEach-Object Id)
             if ($Parent -eq $Id) { throw "A business unit cannot be its own parent." }
             if (-not @($registry | Where-Object { $_.Id -eq $Parent }).Count) {
                 throw ("There is no business unit '$Parent' to be a parent. Create it first, then set -Parent on '$Id'. " +
@@ -278,7 +282,7 @@ else {
 
     if ($existing.Count) {
         $was = "was $($existing[0].Group), $('{0:n0}' -f $existing[0].TokensPerMonth) tokens/month"
-        $registry = @($registry | Where-Object { $_.Id -ne $Id })
+        $registry = @($registry | Where-Object { $_.Id -cne $Id })
         $action = "updated ($was)"
     }
     else {
@@ -322,8 +326,8 @@ if ($Remove -or $PSBoundParameters.ContainsKey('MonthlyBudgetUsd')) {
 # The write is only safe because the registry was read first. Assert that every
 # other business unit survived rather than trusting the string building - an
 # earlier version of this pattern emptied the entitlement allow list.
-foreach ($u in ($registry | Where-Object { $_.Id -ne $Id })) {
-    if ($value -notmatch [regex]::Escape(",$($u.Id)=")) {
+foreach ($u in ($registry | Where-Object { $_.Id -cne $Id })) {
+    if ($value -cnotmatch [regex]::Escape(",$($u.Id)=")) {
         throw "Refusing to write: business unit '$($u.Id)' would be lost. Nothing has been changed."
     }
 }
@@ -331,7 +335,7 @@ foreach ($u in ($registry | Where-Object { $_.Id -ne $Id })) {
 Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-registry' -Value $value
 
 $parentValue = ConvertTo-ClaudeBuParents $parents
-if ($parentValue -ne $parentsRaw) {
+if ($parentValue -cne $parentsRaw) {
     Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-parents' -Value $parentValue
 }
 if ($modeValue -ne $modesRaw) {

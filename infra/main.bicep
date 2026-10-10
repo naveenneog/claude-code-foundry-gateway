@@ -166,6 +166,37 @@ param allowPremiumOids array = []
 @description('Grant the gateway identity Cognitive Services User on the Foundry account. Set false when an equivalent assignment already exists - Azure rejects a second assignment for the same principal, role and scope even under a different name, which is what a reused gateway hits.')
 param grantFoundryRole bool = true
 
+@description('Create an Azure AI Content Safety account and grant APIM access. Existing deployments keep this false unless an operator opts in.')
+param deployContentSafety bool = false
+
+@description('Content Safety policy mode. Existing deployments default to off; opt-in installers pass block unless the operator chooses audit.')
+@allowed([
+  'off'
+  'audit'
+  'block'
+])
+param contentSafetyMode string = 'off'
+
+@description('Existing Content Safety endpoint. Empty uses the account created by this deployment.')
+param contentSafetyEndpoint string = ''
+
+@description('Content Safety harm threshold for FourSeverityLevels severities.')
+@minValue(0)
+@maxValue(6)
+param contentSafetyThreshold int = 2
+
+@description('Seconds APIM waits for each Content Safety call.')
+@minValue(1)
+@maxValue(30)
+param contentSafetyTimeoutSeconds int = 10
+
+@description('Content Safety public network access for the optional account.')
+@allowed([
+  'Enabled'
+  'Disabled'
+])
+param contentSafetyPublicNetworkAccess string = 'Enabled'
+
 @description('Existing allow list to preserve, in sentinel form (",oid1,oid2,"). Install-ClaudeGateway.ps1 reads this off the gateway before redeploying. Empty means derive from allowStandardOids.')
 param allowStandardValueExisting string = ''
 
@@ -181,6 +212,8 @@ param existingApimName string = ''
 var apimName = empty(existingApimName) ? 'apim-${namePrefix}' : existingApimName
 var appInsightsName = 'appi-${namePrefix}'
 var workspaceName = 'log-${namePrefix}'
+var contentSafetyName = 'cs-${namePrefix}'
+var effectiveContentSafetyEndpoint = empty(contentSafetyEndpoint) ? 'https://${contentSafetyName}.cognitiveservices.azure.com' : contentSafetyEndpoint
 var apiId = 'claude-foundry'
 var apiPath = 'claude'
 
@@ -403,6 +436,11 @@ var namedValues = [
   // changed. This is the staleness bound ADR-0005 requires, and it is also what
   // sets the resolver's cost, because cost follows cache misses.
   { key: 'entitlement-cache-seconds', value: string(entitlementCacheSeconds) }
+  { key: 'content-safety-mode', value: contentSafetyMode }
+  { key: 'content-safety-endpoint', value: effectiveContentSafetyEndpoint }
+  { key: 'content-safety-threshold', value: string(contentSafetyThreshold) }
+  { key: 'content-safety-timeout-seconds', value: string(contentSafetyTimeoutSeconds) }
+  { key: 'content-safety-truncate-mode', value: 'newest' }
 ]
 
 resource apimNamedValues 'Microsoft.ApiManagement/service/namedValues@2024-05-01' = [
@@ -419,6 +457,29 @@ resource apimNamedValues 'Microsoft.ApiManagement/service/namedValues@2024-05-01
   }
 ]
 
+module contentSafety 'content-safety.bicep' = if (deployContentSafety) {
+  name: 'deploy-content-safety'
+  params: {
+    accountName: contentSafetyName
+    location: location
+    apimPrincipalId: apim.identity.principalId
+    publicNetworkAccess: contentSafetyPublicNetworkAccess
+  }
+}
+
+resource contentSafetyFragment 'Microsoft.ApiManagement/service/policyFragments@2024-05-01' = {
+  parent: apim
+  name: 'content-safety-screening'
+  properties: {
+    format: 'rawxml'
+    value: loadTextContent('content-safety-screening.xml')
+  }
+  dependsOn: [
+    apimNew
+    apimNamedValues
+  ]
+}
+
 resource apiPolicy 'Microsoft.ApiManagement/service/apis/policies@2024-05-01' = {
   parent: api
   name: 'policy'
@@ -428,6 +489,7 @@ resource apiPolicy 'Microsoft.ApiManagement/service/apis/policies@2024-05-01' = 
   }
   dependsOn: [
     apimNamedValues
+    contentSafetyFragment
     messagesOperation
     countTokensOperation
   ]

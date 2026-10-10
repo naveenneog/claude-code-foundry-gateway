@@ -1,6 +1,6 @@
 # ADR-0028: Basic v2 uses a public Entra-authenticated resolver for the private projection
 
-- **Status:** Accepted
+- **Status:** Accepted. For the installer, the resolver default below is superseded by [ADR-0052](0052-cosmos-default-installer.md) (2026-10-06): `Install-ClaudeGateway.ps1` deploys a public, Entra-authenticated resolver on every tier unless `-ResolverInboundAccess private` is passed on Standard v2 or Premium v2. `scripts/Deploy-ClaudeProjection.ps1` run on its own keeps the per-tier default in this record.
 - **Date:** 2026-09-26
 - **Packet:** P61
 - **Refines:** [ADR-0005](0005-identity-projection.md), [ADR-0011](0011-projection-platform.md),

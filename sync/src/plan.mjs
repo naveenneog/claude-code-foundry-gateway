@@ -15,7 +15,9 @@ export const TIERS_BY_PRECEDENCE = ['premium', 'standard'];
 export const MAX_PROJECTION_AGE_SECONDS = 7200;
 export const STATUS_RECORD_TYPE = 'projection-reconciliation-status';
 export const STATUS_PARTITION_PREFIX = 'projection-status::';
-export const STATUS_TTL_SECONDS = 21600;
+export const STATUS_TTL_SECONDS = 604800;
+export const APPLY_LOCK_RECORD_TYPE = 'projection-apply-lock';
+export const APPLY_LOCK_ID = 'projection-apply-lock';
 
 export function createReconciliation({ verifiedAt, now = new Date(), maxAgeSeconds = MAX_PROJECTION_AGE_SECONDS } = {}) {
   const start = new Date(verifiedAt).getTime();
@@ -87,13 +89,17 @@ export function planChanges(resolved, existing, { allowEmpty = false, keepOrphan
     wanted.add(r.oid);
     const cur = existing.get(r.oid);
     if (cur && cur.tier === r.tier && (cur.businessUnit ?? '') === (r.businessUnit ?? '')) {
+      if (Object.hasOwn(cur, 'expiresAt')) {
+        toWrite.push(r);
+        continue;
+      }
       unchanged++;
       if (!refresh) continue;
     }
     toWrite.push(r);
   }
   const orphans = [...existing.entries()]
-    .filter(([oid, doc]) => !wanted.has(oid) && !isStatusRecord({ id: oid, oid, ...doc }))
+    .filter(([oid, doc]) => !wanted.has(oid) && !isControlRecord({ id: oid, oid, ...doc }))
     .map(([oid]) => oid);
   return {
     refused: false,
@@ -102,6 +108,15 @@ export function planChanges(resolved, existing, { allowEmpty = false, keepOrphan
     keptOrphans: keepOrphans ? orphans : [],
     unchanged,
   };
+}
+
+export function removalLimit(existing) {
+  return Math.max(10, Math.floor(existing / 10));
+}
+
+export function removalLimitExceeded({ deletes, existing }) {
+  const limit = removalLimit(existing);
+  return { exceeded: deletes > limit, limit };
 }
 
 /**
@@ -118,7 +133,8 @@ export function toDocument(r, { tenantId, mappingVersion, reconciliation }) {
     businessUnit: r.businessUnit ?? '',
     mappingVersion,
     effectiveFrom: null,
-    ...reconciliation,
+    reconciliationGeneration: reconciliation?.reconciliationGeneration,
+    lastVerifiedAt: reconciliation?.lastVerifiedAt,
   };
 }
 
@@ -139,6 +155,10 @@ export function isStatusRecord(doc) {
   );
 }
 
+export function isControlRecord(doc) {
+  return Boolean(doc) && (isStatusRecord(doc) || doc.type === APPLY_LOCK_RECORD_TYPE);
+}
+
 export function toStatusDocument({
   tenantId,
   accountResourceId,
@@ -152,10 +172,14 @@ export function toStatusDocument({
   commandOverride = false,
   memberCounts = {},
   writeCounts = {},
-  oldestExpiresAt,
   reconciliation,
   startedAt,
   finishedAt,
+  mode = 'full',
+  executor = 'runner',
+  ok = true,
+  settings = null,
+  user = null,
 }) {
   if (!reconciliation || !GUID.test(reconciliation.reconciliationGeneration ?? '')) {
     throw new Error('status requires a reconciliation generation');
@@ -176,18 +200,61 @@ export function toStatusDocument({
     command,
     dryRun: Boolean(dryRun),
     commandOverride: Boolean(commandOverride),
+    ok: Boolean(ok),
+    mode,
+    executor,
+    ...(user ? { user } : {}),
     memberCounts,
     writeCounts,
-    oldestExpiresAt,
     startedAt,
     finishedAt,
     reconciliationGeneration: reconciliation.reconciliationGeneration,
     lastVerifiedAt: reconciliation.lastVerifiedAt,
-    expiresAt: reconciliation.expiresAt,
+    settings: settings ? normalizeJobSettings(settings) : null,
   };
 }
 
+const SETTING_KEYS = ['clientId', 'standardGroupId', 'premiumGroupId', 'gatewayResourceId'];
+
+/**
+ * The job settings a status record carries and switch evidence binds: the identity's client id,
+ * the tier group object ids (premium may be 'none') and the gateway id.
+ * Azure ids compare without case. Null when any is missing.
+ */
+export function normalizeJobSettings(settings = {}) {
+  const values = SETTING_KEYS.map((key) => settings?.[key]);
+  if (values.some((value) => typeof value !== 'string' || !value.trim())) return null;
+  return Object.fromEntries(SETTING_KEYS.map((key, i) => [key, values[i].trim().toLowerCase()]));
+}
+
+export function validateJobSettings(env = {}) {
+  const remedy = 'Remedy: redeploy the job with scripts/Deploy-ClaudeProjectionRenewal.ps1 -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> -AlertEmail <address>.';
+  const problems = [];
+  const objectId = (value) => GUID.test(value ?? '');
+  const apimId = (value) => typeof value === 'string' &&
+    /^\/subscriptions\/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\/resourceGroups\/[^/]+\/providers\/Microsoft\.ApiManagement\/service\/[^/]+$/i.test(value);
+  const clientId = env.AZURE_CLIENT_ID;
+  const standard = env.PROJECTION_STANDARD_GROUP_ID;
+  const premium = env.PROJECTION_PREMIUM_GROUP_ID;
+  const gateway = env.PROJECTION_GATEWAY_RESOURCE_ID;
+  const accountResourceId = env.PROJECTION_ACCOUNT_RESOURCE_ID;
+  if (!objectId(clientId)) problems.push(`AZURE_CLIENT_ID must be the job identity client id GUID. ${remedy}`);
+  if (!objectId(standard)) problems.push(`PROJECTION_STANDARD_GROUP_ID must be the standard tier group object id GUID, not a group name. ${remedy}`);
+  if (typeof premium !== 'string' || !premium.trim()) {
+    problems.push(`PROJECTION_PREMIUM_GROUP_ID must be the premium tier group object id GUID, or none. ${remedy}`);
+  } else if (premium !== 'none' && !objectId(premium)) {
+    problems.push(`PROJECTION_PREMIUM_GROUP_ID must be the premium tier group object id GUID, or none. ${remedy}`);
+  } else if (objectId(standard) && premium.toLowerCase() === standard.toLowerCase()) {
+    problems.push(`PROJECTION_PREMIUM_GROUP_ID must not equal PROJECTION_STANDARD_GROUP_ID; one group for both tiers would make premium take every standard member. ${remedy}`);
+  }
+  if (!apimId(gateway)) problems.push(`PROJECTION_GATEWAY_RESOURCE_ID must be a Microsoft.ApiManagement/service resource id. ${remedy}`);
+  if (!cosmosAccountId(accountResourceId)) problems.push(`PROJECTION_ACCOUNT_RESOURCE_ID must be a Microsoft.DocumentDB/databaseAccounts resource id. ${remedy}`);
+  return problems;
+}
+
 const GUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+const cosmosAccountId = (value) => typeof value === 'string' &&
+  /^\/subscriptions\/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\/resourceGroups\/[^/]+\/providers\/Microsoft\.DocumentDB\/databaseAccounts\/[^/]+$/i.test(value);
 
 /**
  * What each identity would experience at the flip: the tier the gateway
@@ -209,8 +276,8 @@ export function compareWithGateway(gateway, records, { tenantId, now = new Date(
   const gwTier = (oid) => (premium.has(oid) ? 'premium' : standard.has(oid) ? 'standard' : 'denied');
   const byOid = new Map();
   for (const r of records) {
-    if (isStatusRecord(r)) continue;
-    if (!tenantId || r.tenantId !== tenantId || freshnessProblems(r, now).length) continue;
+    if (isControlRecord(r)) continue;
+    if (!toEntitlement(r, { tenantId, now }).ok) continue;
     byOid.set(r.oid ?? r.id, r);
   }
   const all = new Set([...premium, ...standard, ...byOid.keys()]);
@@ -234,131 +301,114 @@ export function compareWithGateway(gateway, records, { tenantId, now = new Date(
   return { compared: all.size, differences };
 }
 
+export function compareWithSnapshot(snapshot, records, { tenantId, now = new Date() } = {}) {
+  const problems = validateSnapshot(snapshot, { tenantId, now });
+  if (snapshot?.scope && snapshot.scope !== 'full') problems.push("--compare-snapshot expects a full snapshot");
+  if (problems.length) return { refused: true, problems };
+  const expected = new Map((snapshot.records ?? []).map((r) => [r.oid, { tier: r.tier, businessUnit: r.businessUnit ?? '' }]));
+  const live = new Map();
+  for (const r of records ?? []) {
+    if (isControlRecord(r)) continue;
+    if (!toEntitlement(r, { tenantId, now }).ok) continue;
+    live.set(r.oid ?? r.id, { tier: r.tier, businessUnit: r.businessUnit ?? '' });
+  }
+  const all = new Set([...expected.keys(), ...live.keys()]);
+  const differences = [];
+  for (const oid of all) {
+    const want = expected.get(oid);
+    const got = live.get(oid);
+    if (!want && got) differences.push({ oid, kind: 'would-delete-record', snapshot: 'absent', projection: got.tier });
+    else if (want && !got) differences.push({ oid, kind: 'missing-record', snapshot: want.tier, projection: 'absent' });
+    else if (want.tier !== got.tier) differences.push({ oid, kind: 'tier-drift', snapshot: want.tier, projection: got.tier });
+    else if ((want.businessUnit ?? '') !== (got.businessUnit ?? '')) {
+      differences.push({ oid, kind: 'unit-drift', snapshot: want.businessUnit || '(unassigned)', projection: got.businessUnit || '(unassigned)' });
+    }
+  }
+  return { refused: false, compared: all.size, differences };
+}
+
+export function validateTargetedSnapshot(snap, userOid, { tenantId, now = new Date() } = {}) {
+  const problems = validateSnapshot(snap, { tenantId, now });
+  if (!GUID.test(userOid ?? '')) problems.push('--user is not a guid');
+  if (snap?.scope !== 'user') problems.push("targeted apply requires snapshot scope 'user'");
+  if (snap?.user !== userOid) problems.push('snapshot user does not match --user');
+  if ((snap?.records?.length ?? 0) > 1) problems.push('targeted snapshot carries more than one record');
+  for (const r of snap?.records ?? []) {
+    if (r.oid !== userOid) { problems.push('targeted snapshot contains a record for another user'); break; }
+  }
+  return problems;
+}
+
 export function evaluateProjectionAdmission({
   statuses = [],
   entitlementRecords,
   entitlementEvidence,
   expected = {},
-  job = {},
   now = new Date(),
-  minExpiryMarginSeconds = 3600,
-  maxNewestAgeSeconds = 2700,
-  historyWindowSeconds = 7200,
+  maxEvidenceAgeSeconds = 86400,
 } = {}) {
-  if (!expected.actionGroupResourceId && expected.actionGroupResourceId !== undefined) {
-    return refuse('missing action group; deploy alerts with email receivers before switching');
-  }
-  const image = job.image ?? '';
-  if (expected.imageDigest && image !== expected.imageDigest) {
-    return refuse('job image is not the tested pinned digest');
-  }
-  if ((job.command?.length ?? 0) || (job.args?.length ?? 0)) {
-    const text = [...(job.command ?? []), ...(job.args ?? [])].join(' ');
-    return refuse(/--whatif|--dry-run|whatif/i.test(text)
-      ? 'job definition contains a dry-run override'
-      : 'job definition contains a command or args override');
-  }
-  const expectedEntry = expected.entrypoint ?? '';
-  const cutoff = now.getTime() - historyWindowSeconds * 1000;
+  const cutoff = now.getTime() - maxEvidenceAgeSeconds * 1000;
   const valid = statuses
     .filter(isStatusRecord)
     .filter((s) => s.tenantId === expected.tenantId &&
-      s.accountResourceId === expected.accountResourceId &&
+      lower(s.accountResourceId) === lower(expected.accountResourceId) &&
       s.databaseName === expected.databaseName &&
       s.containerName === expected.containerName)
-    .filter((s) => !s.dryRun && !s.commandOverride)
-    .filter((s) => !expected.imageDigest || s.imageDigest === expected.imageDigest)
-    .filter((s) => !expectedEntry || s.entrypoint === expectedEntry)
+    .filter((s) => s.mode === 'full' && s.ok === true)
     .filter((s) => Date.parse(s.finishedAt) >= cutoff)
     .sort((a, b) => Date.parse(a.finishedAt) - Date.parse(b.finishedAt));
-  if (!valid.length) return refuse('no destination-bound Cosmos renewal evidence for this tenant and container');
-  const newest = valid.at(-1);
-  const newestAge = (now.getTime() - Date.parse(newest.finishedAt)) / 1000;
-  if (!Number.isFinite(newestAge) || newestAge > maxNewestAgeSeconds) {
-    return refuse('newest successful renewal is older than 45 minutes');
+  if (!valid.length) {
+    return switchEvidence(false, null, 0, 'no successful full sync evidence for this tenant and container within the allowed age');
   }
+  const newest = valid.at(-1);
   const evidence = entitlementEvidence ?? summarizeEntitlementEvidence(entitlementRecords, {
     tenantId: expected.tenantId,
-    latestGeneration: newest.reconciliationGeneration,
     now,
   });
-  if (!evidence) return refuse('admission must read live entitlement records, not only status history');
+  if (!evidence) return switchEvidence(false, newestFullSync(newest), 0, 'admission must read live entitlement records, not only status history');
   if (evidence.invalidCount > 0) {
     const samples = (evidence.invalidSamples ?? []).map((s) => s.oidHash).filter(Boolean).join(', ');
-    return refuse(`${evidence.invalidCount} live entitlement record(s) would be refused by the resolver${samples ? `; oid-sha256 samples: ${samples}` : ''}`);
+    return switchEvidence(false, newestFullSync(newest), evidence.invalidCount, `${evidence.invalidCount} live entitlement record(s) would be refused by the resolver${samples ? `; oid-sha256 samples: ${samples}` : ''}`);
   }
-  if (evidence.olderActiveCount > 0) {
-    return refuse(`${evidence.olderActiveCount} live entitlement record(s) still carry an older generation`);
-  }
-  if (evidence.latestGeneration !== newest.reconciliationGeneration) {
-    return refuse('status generation does not match the live entitlement records');
-  }
-  const statusOldest = Number(newest.oldestExpiresAt);
-  if (Number.isFinite(statusOldest) && Number.isFinite(evidence.oldestExpiresAt) && statusOldest !== evidence.oldestExpiresAt) {
-    return refuse('status oldest expiry mismatch with live entitlement records');
-  }
-  const statusCounts = normalizeCounts(newest.memberCounts ?? {});
-  const liveCounts = normalizeCounts(evidence.memberCounts ?? {});
-  if (JSON.stringify(statusCounts) !== JSON.stringify(liveCounts)) {
-    return refuse('status member count mismatch with live entitlement records');
-  }
-  if (Number.isFinite(evidence.total) && evidence.total !== Object.values(liveCounts).reduce((a, b) => a + b, 0)) {
-    return refuse('live entitlement total does not match member counts');
-  }
-  const oldestExpiry = Number(evidence.oldestExpiresAt);
-  if (!Number.isFinite(oldestExpiry) || oldestExpiry - Math.floor(now.getTime() / 1000) < minExpiryMarginSeconds) {
-    return refuse('oldest entitlement expiry has less than 60 minutes of margin');
-  }
-  const generations = [...new Set(valid.map((s) => s.reconciliationGeneration).filter(Boolean))];
-  if (generations.length < 3) {
-    return refuse('reconciliation generation has not advanced at least twice within two hours; wait about 60-90 minutes on the 30-minute schedule');
-  }
-  return { ok: true, newestFinishedAt: newest.finishedAt, oldestExpiresAt: oldestExpiry, generations: generations.length };
+  return switchEvidence(true, newestFullSync(newest), 0);
 }
 
-export function summarizeEntitlementEvidence(records, { tenantId, latestGeneration, now = new Date() } = {}) {
+export function summarizeEntitlementEvidence(records, { tenantId, now = new Date() } = {}) {
   if (!Array.isArray(records)) return null;
-  const nowSeconds = Math.floor(now.getTime() / 1000);
-  const live = records.filter((r) => !isStatusRecord(r) &&
-    (Number.isInteger(r.expiresAt) ? r.expiresAt > nowSeconds : r.expiresAt !== undefined));
-  const memberCounts = {};
-  let olderActiveCount = 0;
-  let oldestExpiresAt = Infinity;
+  const live = records.filter((r) => !isControlRecord(r));
   const invalid = [];
   for (const record of live) {
     const verdict = toEntitlement(record, { tenantId, now });
     if (!verdict.ok) {
       invalid.push({ oid: record.oid ?? record.id ?? '', status: verdict.status, reason: verdict.reason });
-      continue;
     }
-    memberCounts[record.tier] = (memberCounts[record.tier] ?? 0) + 1;
-    if (record.reconciliationGeneration !== latestGeneration) olderActiveCount++;
-    if (record.expiresAt < oldestExpiresAt) oldestExpiresAt = record.expiresAt;
   }
   return {
     total: live.length,
-    oldestExpiresAt: Number.isFinite(oldestExpiresAt) ? oldestExpiresAt : null,
-    latestGeneration,
-    olderActiveCount,
     invalidCount: invalid.length,
     invalidSamples: invalid.slice(0, 3).map((r) => ({ oidHash: digest(r.oid), status: r.status })),
-    memberCounts: normalizeCounts(memberCounts),
   };
+}
+
+function newestFullSync(status) {
+  if (!status) return null;
+  return {
+    finishedAt: status.finishedAt,
+    executor: status.executor ?? null,
+    generation: status.reconciliationGeneration ?? null,
+  };
+}
+
+function switchEvidence(ok, newestFullSync, invalidCount, reason) {
+  return { ok, mode: 'switch-evidence', newestFullSync, invalidCount, ...(reason ? { reason } : {}) };
 }
 
 function digest(value) {
   return createHash('sha256').update(String(value)).digest('hex').slice(0, 12);
 }
 
-function normalizeCounts(counts) {
-  return Object.fromEntries(Object.entries(counts)
-    .filter(([, value]) => Number(value) > 0)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, value]) => [key, Number(value)]));
-}
-
-function refuse(reason) {
-  return { ok: false, reason, remedy: reason };
+function lower(value) {
+  return typeof value === 'string' ? value.toLowerCase() : value;
 }
 
 /**

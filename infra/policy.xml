@@ -137,12 +137,7 @@
                                 <choose>
                                     <when condition="@(context.Variables.ContainsKey("entResponse") &amp;&amp; ((IResponse)context.Variables["entResponse"]).StatusCode == 200)">
                                         <set-variable name="entRecord" value="@(((IResponse)context.Variables["entResponse"]).Body.As&lt;string&gt;(preserveContent: true))" />
-                                        <cache-store-value key="@("ent:v2:{{tenant-id}}:" + (string)context.Variables["userId"])" value="@((string)context.Variables["entRecord"])" duration="@{
-                                            var rec = JObject.Parse((string)context.Variables["entRecord"]);
-                                            var expires = (long?)rec["expiresAt"] ?? 0;
-                                            var now = (long)(DateTime.UtcNow - new DateTime(1970, 1, 1)).TotalSeconds;
-                                            return (int)Math.Max(0, Math.Min(int.Parse("{{entitlement-cache-seconds}}"), expires - now));
-                                        }" />
+                                        <cache-store-value key="@("ent:v2:{{tenant-id}}:" + (string)context.Variables["userId"])" value="@((string)context.Variables["entRecord"])" duration="@(int.Parse("{{entitlement-cache-seconds}}"))" />
                                     </when>
                                     <!-- 404 is the resolver's answer for an identity with no
                                          record: not entitled, the same as being in neither
@@ -159,7 +154,7 @@
                                          resolver again.
 
                                          Cached for at most a minute, and never longer than the
-                                         positive window: long enough that a refused caller
+                                         configured window: long enough that a refused caller
                                          cannot hammer the resolver, short enough that someone
                                          just added to a group is let in promptly. -->
                                     <when condition="@(context.Variables.ContainsKey("entResponse") &amp;&amp; ((IResponse)context.Variables["entResponse"]).StatusCode == 404)">
@@ -173,9 +168,8 @@
                             if (!context.Variables.ContainsKey("entRecord")) { return false; }
                             var rec = JObject.Parse((string)context.Variables["entRecord"]);
                             if ((string)rec["tier"] == "none") { return true; }
-                            var expires = (long?)rec["expiresAt"] ?? 0;
-                            var now = (long)(DateTime.UtcNow - new DateTime(1970, 1, 1)).TotalSeconds;
-                            return expires > now &amp;&amp; !string.IsNullOrEmpty((string)rec["reconciliationGeneration"]);
+                            // ADR-0051: projection records persist until a sync changes or removes them.
+                            return !string.IsNullOrEmpty((string)rec["reconciliationGeneration"]);
                         }" />
                         <choose>
                             <when condition="@(context.Variables.ContainsKey("entRecord") &amp;&amp; (bool)context.Variables["entFresh"])">
@@ -193,8 +187,8 @@
                                 <set-variable name="entResolving" value="@(false)" />
                             </when>
                             <otherwise>
-                                <!-- The resolver did not answer and nothing
-                                     cached is within the staleness bound.
+                                <!-- The resolver did not answer, or the cached
+                                     answer is not a usable projection record.
                                      
                                      ADR-0005 forbids treating this as
                                      user-not-found. A 403 would tell an entitled
@@ -219,8 +213,8 @@
                                             new JProperty("error", new JObject(
                                                 new JProperty("type", "api_error"),
                                                 new JProperty("message",
-                                                    "The entitlement projection expired, has invalid freshness, or the entitlement service did not answer. " +
-                                                    "No unexpired answer is available. Your platform team must check the directory reconciliation " +
+                                                    "The entitlement projection has no usable answer, or the entitlement service did not answer. " +
+                                                    "No usable entitlement answer is available. Your platform team must check the directory reconciliation " +
                                                     "and the entitlement service. Retry shortly.")))
                                         ).ToString();
                                     }</set-body>
@@ -308,6 +302,9 @@
                 </return-response>
             </when>
         </choose>
+
+        <!-- 5b. Optional Azure AI Content Safety request screening. -->
+        <include-fragment fragment-id="content-safety-screening" />
 
         <!-- 6. Organisation-wide monthly ceiling.
              ==========================================================
@@ -599,9 +596,42 @@
                         error["type"] = "rate_limit_error";
                         error["reconciled_at"] = state["reconciled_at"].DeepClone();
                         error["http_status"] = 403;
+                        var unpricedMessage = "Usage cannot be completely priced for this scope. Ask the gateway owner to correct the dated price book.";
+                        if (status == "unpriced") {
+                            var unpriced = item["unpriced_models"] as JArray;
+                            var priceBookDateToken = item["price_book_date"];
+                            var priceBookDate = (priceBookDateToken != null &amp;&amp; priceBookDateToken.Type == JTokenType.String) ? (string)priceBookDateToken : "";
+                            if (unpriced != null &amp;&amp; unpriced.Count &gt; 0 &amp;&amp; !string.IsNullOrEmpty(priceBookDate)) {
+                                var names = "";
+                                var modelCount = 0;
+                                foreach (var modelToken in unpriced) {
+                                    if (modelCount &gt;= 5) { break; }
+                                    if (modelToken == null || modelToken.Type != JTokenType.String) { continue; }
+                                    var model = (string)modelToken;
+                                    if (string.IsNullOrEmpty(model) || model.Length &gt; 64) { continue; }
+                                    var validModel = true;
+                                    foreach (var ch in model) {
+                                        if (!((ch &gt;= 'A' &amp;&amp; ch &lt;= 'Z') || (ch &gt;= 'a' &amp;&amp; ch &lt;= 'z') || (ch &gt;= '0' &amp;&amp; ch &lt;= '9') || ch == '.' || ch == '_' || ch == '-')) {
+                                            validModel = false;
+                                            break;
+                                        }
+                                    }
+                                    if (!validModel) { continue; }
+                                    if (names.Length &gt; 0) { names += ", "; }
+                                    names += model;
+                                    modelCount++;
+                                }
+                                if (modelCount &gt; 0) {
+                                    var more = unpriced.Count - modelCount;
+                                    if (more &gt; 0) { names += " and " + more.ToString() + " more"; }
+                                    var entries = (modelCount == 1 &amp;&amp; more == 0) ? "its price-book entry" : "their price-book entries";
+                                    unpricedMessage = "Usage of " + names + " cannot be priced with the price book dated " + priceBookDate + ". Ask the gateway owner to add or correct " + entries + ", then reconcile.";
+                                }
+                            }
+                        }
                         error["message"] = status == "stop"
                             ? "The observed USD budget for this scope is spent. Ask its owner to raise it, then reconcile."
-                            : "Usage cannot be completely priced for this scope. Ask the gateway owner to correct the dated price book.";
+                            : unpricedMessage;
                         return error.ToString(Newtonsoft.Json.Formatting.None);
                     }
                     if (status == "notice") {

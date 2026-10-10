@@ -7,7 +7,7 @@
 # A step's prerequisites: the steps whose result it uses. Both installers list the same pairs.
 $script:ClaudeInstallStepDependencies = [ordered]@{
     'claude-deployment' = @(); 'resource-group' = @(); 'gateway-deployment' = @('resource-group'); 'company-address' = @('gateway-deployment')
-    'entra-groups' = @(); 'sync' = @('gateway-deployment', 'entra-groups'); 'projection' = @('gateway-deployment'); 'business-units' = @('gateway-deployment')
+    'entra-groups' = @(); 'sync' = @('gateway-deployment', 'entra-groups'); 'projection' = @('gateway-deployment', 'sync'); 'business-units' = @('gateway-deployment')
     'onboarding-package' = @('gateway-deployment'); 'verify' = @('gateway-deployment')
 }
 $script:ClaudeInstallSelection = @()

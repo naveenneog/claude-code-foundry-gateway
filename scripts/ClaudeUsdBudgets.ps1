@@ -31,6 +31,38 @@ function ConvertTo-ClaudeUsdValue {
     return $value
 }
 
+function ConvertTo-ClaudeUsdPriceKey {
+    param([AllowNull()][string]$Name)
+    return ([regex]::Replace([string]$Name, '[^A-Za-z0-9]', '')).ToLowerInvariant()
+}
+
+function Get-ClaudeUsdEffectiveRateKey {
+    param($Entry)
+    if ($null -eq $Entry.inputPerM -or $null -eq $Entry.outputPerM) { throw 'price entry is missing inputPerM or outputPerM' }
+    $input = [decimal]$Entry.inputPerM
+    $output = [decimal]$Entry.outputPerM
+    $read = if ($null -ne $Entry.PSObject.Properties['cacheReadPerM']) { [decimal]$Entry.cacheReadPerM } else { $input * [decimal]0.1 }
+    $write5m = if ($null -ne $Entry.PSObject.Properties['cacheWrite5mPerM']) { [decimal]$Entry.cacheWrite5mPerM } else { $input * [decimal]1.25 }
+    $write1h = if ($null -ne $Entry.PSObject.Properties['cacheWrite1hPerM']) { [decimal]$Entry.cacheWrite1hPerM } else { $input * [decimal]2 }
+    return '{0}:{1}:{2}:{3}:{4}' -f $input.ToString([Globalization.CultureInfo]::InvariantCulture),
+        $output.ToString([Globalization.CultureInfo]::InvariantCulture),
+        $read.ToString([Globalization.CultureInfo]::InvariantCulture),
+        $write5m.ToString([Globalization.CultureInfo]::InvariantCulture),
+        $write1h.ToString([Globalization.CultureInfo]::InvariantCulture)
+}
+
+function Assert-ClaudeUsdPriceBookWritable {
+    param($PriceBook)
+    if (-not $PriceBook.date -or -not $PriceBook.models) { throw 'A dated USD price book is required.' }
+    $seen = @{}
+    foreach ($p in @($PriceBook.models.PSObject.Properties)) {
+        $key = ConvertTo-ClaudeUsdPriceKey $p.Name
+        [void](Get-ClaudeUsdEffectiveRateKey $p.Value)
+        if ($seen.ContainsKey($key)) { throw "Duplicate normalized price-book key '$key': $($seen[$key]) and $($p.Name)." }
+        $seen[$key] = $p.Name
+    }
+}
+
 function New-ClaudeUsdBudgetValue {
     param(
         [AllowNull()][string]$Value,
@@ -48,13 +80,30 @@ function New-ClaudeUsdBudgetValue {
     }
     if ($ScopeType -ne 'user' -and $Period -ne 'month') { throw 'Unit and team USD budgets are monthly.' }
     $doc = ConvertFrom-ClaudeUsdValue $Value
-    if (-not $doc.schema_version) {
-        if ($Clear) { return 'e30=' }
-        if (-not $PriceBook.date -or -not $PriceBook.models) { throw 'A dated USD price book is required.' }
+    $hasItems = $doc.schema_version -and $doc.items -and @($doc.items.PSObject.Properties).Count -gt 0
+    $hasOfferedBook = $PriceBook -and $PriceBook.date -and $PriceBook.models
+    if (-not $Clear -and $hasOfferedBook) {
         $date = [datetime]::MinValue
         if (-not [datetime]::TryParseExact([string]$PriceBook.date, 'yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture,
             [Globalization.DateTimeStyles]::None, [ref]$date)) { throw 'USD price book date must be YYYY-MM-DD.' }
+    }
+    if (-not $doc.schema_version) {
+        if ($Clear) { return 'e30=' }
+        if (-not $hasOfferedBook) { throw 'A dated USD price book is required.' }
+        Assert-ClaudeUsdPriceBookWritable $PriceBook
         $doc = [pscustomobject]@{ schema_version = 1; price_book = $PriceBook; items = [pscustomobject]@{} }
+    }
+    elseif (-not $Clear -and -not $hasItems) {
+        if (-not $hasOfferedBook) { throw 'A dated USD price book is required.' }
+        Assert-ClaudeUsdPriceBookWritable $PriceBook
+        $doc.price_book = $PriceBook
+    }
+    elseif (-not $Clear -and $hasItems -and $hasOfferedBook) {
+        $storedBook = $doc.price_book | ConvertTo-Json -Depth 30 -Compress
+        $offeredBook = $PriceBook | ConvertTo-Json -Depth 30 -Compress
+        if ($storedBook -cne $offeredBook) {
+            Write-Warning ("Active USD budgets pin their tariff; stored price book {0} remains in use instead of offered price book {1}. Record the dollar budgets, clear each one, then write them again to store the current book." -f [string]$doc.price_book.date, [string]$PriceBook.date)
+        }
     }
     $key = "$ScopeType`:$ScopeId"
     if ($Clear) { $doc.items.PSObject.Properties.Remove($key) }

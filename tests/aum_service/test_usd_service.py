@@ -164,10 +164,39 @@ class UsdServiceTests(unittest.TestCase):
         query = usage_query(self.arm.base, NOW)
         for fragment in ("ClaudeChargeback(", "Prompt Cached Tokens", 'Properties["Service ID"]',
                          "apim-test", "cache_write_5m_tokens", "cache_write_1h_tokens",
-                         "cache_read_known", "take 1001", "gateway_id"):
+                         "cache_read_known", "take 1001", "gateway_id", "family_of", "latest_unit",
+                         "remainder_reads", "unit_unknown", "group_deployment", "group_business_unit",
+                         "day=coalesce(day, day1)", "user_id=coalesce(user_id, user_id1)",
+                         "family=coalesce(family, family1)",
+                         "cached_by_model", "max_metric_reads",
+                         "coalesce(metric_rows,0) > 0",
+                         "by day=startofday(timestamp), user_id, family, deployment, business_unit"):
             self.assertIn(fragment, query)
+        self.assertIn("family=family_of(deployment)", query)
+        self.assertIn("| extend family=family_of(deployment)", query,
+                      "family must be computed in a separate extend after the deployment fallback")
+        # KQL evaluates every expression of one extend against the input row, so a family computed in the same
+        # extend that replaces `deployment` reads the original, empty DeploymentName (live harness, 2026-10-08).
+        fallback = query.index("| extend deployment=iff(isempty(deployment),model,deployment)")
+        family = query.index("| extend family=family_of(deployment)")
+        self.assertLess(fallback, family)
+        self.assertNotIn("family", query[fallback:family])
+        self.assertIn("summarize metric_model=min(metric_model)", query)
+        self.assertIn("join kind=fullouter cached on day, user_id, family", query)
+        self.assertIn("join kind=leftouter group_totals on day, user_id, family", query)
+        self.assertIn("deployment == group_deployment", query)
+        self.assertIn("business_unit == group_business_unit", query)
+        self.assertNotIn("family=family_of(coalesce(model, deployment))", query)
+        self.assertNotIn("make_set(business_unit", query)
         self.assertNotIn("sum(usd)", query)
         self.assertNotIn("sum(total_tokens)", query)
+
+    def test_usage_query_can_target_fixture_names_for_live_harness(self):
+        query = usage_query(self.arm.base, NOW, chargeback="ChargebackFixture", metrics="MetricsFixture")
+        self.assertIn("ChargebackFixture(_from, _to)", query)
+        self.assertIn("let cached_by_model = MetricsFixture", query)
+        self.assertNotIn("ClaudeChargeback(", query)
+        self.assertNotIn("let cached = AppMetrics", query)
 
 
 if __name__ == "__main__":

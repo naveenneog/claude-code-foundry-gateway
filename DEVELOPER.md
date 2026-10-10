@@ -21,8 +21,23 @@ the gateway up*, you want [docs/SETUP.md](docs/SETUP.md) instead.
 3. [If something is wrong](#if-something-is-wrong)
 4. [FAQ](#faq)
 5. [Appendix — configuring it by hand](#appendix--configuring-it-by-hand)
+## Quickstart
+
+The platform team supplies published entitlement, `claude-gateway.json` and the complete `scripts` folder. The file sits beside that folder. Azure CLI is installed and signed in to the file's tenant; approved software installation follows the organisation's managed-device policy.
+
+```powershell
+$gateway = Get-Content .\claude-gateway.json -Raw | ConvertFrom-Json
+az login --tenant $gateway.tenantId --allow-no-subscriptions
+.\scripts\Onboard-ClaudeDeveloper.ps1 -ConfigPath .\claude-gateway.json
+```
+
+**Expected result:** the wrapper reports its checks, configures the selected path and verifies a gateway request. Desktop is verified separately when it is installed. New CLI sessions, a reloaded VS Code window and a fully restarted Desktop read the new configuration ([Using it](#using-it)).
 
 ## Prerequisites
+
+<details>
+
+<summary>Handover file, entitlement and workstation requirements</summary>
 
 | | |
 |---|---|
@@ -36,7 +51,13 @@ the gateway up*, you want [docs/SETUP.md](docs/SETUP.md) instead.
 
 ---
 
+</details>
+
 ## One command
+
+<details>
+
+<summary>Setup bundle command, model pins and preflight</summary>
 
 Your platform team sent you `claude-gateway.json`. It holds the gateway URL,
 tenant and tier limits, so you do not have to type any of them. Ask for the
@@ -180,7 +201,13 @@ stops before writing anything if a check fails.
 
 ---
 
+</details>
+
 ## Using it
+
+<details>
+
+<summary>VS Code, CLI, Desktop and budget visibility</summary>
 
 **In VS Code** — open a folder, then **Ctrl+Shift+P → `Claude Code: Open in Side
 Bar`**. There is no sign-in step; your Entra credential is already resolved.
@@ -191,8 +218,8 @@ Bar`**. There is no sign-in step; your Entra credential is already resolved.
 
 ![claude /status showing API provider: Microsoft Foundry](docs/guide/b5-cli-status.png)
 
-**In Claude Desktop** — this one has a sign-in step, and the option you need is
-not the obvious one.
+**In Claude Desktop** — Desktop shows a sign-in screen, and the gateway sign-in
+is the **Or sign in with Gateway** option at the bottom of it.
 
 1. **Quit Desktop completely**, including the tray or menu-bar icon. It reads
    its configuration at startup, so a running instance will not pick this up.
@@ -233,7 +260,13 @@ conversation history and connected tools can also contain your prompts.
 
 ---
 
+</details>
+
 ## If something is wrong
+
+<details>
+
+<summary>Symptom fixes, status codes and safe escalation data</summary>
 
 | Symptom | Cause → Fix |
 |---|---|
@@ -242,6 +275,9 @@ conversation history and connected tools can also contain your prompts.
 | `403` naming a personal, organisation, unit or team budget | The named budget is exhausted. Ask its owner; changing your tier does not bypass an organisation or unit ceiling |
 | `429` | Honour `Retry-After`. It may be a request/token limit, projection miss admission or Foundry capacity; the platform team can distinguish them |
 | `503` naming entitlement or an expired projection | A platform sync/resolver issue, not a request for a new API key. Send the time and redacted error to the platform team |
+| `400` `invalid_request_error` "The request body could not be read for content screening" | The gateway could not parse the request as a Claude Messages body while Content Safety was in `block` mode, or the platform team set strict truncation and the newest turn was longer than the screening budget. A JSON object with a `messages` array and a newest turn that fits passes this check; the platform trace records only `unscreenable`, not the body text |
+| `403` `content_safety` "Content Safety blocked the request" | The gateway's Content Safety screen blocked screened text, such as the system prompt, the newest user turn or a tool result, before Claude saw it. A reworded request is screened again; the platform team can see the decision and severities for the time of the request, without its text |
+| `503` `content_safety` "Content Safety unavailable" | The gateway could not reach Content Safety and blocks requests while it is unavailable. The response carries `Retry-After: 5` (seconds); the platform team can find a lasting failure by its time in the gateway trace |
 | `DeploymentNotFound` / `model_not_allowed` | Ask for the actual deployed and permitted model names. Do not add a catalogue of models to settings |
 | `API Error: 400 ... "thinking.type.enabled" is not supported for this model` | This Claude Code release predates the model and sends the older thinking request. Re-run the setup script: it declares each pinned model's capabilities and runs `claude update`. By hand: [step 3](#appendix--configuring-it-by-hand) |
 | Desktop shows **Connection needs Credential kind** and the Credential kind field is empty | The profile uses sign-in keys this Desktop release does not read. Re-run the setup script; it writes the keys the installed and running Desktop reads ([ADR-0031](docs/adr/0031-client-keys-every-release-reads.md)) |
@@ -261,7 +297,13 @@ to a public issue.
 
 ---
 
+</details>
+
 ## FAQ
+
+<details>
+
+<summary>Settings precedence, sign-in mistakes and privacy answers</summary>
 
 **I fixed my settings and Claude Code still uses the old model. Why?**
 Something higher in the precedence order is overriding the file you edited.
@@ -335,7 +377,13 @@ until you sign back in with Gateway.
 
 ---
 
+</details>
+
 ## Appendix — configuring it by hand
+
+<details>
+
+<summary>Manual client files, helpers and Desktop sign-in modes</summary>
 
 Only needed if you cannot run the script, or you are checking what it did.
 
@@ -671,3 +719,11 @@ to use on another machine instead:
 # and for the helper, which signs in again when its cached token expires
 [Environment]::SetEnvironmentVariable('CLAUDE_FOUNDRY_AUTH','device','User')
 ```
+
+</details>
+
+## Next
+
+- [Troubleshooting](docs/TROUBLESHOOTING.md) maps known symptoms to fixes.
+- [Diagnostics](docs/DIAGNOSE.md) creates redacted support evidence.
+- [Onboarding bundle](onboarding/README.md) explains the files the platform team distributes.

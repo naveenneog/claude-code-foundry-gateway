@@ -35,7 +35,10 @@ function az {
     $global:LASTEXITCODE = 0
     $line = $args -join ' '
     if ($line -like 'account show*') { return '00000000-0000-0000-0000-000000000000' }
-    if ($line -like 'account get-access-token*') { return 'fixture-token' }
+    if ($line -like 'account get-access-token*') {
+        if ($line -match '--query accessToken') { return 'fixture-token' }
+        return '{"accessToken":"fixture-token"}'
+    }
     if ($line -like 'ad group show*') { return $groupId }
     if ($line -like 'apim nv list*') {
         return ConvertTo-Json -InputObject @($gateway.Values.Keys | ForEach-Object {
@@ -84,6 +87,19 @@ function Invoke-RestMethod {
     }
     if ($Uri -match '/users/[^/]+\?') {
         return @{ id = $personId; displayName = 'Example Developer'; userPrincipalName = 'developer@example.com' }
+    }
+    if ($Uri -match '/groups\?') {
+        $text = [uri]::UnescapeDataString([string]$Uri)
+        $id = if ($text -match "displayName eq 'premium-group'" -or $text -match "id eq '$groupId'") { $groupId }
+            elseif ($text -match "displayName eq 'standard-group'" -or $text -match "id eq '$otherId'") { $otherId }
+            else { '' }
+        return [pscustomobject]@{ value = [object[]]@(if ($id) { [pscustomobject]@{ id = $id } }) }
+    }
+    if ($Uri -match "/groups/$groupId/transitiveMembers/") {
+        return [pscustomobject]@{ value = [object[]]@([pscustomobject]@{ id = $personId; displayName = 'Example Developer' }) }
+    }
+    if ($Uri -match "/groups/$otherId/transitiveMembers/") {
+        return [pscustomobject]@{ value = [object[]]@() }
     }
     if ($Uri -match '/groups/([^/]+)/members/' -and $Method -in 'Post', 'Delete') {
         $gateway.GroupWrites.Add("$Method $($Matches[1])")
@@ -251,6 +267,208 @@ foreach ($command in 'Set-ClaudeBusinessUnit', 'Set-ClaudeTier', 'Set-ClaudeBudg
 Reset-Gateway $full
 $m = Invoke-Set 'Set-ClaudeBusinessUnit' @{ Id = 'absent'; Remove = $true }
 Assert 'removing an absent unit remains a no-op' (-not $m -and $gateway.Writes.Count -eq 0) $m
+
+# P96: a new identifier with a capital passed the business-unit check and then stopped at the dollar budget
+# with "Invalid USD scope identifier." (scripts/ClaudeUsdBudgets.ps1:42). It is refused with the rule, before
+# any write, and a capitalised spelling of a stored identifier is not taken as that unit.
+Write-Host 'Business unit identifiers - a new identifier is lower-case (P96)' -ForegroundColor Cyan
+Reset-Gateway $local
+$m = Invoke-Set 'Set-ClaudeBusinessUnit' @{ Id = 'Platform-Two'; Group = 'Platform Two'; MonthlyBudgetUsd = 1 }
+Assert 'a new identifier with a capital is refused with the lower-case rule, before any write' ($m -match "'Platform-Two' is not a valid business unit identifier" -and $m -match 'lower-case letters' -and
+    $gateway.Writes.Count -eq 0 -and $gateway.GroupWrites.Count -eq 0) "$m | writes $($gateway.Writes -join ',')"
+Reset-Gateway $local
+$m = Invoke-Set 'Set-ClaudeBusinessUnit' @{ Id = 'Sales'; MonthlyBudgetUsd = 1 }
+Assert 'a capitalised spelling of a stored identifier is refused, not used to change that unit' ($m -match "'Sales' is not a valid business unit identifier" -and $gateway.Writes.Count -eq 0) "$m | writes $($gateway.Writes -join ',')"
+Reset-Gateway $local
+$m = Invoke-Set 'Set-ClaudeBusinessUnit' @{ Id = 'sales'; Parent = 'Platform' }
+Assert 'a capitalised spelling of a stored parent is refused, not written as the parent' ($m -match "'Platform' is not a valid business unit identifier" -and $gateway.Writes.Count -eq 0) "$m | writes $($gateway.Writes -join ',')"
+# P96 council round 5 (Coder note): the writer refuses the group-name characters the Turnstile import refuses, so a unit
+# it creates is not dropped by a later Turnstile apply.
+Reset-Gateway $local
+$m = Invoke-Set 'Set-ClaudeBusinessUnit' @{ Id = 'rd'; Group = 'Claude R&D'; MonthlyBudgetUsd = 1 }
+Assert 'a group name with a shell character is refused, before any write' ($m -match 'cannot contain' -and $gateway.Writes.Count -eq 0 -and $gateway.GroupWrites.Count -eq 0) "$m | writes $($gateway.Writes -join ',')"
+# Before P96 the check ignored case, so a registry can hold an identifier with capitals. Changes that do not
+# touch its dollar budget keep working when the registry holds that exact spelling.
+$legacyRegistry = ',sales=Sales:1000,Legacy-Unit=Legacy:3000,'
+Reset-Gateway $local
+$gateway.Values['bu-registry'] = $legacyRegistry
+$m = Invoke-Set 'Set-ClaudeBusinessUnit' @{ Id = 'Legacy-Unit'; Group = 'Legacy Renamed' }
+Assert 'a unit the registry holds with capitals can still change its group' (-not $m -and $gateway.Values['bu-registry'] -ceq ',sales=Sales:1000,Legacy-Unit=Legacy Renamed:3000,') "$m | registry $($gateway.Values['bu-registry'])"
+Reset-Gateway $local
+$gateway.Values['bu-registry'] = $legacyRegistry
+$m = Invoke-Set 'Set-ClaudeBusinessUnit' @{ Id = 'sales'; Parent = 'Legacy-Unit' }
+Assert 'a unit the registry holds with capitals can still be a parent' (-not $m -and $gateway.Values['bu-parents'] -ceq ',sales=Legacy-Unit,') "$m | parents $($gateway.Values['bu-parents'])"
+# Council round 1 (Architect): the same identifier in another case is not the stored unit. Changing, removing or
+# naming it as a parent through that spelling is refused before any write, rather than acting on 'Legacy-Unit'.
+foreach ($case in @(
+        @{ Name = 'a change of group'; P = @{ Id = 'legacy-unit'; Group = 'Legacy Renamed' } }
+        @{ Name = 'a removal'; P = @{ Id = 'legacy-unit'; Remove = $true } }
+        @{ Name = 'a parent'; P = @{ Id = 'sales'; Parent = 'legacy-unit' } }
+    )) {
+    Reset-Gateway $local
+    $gateway.Values['bu-registry'] = $legacyRegistry
+    $m = Invoke-Set 'Set-ClaudeBusinessUnit' $case.P
+    Assert "the lower-case spelling of a unit stored with capitals is refused for $($case.Name), before any write" ($m -match 'differs only in case' -and $m.Contains("'Legacy-Unit'") -and
+        $gateway.Writes.Count -eq 0) "$m | writes $($gateway.Writes -join ',') | registry $($gateway.Values['bu-registry'])"
+}
+# Council round 2 (UX): bu-modes accepts only lower-case identifiers, so any mode for a unit stored with capitals is refused
+# with that reason before any write, Strict included.
+foreach ($mode in 'Notify', 'Strict') {
+    Reset-Gateway $local
+    $gateway.Values['bu-registry'] = $legacyRegistry
+    $m = Invoke-Set 'Set-ClaudeBusinessUnit' @{ Id = 'Legacy-Unit'; Mode = $mode }
+    Assert "a $mode mode for a unit stored with capitals is refused before any write" ($m -match 'Budget modes accept only lower-case identifiers' -and $m.Contains("'Legacy-Unit'") -and
+        $gateway.Writes.Count -eq 0) "$m | writes $($gateway.Writes -join ',')"
+}
+# Council round 1 (QA): a registry can hold two spellings of one identifier (before P96, through Turnstile or a
+# manual edit). They are two units: a change to one leaves the other, its budget and its team as they are.
+# bu-parents is read without case, as the renewal job reads it (sync/src/business-units.mjs), so these cases keep
+# the two spellings out of bu-parents' keys.
+$unitSpellings = ',sales=Lower Sales:1000,Sales=Upper Sales:2000,eu=EU:100,'
+foreach ($case in @(
+        @{ Name = 'a change of group'; P = @{ Id = 'Sales'; Group = 'New Sales' }
+            WantRegistry = ',sales=Lower Sales:1000,eu=EU:100,Sales=New Sales:2000,'; WantParents = ',eu=sales,' }
+        @{ Name = 'the removal of one'; P = @{ Id = 'Sales'; Remove = $true }
+            WantRegistry = ',sales=Lower Sales:1000,eu=EU:100,'; WantParents = ',eu=sales,' }
+    )) {
+    Reset-Gateway $local
+    $gateway.Values['bu-registry'] = $unitSpellings
+    $gateway.Values['bu-parents'] = ',eu=sales,'
+    $gateway.Values['bu-modes'] = ',sales=notify,'
+    $m = Invoke-Set 'Set-ClaudeBusinessUnit' $case.P
+    Assert "two spellings of one identifier stay two units after $($case.Name)" (-not $m -and $gateway.Values['bu-registry'] -ceq $case.WantRegistry -and $gateway.Values['bu-parents'] -ceq $case.WantParents -and
+        $gateway.Values['bu-modes'] -ceq ',sales=notify,') "$m | registry $($gateway.Values['bu-registry']) | parents $($gateway.Values['bu-parents']) | modes $($gateway.Values['bu-modes'])"
+}
+# Council round 2 (Coder): the writers read bu-parents by exact key, so a change to one spelling leaves the other
+# spelling's parent entry as it is, and a parent that changes only in case is written.
+$teamSpellings = ',platform=Platform:5000,sales=Lower Sales:1000,Sales=Upper Sales:2000,'
+foreach ($case in @(
+        @{ Name = 'removing the other spelling'; Registry = $teamSpellings; Parents = ',sales=platform,'; P = @{ Id = 'Sales'; Remove = $true }
+            WantRegistry = ',platform=Platform:5000,sales=Lower Sales:1000,'; WantParents = ',sales=platform,' }
+        @{ Name = 'clearing the parent of the other spelling'; Registry = $teamSpellings; Parents = ',sales=platform,'; P = @{ Id = 'Sales'; Parent = '' }
+            WantRegistry = $teamSpellings; WantParents = ',sales=platform,' }
+        @{ Name = 'giving the other spelling a parent'; Registry = $teamSpellings; Parents = ',sales=platform,'; P = @{ Id = 'Sales'; Parent = 'platform' }
+            WantRegistry = $teamSpellings; WantParents = ',sales=platform,Sales=platform,' }
+        @{ Name = 'moving a team to the other spelling'; Registry = $unitSpellings; Parents = ',eu=Sales,'; P = @{ Id = 'eu'; Parent = 'sales' }
+            WantRegistry = ',sales=Lower Sales:1000,Sales=Upper Sales:2000,eu=EU:100,'; WantParents = ',eu=sales,' }
+    )) {
+    Reset-Gateway $local
+    $gateway.Values['bu-registry'] = $case.Registry
+    $gateway.Values['bu-parents'] = $case.Parents
+    $m = Invoke-Set 'Set-ClaudeBusinessUnit' $case.P
+    Assert "the parent entry of each spelling is its own after $($case.Name)" (-not $m -and $gateway.Values['bu-registry'] -ceq $case.WantRegistry -and $gateway.Values['bu-parents'] -ceq $case.WantParents) "$m | registry $($gateway.Values['bu-registry']) | parents $($gateway.Values['bu-parents'])"
+}
+
+function Invoke-Bridge([hashtable]$Request) {
+    $file = Join-Path ([IO.Path]::GetTempPath()) ('p96-bridge-' + [guid]::NewGuid().ToString('N') + '.json')
+    try {
+        $Request | ConvertTo-Json -Depth 10 -Compress | Set-Content -LiteralPath $file -Encoding UTF8
+        $json = & (Join-Path $root 'scripts\Invoke-ClaudeFinOps.ps1') -InputFile $file -ResourceGroup rg-test -ApimName apim-test 6>$null
+        return [string](($json | ConvertFrom-Json).error)
+    }
+    finally { Remove-Item -LiteralPath $file -ErrorAction SilentlyContinue }
+}
+function Invoke-BridgeResult([hashtable]$Request) {
+    $file = Join-Path ([IO.Path]::GetTempPath()) ('p101-bridge-' + [guid]::NewGuid().ToString('N') + '.json')
+    try {
+        $Request | ConvertTo-Json -Depth 10 -Compress | Set-Content -LiteralPath $file -Encoding UTF8
+        $json = & (Join-Path $root 'scripts\Invoke-ClaudeFinOps.ps1') -InputFile $file -ResourceGroup rg-test -ApimName apim-test 6>$null
+        return ($json | ConvertFrom-Json)
+    }
+    finally { Remove-Item -LiteralPath $file -ErrorAction SilentlyContinue }
+}
+function New-BridgeUnit([string]$Id, [string]$Group) { @{ id = $Id; external_ref = "entra-group:$Group"; attributes = @{} } }
+Reset-Gateway $local
+$gateway.Values['bu-registry'] = $legacyRegistry
+$m = Invoke-Bridge @{ action = 'budget'; parameters = @{ scope_type = 'organization'; scope_id = 'Legacy-Unit' }; body = @{ token_limit = 4000 } }
+Assert 'the AUM bridge still sets the budget of a unit the registry holds with capitals' (-not $m -and $gateway.Values['bu-registry'] -ceq ',sales=Sales:1000,Legacy-Unit=Legacy:4000,') "$m | registry $($gateway.Values['bu-registry'])"
+Reset-Gateway $local
+$m = Invoke-Bridge @{ action = 'budget'; parameters = @{ scope_type = 'organization'; scope_id = 'Sales' }; body = @{ token_limit = 4000 } }
+Assert 'the AUM bridge refuses a capitalised spelling of a stored unit before any write' ($m -match "'Sales' is not a valid business unit identifier" -and $gateway.Writes.Count -eq 0) "$m | writes $($gateway.Writes -join ',')"
+Reset-Gateway $local
+$gateway.Values['bu-registry'] = $legacyRegistry
+$m = Invoke-Bridge @{ action = 'catalog'; body = @{ organizations = @((New-BridgeUnit 'sales' 'Sales'), (New-BridgeUnit 'Legacy-Unit' 'Legacy Renamed')); departments = @() } }
+Assert 'the AUM catalog keeps a unit the registry holds with capitals' (-not $m -and $gateway.Values['bu-registry'] -ceq ',sales=Sales:1000,Legacy-Unit=Legacy Renamed:3000,') "$m | registry $($gateway.Values['bu-registry'])"
+Reset-Gateway $local
+$m = Invoke-Bridge @{ action = 'catalog'; body = @{ organizations = @((New-BridgeUnit 'sales' 'Sales'), (New-BridgeUnit 'platform' 'Platform'), (New-BridgeUnit 'NewUnit' 'New Unit')); departments = @() } }
+Assert 'the AUM catalog refuses a new identifier with a capital before any write' ($m -match "'NewUnit' is not a valid business unit identifier" -and $gateway.Writes.Count -eq 0) "$m | writes $($gateway.Writes -join ',')"
+Reset-Gateway $local
+$gateway.Values['bu-registry'] = $legacyRegistry
+$m = Invoke-Bridge @{ action = 'budget'; parameters = @{ scope_type = 'organization'; scope_id = 'legacy-unit' }; body = @{ token_limit = 4000 } }
+Assert 'the AUM bridge refuses the lower-case spelling of a unit stored with capitals before any write' ($m -match 'differs only in case' -and $gateway.Writes.Count -eq 0) "$m | writes $($gateway.Writes -join ',')"
+Reset-Gateway $local
+$gateway.Values['bu-registry'] = $legacyRegistry
+$m = Invoke-Bridge @{ action = 'catalog'; body = @{ organizations = @((New-BridgeUnit 'sales' 'Sales'), (New-BridgeUnit 'legacy-unit' 'Legacy')); departments = @() } }
+Assert 'the AUM catalog does not rename a unit stored with capitals to another spelling' ($m -match 'differs only in case' -and $gateway.Writes.Count -eq 0) "$m | writes $($gateway.Writes -join ',') | registry $($gateway.Values['bu-registry'])"
+Reset-Gateway $local
+$publish = Invoke-BridgeResult @{ action = 'developer_publish'; parameters = @{ standard_group = 'standard-group'; premium_group = 'premium-group'; user = $personId } }
+Assert 'developer_publish passes -User through the real sync and returns the published tier' (
+    -not $publish.error -and $publish.synced -eq $true -and $publish.published_tier -eq 'premium' -and
+    $gateway.Writes -contains 'allow-premium' -and $gateway.Writes -notcontains 'entitlement-groups') ($publish | ConvertTo-Json -Compress)
+# Council round 1 (QA): with two spellings stored, the AUM bridge acts on the exact one.
+$bridgeSpellings = ',platform=Platform:5000,sales=Lower Sales:1000,Sales=Upper Sales:2000,'
+Reset-Gateway $local
+$gateway.Values['bu-registry'] = $bridgeSpellings
+$m = Invoke-Bridge @{ action = 'budget'; parameters = @{ scope_type = 'organization'; scope_id = 'Sales' }; body = @{ token_limit = 4000 } }
+Assert 'the AUM bridge sets the budget of the exact spelling when the registry holds two' (-not $m -and $gateway.Values['bu-registry'] -ceq ',platform=Platform:5000,sales=Lower Sales:1000,Sales=Upper Sales:4000,') "$m | registry $($gateway.Values['bu-registry'])"
+Reset-Gateway $local
+$gateway.Values['bu-registry'] = $bridgeSpellings
+$gateway.Values['bu-parents'] = ',sales=platform,'
+$m = Invoke-Bridge @{ action = 'budget'; parameters = @{ scope_type = 'organization'; scope_id = 'Sales' }; body = @{ token_limit = 4000 } }
+Assert "the AUM bridge takes a unit for a unit when the other spelling is a team" (-not $m -and $gateway.Values['bu-registry'] -ceq ',platform=Platform:5000,sales=Lower Sales:1000,Sales=Upper Sales:4000,') "$m | registry $($gateway.Values['bu-registry'])"
+# Council round 3 (UX): a team of 'sales' is not counted against 'Sales' when budgets are checked.
+$allocated = ',sales=Lower Sales:1000,Sales=Upper Sales:50,eu=EU:100,'
+Reset-Gateway $local
+$gateway.Values['bu-registry'] = $allocated
+$gateway.Values['bu-parents'] = ',eu=sales,'
+$m = Invoke-Bridge @{ action = 'budget'; parameters = @{ scope_type = 'organization'; scope_id = 'Sales' }; body = @{ token_limit = 60 } }
+Assert "the AUM budget check counts a team only against the exact spelling of its parent" (-not $m -and $gateway.Values['bu-registry'] -ceq ',sales=Lower Sales:1000,Sales=Upper Sales:60,eu=EU:100,') "$m | registry $($gateway.Values['bu-registry'])"
+Reset-Gateway $local
+$gateway.Values['bu-registry'] = $allocated
+$gateway.Values['bu-parents'] = ',eu=sales,'
+$m = Invoke-Bridge @{ action = 'catalog'; body = @{ organizations = @((New-BridgeUnit 'sales' 'Lower Sales'), (New-BridgeUnit 'Sales' 'Upper Sales')); departments = @(
+            @{ id = 'eu'; parent_id = 'sales'; external_ref = 'entra-group:EU'; attributes = @{} }) } }
+Assert "the AUM catalog's headroom check counts a team only against the exact spelling of its parent" (-not $m -and $gateway.Values['bu-registry'] -ceq $allocated -and $gateway.Values['bu-parents'] -ceq ',eu=sales,') "$m | registry $($gateway.Values['bu-registry']) | parents $($gateway.Values['bu-parents'])"
+Reset-Gateway $local
+$gateway.Values['bu-registry'] = $bridgeSpellings
+$m = Invoke-Bridge @{ action = 'mode'; parameters = @{ scope_id = 'sales' }; body = @{ mode = 'notify' } }
+Assert 'the AUM bridge sets the mode of the exact spelling when the registry holds two' (-not $m -and $gateway.Values['bu-modes'] -ceq ',sales=notify,' -and
+    $gateway.Values['bu-registry'] -cmatch ',sales=Lower Sales:1000,' -and $gateway.Values['bu-registry'] -cmatch ',Sales=Upper Sales:2000,') "$m | registry $($gateway.Values['bu-registry']) | modes $($gateway.Values['bu-modes'])"
+# Council round 2 (Architect, UX): a budget mode is refused for an identifier with capitals, before any write, and the
+# mode of the other spelling is kept.
+Reset-Gateway $local
+$gateway.Values['bu-registry'] = $bridgeSpellings
+$gateway.Values['bu-modes'] = ',sales=notify,'
+$m = Invoke-Bridge @{ action = 'mode'; parameters = @{ scope_id = 'Sales' }; body = @{ mode = 'strict' } }
+Assert 'the AUM bridge refuses a mode for a spelling with capitals before any write, and keeps the mode of the other' ($m -match 'Budget modes accept only lower-case identifiers' -and
+    $gateway.Writes.Count -eq 0 -and $gateway.Values['bu-modes'] -ceq ',sales=notify,') "$m | writes $($gateway.Writes -join ',') | modes $($gateway.Values['bu-modes'])"
+Reset-Gateway $local
+$gateway.Values['bu-registry'] = $bridgeSpellings
+$m = Invoke-Bridge @{ action = 'catalog'; body = @{ organizations = @((New-BridgeUnit 'platform' 'Platform'), (New-BridgeUnit 'sales' 'Lower Sales'), (New-BridgeUnit 'Sales' 'Upper Sales')); departments = @() } }
+Assert 'the AUM catalog keeps two spellings of one identifier as two units' (-not $m -and $gateway.Values['bu-registry'] -ceq $bridgeSpellings) "$m | registry $($gateway.Values['bu-registry'])"
+Reset-Gateway $local
+$gateway.Values['bu-registry'] = $bridgeSpellings
+$m = Invoke-Bridge @{ action = 'catalog'; body = @{ organizations = @(New-BridgeUnit 'platform' 'Platform'); departments = @(
+            @{ id = 'sales'; parent_id = 'platform'; external_ref = 'entra-group:Lower Sales'; attributes = @{} }
+            @{ id = 'Sales'; parent_id = 'platform'; external_ref = 'entra-group:Upper Sales'; attributes = @{} }) } }
+Assert 'the AUM catalog writes a team for each spelling it is given' (-not $m -and $gateway.Values['bu-registry'] -ceq $bridgeSpellings -and $gateway.Values['bu-parents'] -ceq ',sales=platform,Sales=platform,') "$m | registry $($gateway.Values['bu-registry']) | parents $($gateway.Values['bu-parents'])"
+# Council round 2 (Security): culture comparison takes U+212A for 'K' and ignores U+00AD, so the catalog checks each
+# identifier and each parent by its characters before any write.
+Reset-Gateway $local
+$gateway.Values['bu-registry'] = ',platform=Platform:5000,Key=Key Team:3000,'
+$m = Invoke-Bridge @{ action = 'catalog'; body = @{ organizations = @((New-BridgeUnit 'platform' 'Platform'), (New-BridgeUnit 'Key' 'Key Team'), (New-BridgeUnit "$([char]0x212A)ey" 'Other Group')); departments = @() } }
+Assert 'the AUM catalog refuses a look-alike of a stored identifier before any write' ($m -match 'not a valid business unit identifier' -and $gateway.Writes.Count -eq 0) "$m | writes $($gateway.Writes -join ',') | registry $($gateway.Values['bu-registry'])"
+Reset-Gateway $local
+$m = Invoke-Bridge @{ action = 'catalog'; body = @{ organizations = @((New-BridgeUnit 'sales' 'Sales'), (New-BridgeUnit 'platform' 'Platform')); departments = @(@{ id = 'eu'; parent_id = "plat$([char]0xAD)form"; external_ref = 'entra-group:EU'; attributes = @{} }) } }
+Assert 'the AUM catalog refuses a parent with a character that culture comparison ignores, before any write' ($m -match 'not a valid business unit identifier' -and $gateway.Writes.Count -eq 0) "$m | writes $($gateway.Writes -join ',') | parents $($gateway.Values['bu-parents'])"
+Reset-Gateway $local
+$gateway.Values['bu-registry'] = $bridgeSpellings
+$gateway.Values['bu-modes'] = ',sales=notify,'
+$m = Invoke-Bridge @{ action = 'catalog'; body = @{ organizations = @((New-BridgeUnit 'platform' 'Platform'), (New-BridgeUnit 'Sales' 'Upper Sales')); departments = @() } }
+Assert "the AUM catalog removes the mode of the spelling it removes" (-not $m -and $gateway.Values['bu-registry'] -ceq ',platform=Platform:5000,Sales=Upper Sales:2000,' -and $gateway.Values['bu-modes'] -ceq ',,') "$m | registry $($gateway.Values['bu-registry']) | modes $($gateway.Values['bu-modes'])"
+Reset-Gateway $local
+$m = Invoke-Bridge @{ action = 'catalog'; body = @{ organizations = @((New-BridgeUnit 'sales' 'Sales'), (New-BridgeUnit 'platform' 'Platform')); departments = @(@{ id = 'eu'; parent_id = 'Platform'; external_ref = 'entra-group:EU'; attributes = @{} }) } }
+Assert "the AUM catalog refuses a team whose parent is another spelling of a unit, before any write" ($m -match 'Team parent is not a unit' -and $gateway.Writes.Count -eq 0) "$m | writes $($gateway.Writes -join ',') | parents $($gateway.Values['bu-parents'])"
 
 # personBudgets mirrors daily tier ceilings TO Turnstile. Neither apply path
 # writes quota-overrides, and neither edits Entra membership.

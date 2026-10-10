@@ -7,9 +7,11 @@
     creates the private network endpoints that the resolver needs to reach it,
     deploys the resolver with SKU-valid inbound access, exports the gateway's
     current named-value decisions, populates the projection from Entra, compares
-    the resolver records against those decisions, and flips only the projection
-    leaves named values authoritative. P84 refuses switching until the supported
-    scheduled reconciler in P86 exists. PreflightOnly runs the checks alone.
+    the resolver records against those decisions, and leaves named values
+    authoritative. With -FlipAfterCleanCompare it deploys, publishes and applies
+    nothing: it runs Invoke-ClaudeProjectionSwitch (ADR-0050) with the projection
+    prefix and switch evidence. PreflightOnly
+    runs the checks alone.
 
     BasicV2 must use a public resolver endpoint because Basic v2 has no
     outbound VNet integration. The public endpoint is not anonymous: App Service
@@ -31,11 +33,9 @@ param(
     [string]$StandardGroup = 'claude-code-standard',
     [string]$PremiumGroup = 'claude-code-premium',
     [switch]$FlipAfterCleanCompare,
-    [string]$ReconcilerResourceId,
-    [string]$RenewalImageDigest,
-    [string]$RenewalEntryPoint = 'node /app/sync/src/apply-projection.mjs',
-    [string]$RenewalActionGroupResourceId,
     [switch]$PreflightOnly,
+    [ValidateSet('Auto','Snapshot')][string]$CompareBaseline = 'Auto',
+    [switch]$ResolverPublicByDefault,
     [ValidateRange(1,10)][int]$RetryCount = 3,
     [ValidateRange(5,120)][int]$RetryDelaySeconds = 15
 )
@@ -45,10 +45,8 @@ $root = Split-Path $PSScriptRoot -Parent
 . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeRunner.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeProjectionChecks.ps1')
-if ($FlipAfterCleanCompare -and (-not $ReconcilerResourceId -or -not $RenewalImageDigest -or -not $RenewalActionGroupResourceId)) {
-    throw 'Projection switch refused: P86 admission requires -ReconcilerResourceId, -RenewalImageDigest and -RenewalActionGroupResourceId. Expected wait after deployment is about 60-90 minutes for two generation advances on the 30-minute schedule.'
-}
-
+. (Join-Path $PSScriptRoot 'ClaudeProjectionPackage.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeProjectionSwitch.ps1')
 function Step($m) { Write-Host "`n==> $m" -ForegroundColor Cyan }
 function Note($m) { Write-Host "    $m" -ForegroundColor DarkGray }
 function Ok($m) { Write-Host "    [OK]   $m" -ForegroundColor Green }
@@ -81,19 +79,28 @@ if (-not $ResolverInboundAccess) {
         'PremiumV2' { 'private' }
     }
 }
+if ($FlipAfterCleanCompare) {
+    # The switch runs without the preflight and its subscription check, so it is given the subscription (ADR-0054).
+    $switchScope = if ($SubscriptionId) { @{ SubscriptionId = $SubscriptionId } } else { @{} }
+    $null = Invoke-ClaudeProjectionSwitch -ResourceGroup $ResourceGroup -ApimName $ApimName -NamePrefix $NamePrefix -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -CompareBaseline $CompareBaseline @switchScope
+    return
+}
 $preflight = Invoke-ClaudeProjectionPreflight -ResourceGroup $ResourceGroup -ApimName $ApimName -NamePrefix $NamePrefix `
     -SubscriptionId $SubscriptionId -Location $Location -Sku $Sku -ResolverInboundAccess $ResolverInboundAccess `
-    -ResolverAppId $ResolverAppId -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup `
-    -FlipAfterCleanCompare:$FlipAfterCleanCompare -ReconcilerResourceId $ReconcilerResourceId
+    -ResolverAppId $ResolverAppId -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup
+# Before any write, and for -PreflightOnly and -WhatIf too: on a gateway that serves from the projection, this run
+# continues only when it redeploys the resolver the gateway calls, with the app its tokens are for.
+Assert-ClaudeProjectionResolverRedeploy -ResourceGroup $ResourceGroup -ApimName $ApimName -NamePrefix $NamePrefix -SubscriptionId ([string]$preflight.SubscriptionId) -ResolverAppId ([string]$preflight.ResolverAppId)
 if ($PreflightOnly) { return }
 if ($WhatIfPreference) {
-    Note 'WhatIf: app registration if needed; private Cosmos/network; resolver publish; fresh snapshot/apply/compare. No Azure writes or projection switch.'
+    Note 'WhatIf: app registration if needed; private Cosmos/network; resolver publish; gateway resolver named values; fresh snapshot/apply/compare. No Azure writes or projection switch.'
     return
 }
 $Location = $preflight.Location
 $ResolverAppId = $preflight.ResolverAppId
 if ($Sku -in @('StandardV2','PremiumV2') -and $ResolverInboundAccess -ne 'private') {
-    Write-Warning "$Sku can use a private resolver; public was explicitly requested."
+    $reason = if ($ResolverPublicByDefault) { 'the ADR-0052 installer default selected public resolver access' } else { 'public resolver access was selected for this deployment' }
+    Write-Warning "$Sku can use a private resolver; $reason."
 }
 
 $apim = $preflight.Apim
@@ -118,6 +125,7 @@ if ($PSCmdlet.ShouldProcess($projectionName, 'deploy projection.bicep with netwo
 } else { throw 'Projection deployment was declined; no further steps run.' }
 $projection = Get-DeploymentOutput $projectionName
 $cosmosAccount = if ($projection.accountName) { $projection.accountName } else { "cosmos-$NamePrefix" }
+$accountResourceId = "/subscriptions/$(([string]$apim.id -split '/')[2])/resourceGroups/$ResourceGroup/providers/Microsoft.DocumentDB/databaseAccounts/$cosmosAccount"
 
 Step 'Deploy projection network'
 $networkName = "projection-network-$NamePrefix"
@@ -188,6 +196,13 @@ if ($PSCmdlet.ShouldProcess($resolver.siteName, 'package and publish resolver co
         Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
     }
 } else { throw 'Resolver publication was declined; no further steps run.' }
+
+Step 'Point the gateway at the resolver'
+Confirm-ClaudeProjectionResolverServicePrincipal -AppId $ResolverAppId | Out-Null
+if ($PSCmdlet.ShouldProcess($ApimName, 'set resolver named values and entitlement-projection-prefix to the deployed resolver')) {
+    $null = Set-ClaudeProjectionGatewayResolver -ResourceGroup $ResourceGroup -ApimName $ApimName -NamePrefix $NamePrefix -ResolverUrl $resolverUrl -ResolverAudience $resolverAudience
+} else { throw 'Pointing the gateway at the resolver was declined; no further steps run.' }
+Ok "entitlement-resolver-url is $resolverUrl; entitlement-projection-prefix is $NamePrefix; entitlement-source is unchanged"
 $work = Join-Path ([IO.Path]::GetTempPath()) ("claude-projection-" + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force -Path $work | Out-Null
 $snapshot = Join-Path $work 'snapshot.json'
@@ -205,40 +220,24 @@ try {
             --scope /dbs/claude/colls/entitlement --principal-id $($network.runnerPrincipalId) `
             --role-definition-id 00000000-0000-0000-0000-000000000002 -o none 2>$null
         if ($LASTEXITCODE -ne 0) { throw 'Runner Cosmos role assignment failed; projection apply was not attempted.' }
-        tar -c -z -f $syncArchive -C (Join-Path $root 'sync') package.json src
-        if ($LASTEXITCODE -ne 0) { throw 'sync package creation failed' }
+        $null = New-ClaudeProjectionSyncArchive -Path $syncArchive -Root $root
+        Start-ClaudeProjectionRunner -ResourceGroup $ResourceGroup -Name $($network.runnerName) -SubscriptionId $SubscriptionId | Out-Null
         Send-RunnerFile -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Path $syncArchive -Destination /work/sync-source.tar.gz | Out-Null
-        Send-RunnerFile -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Path $snapshot -Destination /work/snapshot.json | Out-Null
-        Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command "node -e require('fs').mkdirSync('/work/sync',{recursive:true})" | Out-Null
-        Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command 'tar -x -z -f /work/sync-source.tar.gz -C /work/sync' | Out-Null
-        Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command 'npm --prefix /work/sync install --omit=dev --no-audit --fund=false' | Out-Null
-        $applyRaw = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command "node /work/sync/src/apply-projection.mjs --cosmos https://$cosmosAccount.documents.azure.com:443/ --tenant $($apim.identity.tenantId) --snapshot /work/snapshot.json"
+        Send-RunnerFile -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Path $snapshot -Destination /work/snapshot.json -Deadline (Get-RunnerFileDeadline -Path $snapshot) | Out-Null
+        Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command "node -e require('fs').mkdirSync('/work',{recursive:true})" | Out-Null
+        Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command 'tar -x -z -f /work/sync-source.tar.gz -C /work' | Out-Null
+        Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command 'npm --prefix /work/sync ci --omit=dev --ignore-scripts --no-audit --fund=false' | Out-Null
+        $applyRaw = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command "node /work/sync/src/apply-projection.mjs --cosmos https://$cosmosAccount.documents.azure.com:443/ --tenant $($apim.identity.tenantId) --account-resource-id $accountResourceId --snapshot /work/snapshot.json"
         $apply = ConvertFrom-ClaudeRunnerResult -RawOutput $applyRaw -Step 'projection apply'
     } else { throw 'Projection population was declined; no further steps run.' }
 
     Step 'Compare before flip'
     if ($PSCmdlet.ShouldProcess($ApimName, 'export gateway decisions and compare projection')) {
-        & (Join-Path $PSScriptRoot 'Compare-ClaudeEntitlement.ps1') -ResourceGroup $ResourceGroup -ApimName $ApimName `
-            -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -ExportGatewayPath $gateway -FailOnDrift:$true
-        if ($LASTEXITCODE -ne 0) { throw 'named-value lists drift from Entra; refusing projection comparison and flip.' }
-        Send-RunnerFile -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Path $gateway -Destination /work/gateway-decisions.json | Out-Null
-        $compareRaw = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command "node /work/sync/src/apply-projection.mjs --cosmos https://$cosmosAccount.documents.azure.com:443/ --tenant $($apim.identity.tenantId) --compare /work/gateway-decisions.json"
-        $compare = ConvertFrom-ClaudeRunnerResult -RawOutput $compareRaw -Step 'Refusing to flip because projection drift remains'
+        $compare = Invoke-ClaudeProjectionDeployerCompare -ResourceGroup $ResourceGroup -ApimName $ApimName -RunnerName $($network.runnerName) `
+            -CosmosAccount $cosmosAccount -TenantId $($apim.identity.tenantId) -GatewayPath $gateway -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -CompareBaseline $CompareBaseline
         Ok "clean comparison: $($compare.compared) identities"
     } else { throw 'Projection comparison was declined; no further steps run.' }
-    if ($FlipAfterCleanCompare) {
-        Step 'Check scheduled renewal evidence before switch'
-        $null = Assert-ClaudeProjectionAdmission -ResourceGroup $ResourceGroup -RunnerName $($network.runnerName) `
-            -CosmosAccount $cosmosAccount -TenantId $($apim.identity.tenantId) -AccountResourceId $preflight.AccountResourceId `
-            -ReconcilerResourceId $ReconcilerResourceId -ImageDigest $RenewalImageDigest -EntryPoint $RenewalEntryPoint `
-            -ActionGroupResourceId $RenewalActionGroupResourceId
-        if ($PSCmdlet.ShouldProcess($ApimName, 'set entitlement-source to projection after evidence-gated admission')) {
-            Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-source' -Value 'projection'
-            Ok 'entitlement-source switched to projection after scheduled-renewal admission'
-        } else { throw 'Projection switch was declined after admission; named values remain authoritative.' }
-    } else {
-        Note 'Clean comparison complete; named values remain authoritative. To switch, rerun after the P86 scheduled reconciler has about 60-90 minutes of good evidence and pass -FlipAfterCleanCompare with the renewal job, digest and action group.'
-    }
+    Note 'Clean comparison complete; named values remain authoritative. To switch now, rerun with -FlipAfterCleanCompare.'
 }
 finally {
     Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue

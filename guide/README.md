@@ -17,8 +17,22 @@ Two entry points:
 
 Both call the same `lib/annotate.mjs`, so the output is visually consistent
 regardless of where the pixels came from.
+## Quickstart
+
+Capture work starts with tooling setup, authorised target discovery and a dedicated browser profile. Fresh clones do not contain private source PNGs for composition.
+
+```powershell
+npm ci
+node .\guide\capture.mjs --help
+```
+
+**Expected result:** dependencies install, the capture tool prints its supported options, and no screenshot is captured until the operator selects an authorised tenant, profile and redaction review path.
 
 ## Setup
+
+<details>
+
+<summary>Node, Edge and authorised capture prerequisites</summary>
 
 The gateway itself needs none of this — the tooling is only for regenerating
 the guide's images.
@@ -34,7 +48,13 @@ The capture launches your installed **Microsoft Edge** (`channel: 'msedge'`),
 so no browser download is needed. If Edge is not present, run
 `npx playwright install chromium` and drop the `channel` option.
 
+</details>
+
 ## Capturing
+
+<details>
+
+<summary>Target discovery, browser profile and capture steps</summary>
 
 ### 1. Discover and select the capture targets
 
@@ -144,7 +164,13 @@ Steps that need a portal session are **skipped, not failed**, when the profile
 is not signed in. A run with no session still produces the public-page
 screenshots and reports which ones it skipped.
 
+</details>
+
 ## Pending portal batch captures
+
+<details>
+
+<summary>Sign-in blockers, capture specs and pending images</summary>
 
 When Conditional Access asks for a new sign-in on a resource or Entra blade,
 stop portal capture. Do not retry, invoke `auth.mjs` unattended or reuse the
@@ -175,7 +201,13 @@ the spec must not save a quota, assign a role, deploy or delete a resource.
 Logical API names in click selectors come from this repository's template; if
 an API was renamed, resolve its known API ID/path before capturing.
 
+</details>
+
 ## What is not committed, and why
+
+<details>
+
+<summary>Redaction failures and unsafe portal captures</summary>
 
 Captures partially mask email addresses in the DOM — first/last characters and
 the domain can remain. **This is not anonymization and does not make an image
@@ -204,7 +236,13 @@ than having no picture — it is a caption that does not match its image. Open
 every new capture and check it shows what its banner claims before committing
 it.
 
+</details>
+
 ## Composing
+
+<details>
+
+<summary>Banner composition from private source PNGs</summary>
 
 ```bash
 node guide/compose.mjs
@@ -218,7 +256,13 @@ shipped in this repo — only the finished images in `docs/guide/` are. Point th
 `src` paths at your own captures, or use `capture.mjs` instead, which produces
 its sources live.
 
+</details>
+
 ## Writing a step
+
+<details>
+
+<summary>Capture spec targets, banners and coordinates</summary>
 
 ```js
 {
@@ -237,7 +281,13 @@ its sources live.
 - Coordinates in `compose.mjs` are fractions of the image (`0`–`1`) so a spec
   stays correct if a source is recaptured at a different resolution.
 
+</details>
+
 ## Redaction
+
+<details>
+
+<summary>Identity masks and publish review requirements</summary>
 
 `annotate()` masks the Azure portal's signed-in account block **by default**.
 Pass `maskIdentity: false` only for pages that have no identity in them.
@@ -256,11 +306,19 @@ Review every generated image before publishing. Terminal captures in particular
 tend to contain real UPNs, and browser captures pick up bookmark bars and tab
 titles.
 
+</details>
+
 ## Conditional access
+
+<details>
+
+<summary>Edge channel choice for compliant device sign-in</summary>
 
 `channel: 'msedge'` is set on the browser launch. A plain Chromium profile is
 rejected with `AADSTS530033` on tenants that require device compliance; Edge
 passes because it can present the device certificate.
+
+</details>
 
 ## Verify and next steps
 

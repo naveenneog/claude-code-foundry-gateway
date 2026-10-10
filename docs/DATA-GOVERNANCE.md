@@ -4,8 +4,21 @@ For privacy/security owners and authorised platform operators. Start with
 [Authentication: data locations](AUTHENTICATION.md#what-data-lives-where).
 Default gateway telemetry excludes prompt/reply bodies, but optional client
 capture, local histories, exports and connected systems can hold them.
+## Quickstart
+
+Discovery is read-only. The subject is the selected user principal name or object id, and `-Since` is the approved lookback in days.
+
+```powershell
+.\scripts\Find-ClaudeUserData.ps1 -User 'developer@contoso.com' -Since 30
+```
+
+**Expected result:** the command reports matching records by table and scope without deleting data. Purge preview, approval and execution remain separate steps.
 
 ## Prerequisites
+
+<details>
+
+<summary>Subject request, targets and purge permissions</summary>
 
 - An approved request identifying the subject, required time window and systems
   in scope. Purge is destructive and not routine log housekeeping.
@@ -18,7 +31,13 @@ capture, local histories, exports and connected systems can hold them.
 - PowerShell **7** and Azure CLI. The purge script uses `-SkipHttpErrorCheck`,
   which is not available in Windows PowerShell 5.1.
 
+</details>
+
 ## 1. Review collection and retention
+
+<details>
+
+<summary>Diagnostics, table plans and retention choices</summary>
 
 **Portal:** APIM > APIs > Claude API > Diagnostics, then the linked Application
 Insights resource and Log Analytics workspace > Tables > Manage table.
@@ -36,7 +55,13 @@ Choose retention before enabling capture. A lower-cost table plan can forfeit
 selective purge: the recorded U7 constraints allow Analytics-plan tables, not
 Basic/Auxiliary. Exports and Sentinel data-lake mirrors have separate lifecycles.
 
+</details>
+
 ## 2. Discover before deleting
+
+<details>
+
+<summary>Workspace user-data finder and coverage gaps</summary>
 
 ```powershell
 ./scripts/Find-ClaudeUserData.ps1 -User '<subject-object-id>' -Since 90 `
@@ -64,7 +89,13 @@ Cosmos, local clients, backups, exports or a separate OTEL collector. No rows
 found is not proof no data exists: verify query permissions, expected tables
 and ingestion paths first.
 
+</details>
+
 ## 3. Preview and approve the purge
+
+<details>
+
+<summary>Purge preview, fixed window and manual API path</summary>
 
 ```powershell
 ./scripts/Remove-ClaudeUserData.ps1 -User '<subject-object-id>' -Since 90 `
@@ -85,7 +116,13 @@ from Azure Cloud Shell after reviewing the table, identity key and time filters.
 Application Insights aliases such as `customMetrics` are not valid purge table
 names; use workspace names such as `AppMetrics`.
 
+</details>
+
 ## 4. Execute and verify completion
+
+<details>
+
+<summary>Operation tracking, SLA and post-purge verification</summary>
 
 Only after approval, repeat the exact reviewed command with `-Execute`.
 Keep every returned operation ID and status URL in the restricted case record.
@@ -101,6 +138,8 @@ reviewed queries for the same subject/window. Check failed and non-purgeable
 tables individually; success for one table is not success for the whole case.
 Coordinate separately with the owners of all other data locations in step 2.
 Deletion does not change Azure billing or revoke inference entitlement.
+
+</details>
 
 ## Troubleshoot and next steps
 

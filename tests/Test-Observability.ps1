@@ -118,12 +118,14 @@ Write-Host 'Observe - chargeback in money' -ForegroundColor Cyan
 
 $cost = Get-Content (Join-Path $root 'analytics/chargeback-cost.kql') -Raw
 
-# ADR-0010: categories are priced separately and never summed before pricing,
-# because a blended rate applied to a cache read overstates it tenfold.
+# ADR-0010: categories are priced separately and never summed before pricing.
+# P108 publishes each model's effective cache-read rate, defaulting to 0.1x
+# input only when the book has no explicit cacheReadPerM.
 Assert 'prompt and completion are priced apart' (
     $cost -match 'prompt_usd\s*=' -and $cost -match 'completion_usd\s*=')
-Assert 'cache read is priced at a tenth of input' ($cost -match 'cache_read_multiplier\s*=\s*0\.1')
-Assert 'and multiplied by the input rate'          ($cost -match 'input_per_m \* cache_read_multiplier')
+Assert 'cache read is priced from the effective cache-read rate' ($cost -match 'cache_read_per_m' -and $cost -match 'cache_read_tokens / 1000000\.0\) \* cache_read_per_m')
+$publisher = Get-Content (Join-Path $root 'scripts/Publish-ClaudeQueries.ps1') -Raw
+Assert 'and the publisher emits cacheReadPerM or the 0.1x input default' ($publisher -match 'cacheReadPerM' -and $publisher -match '\$inputRate \* \[decimal\]0\.1')
 
 # Rates and membership are generated, never typed. Asserted by the markers the
 # publisher requires, so a hand-pasted table cannot satisfy this.

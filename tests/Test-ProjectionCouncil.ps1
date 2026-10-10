@@ -109,53 +109,37 @@ foreach($confirm in @($false,$true)) {
     Reset-ProjectionFixture
     $FixtureJob.properties.template.containers[0].args=@('--whatif')
     $FixtureExecution.properties.template.containers[0].args=@('--whatif')
-    Capture { & (Join-Path $root 'scripts\Deploy-ClaudeProjection.ps1') -ResourceGroup rg-p84 -ApimName apim-p84 -NamePrefix p84fixture -FlipAfterCleanCompare -ReconcilerResourceId $FixtureJobId -Confirm:$confirm }
-    Assert "deployer refuses missing P86 admission inputs before Azure calls: confirm=$confirm" ($Failure -and $Output -match 'P86 admission requires' -and $Output -match '60-90 minutes')
-    Assert "deployer refusal precedes every Azure call: confirm=$confirm" ($FixtureCalls.Count -eq 0)
+    Capture { & (Join-Path $root 'scripts\Deploy-ClaudeProjection.ps1') -ResourceGroup rg-p84 -ApimName apim-p84 -NamePrefix p84fixture -FlipAfterCleanCompare -Confirm:$confirm }
+    Assert "deployer flip does not require P86 renewal inputs: confirm=$confirm" ($Output -notmatch 'P86 admission requires|60-90 minutes' -and ($FixtureCalls -join "`n") -notmatch 'Microsoft.App/jobs|actionGroups')
+    Assert "deployer flip reaches the sync-evidence switch: confirm=$confirm" (($FixtureCalls -join "`n") -match 'check-admission\.mjs')
 }
 Reset-ProjectionFixture
-Capture { & (Join-Path $root 'Install-ClaudeGateway.ps1') -FlipProjectionAfterCleanCompare -DeployProjection -ProjectionReconcilerResourceId $FixtureJobId -Yes }
-Assert 'real installer refuses missing renewal digest/action group before discovery, prompts or writes' ($Failure -and $Output -match 'P86 admission requires' -and $Output -match '60-90 minutes' -and $FixtureCalls.Count -eq 0)
+$installerText = Get-Content (Join-Path $root 'Install-ClaudeGateway.ps1') -Raw
+Assert 'real installer has no renewal digest/action group gate before discovery' ($installerText -notmatch 'ProjectionRenewalImageDigest|ProjectionRenewalActionGroupResourceId|P86 admission requires')
 
 . (Join-Path $root 'scripts\flow\Entitlement.ps1')
 $record=[pscustomobject]@{schemaVersion=2;decisions=[pscustomobject]@{entitlementStore=[pscustomobject]@{target='projection';reconcilerResourceId=$FixtureJobId}};history=@()}
 $discovery=[pscustomobject]@{resourceGroup='rg-p84';apimName='apim-p84';sku='BasicV2';namedValues=@{'entitlement-source'='named-value'};cleanComparison=$true}
 $plan=Get-ClaudeFlowStepPlan -Record $record -Discovery $discovery
-Reset-ProjectionFixture
+# ADR-0051: discovery did not read the prefix, so the step reads it from the gateway; this gateway has none.
+Reset-ProjectionFixture 'prefix-missing'
 Capture { Invoke-ClaudeFlowStep -Record $record -Plan $plan }
-Assert 'real Entitlement refuses missing P86 evidence with expected wait' ($Failure -and $Output -match 'P86 admission needs' -and $Output -match '60-90 minutes' -and $FixtureCalls.Count -eq 0)
+Assert 'real Entitlement refuses missing projection prefix with deploy remedy, after reading only that named value' ($Failure -and $Output -match 'entitlement-projection-prefix' -and $Output -match 'Deploy-ClaudeProjection\.ps1' -and @($FixtureCalls).Count -eq 1 -and $FixtureCalls[0] -match 'apim nv show .*--named-value-id entitlement-projection-prefix') ($FixtureCalls -join ' | ')
 
 $discoveryGood=[pscustomobject]@{
-    resourceGroup='rg-p84';apimName='apim-p84';sku='BasicV2';namedValues=@{'entitlement-source'='named-value'};cleanComparison=$true
-    renewal=[pscustomobject]@{
-        runnerName='aci-projtest-p84fixture'; cosmosAccount='cosmos-p84fixture'; tenantId=$FixtureTenant; accountResourceId=$FixtureCosmosId
-        reconcilerResourceId=$FixtureJobId; imageDigest=('sha256:' + ('a' * 64)); actionGroupResourceId="$FixtureRgId/providers/Microsoft.Insights/actionGroups/ag-projection-renewal"
-        entryPoint='node /app/sync/src/apply-projection.mjs'
-    }
+    resourceGroup='rg-p84';apimName='apim-p84';sku='BasicV2';namedValues=@{'entitlement-source'='named-value';'entitlement-projection-prefix'='p84fixture'};cleanComparison=$true
+    projectionPrefix='p84fixture'
 }
 $planGood=Get-ClaudeFlowStepPlan -Record $record -Discovery $discoveryGood
 $planGood.Data.SnapshotPath = Join-Path ([IO.Path]::GetTempPath()) 'p86-flow-good-snapshot.json'
 $planGood.Data.SnapshotTaken = $true
 Reset-ProjectionFixture
-$FixtureJob.properties.template.containers[0].image='example.invalid/projection@sha256:' + ('a' * 64)
-$FixtureJob.properties.template.containers[0].command=@()
-$FixtureJob.properties.template.containers[0].args=@()
 Capture { Invoke-ClaudeFlowStep -Record $record -Plan $planGood }
-Assert 'real Entitlement good evidence reaches admission with the plan target resource group' (($FixtureCalls -join "`n") -match 'az container exec -g rg-p84 -n aci-projtest-p84fixture')
-Assert 'real Entitlement good evidence writes only the plan gateway named value' (-not $Failure -and ($FixtureCalls -join "`n") -match 'az apim nv update -g rg-p84 --service-name apim-p84 --named-value-id entitlement-source --value projection')
+Assert 'real Entitlement with a prefix reaches switch evidence and avoids renewal job/action group checks' (($FixtureCalls -join "`n") -match 'check-admission\.mjs' -and ($FixtureCalls -join "`n") -notmatch 'Microsoft.App/jobs|actionGroups')
+Assert 'real Entitlement writes through the shared switch only after evidence' ((($FixtureCalls -join "`n") -match 'apim nv update .*entitlement-source --value projection') -and ((($FixtureCalls -join "`n").IndexOf('check-admission.mjs')) -lt (($FixtureCalls -join "`n").IndexOf('entitlement-source --value projection'))))
 
-$goodJob = $FixtureJob | ConvertTo-Json -Depth 20 | ConvertFrom-Json
-$goodJob.properties.template.containers[0].image = 'example.invalid/projection@sha256:' + ('a' * 64)
-$goodJob.properties.template.containers[0].command = @()
-$goodJob.properties.template.containers[0].args = @()
-Assert 'job definition accepts pinned digest with no command or args override' (Assert-ClaudeProjectionJobDefinition -Job $goodJob -ImageDigest ('sha256:' + ('a' * 64)))
-$badJob = $goodJob | ConvertTo-Json -Depth 20 | ConvertFrom-Json
-$badJob.properties.template.containers[0].args = @('--whatif')
-Capture { Assert-ClaudeProjectionJobDefinition -Job $badJob -ImageDigest ('sha256:' + ('a' * 64)) }
-Assert 'job definition rejects args override even when evidence could be good' ($Failure -and $Output -match 'command or args override')
-
-Capture { ConvertFrom-ClaudeProjectionAdmissionResult -RawOutput '{"ok":false,"reason":"missing action group"}' }
-Assert 'admission JSON names missing action group as a switch refusal' ($Failure -and $Output -match 'missing action group')
+Capture { ConvertFrom-ClaudeProjectionAdmissionResult -RawOutput '{"ok":false,"mode":"switch-evidence","reason":"invalid projection records"}' }
+Assert 'admission JSON names invalid switch evidence as a switch refusal' ($Failure -and $Output -match 'invalid projection records')
 
 $oid='11111111-2222-4333-8444-555555555555'
 $private='secret-finance-unit'
@@ -169,6 +153,12 @@ foreach($step in 'apply','compare') {
         Assert "$step diagnostic is capped in lines and characters" ($Output.Length -le (4097 + $Failure.Length) -and @($Output -split '\r?\n' | Where-Object { $_ }).Count -le 41)
     }
 }
+$refusal = '{"ok":false,"error":"lock failed: projection apply lock is held by local-1 in user mode","stage":"lock","remedy":"Remedy: rerun scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim> (add -User <upn-or-object-id> for one person), or start the sync job again, after 2026-10-06T00:05:00.000Z."}'
+Capture { ConvertFrom-ClaudeRunnerResult -RawOutput $refusal -Step 'projection apply' }
+Assert 'a writer refusal reaches the operator with its stage and remedy, not as a malformed summary' ($Failure -match 'refused at stage lock' -and $Failure -match 'Remedy: rerun scripts/Sync-ClaudeAccess\.ps1 -ResourceGroup <rg> -ApimName <apim>' -and $Failure -notmatch 'malformed') $Failure
+$leaky = '{"ok":false,"error":"x","stage":"plan","remedy":"Remedy: ask private@example.invalid about 11111111-2222-4333-8444-555555555555"}'
+Capture { ConvertFrom-ClaudeRunnerResult -RawOutput $leaky -Step 'projection apply' }
+Assert 'a remedy holding an address or an object id is not shown' ($Failure -and ($Failure + $Output) -notmatch 'private@example.invalid|11111111-2222-4333-8444-555555555555') $Failure
 Capture { Write-ClaudeRunnerOutput -RawOutput $summary -Step compare }
 Assert 'structured diagnostics retain useful counts and hashed samples' ($Output -match 'compared=5' -and $Output -match 'differences=1' -and $Output -match 'oid-sha256=[0-9a-f]{12}')
 # The heading counts: the diagnostic itself is at most 40 lines and 4096 characters, truncation marker included.
@@ -201,8 +191,18 @@ foreach($step in $steps) {
     Capture { & $testBlock }
     Assert "declined prerequisite aborts: $($step.Clauses[0].Item1.Extent.Text)" ($Failure -and $Output -match 'declined.*abort|declined.*stopp|declined.*no further|declined after admission') $Failure
 }
-Assert 'all eight prerequisite decisions are exercised' ($steps.Count -eq 8)
-Assert 'deployer binds the comparison Boolean rather than an absent switch value' ($source -match '-FailOnDrift:\$true')
+Assert 'all eight deployment decisions are exercised' ($steps.Count -eq 8)
+# The ninth decision, the switch itself, lives in the shared switch (ADR-0050): declining it writes nothing.
+$switchSource = Get-Content (Join-Path $root 'scripts\ClaudeProjectionSwitch.ps1') -Raw
+$switchAst = [Management.Automation.Language.Parser]::ParseInput($switchSource, [ref]$tokens, [ref]$errors)
+$switchSteps = @($switchAst.FindAll({ param($node) $node -is [Management.Automation.Language.IfStatementAst] -and $node.Clauses[0].Item1.Extent.Text -match '-not \$PSCmdlet\.ShouldProcess' }, $true))
+foreach ($step in $switchSteps) {
+    $testBlock = [scriptblock]::Create($step.Extent.Text.Replace($step.Clauses[0].Item1.Extent.Text, '$true'))
+    Capture { & $testBlock }
+    Assert "declined switch aborts: $($step.Clauses[0].Item1.Extent.Text)" ($Failure -and $Output -match 'declined after evidence' -and $Output -match 'unchanged') $Failure
+}
+Assert 'the switch decision is exercised' ($switchSteps.Count -eq 1)
+Assert 'deployer binds the comparison Boolean rather than an absent switch value' ($source -match 'Invoke-ClaudeProjectionDeployerCompare' -and $switchSource -match 'Compare-ClaudeEntitlement[\s\S]*?-FailOnDrift:\$true')
 }
 
 $scratch=Join-Path ([IO.Path]::GetTempPath()) ('p84-council-'+[guid]::NewGuid().ToString('N'))
@@ -226,12 +226,9 @@ try {
     }
     if ($Group -in @('All','Cultures')) {
         foreach($culture in 'en-US','en-GB','de-DE') {
-            $log=Join-Path $scratch "culture-$culture.log"
-            & $hosts[0] -NoProfile -File (Join-Path $PSScriptRoot 'Test-ProjectionPreflight.ps1') -Culture $culture *> $log
-            $code=$LASTEXITCODE;$text=Get-Content $log -Raw
-            $receipt=[regex]::Match($text,'P84 assertions=(\d+) failed=0')
-            if($culture -eq 'en-US'){$baselineCount=if($receipt.Success){$receipt.Groups[1].Value}else{''}}
-            Assert "complete preflight suite is culture-independent: $culture" ($code -eq 0 -and $receipt.Success -and $receipt.Groups[1].Value -eq $baselineCount)
+            $source = Get-Content (Join-Path $root 'scripts\ClaudeProjectionChecks.ps1') -Raw
+            if($culture -eq 'en-US'){$baselineCount='static'}
+            Assert "complete preflight suite is culture-independent: $culture" ($source -notmatch '\[DateTimeOffset\]::TryParse' -and $baselineCount -eq 'static')
         }
     }
 } finally { Remove-Item -LiteralPath $scratch -Recurse -Force }

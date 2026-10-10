@@ -1,11 +1,23 @@
 # Guided flow
 
-`Start-ClaudeGateway.ps1` is the product path for setup, later changes, status
-and the generated handover guide. It keeps the existing implementation scripts:
-each `scripts/flow/<Step>.ps1` module plans without writing, applies
-non-interactively and verifies its own work.
+This guide covers setup, updates, decision changes, diagnostics and handover through `Start-ClaudeGateway.ps1`.
+## Quickstart
+
+The commands run from the repository root in PowerShell 7 with the [Setup tools and roles](SETUP.md#1-prerequisites) and the intended Azure sign-in. A first attended run reviews the foundation in the installer, then reviews the remaining flow steps ([Attended setup](#attended-setup)).
+
+```powershell
+.\Start-ClaudeGateway.ps1 -Action Setup
+.\Start-ClaudeGateway.ps1 -Action Status
+.\Start-ClaudeGateway.ps1 -Action Guide
+```
+
+**Expected result:** completed steps are recorded in `onboarding/claude-gateway.json`; Status reports the recorded deployment; Guide writes `onboarding/HOW-TO-USE.md`. A failed verification remains a failure and retains its resume information.
 
 ## Run it
+
+<details>
+
+<summary>Launch commands, actions and record path</summary>
 
 ```powershell
 .\Start-ClaudeGateway.ps1 -Action Setup
@@ -26,7 +38,13 @@ specific and git-ignored. Use `-RecordPath` to use a different record; a relativ
 path is relative to the repository, from `Start-ClaudeGateway.ps1` and the root
 `Update-ClaudeGateway.ps1` alike.
 
+</details>
+
 ## What the flow asks and why
+
+<details>
+
+<summary>Step questions, modules and manual runbooks</summary>
 
 Discovery reads only the gateway the record names (`az apim show`), and nothing
 when the record names none. The flow then asks the questions exposed by the step
@@ -41,7 +59,13 @@ modules present on the branch. It never invents resource names.
 | Verification | `Verify.ps1` | Runs the gateway health checks after setup or change. Manual equivalent: [Operations health](OPERATIONS.md#2-check-health-and-headroom). |
 | Guide | `Guide.ps1` | Writes `onboarding/HOW-TO-USE.md` with this tenant's names and the operator/developer/FinOps instructions. |
 
+</details>
+
 ## Attended setup
+
+<details>
+
+<summary>Installer prompts, phased setup and unsafe value checks</summary>
 
 An attended run is `-Action Setup` in a console, without `-PlanOnly`,
 `-ApprovedPlanFingerprint` or `-WhatIf`. With no gateway in the record it has
@@ -119,7 +143,13 @@ so a test can drive an attended run through standard input
 (`tests/Test-FlowStart.ps1`). `CLAUDE_NONINTERACTIVE=1` and `-NonInteractive`
 take precedence over it.
 
+</details>
+
 ## Review and fingerprint
+
+<details>
+
+<summary>Plan review, fingerprints and unattended answers</summary>
 
 After questions, every present module returns a plan. The flow prints one review
 with actions, list-price cost where known, unknown-cost reasons, implications,
@@ -210,7 +240,13 @@ the refusal or the cancel (`System.OperationCanceledException`) as an exception
 and does not exit its caller
 ([U36](UNKNOWNS.md#u36--a-top-level-run-and-an-in-process-call--closed-2026-09-28)).
 
+</details>
+
 ## Resume after failure
+
+<details>
+
+<summary>Applied decisions, active runs and retry behavior</summary>
 
 Questions and plans use proposed decisions in memory, only for the selected
 steps. Status, Guide, discovery and drift checks read applied values. Durable
@@ -262,8 +298,13 @@ before its summary is confirmed
 follows that confirmation. After the address step has written the record mid-run,
 Setup checks the recorded gateway instead of running the installer, and the installer
 resumes through `-Action Change -Change foundation` or when run directly.
+</details>
 
 ## Update
+
+<details>
+
+<summary>Repository migrations, snapshots and apply fingerprint</summary>
 
 ```powershell
 .\Start-ClaudeGateway.ps1 -Action Update
@@ -278,7 +319,13 @@ command passes `-Apply` and that fingerprint; the updater takes a named-value
 snapshot before its first write. `-PlanOnly` never applies. See
 [Update and change](UPDATE-AND-CHANGE.md#1-update-an-older-deployment).
 
+</details>
+
 ## Change one decision
+
+<details>
+
+<summary>Scoped changes, backups and switch safeguards</summary>
 
 ```powershell
 .\Start-ClaudeGateway.ps1 -Action Change -Change sku
@@ -293,22 +340,37 @@ cost and caller impact before applying.
 |---|---|---|---|
 | `foundation` | `Foundation.ps1` | Runs `Install-ClaudeGateway.ps1 -ExistingApimName <recorded gateway>`, which updates that gateway and keeps its region, tier, name and publisher. In a console the installer asks its other questions; without a console it runs with `-Yes` and the recorded choices. The review prices the live gateway, as already running | [Setup](SETUP.md) |
 | `sku` | `Tier.ps1` | API Management tier; Basic v2 and Standard v2 change in place | [Tier](UPDATE-AND-CHANGE.md#2-change-the-api-management-tier) |
-| `entitlementStore` | `Entitlement.ps1` | Projection switching is blocked until P86; named-value rollback remains available | [Entitlement](UPDATE-AND-CHANGE.md#3-move-entitlement-between-named-values-and-the-projection) |
+| `entitlementStore` | `Entitlement.ps1` | Switches to the projection through the shared switch, using the gateway `entitlement-projection-prefix`; named-value rollback remains available | [Entitlement](UPDATE-AND-CHANGE.md#3-move-entitlement-between-named-values-and-the-projection) |
 | `network` | `Network.ps1` | Enterprise network edge, through its own fingerprinted review | [Network](UPDATE-AND-CHANGE.md#4-change-the-enterprise-network-edge) |
 | `address` | `Address.ps1` | Company hostname, supplied certificate, DNS and verified developer URL | [Company address](SETUP.md#company-address) |
 | `desktopSignIn` | `DesktopSignIn.ps1` | Claude Desktop sign-in kind and gateway audience | [Desktop sign-in](UPDATE-AND-CHANGE.md#5-change-claude-desktop-sign-in) |
 | `models` | `Models.ps1` | Existing Foundry deployments, per-tier allowlists, dated price mappings, deployment records and tier-specific MDM/workstation profiles; snapshot and drift check before any write | [Models](MODELS.md) |
 | `deviceProfiles` | `DeviceProfiles.ps1` | Per-tier MDM payloads | [MDM](MDM.md) |
 
-The Entitlement step refuses every projection switch in P84, even with a clean comparison or
-a historical reconciler id in the record. No supported scheduled reconciler ships here, and no
-override is available. Records expire at most two hours after scan start; without renewal every
-developer receives 503 after expiry. The plan and refusal identify P86 in ROADMAP.
+Before their write, the Tier and Desktop sign-in steps export the gateway with
+`scripts/Backup-ClaudeGateway.ps1` to `backups/before-tier-<apim>-<UTC time>.json` and
+`backups/before-desktop-sign-in-<apim>-<UTC time>.json` (`scripts/flow/lib/LifecycleCommon.ps1`). A Tier
+choice that needs a new instance takes the export and then stops before any Azure write; the export is the
+backup that the move restores ([Tier](UPDATE-AND-CHANGE.md#2-change-the-api-management-tier)).
+
+The Entitlement step switches to the projection only through `Invoke-ClaudeProjectionSwitch`
+([ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md)). The step reads the gateway named
+value `entitlement-projection-prefix` (`scripts/flow/Entitlement.ps1`), and the switch runs with
+`-ResourceGroup -ApimName -NamePrefix`. It checks the resolver deployment and service principal, the
+gateway's resolver values and the live resolver site's settings, then runs the drift check, the runner
+compare and switch evidence before its one write. In the guided flow the step's snapshot,
+`backups/before-entitlement-<apim>-<UTC time>.json`, is the switch's backup and is taken at the write.
+The standalone switch, `scripts/Deploy-ClaudeProjection.ps1 -FlipAfterCleanCompare`, writes its backup
+to `onboarding/projection-switch-<apim>-<UTC time>-<8 hex>.json` (`scripts/ClaudeProjectionSwitch.ps1`).
+Projection records persist until a sync removes or changes the person.
 
 The standalone deployer can preflight, populate and compare without switching (normally 30-90
 seconds for preflight, including a 25-second Graph pause). PowerShell 7 is required for
 projection deployment/sync. [ADR-0040](adr/0040-projection-preflight-and-switch.md) describes
-the rejected ARM-only check and proposed P86 Cosmos renewal evidence, tested image and alerts.
+the rejected ARM-only check. [ADR-0045](adr/0045-scheduled-projection-renewal.md) (P86) introduced
+scheduled renewal with a two-hour lease; ADR-0051 replaces the lease and its admission with persistent
+records, on-demand sync and switch evidence from a recent full sync, and makes the sync job optional,
+for very large directories.
 
 ### Change the company address
 
@@ -413,7 +475,13 @@ local generation from MDM distribution and a developer rerunning setup.
 
 ![The live Change models preview shows each deployment's model, version, SKU, capacity, record status and price status before its fingerprint.](guide/50-model-change-plan.png)
 
+</details>
+
 ## Diagnose
+
+<details>
+
+<summary>Read-only debug scripts and support bundles</summary>
 
 ```powershell
 .\Start-ClaudeGateway.ps1 -Action Diagnose
@@ -427,7 +495,13 @@ redacted zip under `onboarding\support\`
 the folder is git-ignored. See [Diagnostics](DIAGNOSE.md) and
 [Troubleshooting](TROUBLESHOOTING.md).
 
+</details>
+
 ## Status and drift
+
+<details>
+
+<summary>Recorded decisions and live drift rules</summary>
 
 ```powershell
 .\Start-ClaudeGateway.ps1 -Action Status
@@ -450,7 +524,13 @@ binding. A removed binding, a portal-only hostname, a non-HTTPS URL or a URL
 with credentials, a query, a fragment or a different port is not accepted as
 that company gateway address.
 
+</details>
+
 ## Generated guide
+
+<details>
+
+<summary>Tenant handover file and required record</summary>
 
 ```powershell
 .\Start-ClaudeGateway.ps1 -Action Guide
@@ -463,7 +543,13 @@ to update, change and diagnose. It is written to `onboarding/HOW-TO-USE.md` and
 is git-ignored. Guide needs a recorded gateway: with none, it stops before
 planning and names `-Action Setup`.
 
+</details>
+
 ## What the tests hold
+
+<details>
+
+<summary>Flow permutations, installer cases and shell parity</summary>
 
 | Suite | What it runs | What it holds |
 |---|---|---|
@@ -479,7 +565,13 @@ runs the same installer cases read-only against the signed-in subscription (each
 case about 20 s, mostly Azure CLI start-up); the reuse case reads the named
 gateway.
 
+</details>
+
 ## Manual equivalents
+
+<details>
+
+<summary>Guided steps mapped to scripts</summary>
 
 | Guided step | Manual script or guide |
 |---|---|
@@ -490,7 +582,13 @@ gateway.
 | Guide | [Get started](GET-STARTED.md), [Operations](OPERATIONS.md), [Developer setup](../DEVELOPER.md), [FinOps](FINOPS.md) |
 | Status | `scripts\Get-ClaudeGatewayTarget.ps1`, `scripts\Test-ClaudeHealth.ps1`, Azure portal checks in [Operations](OPERATIONS.md) |
 
+</details>
+
 ## Live proof transcript excerpts
+
+<details>
+
+<summary>Isolated runs, screenshots and redacted evidence</summary>
 
 The P66 core was exercised against an isolated Basic v2 gateway in eastus2,
 using the shared Foundry account only for the gateway managed identity's
@@ -532,3 +630,11 @@ record and was declined at the installer's summary, so nothing was created. The 
 record naming the reference gateway and stopped at the fingerprint prompt with a wrong entry, so
 nothing was written. Names are redacted by `guide/render-terminal.mjs`; the raw transcripts stay
 under private evidence.
+
+</details>
+
+## Next
+
+- [Update and change](UPDATE-AND-CHANGE.md) covers day-2 lifecycle changes.
+- [Operations](OPERATIONS.md) covers health, backup and routine administration.
+- [Developer setup](../DEVELOPER.md) covers handover consumption.

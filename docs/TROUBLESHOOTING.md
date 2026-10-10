@@ -8,8 +8,17 @@ layer, run [Diagnostics](DIAGNOSE.md) first, then follow
 [Debugging](DEBUGGING.md); for roles/resource names, use
 [Operations](OPERATIONS.md#1-select-the-gateway-and-workspace).
 After a fix, repeat the original request and inspect its body and headers.
+## Quickstart
+
+The known symptom selects the section below. An unknown failure layer starts with [Diagnostics](DIAGNOSE.md), then [Debugging](DEBUGGING.md). The support record contains UTC time, client/version, selected gateway, status and redacted operation identifiers, never a bearer token.
+
+**Expected result:** the applicable recovery route is identified, or the support record is complete enough for the platform team to reproduce the failing layer.
 
 ## Deployment
+
+<details>
+
+<summary>APIM deployment, policy update and group creation failures</summary>
 
 | Symptom | Cause → Fix |
 |---|---|
@@ -25,7 +34,13 @@ After a fix, repeat the original request and inspect its body and headers.
 | Cannot create the Entra groups | Many tenants restrict group creation. Create them by hand and re-run with `-SkipGroups`. |
 | Deleting a resource group rolls back with `ResourceGroupDeletionBlocked`, naming a Flex Consumption plan (`Microsoft.Web/serverFarms`, FC1) whose delete fails `NotFound` | The Functions resolver's plan outlived its app: ARM still lists it, the Web provider no longer knows it, and every group delete rolls back on it. Measured on 2026-09-25: five deletes over more than 90 minutes each rolled back. Re-create the plan under the same name (`az rest --method PUT` on its resource ID with `sku` FC1 / FlexConsumption, `kind` functionapp, the original location), delete it, then delete the group; the group was gone 24 seconds later. Capacity 0 carries no cost while it exists. |
 
+</details>
+
 ## Environment
+
+<details>
+
+<summary>Windows Azure CLI quoting and query hazards</summary>
 
 | Symptom | Cause → Fix |
 |---|---|
@@ -35,31 +50,55 @@ After a fix, repeat the original request and inspect its body and headers.
 
 The preflight in both setup scripts reports whether the platform is affected.
 
+</details>
+
 ## Policy
+
+<details>
+
+<summary>XML, named value and projection switch failures</summary>
 
 | Symptom | Cause → Fix |
 |---|---|
 | `An XML comment cannot contain '--', and '-' cannot be the last character` | A `--` inside an XML comment in your policy. Use single dashes. The error does not mention comments. |
 | `az rest` fails with `'charmap' codec can't encode character '\ufeff'` | An Azure CLI bug decoding APIM's policy response on Windows. **The PUT usually succeeded** — verify with a GET before retrying. `Set-GatewayPolicy.ps1` avoids `az rest` for this reason. |
 | Policy references `{{name}}` and returns 500 | The named value does not exist. Create it, or redeploy the template. |
-| A lifecycle entitlement flip is refused after projection deployment | The comparison was not clean. Re-run `Deploy-ClaudeProjection.ps1` without `-FlipAfterCleanCompare`, fix the reported missing/stale identities, then run it with `-FlipAfterCleanCompare`; the guided step deliberately refuses to flip on drift. |
+| A projection switch is refused | The refusal names its step: resolver deployment/settings, missing resolver service principal, lists that drift from Entra (`Sync-ClaudeAccess.ps1` refreshes them), a projection that differs from the gateway, or switch evidence (no successful full sync in the last 24 hours, or a record the resolver would refuse). `Deploy-ClaudeProjection.ps1 -FlipAfterCleanCompare -WhatIf` runs the same checks without the backup and the write ([switch](SECURE-PROJECTION.md#switch-to-the-projection-p95)). |
+
+</details>
 
 ## Runtime
+
+<details>
+
+<summary>Authentication, entitlement, quota and backend responses</summary>
 
 | Symptom | Cause → Fix |
 |---|---|
 | **401** "A Microsoft Entra ID token is required" | Not signed in, or signed into the wrong tenant. Guests must use `az login --tenant <tenant-id>`. |
 | **403** "Not entitled to Claude Code" | Object id is in neither allowlist. Add the person to a group and run `Sync-ClaudeAccess.ps1`. |
 | **403** `rate_limit_error` | Read `budget` and the message: personal, organisation or business-unit/team budget. A quota increase can admit new requests after propagation; it does not reset consumption. |
+| **403** `usd_budget_unpriced` with `unpriced_models: ["unattributed-usage"]` | A reconciler before this release could produce this when a developer was stamped into two units in one day (`docs/status/P108.md:12-17`). The remedy is to register the reconciler from this release with `scripts/Register-ClaudeUsdReconciler.ps1`; it replaces the old job after the new job's first successful run. See [Scheduled reconciler without the AUM service](BUDGETS.md#scheduled-reconciler-without-the-aum-service). |
+| **403** `usd_budget_unpriced` naming a model | The dated price book stored in `usd-budgets` has no usable entry for that deployment: no entry, an entry with a missing `inputPerM` or `outputPerM` or a rate that is negative, above 1,000,000 or not a number, or two spellings of the model with different rates (`service/aum/aum_service/usd_budgets.py:203-248`). An invalid entry also leaves its undated family unpriced, so adding another spelling does not price it. The model can also be `claude-haiku-5-5`, which stays unpriced because its price is tiered by prompt size (`docs/UNKNOWNS.md:14`). The budget writer embeds `price_book` in `usd-budgets`; active items keep the stored book and warn when a different book is offered (`scripts/ClaudeUsdBudgets.ps1:101-106`). `scripts/Publish-ClaudeQueries.ps1` republishes the same price-book date and rows for `ClaudeChargeback()` (`scripts/Publish-ClaudeQueries.ps1:127-161`). The remedy is to add or correct the model's entry in the price book (`config/price-book.json` or the `-PriceBookPath` file), record the approved dollar budgets, clear each one, write them again so the first write to the empty document stores the current book, publish the queries for the workbook, and reconcile. Dollar budgets are not enforced between the clear and rewrite; token budgets still apply. With the AUM service, clear the budgets and PUT `usd-price-book`. See [Dollar budgets: what is enforced](BUDGETS.md#dollar-budgets-what-is-enforced). |
+| **503** `usd_budget_state_stale` right after an administrative change | Writes to `usd-budgets`, `bu-modes`, `bu-parents`, `bu-members` or `entitlement-source` change the policy revision the gateway compares with `usd-budget-state` (`infra/policy.xml:561-569`, `infra/policy.xml:644-647`). Enforced scopes get 503 until the next successful reconciliation, one schedule interval by default (`*/5 * * * *`), or until the job is started. If no reconciler is deployed, run `Sync-ClaudeUsdBudgets.ps1` on demand or deploy the scheduled reconciler. See [Refusals, modes and recovery](BUDGETS.md#refusals-modes-and-recovery). |
 | **403** `model_not_allowed` / unassigned-unit message | Model or unit policy, not necessarily missing tier membership. Check [Budgets](BUDGETS.md) and the published unit map. |
 | **429** | Token/request rate, resolver miss admission or Foundry capacity. Inspect the body and honour `Retry-After`; not every 429 is the personal TPM limit. |
-| **503** naming an expired projection | Reconciliation did not renew the lease. Complete a fresh scan/apply; never serve stale records or roll back to unreviewed old lists. |
+| Removed person still works on a projection gateway | The sync job removes them at its next run (every 2 hours by default); to remove them at once, run `scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim> -User <name-or-object-id>`. Access ends after that run plus at most `entitlement-cache-seconds`. Disabled Entra accounts lose access when their current token expires, 60 to 90 minutes by default (Microsoft Learn access tokens, updated 2026-07-17: https://learn.microsoft.com/entra/identity-platform/access-tokens). |
 | **503** naming the entitlement service | Resolver/network/authentication failure after cache expiry. Check [Private projection](SECURE-PROJECTION.md#troubleshooting). |
+| **400** `invalid_request_error` "The request body could not be read for content screening" | `content-safety-mode` is `block` and either the request was not readable as a Claude Messages JSON object with a `messages` array, or `content-safety-truncate-mode` is `block` and the newest turn is longer than the screening budget ([Content Safety](CONTENT-SAFETY.md#limits)). A readable request whose newest turn fits passes this check. The trace records decision `unscreenable` without storing the body ([Content Safety](CONTENT-SAFETY.md#modes)). |
+| **403** `content_safety` "Content Safety blocked the request" | `content-safety-mode` is `block` and Prompt Shields, or a severity at or above the threshold, flagged screened text: the system prompt, tool descriptions, or the newest turn with its documents, tool results, search results and assistant prefill. The trace for the request records the decision, `blockedBy` and the severities, without text ([Content Safety](CONTENT-SAFETY.md#logging)). |
+| **503** `content_safety` "Content Safety unavailable" with `Retry-After: 5` | `content-safety-mode` is `block` and the Content Safety call failed, timed out or returned an answer of the wrong shape. The trace's error class, `timeout`, `service_error` or `malformed`, names the failure. The Content Safety account, the gateway identity's role on it and `content-safety-endpoint` decide whether the call can succeed ([Content Safety](CONTENT-SAFETY.md#change-a-setting)). |
 | **404** `api_not_supported` from Foundry | An OpenAI-shaped path. Claude deployments expose only `/anthropic/*`. |
 | **404** `DeploymentNotFound` | A model alias points at a deployment you do not have. Foundry mode does no start-up model check, so this surfaces mid-task. |
 | Backend returns 401 through the gateway | The gateway identity lacks `Cognitive Services User` on the Foundry account, or the assignment has not propagated (allow 2–5 minutes). |
 
+</details>
+
 ## Claude Code client
+
+<details>
+
+<summary>Client settings, versions, setup files and shell issues</summary>
 
 | Symptom | Cause → Fix |
 |---|---|
@@ -75,7 +114,13 @@ The preflight in both setup scripts reports whether the platform is affected.
 | The panel fails but the CLI works | The extension host is running an older build than the one installed on disk — it does not pick up auto-updates until the window reloads. A long-lived window can be several versions behind. **Developer: Reload Window**, and quit VS Code entirely if that is not enough. `Debug-ClaudeCode.ps1` reports this. |
 | Windows: a credential script returns *"Windows Subsystem for Linux has no installed distributions"* | Inside Git Bash a bare `az` resolves to the WSL shim. Use `az.cmd`. Note `command -v az.cmd` also fails because bash ignores `PATHEXT`, so probe by running the candidate and checking the result starts with `eyJ`. |
 
+</details>
+
 ## Claude Desktop
+
+<details>
+
+<summary>Desktop sign-in, DNS and app-container failures</summary>
 
 | Symptom | Cause → Fix |
 |---|---|
@@ -123,7 +168,13 @@ To confirm it is this and not something else:
 `Test-FoundryDirect.ps1` checks for this without launching anything: a lock on
 those files while no Claude process is running is the signature.
 
+</details>
+
 ## Monitoring
+
+<details>
+
+<summary>Metric emission, dimensions, workspaces and missing principals</summary>
 
 | Symptom | Cause → Fix |
 |---|---|
@@ -135,7 +186,13 @@ those files while no Claude process is running is the signature.
 | A service principal is missing from the group sync | Delegated tokens cannot list service principal members without `Application.Read.All`. Pass CI identities explicitly with `-AdditionalPremiumOids` / `-AdditionalStandardOids`. |
 | `ApiManagementGatewayLlmLog` is empty — even over all time — while the gateway is plainly serving | You are reading a different workspace. A resource group often holds several, and the first one listed need not be the gateway's; on the reference deployment three share the group and the first is not it. Ask the gateway where it writes rather than guessing: `az monitor diagnostic-settings list --resource <apim-resource-id> --query "[].workspaceId" -o tsv`. The scripts here ask the gateway, match the workspace named after it, or refuse to guess — none takes the first one listed. |
 
+</details>
+
 ## Still stuck?
+
+<details>
+
+<summary>Support evidence and inspector proxy warning</summary>
 
 Collect UTC time, client/version, gateway host, status/error body and the
 relevant operation/request ID for the platform team. Redact personal/deployment
@@ -145,7 +202,13 @@ Do not use the historical inspector proxy unchanged: its upstream is fixed and
 its listener is not explicitly loopback-only. See
 [the inspection warning](DEBUGGING.md#see-exactly-what-is-on-the-wire).
 
+</details>
+
 ## Turnstile and offboarding
+
+<details>
+
+<summary>Stopped database, consent gaps and removal checks</summary>
 
 ### Turnstile database stopped
 
@@ -184,5 +247,13 @@ Sources: [P71 measurements](status/P71.md#p71-aum-answers-fast-and-says-why-it-c
 | Symptom | Next action |
 |---|---|
 | Need admin approval at Microsoft sign-in | Use [Turnstile's CLI sign-in](TURNSTILE.md#viewers-and-managers), or have the tenant administrator grant approved web consent |
-| Removed person still works | Check nested memberships, active-store publication, `Nothing to change`/empty-list warnings and cache/lease timing; [Onboarding](ONBOARDING.md#5-revoke-access) |
+| Removed person still works | Check nested memberships, active-store publication, `Nothing to change`/empty-list warnings and cache timing; [Onboarding](ONBOARDING.md#5-revoke-access) |
 | Turnstile save is not yet applied | Check the apply job/last result and governance authority; UI save is not proof of gateway propagation |
+
+</details>
+
+## Next
+
+- [Diagnostics](DIAGNOSE.md) creates support bundles.
+- [Debugging](DEBUGGING.md) isolates request boundaries.
+- [Network](NETWORK.md) covers egress and streaming failures.

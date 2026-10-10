@@ -12,6 +12,32 @@ that step: the gateway and Foundry account need not share one. Use
 [target discovery](OPERATIONS.md#1-select-the-gateway-and-workspace) to distinguish
 the subscription, gateway group, Foundry group and telemetry workspace.
 
+## Quickstart
+
+The default projection path requires PowerShell 7, Azure CLI/Bicep, Node.js/npm and ZIP-capable `tar`, an eligible Foundry account and the [deployment roles](#2-permissions-and-roles). The command runs from the repository root. The installer presents discovered targets, prices and an approval summary before writing.
+
+```powershell
+.\Install-ClaudeGateway.ps1
+```
+
+After installation, the generated record supplies the gateway target for the pilot handover and health check. The example uses `developer@contoso.com` as the selected standard-tier pilot account and handover recipient.
+
+```powershell
+$gateway = Get-Content .\onboarding\claude-gateway.json -Raw | ConvertFrom-Json
+.\scripts\Set-ClaudeDeveloper.ps1 -ResourceGroup $gateway.resourceGroup -ApimName $gateway.apimName -User 'developer@contoso.com' -Tier standard -Sync
+.\scripts\New-OnboardingEmail.ps1 -ConfigPath .\onboarding\claude-gateway.json -To 'developer@contoso.com'
+.\scripts\Test-ClaudeHealth.ps1 -ResourceGroup $gateway.resourceGroup -ApimName $gateway.apimName
+.\scripts\Get-ClaudeBypass.ps1 -ResourceGroup $gateway.resourceGroup -ApimName $gateway.apimName
+```
+
+**Expected result:** the installer writes `onboarding/claude-gateway.json`; the membership command publishes the pilot to the active store; the email command writes HTML, text and EML files; health exits zero; the bypass audit has no unapproved direct or inherited Foundry role. A separate developer setup run verifies the pilot request before broad rollout. Roll out only after bypass findings are clean or explicitly approved, and after section 4.2 reviews Foundry key access, local authentication and network exposure ([details](#42-close-the-bypass)).
+
+## 1. Prerequisites
+
+<details>
+
+<summary>Azure resource lookups, SKU choice, tooling and region checks</summary>
+
 ### Find the values used in this guide
 
 The following are lookups, not permission grants or deployment commands. Run
@@ -49,7 +75,6 @@ shows the fields used for the gateway lookup.
 
 The customer-deployment command guide is [Azure CLI commands for a customer gateway setup](AZ-COMMANDS.md). It mirrors the installer, setup and administration scripts in Cloud Shell bash, with one-line purpose statements, `az` commands, verification commands, expected results and source script references. Its current status is commands checked against Azure CLI help and the templates; not yet run end to end.
 
-## 1. Prerequisites
 
 ### Azure resources you must already have
 
@@ -131,11 +156,23 @@ built on an RPS figure would be a guess in a table.
 ([v2 tiers overview](https://learn.microsoft.com/azure/api-management/v2-service-tiers-overview))
 
 On that arithmetic Basic v2 covers roughly 900 developers, so **volume rarely
-decides this**. What usually moves an enterprise to Standard v2 is that Basic v2
-has no VNet integration. Neither Basic v2 nor Standard v2 has availability zones;
-Premium v2 does, but not multi-region. The installer says so rather
-than implying the request count is the deciding factor, and the suggestion is
-only a default — override it at the prompt.
+decides this**. The facts that do, with the projection, from Microsoft Learn:
+
+| Tier | Built-in cache | Scale units | Virtual network | Availability zones |
+|---|---|---|---|---|
+| Basic v2 | 250 MB | up to 10 | none | no |
+| Standard v2 | 1 GB | up to 10 | outbound integration | yes |
+| Premium v2 | 5 GB | up to 30 | injection | yes |
+
+Sources: [features](https://learn.microsoft.com/azure/api-management/api-management-features)
+(updated 2026-06-05), [outbound integration](https://learn.microsoft.com/azure/api-management/integrate-vnet-outbound)
+(2025-12-04), [injection](https://learn.microsoft.com/azure/api-management/inject-vnet-v2) (2025-10-08) and
+[reliability](https://learn.microsoft.com/azure/reliability/reliability-api-management) (2026-09-09).
+Cosmos DB serverless, which the projection uses, is single-region
+([serverless](https://learn.microsoft.com/azure/cosmos-db/serverless), 2026-04-27). The installer's
+suggestion: Basic v2 for evaluation and small teams; Standard v2 for availability zones, outbound
+virtual network integration or more than Basic v2's included volume; Premium v2 for virtual network
+injection or more than 10 units. The installer creates API Management without zone-redundancy settings and without Premium v2 virtual network injection. Microsoft Learn says Premium v2 virtual network injection can be selected only when the instance is created and cannot be added to an existing instance (inject-vnet-v2, 2025-10-08); the reliability article lists zone support for Standard v2 and Premium v2 (reliability-api-management, 2026-09-09), and the v2 tiers overview lists the networking options (2026-09-04). A gateway that needs zone placement or Premium v2 injection is created with those settings first and then reused with `-ExistingApimName`. The suggestion is a default at the prompt.
 
 This is included-request arithmetic, **not supported developer capacity**.
 The shipped named-value membership map fills at roughly 93 developers with
@@ -144,22 +181,30 @@ for an **entitlement store** as a separate choice:
 
 | Store | When it fits | Network shape |
 |---|---|---|
-| Named values | Small deployments below the measured ceiling | No extra components. |
-| Cosmos projection | Around 100 developers and above, or whenever the operator chooses it | Standard v2 and Premium v2 use a private resolver. Basic v2 uses a public resolver endpoint restricted by Microsoft Entra to the gateway managed identity, while Cosmos remains private. |
+| Cosmos projection (default) | Every size ([ADR-0052](adr/0052-cosmos-default-installer.md)) | The resolver endpoint is public on every tier and accepts only the gateway managed identity's Microsoft Entra token; Cosmos remains private. `-ResolverInboundAccess private` on Standard v2 or Premium v2 needs the gateway's outbound virtual network integration into the projection network. |
+| Named values | Teams within the measured ceiling | No extra components. |
 
-The projection deployer is `scripts/Deploy-ClaudeProjection.ps1`. It deploys
+The installer runs the projection deployer, `scripts/Deploy-ClaudeProjection.ps1`, which deploys
 private Cosmos and the resolver, populates from Entra, compares the projection
-against the named-value lists, and leaves named values authoritative. P84 refuses every switch:
-records expire at most two hours after scan start, then every developer receives 503 without
-renewal. The supported scheduled reconciler is proposed as P86 in [ROADMAP](ROADMAP.md). The
+against the named-value lists (or, on a new gateway, against the snapshot it applied) and leaves named
+values authoritative; the installer then runs it with `-FlipAfterCleanCompare` to switch. Projection records persist until a sync removes or changes the person; a sync-job outage does not
+stop developers. The installer also deploys the sync job, which applies Entra tier and business-unit group changes every 2 hours by default
+(`-ProjectionSyncInterval`, [scheduled sync job](SECURE-PROJECTION.md#scheduled-sync-job-p104)). To publish a change at once, add or remove a developer in the Entra group, then run
+`scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim> -User <name-or-object-id>` for one
+person, or omit `-User` for everyone. The same command works for named values and the Cosmos projection;
+named values publish a whole-list refresh and report the developer's written tier. If the group change happened
+seconds ago, Microsoft Graph can still report the previous membership; rerun the sync until it reports the expected
+`published_tier`, then allow at most `entitlement-cache-seconds` for the gateway cache. Disabled Entra accounts lose access when their current token expires,
+60 to 90 minutes by default (Microsoft Learn access tokens, updated 2026-07-17:
+https://learn.microsoft.com/entra/identity-platform/access-tokens). With `-FlipAfterCleanCompare` the
+deployer deploys nothing: it runs resolver checks, the drift check, the runner compare and switch
+evidence, and switches `entitlement-source` ([ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md)). The
 Basic v2 resolver endpoint is public because Basic v2 has no outbound VNet
 integration; APIM outbound IPs are not treated as the primary control.
 Authentication is.
 
-A developer count above the named-value ceiling is noted at the count, and the
-store question then recommends the Cosmos projection. Choosing named values for
-more developers than they hold is stated after the store question, with the
-Cosmos store as the remedy, and asks "Continue with named values".
+Named values chosen for more developers than they hold are refused at the store question, with the
+capacity reason and the Cosmos projection as the remedy, before anything is created.
 
 ### Tooling
 
@@ -167,8 +212,9 @@ Cosmos store as the remedy, and asks "Continue with named values".
 |------|---------|-----|
 | Azure CLI | 2.60+ | deployment and all verification commands |
 | Bicep | Azure CLI-managed executable | `az bicep version`; if missing, `az bicep install` |
-| PowerShell | 7+, or Windows PowerShell 5.1 | the setup wizard and scripts. macOS/Linux can use the `.sh` equivalents instead |
-| Node.js | compatible with the selected tooling's `package.json` | only for optional screenshot/inspector tooling and the projection code |
+| PowerShell | 7+ for the Cosmos projection, the default store; Windows PowerShell 5.1 runs the named-value store only | the installer and scripts; the installer checks the version before the projection steps (`scripts/ClaudeInstallProjection.ps1:67-80`). The macOS/Linux `.sh` installer deploys named values only ([ADR-0052](adr/0052-cosmos-default-installer.md)) |
+| Node.js and npm | no `engines` constraint in `resolver/package.json` or `sync/package.json` | required for the Cosmos projection: the resolver and the sync code are packaged on this machine; otherwise only for screenshot and inspector tooling |
+| tar | one that writes ZIP archives | required for the Cosmos projection: it packages the resolver ([SECURE-PROJECTION](SECURE-PROJECTION.md) prerequisites) |
 
 ### Region
 
@@ -198,11 +244,15 @@ case or spacing, or by its number in the list.
 
 ---
 
+</details>
+
 ## 2. Permissions and roles
 
-This is the part that most often blocks a deployment, so it is worth reading in
-full. There are three distinct identities involved and they need different
-things.
+<details>
+
+<summary>Operator, gateway, developer and directory role requirements</summary>
+
+Three identities are involved, and each needs different roles.
 
 ### 2.1 You — the person running the deployment
 
@@ -365,7 +415,13 @@ budget without creating anything.
 
 ---
 
+</details>
+
 ## 3. Deploy
+
+<details>
+
+<summary>Wizard, projection, company address and portal deployment paths</summary>
 
 ### Option A — the interactive wizard (recommended)
 
@@ -409,6 +465,8 @@ region.
 cost of this accelerator, so any v2 instance you already own is offered first,
 annotated with whether it already carries the Claude API.
 
+A re-run of an existing named-value gateway without `-EntitlementStore` migrates it to the Cosmos projection: the approval summary says `projection (migrating from named values: deploy, compare, switch)` before any write. `.\Update-ClaudeGateway.ps1 -ResourceGroup <rg> -ApimName <apim>` makes the same move without asking the setup questions again: its plan reuses the gateway's tier groups and values, checks quotas and prerequisites, and lists the resources, network and cost before `-Apply` ([Update and change](UPDATE-AND-CHANGE.md#move-a-named-value-gateway-with-the-update)). `-EntitlementStore named-value` keeps named values for a small organisation within the named-value capacity. A gateway already on the projection stays on the projection; `-EntitlementStore named-value` on it is refused before anything is created, with the rollback steps. A rollback to named values holds only a population within their capacity, about 93 developers in business-unit membership and about 110 per tier list ([Scale](SCALE.md#what-runs-out-first)).
+
 ![The wizard listing two existing v2 API Management instances with their SKU, region and resource group, plus a third option to create a new one](guide/run-2-reuse-existing-apim.png)
 
 **4. Budgets.** Every prompt has a working default in brackets — Enter accepts
@@ -423,7 +481,7 @@ where it costs money, with the figure at your stated developer count:
 
 | Choice | Options | Why it is asked rather than defaulted |
 |---|---|---|
-| Revocation window | 15 min / 1 hour / 4 hours | A requested projection cache window, not an installed sync schedule. Current projection leases cap stale admission at two hours from scan start, including cache; named values remain stale until synced. |
+| Revocation window | 15 min / 1 hour / 4 hours | Cache window after a sync. Projection records persist until a sync removes or changes the person; disabled Entra accounts lose access when the current token expires. |
 | Team budget | `report` / `stop` | This legacy prompt changes guidance, not a unit's stored mode. The installer preserves `bu-modes`; a missing entry means strict. Configure strict, allowance or notify per unit through [Business units](BUSINESS-UNITS.md#budget-modes) or Turnstile. An enforcing token quota triggers later than the dollar figure suggests because it excludes cache. |
 | Unassigned developers | `allow` / `deny` | `deny` on day one refuses people who have done nothing wrong. Start on `allow` and switch when `Get-ClaudeBusinessUnit.ps1` reports zero unassigned. |
 | Developer sign-in | `interactive` / `device` / `helper` | How developers authenticate. Written into `claude-gateway.json` and applied by the onboarding script on each machine. |
@@ -431,17 +489,17 @@ where it costs money, with the figure at your stated developer count:
 | Developer address | `azure` / `custom` | Azure keeps the default hostname. Custom asks for the company hostname, supplied certificate and DNS hosting, shows their costs, then configures and proves the address after deployment. A later address change requires redistributed workstation settings ([Company address](#company-address)). |
 
 > [!IMPORTANT]
-> **Developer sign-in is decided here, once, for everyone.** A fleet where half
-> the workstations authenticate one way and half another is a fleet with two
-> support paths and two sets of symptoms. Choose `device` if *any* developer
-> works on a jump box, a VDI session or over SSH — it costs nothing on a laptop
-> and is the only option that works without a browser. `helper` routes every
-> client through the credential helper that Claude Desktop needs anyway.
+> **Developer sign-in is one setting for every developer.** A fleet where half
+> the workstations authenticate one way and half another has two
+> support paths and two sets of symptoms. `device` works on a jump box, in a VDI
+> session and over SSH as well as on a laptop, and is
+> the only option that works without a browser. `helper` routes every client
+> through the credential helper that Claude Desktop uses.
 >
 > It is changeable later by reissuing `claude-gateway.json` and re-running
 > `Onboard-ClaudeDeveloper.ps1`, which is safe to run repeatedly.
-> Device-code sign-in still needs Conditional Access to allow that flow; review
-> [Authentication](AUTHENTICATION.md#conditional-access) before choosing it.
+> Device-code sign-in needs Conditional Access to allow that flow
+> ([Authentication](AUTHENTICATION.md#conditional-access)).
 
 > [!NOTE]
 > **Desktop sign-in is separate.** `helper-script` keeps today's Desktop
@@ -849,26 +907,31 @@ installer runs, or typed at its prompt, and a file that names it is refused
 ### Option B — non-interactive script
 
 The interactive installer's projection flags are separate from `deploy.ps1`:
-`-DeployProjection` runs the checked projection deployer and requires PowerShell 7 for apply.
-`-FlipProjectionAfterCleanCompare` is refused unconditionally before discovery or writes,
-including with a historical `-ProjectionReconcilerResourceId`. No supported scheduled reconciler
-ships in P84. An admin-created resolver registration is supplied as
-`-ProjectionResolverAppId <client-id>`. An example installer invocation is:
+`-DeployProjection` and `-FlipProjectionAfterCleanCompare` remain accepted for existing scripts. Since P98, they do not change installer behavior: choosing `-EntitlementStore projection` deploys the projection, compares it, and switches through the shared switch.
+Since P104 the sync job deploys with the projection: `-ProjectionSyncInterval` takes `30m`, `1h`, `2h` (default), `3h`, `4h`, `6h`, `8h`, `12h`, `manual` or `none`, a re-run keeps the deployed job's interval, and `-DeploySyncJob` is accepted and has no effect ([ADR-0058](adr/0058-scheduled-projection-sync.md)).
+
+A staged deployment without switching uses the deployer directly, not the installer:
 
 ```powershell
-pwsh -NoProfile -File .\Install-ClaudeGateway.ps1 `
-  -SubscriptionId <subscription-id> -FoundryAccount <foundry-account> `
-  -ResourceGroup <gateway-rg> -NamePrefix <prefix> -EntitlementStore projection `
-  -DeployProjection -ProjectionResolverAppId <resolver-app-id>
+./scripts/Deploy-ClaudeProjection.ps1 `
+  -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> `
+  -Location <region> -Sku BasicV2 -ResolverInboundAccess public `
+  -StandardGroup <standard-group> -PremiumGroup <premium-group>
+
+./scripts/Deploy-ClaudeProjection.ps1 `
+  -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> `
+  -StandardGroup <standard-group> -PremiumGroup <premium-group> `
+  -FlipAfterCleanCompare
 ```
 
-The example deploys beside the gateway without switching. Records expire at most two hours after
-scan start, then every developer receives 503 without renewal. Switching needs the supported P86
-scheduled reconciler; neither installer nor deployer creates it. The read-only preflight normally takes 30-90 seconds, including
+The first command deploys and compares while named values remain authoritative. The second command switches only after the shared switch checks pass.
+switches right after a clean deploy comparison, with no 60-90 minute wait. The optional sync job deploys separately
+with `scripts/Deploy-ClaudeProjectionRenewal.ps1` for very large directories. The read-only preflight normally takes 30-90 seconds, including
 the 25-second Graph interval. [Private projection](SECURE-PROJECTION.md#one-command-deployment)
-contains the `-PreflightOnly` command and admin registration steps; proposed
-[ADR-0040](adr/0040-projection-preflight-and-switch.md) records P84 refusal and proposed P86 evidence.
-Sources: `Install-ClaudeGateway.ps1:64`, `scripts/Deploy-ClaudeProjection.ps1:80`.
+contains the `-PreflightOnly` command and admin registration steps;
+[ADR-0040](adr/0040-projection-preflight-and-switch.md) records the preflight and
+[ADR-0050](adr/0050-projection-switch-function.md) the switch.
+Sources: `Install-ClaudeGateway.ps1:63-67,125-128`, `scripts/Deploy-ClaudeProjection.ps1:52-57`.
 
 ```powershell
 ./deploy.ps1 -FoundryAccount <your-foundry-account> -ResourceGroup rg-claude-gateway
@@ -1005,7 +1068,13 @@ it — it clears it.
 
 ---
 
+</details>
+
 ## 4. Verify before announcing
+
+<details>
+
+<summary>Governance tests, v2 tier proof and bypass audit</summary>
 
 Use an entitled test identity and an agreed change window. The governance
 check sends model requests and its throttle test temporarily changes limits;
@@ -1112,6 +1181,8 @@ RBAC-only audit does not prove an old API key cannot bypass the gateway.
 > the access is ungoverned, not that it is wrong.
 
 ---
+
+</details>
 
 ## 5. Next
 

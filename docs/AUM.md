@@ -17,8 +17,24 @@ An optional **AUM service** adds its own Entra roles and server-enforced scoped
 management, without Turnstile. Administrators can instead choose Turnstile as
 their web FinOps tool; AUM can optionally use its API as another keyboard-facing
 client. Example data is an explicit test backend, never the production default.
+## Quickstart
+
+The Direct path uses the existing gateway, the operator's Azure CLI sign-in and the repository's writers. It is an administrator connection, not a scoped-manager boundary. The commands run from the repository root.
+
+```powershell
+.\scripts\Install-ClaudeAum.ps1
+.\.venv-finops\Scripts\aum.exe configure --backend direct --save
+.\.venv-finops\Scripts\aum.exe whoami
+.\.venv-finops\Scripts\aum.exe
+```
+
+**Expected result:** installation reports the AUM version; connection selects and verifies the intended gateway; `whoami` reports the current authority; the terminal shows its backend and role. [How-to](#how-to) covers the first operation.
 
 ## Install
+
+<details>
+
+<summary>Python setup, Cloud Shell launcher and endpoint reachability</summary>
 
 AUM requires Python 3.12 or later and Azure CLI. Direct also requires
 PowerShell 7 and this repository. The
@@ -155,7 +171,13 @@ The AUM endpoint facts come from
 [Direct](../cli/finops/src/claude_finops/direct.py) and
 [Graph](../cli/finops/src/claude_finops/groups.py).
 
+</details>
+
 ## Connect
+
+<details>
+
+<summary>Backend authority, profile save and rollback behavior</summary>
 
 Each gateway has one budget/governance write authority. P80 does not change the authority
 rules in [ADR-0026](adr/0026-usd-budget-reconciliation.md) or the publication
@@ -211,7 +233,13 @@ URL/scope pairs do not require Azure resource discovery. Profiles contain
 addresses, not tokens. `--config`, `AUM_CONFIG` and the legacy fallbacks are
 described in [Configure a backend](#configure-a-backend).
 
+</details>
+
 ## First run and screen tour
+
+<details>
+
+<summary>Terminal navigation, quit behavior and refresh failures</summary>
 
 The terminal entry point is:
 
@@ -266,7 +294,13 @@ accessed 2026-09-29;
 [error boundary](../cli/finops/src/claude_finops/errors.py),
 [pilot matrix](../cli/finops/tests/test_p85_escape.py)).
 
+</details>
+
 ## How-to
+
+<details>
+
+<summary>People, budgets, reports and connection workflows</summary>
 
 ### Add a person to a team
 
@@ -529,7 +563,13 @@ aum people find amara@contoso.com --team sales-emea
 aum lookup amara@contoso.com --team sales-emea
 ```
 
+</details>
+
 ## Reference
+
+<details>
+
+<summary>CLI commands, backend profiles and manual Azure steps</summary>
 
 Command syntax is in [Command reference](#command-reference). Backend-specific
 details remain in [Direct gateway access](#direct-gateway-access),
@@ -680,9 +720,10 @@ CLI equivalent:
 $user = az ad user show --id amara@contoso.com --query id -o tsv
 $standard = az ad group show --group <standard-tier-group> --query id -o tsv
 az ad group member add --group $standard --member-id $user
-.\scripts\Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim>
+.\scripts\Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim> -User $user
 ```
-Direct refresh refuses when Turnstile owns publication.
+Direct refresh refuses when Turnstile owns publication. The same `-User` command works for named values and the
+Cosmos projection; named values publish a whole-list refresh and report the developer's written tier.
 
 #### Manual Azure portal and Azure CLI path
 
@@ -2330,8 +2371,13 @@ Historical usage and audit facts from real test requests are retained, not delet
 to make the test disappear. Operational configuration, memberships and groups
 are what the cleanup restores.
 
+</details>
 
 ## Troubleshooting
+
+<details>
+
+<summary>Exit codes, validation commands and evidence locations</summary>
 
 [Troubleshoot and validate](#troubleshoot-and-validate) lists exit codes.
 [Read latency and progress](#read-latency-and-progress) and
@@ -2369,3 +2415,11 @@ The [revision-4 parity manifest](../cli/finops/src/claude_finops/parity.json)
 distinguishes implemented current APIs from named server dependencies. Exact
 future request/response contracts ship in
 [`contracts.json`](../cli/finops/src/claude_finops/contracts.json).
+
+</details>
+
+## Next
+
+- [FinOps](FINOPS.md) covers monthly close.
+- [Budgets](BUDGETS.md) covers enforcement semantics.
+- [AUM service](AUM-SERVICE.md) covers scoped management service deployment.

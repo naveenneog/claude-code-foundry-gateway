@@ -45,6 +45,9 @@ function Invoke-ClaudeGraphRead {
 function Get-ClaudeGraphGroup {
     param([string]$GroupName, [string]$Token)
     if ([string]::IsNullOrWhiteSpace($GroupName)) { throw 'Graph group name is required.' }
+    # 'none' means no group (-PremiumGroup none, the switch and the sync job), never a display name: any user can
+    # create a Microsoft 365 group called none, and its members must not become a tier.
+    if ($GroupName.Trim() -eq 'none') { return $null }
     $property = if ($GroupName -match '^[0-9a-fA-F-]{36}$') { 'id' } else { 'displayName' }
     $filter = [uri]::EscapeDataString("$property eq '$($GroupName.Replace("'", "''"))'")
     $page = Invoke-ClaudeGraphRead -Uri "https://graph.microsoft.com/v1.0/groups?`$filter=$filter&`$select=id&`$top=2" -Token $Token
@@ -59,9 +62,23 @@ function Get-ClaudeGraphGroup {
     return $groups[0]
 }
 
+function Resolve-ClaudeGraphUserObjectId {
+    param([Parameter(Mandatory)][string]$Identity, [Parameter(Mandatory)][string]$Token)
+    $guid = '^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$'
+    if ($Identity -match $guid) { return $Identity.ToLowerInvariant() }
+    if ($Identity -notmatch "^[A-Za-z0-9.!#`$%&'*+/=?^_``{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$") {
+        throw '-User must be an object id GUID or a valid user principal name. Remedy: pass the user''s object id or user principal name, for example -User dev@contoso.com.'
+    }
+    $encoded = [uri]::EscapeDataString($Identity)
+    $user = Invoke-ClaudeGraphRead -Uri "https://graph.microsoft.com/v1.0/users/${encoded}?`$select=id" -Token $Token
+    if (-not $user -or [string]$user.id -notmatch $guid) { throw "Graph did not return a valid object id for user '$Identity'." }
+    return ([string]$user.id).ToLowerInvariant()
+}
+
 function Get-GroupMemberOids {
     param([string]$GroupName, [string]$Token)
 
+    if ([string]$GroupName -and ([string]$GroupName).Trim() -eq 'none') { return @() }
     $group = Get-ClaudeGraphGroup -GroupName $GroupName -Token $Token
     if (-not $group) {
         Write-Warning "Group '$GroupName' not found - treating as empty."

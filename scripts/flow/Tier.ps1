@@ -102,6 +102,13 @@ function Get-ClaudeFlowStepPlan {
         -Data @{ Target = $target; DesiredSku = $desired; InPlace = $option.InPlace; SnapshotPath = $null; SnapshotTaken = $false }
 }
 
+function Initialize-ClaudeFlowStep {
+    # Start-ClaudeGateway.ps1 runs this after approval and before Invoke-ClaudeFlowStep; it names the snapshot
+    # that the write gate takes.
+    param([Parameter(Mandatory = $true)]$Record, [Parameter(Mandatory = $true)]$Plan)
+    Initialize-ClaudeFlowLifecycleSnapshotPath -Plan $Plan -Step tier
+}
+
 function Invoke-ClaudeFlowStep {
     param([Parameter(Mandatory = $true)]$Record, [Parameter(Mandatory = $true)]$Plan)
     if (Test-ClaudeFlowPlanIsNoop $Plan) { return @{} }

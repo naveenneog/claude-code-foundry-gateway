@@ -1,42 +1,36 @@
 # Claude Code on Microsoft Foundry — Governed Gateway Accelerator
 
-Run **Claude Code CLI, the VS Code extension and Claude Desktop** against your
-organisation's Claude deployment in Microsoft Foundry. Azure API Management
-validates each caller's Microsoft Entra token, checks entitlement and token
-budgets, and records usage for business-unit chargeback. The gateway's managed
-identity calls Foundry; developers need no model API key or Foundry role.
+Runs **Claude Code CLI, the VS Code extension and Claude Desktop** against an organisation's Claude
+deployment in Microsoft Foundry. Azure API Management validates each caller's Microsoft Entra token,
+checks entitlement and token budgets, and records usage for business-unit chargeback. The gateway's
+managed identity calls Foundry; developers need no model API key or Foundry role.
 
-Start with [Setup](docs/SETUP.md) for deployment or
-[DEVELOPER.md](DEVELOPER.md) if your platform team has already granted access.
+## Quickstart
 
-> **How many developers this holds today:** the default installer stores
-> entitlement in named values. Business-unit membership fills first, at
-> **roughly 93 developers** with six-character unit IDs; tier lists hold 110
-> each. Longer IDs reduce that capacity. Oversized writes fail, not truncate.
->
-> The optional private Cosmos DB projection removes those membership lists.
-> **It is not the default.** On 2026-09-24, **500,000 records were loaded and read**:
-> 954 writes/second; point reads cost 1 RU, p99 51 ms. This is a storage test,
-> **not 500,000 concurrent developers** or a completed directory scan.
->
-> Projection deployment requires PowerShell 7. Its [read-only preflight](docs/SECURE-PROJECTION.md#one-command-deployment)
-> runs before Azure writes. **P84 refuses every automated projection switch** until the supported
-> scheduled reconciler proposed as P86 exists. Without renewal, records expire within two hours
-> and every developer receives 503. A clean comparison or successful ARM job is not renewal
-> evidence ([ADR-0040](docs/adr/0040-projection-preflight-and-switch.md)).
->
-> The current two-always-ready-instance profile costs **$91.56/month at rest**.
-> Hourly lease renewal at 500,000 members adds about **365 million writes/month**,
-> about **$538/month** at the measured create RU charge and stated list price
-> (derived, not a measured scheduled-sync bill). APIM, Foundry and other usage
-> costs are additional. See the [dated P19 record](docs/status/P19.md#where-p19-stands-2026-09-24),
-> [Scale](docs/SCALE.md) and [private deployment](docs/SECURE-PROJECTION.md).
->
-> `scripts/Measure-ClaudeCeiling.ps1` checks your named-value headroom and fails
-> at 80%; [Operations](docs/OPERATIONS.md#2-check-health-and-headroom) gives the
-> command, roles and portal checks.
+The commands run from the repository root in PowerShell 7 with Azure CLI/Bicep, Node.js/npm, ZIP-capable `tar`, an eligible Foundry account and the [Setup roles](docs/SETUP.md#2-permissions-and-roles). The example uses `developer@contoso.com` as the selected standard-tier pilot account and handover recipient. The installer records the gateway target.
+
+```powershell
+git clone https://github.com/naveenneog/claude-code-foundry-gateway
+cd claude-code-foundry-gateway
+.\Install-ClaudeGateway.ps1
+$gateway = Get-Content .\onboarding\claude-gateway.json -Raw | ConvertFrom-Json
+.\scripts\Set-ClaudeDeveloper.ps1 -ResourceGroup $gateway.resourceGroup -ApimName $gateway.apimName -User 'developer@contoso.com' -Tier standard -Sync
+.\scripts\New-OnboardingEmail.ps1 -ConfigPath .\onboarding\claude-gateway.json -To 'developer@contoso.com'
+.\scripts\Test-ClaudeHealth.ps1 -ResourceGroup $gateway.resourceGroup -ApimName $gateway.apimName
+.\scripts\Get-ClaudeBypass.ps1 -ResourceGroup $gateway.resourceGroup -ApimName $gateway.apimName
+```
+
+**Expected result:** the installer writes the handover record; the membership command publishes access; the email command writes HTML, text and EML files; health exits zero; the bypass audit has no unapproved direct or inherited Foundry role. The generated message contains no attached configuration or scripts bundle.
+
+Roll out broadly only after the bypass findings are clean or explicitly approved, and after section 4.2 reviews Foundry key access, local authentication and network exposure; direct Foundry access skips entitlement, budgets and model restrictions ([details](docs/SETUP.md#42-close-the-bypass)). The developer's [setup and request verification](DEVELOPER.md#one-command) uses the record and complete scripts bundle. [Setup](docs/SETUP.md) covers deployment choices; [Guided flow](docs/GUIDED-FLOW.md) covers setup followed by later operations.
+
+`./install-claude-gateway.sh` on macOS and Linux deploys the gateway with named values; the projection path runs from PowerShell 7 ([ADR-0052](docs/adr/0052-cosmos-default-installer.md)). `./Update-ClaudeGateway.ps1 -ResourceGroup $gateway.resourceGroup -ApimName $gateway.apimName` plans moving a named-value gateway to the projection without writing until `-Apply` and the plan fingerprint are supplied ([Update and change](docs/UPDATE-AND-CHANGE.md#move-a-named-value-gateway-with-the-update), [ADR-0054](docs/adr/0054-update-flow-entitlement-migration.md)).
 
 ## Start here
+
+<details>
+
+<summary>Guide map for setup, operations and troubleshooting</summary>
 
 | You need to… | Start with |
 |---|---|
@@ -54,6 +48,7 @@ Start with [Setup](docs/SETUP.md) for deployment or
 | Use a terminal FinOps console or automate reports | [AUM (Azure Usage Management)](docs/AUM.md#install) — installation, connection setup, terminal actions and scriptable commands |
 | Deploy clients and managed settings with MDM | [Fleet deployment with Intune, Jamf or Group Policy](docs/MDM.md) — profiles, apps, assignments, verification and rollback |
 | Manage a business unit or view its usage | [Turnstile: viewers and managers](docs/TURNSTILE.md#viewers-and-managers) — assigned roles and sign-in without web consent |
+| Screen Claude requests with Azure AI Content Safety | [Content Safety](docs/CONTENT-SAFETY.md) — optional Prompt Shields and harm analysis before Foundry |
 | Review security, identities or revocation | [Authentication](docs/AUTHENTICATION.md), then [Network](docs/NETWORK.md) |
 | Configure firewalls, private endpoints or VNet access | [Network](docs/NETWORK.md), then [Private projection](docs/SECURE-PROJECTION.md) |
 | Plan for 500,000 developers | [Scale](docs/SCALE.md) — measured envelope, unresolved limits and cost assumptions |
@@ -94,7 +89,59 @@ not figures embedded in a diagram. `scripts/Get-ClaudeBom.ps1` reads the deploye
 bill of materials; the [operations procedure](docs/OPERATIONS.md#5-inspect-cost-and-retire-only-what-you-own)
 explains created, reused and optional resources.
 
+</details>
+
+## Capacity and cost today
+
+<details>
+
+<summary>Measured projection capacity, named-value limits and costs</summary>
+
+> **How many developers this holds today:** the projection stores one Cosmos DB record per developer.
+> On 2026-09-24, **500,000 records were loaded and read**: 954 writes/second; point reads cost 1 RU,
+> p99 51 ms. This is a storage test, **not 500,000 concurrent developers** or a completed directory
+> scan.
+>
+> Named values remain selectable for small teams. Business-unit membership fills first, at
+> **roughly 93 developers** with six-character unit IDs; tier lists hold 110 each. Longer IDs reduce
+> that capacity. Oversized writes fail, not truncate.
+> **The installer deploys the projection by default.** Above that capacity it refuses named values.
+>
+> Projection deployment requires PowerShell 7. Its [read-only preflight](docs/SECURE-PROJECTION.md#one-command-deployment)
+> runs before Azure writes. Projection records persist until a sync deletes or changes them,
+> so a sync-job outage does not stop developers. The installer deploys the sync job, which applies
+> Entra tier and business-unit group changes every 2 hours by default (`-ProjectionSyncInterval`, 30 minutes
+> to 12 hours). `scripts/Sync-ClaudeAccess.ps1 -User`
+> publishes one developer's change on either entitlement store: named values run a full allow-list refresh and the
+> projection uses the in-VNet runner. Without `-User` it refreshes everyone.
+> `scripts/Deploy-ClaudeProjection.ps1 -FlipAfterCleanCompare` switches without deploying
+> anything, after resolver checks, drift check, runner compare and Cosmos switch evidence
+> ([ADR-0051](docs/adr/0051-persistent-sync-based-cosmos-entitlement.md)).
+> `.\Update-ClaudeGateway.ps1 -ResourceGroup <rg> -ApimName <apim>` plans the move of a named-value
+> gateway to the projection. The plan reuses the gateway's tier groups, checks quotas and prerequisites, and
+> lists the resources, network and monthly cost before `-Apply` writes anything
+> ([Update and change](docs/UPDATE-AND-CHANGE.md#move-a-named-value-gateway-with-the-update),
+> [ADR-0054](docs/adr/0054-update-flow-entitlement-migration.md)).
+>
+> The current two-always-ready-instance profile costs **$91.56/month at rest**.
+> Projection writes now follow directory churn. The older 500,000-member renewal estimate was
+> about **365 million writes/month** and **$538/month** at the measured create RU charge and
+> stated list price; it is historical, not the current operating model. APIM, Foundry and other usage
+> costs are additional. See the [dated P19 record](docs/status/P19.md#where-p19-stands-2026-09-24),
+> [Scale](docs/SCALE.md) and [private deployment](docs/SECURE-PROJECTION.md).
+>
+> `scripts/Measure-ClaudeCeiling.ps1` checks your named-value headroom and fails
+> at 80%; [Operations](docs/OPERATIONS.md#2-check-health-and-headroom) gives the
+> command, roles and portal checks.
+
+</details>
+
+
 ## Why
+
+<details>
+
+<summary>Gateway controls Foundry authentication does not enforce</summary>
 
 Foundry provides Entra authentication. The gateway adds a shared enforcement
 point for entitlement, token limits and model access. It governs only requests
@@ -108,7 +155,13 @@ Entra tokens are still bearer credentials and must be protected; a signed claim
 does not make a stolen token impossible to replay.
 [Authentication](docs/AUTHENTICATION.md) explains identities and revocation.
 
+</details>
+
 ## What you get
+
+<details>
+
+<summary>Governance controls, clients and installer walkthrough</summary>
 
 | Control | Mechanism |
 |---|---|
@@ -127,23 +180,20 @@ does not make a stolen token impossible to replay.
 Configuration and sign-in steps are in [DEVELOPER.md](DEVELOPER.md). Desktop
 users choose **Or sign in with Gateway**, not Google or email.
 
-<details>
-<summary>Client screenshots</summary>
+**Client screenshots.**
 
 ![Claude CLI status showing Microsoft Foundry, gateway URL and enterprise managed settings](docs/images/client-cli-status.png)
 ![Claude Code in VS Code streaming through the gateway](docs/images/vscode-through-gateway.png)
 ![Claude Desktop Chat and Cowork with the account row showing Gateway](docs/images/client-desktop-chat.png)
 ![Claude Desktop Code tab showing session and token counts](docs/images/client-desktop-code.png)
 
-</details>
 
 ### Running the installer
 
 The [setup walkthrough](docs/SETUP.md#option-a--the-interactive-wizard-recommended)
 explains the choices and offers a portal alternative.
 
-<details>
-<summary>Installer screenshots</summary>
+**Installer screenshots.**
 
 ![Installer prerequisites, Azure sign-in, subscription and Foundry discovery](docs/guide/run-1-prerequisites.png)
 ![Existing v2 gateways offered for reuse, with SKU, region and resource group](docs/guide/run-2-reuse-existing-apim.png)
@@ -157,10 +207,16 @@ Identifiers are redacted with [terminal](guide/redact-terminal.mjs) and
 
 ## Prerequisites
 
+<details>
+
+<summary>Foundry, APIM, tooling, permissions and SKU requirements</summary>
+
 Platform deployment needs a Foundry account eligible to deploy Claude, an APIM
 **v2** tier, Azure CLI/Bicep, and the Azure and Entra permissions listed in
-[Setup](docs/SETUP.md#1-prerequisites). Developers need the platform team's
-configuration and entitlement, not those administrator roles.
+[Setup](docs/SETUP.md#1-prerequisites). The installer's default store, the Cosmos
+projection, also needs PowerShell 7, Node.js with npm, and `tar` on the machine
+that runs it ([Setup tooling](docs/SETUP.md#tooling)). Developers need the platform
+team's configuration and entitlement, not those administrator roles.
 
 **USD budgets:** dollar inputs now retain their approved amount and dated tariff,
 with an optional reconciler publishing gateway stops. This includes observed
@@ -173,15 +229,13 @@ See [dollar budgets](docs/BUDGETS.md#dollar-budgets-what-is-enforced) and the
 > Classic tiers can accept the policy but meter zero tokens. Private resolver
 > access needs Standard v2 or Premium v2 outbound VNet integration.
 
-## Quickstart
+</details>
 
-After reviewing the [roles](docs/SETUP.md#2-permissions-and-roles):
+## What the installer does
 
-```powershell
-git clone https://github.com/naveenneog/claude-code-foundry-gateway
-cd claude-code-foundry-gateway
-./Install-ClaudeGateway.ps1
-```
+<details>
+
+<summary>Resource discovery, deployment choices and projection switch</summary>
 
 **macOS/Linux:** use `./install-claude-gateway.sh` from the same directory.
 **Portal:** [Setup option C](docs/SETUP.md#option-c--portal) covers template
@@ -193,35 +247,67 @@ An answers file, a read-only preflight and selected steps are described in [Setu
 ### What it does
 
 The installer discovers resources, collects deployment and budget choices,
-deploys/reuses the gateway and observability resources, grants the gateway
-identity access to Foundry, configures the API/policy, creates or reuses tier
-groups, syncs entitlement and generates the
-[developer handover](onboarding/README.md). See [Setup](docs/SETUP.md) before a
-redeploy; optional projection and Turnstile deployment are separate procedures.
+deploys or reuses the gateway and observability resources, grants the gateway
+identity access to Foundry, configures the API and policy, and creates or reuses
+the tier groups. With the default Cosmos projection it then deploys the projection,
+populates and compares it, and switches the gateway to it; with named values it
+syncs the tier lists. It ends with the [developer handover](onboarding/README.md).
+`-WhatIf` lists these steps and changes nothing. Turnstile deployment is a separate
+procedure ([Setup](docs/SETUP.md)).
+
+</details>
 
 ## Onboarding a developer
+
+<details>
+
+<summary>Group membership, sync verification and handover files</summary>
 
 Follow [Onboarding](docs/ONBOARDING.md): change the Entra group, publish the
 change, verify it, then send [DEVELOPER.md](DEVELOPER.md), the generated config
 and the complete scripts bundle. No developer API key is issued.
 
+</details>
+
 ## Verifying the controls
+
+<details>
+
+<summary>Governance test window and billable throttle checks</summary>
 
 Use [Governance checks](docs/GOVERNANCE-CHECKS.md). Agree a test window:
 throttle tests temporarily change live limits and send billable model requests.
 
+</details>
+
 ## Close the bypass
+
+<details>
+
+<summary>Foundry role audit and direct-access cleanup</summary>
 
 Run the [Foundry bypass audit](docs/SETUP.md#42-close-the-bypass) and review
 inherited as well as direct roles. Keep the gateway's managed identity grant.
 Do not remove another application's legitimate assignment without its owner.
 
+</details>
+
 ## Tuning budgets
+
+<details>
+
+<summary>Budget defaults, overrides, refusals and portal edits</summary>
 
 Moved to [Configure token budgets and model access](docs/BUDGETS.md), including
 all defaults, per-person overrides, refusal bodies, portal edits and verification.
 
+</details>
+
 ## Chargeback
+
+<details>
+
+<summary>Ledger, workbooks, consoles and billing gaps</summary>
 
 Start with [FinOps](docs/FINOPS.md). `ClaudeChargeback` is the request ledger;
 `ClaudeCost` prices its usage plus observed cache reads. The
@@ -240,7 +326,13 @@ starting it automatically.
 See [console choices](docs/FINOPS.md#optional-consoles) for access differences.
 Custom metrics remain useful for pilot diagnostics, not complete scaled billing.
 
+</details>
+
 ## What it costs
+
+<details>
+
+<summary>Bill of materials prices and excluded token costs</summary>
 
 Use `scripts/Get-ClaudeBom.ps1 -WithPrices` with your selected gateway;
 [Operations](docs/OPERATIONS.md#5-inspect-cost-and-retire-only-what-you-own)
@@ -251,13 +343,25 @@ Include the optional [projection](docs/SECURE-PROJECTION.md#cost) and
 
 ![Bill of materials listing deployed resources and list prices, explicitly excluding Claude tokens](docs/guide/bom-prices.png)
 
+</details>
+
 ## Repository layout
+
+<details>
+
+<summary>Script, template and operations reference locations</summary>
 
 Moved to [Repository and command reference](docs/REFERENCE.md#repository-layout).
 The scripts, templates, analytics, resolver, sync and screenshot tools are mapped
 there; [Operations](docs/OPERATIONS.md) maps tasks to commands and portal paths.
 
+</details>
+
 ## Documentation
+
+<details>
+
+<summary>User guide index and engineering record links</summary>
 
 | Guide | Purpose |
 |---|---|
@@ -279,6 +383,7 @@ there; [Operations](docs/OPERATIONS.md) maps tasks to commands and portal paths.
 | [Enterprise network](docs/NETWORK-ENTERPRISE.md) | Priced network reviews, caller access impact, live-tested regional WAF and private origins; reference-only hub and global-edge alternatives |
 | [Data governance](docs/DATA-GOVERNANCE.md) | Retention, discovery, approved purge and its coverage limits |
 | [Scale](docs/SCALE.md) / [Private projection](docs/SECURE-PROJECTION.md) | Measured limits, costs and migration runbook |
+| [Cosmos projection workbook](docs/PROJECTION-WORKBOOK.md) | Manual deploy, populate, switch, operation and rollback steps for sync-based Cosmos entitlement |
 | [Comparison](docs/COMPARISON.md) / [Foundry direct](docs/FOUNDRY-DIRECT.md) | Adoption choices and ungoverned evaluation |
 | [AI Gateway tier](docs/AI-GATEWAY-TIER.md) | Preview comparison and unverified model-serving path |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) / [Debugging](docs/DEBUGGING.md) | Known symptoms / isolate the failure layer |
@@ -290,13 +395,25 @@ The engineering record is separate from the user guides:
 [Charter](docs/CHARTER.md), [Roadmap](docs/ROADMAP.md), [Status](docs/STATUS.md),
 [Unknowns](docs/UNKNOWNS.md), [ADRs](docs/adr/) and [Changelog](CHANGELOG.md).
 
+</details>
+
 ## Companion accelerator
+
+<details>
+
+<summary>Desktop fleet-policy tooling in the companion repository</summary>
 
 [claude-desktop-foundry](https://github.com/naveenneog/claude-desktop-foundry)
 provides Desktop fleet-policy tooling that can reuse this gateway. Follow that
 repository's instructions for its scripts; they are not all in this checkout.
 
+</details>
+
 ## Contributing
+
+<details>
+
+<summary>Issue evidence, redaction rules and contributor checks</summary>
 
 Open an issue or pull request with a reproducible command, client/version,
 status code and redacted output. Do not include tokens, tenant/resource IDs,
@@ -307,6 +424,15 @@ real addresses, prompt content or unredacted screenshots.
 Use [Contributor checks](docs/REFERENCE.md#contributor-checks) for offline/live
 tests, the packet gate, PowerShell encoding and Windows Azure CLI quoting.
 
+</details>
+
+## Next
+
+- [Setup](docs/SETUP.md) covers deployment choices.
+- [Operations](docs/OPERATIONS.md) covers day-to-day administration.
+- [Developer setup](DEVELOPER.md) covers workstation handover.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
+

@@ -34,9 +34,10 @@ Mutation 'named-value-length-preflight' $life 'Test-ApimNamedValueLength -Id "mo
 Mutation 'recorded-overrides-survive' $life '$entry = if ($old.Count) { $old[0] | ConvertTo-Json -Depth 20 | ConvertFrom-Json } else { [pscustomobject]@{} }' '$entry = [pscustomobject]@{}'
 Mutation 'root-models-are-the-live-union' $life 'Set-ClaudeRecordProperty $recordAfter ''models'' @($recorded.name)' 'Set-ClaudeRecordProperty $recordAfter ''models'' @(''stale-model'')'
 Mutation 'tier-records-are-scoped' $life '$names = @($permitted | Where-Object { $_.name -in $sets[$tier] } | ForEach-Object { $_.name })' '$names = @($permitted.name)'
-Mutation 'negative-price-refusal' $price '[decimal]$value -lt 0' '$false'
-Mutation 'ambiguous-price-refusal' $price '$rates.Count -gt 1' '$false'
-Mutation 'negotiated-deployment-price-wins' $price '[string]$Deployment.name -in $names' '$false'
+Mutation 'negative-price-refusal' $price '$value -lt 0 -or [decimal]$value -lt 0' '$false' 2
+Mutation 'ambiguous-price-refusal' $price '$rates.Count -gt 1' '$false' 3
+Mutation 'negotiated-deployment-price-wins' $price '$key = Resolve-ClaudePriceBookKey -Name ([string]$Deployment.name) -Book $Book' '$key = '''''
+Mutation 'equal-rate-spellings-take-ordinal-first' $price 'return [string](@(Sort-ClaudeFlowOrdinal -InputObject $matches)[0])' 'return [string]$matches[0]'
 Mutation 'unpriced-never-free' $price 'Detail = "unpriced ($reason); not free"' 'Detail = "free USD 0"'
 Mutation 'historical-price-retention' $life '$bookAfter = $book | ConvertTo-Json -Depth 40 | ConvertFrom-Json' '$bookAfter = $book | ConvertTo-Json -Depth 40 | ConvertFrom-Json; $bookAfter.models.PSObject.Properties.Remove(''retired'')'
 Mutation 'price-mapping-is-persisted' $life '$priceChanged = $true' '$priceChanged = $false'
@@ -130,6 +131,12 @@ try {
     Copy-Item -LiteralPath (Join-Path $root 'scripts') -Destination $shadow -Recurse
     # The answers schema the guided flow checks -AnswersPath against (ADR-0047).
     Copy-Item -LiteralPath (Join-Path $root 'schemas') -Destination $shadow -Recurse
+    # Tracked configuration only: an operator's gitignored config\price-book.json must not change the suite's results.
+    foreach ($tracked in @(& git -C $root ls-files -- config)) {
+        $trackedTarget = Join-Path $shadow $tracked
+        New-Item -ItemType Directory -Path (Split-Path $trackedTarget -Parent) -Force | Out-Null
+        Copy-Item -LiteralPath (Join-Path $root $tracked) -Destination $trackedTarget
+    }
     foreach ($file in 'Start-ClaudeGateway.ps1','Install-ClaudeGateway.ps1','.gitignore') { Copy-Item -LiteralPath (Join-Path $root $file) -Destination $shadow }
     & git -C $shadow init --quiet
     if ($LASTEXITCODE) { throw 'Cannot initialise the private mutation source repository.' }

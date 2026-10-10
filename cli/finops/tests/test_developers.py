@@ -136,6 +136,8 @@ class FakeDeveloperBackend:
 
     def __init__(self):
         self.calls = []
+        self.client = None
+        self.publish_tiers = None
 
     def _bridge(self, action, body=None, **params):
         self.calls.append((action, params))
@@ -149,12 +151,24 @@ class FakeDeveloperBackend:
                 "entitlements": {"standard": [], "premium": []},
                 "memberships": {},
             }
-        return {"published": True, **params}
+        result = {"published": True, **params}
+        if action == "developer_publish":
+            if self.publish_tiers:
+                result["published_tier"] = self.publish_tiers.pop(0)
+            elif self.client:
+                if USER in self.client.group_members.get(PREMIUM, set()):
+                    result["published_tier"] = "premium"
+                elif USER in self.client.group_members.get(STANDARD, set()):
+                    result["published_tier"] = "standard"
+                else:
+                    result["published_tier"] = "none"
+        return result
 
 
 class FakeDeveloperEngine:
     def __init__(self, client):
         self.backend = FakeDeveloperBackend()
+        self.backend.client = client
         self.developer_factory = lambda: client
 
     def read(self, resource, **_):
@@ -208,9 +222,56 @@ def remove_with(client):
 
 def test_removal_of_one_of_several_tier_members_publishes_without_allow_empty():
     _, publish, _ = remove_with(FakeDeveloperClient(direct={STANDARD}, group_members={STANDARD: {USER, "other-user"}}))
+    assert publish["user"] == USER
     assert "allow_empty_standard" not in publish
     assert "allow_empty_premium" not in publish
     assert "allow_empty" not in publish
+
+
+def test_direct_developer_publication_keeps_published_tier():
+    from claude_finops.developer_actions import developer_change
+    client = FakeDeveloperClient()
+    engine = FakeDeveloperEngine(client)
+    original = engine.backend._bridge
+
+    def bridge(action, body=None, **params):
+        result = original(action, body=body, **params)
+        if action == "developer_publish":
+            result["published_tier"] = "premium"
+        return result
+
+    engine.backend._bridge = bridge
+    result = developer_change(engine, object(), "dev@contoso.com", tier="premium", apply=True)
+    assert result["publication"]["published_tier"] == "premium"
+    assert engine.backend.calls[-1][1]["user"] == USER
+
+
+def test_direct_developer_publication_retries_until_expected_tier(monkeypatch):
+    import claude_finops.developer_actions as actions
+    monkeypatch.setattr(actions.time, "sleep", lambda _: None)
+    monkeypatch.setattr(actions, "PUBLISH_RETRY_SECONDS", 30)
+    client = FakeDeveloperClient(direct={STANDARD}, group_members={STANDARD: {USER}})
+    engine = FakeDeveloperEngine(client)
+    engine.backend.publish_tiers = ["standard", "none"]
+    result = actions.developer_change(engine, object(), "dev@contoso.com", remove=True, apply=True, confirm="dev@contoso.com")
+    assert result["publication"]["published_tier"] == "none"
+    assert [call[0] for call in engine.backend.calls].count("developer_publish") == 2
+
+
+def test_direct_developer_publication_warns_when_expected_tier_lags(monkeypatch):
+    import claude_finops.developer_actions as actions
+    ticks = iter([0, 11])
+    monkeypatch.setattr(actions.time, "monotonic", lambda: next(ticks, 11))
+    monkeypatch.setattr(actions.time, "sleep", lambda _: None)
+    monkeypatch.setattr(actions, "PUBLISH_RETRY_SECONDS", 10)
+    monkeypatch.setattr(actions, "PUBLISH_RETRY_INTERVAL_SECONDS", 10)
+    client = FakeDeveloperClient(direct={STANDARD}, group_members={STANDARD: {USER}})
+    engine = FakeDeveloperEngine(client)
+    engine.backend.publish_tiers = ["standard", "standard"]
+    result = actions.developer_change(engine, object(), "dev@contoso.com", remove=True, apply=True, confirm="dev@contoso.com")
+    assert result["publication"]["published_tier"] == "standard"
+    assert "Gateway still reports tier standard" in result["publication"]["publication_warning"]
+    assert "Sync-ClaudeAccess.ps1 -User" in result["publication"]["publication_warning"]
 
 
 def test_removal_of_last_member_of_changed_tier_publishes_scoped_allow_empty():

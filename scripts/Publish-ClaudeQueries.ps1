@@ -125,18 +125,91 @@ function New-GeneratedBlock {
 }
 
 function New-PriceBlock {
-    $path = Join-Path $root 'config/price-book.json'
+    param([string]$Path)
+    $path = if ($Path) { $Path } else { Join-Path $root 'config/price-book.json' }
     if (-not (Test-Path $path)) { $path = Join-Path $root 'config/price-book.example.json' }
     $pb = Get-Content $path -Raw | ConvertFrom-Json
     $models = @($pb.models.PSObject.Properties)
     if (-not $models.Count) { throw "The price book at $path has no models, so nothing could be priced." }
+    $seen = @{}
+    foreach ($model in $models) {
+        $key = ConvertTo-ClaudeQueryPriceKey $model.Name
+        if ($seen.ContainsKey($key)) {
+            $previous = $seen[$key]
+            $previousRate = Get-ClaudeQueryEffectivePriceRateKey $previous.Value $previous.Name -BookPath $path
+            $currentRate = Get-ClaudeQueryEffectivePriceRateKey $model.Value $model.Name -BookPath $path
+            if ($previousRate -ne $currentRate) {
+                throw "Duplicate normalized price-book key '$key' in $path has conflicting rates: $($previous.Name) and $($model.Name)."
+            }
+            Write-Warning "Duplicate normalized price-book key '$key' in $path has equal rates: $($previous.Name) and $($model.Name)."
+        }
+        else { $seen[$key] = $model }
+    }
 
     $rows = @($models | ForEach-Object {
-        '    "{0}", {1}, {2}' -f $_.Name, $_.Value.inputPerM, $_.Value.outputPerM
+        $rates = Get-ClaudeQueryEffectivePriceRates $_.Value $_.Name -BookPath $path
+        '    "{0}", {1}, {2}, {3}, {4}, {5}' -f $_.Name,
+            (Format-ClaudeQueryDecimal $rates[0]),
+            (Format-ClaudeQueryDecimal $rates[1]),
+            (Format-ClaudeQueryDecimal $rates[2]),
+            (Format-ClaudeQueryDecimal $rates[3]),
+            (Format-ClaudeQueryDecimal $rates[4])
     }) -join ",`n"
 
     return ("let price_book_date = `"{0}`";`n" -f $pb.date) +
-           "let price = datatable(model: string, input_per_m: real, output_per_m: real) [`n$rows`n];"
+           "let price = datatable(model: string, input_per_m: real, output_per_m: real, cache_read_per_m: real, cache_write_5m_per_m: real, cache_write_1h_per_m: real) [`n$rows`n];"
+}
+
+function Format-ClaudeQueryDecimal {
+    param([Parameter(Mandatory = $true)][decimal]$Value)
+    return $Value.ToString('G29', [Globalization.CultureInfo]::InvariantCulture)
+}
+
+function Get-ClaudeQueryEffectivePriceRates {
+    param([Parameter(Mandatory = $true)]$Rate, [Parameter(Mandatory = $true)][string]$ModelName, [string]$BookPath = '')
+    $inputRate = Get-ClaudeQueryPriceRate -Rate $Rate -ModelName $ModelName -Field 'inputPerM' -Required -BookPath $BookPath
+    $outputRate = Get-ClaudeQueryPriceRate -Rate $Rate -ModelName $ModelName -Field 'outputPerM' -Required -BookPath $BookPath
+    $cacheRead = Get-ClaudeQueryPriceRate -Rate $Rate -ModelName $ModelName -Field 'cacheReadPerM' -Default ($inputRate * [decimal]0.1) -BookPath $BookPath
+    $cacheWrite5m = Get-ClaudeQueryPriceRate -Rate $Rate -ModelName $ModelName -Field 'cacheWrite5mPerM' -Default ($inputRate * [decimal]1.25) -BookPath $BookPath
+    $cacheWrite1h = Get-ClaudeQueryPriceRate -Rate $Rate -ModelName $ModelName -Field 'cacheWrite1hPerM' -Default ($inputRate * [decimal]2) -BookPath $BookPath
+    return @($inputRate, $outputRate, $cacheRead, $cacheWrite5m, $cacheWrite1h)
+}
+
+function Get-ClaudeQueryEffectivePriceRateKey {
+    param([Parameter(Mandatory = $true)]$Rate, [Parameter(Mandatory = $true)][string]$ModelName, [string]$BookPath = '')
+    return ((Get-ClaudeQueryEffectivePriceRates $Rate $ModelName -BookPath $BookPath) | ForEach-Object { Format-ClaudeQueryDecimal $_ }) -join ':'
+}
+
+function Get-ClaudeQueryPriceRate {
+    param(
+        [Parameter(Mandatory = $true)]$Rate,
+        [Parameter(Mandatory = $true)][string]$ModelName,
+        [Parameter(Mandatory = $true)][string]$Field,
+        [decimal]$Default,
+        [switch]$Required,
+        [string]$BookPath = ''
+    )
+    $label = if ($BookPath) { "Price book '$BookPath': model '$ModelName'" } else { "Price book model '$ModelName'" }
+    if ($null -eq $Rate.PSObject.Properties[$Field]) {
+        if ($Required) { throw "$label is missing numeric $Field." }
+        return $Default
+    }
+    $value = $Rate.$Field
+    if ($null -eq $value -or $value -is [bool] -or $value -is [string] -or
+        $value -is [System.Collections.IEnumerable] -or $value.GetType().FullName -eq 'System.Management.Automation.PSCustomObject') {
+        throw "$label needs numeric $Field."
+    }
+    # The sign is read before the decimal conversion, which turns -1e-30 into 0. The bounds are the reconciler's
+    # (service/aum/aum_service/usd_budgets.py rate): 0 to 1,000,000 per million tokens.
+    if ($value -lt 0) { throw "$label has negative $Field." }
+    try { $parsed = [decimal]$value } catch { throw "$label needs numeric $Field within the decimal range." }
+    if ($parsed -gt 1000000) { throw "$label has $Field above 1,000,000 per million tokens." }
+    return $parsed
+}
+
+function ConvertTo-ClaudeQueryPriceKey {
+    param([AllowNull()][string]$Name)
+    return ([regex]::Replace([string]$Name, '[^A-Za-z0-9]', '')).ToLowerInvariant()
 }
 
 function New-MembershipBlock {

@@ -18,7 +18,9 @@
     "infra/chargeback-reports.bicep",
     "infra/chargeback-dns.bicep",
     "infra/aum-service.bicep",
-    "infra/projection-renewal.bicep"
+    "infra/projection-renewal.bicep",
+    "infra/projection-registry.bicep",
+    "infra/projection-renewal-gateway-reader.bicep"
   ],
   "identifiers": {},
   "sections": [
@@ -77,7 +79,7 @@
     },
     {
       "title": "Optional scheduled jobs \u00b7 Turnstile export and P86 projection renewal",
-      "note": "Container Apps jobs use user-assigned identities and Consumption environments. P86 adds a scheduled projection renewal job, an internal Container Apps environment, a digest-pinned ACR image, container-scoped Cosmos data-plane writer rights, and email-backed alerts.",
+      "note": "Container Apps jobs use user-assigned identities and Consumption environments. P86 adds a scheduled projection renewal job, an internal Container Apps environment, a digest-pinned ACR image, container-scoped Cosmos data-plane writer rights, and email-backed alerts. P94 deploys the registry and the job identity before the image build, sends the job environment's logs to the gateway workspace through a diagnostic setting, and grants the job a named-value read role on the gateway.",
       "types": [
         "Microsoft.ManagedIdentity/userAssignedIdentities",
         "Microsoft.App/managedEnvironments",

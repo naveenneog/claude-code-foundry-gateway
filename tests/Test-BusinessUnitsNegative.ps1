@@ -45,7 +45,7 @@ $mutations = @(
 
     @{ Name  = 'an identifier with a comma is accepted'
        File  = 'scripts/ClaudeBusinessUnit.ps1'
-       From  = "^[a-z0-9][a-z0-9-]*$"
+       From  = "^[a-z0-9][a-z0-9-]*\z"
        To    = '.' }
 
     @{ Name  = 'the report stops saying the figure is list price'
@@ -586,10 +586,10 @@ $mutations = @(
        To    = 'That is a known issue' }
 
     @{ Suite = 'Test-Scale.ps1'
-       Name  = 'the README implies the projection is the default'
+       Name  = 'the README stops saying the installer deploys the projection by default'
        File  = 'README.md'
-       From  = '**It is not the default.**'
-       To    = '**It is the default.**' }
+       From  = '**The installer deploys the projection by default.**'
+       To    = '**The installer deploys named values by default.**' }
 
     @{ Suite = 'Test-Scale.ps1'
        Name  = 'private networking stops being priced'
@@ -716,8 +716,8 @@ $mutations = @(
     @{ Suite = 'Test-ModelsAndPlugins.ps1'
        Name  = 'price book rates stop being decimal'
        File  = 'scripts/ClaudeBusinessUnit.ps1'
-       From  = 'InputPerM  = [decimal]$m.inputPerM'
-       To    = 'InputPerM  = $m.inputPerM' }
+       From  = '$parsed = [decimal]$Value'
+       To    = '$parsed = $Value' }
 
     @{ Suite = 'Test-ModelsAndPlugins.ps1'
        Name  = 'a malformed price book is silently ignored'
@@ -931,8 +931,8 @@ $mutations = @(
     @{ Suite = 'Test-Observability.ps1'
        Name  = 'cache read is priced at the full input rate'
        File  = 'analytics/chargeback-cost.kql'
-       From  = 'let cache_read_multiplier = 0.1;'
-       To    = 'let cache_read_multiplier = 1.0;' }
+       From  = '(cache_read_tokens / 1000000.0) * cache_read_per_m'
+       To    = '(cache_read_tokens / 1000000.0) * input_per_m' }
 
     @{ Suite = 'Test-Observability.ps1'
        Name  = 'an unpriced model is costed at zero'
@@ -1579,9 +1579,9 @@ $mutations = @(
 
     @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'the declared population is never checked against the store'
-       File  = 'Install-ClaudeGateway.ps1'
-       From  = 'Named values hold about {0} developers, and you said {1}.'
-       To    = 'Sizing looks fine for {0} developers' }
+       File  = 'scripts/ClaudeInstallProjection.ps1'
+       From  = 'if ($store -eq ''named-value'' -and $DeveloperCount -gt $BuCeiling) {'
+       To    = 'if ($false) {' }
 
     @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'the ceiling becomes a pasted number in the installer'
@@ -1591,9 +1591,9 @@ $mutations = @(
 
     @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'a bigger SKU is offered as the fix for the ceiling'
-       File  = 'Install-ClaudeGateway.ps1'
-       From  = 'raising the SKU does not move it'
-       To    = 'a larger SKU raises it' }
+       File  = 'scripts/ClaudeInstallProjection.ps1'
+       From  = 'raising the API Management SKU does not increase'
+       To    = 'a larger API Management SKU increases' }
 
     @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'the revocation window goes back to being documented'
@@ -1712,8 +1712,8 @@ $mutations = @(
     @{ Suite = 'Test-Scale.ps1'
        Name  = 'a redeploy silently un-migrates the gateway'
        File  = 'Install-ClaudeGateway.ps1'
-       From  = 'named-value-id entitlement-source --query value'
-       To    = 'named-value-id bu-parents --query value' }
+       From  = "-Id 'entitlement-source' -FailOnError"
+       To    = "-Id 'bu-parents' -FailOnError" }
 
     @{ Suite = 'Test-Scale.ps1'
        Name  = 'the Basic v2 networking floor is dropped'
@@ -2417,10 +2417,10 @@ $mutations = @(
        To    = 'Math.Max(3600, int.Parse' }
 
     @{ Suite = 'Test-SecureProjection.ps1'
-       Name  = 'an export asks for a Cosmos token it cannot use'
+       Name  = 'the exporter asks for a Cosmos token'
        File  = 'scripts/Sync-ClaudeProjection.ps1'
-       From  = 'if (-not $ExportPath) {'
-       To    = 'if ($true) {' }
+       From  = '$graphToken = Get-GraphToken'
+       To    = '$graphToken = Get-GraphToken; $cosmosToken = az account get-access-token --resource https://cosmos.azure.com --query accessToken -o tsv' }
 
     @{ Suite = 'Test-SecureProjection.ps1'
        Name  = 'the projection charges the last business unit again'
@@ -2443,8 +2443,8 @@ $mutations = @(
     @{ Suite = 'Test-SecureProjection.ps1'
        Name  = 'a snapshot is applied without validation'
        File  = 'sync/src/apply-projection.mjs'
-       From  = 'const problems = validateSnapshot(snap, { tenantId });'
-       To    = 'const problems = [];' }
+       From  = '      : validateSnapshot(snap, { tenantId });'
+       To    = '      : [];' }
 
     @{ Suite = 'Test-SecureProjection.ps1'
        Name  = 'a failed write is reported as ok'
@@ -2904,9 +2904,9 @@ $mutations = @(
        To    = "''" }
 
     @{ Suite = 'Test-AdminSurface.ps1'
-       Name  = 'the sign-in choice stops being decided once'
+       Name  = 'the sign-in choice stops being one fleet-wide setting'
        File  = 'docs/SETUP.md'
-       From  = 'decided here, once, for everyone'
+       From  = 'one setting for every developer'
        To    = 'set per machine' }
 
     @{ Suite = 'Test-AdminSurface.ps1'
@@ -3144,7 +3144,7 @@ $caught = 0
 
 try {
     New-Item -ItemType Directory -Path $sandbox -Force | Out-Null
-    foreach ($d in 'infra', 'scripts', 'tests', 'analytics', 'sync', 'resolver', 'cli') {
+    foreach ($d in 'infra', 'scripts', 'tests', 'analytics', 'sync', 'resolver', 'cli', 'service') {
         if (Test-Path (Join-Path $root $d)) {
             Copy-Item (Join-Path $root $d) $sandbox -Recurse -Force
         }
@@ -3153,6 +3153,8 @@ try {
     # back to the template.
     Copy-Item (Join-Path $root 'Install-ClaudeGateway.ps1') $sandbox -Force
     Copy-Item (Join-Path $root 'README.md') $sandbox -Force
+    # Test-UsdBudgets.ps1 checks the CHANGELOG wording against the price-book rules.
+    Copy-Item (Join-Path $root 'CHANGELOG.md') $sandbox -Force
     # The developer-facing guide, which carries the Desktop gateway sign-in step
     # and the FAQ, both of which are asserted against.
     Copy-Item (Join-Path $root 'DEVELOPER.md') $sandbox -Force

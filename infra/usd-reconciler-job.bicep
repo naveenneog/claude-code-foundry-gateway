@@ -28,7 +28,7 @@ param existingEnvironmentId string = ''
 @description('Tags applied to owned resources.')
 param tags object = {}
 
-var suffix = take(uniqueString(resourceGroup().id, gatewayResourceId, workspaceResourceId, repositoryRef), 10)
+var suffix = take(uniqueString(resourceGroup().id, gatewayResourceId, workspaceResourceId), 10)
 var gatewayName = last(split(gatewayResourceId, '/'))
 var workspaceName = last(split(workspaceResourceId, '/'))
 
@@ -69,24 +69,6 @@ resource logs 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = if (e
   }
 }
 
-resource gateway 'Microsoft.ApiManagement/service@2024-05-01' existing = {
-  name: gatewayName
-}
-
-resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = {
-  name: workspaceName
-}
-
-resource workspaceReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(workspaceResourceId, identity.id, 'usd-reconcile-workspace-reader')
-  scope: workspace
-  properties: {
-    principalId: identity.properties.principalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '73c42c96-874c-492b-b04d-ab87d138a893')
-  }
-}
-
 resource writerRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = {
   name: guid(gatewayResourceId, 'usd-reconciler-writer')
   properties: {
@@ -112,13 +94,22 @@ resource writerRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = {
   }
 }
 
-resource gatewayWriter 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(gateway.id, identity.id, 'usd-reconcile-named-values')
-  scope: gateway
-  properties: {
+module gatewayAccess 'aum-gateway-access.bicep' = {
+  name: 'usd-reconciler-gateway-access-${suffix}'
+  scope: resourceGroup(split(gatewayResourceId, '/')[2], split(gatewayResourceId, '/')[4])
+  params: {
+    gatewayName: gatewayName
     principalId: identity.properties.principalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: writerRole.id
+    writerRoleDefinitionId: writerRole.id
+  }
+}
+
+module logsAccess 'aum-logs-access.bicep' = {
+  name: 'usd-reconciler-logs-access-${suffix}'
+  scope: resourceGroup(split(workspaceResourceId, '/')[2], split(workspaceResourceId, '/')[4])
+  params: {
+    workspaceName: workspaceName
+    principalId: identity.properties.principalId
   }
 }
 
@@ -203,12 +194,13 @@ resource job 'Microsoft.App/jobs@2024-03-01' = {
     }
   }
   dependsOn: [
-    gatewayWriter
-    workspaceReader
+    gatewayAccess
+    logsAccess
   ]
 }
 
 output jobName string = job.name
+output jobId string = job.id
 output environmentName string = empty(existingEnvironmentId) ? environment.name : last(split(existingEnvironmentId, '/'))
 output identityId string = identity.id
 output principalId string = identity.properties.principalId

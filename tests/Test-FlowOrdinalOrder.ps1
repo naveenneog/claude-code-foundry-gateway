@@ -66,7 +66,6 @@ $allowed = @(
     @{ File = 'scripts\ClaudeChoice.ps1'; Line = '$groups = @($apps | Where-Object { $_.resourceGroup } | Group-Object resourceGroup | Sort-Object Name)'; Reason = 'console only: a menu, recommended only when it has one entry' }
     @{ File = 'scripts\ClaudeChoice.ps1'; Line = 'Sort-Object @{ Expression = ''LastWriteTimeUtc''; Descending = $true }, Name)'; Reason = 'console only: a backup menu, newest first by time; the name orders only files written in the same tick' }
     @{ File = 'scripts\ClaudeChoice.ps1'; Line = '$models = @($Names | Where-Object { $_ } | Sort-Object -Unique)'; Reason = 'console only: Select-ClaudeModel, called by Setup-ClaudeFoundryDirect, Show-Governance and Test-ClaudeNetworkEdge, none of which the plans load' }
-    @{ File = 'scripts\ClaudeTurnstileApply.ps1'; Line = ''','' + ((@($Value.Trim('','') -split '','' | Where-Object { $_ }) | Sort-Object) -join '','') + '','''; Reason = 'in-process: both sides of one comparison are put in this form by one process; the value written is the desired one' }
     @{ File = 'scripts\ClaudeTurnstileApply.ps1'; Line = 'foreach ($item in @($Snapshot.BudgetItems | Where-Object { $_.scope_type -in ''organization'', ''department'' } | Sort-Object scope_type, scope_id)) {'; Reason = 'in-process: revisions compared key by key; their order reaches only the apply report' }
     @{ File = 'scripts\ClaudeTurnstileApply.ps1'; Line = '$keys = @(@($revisions.Keys) + @($latest.Keys) | Sort-Object -Unique)'; Reason = 'in-process: a set of keys, each compared on its own' }
 )

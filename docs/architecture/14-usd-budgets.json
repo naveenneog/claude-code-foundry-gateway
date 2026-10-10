@@ -49,9 +49,9 @@
       "Nonstream TTL split known; streaming writes remain unknown"
     ]},
     {"id": "reconcile", "x": 446, "y": 382, "w": 385, "h": 200, "tone": "blue", "title": "5 - Reconcile off the request path", "lines": [
-      "[[timer]] / [[job-template]]: every five minutes",
-      "[[direct]]: on demand",
-      "[[price]]: Decimal; unpriced is never zero"
+      "[[timer]] / [[job-template]]: one per gateway",
+      "Commit updates replace after first success",
+      "[[direct]]; [[price]]: unpriced is never zero"
     ]},
     {"id": "snapshot", "x": 874, "y": 382, "w": 385, "h": 200, "tone": "blue", "title": "6 - Publish a bounded-age decision", "lines": [
       "[[state]]: scope spend and UTC windows",

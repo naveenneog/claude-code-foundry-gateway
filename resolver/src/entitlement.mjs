@@ -33,10 +33,11 @@ export function toEntitlement(doc, { tenantId, now = new Date() } = {}) {
     return { ok: false, status: 404, reason: 'no record for this identity' };
   }
 
-  if (doc.type === 'projection-reconciliation-status' ||
+  // Any type property, even a falsy one, marks control data; the sync skips the same documents.
+  if (doc.type !== undefined ||
       (typeof doc.oid === 'string' && doc.oid.startsWith('projection-status::')) ||
       (typeof doc.id === 'string' && doc.id.startsWith('projection-status::'))) {
-    return { ok: false, status: 404, reason: 'status record is not entitlement' };
+    return { ok: false, status: 404, reason: 'control record is not entitlement' };
   }
 
   // A record from another tenant must never be honoured. Object ids are unique
@@ -55,14 +56,15 @@ export function toEntitlement(doc, { tenantId, now = new Date() } = {}) {
     };
   }
 
-  const verified = Date.parse(doc.lastVerifiedAt);
-  if (!isObjectId(doc.reconciliationGeneration) || !Number.isFinite(verified) ||
-      verified > now.getTime() || !Number.isInteger(doc.expiresAt) ||
-      doc.expiresAt > Math.floor(verified / 1000) + 7200) {
-    return { ok: false, status: 503, reason: 'projection freshness is invalid; run a complete reconciliation' };
+  const legacyExpiresAt = Number(doc.expiresAt);
+  if (doc.expiresAt !== undefined && doc.expiresAt !== null &&
+      Number.isFinite(legacyExpiresAt) && legacyExpiresAt < Math.floor(now.getTime() / 1000)) {
+    return { ok: false, status: 404, reason: 'legacy projection record expired; run a full sync' };
   }
-  if (doc.expiresAt <= Math.floor(now.getTime() / 1000)) {
-    return { ok: false, status: 503, reason: 'projection expired; its directory reconciliation must run again' };
+
+  const verified = Date.parse(doc.lastVerifiedAt);
+  if (!isObjectId(doc.reconciliationGeneration) || !Number.isFinite(verified) || verified > now.getTime()) {
+    return { ok: false, status: 503, reason: 'projection record is invalid; run a full sync' };
   }
 
   // A record that has not taken effect is not yet entitlement. This is what
@@ -89,7 +91,6 @@ export function toEntitlement(doc, { tenantId, now = new Date() } = {}) {
       mappingVersion: doc.mappingVersion ?? 0,
       effectiveFrom: doc.effectiveFrom ?? null,
       reconciliationGeneration: doc.reconciliationGeneration,
-      expiresAt: doc.expiresAt,
     },
   };
 }

@@ -77,6 +77,94 @@ if (Test-Path $helper) {
         $ok = $true
         try { Test-ClaudeBuId 'finance-emea' } catch { $ok = $false }
         Assert "'finance-emea' is accepted" $ok
+
+        # P96: the dollar budget uses the identifier as its scope and accepts only lower-case
+        # (scripts/ClaudeUsdBudgets.ps1:42), so a new identifier with a capital is refused here, with the
+        # rule. Before P96 this check ignored case, so a registry can hold an identifier with capitals; an
+        # identifier the registry holds with that exact spelling stays usable, and the registry with it can still be written.
+        $caseRefusal = ''
+        try { Test-ClaudeBuId 'Platform' } catch { $caseRefusal = $_.Exception.Message }
+        Assert "a new identifier with a capital, 'Platform', is refused with the lower-case rule" ($caseRefusal -match 'lower-case letters') $caseRefusal
+        $respelt = ''
+        try { Test-ClaudeBuId 'Sales' -Registry @('sales', 'platform') } catch { $respelt = $_.Exception.Message }
+        Assert "'Sales' is refused when the registry holds 'sales', rather than taken as that unit" ($respelt -match 'lower-case letters') $respelt
+        $inverse = ''
+        try { Test-ClaudeBuId 'legacy-unit' -Registry @('finance', 'Legacy-Unit') } catch { $inverse = $_.Exception.Message }
+        Assert "'legacy-unit' is refused when the registry holds 'Legacy-Unit', naming the stored spelling" ($inverse -match 'differs only in case' -and $inverse.Contains("'Legacy-Unit'")) $inverse
+        # Council round 2 (Security): -ccontains compares by culture, so U+212A KELVIN SIGN equals 'K'. An identifier is
+        # known only when the registry holds the same characters.
+        $lookalike = ''
+        try { Test-ClaudeBuId "$([char]0x212A)ey" -Registry @('platform', 'Key') } catch { $lookalike = $_.Exception.Message }
+        Assert 'a look-alike of a stored identifier is not known, and is refused' ($lookalike -match 'not a valid business unit identifier') $lookalike
+        $legacy = 'not run'
+        try { Test-ClaudeBuId 'Legacy-Unit' -Registry @('finance', 'Legacy-Unit'); $legacy = '' } catch { $legacy = $_.Exception.Message }
+        Assert 'an identifier the registry holds with capitals stays usable' (-not $legacy) $legacy
+        $unsafe = ''
+        try { Test-ClaudeBuId 'Has Space' -Registry @('Has Space') } catch { $unsafe = $_.Exception.Message }
+        Assert 'a stored identifier is still refused when it could break the map' ($unsafe -match 'not a valid business unit identifier') $unsafe
+        $written = ''
+        try { $written = ConvertTo-ClaudeBuRegistry @([pscustomobject]@{ Id = 'Legacy-Unit'; Group = 'Claude BU Legacy'; TokensPerMonth = 5 }) } catch { $written = "threw: $($_.Exception.Message)" }
+        Assert 'a registry that holds a stored identifier with capitals is still written' ($written -eq ',Legacy-Unit=Claude BU Legacy:5,') $written
+
+        # The interactive manager checks a new identifier at its prompt with the writer's rule, before it offers
+        # to create the Entra group (scripts/Manage-ClaudeBusinessUnits.ps1, Add-Unit).
+        $manageAst = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'scripts/Manage-ClaudeBusinessUnits.ps1'), [ref]$null, [ref]$null)
+        $confirmAst = $manageAst.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Confirm-Identifier' }, $true)
+        if ($confirmAst) {
+            . ([scriptblock]::Create($confirmAst.Extent.Text))
+            Assert "the manager's prompt refuses a new identifier with a capital, 'Platform'" (-not (Confirm-Identifier 'Platform' 6>$null))
+            Assert "the manager's prompt accepts 'finance-emea'" ([bool](Confirm-Identifier 'finance-emea' 6>$null))
+            $shown = (Confirm-Identifier 'Platform' 6>&1 | ForEach-Object { "$_" }) -join ' '
+            Assert "the manager's prompt shows the writer's message" ($shown.Contains("'Platform' is not a valid business unit identifier") -and $shown.Contains('starting with a letter or digit')) $shown
+
+            # Council round 2 (UX): Add-Unit reads the registry and checks the identifier against it before it looks up
+            # or offers to create the Entra group; a registry it cannot read stops it the same way.
+            $addAst = $manageAst.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Add-Unit' }, $true)
+            $readAst = $manageAst.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Read-Value' }, $true)
+            $runAdd = {
+                param([string]$Answer, [scriptblock]$ReadRegistry)
+                $calls = [System.Collections.Generic.List[string]]::new()
+                & {
+                    . ([scriptblock]::Create($readAst.Extent.Text))
+                    . ([scriptblock]::Create($addAst.Extent.Text))
+                    function Read-Host { $Answer }
+                    function az { $calls.Add("az $($args -join ' ')"); $global:LASTEXITCODE = 0 }
+                    function Get-ApimNamedValue { param($ResourceGroup, $ApimName, $Id, [switch]$FailOnError) $calls.Add("read $Id"); & $ReadRegistry }
+                    function Invoke-Child { param($Script, $Arguments) $calls.Add("child $Script") }
+                    function Complete-Change { }
+                    $ResourceGroup = 'rg-test'; $ApimName = 'apim-test'
+                    Add-Unit 6>$null | Out-Null
+                }
+                return , $calls.ToArray()
+            }
+            if ($addAst -and $readAst) {
+                $legacy = { ',sales=Sales:1000,Legacy-Unit=Legacy:3000,' }
+                $alias = & $runAdd 'legacy-unit' $legacy
+                Assert "the manager refuses another spelling of a stored unit before the Entra group step" (($alias -join ' | ') -ceq 'read bu-registry') ($alias -join ' | ')
+                $unread = & $runAdd 'research' { throw 'ERROR: (AuthorizationFailed) cannot read' }
+                Assert "the manager stops before the Entra group step when it cannot read the registry" (($unread -join ' | ') -ceq 'read bu-registry') ($unread -join ' | ')
+                # Council round 3 (UX): Get-ApimNamedValue -FailOnError returns $null for a named value that does not exist.
+                $absent = & $runAdd 'research' { $null }
+                Assert "the manager stops before the Entra group step when the gateway has no bu-registry" (($absent -join ' | ') -ceq 'read bu-registry') ($absent -join ' | ')
+                # Council round 4 (UX note): the stop names the command that updates this gateway.
+                $absentText = & {
+                    . ([scriptblock]::Create($readAst.Extent.Text))
+                    . ([scriptblock]::Create($addAst.Extent.Text))
+                    function Read-Host { 'research' }
+                    function az { $global:LASTEXITCODE = 0 }
+                    function Get-ApimNamedValue { param($ResourceGroup, $ApimName, $Id, [switch]$FailOnError) $null }
+                    function Invoke-Child { }
+                    function Complete-Change { }
+                    $ResourceGroup = 'rg-test'; $ApimName = 'apim-test'
+                    Add-Unit 6>&1 | Out-String
+                }
+                Assert "the manager's missing-registry stop names the update command for this gateway" ($absentText -match 'Update-ClaudeGateway\.ps1 -RecordPath \S+ -ResourceGroup rg-test -ApimName apim-test') $absentText
+                $fresh = & $runAdd 'research' $legacy
+                Assert "the manager reaches the Entra group step for a new lower-case identifier" ($fresh.Count -ge 2 -and $fresh[0] -ceq 'read bu-registry' -and $fresh[1] -like 'az ad group show*') ($fresh -join ' | ')
+            }
+            else { Assert "the manager's Add-Unit can be read" $false 'Add-Unit or Read-Value missing from scripts/Manage-ClaudeBusinessUnits.ps1' }
+        }
+        else { Assert "the manager's prompt checks the identifier" $false 'Confirm-Identifier missing from scripts/Manage-ClaudeBusinessUnits.ps1' }
     }
     else { Assert 'it validates an identifier' $false 'Test-ClaudeBuId missing' }
 }
@@ -235,6 +323,100 @@ foreach ($model in $ClaudePriceBook.Keys) {
 }
 Assert 'every price book rate is decimal' ($badPrices.Count -eq 0) ($badPrices -join ', ')
 Assert 'and the book is not empty'        ($ClaudePriceBook.Keys.Count -ge 4)
+Assert 'budget conversion uses normalized model price matching' ((ConvertTo-ClaudeBuTokens -Usd 1 -Model 'claude_haiku_4_5').BlendedUsdPerM -gt 0)
+$helperSource = Get-Content $helper -Raw
+Assert 'business unit pricing reuses the shared model price matcher' ($helperSource -match 'ClaudeModelPrices\.ps1' -and $helperSource -match 'Resolve-ClaudePriceBookKey' -and $helperSource -notmatch 'function ConvertTo-ClaudePriceModelKey')
+foreach ($case in @(
+    @('claude_haiku_4_5', 'claude-haiku-4.5'),
+    @('claude-haiku-4-5-2025-10-01', 'claude-haiku-4.5'),
+    @('claude-opus-4-8-2026-01-01', 'claude-opus-4.8'),
+    @('CLAUDE SONNET 5', 'claude-sonnet-5')
+)) {
+    $actual = ConvertTo-ClaudeBuUsd -Tokens 1000000 -Model $case[0]
+    $expected = ConvertTo-ClaudeBuUsd -Tokens 1000000 -Model $case[1]
+    Assert "business-unit price parity for $($case[0])" ($actual -eq $expected) "actual $actual expected $expected"
+}
+Assert 'business-unit shorter family remains unpriced' ($null -eq (ConvertTo-ClaudeBuUsd -Tokens 1000000 -Model 'claude-sonnet-5-2'))
+$savedPriceBook = $script:ClaudePriceBook
+$savedPriceBookDate = $script:ClaudePriceBookDate
+$savedPoisonedPriceFamilies = $script:ClaudePoisonedPriceFamilies
+$invalidOptionalBook = Join-Path ([IO.Path]::GetTempPath()) ('bu-invalid-price-book-' + [guid]::NewGuid().ToString('N') + '.json')
+try {
+    [IO.File]::WriteAllText($invalidOptionalBook, (@{
+        date = '2026-10-08'; source = 'test'; models = [ordered]@{
+            good = @{ inputPerM = 2; outputPerM = 10; cacheReadPerM = 0.2 }
+            nullcache = @{ inputPerM = 2; outputPerM = 10; cacheReadPerM = $null }
+            negativecache = @{ inputPerM = 2; outputPerM = 10; cacheReadPerM = -0.5 }
+            textcache = @{ inputPerM = 2; outputPerM = 10; cacheReadPerM = 'oops' }
+        }
+    } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+    $importError = ''
+    $warnings = ''
+    try { $warnings = (Import-ClaudePriceBook -Path $invalidOptionalBook 3>&1 | Out-String) } catch { $importError = $_.Exception.Message }
+    Assert 'price-book import does not throw for invalid optional rates' (-not $importError) $importError
+    Assert 'price-book import keeps valid entries when optional-rate siblings are invalid' ($script:ClaudePriceBook.ContainsKey('good') -and -not $script:ClaudePriceBook.ContainsKey('nullcache') -and -not $script:ClaudePriceBook.ContainsKey('negativecache') -and -not $script:ClaudePriceBook.ContainsKey('textcache'))
+    Assert 'price-book import warnings name invalid optional rate keys and fields' ($warnings -match 'nullcache' -and $warnings -match 'negativecache' -and $warnings -match 'textcache' -and $warnings -match 'cacheReadPerM') $warnings
+    [IO.File]::WriteAllText($invalidOptionalBook, (@{
+        date = '2026-10-08'; source = 'test'; models = [ordered]@{
+            'claude-opus-5-5' = @{ inputPerM = 5; outputPerM = 25; cacheReadPerM = $null }
+            'claude-opus-5.5' = @{ inputPerM = 1; outputPerM = 5 }
+            'claude-sonnet-5-5-20260101' = @{ inputPerM = 2; outputPerM = 10; cacheReadPerM = $null }
+            'claude-sonnet-5.5' = @{ inputPerM = 1; outputPerM = 5 }
+            'required-negative' = @{ inputPerM = -5; outputPerM = 25 }
+            'required.negative' = @{ inputPerM = 1; outputPerM = 5 }
+            'required-boolean' = @{ inputPerM = $true; outputPerM = 25 }
+            'required-output' = @{ inputPerM = 1; outputPerM = 'x' }
+            'required.output' = @{ inputPerM = 1; outputPerM = 5 }
+        }
+    } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+    $warnings = (Import-ClaudePriceBook -Path $invalidOptionalBook 3>&1 | Out-String)
+    Assert 'invalid optional rates poison sibling spellings instead of falling back' (
+        $null -eq (ConvertTo-ClaudeRequestUsd -Model 'claude-opus-5.5' -InputTokens 1000000 -OutputTokens 200000) -and
+        $null -eq (ConvertTo-ClaudeCacheUsd -Model 'claude-opus-5.5' -Tokens 1000000)
+    )
+    Assert 'invalid dated entries poison their family instead of falling back' ($null -eq (ConvertTo-ClaudeRequestUsd -Model 'claude-sonnet-5-5-20260101' -InputTokens 1000000))
+    Assert 'an invalid dated entry also leaves its undated family unpriced' ($null -eq (ConvertTo-ClaudeRequestUsd -Model 'claude-sonnet-5.5' -InputTokens 1000000))
+    Assert 'an invalid required rate leaves a valid sibling spelling unpriced' (
+        $null -eq (ConvertTo-ClaudeRequestUsd -Model 'required.negative' -InputTokens 1000000) -and
+        $null -eq (ConvertTo-ClaudeRequestUsd -Model 'required.output' -InputTokens 1000000)
+    )
+    Assert 'invalid required rates poison their families and leave converters unpriced' (
+        $null -eq (ConvertTo-ClaudeRequestUsd -Model 'required-negative' -InputTokens 1000000) -and
+        $null -eq (ConvertTo-ClaudeRequestUsd -Model 'required-boolean' -InputTokens 1000000)
+    )
+    $budgetError = ''
+    try { ConvertTo-ClaudeBuTokens -Usd 1000 -Model 'claude-opus-5.5' | Out-Null } catch { $budgetError = $_.Exception.Message }
+    Assert 'budget conversion refuses a poisoned family instead of writing fallback tokens' ($budgetError -match 'No price for') $budgetError
+    Assert 'the poisoned-family refusal names the invalid entry, its field and the price book' ($budgetError -match "entry 'claude-opus-5-5'" -and $budgetError -match 'cacheReadPerM' -and $budgetError.Contains($invalidOptionalBook)) $budgetError
+    Assert 'poisoned-family warning names the family and says it is unpriced until fixed' ($warnings -match 'claudeopus55' -and $warnings -match 'unpriced until' -and $warnings -match 'cacheReadPerM') $warnings
+    [IO.File]::WriteAllText($invalidOptionalBook, (@{ date = '2026-10-08'; source = 'test'; models = @{} } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+    $emptyError = ''
+    try { Import-ClaudePriceBook -Path $invalidOptionalBook 3>$null | Out-Null } catch { $emptyError = $_.Exception.Message }
+    Assert 'a price book that lists no models is refused with the remedy' ($emptyError -match 'lists no models' -and $emptyError -match 'Delete it') $emptyError
+    [IO.File]::WriteAllText($invalidOptionalBook, '{"date":"2026-10-08","source":"test","models":{"huge":{"inputPerM":1e30,"outputPerM":5},"too-high":{"inputPerM":2000000,"outputPerM":5},"tiny-negative":{"inputPerM":-1e-30,"outputPerM":5},"arrayed":[{"inputPerM":1,"outputPerM":5}],"fine":{"inputPerM":1,"outputPerM":5}}}', [Text.UTF8Encoding]::new($false))
+    $rangeError = ''
+    try { & { $ErrorActionPreference = 'Stop'; Import-ClaudePriceBook -Path $invalidOptionalBook 3>$null | Out-Null } } catch { $rangeError = $_.Exception.Message }
+    Assert 'an out-of-range rate or a non-object entry leaves only its family unpriced, without stopping the import' (
+        -not $rangeError -and
+        $null -eq (ConvertTo-ClaudeRequestUsd -Model 'huge' -InputTokens 1000000) -and
+        $null -eq (ConvertTo-ClaudeRequestUsd -Model 'too-high' -InputTokens 1000000) -and
+        $null -eq (ConvertTo-ClaudeRequestUsd -Model 'tiny-negative' -InputTokens 1000000) -and
+        $null -eq (ConvertTo-ClaudeRequestUsd -Model 'arrayed' -InputTokens 1000000) -and
+        $null -ne (ConvertTo-ClaudeRequestUsd -Model 'fine' -InputTokens 1000000)
+    ) $rangeError
+    foreach ($badModels in '"abc"', '[{"inputPerM":1,"outputPerM":5}]') {
+        [IO.File]::WriteAllText($invalidOptionalBook, '{"date":"2026-10-08","source":"test","models":' + $badModels + '}', [Text.UTF8Encoding]::new($false))
+        $modelsError = ''
+        try { Import-ClaudePriceBook -Path $invalidOptionalBook 3>$null | Out-Null } catch { $modelsError = $_.Exception.Message }
+        Assert "a price book whose models value is not an object is refused: $badModels" ($modelsError -match "has no 'models' object") $modelsError
+    }
+}
+finally {
+    Remove-Item -LiteralPath $invalidOptionalBook -Force -ErrorAction SilentlyContinue
+    $script:ClaudePriceBook = $savedPriceBook
+    $script:ClaudePriceBookDate = $savedPriceBookDate
+    $script:ClaudePoisonedPriceFamilies = $savedPoisonedPriceFamilies
+}
 
 $setSrc = Get-Content $setPath -Raw
 Assert 'the writer takes a decimal budget' ($setSrc -match '\[decimal\]\$MonthlyBudgetUsd')
@@ -277,6 +459,17 @@ Assert 'and keys it on the object id'              ($getSrc -match 'cache_read =
 # with the field renamed away.
 Assert 'cache is a field of its own, beside tokens_used' ($getSrc -match 'tokens_cache_read = \$cacheRead')
 Assert 'and is priced at the cache rate, not the blend' ($getSrc -match 'ConvertTo-ClaudeCacheUsd -Tokens \$cacheRead')
+$cacheBookPath = Join-Path ([IO.Path]::GetTempPath()) ('bu-cache-book-' + [guid]::NewGuid().ToString('N') + '.json')
+try {
+    [IO.File]::WriteAllText($cacheBookPath, (@{
+        date = '2026-10-08'; source = 'test'; models = @{
+            'test-cache-model' = @{ inputPerM = 2; outputPerM = 10; cacheReadPerM = 0.05 }
+        }
+    } | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+    Import-ClaudePriceBook -Path $cacheBookPath | Out-Null
+    Assert 'cache USD conversion uses explicit cacheReadPerM when the book supplies it' ((ConvertTo-ClaudeCacheUsd -Tokens 1000000 -Model 'test-cache-model') -eq 0.05)
+}
+finally { Remove-Item -LiteralPath $cacheBookPath -Force -ErrorAction SilentlyContinue }
 
 # Cache write stays unattributed - it exists only in the response body, and
 # reading that in outbound ends streaming. The report has to say so rather than

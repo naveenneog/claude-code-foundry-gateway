@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mergeMembership, planChanges, toDocument, validateSnapshot, createReconciliation } from '../src/plan.mjs';
+import { mergeMembership, planChanges, removalLimit, removalLimitExceeded, toDocument, validateSnapshot, validateTargetedSnapshot, compareWithSnapshot, createReconciliation } from '../src/plan.mjs';
 const lease = createReconciliation({ verifiedAt: new Date() });
 
 const A = '11111111-1111-1111-1111-111111111111';
@@ -50,6 +50,12 @@ test('unchanged records are not rewritten', () => {
   assert.equal(plan.toWrite.length, 0);
 });
 
+test('unchanged legacy records with expiresAt are rewritten without expiresAt', () => {
+  const plan = planChanges([{ oid: A, tier: 'standard', businessUnit: '' }], new Map([[A, { tier: 'standard', businessUnit: '', expiresAt: 1791200000 }]]));
+  assert.equal(plan.unchanged, 0);
+  assert.deepEqual(plan.toWrite.map((r) => r.oid), [A]);
+});
+
 test('a tier or unit change is rewritten', () => {
   const existing = new Map([[A, { tier: 'standard', businessUnit: '' }], [B, { tier: 'standard', businessUnit: 'x' }]]);
   const plan = planChanges([{ oid: A, tier: 'premium', businessUnit: '' }, { oid: B, tier: 'standard', businessUnit: 'y' }], existing);
@@ -62,6 +68,19 @@ test('someone removed from every group loses their record', () => {
   assert.deepEqual(plan.toDelete, [C]);
 });
 
+test('unattended removal ceiling is max ten or ten percent of existing records', () => {
+  assert.equal(removalLimit(0), 10);
+  assert.equal(removalLimit(99), 10);
+  assert.equal(removalLimit(109), 10);
+  assert.equal(removalLimit(110), 11);
+  assert.equal(removalLimit(1000), 100);
+});
+
+test('unattended removal ceiling allows the limit and refuses only above it', () => {
+  assert.deepEqual(removalLimitExceeded({ deletes: 10, existing: 109 }), { exceeded: false, limit: 10 });
+  assert.deepEqual(removalLimitExceeded({ deletes: 11, existing: 109 }), { exceeded: true, limit: 10 });
+});
+
 test('orphans are kept only when asked, and reported', () => {
   const existing = new Map([[A, { tier: 'standard' }], [C, { tier: 'premium' }]]);
   const plan = planChanges([{ oid: A, tier: 'standard' }], existing, { keepOrphans: true });
@@ -69,12 +88,22 @@ test('orphans are kept only when asked, and reported', () => {
   assert.deepEqual(plan.keptOrphans, [C]);
 });
 
+test('planning a directory of 300,000 persistent identities does not depend on retained expiry', () => {
+  const resolved = Array.from({ length: 300000 }, (_, i) => ({ oid: `w${i}`, tier: 'standard' }));
+  const plan = planChanges(resolved, new Map([[C, { tier: 'premium', expiresAt: 100 }]]), { keepOrphans: true });
+  assert.equal(plan.toWrite.length, 300000);
+  assert.deepEqual(plan.keptOrphans, [C]);
+  assert.equal('oldestExpiresAt' in plan, false);
+});
+
 test('the document is a point-read shape: id and partition key are the oid', () => {
-  const d = toDocument({ oid: A, tier: 'premium', businessUnit: 'sales' }, { tenantId: T, mappingVersion: 7 });
+  const d = toDocument({ oid: A, tier: 'premium', businessUnit: 'sales' }, { tenantId: T, mappingVersion: 7, reconciliation: lease });
   assert.equal(d.id, A);
   assert.equal(d.oid, A);
   assert.equal(d.tenantId, T);
   assert.equal(d.effectiveFrom, null);
+  assert.equal(d.reconciliationGeneration, lease.reconciliationGeneration);
+  assert.equal('expiresAt' in d, false);
 });
 
 test('the flip comparison names what each identity would experience', async () => {
@@ -115,4 +144,34 @@ test('a snapshot with an unknown tier, a bad oid or a duplicate is refused', () 
   assert.match(validateSnapshot({ ...base, records: [{ oid: 'not-a-guid', tier: 'standard' }] }).join(), /not a guid/);
   assert.match(validateSnapshot({ ...base, records: [{ oid: A, tier: 'standard' }, { oid: A, tier: 'premium' }] }).join(), /twice/);
   assert.match(validateSnapshot({ tenantId: T, records: [] }).join(), /kind/);
+});
+
+test('targeted snapshots must name one matching user record or no record', () => {
+  const base = { kind: 'claude-entitlement-snapshot', tenantId: T, scope: 'user', user: A, ...lease };
+  assert.deepEqual(validateTargetedSnapshot({ ...base, records: [{ oid: A, tier: 'standard' }] }, A, { tenantId: T }), []);
+  assert.deepEqual(validateTargetedSnapshot({ ...base, records: [] }, A, { tenantId: T }), []);
+  assert.match(validateTargetedSnapshot({ ...base, scope: 'full', records: [{ oid: A, tier: 'standard' }] }, A, { tenantId: T }).join(), /scope 'user'/);
+  assert.match(validateTargetedSnapshot({ ...base, user: B, records: [{ oid: A, tier: 'standard' }] }, A, { tenantId: T }).join(), /does not match/);
+  assert.match(validateTargetedSnapshot({ ...base, records: [{ oid: B, tier: 'standard' }] }, A, { tenantId: T }).join(), /another user/);
+  assert.match(validateTargetedSnapshot({ ...base, records: [{ oid: A, tier: 'standard' }, { oid: B, tier: 'standard' }] }, A, { tenantId: T }).join(), /more than one/);
+});
+
+test('full snapshot comparison uses resolver validation and reports tier and unit drift', () => {
+  const snap = { kind: 'claude-entitlement-snapshot', tenantId: T, scope: 'full', ...lease, records: [
+    { oid: A, tier: 'standard', businessUnit: 'sales' },
+    { oid: B, tier: 'premium', businessUnit: '' },
+  ] };
+  const live = [
+    { oid: A, tenantId: T, tier: 'standard', businessUnit: 'finance', lastVerifiedAt: lease.lastVerifiedAt, reconciliationGeneration: lease.reconciliationGeneration },
+    { oid: C, tenantId: T, tier: 'standard', businessUnit: '', lastVerifiedAt: lease.lastVerifiedAt, reconciliationGeneration: lease.reconciliationGeneration },
+    { oid: '44444444-4444-4444-4444-444444444444', tenantId: T, tier: 'platinum', lastVerifiedAt: lease.lastVerifiedAt, reconciliationGeneration: lease.reconciliationGeneration },
+  ];
+  const r = compareWithSnapshot(snap, live, { tenantId: T });
+  assert.equal(r.compared, 3);
+  assert.deepEqual(Object.fromEntries(r.differences.map((d) => [d.oid, d.kind])), {
+    [A]: 'unit-drift',
+    [B]: 'missing-record',
+    [C]: 'would-delete-record',
+  });
+  assert.match(compareWithSnapshot({ ...snap, scope: 'user' }, live, { tenantId: T }).problems.join(), /full snapshot/);
 });

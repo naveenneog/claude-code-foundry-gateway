@@ -4,6 +4,15 @@ Run commands from the repository root unless a procedure changes directories.
 For parameter descriptions use `Get-Help .\scripts\<name>.ps1 -Full`, or read
 the script's top-level `param()` block. There is no Azure portal view of local
 script parameters. [Operations](OPERATIONS.md) maps tasks to portal actions.
+## Quickstart
+
+Script help is the fastest reference for a command's supported arguments. Commands are repository-root relative unless their procedure names another directory.
+
+```powershell
+Get-Help .\scripts\Test-ClaudeHealth.ps1 -Full
+```
+
+**Expected result:** PowerShell prints the command help and parameters. When comment help is incomplete, the script's top-level `param()` block is authoritative.
 
 ## Repository layout
 
@@ -38,7 +47,7 @@ scripts/
   Sync-ClaudeAccess.ps1       publish Entra membership
   Compare-ClaudeEntitlement.ps1  compare named values with Entra
   ClaudeGraphMembership.ps1   shared transitive membership reader
-  Sync-ClaudeProjection.ps1   optional projection writer/exporter
+  Sync-ClaudeProjection.ps1   projection snapshot exporter
   Show-Governance.ps1         governance verification
   Set-ClaudeDeveloper.ps1     people, tiers and units
   Set-ClaudeTier.ps1          tier limits and models
@@ -88,6 +97,10 @@ not a safe default for customer traffic. Read the
 [inspection warning](DEBUGGING.md#see-exactly-what-is-on-the-wire) before adapting it.
 
 ## Contributor checks
+
+<details>
+
+<summary>Contributor reference details</summary>
 
 ```powershell
 pwsh -NoProfile -File .\tests\Test-All.ps1
@@ -148,6 +161,8 @@ before running a real command. Filter Azure CLI JSON in PowerShell, or use
 `Invoke-RestMethod` for REST URLs, especially Graph `@odata.nextLink` paging.
 Check exit status: error text is a nonempty string, not evidence of success.
 `tests/Test-AzArguments.ps1` guards repository scripts.
+
+</details>
 
 ## Next steps
 

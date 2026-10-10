@@ -117,6 +117,10 @@ foreach ($e in 'Scale-out', 'Policy deployment', 'Period rollover') {
 }
 
 Assert 'it points at the projection decision' ($s -match 'adr/0005-identity-projection\.md')
+Assert 'the manual projection apply includes the account resource id' (
+    $s -match 'az cosmosdb show -n cosmos-<prefix> -g <rg> --query id -o tsv' -and
+    $s -match 'apply-projection\.mjs --cosmos https://cosmos-<prefix>\.documents\.azure\.com:443/ --tenant <tenant-id> --account-resource-id \$accountResourceId --snapshot /work/snapshot\.json'
+)
 
 # The first thing a reviewer proposes is "put the tier in a token claim and skip
 # the lookup". It cannot work here and that has to be written down, or it gets
@@ -395,7 +399,17 @@ Assert 'the README states the current ceiling'   ($readmeTop -match 'How many de
 Assert 'and gives the measured number'           ($readmeTop -match 'roughly 93 developers')
 # P19 measured 500,000 storage records on 2026-09-24. Keep the deployment
 # caveat, but do not require the superseded "not yet load-tested" sentence.
-Assert 'and says the larger design is not the default yet' ($readmeTop -match '\*\*It is not the default\.\*\*')
+# ADR-0052 (P98): the installer deploys the projection by default; named values are the small-team choice.
+Assert 'and says the installer deploys the projection by default' ($readmeTop -match '\*\*The installer deploys the projection by default\.\*\*')
+# P98 council round 2 (UX): the change guide still called named values the default, and the re-run and
+# rollback texts did not say that named values cannot hold a population above their capacity.
+$updateGuide = Get-Content (Join-Path $root 'docs/UPDATE-AND-CHANGE.md') -Raw
+Assert 'the change guide names the projection as the installer default' ($updateGuide -notmatch 'Named values are the default' -and $updateGuide -match "The Cosmos projection is the installer's default store")
+foreach ($doc in 'docs/SETUP.md', 'docs/SECURE-PROJECTION.md', 'docs/UPDATE-AND-CHANGE.md') {
+    # Markdown wraps sentences across lines; compare with runs of whitespace as one space.
+    $docText = (Get-Content (Join-Path $root $doc) -Raw) -replace '\s+', ' '
+    Assert "$doc says a rollback to named values holds only a population within their capacity" ($docText -match 'A rollback to named values holds only a population within their capacity')
+}
 Assert 'and distinguishes the storage test from active developers' (
     $readmeTop -match '500,000 records were loaded and read' -and
     $readmeTop -match 'not 500,000 concurrent developers')
@@ -522,7 +536,7 @@ Assert 'the switch is constrained'               ($bicep -match "(?s)@allowed\(\
 # A redeploy that did not read the source back would return a migrated operator
 # to lists that stopped being maintained the moment they migrated.
 $inst = Get-Content (Join-Path $root 'Install-ClaudeGateway.ps1') -Raw
-Assert 'a redeploy preserves the source'         ($inst -match "named-value-id entitlement-source --query value")
+Assert 'a redeploy preserves the source'         ($inst -match "Get-ApimNamedValue[^\r\n]*-Id 'entitlement-source' -FailOnError" -and $inst -match 'entitlementSource=\$\(if \(\$entSrc\)')
 Assert 'and hands it back to the template'       ($inst -match 'entitlementSource=\$\(if \(\$entSrc\)')
 Assert 'the resolver settings survive too'       ($inst -match 'entitlementResolverUrl=\$\(if \(\$entUrl\)')
 Assert 'and it says so when migrated'            ($inst -match 'preserving entitlement source: projection')

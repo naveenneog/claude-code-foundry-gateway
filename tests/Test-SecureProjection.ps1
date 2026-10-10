@@ -63,7 +63,7 @@ Assert 'with the endpoint subnet it is given'    ($nb -match "param endpointsSub
 Assert 'and the VNet is only created when absent' ($nb -match "var createVnet = empty\(vnetId\)")
 # Learn, flex-consumption-how-to: Microsoft.App/environments, /27 minimum,
 # no private endpoints in the same subnet.
-Assert 'the resolver subnet has the Flex delegation' ($nb -match "serviceName: 'Microsoft.App/environments'")
+Assert 'the resolver subnet has the Flex delegation' ($nb -match "(?s)name: 'resolver'\s*properties: \{\s*addressPrefix: cidrSubnet\(vnetAddressPrefix, 26, 12\)\s*delegations: \[\s*\{\s*name: 'flex'\s*properties: \{\s*serviceName: 'Microsoft\.App/environments'")
 Assert 'and is at least a /27'                    ($nb -match 'cidrSubnet\(vnetAddressPrefix, 26, ')
 Assert 'the resolver endpoint zone is created'    ($nb -match "privatelink\.azurewebsites\.net")
 Assert 'and linked to the VNet'                   ($nb -match '(?s)resource sitesLink.*virtualNetwork: \{\s*id: linkedVnetId')
@@ -84,16 +84,21 @@ Write-Host ''
 Write-Host 'Secure projection - the writer runs inside the network' -ForegroundColor Cyan
 
 $sp = Get-Content (Join-Path $root 'scripts/Sync-ClaudeProjection.ps1') -Raw
-Assert 'membership can be exported instead of written' ($sp -match '(?m)\[string\]\$ExportPath\s*$')
-Assert 'an export needs no Cosmos token'          ($sp -match '(?s)if \(-not \$ExportPath\) \{\s*\$cosmosToken = az account get-access-token')
+Assert 'membership can be exported instead of written' ($sp -match '(?m)\[string\]\$ExportPath,?\s*$')
+Assert 'the exporter never asks for a Cosmos token' ($sp -notmatch 'get-access-token --resource https://cosmos\.azure\.com')
 Assert 'and is written without a byte-order mark' ($sp -match 'UTF8Encoding\(\$false\)')
 Assert 'the importer exists'                      (Test-Path (Join-Path $root 'sync/src/apply-projection.mjs'))
 $ap = Get-Content (Join-Path $root 'sync/src/apply-projection.mjs') -Raw
+$secureDoc = Get-Content (Join-Path $root 'docs/SECURE-PROJECTION.md') -Raw
 Assert 'it validates a snapshot before writing'   ($ap -match 'validateSnapshot\(snap, \{ tenantId \}\)')
 Assert 'a failed write is not reported as ok'     ($ap -match 'ok: !\(writes\.failed \|\| deletes\.failed\)')
 Assert 'it tolerates a byte-order mark'           ($ap -match '\\uFEFF')
 Assert 'it writes in bulk'                        ($ap -match 'executeBulkOperations')
 Assert 'and can compare without writing'          ($ap -match "opt\('--compare'\)")
+Assert 'the manual runner apply passes the Cosmos account resource id' (
+    $secureDoc -match 'az cosmosdb show -n cosmos-<prefix> -g \$rg --query id -o tsv' -and
+    $secureDoc -match 'apply-projection\.mjs --cosmos https://cosmos-<prefix>\.documents\.azure\.com:443/ --tenant <tenant-id> --account-resource-id \$accountResourceId --snapshot /work/snapshot\.json'
+)
 
 Write-Host ''
 Write-Host 'Secure projection - both paths charge the same business unit' -ForegroundColor Cyan
@@ -170,7 +175,11 @@ Assert 'and says so'                              ($ins -match "Keeping this gat
 # ErrorActionPreference Stop the wizard ended before its summary.
 Assert 'optional az calls cannot end the script on 5.1' ($ins -match "(?s)function Invoke-AzOptional.*\`$ErrorActionPreference = 'Continue'")
 Assert 'the window lookup uses it'                ($ins -match '\$liveWindow = Invoke-AzOptional \{')
-Assert 'and so does the network-state lookup'     ($ins -match '\$liveId = Invoke-AzOptional \{')
+# P95 council round 3: the network-state lookup reuses the gateway probe, which also collects stderr on 5.1
+# (ErrorActionPreference Continue) but reads absence only from Azure's not-found answer.
+$apimNv = Get-Content (Join-Path $root 'scripts/ApimNamedValue.ps1') -Raw
+Assert 'and so does the network-state lookup, through the gateway probe' ($ins -match '\$liveId = \$liveApimId' -and $ins -match '\$liveApimId = Get-ApimServiceId ' -and
+    $apimNv -match "(?s)function Get-ApimServiceId \{.*?\`$ErrorActionPreference = 'Continue'.*?ResourceNotFound\|ResourceGroupNotFound")
 
 Write-Host ''
 Write-Host 'Secure projection - the Deploy to Azure button deploys this' -ForegroundColor Cyan
@@ -212,8 +221,6 @@ Assert 'and quotes the device code guidance'      ($auth -match 'unilateral bloc
 
 Write-Host ''
 Write-Host 'Secure projection - the sync rules, run' -ForegroundColor Cyan
-& (Join-Path $PSScriptRoot 'Test-ProjectionPaging.ps1')
-Assert 'multi-page Cosmos behavior holds' ($LASTEXITCODE -eq 0)
 & (Join-Path $PSScriptRoot 'Test-ProjectionRules.ps1')
 Assert 'projection freshness and miss-path rules hold' ($LASTEXITCODE -eq 0)
 

@@ -201,6 +201,204 @@ exact streaming cache-creation detail remains **U13**.
   [Setup](docs/SETUP.md#resume-after-a-failure)). `.github/workflows/installer-unix.yml`
   runs the bash suites and the store suite on `ubuntu-latest` and `macos-latest`
   ([U75](docs/UNKNOWNS.md#p91-research-before-implementation)).
+- **P108 dollar budget reconciliation now prices and attributes Foundry usage by the row that owns it.**
+  USD reconciliation groups usage by stamped business unit as well as day, user and deployment, so a
+  developer who moves units during a day produces one row per unit instead of an ambiguous month-long
+  `unattributed-usage` stop. Rows without a user id are reported in the reconciler output and charge no
+  scope. The reconciler, model price reader and chargeback KQL share the normalized exact-or-eight-digit
+  dated model match. The shipped price book covers every 2026-10-08 eastus2 Foundry Claude catalog
+  model with a single Anthropic list tariff, and deliberately leaves tiered `claude-haiku-5-5`
+  unpriced until U178 splits usage by prompt size. The gateway's `usd_budget_unpriced` message now
+  names the model list and price-book date when the reconciled state carries them, with a generic
+  403 fallback for malformed older state. Registering the standalone scheduled reconciler
+  at a newer commit now updates the same per-gateway job and removes older jobs for that gateway
+  only after the replacement deploys. Cleanup uses core `az resource delete` and no longer suggests
+  deleting the environment used by the replacement job; it now prints old identity role-assignment
+  deletes with explicit workspace and gateway scopes before the identity delete. Upgrades now keep old jobs until the new
+  job has one successful post-deployment execution, then start the new job once more after old-job deletion
+  so an old scheduled run cannot leave the last written state on the old code. `-RunNow` uses ARM start/poll calls rather
+  than the Container Apps CLI extension. The scheduled job template now delegates gateway and
+  workspace role assignments to the shared principal-id-keyed modules so a recreated per-gateway
+  identity does not reuse role assignment names from the old principal.
+  Cache-read metrics are allocated once per day, user and model family; a price book with two keys of one
+  normalised form is refused when it is written, a stored book keeps working (equal rates are one entry;
+  conflicting or invalid rates leave that model family unpriced; for an invalid rate the business-unit and
+  Turnstile scripts warn instead of stopping), and named-value gateways keep the current-membership
+  attribution rule ([ADR-0060](docs/adr/0060-usd-reconciler-attribution-and-pricing.md)).
+- **P108 script-managed USD price books now follow the AUM pinning rule.** Clearing the last budget item leaves a valid document, and the next write stores the current price book; active budgets keep their stored book and print a warning when a different one is offered.
+
+- **P104 the projection sync job runs on an admin-set schedule.** Adding or removing a developer in an Entra
+  tier group or business-unit group reaches the Cosmos projection at the sync job's next run, with no command
+  ([ADR-0058](docs/adr/0058-scheduled-projection-sync.md)). `Install-ClaudeGateway.ps1` deploys the job with the
+  projection; `-ProjectionSyncInterval` takes `30m`, `1h`, `2h` (default), `3h`, `4h`, `6h`, `8h`, `12h`,
+  `manual` or `none`, and a re-run keeps the deployed job's interval, alert addresses, registry SKU, workspace and
+  subnet. The review shows the interval, the runs a
+  month and the missed-run range; `-DeploySyncJob` is accepted and has no effect.
+  `scripts/Deploy-ClaudeProjectionRenewal.ps1 -SyncInterval` replaces `-CronExpression`, which is refused with
+  the interval it maps to, and `scripts/Set-ClaudeProjectionSyncSchedule.ps1 -Interval` changes a deployed job
+  without deploying its registry again (`-KeepRegistry`). The schedule script keeps and prints the tier groups
+  that the job's deployment recorded, refuses a job whose groups differ from them, and with
+  `-ExpectedStandardGroup`/`-ExpectedPremiumGroup` refuses groups other than the given object ids. An installer
+  re-run stops before any write when the job's registry has public network access disabled.
+  Each run writes only changed developers; an unattended run that would delete more than max(10, 10% of the
+  records) writes nothing and ends at stage `removal-ceiling`. The no-success alert fires after 2 x the interval + 15
+  minutes under one rule name; the deploy script removes P97's `-no-success-45m` rule, whose query held the
+  literal text `${renewalLogs}` because Bicep does not interpolate `'''` strings. The deploy script reports
+  whether the job identity holds Microsoft Graph `GroupMember.Read.All` and never grants it.
+- **P101 one sync command for every store.** `scripts/Sync-ClaudeAccess.ps1 -User <upn-or-object-id>` now works
+  on named-value and projection gateways. The sync resolves tier groups from parameters, then the gateway
+  `entitlement-groups` named value, then the gateway decision record, then the default group names; a missing
+  recorded group stops before writes with the `-StandardGroup`, `-PremiumGroup` and `-RecordGroups` remedy.
+  A sync records `entitlement-groups` (object IDs only) when each tier came from a parameter or this gateway's
+  decision record and its list was written; a default-name fallback or a
+  tier list skipped by the empty-tier guard is synced but recorded only with `-RecordGroups`. `-RecordGroups` is
+  also required to replace recorded groups, and a decision record that disagrees with `entitlement-groups` stops
+  the sync before any write. The sync prints each tier's display name, object ID and source, and refuses equal
+  standard and premium IDs. AUM Direct developer publication passes the developer object ID as `-User`, compares
+  the returned `published_tier` with the requested outcome and retries for Microsoft Graph lag before warning.
+  The Turnstile apply records its tier groups with `-RecordGroups` ([ADR-0057](docs/adr/0057-one-sync-command.md)).
+- **P103 user guides open with a Quickstart, and every other section is a disclosure (part 1).** README,
+  SETUP, ARCHITECTURE and 38 guides open with an H1, a purpose line and a visible `## Quickstart` with its
+  expected result. Every other section heading stays visible, with its body in one `<details>` block whose
+  summary names what the section holds, and a visible Next section ends each guide
+  ([ADR-0056](docs/adr/0056-documentation-quickstart-and-disclosures.md)). `tests/Test-DocStructure.ps1`
+  checks the structure, that every heading anchor from before the change still exists, that Quickstart
+  commands define their inputs and call scripts and parameters that exist, and that GitHub renders the heading
+  after each disclosure ([P103 status](docs/status/P103.md#p103-quickstart-first-sections-as-disclosures)).
+  Part 2 covers SECURE-PROJECTION, PROJECTION-WORKBOOK, UPDATE-AND-CHANGE and AZ-COMMANDS.
+
+- **P99 a snapshot of 500,000 developers reaches the runner within its apply-by time.** `Send-RunnerFile`
+  (`scripts/ClaudeRunner.ps1`) compresses the file with gzip, sends base64url parts through up to 16
+  `az container exec` calls at once, retries a failed part, stops an exec that does not answer, and
+  assembles, decompresses and checks the file on the runner
+  ([ADR-0053](docs/adr/0053-parallel-compressed-runner-transfer.md)). On 2026-10-06 a synthetic snapshot of
+  500,000 records (63 MB, 12 MB compressed) took 41 minutes in 3,336 parts; the writer applied it in 529
+  seconds and the compare found no differences ([P99 status](docs/status/P99.md#live-run)). A transfer that
+  cannot end 10 minutes before the snapshot's apply-by time is refused before it starts, or stopped when it
+  falls behind; nothing is written either way. A transfer of a minute or more prints its progress. The
+  deployer's populate step, the switch's snapshot compare and full syncs use it unchanged, so the earlier
+  limit of about 40,000 developers no longer applies to them. The update flow's plan (P100) estimates the transfer
+  with the same model, so a move to the projection is refused for the transfer only above about 1.4 million developers.
+
+- **P100 the update moves a named-value gateway to the Cosmos projection.** `Update-ClaudeGateway.ps1
+  -ResourceGroup <rg> -ApimName <apim>` plans migration `0004-entitlement-projection`
+  ([ADR-0054](docs/adr/0054-update-flow-entitlement-migration.md)), with or without the decision record. The
+  plan reuses the gateway's tier groups (parameters, then the new `entitlement-groups` named value, then the
+  decision record, then the default names, each read from Microsoft Graph) and counts the developers who would
+  gain or lose access. It also reuses the business units, name prefix, region and tier. It lists the
+  readiness checks with remedies, covering region availability, usage against limits, the right to create role
+  assignments and template validation. It also lists the resources, network, identities, monthly cost and time.
+  A FAIL blocks the plan: no apply command is printed, and `-Apply` refuses before the backup. The apply records
+  the tier groups in `entitlement-groups` first, then runs the installer's refresh, deployment, population,
+  comparison and switch, and verifies the switch, the prefix and the groups. A failed step leaves named values
+  serving and prints the update that resumes with the resolved values. `-PremiumGroup none` passes `none`, and
+  the group name `none` is no group in every Graph lookup. `-KeepNamedValues` keeps named values; in Windows
+  PowerShell 5.1 no move is planned. `Invoke-ClaudeProjectionPreflight -PassThru` returns its checks without
+  printing or throwing.
+  A decision record of another gateway, by resource group, API Management name or subscription, is refused
+  before any write and is not a source of tier groups. The update reads the gateway in the subscription the
+  record names and applies only when that is the Azure CLI's current subscription; otherwise the plan prints
+  `az account set --subscription <id>`. `Invoke-ClaudeProjectionSwitch -SubscriptionId` and the deployer's
+  `-FlipAfterCleanCompare -SubscriptionId` refuse another current subscription.
+
+- **P102 Azure AI Content Safety request screening.** The gateway can opt into an Azure AI Content
+  Safety account and the APIM policy fragment `content-safety-screening`
+  ([ADR-0055](docs/adr/0055-content-safety-screening.md)), which screens a Messages request before
+  Foundry: the system prompt, tool descriptions and the newest turn, meaning the user messages that
+  end the conversation with their text, documents (title and context included), search results and
+  tool results, and the assistant prefill after them. The newest turn has the
+  first claim on each 10,000-character budget. Caller-written text goes to Prompt Shields
+  `userPrompt`, tool and document text to Prompt Shields `documents`, and all screened text to harm
+  analysis; Prompt Shields is called only when there is a prompt or a document. `content-safety-mode`
+  is `off`, `audit` or `block`, trimmed and case-insensitive, and any other value enforces as `block`.
+  In block mode a detected attack, or a severity at or above `content-safety-threshold`, returns 403,
+  and a Content Safety error, timeout or malformed answer returns 503; audit mode forwards and traces
+  the decision. Gateways that do not opt in keep `off` and create no Content Safety account. Existing
+  gateways receive the fragment and its named values through `Update-ClaudeGateway.ps1`, with
+  `content-safety-mode` set to `off`; the update plans a fragment update when the live content differs
+  or could not be read. `Set-GatewayPolicy.ps1` creates only missing named values and stops before any
+  write when the named-value list cannot be read. The policy tests compile and run the fragment's own
+  expressions. `scripts/Test-ClaudeLiveContentSafety.ps1` is the owner-run disposable live proof; fresh
+  run 25 and upgrade run 26, from a P100 gateway, passed at `de775d73` on 2026-10-07
+  ([P102 status](docs/status/P102.md)).
+- **P98 the installer deploys the Cosmos projection by default.** `Install-ClaudeGateway.ps1` offers
+  the projection first, as recommended, for every size; `-Yes` chooses it, and named values above their
+  capacity are refused, also under `-Yes` and `-Sku`, from `-DeveloperCount` or the tier groups' members
+  ([ADR-0052](docs/adr/0052-cosmos-default-installer.md)). Choosing the projection deploys, populates and
+  compares it, then switches the gateway; a failure leaves the current store serving and prints the
+  rerun command. A re-run without `-EntitlementStore` migrates a named-value gateway, and the approval
+  summary says so; a gateway already on the projection keeps it and its resolver access. Above
+  named-value capacity, `-CompareBaseline Snapshot` compares the projection with a fresh Entra snapshot.
+  The resolver is public by default on every tier, accepting only the gateway's managed identity.
+  `-DeploySyncJob` adds the optional sync job; a failed job deployment is reported with its full rerun
+  command. The approval summary lists the projection steps, so `-WhatIf` shows them. The SKU guidance
+  cites the cache, units, network and zone facts, and states that zone redundancy and Premium v2 virtual
+  network injection are chosen at creation, which the installer does not provision. README, Setup and
+  the projection guide open with a quickstart. `scripts/Test-ClaudeLiveProjection.ps1` installs a
+  disposable gateway, checks one developer's access through removal and re-adding, and deletes only what
+  the run created. A re-run keeps the store that serves:
+  - on a projection gateway it compares with a fresh snapshot;
+  - it deploys the projection that `entitlement-projection-prefix` records;
+  - it keeps the resolver's network access;
+  - it refuses `-EntitlementStore named-value` with the rollback steps.
+
+  The named-value sync checks every list before its first write, and the drift check no longer reports a
+  one-member list as in sync. A snapshot too large to send through the runner before its apply-by time
+  (about 40,000 developers) is refused before it starts; ROADMAP packet P99 plans a directory-scale
+  transfer. Rerun commands quote every value that is not a plain token
+  ([P98 status](docs/status/P98.md#p98-the-installer-deploys-the-cosmos-projection-by-default-2026-10-06)).
+- **P97 Cosmos entitlement persists until a sync changes it, and syncs run on demand.** Projection
+  records no longer expire 7,200 seconds after the scan that wrote them; a sync writes only the records
+  that change ([ADR-0051](docs/adr/0051-persistent-sync-based-cosmos-entitlement.md)). The resolver
+  refuses a record with an invalid generation or verification time, and a record that still carries a
+  past `expiresAt` from before ADR-0051; the next full or targeted sync rewrites it.
+  `scripts/Sync-ClaudeAccess.ps1 -User <upn-or-object-id>` publishes one developer's change through the
+  in-VNet runner, using Microsoft Graph `checkMemberGroups`; without `-User` it syncs everyone, and
+  `-Store auto` follows the gateway's `entitlement-source`. `sync/src/apply-projection.mjs` is the one
+  Cosmos writer: every apply that writes takes a lease lock in the container, reads records and sync
+  statuses inside it, requires `--account-resource-id`, and refuses a snapshot older than a sync that
+  already covered it, or past its apply-by time when the first write is due; a full sync leaves alone the
+  people a newer targeted sync changed, and `Sync-ClaudeAccess.ps1` prints how many. Every refusal names a
+  remedy, which `Sync-ClaudeAccess.ps1` and the deployer show with the stage that refused. No Cosmos query
+  filters on a path the container does not index: status reads query only the status partition. The
+  container sets `defaultTtl: -1`, so records and the lock never expire and status records expire after
+  seven days. The resolver refuses any document that carries a `type`, and `--tenant` must be a GUID,
+  stored in lower case. `scripts/Sync-ClaudeProjection.ps1` only exports snapshots; its direct Cosmos writes,
+  `-AllowEmpty` and `-KeepOrphans` are removed. The switch (`scripts/Deploy-ClaudeProjection.ps1
+  -FlipAfterCleanCompare`) admits a gateway on a successful full sync within 24 hours for its Cosmos
+  account and tenant, with no record the resolver would refuse; it needs no job and no receipt. The sync
+  job is optional and manual unless `-CronExpression` is passed. The runner starts when it has stopped.
+  The deployer creates the resolver's service principal, refuses a `-Location` other than an existing
+  Cosmos account's, compares a new gateway with the snapshot it applied, and records
+  `entitlement-projection-prefix`, also on a gateway that served from a projection before P97; the
+  renewal deployer refuses until that named value names its projection, because the job's records carry no
+  `expiresAt` and an older resolver refuses them. `docs/PROJECTION-WORKBOOK.md` gives the manual steps,
+  quickstart first, and `tests/Test-DocMarkdown.ps1` refuses masked `Authorization` headers and fenced
+  blocks inside table rows in every tracked markdown file
+  ([P97 status](docs/status/P97.md#p97-cosmos-entitlement-persists-until-a-sync-changes-it-2026-10-05)).
+- **P95 the projection switch runs end to end.** `Invoke-ClaudeProjectionSwitch`
+  (`scripts/ClaudeProjectionSwitch.ps1`) takes the renewal receipt and checks every value in it
+  before any call, requires the gateway's `entitlement-resolver-url` to be the resolver deployed with
+  the projection, which reads the Cosmos account the job renews, runs the drift check with
+  `scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift` and a read-only compare in the runner, runs
+  admission, writes the entitlement named values to
+  `onboarding/projection-switch-<apim>-<UTC time>-<8 hex digits>.json` and sets `entitlement-source`
+  to `projection`, then prints the rollback. The deployer's `-FlipAfterCleanCompare`, the installer
+  through it, and the guided Entitlement step use it; the deployer deploys, publishes and applies
+  nothing in switch mode, and `-WhatIf` stops before the backup. The deployer's normal run points
+  the gateway at the resolver. Admission reads the action group and requires an email receiver whose
+  status is `Enabled`, and counts only status records the job wrote under its current settings,
+  which must name the gateway, the compared tier groups, the receipt's identity and the Cosmos
+  account and tenant admission reads. A restore does not switch to the projection.
+  `docs/SECURE-PROJECTION.md` lists the owner-attended live run.
+  [ADR-0050](docs/adr/0050-projection-switch-function.md).
+- **P94 the projection renewal job deploys and renews.** `scripts/Deploy-ClaudeProjectionRenewal.ps1`
+  deploys `infra/projection-registry.bicep` (registry, job identity, AcrPull), builds the image
+  from the sync package, reads back its digest and deploys `infra/projection-renewal.bicep` pinned
+  to it; `docs/AZ-COMMANDS.md` gives the same steps as Azure CLI commands. The projection network
+  gains a `/27` renewal subnet. The job carries its client id, tier group ids and gateway id, reads
+  `bu-registry` and `bu-parents` on every run, and prints a success or failure line that the
+  alerts match. [ADR-0049](docs/adr/0049-projection-renewal-deployment.md).
 - **P86 scheduled projection renewal.** A 30-minute Container Apps renewal job,
   tenant-admin Graph grant script, Cosmos status evidence, email-backed alerts
   and evidence-gated switch admission replace P84's unconditional projection
@@ -1335,6 +1533,85 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Fixed
 
+- **P96 a business unit identifier with a capital, or another spelling of a stored one.**
+  `scripts/Set-ClaudeBusinessUnit.ps1` accepted a new identifier such as `Platform` and then stopped at
+  the dollar budget with "Invalid USD scope identifier." (`scripts/ClaudeUsdBudgets.ps1:42`); the AUM
+  catalog action wrote such an identifier to `bu-registry`; and `scripts/Manage-ClaudeBusinessUnits.ps1`
+  accepted it at its prompt and offered to create the Entra group. A spelling that differed only in case
+  from a stored unit, such as `Sales` for `sales` or `legacy-unit` for `Legacy-Unit`, changed, renamed
+  or removed that unit, and a registry that held two such spellings lost one at the next change. A new
+  identifier is now refused with the lower-case rule, and another spelling of a stored unit with the
+  stored spelling, before any write. The script, the AUM bridge and the Turnstile budget pull compare
+  identifiers by their characters and keep each spelling's mode and parent entry, and a budget mode is
+  refused for an identifier with capitals, which `bu-modes` cannot hold. A unit that the registry holds
+  with capitals keeps working under that spelling
+  ([P96 status](docs/status/P96.md#p96-fixes-from-a-live-deployment-2026-10-05)).
+- **P96 the guided flow's Tier and Desktop sign-in changes.** `Start-ClaudeGateway.ps1 -Action Change`
+  with `-Change sku` or `-Change desktopSignIn` stopped at the write gate with "A named-value snapshot
+  path is required before applying this lifecycle change." Both steps now export the gateway to
+  `backups/before-tier-<apim>-<UTC time>.json` or `backups/before-desktop-sign-in-<apim>-<UTC time>.json`
+  before their write ([P96 status](docs/status/P96.md#p96-fixes-from-a-live-deployment-2026-10-05)).
+- **P95 no switch path could reach the projection.** The deployer's `-FlipAfterCleanCompare`
+  redeployed and applied a fresh snapshot before admission, so admission refused every attempt as
+  an older generation; the guided flow's live discovery supplied no renewal evidence and ran no
+  compare; admission accepted any action-group id and did not tie the job's evidence to its
+  settings. README, six guides, the deployer synopsis and the preflight refusal said the switch
+  was unavailable or later work. Each is corrected with tests
+  ([P95 status](docs/status/P95.md#p95-the-projection-switch-over-runs-end-to-end-2026-10-05)).
+- **P95 council round 1.** The guided flow's real entry point (`Get-ClaudeFlowDiscovery`) carried no
+  receipt and gave the Entitlement plan no snapshot path, so it refused every switch. Admission's
+  command quoted the entry point, which `az.cmd` and the runner split, so every live admission
+  would have failed. No script set `entitlement-resolver-url` after P84, so a scripted switch would
+  have pointed every request at the placeholder resolver. Receipt values reached `az.cmd`, the
+  runner and ARM URLs unchecked, so a planted receipt could run commands or send the management
+  token to another host. A restore could set `entitlement-source` to `projection`. A failed runner
+  compare read as a projection mismatch, an unreadable job gave the raw ARM error, `-Confirm`
+  prompted for working files first, and `-RenewalEntryPoint` was ignored. Each is corrected with a
+  test ([P95 council](docs/status/P95.md#council)).
+- **P95 council round 2.** The switch trusted the resolver deployment's recorded parameters, so a
+  resolver site whose settings had since changed passed; it now reads the live site and its
+  application settings. The deployer's normal run repointed a gateway that already served from the
+  projection, which would move every request to a new, unpopulated resolver; it now stops. A failed
+  read of `entitlement-source` or the resolver values during an installer redeploy returned the
+  gateway to named values; those reads now stop the run. Discovery found a receipt only beside the
+  decision record; it now also reads the repository's `onboarding/`, where the renewal deployer
+  writes it. Each is corrected with a test ([P95 council](docs/status/P95.md#council)).
+- **P95 council round 3.** A failed read of whether the gateway exists made the installer take an
+  existing gateway for new, skip its fail-closed reads and deploy the template's defaults over it;
+  only Azure's not-found answer now means a new gateway. The deployer redeployed the resolver site
+  and its sign-in settings before its projection check, so on a gateway on the projection a rerun
+  with another resolver app changed the live resolver and then refused; the check now runs before
+  any write, `-PreflightOnly` and `-WhatIf` included. The guided Entitlement plan listed a deployment
+  and list writes the step does not make and a rollback without the refresh and compare. A resource
+  group name with parentheses was asked for again in the same form. Refusals without a remedy now
+  name one. Each is corrected with a test ([P95 council](docs/status/P95.md#council)).
+- **P95 council round 4.** The deployer's projection check compared the gateway's URL with the last
+  resolver deployment record, whose outputs a failed deployment leaves empty, so one failed resolver
+  redeploy blocked every rerun; it now reads the site the run redeploys. The refusal said nothing had
+  changed when the installer had already deployed the gateway, and named only the deployer's
+  `-ResolverAppId`; it now says what this run did not write and names the installer's
+  `-ProjectionResolverAppId` too. Each guided Entitlement direction names the rights its own step
+  uses ([P95 council](docs/status/P95.md#council)).
+- **P94 the renewal job could not be deployed or run as merged.** The image and the runner archive
+  missed `resolver/src/entitlement.mjs`, which `sync/src/plan.mjs` imports, so the job, the runner
+  apply and compare, and admission stopped with a missing module; the runner archive now holds the
+  same package as the image and installs from a committed lockfile. The renewal template needed the
+  digest of an image in a registry it created itself; the job had no `AZURE_CLIENT_ID`; its name
+  exceeded the 32-character Container Apps limit for prefixes over 9 characters; and the alerts read
+  the legacy `_CL` table, ended in a `summarize` that always returns a row and passed `now()` as
+  epoch seconds. Each is corrected with tests ([P94 status](docs/status/P94.md#p94-the-p86-renewal-job-deploys-and-renews-2026-10-04)).
+- **P94 council rounds 1-3.** A refusal from `scripts/Deploy-ClaudeProjectionRenewal.ps1` prints its
+  message alone, one refused value per line. The script and the guide refuse a resource group that
+  still holds P86's renewal job, environment or failure alert, matched by name and resource type,
+  with the delete commands, and refuse one group for both tiers, as admission now does; the script
+  refuses a subnet id, from its parameter or the network deployment, or a registry name with
+  characters that `cmd.exe` re-reads. The guide reads the tier group ids from the section 5 group
+  receipts recorded for the current group names, refuses an id that is not an object id, and
+  removes its package directory. The job treats a unit whose group was deleted as an empty unit,
+  computes the oldest expiry with a loop that holds past 125,000 records, and orders unit ids that
+  differ only in case as PowerShell does. Every `npm ci` of the sync package skips install scripts.
+  The receipt records the tier group ids and the identity's client id
+  ([P94 council](docs/status/P94.md#council)).
 - **P88 AUM test clock independence.** AUM pytest now pins `datetime.now(timezone.utc)` for `claude_finops` modules and AUM test helpers to an advancing instant inside the September fixture month without changing the stdlib datetime module. A real-clock opt-out, clock-reader coverage guard and September service budget write guard keep the seam reversible.
 - **AUM lookups could cancel their own view refresh (P71 follow-up).** A changed
   tab and its caller both started exclusive refresh workers. Lookup, breadcrumb,

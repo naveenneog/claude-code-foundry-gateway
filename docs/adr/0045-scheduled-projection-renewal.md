@@ -1,6 +1,9 @@
 # ADR-0045: Scheduled projection renewal and evidence-gated switching
 
-- **Status:** Proposed for P86
+- **Status:** Accepted with P86, which merged with the owner's approval on 2026-10-02 (`9c5022b`,
+  [ROADMAP](../ROADMAP.md)); the schedule and the three-renewal switch gate are superseded by
+  [ADR-0051](0051-persistent-sync-based-cosmos-entitlement.md) (P97, 2026-10-05): the job is optional and
+  runs on demand
 - **Date:** 2026-10-01
 - **Packet:** P86
 - **Refines:** ADR-0017 and ADR-0040

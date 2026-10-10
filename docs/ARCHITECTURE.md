@@ -2,7 +2,7 @@
 
 This article explains how Claude Code, the Claude VS Code extension and Claude Desktop use
 the customer's Claude deployment in Microsoft Foundry through Azure API Management. It
-also explains the optional entitlement projection, Turnstile governance console and
+also explains the entitlement projection, which the installer deploys by default, the Turnstile governance console and
 AUM (Azure Usage Management), the terminal FinOps console. It is a concept article; use the linked how-to guides to deploy or
 operate each part.
 
@@ -11,11 +11,20 @@ For current operational evidence, use
 It pairs portal inspections with Azure CLI commands and redacted live screenshots.
 Its coverage table distinguishes successful live requests and sign-in from configuration
 inspection, prior job history and tests still blocked or deliberately not performed.
+## Quickstart
+
+The [Overview](#overview) identifies the components; [Request path](#request-path) follows inference; [Setup](SETUP.md) deploys them. The [live verification guide](architecture/LIVE-VERIFICATION.md) distinguishes diagrams from dated portal evidence.
+
+**Expected result:** readers can map a request, entitlement read, telemetry write and management action to the responsible component before following an operating guide.
 
 ## Overview
 
+<details>
+
+<summary>APIM enforcement point and optional deployment profiles</summary>
+
 API Management is the enforcement point. It validates the caller's Microsoft Entra token,
-resolves entitlement, checks model access and token budgets, and replaces the caller's
+resolves entitlement, optionally screens request text with Azure AI Content Safety, checks model access and token budgets, and replaces the caller's
 token with the gateway's managed identity before calling Foundry. The governance and
 reporting tools configure or observe that path; they do not proxy inference.
 
@@ -27,17 +36,18 @@ Source: [01-system.json](architecture/01-system.json).
 
 | Profile | Adds to the deployment | Identity and operational boundary |
 |---|---|---|
-| **Default: named values** | API Management v2, Application Insights and Log Analytics. Foundry already exists. Workbooks and saved KQL functions are published separately as definitions. | Entra groups are synchronized to gateway named values. No resolver, Cosmos database or Turnstile service is required. |
-| **Projection** | Cosmos DB, a resolver Function, Function host/deployment storage, private endpoints and DNS. A writer runs separately to reconcile the directory. | The writer and resolver have different identities and container-scoped data roles. Cosmos stays private. Standard v2 and Premium v2 use a private resolver; Basic v2 uses a public resolver endpoint restricted by Microsoft Entra to the gateway managed identity. |
+| **Default: projection** ([ADR-0052](adr/0052-cosmos-default-installer.md)) | API Management v2, Application Insights and Log Analytics, plus Cosmos DB, a resolver Function, Function host/deployment storage, private endpoints and DNS. An in-network runner applies directory snapshots; an optional job syncs very large directories. Foundry already exists. | The runner, the job and the resolver have different identities and container-scoped data roles. Cosmos stays private. The installer deploys a public resolver endpoint restricted by Microsoft Entra to the gateway managed identity on every tier, and a private resolver on Standard v2 or Premium v2 with `-ResolverInboundAccess private`. |
+| **Named values** | API Management v2, Application Insights and Log Analytics only. For small teams: named values hold about 93 to 110 developers ([SCALE](SCALE.md)). | Entra groups are synchronized to gateway named values. No resolver, Cosmos database or Turnstile service is required. |
 | **Turnstile** | A separate fork deployment: App Service, PostgreSQL, Event Hubs and supporting Functions, Storage, Key Vault and networking. This repository adds the manual apply and hourly export Container Apps jobs. | Entra app roles control console access. The console starts one apply job; the job, not the console, writes gateway named values. |
 | **AUM (Azure Usage Management)** | A local Python terminal FinOps console, command `aum`; no new inference service or mandatory Azure resource. The terminal release is merged; the naming packet is staged on branch `aum`. | It uses Turnstile's HTTP API or Direct Azure with the operator's Azure CLI sign-in. A fake backend is for tests, never an outage fallback. |
 | **Monthly chargeback reports (P50)** | A separate Consumption environment, generator/dispatcher/admin jobs, discovered existing or explicit new VNet, private Blob storage and Azure Communication Services Email. | The reporting identity reads telemetry/configuration and writes reports. A separate administration identity writes configuration only. No Turnstile dependency. |
 | **AUM service (P55)** | Optional Python Functions, keyless Blob/Table state, scoped administrative API and timers. Network, redundancy, warm capacity and telemetry are explicit priced choices. | An independent administrative authority; it refuses gateway writes while Turnstile owns them. It does not proxy inference or make an unimplemented client adapter complete. |
 | **USD budget reconciliation (P21/P59)** | Two preserved named values, a five-minute timer in the optional AUM service, and an on-demand script. | Dated decimal tariffs and observed-category spend become gateway stops. The timer uses the service identity/lease/audit; Direct uses Azure CLI and ETags. Neither writes while Turnstile owns governance. |
 
-Projection and Turnstile are independent options. Turning on one does not imply the other.
-The default deployment has no additional application database, processor or queue, but
-that statement does **not** describe the optional profiles. Use
+The projection and Turnstile are independent. Turning on one does not imply the other.
+The named-values profile adds no application database, processor or queue. The default profile adds
+the projection's Cosmos DB account, resolver Function and runner, and the other profiles add the
+resources in the table. Use
 [`Get-ClaudeBom.ps1`](../scripts/Get-ClaudeBom.ps1) and
 [`Get-ClaudeTurnstileBom.ps1`](../scripts/Get-ClaudeTurnstileBom.ps1) for the resources actually
 deployed, rather than treating an architecture picture as a resource count or price quote.
@@ -169,8 +179,13 @@ output the run shows (`Invoke-ClaudeInstallAzShown`, `scripts/ClaudeInstallResum
 `scripts/install-checkpoint.sh:47-52`). A file
 that cannot be written refuses the run at startup, before any Azure call, and no event is written before
 that check passes (`scripts/ClaudeInstallSteps.ps1:19-27`, `scripts/install-steps.sh:134-144`).
+</details>
 
 ## Optional company hostname
+
+<details>
+
+<summary>Custom DNS, certificate binding and proof gates</summary>
 
 ![Company address control path: a priced installer or Change review creates DNS first, configures the supplied certificate and preserves APIM hostnames, then publishes the developer URL only after trusted TLS and a gateway HTTP 401.](images/architecture/company-address.png)
 
@@ -190,7 +205,13 @@ are separate from applied state; a failed replacement has a separately recorded,
 unverified receipt for a new scoped recovery review. Deadline-bound workers
 include native reads and clean their private files when cancelled.
 
+</details>
+
 ## Model lifecycle administration
+
+<details>
+
+<summary>Foundry model lists, tier profiles and tariff preservation</summary>
 
 ![Model lifecycle: read Foundry and gateway state, approve a fingerprint, check ownership and snapshot, write the two model lists, preserve dated prices and records, then generate separate tier profiles for existing fleet and workstation routes.](images/architecture/model-lifecycle.png)
 
@@ -277,9 +298,15 @@ keys or connection strings, and the checkpoint test suites check that
   and the store check does not apply there. Before a wait longer than 60 s the
   installer prints the 20-minute idle limit
   ([Cloud Shell FAQ](https://learn.microsoft.com/azure/cloud-shell/faq-troubleshooting)).
+</details>
+
 ## Request path
 
-![Six request hops: sign in, admit, serve, meter, attribute and observe. Four budget layers and projection admission, absence and expiry outcomes are shown, followed by the components each optional profile adds.](images/architecture/request-path.png)
+<details>
+
+<summary>Sign-in, entitlement, optional screening, budgets, Foundry call and telemetry</summary>
+
+![Seven request hops: sign in, admit, the optional Content Safety screen, serve, meter, attribute and observe. Four budget layers and projection admission, absence and fault outcomes are shown, followed by the components each optional profile adds.](images/architecture/request-path.png)
 
 Source: [02-request.json](architecture/02-request.json). The README's
 `images/request-flow.png` is a byte-identical compatibility copy.
@@ -299,24 +326,28 @@ Source: [02-request.json](architecture/02-request.json). The README's
    is non-empty.
    `entitlement-source` selects `named-value` or `projection`. Entitlement, tier and the
    requested model are checked before Foundry is called.
-3. **Serve.** `authentication-managed-identity` obtains the gateway's Foundry token.
+3. **Screen (optional).** With `content-safety-mode` set to `audit` or `block`, the
+   [`content-safety-screening`](../infra/content-safety-screening.xml) fragment runs after
+   entitlement and before the budgets. It sends the system prompt, tool descriptions, the
+   newest user turn and an assistant prefill to Azure AI Content Safety with the gateway's
+   managed identity. Block mode returns 403 for detected content, 503 when Content Safety
+   fails and 400 for a body it cannot read ([Content Safety](CONTENT-SAFETY.md),
+   [ADR-0055](adr/0055-content-safety-screening.md)).
+4. **Serve.** `authentication-managed-identity` obtains the gateway's Foundry token.
    The policy replaces `Authorization` and deletes `x-api-key`. The existing customer
    Foundry deployment receives the gateway identity, not the developer token.
-4. **Meter.** The built-in `ApiManagementGatewayLlmLog` records request-level token usage,
+5. **Meter.** The built-in `ApiManagementGatewayLlmLog` records request-level token usage,
    model and streaming metadata. It is not the custom-metric budget counter.
-5. **Attribute.** The outbound `claude-chargeback` trace supplies the user, tier, assigned
+6. **Attribute.** The outbound `claude-chargeback` trace supplies the user, tier, assigned
    unit or team and raw client string in `AppTraces`. The trace's `Properties.RequestId`
    joins the LLM log's `CorrelationId`. Application Insights operation ids are not that key.
-6. **Observe.** Saved functions, workbooks and optional consumers read the Log Analytics
+7. **Observe.** Saved functions, workbooks and optional consumers read the Log Analytics
    data. Ingestion is asynchronous; a successful request is not an immediately complete
    reporting window.
 
 ### Entitlement and budgets
 
-In the default profile, [`Sync-ClaudeAccess.ps1`](../scripts/Sync-ClaudeAccess.ps1) reads
-Entra groups and writes `allow-standard`, `allow-premium` and `bu-members`. Premium takes
-precedence over standard. The assigned unit can be a team; `bu-parents` supplies its parent.
-The policy does not perform a live Microsoft Graph membership call for each request.
+`Sync-ClaudeAccess.ps1` publishes Entra membership to the gateway's active store. The default projection profile writes Cosmos records through the runner; a selected named-value profile writes `allow-standard`, `allow-premium` and `bu-members`. Premium takes precedence over standard. The policy does not call Microsoft Graph for membership on each request ([ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md), [ADR-0052](adr/0052-cosmos-default-installer.md)).
 
 The maximum four budget layers for a team member are, in policy order:
 
@@ -384,16 +415,24 @@ Unpriced models are reported and refused for enforced scopes, never counted as z
 
 The AUM service timer runs every five minutes under its existing identity, lease and
 audit. `Sync-ClaudeUsdBudgets.ps1` invokes the same engine on demand with Azure CLI
-sign-in. P66's guided Budgets step adds the non-service fallback: a five-minute
-Container Apps job definition pinned to a repository commit, with a managed identity
-limited to gateway named values and workspace reads. State expires after 15 minutes. Ingestion, execution and APIM propagation add
+sign-in. P66's guided Budgets step adds the non-service fallback: one five-minute
+Container Apps job and user-assigned identity per gateway, updated in place at a
+pinned repository commit, with the managed identity limited to gateway named
+values and workspace reads. A newer commit replaces older jobs only after the
+new job's first successful run. State expires after 15 minutes. Ingestion, execution and APIM propagation add
 delay; no hard currency overshoot guarantee is made. Nonstream counts can be complete,
 including both cache-write TTLs. Streaming cache reads depend on capped custom metrics
 and cache writes remain unknown. A known subtotal under budget is not complete spend.
 See [BUDGETS.md](BUDGETS.md) and the
 [AUM client contract](aum-usd-budgets-client-contract.md).
 
+</details>
+
 ## Telemetry and chargeback
+
+<details>
+
+<summary>LLM logs, saved queries and cost attribution limits</summary>
 
 The default gateway uses a resource diagnostic for the LLM log and an Application Insights
 diagnostic for traces and custom token metrics. The shipped diagnostic does not capture
@@ -413,7 +452,13 @@ invoice. An unjoined row remains visible as unattributed rather than being silen
 discarded. See [monitoring](MONITORING.md), [analytics provenance](adr/0006-ledger-is-the-llm-log.md)
 and [financial semantics](adr/0010-financial-semantics.md).
 
+</details>
+
 ## Private monthly reports and email delivery (P50)
+
+<details>
+
+<summary>Generator, private storage, recipients and paced email delivery</summary>
 
 ![P50 chargeback reports: read-only workspace and gateway sources feed a monthly generator in a dedicated reports VNet. Private Blob settings, archive and hashed-recipient outbox connect separate reporting and administration identities to a paced ACS Email dispatcher and scoped BCC recipients.](images/architecture/chargeback-reports.png)
 
@@ -502,7 +547,13 @@ are slower. Hundreds of unit reports therefore require a verified custom domain 
 approved quota for timely production delivery. A successful ACS operation is not proof
 of inbox placement, and emailed data is outside the archive's retention control.
 
+</details>
+
 ## Governance apply path
+
+<details>
+
+<summary>Turnstile saves, job identities and named-value writes</summary>
 
 ![Turnstile governance apply: a save starts one manual Container Apps job; its pinned scripts prepare the month, read catalog, tiers and budgets, reject unsafe input, write changed named values and verify read-back.](images/architecture/governance-apply.png)
 
@@ -561,7 +612,13 @@ writes atomic. Follow the
 and [ADR-0019](adr/0019-budget-enforcement-modes.md); do not infer a stronger
 ordering guarantee from the arrows.
 
+</details>
+
 ## Delegated management and console sign-in
+
+<details>
+
+<summary>Entra roles, manager scopes and CLI-code sign-in</summary>
 
 ![Delegated management: assigned Entra application groups and catalog manager_group_id determine scope; an Azure CLI token becomes a single-use 60-second browser login code. Admin, Viewer and Manager privileges are distinct.](images/architecture/delegated-management.png)
 
@@ -602,9 +659,15 @@ button. See [viewers and managers](TURNSTILE.md#viewers-and-managers),
 [sign-in before consent](TURNSTILE.md#sign-in-before-the-tenant-grants-consent)
 and [ADR-0016](adr/0016-delegated-management.md).
 
-## Projection freshness, admission and private networking
+</details>
 
-![Projection freshness and admission: a complete paged directory scan produces an absolute lease; the in-VNet writer reconciles Cosmos, while the gateway admits bounded misses to an authenticated resolver with per-process single flight.](images/architecture/projection-freshness.png)
+## Projection freshness, switch evidence and private networking
+
+<details>
+
+<summary>Cosmos entitlement records, resolver cache and switch checks</summary>
+
+![Projection persistence and switch evidence: a complete paged directory scan writes persistent records; the in-VNet writer reconciles Cosmos, while the gateway admits bounded misses to an authenticated resolver with per-process single flight.](images/architecture/projection-freshness.png)
 
 Source: [05-projection.json](architecture/05-projection.json).
 
@@ -614,23 +677,47 @@ by `oid` and carries the tenant, tier, assigned unit/team and freshness:
 
 - `lastVerifiedAt` is the beginning of the directory observation, not the end of the upload.
 - `reconciliationGeneration` identifies a complete scan.
-- `expiresAt` is an absolute UTC epoch-second expiry. The default and maximum lease is
-  7,200 seconds; the configured range is 60 to 7,200 seconds.
+- Records do not carry an operating expiry. They persist until a later sync deletes or changes them.
 
 The writer follows Graph `@odata.nextLink` pages for users and service principals and
 pages existing Cosmos records with `fetchNext()`. Publication starts only after a complete
-observation. Snapshot replay preserves the original lease; it cannot renew stale access.
-Every retained member is refreshed, even if its tier and unit are unchanged. Kept or
-failed-to-delete orphans do not receive a new lease. A partial write can leave mixed
-generations, each with its own expiry, and exits nonzero.
+observation. Snapshot exports still carry an apply-by deadline of 7,200 seconds from scan start,
+so old membership cannot be replayed. Apply writes only added, moved or changed records and deletes
+orphans during a full sync. Targeted sync writes or deletes one person's record and reads only that
+person's memberships. A partial write can leave mixed generations and exits nonzero.
 
-P86 adds the scheduled renewal path in `infra/projection-renewal.bicep`. It declares an
-ACR registry, an internal Container Apps environment, a scheduled Container Apps job, a
-user-assigned identity, a container-scoped Cosmos SQL data-plane writer role, an email-backed
-action group and scheduled-query alerts. The job writes destination-bound status records in
-the entitlement container. Switch admission reads those records through
-`sync/src/check-admission.mjs` and also checks that the ARM job uses the tested pinned image
-without command or args overrides.
+The sync job in `infra/projection-renewal.bicep` applies Entra tier and business-unit group changes on a
+schedule. It declares an internal Container Apps environment, a Container Apps job that runs every 2 hours by
+default (`-SyncInterval` sets 30 minutes to 12 hours, or manual; [ADR-0058](adr/0058-scheduled-projection-sync.md)), a
+container-scoped Cosmos SQL data-plane writer role, an email-backed action group and alerts. A
+scheduled job adds the no-success alert, which fires after 2 x the interval + 15 minutes without a successful run; failed-run and Graph-denied alerts remain.
+The job writes destination-bound status records in the entitlement container. It is not required for
+switching.
+
+`scripts/Deploy-ClaudeProjectionRenewal.ps1` deploys `infra/projection-registry.bicep` (the ACR
+registry, the job's user-assigned identity and its AcrPull grant) before the image build, then
+the sync-job template with the registry and identity as existing resources. The job runs on the
+`renewal` subnet of `infra/projection-network.bicep`, sends its console lines to the gateway's
+Log Analytics workspace through a diagnostic setting, and reads `bu-registry` and `bu-parents`
+on every run through a named-value read role that `infra/projection-renewal-gateway-reader.bicep`
+grants at the gateway's resource group. The image and the in-network runner use one sync package
+that includes `resolver/src/entitlement.mjs`.
+
+P97 updates the switch ([ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md)).
+`Invoke-ClaudeProjectionSwitch` takes `-ResourceGroup -ApimName -NamePrefix`. It checks the resolver
+deployment, live site settings, gateway resolver named values and the resolver app's service
+principal. It then runs `scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift` and a read-only
+`apply-projection.mjs --compare` in the runner. A gateway with empty named-value lists compares the
+projection with a fresh Entra snapshot instead. Switch evidence is a successful full sync status in
+the last 24 hours for the same account, database, container and tenant, plus no live entitlement
+record the resolver would refuse. The switch writes the entitlement named values to a backup and sets
+`entitlement-source` to `projection`. The deployer's `-FlipAfterCleanCompare` and the guided
+Entitlement step call it; both deploy, publish and apply nothing in switch mode. The update's
+migration `0004-entitlement-projection` ([ADR-0054](adr/0054-update-flow-entitlement-migration.md))
+moves a named-value gateway through the installer's functions: it records `entitlement-groups`,
+refreshes the named values, runs the deployer, then the deployer's `-FlipAfterCleanCompare`. The guided flow reads
+`entitlement-projection-prefix` from the gateway. `scripts/Restore-ClaudeGateway.ps1` does not move
+`entitlement-source` to `projection`.
 
 Before a resolver call, APIM limits `entitlement-misses` to 200 per second and 100
 concurrent. Excess returns retryable 429. These approximate distributed controls bound
@@ -644,10 +731,10 @@ disabled. The deployment defaults to two warm 2-GB instances with 100 HTTP reque
 instance. There is no cross-instance single-flight lock.
 
 `toEntitlement` distinguishes absent records from invalid ones. No record becomes a
-gateway entitlement refusal, while expired or malformed freshness becomes 503. APIM
-includes tenant and schema version in the cache key, clips positive caching to the
-remaining lease, and checks expiry on every hit. A stopped sync cannot authorize new
-requests indefinitely; it does not terminate a stream already admitted.
+gateway entitlement refusal, while wrong tenant, unknown tier, malformed generation or invalid
+verification time becomes 503. APIM includes tenant and schema version in the cache key and caches
+positive answers for `entitlement-cache-seconds`. A stopped sync does not revoke existing records; a
+removal takes a sync and then at most the cache window.
 
 ### Separate network reachability from identity
 
@@ -662,14 +749,18 @@ requests indefinitely; it does not terminate a stream already admitted.
   blob, queue and table. Private DNS links and endpoint zone groups are part of the path,
   not optional decoration.
 
-Schedule observation, transfer and apply well inside the lease. Alert on failures and
-remaining lease. Existing unleased records need a fresh reconciliation before the stricter
-reader and policy are deployed. See
+Run sync after directory changes and before switching. See
 [the private deployment how-to](SECURE-PROJECTION.md),
 [the migration and measurement guide](SCALE.md) and
-[ADR-0017](adr/0017-projection-freshness-and-admission.md).
+[ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md).
+
+</details>
 
 ## Enterprise network ingress (P54)
+
+<details>
+
+<summary>Regional WAF, private origins and priced network plan</summary>
 
 ![Internal-only regional WAF and private origins](images/architecture/network-private.png)
 
@@ -688,7 +779,13 @@ access, before any write. It does not convert Turnstile, PostgreSQL, the project
 scheduled jobs (P49); a plan that needs those fails before it writes. See
 [ADR-0022](adr/0022-enterprise-network-edge.md).
 
+</details>
+
 ## AUM (Azure Usage Management) - terminal FinOps console
+
+<details>
+
+<summary>Terminal FinOps backends, identity guards and safe publishing</summary>
 
 ![AUM (Azure Usage Management), terminal FinOps console, command aum: Textual UI and Typer commands share one engine, which selects Turnstile HTTP, Direct Azure through ARM and Log Analytics with a PowerShell bridge, or a fake test backend.](images/architecture/terminal-finops.png)
 
@@ -807,7 +904,13 @@ Source: [15-aum-readiness.json](architecture/15-aum-readiness.json). The Windows
 MSI launcher runs its existing Python entry point directly; other command
 wrappers are created suspended, assigned to their timeout job, then resumed.
 
+</details>
+
 ## Optional independent AUM service (P55)
+
+<details>
+
+<summary>Scoped Functions authority, leases, boosts and warnings</summary>
 
 ![Independent AUM service: delegated Entra users reach a token-validated Functions API; authority, scope and allocation checks precede audited and leased named-value writes; keyless service storage holds workflows and two timers handle boost expiry and warnings.](images/architecture/aum-service.png)
 
@@ -852,7 +955,13 @@ routing. The deployment does not repurpose shared storage/plans or modify the ga
 network. Bounded observed-user queries do not remove the 4,096-character named-value
 limit or prove capacity for 500,000 per-person overrides.
 
+</details>
+
 ## Budget enforcement modes
+
+<details>
+
+<summary>Strict, allowance and notify behavior per scope</summary>
 
 ![Budget modes: validated owner configuration publishes bu-modes separately from the base budget registry; strict, allowance and notify act on each scope independently, preserve other controls and emit advisory response/trace information.](images/architecture/budget-modes.png)
 
@@ -887,7 +996,13 @@ The architecture capture's live scope remains the explicit
 [verification coverage](architecture/LIVE-VERIFICATION.md#live-coverage-and-limitations);
 it does not claim an additional live mode mutation run.
 
+</details>
+
 ## Azure resource inventory
+
+<details>
+
+<summary>Bicep resource types and deployment profile boundaries</summary>
 
 ![Azure resource type inventory grouped into default gateway, projection, private networking, resolver and Turnstile integration. All resource types declared in this repository's infra Bicep files are represented.](images/architecture/azure-resource-inventory.png)
 
@@ -899,7 +1014,13 @@ separately displays five additional resource types from its merged implementatio
 definitions, Storage management policies and the three Communication/Email resource types.
 These are not claimed as resources in the current default deployment.
 
+</details>
+
 ## Keep architecture current after every feature
+
+<details>
+
+<summary>Diagram sources, rendering checks and drift tests</summary>
 
 The sources are JSON under [`docs/architecture`](architecture), one file per diagram.
 The layout is deterministic HTML/SVG with real code identifiers, rendered by the existing
@@ -998,3 +1119,11 @@ Review behavior against the implementation whenever a feature changes a componen
 flow, identity, schedule or network path. PNGs are repeatable with the same locked
 Playwright/browser and installed fonts; cross-platform font rasterization can differ
 without changing the architecture.
+
+</details>
+
+## Next
+
+- [Setup](SETUP.md) deploys the components.
+- [Operations](OPERATIONS.md) runs day-to-day checks.
+- [Authentication](AUTHENTICATION.md) covers caller and service identities.

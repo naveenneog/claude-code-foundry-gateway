@@ -35,6 +35,33 @@ $code = @(Get-ChildItem (Join-Path $root 'scripts'), (Join-Path $root 'tests') -
 $found = @(Find-Reference $code)
 Assert 'no script or test names the reference deployment' (-not $found.Count) ($found -join '; ')
 
+$base = (& git -C $root merge-base HEAD origin/main 2>$null)
+$changed = if ($base) { @(& git -C $root diff --name-only $base HEAD 2>$null) } else { @() }
+$docs = @($changed | Where-Object { $_ -match '^docs/' -and $_ -match '\.md$' } | ForEach-Object { Join-Path $root ($_.Replace('/', '\')) } | Where-Object { Test-Path -LiteralPath $_ })
+$foundDocs = @(Find-Reference $docs)
+Assert 'no changed public documentation names the reference deployment identifiers' (-not $foundDocs.Count) ($foundDocs -join '; ')
+
+# A subscription or tenant id in public documentation is found by its shape, so this test never has to hold a
+# real id itself. Only the all-zero placeholder form (00000000-...) is allowed.
+$idPattern = '(?i)(?:subscriptions/|-SubscriptionId\s+[''"]?|--subscription\s+[''"]?|SUBSCRIPTION_ID\s*=\s*[''"]?|"?subscriptionId"?\s*[:=]\s*[''"]?|-TenantId\s+[''"]?|--tenant\s+[''"]?|TENANT_ID\s*=\s*[''"]?|"?tenantId"?\s*[:=]\s*[''"]?)([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})'
+function Find-AccountId([string]$Text, [string]$Label) {
+    foreach ($m in [regex]::Matches($Text, $idPattern)) {
+        if ($m.Groups[1].Value -notmatch '^0{8}-') { "${Label}: a subscription or tenant id at offset $($m.Index)" }
+    }
+}
+$markdown = @(& git -C $root ls-files -- '*.md')
+$foundIds = @(foreach ($doc in $markdown) { Find-AccountId ([IO.File]::ReadAllText((Join-Path $root $doc))) $doc })
+Assert "no public documentation holds a subscription or tenant id ($($markdown.Count) markdown files)" ($markdown.Count -gt 100 -and -not $foundIds.Count) ($foundIds -join '; ')
+$idSamples = @(
+    @{ Text = '-SubscriptionId 1a2b3c4d-1111-4222-8333-444455556666 `'; Found = $true },
+    @{ Text = 'export TENANT_ID="9f8e7d6c-5b4a-4321-8765-0123456789ab"'; Found = $true },
+    @{ Text = '/subscriptions/abcdef01-2345-4678-9abc-def012345678/resourceGroups/rg'; Found = $true },
+    @{ Text = '-SubscriptionId 00000000-0000-0000-0000-000000000000 `'; Found = $false },
+    @{ Text = '-SubscriptionId <subscription-id> `'; Found = $false }
+)
+$idMisses = @($idSamples | Where-Object { [bool]@(Find-AccountId $_.Text 'sample').Count -ne $_.Found } | ForEach-Object { $_.Text })
+Assert 'the id shape check finds planted ids and passes placeholders' (-not $idMisses.Count) ($idMisses -join '; ')
+
 # The check has been seen to fail: a planted name in a copy is found.
 $plant = Join-Path ([IO.Path]::GetTempPath()) "nodeploy-$PID.ps1"
 try {

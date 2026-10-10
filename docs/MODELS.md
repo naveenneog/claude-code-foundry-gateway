@@ -8,8 +8,22 @@ available as `scripts/Sync-ClaudeModels.ps1`.
 The operation does not deploy or delete a Foundry model, change Entra
 membership, assign MDM policy or run software on another workstation.
 [ADR-0034](adr/0034-model-lifecycle.md) defines these boundaries.
+## Quickstart
+
+The model plan runs from the repository root in PowerShell 7. The gateway record supplies the target, and the selected deployment name comes from Foundry Models + endpoints.
+
+```powershell
+$gateway = Get-Content .\onboarding\claude-gateway.json -Raw | ConvertFrom-Json
+.\scripts\Add-ClaudeModel.ps1 -ResourceGroup $gateway.resourceGroup -ApimName $gateway.apimName -List
+```
+
+**Expected result:** the command lists the current deployed and allowed models without writing. The write path below verifies the deployment, gateway allowlist, price book and developer configuration together.
 
 ## Prerequisites
+
+<details>
+
+<summary>Required access, records and target discovery</summary>
 
 Discovery needs read access to the selected Foundry account and API Management
 instance. Apply needs API Management Service Contributor, writable local
@@ -44,7 +58,13 @@ The model view exposes the actual deployment name, model, version, SKU/capacity
 and provisioning state
 ([Microsoft Learn](https://learn.microsoft.com/azure/foundry/foundry-models/how-to/deploy-foundry-models)).
 
+</details>
+
 ## 1. Inspect, deploy and allow
+
+<details>
+
+<summary>Deployment choices, approval fingerprint and live proof</summary>
 
 An administrator deploys the model through Foundry's approved deployment
 process. The model change then discovers it:
@@ -146,7 +166,13 @@ reconciliation remains U2.
 
 ![Final isolated-proof cleanup records the resource group, gateway purge, exact role-assignment removal and deletion of both dedicated Entra groups, with UTC times.](guide/55-model-proof-cleanup.png)
 
+</details>
+
 ## The four things that have to agree
+
+<details>
+
+<summary>Deployment, allowlist, pricing and client selection alignment</summary>
 
 | State | Location | Consequence of a mismatch |
 |---|---|---|
@@ -161,7 +187,13 @@ The third is the one that fails quietly when a reporting copy of the price
 book is left stale; the sync explicitly labels missing prices rather than
 describing them as zero usage.
 
+</details>
+
 ## The price book
+
+<details>
+
+<summary>Private rates, missing prices and reporting publication</summary>
 
 `config/price-book.json` may hold your negotiated rates. It is private and
 git-ignored; negotiated rates can be
@@ -207,7 +239,13 @@ publication/distribution operations remain explicit, with each closed month's
 exports and price snapshot retained ([FinOps](FINOPS.md),
 [ADR-0010](adr/0010-financial-semantics.md)).
 
+</details>
+
 ## What developers change
+
+<details>
+
+<summary>Generated tier records and client profile refresh</summary>
 
 The administrator record contains the allowed live union in `models`, and
 `deployments` includes each deployment's model/version and existing client
@@ -256,7 +294,13 @@ update devices ([MDM](MDM.md)).
 
 ![The generated live client files give standard Haiku and Sonnet, keep premium Sonnet-only, pin the Haiku alias within each tier and declare Sonnet's adaptive-thinking capabilities.](guide/53-model-client-handover.png)
 
+</details>
+
 ## Retiring one
+
+<details>
+
+<summary>Drop choices, allow-all risk and legacy command limits</summary>
 
 When Foundry no longer lists a deployment, the model question offers `drop`.
 For example:
@@ -280,7 +324,13 @@ It does not reconcile records/profiles, uses one resource group for both
 services, and can write an empty allow-all list on last-entry removal.
 The reviewed sync is the lifecycle path described here.
 
+</details>
+
 ## Troubleshoot and next steps
+
+<details>
+
+<summary>Troubleshoot and next steps commands, choices and checks</summary>
 
 ### Reference-gateway preview
 
@@ -307,3 +357,11 @@ access change separately.
 
 [Budgets](BUDGETS.md) covers limits; [Plugins](PLUGINS.md) covers non-model
 client capabilities.
+
+</details>
+
+## Next
+
+- [Developer setup](../DEVELOPER.md) covers client refresh after a model change.
+- [Budgets](BUDGETS.md) covers model restrictions as a spend control.
+- [Plugins](PLUGINS.md) covers marketplace and extension policy.

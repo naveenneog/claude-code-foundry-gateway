@@ -285,13 +285,14 @@ try {
         Set-ClaudeRecordProperty $b.models 'claude-haiku-4-5' ([pscustomobject]@{ inputPerM = 99; outputPerM = 5 })
         $global:P70rawDeployments[3].name = 'quick'
         Save $global:P70bookPath $b
-        Reject { Plan @{ quick = 'both'; 'next.opus' = 'premium' } } 'ambiguous|conflict'
+        Reject { Plan @{ quick = 'both'; 'next.opus' = 'premium' } } 'ambiguous|conflict|duplicate normalized'
     }
     Reset-State
     Check 'deployment-specific negotiated price takes precedence over model mapping' {
         $b = Json $global:P70bookPath; Set-ClaudeRecordProperty $b.models 'sonnet' ([pscustomobject]@{ inputPerM = 1.5; outputPerM = 7.5 }); Save $global:P70bookPath $b
         $p = Plan
-        $p.Data.PriceBookAfter.models.sonnet.inputPerM -eq 1.5
+        $p.Data.PriceBookAfter.models.sonnet.inputPerM -eq 1.5 -and
+            $p.Data.PriceChanged -eq $true
     }
     Reset-State
     Check 'apply cannot run without preparation and snapshot' {
@@ -361,9 +362,9 @@ try {
         $r = Json $global:P70recordPath
         ($r.tiers.standard.models -join ',') -eq 'claude-haiku-4-5,sonnet' -and $r.tiers.standard.tokensPerMinute -eq 20000 -and 'next.opus' -in $r.tiers.premium.models
     }
-    Check 'price mapping adds deployed Haiku spelling without losing historical prices or metadata' {
+    Check 'price mapping preserves historical Haiku price without adding a duplicate normalized key' {
         $b = Json $global:P70bookPath
-        $b.models.'claude-haiku-4-5'.inputPerM -eq 1 -and $b.models.retired.outputPerM -eq 15 -and $b.privateNote -eq 'keep' -and $b.date -eq '2026-09-15'
+        $null -eq $b.models.PSObject.Properties['claude-haiku-4-5'] -and $b.models.'claude-haiku-4.5'.inputPerM -eq 1 -and $b.models.retired.outputPerM -eq 15 -and $b.privateNote -eq 'keep' -and $b.date -eq '2026-09-15'
     }
     Check 'Opus 5.5 stays unpriced instead of inheriting Opus 5 rates' { 'next.opus' -notin (Json $global:P70bookPath).models.PSObject.Properties.Name }
     Check 'both complete device profile families are generated' {
@@ -469,6 +470,137 @@ try {
         $state = Get-ClaudeModelDiscovery (Get-ClaudeModelTarget $global:P70record)
         $qs = @(Get-ClaudeModelQuestions -Record $global:P70record -Discovery $state -PriceBook (Get-ClaudeModelPriceBook $global:P70bookPath))
         @($qs | Where-Object Key -eq 'models.tiers.next~opus')[0].Question -match 'unpriced' -and @($qs | Where-Object Key -eq 'models.tiers.claude-haiku-4-5')[0].Question -match 'per million'
+    }
+    Check 'PowerShell price matching uses the same normalized dated model fixture' {
+        $book = Get-ClaudeModelPriceBook (Join-Path $root 'config\price-book.example.json')
+        $cases = @(
+            @('claude-fable-5', 'claude-fable-5'),
+            @('claude-fable-5-1', 'claude-fable-5-1'),
+            @('claude_haiku_4_5', 'claude-haiku-4.5'),
+            @('claude-haiku-4-5', 'claude-haiku-4.5'),
+            @('claude-haiku-4-5-2025-10-01', 'claude-haiku-4.5'),
+            @('claude-haiku-4-5-20251001', 'claude-haiku-4.5'),
+            @('claude-haiku-5-5', ''),
+            @('claude-opus-4-1', 'claude-opus-4-1'),
+            @('claude-opus-4-5', 'claude-opus-4-5'),
+            @('claude-opus-4-6', 'claude-opus-4-6'),
+            @('claude-opus-4-7', 'claude-opus-4-7'),
+            @('claude-opus-4-8', 'claude-opus-4.8'),
+            @('claude-opus-4-8-2026-01-01', 'claude-opus-4.8'),
+            @('claude-opus-5-5', 'claude-opus-5-5'),
+            @('claude-sonnet-4-5', 'claude-sonnet-4-5'),
+            @('claude-sonnet-4-6', 'claude-sonnet-4-6'),
+            @('CLAUDE SONNET 5', 'claude-sonnet-5'),
+            @('Claude-Sonnet-5', 'claude-sonnet-5'),
+            @('claude-sonnet-5-5', 'claude-sonnet-5-5'),
+            @('claude-sonnet-5-2', ''),
+            @('claude-sonnet-5-123456', ''),
+            @('gpt-5', '')
+        )
+        foreach ($case in $cases) {
+            $deployment = [pscustomobject]@{ name = $case[0]; model = $case[0]; sku = 'GlobalStandard' }
+            $actual = (Get-ClaudeDeploymentPrice $deployment $book).SourceKey
+            if ($actual -cne $case[1]) { throw "$($case[0]) matched '$actual', expected '$($case[1])'" }
+        }
+        $withoutOpus55 = [pscustomobject]@{ date = '2026-10-08'; source = 'test tariff'; models = [pscustomobject]@{
+            'claude-opus-5' = [pscustomobject]@{ inputPerM = 5; outputPerM = 25 }
+        } }
+        $conflict = [pscustomobject]@{ date = '2026-10-08'; source = 'test tariff'; models = [pscustomobject]@{
+            'claude-haiku-4.5' = [pscustomobject]@{ inputPerM = 1; outputPerM = 5 }
+            'claude-haiku-4-5' = [pscustomobject]@{ inputPerM = 2; outputPerM = 5 }
+        } }
+        $cacheReadConflict = [pscustomobject]@{ date = '2026-10-08'; source = 'test tariff'; models = [pscustomobject]@{
+            'claude-haiku-4.5' = [pscustomobject]@{ inputPerM = 1; outputPerM = 5 }
+            'claude-haiku-4-5' = [pscustomobject]@{ inputPerM = 1; outputPerM = 5; cacheReadPerM = 0.05 }
+        } }
+        $cacheWriteConflict = [pscustomobject]@{ date = '2026-10-08'; source = 'test tariff'; models = [pscustomobject]@{
+            'claude-opus-4.8' = [pscustomobject]@{ inputPerM = 5; outputPerM = 25; cacheWrite5mPerM = 6.25 }
+            'claude-opus-4-8' = [pscustomobject]@{ inputPerM = 5.0; outputPerM = 25.0; cacheWrite5mPerM = 7.50 }
+        } }
+        (-not (Get-ClaudeDeploymentPrice ([pscustomobject]@{ name = 'claude-opus-5-5'; model = 'claude-opus-5-5'; sku = 'GlobalStandard' }) $withoutOpus55).SourceKey) -and
+            (-not (Get-ClaudeDeploymentPrice ([pscustomobject]@{ name = 'claude-haiku-4-5-20251001'; model = 'claude-haiku-4-5-20251001'; sku = 'GlobalStandard' }) $conflict).SourceKey) -and
+            (-not (Get-ClaudeDeploymentPrice ([pscustomobject]@{ name = 'claude-haiku-4-5-20251001'; model = 'claude-haiku-4-5-20251001'; sku = 'GlobalStandard' }) $cacheReadConflict).SourceKey) -and
+            (-not (Get-ClaudeDeploymentPrice ([pscustomobject]@{ name = 'claude-opus-4-8'; model = 'claude-opus-4-8'; sku = 'GlobalStandard' }) $cacheWriteConflict).SourceKey)
+    }
+    Check 'PowerShell price book allows equal-rate duplicate normalized keys and uses ordinal comparison' {
+        $dup = Join-Path $scratch 'duplicate-price-book.json'
+        Save $dup ([ordered]@{ date = '2026-10-08'; source = 'test'; models = [ordered]@{
+            'claude-haiku-4.5' = @{ inputPerM = 0.8; outputPerM = 5; cacheWrite5mPerM = 1.000 }
+            'claude-haiku-4-5' = @{ inputPerM = 0.80; outputPerM = 5.0; cacheWrite5mPerM = 1 }
+        } })
+        $book = Get-ClaudeModelPriceBook $dup
+        $accentBook = [pscustomobject]@{ date = '2026-10-08'; source = 'test'; models = [pscustomobject]@{
+            "claud$([char]0x00e9)-opus-5" = [pscustomobject]@{ inputPerM = 1; outputPerM = 5 }
+        } }
+        $scaleBook = [pscustomobject]@{ date = '2026-10-08'; source = 'test'; models = [pscustomobject]@{
+            'scaled.model' = [pscustomobject]@{ inputPerM = [decimal]'0.8'; outputPerM = [decimal]'4' }
+            'scaled-model' = [pscustomobject]@{ inputPerM = [decimal]'0.8'; outputPerM = [decimal]'4'; cacheWrite5mPerM = [decimal]'1.000' }
+        } }
+        $book.models.'claude-haiku-4.5'.inputPerM -eq 0.8 -and
+            (Resolve-ClaudePriceBookKey -Name 'scaled-model' -Book $scaleBook) -eq 'scaled-model' -and
+            (Resolve-ClaudePriceBookKey -Name 'az' -Book ([pscustomobject]@{ date = '2026-10-08'; source = 'test'; models = [pscustomobject]@{
+                'A_z' = [pscustomobject]@{ inputPerM = 1; outputPerM = 5 }
+                'a-z' = [pscustomobject]@{ inputPerM = 1; outputPerM = 5 }
+            } })) -ceq 'a-z' -and
+            (Resolve-ClaudePriceBookKey -Name 'ab' -Book ([pscustomobject]@{ date = '2026-10-08'; source = 'test'; models = [pscustomobject]@{
+                "a$([char]0x00DF)-b" = [pscustomobject]@{ inputPerM = 1; outputPerM = 5 }
+                'a_b' = [pscustomobject]@{ inputPerM = 1; outputPerM = 5 }
+            } })) -ceq 'a_b' -and
+            (Resolve-ClaudePriceBookKey -Name 'ab' -Book ([pscustomobject]@{ date = '2026-10-08'; source = 'test'; models = [pscustomobject]@{
+                "a$([char]0xFF01)b" = [pscustomobject]@{ inputPerM = 1; outputPerM = 5 }
+                "a$([char]::ConvertFromUtf32(0x1F600))b" = [pscustomobject]@{ inputPerM = 1; outputPerM = 5 }
+            } })) -ceq "a$([char]::ConvertFromUtf32(0x1F600))b" -and
+            # U181 (ASSUMED): .NET's ToUpperInvariant has a one-to-one simple mapping U+1FB3 -> U+1FBC; Python's
+            # full uppercase mapping expands U+1FB3 to two characters and falls back to the unfolded character, so
+            # the two readers disagree on this pair. Pinned, not chased further: both entries carry equal rates.
+            (Resolve-ClaudePriceBookKey -Name 'ab' -Book ([pscustomobject]@{ date = '2026-10-08'; source = 'test'; models = [pscustomobject]@{
+                "a$([char]0x1FB3)b" = [pscustomobject]@{ inputPerM = 1; outputPerM = 5 }
+                "a$([char]0x1FB8)b" = [pscustomobject]@{ inputPerM = 1; outputPerM = 5 }
+            } })) -ceq "a$([char]0x1FB8)b" -and
+            -not (Resolve-ClaudePriceBookKey -Name ("claude$([char]0x0301)-opus-5") -Book $accentBook)
+    }
+    Check 'PowerShell price book refuses duplicate normalized keys with different cache rates' {
+        $dup = Join-Path $scratch 'duplicate-cache-price-book.json'
+        Save $dup ([ordered]@{ date = '2026-10-08'; source = 'test'; models = [ordered]@{
+            'claude-haiku-4.5' = @{ inputPerM = 1; outputPerM = 5; cacheReadPerM = 0.1 }
+            'claude-haiku-4-5' = @{ inputPerM = 1; outputPerM = 5; cacheReadPerM = 0.05 }
+        } })
+        Reject { Get-ClaudeModelPriceBook $dup } 'conflicting|Duplicate normalized'
+    }
+    Check 'PowerShell price book refuses a negative rate too small for a decimal' {
+        $tiny = Join-Path $scratch 'tiny-negative-price-book.json'
+        [IO.File]::WriteAllText($tiny, '{"date":"2026-10-08","source":"test","models":{"tiny":{"inputPerM":-1e-30,"outputPerM":5}}}')
+        Reject { Get-ClaudeModelPriceBook $tiny } 'negative'
+    }
+    Check 'an equal-rate duplicate warning names every spelling and the one in use' {
+        $dup = Join-Path $scratch 'duplicate-warning-price-book.json'
+        Save $dup ([ordered]@{ date = '2026-10-08'; source = 'test'; models = [ordered]@{
+            'claude_haiku_4_5' = @{ inputPerM = 1; outputPerM = 5 }
+            'claude-haiku-4.5' = @{ inputPerM = 1; outputPerM = 5 }
+            'claude-haiku-4-5' = @{ inputPerM = 1.0; outputPerM = 5 }
+        } })
+        $warnings = @(Get-ClaudeModelPriceBook $dup 3>&1 | Where-Object { $_ -is [Management.Automation.WarningRecord] } | ForEach-Object { $_.Message })
+        $warnings.Count -eq 1 -and $warnings[0] -match 'equal effective rates' -and
+            $warnings[0].Contains('claude_haiku_4_5') -and $warnings[0].Contains('claude-haiku-4.5') -and
+            $warnings[0].Contains("'claude-haiku-4-5' is used")
+    }
+    Check 'PowerShell resolver refuses duplicate families that differ in any one effective rate' {
+        $cases = @(
+            @('inputPerM', @{ inputPerM = 1; outputPerM = 5; cacheReadPerM = 0.1; cacheWrite5mPerM = 1.25; cacheWrite1hPerM = 2 }, @{ inputPerM = 2; outputPerM = 5; cacheReadPerM = 0.1; cacheWrite5mPerM = 1.25; cacheWrite1hPerM = 2 }),
+            @('outputPerM', @{ inputPerM = 1; outputPerM = 5 }, @{ inputPerM = 1; outputPerM = 6 }),
+            @('cacheReadPerM', @{ inputPerM = 1; outputPerM = 5 }, @{ inputPerM = 1; outputPerM = 5; cacheReadPerM = 0.05 }),
+            @('cacheWrite5mPerM', @{ inputPerM = 1; outputPerM = 5 }, @{ inputPerM = 1; outputPerM = 5; cacheWrite5mPerM = 2 }),
+            @('cacheWrite1hPerM', @{ inputPerM = 1; outputPerM = 5 }, @{ inputPerM = 1; outputPerM = 5; cacheWrite1hPerM = 3 })
+        )
+        foreach ($case in $cases) {
+            $book = [pscustomobject]@{ date = '2026-10-08'; source = 'test'; models = [pscustomobject]@{
+                'rate.family' = [pscustomobject]$case[1]
+                'rate-family' = [pscustomobject]$case[2]
+            } }
+            $actual = (Get-ClaudeDeploymentPrice ([pscustomobject]@{ name = 'rate-family-20260101'; model = 'rate-family-20260101'; sku = 'GlobalStandard' }) $book).SourceKey
+            if ($actual) { throw "$($case[0]) conflict resolved to '$actual'" }
+        }
+        $true
     }
     Check 'oversized model lists fail before backup or writes' {
         $extra = 1..85 | ForEach-Object { 'missing-' + $_.ToString('000') + ('x' * 45) }

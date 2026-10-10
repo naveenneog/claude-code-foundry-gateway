@@ -59,6 +59,90 @@ if ($sharded -or $LocalOnly) {
     }
 }
 
+function Get-TestAllFileHash {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    # A suite may be writing the file at this moment; a sharing violation is retried briefly.
+    for ($attempt = 1; ; $attempt++) {
+        try { return (Get-FileHash -LiteralPath $Path -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant() }
+        catch { if ($attempt -ge 5) { throw }; Start-Sleep -Milliseconds 100 }
+    }
+}
+
+function New-TestAllPriceBookSnapshot {
+    param([Parameter(Mandatory = $true)][string]$Root, [Parameter(Mandatory = $true)][string]$ScratchRoot)
+    $path = Join-Path $Root 'config\price-book.json'
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+        return [pscustomobject]@{ Exists = $false; Path = $path; Backup = ''; Sha256 = '' }
+    }
+    $backup = Join-Path $ScratchRoot 'operator-price-book.json'
+    New-Item -ItemType Directory -Path $ScratchRoot -Force | Out-Null
+    Copy-Item -LiteralPath $path -Destination $backup -Force
+    return [pscustomobject]@{ Exists = $true; Path = $path; Backup = $backup; Sha256 = Get-TestAllFileHash $path }
+}
+
+function Restore-TestAllPriceBookSnapshot {
+    param($Snapshot)
+    if ($Snapshot -and $Snapshot.Exists -and (Test-Path -LiteralPath $Snapshot.Backup -PathType Leaf)) {
+        New-Item -ItemType Directory -Path (Split-Path $Snapshot.Path -Parent) -Force | Out-Null
+        Copy-Item -LiteralPath $Snapshot.Backup -Destination $Snapshot.Path -Force
+    }
+}
+
+function Save-TestAllChangedPriceBook {
+    # The changed or left-behind file may be the operator's own edit made during the run: it is kept outside the
+    # repository and the run directory, and the failure names the copy. Without a copy the file is left in place.
+    param([Parameter(Mandatory = $true)][string]$Path, [switch]$Move)
+    $kept = Join-Path ([IO.Path]::GetTempPath()) ('price-book-changed-during-tests-' + [DateTime]::UtcNow.ToString('yyyyMMddHHmmss') + '-' + [guid]::NewGuid().ToString('N').Substring(0, 8) + '.json')
+    try {
+        if ($Move) { Move-Item -LiteralPath $Path -Destination $kept -Force -ErrorAction Stop }
+        else { Copy-Item -LiteralPath $Path -Destination $kept -Force -ErrorAction Stop }
+        return [pscustomobject]@{ Kept = $true; Text = "kept the changed file at `"$kept`"" }
+    }
+    catch { return [pscustomobject]@{ Kept = $false; Text = "could not keep the changed file ($($_.Exception.Message)), so it was left in place" } }
+}
+
+function Test-TestAllPriceBookSnapshot {
+    # Checks run in parallel, so a change found when one check finishes may come from a check still running;
+    # the message names those checks as well.
+    param($Snapshot, [Parameter(Mandatory = $true)][string]$SuiteName, [string[]]$Running = @())
+    if (-not $Snapshot) { return '' }
+    $Running = @($Running | Where-Object { $_ })
+    if ($Running.Count) { $SuiteName = "$SuiteName or by a check still running ($($Running -join ', '))" }
+    if (-not $Snapshot.Exists) {
+        # No operator book existed when the run started: a book now is a suite's leftover, which would price real requests.
+        if (Test-Path -LiteralPath $Snapshot.Path -PathType Leaf) {
+            $save = Save-TestAllChangedPriceBook -Path $Snapshot.Path -Move
+            if (-not $save.Kept) { return "config\price-book.json was created by $SuiteName; $($save.Text)." }
+            return "config\price-book.json was created by $SuiteName; removed it and $($save.Text), because no operator price book existed when the run started."
+        }
+        return ''
+    }
+    $problem = ''
+    if (-not (Test-Path -LiteralPath $Snapshot.Path -PathType Leaf)) {
+        $problem = "config\price-book.json was deleted by $SuiteName"
+    }
+    elseif ((Get-TestAllFileHash $Snapshot.Path) -cne $Snapshot.Sha256) {
+        $problem = "config\price-book.json was modified by $SuiteName"
+    }
+    if ($problem) {
+        $kept = ''
+        if (Test-Path -LiteralPath $Snapshot.Path -PathType Leaf) {
+            $save = Save-TestAllChangedPriceBook -Path $Snapshot.Path
+            if (-not $save.Kept) { return "$problem; $($save.Text)." }
+            $kept = " and $($save.Text)"
+        }
+        Restore-TestAllPriceBookSnapshot $Snapshot
+        return "$problem; restored the original operator price book$kept."
+    }
+    return ''
+}
+
+function Get-TestAllOtherRunningCheckName($check) {
+    return @($active | Where-Object { -not [object]::ReferenceEquals($_, $check) } | ForEach-Object { [string]$_.Name })
+}
+
+$priceBookSnapshot = New-TestAllPriceBookSnapshot -Root $root -ScratchRoot $runDirectory
+
 function Invoke-Check {
     param(
         [string]$Name, [string]$Script, [hashtable]$Params = @{},
@@ -108,6 +192,8 @@ function Set-CheckFailure($check, [string]$Message) {
     $output = ''
     if ($check.Stdout -and $check.Stdout.IsCompletedSuccessfully) { $output += $check.Stdout.Result }
     if ($check.Stderr -and $check.Stderr.IsCompletedSuccessfully) { $output += $check.Stderr.Result }
+    $priceBookProblem = Test-TestAllPriceBookSnapshot $priceBookSnapshot $check.Name (Get-TestAllOtherRunningCheckName $check)
+    if ($priceBookProblem) { $Message += " $priceBookProblem" }
     Set-CheckResult $check 'FAIL' ($output + "`n  FAIL - $Message")
 }
 
@@ -165,6 +251,11 @@ function Receive-Check($check) {
     if ($check.Process.HasExited -and $check.Stdout.IsCompleted -and $check.Stderr.IsCompleted) {
         $code = $check.Process.ExitCode
         $output = $check.Stdout.GetAwaiter().GetResult() + $check.Stderr.GetAwaiter().GetResult()
+        $priceBookProblem = Test-TestAllPriceBookSnapshot $priceBookSnapshot $check.Name (Get-TestAllOtherRunningCheckName $check)
+        if ($priceBookProblem) {
+            $code = if ($code -ne 0) { $code } else { 1 }
+            $output += "`n  FAIL - $priceBookProblem"
+        }
         if ($code -ne 0) { $output += "`n  FAIL - process exited $code" }
         Set-CheckResult $check $(if ($code -eq 0) { 'PASS' } else { 'FAIL' }) $output $code
         Stop-CheckProcess $check
@@ -203,11 +294,14 @@ try {
     Invoke-Check 'Screenshots and the docs that show them' 'Test-Screenshots.ps1'
     Invoke-Check 'Architecture sources, images and code agree' 'Test-Architecture.ps1'
     Invoke-Check 'Documentation links and commands'        'Test-DocReferences.ps1'
+    Invoke-Check 'Documentation structure and disclosures' 'Test-DocStructure.ps1'
+    Invoke-Check 'Markdown commands and tables'            'Test-DocMarkdown.ps1'
     Invoke-Check 'Azure CLI setup guide mirrors scripts [0/4]' 'Test-AzCommandsGuide.ps1' @{ Shard = '0/4' }
     Invoke-Check 'Azure CLI setup guide mirrors scripts [1/4]' 'Test-AzCommandsGuide.ps1' @{ Shard = '1/4' }
     Invoke-Check 'Azure CLI setup guide mirrors scripts [2/4]' 'Test-AzCommandsGuide.ps1' @{ Shard = '2/4' }
     Invoke-Check 'Azure CLI setup guide mirrors scripts [3/4]' 'Test-AzCommandsGuide.ps1' @{ Shard = '3/4' }
     Invoke-Check 'Azure CLI setup guide portal path'       'Test-AzPortalGuide.ps1'
+Invoke-Check 'Azure CLI guide renewal block runs in order' 'Test-AzCommandsRenewal.ps1'
     Invoke-Check 'Portal capture specs and batch safety'   'Test-PortalCaptureSpecs.ps1'
     Invoke-Check 'Resolver - the entitlement read path'   'Test-Resolver.ps1'
     Invoke-Check 'Named value writes fail loudly'          'Test-NamedValueWrites.ps1' @{ SkipLive = $true }
@@ -249,6 +343,11 @@ try {
     Invoke-Check 'Guided diagnostics and support bundles'  'Test-Diagnose.ps1' -SerialLane
     Invoke-Check 'Wizard reaches summary on PS 5.1'        'Test-On-PS51.ps1' -SerialLane
     Invoke-Check 'Analytics query contract'                'Test-Analytics.ps1' @{ SkipLive = $true }
+    Invoke-Check 'Content Safety request screening'        'Test-ContentSafetyPolicy.ps1'
+    Invoke-Check 'Content Safety deployment wiring'        'Test-ContentSafetyDeployment.ps1'
+    Invoke-Check 'Content Safety live-script contract'     'Test-ContentSafetyLiveScript.ps1'
+    Invoke-Check 'Set gateway policy drift repair'         'Test-SetGatewayPolicy.ps1'
+    Invoke-Check 'Content Safety negative detectors'       'Test-ContentSafetyNegative.ps1' -SerialLane
     Invoke-Check 'Org spend ceiling'                       'Test-OrgCeiling.ps1' @{ SkipLive = $true }
     Invoke-Check 'Per-user budget control'                 'Test-BudgetControl.ps1' @{ SkipLive = $true }
     Invoke-Check 'Capability scoping per tier'             'Test-CapabilityScoping.ps1' @{ SkipLive = $true }
@@ -276,9 +375,9 @@ try {
     # Shard 0 also carries the mutation that runs the PS 5.1 wizard (Test-On-PS51.ps1), about
     # 100 s alone and up to 300 s on a loaded machine; measured 520 s against the others' ~220 s.
     Invoke-Check 'Business unit checks detect breakage [0/4]' 'Test-BusinessUnitsNegative.ps1' @{ Shard = '0/4' } -TimeoutSeconds 900
-    Invoke-Check 'Business unit checks detect breakage [1/4]' 'Test-BusinessUnitsNegative.ps1' @{ Shard = '1/4' }
-    Invoke-Check 'Business unit checks detect breakage [2/4]' 'Test-BusinessUnitsNegative.ps1' @{ Shard = '2/4' }
-    Invoke-Check 'Business unit checks detect breakage [3/4]' 'Test-BusinessUnitsNegative.ps1' @{ Shard = '3/4' }
+    Invoke-Check 'Business unit checks detect breakage [1/4]' 'Test-BusinessUnitsNegative.ps1' @{ Shard = '1/4' } -TimeoutSeconds 900
+    Invoke-Check 'Business unit checks detect breakage [2/4]' 'Test-BusinessUnitsNegative.ps1' @{ Shard = '2/4' } -TimeoutSeconds 900
+    Invoke-Check 'Business unit checks detect breakage [3/4]' 'Test-BusinessUnitsNegative.ps1' @{ Shard = '3/4' } -TimeoutSeconds 900
     Invoke-Check 'Admin surface - SKU, groups, tiers'      'Test-AdminSurface.ps1'
     Invoke-Check 'Set scripts respect governance authority' 'Test-GovernanceAuthority.ps1'
     Invoke-Check 'Scale ceilings and the load envelope'    'Test-Scale.ps1'
@@ -301,7 +400,27 @@ try {
     Invoke-Check 'Network edge checks detect breakage'       'Test-NetworkEdgeNegative.ps1'
     Invoke-Check 'Projection checks detect breakage'        'Test-ProjectionNegative.ps1'
     Invoke-Check 'Projection preflight and safe switch'     'Test-ProjectionPreflight.ps1'
+    Invoke-Check 'Update flow moves named values to the projection' 'Test-UpdateEntitlementMigration.ps1'
+    Invoke-Check 'Projection readiness checks before a migration' 'Test-ProjectionReadiness.ps1'
+    Invoke-Check 'Projection resource inventory matches the templates' 'Test-ProjectionInventory.ps1'
     Invoke-Check 'Projection council corrections'           'Test-ProjectionCouncil.ps1'
+Invoke-Check 'Projection runner lifecycle' 'Test-ProjectionRunnerLifecycle.ps1'
+Invoke-Check 'Projection runner transfer, compressed and parallel' 'Test-RunnerTransfer.ps1'
+Invoke-Check 'Projection sync scripts' 'Test-ProjectionSyncScripts.ps1'
+Invoke-Check 'Projection sync package and its import closure' 'Test-ProjectionPackage.ps1'
+Invoke-Check 'Projection renewal templates and deploy script' 'Test-ProjectionRenewal.ps1'
+Invoke-Check 'Projection sync job intervals' 'Test-ProjectionSyncSchedule.ps1'
+Invoke-Check 'Projection sync schedule change' 'Test-ProjectionSyncScheduleScript.ps1'
+Invoke-Check 'Projection renewal runs reach admission offline' 'Test-ProjectionRenewalRuns.ps1'
+Invoke-Check 'Projection switch evidence and switch function' 'Test-ProjectionSwitchEvidence.ps1'
+# Exclusive: it counts the switch backups that a run adds to the repository's onboarding folder, which
+# the council suite's deployer flip also writes into.
+Invoke-Check 'Projection deployer and installer switch wiring' 'Test-ProjectionDeployerInstallerWiring.ps1' -SerialLane
+Invoke-Check 'Projection deployer compare before any switch' 'Test-ProjectionDeployerCompare.ps1'
+Invoke-Check 'Projection guided flow switch wiring' 'Test-ProjectionFlowSwitch.ps1'
+Invoke-Check 'Projection installer contract' 'Test-ProjectionInstaller.ps1'
+Invoke-Check 'Installer projection defaults and live verifier' 'Test-ClaudeInstallProjection.ps1'
+Invoke-Check 'Live projection verifier validation and order' 'Test-ClaudeLiveProjection.ps1'
     Invoke-Check 'Claude Desktop sign-in choice'             'Test-DesktopSignIn.ps1'
     Invoke-Check 'Workstation clients read what setup writes' 'Test-WorkstationClients.ps1' -SerialLane
     Invoke-Check 'Workstation model retirement agrees across shells' 'Test-WorkstationModels.ps1'
@@ -413,6 +532,8 @@ finally {
     foreach ($check in @($active.ToArray())) {
         try { Stop-CheckProcess $check } catch { Write-Warning $_.Exception.Message }
     }
+    $finalPriceBookProblem = Test-TestAllPriceBookSnapshot $priceBookSnapshot 'a check or another process during the run'
+    if ($finalPriceBookProblem) { Write-Warning $finalPriceBookProblem }
     Remove-Item -LiteralPath $runDirectory -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $stateDirectory -Recurse -Force -ErrorAction SilentlyContinue
 }

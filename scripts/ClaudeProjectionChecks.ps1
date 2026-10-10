@@ -10,6 +10,40 @@ function Get-ClaudeProjectionAppRemedy {
     return "Customer Entra admin: https://entra.microsoft.com > Entra ID > App registrations > New registration > claude-projection-resolver-$NamePrefix > Accounts in this organizational directory only > Register; Overview supplies the Application (client) ID; Expose an API > Application ID URI is api://<id>. CLI equivalent: az ad app create --display-name claude-projection-resolver-$NamePrefix --sign-in-audience AzureADMyOrg --query appId -o tsv; after a successful nonempty id, az ad app update --id <id> --identifier-uris api://<id>. The operator supplies -ResolverAppId <id>."
 }
 
+# Read-only: does the resolver application have a service principal in this tenant? Entra issues no token
+# for a resource application without one (AADSTS500011).
+function Test-ClaudeProjectionResolverServicePrincipal {
+    param([Parameter(Mandatory)][string]$AppId)
+    if ($AppId -notmatch '^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$') {
+        throw 'Resolver application id must be a GUID before its service principal is read.'
+    }
+    try {
+        $sp = Invoke-ClaudeNetworkAz @('ad','sp','show','--id',$AppId)
+        return [bool]($sp -and $sp.appId)
+    }
+    catch {
+        if ($_.Exception.Message -match '(?i)not\s*found|Request_ResourceNotFound|does not exist') { return $false }
+        throw
+    }
+}
+
+# The switch checks and never writes: a missing service principal refuses with the remedy.
+function Assert-ClaudeProjectionResolverServicePrincipal {
+    param([Parameter(Mandatory)][string]$AppId)
+    if (-not (Test-ClaudeProjectionResolverServicePrincipal -AppId $AppId)) {
+        throw "Projection switch refused: resolver application $AppId has no service principal in this tenant, so Microsoft Entra ID issues the gateway no token for the resolver (AADSTS500011). Remedy: rerun scripts/Deploy-ClaudeProjection.ps1 with this -NamePrefix, which creates it, or run az ad sp create --id $AppId; then rerun the switch."
+    }
+    return $AppId
+}
+
+# The deployer creates the service principal when it is missing.
+function Confirm-ClaudeProjectionResolverServicePrincipal {
+    param([Parameter(Mandatory)][string]$AppId)
+    if (Test-ClaudeProjectionResolverServicePrincipal -AppId $AppId) { return $AppId }
+    $null = Invoke-ClaudeNetworkAz @('ad','sp','create','--id',$AppId)
+    return $AppId
+}
+
 function New-ClaudeProjectionResolverApp {
     param([string]$NamePrefix)
     try {
@@ -21,7 +55,13 @@ function New-ClaudeProjectionResolverApp {
         throw "Resolver app creation returned no valid application id; no update was attempted. $(Get-ClaudeProjectionAppRemedy $NamePrefix)"
     }
     $null = Invoke-ClaudeNetworkAz @('ad','app','update','--id',[string]$made.appId,'--identifier-uris',"api://$($made.appId)")
+    $null = Confirm-ClaudeProjectionResolverServicePrincipal -AppId ([string]$made.appId)
     return [string]$made.appId
+}
+
+function ConvertTo-ClaudeProjectionLocationKey {
+    param([AllowEmptyString()][string]$Location)
+    return (($Location -replace '[^A-Za-z0-9]', '').ToLowerInvariant())
 }
 
 function Get-ClaudeProjectionStorageName {
@@ -63,45 +103,42 @@ function Format-ClaudeProjectionChecks {
     return ($lines -join "`n").TrimEnd()
 }
 
-function Stop-ClaudeProjectionSwitch {
-    throw 'Projection switching is unavailable in P84. Records expire at most 2 hours after scan start; every developer gets 503 after expiry without renewal. Switching needs the scheduled reconciler in P86 (docs/ROADMAP.md). No override is available.'
+function Get-ClaudeProjectionArmUrl {
+    # The management token goes with this request: the id must be an ARM resource id whose URL stays on
+    # management.azure.com. A sub-path, such as config/appsettings/list, is letters in segments under
+    # that resource.
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$ResourceId, [Parameter(Mandatory)][string]$ApiVersion,
+        [ValidatePattern('^[A-Za-z]+(/[A-Za-z]+)*$')][string]$SubPath)
+    if ($ResourceId -notmatch '^/subscriptions/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/resourceGroups/[A-Za-z0-9._-]{1,90}/providers/[A-Za-z0-9.]{1,64}(/[A-Za-z0-9._-]{1,260}){2}$') {
+        throw "Projection switch refused: '$ResourceId' is not an Azure resource id, so the management token is not sent for it. Remedy: redeploy the projection and rerun."
+    }
+    $path = if ($SubPath) { "$ResourceId/$SubPath" } else { $ResourceId }
+    $url = "https://management.azure.com${path}?api-version=$ApiVersion"
+    $uri = [uri]$url
+    if ($uri.Host -ne 'management.azure.com' -or $uri.UserInfo -or $uri.AbsolutePath -ne $path) {
+        throw "Projection switch refused: '$path' does not stay on management.azure.com, so the management token is not sent for it."
+    }
+    return $url
 }
 
 function ConvertFrom-ClaudeProjectionAdmissionResult {
     param([Parameter(Mandatory)][string]$RawOutput)
-    $last = @($RawOutput -split '\r?\n' | Where-Object { $_.Trim().StartsWith('{') } | Select-Object -Last 1)
-    if (-not $last) { throw 'Projection admission returned no JSON. Remedy: run the read-only admission check through the in-VNet runner and inspect its logs.' }
-    try { $obj = $last | ConvertFrom-Json -ErrorAction Stop }
+    $jsonLines = @($RawOutput -split '\r?\n' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    $jsonLines = @($jsonLines | Where-Object { $_.StartsWith('{') -and $_.EndsWith('}') })
+    if ($jsonLines.Count -ne 1) { throw "Projection admission returned $($jsonLines.Count) JSON lines, not exactly one. Remedy: rerun the fixed repository checker through the runner." }
+    try { $obj = $jsonLines[0] | ConvertFrom-Json -ErrorAction Stop }
     catch { throw 'Projection admission returned malformed JSON. Remedy: rerun the fixed repository checker through the runner.' }
-    if (-not $obj.ok) {
-        $reason = if ($obj.reason) { [string]$obj.reason } elseif ($obj.error) { [string]$obj.error } else { 'admission evidence was not accepted' }
-        throw "Projection switch refused: $reason Remedy: wait for two successful 30-minute renewals, fix the scheduled job or alerts, then rerun."
+    if (-not ($obj.ok -eq $true -and [string]$obj.mode -eq 'switch-evidence')) {
+        $reason = if ($obj.reason) { [string]$obj.reason } elseif ($obj.error) { [string]$obj.error } else { 'switch evidence was not accepted' }
+        if (-not $obj.newestFullSync -and $reason -notmatch 'full sync') { $reason = "no full sync within 24 hours; $reason" }
+        if ($obj.invalidCount -gt 0) {
+            $samples = @($obj.invalidSamples | Select-Object -First 3)
+            $suffix = if ($samples.Count) { " Samples: $($samples -join ', ')." } else { '' }
+            $reason = "$reason Invalid projection records: $($obj.invalidCount).$suffix"
+        }
+        throw "Projection switch refused: $reason Remedy: run scripts/Sync-ClaudeAccess.ps1 for the projection (or a full projection sync), fix invalid projection records, then rerun."
     }
     return $obj
-}
-
-function Assert-ClaudeProjectionJobDefinition {
-    param(
-        [Parameter(Mandatory)]$Job,
-        [Parameter(Mandatory)][string]$ImageDigest
-    )
-    $containers = @($Job.properties.template.containers)
-    if ($containers.Count -ne 1) { throw 'Projection switch refused: the renewal job must have exactly one container. Remedy: redeploy the tested P86 job.' }
-    $container = $containers[0]
-    if ([string]$container.image -notmatch "@$([regex]::Escape($ImageDigest))$") {
-        throw 'Projection switch refused: the renewal job image is not the tested pinned digest. Remedy: deploy the tested image digest.'
-    }
-    if (@($container.command).Count -gt 0 -or @($container.args).Count -gt 0) {
-        throw 'Projection switch refused: the renewal job has a command or args override. Remedy: redeploy the tested image entrypoint with no ARM command/args override.'
-    }
-    $env = @{}
-    foreach ($e in @($container.env)) { if ($e.name) { $env[$e.name] = [string]$e.value } }
-    foreach ($name in 'DRY_RUN','WHATIF','PROJECTION_COMMAND_OVERRIDE') {
-        if ($env.ContainsKey($name) -and $env[$name]) {
-            throw "Projection switch refused: the renewal job has dry-run or command override environment '$name'. Remedy: remove the override and wait for fresh evidence."
-        }
-    }
-    return $true
 }
 
 function Assert-ClaudeProjectionAdmission {
@@ -111,38 +148,71 @@ function Assert-ClaudeProjectionAdmission {
         [Parameter(Mandatory)][string]$CosmosAccount,
         [Parameter(Mandatory)][string]$TenantId,
         [Parameter(Mandatory)][string]$AccountResourceId,
-        [Parameter(Mandatory)][string]$ReconcilerResourceId,
-        [Parameter(Mandatory)][string]$ImageDigest,
-        [Parameter(Mandatory)][string]$EntryPoint,
-        [Parameter(Mandatory)][string]$ActionGroupResourceId,
-        [string]$Database = 'claude',
-        [string]$Container = 'entitlement'
+        [ValidateRange(60,604800)][int]$MaxEvidenceAgeSeconds = 86400
     )
-    if ([string]::IsNullOrWhiteSpace($ActionGroupResourceId)) {
-        throw 'Projection switch refused: renewal alerts have no action group with email receivers. Remedy: deploy the P86 action group and alerts, then wait for fresh evidence.'
-    }
-    Write-Host '    Checking scheduled renewal evidence from Cosmos through the in-VNet runner (expected wait: about 60-90 minutes after the first successful 30-minute run).' -ForegroundColor DarkGray
-    $command = "node /work/sync/src/check-admission.mjs --cosmos https://$CosmosAccount.documents.azure.com:443/ --tenant $TenantId --account-resource-id $AccountResourceId --database $Database --container $Container --image-digest $ImageDigest --entrypoint `"$EntryPoint`" --action-group-resource-id $ActionGroupResourceId"
+    Write-Host '    Checking switch evidence from Cosmos through the in-VNet runner.' -ForegroundColor DarkGray
+    $command = "node /work/sync/src/check-admission.mjs --cosmos https://$CosmosAccount.documents.azure.com:443/ --tenant $TenantId --account-resource-id $AccountResourceId --max-evidence-age-seconds $MaxEvidenceAgeSeconds"
     $raw = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $RunnerName -Command $command
-    $admission = ConvertFrom-ClaudeProjectionAdmissionResult -RawOutput $raw
+    return (ConvertFrom-ClaudeProjectionAdmissionResult -RawOutput $raw)
+}
 
-    $token = Invoke-ClaudeNetworkAz @('account','get-access-token','--resource','https://management.azure.com')
-    if (-not $token.accessToken) { throw 'Projection switch refused: could not get a management-plane token to read the renewal job definition.' }
-    $job = Invoke-RestMethod -Method Get -Headers @{ Authorization = "Bearer $($token.accessToken)" } -Uri "https://management.azure.com${ReconcilerResourceId}?api-version=2024-03-01" -ErrorAction Stop
-    $null = Assert-ClaudeProjectionJobDefinition -Job $job -ImageDigest $ImageDigest
-    return $admission
+# The gateway reads entitlement-resolver-url and -audience only while entitlement-source is projection
+# (ADR-0050). On a gateway that serves from the projection, a change to them moves every request to
+# another resolver at once, without the switch's checks, so it is refused. SECURE-PROJECTION section 9
+# gives the same step by hand.
+function Set-ClaudeProjectionGatewayResolver {
+    param([Parameter(Mandatory)][string]$ResourceGroup, [Parameter(Mandatory)][string]$ApimName,
+        [Parameter(Mandatory)][string]$NamePrefix, [Parameter(Mandatory)][string]$ResolverUrl,
+        [Parameter(Mandatory)][string]$ResolverAudience)
+    $liveSource = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-source' -FailOnError
+    $pointed = (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-url' -FailOnError) -eq $ResolverUrl -and
+        (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-audience' -FailOnError) -eq $ResolverAudience
+    if ($liveSource -eq 'projection' -and -not $pointed) {
+        throw "Refusing to point the gateway at $ResolverUrl and $ResolverAudience`: entitlement-source is projection, so every request would move to them at once, without the switch's checks. Remedy: return the gateway to named values first (refresh the lists with scripts/Sync-ClaudeAccess.ps1, check them with scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift, then set entitlement-source to named-value), then rerun."
+    }
+    if (-not $pointed) {
+        Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-url' -Value $ResolverUrl
+        Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-audience' -Value $ResolverAudience
+    }
+    # The prefix records which projection the gateway uses; the switch and the sync read it, and no request
+    # path changes with it. A gateway that served from a projection before ADR-0051 has none yet.
+    if ((Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-projection-prefix' -FailOnError) -cne $NamePrefix) {
+        Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-projection-prefix' -Value $NamePrefix
+    }
+}
+
+function Assert-ClaudeProjectionResolverRedeploy {
+    param([Parameter(Mandatory)][string]$ResourceGroup, [Parameter(Mandatory)][string]$ApimName,
+        [Parameter(Mandatory)][string]$NamePrefix, [Parameter(Mandatory)][string]$SubscriptionId,
+        [AllowEmptyString()][string]$ResolverAppId)
+    if ((Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-source' -FailOnError) -ne 'projection') { return }
+    $gatewayUrl = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-url' -FailOnError
+    $gatewayAudience = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-audience' -FailOnError
+    $siteName = "func-resolver-$NamePrefix"
+    $siteUrl = ''
+    try {
+        $siteArmUrl = Get-ClaudeProjectionArmUrl -ResourceId "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroup/providers/Microsoft.Web/sites/$siteName" -ApiVersion '2024-04-01'
+        $siteHost = [string](Invoke-ClaudeNetworkAz @('rest', '--method', 'get', '--url', $siteArmUrl)).properties.defaultHostName
+        if ($siteHost) { $siteUrl = "https://$siteHost/api" }
+    } catch { }
+    if ($ResolverAppId -and "api://$ResolverAppId" -eq $gatewayAudience -and $siteUrl -and $siteUrl -eq $gatewayUrl) { return }
+    $appInAudience = $gatewayAudience -replace '^api://', ''
+    throw "Refusing to redeploy the resolver for -NamePrefix ${NamePrefix}: entitlement-source is projection, so every request goes to $gatewayUrl with a token for $gatewayAudience. Remedy: rerun scripts/Deploy-ClaudeProjection.ps1 with the -NamePrefix of the resolver at $gatewayUrl and -ResolverAppId $appInAudience, or return the gateway to named values first (refresh the lists with scripts/Sync-ClaudeAccess.ps1 -Store named-value, check them with scripts/Compare-ClaudeEntitlement.ps1 -FailOnDrift, then set entitlement-source to named-value)."
 }
 
 function Invoke-ClaudeProjectionPreflight {
+    # Advanced, so a parameter it does not declare (such as the removed P95 -FlipAfterCleanCompare) is refused.
+    [CmdletBinding()]
     param(
         [string]$ResourceGroup, [string]$ApimName, [string]$NamePrefix, [string]$SubscriptionId,
         [string]$Location, [string]$Sku = 'BasicV2', [string]$ResolverInboundAccess,
         [string]$ResolverAppId, [string]$StandardGroup = 'claude-code-standard',
-        [string]$PremiumGroup = 'claude-code-premium', [switch]$FlipAfterCleanCompare,
-        [string]$ReconcilerResourceId
+        [string]$PremiumGroup = 'claude-code-premium',
+        # Returns the checks and the context to a caller that shows them in its own plan (ADR-0054, the update
+        # flow), instead of printing the table and throwing on a FAIL.
+        [switch]$PassThru
     )
-    if ($FlipAfterCleanCompare -and -not $ReconcilerResourceId) { Stop-ClaudeProjectionSwitch }
-    Write-Host 'Projection preflight (about 30-90 s, including a 25 s Graph pause). No Azure writes.'
+    if (-not $PassThru) { Write-Host 'Projection preflight (about 30-90 s, including a 25 s Graph pause). No Azure writes.' }
     $checks = [Collections.Generic.List[object]]::new()
     $context = @{ Location = $Location; ResolverAppId = $ResolverAppId }
     function Check($Name, $Who, $Remedy, [scriptblock]$Read) {
@@ -155,6 +225,7 @@ function Invoke-ClaudeProjectionPreflight {
         }
     }
     function Report {
+        if ($PassThru) { return }
         Format-ClaudeProjectionChecks -Checks $checks.ToArray() -Width $Host.UI.RawUI.WindowSize.Width | Write-Host
         $failed = @($checks | Where-Object Result -eq 'FAIL')
         if ($failed.Count) { throw "Projection preflight failed ($($failed.Count)): $(($failed | ForEach-Object { "$($_.Check): $($_.Evidence)" }) -join '; ')" }
@@ -177,7 +248,10 @@ function Invoke-ClaudeProjectionPreflight {
             "$tool found"
         }
     }
-    if (@($checks | Where-Object Result -eq 'FAIL').Count) { Report }
+    if (@($checks | Where-Object Result -eq 'FAIL').Count) {
+        Report
+        if ($PassThru) { return [pscustomobject]@{ Checks = $checks.ToArray(); Context = $null } }
+    }
     Check 'Azure sign-in' 'operator' 'az login; az account set --subscription <gateway-subscription-id>' {
         $context.Account = Invoke-ClaudeNetworkAz @('account','show')
         if (-not $context.Account -or -not $context.Account.id -or $context.Account.state -ne 'Enabled') { throw 'Azure CLI is not signed in to an enabled subscription.' }
@@ -276,6 +350,17 @@ function Invoke-ClaudeProjectionPreflight {
         if (-not $context.ResourceGroupId) { throw 'Name availability requires the verified resource group.' }
         $storageName = Get-ClaudeProjectionStorageName -ResourceGroupId $context.ResourceGroupId -NamePrefix $NamePrefix
         $resources = @(Invoke-ClaudeNetworkAz @('resource','list','-g',$ResourceGroup,'--subscription',$context.SubscriptionId))
+        $existingCosmos = @($resources | Where-Object id -eq $context.AccountResourceId | Select-Object -First 1)
+        if ($existingCosmos.Count -and [string]$existingCosmos[0].location) {
+            $existingLocation = [string]$existingCosmos[0].location
+            if ($Location) {
+                if ((ConvertTo-ClaudeProjectionLocationKey $Location) -ne (ConvertTo-ClaudeProjectionLocationKey $existingLocation)) {
+                    throw "Cosmos account cosmos-$NamePrefix already exists in $existingLocation, but -Location requested $Location. Remedy: rerun with -Location $existingLocation or another -NamePrefix."
+                }
+            } else {
+                $context.Location = $existingLocation
+            }
+        }
         $cosmosTaken = Invoke-ClaudeNetworkAz @('cosmosdb','check-name-exists','-n',"cosmos-$NamePrefix",'--subscription',$context.SubscriptionId)
         if ($cosmosTaken -isnot [bool] -or ($cosmosTaken -and -not @($resources | Where-Object id -eq $context.AccountResourceId).Count)) { throw "Cosmos name cosmos-$NamePrefix is unavailable or its availability is unproven." }
         $storage = Invoke-ClaudeNetworkAz @('storage','account','check-name','--name',$storageName,'--subscription',$context.SubscriptionId)
@@ -297,5 +382,6 @@ function Invoke-ClaudeProjectionPreflight {
     })
     Report
     $context.Remove('GraphToken')
+    if ($PassThru) { return [pscustomobject]@{ Checks = $checks.ToArray(); Context = $context } }
     return $context
 }

@@ -1,6 +1,7 @@
 # ADR-0012: Store and availability are separate switches, not one tier ladder
 
-- **Status:** Accepted
+- **Status:** Accepted; the default store (named values) is superseded by
+  [ADR-0052](0052-cosmos-default-installer.md) (P98, 2026-10-06): the installer deploys the projection by default
 - **Date:** 2026-09-17
 - **Packet:** P19
 - **Deciders:** claude-code-foundry-gateway maintainers, platform owner

@@ -151,8 +151,6 @@ foreach ($m in [regex]::Matches($markdown, '--named-value-id\s+([A-Za-z0-9-]+)')
 foreach ($m in [regex]::Matches($markdown, '`([A-Za-z][A-Za-z0-9]+-[A-Za-z0-9-]+)`')) {
     if ($declaredNamedValues.Contains($m.Groups[1].Value)) { [void]$guideNamedValues.Add($m.Groups[1].Value) }
 }
-$unknownNamedValues = @($guideNamedValues | Where-Object { -not $declaredNamedValues.Contains($_) } | Sort-Object)
-Assert 'every guide named-value id is in the gateway Bicep or policy XML' ($unknownNamedValues.Count -eq 0) ($unknownNamedValues -join ', ')
 
 $scriptNamedValues = New-Object Collections.Generic.HashSet[string]
 $inScope = @(
@@ -185,9 +183,14 @@ $notCovered = @()
 foreach ($m in [regex]::Matches($markdown, '(?m)^- `([A-Za-z0-9-]+)` — not covered:')) { $notCovered += $m.Groups[1].Value }
 $missingParity = @($scriptNamedValues | Where-Object { $_ -and -not $guideNamedValues.Contains($_) -and $_ -notin $notCovered } | Sort-Object)
 Assert 'every in-scope script-written named value appears in the guide or not-covered list' ($missingParity.Count -eq 0) ($missingParity -join ', ')
+# A named value that only a script writes is defined by that script, not by the gateway template:
+# entitlement-projection-prefix is written by the projection deployer and left out of main.bicep, so a gateway
+# redeploy keeps it (ADR-0051). A guide id that neither the templates nor an in-scope script define is still refused.
+$unknownNamedValues = @($guideNamedValues | Where-Object { -not $declaredNamedValues.Contains($_) -and -not $scriptNamedValues.Contains($_) } | Sort-Object)
+Assert 'every guide named-value id is in the gateway Bicep, the policy XML or an in-scope script''s writes' ($unknownNamedValues.Count -eq 0) ($unknownNamedValues -join ', ')
 
 $bicepParams = @{}
-foreach ($file in 'infra\main.bicep','infra\projection-network.bicep','infra\projection.bicep','infra\resolver.bicep') {
+foreach ($file in 'infra\main.bicep','infra\projection-network.bicep','infra\projection.bicep','infra\resolver.bicep','infra\projection-registry.bicep','infra\projection-renewal.bicep') {
     $text = Read-Text (Join-Path $root $file)
     $set = New-Object Collections.Generic.HashSet[string]
     foreach ($m in [regex]::Matches($text, '(?m)^\s*param\s+([A-Za-z][A-Za-z0-9_]*)\s+')) { [void]$set.Add($m.Groups[1].Value) }
@@ -200,7 +203,8 @@ foreach ($cmd in $commands) {
     $paramIndex = [Array]::IndexOf($tokens, '--parameters')
     if ($templateIndex -lt 0 -or $paramIndex -lt 0 -or $templateIndex + 1 -ge $tokens.Count) { continue }
     $template = $tokens[$templateIndex + 1].Trim('"''')
-    if (-not $bicepParams.ContainsKey($template)) { continue }
+    # A template missing from the list above would have its parameters skipped without a word.
+    if (-not $bicepParams.ContainsKey($template)) { Assert "guide template $template has its parameters checked" $false $cmd; continue }
     for ($i = $paramIndex + 1; $i -lt $tokens.Count; $i++) {
         $token = $tokens[$i]
         if ($token.StartsWith('-')) { break }
@@ -212,6 +216,8 @@ foreach ($cmd in $commands) {
 
 $docRef = Join-Path $PSScriptRoot 'Test-DocReferences.ps1'
 Assert 'relative-link checker exists for guide links' (Test-Path -LiteralPath $docRef)
+$docMarkdown = Join-Path $PSScriptRoot 'Test-DocMarkdown.ps1'
+Assert 'markdown command checker exists for guide links' (Test-Path -LiteralPath $docMarkdown)
 
 $assignedAuthVars = New-Object 'System.Collections.Generic.HashSet[string]'
 $authorizationHeaders = New-Object Collections.Generic.List[string]
@@ -653,6 +659,10 @@ if [ "$1" = "cosmosdb" ] && [ "$2" = "sql" ] && [ "$3" = "role" ] && [ "$4" = "a
   printf 'cosmos-role\n' >> "$P89_WRITES"
   exit 0
 fi
+if [ "$1" = "cosmosdb" ] && [ "$2" = "show" ]; then
+  printf '/subscriptions/11111111-1111-4111-8111-111111111111/resourceGroups/rg/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-prefix\n'
+  exit 0
+fi
 if [ "$1" = "container" ] && [ "$2" = "exec" ]; then
   cmd="$(arg_after --exec-command "$@")"
   printf 'container-exec %s\n' "$cmd" >> "$P89_WRITES"
@@ -786,7 +796,10 @@ function Invoke-GuideBashScenario([string]$Name, [string]$Script, [hashtable]$Ex
     [IO.File]::WriteAllText((Join-Path $dir 'scripts\Sync-ClaudeProjection.ps1'), "#!/usr/bin/env bash`nwhile [ `"`$#`" -gt 0 ]; do if [ `"`$1`" = `"-ExportPath`" ]; then shift; printf '{`"members`":[]}\n' > `"`$1`"; fi; shift || true; done`n")
     [IO.File]::WriteAllText((Join-Path $dir 'scripts\Compare-ClaudeEntitlement.ps1'), "#!/usr/bin/env bash`nwhile [ `"`$#`" -gt 0 ]; do if [ `"`$1`" = `"-ExportGatewayPath`" ]; then shift; printf '{`"decisions`":[]}\n' > `"`$1`"; fi; shift || true; done`n")
     [IO.File]::WriteAllText((Join-Path $dir 'sync\package.json'), "{`"scripts`":{}}`n")
+    [IO.File]::WriteAllText((Join-Path $dir 'sync\package-lock.json'), "{`"lockfileVersion`":3}`n")
+    [IO.File]::WriteAllText((Join-Path $dir 'sync\Dockerfile'), "FROM scratch`n")
     [IO.File]::WriteAllText((Join-Path $dir 'sync\src\apply-projection.mjs'), "console.log(`"ok`")`n")
+    [IO.File]::WriteAllText((Join-Path $dir 'resolver\src\entitlement.mjs'), "export const KNOWN_TIERS = [];`n")
     [IO.File]::WriteAllText((Join-Path $dir 'resolver\host.json'), "{}`n")
     [IO.File]::WriteAllText((Join-Path $dir 'resolver\package.json'), "{`"dependencies`":{}}`n")
     [IO.File]::WriteAllText((Join-Path $dir 'resolver\src\index.js'), "module.exports={}`n")
@@ -1615,10 +1628,14 @@ Assert 'projection runner block assigns Cosmos role and transfers files before a
     $runnerCalls -match 'cosmos-role' -and
     $runnerCalls -match 'sync-source\.tar\.gz' -and
     $runnerCalls -match 'snapshot\.json' -and
-    $runnerCalls -match 'apply-projection\.mjs --cosmos .* --snapshot /work/snapshot\.json' -and
+    $runnerCalls -match 'apply-projection\.mjs --cosmos .* --account-resource-id /subscriptions/11111111-1111-4111-8111-111111111111/resourceGroups/rg/providers/Microsoft\.DocumentDB/databaseAccounts/cosmos-prefix --snapshot /work/snapshot\.json' -and
     $runnerCalls -match 'gateway-decisions\.json' -and
     $runnerCalls -match 'apply-projection\.mjs --cosmos .* --compare /work/gateway-decisions\.json'
 ) $projectionRunner.Output
+$runnerArchive = if ($projectionRunner.Dir -and (Test-Path -LiteralPath (Join-Path $projectionRunner.Dir 'sync-source.tar.gz'))) { @(& tar -t -z -f (Join-Path $projectionRunner.Dir 'sync-source.tar.gz')) } else { @() }
+Assert 'projection runner archive carries the resolver module that plan.mjs imports' (
+    $runnerArchive -contains 'resolver/src/entitlement.mjs' -and $runnerArchive -contains 'sync/src/apply-projection.mjs' -and $runnerArchive -contains 'sync/package-lock.json'
+) ($runnerArchive -join ', ')
 
 $runnerChunkFail = Invoke-GuideBashScenario 'runner-chunk-fail' (Join-GuideBlocks @($projectionDeployBlock, $projectionRunnerBlock))
 Assert 'runner failed chunk stops before apply and compare' (

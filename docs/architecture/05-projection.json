@@ -2,8 +2,8 @@
   "version": 1,
   "id": "projection-freshness",
   "kind": "flow",
-  "title": "Projection freshness is a lease, not just a cache TTL",
-  "subtitle": "A complete directory observation gives each record an absolute expiry. The gateway bounds cache misses before the resolver, and never grants a request using an expired positive answer.",
+  "title": "Projection records persist until sync changes them",
+  "subtitle": "A complete directory observation writes persistent entitlement records. Snapshots have an apply-by limit, the gateway bounds cache misses, and switching requires recent full-sync evidence plus resolver validation.",
   "width": 1280,
   "height": 1700,
   "outputs": [
@@ -13,6 +13,7 @@
     "sync/src/graph.mjs",
     "sync/src/plan.mjs",
     "sync/src/apply-projection.mjs",
+    "sync/src/apply-lock.mjs",
     "resolver/src/index.mjs",
     "resolver/src/lookup.mjs",
     "resolver/src/entitlement.mjs",
@@ -22,7 +23,15 @@
     "infra/projection-network.bicep",
     "infra/projection-renewal.bicep",
     "sync/Dockerfile",
-    "sync/src/check-admission.mjs"
+    "sync/src/check-admission.mjs",
+    "infra/projection-registry.bicep",
+    "infra/projection-renewal-gateway-reader.bicep",
+    "sync/src/business-units.mjs",
+    "sync/src/events.mjs",
+    "scripts/Deploy-ClaudeProjectionRenewal.ps1",
+    "scripts/ClaudeProjectionSwitch.ps1",
+    "scripts/Sync-ClaudeAccess.ps1",
+    "scripts/ClaudeRunner.ps1"
   ],
   "identifiers": {
     "snapshot": {
@@ -51,7 +60,7 @@
       "match": "lastVerifiedAt: new Date(start).toISOString()"
     },
     "expiry": {
-      "label": "expiresAt",
+      "label": "snapshot apply-by",
       "source": "sync/src/plan.mjs",
       "match": "expiresAt = Math.floor(start / 1000) + maxAgeSeconds"
     },
@@ -69,6 +78,11 @@
       "label": "executeBulkOperations",
       "source": "sync/src/apply-projection.mjs",
       "match": "container.items.executeBulkOperations("
+    },
+    "apply-lock": {
+      "label": "projection-apply-lock",
+      "source": "sync/src/apply-lock.mjs",
+      "match": "export async function acquireApplyLock"
     },
     "lookup": {
       "label": "createLookup",
@@ -122,8 +136,8 @@
     },
     "acr": {
       "label": "ACR registry",
-      "source": "infra/projection-renewal.bicep",
-      "match": "Microsoft.ContainerRegistry/registries@2023-07-01"
+      "source": "infra/projection-registry.bicep",
+      "match": "resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {"
     },
     "cae-job": {
       "label": "Container Apps job",
@@ -137,8 +151,8 @@
     },
     "renewal-identity": {
       "label": "renewal identity",
-      "source": "infra/projection-renewal.bicep",
-      "match": "Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31"
+      "source": "infra/projection-registry.bicep",
+      "match": "resource identity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {"
     },
     "cosmos-writer": {
       "label": "Cosmos writer role",
@@ -154,6 +168,56 @@
       "label": "check-admission.mjs",
       "source": "sync/src/check-admission.mjs",
       "kind": "file"
+    },
+    "registry-template": {
+      "label": "projection-registry.bicep",
+      "source": "infra/projection-registry.bicep",
+      "kind": "file"
+    },
+    "deploy-renewal": {
+      "label": "Deploy-ClaudeProjectionRenewal.ps1",
+      "source": "scripts/Deploy-ClaudeProjectionRenewal.ps1",
+      "kind": "file"
+    },
+    "unit-reader": {
+      "label": "named-value reader role",
+      "source": "infra/projection-renewal-gateway-reader.bicep",
+      "match": "'Microsoft.ApiManagement/service/namedValues/read'"
+    },
+    "unit-read": {
+      "label": "bu-registry read",
+      "source": "sync/src/business-units.mjs",
+      "match": "export async function readGatewayUnits("
+    },
+    "renewal-logs": {
+      "label": "diagnostic setting",
+      "source": "infra/projection-renewal.bicep",
+      "match": "Microsoft.Insights/diagnosticSettings@2021-05-01-preview"
+    },
+    "switch": {
+      "label": "Invoke-ClaudeProjectionSwitch",
+      "source": "scripts/ClaudeProjectionSwitch.ps1",
+      "match": "function Invoke-ClaudeProjectionSwitch {"
+    },
+    "sync-access": {
+      "label": "Sync-ClaudeAccess.ps1",
+      "source": "scripts/Sync-ClaudeAccess.ps1",
+      "kind": "file"
+    },
+    "runner-start": {
+      "label": "Start-ClaudeProjectionRunner",
+      "source": "scripts/ClaudeRunner.ps1",
+      "match": "function Start-ClaudeProjectionRunner"
+    },
+    "compare-snapshot": {
+      "label": "--compare-snapshot",
+      "source": "sync/src/apply-projection.mjs",
+      "match": "--compare-snapshot"
+    },
+    "entitlement-source": {
+      "label": "entitlement-source",
+      "source": "infra/policy.xml",
+      "match": "{{entitlement-source}}"
     }
   },
   "groups": [
@@ -163,7 +227,7 @@
       "w": 394,
       "h": 510,
       "tone": "slate",
-      "title": "Directory observation \u00c2\u00b7 outside or inside VNet"
+      "title": "Directory observation · outside or inside VNet"
     },
     {
       "x": 430,
@@ -171,7 +235,7 @@
       "w": 850,
       "h": 510,
       "tone": "teal",
-      "title": "Private VNet \u00c2\u00b7 separate writer identity"
+      "title": "Private VNet · separate writer identity"
     },
     {
       "x": 0,
@@ -179,7 +243,7 @@
       "w": 394,
       "h": 758,
       "tone": "blue",
-      "title": "API Management \u00c2\u00b7 caller already validated"
+      "title": "API Management · caller already validated"
     },
     {
       "x": 430,
@@ -187,15 +251,15 @@
       "w": 850,
       "h": 758,
       "tone": "teal",
-      "title": "Resolver \u00c2\u00b7 read-only identity; inbound depends on SKU"
+      "title": "Resolver · read-only identity; inbound depends on SKU"
     },
     {
       "x": 430,
       "y": 1320,
       "w": 850,
-      "h": 340,
+      "h": 376,
       "tone": "amber",
-      "title": "P86 scheduled renewal and switch admission"
+      "title": "P97 optional sync job and switch evidence"
     }
   ],
   "nodes": [
@@ -206,13 +270,13 @@
       "w": 362,
       "h": 420,
       "tone": "slate",
-      "title": "1 \u00c2\u00b7 Finish the whole scan",
+      "title": "1 · Finish the whole scan",
       "lines": [
         "Snapshot: [[snapshot]]",
         "Export uses the operator's Graph token; in-VNet reads use the writer's grant.",
         "Read users and service principals transitively; follow every [[next]].",
-        "[[reconcile]] records scan start as [[verified]], a UUID [[generation]], and [[expiry]].",
-        "Default and maximum lease: 7,200 seconds. A failed scan publishes nothing."
+        "[[reconcile]] records scan start as [[verified]], a UUID [[generation]], and a [[expiry]].",
+        "A failed scan publishes nothing."
       ]
     },
     {
@@ -222,13 +286,13 @@
       "w": 372,
       "h": 420,
       "tone": "teal",
-      "title": "2 \u00c2\u00b7 Reconcile, do not renew replay",
+      "title": "2 · Reconcile changes only",
       "lines": [
-        "[[writer]]",
-        "Snapshot import preserves its generation and expiry.",
+        "[[writer]] acquires [[apply-lock]] before reads.",
+        "Snapshot import must be before its apply-by deadline.",
         "Page existing records with [[fetch]]; write in bounded [[upsert]] batches.",
-        "Refresh unchanged members too. Delete orphans; kept or failed-to-delete orphans are not renewed.",
-        "Empty replacement is refused unless explicit. Partial failure or expiry exits nonzero."
+        "Write added, moved and changed records. Delete orphans on a full sync.",
+        "[[sync-access]] can target one user; [[runner-start]] starts the runner when stopped."
       ]
     },
     {
@@ -238,13 +302,13 @@
       "w": 386,
       "h": 420,
       "tone": "teal",
-      "title": "3 \u00c2\u00b7 Cosmos DB entitlement",
+      "title": "3 · Cosmos DB entitlement",
       "lines": [
         "One record per oid; id and partition key are that oid.",
-        "Carries tenant, tier, unit / team, mapping version and absolute freshness.",
+        "Carries tenant, tier, unit / team, mapping version and verification metadata.",
         "Writer: Data Contributor on one container. Resolver: Data Reader on that container.",
         "[[network]] defaults to private-only. Key authentication is off.",
-        "A partial apply can leave mixed generations. There is no atomic cross-partition cutover."
+        "Records persist until a sync deletes or changes them."
       ]
     },
     {
@@ -254,12 +318,12 @@
       "w": 362,
       "h": 304,
       "tone": "blue",
-      "title": "4 \u00c2\u00b7 Cache hit or miss",
+      "title": "4 · Cache hit or miss",
       "lines": [
         "Key: [[key]]",
-        "Check positive expiry on every hit.",
-        "Store for min([[ttl]], remaining lease).",
-        "A miss goes to admission below; the cache never extends a lease.",
+        "A valid positive answer is cached for [[ttl]].",
+        "Cache expiry is not entitlement expiry.",
+        "A miss goes to admission below.",
         "Negative cache: min(60s, configured window)."
       ]
     },
@@ -270,7 +334,7 @@
       "w": 362,
       "h": 330,
       "tone": "blue",
-      "title": "5 \u00c2\u00b7 Admission before lookup",
+      "title": "5 · Admission before lookup",
       "lines": [
         "[[misses]]",
         "At most 200 misses/s and 100 concurrent misses.",
@@ -286,7 +350,7 @@
       "w": 374,
       "h": 304,
       "tone": "teal",
-      "title": "6 \u00c2\u00b7 Authenticated Function",
+      "title": "6 · Authenticated Function",
       "lines": [
         "GET [[route]]",
         "[[auth]] allows the gateway identity, correct tenant and audience only.",
@@ -302,7 +366,7 @@
       "w": 374,
       "h": 330,
       "tone": "teal",
-      "title": "7 \u00c2\u00b7 One read per identity / process",
+      "title": "7 · One read per identity / process",
       "lines": [
         "[[lookup]] shares concurrent same-oid reads.",
         "100 distinct in-flight reads per process; 3.5-second deadline and abort signal.",
@@ -317,12 +381,12 @@
       "w": 386,
       "h": 304,
       "tone": "teal",
-      "title": "8 \u00c2\u00b7 Validate the stored record",
+      "title": "8 · Validate the stored record",
       "lines": [
         "[[to-entitlement]]",
-        "Check tenant, supported tier, generation, scan time and absolute expiry.",
+        "Check tenant, supported tier, generation and scan time.",
         "Read by id + partition key over the Cosmos private endpoint.",
-        "A future scan time or a lease longer than two hours is invalid."
+        "Missing or future verification metadata is invalid."
       ]
     },
     {
@@ -332,29 +396,31 @@
       "w": 386,
       "h": 330,
       "tone": "amber",
-      "title": "9 \u00c2\u00b7 Distinguish absence from fault",
+      "title": "9 · Distinguish absence from fault",
       "lines": [
-        "Fresh, entitled record: return 200 with expiry; continue the gateway policy.",
+        "Valid entitled record: return 200; continue the gateway policy.",
         "Missing / not-yet-effective record: resolver 404 becomes gateway 403.",
-        "Expired / malformed freshness or resolver failure: gateway 503, Retry-After 5.",
+        "Malformed record or resolver failure: gateway 503, Retry-After 5.",
         "No fallback to old lists. A healthy retry is not proof that membership changed."
       ]
     },
     {
       "id": "renewal-job",
       "x": 446,
-      "y": 1348,
+      "y": 1364,
       "w": 818,
-      "h": 300,
+      "h": 320,
       "tone": "amber",
-      "title": "10 \u00b7 Scheduled renewal evidence gate",
+      "title": "10 · Optional sync job and switch evidence",
       "lines": [
-        "[[renewal-template]]",
-        "[[acr]]",
-        "[[cae-env]] and [[cae-job]]",
-        "[[renewal-identity]] and [[cosmos-writer]]",
-        "[[renewal-alerts]]",
-        "[[admission-check]]"
+        "[[deploy-renewal]]: every 2 h by default; 30m-12h or manual.",
+        "[[registry-template]]: [[acr]], [[renewal-identity]], AcrPull.",
+        "[[renewal-template]]: [[cae-env]], [[cae-job]], [[cosmos-writer]].",
+        "Logs and alerts: [[renewal-logs]], [[renewal-alerts]].",
+        "Unit reads: [[unit-reader]], [[unit-read]].",
+        "Switch compare: runner or [[compare-snapshot]].",
+        "[[admission-check]]: full sync <24h; no invalid record.",
+        "[[switch]]: backup, one [[entitlement-source]] write."
       ]
     }
   ],
@@ -510,7 +576,7 @@
         ],
         [
           1210,
-          1348
+          1364
         ]
       ]
     },
@@ -521,7 +587,7 @@
       "points": [
         [
           878,
-          1348
+          1364
         ],
         [
           878,
@@ -538,5 +604,5 @@
       ]
     }
   ],
-  "notice": "A stopped sync bounds admission of new requests to two hours from the last successful scan's start, subject to clock skew and directory replication; it does not terminate an existing stream. Schedule scan + transfer + apply inside the lease, and alert on remaining lease as well as job failure."
+  "notice": "A stopped sync leaves the last successful projection in place. Removing a person takes a sync and then at most entitlement-cache-seconds; disabled accounts lose access when their current token expires."
 }

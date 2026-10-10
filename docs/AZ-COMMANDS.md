@@ -50,21 +50,27 @@ References use repository paths and line numbers from the source scripts that th
 | 7 | Optional Desktop public-client app registration, redirect URIs and APIM Desktop audience for `external-idp-browser` and `external-idp-broker`; the default `helper-script` path needs no app registration | [§7](#7-developer-sign-in-mode-and-claude-desktop-sign-in) | [Part 7 in the portal](#part-7-in-the-portal) | Pending: `p60-desktop-app-overview`, `p60-desktop-app-authentication`, `p60-desktop-app-api-permissions`, `p60-gateway-desktop-audience` | App-registration and APIM audience changes are followed by handover-file regeneration. |
 | 8 | `onboarding/claude-gateway.json` developer handover artifact | [§8](#8-developer-handover-file) | [Part 8 in the portal](#part-8-in-the-portal) | No screenshot; no portal equivalent | Regenerate and redistribute the JSON after endpoint, tenant, app id, SKU or tier-model changes. |
 | 9 | Optional company gateway hostname, certificate source and APIM custom domain binding | [§9](#9-optional-company-address) | [Part 9 in the portal](#part-9-in-the-portal) | Existing: `p54-vault-certificate`, `p54-vault-role`; pending: `p90-company-custom-domains` | Change APIM Custom domains, Key Vault certificate and DNS together, then verify TLS. |
-| 10 | Optional Cosmos projection, resolver app, private networking, resolver auth and APIM resolver named values | [§10](#10-optional-cosmos-projection) | [Part 10 in the portal](#part-10-in-the-portal) | Existing: `docs-review-cosmos-networking`, `docs-review-resolver-authentication`, `docs-review-resolver-networking`, `p54-private-endpoint`, `p54-private-dns`, `architecture-projection-networking` | Resolver named values can change while `entitlement-source` stays `named-value` until the supported switch exists. |
+| 10 | Optional Cosmos projection, resolver app, private networking, resolver auth and APIM resolver named values | [§10](#10-optional-cosmos-projection) | [Part 10 in the portal](#part-10-in-the-portal) | Existing: `docs-review-cosmos-networking`, `docs-review-resolver-authentication`, `docs-review-resolver-networking`, `p54-private-endpoint`, `p54-private-dns`, `architecture-projection-networking` | Resolver named values can change while `entitlement-source` stays `named-value`; the switch is `scripts/Deploy-ClaudeProjection.ps1 -FlipAfterCleanCompare` ([SECURE-PROJECTION](SECURE-PROJECTION.md#switch-to-the-projection-p95)). |
 | 11 | Data-plane verification, refusal cases, bypass audit, call ceiling and diagnostics review | [§11](#11-verification) | [Part 11 in the portal](#part-11-in-the-portal) | Existing: `docs-review-gateway-diagnostics`, `docs-review-workspace-tables`, `docs-review-workspace-functions`, `docs-review-workspace-workbooks` | Change named values, groups or role assignments, then rerun the relevant verification command. |
 | 12 | Teardown of the gateway resource group and receipt-created external role/group/app objects | [§12](#12-teardown) | [Part 12 in the portal](#part-12-in-the-portal) | No current automated capture; `p90-resource-group-delete` moved to Tooling gaps | Delete only owned resources and receipt-created external objects after reviewing receipts. |
 
 ## Out of scope
 
-FinOps beyond the gateway's named values (AUM, Turnstile, chargeback reports, USD reconciler, Grafana), business units and teams, workstation setup scripts, the network WAF edge, backup/restore/update, and analytics and data deletion.
+FinOps beyond the gateway's named values (AUM, Turnstile, chargeback reports, USD reconciler, Grafana), business units and teams, optional Azure AI Content Safety request screening, workstation setup scripts, the network WAF edge, backup/restore/update, and analytics and data deletion.
 
 - `bu-registry` — not covered: business units and teams are out of scope for this guide.
 - `bu-members` — not covered: business units and teams are out of scope for this guide.
 - `bu-parents` — not covered: business units and teams are out of scope for this guide.
 - `bu-modes` — not covered: business-unit budget modes are out of scope for this guide.
 - `bu-unassigned` — not covered: business-unit assignment behavior is out of scope for this guide.
+- `entitlement-groups` — not covered: scripts/Sync-ClaudeAccess.ps1 records the tier groups' object ids after a sync whose groups came from parameters or this gateway's decision record, or after a sync with `-RecordGroups` ([ADR-0057](adr/0057-one-sync-command.md)).
 - `usd-budgets` — not covered: USD reconciler and FinOps budget projection are out of scope.
 - `usd-budget-state` — not covered: USD reconciler state is out of scope.
+- `content-safety-mode` — not covered: Content Safety screening is optional; [CONTENT-SAFETY.md](CONTENT-SAFETY.md#change-a-setting) lists its named values and the commands that change them.
+- `content-safety-endpoint` — not covered: Content Safety screening is optional; see [CONTENT-SAFETY.md](CONTENT-SAFETY.md#change-a-setting).
+- `content-safety-threshold` — not covered: Content Safety screening is optional; see [CONTENT-SAFETY.md](CONTENT-SAFETY.md#change-a-setting).
+- `content-safety-timeout-seconds` — not covered: Content Safety screening is optional; see [CONTENT-SAFETY.md](CONTENT-SAFETY.md#change-a-setting).
+- `content-safety-truncate-mode` — not covered: Content Safety screening is optional; see [CONTENT-SAFETY.md](CONTENT-SAFETY.md#change-a-setting).
 - Removing gateway artifacts from a reused APIM is out of scope: API `claude-foundry`, named values, logger `appinsights`, diagnostics, diagnostic setting `claude-llm-logs`, `appi-<prefix>` and `log-<prefix>`.
 
 ## 1. Variables, prerequisites and discovery
@@ -118,7 +124,7 @@ az role assignment list --scope "$FOUNDRY_ID" --include-inherited --query "[].{p
 az role assignment list --scope "/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${GATEWAY_RG}" --include-inherited --query "[].{principal:principalName,role:roleDefinitionName,scope:scope}" -o table
 ```
 
-Expected result: the operator has enough rights to deploy the gateway resource group and to inspect or assign the Foundry data-plane role. This mirrors `Install-ClaudeGateway.ps1:1526-1537` and `docs/SETUP.md` section 2.
+Expected result: the operator has enough rights to deploy the gateway resource group and to inspect or assign the Foundry data-plane role. This mirrors `Install-ClaudeGateway.ps1:1532-1551` and `docs/SETUP.md` section 2.
 
 ### Part 1 in the portal
 
@@ -230,7 +236,7 @@ az bicep build --file infra/main.bicep
 az deployment group what-if -g "$GATEWAY_RG" --template-file infra/main.bicep --parameters namePrefix="$NAME_PREFIX" location="$LOCATION" foundryAccountName="$FOUNDRY_ACCOUNT" foundryResourceGroup="$FOUNDRY_RG" publisherEmail="$PUBLISHER_EMAIL" publisherName="$PUBLISHER_NAME" apimSku=BasicV2 apimCapacity=1 sonnetDeployment="$SONNET_DEPLOYMENT" opusDeployment="$OPUS_DEPLOYMENT" haikuDeployment="$HAIKU_DEPLOYMENT" tpmStandard="$TPM_STANDARD" quotaStandard="$QUOTA_STANDARD" tpmPremium="$TPM_PREMIUM" quotaPremium="$QUOTA_PREMIUM" quotaOrg="$QUOTA_ORG" modelsStandard="$MODELS_STANDARD" modelsPremium="$MODELS_PREMIUM" callsPerMinute="$CALLS_PER_MINUTE" entitlementSource=named-value entitlementCacheSeconds="$ENTITLEMENT_CACHE_SECONDS" desktopExtraAudience="$DESKTOP_EXTRA_AUDIENCE"
 ```
 
-Expected result: Bicep builds and what-if shows APIM, API, policy, logger, named values, diagnostics, workspace and role-assignment changes. This mirrors `deploy.ps1:157-170`, `Install-ClaudeGateway.ps1:1543-1585` and `infra/main.bicep:8-179`.
+Expected result: Bicep builds and what-if shows APIM, API, policy, logger, named values, diagnostics, workspace and role-assignment changes. This mirrors `deploy.ps1:157-170`, `Install-ClaudeGateway.ps1:1553-1590` and `infra/main.bicep:8-179`.
 
 Deploy Basic v2.
 
@@ -239,7 +245,7 @@ az deployment group create -g "$GATEWAY_RG" -n "claude-gateway-basicv2" --templa
 az deployment group show -g "$GATEWAY_RG" -n "claude-gateway-basicv2" --query "properties.outputs.{apim:apimName.value,url:gatewayUrl.value,principal:apimPrincipalId.value}" -o json
 ```
 
-Expected result: outputs include the APIM name, gateway URL and APIM principal id. Basic v2 has no outbound VNet integration. This mirrors `infra/main.bicep:31-35`, `infra/main.bicep:443-460` and `Install-ClaudeGateway.ps1:1585`.
+Expected result: outputs include the APIM name, gateway URL and APIM principal id. Basic v2 has no outbound VNet integration. This mirrors `infra/main.bicep:31-35`, `infra/main.bicep:443-460` and `Install-ClaudeGateway.ps1:1595`.
 
 Deploy Standard v2 when outbound VNet integration is required.
 
@@ -316,7 +322,7 @@ The create follows review of the what-if output.
 p89_deploy_reused_apim create
 ```
 
-Expected result: a clean existing v2 APIM is reused without resetting an already-installed gateway. `grantFoundryRole=false` is passed when the gateway identity already has Cognitive Services User, matching `Install-ClaudeGateway.ps1:1514-1541`.
+Expected result: a clean existing v2 APIM is reused without resetting an already-installed gateway. `grantFoundryRole=false` is passed when the gateway identity already has Cognitive Services User, matching `Install-ClaudeGateway.ps1:1524-1551`.
 
 Read policy deployment state.
 
@@ -344,7 +350,7 @@ p89_named_value_readback() {
 p89_named_value_readback
 ```
 
-Expected result: the value length is at most 4,096, and the final read returns the exact value written. This mirrors `scripts/ApimNamedValue.ps1:35-73` and `scripts/ApimNamedValue.ps1:125-191`.
+Expected result: the value length is at most 4,096, and the final read returns the exact value written. This mirrors `scripts/ApimNamedValue.ps1:35-73` and `scripts/ApimNamedValue.ps1:161-227`.
 
 ### Part 2 in the portal
 
@@ -384,7 +390,7 @@ Capture id: `gateway-named-values`.
 
 Capture id: `docs-review-gateway-diagnostics`.
 
-**Change later.** Single named-value, tier-limit and hostname changes go through §4, §6 and §9. A full redeploy over a live gateway goes through `Install-ClaudeGateway.ps1 -ExistingApimName`, which reads back operator-owned named values and APIM network, portal, custom-property and hostname state before deployment (`Install-ClaudeGateway.ps1:1401-1512`). A direct §2 template rerun can reset operator-owned named values (`infra/main.bicep:170-207`, `infra/main.bicep:378-389`), entitlement resolver values (`infra/main.bicep:144-158`) and owned-APIM service properties (`infra/main.bicep:252-292`). The absent-name check is `p89_apim_absent`. Basic v2 ↔ Standard v2 changes use API Management services > `$APIM_NAME` > Pricing tier: select the tier and units; **Save**. Learn documents **Pricing tier** for changing service tier and **Scale** for v2 units. Source: https://learn.microsoft.com/azure/api-management/upgrade-and-scale.
+**Change later.** Single named-value, tier-limit and hostname changes go through §4, §6 and §9. A full redeploy over a live gateway goes through `Install-ClaudeGateway.ps1 -ExistingApimName`, which reads back operator-owned named values and APIM network, portal, custom-property and hostname state before deployment (`Install-ClaudeGateway.ps1:1405-1522`). A direct §2 template rerun can reset operator-owned named values (`infra/main.bicep:170-207`, `infra/main.bicep:378-389`), entitlement resolver values (`infra/main.bicep:144-158`) and owned-APIM service properties (`infra/main.bicep:252-292`). The absent-name check is `p89_apim_absent`. Basic v2 ↔ Standard v2 changes use API Management services > `$APIM_NAME` > Pricing tier: select the tier and units; **Save**. Learn documents **Pricing tier** for changing service tier and **Scale** for v2 units. Source: https://learn.microsoft.com/azure/api-management/upgrade-and-scale.
 
 ## 3. Gateway managed identity and Foundry role
 
@@ -569,7 +575,7 @@ Verify the authorization and budget named values that the template initialized.
 az apim nv list -g "$GATEWAY_RG" --service-name "$APIM_NAME" --query "[?name=='allow-standard' || name=='allow-premium' || name=='quota-overrides' || name=='external-idp-extra-audience'].{name:name,value:value}" -o table
 ```
 
-Expected result: `allow-*` values are comma-sentinel lists, `quota-overrides` is `,,` until personal overrides exist, and the Desktop audience is the disabled sentinel until external sign-in is configured. On an existing gateway, entitlement sync and budget commands own these values after deployment. This mirrors `infra/main.bicep:215-224`, `infra/main.bicep:367-370`, `scripts/Sync-ClaudeAccess.ps1:122-129`, `scripts/ClaudeBudgetOverride.ps1:1-29` and `scripts/ApimNamedValue.ps1:150-154`.
+Expected result: `allow-*` values are comma-sentinel lists, `quota-overrides` is `,,` until personal overrides exist, and the Desktop audience is the disabled sentinel until external sign-in is configured. On an existing gateway, entitlement sync and budget commands own these values after deployment. This mirrors `infra/main.bicep:215-224`, `infra/main.bicep:367-370`, `scripts/Sync-ClaudeAccess.ps1:122-129`, `scripts/ClaudeBudgetOverride.ps1:1-29` and `scripts/ApimNamedValue.ps1:186-190`.
 
 ### Part 4 in the portal
 
@@ -1057,7 +1063,7 @@ az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id 
 az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id external-idp-extra-audience --query value -o tsv
 ```
 
-Expected result: the app id is stored as `external-idp-extra-audience` for id-token mode. For access-token mode, store the gateway API audience instead. Consent is not granted by these commands; a tenant admin grants user/admin consent for scopes that require it. This mirrors `Install-ClaudeGateway.ps1:1141-1238`, `Install-ClaudeGateway.ps1:1573` and `scripts/ClaudeDesktopSignIn.ps1:92-101`.
+Expected result: the app id is stored as `external-idp-extra-audience` for id-token mode. For access-token mode, store the gateway API audience instead. Consent is not granted by these commands; a tenant admin grants user/admin consent for scopes that require it. This mirrors `Install-ClaudeGateway.ps1:1141-1238`, `Install-ClaudeGateway.ps1:1583` and `scripts/ClaudeDesktopSignIn.ps1:92-101`.
 
 ### Part 7 in the portal
 
@@ -1100,7 +1106,7 @@ p89_gateway_url
 # P89-GATEWAY-URL-END
 ```
 
-Expected result: `GATEWAY_URL` is the live APIM gateway URL plus `/claude`, matching `infra/main.bicep:516` and `Install-ClaudeGateway.ps1:1585-1586`. When §9 has a verified `.p89-receipts/gateway-address.json` and the live APIM still lists that Proxy hostname, the URL is `https://<hostname>/claude`, matching `Install-ClaudeGateway.ps1:1590` and `scripts/ClaudeGatewayAddress.ps1:118,123`.
+Expected result: `GATEWAY_URL` is the live APIM gateway URL plus `/claude`, matching `infra/main.bicep:516` and `Install-ClaudeGateway.ps1:1595-1596`. When §9 has a verified `.p89-receipts/gateway-address.json` and the live APIM still lists that Proxy hostname, the URL is `https://<hostname>/claude`, matching `Install-ClaudeGateway.ps1:1600` and `scripts/ClaudeGatewayAddress.ps1:118,123`.
 
 Generate `onboarding/claude-gateway.json` with the same schema the installer writes.
 
@@ -1149,7 +1155,7 @@ p89_handover
 # P89-HANDOVER-END
 ```
 
-Expected result: `jq -e` exits 0, and the file contains no secrets. The key set matches the installer record, including subscription, SKU, region, Foundry account, entitlement store, projection deployer, tier model arrays, tier model allow-list strings and request ceiling. This mirrors `Install-ClaudeGateway.ps1:1699-1726` and `onboarding/README.md:13-41`. `scripts/Setup-ClaudeWorkstation.ps1` consumes this file through `-ConfigPath`; `Onboard-ClaudeDeveloper.ps1` distributes the same handover artifact rather than changing its schema.
+Expected result: `jq -e` exits 0, and the file contains no secrets. The key set matches the installer record, including subscription, SKU, region, Foundry account, entitlement store, projection deployer, tier model arrays, tier model allow-list strings and request ceiling. This mirrors `Install-ClaudeGateway.ps1:1704-1742` and `onboarding/README.md:13-41`. `scripts/Setup-ClaudeWorkstation.ps1` consumes this file through `-ConfigPath`; `Onboard-ClaudeDeveloper.ps1` distributes the same handover artifact rather than changing its schema.
 
 ### Part 8 in the portal
 
@@ -1442,7 +1448,7 @@ p89_projection_deploy
 # P89-PROJECTION-DEPLOY-END
 ```
 
-Expected result: `projection.bicep` deploys first, then `projection-network.bicep` uses the Cosmos account output and creates private endpoints, DNS and the in-VNet runner. The private resolver path requires a gateway SKU with outbound VNet integration; Basic v2 cannot use this path (`docs/SCALE.md:628-635`). This mirrors `scripts/Deploy-ClaudeProjection.ps1:107-122`, `infra/projection.bicep:11-68` and `infra/projection-network.bicep:26-49`.
+Expected result: `projection.bicep` deploys first, then `projection-network.bicep` uses the Cosmos account output and creates private endpoints, DNS and the in-VNet runner. The private resolver path requires a gateway SKU with outbound VNet integration; Basic v2 cannot use this path (`docs/SCALE.md:628-635`). This mirrors `scripts/Deploy-ClaudeProjection.ps1:135-156`, `infra/projection.bicep:11-68` and `infra/projection-network.bicep:26-49`.
 
 Deploy the resolver with Standard v2 outbound VNet integration and upload code.
 
@@ -1485,19 +1491,40 @@ p89_resolver_deploy
 # P89-RESOLVER-DEPLOY-END
 ```
 
-Expected result: the Function app is running with VNet integration and resolver code uploaded. `allowedCallerAppIds` is the gateway managed identity application id, and `allowedCallerObjectIds` is the gateway object id; otherwise the resolver refuses the gateway. This mirrors `scripts/Deploy-ClaudeProjection.ps1:130-168` and `infra/resolver.bicep:385-387`.
+Expected result: the Function app is running with VNet integration and resolver code uploaded. `allowedCallerAppIds` is the gateway managed identity application id, and `allowedCallerObjectIds` is the gateway object id; otherwise the resolver refuses the gateway. This mirrors `scripts/Deploy-ClaudeProjection.ps1:158-215` and `infra/resolver.bicep:385-387`.
 
 Set resolver named values without switching entitlement.
 
 ```bash
-export RESOLVER_URL="https://func-${NAME_PREFIX}-resolver.azurewebsites.net/api"
-export RESOLVER_AUDIENCE="api://${RESOLVER_APP_ID}"
-az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id entitlement-resolver-url --value "$RESOLVER_URL" -o none
-az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id entitlement-resolver-audience --value "$RESOLVER_AUDIENCE" -o none
-az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id entitlement-source --query value -o tsv
+p95_resolver_named_values() {
+  if ! RESOLVER_URL="$(az deployment group show -g "$GATEWAY_RG" -n "projection-resolver-${NAME_PREFIX}" --query "properties.outputs.resolverUrl.value" -o tsv)" || [ -z "$RESOLVER_URL" ] ||
+    ! RESOLVER_AUDIENCE="$(az deployment group show -g "$GATEWAY_RG" -n "projection-resolver-${NAME_PREFIX}" --query "properties.outputs.resolverAudience.value" -o tsv)" || [ -z "$RESOLVER_AUDIENCE" ]; then
+    echo "Refused: could not read the resolver deployment's resolverUrl and resolverAudience outputs; the named values were not changed." >&2
+    return 1
+  fi
+  export RESOLVER_URL RESOLVER_AUDIENCE
+  CURRENT_SOURCE="$(az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id entitlement-source --query value -o tsv)" || return 1
+  CURRENT_URL="$(az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id entitlement-resolver-url --query value -o tsv)" || return 1
+  CURRENT_AUDIENCE="$(az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id entitlement-resolver-audience --query value -o tsv)" || return 1
+  if [ "$CURRENT_SOURCE" = "projection" ] && { [ "$CURRENT_URL" != "$RESOLVER_URL" ] || [ "$CURRENT_AUDIENCE" != "$RESOLVER_AUDIENCE" ]; }; then
+    echo "Refused: entitlement-source is projection, so new resolver named values would send every request to this resolver at once; the named values were not changed." >&2
+    return 1
+  fi
+  if [ "$CURRENT_URL" != "$RESOLVER_URL" ] || [ "$CURRENT_AUDIENCE" != "$RESOLVER_AUDIENCE" ]; then
+    az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id entitlement-resolver-url --value "$RESOLVER_URL" -o none || return 1
+    az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id entitlement-resolver-audience --value "$RESOLVER_AUDIENCE" -o none || return 1
+  fi
+  if CURRENT_PREFIX="$(az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id entitlement-projection-prefix --query value -o tsv 2>/dev/null)"; then
+    [ "$CURRENT_PREFIX" = "$NAME_PREFIX" ] || az apim nv update -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id entitlement-projection-prefix --value "$NAME_PREFIX" -o none || return 1
+  else
+    az apim nv create -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id entitlement-projection-prefix --display-name entitlement-projection-prefix --value "$NAME_PREFIX" -o none || return 1
+  fi
+  az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id entitlement-source --query value -o tsv
+}
+p95_resolver_named_values
 ```
 
-Expected result: resolver URL and audience are set, while `entitlement-source` remains `named-value`. This mirrors `docs/SCALE.md:670-675`.
+Expected result: resolver URL and audience are the resolver deployment's outputs, `entitlement-projection-prefix` is `$NAME_PREFIX`, and `entitlement-source` remains `named-value`. On a gateway already on the projection, a URL or audience that differs makes the function write neither value and return 1, and values that already match are not written again (return 0). The prefix is written whenever it differs, on that gateway too: it records which projection the gateway uses, the switch and `scripts/Sync-ClaudeAccess.ps1` read it, and no request path changes with it. A gateway that served from a projection before [ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md) has none until this step or the deployer writes it. A failed read of the URL, audience or source returns 1 before any write. The switch requires the two resolver values to be the outputs of `projection-resolver-${NAME_PREFIX}` ([SECURE-PROJECTION](SECURE-PROJECTION.md#switch-to-the-projection-p95)). This mirrors `scripts/ClaudeProjectionChecks.ps1:163-182`, which `scripts/Deploy-ClaudeProjection.ps1:197` calls; the deployer also refuses such a gateway before any write unless the run redeploys the resolver it calls (`scripts/ClaudeProjectionChecks.ps1:184-201`).
 
 Populate and compare the projection through an in-VNet runner container.
 
@@ -1506,9 +1533,13 @@ Populate and compare the projection through an in-VNet runner container.
 p89_projection_runner() {
   export RUNNER_NAME="$(az deployment group show -g "$GATEWAY_RG" -n "$PROJECTION_NETWORK_NAME" --query "properties.outputs.runnerName.value" -o tsv)"
   export RUNNER_PRINCIPAL_ID="$(az deployment group show -g "$GATEWAY_RG" -n "$PROJECTION_NETWORK_NAME" --query "properties.outputs.runnerPrincipalId.value" -o tsv)"
+  if ! PROJECTION_ACCOUNT_RESOURCE_ID="$(az cosmosdb show -n "$COSMOS_ACCOUNT" -g "$GATEWAY_RG" --query id -o tsv)" || [ -z "$PROJECTION_ACCOUNT_RESOURCE_ID" ]; then
+    echo "Refused: could not read the projection Cosmos account resource id; nothing was applied." >&2
+    return 1
+  fi
   az cosmosdb sql role assignment create --account-name "$COSMOS_ACCOUNT" --resource-group "$GATEWAY_RG" --scope /dbs/claude/colls/entitlement --principal-id "$RUNNER_PRINCIPAL_ID" --role-definition-id 00000000-0000-0000-0000-000000000002 -o none || return 1
   ./scripts/Sync-ClaudeProjection.ps1 -Account "$COSMOS_ACCOUNT" -ApimName "$APIM_NAME" -ResourceGroup "$GATEWAY_RG" -StandardGroup "$STANDARD_GROUP" -PremiumGroup "$PREMIUM_GROUP" -ExportPath snapshot.json || return 1
-  tar -c -z -f sync-source.tar.gz -C sync package.json src || return 1
+  tar -c -z -f sync-source.tar.gz sync/Dockerfile sync/package.json sync/package-lock.json sync/src resolver/src/entitlement.mjs || return 1
 
   send_runner_file() {
     src="$1"
@@ -1554,10 +1585,10 @@ p89_projection_runner() {
 
   send_runner_file sync-source.tar.gz /work/sync-source.tar.gz || return 1
   send_runner_file snapshot.json /work/snapshot.json || return 1
-  az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node -e require('fs').mkdirSync('/work/sync',{recursive:true})" || return 1
-  az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "tar -x -z -f /work/sync-source.tar.gz -C /work/sync" || return 1
-  az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "npm --prefix /work/sync install --omit=dev --no-audit --fund=false" || return 1
-  az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node /work/sync/src/apply-projection.mjs --cosmos https://${COSMOS_ACCOUNT}.documents.azure.com:443/ --tenant ${TENANT_ID} --snapshot /work/snapshot.json" || return 1
+  az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node -e require('fs').mkdirSync('/work',{recursive:true})" || return 1
+  az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "tar -x -z -f /work/sync-source.tar.gz -C /work" || return 1
+  az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "npm --prefix /work/sync ci --omit=dev --ignore-scripts --no-audit --fund=false" || return 1
+  az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node /work/sync/src/apply-projection.mjs --cosmos https://${COSMOS_ACCOUNT}.documents.azure.com:443/ --tenant ${TENANT_ID} --account-resource-id ${PROJECTION_ACCOUNT_RESOURCE_ID} --snapshot /work/snapshot.json" || return 1
   ./scripts/Compare-ClaudeEntitlement.ps1 -ResourceGroup "$GATEWAY_RG" -ApimName "$APIM_NAME" -StandardGroup "$STANDARD_GROUP" -PremiumGroup "$PREMIUM_GROUP" -ExportGatewayPath gateway-decisions.json -FailOnDrift || return 1
   send_runner_file gateway-decisions.json /work/gateway-decisions.json || return 1
   az container exec -g "$GATEWAY_RG" -n "$RUNNER_NAME" --exec-command "node /work/sync/src/apply-projection.mjs --cosmos https://${COSMOS_ACCOUNT}.documents.azure.com:443/ --tenant ${TENANT_ID} --compare /work/gateway-decisions.json"
@@ -1566,7 +1597,109 @@ p89_projection_runner
 # P89-PROJECTION-RUNNER-END
 ```
 
-Expected result: population and comparison run through the runner created by `projection-network.bicep`. `send_runner_file` mirrors `scripts/ClaudeRunner.ps1:113-148`: base64url chunks are appended through `az container exec` and decoded in the container. The snapshot and gateway-decision files are produced by the repository scripts because their Graph and named-value comparison logic is not an Azure CLI data-plane operation. This mirrors `scripts/Deploy-ClaudeProjection.ps1:199-221`, `scripts/Sync-ClaudeProjection.ps1`, `scripts/ClaudeRunner.ps1`, `docs/SCALE.md:681-726` and `infra/projection-network.bicep:46-49`.
+Expected result: population and comparison run through the runner created by `projection-network.bicep`. `send_runner_file` sends base64url chunks through `az container exec`, one at a time, and decodes them in the container: the protocol `scripts/ClaudeRunner.ps1` used before [ADR-0053](adr/0053-parallel-compressed-runner-transfer.md), about 1 KB a second. `Send-RunnerFile` in `scripts/ClaudeRunner.ps1` compresses the file and sends parts in parallel, which a directory of more than about 40,000 developers needs within the snapshot's 2-hour apply-by time. The snapshot and gateway-decision files are produced by the repository scripts because their Graph and named-value comparison logic is not an Azure CLI data-plane operation. This mirrors `scripts/Deploy-ClaudeProjection.ps1:241-270`, `scripts/Sync-ClaudeProjection.ps1`, `scripts/ClaudeRunner.ps1`, `docs/SCALE.md:681-726` and `infra/projection-network.bicep:46-49`.
+
+Deploy the optional sync job, its registry and its alerts.
+
+```bash
+# P89-PROJECTION-RENEWAL-BEGIN
+p94_projection_renewal() {
+  export ALERT_EMAIL="${ALERT_EMAIL:-<alert-email>}"
+  export IMAGE_TAG="${IMAGE_TAG:-sync-$(date -u +%Y%m%d%H%M%S)}"
+  if ! [[ "$ALERT_EMAIL" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$ ]]; then
+    echo "Refused: ALERT_EMAIL is not one email address; nothing was deployed." >&2
+    return 1
+  fi
+  export SYNC_INTERVAL="${SYNC_INTERVAL:-2h}"
+  case "$SYNC_INTERVAL" in
+    30m) SYNC_CRON='*/30 * * * *'; NO_SUCCESS_MINUTES=75 ;;
+    1h) SYNC_CRON='0 * * * *'; NO_SUCCESS_MINUTES=135 ;;
+    2h) SYNC_CRON='0 */2 * * *'; NO_SUCCESS_MINUTES=255 ;;
+    3h) SYNC_CRON='0 */3 * * *'; NO_SUCCESS_MINUTES=375 ;;
+    4h) SYNC_CRON='0 */4 * * *'; NO_SUCCESS_MINUTES=495 ;;
+    6h) SYNC_CRON='0 */6 * * *'; NO_SUCCESS_MINUTES=735 ;;
+    8h) SYNC_CRON='0 */8 * * *'; NO_SUCCESS_MINUTES=975 ;;
+    12h) SYNC_CRON='0 */12 * * *'; NO_SUCCESS_MINUTES=1455 ;;
+    manual) SYNC_CRON=''; NO_SUCCESS_MINUTES=0 ;;
+    *) echo "Refused: SYNC_INTERVAL '$SYNC_INTERVAL' is not one of 30m, 1h, 2h, 3h, 4h, 6h, 8h, 12h, manual; the shortest interval is 30 minutes. Nothing was deployed." >&2
+       return 1 ;;
+  esac
+  if ! RENEWAL_SUBNET_ID="$(az deployment group show -g "$GATEWAY_RG" -n "projection-network-${NAME_PREFIX}" --query "properties.outputs.renewalSubnetId.value" -o tsv)" || [ -z "$RENEWAL_SUBNET_ID" ]; then
+    echo "Refused: the projection network has no renewal subnet; rerun the projection deployment block above. Nothing was deployed." >&2
+    return 1
+  fi
+  if ! COSMOS_ACCOUNT="$(az deployment group show -g "$GATEWAY_RG" -n "projection-${NAME_PREFIX}" --query "properties.outputs.accountName.value" -o tsv)" || [ -z "$COSMOS_ACCOUNT" ]; then
+    echo "Refused: could not read the projection Cosmos account output; nothing was deployed." >&2
+    return 1
+  fi
+  if ! RG_RESOURCES="$(az resource list -g "$GATEWAY_RG" --query "[].[name,type]" -o tsv)"; then
+    echo "Refused: could not list the resources in $GATEWAY_RG; nothing was deployed." >&2
+    return 1
+  fi
+  P86_LEFT="$(printf '%s\n' "$RG_RESOURCES" | grep -i -F -x -e "caj-projection-renewal-${NAME_PREFIX}"$'\t'"Microsoft.App/jobs" -e "cae-projection-${NAME_PREFIX}"$'\t'"Microsoft.App/managedEnvironments" -e "sqr-projection-${NAME_PREFIX}-graph-read-failed"$'\t'"Microsoft.Insights/scheduledQueryRules" | cut -f1 | tr '\n' ' ')"
+  if [ -n "$P86_LEFT" ]; then
+    echo "Refused: P86 renewal resources are in $GATEWAY_RG (${P86_LEFT% }), and the new job would run beside them; docs/SECURE-PROJECTION.md lists the delete commands. Nothing was deployed." >&2
+    return 1
+  fi
+  if ! WORKSPACE_ID="${WORKSPACE_ID:-$(az monitor log-analytics workspace list -g "$GATEWAY_RG" --query "[].id" -o tsv)}" || [ -z "$WORKSPACE_ID" ] || [ "$(printf '%s\n' "$WORKSPACE_ID" | wc -l)" -ne 1 ]; then
+    echo "Refused: set WORKSPACE_ID to the gateway's Log Analytics workspace resource id; nothing was deployed." >&2
+    return 1
+  fi
+  if ! STANDARD_GROUP_ID="$(jq -r --arg name "$STANDARD_GROUP" 'if .group.displayName == $name then .group.id // "" else "" end' .p89-receipts/group-standard.json)" || ! [[ "$STANDARD_GROUP_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+    echo "Refused: the standard group receipt from section 5 records no object id for STANDARD_GROUP '$STANDARD_GROUP'; nothing was deployed." >&2
+    return 1
+  fi
+  if [ "$PREMIUM_GROUP" = "none" ]; then
+    PREMIUM_GROUP_ID="none"
+  elif ! PREMIUM_GROUP_ID="$(jq -r --arg name "$PREMIUM_GROUP" 'if .group.displayName == $name then .group.id // "" else "" end' .p89-receipts/group-premium.json)" || ! [[ "$PREMIUM_GROUP_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+    echo "Refused: the premium group receipt from section 5 records no object id for PREMIUM_GROUP '$PREMIUM_GROUP'; set PREMIUM_GROUP=none when the gateway has no premium tier. Nothing was deployed." >&2
+    return 1
+  fi
+  if [ "$PREMIUM_GROUP_ID" = "$STANDARD_GROUP_ID" ]; then
+    echo "Refused: the premium tier group is the same group as the standard tier group, and premium membership takes precedence. Nothing was deployed." >&2
+    return 1
+  fi
+  APIM_ID="$(az apim show -g "$GATEWAY_RG" -n "$APIM_NAME" --query id -o tsv)" || return 1
+  az deployment group create -g "$GATEWAY_RG" -n "projection-registry-${NAME_PREFIX}" --template-file infra/projection-registry.bicep --parameters namePrefix="$NAME_PREFIX" location="$LOCATION" acrSku=Basic -o none || return 1
+  REGISTRY_OUTPUTS="$(az deployment group show -g "$GATEWAY_RG" -n "projection-registry-${NAME_PREFIX}" --query properties.outputs -o json)" || return 1
+  ACR_NAME="$(printf '%s' "$REGISTRY_OUTPUTS" | jq -r '.acrName.value // ""')"
+  IDENTITY_NAME="$(printf '%s' "$REGISTRY_OUTPUTS" | jq -r '.identityName.value // ""')"
+  IDENTITY_PRINCIPAL_ID="$(printf '%s' "$REGISTRY_OUTPUTS" | jq -r '.identityPrincipalId.value // ""')"
+  if [ -z "$ACR_NAME" ] || [ -z "$IDENTITY_NAME" ] || [ -z "$IDENTITY_PRINCIPAL_ID" ]; then
+    echo "Refused: the registry deployment returned no registry or identity; the image was not built." >&2
+    return 1
+  fi
+  PACKAGE_DIR="$(mktemp -d)" || return 1
+  tar -c -f - sync/Dockerfile sync/package.json sync/package-lock.json sync/src resolver/src/entitlement.mjs | tar -x -f - -C "$PACKAGE_DIR" || { rm -rf "$PACKAGE_DIR"; return 1; }
+  az acr build --registry "$ACR_NAME" --image "claude-projection-sync:${IMAGE_TAG}" --file sync/Dockerfile --no-logs "$PACKAGE_DIR" -o none || { rm -rf "$PACKAGE_DIR"; return 1; }
+  rm -rf "$PACKAGE_DIR"
+  IMAGE_DIGEST="$(az acr manifest show-metadata --registry "$ACR_NAME" --name "claude-projection-sync:${IMAGE_TAG}" --query digest -o tsv)"
+  if ! [[ "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+    echo "Refused: the registry returned '$IMAGE_DIGEST', not a sha256 digest; the job was not deployed." >&2
+    return 1
+  fi
+  rm -f renewal-params.json
+  jq -n --arg namePrefix "$NAME_PREFIX" --arg location "$LOCATION" --arg cosmos "$COSMOS_ACCOUNT" --arg subnet "$RENEWAL_SUBNET_ID" --arg workspace "$WORKSPACE_ID" --arg email "$ALERT_EMAIL" --arg acr "$ACR_NAME" --arg identity "$IDENTITY_NAME" --arg digest "$IMAGE_DIGEST" --arg tenant "$TENANT_ID" --arg standard "$STANDARD_GROUP_ID" --arg premium "$PREMIUM_GROUP_ID" --arg gateway "$APIM_ID" --arg cron "$SYNC_CRON" --argjson noSuccess "$NO_SUCCESS_MINUTES" '{"$schema":"https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#","contentVersion":"1.0.0.0",parameters:{namePrefix:{value:$namePrefix},location:{value:$location},cosmosAccountName:{value:$cosmos},containerAppsSubnetId:{value:$subnet},logAnalyticsWorkspaceId:{value:$workspace},actionGroupEmailReceivers:{value:[$email]},acrName:{value:$acr},identityName:{value:$identity},syncImageDigest:{value:$digest},tenantId:{value:$tenant},standardGroupId:{value:$standard},premiumGroupId:{value:$premium},gatewayResourceId:{value:$gateway},cronExpression:{value:$cron},noSuccessMinutes:{value:$noSuccess}}}' > renewal-params.json || {
+    rm -f renewal-params.json
+    echo "Refused: renewal parameters could not be generated; the job was not deployed." >&2
+    return 1
+  }
+  az deployment group create -g "$GATEWAY_RG" -n "projection-renewal-${NAME_PREFIX}" --template-file infra/projection-renewal.bicep --parameters @renewal-params.json -o none || return 1
+  RETIRED_RULES="sqr-projection-${NAME_PREFIX}-expiry-margin-60m sqr-projection-${NAME_PREFIX}-no-success-45m"
+  if [ "$SYNC_INTERVAL" = "manual" ]; then RETIRED_RULES="$RETIRED_RULES sqr-projection-${NAME_PREFIX}-no-success"; fi
+  for RULE in $RETIRED_RULES; do
+    if printf '%s\n' "$RG_RESOURCES" | grep -i -F -x -q "${RULE}"$'\t'"Microsoft.Insights/scheduledQueryRules"; then
+      az resource delete -g "$GATEWAY_RG" -n "$RULE" --resource-type Microsoft.Insights/scheduledQueryRules -o none || return 1
+    fi
+  done
+  az deployment group show -g "$GATEWAY_RG" -n "projection-renewal-${NAME_PREFIX}" --query "properties.outputs.{job:jobResourceId.value,actionGroup:actionGroupResourceId.value}" -o json || return 1
+  echo "Tenant administrator, once: ./scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1 -PrincipalId ${IDENTITY_PRINCIPAL_ID}"
+}
+p94_projection_renewal
+# P89-PROJECTION-RENEWAL-END
+```
+
+Expected result: the registry and the job identity deploy first, the image builds from the sync package (`sync/` and `resolver/src/entitlement.mjs`), and the job is pinned to the digest the registry reports. By default the job runs every 2 hours. `SYNC_INTERVAL`, set before the block to `30m`, `1h`, `2h`, `3h`, `4h`, `6h`, `8h`, `12h` or `manual`, maps to the same cron expressions and no-success ranges as `scripts/ClaudeProjectionSchedule.ps1` ([ADR-0058](adr/0058-scheduled-projection-sync.md)); any other value is refused before a deployment. After the job deploys, the block removes `sqr-projection-<prefix>-expiry-margin-60m` and `sqr-projection-<prefix>-no-success-45m`, and for `manual` also `sqr-projection-<prefix>-no-success`, when they exist. To change the interval later, run the block again with another `SYNC_INTERVAL`, which builds a new image, or run `scripts/Set-ClaudeProjectionSyncSchedule.ps1`, which keeps the deployed image. The tier group ids come from the group receipts that section 5 records for the current `STANDARD_GROUP` and `PREMIUM_GROUP`, and one group for both tiers is refused. A resource group that still holds P86's renewal job, environment or `graph-read-failed` alert, matched by name and resource type, is refused before any deployment; [the projection runbook](SECURE-PROJECTION.md#optional-sync-job-and-switch-evidence-p97) lists the delete commands. The block prints the job and action group ids and the tenant administrator's Graph grant. Each alert address receives a confirmation email from Azure Monitor and receives no alerts until it is confirmed ([U116](UNKNOWNS.md#p94-research-before-implementation)). The job is optional switch support for very large directories; switch evidence needs a successful full sync in the last 24 hours, not three scheduled runs. ACR task runs are paused for subscriptions on Azure free credits ([U114](UNKNOWNS.md#p94-research-before-implementation)); there, `docker build` and `docker push` from the package directory replace `az acr build`. This mirrors `scripts/Deploy-ClaudeProjectionRenewal.ps1`, `infra/projection-registry.bicep` and `infra/projection-renewal.bicep` ([ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md)).
 
 Projection switch status.
 
@@ -1574,7 +1707,7 @@ Projection switch status.
 az apim nv show -g "$GATEWAY_RG" --service-name "$APIM_NAME" --named-value-id entitlement-source --query value -o tsv
 ```
 
-Expected result: the value stays `named-value`. P84 refuses automated switching. `docs/SCALE.md:744-760` states the reason: records lease for at most two hours, and without renewal every developer receives 503 after expiry. The legacy manual command can change `entitlement-source` to `projection`, but it is not P84-protected admission, creates no reconciler, and can cause that outage. P86, in progress on another branch, will add supported renewal and switch; this guide does not include P86's content.
+Expected result: the value stays `named-value`. Projection records persist until a sync removes or changes the person. The supported switch is `scripts/Deploy-ClaudeProjection.ps1 -FlipAfterCleanCompare`, which runs repository code in the runner for the compare and switch evidence and has no Azure CLI equivalent in this guide ([ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md), [SECURE-PROJECTION](SECURE-PROJECTION.md#switch-to-the-projection-p95)). The manual command can change `entitlement-source` to `projection`, but it skips those checks.
 
 ### Part 10 in the portal
 
@@ -1608,8 +1741,9 @@ Capture id: `docs-review-resolver-authentication`.
 
 Capture id: `docs-review-resolver-networking`.
 
-5. **Set resolver named values without switching entitlement.** API Management services > `$APIM_NAME` > APIs > Named values: edit `entitlement-resolver-url` and `entitlement-resolver-audience`; Value: `$RESOLVER_URL` and `$RESOLVER_AUDIENCE`; **Save**. `entitlement-source` stays `named-value`; `infra/policy.xml:86-92` calls the resolver only when the value is `projection`.
+5. **Set resolver named values without switching entitlement.** API Management services > `$APIM_NAME` > APIs > Named values: edit `entitlement-resolver-url` and `entitlement-resolver-audience`; Value: the outputs `resolverUrl` and `resolverAudience` of the deployment `projection-resolver-$NAME_PREFIX` (`$RESOLVER_URL` and `$RESOLVER_AUDIENCE`); **Save**. Edit `entitlement-projection-prefix`, or **+ Add** it when it is missing (Type: Plain); Value: `$NAME_PREFIX`; **Save**. `entitlement-source` stays `named-value`; `infra/policy.xml:86-92` calls the resolver only when the value is `projection`.
 6. **Populate and compare the projection through an in-VNet runner container.** No portal equivalent: the runner transfer, hash check, package install and compare are command-line computation steps.
+7. **Deploy the optional sync job, its registry and its alerts.** The image build has no portal equivalent in this guide. After deployment: Container Apps job (`caj-renew-...`, tag `claude-projection-prefix`) > Execution history lists manual runs, or scheduled runs when a cron expression is configured; Monitor > Alerts > Alert rules lists failed-run and Graph-denied rules, and the stale-success rule when scheduled; Monitor > Action groups > `ag-projection-renewal-...` > Test sends a test notification to the confirmed addresses.
 
 **Change later.**
 
@@ -1620,7 +1754,8 @@ Capture id: `docs-review-resolver-networking`.
 | Resolver private endpoint or VNet integration | Function App > Networking | **Deploy the resolver with Standard v2 outbound VNet integration and upload code** | `infra/policy.xml:86-92` calls the resolver only when the value is `projection`, so §11 request results stay unchanged. |
 | Resolver Microsoft identity provider | Function App > Authentication | **Deploy the resolver with Standard v2 outbound VNet integration and upload code** | `infra/policy.xml:86-92` calls the resolver only when the value is `projection`, so §11 request results stay unchanged. |
 | Resolver app settings, URL or audience | Function App > Environment variables; API Management > Named values | **Deploy the resolver with Standard v2 outbound VNet integration and upload code** and **Set resolver named values without switching entitlement** | `infra/policy.xml:86-92` calls the resolver only when the value is `projection`, so §11 request results stay unchanged. |
-| Entitlement data | No portal equivalent for the runner transfer and compare | **Populate and compare the projection through an in-VNet runner container** | Projection data changes leave §11 request results unchanged until a supported projection switch exists. |
+| Entitlement data | No portal equivalent for the runner transfer and compare | **Populate and compare the projection through an in-VNet runner container** | Projection data changes leave §11 request results unchanged while `entitlement-source` is `named-value`. |
+| Optional sync-job trigger, image, alert addresses or tier groups | Container Apps job > Configuration; Monitor > Action groups | **Deploy the optional sync job, its registry and its alerts** | The job writes projection records only; §11 request results stay unchanged while `entitlement-source` is `named-value`. A new full sync supplies switch evidence for 24 hours. |
 | Log routing or policy settings | API Management diagnostics or policy blades | The relevant §11 diagnostics check | Diagnostic results change only after log routing or policy changes. |
 
 

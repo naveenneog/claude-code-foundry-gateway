@@ -154,6 +154,7 @@ function Get-ClaudeFlowDiscovery {
         gateway = $gateway
         addressRecovery = $recovery
         Region = $(if ($region) { $region } else { $null })
+        # The Entitlement step reads entitlement-projection-prefix itself when it switches (ADR-0051).
         comparison = [pscustomobject]@{ status = $status; differences = @($differences); reason = $reason }
     }
 }

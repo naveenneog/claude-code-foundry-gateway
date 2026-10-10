@@ -57,19 +57,14 @@ param(
     [string]$ExportGatewayPath
 )
 
-# The groups recorded for this gateway, then the default names. A fixed default compared a gateway
-# installed with other group names against the tenant's claude-code-* groups.
-if (-not $StandardGroup) { $StandardGroup = [string](& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') StandardGroup -ForApimName $ApimName 3>$null) }
-if (-not $PremiumGroup) { $PremiumGroup = [string](& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') PremiumGroup -ForApimName $ApimName 3>$null) }
-if (-not $StandardGroup) { $StandardGroup = 'claude-code-standard' }
-if (-not $PremiumGroup) { $PremiumGroup = 'claude-code-premium' }
-
 $ErrorActionPreference = 'Stop'
 
 # The same membership read the sync uses. Sharing it is the point: a comparison
 # that reads the directory differently from the writer reports its own bugs as
 # drift.
+. (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeGraphMembership.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeEntitlementGroups.ps1')
 
 function Get-ListOids {
     param([string]$Id)
@@ -101,8 +96,9 @@ Write-Host 'Entitlement: gateway versus directory' -ForegroundColor Cyan
 Write-Host "  APIM : $ApimName ($ResourceGroup)"
 
 # Side one: what the gateway is enforcing right now.
-$gwPremium  = Get-ListOids 'allow-premium'
-$gwStandard = Get-ListOids 'allow-standard'
+# @() keeps a one-element or empty list an array; unrolled, the lists below concatenated into one string.
+$gwPremium  = @(Get-ListOids 'allow-premium')
+$gwStandard = @(Get-ListOids 'allow-standard')
 
 if ($ExportGatewayPath) {
     . (Join-Path $PSScriptRoot 'ClaudeBusinessUnit.ps1')
@@ -123,8 +119,14 @@ if ($ExportGatewayPath) {
     Write-Host "  Gateway decisions written to $full" -ForegroundColor DarkGray
 }
 
-# Side two: what the directory says now.
 $token = Get-GraphToken
+$groupResolution = Resolve-ClaudeEntitlementGroupsForSync -ResourceGroup $ResourceGroup -ApimName $ApimName -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup `
+    -GetNamedValue { param($Id) Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id $Id -FailOnError } `
+    -FindGroup { param($Value) Get-ClaudeGraphGroup -GroupName $Value -Token $token }
+$StandardGroup = [string]$groupResolution.Standard.Argument
+$PremiumGroup = [string]$groupResolution.Premium.Argument
+
+# Side two: what the directory says now.
 $dirPremiumM  = @(Get-GroupMemberOids -GroupName $PremiumGroup  -Token $token)
 $dirStandardM = @(Get-GroupMemberOids -GroupName $StandardGroup -Token $token)
 $dirPremium   = @($dirPremiumM  | ForEach-Object { $_.Oid })

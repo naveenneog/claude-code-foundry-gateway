@@ -13,8 +13,24 @@ Select the subscription, gateway and workspace with
 [Operations](OPERATIONS.md#1-select-the-gateway-and-workspace). Run from the
 repository root. If your tier groups have nondefault names, pass
 `-StandardGroup` and `-PremiumGroup` to the membership/sync commands.
+## Quickstart
+
+The commands run from the repository root in PowerShell 7. The deployment record supplies the gateway target, and `developer@contoso.com` is the selected Entra account for the pilot.
+
+```powershell
+$gateway = Get-Content .\onboarding\claude-gateway.json -Raw | ConvertFrom-Json
+$rg = $gateway.resourceGroup
+$apim = $gateway.apimName
+.\scripts\Set-ClaudeDeveloper.ps1 -ResourceGroup $rg -ApimName $apim -User 'developer@contoso.com' -Tier standard -Sync
+```
+
+**Expected result:** the developer is added to the tier group and the active store is published. A fresh request from that account is the separate access verification step. The generated handover remains separate from entitlement ([Developer setup](../DEVELOPER.md#quickstart)).
 
 ## Find the values before changing membership
+
+<details>
+
+<summary>Gateway, group, user and unit lookup sources</summary>
 
 | Value | Portal source | CLI lookup |
 |---|---|---|
@@ -32,9 +48,15 @@ new similarly named group as a workaround.
 
 ---
 
+</details>
+
 ## How entitlement actually works
 
-Understanding this makes every operation below obvious.
+<details>
+
+<summary>Group sync, allowlists and projection store behavior</summary>
+
+This section identifies which store receives published membership changes.
 
 ```text
 Entra group  ──(Sync-ClaudeAccess.ps1)──▶  APIM named value  ──▶  policy check
@@ -47,11 +69,12 @@ The policy compares the `oid` claim in the caller's token against the
 object ids**, not group references — the gateway never calls Graph at request
 time.
 
-This section describes `entitlement-source=named-value`, the default.
-After a [projection migration](SCALE.md#the-move-itself-step-by-step), group
-changes must be published by the projection writer instead. `-Sync` on
-`Set-ClaudeDeveloper.ps1` invokes the named-value writer; it does not refresh
-Cosmos leases or records.
+The list checks in this section apply when `entitlement-source` is `named-value`.
+The installer defaults to the projection; `Set-ClaudeDeveloper.ps1 -Sync` invokes
+the active-store writer. Projection publication and request verification are in
+the [workbook](PROJECTION-WORKBOOK.md#step-5-verify-requests)
+([ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md),
+[ADR-0052](adr/0052-cosmos-default-installer.md)).
 
 Three consequences:
 
@@ -63,7 +86,13 @@ Three consequences:
 
 ---
 
+</details>
+
 ## 1. Add a developer
+
+<details>
+
+<summary>Membership command, sync behavior and guest resolution</summary>
 
 One command. It edits the **Entra group**, because that is the durable change —
 `Sync-ClaudeAccess.ps1` rebuilds `allow-standard` and `allow-premium` from group
@@ -71,11 +100,11 @@ membership every time it runs, so a developer added straight to a named value
 works until the next sync and then silently stops.
 
 ```powershell
-./scripts/Set-ClaudeDeveloper.ps1 -User amara@contoso.com -Tier standard -Sync
-./scripts/Set-ClaudeDeveloper.ps1 -User amara@contoso.com -Tier premium -BusinessUnit sales -Sync
-./scripts/Set-ClaudeDeveloper.ps1 -User amara@contoso.com -Remove -Sync
-aum developer add amara@contoso.com --tier standard --unit sales --apply
-aum developer remove amara@contoso.com --apply --confirm amara@contoso.com
+./scripts/Set-ClaudeDeveloper.ps1 -User developer@contoso.com -Tier standard -Sync
+./scripts/Set-ClaudeDeveloper.ps1 -User developer@contoso.com -Tier premium -BusinessUnit sales -Sync
+./scripts/Set-ClaudeDeveloper.ps1 -User developer@contoso.com -Remove -Sync
+aum developer add developer@contoso.com --tier standard --unit sales --apply
+aum developer remove developer@contoso.com --apply --confirm developer@contoso.com
 ```
 
 `-Sync` publishes to the gateway as well. Without it the change is in the
@@ -96,7 +125,7 @@ nested group. Do not combine `-Remove` with `-BusinessUnit`: use the removal
 command shown, then verify every effective membership path.
 
 Guests work by the address you invited them with. A guest's UPN is not their
-email — in this tenant `amara@contoso.com` is stored as
+email — in this tenant `developer@contoso.com` is stored as
 `amara_contoso.com#EXT#@contoso.onmicrosoft.com` — and the script tries the
 object id, the mail attribute and the UPN in turn.
 AUM uses the same exact-resolution order and also searches `otherMails` for
@@ -106,7 +135,13 @@ The sections below cover the same job done by hand, and the portal walkthrough.
 **Portal:** Entra ID > Groups > the relevant tier/team/unit > Members. Add or
 remove the person, then perform Step 3's publication and Step 4's verification.
 
+</details>
+
 ## 1a. Add a developer by hand
+
+<details>
+
+<summary>Object IDs, group membership, sync and handover</summary>
 
 ### Step 1 — find their object id
 
@@ -246,7 +281,13 @@ access. Access is group membership.
 
 ---
 
+</details>
+
 ## 2. UI walkthrough — adding a member in the portal
+
+<details>
+
+<summary>Portal group membership, sync and delegation steps</summary>
 
 Two portals work. **Microsoft Entra admin center** (`entra.microsoft.com`) is
 the current home for identity; the Azure portal blade is identical underneath.
@@ -279,7 +320,9 @@ separate from this directory view.
 People on a directory page are pseudonymised from the group's own member list read at
 capture time (`redaction.people` in the capture spec); their initials are hidden.
 
-### Then run the sync — this is the step people miss
+<a id="then-run-the-sync--this-is-the-step-people-miss"></a>
+
+### Then publish the group change with the sync
 
 The portal grants *group membership*. The gateway reads an **allowlist of
 object ids** that is refreshed by the sync, so until it runs the developer still
@@ -344,7 +387,13 @@ out of the loop entirely.
 
 ---
 
+</details>
+
 ## 3. Common variations
+
+<details>
+
+<summary>Teams, nested groups, contractors and CI identities</summary>
 
 | Situation | What to do |
 |-----------|-----------|
@@ -356,7 +405,13 @@ out of the loop entirely.
 
 ---
 
+</details>
+
 ## 4. Change a developer's tier
+
+<details>
+
+<summary>Person tier moves, tier budgets and model lists</summary>
 
 Two different things get called "changing the tier". Be clear which one you mean.
 
@@ -477,7 +532,13 @@ Entra group, and a branch in the policy's tier lookup. The policy structure is i
 
 ---
 
+</details>
+
 ## 5. Revoke access
+
+<details>
+
+<summary>Removal, publication, token lifetime and bypass audit</summary>
 
 ```powershell
 ./scripts/Set-ClaudeDeveloper.ps1 -User developer@contoso.com -Remove -Sync `
@@ -509,7 +570,13 @@ and run the sync as well.
 
 ---
 
+</details>
+
 ## 6. Offboarding checklist
+
+<details>
+
+<summary>Membership, store publication and refusal checklist</summary>
 
 - [ ] Removed from both `claude-code-*` tier groups
 - [ ] Removed from every business-unit and team group
@@ -523,7 +590,7 @@ and run the sync as well.
 ---
 ---
 
-# Part B — Developer
+<a name="part-b--developer"></a>\n\n**Part B — Developer.**
 
 Moved to **[DEVELOPER.md](../DEVELOPER.md)**, at the root of the repository.
 
@@ -532,7 +599,13 @@ separate page rather than the second half of this one.
 
 Send them that link. Nothing else on this page applies to them.
 
+</details>
+
 ## 7. Checking a machine before you promise a date
+
+<details>
+
+<summary>Preflight checks for tooling, identity, network and access</summary>
 
 A developer who is in the right group, on the right tenant, with the right
 role can still fail — because their machine sits behind a proxy that breaks
@@ -595,3 +668,11 @@ Both paths use the same shape, distinguished by `mode`:
 > A file written before `mode` existed still works — the mode is inferred from
 > whether it carries `gatewayUrl` or `foundryResource`, and the inference is
 > printed. Reissue the file to remove the warning.
+
+</details>
+
+## Next
+
+- [Developer setup](../DEVELOPER.md) covers workstation configuration.
+- [Projection workbook](PROJECTION-WORKBOOK.md#step-5-verify-requests) covers projection request verification.
+- [Operations](OPERATIONS.md) covers routine health checks.

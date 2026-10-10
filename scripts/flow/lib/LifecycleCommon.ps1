@@ -26,6 +26,67 @@ function global:Get-ClaudeFlowLifecycleStringHash {
     finally { $sha.Dispose() }
 }
 
+function global:ConvertTo-ClaudeFlowLifecycleCanonicalXmlDocument {
+    # Insignificant whitespace is dropped and line endings inside attribute and text values are made uniform, so a
+    # checkout's line endings do not change the canonical form.
+    param([Parameter(Mandatory = $true)][string]$XmlText, [switch]$DecodeStoredText)
+    $doc = New-Object System.Xml.XmlDocument
+    $doc.PreserveWhitespace = $false
+    $doc.LoadXml($XmlText)
+    foreach ($node in @(@($doc.SelectNodes('//@*')) + @($doc.SelectNodes('//text()')))) {
+        $value = [string]$node.Value
+        if ($DecodeStoredText) { $value = ConvertFrom-ClaudeFlowLifecycleXmlEntities -Text $value }
+        $node.Value = $value.Replace("`r`n", "`n").Replace("`r", "`n")
+    }
+    return $doc
+}
+
+function global:ConvertFrom-ClaudeFlowLifecycleXmlEntities {
+    # One pass over the five predefined XML entities and character references: '&amp;lt;' becomes '&lt;', not '<'.
+    # A reference that is not a Unicode scalar value (above 0x10FFFF, a surrogate, or too long) is left as written.
+    param([AllowEmptyString()][string]$Text)
+    return [regex]::Replace($Text, '&(lt|gt|quot|apos|amp|#x[0-9A-Fa-f]{1,6}|#[0-9]{1,7});', {
+            param($match)
+            $name = $match.Groups[1].Value
+            if ($name -eq 'lt') { return '<' }
+            if ($name -eq 'gt') { return '>' }
+            if ($name -eq 'quot') { return '"' }
+            if ($name -eq 'apos') { return "'" }
+            if ($name -eq 'amp') { return '&' }
+            $codePoint = if ($name.StartsWith('#x')) { [Convert]::ToInt32($name.Substring(2), 16) } else { [int]$name.Substring(1) }
+            if ($codePoint -gt 0x10FFFF -or ($codePoint -ge 0xD800 -and $codePoint -le 0xDFFF)) { return $match.Value }
+            return [char]::ConvertFromUtf32($codePoint)
+        })
+}
+
+function global:Get-ClaudeFlowLifecycleCanonicalXml {
+    param([AllowEmptyString()][string]$XmlText)
+    if ([string]::IsNullOrWhiteSpace($XmlText)) { return '' }
+    return (ConvertTo-ClaudeFlowLifecycleCanonicalXmlDocument -XmlText $XmlText).OuterXml
+}
+
+function global:Get-ClaudeFlowLifecycleCanonicalXmlHash {
+    param([AllowEmptyString()][string]$XmlText)
+    if ([string]::IsNullOrWhiteSpace($XmlText)) { return '' }
+    return Get-ClaudeFlowLifecycleStringHash -Text (Get-ClaudeFlowLifecycleCanonicalXml -XmlText $XmlText)
+}
+
+function global:Get-ClaudeFlowLifecycleStoredXmlHash {
+    # API Management keeps the text of a fragment written with format=rawxml as it was sent, entity references
+    # included, and encodes that text once more when it returns format=xml (P102 probe, 2026-10-07; ADR-0055).
+    # Decoding the read-back once more gives the values the template parses to, so both hash alike.
+    param([AllowEmptyString()][string]$XmlText)
+    if ([string]::IsNullOrWhiteSpace($XmlText)) { return '' }
+    return Get-ClaudeFlowLifecycleStringHash -Text (ConvertTo-ClaudeFlowLifecycleCanonicalXmlDocument -XmlText $XmlText -DecodeStoredText).OuterXml
+}
+
+function global:New-ClaudeFlowLifecycleArmHeaders {
+    param([Parameter(Mandatory = $true)][string]$Token)
+    $headers = @{ 'Content-Type' = 'application/json' }
+    $headers['Authorization'] = 'Bearer ' + $Token.Trim()
+    return $headers
+}
+
 function global:Get-ClaudeFlowLifecyclePolicyNamedValueReferences {
     param([string]$PolicyPath = (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'infra\policy.xml'))
     if (-not (Test-Path -LiteralPath $PolicyPath)) { throw "Policy file '$PolicyPath' does not exist." }
@@ -34,6 +95,28 @@ function global:Get-ClaudeFlowLifecyclePolicyNamedValueReferences {
     return @(Sort-ClaudeFlowOrdinal -InputObject @([regex]::Matches($text, '\{\{([^}]+)\}\}') |
         ForEach-Object { $_.Groups[1].Value.Trim() } |
         Where-Object { $_ }) -Unique)
+}
+
+function global:Get-ClaudeFlowLifecyclePolicyFragmentIds {
+    param([string]$PolicyPath = (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'infra\policy.xml'))
+    if (-not (Test-Path -LiteralPath $PolicyPath)) { throw "Policy file '$PolicyPath' does not exist." }
+    $text = [IO.File]::ReadAllText($PolicyPath)
+    return @(Sort-ClaudeFlowOrdinal -InputObject @([regex]::Matches($text, '<include-fragment\s+fragment-id="([^"]+)"\s*/?>') |
+        ForEach-Object { $_.Groups[1].Value.Trim() } |
+        Where-Object { $_ }) -Unique)
+}
+
+function global:Get-ClaudeFlowLifecyclePolicyAndFragmentNamedValueReferences {
+    param([string]$PolicyPath = (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'infra\policy.xml'))
+    $root = Get-ClaudeFlowLifecycleRepoRoot
+    $references = [Collections.Generic.List[string]]::new()
+    foreach ($name in @(Get-ClaudeFlowLifecyclePolicyNamedValueReferences -PolicyPath $PolicyPath)) { $references.Add($name) }
+    foreach ($fragmentId in @(Get-ClaudeFlowLifecyclePolicyFragmentIds -PolicyPath $PolicyPath)) {
+        $fragmentPath = Join-Path (Join-Path $root 'infra') "$fragmentId.xml"
+        if (-not (Test-Path -LiteralPath $fragmentPath)) { throw "Policy fragment '$fragmentId' is included by '$PolicyPath' but '$fragmentPath' does not exist." }
+        foreach ($name in @(Get-ClaudeFlowLifecyclePolicyNamedValueReferences -PolicyPath $fragmentPath)) { $references.Add($name) }
+    }
+    return @(Sort-ClaudeFlowOrdinal -InputObject @($references) -Unique)
 }
 
 function global:Get-ClaudeFlowLifecycleTemplateNamedValueDefaults {
@@ -55,6 +138,11 @@ function global:Get-ClaudeFlowLifecycleTemplateNamedValueDefaults {
             '^entitlement-resolver-audience$' { 'https://resolver-not-deployed.invalid'; break }
             '^entitlement-cache-seconds$' { '3600'; break }
             '^external-idp-extra-audience$' { 'urn:disabled:claude-extra-audience'; break }
+            '^content-safety-mode$' { 'off'; break }
+            '^content-safety-endpoint$' { 'https://content-safety-off.invalid'; break }
+            '^content-safety-threshold$' { '2'; break }
+            '^content-safety-timeout-seconds$' { '10'; break }
+            '^content-safety-truncate-mode$' { 'newest'; break }
             '^tpm-standard$' { '20000'; break }
             '^quota-standard$' { '500000'; break }
             '^tpm-premium$' { '80000'; break }
@@ -115,13 +203,38 @@ function global:Import-ClaudeFlowLifecycleDiscovery {
 }
 
 function global:Get-ClaudeFlowLifecycleLiveDiscovery {
-    param([string]$ResourceGroup, [string]$ApimName, [string]$ApiId = 'claude-foundry')
+    # -SubscriptionId: the decision record's subscription, passed only as an ID (az.cmd re-reads other text), so the
+    # gateway is read where the record says it is, with a token for that subscription's tenant, rather than in the
+    # Azure CLI's current subscription.
+    param([string]$ResourceGroup, [string]$ApimName, [string]$ApiId = 'claude-foundry', [string]$SubscriptionId)
     if (-not $ResourceGroup -or -not $ApimName) { throw 'ResourceGroup and ApimName are required for live discovery.' }
-    $apim = az apim show -g $ResourceGroup -n $ApimName -o json | ConvertFrom-Json
-    $nvs = az apim nv list -g $ResourceGroup --service-name $ApimName -o json | ConvertFrom-Json
-    $token = az account get-access-token --resource https://management.azure.com --query accessToken -o tsv
+    $scope = if ($SubscriptionId -match '^[0-9A-Fa-f]{8}-([0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12}$') { @('--subscription', $SubscriptionId) } else { @() }
+    $apim = az apim show -g $ResourceGroup -n $ApimName @scope -o json | ConvertFrom-Json
+    $nvs = az apim nv list -g $ResourceGroup --service-name $ApimName @scope -o json | ConvertFrom-Json
+    $token = az account get-access-token --resource https://management.azure.com @scope --query accessToken -o tsv
     $policyUri = "https://management.azure.com$($apim.id)/apis/$ApiId/policies/policy?api-version=2024-05-01&format=rawxml"
     $policy = Invoke-RestMethod -Method Get -Uri $policyUri -Headers @{ Authorization = "Bearer $token" }
+    $fragmentUri = "https://management.azure.com$($apim.id)/policyFragments?api-version=2024-05-01"
+    $fragments = @()
+    try {
+        $fragmentResult = Invoke-RestMethod -Method Get -Uri $fragmentUri -Headers @{ Authorization = "Bearer $token" }
+        $fragmentNames = @($fragmentResult.value | ForEach-Object { if ($_.name) { [string]$_.name } elseif ($_.id -match '/policyFragments/([^/]+)$') { $Matches[1] } } | Where-Object { $_ })
+        $fragments = @(foreach ($fragmentName in $fragmentNames) {
+                $rawFragmentUri = "https://management.azure.com$($apim.id)/policyFragments/$fragmentName`?format=xml&api-version=2024-05-01"
+                try {
+                    $rawFragment = Invoke-RestMethod -Method Get -Uri $rawFragmentUri -Headers (New-ClaudeFlowLifecycleArmHeaders -Token $token)
+                    $value = [string]$rawFragment.properties.value
+                    [pscustomobject]@{ name = $fragmentName; value = $value; canonicalHash = Get-ClaudeFlowLifecycleStoredXmlHash -XmlText $value }
+                }
+                catch {
+                    $readError = $_.Exception.Message
+                    Write-Warning "The policy fragment '$fragmentName' could not be read ($readError). The update plan treats it as not current and writes the release content."
+                    [pscustomobject]@{ name = $fragmentName; value = ''; canonicalHash = ''; error = $readError }
+                }
+            })
+    } catch { $fragments = @() }
+    $prefixValue = @($nvs | Where-Object { $_.name -eq 'entitlement-projection-prefix' } | Select-Object -First 1)
+    $projectionPrefix = if ($prefixValue) { if ($prefixValue.PSObject.Properties.Name -contains 'properties') { [string]$prefixValue.properties.value } else { [string]$prefixValue.value } } else { '' }
     [pscustomobject]@{
         subscriptionId = (($apim.id -split '/')[2])
         resourceGroup = $ResourceGroup
@@ -130,7 +243,10 @@ function global:Get-ClaudeFlowLifecycleLiveDiscovery {
         sku = $apim.sku.name
         capacity = $apim.sku.capacity
         apimId = $apim.id
+        projectionPrefix = $projectionPrefix
+        projectionPrefixProblem = $(if ($projectionPrefix) { $null } else { 'entitlement-projection-prefix is missing. Remedy: deploy the projection with scripts/Deploy-ClaudeProjection.ps1.' })
         policy = $policy.properties.value
+        policyFragments = $fragments
         # az apim nv list returns flattened objects; ARM returns them under properties.
         namedValues = @($nvs | Where-Object {
                 $isSecret = if ($_.PSObject.Properties.Name -contains 'properties' -and $_.properties) { $_.properties.secret } else { $_.secret }
@@ -165,6 +281,27 @@ function global:Get-ClaudeFlowLifecycleApimMonthlyCost {
         return New-ClaudeFlowCost -Item "API Management $Sku ($Units unit)" -Source 'Azure Retail Prices API' -UnknownReason "the Azure Retail Prices API could not be reached ($unreachable); rerun the plan to price it"
     }
     return New-ClaudeFlowCost -Item "API Management $Sku ($Units unit)" -Source 'Azure Retail Prices API' -UnknownReason "no retail meter found for $Sku in $Region"
+}
+
+function global:Initialize-ClaudeFlowLifecycleSnapshotPath {
+    # Names the snapshot a change step's write gate takes (Assert-ClaudeFlowLifecycleSnapshotBeforeWrite). Each step's
+    # Initialize-ClaudeFlowStep calls it; Start-ClaudeGateway.ps1 runs that after approval and before the write, so a
+    # step that is refused before its write leaves no snapshot.
+    param([Parameter(Mandatory = $true)]$Plan, [Parameter(Mandatory = $true)][ValidatePattern('^[a-z][a-z-]*$')][string]$Step)
+    if ((Test-ClaudeFlowPlanIsNoop $Plan) -or $Plan.Data.SnapshotPath) { return }
+    $name = 'before-{0}-{1}-{2}.json' -f $Step, $Plan.Data.Target.ApimName, [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ')
+    $Plan.Data.SnapshotPath = Join-Path (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'backups') $name
+    $Plan.Data.SnapshotTaken = $false
+}
+
+function global:Sync-ClaudeFlowLifecycleSnapshotTaken {
+    # The update's migrations share one snapshot path. The first that writes takes the backup; it then counts for
+    # every plan with that path, so a later migration does not overwrite the state from before the update.
+    param([object[]]$Plans = @())
+    $taken = @($Plans | Where-Object { $_ -and $_.Data -is [hashtable] -and $_.Data.SnapshotTaken -eq $true -and $_.Data.SnapshotPath } | ForEach-Object { [string]$_.Data.SnapshotPath })
+    foreach ($plan in $Plans) {
+        if ($plan -and $plan.Data -is [hashtable] -and $plan.Data.SnapshotPath -and $taken -contains [string]$plan.Data.SnapshotPath) { $plan.Data.SnapshotTaken = $true }
+    }
 }
 
 function global:Assert-ClaudeFlowLifecycleSnapshotBeforeWrite {
