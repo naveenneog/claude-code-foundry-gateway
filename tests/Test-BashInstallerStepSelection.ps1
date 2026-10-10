@@ -147,7 +147,7 @@ try {
         $pw = New-P91World; $pw.inject.groupCreateFail = @('claude-code-premium')
         $psScenario = New-P91Scenario -Name 'parity' -Scratch $psScratch -Template $psTemplate -World $pw
         $psProgress = Join-Path $psScenario.Dir 'progress.ndjson'
-        $psRun = New-P91Run $psScenario -Arguments @("-SubscriptionId '$sub'", "-FoundryAccount 'ai-p91'", "-FoundryResourceGroup 'rg-ai-p91'", "-EntitlementStore 'named-value'", "-AuthMode 'interactive'",
+        $psRun = New-P91Run $psScenario -Arguments @("-SubscriptionId '$sub'", "-FoundryAccount 'ai-p91'", "-FoundryResourceGroup 'rg-ai-p91'", "-EntitlementStore 'named-value'", '-DeveloperCount 25', "-AuthMode 'interactive'",
             "-DesktopSignInKind 'helper-script'", "-AddressMode 'azure'", '-SkipFinOpsOffer', "-ResourceGroup 'rg-p91'", "-Location 'eastus2'", "-NamePrefix 'p91gw'", "-PublisherEmail 'ops@contoso.com'",
             "-Sku 'BasicV2'", "-StandardModels 'claude-sonnet-5'", "-PremiumModels 'claude-sonnet-5'", '-TpmStandard 20000', '-QuotaStandard 500000', '-TpmPremium 80000', '-QuotaPremium 5000000',
             '-QuotaOrg 100000000', '-CallsPerMinute 120', '-Yes', "-ProgressPath '$psProgress'")

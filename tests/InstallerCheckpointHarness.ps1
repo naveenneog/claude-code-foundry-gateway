@@ -80,7 +80,7 @@ function New-P91World {
         $world.resourceGroups['rg-p91'] = 'eastus2'
         $world.apims['apim-p91reuse'] = [ordered]@{ rg = 'rg-p91'; sku = 'StandardV2'; location = 'East US 2'; publisherEmail = 'ops@contoso.com'; identity = $IdentityType
             principalId = '00000000-0000-4000-8000-0000000000c2'; apis = @()
-            namedValues = [ordered]@{ 'entitlement-cache-seconds' = '900'; 'allow-standard' = ',00000000-0000-4000-8000-0000000000d1,'; 'allow-premium' = ',,'; 'quota-overrides' = ',,'; 'bu-registry' = ',,'; 'bu-members' = ',,'; 'bu-parents' = ',,'; 'bu-modes' = ',,' } }
+            namedValues = [ordered]@{ 'entitlement-cache-seconds' = '900'; 'entitlement-source' = 'named-value'; 'allow-standard' = ',00000000-0000-4000-8000-0000000000d1,'; 'allow-premium' = ',,'; 'quota-overrides' = ',,'; 'bu-registry' = ',,'; 'bu-members' = ',,'; 'bu-parents' = ',,'; 'bu-modes' = ',,' } }
     }
     return $world
 }

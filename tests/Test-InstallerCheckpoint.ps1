@@ -26,7 +26,7 @@ $sleeper = $null
 $outsideRoot = Join-Path ([IO.Path]::GetPathRoot([Environment]::GetFolderPath('UserProfile'))) ('p91-outside-profile-' + [guid]::NewGuid().ToString('N'))
 
 $sub = $script:P91Subscription
-$common = @("-SubscriptionId '$sub'", "-FoundryAccount 'ai-p91'", "-FoundryResourceGroup 'rg-ai-p91'", "-EntitlementStore 'named-value'",
+$common = @("-SubscriptionId '$sub'", "-FoundryAccount 'ai-p91'", "-FoundryResourceGroup 'rg-ai-p91'", "-EntitlementStore 'named-value'", '-DeveloperCount 25',
     "-AuthMode 'interactive'", "-DesktopSignInKind 'helper-script'", "-AddressMode 'azure'", '-SkipFinOpsOffer')
 $newGateway = $common + @("-ResourceGroup 'rg-p91'", "-Location 'eastus2'", "-NamePrefix 'p91gw'", "-PublisherEmail 'ops@contoso.com'", "-Sku 'BasicV2'")
 $reused = $common + @("-ResourceGroup 'rg-p91'", "-ExistingApimName 'apim-p91reuse'")
@@ -236,12 +236,11 @@ try {
         top = 'schema', 'schemaVersion', 'runId', 'installer', 'installerFingerprint', 'installerCommit', 'checkout', 'createdUtc', 'updatedUtc', 'binding', 'answers', 'steps'
         binding = 'tenantId', 'subscriptionId', 'resourceGroup', 'apimName', 'namePrefix', 'reusedApim'
         step = 'id', 'state', 'startedUtc', 'completedUtc', 'inputHash', 'receipt'
-        answers = 'SubscriptionId', 'FoundryAccount', 'FoundryResourceGroup', 'ResourceGroup', 'Location', 'NamePrefix', 'PublisherEmail', 'Sku', 'AddressMode', 'AddressHostname',
+        answers = 'SubscriptionId', 'FoundryAccount', 'FoundryResourceGroup', 'ResourceGroup', 'Location', 'NamePrefix', 'PublisherEmail', 'Sku', 'DeveloperCount', 'AddressMode', 'AddressHostname',
             'AddressCertificateSource', 'AddressKeyVaultCertificateId', 'AddressPfxPath', 'AddressDnsZoneResourceId', 'AddressDnsMode', 'AddressReplaceHostname', 'ExistingApimName',
-            'EntitlementStore', 'ResolverInboundAccess', 'DeployProjection', 'ProjectionReconcilerResourceId', 'ProjectionRenewalImageDigest', 'ProjectionRenewalEntryPoint',
-            'ProjectionRenewalActionGroupResourceId', 'ProjectionResolverAppId', 'TpmStandard', 'QuotaStandard', 'TpmPremium',
+            'EntitlementStore', 'ResolverInboundAccess', 'DeployProjection', 'DeploySyncJob', 'ProjectionSyncInterval', 'ProjectionResolverAppId', 'TpmStandard', 'QuotaStandard', 'TpmPremium',
             'QuotaPremium', 'QuotaOrg', 'CallsPerMinute', 'StandardGroup', 'PremiumGroup', 'StandardModels', 'PremiumModels', 'AuthMode', 'DesktopSignInKind', 'DesktopBearerTokenType',
-            'DesktopEntraClientId', 'DesktopEntraIssuer', 'DesktopEntraScopes', 'DesktopEntraAudience', 'DesktopEntraResource', 'ModelOrganizationName', 'ModelIndustry', 'ModelCountryCode',
+            'DesktopEntraClientId', 'DesktopEntraIssuer', 'DesktopEntraScopes', 'DesktopEntraAudience', 'DesktopEntraResource', 'DeployContentSafety', 'ContentSafetyMode', 'ModelOrganizationName', 'ModelIndustry', 'ModelCountryCode',
             'RevocationWindowSeconds', 'TeamBudgetBehaviour', 'UnassignedDevelopers', 'DeveloperEstimate', 'PendingClaudeDeployment'
     }
     $receiptKeys = @{ 'resource-group' = 'name', 'location', 'origin'; 'gateway-deployment' = 'deployments', 'apimName', 'origin', 'gatewayUrl', 'roleAssignmentId', 'roleOrigin', 'desktopClientId'

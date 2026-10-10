@@ -206,7 +206,7 @@ exit /b 0
     # Two runs, kept apart from the read-only preflight scenarios: the run reads a reused instance, and
     # the instances its menu offers, through the same functions as the preflight (U82).
     $runArgs = @("-SubscriptionId '$sub'", "-FoundryAccount 'ai-p91'", "-FoundryResourceGroup 'rg-ai-p91'", "-EntitlementStore 'named-value'", "-AuthMode 'interactive'",
-        "-DesktopSignInKind 'helper-script'", "-AddressMode 'azure'", '-SkipFinOpsOffer', "-ResourceGroup 'rg-p91'", "-StandardModels 'claude-sonnet-5'",
+        "-DesktopSignInKind 'helper-script'", "-AddressMode 'azure'", '-SkipFinOpsOffer', "-ResourceGroup 'rg-p91'", '-DeveloperCount 25', "-StandardModels 'claude-sonnet-5'",
         "-PremiumModels 'claude-opus-5','claude-sonnet-5'", '-TpmStandard 20000', '-QuotaStandard 500000', '-TpmPremium 80000', '-QuotaPremium 5000000', '-QuotaOrg 100000000', '-CallsPerMinute 120', '-Yes')
     $runIdentity = New-P91Run (New-P91Scenario -Name 'run-no-identity' -Scratch $scratch -Template $template -World (New-P91World -ReusedGateway -IdentityType 'None')) -Arguments ($runArgs + "-ExistingApimName 'apim-p91reuse'")
     $w = New-P91World; $w.inject.readErrors = @([ordered]@{ match = 'apim list*'; text = 'ERROR: (AuthorizationFailed) The client does not have authorization to perform action Microsoft.ApiManagement/service/read.' })

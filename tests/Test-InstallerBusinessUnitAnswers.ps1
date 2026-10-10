@@ -21,7 +21,7 @@ New-Item -ItemType Directory -Force -Path $scratch | Out-Null
 $sub = $script:P91Subscription
 $common = @("-SubscriptionId '$sub'", "-FoundryAccount 'ai-p91'", "-FoundryResourceGroup 'rg-ai-p91'", "-EntitlementStore 'named-value'", "-AuthMode 'interactive'",
     "-DesktopSignInKind 'helper-script'", "-AddressMode 'azure'", '-SkipFinOpsOffer', "-ResourceGroup 'rg-p91'", "-Location 'eastus2'", "-NamePrefix 'p91gw'",
-    "-PublisherEmail 'ops@contoso.com'", "-Sku 'BasicV2'", "-StandardModels 'claude-sonnet-5'", "-PremiumModels 'claude-opus-5','claude-sonnet-5'", '-TpmStandard 20000',
+    "-PublisherEmail 'ops@contoso.com'", "-Sku 'BasicV2'", '-DeveloperCount 25', "-StandardModels 'claude-sonnet-5'", "-PremiumModels 'claude-opus-5','claude-sonnet-5'", '-TpmStandard 20000',
     '-QuotaStandard 500000', '-TpmPremium 80000', '-QuotaPremium 5000000', '-QuotaOrg 100000000', '-CallsPerMinute 120', '-Yes')
 # Answer order puts a team first: the installer orders units before teams itself.
 $tree = @(
@@ -57,7 +57,7 @@ try {
     # unit's group by the name rule of ADR-0046 decision 11. az ad group show --group falls back to a single
     # prefix match, so a lone claude-bu-platform-admins was taken for claude-bu-platform.
     $prompted = @("-SubscriptionId '$sub'", "-FoundryAccount 'ai-p91'", "-FoundryResourceGroup 'rg-ai-p91'", "-EntitlementStore 'named-value'", "-AuthMode 'interactive'",
-        "-DesktopSignInKind 'helper-script'", "-AddressMode 'azure'", '-SkipFinOpsOffer', "-ResourceGroup 'rg-p91'", "-ExistingApimName 'apim-p91reuse'", "-StandardModels 'claude-sonnet-5'",
+        "-DesktopSignInKind 'helper-script'", "-AddressMode 'azure'", '-SkipFinOpsOffer', "-ResourceGroup 'rg-p91'", "-ExistingApimName 'apim-p91reuse'", '-DeveloperCount 25', "-StandardModels 'claude-sonnet-5'",
         "-PremiumModels 'claude-opus-5','claude-sonnet-5'", '-TpmStandard 20000', '-QuotaStandard 500000', '-TpmPremium 80000', '-QuotaPremium 5000000', '-QuotaOrg 100000000', '-CallsPerMinute 120')
     $adminsId = '00000000-0000-4000-8000-0000000003a1'
     $w = New-P91World -ReusedGateway; $w.groups[$adminsId] = 'claude-bu-platform-admins'; $w.inject.bu = 'refuse:zzz'

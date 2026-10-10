@@ -10,13 +10,12 @@ $script:ClaudeInstallSteps = [ordered]@{
     'company-address' = 'Company address'; 'entra-groups' = 'Entra groups'; 'sync' = 'Sync entitlement'; 'projection' = 'Projection deployment'
     'business-units' = 'Business units'; 'onboarding-package' = 'Onboarding package'; 'verify' = 'Verification'
 }
-$script:ClaudeInstallParameterAnswers = @('SubscriptionId', 'FoundryAccount', 'FoundryResourceGroup', 'ResourceGroup', 'Location', 'NamePrefix', 'PublisherEmail', 'Sku',
+$script:ClaudeInstallParameterAnswers = @('SubscriptionId', 'FoundryAccount', 'FoundryResourceGroup', 'ResourceGroup', 'Location', 'NamePrefix', 'PublisherEmail', 'Sku', 'DeveloperCount',
     'AddressMode', 'AddressHostname', 'AddressCertificateSource', 'AddressKeyVaultCertificateId', 'AddressPfxPath', 'AddressDnsZoneResourceId', 'AddressDnsMode',
-    'AddressReplaceHostname', 'ExistingApimName', 'EntitlementStore', 'ResolverInboundAccess', 'DeployProjection', 'ProjectionReconcilerResourceId', 'ProjectionRenewalImageDigest',
-    'ProjectionRenewalEntryPoint', 'ProjectionRenewalActionGroupResourceId', 'ProjectionResolverAppId',
+    'AddressReplaceHostname', 'ExistingApimName', 'EntitlementStore', 'ResolverInboundAccess', 'DeployProjection', 'DeploySyncJob', 'ProjectionSyncInterval', 'ProjectionResolverAppId',
     'TpmStandard', 'QuotaStandard', 'TpmPremium', 'QuotaPremium', 'QuotaOrg', 'CallsPerMinute', 'StandardGroup', 'PremiumGroup', 'StandardModels', 'PremiumModels',
     'AuthMode', 'DesktopSignInKind', 'DesktopBearerTokenType', 'DesktopEntraClientId', 'DesktopEntraIssuer', 'DesktopEntraScopes', 'DesktopEntraAudience',
-    'DesktopEntraResource', 'ModelOrganizationName', 'ModelIndustry', 'ModelCountryCode')
+    'DesktopEntraResource', 'DeployContentSafety', 'ContentSafetyMode', 'ModelOrganizationName', 'ModelIndustry', 'ModelCountryCode')
 $script:ClaudeInstallPromptAnswers = @('RevocationWindowSeconds', 'TeamBudgetBehaviour', 'UnassignedDevelopers', 'DeveloperEstimate', 'PendingClaudeDeployment', 'BusinessUnits')
 $script:ClaudeInstallChoices = @{
     Sku = 'BasicV2', 'StandardV2', 'PremiumV2'; AddressMode = 'azure', 'custom'; AddressCertificateSource = 'KeyVault', 'Pfx'; AddressDnsMode = 'AzureDns', 'External'
@@ -546,9 +545,8 @@ function Get-ClaudeInstallInputHash([string]$Id) {
         'company-address' { @($c.Answers.Keys | Where-Object { $_ -like 'Address*' }) }
         # Every answer the step passes to scripts/Deploy-ClaudeProjection.ps1; the binding fields (resource
         # group, subscription, gateway) are compared by the binding itself (ADR-0046 decision 5, ADR-0047 decision 15).
-        'projection' { 'EntitlementStore', 'ResolverInboundAccess', 'NamePrefix', 'Location', 'Sku', 'ProjectionResolverAppId', 'StandardGroup', 'PremiumGroup',
-            'ProjectionReconcilerResourceId', 'ProjectionRenewalImageDigest', 'ProjectionRenewalEntryPoint', 'ProjectionRenewalActionGroupResourceId' }
-        'gateway-deployment' { @($c.Answers.Keys | Where-Object { $_ -notin 'StandardGroup', 'PremiumGroup', 'AuthMode', 'TeamBudgetBehaviour', 'DeveloperEstimate', 'DeployProjection', 'ProjectionReconcilerResourceId', 'ProjectionResolverAppId', 'ProjectionRenewalImageDigest', 'ProjectionRenewalEntryPoint', 'ProjectionRenewalActionGroupResourceId', 'PendingClaudeDeployment', 'ModelOrganizationName', 'ModelIndustry', 'ModelCountryCode' -and $_ -notlike 'Address*' }) }
+        'projection' { 'EntitlementStore', 'ResolverInboundAccess', 'NamePrefix', 'Location', 'Sku', 'ProjectionResolverAppId', 'StandardGroup', 'PremiumGroup', 'DeploySyncJob', 'ProjectionSyncInterval' }
+        'gateway-deployment' { @($c.Answers.Keys | Where-Object { $_ -notin 'StandardGroup', 'PremiumGroup', 'AuthMode', 'TeamBudgetBehaviour', 'DeveloperEstimate', 'DeployProjection', 'ProjectionResolverAppId', 'DeploySyncJob', 'ProjectionSyncInterval', 'PendingClaudeDeployment', 'ModelOrganizationName', 'ModelIndustry', 'ModelCountryCode' -and $_ -notlike 'Address*' }) }
         default { @() }
     }
     $inputs = [ordered]@{}

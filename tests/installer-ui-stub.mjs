@@ -35,7 +35,7 @@ const realSteps = [
   ['company-address', 'Company address', ['gateway-deployment']],
   ['entra-groups', 'Entra groups', []],
   ['sync', 'Sync entitlement', ['gateway-deployment', 'entra-groups']],
-  ['projection', 'Projection deployment', ['gateway-deployment']],
+  ['projection', 'Projection deployment', ['gateway-deployment', 'sync']],
   ['business-units', 'Business units', ['gateway-deployment']],
   ['onboarding-package', 'Onboarding package', ['gateway-deployment']],
   ['verify', 'Verification', ['gateway-deployment']],

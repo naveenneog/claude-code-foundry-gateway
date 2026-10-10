@@ -43,6 +43,7 @@ function global:Complete-P91Deployment($World, $Deployment) {
     foreach ($nv in 'allow-standard', 'allow-premium', 'quota-overrides', 'bu-registry', 'bu-members', 'bu-parents', 'bu-modes') {
         if (-not (Get-P91Property $apim.namedValues $nv)) { Set-P91Property $apim.namedValues $nv ',,' }
     }
+    if (-not (Get-P91Property $apim.namedValues 'entitlement-source')) { Set-P91Property $apim.namedValues 'entitlement-source' 'named-value' }
     if (-not (Get-P91Property $apim.namedValues 'entitlement-cache-seconds')) { Set-P91Property $apim.namedValues 'entitlement-cache-seconds' '3600' }
     # main.bicep:385-386 deploys both, empty ('e30=' is base64 for {}).
     foreach ($nv in 'usd-budgets', 'usd-budget-state') { if (-not (Get-P91Property $apim.namedValues $nv)) { Set-P91Property $apim.namedValues $nv 'e30=' } }
@@ -175,7 +176,7 @@ function global:az {
             $id = & $value @('--named-value-id')
             $apim = Get-P91Property $w.apims $name
             $nv = if ($apim) { Get-P91Property $apim.namedValues $id } else { $null }
-            if ($null -eq $nv) { Write-P91Failure "ERROR: (ResourceNotFound) Named value '$id' not found.`nCode: ResourceNotFound" 3; return }
+            if ($null -eq $nv) { Write-P91Failure "ERROR: (ResourceNotFound) NamedValue not found.`nCode: ResourceNotFound" 3; return }
             return [string]$nv
         }
         'apim nv list*' {

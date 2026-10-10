@@ -59,8 +59,13 @@ writes the decision record after each completed step, verifies, and generates
 `onboarding/HOW-TO-USE.md`. It does not replace API Management, Foundry,
 Turnstile, AUM or the reporting jobs; it coordinates their setup and handover.
 
+</details>
 
 ## Lean installer phase 0
+
+<details>
+
+<summary>One answers schema and a read-only preflight shared by both installers</summary>
 
 ![Lean installer phase 0: one answers schema feeds both installers and the guided flow; the shared preflight only reads; selected steps reuse P91 live verification and append a progress stream.](images/architecture/lean-installer-phase0.png)
 
@@ -70,7 +75,13 @@ Source: [17-lean-installer-phase0.json](architecture/17-lean-installer-phase0.js
 Phase 0 adds operator-side files and streams. Azure writes stay in the installers' steps after the
 confirmed summary; the preflight, `-ListSteps` and the guided flow's plan only read.
 
+</details>
+
 ## Installer UI
+
+<details>
+
+<summary>A local Node server and static page over the installer, gated on preflight fingerprints</summary>
 
 ![Installer UI: a local Node server and static page share the UI model, gate runs on preflight fingerprints, keep a server-side run record and stream redacted installer progress.](images/architecture/installer-ui.png)
 
@@ -228,7 +239,13 @@ not just the top-level generator. The installer persists the same per-tier
 lists that later model changes use, and both workstation setup implementations
 remove aliases for families that are no longer selected.
 
+</details>
+
 ## Install checkpoint and resume
+
+<details>
+
+<summary>One checkpoint per checkout, skipping a step only when a live read confirms it</summary>
 
 ![Install checkpoint: the guided flow and both installers keep one checkpoint per checkout in a per-user state directory; the first write follows the confirmed summary; a rerun skips a step only when a live Azure read shows its result.](images/architecture/install-checkpoint.png)
 
