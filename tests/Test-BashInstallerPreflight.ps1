@@ -1,0 +1,295 @@
+# P92 acceptance test 2, bash half (docs/adr/0047-lean-installer-phase-0.md): install-claude-gateway.sh
+# --preflight checks every answer and the estate before any write, with the same check ids, results and
+# reasons as Install-ClaudeGateway.ps1 -Preflight (tests/Test-InstallerPreflight.ps1). An answer that
+# only the PowerShell installer applies is also reported under answers.schema. Runs through the stubs
+# of tests/BashInstallerHarness.ps1; nothing reaches Azure.
+param([string]$Shard = '')
+$ErrorActionPreference = 'Stop'
+$root = Split-Path $PSScriptRoot -Parent
+$script:fail = 0
+$script:checks = 0
+function Assert($label, $condition, $detail = '') {
+    $script:checks++
+    if ($condition) { Write-Host "  [OK]   $label" -ForegroundColor Green }
+    else { Write-Host "  [FAIL] $label$(if ($detail) { " - $detail" })" -ForegroundColor Red; $script:fail++ }
+}
+# Test-All runs the suite as two checks, -Shard 0/2 and -Shard 1/2, each measured alone at most half of the
+# default per-check timeout (docs/adr/0047-lean-installer-phase-0.md decision 14); without -Shard both groups run.
+# core: the static checks, acceptance test 2's scenarios, redaction, the text report and the not-evaluated
+# probe; branches: one scenario for each branch of the lead's round-2 review, and the subscription records of
+# round 3. tests/Test-BashInstallerPreflightShards.ps1 checks that every check is in one group.
+$script:ShardGroups = [ordered]@{ core = 0; branches = 1 }
+$script:ShardCount = 2
+function Test-ShardGroup([string]$Group) {
+    if (-not $Shard) { return $true }
+    if ($Shard -notmatch '^(\d+)/(\d+)$' -or [int]$Matches[2] -ne $script:ShardCount -or [int]$Matches[1] -ge $script:ShardCount) { throw "-Shard is i/$($script:ShardCount) with i from 0 to $($script:ShardCount - 1), not '$Shard'." }
+    return [int]$script:ShardGroups[$Group] -eq [int]$Matches[1]
+}
+Write-Host ''
+Write-Host "Installer preflight (bash installer)$(if ($Shard) { ", shard $Shard" })" -ForegroundColor Cyan
+$watch = [Diagnostics.Stopwatch]::StartNew()
+. (Join-Path $PSScriptRoot 'BashInstallerHarness.ps1')
+. (Join-Path $PSScriptRoot 'InstallerRedactionShapes.ps1')
+$scratch = [IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetTempPath()) ('p92-bash-preflight-' + [guid]::NewGuid().ToString('N'))))
+$made = New-BashTemplate $scratch
+$template = $made.Template; $psTable = $made.PsTable
+$ids = @('answers.schema', 'answers.crossField', 'target.tenant', 'target.subscription', 'operator.adminPrereqs', 'foundry.account', 'foundry.deployments',
+    'apim.nameAvailability', 'apim.existingSku', 'apim.existingIdentity', 'entra.groupNames', 'businessUnits.ids', 'businessUnits.depth', 'address.inputs')
+$azureChecks = @('target.tenant', 'target.subscription', 'foundry.account', 'foundry.deployments', 'apim.nameAvailability', 'apim.existingSku', 'apim.existingIdentity', 'entra.groupNames')
+
+# ------------------------------------------------------------------ static checks
+if (Test-ShardGroup 'core') {
+    $p92Libraries = @('scripts/install-answers.sh', 'scripts/install-preflight.sh', 'scripts/install-steps.sh') | ForEach-Object { Join-Path $root $_ }
+    $missing = @($p92Libraries | Where-Object { -not (Test-Path -LiteralPath $_) })
+    $syntax = @(foreach ($p in @($p92Libraries | Where-Object { Test-Path -LiteralPath $_ })) { $o = (& $bash -n (ConvertTo-BashPath $p) 2>&1 | Out-String).Trim(); if ($o -or $LASTEXITCODE) { "$p $o" } })
+    Assert 'A13 the P92 bash libraries exist and pass bash -n' (-not $missing.Count -and -not $syntax.Count) "missing: $($missing -join ', '); $($syntax -join ' | ')"
+    $forbidden = '(?m)^[^#\n]*(\b(declare|local|typeset)\s+-[a-zA-Z]*A\b|\bmapfile\b|\breadarray\b|\$\{[^}\n]*(,,|\^\^)[^}\n]*\}|\|&|&>>|\bcoproc\b|\bsed\s+-i(\s|$)|\bdate\s+(-[a-zA-Z]*\s+)*-d\b|\breadlink\s+-f\b|\bstat\s+-c\b|\bfind\b[^\n]*-printf\b|\bgrep\s+-[a-zA-Z]*P)'
+    $text = (@(@($p92Libraries) + (Join-Path $root 'install-claude-gateway.sh') | Where-Object { Test-Path -LiteralPath $_ } | ForEach-Object { [IO.File]::ReadAllText($_) }) -join "`n")
+    $hits = @([regex]::Matches($text, $forbidden) | ForEach-Object { $_.Value.Trim() })
+    Assert 'A13 bash stays 3.2-compatible: no associative arrays, mapfile, case-modifying expansions, GNU-only sed -i, date -d, readlink -f, stat -c or grep -P' (-not $missing.Count -and -not $hits.Count) ($hits -join ' | ')
+}
+
+$base = [ordered]@{ schemaVersion = 1; SubscriptionId = $sub; FoundryAccount = 'ai-p91'; FoundryResourceGroup = 'rg-ai-p91'; ResourceGroup = 'rg-p91'; Location = 'eastus2'
+    NamePrefix = 'p92gw'; PublisherEmail = 'ops@contoso.com'; Sku = 'BasicV2'; StandardGroup = 'claude-code-standard'; PremiumGroup = 'claude-code-premium' }
+function New-Answers([scriptblock]$Change) { $a = ($base | ConvertTo-Json -Depth 8) | ConvertFrom-Json; if ($Change) { & $Change $a }; $a }
+function Set-Answer($Doc, [string]$Name, $Value) { $Doc | Add-Member -NotePropertyName $Name -NotePropertyValue $Value -Force }
+$scenarios = [ordered]@{}
+function Add-Scenario([string]$Name, $World, $Answers, [switch]$Text, [hashtable]$Environment = @{}) {
+    $s = New-Scenario $Name $World
+    $file = Join-Path $s.Dir 'answers.json'
+    Write-Lf $file ($Answers | ConvertTo-Json -Depth 10)
+    $arguments = @('--preflight', '--answers-file', (ConvertTo-BashPath $file)) + $(if ($Text) { @() } else { @('--json') })
+    $scenarios[$Name] = [pscustomobject]@{ Scenario = $s; Run = (New-Run $s $arguments $Environment); Result = $null; Json = $null; Text = [bool]$Text; Group = $script:group }
+}
+function Get-Check($Name, [string]$Id) { $j = $scenarios[$Name].Json; if ($j) { @($j.checks | Where-Object { $_.id -eq $Id })[0] } }
+function Show($Name) { $r = $scenarios[$Name].Result; if ($r) { "exit $($r.ExitCode): " + (Get-Tail $r) } else { 'no result' } }
+
+try {
+    $probeRun = $null
+    if (Test-ShardGroup 'core') {
+        $script:group = 'core'
+        Add-Scenario 'pass' (New-World) (New-Answers)
+        $w = New-World; $w['signedOut'] = $true
+        Add-Scenario 'signed-out' $w (New-Answers)
+        Add-Scenario 'foundry-missing' (New-World) (New-Answers { param($a) $a.FoundryAccount = 'ai-missing' })
+        Add-Scenario 'deployment-missing' (New-World) (New-Answers { param($a) Set-Answer $a 'StandardModels' @('claude-haiku-9') })
+        $w = New-World; $w['apimNamesTaken'] = @('apim-p92taken')
+        Add-Scenario 'name-taken' $w (New-Answers { param($a) $a.NamePrefix = 'p92taken' })
+        $reuse = { param($a) foreach ($n in 'NamePrefix', 'Location', 'PublisherEmail', 'Sku') { $a.PSObject.Properties.Remove($n) }; Set-Answer $a 'ExistingApimName' 'apim-p92reuse' }
+        $w = New-World; $w.resourceGroups['rg-p91'] = 'eastus2'; $w.apims['apim-p92reuse'] = [ordered]@{ rg = 'rg-p91'; sku = 'StandardV2'; location = 'eastus2'; identity = 'None'; apis = @() }
+        Add-Scenario 'no-identity' $w (New-Answers $reuse)
+        $w = New-World; $w.resourceGroups['rg-p91'] = 'eastus2'; $w.apims['apim-p92reuse'] = [ordered]@{ rg = 'rg-p91'; sku = 'Developer'; location = 'eastus2'; identity = 'SystemAssigned'; apis = @() }
+        Add-Scenario 'classic-sku' $w (New-Answers $reuse)
+        $w = New-World; $w.inject.readErrors = @([ordered]@{ match = 'ad group list --display-name claude-code-standard*'; text = 'ERROR: Insufficient privileges to complete the operation. (Authorization_RequestDenied)' })
+        Add-Scenario 'graph-error' $w (New-Answers)
+        $sameLength = New-World; $sameLength.inject['groupLists'] = [ordered]@{ 'claude-code-standard' = @([ordered]@{ id = '00000000-0000-4000-8000-0000000002a1'; displayName = 'CLAUDE-CODE-STANDARD' }, [ordered]@{ id = '00000000-0000-4000-8000-0000000002a2'; displayName = 'Claude-Code-Standard' }) }
+        Add-Scenario 'same-length' $sameLength (New-Answers)
+        $kvBad = { param($a) Set-Answer $a 'AddressMode' 'custom'; Set-Answer $a 'AddressHostname' 'claude.contoso.com'; Set-Answer $a 'AddressCertificateSource' 'KeyVault'; Set-Answer $a 'AddressKeyVaultCertificateId' 'http://kv-contoso/certificates'; Set-Answer $a 'AddressDnsMode' 'External' }
+        Add-Scenario 'kv-malformed' (New-World) (New-Answers $kvBad)
+        Add-Scenario 'all-at-once' (New-World) (New-Answers { param($a) $a.FoundryAccount = 'ai-missing'; $a.StandardGroup = "O'Brien"
+                Set-Answer $a 'BusinessUnits' @([ordered]@{ id = 'Finance'; group = 'claude-bu-finance'; monthlyUsdBudget = 5000; mode = 'Strict' }); & $kvBad $a })
+        # Round 3, the Security seat's item 5: an error that a message quotes carries every secret shape of
+        # tests/InstallerRedactionShapes.ps1, and a remedy lists a deployment named like a secret.
+        $redactWorld = { $w = New-World; $w.inject.readErrors = @([ordered]@{ match = 'ad group list --display-name claude-code-standard*'; text = $P92RedactionSentence })
+            $w.foundry.deployments = @(@($w.foundry.deployments) + @([ordered]@{ name = 'secret=p92RemedySentinel'; properties = [ordered]@{ model = [ordered]@{ format = 'OpenAI'; name = 'gpt-4o'; version = '2024-08-06' } } })); $w }
+        $redactAnswers = { param($a) Set-Answer $a 'StandardModels' @('claude-sonnet-5', 'claude-p92-missing') }
+        Add-Scenario 'redact' (& $redactWorld) (New-Answers $redactAnswers)
+        Add-Scenario 'redact-text' (& $redactWorld) (New-Answers $redactAnswers) -Text
+        # The text report over the same-length world, so that one of its lines is a FAIL with its remedy.
+        Add-Scenario 'text' $sameLength (New-Answers) -Text
+        # Round 3, the UX seat's item 9: the bash preflight with every Azure branch left out (pf_azure_ replaced
+        # in a probe that sources the installer's libraries), so that the checks it evaluates stay not-evaluated.
+        $probe = New-Scenario 'not-evaluated' (New-World)
+        Write-Lf (Join-Path $probe.Repo 'p92-not-evaluated.sh') (@(
+                'set -uo pipefail'
+                'HERE="$(cd "$(dirname "$0")" && pwd)"'
+                '. "$HERE/scripts/install-checkpoint.sh"'
+                "pf_answers_() { PF_ANSWERS='{`"SubscriptionId`":`"$sub`"}'; }"
+                'pf_prereqs_() { pf_pass_ operator.adminPrereqs "claude_preflight admin passed"; }'
+                'pf_azure_() { :; }'
+                'WANT_JSON=1'
+                'preflight_run_') -join "`n")
+        $probeRun = New-Run $probe @() -Entry './p92-not-evaluated.sh'
+    }
+    if (Test-ShardGroup 'branches') {
+        $script:group = 'branches'
+        # One scenario for each branch of the lead's round-2 review, as in tests/Test-InstallerPreflight.ps1:
+        # the tenant and the state of the answered subscription, an unreadable one, the account list without
+        # FoundryResourceGroup, no Claude deployment, failing admin prerequisites (the harness's curl cannot
+        # reach management.azure.com), a PFX path that is not a file, and az output that is not JSON.
+        $otherTenant = '00000000-0000-4000-8000-0000000000f2'
+        $w = New-World; $w['subscriptionTenantId'] = $otherTenant
+        Add-Scenario 'cross-tenant' $w (New-Answers)
+        $w = New-World; $w['subscriptionState'] = 'Disabled'
+        Add-Scenario 'disabled' $w (New-Answers)
+        $w = New-World; $w.inject.readErrors = @([ordered]@{ match = 'account show --subscription*'; text = "ERROR: (AuthorizationFailed) The client does not have authorization to read subscription $sub." })
+        Add-Scenario 'sub-unreadable' $w (New-Answers)
+        $noRg = { param($a) $a.PSObject.Properties.Remove('FoundryResourceGroup') }
+        Add-Scenario 'list-found' (New-World) (New-Answers $noRg)
+        Add-Scenario 'list-missing' (New-World) (New-Answers { param($a) $a.PSObject.Properties.Remove('FoundryResourceGroup'); $a.FoundryAccount = 'ai-missing' })
+        $w = New-World; $w.foundry.deployments = @([ordered]@{ name = 'gpt-4o'; properties = [ordered]@{ model = [ordered]@{ format = 'OpenAI'; name = 'gpt-4o'; version = '2024-08-06' } } })
+        Add-Scenario 'no-claude' $w (New-Answers)
+        Add-Scenario 'prereq-fail' (New-World) (New-Answers) -Environment @{ P91_MANAGEMENT_UNREACHABLE = '1' }
+        $pfxMissing = '/nonexistent-p92/no-such-certificate.pfx'
+        Add-Scenario 'pfx-missing' (New-World) (New-Answers { param($a) Set-Answer $a 'AddressMode' 'custom'; Set-Answer $a 'AddressHostname' 'claude.contoso.com'; Set-Answer $a 'AddressCertificateSource' 'Pfx'; Set-Answer $a 'AddressPfxPath' $pfxMissing; Set-Answer $a 'AddressDnsMode' 'External' })
+        $w = New-World; $w.inject['rawOutputs'] = @([ordered]@{ match = 'cognitiveservices account list*'; text = '<html><body>Service Unavailable</body></html>' })
+        Add-Scenario 'list-not-json' $w (New-Answers $noRg)
+        $w = New-World; $w.inject['rawOutputs'] = @([ordered]@{ match = 'account show -o json'; text = '<html><body>Sign in</body></html>' })
+        Add-Scenario 'account-not-json' $w (New-Answers)
+        $w = New-World; $w.inject['rawOutputs'] = @([ordered]@{ match = 'account show -o json'; text = '{"user": {"name": "admin@contoso.com", "type": "user"}, "name": "p91-subscription"}' })
+        Add-Scenario 'account-no-tenant' $w (New-Answers)
+        # Round 3, the Coder seat's item 1: a subscription record without its id, with a null id or without its
+        # tenant, and a current account without an id when SubscriptionId is not answered.
+        $tenant = '00000000-0000-4000-8000-0000000000f1'
+        $user = '"user": {"name": "admin@contoso.com", "type": "user"}'
+        $record = { param([string]$Json) $w = New-World; $w.inject['rawOutputs'] = @([ordered]@{ match = 'account show --subscription*'; text = $Json }); $w }
+        Add-Scenario 'sub-no-id' (& $record ('{"name": "p91-subscription", "state": "Enabled", "tenantId": "' + $tenant + '", ' + $user + '}')) (New-Answers)
+        Add-Scenario 'sub-null-id' (& $record ('{"id": null, "name": "p91-subscription", "state": "Enabled", "tenantId": "' + $tenant + '", ' + $user + '}')) (New-Answers)
+        Add-Scenario 'sub-no-tenant' (& $record ('{"id": "' + $sub + '", "name": "p91-subscription", "state": "Enabled", ' + $user + '}')) (New-Answers)
+        $w = New-World; $w.inject['rawOutputs'] = @([ordered]@{ match = 'account show -o json'; text = ('{"name": "p91-subscription", "tenantId": "' + $tenant + '", ' + $user + '}') })
+        Add-Scenario 'current-no-id' $w (New-Answers { param($a) $a.PSObject.Properties.Remove('SubscriptionId') })
+    }
+
+    $results = Invoke-Runs (@($scenarios.Values | ForEach-Object { $_.Run }) + @($probeRun | Where-Object { $_ }))
+    foreach ($s in $scenarios.Values) {
+        $s.Result = $results[$s.Run.Dir]
+        if (-not $s.Text) { try { $s.Json = $s.Result.Out | ConvertFrom-Json -ErrorAction Stop } catch { $s.Json = $null } }
+    }
+
+    $one = { param([string]$Name, [string]$Id, [string]$Pattern)
+        $c = Get-Check $Name $Id
+        [bool]($scenarios[$Name].Result.ExitCode -ne 0 -and $c -and $c.result -eq 'FAIL' -and ("$($c.message) $($c.remedy)" -match $Pattern)) }
+    $psOnly = { param([string]$Name, [string]$Answer) $c = Get-Check $Name 'answers.schema'; [bool]($c -and $c.result -eq 'FAIL' -and (@($c.problems | ForEach-Object { $_.message }) -join ' ') -match "$Answer is applied by Install-ClaudeGateway\.ps1") }
+    # The checks each scenario of a group meets, once per group: the JSON shape, fail closed and read-only.
+    $groupOf = { param([string]$Group) @($scenarios.GetEnumerator() | Where-Object { $_.Value.Group -eq $Group }) }
+    $shapeOf = { param([string]$Group)
+        @(foreach ($s in @(& $groupOf $Group | Where-Object { -not $_.Value.Text })) {
+                $j = $s.Value.Json
+                $got = @(if ($j) { $j.checks | ForEach-Object { [string]$_.id } })
+                $bad = @(if ($j) { $j.checks | Where-Object { $_.result -cnotin 'PASS', 'FAIL', 'NOT-RUN' -or ($_.result -eq 'NOT-RUN' -and -not $_.reason) -or ($_.result -eq 'FAIL' -and (-not $_.message -or -not $_.remedy)) } })
+                if (-not $j -or $j.schemaVersion -ne 1 -or $j.installer -ne 'bash' -or ($got -join ',') -ne ($ids -join ',') -or $bad.Count -or $j.result -cnotin 'PASS', 'FAIL') { "$($s.Key): $(Show $s.Key)" } }) }
+    # Fail closed by construction: every check starts NOT-RUN (not-evaluated) and passes only through
+    # pf_pass_ with a message, so a branch that sets nothing cannot read as a PASS.
+    $looseOf = { param([string]$Group)
+        @(foreach ($s in @(& $groupOf $Group)) { $j = $s.Value.Json; if ($j) { foreach ($c in @($j.checks)) { if ($c.reason -eq 'not-evaluated' -or ($c.result -eq 'PASS' -and -not "$($c.message)".Trim())) { "$($s.Key): $($c.id) $($c.result)/$($c.reason)" } } } }) }
+    $readOnlyOf = { param([string]$Group)
+        $set = @(& $groupOf $Group | ForEach-Object { $_.Value })
+        [pscustomobject]@{
+            Writes = @(foreach ($s in $set) { @($s.Result.Az | Where-Object { $_ -match '(^| )(create|update|delete|set|add|remove|login|purge|assign|start|stop)( |$)' }) })
+            Files = @(foreach ($s in $set) { @(Get-ChildItem -LiteralPath $s.Scenario.Home -Recurse -Force -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -like 'install-*' } | ForEach-Object Name) })
+            Scripts = @(foreach ($s in $set) { @($s.Result.Scripts | Where-Object { $_ -notmatch 'PSVersionTable' }) })
+            WithAz = @($set | Where-Object { $_.Result.Az.Count }).Count } }
+    if (Test-ShardGroup 'core') {
+        $shape = & $shapeOf 'core'
+        Assert 'P2 bash --json prints only JSON: schemaVersion 1, installer bash, the 14 check ids once in order, results PASS, FAIL or NOT-RUN, a reason on every NOT-RUN and a remedy on every FAIL' (-not $shape.Count) ($shape -join ' || ')
+        $p = $scenarios['pass']
+        $notPassed = @($p.Json.checks | Where-Object { $_.result -eq 'FAIL' -or ($_.result -eq 'NOT-RUN' -and $_.reason -notin 'not-applicable', 'not-answered') } | ForEach-Object { "$($_.id) $($_.result) $($_.reason)" })
+        $passed = @($p.Json.checks | Where-Object { $_.result -eq 'PASS' } | ForEach-Object id)
+        Assert 'P2 bash complete answers over a matching estate pass: exit 0, and every check that applies passes' ($p.Result.ExitCode -eq 0 -and $p.Json.result -eq 'PASS' -and -not $notPassed.Count -and
+            -not @('answers.schema', 'answers.crossField', 'target.tenant', 'target.subscription', 'operator.adminPrereqs', 'foundry.account', 'foundry.deployments', 'apim.nameAvailability', 'entra.groupNames' | Where-Object { $passed -notcontains $_ }).Count) "$($notPassed -join ', ') || passed: $($passed -join ', ') || $(Show 'pass')"
+        $so = $scenarios['signed-out']
+        $azure = @($so.Json.checks | Where-Object { $_.id -in $azureChecks })
+        Assert 'P2 bash not signed in: target.tenant and every Azure check report NOT-RUN with a reason, none passes, and the exit code is not 0' ($so.Result.ExitCode -ne 0 -and $azure.Count -eq $azureChecks.Count -and
+            -not @($azure | Where-Object { $_.result -ne 'NOT-RUN' -or -not $_.reason -or -not $_.message }).Count -and (Get-Check 'signed-out' 'target.tenant').reason -eq 'not-signed-in') ((@($azure | ForEach-Object { "$($_.id)=$($_.result)/$($_.reason)" }) -join ', ') + ' || ' + (Show 'signed-out'))
+        Assert 'P2 bash a Foundry account that does not exist is its own FAIL, and the deployment check that needs it is NOT-RUN' ((& $one 'foundry-missing' 'foundry.account' 'ai-missing') -and
+            (Get-Check 'foundry-missing' 'foundry.deployments').reason -eq 'prerequisite-failed') (Show 'foundry-missing')
+        Assert 'P2 bash a named deployment that the account lacks is a FAIL naming it; StandardModels is reported as an answer only PowerShell applies' ((& $one 'deployment-missing' 'foundry.deployments' 'claude-haiku-9') -and (& $psOnly 'deployment-missing' 'StandardModels')) (Show 'deployment-missing')
+        Assert 'P2 bash an API Management name another instance holds is a FAIL' (& $one 'name-taken' 'apim.nameAvailability' 'apim-p92taken') (Show 'name-taken')
+        $ni = Get-Check 'no-identity' 'apim.existingIdentity'
+        Assert 'P2 bash a reused instance without a system-assigned identity is a FAIL with the portal toggle remedy; ExistingApimName is an answer only PowerShell applies' ((& $one 'no-identity' 'apim.existingIdentity' 'apim-p92reuse') -and
+            $ni.remedy -match 'Managed identities' -and $ni.remedy -match 'System assigned' -and (& $psOnly 'no-identity' 'ExistingApimName')) (Show 'no-identity')
+        Assert 'P2 bash a reused instance on a classic tier is a FAIL naming the tier' (& $one 'classic-sku' 'apim.existingSku' 'Developer') (Show 'classic-sku')
+        Assert 'P2 bash a Microsoft Graph read error on a group name is a FAIL (inconclusive), never a pass' (& $one 'graph-error' 'entra.groupNames' 'claude-code-standard') (Show 'graph-error')
+        Assert 'P2 bash two groups with names of the configured length are a FAIL naming both ids' (& $one 'same-length' 'entra.groupNames' '0000000002a1.*0000000002a2|0000000002a2.*0000000002a1') (Show 'same-length')
+        Assert 'P2 bash a Key Vault certificate URL of the wrong shape is a FAIL of address.inputs' (& $one 'kv-malformed' 'address.inputs' 'AddressKeyVaultCertificateId') (Show 'kv-malformed')
+        $aao = @($scenarios['all-at-once'].Json.checks | Where-Object { $_.result -eq 'FAIL' } | ForEach-Object id)
+        Assert 'P2 bash one run with four distinct problems reports all four' ($scenarios['all-at-once'].Result.ExitCode -ne 0 -and
+            -not @('foundry.account', 'entra.groupNames', 'businessUnits.ids', 'address.inputs' | Where-Object { $aao -notcontains $_ }).Count) "$($aao -join ', ') || $(Show 'all-at-once')"
+        # ------------------------------------------------------------------ round 3: redaction (item 5)
+        $rd = $scenarios['redact']; $eg = Get-Check 'redact' 'entra.groupNames'; $fd = Get-Check 'redact' 'foundry.deployments'
+        $egProblems = @(Get-P92RedactionProblems "$($eg.message)")
+        Assert 'R3 bash the JSON report redacts every secret shape in an error that a message quotes: each becomes its [redacted] form, and no sentinel appears in stdout or stderr' ($eg.result -eq 'FAIL' -and -not $egProblems.Count -and
+            (Test-P92NoSentinel ($rd.Result.Out + $rd.Result.Err))) "$($egProblems -join '; ') || $($eg.message)"
+        Assert 'R3 bash the JSON report redacts a secret in a remedy: a deployment named secret=<value> is listed as secret=[redacted]' ($fd.result -eq 'FAIL' -and "$($fd.remedy)" -match 'secret=\[redacted\]' -and
+            @($fd.problems | Where-Object { "$($_.remedy)" -match 'secret=\[redacted\]' }).Count -eq 1 -and "$($fd.remedy)" -notmatch 'p92RemedySentinel') "$($fd.remedy)"
+        $rt = $scenarios['redact-text'].Result
+        $rtLine = @($rt.Out -split "`n" | Where-Object { $_ -match '\[FAIL\] entra\.groupNames: ' }) -join "`n"
+        $rtProblems = @(Get-P92RedactionProblems $rtLine)
+        Assert 'R3 bash the text report redacts the same: each shape in its [redacted] form, the remedy too, and no sentinel appears in stdout or stderr' ($rtLine -and -not $rtProblems.Count -and $rt.Out -match '\[FAIL\] foundry\.deployments: .*secret=\[redacted\]' -and
+            (Test-P92NoSentinel ($rt.Out + $rt.Err))) "$($rtProblems -join '; ') || $rtLine"
+        # ------------------------------------------------------------------ round 3: a check no branch evaluates (item 9)
+        $pe = $results[$probeRun.Dir]
+        $pj = $null; try { $pj = $pe.Out | ConvertFrom-Json -ErrorAction Stop } catch { }
+        $unevaluated = @(if ($pj) { $pj.checks | Where-Object { $_.reason -eq 'not-evaluated' } })
+        $wrongText = @($unevaluated | Where-Object { $_.result -ne 'NOT-RUN' -or $_.message -cne 'the preflight did not evaluate this check, which is a defect of the preflight' -or
+                $_.remedy -cne 'Run the preflight from the latest checkout; if the check is still not evaluated, report it with this output.' })
+        Assert 'R3 bash a check that no branch evaluates is NOT-RUN (not-evaluated), says the preflight did not evaluate it, which is a defect of the preflight, gives the remedy to run the latest checkout or report it, and fails the preflight' (
+            $pj -and $pj.result -eq 'FAIL' -and $unevaluated.Count -eq 8 -and -not $wrongText.Count) "$(@($unevaluated | ForEach-Object { "$($_.id): $($_.message) / $($_.remedy)" } | Select-Object -First 2) -join ' || ') || $(Get-Tail $pe)"
+        $loose = & $looseOf 'core'
+        Assert 'P2 bash fail closed: in every scenario each PASS carries its message, and no check is left NOT-RUN not-evaluated (ADR-0047 decision 5)' (-not $loose.Count -and @(& $groupOf 'core' | Where-Object { $_.Value.Json }).Count -ge 10) ($loose -join ' || ')
+        $tx = $scenarios['text'].Result
+        $lines = @($tx.Out -split "`n" | Where-Object { $_ -match '^\s*\[(PASS|FAIL|NOT-RUN)\] ([A-Za-z.]+): ' })
+        $lineIds = @($lines | ForEach-Object { [regex]::Match($_, '\] ([A-Za-z.]+):').Groups[1].Value } | Select-Object -Unique)
+        Assert 'P2 bash the text report has one line per check, [RESULT] id: message, and each FAIL line ends with its remedy' ($tx.ExitCode -ne 0 -and ($lineIds -join ',') -eq ($ids -join ',') -and
+            @($lines | Where-Object { $_ -match '\[FAIL\] entra\.groupNames: .*Remedy: ' }).Count -ge 1 -and $tx.Out -match '(?m)^\s*Preflight: 14 checks; \d+ PASS, \d+ FAIL, \d+ NOT-RUN\.') (Get-Tail $tx)
+        $ro = & $readOnlyOf 'core'
+        Assert 'P2 bash read-only: no run made a create, update, set, delete, assign or login call, ran a child script, or wrote a checkpoint, lock or temporary file' (-not $ro.Writes.Count -and -not $ro.Files.Count -and -not $ro.Scripts.Count -and $ro.WithAz -ge 10) "writes: $(($ro.Writes | Select-Object -Unique -First 5) -join ' | '); files: $($ro.Files -join ', '); scripts: $($ro.Scripts -join ', ')"
+    }
+    if (Test-ShardGroup 'branches') {
+        $shape = & $shapeOf 'branches'
+        Assert 'P2 bash --json prints only JSON for each branch scenario: schemaVersion 1, installer bash, the 14 check ids once in order, results PASS, FAIL or NOT-RUN, a reason on every NOT-RUN and a remedy on every FAIL' (-not $shape.Count) ($shape -join ' || ')
+        # ------------------------------------------------------------------ each branch fails on its own
+        $tn = Get-Check 'cross-tenant' 'target.tenant'
+        Assert 'P2 bash a subscription in another tenant than the Azure CLI sign-in is a FAIL of target.tenant naming both tenants, with az login --tenant as the remedy' ((& $one 'cross-tenant' 'target.tenant' "is in tenant $otherTenant, and Azure CLI is signed in to tenant 00000000-0000-4000-8000-0000000000f1") -and
+            $tn.remedy -match "az login --tenant $otherTenant") (Show 'cross-tenant')
+        Assert 'P2 bash a disabled subscription is a FAIL of target.subscription naming its state' (& $one 'disabled' 'target.subscription' 'is Disabled') (Show 'disabled')
+        $later = @('foundry.account', 'foundry.deployments', 'apim.nameAvailability', 'apim.existingSku', 'apim.existingIdentity')
+        $su = @($scenarios['sub-unreadable'].Json.checks | Where-Object { $_.id -in $later -and ($_.result -ne 'NOT-RUN' -or $_.reason -ne 'prerequisite-failed') })
+        Assert 'P2 bash a subscription Azure CLI cannot read is a FAIL of target.subscription, and each check that reads in it is NOT-RUN (prerequisite-failed)' ((& $one 'sub-unreadable' 'target.subscription' 'is not readable by admin@contoso\.com \(ERROR: \(AuthorizationFailed\)') -and
+            $scenarios['sub-unreadable'].Json -and -not $su.Count) "$(($su | ForEach-Object { "$($_.id)=$($_.result)/$($_.reason)" }) -join ', ') || $(Show 'sub-unreadable')"
+        $lf = $scenarios['list-found']; $lfa = Get-Check 'list-found' 'foundry.account'; $lfd = Get-Check 'list-found' 'foundry.deployments'
+        Assert 'P2 bash without FoundryResourceGroup, a Foundry account the subscription lists is found, and its deployments are read in its own resource group' ($lfa.result -eq 'PASS' -and $lfa.message -eq 'Foundry account ai-p91 in the subscription' -and
+            $lfd.result -eq 'PASS' -and (Get-Calls $lf.Result 'cognitiveservices account list*').Count -eq 1 -and (Get-Calls $lf.Result 'cognitiveservices account deployment list -g rg-ai-p91 -n ai-p91*').Count -eq 1) (Show 'list-found')
+        Assert 'P2 bash without FoundryResourceGroup, a Foundry account the subscription does not list is a FAIL of foundry.account, and its deployments are NOT-RUN' ((& $one 'list-missing' 'foundry.account' 'Foundry account ai-missing was not found in the subscription') -and
+            (Get-Check 'list-missing' 'foundry.deployments').reason -eq 'prerequisite-failed') (Show 'list-missing')
+        Assert 'P2 bash a Foundry account with no Claude deployment and no PendingClaudeDeployment is a FAIL of foundry.deployments' (& $one 'no-claude' 'foundry.deployments' 'the Foundry account ai-p91 has no Claude deployment') (Show 'no-claude')
+        Assert 'P2 bash failing admin prerequisites are a FAIL of operator.adminPrereqs naming the failed check (the harness cannot reach management.azure.com)' (& $one 'prereq-fail' 'operator.adminPrereqs' 'cannot reach management\.azure\.com') (Show 'prereq-fail')
+        Assert 'P2 bash an AddressPfxPath that is not a file is a FAIL of address.inputs naming the path' (& $one 'pfx-missing' 'address.inputs' "AddressPfxPath '/nonexistent-p92/no-such-certificate\.pfx' is not a file") (Show 'pfx-missing')
+        Assert 'P2 bash a Foundry account list that is not JSON is an inconclusive FAIL of foundry.account, and its deployments are NOT-RUN' ((& $one 'list-not-json' 'foundry.account' 'Foundry account ai-p91 could not be read \(az cognitiveservices account list did not return JSON\)') -and
+            (Get-Check 'list-not-json' 'foundry.deployments').reason -eq 'prerequisite-failed') (Show 'list-not-json')
+        $an = @($scenarios['account-not-json'].Json.checks | Where-Object { $_.id -in @($azureChecks | Select-Object -Skip 1) -and ($_.result -ne 'NOT-RUN' -or $_.reason -ne 'prerequisite-failed') })
+        Assert 'P2 bash an az account show that is not JSON is an inconclusive FAIL of target.tenant, and every other Azure check is NOT-RUN' ((& $one 'account-not-json' 'target.tenant' 'the signed-in account could not be read \(az account show did not return JSON\)') -and
+            $scenarios['account-not-json'].Json -and -not $an.Count) "$(($an | ForEach-Object { "$($_.id)=$($_.result)/$($_.reason)" }) -join ', ') || $(Show 'account-not-json')"
+        $nt = @($scenarios['account-no-tenant'].Json.checks | Where-Object { $_.id -in @($azureChecks | Select-Object -Skip 1) -and ($_.result -ne 'NOT-RUN' -or $_.reason -ne 'prerequisite-failed') })
+        Assert 'P2 bash an az account show without a tenantId is an inconclusive FAIL of target.tenant, and every other Azure check is NOT-RUN' ((& $one 'account-no-tenant' 'target.tenant' 'the signed-in account could not be read \(az account show returned no tenantId\)') -and
+            $scenarios['account-no-tenant'].Json -and -not $nt.Count) "$(($nt | ForEach-Object { "$($_.id)=$($_.result)/$($_.reason)" }) -join ', ') || $(Show 'account-no-tenant')"
+        # ------------------------------------------------------------------ round 3: the subscription record (item 1)
+        function Get-EmptySubscription($Result) { @($Result.Az | Where-Object { $tk = @($_ -split ' '); $i = [array]::IndexOf($tk, '--subscription'); $i -ge 0 -and ($i + 1 -ge $tk.Count -or $tk[$i + 1] -in '', 'null', "''", '""') }) }
+        $recordCase = { param([string]$Name, [string]$Message)
+            $c = Get-Check $Name 'target.subscription'
+            $notRun = @($scenarios[$Name].Json.checks | Where-Object { $_.id -in $later -and ($_.result -ne 'NOT-RUN' -or $_.reason -ne 'prerequisite-failed') })
+            $empty = @(Get-EmptySubscription $scenarios[$Name].Result)
+            [pscustomobject]@{ Ok = [bool]((& $one $Name 'target.subscription' ('^' + [regex]::Escape($Message) + ' ')) -and $scenarios[$Name].Json -and -not $notRun.Count -and -not $empty.Count)
+                Detail = "$($c.result): $($c.message) || $(($notRun | ForEach-Object { "$($_.id)=$($_.result)/$($_.reason)" }) -join ', ') || empty: $($empty -join ' | ')" } }
+        $rc = & $recordCase 'sub-no-id' "subscription '$sub' is not readable by admin@contoso.com (az account show returned no subscription id)"
+        Assert 'R3 bash a subscription record without an id is an inconclusive FAIL of target.subscription, each later check is NOT-RUN (prerequisite-failed), and no az call names an empty subscription' $rc.Ok $rc.Detail
+        $rc = & $recordCase 'sub-null-id' "subscription '$sub' is not readable by admin@contoso.com (az account show returned no subscription id)"
+        Assert 'R3 bash a subscription record whose id is null is an inconclusive FAIL of target.subscription, each later check is NOT-RUN, and no az call names --subscription null' $rc.Ok $rc.Detail
+        $rc = & $recordCase 'sub-no-tenant' "subscription '$sub' is not readable by admin@contoso.com (az account show returned no tenantId)"
+        Assert 'R3 bash a subscription record without a tenantId is an inconclusive FAIL of target.subscription, and each later check is NOT-RUN' $rc.Ok $rc.Detail
+        $rc = & $recordCase 'current-no-id' 'the current subscription could not be read (az account show returned no subscription id)'
+        Assert 'R3 bash with SubscriptionId not answered, a current account without an id is an inconclusive FAIL of target.subscription, and each later check is NOT-RUN' $rc.Ok $rc.Detail
+        $loose = & $looseOf 'branches'
+        Assert 'P2 bash fail closed: in every branch scenario each PASS carries its message, and no check is left NOT-RUN not-evaluated (ADR-0047 decision 5)' (-not $loose.Count -and @(& $groupOf 'branches' | Where-Object { $_.Value.Json }).Count -ge 12) ($loose -join ' || ')
+        $ro = & $readOnlyOf 'branches'
+        Assert 'P2 bash read-only for each branch scenario: no run made a create, update, set, delete, assign or login call, ran a child script, or wrote a checkpoint, lock or temporary file' (-not $ro.Writes.Count -and -not $ro.Files.Count -and -not $ro.Scripts.Count -and $ro.WithAz -ge 10) "writes: $(($ro.Writes | Select-Object -Unique -First 5) -join ' | '); files: $($ro.Files -join ', '); scripts: $($ro.Scripts -join ', ')"
+    }
+    $unexpected = @(foreach ($s in $scenarios.Values) { @($s.Result.Unexpected) })
+    Assert 'harness: every az call was one the stub knows, and no run timed out' (-not $unexpected.Count -and -not @($scenarios.Values | Where-Object { $_.Result.TimedOut }).Count) (($unexpected | Select-Object -Unique -First 4) -join ' | ')
+}
+finally {
+    if ($env:P91_KEEP_SCRATCH -ne '1') { Remove-Item -LiteralPath $scratch -Recurse -Force -ErrorAction SilentlyContinue }
+}
+Write-Host ''
+Write-Host ("{0} checks, {1} failed, {2:N1} s" -f $script:checks, $script:fail, $watch.Elapsed.TotalSeconds)
+if ($script:fail) { exit 1 }

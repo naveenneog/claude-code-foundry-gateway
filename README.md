@@ -37,6 +37,7 @@ Roll out broadly only after the bypass findings are clean or explicitly approved
 | Let one guided flow set up, update, change, diagnose and generate the handover guide | [Guided flow](docs/GUIDED-FLOW.md) — `Start-ClaudeGateway.ps1`, review fingerprint, resume and manual equivalents |
 | Use the CLI, VS Code or Desktop on Windows/macOS | [Developer setup](DEVELOPER.md) — prerequisites, setup, verification and fixes |
 | Stand up a gateway | [Setup](docs/SETUP.md) — required roles, installer and portal deployment |
+| Use the form-based installer | [Installer UI](docs/INSTALLER-UI.md) — local server, Cloud Shell Web preview, static fallback, preflight table and streamed selected steps |
 | Stand up a gateway with plain Azure CLI commands | [Azure CLI setup commands](docs/AZ-COMMANDS.md) — script-equivalent bash commands, verification and script references |
 | Give developers a company gateway address | [Company address](docs/SETUP.md#company-address) — supplied certificate, DNS, component prices and proof before publishing the URL |
 | Update an older gateway or change tier, entitlement, network or Desktop sign-in | [Update and change](docs/UPDATE-AND-CHANGE.md) — fingerprinted plans, snapshots and rollback |
@@ -235,6 +236,15 @@ See [dollar budgets](docs/BUDGETS.md#dollar-budgets-what-is-enforced) and the
 <details>
 
 <summary>Resource discovery, deployment choices and projection switch</summary>
+
+**macOS/Linux:** use `./install-claude-gateway.sh` from the same directory.
+**Portal:** [Setup option C](docs/SETUP.md#option-c--portal) covers template
+deployment and the group, sync and handover steps it does not perform.
+For preview and unattended parameters, see [Setup](docs/SETUP.md#3-deploy).
+A rerun after a failure resumes from the install checkpoint ([Setup](docs/SETUP.md#resume-after-a-failure)).
+An answers file, a read-only preflight and selected steps are described in [Setup](docs/SETUP.md#answers-file-preflight-and-selected-steps).
+
+### What it does
 
 The installer discovers resources, collects deployment and budget choices,
 deploys or reuses the gateway and observability resources, grants the gateway

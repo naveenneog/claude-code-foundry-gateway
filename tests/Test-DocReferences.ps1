@@ -446,6 +446,23 @@ function Get-StatusFenceFailures([string]$Repo) {
     }
 }
 
+function Get-UnknownIdDuplicateFailures([string]$Repo) {
+    $path = Join-Path $Repo 'docs\UNKNOWNS.md'
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { return }
+    $rows = @{}
+    $lines = Get-Content -LiteralPath $path
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -notmatch '^\|\s*(U\d+)\s*\|') { continue }
+        $id = $Matches[1]
+        if (-not $rows.ContainsKey($id)) { $rows[$id] = @() }
+        $rows[$id] += ($i + 1)
+    }
+    foreach ($entry in $rows.GetEnumerator()) {
+        if ($entry.Value.Count -le 1) { continue }
+        New-ReferenceFailure 'docs/UNKNOWNS.md' $entry.Value[0] 'unknown-id-duplicate' "$($entry.Key) appears on lines $($entry.Value -join ', ')"
+    }
+}
+
 Write-Host 'Documentation references - files, GitHub anchors, scripts and parameters' -ForegroundColor Cyan
 $guides = @(Get-GuideFiles $Root)
 Assert 'user-facing guides were found' ($guides.Count -gt 0)
@@ -482,6 +499,11 @@ foreach ($b in $statusFenceFailures) {
     Write-Host ("  [FAIL] {0}:{1} [{2}] {3}" -f $b.File, $b.Line, $b.Kind, $b.Detail) -ForegroundColor Red
 }
 Assert 'fenced code blocks are balanced in STATUS and docs/status' ($statusFenceFailures.Count -eq 0) "$($statusFenceFailures.Count) unbalanced fence(s)"
+$unknownDuplicateFailures = @(Get-UnknownIdDuplicateFailures $Root)
+foreach ($b in $unknownDuplicateFailures) {
+    Write-Host ("  [FAIL] {0}:{1} [{2}] {3}" -f $b.File, $b.Line, $b.Kind, $b.Detail) -ForegroundColor Red
+}
+Assert 'unknown IDs are unique' ($unknownDuplicateFailures.Count -eq 0) "$($unknownDuplicateFailures.Count) duplicate unknown id(s)"
 
 $readme = Get-Content (Join-Path $Root 'README.md') -Raw
 $mdmPath = Join-Path $Root 'docs\MDM.md'

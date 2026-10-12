@@ -129,6 +129,8 @@ try {
     Copy-Item -LiteralPath (Join-Path $root "tests\$suiteFile") -Destination $suitePath
     Copy-Item -LiteralPath (Join-Path $root 'tests\ScriptImportCoverage.ps1') -Destination (Join-Path $shadow 'tests')
     Copy-Item -LiteralPath (Join-Path $root 'scripts') -Destination $shadow -Recurse
+    # The answers schema the guided flow checks -AnswersPath against (ADR-0047).
+    Copy-Item -LiteralPath (Join-Path $root 'schemas') -Destination $shadow -Recurse
     # Tracked configuration only: an operator's gitignored config\price-book.json must not change the suite's results.
     foreach ($tracked in @(& git -C $root ls-files -- config)) {
         $trackedTarget = Join-Path $shadow $tracked

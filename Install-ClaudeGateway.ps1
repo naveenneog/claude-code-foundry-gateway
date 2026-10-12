@@ -119,12 +119,65 @@ param(
     # one for this gateway. Asked in a console; without this switch an unattended run refuses (P79).
     [switch]$ArchiveSavedRecord,
 
+    # Set this checkout's install checkpoint aside and start again (docs/adr/0046-installer-checkpoint-and-resume.md).
+    # Without it a rerun resumes after the last step whose result Azure still shows.
+    [switch]$Restart,
+
+    # An answers file (schemas/claude-gateway.answers.schema.json). A parameter passed wins over it, and it
+    # wins over the install checkpoint's answers (docs/adr/0047-lean-installer-phase-0.md).
+    [string]$AnswersPath,
+    # Check the answers and the estate, read-only, print the report and stop; -Json prints it as JSON.
+    [switch]$Preflight,
+    [switch]$Json,
+    # Print the steps with the state the install checkpoint records, and stop.
+    [switch]$ListSteps,
+    # Run these steps only, each after its prerequisites are completed and verified live.
+    [string[]]$Steps,
+    # Append one JSON event per line to this file as each step starts, completes, is skipped or fails.
+    [string]$ProgressPath,
+
+    # Answers the installer otherwise asks for; an answers file passes them to an unattended run.
+    [ValidateRange(3600, 86400)][int]$RevocationWindowSeconds,
+    [ValidateSet('report', 'stop')][string]$TeamBudgetBehaviour,
+    [ValidateSet('allow', 'deny')][string]$UnassignedDevelopers,
+    [int]$DeveloperEstimate,
+    [object]$PendingClaudeDeployment,
+    [object[]]$BusinessUnits,
+
     # Accept every default without prompting.
     [switch]$Yes
 )
 
 $ErrorActionPreference = 'Stop'
+# At top level a refusal or failure is one line on standard error, which PowerShell's error view
+# would wrap at the console width; called from another script or a hosted runspace, the exception
+# reaches the caller unchanged (the test Start-ClaudeGateway.ps1:24 uses, U36). The install lock is
+# released either way.
+$script:InstallTopLevel = -not $MyInvocation.PSCommandPath -and $MyInvocation.InvocationName -ne '.' -and $Host.Name -ne 'Default Host'
+trap {
+    if (Get-Command Write-ClaudeInstallTrapEvent -ErrorAction SilentlyContinue) { Write-ClaudeInstallTrapEvent $_.Exception.Message }
+    if (Get-Command Exit-ClaudeInstallLock -ErrorAction SilentlyContinue) { Exit-ClaudeInstallLock }
+    if (-not $script:InstallTopLevel) { break }
+    # A secret that the error quotes is replaced (ADR-0047 decision 12); before the libraries load, no Azure CLI
+    # call has run, so no error can quote one.
+    $line = ($_.Exception.Message -replace '\s*[\r\n]+\s*', ' ').Trim()
+    if (Get-Command Protect-ClaudeInstallText -ErrorAction SilentlyContinue) { $line = Protect-ClaudeInstallText $line }
+    [Console]::Error.WriteLine($line)
+    if ($_.Exception.Message -notlike 'Refused: *' -and (Get-Command Write-ClaudeInstallFailureHint -ErrorAction SilentlyContinue)) { Write-ClaudeInstallFailureHint }
+    exit 1
+}
 $root = $PSScriptRoot
+# -Preflight and -ListSteps read only and print only their report: no prompt and no change (ADR-0047).
+. (Join-Path $root 'scripts/ClaudeInstallCheckpoint.ps1')
+if ($Preflight -or $ListSteps) {
+    if ($ListSteps) { Show-ClaudeInstallStepList -Root $root -Json:$Json; return }
+    . (Join-Path $root 'scripts/ClaudeInstallerPreflight.ps1')
+    $preflightResult = Get-ClaudeInstallPreflightResult -Bound $PSBoundParameters
+    Write-ClaudeGatewayPreflight -Result $preflightResult -Json:$Json
+    exit $(if ($preflightResult.result -eq 'PASS') { 0 } else { 1 })
+}
+if ($Steps) { Set-ClaudeInstallSelection -Steps $Steps }
+Initialize-ClaudeInstallProgress -Path $ProgressPath
 $desktopSignInHelper = Join-Path $root 'scripts/ClaudeDesktopSignIn.ps1'
 if (Test-Path $desktopSignInHelper) { . $desktopSignInHelper }
 
@@ -155,8 +208,10 @@ function Write-Head($t) {
 }
 function Write-Step($t) { Write-Host ''; Write-Host "==> $t" -ForegroundColor Cyan }
 function Write-Ok($t)   { Write-Host "    [OK]   $t" -ForegroundColor Green }
-function Write-Warn2($t){ Write-Host "    [WARN] $t" -ForegroundColor Yellow }
-function Write-Bad($t)  { Write-Host "    [FAIL] $t" -ForegroundColor Red }
+# A warning or a failure line can quote an error, so a secret in it is replaced once the checkpoint library is
+# loaded (ADR-0047 decision 12). Each helper stands alone: tests/Test-FlowStart.ps1 runs it outside the installer.
+function Write-Warn2($t){ if (Get-Command Protect-ClaudeInstallText -ErrorAction SilentlyContinue) { $t = Protect-ClaudeInstallText ([string]$t) }; Write-Host "    [WARN] $t" -ForegroundColor Yellow }
+function Write-Bad($t)  { if (Get-Command Protect-ClaudeInstallText -ErrorAction SilentlyContinue) { $t = Protect-ClaudeInstallText ([string]$t) }; Write-Host "    [FAIL] $t" -ForegroundColor Red }
 function Write-Note($t) { Write-Host "    $t" -ForegroundColor DarkGray }
 
 # Prompt with a default already in place. Enter accepts it.
@@ -298,6 +353,17 @@ Write-Host ' Nothing is created until you confirm the summary.' -ForegroundColor
 # ADR-0058: a sync interval outside the list stops here, before any Azure call; the choice is made with the store.
 if ($PSBoundParameters.ContainsKey('ProjectionSyncInterval')) { $null = Resolve-ClaudeInstallerSyncInterval -Requested $ProjectionSyncInterval -DeployedJob $null }
 if (-not (Test-ClaudePrerequisites -Mode Admin)) { return }
+# The answers file's answers are bound as if passed, then an interrupted run's answers: a parameter passed
+# wins over the answers file, which wins over the checkpoint (ADR-0046, ADR-0047).
+if ($AnswersPath) {
+    . (Join-Path $root 'scripts/ClaudeInstallerAnswers.ps1')
+    $fromAnswers = Import-ClaudeInstallerAnswers -Path $AnswersPath -Bound $PSBoundParameters
+    foreach ($name in @($fromAnswers.Keys)) { Set-Variable -Name $name -Value $fromAnswers[$name]; $PSBoundParameters[$name] = $fromAnswers[$name] }
+}
+$recordedAnswers = Open-ClaudeInstallCheckpoint -Root $root -Bound $PSBoundParameters -Restart:$Restart -WhatIfRun:$WhatIfPreference -AnswersPath $AnswersPath
+foreach ($name in @($recordedAnswers.Keys)) { if (-not $PSBoundParameters.ContainsKey($name)) { Set-Variable -Name $name -Value $recordedAnswers[$name]; $PSBoundParameters[$name] = $recordedAnswers[$name] } }
+if (-not $PSBoundParameters.ContainsKey('DeveloperEstimate') -and $null -ne ($recordedEstimate = Get-ClaudeInstallAnswer 'DeveloperEstimate')) { $script:DeveloperEstimate = [int]$recordedEstimate }
+if (-not $BusinessUnits -and ($recordedUnits = Get-ClaudeInstallAnswer 'BusinessUnits')) { $BusinessUnits = @($recordedUnits) }
 if ($DeployProjection) { Write-Note '-DeployProjection is accepted for compatibility; since P98, choosing -EntitlementStore projection always deploys and switches the projection.' }
 if ($FlipProjectionAfterCleanCompare) { Write-Note '-FlipProjectionAfterCleanCompare is accepted for compatibility; since P98, the installer switch is part of -EntitlementStore projection.' }
 
@@ -320,6 +386,7 @@ if (-not $acct) {
 }
 Write-Ok "$($acct.user.name)"
 Write-Note "tenant $($acct.tenantId)"
+Assert-ClaudeInstallTenant $acct.tenantId
 
 if (-not $SubscriptionId) {
     # Listing every subscription is unusable on a large tenant - this account
@@ -330,7 +397,7 @@ if (-not $SubscriptionId) {
         $SubscriptionId = $acct.id
     }
     else {
-        $subs = az account list --query "[].{name:name, id:id, state:state}" -o json |
+        $subs = Invoke-ClaudeInstallAzShown { az account list --query "[].{name:name, id:id, state:state}" -o json } |
             ConvertFrom-Json |
             Where-Object { $_.state -eq 'Enabled' }
         $subs = @($subs)
@@ -358,9 +425,11 @@ if (-not $SubscriptionId) {
         $SubscriptionId = $shown[[int]$pick - 1].id
     }
 }
-az account set --subscription $SubscriptionId
-$subName = (az account show --query name -o tsv)
+Invoke-ClaudeInstallAzShown { az account set --subscription $SubscriptionId }
+$subName = (Invoke-ClaudeInstallAzShown { az account show --query name -o tsv })
 Write-Ok "subscription: $subName"
+Assert-ClaudeInstallSubscription
+Assert-ClaudeInstallPrerequisites
 
 # ------------------------------------------------------- 1. Foundry account
 
@@ -380,7 +449,7 @@ if (-not $FoundryAccount) {
     #
     # Keep JMESPath here free of ( ) | & < > ^ and filter in PowerShell instead.
     # Brackets and braces alone are fine.
-    $accounts = az cognitiveservices account list --query "[].{name:name, rg:resourceGroup, loc:location, kind:kind}" -o json |
+    $accounts = Invoke-ClaudeInstallAzShown { az cognitiveservices account list --query "[].{name:name, rg:resourceGroup, loc:location, kind:kind}" -o json } |
         ConvertFrom-Json
     $accounts = @($accounts | Where-Object { $_.kind -eq 'AIServices' -or $_.kind -eq 'OpenAI' })
 
@@ -500,7 +569,7 @@ if (-not $FoundryResourceGroup) {
     # these empty and the deployment then fails with something far less
     # obvious than "I could not find your account".
     $FoundryResourceGroup = @(
-        az cognitiveservices account list --query "[].{n:name, rg:resourceGroup}" -o json |
+        Invoke-ClaudeInstallAzShown { az cognitiveservices account list --query "[].{n:name, rg:resourceGroup}" -o json } |
             ConvertFrom-Json |
             Where-Object { $_.n -eq $FoundryAccount }
     )[0].rg
@@ -519,6 +588,8 @@ Write-Ok "$FoundryAccount (rg $FoundryResourceGroup)"
 # what is actually deployed. Hard-coding them produces a gateway that allowlists
 # a model the account does not serve, and the developer sees a refusal naming a
 # model that looks correct.
+# A resumed run that recorded a Claude deployment still to create creates it after its summary.
+if (-not $pendingDeployment -and ($restored = Get-ClaudeInstallPendingDeployment)) { $pendingDeployment = $restored.Deployment; $providerData = $restored.ProviderData }
 $deployed = @(Get-ClaudeDeployment -Account $FoundryAccount -ResourceGroup $FoundryResourceGroup)
 if ($pendingDeployment -and $pendingDeployment.account -eq $FoundryAccount) { $deployed += $pendingDeployment }
 $modelsStd = ''
@@ -590,31 +661,24 @@ $useExistingGateway = {
     # workspace every time.
     $NamePrefix = ($instance.name -replace '^apim-', '')
     Write-Ok "reusing $($instance.name) ($($instance.sku.name), $($instance.resourceGroup))"
-    if ($instance.identity.type -and $instance.identity.type -notmatch 'SystemAssigned') {
-        Write-Warn2 "$($instance.name) has identity '$($instance.identity.type)'. Deploying sets SystemAssigned, which the gateway needs to call Foundry."
-    }
+    # The deployment fails without a system-assigned identity, so the remedy is said before it (U86).
+    $identity = (Get-ClaudeApimReuseProblems -Instance $instance).IdentityProblem
+    if ($identity) { Write-Warn2 "$($identity.message). $($identity.remedy)" }
 }
+. (Join-Path $root 'scripts/ClaudeInstallerPreflight.ps1')
 if ($ExistingApimName) {
-    $named = $null
-    if ($ResourceGroup) {
-        $json = Invoke-AzOptional { az apim show -g $ResourceGroup -n $ExistingApimName -o json }
-        if ($json) { $named = ($json | Out-String) | ConvertFrom-Json }
-        if ($named -and -not $named.resourceGroup) { $named | Add-Member -NotePropertyName resourceGroup -NotePropertyValue $ResourceGroup -Force }
+    # Read as the preflight reads it (apim.existingSku, apim.existingIdentity): present, absent or inconclusive.
+    $reuse = Get-ClaudeApimReuseState -Name $ExistingApimName -ResourceGroup $ResourceGroup
+    if ($reuse.Verdict -ne 'present') {
+        Write-Bad "$($reuse.Detail)."
+        throw $(if ($reuse.Verdict -eq 'absent') { 'The gateway to update was not found. Nothing was created.' } else { 'The gateway to update could not be read. Nothing was created.' })
     }
-    else {
-        $listed = az apim list -o json 2>$null | ConvertFrom-Json
-        $named = @($listed | Where-Object { $_.name -eq $ExistingApimName })[0]
-    }
-    if (-not $named) {
-        Write-Bad "API Management '$ExistingApimName' was not found$(if ($ResourceGroup) { " in '$ResourceGroup'" }) in this subscription."
-        throw 'The gateway to update was not found. Nothing was created.'
-    }
-    if ([string]$named.sku.name -notmatch 'V2$') {
-        throw "$ExistingApimName is $($named.sku.name); only v2 tiers meter Anthropic tokens, so budgets would read zero. Nothing was created."
-    }
+    if ($reuse.SkuProblem) { throw "$($reuse.SkuProblem.message). Nothing was created." }
+    $named = $reuse.Instance
+    if (-not $named.resourceGroup) { $named | Add-Member -NotePropertyName resourceGroup -NotePropertyValue $reuse.ResourceGroup -Force }
     . $useExistingGateway $named
 }
-if (-not $Location) { $Location = az cognitiveservices account show -g $FoundryResourceGroup -n $FoundryAccount --query location -o tsv }
+if (-not $Location) { $Location = Invoke-ClaudeInstallAzShown { az cognitiveservices account show -g $FoundryResourceGroup -n $FoundryAccount --query location -o tsv } }
 if (-not $Location) {
     Write-Bad "Could not resolve the location of '$FoundryAccount'."
     Write-Note 'Pass -Location explicitly.'
@@ -624,8 +688,8 @@ $ResourceGroup = if ($ResourceGroup) { $ResourceGroup } else {
     Read-Default -Prompt 'Resource group' -Default $FoundryResourceGroup `
         -Help 'Created if it does not exist. Same region as Foundry keeps latency down.'
 }
-# A gateway being updated keeps its region.
-$Location = if ($ExistingApim) { $Location } else { Read-GatewayRegion -Default $Location }
+# A gateway being updated keeps its region; a resumed run keeps the recorded one.
+if (-not (Test-ClaudeInstallResuming)) { $Location = if ($ExistingApim) { $Location } else { Read-GatewayRegion -Default $Location } }
 
 # ------------------------------------------------- reuse an existing gateway
 #
@@ -638,8 +702,11 @@ $Location = if ($ExistingApim) { $Location } else { Read-GatewayRegion -Default 
 # zero Anthropic tokens, so every budget silently reads as zero usage.
 
 if (-not $NamePrefix) {
-    $allApim = az apim list -o json 2>$null | ConvertFrom-Json
-    $reusable = @($allApim | Where-Object { $_.sku.name -match 'V2$' })
+    # Read as the reuse path reads (Get-ClaudeApimReuseCandidates): a list that cannot be read offers no
+    # instance and says so, rather than reading as a subscription without one.
+    $candidates = Get-ClaudeApimReuseCandidates
+    if ($candidates.Verdict -ne 'present') { Write-Warn2 "The API Management instances in this subscription could not be listed ($($candidates.Detail)), so none is offered for reuse; -ExistingApimName names one." }
+    $reusable = @($candidates.Instances)
 
     if ($reusable.Count) {
         Write-Host ''
@@ -1005,12 +1072,15 @@ Write-Host '    Shortening the window moves only the rest.' -ForegroundColor Dar
 $windowTarget = if ($ExistingApim) { $ExistingApim } else { "apim-$NamePrefix" }
 $liveWindow = Invoke-AzOptional { az apim nv show -g $ResourceGroup --service-name $windowTarget --named-value-id entitlement-cache-seconds --query value -o tsv }
 $liveWindowSeconds = 0
-if ($liveWindow -and [int]::TryParse("$liveWindow".Trim(), [ref]$liveWindowSeconds) -and $liveWindowSeconds -gt 0) {
+# An answer given for the window wins over the live one: it is a change the operator asked for.
+if ($RevocationWindowSeconds) { $entitlementCacheSeconds = $RevocationWindowSeconds }
+elseif ($liveWindow -and [int]::TryParse("$liveWindow".Trim(), [ref]$liveWindowSeconds) -and $liveWindowSeconds -gt 0) {
     $entitlementCacheSeconds = $liveWindowSeconds
     Write-Host ''
     Write-Host ("    Keeping this gateway's revocation window: {0} seconds." -f $liveWindowSeconds) -ForegroundColor Green
     Write-Host ("    Change it with: Set-ApimNamedValue -ResourceGroup {0} -ApimName {1} -Id entitlement-cache-seconds -Value <seconds>" -f $ResourceGroup, $windowTarget) -ForegroundColor DarkGray
 }
+elseif ($recordedWindow = Get-ClaudeInstallAnswer 'RevocationWindowSeconds') { $entitlementCacheSeconds = [int]$recordedWindow }
 else {
     $revoke = Read-Default -Prompt 'Revocation window in minutes' -Default '60' `
         -Help 'Applies once you move to the projection. Changeable later with one command.' -Validate {
@@ -1036,13 +1106,13 @@ Write-Host '    Worth knowing before choosing stop: the counter cannot see cache
 Write-Host '    and on measured usage cache was the majority of real cost. A stop set from' -ForegroundColor DarkGray
 Write-Host '    a dollar figure therefore triggers far later than the dollars suggest.' -ForegroundColor DarkGray
 
-$budgetMode = Read-Default -Prompt 'Team budget behaviour (report/stop)' -Default 'report' `
+$budgetMode = if ($TeamBudgetBehaviour) { $TeamBudgetBehaviour } elseif ($recordedMode = Get-ClaudeInstallAnswer 'TeamBudgetBehaviour') { $recordedMode } else { Read-Default -Prompt 'Team budget behaviour (report/stop)' -Default 'report' `
     -Help 'Either way the spend is attributed. This chooses whether it also refuses.' -Validate {
         param($x)
         if ($x -in @('report','stop')) { return $true }
         Write-Warn2 'Must be report or stop.'
         return $false
-    }
+    } }
 
 # Whether somebody with no team may use it at all.
 Write-Host ''
@@ -1054,13 +1124,13 @@ Write-Host ''
 Write-Host '    Start on allow unless every developer already has a team. deny on day one' -ForegroundColor DarkGray
 Write-Host '    refuses people who have done nothing wrong.' -ForegroundColor DarkGray
 
-$unassignedMode = Read-Default -Prompt 'Developers with no team (allow/deny)' -Default 'allow' `
+$unassignedMode = if ($UnassignedDevelopers) { $UnassignedDevelopers } elseif ($recordedMode = Get-ClaudeInstallAnswer 'UnassignedDevelopers') { $recordedMode } else { Read-Default -Prompt 'Developers with no team (allow/deny)' -Default 'allow' `
     -Help 'Get-ClaudeBusinessUnit.ps1 reports how many are unassigned, so you can switch this when it reaches zero.' -Validate {
         param($x)
         if ($x -in @('allow','deny')) { return $true }
         Write-Warn2 'Must be allow or deny.'
         return $false
-    }
+    } }
 
 # The address developers are configured against. This one cannot be retrofitted
 # cheaply, which is why it is asked rather than defaulted silently.
@@ -1290,8 +1360,11 @@ if ($QuotaOrg -lt $QuotaPremium) { Write-Warn2 'The monthly organisation ceiling
 
 Write-Step 'Entitlement groups'
 Write-Note 'Membership of these Entra groups is what grants access.'
-$StandardGroup = Read-Default -Prompt 'Standard tier group' -Default $StandardGroup
-$PremiumGroup  = Read-Default -Prompt 'Premium tier group'  -Default $PremiumGroup
+if (-not (Test-ClaudeInstallResuming)) {
+    $StandardGroup = Read-Default -Prompt 'Standard tier group' -Default $StandardGroup
+    $PremiumGroup  = Read-Default -Prompt 'Premium tier group'  -Default $PremiumGroup
+}
+Assert-ClaudeInstallNames ([ordered]@{ StandardGroup = $StandardGroup; PremiumGroup = $PremiumGroup; NamePrefix = $NamePrefix })
 
 # Every value below reaches az. Checked before the summary, so a refusal creates nothing (ADR-0032).
 Assert-AzArgumentsSafe -Values ([ordered]@{
@@ -1333,6 +1406,7 @@ $rows = [ordered]@{
 if ($pendingDeployment) {
     $rows.Insert(2, 'Claude deployment', ("{0} v{1} on {2}, {3} capacity {4} - deployed first, after you confirm" -f $pendingDeployment.model, $pendingDeployment.version, $pendingDeployment.account, $pendingDeployment.sku, $pendingDeployment.capacity))
 }
+if (Test-ClaudeInstallResuming) { $rows['Checkpoint'] = Get-ClaudeInstallSummaryRow }
 if ($syncJobChoice) {
     $storeRow = [Array]::IndexOf(@($rows.Keys), 'Entitlement store')
     $rows.Insert($storeRow + 1, 'Sync job', $syncJobChoice.Summary)
@@ -1375,19 +1449,25 @@ if ($ExistingApim) {
 Write-Host ''
 
 if ($WhatIfPreference) { Write-Warn2 'WhatIf - stopping before any change.'; return }
-if (-not (Read-YesNo $(if ($ExistingApim) { 'Apply this to the existing gateway?' } else { 'Create these resources?' }) $true)) {
-    Write-Host ''; Write-Host 'Cancelled.' -ForegroundColor Yellow; return
+if (-not (Read-YesNo $(if (Test-ClaudeInstallResuming) { "Resume from $(Get-ClaudeInstallResumeTitle)?" } elseif ($ExistingApim) { 'Apply this to the existing gateway?' } else { 'Create these resources?' }) $true)) {
+    Write-Host ''; Write-Host 'Cancelled.' -ForegroundColor Yellow
+    if (Test-ClaudeInstallResuming) { Write-Note "The install checkpoint is kept. To discard it and start again: $(Format-ClaudeInstallResume) -Restart" }
+    return
 }
+Assert-ClaudeInstallDesktopApp $DesktopEntraClientId
+# The checkpoint is written here, after the summary is confirmed and before the first change (ADR-0032).
+Save-ClaudeInstallCheckpoint
 
 # ---------------------------------------------------------------- 6. deploy
 
 Write-Head 'Deploying'
 
-if ($pendingDeployment) {
+if ($pendingDeployment -and -not (Test-ClaudeInstallStepSkip 'claude-deployment' -Verify { Test-ClaudeInstallModelDeployment $pendingDeployment.resourceGroup $pendingDeployment.account $pendingDeployment.name })) {
     Write-Step 'Claude deployment'
     $made = New-ClaudeDeployment -Account $pendingDeployment.account -ResourceGroup $pendingDeployment.resourceGroup `
         -Model $pendingDeployment.model -Version $pendingDeployment.version -Sku $pendingDeployment.sku -Capacity $pendingDeployment.capacity -ProviderData $providerData
     Write-Ok "deployed $(Format-ClaudeDeployment $made)"
+    Complete-ClaudeInstallStep 'claude-deployment' -Receipt ([pscustomobject]@{ account = $pendingDeployment.account; resourceGroup = $pendingDeployment.resourceGroup; name = $pendingDeployment.name; origin = 'created' })
 }
 
 Write-Step 'Resource group'
@@ -1400,31 +1480,39 @@ Write-Step 'Resource group'
 # and then deployed the whole gateway into the group's region while -Location
 # was quietly ignored. Nobody reading that output would know which region they
 # had ended up in.
-$rgLocation = az group show -n $ResourceGroup --query location -o tsv 2>$null
-if ($rgLocation) {
-    $rgLocation = $rgLocation.Trim()
-    $same = ($rgLocation -replace '\s', '').ToLower() -eq ($Location -replace '\s', '').ToLower()
-    if ($same) {
-        Write-Ok "$ResourceGroup (exists, $rgLocation)"
+if (-not (Test-ClaudeInstallStepSkip 'resource-group' -Idempotent -Verify { Test-ClaudeInstallResourceGroup $ResourceGroup })) {
+    $rgLocation = az group show -n $ResourceGroup --query location -o tsv 2>$null
+    if ($rgLocation) {
+        $rgLocation = $rgLocation.Trim()
+        $same = ($rgLocation -replace '\s', '').ToLower() -eq ($Location -replace '\s', '').ToLower()
+        if ($same) {
+            Write-Ok "$ResourceGroup (exists, $rgLocation)"
+        }
+        else {
+            Write-Ok "$ResourceGroup (exists)"
+            Write-Warn2 "It is in '$rgLocation', not the '$Location' you asked for."
+            Write-Note  "A resource group cannot be moved, and everything here takes its location from"
+            Write-Note  "the group - so the gateway will be created in '$rgLocation' and -Location is"
+            Write-Note  "ignored. Deploying into '$Location' means using a different group name."
+        }
     }
     else {
-        Write-Ok "$ResourceGroup (exists)"
-        Write-Warn2 "It is in '$rgLocation', not the '$Location' you asked for."
-        Write-Note  "A resource group cannot be moved, and everything here takes its location from"
-        Write-Note  "the group - so the gateway will be created in '$rgLocation' and -Location is"
-        Write-Note  "ignored. Deploying into '$Location' means using a different group name."
+        Invoke-ClaudeInstallAzShown { az group create -n $ResourceGroup -l $Location -o none }
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not create resource group '$ResourceGroup' in '$Location'. See the error above."
+        }
+        Write-Ok "$ResourceGroup (created in $Location)"
     }
-}
-else {
-    az group create -n $ResourceGroup -l $Location -o none
-    if ($LASTEXITCODE -ne 0) {
-        throw "Could not create resource group '$ResourceGroup' in '$Location'. See the error above."
-    }
-    Write-Ok "$ResourceGroup (created in $Location)"
+    Complete-ClaudeInstallStep 'resource-group' -Receipt ([pscustomobject]@{ name = $ResourceGroup; location = $(if ($rgLocation) { $rgLocation } else { $Location }); origin = $(if ($rgLocation) { 'pre-existing' } else { 'created' }) })
 }
 
 Write-Step $(if ($ExistingApim) { 'Claude API and policies (a few minutes)' } else { 'API Management and Application Insights (a few minutes)' })
 Write-Note 'Safe to leave running.'
+# A recorded deployment is awaited, used or shown first; its body below is not re-indented, so that
+# this change reads line by line (ADR-0046 decision 10).
+$gatewayPlan = Resolve-ClaudeInstallGatewayStep -ResourceGroup $ResourceGroup -ApimName $apimName
+$gatewayUrl = $gatewayPlan.GatewayUrl
+if ($gatewayPlan.Run) {
 
 # Entitlement is owned by Sync-ClaudeAccess.ps1, not by this template. If the
 # gateway already exists, read the current allow lists and hand them back, so a
@@ -1605,7 +1693,8 @@ Assert-AzArgumentsSafe -Values ([ordered]@{
     ContentSafetyTimeoutSeconds = $contentSafetyTimeoutForDeployment
 })
 
-az deployment group create `
+Register-ClaudeInstallDeployment $deployName -CreatedApim (-not $ExistingApim -and -not $liveId)
+Invoke-ClaudeInstallAzShown { az deployment group create `
     --name $deployName `
     -g $ResourceGroup `
     --template-file (Join-Path $root 'infra/main.bicep') `
@@ -1647,7 +1736,7 @@ az deployment group create `
         entitlementCacheSeconds=$(if ($entitlementCacheSeconds) { $entitlementCacheSeconds } elseif ($entTtl) { $entTtl } else { 3600 }) `
         buUnassigned=$(if ($unassignedMode) { $unassignedMode } else { 'allow' }) `
     @preserveArgs `
-    -o none
+    -o none }
 
 if ($LASTEXITCODE -ne 0) { throw 'Deployment failed. See the error above.' }
 if ($restoreContentSafetyTruncateMode) {
@@ -1657,45 +1746,59 @@ Write-Ok 'deployed'
 
 $gatewayUrl = az deployment group show -g $ResourceGroup -n $deployName --query "properties.outputs.gatewayUrl.value" -o tsv 2>$null
 if (-not $gatewayUrl) { $gatewayUrl = "https://$apimName.azure-api.net/claude" }
-if ($addressPlan) {
+Complete-ClaudeInstallGatewayStep -ResourceGroup $ResourceGroup -ApimName $apimName -GatewayUrl $gatewayUrl -GrantedRole $grantRole `
+    -FoundryResourceGroup $FoundryResourceGroup -FoundryAccount $FoundryAccount -DesktopClientId $DesktopEntraClientId
+}
+if ($addressPlan -and (Test-ClaudeInstallStepSelected 'company-address')) {
+    if (Test-ClaudeInstallStepSkip 'company-address' -Verify { Test-ClaudeInstallAddress $ResourceGroup $apimName $AddressHostname $savedAddressPath }) {
+        $addressRecord = Read-ClaudeDecisionRecord -Path $savedAddressPath
+        $addressResult = [pscustomobject]@{ GatewayUrl = [string]$addressRecord.gatewayUrl; Address = $addressRecord.address }
+    }
+    else {
     Write-Step 'Company address, certificate and DNS'
     $addressResult = Invoke-ClaudeAddressPlan -Plan $addressPlan -CertificatePassword $AddressCertificatePassword -RecordPath $savedAddressPath
+    Complete-ClaudeInstallStep 'company-address' -Receipt ([pscustomobject]@{ hostname = $AddressHostname })
+    }
     $gatewayUrl = $addressResult.GatewayUrl
 }
 
 # ---------------------------------------------------------------- 7. groups
 
-Write-Step 'Entra groups'
-foreach ($g in @($StandardGroup, $PremiumGroup)) {
-    $existing = az ad group show --group $g --query id -o tsv 2>$null
-    if ($existing) { Write-Ok "$g exists" }
-    else {
-        $id = (az ad group create --display-name $g --mail-nickname $g -o json 2>$null | ConvertFrom-Json).id
-        if ($id) { Write-Ok "$g created" }
-        else {
-            Write-Warn2 "Could not create '$g' - your tenant may restrict group creation."
-            Write-Note 'Ask an admin to create it, then re-run.'
-        }
-    }
+if (Test-ClaudeInstallStepSelected 'entra-groups') {
+    Write-Step 'Entra groups'
+    Invoke-ClaudeInstallGroups -Groups @([pscustomobject]@{ Role = 'standard'; Name = $StandardGroup }, [pscustomobject]@{ Role = 'premium'; Name = $PremiumGroup })
 }
 
-Write-Step 'Sync entitlement'
-$entitlementSync = Invoke-ClaudeInstallerEntitlementSync -Root $root -ResourceGroup $ResourceGroup -ApimName $apimName `
-    -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -EntitlementStore $EntitlementStore `
-    -LiveEntitlementSource $liveEntitlementSource -NewGateway:(-not ($ExistingApim -or $liveApimId))
-switch ($entitlementSync.Reason) {
-    'already-projection' { Write-Note 'This gateway serves from the projection: the projection deployment syncs it and compares it with a fresh Entra snapshot.' }
-    'new-gateway' { Write-Note 'Projection is the default store for this new gateway; skipping named-value list population.' }
-    'over-capacity' {
-        Write-Warn2 'The population exceeds named-value capacity, so the projection will be compared with a fresh Entra snapshot.'
-        Write-Note 'The named-value lists were left as they were and serve until the switch; a rollback to named values cannot hold this population (about 93-110 developers fit).'
+# A default for a selective -Steps run that names 'projection' without 'sync' (ADR-0046 resume): the catalog
+# dependency below refuses that combination on a resume with no completed 'sync' step, but an unattended
+# single-invocation run naming both is the common case, where the block below always replaces this default
+# before 'projection' reads it.
+$entitlementSync = [pscustomobject]@{ CompareBaseline = 'Auto'; ServingStore = $(if ($liveEntitlementSource -eq 'projection') { 'projection' } else { 'named-value' }); Reason = 'not-selected' }
+if (Test-ClaudeInstallStepSelected 'sync') {
+    Write-Step 'Sync entitlement'
+    Start-ClaudeInstallStep 'sync'
+    $entitlementSync = Invoke-ClaudeInstallerEntitlementSync -Root $root -ResourceGroup $ResourceGroup -ApimName $apimName `
+        -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -EntitlementStore $EntitlementStore `
+        -LiveEntitlementSource $liveEntitlementSource -NewGateway:(-not ($ExistingApim -or $liveApimId))
+    switch ($entitlementSync.Reason) {
+        'already-projection' { Write-Note 'This gateway serves from the projection: the projection deployment syncs it and compares it with a fresh Entra snapshot.' }
+        'new-gateway' { Write-Note 'Projection is the default store for this new gateway; skipping named-value list population.' }
+        'over-capacity' {
+            Write-Warn2 'The population exceeds named-value capacity, so the projection will be compared with a fresh Entra snapshot.'
+            Write-Note 'The named-value lists were left as they were and serve until the switch; a rollback to named values cannot hold this population (about 93-110 developers fit).'
+        }
     }
+    Complete-ClaudeInstallStep 'sync'
 }
 
 $syncJobStatus = 'not-requested'
 $syncJobGrant = ''
-if ($EntitlementStore -eq 'projection') {
+if ($EntitlementStore -eq 'projection' -and (Test-ClaudeInstallStepSelected 'projection')) {
     Write-Step 'Projection deployment'
+    Start-ClaudeInstallStep 'projection'
+    # Resume does not skip this step on a live check: Invoke-ClaudeInstallerProjectionDeployment (P98) replaced
+    # the direct Deploy-ClaudeProjection.ps1 call this checkpoint's old -Verify block checked by deployment name,
+    # and those names do not match the new function's. A live-state verify for skip-on-resume is a follow-up.
     Invoke-ClaudeInstallerProjectionDeployment -Root $root -ResourceGroup $ResourceGroup -ApimName $apimName -NamePrefix $projectionPrefix `
         -Location $Location -Sku $Sku -ResolverInboundAccess $ResolverInboundAccess -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup `
         -SubscriptionId $SubscriptionId -ProjectionResolverAppId $ProjectionResolverAppId -CompareBaseline $entitlementSync.CompareBaseline -ServingStore $entitlementSync.ServingStore -ResolverPublicByDefault:($ResolverInboundAccess -eq 'public' -and -not $PSBoundParameters.ContainsKey('ResolverInboundAccess')) -WhatIf:$WhatIfPreference | Out-Null
@@ -1705,6 +1808,7 @@ if ($EntitlementStore -eq 'projection') {
             -AcrSku $syncJobInputs.AcrSku -WorkspaceResourceId $syncJobInputs.WorkspaceResourceId -RenewalSubnetId $syncJobInputs.RenewalSubnetId) { 'deployed' } else { 'failed' }
         if ($syncJobStatus -eq 'deployed') { $syncJobGrant = Get-ClaudeInstallerSyncJobGrant -Root $root -NamePrefix $projectionPrefix }
     }
+    Complete-ClaudeInstallStep 'projection'
 }
 
 # ------------------------------------------------------- 7b. business units
@@ -1715,9 +1819,22 @@ if ($EntitlementStore -eq 'projection') {
 #
 # Skipped by default under -Yes: a business unit is a naming decision about the
 # customer's own organisation, and guessing one unattended leaves a registry
-# entry nobody asked for.
-if (-not $Yes) {
+# entry nobody asked for. Units given as answers are applied, attended or not (ADR-0047).
+if (-not (Test-ClaudeInstallStepSelected 'business-units')) {
+    # -Steps without business-units: this run neither asks for nor writes a business unit.
+}
+elseif ($BusinessUnits) {
+    Write-Step 'Business units'
+    if (-not (Test-ClaudeInstallStepSkip 'business-units' -Verify { Test-ClaudeInstallBusinessUnits $ResourceGroup $apimName $args[0] })) {
+        Invoke-ClaudeInstallBusinessUnits -Root $root -Units @($BusinessUnits) -ResourceGroup $ResourceGroup -ApimName $apimName
+    }
+    . (Join-Path $root 'scripts/ClaudeUsdBudgets.ps1'); . (Join-Path $root 'scripts/ClaudeBudgetModes.ps1')
+    Write-ClaudeInstallUsdReconcile -ResourceGroup $ResourceGroup -ApimName $apimName
+}
+elseif (-not $Yes) {
     Write-Step 'Business units (optional)'
+    # A resume skips units it finds in bu-registry; the block below is not re-indented (ADR-0046).
+    if (-not (Test-ClaudeInstallStepSkip 'business-units' -Verify { Test-ClaudeInstallBusinessUnits $ResourceGroup $apimName $args[0] })) {
     Write-Note 'A business unit is an Entra group with a monthly budget. Usage is charged to it.'
     Write-Note 'Skip this and add them later with ./scripts/Set-ClaudeBusinessUnit.ps1.'
 
@@ -1735,32 +1852,52 @@ if (-not $Yes) {
         $buGroup = Read-Default -Prompt 'Entra group' -Default "claude-bu-$buId" `
             -Help 'Who belongs to the unit. Created here if it does not exist.'
 
-        $existing = az ad group show --group $buGroup --query id -o tsv 2>$null
-        if (-not $existing) {
-            $newId = (az ad group create --display-name $buGroup --mail-nickname $buGroup -o json 2>$null | ConvertFrom-Json).id
-            if ($newId) { Write-Ok "$buGroup created" }
-            else {
-                # Set-ClaudeBusinessUnit refuses a unit pointing at a group that
-                # does not exist, because it would sync to nobody and read as
-                # unused rather than broken. Stop here rather than write one.
-                Write-Warn2 "Could not create '$buGroup' - your tenant may restrict group creation."
-                Write-Note 'Ask an admin to create it, then run Set-ClaudeBusinessUnit.ps1.'
-                continue
-            }
+        # The answers schema's rule for a unit's group: a name with a single quote, comma, colon or cmd.exe metacharacter
+        # is refused here, with the schema's message, before any az call reads Graph for it (ADR-0047 decision 13).
+        if (-not (Get-Command Get-ClaudeAnswersSchema -ErrorAction SilentlyContinue)) { . (Join-Path $root 'scripts/ClaudeInstallerAnswers.ps1') }
+        $groupRule = (Get-ClaudeAnswersSchema).Defs['BusinessUnit'].properties.group
+        if ($buGroup -cnotmatch [string]$groupRule.pattern) {
+            Write-Warn2 "Entra group '$buGroup' $($groupRule.'x-patternMessage'), so business unit $buId is not written."
+            Write-Note ([string]$groupRule.'x-remedy')
+            continue
         }
-        else { Write-Ok "$buGroup exists" }
+
+        # By its exact name, through the function the answers path uses (ADR-0046 decision 11): az ad group
+        # show --group would take a single group whose name only starts with this one.
+        $unitGroup = Resolve-ClaudeInstallUnitGroup $buGroup
+        if ($unitGroup.Verdict -eq 'inconclusive') {
+            Write-Warn2 "Entra group '$buGroup' could not be looked up by name ($($unitGroup.Detail)), so business unit $buId is not written."
+            Write-Note $(if ($unitGroup.Detail -match 'groups have a name of that length') { 'Rename or remove one of those groups, or give another group name.' } else { 'Sign in with an account that can read Entra groups in Microsoft Graph, then add the unit with Set-ClaudeBusinessUnit.ps1.' })
+            continue
+        }
+        if ($unitGroup.Verdict -eq 'create-failed') {
+            # Set-ClaudeBusinessUnit refuses a unit pointing at a group that
+            # does not exist, because it would sync to nobody and read as
+            # unused rather than broken. Stop here rather than write one.
+            Write-Warn2 "Could not create '$buGroup' - your tenant may restrict group creation."
+            Write-Note 'Ask an admin to create it, then run Set-ClaudeBusinessUnit.ps1.'
+            continue
+        }
+        if ($unitGroup.Verdict -eq 'created') { Write-Ok "$buGroup created" } else { Write-Ok "$buGroup exists" }
 
         $buBudget = Read-Int -Prompt 'Monthly budget, US dollars' -Default 5000 `
             -Help 'Converted to tokens on write. List price, and the counter cannot see cached tokens.'
 
-        & (Join-Path $root 'scripts/Set-ClaudeBusinessUnit.ps1') -Id $buId -Group $buGroup `
+        & (Join-Path $root 'scripts/Set-ClaudeBusinessUnit.ps1') -Id $buId -Group $buGroup -SkipGroupCheck `
             -MonthlyBudgetUsd $buBudget -ApimName $apimName -ResourceGroup $ResourceGroup
+        Add-ClaudeInstallBusinessUnit -Id $buId -GroupId $unitGroup.Id -GroupOrigin $unitGroup.Origin
+    }
+    Complete-ClaudeInstallStep 'business-units'
     }
 }
 
 # --------------------------------------------------------------- 8. package
 
+# A run with -Steps writes the package only when it names onboarding-package; the block below is not
+# re-indented, so that this change reads line by line.
+if (Test-ClaudeInstallStepSelected 'onboarding-package') {
 Write-Step 'Onboarding package'
+Start-ClaudeInstallStep 'onboarding-package'
 $pkg = Join-Path $root 'onboarding'
 New-Item -ItemType Directory -Force -Path $pkg | Out-Null
 
@@ -1832,14 +1969,24 @@ else {
     [IO.File]::WriteAllText($configPath, ($config | ConvertTo-Json -Depth 30), (New-Object Text.UTF8Encoding($false)))
 }
 Write-Ok "config: $configPath"
+Complete-ClaudeInstallStep 'onboarding-package' -Receipt ([pscustomobject]@{ path = $configPath })
+}
 
 # ---------------------------------------------------------------- 9. verify
 
-Write-Step 'Verifying the controls'
-try {
-    & (Join-Path $root 'scripts/Show-Governance.ps1') -ApimName $apimName -ResourceGroup $ResourceGroup -SkipThrottleTest
+if (Test-ClaudeInstallStepSelected 'verify') {
+    Write-Step 'Verifying the controls'
+    Start-ClaudeInstallStep 'verify'
+    $verified = $true
+    try {
+        & (Join-Path $root 'scripts/Show-Governance.ps1') -ApimName $apimName -ResourceGroup $ResourceGroup -SkipThrottleTest
+    }
+    catch { Write-Warn2 "Verification could not complete: $($_.Exception.Message)"; $verified = $false }
+    Complete-ClaudeInstallStep 'verify' -Incomplete:(-not $verified)
 }
-catch { Write-Warn2 "Verification could not complete: $($_.Exception.Message)" }
+Close-ClaudeInstallCheckpoint
+# A run with -Steps ran what it was asked to; the next steps belong to a whole install.
+if ($Steps) { return }
 
 # ----------------------------------------------------------------- 10. next
 

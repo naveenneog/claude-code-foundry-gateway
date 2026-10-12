@@ -38,13 +38,13 @@ Assert 'BasicV2 refuses a private resolver before anything is created' ($Failure
 Assert 'Basic public shape names the Entra-only risk' ($installer -match 'public, Entra-authenticated resolver' -and $installer -match 'APIM v2 outbound IP')
 Assert 'SKU guidance says zones and injection are not provisioned by this installer' ($installer -match 'without zone redundancy or Premium v2 VNet injection' -and $installer -match '-ExistingApimName')
 Assert 'installer persists projection settings into claude-gateway.json' ($installer -match 'entitlementStore\s*=' -and $installer -match 'resolverInboundAccess\s*=' -and $installer -match 'projectionDeployer\s*=')
-Assert 'installer deploys the projection whenever the store is projection' ($installer -match "(?s)if \(\`$EntitlementStore -eq 'projection'\) \{\s*Write-Step 'Projection deployment'.*?Invoke-ClaudeInstallerProjectionDeployment")
+Assert 'installer deploys the projection whenever the store is projection' ($installer -match "(?s)if \(\`$EntitlementStore -eq 'projection'(?: -and [^{]+)?\) \{\s*Write-Step 'Projection deployment'.*?Invoke-ClaudeInstallerProjectionDeployment")
 Assert 'an explicit store under -Yes is kept' ((Resolve-ClaudeInstallerEntitlementStore -EntitlementStore named-value -DeveloperCount 25 -BuCeiling 93 -ListCeiling 110 -Yes).Store -eq 'named-value')
 Assert 'an existing named-value gateway without an explicit store migrates to projection' ((Resolve-ClaudeInstallerEntitlementStore -DeveloperCount 25 -BuCeiling 93 -ListCeiling 110 -DefaultStore named-value -Yes).Store -eq 'projection' -and $installer -match 'migrating from named values: deploy, compare, switch')
 Assert '-Yes states the projection default it chose' ($installer -match 'EntitlementStore projection: default under -Yes')
 Assert 'choosing projection implies the deployer; named values do not' ($small.DeployProjection -eq $true -and
     (Resolve-ClaudeInstallerEntitlementStore -EntitlementStore named-value -DeveloperCount 25 -BuCeiling 93 -ListCeiling 110 -Yes).DeployProjection -eq $false -and
-    $installer -match "if \(\`$EntitlementStore -eq 'projection'\) \{\s*Write-Step 'Projection deployment'")
+    $installer -match "if \(\`$EntitlementStore -eq 'projection'(?: -and [^{]+)?\) \{\s*Write-Step 'Projection deployment'")
 Assert 'flip no longer requires renewal admission inputs' ($installer -match 'FlipProjectionAfterCleanCompare' -and $installer -notmatch 'ProjectionRenewalImageDigest|ProjectionRenewalActionGroupResourceId|P86 admission requires')
 
 Write-Host ''

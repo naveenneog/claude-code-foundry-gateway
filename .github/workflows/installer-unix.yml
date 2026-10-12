@@ -1,0 +1,113 @@
+name: Installer checkpoint on macOS and Linux
+
+# The bash installer and its install checkpoint (docs/adr/0046-installer-checkpoint-and-resume.md), and its
+# answers file, preflight, steps and progress stream (docs/adr/0047-lean-installer-phase-0.md),
+# on bash 5 (ubuntu-latest) and on the macOS system bash 3.2 (macos-latest); tool versions in
+# docs/UNKNOWNS.md U71. Test-All (test-all.yml) runs the same checks on Windows with Git Bash. The
+# store suite's real POSIX mode checks, for both installers' libraries, run only here.
+on:
+  pull_request:
+    paths:
+      - install-claude-gateway.sh
+      - scripts/install-checkpoint.sh
+      - scripts/install-store.sh
+      - scripts/install-resume.sh
+      - scripts/ClaudeInstallCheckpoint.ps1
+      - scripts/ClaudeInstallStore.ps1
+      - scripts/ClaudeInstallResume.ps1
+      - scripts/preflight.sh
+      - scripts/banner.sh
+      - scripts/install-answers.sh
+      - scripts/install-answers.jq
+      - scripts/install-steps.sh
+      - scripts/install-preflight.sh
+      - scripts/install-prices.sh
+      - scripts/ClaudeInstallerAnswers.ps1
+      - schemas/claude-gateway.answers.schema.json
+      - infra/main.bicep
+      - tests/Test-BashInstaller.ps1
+      - tests/Test-BashInstallerCheckpoint.ps1
+      - tests/Test-InstallerCheckpointStore.ps1
+      - tests/BashInstallerHarness.ps1
+      - tests/ChildOutputRead.ps1
+      - tests/Test-InstallerAnswersSchema.ps1
+      - tests/Test-BashInstallerPreflight.ps1
+      - tests/Test-BashInstallerStepSelection.ps1
+      - tests/Test-InstallerRedaction.ps1
+      - tests/InstallerRedactionShapes.ps1
+      - .github/workflows/installer-unix.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: installer-unix-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bash-installer:
+    name: bash installer on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Tool versions
+        shell: bash
+        run: |
+          uname -sm
+          echo "bash on PATH: $(bash --version | head -n 1)"
+          echo "/bin/bash: $(/bin/bash --version | head -n 1)"
+          echo "jq: $(jq --version)"
+          echo "pwsh: $(pwsh --version)"
+          echo "az: $(az version --query '"azure-cli"' -o tsv)"
+          for t in sha256sum shasum openssl; do echo "$t: $(command -v "$t" || echo absent)"; done
+          echo "ps lstart: $(LC_ALL=C TZ=UTC ps -o lstart= -p $$)"
+      - name: Installer checkpoint and resume (bash)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File tests/Test-BashInstallerCheckpoint.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Installer checkpoint store permissions (both libraries, real modes)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File tests/Test-InstallerCheckpointStore.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Installer prices, record and FinOps offer (bash)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File tests/Test-BashInstaller.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Answers schema, both validators (PowerShell and jq)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File tests/Test-InstallerAnswersSchema.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Redaction, one rule set in both engines (PowerShell and jq)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File tests/Test-InstallerRedaction.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Installer preflight (bash)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File tests/Test-BashInstallerPreflight.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Installer steps, precedence and progress stream (bash)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File tests/Test-BashInstallerStepSelection.ps1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }

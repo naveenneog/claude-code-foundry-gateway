@@ -30,6 +30,8 @@
     "architectureSignificantPaths": [
       "infra/**",
       "Install-ClaudeGateway.ps1",
+      "tools/installer-ui/**",
+      "scripts/Get-ClaudeInstallerUi*.ps1",
       "scripts/Sync-ClaudeAccess.ps1",
       "scripts/Import-ClaudeEntitlement.ps1"
     ]

@@ -1,0 +1,110 @@
+{
+  "packet": "P91",
+  "round": "council round 3, Security: the Windows walk and the ruling on the lead amendment",
+  "dateUtc": "2026-10-02",
+  "measuredCommit": "7902a3c0c86c1aea6e058f514bd5babda2680c8b",
+  "platform": "Windows, PowerShell 7.6.6, Git Bash 5.3.15, jq 1.8.2",
+  "logicalCpuCount": 16,
+  "rule": "A mutant counts as caught only when its suite reaches the baseline check count and at least one check fails; a bash mutant also passes bash -n. Each mutant runs in its own copy of the files the suites read; targetFailed says whether the check the mutant was written for, found by its label, is among the failures.",
+  "suites": {
+    "store": "tests/Test-InstallerCheckpointStore.ps1",
+    "pwsh": "tests/Test-InstallerCheckpoint.ps1",
+    "bash": "tests/Test-BashInstallerCheckpoint.ps1"
+  },
+  "baselineNote": "Baselines are the runs at d52c078 and at the test commit after it; the PowerShell and bash suites ran side by side.",
+  "loadNote": "The two store mutants ran together, then the PowerShell mutant, then the bash mutant, on one machine shared with other work; seconds are wall times under that load.",
+  "baselines": [
+    {
+      "suite": "store",
+      "checks": 24,
+      "failed": 0,
+      "seconds": 18.0
+    },
+    {
+      "suite": "pwsh",
+      "checks": 86,
+      "failed": 0,
+      "seconds": 196.6
+    },
+    {
+      "suite": "bash",
+      "checks": 52,
+      "failed": 0,
+      "seconds": 502.2
+    }
+  ],
+  "caught": 4,
+  "targetFailed": 4,
+  "total": 4,
+  "mutants": [
+    {
+      "suite": "store",
+      "mutant": 1,
+      "label": "pwsh Windows: a parent directory that lets Users delete it is refused",
+      "file": "scripts/ClaudeInstallStore.ps1",
+      "name": "pwsh Windows: Delete leaves the mask of the directories above the state directory",
+      "mutation": "'-Mask (0x10000 -bor 0x40 -bor 0x40000 -bor 0x80000 -bor 0x10000000 -bor 0x40000000))[0]' -> '-Mask (0x40 -bor 0x40000 -bor 0x80000 -bor 0x10000000 -bor 0x40000000))[0]'",
+      "checks": 24,
+      "failed": 2,
+      "bashN": "ok",
+      "targetFailed": true,
+      "caught": true,
+      "seconds": 10.7,
+      "failedLabels": [
+        "pwsh Windows: a parent directory that lets Users delete it is refused,",
+        "pwsh Windows: a directory between the parent and the user profile that"
+      ]
+    },
+    {
+      "suite": "store",
+      "mutant": 2,
+      "label": "pwsh Windows: a directory between the parent and the user profile",
+      "file": "scripts/ClaudeInstallStore.ps1",
+      "name": "pwsh Windows: the walk stops at the parent",
+      "mutation": "'        if ([string]::Equals($a.TrimEnd('\\'), $top, [StringComparison]::OrdinalIgnoreCase)) { return '' }\r\n        $a = [IO.Path]::GetDirectoryName($a)' -> '        if ([string]::Equals($a.TrimEnd('\\'), $top, [StringComparison]::OrdinalIgnoreCase)) { return '' }\r\n        $a = $null'",
+      "checks": 24,
+      "failed": 1,
+      "bashN": "ok",
+      "targetFailed": true,
+      "caught": true,
+      "seconds": 10.6,
+      "failedLabels": [
+        "pwsh Windows: a directory between the parent and the user profile that"
+      ]
+    },
+    {
+      "suite": "pwsh",
+      "mutant": 3,
+      "label": "R6 Security ruling",
+      "file": "scripts/ClaudeInstallStore.ps1",
+      "name": "pwsh: a default place that fails a check and exists is used as the store",
+      "mutation": "'    $l.Persistent = $false' -> '    if (Test-Path -LiteralPath $l.Directory) { return }; $l.Persistent = $false'",
+      "checks": 86,
+      "failed": 1,
+      "bashN": "ok",
+      "targetFailed": true,
+      "caught": true,
+      "seconds": 115.7,
+      "failedLabels": [
+        "R6 Security ruling: a default place that fails a check and holds only "
+      ]
+    },
+    {
+      "suite": "bash",
+      "mutant": 4,
+      "label": "R6 bash Security ruling",
+      "file": "scripts/install-store.sh",
+      "name": "bash: a default place that fails a check and exists is used as the store",
+      "mutation": "'  CKPT_NOSTORE=\"$CKPT_UNTRUSTED This run keeps no install checkpoint.\"' -> '  [ -d \"$CKPT_DIR\" ] && return 0\n  CKPT_NOSTORE=\"$CKPT_UNTRUSTED This run keeps no install checkpoint.\"'",
+      "checks": 52,
+      "failed": 1,
+      "bashN": "ok",
+      "targetFailed": true,
+      "caught": true,
+      "seconds": 556.1,
+      "failedLabels": [
+        "R6 bash Security ruling: a default place that fails a check and holds "
+      ]
+    }
+  ]
+}

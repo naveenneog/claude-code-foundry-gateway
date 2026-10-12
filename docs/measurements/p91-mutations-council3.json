@@ -1,0 +1,137 @@
+{
+  "packet": "P91",
+  "round": "council round 3, Coder: names that reach an OData string literal",
+  "dateUtc": "2026-10-02",
+  "measuredCommit": "0d86ac2b3523f5c95b8f3efb555f150dcaa870bb",
+  "platform": "Windows, PowerShell 7.6.6, Git Bash 5.3.15, jq 1.8.2",
+  "logicalCpuCount": 16,
+  "rule": "A mutant counts as caught only when its suite reaches the baseline check count and at least one check fails; a bash mutant also passes bash -n. Each mutant runs in its own copy of the files the suites read; targetFailed says whether the check the mutant was written for, found by its label, is among the failures.",
+  "suites": {
+    "pwsh": "tests/Test-InstallerCheckpoint.ps1",
+    "bash": "tests/Test-BashInstallerCheckpoint.ps1"
+  },
+  "baselineNote": "Baselines are the GREEN runs at 0d86ac2, whose code the measured commit keeps; the PowerShell and bash suites ran side by side.",
+  "loadNote": "Two PowerShell mutants ran at a time, then the two bash mutants together, on one machine shared with other work; seconds are wall times under that load.",
+  "baselines": [
+    {
+      "suite": "pwsh",
+      "checks": 85,
+      "failed": 0,
+      "seconds": 174.7
+    },
+    {
+      "suite": "bash",
+      "checks": 51,
+      "failed": 0,
+      "seconds": 398.0
+    }
+  ],
+  "caught": 6,
+  "targetFailed": 6,
+  "total": 6,
+  "mutants": [
+    {
+      "suite": "pwsh",
+      "mutant": 1,
+      "label": "R5 a tier group name with a single quote is refused at input",
+      "file": "Install-ClaudeGateway.ps1",
+      "name": "pwsh: the names are not checked after the group questions",
+      "mutation": "'Assert-ClaudeInstallNames ([ordered]@{ StandardGroup = $StandardGroup; PremiumGroup = $PremiumGroup; NamePrefix = $NamePrefix })' -> '$null = 0'",
+      "checks": 85,
+      "failed": 1,
+      "bashN": "ok",
+      "targetFailed": true,
+      "caught": true,
+      "seconds": 171.5,
+      "failedLabels": [
+        "R5 a tier group name with a single quote is refused at input on one li"
+      ]
+    },
+    {
+      "suite": "pwsh",
+      "mutant": 2,
+      "label": "R5 a tier group answer with a single quote in the checkpoint refuses as a corrupt checkpoint",
+      "file": "scripts/ClaudeInstallCheckpoint.ps1",
+      "name": "pwsh: a recorded name with a single quote is accepted",
+      "mutation": "'if ($Name -in $script:ClaudeInstallODataAnswers -and $item.Contains(\"'\")) { return' -> 'if ($false) { return'",
+      "checks": 85,
+      "failed": 2,
+      "bashN": "ok",
+      "targetFailed": true,
+      "caught": true,
+      "seconds": 170.6,
+      "failedLabels": [
+        "R5 a tier group answer with a single quote in the checkpoint refuses a",
+        "R5 a name prefix with a single quote, which reaches an OData string li"
+      ]
+    },
+    {
+      "suite": "pwsh",
+      "mutant": 3,
+      "label": "R5 a name prefix with a single quote",
+      "file": "scripts/ClaudeInstallCheckpoint.ps1",
+      "name": "pwsh: the name prefix is not among the OData names",
+      "mutation": "'$script:ClaudeInstallODataAnswers = @('StandardGroup', 'PremiumGroup', 'NamePrefix')' -> '$script:ClaudeInstallODataAnswers = @('StandardGroup', 'PremiumGroup')'",
+      "checks": 85,
+      "failed": 1,
+      "bashN": "ok",
+      "targetFailed": true,
+      "caught": true,
+      "seconds": 184.9,
+      "failedLabels": [
+        "R5 a name prefix with a single quote, which reaches an OData string li"
+      ]
+    },
+    {
+      "suite": "pwsh",
+      "mutant": 4,
+      "label": "R5 a Desktop or resolver app id that is not a GUID",
+      "file": "scripts/ClaudeInstallResume.ps1",
+      "name": "pwsh: a Desktop app id that is not a GUID reaches az ad app show --id",
+      "mutation": "'if ($ClientId -notmatch '^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$') {' -> 'if ($false) {'",
+      "checks": 85,
+      "failed": 1,
+      "bashN": "ok",
+      "targetFailed": true,
+      "caught": true,
+      "seconds": 183.1,
+      "failedLabels": [
+        "R5 a Desktop or resolver app id that is not a GUID, which az ad app sh"
+      ]
+    },
+    {
+      "suite": "bash",
+      "mutant": 5,
+      "label": "R5 bash a tier group name with a single quote is refused at input",
+      "file": "install-claude-gateway.sh",
+      "name": "bash: the names are not checked after the group questions",
+      "mutation": "'\nckpt_group_names_\n' -> '\ntrue\n'",
+      "checks": 51,
+      "failed": 1,
+      "bashN": "ok",
+      "targetFailed": true,
+      "caught": true,
+      "seconds": 914.9,
+      "failedLabels": [
+        "R5 bash a tier group name with a single quote is refused at input on o"
+      ]
+    },
+    {
+      "suite": "bash",
+      "mutant": 6,
+      "label": "R5 bash a tier group answer with a single quote in the checkpoint refuses as a corrupt checkpoint",
+      "file": "scripts/install-checkpoint.sh",
+      "name": "bash: a recorded name with a single quote is accepted",
+      "mutation": "'contains(\"\\u0027\")' -> 'contains(\"\\u0000\")'",
+      "checks": 51,
+      "failed": 1,
+      "bashN": "ok",
+      "targetFailed": true,
+      "caught": true,
+      "seconds": 901.1,
+      "failedLabels": [
+        "R5 bash a tier group answer with a single quote in the checkpoint refu"
+      ]
+    }
+  ]
+}

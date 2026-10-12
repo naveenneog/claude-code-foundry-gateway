@@ -1,0 +1,397 @@
+(function () {
+  "use strict";
+
+  function createRunHost(deps) {
+    const { byId, csrfToken, getJson, hasBlockingProblems, onPreflightStale, postJson, readIdentityAfterRun, setErrorText, setStatusText, updateRunAdmission } = deps;
+    const maxRunOutputLines = 2000;
+    let activeRunId = "";
+    let activeStepId = "";
+    let runActive = false;
+    // The followed run is stopping or has already finished, so Stop is not offered.
+    let runStopping = false;
+    let lastRunSeq = 0;
+    let lastFailedStep = "";
+    let activeClientRequestId = "";
+    let runOutputLines = [];
+    let removedRunOutputLines = 0;
+
+    function isActive() {
+      return runActive;
+    }
+
+    function failedStep() {
+      return lastFailedStep;
+    }
+
+    function currentStep() {
+      return activeStepId;
+    }
+
+    function canStop() {
+      return Boolean(runActive && activeRunId && !runStopping);
+    }
+
+    function resetActiveRun() {
+      activeRunId = "";
+      activeClientRequestId = "";
+    }
+
+    function clientRequestId() {
+      const bytes = new Uint8Array(16);
+      crypto.getRandomValues(bytes);
+      return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+    }
+
+    function appendRunLine(text) {
+      const output = byId("run-output");
+      runOutputLines.push(text);
+      if (runOutputLines.length > maxRunOutputLines) {
+        const removed = runOutputLines.length - maxRunOutputLines;
+        runOutputLines.splice(0, removed);
+        removedRunOutputLines += removed;
+      }
+      const shown = removedRunOutputLines ? [`Earlier run output lines were removed (${removedRunOutputLines}).`, ...runOutputLines] : runOutputLines;
+      output.textContent = `${shown.join("\n")}\n`;
+    }
+
+    function clearRunOutput() {
+      byId("run-output").textContent = "";
+      runOutputLines = [];
+      removedRunOutputLines = 0;
+    }
+
+    // The state the server reports for the followed run: Stop is offered only while it is running, and a stopping or ended run says so.
+    function applyRunState(state) {
+      runStopping = state !== "running";
+      if (state === "stopped" || state === "exited") setStatusText("run", "The run has ended. Reading its final output.");
+      if (state === "stopping") setStatusText("run", `Stopping at ${activeStepId || "the current step"}.`);
+      updateRunAdmission();
+    }
+
+    // A run the page starts following, from the run response or from the admission record of a lost request.
+    function adoptRun(runId, stepId = "", state = "running") {
+      activeRunId = runId;
+      activeStepId = stepId;
+      clearRunOutput();
+      applyRunState(state);
+    }
+
+    function finishRun(summary) {
+      const stoppedStep = summary.stepId || activeStepId || parseStoppedStep(summary.message) || summary.failedStepId || lastFailedStep || "the current step";
+      activeRunId = "";
+      activeStepId = "";
+      runActive = false;
+      runStopping = false;
+      lastFailedStep = summary.failedStepId || "";
+      updateRunAdmission();
+      if (summary.resumeCommand) appendRunLine(`Resume: ${summary.resumeCommand}`);
+      if (summary.state === "stopped") {
+        return { statusText: `Run stopped at ${stoppedStep}.` };
+      }
+      if (summary.state === "exited" && summary.exitCode === 0) return {};
+      const code = summary.exitCode === null || summary.exitCode === undefined ? "unknown" : String(summary.exitCode);
+      const pieces = [`Installer run failed with exit code ${code}.`];
+      if (lastFailedStep) pieces.push(`Failed step: ${lastFailedStep}.`);
+      if (summary.resumeCommand) pieces.push(`Resume with: ${summary.resumeCommand}`);
+      const error = new Error(pieces.join(" "));
+      error.data = { error: error.message, runSummary: true };
+      throw error;
+    }
+
+    function parseStoppedStep(message) {
+      const match = String(message || "").match(/Stopped installer run at ([^.]+)\./);
+      return match?.[1] || "";
+    }
+
+    async function readRunStream(res) {
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let summary = null;
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split(/\r?\n/);
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          if (!line) continue;
+          const event = JSON.parse(line);
+          lastRunSeq = event.seq || lastRunSeq;
+          if (event.type === "progress" && event.event === "started") activeStepId = event.stepId || activeStepId;
+          // A stop that another tab or client sent reaches this page as the stopped event.
+          if (event.type === "stopped") {
+            activeStepId = event.stepId || activeStepId;
+            applyRunState("stopping");
+          }
+          appendRunLine(`${event.type}: ${event.stepId || ""} ${event.event || ""} ${event.line || event.message || ""}`);
+          if (event.type === "summary") summary = event;
+        }
+      }
+      if (summary) return finishRun(summary);
+      return null;
+    }
+
+    async function fetchRunStream(path) {
+      const res = await fetch(path);
+      if (!res.ok) throw await responseError(res, "run stream failed");
+      return res;
+    }
+
+    function attachPath(after) {
+      return `./api/run/attach?after=${after}&run=${encodeURIComponent(activeRunId)}`;
+    }
+
+    function replacedRunError() {
+      const error = new Error("The run this page followed finished, and a later run replaced its record.");
+      error.data = { error: error.message, remedy: "Reload the page to see the latest run." };
+      return error;
+    }
+
+    function clearForReplacedRun() {
+      runActive = false;
+      runStopping = false;
+      resetActiveRun();
+      updateRunAdmission();
+    }
+
+    async function responseError(res, fallback) {
+      let data = {};
+      try {
+        data = await res.json();
+      } catch {}
+      const error = new Error(data.error || `${fallback} with HTTP ${res.status}`);
+      error.data = { ...data, status: res.status };
+      return error;
+    }
+
+    async function recoverMissingSummary(reattachCount = 0, quietCount = 0) {
+      const status = await getJson("./api/run/status");
+      if (sameRun(status)) {
+        if (quietCount >= 3) {
+          runActive = false;
+          runStopping = false;
+          updateRunAdmission();
+          throw new Error("The run continues on the server, but the stream keeps ending without new events. Reloading the page reattaches to the run.");
+        }
+        activeRunId = status.id;
+        activeStepId = status.currentStepId || status.steps?.[0] || "";
+        applyRunState(status.state);
+        const before = lastRunSeq;
+        const result = await readRunStream(await fetchRunStream(attachPath(lastRunSeq)));
+        if (result) return result;
+        if (status.state !== "running" && status.state !== "stopping") {
+          runActive = false;
+          runStopping = false;
+          updateRunAdmission();
+          const state = status.state || "unknown";
+          throw new Error(`The run stream ended without a summary; the server reports state ${state}.`);
+        }
+        return recoverMissingSummary(reattachCount + 1, before === lastRunSeq ? quietCount + 1 : 0);
+      }
+      runActive = false;
+      runStopping = false;
+      resetActiveRun();
+      updateRunAdmission();
+      const state = status.state || "unknown";
+      throw new Error(`The run stream ended without a summary; the server reports state ${state}.`);
+    }
+
+    async function followRun(read) {
+      try {
+        const result = (await read()) || (await recoverMissingSummary());
+        refreshIdentityAfterRun();
+        return result;
+      } catch (error) {
+        if (!error.data?.runSummary) {
+          try {
+            const recovered = await reconcileBrokenStream();
+            if (recovered) {
+              refreshIdentityAfterRun();
+              return recovered;
+            }
+          } catch (recoveryError) {
+            runActive = false;
+            updateRunAdmission();
+            throw recoveryError;
+          }
+        }
+        runActive = false;
+        updateRunAdmission();
+        if (error.data?.runSummary) refreshIdentityAfterRun();
+        throw error;
+      }
+    }
+
+    function sameRun(status) {
+      if (!status?.id) return false;
+      return status.id === activeRunId || (activeClientRequestId && status.clientRequestId === activeClientRequestId);
+    }
+
+    async function reconcileBrokenStream() {
+      const status = await getJson(activeClientRequestId ? `./api/run/status?request=${encodeURIComponent(activeClientRequestId)}` : "./api/run/status");
+      const followedRunId = activeRunId || (status?.admission?.state === "started" ? status.admission.runId || "" : "");
+      const run = status;
+      if (!run?.id || run.id !== followedRunId) {
+        if (followedRunId && run?.id && run.id !== followedRunId) {
+          clearForReplacedRun();
+          throw replacedRunError();
+        }
+        return null;
+      }
+      activeRunId = run.id;
+      activeStepId = run.currentStepId || run.steps?.[0] || activeStepId;
+      runActive = true;
+      applyRunState(run.state);
+      return (await readRunStream(await fetchRunStream(attachPath(lastRunSeq)))) || (await recoverMissingSummary());
+    }
+
+    async function recoverLostRequest(requestError) {
+      // The request may have reached the server before the connection failed: a run that started is reattached.
+      let statusFailures = 0;
+      for (let i = 0; i < 400; i++) {
+        let status;
+        try {
+          status = await getJson(`./api/run/status?request=${encodeURIComponent(activeClientRequestId)}`);
+        } catch {
+          statusFailures++;
+          if (statusFailures >= 3) break;
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          continue;
+        }
+        if (status?.admission?.state === "admitting") {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          continue;
+        }
+        if (status?.admission?.state === "started") {
+          const admittedRunId = status.admission.runId || "";
+          if (status.id && admittedRunId && status.id !== admittedRunId) {
+            runActive = false;
+            runStopping = false;
+            updateRunAdmission();
+            throw replacedRunError();
+          }
+          adoptRun(admittedRunId || status.id || "", status.currentStepId || status.steps?.[0] || "", status.state);
+          return followRun(() => fetchRunStream(attachPath(0)).then(readRunStream));
+        }
+        if (status?.admission?.state === "refused") {
+          runActive = false;
+          runStopping = false;
+          updateRunAdmission();
+          const error = new Error(status.admission.error || "run refused");
+          error.data = { error: error.message, reason: status.admission.reason };
+          if (["identity-changed", "preflight-required"].includes(error.data.reason) && typeof onPreflightStale === "function") onPreflightStale(error.message);
+          throw error;
+        }
+        if (!status?.admission) {
+          runActive = false;
+          runStopping = false;
+          updateRunAdmission();
+          const error = new Error(`The run request failed before the server answered (${requestError.message}), and the installer UI server has no record of that request.`);
+          error.data = { error: error.message, remedy: "Check that the installer UI server is still running in its terminal, then try again." };
+          throw error;
+        }
+        break;
+      }
+      runActive = false;
+      updateRunAdmission();
+      const server = statusFailures ? "the installer UI server did not answer status requests" : "the installer UI server did not finish admitting the run";
+      const error = new Error(`The run request failed before the server answered (${requestError.message}), and ${server}.`);
+      error.data = { error: error.message, remedy: "Check that the installer UI server is still running in its terminal, then try again." };
+      throw error;
+    }
+
+    async function streamRun(body) {
+      if (hasBlockingProblems()) return undefined;
+      runActive = true;
+      runStopping = false;
+      activeClientRequestId = clientRequestId();
+      // A new run's events start at 1; a reattach of this run must not use the previous run's cursor.
+      lastRunSeq = 0;
+      updateRunAdmission();
+      let res;
+      try {
+        res = await fetch("./api/run/stream", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-csrf-token": csrfToken(),
+            "x-client-request-id": activeClientRequestId,
+          },
+          body: JSON.stringify(body),
+        });
+      } catch (error) {
+        return recoverLostRequest(error);
+      }
+      if (!res.ok) {
+        runActive = false;
+        resetActiveRun();
+        updateRunAdmission();
+        const error = await responseError(res, "run failed");
+        if (["identity-changed", "preflight-required"].includes(error.data?.reason) && typeof onPreflightStale === "function") onPreflightStale(error.message);
+        throw error;
+      }
+      adoptRun(res.headers.get("x-installer-run-id") || "");
+      return followRun(() => readRunStream(res));
+    }
+
+    async function refreshRunStatus() {
+      if (location.protocol === "file:") return;
+      const status = await getJson("./api/run/status");
+      if (status.id && (status.state === "running" || status.state === "stopping")) {
+        activeRunId = status.id;
+        activeClientRequestId = status.clientRequestId || "";
+        activeStepId = status.currentStepId || status.steps?.[0] || "";
+        runActive = true;
+        applyRunState(status.state);
+        try {
+          const result = (await readRunStream(await fetchRunStream(attachPath(lastRunSeq)))) || (await recoverMissingSummary());
+          if (result?.statusText) setStatusText("run", result.statusText);
+          refreshIdentityAfterRun();
+          return result;
+        } catch (error) {
+          if (error.data?.reason === "run-replaced") {
+            clearForReplacedRun();
+            throw replacedRunError();
+          }
+          if (error.data?.runSummary) refreshIdentityAfterRun();
+          throw error;
+        }
+      }
+    }
+
+    async function stopRun() {
+      const status = await getJson("./api/run/status");
+      const runId = activeRunId;
+      const step = status.id === activeRunId ? status.currentStepId || status.steps?.[0] || activeStepId || "the current step" : activeStepId || "the current step";
+      if (!runId) return { statusText: "No run is active, so nothing was stopped." };
+      // The followed run can already be stopping or have ended, for example after a stop from another tab.
+      if (status.id === runId && status.state !== "running") {
+        activeStepId = status.currentStepId || status.steps?.[0] || activeStepId;
+        applyRunState(status.state);
+        return { statusText: status.state === "stopping" ? "The run is already stopping, so no second stop was requested." : "The run has already ended, so nothing was stopped." };
+      }
+      if (!globalThis.confirm(`Stop run at ${step}? Running the same steps again resumes from the install checkpoint.`)) return { statusText: "No stop was requested." };
+      const result = await postJson("./api/run/stop", { runId });
+      appendRunLine(`stopped: ${result.message}`);
+      if (runActive && activeRunId === runId) {
+        runStopping = true;
+        setStatusText("run", `Stopping at ${step}.`);
+        updateRunAdmission();
+      }
+      return { statusText: "Stop requested." };
+    }
+
+    function handleAttachError(error) {
+      setErrorText("run", [error.message || String(error), error.data?.remedy].filter(Boolean).join(" "));
+    }
+
+    function refreshIdentityAfterRun() {
+      void readIdentityAfterRun().catch(() => {});
+    }
+
+    return { appendRunLine, canStop, currentStep, failedStep, handleAttachError, isActive, resetActiveRun, streamRun, stopRun, refreshRunStatus };
+  }
+
+  globalThis.ClaudeInstallerRun = { create: createRunHost };
+})();

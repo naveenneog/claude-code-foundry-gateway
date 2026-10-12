@@ -61,6 +61,137 @@ Turnstile, AUM or the reporting jobs; it coordinates their setup and handover.
 
 </details>
 
+## Lean installer phase 0
+
+<details>
+
+<summary>One answers schema and a read-only preflight shared by both installers</summary>
+
+![Lean installer phase 0: one answers schema feeds both installers and the guided flow; the shared preflight only reads; selected steps reuse P91 live verification and append a progress stream.](images/architecture/lean-installer-phase0.png)
+
+Source: [17-lean-installer-phase0.json](architecture/17-lean-installer-phase0.json);
+[ADR-0047](adr/0047-lean-installer-phase-0.md).
+
+Phase 0 adds operator-side files and streams. Azure writes stay in the installers' steps after the
+confirmed summary; the preflight, `-ListSteps` and the guided flow's plan only read.
+
+</details>
+
+## Installer UI
+
+<details>
+
+<summary>A local Node server and static page over the installer, gated on preflight fingerprints</summary>
+
+![Installer UI: a local Node server and static page share the UI model, gate runs on preflight fingerprints, keep a server-side run record and stream redacted installer progress.](images/architecture/installer-ui.png)
+
+Source: [18-installer-ui.json](architecture/18-installer-ui.json);
+[Installer UI](INSTALLER-UI.md); [ADR-0048](adr/0048-installer-ui-local-server.md).
+
+The installer UI adds an operator-side local server and static page. It adds no Azure resource and no
+hosted control plane. `tools/installer-ui/server.mjs` owns the HTTP routes, local session controls,
+PowerShell child process calls and idle lifecycle (`tools/installer-ui/server.mjs:51-127`;
+`tools/installer-ui/server.mjs:191-215`; `tools/installer-ui/server.mjs:309-570`). `tools/installer-ui/http-helpers.mjs` owns Host, cookie,
+CSRF, same-origin and JSON-body helpers (`tools/installer-ui/http-helpers.mjs:13-30`;
+`tools/installer-ui/http-helpers.mjs:61-119`). The browser, server and tests share `tools/installer-ui/ui-model.js` through
+`tools/installer-ui/server-model.mjs`, command and preflight rendering is split into
+`tools/installer-ui/installer-ui-render.js`, and the UI model's copied address defaults are checked
+against `scripts/ClaudeGatewayAddressInput.ps1`; the static page serves the same `index.html` bytes
+as the live server (`tools/installer-ui/installer-ui-render.js:7-108`;
+`tools/installer-ui/ui-model.js:155-161`;
+`scripts/ClaudeGatewayAddressInput.ps1:27-28`; `tools/installer-ui/server.mjs:350`;
+`tools/installer-ui/server-model.mjs:77-91`; `tests/installer-ui-structure.test.mjs:30-31`).
+
+The first page load consumes the URL token and `tools/installer-ui/session-auth.mjs` issues a
+separate session cookie secret, so the bootstrap token is not a reusable API credential
+(`tools/installer-ui/session-auth.mjs:4-13`; `tools/installer-ui/server.mjs:323-339`).
+
+Azure context and prefill reads go through `scripts/Get-ClaudeInstallerUiIdentity.ps1` and
+`scripts/Get-ClaudeInstallerUiPrefill.ps1`, not Node-to-`az` calls. Installer execution stays in
+`Install-ClaudeGateway.ps1`, with selected steps, `-ProgressPath` and the existing redaction table.
+The Node server starts only the configured PowerShell command, a Node test stub through
+`process.execPath` or `taskkill.exe` for Windows stop (`tools/installer-ui/server.mjs:25-27`;
+`tools/installer-ui/server.mjs:51-108`; `tools/installer-ui/ui-model.js:585-605`; `tools/installer-ui/server-model.mjs:21-42`;
+`tests/installer-ui-structure.test.mjs:69-96`).
+`tools/installer-ui/azure-lease.mjs` serializes identity, prefill, preflight and run admission so the
+server has one Azure CLI-producing operation at a time (`tools/installer-ui/azure-lease.mjs:1-91`;
+`tools/installer-ui/server.mjs:217-221`; `tools/installer-ui/server.mjs:464`).
+
+Preflight admission is fingerprinted by `tools/installer-ui/preflight-record.mjs`; a run needs a
+stored PASS for the same answers, a covering step scope and the same identity snapshot
+(`tools/installer-ui/preflight-record.mjs:28-37`; `tools/installer-ui/preflight-record.mjs:46-82`;
+`tools/installer-ui/server.mjs:424-435`; `tools/installer-ui/server.mjs:464-477`).
+`tools/installer-ui/step-scope.mjs` validates selected step ids against the producer step list before
+the Azure lease is requested (`tools/installer-ui/step-scope.mjs:1-37`;
+`tools/installer-ui/server.mjs:407-409`; `tools/installer-ui/server.mjs:455-464`).
+Versioned installer-interface checks live in `tools/installer-ui/installer-contract.mjs`, so malformed
+step lists and preflight payloads fail closed and malformed progress events become stream errors
+(`tools/installer-ui/installer-contract.mjs:12-17`; `tools/installer-ui/installer-contract.mjs:31-116`;
+`tools/installer-ui/installer-stream.mjs:61-68`).
+
+Run state lives in `tools/installer-ui/run-record.mjs`, not in a browser connection. `GET
+/api/run/status` reports the active or last run, `GET /api/run/attach?after=<seq>&run=<id>` replays
+the tail and follows live events for that run id, a replaced record returns `409` with
+`reason: run-replaced`, and `POST /api/run/stop` stops the followed child process tree.
+A stop for a run that is already stopping returns the message of the first stop without stopping
+the tree again (`tools/installer-ui/server.mjs:544-545`).
+`tools/installer-ui/run-admission.mjs` keeps the admission of the last 20 run requests by client
+request id (`admitting`, then `started` with the run id or `refused` with the error and reason), and
+`GET /api/run/status?request=<id>` adds that record to the status
+(`tools/installer-ui/run-admission.mjs:1-30`; `tools/installer-ui/server.mjs:371-375`;
+`tools/installer-ui/server.mjs:442-448`; `tools/installer-ui/server.mjs:480`; `tools/installer-ui/server.mjs:489`).
+`tools/installer-ui/run-transport.mjs`
+handles UTF-8 carries, progress-file offsets, NDJSON writes and backpressure. The server caps console
+bytes and line bytes before publishing output (`tools/installer-ui/run-record.mjs:10-129`;
+`tools/installer-ui/server.mjs:371-384`; `tools/installer-ui/server.mjs:538-553`;
+`tools/installer-ui/run-transport.mjs:5-91`; `tools/installer-ui/installer-stream.mjs:6-7`;
+`tools/installer-ui/installer-stream.mjs:23-38`; `tools/installer-ui/installer-stream.mjs:57-60`; `tools/installer-ui/installer-stream.mjs:70-74`).
+Read-only children use `tools/installer-ui/child-output.mjs` for UTF-8 decoding and a 1 MiB
+stdout/stderr cap. Streaming runs keep a 4 MiB console cap and a 64 KiB line cap for console and
+progress lines (`tools/installer-ui/child-output.mjs:3-60`; `tools/installer-ui/server.mjs:164`;
+`tools/installer-ui/installer-stream.mjs:6-7`; `tools/installer-ui/installer-stream.mjs:23-75`; `tools/installer-ui/run-transport.mjs:28-67`).
+
+**Answers schema.** [`schemas/claude-gateway.answers.schema.json`](../schemas/claude-gateway.answers.schema.json)
+names each answer once, by its installer parameter, with the programs that apply it (`x-appliedBy`),
+its bash flag (`x-bashFlag`), its guided-flow keys (`x-flowKeys`) and the preflight check that reports
+a problem with it (`x-checkId`). `scripts/ClaudeInstallerAnswers.ps1` and `scripts/install-answers.jq`
+read it and report the same problems word for word (ADR-0047 decision 2). The schema lists no secret:
+`x-secrets` names `AddressCertificatePassword`, which an answers file is refused for holding.
+
+**Preflight.** `-Preflight` and `--preflight` report the 14 checks that `x-preflightChecks` lists, as
+text or as JSON with `schemaVersion`, `installer`, `answersSchemaVersion`, `result` and `checks`
+(`scripts/ClaudeInstallerPreflight.ps1:125-201`, `scripts/install-preflight.sh:222-286`). Each check is
+PASS, FAIL or NOT-RUN with a reason. A check starts NOT-RUN with reason `not-evaluated`, which fails the
+preflight, and is PASS only where a branch passes it with a message (ADR-0047 decision 5). Its reads go
+through the P91 verdict readers, and the API Management reads are the ones the run's reuse path makes
+(`Get-ClaudeApimReuseState`, `scripts/ClaudeInstallerPreflight.ps1:22-43`). The guided flow applies an
+approved plan only when this result is PASS (ADR-0047 decision 9).
+
+**Progress stream.** `-ProgressPath` and `--progress-file` append one JSON object per line
+(`scripts/ClaudeInstallSteps.ps1:29-61`, `scripts/install-steps.sh:24-45`):
+
+| Key | Value |
+|---|---|
+| `schemaVersion` | `1` |
+| `time` | UTC, `yyyy-MM-ddTHH:mm:ssZ` |
+| `runId` | The install checkpoint's run id, 32 hexadecimal digits |
+| `stepId` | A step id of ADR-0046, or empty for an event of the whole run |
+| `event` | `started`, `completed`, `skipped-verified`, `warning`, `failed` or `refused` |
+| `message` | `<step title>: started`, `completed`, `verified live, skipped`, `incomplete` or `failed: <reason>`; a refusal's line starts with `Refused:` |
+| `resumeCommand` | The command that resumes the run, on `warning` and `failed`; otherwise empty |
+
+Both installers write the same events with the same messages for the steps both run. Each line is one
+write. A JWT, `Bearer <token>` or a named secret such as `sig=` or `password:` in a message or resume
+command is written as `[redacted]`, and the preflight's messages and remedies pass the same rules: both
+installers hold one rule table (`Protect-ClaudeInstallText`, `scripts/ClaudeInstallResume.ps1:46-54`;
+`redact`, `scripts/install-checkpoint.sh:36-37`; ADR-0047 decision 12). The same rules apply to each line
+either installer prints from an error or a refusal, and to the error output of the Azure CLI calls whose
+output the run shows (`Invoke-ClaudeInstallAzShown`, `scripts/ClaudeInstallResume.ps1:20-33`; `ckpt_shown_`,
+`scripts/install-checkpoint.sh:47-52`). A file
+that cannot be written refuses the run at startup, before any Azure call, and no event is written before
+that check passes (`scripts/ClaudeInstallSteps.ps1:19-27`, `scripts/install-steps.sh:134-144`).
+</details>
+
 ## Optional company hostname
 
 <details>
@@ -108,6 +239,82 @@ not just the top-level generator. The installer persists the same per-tier
 lists that later model changes use, and both workstation setup implementations
 remove aliases for families that are no longer selected.
 
+</details>
+
+## Install checkpoint and resume
+
+<details>
+
+<summary>One checkpoint per checkout, skipping a step only when a live read confirms it</summary>
+
+![Install checkpoint: the guided flow and both installers keep one checkpoint per checkout in a per-user state directory; the first write follows the confirmed summary; a rerun skips a step only when a live Azure read shows its result.](images/architecture/install-checkpoint.png)
+
+Source: [16-install-checkpoint.json](architecture/16-install-checkpoint.json);
+[installer checkpoint design record (ADR-0046)](adr/0046-installer-checkpoint-and-resume.md); [Setup](SETUP.md#resume-after-a-failure).
+
+The install checkpoint is an operator-side data store: one JSON file per checkout in
+a per-user state directory on the machine or Cloud Shell session that runs the
+installer ([store and location](adr/0046-installer-checkpoint-and-resume.md#1-store-and-location)). It holds the binding
+(tenant, subscription, resource group, gateway), the non-secret answers, each step's
+state and input hash, and receipts: deployment names, Entra group ids, the role
+assignment id, the Desktop client id and the projection resolver app id
+([schema](adr/0046-installer-checkpoint-and-resume.md#4-schema-version-1), [receipts](adr/0046-installer-checkpoint-and-resume.md#11-receipts)). It holds no tokens,
+keys or connection strings, and the checkpoint test suites check that
+([no secrets](adr/0046-installer-checkpoint-and-resume.md#15-no-secrets)). The decision record
+`onboarding/claude-gateway.json` still holds applied values only
+([ADR-0030](adr/0030-guided-flow.md)).
+
+- **Components.** `scripts/ClaudeInstallCheckpoint.ps1` and
+  `scripts/install-checkpoint.sh` keep the run state, the lock and the answers;
+  `scripts/ClaudeInstallStore.ps1` and `scripts/install-store.sh` place the store
+  and decide whether it is trusted; `scripts/ClaudeInstallResume.ps1` and
+  `scripts/install-resume.sh` hold the live reads and step actions. Each installer
+  resumes only its own checkpoint
+  ([resume across installers](adr/0046-installer-checkpoint-and-resume.md#13-resume-across-installers)).
+- **Identities.** The checkpoint adds no Azure resource, identity or role. The live
+  reads run under the operator's Azure CLI sign-in, as the installers' other calls do.
+- **Data flow.** The first write follows the confirmed summary
+  ([ADR-0032](adr/0032-guided-flow-starts-at-once.md)), and each step records its
+  state. The deployment name is recorded before `az deployment group create`
+  ([deployments](adr/0046-installer-checkpoint-and-resume.md#10-deployments)). A rerun skips a step only when a live read
+  returns present; absent reruns the step, and inconclusive refuses unless the step
+  is idempotent ([verification before a skip](adr/0046-installer-checkpoint-and-resume.md#7-verification-before-a-skip)).
+  Receipt values are checked on read, before they reach `az` as arguments, and a
+  receipt is used only when the live object it names is the one the run recorded:
+  the group listed under the configured name, the role assignment of Cognitive
+  Services User on the Foundry account for the gateway's identity, the resolver app
+  by its name, the Desktop app by its `appId`
+  ([receipts](adr/0046-installer-checkpoint-and-resume.md#11-receipts)).
+- **Store.** The state directory is inside the user's home directory or profile (in
+  Cloud Shell, inside `clouddrive` when storage is mounted), is not itself a link,
+  and is used by its real path. Before either installer reads, locks or replaces
+  anything in it, it checks for a directory, checkpoint, lock or temporary file that
+  another account could have written or replaced: on Linux and macOS one the current
+  user does not own, one its group or other users can write, a symbolic link, or a
+  directory between it and `$HOME` that another user owns or that its group or
+  other users can write without the sticky bit; on Windows a junction or symbolic
+  link, one owned by an account other than the current user, SYSTEM or
+  Administrators, one with an access rule that lets another account write it, a
+  state directory whose rules are inherited, and a directory up to the user profile
+  that another account may delete, rename or re-permission. Such a store refuses
+  when `CLAUDE_GATEWAY_STATE_DIR` names it or when it holds a file of the checkout;
+  otherwise the run keeps no store and continues on its live checks. The bash
+  installer under Git Bash keeps no store
+  ([store and location](adr/0046-installer-checkpoint-and-resume.md#1-store-and-location), [file mechanics](adr/0046-installer-checkpoint-and-resume.md#2-file-mechanics)).
+- **Failures.** A refusal is one line that names the field or reason and, for the
+  refusals [Setup](SETUP.md#resume-after-a-failure) lists, the command that resumes
+  the run or discards the checkpoint ([output](adr/0046-installer-checkpoint-and-resume.md#14-output)). A corrupt checkpoint
+  is refused and kept. A lock held by a live process refuses and names when a later
+  run takes it over, and a stale lock is renamed ([lock](adr/0046-installer-checkpoint-and-resume.md#3-lock)). A deployment
+  that is still running is waited on for up to 3,600 s; the run then stops with the
+  resume command.
+- **Cloud Shell.** The checkpoint is in `clouddrive` when storage is mounted;
+  otherwise it is in the session's `$HOME`, with the full resume command printed.
+  Files in `clouddrive` are readable by principals with access to the Cloud Shell
+  storage account ([Persist files](https://learn.microsoft.com/azure/cloud-shell/persisting-shell-storage#securing-storage-access)),
+  and the store check does not apply there. Before a wait longer than 60 s the
+  installer prints the 20-minute idle limit
+  ([Cloud Shell FAQ](https://learn.microsoft.com/azure/cloud-shell/faq-troubleshooting)).
 </details>
 
 ## Request path
