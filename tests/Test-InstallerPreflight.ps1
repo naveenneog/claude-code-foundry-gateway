@@ -131,6 +131,15 @@ exit /b 0
     Add-Scenario 'graph-error' $w (New-Answers)
     $w = New-P91World; $w.inject['groupLists'] = [ordered]@{ 'claude-code-standard' = @([ordered]@{ id = '00000000-0000-4000-8000-0000000002a1'; displayName = 'CLAUDE-CODE-STANDARD' }, [ordered]@{ id = '00000000-0000-4000-8000-0000000002a2'; displayName = 'Claude-Code-Standard' }) }
     Add-Scenario 'same-length' $w (New-Answers)
+    # P113: both tier groups are absent (the template's world never populates them), and the tenant does
+    # not confirm the signed-in account can create one - entra.groupNames is a FAIL, not the silent
+    # "is created by the run" pass a missing group otherwise gets.
+    $w = New-P91World; $w['groupCreateAllowed'] = $false
+    Add-Scenario 'group-create-blocked' $w (New-Answers)
+    # P113: the creation-privilege read itself fails (Conditional Access, Graph access denied, any
+    # reason) - unconfirmed is a FAIL the same as an explicit false, never a pass by default.
+    $w = New-P91World; $w.inject.readErrors = @([ordered]@{ match = 'rest --method get --url https://graph.microsoft.com/v1.0/policies/authorizationPolicy*'; text = 'ERROR: AADSTS53003: Access has been blocked by Conditional Access policies.' })
+    Add-Scenario 'group-create-unconfirmed' $w (New-Answers)
     $kvBad = { param($a) $a.AddressMode = 'custom'; Set-Answer $a 'AddressHostname' 'claude.contoso.com'; Set-Answer $a 'AddressCertificateSource' 'KeyVault'; Set-Answer $a 'AddressKeyVaultCertificateId' 'http://kv-contoso/certificates'; Set-Answer $a 'AddressDnsMode' 'External' }
     Add-Scenario 'kv-malformed' (New-P91World) (New-Answers $kvBad)
     Add-Scenario 'all-at-once' (New-P91World) (New-Answers { param($a) $a.FoundryAccount = 'ai-missing'; Set-Answer $a 'StandardGroup' "O'Brien"
@@ -250,6 +259,10 @@ exit /b 0
     Assert 'P2 a reused instance on a classic tier is a FAIL naming the tier' (& $one 'classic-sku' 'apim.existingSku' 'Developer') (Show 'classic-sku')
     Assert 'P2 a Microsoft Graph read error on a group name is a FAIL (inconclusive), never a pass' (& $one 'graph-error' 'entra.groupNames' 'claude-code-standard') (Show 'graph-error')
     Assert 'P2 two groups with names of the configured length are a FAIL naming both ids' (& $one 'same-length' 'entra.groupNames' '0000000002a1.*0000000002a2|0000000002a2.*0000000002a1') (Show 'same-length')
+    $gcb = Get-Check 'group-create-blocked' 'entra.groupNames'
+    Assert 'P113 an absent tier group the tenant does not confirm as creatable is a FAIL naming both groups, never the silent "is created by the run" pass' ((& $one 'group-create-blocked' 'entra.groupNames' "'claude-code-standard'.*'claude-code-premium'|'claude-code-premium'.*'claude-code-standard'") -and
+        $gcb.message -match 'Groups Administrator' -and $gcb.remedy -match 'Groups Administrator' -and $gcb.remedy -match 'Users can create security groups') (Show 'group-create-blocked')
+    Assert 'P113 a Conditional Access failure reading the creation-privilege policy is a FAIL (unconfirmed), the same as an explicit false, never a pass' (& $one 'group-create-unconfirmed' 'entra.groupNames' 'could not be confirmed') (Show 'group-create-unconfirmed')
     Assert 'P2 a Key Vault certificate URL of the wrong shape is a FAIL of address.inputs' (& $one 'kv-malformed' 'address.inputs' 'AddressKeyVaultCertificateId') (Show 'kv-malformed')
     $aao = @($scenarios['all-at-once'].Json.checks | Where-Object { $_.result -eq 'FAIL' } | ForEach-Object id)
     Assert 'P2 one run with four distinct problems reports all four (Foundry account, group name, business-unit id, Key Vault URL)' ($scenarios['all-at-once'].Result.ExitCode -ne 0 -and

@@ -257,6 +257,12 @@ function global:az {
             })
             return (ConvertTo-Json -InputObject $list -Depth 5)
         }
+        'rest --method get --url https://graph.microsoft.com/v1.0/policies/authorizationPolicy*' {
+            # groupCreateAllowed unset means true: every scenario but the one that sets it false keeps
+            # today's "absent means created by the run" result (P113).
+            $allowed = if ($null -ne (Get-P91Property $w 'groupCreateAllowed')) { [bool]$w.groupCreateAllowed } else { $true }
+            return (ConvertTo-Json -Compress -InputObject ([ordered]@{ defaultUserRolePermissions = [ordered]@{ allowedToCreateSecurityGroups = $allowed } }))
+        }
         'rest*' {
             $url = [string](& $value @('--url', '--uri', '-u'))
             $id = ($url -replace '^https://management\.azure\.com', '') -replace '\?.*$', ''

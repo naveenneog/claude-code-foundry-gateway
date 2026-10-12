@@ -29,6 +29,13 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **Preflight proves group-creation privilege (P113).** `Install-ClaudeGateway.ps1 -Preflight` (and
+  `-PlanOnly`/the guided flow) no longer assumes an absent tier or business-unit group will be
+  created: it reads the tenant's Microsoft Graph `authorizationPolicy.defaultUserRolePermissions
+  .allowedToCreateSecurityGroups`, and `entra.groupNames` is a FAIL naming every absent group and the
+  admin remedy (create the group, grant Groups/User/Global Administrator, or turn on "Users can
+  create security groups") when that permission is off, unreadable, or the read itself fails - never
+  a silent `created by the run` pass. A tenant that allows it keeps today's behaviour unchanged.
 - **Installer UI milestone 1 (P93).** `node tools/installer-ui/server.mjs` starts a local Node
   `http` server with no packages. It binds to loopback by default, prints a one-time token, checks the
   token on every request, rejects foreign Host headers and OPTIONS, sends no CORS headers, renders the

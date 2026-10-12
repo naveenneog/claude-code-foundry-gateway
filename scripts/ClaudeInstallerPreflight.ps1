@@ -319,14 +319,47 @@ function Invoke-ClaudeGatewayPreflightAzure {
     }
     if ($Installer -eq 'pwsh') { foreach ($u in @(& $get 'BusinessUnits')) { $g = [string](Get-ClaudeAnswersField $u 'group'); if ($g -and -not $names.Contains($g)) { $names.Add($g) } } }
     $notes = @()
+    $absent = [System.Collections.Generic.List[string]]::new()
     foreach ($name in $names) {
         $found = Find-ClaudeInstallGroupByName $name
         if ($found.Verdict -eq 'present') { $notes += "'$name' exists ($($found.Id))" }
-        elseif ($found.Verdict -eq 'absent') { $notes += "'$name' is created by the run" }
+        elseif ($found.Verdict -eq 'absent') { $notes += "'$name' is created by the run"; $absent.Add($name) }
         elseif ($found.Detail -match 'groups have a name of that length') { Add-ClaudePreflightProblem $Checks['entra.groupNames'] "Entra group '$name' is not one group: $($found.Detail)" 'Rename or remove one of those groups, or answer another group name.' }
         else { Add-ClaudePreflightProblem $Checks['entra.groupNames'] "Entra group '$name' could not be looked up by name ($($found.Detail))" 'Sign in with an account that can read Entra groups in Microsoft Graph, for example one with the Directory Readers role, then run the preflight again.' }
     }
+    # An absent group was only ever noted as "created by the run": az ad group create then met a tenant
+    # that disables self-service group creation, discovered live only after the gateway was already
+    # deployed (docs/status/P113.md). A group that will be created is confirmed creatable first.
+    if ($absent.Count) {
+        $privilege = Test-ClaudeInstallGroupCreationPrivilege
+        if ($privilege.Verdict -ne 'allowed') {
+            $list = ($absent | ForEach-Object { "'$_'" }) -join ', '
+            Add-ClaudePreflightProblem $Checks['entra.groupNames'] "$list does not exist yet, and $($privilege.Detail)" `
+                'Ask the customer Entra admin to create the group(s) first, to grant you the Groups Administrator, User Administrator or Global Administrator role, or to turn on "Users can create security groups" in the Microsoft Entra admin center; then run the preflight again.'
+        }
+    }
     Set-ClaudePreflightPass $Checks['entra.groupNames'] "Entra groups: $($notes -join '; ')"
+}
+
+function Test-ClaudeInstallGroupCreationPrivilege {
+    # Whether the signed-in account could create an Entra security group if one named in the answers is
+    # missing: the tenant-wide default permission (Microsoft Graph
+    # authorizationPolicy.defaultUserRolePermissions.allowedToCreateSecurityGroups,
+    # https://learn.microsoft.com/graph/api/resources/defaultuserrolepermissions, retrieved 2026-10-12),
+    # which az ad group create relies on for a non-admin account. A directory role such as Groups
+    # Administrator also grants creation regardless of this setting, but is not enumerated here - the
+    # same caution the resolver-registration check takes for app-registration rights
+    # (scripts/ClaudeProjectionChecks.ps1 'Resolver registration'): unproven is reported, never silently
+    # assumed true. az rest, not Invoke-ClaudeGraphRead, so this file's one read-call idiom
+    # (Invoke-ClaudeInstallAzRead) and its az.cmd-stub test harness cover it too.
+    $r = Invoke-ClaudeInstallAzRead @('rest', '--method', 'get', '--url', 'https://graph.microsoft.com/v1.0/policies/authorizationPolicy', '-o', 'json')
+    if ($r.Verdict -eq 'present') {
+        $allowed = $null
+        try { $allowed = ($r.Output | ConvertFrom-Json -ErrorAction Stop).defaultUserRolePermissions.allowedToCreateSecurityGroups } catch { }
+        if ($allowed -is [bool] -and $allowed) { return [pscustomobject]@{ Verdict = 'allowed'; Detail = 'the tenant allows the default user role to create security groups' } }
+        return [pscustomobject]@{ Verdict = 'blocked'; Detail = 'the tenant does not confirm the signed-in account can create one (allowedToCreateSecurityGroups is off, missing or not a boolean); a Groups Administrator, User Administrator or Global Administrator role still would' }
+    }
+    return [pscustomobject]@{ Verdict = 'blocked'; Detail = "whether the account can create one could not be confirmed ($($r.Detail)); a Groups Administrator, User Administrator or Global Administrator role still would" }
 }
 
 function Format-ClaudeGatewayPreflight {
