@@ -137,6 +137,65 @@ try {
 finally { Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue }
 
 Write-Host ''
+Write-Host 'Resolver publish archive - a real PKZIP, not a tar-format file under a .zip name' -ForegroundColor Cyan
+
+# GNU tar's -a (--auto-compress) does not recognize .zip (it supports gzip/bzip2/lzip/lzma/lzop/
+# zstd/xz/compress only) and silently writes a tar-format file under the .zip name instead of
+# erroring. Kudu's zip-deploy then fails with "End of Central Directory record could not be
+# found" - reproduced live 2026-10-13 on a customer deployment. This check proves the archive
+# New-ClaudeProjectionResolverArchive writes is a real PKZIP regardless of host platform.
+$resolverWork = Join-Path ([IO.Path]::GetTempPath()) ('resolver-archive-' + [guid]::NewGuid().ToString('N'))
+try {
+    $stageDir = Join-Path $resolverWork 'stage'
+    New-Item -ItemType Directory -Force -Path $stageDir | Out-Null
+    [IO.File]::WriteAllText((Join-Path $stageDir 'host.json'), '{}')
+    [IO.File]::WriteAllText((Join-Path $stageDir 'package.json'), '{}')
+    New-Item -ItemType Directory -Force -Path (Join-Path $stageDir 'src') | Out-Null
+    [IO.File]::WriteAllText((Join-Path $stageDir 'src\index.js'), 'module.exports = {};')
+    New-Item -ItemType Directory -Force -Path (Join-Path $stageDir 'node_modules\dep') | Out-Null
+    [IO.File]::WriteAllText((Join-Path $stageDir 'node_modules\dep\index.js'), 'module.exports = {};')
+    $zipPath = Join-Path $resolverWork 'resolver.zip'
+    $returned = New-ClaudeProjectionResolverArchive -Source $stageDir -Path $zipPath
+    Assert 'the function returns the resolved archive path' ($returned -eq (Resolve-Path -LiteralPath $zipPath).Path)
+    Assert 'the archive file exists' (Test-Path -LiteralPath $zipPath)
+    $bytes = [IO.File]::ReadAllBytes($zipPath)
+    Assert 'the archive starts with the PKZIP local-file-header signature (PK\x03\x04), not a tar header' (
+        $bytes.Length -ge 4 -and $bytes[0] -eq 0x50 -and $bytes[1] -eq 0x4B -and $bytes[2] -eq 3 -and $bytes[3] -eq 4
+    ) ('first 4 bytes: ' + (($bytes[0..([Math]::Min(3, $bytes.Length - 1))] | ForEach-Object { $_.ToString('X2') }) -join ' '))
+    $entries = $null
+    $rawEntries = $null
+    $opened = $true
+    try {
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        $archive = [IO.Compression.ZipFile]::OpenRead($zipPath)
+        try {
+            $rawEntries = @($archive.Entries | ForEach-Object { $_.FullName })
+            $entries = @($rawEntries | ForEach-Object { $_ -replace '\\', '/' })
+        }
+        finally { $archive.Dispose() }
+    } catch { $opened = $false }
+    Assert '.NET ZipFile opens the archive without error (an End-Of-Central-Directory record is present)' $opened
+    Assert 'no entry name contains a backslash (the historical Compress-Archive-on-Windows extraction break on Linux, docs/SECURE-PROJECTION.md)' (-not @($rawEntries | Where-Object { $_ -match '\\' }).Count) ($rawEntries -join ', ')
+    foreach ($expected in 'host.json', 'package.json', 'src/index.js', 'node_modules/dep/index.js') {
+        Assert "the archive carries $expected" ($entries -contains $expected) ($entries -join ', ')
+    }
+    # Negative control: a source with nothing staged is refused rather than silently producing an
+    # empty or missing archive.
+    $emptyDir = Join-Path $resolverWork 'empty'
+    New-Item -ItemType Directory -Force -Path $emptyDir | Out-Null
+    $emptyFailed = $false
+    try { New-ClaudeProjectionResolverArchive -Source $emptyDir -Path (Join-Path $resolverWork 'empty.zip') | Out-Null }
+    catch { $emptyFailed = $_.Exception.Message -match 'is empty' }
+    Assert 'control: an empty staging source is refused, not silently zipped as empty' $emptyFailed
+}
+finally { Remove-Item -LiteralPath $resolverWork -Recurse -Force -ErrorAction SilentlyContinue }
+
+$deployerText = Get-Content -LiteralPath (Join-Path $root 'scripts\Deploy-ClaudeProjection.ps1') -Raw
+Assert 'the deployer publishes the resolver through the archive function, not a raw tar call' (
+    $deployerText -match 'New-ClaudeProjectionResolverArchive -Source \$stage' -and $deployerText -notmatch 'tar -a -c -f resolver\.zip'
+)
+
+Write-Host ''
 Write-Host 'Projection sync package - the image and the deployer use the package' -ForegroundColor Cyan
 
 $docker = Get-Content -LiteralPath (Join-Path $root 'sync\Dockerfile') -Raw

@@ -673,8 +673,14 @@ Push-Location $stage
 try {
     npm install --omit=dev
     if ($LASTEXITCODE -ne 0) { throw 'Resolver dependency installation failed' }
-    tar -a -c -f resolver.zip host.json package.json src node_modules
-    if ($LASTEXITCODE -ne 0) { throw 'Resolver ZIP creation failed' }
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $archive = [IO.Compression.ZipFile]::Open('resolver.zip', 'Create')
+    try {
+        foreach ($file in Get-ChildItem -Recurse -File -Force) {
+            $relative = $file.FullName.Substring($stage.Length + 1).Replace('\', '/')
+            [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $file.FullName, $relative) | Out-Null
+        }
+    } finally { $archive.Dispose() }
     az functionapp deployment source config-zip -g <rg> -n func-resolver-<prefix> --src resolver.zip
     if ($LASTEXITCODE -ne 0) { throw 'Resolver publish failed; keep the stage for diagnostics' }
 }
@@ -682,8 +688,21 @@ finally { Pop-Location }
 # Remove $stage after successful deployment and verification, not before.
 ```
 
-Zip with `tar`, not `Compress-Archive`, which can write paths with backslashes
-that break extraction on Linux. Measured: 149 seconds, with the storage account
+Not `tar -a -c -f resolver.zip ...`: GNU tar (most Linux distributions) has no zip
+archive format at all - it recognizes gzip, bzip2, lzip, lzma, lzop, zstd, xz and
+compress suffixes only (GNU tar manual, "Creating and Reading Compressed Archives",
+read 2026-10-13) - so `-a` with an unrecognized `.zip` suffix silently writes a
+tar-format file under that name, and Kudu's zip-deploy then refuses it with
+`InvalidPackageContentException: ... End of Central Directory record could not be
+found`, reproduced live on a customer deployment, 2026-10-13. Not plain
+`Compress-Archive` either: it is the reason `tar` was tried in the first place, because
+an earlier measurement found it can write paths with backslashes that break extraction
+on Linux. `System.IO.Compression.ZipFile` with an explicit, forward-slash-normalized
+entry name per file avoids both: a real PKZIP every platform's `tar` can read, with
+entry names no Linux unzipper misreads. `scripts/ClaudeProjectionPackage.ps1`'s
+`New-ClaudeProjectionResolverArchive` is the same code path `Deploy-ClaudeProjection.ps1`
+runs; `tests/Test-ProjectionPackage.ps1` proves the archive it writes opens as a real
+zip with forward-slash-only entries. Measured: 149 seconds, with the storage account
 already private, because the platform writes the package through the VNet.
 
 **Portal/manual:** Function App > Deployment Center / deployment logs can inspect

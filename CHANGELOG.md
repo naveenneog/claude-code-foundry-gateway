@@ -1540,6 +1540,20 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Fixed
 
+- **Resolver zip-deploy failed with "End of Central Directory record could not be found" on
+  Linux (GNU tar).** `Deploy-ClaudeProjection.ps1`'s "Publish resolver code" step packaged the
+  resolver with `tar -a -c -f resolver.zip ...`. GNU tar (most Linux distributions) has no zip
+  archive format at all - `-a`/`--auto-compress` recognizes gzip, bzip2, lzip, lzma, lzop, zstd,
+  xz and compress suffixes only - so it silently wrote a tar-format file under the `.zip` name,
+  and Azure's Kudu zip-deploy endpoint correctly refused it. `scripts/ClaudeInstallProjection.ps1`
+  via `Install-ClaudeGateway.ps1`, and the manual `docs/SECURE-PROJECTION.md` runbook step, hit
+  the same packaging code, respectively, reproduced live on a customer deployment, 2026-10-13. A
+  new `New-ClaudeProjectionResolverArchive` (`scripts/ClaudeProjectionPackage.ps1`) writes a real
+  PKZIP through `System.IO.Compression.ZipFile` with explicit, forward-slash-normalized entry
+  names per file - the same approach `Publish-ClaudeAumService.ps1` already uses for its own
+  zip-deploy, and deliberately not `Compress-Archive`, which an earlier measurement recorded as
+  writing backslash-separated paths that break extraction on Linux.
+
 - **P96 a business unit identifier with a capital, or another spelling of a stored one.**
   `scripts/Set-ClaudeBusinessUnit.ps1` accepted a new identifier such as `Platform` and then stopped at
   the dollar budget with "Invalid USD scope identifier." (`scripts/ClaudeUsdBudgets.ps1:42`); the AUM

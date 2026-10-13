@@ -42,6 +42,58 @@ function New-ClaudeProjectionSyncPackage {
     return (Resolve-Path -LiteralPath $Destination).Path
 }
 
+function New-ClaudeProjectionResolverArchive {
+    <#
+    .SYNOPSIS
+        Zips a staged resolver publish folder for Kudu zip-deploy
+        (az functionapp deployment source config-zip).
+
+    .DESCRIPTION
+        Kudu's zip-deploy endpoint needs a real PKZIP archive with forward-slash entry
+        names. GNU tar's -a (--auto-compress) does not produce one for an unrecognized
+        .zip suffix: GNU tar supports gzip, bzip2, lzip, lzma, lzop, zstd, xz and compress
+        only - zip is not an archive format it can write (GNU tar manual, "Creating and
+        Reading Compressed Archives",
+        https://www.gnu.org/software/tar/manual/html_node/gzip.html, read 2026-10-13). On
+        a machine whose tar is GNU tar (most Linux distributions; not the libarchive/bsdtar
+        some platforms ship), tar -a -c -f resolver.zip ... silently writes a tar-format
+        file under a .zip name, and Kudu then refuses it with
+        "InvalidPackageContentException: ... End of Central Directory record could not be
+        found" - reproduced live on a customer deployment, 2026-10-13.
+
+        Entries are added one file at a time through System.IO.Compression.ZipFile with an
+        explicit, forward-slash-normalized relative name - the same approach
+        Publish-ClaudeAumService.ps1 already uses for its own zip-deploy - rather than
+        Compress-Archive, because docs/SECURE-PROJECTION.md's "Publish the resolver code"
+        step records that Compress-Archive "can write paths with backslashes that break
+        extraction on Linux" as the reason tar was chosen originally. (Measured here on
+        PowerShell 7.6.6, Compress-Archive already normalizes to forward slashes; this
+        function does not depend on that holding across every PowerShell 7 minor version.)
+        A file that cannot be read (for example a dangling node_modules/.bin symlink,
+        which Node's own module resolution never follows) is skipped, not fatal.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$Source,
+        [Parameter(Mandatory = $true)][string]$Path
+    )
+    $full = (Resolve-Path -LiteralPath $Source).Path.TrimEnd('\', '/')
+    $files = @(Get-ChildItem -LiteralPath $full -Recurse -File -Force -ErrorAction SilentlyContinue)
+    if (-not $files.Count) { throw "Resolver publish source '$Source' is empty." }
+    if (Test-Path -LiteralPath $Path) { Remove-Item -LiteralPath $Path -Force }
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $archive = [IO.Compression.ZipFile]::Open($Path, 'Create')
+    try {
+        foreach ($file in $files) {
+            $relative = $file.FullName.Substring($full.Length + 1).Replace('\', '/')
+            try { [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $file.FullName, $relative) | Out-Null }
+            catch { Write-Warning "Resolver archive: skipped unreadable file '$relative' ($($_.Exception.Message))" }
+        }
+    }
+    finally { $archive.Dispose() }
+    return (Resolve-Path -LiteralPath $Path).Path
+}
+
 function New-ClaudeProjectionSyncArchive {
     <#
     .SYNOPSIS

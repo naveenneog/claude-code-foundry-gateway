@@ -186,9 +186,8 @@ if ($PSCmdlet.ShouldProcess($resolver.siteName, 'package and publish resolver co
         try {
             npm install --omit=dev --no-audit --fund=false
             if ($LASTEXITCODE -ne 0) { throw 'resolver dependency installation failed' }
-            tar -a -c -f resolver.zip host.json package.json src node_modules
-            if ($LASTEXITCODE -ne 0) { throw 'resolver ZIP creation failed' }
-            az functionapp deployment source config-zip -g $ResourceGroup -n $($resolver.siteName) --src resolver.zip -o none
+            $resolverZip = New-ClaudeProjectionResolverArchive -Source $stage -Path (Join-Path $stage 'resolver.zip')
+            az functionapp deployment source config-zip -g $ResourceGroup -n $($resolver.siteName) --src $resolverZip -o none
             if ($LASTEXITCODE -ne 0) { throw 'resolver publish failed' }
         } finally { Pop-Location }
     }
