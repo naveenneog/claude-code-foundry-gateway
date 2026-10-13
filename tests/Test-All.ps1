@@ -465,6 +465,7 @@ Invoke-Check 'Live projection verifier validation and order' 'Test-ClaudeLivePro
     Invoke-Check 'Guided flow plans in one order on both shells' 'Test-FlowOrdinalOrder.ps1' -SerialLane
     Invoke-Check 'Installer summary across permutations'     'Test-InstallerPermutations.ps1'
     Invoke-Check 'Installer checkpoint and resume'           'Test-InstallerCheckpoint.ps1'
+    Invoke-Check 'Install checkpoint answers never bake in an unresumable value' 'Test-InstallerCheckpointAnswers.ps1'
 Invoke-Check 'Tier groups follow their gateway'          'Test-TierGroupTarget.ps1'
 
     if ($IncludeAzure) {

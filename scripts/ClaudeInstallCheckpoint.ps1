@@ -23,7 +23,7 @@ $script:ClaudeInstallChoices = @{
     DesktopSignInKind = 'helper-script', 'external-idp-browser', 'external-idp-broker'; DesktopBearerTokenType = 'id_token', 'access_token'
     TeamBudgetBehaviour = 'report', 'stop'; UnassignedDevelopers = 'allow', 'deny'
 }
-$script:ClaudeInstallIntegers = @('TpmStandard', 'QuotaStandard', 'TpmPremium', 'QuotaPremium', 'QuotaOrg', 'CallsPerMinute', 'RevocationWindowSeconds', 'DeveloperEstimate')
+$script:ClaudeInstallIntegers = @('TpmStandard', 'QuotaStandard', 'TpmPremium', 'QuotaPremium', 'QuotaOrg', 'CallsPerMinute', 'RevocationWindowSeconds', 'DeveloperEstimate', 'DeveloperCount')
 # Answers that Azure CLI places inside an OData string literal without escaping a quote: az ad group
 # list --display-name sends startswith(displayName,'<name>') for the tier groups, and az ad app list
 # --display-name sends it for claude-projection-resolver-<NamePrefix> (azure-cli 2.86.0
