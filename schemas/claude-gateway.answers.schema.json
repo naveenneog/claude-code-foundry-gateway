@@ -38,6 +38,7 @@
     "Steps": { "Install-ClaudeGateway.ps1": "-Steps", "install-claude-gateway.sh": "--steps", "reason": "Runs the named steps only." },
     "ProgressPath": { "Install-ClaudeGateway.ps1": "-ProgressPath", "install-claude-gateway.sh": "--progress-file", "reason": "Appends one JSON event per line for each step." },
     "ArchiveSavedRecord": { "Install-ClaudeGateway.ps1": "-ArchiveSavedRecord", "reason": "Keeps another gateway's saved record beside a new one." },
+    "RecordGroups": { "Install-ClaudeGateway.ps1": "-RecordGroups", "reason": "Replaces the gateway's recorded entitlement-groups with what -StandardGroup/-PremiumGroup resolve to now; a one-run override, not a durable answer." },
     "AddressApprovedPlanFingerprint": { "Install-ClaudeGateway.ps1": "-AddressApprovedPlanFingerprint", "reason": "The guided flow's approval of the reviewed company-address plan." },
     "FlipProjectionAfterCleanCompare": { "Install-ClaudeGateway.ps1": "-FlipProjectionAfterCleanCompare", "reason": "A separate operation on an existing projection." },
     "WhatIf": { "install-claude-gateway.sh": "--what-if", "reason": "Previews a run; Install-ClaudeGateway.ps1 takes PowerShell's common parameter -WhatIf." },

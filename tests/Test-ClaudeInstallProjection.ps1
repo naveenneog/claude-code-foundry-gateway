@@ -309,6 +309,16 @@ Assert 'a migration refreshes the named-value lists explicitly and compares with
     $syncCalls.Count -eq 1 -and $syncCalls[0].Path -match 'Sync-ClaudeAccess\.ps1$' -and $syncCalls[0].Args['Store'] -eq 'named-value' -and
     $migrating.CompareBaseline -eq 'Auto' -and $migrating.ServingStore -eq 'named-value') ($migrating | ConvertTo-Json -Compress)
 $syncCalls.Clear()
+$withoutRecord = Invoke-ClaudeInstallerEntitlementSync @syncArgs -EntitlementStore named-value -LiveEntitlementSource named-value -InvokeScript $syncOk
+Assert 'without -RecordGroups, Sync-ClaudeAccess.ps1 is called with no RecordGroups argument at all' (-not $syncCalls[0].Args.Contains('RecordGroups')) ($syncCalls[0].Args | ConvertTo-Json -Compress)
+$syncCalls.Clear()
+$withRecord = Invoke-ClaudeInstallerEntitlementSync @syncArgs -EntitlementStore named-value -LiveEntitlementSource named-value -InvokeScript $syncOk -RecordGroups
+Assert 'Install-ClaudeGateway.ps1 -RecordGroups reaches Sync-ClaudeAccess.ps1 as -RecordGroups, so a gateway recording a stale group id (a group deleted and recreated under the same name) can be made to accept the live one' ($syncCalls[0].Args['RecordGroups'] -eq $true) ($syncCalls[0].Args | ConvertTo-Json -Compress)
+Assert 'Install-ClaudeGateway.ps1 declares -RecordGroups, and it is not a checkpoint-recorded answer (it overrides one run, not a durable setting to replay on every future resume)' (
+    $installerText -match '\[switch\]\$RecordGroups' -and
+    -not ((Get-Content -LiteralPath (Join-Path $root 'scripts\ClaudeInstallCheckpoint.ps1') -Raw) -match "'RecordGroups'")
+)
+$syncCalls.Clear()
 $overCapacity = Invoke-ClaudeInstallerEntitlementSync @syncArgs -EntitlementStore projection -LiveEntitlementSource named-value -InvokeScript $syncOver
 Assert 'above named-value capacity the comparison uses a fresh snapshot, and named values are still what serves' (
     $overCapacity.CompareBaseline -eq 'Snapshot' -and $overCapacity.ServingStore -eq 'named-value' -and $overCapacity.Reason -eq 'over-capacity') ($overCapacity | ConvertTo-Json -Compress)

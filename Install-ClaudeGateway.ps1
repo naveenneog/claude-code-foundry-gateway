@@ -119,6 +119,14 @@ param(
     # one for this gateway. Asked in a console; without this switch an unattended run refuses (P79).
     [switch]$ArchiveSavedRecord,
 
+    # The gateway's recorded entitlement-groups named value is replaced with whatever
+    # -StandardGroup/-PremiumGroup resolve to now. Without it, "Sync entitlement" refuses rather
+    # than silently re-pointing entitlement when a resolved group id differs from what is already
+    # recorded there (scripts/Sync-ClaudeAccess.ps1) - for example because a group of the same name
+    # was deleted and recreated, which gets a new object id. Not recorded in the install checkpoint:
+    # it overrides one run, not a durable answer to replay on every future resume.
+    [switch]$RecordGroups,
+
     # Set this checkout's install checkpoint aside and start again (docs/adr/0046-installer-checkpoint-and-resume.md).
     # Without it a rerun resumes after the last step whose result Azure still shows.
     [switch]$Restart,
@@ -1779,7 +1787,7 @@ if (Test-ClaudeInstallStepSelected 'sync') {
     Start-ClaudeInstallStep 'sync'
     $entitlementSync = Invoke-ClaudeInstallerEntitlementSync -Root $root -ResourceGroup $ResourceGroup -ApimName $apimName `
         -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -EntitlementStore $EntitlementStore `
-        -LiveEntitlementSource $liveEntitlementSource -NewGateway:(-not ($ExistingApim -or $liveApimId))
+        -LiveEntitlementSource $liveEntitlementSource -NewGateway:(-not ($ExistingApim -or $liveApimId)) -RecordGroups:$RecordGroups
     switch ($entitlementSync.Reason) {
         'already-projection' { Write-Note 'This gateway serves from the projection: the projection deployment syncs it and compares it with a fresh Entra snapshot.' }
         'new-gateway' { Write-Note 'Projection is the default store for this new gateway; skipping named-value list population.' }

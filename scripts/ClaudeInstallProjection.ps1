@@ -366,6 +366,7 @@ function Invoke-ClaudeInstallerEntitlementSync {
         # The update's move with a tier that has no members (ADR-0054): the refresh may empty that tier's list.
         [switch]$AllowEmptyStandard,
         [switch]$AllowEmptyPremium,
+        [switch]$RecordGroups,
         [scriptblock]$InvokeScript
     )
     $serving = if ($LiveEntitlementSource -eq 'projection') { 'projection' } else { 'named-value' }
@@ -378,6 +379,7 @@ function Invoke-ClaudeInstallerEntitlementSync {
     $parameters = [ordered]@{ ApimName = $ApimName; ResourceGroup = $ResourceGroup; StandardGroup = $StandardGroup; PremiumGroup = $PremiumGroup; Store = 'named-value' }
     if ($AllowEmptyStandard) { $parameters['AllowEmptyStandard'] = $true }
     if ($AllowEmptyPremium) { $parameters['AllowEmptyPremium'] = $true }
+    if ($RecordGroups) { $parameters['RecordGroups'] = $true }
     $scriptPath = Join-Path $Root 'scripts\Sync-ClaudeAccess.ps1'
     try {
         if ($InvokeScript) { $null = & $InvokeScript $scriptPath $parameters }
