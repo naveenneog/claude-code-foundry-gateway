@@ -384,6 +384,7 @@ there; [Operations](docs/OPERATIONS.md) maps tasks to commands and portal paths.
 | [Data governance](docs/DATA-GOVERNANCE.md) | Retention, discovery, approved purge and its coverage limits |
 | [Scale](docs/SCALE.md) / [Private projection](docs/SECURE-PROJECTION.md) | Measured limits, costs and migration runbook |
 | [Cosmos projection workbook](docs/PROJECTION-WORKBOOK.md) | Manual deploy, populate, switch, operation and rollback steps for sync-based Cosmos entitlement |
+| [Helper-script to interactive sign-in and projection](docs/ADMIN-HELPER-TO-INTERACTIVE-PROJECTION-WORKBOOK.md) | Preflighted migration of Desktop sign-in and the entitlement source, with an [Excel checklist](docs/ADMIN-HELPER-TO-INTERACTIVE-PROJECTION-WORKBOOK.xlsx) |
 | [Comparison](docs/COMPARISON.md) / [Foundry direct](docs/FOUNDRY-DIRECT.md) | Adoption choices and ungoverned evaluation |
 | [AI Gateway tier](docs/AI-GATEWAY-TIER.md) | Preview comparison and unverified model-serving path |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) / [Debugging](docs/DEBUGGING.md) | Known symptoms / isolate the failure layer |

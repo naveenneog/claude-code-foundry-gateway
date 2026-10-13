@@ -1458,6 +1458,22 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Changed
 
+- **Generated architecture diagrams appear in the guides that cover their topic.** Thirteen of the
+  twenty rendered diagrams under `docs/images/architecture/` were referenced only by
+  `docs/ARCHITECTURE.md`. Twelve are now also placed in the guide for their subject
+  (`BUDGETS.md`, `MODELS.md`, `TURNSTILE.md`, `AUM.md`, `AUM-SERVICE.md`, `OPERATIONS.md`,
+  `DEBUGGING.md`, `CHARGEBACK-REPORTS.md`, `SETUP.md`, `INSTALLER-UI.md`,
+  `SECURE-PROJECTION.md`, `PROJECTION-WORKBOOK.md`), with the caption text taken from
+  `docs/ARCHITECTURE.md` and a link back to its section. `system-overview.png` stays
+  ARCHITECTURE-only because `README.md` embeds the byte-identical generated copy at
+  `docs/images/architecture.png`. No diagram source, render or manifest changed.
+- **The helper-script to interactive sign-in migration runbook has a phase map and screenshots.**
+  `docs/ADMIN-HELPER-TO-INTERACTIVE-PROJECTION-WORKBOOK.md` gained an "At a glance" table of
+  phases 0-5 and rollback with their anchors, what each writes and its step numbers, plus the
+  projection freshness diagram and three existing screenshots at the preflight, Intune pilot and
+  verify steps. `README.md`, `docs/SECURE-PROJECTION.md`, `docs/UPDATE-AND-CHANGE.md` and
+  `docs/MDM.md` link to it.
+
 - **The gate's command budget is 60 minutes until the exclusive checks are sharded (P77).**
   `.ironclad/charter.json` gave every gate command 1,800 seconds (ADR-0025). On 2026-09-28 four packet
   gates passed in 1,368 to 1,688 seconds and three timed out at 1,800, the last at the default

@@ -126,6 +126,8 @@ as strict. The service never rewrites the gateway policy to enable a feature.
 
 <summary>Discovery, cost preview, deployment and private networking</summary>
 
+![Independent AUM service: delegated Entra users reach a token-validated Functions API; authority, scope and allocation checks precede audited and leased named-value writes; keyless service storage holds workflows and two timers handle boost expiry and warnings](images/architecture/aum-service.png)
+
 ### 1. Discover targets
 
 ```powershell

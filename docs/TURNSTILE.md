@@ -621,6 +621,8 @@ The first two runs failed, and both causes are now handled:
 
 <summary>Full governance saves, stale-run guard and apply rules</summary>
 
+![Turnstile governance apply: a save starts one manual Container Apps job; its pinned scripts prepare the month, read catalog, tiers and budgets, reject unsafe input, write changed named values and verify read-back](images/architecture/governance-apply.png)
+
 ### Concurrent saves and the stale-run guard
 
 **Measured 2026-09-24 by the manager-scoping agent:** two catalog saves one second
@@ -872,6 +874,8 @@ possible and would still compete with the apply while Turnstile owns that value.
 <details>
 
 <summary>Entra role gates, viewers, managers and CLI sign-in</summary>
+
+![Delegated management: assigned Entra application groups and catalog manager_group_id determine scope; an Azure CLI token becomes a single-use 60-second browser login code, and Admin, Viewer and Manager privileges are distinct](images/architecture/delegated-management.png)
 
 Three layers, each measured.
 

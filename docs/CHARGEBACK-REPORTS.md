@@ -238,6 +238,8 @@ unit emails. A filtered unit's HTML and CSV never contain another unit's people.
 
 <summary>Private jobs, recipients, settings and delivery verification</summary>
 
+![Read-only workspace and gateway sources feed a monthly generator in a dedicated reports VNet; private Blob settings, archive and hashed-recipient outbox connect separate reporting and administration identities to a paced ACS Email dispatcher and scoped BCC recipients](images/architecture/chargeback-reports.png)
+
 The guided flow uses `scripts/flow/Reports.ps1` as the product entry point for this
 feature. It collects the same P50 decisions: allowed recipient domains, recipients,
 UTC cron and delivery choice, then calls the existing schedule, recipient and report

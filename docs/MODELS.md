@@ -66,6 +66,8 @@ and provisioning state
 
 <summary>Deployment choices, approval fingerprint and live proof</summary>
 
+![Model lifecycle: read Foundry and gateway state, approve a fingerprint, check ownership and snapshot, write the two model lists, preserve dated prices and records, then generate separate tier profiles for existing fleet and workstation routes](images/architecture/model-lifecycle.png)
+
 An administrator deploys the model through Foundry's approved deployment
 process. The model change then discovers it:
 

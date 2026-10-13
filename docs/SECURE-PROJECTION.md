@@ -25,6 +25,11 @@ capacity, about 93 developers in business-unit membership and about 110 per tier
 ([Scale](SCALE.md#what-runs-out-first)). The rest of this article covers each step, the network, the
 rights used and the costs.
 
+![Projection persistence and switch evidence: a complete paged directory scan writes persistent records; the in-VNet writer reconciles Cosmos, while the gateway admits bounded misses to an authenticated resolver with per-process single flight](images/architecture/projection-freshness.png)
+
+The diagram is generated from this repository's sync, resolver, policy and Bicep sources
+([Architecture](ARCHITECTURE.md#projection-freshness-switch-evidence-and-private-networking)).
+
 The gateway decides each developer's tier from two named values. A named value
 holds 4,096 characters, which is about 93 to 110 object ids, so beyond roughly a
 hundred developers entitlement has to move to the **projection**: one Cosmos DB
@@ -280,6 +285,10 @@ above the subscription's monthly Container Apps free grant of 180,000 vCPU-secon
 which other Container Apps workloads share ([Billing in Azure Container Apps](https://learn.microsoft.com/azure/container-apps/billing), updated 2026-03-25).
 
 ### Switch to the projection (P95)
+
+An attended change window that moves Claude Desktop to interactive sign-in at the same time has a
+step-by-step checklist in the
+[helper-script to interactive sign-in and projection workbook](ADMIN-HELPER-TO-INTERACTIVE-PROJECTION-WORKBOOK.md).
 
 `scripts/Deploy-ClaudeProjection.ps1 -FlipAfterCleanCompare` runs `Invoke-ClaudeProjectionSwitch
 -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix>`. It deploys, publishes and applies nothing:

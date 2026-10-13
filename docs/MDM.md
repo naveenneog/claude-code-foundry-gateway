@@ -275,6 +275,10 @@ the deployment window.
 | Update | Generate a new tier profile, update the platform script/remediation/app content, and confirm pilot device status before broad assignment. |
 | Rollback | Remove the assignment for profiles that the CSP removes cleanly; run the rollback script for registry values because Microsoft documents that removing some custom policy assignments might not revert the setting. For Win32 apps, assign **Uninstall** where packaging supports it. |
 
+A pilot-first rollout that also changes Claude Desktop from the credential helper to interactive
+browser sign-in is sequenced in the
+[helper-script to interactive sign-in and projection workbook](ADMIN-HELPER-TO-INTERACTIVE-PROJECTION-WORKBOOK.md).
+
 </details>
 
 ## 4. Intune on macOS

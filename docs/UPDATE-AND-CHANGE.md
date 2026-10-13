@@ -268,3 +268,8 @@ Set-ApimNamedValue -ResourceGroup <rg> -ApimName <apim> `
 
 After any Desktop sign-in change, redistribute the regenerated Intune/Jamf/GPO profiles or rerun
 the workstation setup scripts.
+
+Moving an existing fleet from the helper script to interactive browser sign-in, with an Intune
+pilot before the entitlement source changes, is covered step by step in the
+[helper-script to interactive sign-in and projection workbook](ADMIN-HELPER-TO-INTERACTIVE-PROJECTION-WORKBOOK.md)
+and its [Excel checklist](ADMIN-HELPER-TO-INTERACTIVE-PROJECTION-WORKBOOK.xlsx).

@@ -4,6 +4,11 @@ The installer UI is a local form over the same answers schema, preflight result,
 progress stream that the installers expose. It adds no Azure service or hosted control plane
 (`docs/architecture/18-installer-ui.json:1-43`; `tools/installer-ui/server.mjs:1-20`).
 
+![Installer UI: a local Node server and static page share the UI model, gate runs on preflight fingerprints, keep a server-side run record and stream redacted installer progress](images/architecture/installer-ui.png)
+
+Screenshots of the running form are in [Screenshots](#screenshots) below, and the generated diagram
+above is described in [Architecture](ARCHITECTURE.md#installer-ui).
+
 ## Start command
 
 The portable start command is:

@@ -87,6 +87,8 @@ answering from somewhere other than your gateway, which no other check catches.
 
 <summary>Client, APIM and Foundry failure hops</summary>
 
+![Seven request hops: sign in, admit, the optional Content Safety screen, serve, meter, attribute and observe, with four budget layers and the projection admission, absence and fault outcomes](images/architecture/request-path.png)
+
 Every failure lives at exactly one of these hops.
 
 ```text

@@ -4,6 +4,11 @@ This workbook gives the manual procedure to deploy, populate, switch to and oper
 
 Sources: [ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md), [secure projection](SECURE-PROJECTION.md#one-command-deployment).
 
+![Projection persistence and switch evidence: a complete paged directory scan writes persistent records; the in-VNet writer reconciles Cosmos, while the gateway admits bounded misses to an authenticated resolver with per-process single flight](images/architecture/projection-freshness.png)
+
+The numbered steps in the diagram match the order of this workbook
+([Architecture](ARCHITECTURE.md#projection-freshness-switch-evidence-and-private-networking)).
+
 A gateway that serves from named values also moves with one planned update, which runs steps 1 to 4 below with the gateway's previous tier groups and values: `.\Update-ClaudeGateway.ps1 -ResourceGroup <rg> -ApimName <apim>`, then the printed `-Apply` command ([Update and change](UPDATE-AND-CHANGE.md#move-a-named-value-gateway-with-the-update), [ADR-0054](adr/0054-update-flow-entitlement-migration.md)).
 
 ## Quickstart

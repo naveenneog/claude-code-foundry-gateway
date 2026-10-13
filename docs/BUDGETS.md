@@ -24,6 +24,8 @@ $apim = $gateway.apimName
 
 <summary>USD stops, reconciler timing and arithmetic limits</summary>
 
+![Dated dollar budgets are authored through scripts or scoped AUM APIs, reconciled from categorized telemetry outside inference, and enforced by expiring gateway decisions; streaming incompleteness remains explicit](images/architecture/usd-budgets.png)
+
 The dollar-input scripts now preserve the approved **USD amount and price-book
 date**, as well as their existing approximate token quota. An optional reconciler
 prices observed input, output, cache reads and known 5-minute/1-hour cache writes
@@ -627,6 +629,8 @@ and [U9/U13](UNKNOWNS.md) describe the remaining limits.
 <details>
 
 <summary>Strict, allowance and notify mode operations</summary>
+
+![Budget modes: validated owner configuration publishes bu-modes separately from the base budget registry; strict, allowance and notify act on each scope independently, preserve other controls and emit advisory response and trace information](images/architecture/budget-modes.png)
 
 The platform owner can select a mode for a unit or team independently of its
 base allocation. This does not change who is authorised to manage it.

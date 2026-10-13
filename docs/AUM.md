@@ -988,6 +988,8 @@ Azure CLI session, not only AUM.
 
 #### Read latency and progress
 
+![AUM readiness uses bounded authenticated HTTP and read-only Azure diagnosis; Direct shares a snapshot and returns independent sources progressively](images/architecture/aum-readiness.png)
+
 Direct reuses resource tokens for a verified principal and Azure CLI session
 until two minutes before known expiry. Opaque tokens have a five-minute reuse
 limit. Each read cycle verifies the current account once; concurrent queries

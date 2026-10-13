@@ -228,6 +228,8 @@ also covers client conversation backups and cross-instance limitations.
 
 <summary>BOM pricing, cleanup safeguards and deletion verification</summary>
 
+![Azure resource type inventory grouped into default gateway, projection, private networking, resolver and Turnstile integration; all resource types declared in this repository's infra Bicep files are represented](images/architecture/azure-resource-inventory.png)
+
 ```powershell
 ./scripts/Get-ClaudeBom.ps1 -ResourceGroup $rg -ApimName $apim -WithPrices
 ```

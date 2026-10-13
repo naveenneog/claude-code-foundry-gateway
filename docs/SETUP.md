@@ -534,6 +534,8 @@ entitlement, verifies the controls, and writes `onboarding/claude-gateway.json`
 
 ### Company address
 
+![Company address control path: a priced installer or Change review creates DNS first, configures the supplied certificate and preserves APIM hostnames, then publishes the developer URL only after trusted TLS and a gateway HTTP 401](images/architecture/company-address.png)
+
 `custom` configures a gateway hostname rather than printing manual steps at the
 end. The installer asks for the hostname, certificate source and DNS hosting
 with its other choices. The address review appears before the final summary;
@@ -709,6 +711,8 @@ account and resource group, as the PowerShell installer's record does.
 
 ### Resume after a failure
 
+![Install checkpoint: the guided flow and both installers keep one checkpoint per checkout in a per-user state directory; the first write follows the confirmed summary, and a rerun skips a step only when a live Azure read shows its result](images/architecture/install-checkpoint.png)
+
 Both installers keep an install checkpoint for each checkout, from the confirmed
 summary until the last step completes
 ([installer checkpoint design record (ADR-0046)](adr/0046-installer-checkpoint-and-resume.md)). A rerun after a failure
@@ -842,6 +846,8 @@ The guided flow's resume of the steps after the installer is separate
 Both installers read one answers file, check it and the estate before anything changes, run selected
 steps and write a progress stream
 ([lean installer design record (ADR-0047)](adr/0047-lean-installer-phase-0.md)).
+
+![Lean installer phase 0: one answers schema feeds both installers and the guided flow, the shared preflight only reads, and selected steps reuse live verification and append a progress stream](images/architecture/lean-installer-phase0.png)
 
 The form-based installer UI uses the same schema and installer interfaces. It starts with
 `node .\tools\installer-ui\server.mjs`, opens locally or through Cloud Shell Web preview, and has a
