@@ -10,6 +10,11 @@
 
 import { createHash, randomUUID } from 'node:crypto';
 import { toEntitlement } from '../../resolver/src/entitlement.mjs';
+import {
+  createProfileSelector,
+  hashAccessCatalog,
+  hashAccessProfile,
+} from './access-catalog.mjs';
 
 export const TIERS_BY_PRECEDENCE = ['premium', 'standard'];
 export const MAX_PROJECTION_AGE_SECONDS = 7200;
@@ -64,6 +69,69 @@ export function mergeMembership({ tiers = {}, businessUnits = [] } = {}) {
   return { records: [...byOid.values()], unitWithoutTier };
 }
 
+export function mergeCatalogMembership({ catalog, profileGroups = [], businessUnits = [] } = {}) {
+  const selector = createProfileSelector(catalog);
+  const canonical = selector.catalog;
+  const enabledProfiles = canonical.profiles.filter((profile) => profile.enabled);
+  const groups = new Map(profileGroups.map((group) => [group.groupObjectId.toLowerCase(), group.members ?? []]));
+  for (const profile of enabledProfiles) {
+    if (!groups.has(profile.groupObjectId)) {
+      throw new Error(`enabled profile '${profile.id}' has no resolved access group`);
+    }
+  }
+
+  const membershipsByOid = new Map();
+  const namesByOid = new Map();
+  for (const profile of enabledProfiles) {
+    for (const member of groups.get(profile.groupObjectId)) {
+      if (!membershipsByOid.has(member.oid)) membershipsByOid.set(member.oid, []);
+      membershipsByOid.get(member.oid).push(profile.groupObjectId);
+      if (!namesByOid.has(member.oid)) namesByOid.set(member.oid, member.name ?? '');
+    }
+  }
+
+  const plans = new Map(canonical.plans.map((plan) => [plan.id, plan]));
+  const profileHashes = new Map(enabledProfiles.map((profile) => [profile.id, `sha256:${hashAccessProfile(profile)}`]));
+  const catalogVersion = `sha256:${hashAccessCatalog(canonical)}`;
+  const byOid = new Map();
+  for (const [oid, memberships] of membershipsByOid) {
+    const profile = selector.select(memberships);
+    if (!profile) continue;
+    const plan = plans.get(profile.planId);
+    byOid.set(oid, {
+      oid,
+      name: namesByOid.get(oid) ?? '',
+      schemaVersion: 3,
+      tier: plan.compatibilityTier,
+      planId: plan.id,
+      profileId: profile.id,
+      capabilities: profile.capabilities,
+      modelFamilies: profile.modelFamilies,
+      connectors: profile.connectors,
+      catalogVersion,
+      profileHash: profileHashes.get(profile.id),
+      businessUnit: '',
+    });
+  }
+
+  const unitWithoutProfile = [];
+  const assigned = new Set();
+  for (const unit of businessUnits) {
+    for (const member of unit.members ?? []) {
+      const record = byOid.get(member.oid);
+      if (!record) {
+        unitWithoutProfile.push({ oid: member.oid, unit: unit.id });
+        continue;
+      }
+      if (!assigned.has(member.oid)) {
+        record.businessUnit = unit.id;
+        assigned.add(member.oid);
+      }
+    }
+  }
+  return { records: [...byOid.values()], unitWithoutProfile };
+}
+
 /**
  * Decide what to write and what to remove.
  *
@@ -88,7 +156,7 @@ export function planChanges(resolved, existing, { allowEmpty = false, keepOrphan
   for (const r of resolved) {
     wanted.add(r.oid);
     const cur = existing.get(r.oid);
-    if (cur && cur.tier === r.tier && (cur.businessUnit ?? '') === (r.businessUnit ?? '')) {
+    if (cur && effectiveRecordEqual(cur, r)) {
       if (Object.hasOwn(cur, 'expiresAt')) {
         toWrite.push(r);
         continue;
@@ -129,6 +197,16 @@ export function toDocument(r, { tenantId, mappingVersion, reconciliation }) {
     id: r.oid,
     oid: r.oid,
     tenantId,
+    ...(r.schemaVersion === 3 ? {
+      schemaVersion: 3,
+      planId: r.planId,
+      profileId: r.profileId,
+      capabilities: r.capabilities,
+      modelFamilies: r.modelFamilies,
+      connectors: r.connectors,
+      catalogVersion: r.catalogVersion,
+      profileHash: r.profileHash,
+    } : {}),
     tier: r.tier,
     businessUnit: r.businessUnit ?? '',
     mappingVersion,
@@ -136,6 +214,37 @@ export function toDocument(r, { tenantId, mappingVersion, reconciliation }) {
     reconciliationGeneration: reconciliation?.reconciliationGeneration,
     lastVerifiedAt: reconciliation?.lastVerifiedAt,
   };
+}
+
+const EXPANDED_EFFECTIVE_FIELDS = [
+  'tier',
+  'planId',
+  'profileId',
+  'capabilities',
+  'modelFamilies',
+  'connectors',
+  'catalogVersion',
+  'profileHash',
+  'businessUnit',
+];
+
+function effectiveRecordEqual(current, resolved) {
+  if (current.schemaVersion === 3 || resolved.schemaVersion === 3) {
+    if (current.schemaVersion !== 3 || resolved.schemaVersion !== 3) return false;
+    return EXPANDED_EFFECTIVE_FIELDS.every((field) => effectiveValueEqual(current[field], resolved[field], field));
+  }
+  return current.tier === resolved.tier &&
+    (current.businessUnit ?? '') === (resolved.businessUnit ?? '');
+}
+
+function effectiveValueEqual(left, right, field) {
+  if (field === 'businessUnit') return (left ?? '') === (right ?? '');
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return Array.isArray(left) && Array.isArray(right) &&
+      left.length === right.length &&
+      left.every((value, index) => value === right[index]);
+  }
+  return left === right;
 }
 
 export function statusPartitionKey(tenantId) {

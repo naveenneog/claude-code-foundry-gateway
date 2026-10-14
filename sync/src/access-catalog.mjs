@@ -81,8 +81,26 @@ export function hashAccessCatalog(catalog) {
   return createHash('sha256').update(JSON.stringify(canonical)).digest('hex');
 }
 
+export function hashAccessProfile(profile) {
+  if (!isRecord(profile)) throw new Error('access profile must be one object');
+  const canonical = canonicalizeProfiles([profile])[0];
+  validateProfile(canonical, 0);
+  return createHash('sha256').update(JSON.stringify(canonical)).digest('hex');
+}
+
 export function selectProfileForMemberships(catalog, memberships) {
+  return createProfileSelector(catalog).select(memberships);
+}
+
+export function createProfileSelector(catalog) {
   const canonical = canonicalizeAccessCatalog(catalog);
+  return {
+    catalog: canonical,
+    select: (memberships) => selectCanonicalProfile(canonical, memberships),
+  };
+}
+
+function selectCanonicalProfile(canonical, memberships) {
   if (!Array.isArray(memberships)) throw new Error('memberships must be an array of group object id GUIDs');
   const groups = new Set(memberships.map((membership, index) => {
     const normalized = lowerString(membership);

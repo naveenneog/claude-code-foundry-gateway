@@ -33,7 +33,8 @@
  *        [--whatif] [--allow-empty] [--keep-orphans]
  */
 import { readFileSync } from 'node:fs';
-import { mergeMembership, planChanges, removalLimitExceeded, toDocument, toStatusDocument, validateSnapshot, validateTargetedSnapshot, compareWithGateway, compareWithSnapshot, createReconciliation, normalizeJobSettings, validateJobSettings, statusPartitionKey, STATUS_RECORD_TYPE } from './plan.mjs';
+import { mergeCatalogMembership, mergeMembership, planChanges, removalLimitExceeded, toDocument, toStatusDocument, validateSnapshot, validateTargetedSnapshot, compareWithGateway, compareWithSnapshot, createReconciliation, normalizeJobSettings, validateJobSettings, statusPartitionKey, STATUS_RECORD_TYPE } from './plan.mjs';
+import { canonicalizeAccessCatalog } from './access-catalog.mjs';
 import { acquireApplyLock, validateLockWait } from './apply-lock.mjs';
 import { resolveGroupId, getTransitiveMembers } from './graph.mjs';
 import { readGatewayUnits, sortUnitsByDepth } from './business-units.mjs';
@@ -122,6 +123,7 @@ if (jobSettingsRun) {
 const { DefaultAzureCredential } = await import('@azure/identity');
 const { CosmosClient } = await import('@azure/cosmos');
 const credential = new DefaultAzureCredential();
+const containerRef = () => new CosmosClient({ endpoint, aadCredentials: credential }).database(databaseName).container(containerName);
 
 // Tier groups: --standard/--premium for a manual graph run, else the job's PROJECTION_*_GROUP_ID
 // settings (object ids, checked here before any read).
@@ -161,10 +163,36 @@ async function resolveMembership() {
   }
   if (userOid) fail('--user can only be used with --snapshot <file>');
   if (!flag('--graph')) fail('pass --snapshot <file> or --graph');
-  const groups = tierGroups();
+  const catalog = await step('catalog', () => readAccessCatalog(containerRef()));
   const verifiedAt = new Date();
   const units = await step('business-units', unitGroups);
   const token = await step('graph', async () => (await credential.getToken('https://graph.microsoft.com/.default')).token);
+
+  if (catalog) {
+    const businessUnits = await step('graph', () => resolveBusinessUnitMemberships(units, token));
+    const profileGroups = [];
+    await step('graph', async () => {
+      for (const profile of catalog.profiles.filter((candidate) => candidate.enabled)) {
+        let members;
+        try {
+          members = await getTransitiveMembers(profile.groupObjectId, token);
+        } catch (error) {
+          if (error?.status === 404) {
+            throw new Error(`configured access group '${profile.groupObjectId}' for profile '${profile.id}' is absent`);
+          }
+          throw error;
+        }
+        log(`graph-members ${profile.groupObjectId} ${members.length}`);
+        profileGroups.push({ groupObjectId: profile.groupObjectId, members });
+      }
+    });
+    const { records, unitWithoutProfile } = mergeCatalogMembership({ catalog, profileGroups, businessUnits });
+    for (const unit of unitWithoutProfile.slice(0, 10)) log(`note: ${unit.oid} is in ${unit.unit} but holds no access profile - not projected`);
+    const reconciliation = await step('lease', async () => createReconciliation({ verifiedAt, maxAgeSeconds: Number(opt('--max-age-seconds', 7200)) }));
+    return { records, mappingVersion: Math.floor(Date.now() / 1000), source: 'graph access catalog', reconciliation };
+  }
+
+  const groups = tierGroups();
   const tiers = {};
   await step('graph', async () => {
     for (const tier of ['premium', 'standard']) {
@@ -176,29 +204,57 @@ async function resolveMembership() {
       log(`${tier.padEnd(9)} ${group}  ${tiers[tier].length} member(s)`);
     }
   });
-  const businessUnits = [];
-  await step('graph', async () => {
-    for (const { id: unit, group } of units) {
-      const id = await resolveGroupId(group, token);
-      let members = null;
-      if (id) {
-        try {
-          members = await getTransitiveMembers(id, token);
-        } catch (error) {
-          // A deleted unit group is an empty unit, as Get-GroupMemberOids in
-          // scripts/ClaudeGraphMembership.ps1 treats it, so one stale registry entry cannot stop every
-          // renewal. Tier groups above stay strict.
-          if (error?.status !== 404) throw error;
-        }
-      }
-      if (!members) log(`warning: unit '${unit}' group '${group}' was not found - treating it as empty`);
-      businessUnits.push({ id: unit, members: members ?? [] });
-    }
-  });
+  const businessUnits = await step('graph', () => resolveBusinessUnitMemberships(units, token));
   const { records, unitWithoutTier } = mergeMembership({ tiers, businessUnits });
   for (const u of unitWithoutTier.slice(0, 10)) log(`note: ${u.oid} is in ${u.unit} but holds no tier - not projected`);
   const reconciliation = await step('lease', async () => createReconciliation({ verifiedAt, maxAgeSeconds: Number(opt('--max-age-seconds', 7200)) }));
   return { records, mappingVersion: Math.floor(Date.now() / 1000), source: 'graph', reconciliation };
+}
+
+async function resolveBusinessUnitMemberships(units, token) {
+  const businessUnits = [];
+  for (const { id: unit, group } of units) {
+    const id = await resolveGroupId(group, token);
+    let members = null;
+    if (id) {
+      try {
+        members = await getTransitiveMembers(id, token);
+      } catch (error) {
+        // A deleted unit group is an empty unit, as Get-GroupMemberOids in
+        // scripts/ClaudeGraphMembership.ps1 treats it, so one stale registry entry cannot stop every
+        // renewal. Tier and access groups stay strict.
+        if (error?.status !== 404) throw error;
+      }
+    }
+    if (!members) log(`warning: unit '${unit}' group '${group}' was not found - treating it as empty`);
+    businessUnits.push({ id: unit, members: members ?? [] });
+  }
+  return businessUnits;
+}
+
+async function readAccessCatalog(container) {
+  const fixture = opt('--access-catalog-fixture');
+  if (fixture) {
+    return normalizeAccessCatalog(JSON.parse(readFileSync(fixture, 'utf8').replace(/^\uFEFF/, '')));
+  }
+  const key = `access-catalog::${tenantId}`;
+  try {
+    const { resource } = await container.item(key, key).read();
+    return normalizeAccessCatalog(resource);
+  } catch (error) {
+    if (error?.code === 404 || error?.statusCode === 404) return null;
+    throw error;
+  }
+}
+
+function normalizeAccessCatalog(document) {
+  const catalog = { ...document };
+  for (const field of ['id', 'oid', 'type', '_etag', '_rid', '_self', '_attachments', '_ts']) delete catalog[field];
+  const canonical = canonicalizeAccessCatalog(catalog);
+  if (canonical.tenantId !== tenantId) {
+    throw new Error(`access catalog is for tenant ${canonical.tenantId}, not ${tenantId}`);
+  }
+  return canonical;
 }
 
 // The container indexes only /oid (infra/projection.bicep), so no query here has a WHERE clause: a
@@ -207,12 +263,12 @@ async function resolveMembership() {
 // A long read renews the lease between pages, so a large container cannot outlive it before the first write.
 async function readExisting(container, lock) {
   const existing = new Map();
-  const iterator = container.items.query('SELECT c.id, c.tier, c.businessUnit, c.expiresAt, c.type FROM c', { maxItemCount: 1000 });
+  const iterator = container.items.query('SELECT c.id, c.tier, c.businessUnit, c.schemaVersion, c.planId, c.profileId, c.capabilities, c.modelFamilies, c.connectors, c.catalogVersion, c.profileHash, c.expiresAt, c.type FROM c', { maxItemCount: 1000 });
   while (iterator.hasMoreResults()) {
     const { resources } = await iterator.fetchNext();
     for (const d of resources ?? []) {
       if (d.type !== undefined) continue;
-      const current = { tier: d.tier, businessUnit: d.businessUnit ?? '' };
+      const current = effectiveFields(d);
       if (Object.hasOwn(d, 'expiresAt')) current.expiresAt = d.expiresAt;
       existing.set(d.id, current);
     }
@@ -230,11 +286,28 @@ async function readExistingUser(container, oid) {
     if (error?.code !== 404 && error?.statusCode !== 404) throw error;
   }
   if (resource && !resource.type) {
-    const current = { tier: resource.tier, businessUnit: resource.businessUnit ?? '' };
+    const current = effectiveFields(resource);
     if (Object.hasOwn(resource, 'expiresAt')) current.expiresAt = resource.expiresAt;
     existing.set(resource.id, current);
   }
   return existing;
+}
+
+function effectiveFields(document) {
+  const current = { tier: document.tier, businessUnit: document.businessUnit ?? '' };
+  if (document.schemaVersion === 3) {
+    Object.assign(current, {
+      schemaVersion: 3,
+      planId: document.planId,
+      profileId: document.profileId,
+      capabilities: document.capabilities,
+      modelFamilies: document.modelFamilies,
+      connectors: document.connectors,
+      catalogVersion: document.catalogVersion,
+      profileHash: document.profileHash,
+    });
+  }
+  return current;
 }
 
 async function readSuccessfulStatuses(container, lock) {
@@ -263,8 +336,6 @@ async function bulk(container, operations, lock) {
 }
 
 const started = Date.now();
-const containerRef = () => new CosmosClient({ endpoint, aadCredentials: credential }).database(databaseName).container(containerName);
-
 // --compare <gateway-decisions.json>: read-only. What each identity would
 // experience at the flip, from the records the resolver would actually serve.
 if (opt('--compare')) {

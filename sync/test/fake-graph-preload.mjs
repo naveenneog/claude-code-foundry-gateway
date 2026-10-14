@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 
 let injected = false;
 
@@ -57,12 +57,21 @@ globalThis.fetch = async (input) => {
   if (url.host !== 'graph.microsoft.com') throw new Error(`fake graph refuses ${url.host}`);
   const members = /^\/v1\.0\/groups\/([^/]+)\/transitiveMembers\/microsoft\.graph\.(user|servicePrincipal)$/.exec(url.pathname);
   if (members) {
-    const [, , cast] = members;
+    const [, groupId, cast] = members;
+    appendFileSync(process.env.FAKE_COSMOS_LOG, `graph-members ${groupId} ${cast}\n`);
+    if (groupId === process.env.FAKE_GRAPH_ABSENT_GROUP) {
+      return response(404, { error: { message: `group ${groupId} was not found` } });
+    }
     if (cast === 'servicePrincipal') return response(200, { value: [] });
     maybeInjectConcurrentStatus();
+    const configured = process.env.FAKE_GRAPH_GROUP_MEMBERS
+      ? JSON.parse(process.env.FAKE_GRAPH_GROUP_MEMBERS)
+      : null;
+    const memberIds = configured
+      ? configured[groupId] ?? []
+      : (process.env.FAKE_GRAPH_USERS ?? '').split(',');
     return response(200, {
-      value: (process.env.FAKE_GRAPH_USERS ?? '')
-        .split(',')
+      value: memberIds
         .filter(Boolean)
         .map((id) => ({ id, userPrincipalName: `${id.slice(0, 8)}@example.invalid`, displayName: id })),
     });

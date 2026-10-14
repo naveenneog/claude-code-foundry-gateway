@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mergeMembership, planChanges, removalLimit, removalLimitExceeded, toDocument, validateSnapshot, validateTargetedSnapshot, compareWithSnapshot, createReconciliation } from '../src/plan.mjs';
+import { mergeCatalogMembership, mergeMembership, planChanges, removalLimit, removalLimitExceeded, toDocument, validateSnapshot, validateTargetedSnapshot, compareWithSnapshot, createReconciliation } from '../src/plan.mjs';
 const lease = createReconciliation({ verifiedAt: new Date() });
 
 const A = '11111111-1111-1111-1111-111111111111';
@@ -32,6 +32,48 @@ test('the first unit in precedence order wins, as bu-members is written', () => 
   assert.equal(records[0].businessUnit, 'team');
 });
 
+test('catalog membership selects one whole highest-priority profile while BU stays independent', () => {
+  const catalog = {
+    schemaVersion: 1,
+    tenantId: T,
+    plans: [
+      { id: 'basic', name: 'Basic', enabled: true, nominalCredit: { amount: 20, currency: 'USD', period: 'month', scope: 'user' }, compatibilityTier: 'standard' },
+      { id: 'power', name: 'Power', enabled: true, nominalCredit: { amount: 200, currency: 'USD', period: 'month', scope: 'user' }, compatibilityTier: 'premium' },
+    ],
+    profiles: [
+      { id: 'code-haiku', name: 'Code Haiku', planId: 'basic', groupObjectId: A, priority: 10, capabilities: ['code'], modelFamilies: ['haiku'], connectors: [], enabled: true },
+      { id: 'design-opus', name: 'Design Opus', planId: 'power', groupObjectId: B, priority: 50, capabilities: ['design'], modelFamilies: ['opus'], connectors: ['m365'], enabled: true },
+    ],
+  };
+  const { records, unitWithoutProfile } = mergeCatalogMembership({
+    catalog,
+    profileGroups: [
+      { groupObjectId: A, members: [{ oid: C, name: 'person@example.invalid' }] },
+      { groupObjectId: B, members: [{ oid: C, name: 'person@example.invalid' }] },
+    ],
+    businessUnits: [{ id: 'sales', members: [{ oid: C }, { oid: A }] }],
+  });
+
+  assert.equal(records.length, 1);
+  assert.deepEqual(records[0], {
+    oid: C,
+    name: 'person@example.invalid',
+    schemaVersion: 3,
+    tier: 'premium',
+    planId: 'power',
+    profileId: 'design-opus',
+    capabilities: ['design'],
+    modelFamilies: ['opus'],
+    connectors: ['m365'],
+    catalogVersion: records[0].catalogVersion,
+    profileHash: records[0].profileHash,
+    businessUnit: 'sales',
+  });
+  assert.match(records[0].catalogVersion, /^sha256:[0-9a-f]{64}$/);
+  assert.match(records[0].profileHash, /^sha256:[0-9a-f]{64}$/);
+  assert.deepEqual(unitWithoutProfile, [{ oid: A, unit: 'sales' }]);
+});
+
 test('an empty directory never revokes everyone', () => {
   const plan = planChanges([], new Map([[A, { tier: 'standard', businessUnit: '' }]]));
   assert.equal(plan.refused, true);
@@ -60,6 +102,42 @@ test('a tier or unit change is rewritten', () => {
   const existing = new Map([[A, { tier: 'standard', businessUnit: '' }], [B, { tier: 'standard', businessUnit: 'x' }]]);
   const plan = planChanges([{ oid: A, tier: 'premium', businessUnit: '' }, { oid: B, tier: 'standard', businessUnit: 'y' }], existing);
   assert.deepEqual(plan.toWrite.map((r) => r.oid), [A, B]);
+});
+
+test('unchanged schema version 3 records are not rewritten and any effective profile change is', () => {
+  const base = {
+    oid: A,
+    schemaVersion: 3,
+    tier: 'premium',
+    planId: 'power',
+    profileId: 'design-opus',
+    capabilities: ['design'],
+    modelFamilies: ['opus'],
+    connectors: ['m365'],
+    catalogVersion: `sha256:${'a'.repeat(64)}`,
+    profileHash: `sha256:${'b'.repeat(64)}`,
+    businessUnit: 'sales',
+  };
+  const unchanged = planChanges([base], new Map([[A, structuredClone(base)]]));
+  assert.equal(unchanged.unchanged, 1);
+  assert.deepEqual(unchanged.toWrite, []);
+
+  for (const [field, value] of [
+    ['tier', 'standard'],
+    ['planId', 'basic'],
+    ['profileId', 'code-haiku'],
+    ['capabilities', ['code']],
+    ['modelFamilies', ['haiku']],
+    ['connectors', []],
+    ['catalogVersion', `sha256:${'c'.repeat(64)}`],
+    ['profileHash', `sha256:${'d'.repeat(64)}`],
+    ['businessUnit', 'finance'],
+  ]) {
+    const current = structuredClone(base);
+    current[field] = value;
+    const changed = planChanges([base], new Map([[A, current]]));
+    assert.deepEqual(changed.toWrite.map((record) => record.oid), [A], field);
+  }
 });
 
 test('someone removed from every group loses their record', () => {
@@ -104,6 +182,41 @@ test('the document is a point-read shape: id and partition key are the oid', () 
   assert.equal(d.effectiveFrom, null);
   assert.equal(d.reconciliationGeneration, lease.reconciliationGeneration);
   assert.equal('expiresAt' in d, false);
+});
+
+test('the schema version 3 document carries the complete effective profile and reconciliation fields', () => {
+  const record = {
+    oid: A,
+    schemaVersion: 3,
+    tier: 'premium',
+    planId: 'power',
+    profileId: 'design-opus',
+    capabilities: ['design'],
+    modelFamilies: ['opus'],
+    connectors: ['m365'],
+    catalogVersion: `sha256:${'a'.repeat(64)}`,
+    profileHash: `sha256:${'b'.repeat(64)}`,
+    businessUnit: 'sales',
+  };
+  assert.deepEqual(toDocument(record, { tenantId: T, mappingVersion: 7, reconciliation: lease }), {
+    id: A,
+    oid: A,
+    tenantId: T,
+    schemaVersion: 3,
+    tier: 'premium',
+    planId: 'power',
+    profileId: 'design-opus',
+    capabilities: ['design'],
+    modelFamilies: ['opus'],
+    connectors: ['m365'],
+    catalogVersion: record.catalogVersion,
+    profileHash: record.profileHash,
+    businessUnit: 'sales',
+    mappingVersion: 7,
+    effectiveFrom: null,
+    reconciliationGeneration: lease.reconciliationGeneration,
+    lastVerifiedAt: lease.lastVerifiedAt,
+  });
 });
 
 test('the flip comparison names what each identity would experience', async () => {
