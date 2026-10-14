@@ -189,10 +189,10 @@ $steps=@($ast.FindAll({param($node) $node -is [Management.Automation.Language.If
 foreach($step in $steps) {
     $testBlock=[scriptblock]::Create($step.Extent.Text.Replace($step.Clauses[0].Item1.Extent.Text,'$false'))
     Capture { & $testBlock }
-    Assert "declined prerequisite aborts: $($step.Clauses[0].Item1.Extent.Text)" ($Failure -and $Output -match 'declined.*abort|declined.*stopp|declined.*no further|declined after admission') $Failure
+    Assert "declined prerequisite aborts: $($step.Clauses[0].Item1.Extent.Text)" ($Failure -and $Output -match 'declined.*abort|declined.*stopp|declined.*no further|declined.*no resolver deployment|declined after admission') $Failure
 }
-Assert 'all eight deployment decisions are exercised' ($steps.Count -eq 8)
-# The ninth decision, the switch itself, lives in the shared switch (ADR-0050): declining it writes nothing.
+Assert 'all nine deployment decisions are exercised' ($steps.Count -eq 9)
+# The tenth decision, the switch itself, lives in the shared switch (ADR-0050): declining it writes nothing.
 $switchSource = Get-Content (Join-Path $root 'scripts\ClaudeProjectionSwitch.ps1') -Raw
 $switchAst = [Management.Automation.Language.Parser]::ParseInput($switchSource, [ref]$tokens, [ref]$errors)
 $switchSteps = @($switchAst.FindAll({ param($node) $node -is [Management.Automation.Language.IfStatementAst] -and $node.Clauses[0].Item1.Extent.Text -match '-not \$PSCmdlet\.ShouldProcess' }, $true))

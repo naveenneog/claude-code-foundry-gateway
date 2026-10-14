@@ -91,6 +91,8 @@ Sources: [secure projection prerequisites](SECURE-PROJECTION.md#prerequisites), 
 | Switch permissions | APIM named-value read/write, resolver deployment and site reads, `Microsoft.Web/sites/config/list/action`, Graph drift read and Cosmos data read through the runner. |
 | Runner permissions | Container group read, start and exec on `aci-projtest-<prefix>`. |
 | Region | `-Location` equals the existing `cosmos-<prefix>` region when that account already exists. |
+| Standard/Premium private network | Managed VNet by default, or one existing VNet ID plus explicit endpoint, runner, resolver, renewal and APIM integration subnet IDs. Every subnet is dedicated to its documented role; APIM, resolver and renewal are at least /27. |
+| Private DNS ownership | The projection creates and owns the Cosmos, Functions and storage private DNS zones and links them to the selected VNet. A conflicting same-namespace link is refused. Central-zone reuse is not supported in P116. |
 
 Sources: [secure projection prerequisites](SECURE-PROJECTION.md#prerequisites), [rights used by the checks](SECURE-PROJECTION.md#rights-used-by-the-checks), [ADR-0051 decision 5](adr/0051-persistent-sync-based-cosmos-entitlement.md#decision), [Azure CLI guide status](AZ-COMMANDS.md).
 
@@ -106,6 +108,13 @@ Sources: [secure projection prerequisites](SECURE-PROJECTION.md#prerequisites), 
 | Location | `<location>` | `az cosmosdb show -g <rg> -n cosmos-<prefix> --query location -o tsv` when the account exists |
 | SKU | `<sku>` | `az apim show -g <rg> -n <apim> --query sku.name -o tsv` |
 | Resolver access | `<public-or-private>` | No single read before deployment; the deployer derives it from SKU when omitted. |
+| Projection network mode | `<managed-or-existing>` | `managed` when omitted. Existing mode requires the six resource-ID parameters below. |
+| Existing VNet | `<vnet-id>` | `-ProjectionVnetId` |
+| Existing endpoint subnet | `<endpoint-subnet-id>` | `-ProjectionEndpointsSubnetId` |
+| Existing runner subnet | `<runner-subnet-id>` | `-ProjectionRunnerSubnetId` |
+| Existing resolver subnet | `<resolver-subnet-id>` | `-ProjectionResolverSubnetId` |
+| Existing renewal subnet | `<renewal-subnet-id>` | `-ProjectionRenewalSubnetId` |
+| Existing APIM subnet | `<apim-subnet-id>` | `-ProjectionApimSubnetId` |
 | Standard group | `<standard-group>` | `az ad group show --group <standard-group> --query id -o tsv` |
 | Premium group | `<premium-group>` | `az ad group show --group <premium-group> --query id -o tsv` when not `none` |
 
@@ -127,6 +136,21 @@ pwsh -NoProfile -File .\scripts\Deploy-ClaudeProjection.ps1 `
 ```
 
 Expected result: The report contains check, result, evidence, remedy and who acts. Failed resource or Graph checks remain `FAIL`; unproven app-creation rights are `WARN`.
+
+For an existing customer VNet, append:
+
+```powershell
+-ProjectionNetworkMode existing `
+-ProjectionVnetId <vnet-id> `
+-ProjectionEndpointsSubnetId <endpoint-subnet-id> `
+-ProjectionRunnerSubnetId <runner-subnet-id> `
+-ProjectionResolverSubnetId <resolver-subnet-id> `
+-ProjectionRenewalSubnetId <renewal-subnet-id> `
+-ProjectionApimSubnetId <apim-subnet-id>
+```
+
+Preflight reads the selected VNet/subnets and private DNS links before any write. `-WhatIf` runs
+the same validation and prints the selected network plan without changing Azure.
 
 Sources: [one-command deployment](SECURE-PROJECTION.md#one-command-deployment), `scripts/Deploy-ClaudeProjection.ps1`.
 

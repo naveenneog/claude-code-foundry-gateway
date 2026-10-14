@@ -100,6 +100,7 @@ if (-not $CapturedError) {
     foreach ($pair in @(
         @('cosmos-projtest', 'Microsoft.DocumentDB/databaseAccounts'),
         @('vnet-projtest', 'Microsoft.Network/virtualNetworks'),
+        @('nsg-apim-projtest', 'Microsoft.Network/networkSecurityGroups'),
         @('pe-cosmos-projtest', 'Microsoft.Network/privateEndpoints'),
         @('aci-projtest-projtest', 'Microsoft.ContainerInstance/containerGroups'),
         @('func-resolver-projtest', 'Microsoft.Web/sites'),
@@ -124,6 +125,7 @@ if (-not $CapturedError) {
     Assert 'runner subnet prefix and delegation match template' ($subnets['runner'].Prefix -eq '10.10.2.0/24' -and $subnets['runner'].Delegation -eq 'Microsoft.ContainerInstance/containerGroups')
     Assert 'resolver subnet prefix and delegation match template' ($subnets['resolver'].Prefix -eq '10.10.3.0/26' -and $subnets['resolver'].Delegation -eq 'Microsoft.App/environments')
     Assert 'renewal subnet prefix and delegation match template' ($subnets['renewal'].Prefix -eq '10.10.3.64/27' -and $subnets['renewal'].Delegation -eq 'Microsoft.App/environments')
+    Assert 'APIM subnet prefix and delegation match template' ($subnets['apim'].Prefix -eq '10.10.4.0/24' -and $subnets['apim'].Delegation -eq 'Microsoft.Web/serverFarms' -and $subnets['apim'].Purpose -match 'AzureKeyVault')
     Assert 'private DNS zones include Cosmos, sites and resolver storage zones' (@($privatePlan.Network.PrivateDnsZones | Where-Object { $_ -in @('privatelink.documents.azure.com','privatelink.azurewebsites.net','privatelink.blob.core.windows.net','privatelink.queue.core.windows.net','privatelink.table.core.windows.net') }).Count -eq 5)
     Assert 'public resolver plan omits the resolver site private endpoint' (@($publicPlan.Network.PrivateEndpoints | Where-Object { $_ -eq 'pe-func-resolver-projtest' }).Count -eq 0)
     Assert 'private resolver plan includes the resolver site private endpoint' (@($privatePlan.Network.PrivateEndpoints | Where-Object { $_ -eq 'pe-func-resolver-projtest' }).Count -eq 1)

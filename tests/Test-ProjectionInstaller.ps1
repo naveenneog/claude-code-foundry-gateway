@@ -59,7 +59,7 @@ if (Test-Path $deployerPath) {
     Assert 'deployer deploys the resolver with selected inbound access' ($deployer -match 'resolver\.bicep' -and $deployer -match 'inboundAccess=')
     Assert 'deployer passes resolver identity allow lists through a parameter file' ($deployer -match 'allowedCallerAppIds = @\{ value = @\(\$gatewayAppId\) \}' -and $deployer -match 'allowedCallerObjectIds = @\{ value = @\(\$gatewayObjectId\) \}' -and $deployer -match '--parameters "@\$resolverParamFile"')
     Assert 'deployer publishes resolver code' ($deployer -match 'functionapp deployment source config-zip' -and $deployer -match 'resolver\.zip')
-    Assert 'deployer uses an in-network runner for private Cosmos writes' ($deployer -match 'runnerEnabled=true' -and $deployer -match 'Send-RunnerFile' -and $deployer -match 'Invoke-RunnerCommand')
+    Assert 'deployer uses an in-network runner for private Cosmos writes' ($deployer -match 'runnerEnabled\s*=\s*@\{\s*value\s*=\s*\$true\s*\}' -and $deployer -match 'Send-RunnerFile' -and $deployer -match 'Invoke-RunnerCommand')
     Assert 'deployer grants the runner data contributor on one container' ($deployer -match 'cosmosdb sql role assignment create' -and $deployer -match '00000000-0000-0000-0000-000000000002' -and $deployer -match '/dbs/claude/colls/entitlement')
     Assert 'deployer populates from Entra' ($deployer -match 'Sync-ClaudeProjection\.ps1' -and $deployer -match 'apply-projection\.mjs')
     # The compare moved into Invoke-ClaudeProjectionDeployerCompare (tests/Test-ProjectionDeployerCompare.ps1 runs it).
@@ -90,9 +90,11 @@ Assert 'projection is offered first and recommended; named values are the small-
 Capture { Resolve-ClaudeInstallerEntitlementStore -EntitlementStore named-value -DeveloperCount 500 -BuCeiling 93 -ListCeiling 110 -Yes }
 Assert 'named values above the measured ceiling are refused with the capacity reason' ($Failure -match '4,096-character' -and $Failure -match 'Choose projection') $Failure
 
-foreach ($sku in 'BasicV2','StandardV2','PremiumV2') {
+$basicDefault = Resolve-ClaudeInstallerResolverInboundAccess -Sku BasicV2 -EntitlementStore projection
+Assert 'BasicV2 resolver defaults to public' ($basicDefault.Access -eq 'public') ($basicDefault | ConvertTo-Json -Depth 4)
+foreach ($sku in 'StandardV2','PremiumV2') {
     $choice = Resolve-ClaudeInstallerResolverInboundAccess -Sku $sku -EntitlementStore projection
-    Assert "resolver defaults to public on $sku" ($choice.Access -eq 'public') ($choice | ConvertTo-Json -Depth 4)
+    Assert "resolver defaults to private on $sku" ($choice.Access -eq 'private') ($choice | ConvertTo-Json -Depth 4)
 }
 $private = Resolve-ClaudeInstallerResolverInboundAccess -Sku PremiumV2 -EntitlementStore projection -Requested private
 Assert 'private resolver remains available with the outbound VNet prerequisite' ($private.Access -eq 'private' -and $private.Message -match 'outbound VNet integration' -and $private.Message -match 'updated 2025-12-04') $private.Message

@@ -37,9 +37,11 @@ function Get-GroupMemberOids { param([string]$GroupName, [string]$Token) if ($Gr
 $countFromGroups = Get-ClaudeInstallerDeveloperCountFromGroups -StandardGroup std -PremiumGroup prem
 Assert 'unattended named-value capacity can derive a distinct developer count from tier groups' ($countFromGroups -eq 3) "count=$countFromGroups"
 
-foreach ($sku in 'BasicV2','StandardV2','PremiumV2') {
+$resolver = Resolve-ClaudeInstallerResolverInboundAccess -Sku BasicV2 -EntitlementStore projection
+Assert 'resolver inbound access defaults public on BasicV2' ($resolver.Access -eq 'public' -and $resolver.Message -match 'public') ($resolver | ConvertTo-Json -Depth 4)
+foreach ($sku in 'StandardV2','PremiumV2') {
     $resolver = Resolve-ClaudeInstallerResolverInboundAccess -Sku $sku -EntitlementStore projection
-    Assert "resolver inbound access defaults public on $sku" ($resolver.Access -eq 'public' -and $resolver.Message -match 'public') ($resolver | ConvertTo-Json -Depth 4)
+    Assert "resolver inbound access defaults private on $sku" ($resolver.Access -eq 'private' -and $resolver.Message -match 'private') ($resolver | ConvertTo-Json -Depth 4)
 }
 Capture { Resolve-ClaudeInstallerResolverInboundAccess -Sku BasicV2 -EntitlementStore projection -Requested private }
 Assert 'Basic v2 still refuses private resolver inbound access' ($Failure -match 'BasicV2 cannot use a private resolver') $Failure
@@ -119,6 +121,24 @@ Assert 'choosing projection deploys, populates and compares first, then switches
     (& $named $calls[0] '-Sku') -eq 'BasicV2' -and (& $named $calls[0] '-ResolverInboundAccess') -eq 'public' -and (& $named $calls[0] '-Location') -eq 'eastus2' -and
     (& $named $calls[1] '-NamePrefix') -eq 'p98' -and (& $named $calls[1] '-StandardGroup') -eq 'std' -and (& $named $calls[1] '-PremiumGroup') -eq 'prem' -and
     -not @($calls | ForEach-Object { $_.Args.Keys } | Where-Object { $_ -match 'Renewal|^ReconcilerResourceId$' }).Count
+) ($calls | ConvertTo-Json -Depth 5)
+
+$calls.Clear()
+$vnet = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/network-rg/providers/Microsoft.Network/virtualNetworks/customer'
+$null = Invoke-ClaudeInstallerProjectionDeployment -Root $root -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 `
+    -Location eastus2 -Sku StandardV2 -ResolverInboundAccess private -StandardGroup std -PremiumGroup prem `
+    -ProjectionNetworkMode existing -ProjectionVnetId $vnet -ProjectionEndpointsSubnetId "$vnet/subnets/endpoints" `
+    -ProjectionRunnerSubnetId "$vnet/subnets/runner" -ProjectionResolverSubnetId "$vnet/subnets/resolver" `
+    -ProjectionRenewalSubnetId "$vnet/subnets/renewal" -ProjectionApimSubnetId "$vnet/subnets/apim" -InvokeScript $record
+Assert 'existing network selection reaches the deployment run with all five subnet ids' (
+    $calls.Count -eq 2 -and (& $named $calls[0] '-ProjectionNetworkMode') -eq 'existing' -and
+    (& $named $calls[0] '-ProjectionVnetId') -eq $vnet -and
+    (& $named $calls[0] '-ProjectionEndpointsSubnetId') -eq "$vnet/subnets/endpoints" -and
+    (& $named $calls[0] '-ProjectionRunnerSubnetId') -eq "$vnet/subnets/runner" -and
+    (& $named $calls[0] '-ProjectionResolverSubnetId') -eq "$vnet/subnets/resolver" -and
+    (& $named $calls[0] '-ProjectionRenewalSubnetId') -eq "$vnet/subnets/renewal" -and
+    (& $named $calls[0] '-ProjectionApimSubnetId') -eq "$vnet/subnets/apim" -and
+    -not $calls[1].Args.Contains('ProjectionNetworkMode')
 ) ($calls | ConvertTo-Json -Depth 5)
 
 $calls.Clear()

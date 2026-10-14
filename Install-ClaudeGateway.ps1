@@ -61,6 +61,14 @@ param(
     [string]$EntitlementStore,
     [ValidateSet('private','public')]
     [string]$ResolverInboundAccess,
+    [ValidateSet('managed','existing')]
+    [string]$ProjectionNetworkMode,
+    [string]$ProjectionVnetId,
+    [string]$ProjectionEndpointsSubnetId,
+    [string]$ProjectionRunnerSubnetId,
+    [string]$ProjectionResolverSubnetId,
+    [string]$ProjectionRenewalSubnetId,
+    [string]$ProjectionApimSubnetId,
     [switch]$DeployProjection,
     [switch]$FlipProjectionAfterCleanCompare,
     [switch]$DeploySyncJob,
@@ -357,6 +365,7 @@ Write-Host ' Nothing is created until you confirm the summary.' -ForegroundColor
 . (Join-Path $root 'scripts/ClaudeModelDeployment.ps1')
 . (Join-Path $root 'scripts/ClaudeChoice.ps1')
 . (Join-Path $root 'scripts/ClaudeInstallProjection.ps1')
+Import-Module (Join-Path $root 'scripts/ClaudeProjectionNetwork.psm1') -Force
 . (Join-Path $root 'scripts/ClaudeGatewayRegion.ps1')
 # ADR-0058: a sync interval outside the list stops here, before any Azure call; the choice is made with the store.
 if ($PSBoundParameters.ContainsKey('ProjectionSyncInterval')) { $null = Resolve-ClaudeInstallerSyncInterval -Requested $ProjectionSyncInterval -DeployedJob $null }
@@ -992,6 +1001,24 @@ if (-not $resolverRequested -and $EntitlementStore -eq 'projection' -and ($Exist
 }
 $resolverChoice = Resolve-ClaudeInstallerResolverInboundAccess -Sku $Sku -EntitlementStore $EntitlementStore -Requested $resolverRequested
 $ResolverInboundAccess = $resolverChoice.Access
+$needsPrivateProjectionNetwork = ($EntitlementStore -eq 'projection' -and $ResolverInboundAccess -eq 'private' -and $Sku -in @('StandardV2','PremiumV2'))
+$projectionNetwork = Resolve-ClaudeProjectionNetworkSelection -Mode $ProjectionNetworkMode -VnetId $ProjectionVnetId `
+    -EndpointsSubnetId $ProjectionEndpointsSubnetId -RunnerSubnetId $ProjectionRunnerSubnetId `
+    -ResolverSubnetId $ProjectionResolverSubnetId -RenewalSubnetId $ProjectionRenewalSubnetId `
+    -ApimSubnetId $ProjectionApimSubnetId -NonInteractive:($Yes -or -not $needsPrivateProjectionNetwork) -Selector {
+        param($options)
+        Select-ClaudeChoice -Parameter ProjectionNetworkMode -Question 'Projection network' -Options $options `
+            -WhereToFind @('docs/SECURE-PROJECTION.md: Standard v2 private network prerequisites') `
+            -AmbiguousMessage 'Choose managed or existing explicitly for unattended runs.' `
+            -Interactive $true
+    }
+$ProjectionNetworkMode = $projectionNetwork.Mode
+$ProjectionVnetId = $projectionNetwork.VnetId
+$ProjectionEndpointsSubnetId = $projectionNetwork.EndpointsSubnetId
+$ProjectionRunnerSubnetId = $projectionNetwork.RunnerSubnetId
+$ProjectionResolverSubnetId = $projectionNetwork.ResolverSubnetId
+$ProjectionRenewalSubnetId = $projectionNetwork.RenewalSubnetId
+$ProjectionApimSubnetId = $projectionNetwork.ApimSubnetId
 
 if ($EntitlementStore -eq 'projection') {
     Write-Host ''
@@ -1003,6 +1030,12 @@ if ($EntitlementStore -eq 'projection') {
     else {
         Write-Host '  Projection resolver: private endpoint.' -ForegroundColor Green
         Write-Host '    Requires gateway outbound VNet integration into the projection network; Microsoft Learn integrate-vnet-outbound, updated 2025-12-04.' -ForegroundColor DarkGray
+        if ($ProjectionNetworkMode -eq 'managed') {
+            Write-Host '    Network: managed projection VNet with dedicated endpoint, runner, resolver, renewal and APIM integration subnets.' -ForegroundColor DarkGray
+        }
+        else {
+            Write-Host "    Network: existing customer VNet $ProjectionVnetId with five explicit dedicated subnet IDs." -ForegroundColor DarkGray
+        }
     }
     try {
         $cost100 = & (Join-Path $PSScriptRoot 'scripts/Measure-ClaudeProjectionCost.ps1') -Developers 100 -AsJson 2>$null 6>$null | Out-String | ConvertFrom-Json
@@ -1404,6 +1437,7 @@ $rows = [ordered]@{
     '  '                    = ''
     # Every choice on the Choices page, in the order asked: the summary is the approval (ADR-0032).
     'Entitlement store'     = $(if ($EntitlementStore -eq 'projection') { $(if ($liveEntitlementSource -eq 'named-value') { "projection (migrating from named values: deploy, compare, switch), resolver $ResolverInboundAccess" } else { "projection, resolver $ResolverInboundAccess" }) } else { $EntitlementStore })
+    'Projection network'    = $(if ($EntitlementStore -eq 'projection') { $(if ($ProjectionNetworkMode -eq 'existing') { "existing customer VNet $ProjectionVnetId" } else { 'managed projection VNet' }) } else { 'not used' })
     'Revocation window'     = $(if ($entitlementCacheSeconds % 60) { "$entitlementCacheSeconds seconds" } else { "$($entitlementCacheSeconds / 60) minutes" })
     'Team budget behaviour' = $budgetMode
     'Developers with no team' = $unassignedMode
@@ -1809,6 +1843,9 @@ if ($EntitlementStore -eq 'projection' -and (Test-ClaudeInstallStepSelected 'pro
     # and those names do not match the new function's. A live-state verify for skip-on-resume is a follow-up.
     Invoke-ClaudeInstallerProjectionDeployment -Root $root -ResourceGroup $ResourceGroup -ApimName $apimName -NamePrefix $projectionPrefix `
         -Location $Location -Sku $Sku -ResolverInboundAccess $ResolverInboundAccess -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup `
+        -ProjectionNetworkMode $ProjectionNetworkMode -ProjectionVnetId $ProjectionVnetId -ProjectionEndpointsSubnetId $ProjectionEndpointsSubnetId `
+        -ProjectionRunnerSubnetId $ProjectionRunnerSubnetId -ProjectionResolverSubnetId $ProjectionResolverSubnetId `
+        -ProjectionRenewalSubnetId $ProjectionRenewalSubnetId -ProjectionApimSubnetId $ProjectionApimSubnetId `
         -SubscriptionId $SubscriptionId -ProjectionResolverAppId $ProjectionResolverAppId -CompareBaseline $entitlementSync.CompareBaseline -ServingStore $entitlementSync.ServingStore -ResolverPublicByDefault:($ResolverInboundAccess -eq 'public' -and -not $PSBoundParameters.ContainsKey('ResolverInboundAccess')) -WhatIf:$WhatIfPreference | Out-Null
     if ($ProjectionSyncInterval -ne 'none' -and -not $WhatIfPreference) {
         $syncJobStatus = if (Invoke-ClaudeInstallerSyncJobDeployment -Root $root -ResourceGroup $ResourceGroup -ApimName $apimName -NamePrefix $projectionPrefix `

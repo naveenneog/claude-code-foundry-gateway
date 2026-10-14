@@ -29,6 +29,8 @@
     "sync/src/business-units.mjs",
     "sync/src/events.mjs",
     "scripts/Deploy-ClaudeProjectionRenewal.ps1",
+    "scripts/Deploy-ClaudeProjection.ps1",
+    "scripts/ClaudeProjectionNetwork.psm1",
     "scripts/ClaudeProjectionSwitch.ps1",
     "scripts/Sync-ClaudeAccess.ps1",
     "scripts/ClaudeRunner.ps1"
@@ -110,14 +112,24 @@
       "match": "counter-key=\"entitlement-misses\""
     },
     "key": {
-      "label": "ent:v2:<tenant>:<oid>",
+      "label": "ent:v3:<tenant>:<oid>",
       "source": "infra/policy.xml",
-      "match": "ent:v2:{{tenant-id}}:"
+      "match": "ent:v3:{{tenant-id}}:"
     },
     "inbound": {
       "label": "inboundAccess",
       "source": "infra/resolver.bicep",
       "match": "param inboundAccess string = 'private'"
+    },
+    "network-selection": {
+      "label": "network selection",
+      "source": "scripts/ClaudeProjectionNetwork.psm1",
+      "match": "function Resolve-ClaudeProjectionNetworkSelection"
+    },
+    "apim-integration": {
+      "label": "APIM VNet integration",
+      "source": "scripts/ClaudeProjectionNetwork.psm1",
+      "match": "function Set-ClaudeProjectionApimOutboundIntegration"
     },
     "network": {
       "label": "networkAccess",
@@ -354,7 +366,7 @@
       "lines": [
         "GET [[route]]",
         "[[auth]] allows the gateway identity, correct tenant and audience only.",
-        "[[inbound]] = private, except Basic v2 public+Entra.",
+        "[[inbound]]; [[network-selection]] and [[apim-integration]] precede resolver.",
         "Two warm 2-GB instances; 100 HTTP requests each.",
         "No result cache after a read."
       ]

@@ -8,13 +8,11 @@
 // Two shapes, because enterprises and evaluations arrive differently:
 //
 //   new VNet        nothing passed in. The template creates a VNet with the
-//                   four subnets the projection needs. Good for an evaluation.
-//   existing VNet   vnetId and endpointsSubnetId passed in. The network team
-//                   owns the address plan and hands over subnets; this creates
-//                   only the private endpoint, the private DNS zones and their
-//                   links. Nothing here changes the VNet itself, so a later
-//                   redeploy of the network team's own template cannot fight
-//                   with this one over subnet lists.
+//                   five dedicated subnets the projection needs.
+//   existing VNet   the VNet and all five subnet IDs are passed explicitly.
+//                   The network team owns the address plan and delegations;
+//                   this creates only the private endpoint, private DNS zones
+//                   and links. Nothing here changes the VNet or its subnets.
 //
 // It can also create a container group in the VNet, because a private
 // endpoint on its own does not let anyone test: something has to sit inside the
@@ -39,8 +37,14 @@ param endpointsSubnetId string = ''
 @description('Existing subnet delegated to Microsoft.ContainerInstance/containerGroups, for the runner. Required with vnetId when runnerEnabled.')
 param runnerSubnetId string = ''
 
+@description('Existing subnet delegated to Microsoft.App/environments for the resolver: at least a /27 and separate from the renewal subnet. Required with vnetId.')
+param resolverSubnetId string = ''
+
 @description('Existing subnet delegated to Microsoft.App/environments for the projection renewal job: at least a /27, separate from the resolver subnet. Used with vnetId.')
 param renewalSubnetId string = ''
+
+@description('Existing subnet delegated only to Microsoft.Web/serverFarms for Standard v2 or Premium v2 outbound integration: at least a /27. Required with vnetId.')
+param apimSubnetId string = ''
 
 @description('Address space when creating a VNet.')
 param vnetAddressPrefix string = '10.10.0.0/16'
@@ -65,6 +69,28 @@ var sitesZoneName = 'privatelink.azurewebsites.net'
 
 resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' existing = {
   name: cosmosAccountName
+}
+
+resource apimNsg 'Microsoft.Network/networkSecurityGroups@2023-11-01' = if (createVnet) {
+  name: 'nsg-apim-${namePrefix}'
+  location: location
+  properties: {
+    securityRules: [
+      {
+        name: 'key-vault-dependency'
+        properties: {
+          priority: 100
+          direction: 'Outbound'
+          access: 'Allow'
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRange: '443'
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'AzureKeyVault'
+        }
+      }
+    ]
+  }
 }
 
 resource vnet 'Microsoft.Network/virtualNetworks@2023-11-01' = if (createVnet) {
@@ -134,6 +160,26 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-11-01' = if (createVnet) {
               name: 'container-apps'
               properties: {
                 serviceName: 'Microsoft.App/environments'
+              }
+            }
+          ]
+        }
+      }
+      {
+        // Standard v2 and Premium v2 outbound VNet integration requires a
+        // dedicated Microsoft.Web/serverFarms subnet, minimum /27 and /24
+        // recommended. The managed /16 leaves a full /24 at 10.10.4.0.
+        name: 'apim'
+        properties: {
+          addressPrefix: cidrSubnet(vnetAddressPrefix, 24, 4)
+          networkSecurityGroup: {
+            id: apimNsg.id
+          }
+          delegations: [
+            {
+              name: 'apim-v2'
+              properties: {
+                serviceName: 'Microsoft.Web/serverFarms'
               }
             }
           ]
@@ -307,8 +353,10 @@ resource runner 'Microsoft.ContainerInstance/containerGroups@2023-05-01' = if (r
 output vnetName string = createVnet ? vnetName : last(split(vnetId, '/'))
 output vnetId string = linkedVnetId
 output endpointsSubnetId string = peSubnetId
-output resolverSubnetId string = createVnet ? '${vnet.id}/subnets/resolver' : ''
+output runnerSubnetId string = runnerSubnet
+output resolverSubnetId string = createVnet ? '${vnet.id}/subnets/resolver' : resolverSubnetId
 output renewalSubnetId string = createVnet ? '${vnet.id}/subnets/renewal' : renewalSubnetId
+output apimSubnetId string = createVnet ? '${vnet.id}/subnets/apim' : apimSubnetId
 output sitesDnsZoneId string = sitesZone.id
 output blobDnsZoneId string = storageZones[0].id
 output queueDnsZoneId string = storageZones[1].id

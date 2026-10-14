@@ -711,6 +711,15 @@ scheduled job adds the no-success alert, which fires after 2 x the interval + 15
 The job writes destination-bound status records in the entitlement container. It is not required for
 switching.
 
+For a Standard v2 or Premium v2 private resolver, the installer selects a managed projection VNet
+or an explicit customer VNet plus five dedicated subnet IDs before any write. The managed shape
+adds a /24 APIM integration subnet with the `Microsoft.Web/serverFarms` delegation and a Key Vault
+outbound NSG rule; endpoint, runner, resolver and renewal roles remain separate. Existing-network
+preflight validates subscription, region, subnet ownership, delegation, size, endpoint policy and
+same-namespace private-DNS links. `Deploy-ClaudeProjection.ps1` integrates APIM through the ARM
+2024-05-01 PATCH path and verifies identity and subnet state before resolver deployment. The
+projection owns its five private DNS zones in P116; central-zone reuse is not part of this packet.
+
 `scripts/Deploy-ClaudeProjectionRenewal.ps1` deploys `infra/projection-registry.bicep` (the ACR
 registry, the job's user-assigned identity and its AcrPull grant) before the image build, then
 the sync-job template with the registry and identity as existing resources. The job runs on the

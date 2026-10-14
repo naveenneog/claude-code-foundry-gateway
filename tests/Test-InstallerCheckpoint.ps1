@@ -238,7 +238,8 @@ try {
         step = 'id', 'state', 'startedUtc', 'completedUtc', 'inputHash', 'receipt'
         answers = 'SubscriptionId', 'FoundryAccount', 'FoundryResourceGroup', 'ResourceGroup', 'Location', 'NamePrefix', 'PublisherEmail', 'Sku', 'DeveloperCount', 'AddressMode', 'AddressHostname',
             'AddressCertificateSource', 'AddressKeyVaultCertificateId', 'AddressPfxPath', 'AddressDnsZoneResourceId', 'AddressDnsMode', 'AddressReplaceHostname', 'ExistingApimName',
-            'EntitlementStore', 'ResolverInboundAccess', 'DeployProjection', 'DeploySyncJob', 'ProjectionSyncInterval', 'ProjectionResolverAppId', 'TpmStandard', 'QuotaStandard', 'TpmPremium',
+            'EntitlementStore', 'ResolverInboundAccess', 'ProjectionNetworkMode', 'ProjectionVnetId', 'ProjectionEndpointsSubnetId', 'ProjectionRunnerSubnetId',
+            'ProjectionResolverSubnetId', 'ProjectionRenewalSubnetId', 'ProjectionApimSubnetId', 'DeployProjection', 'DeploySyncJob', 'ProjectionSyncInterval', 'ProjectionResolverAppId', 'TpmStandard', 'QuotaStandard', 'TpmPremium',
             'QuotaPremium', 'QuotaOrg', 'CallsPerMinute', 'StandardGroup', 'PremiumGroup', 'StandardModels', 'PremiumModels', 'AuthMode', 'DesktopSignInKind', 'DesktopBearerTokenType',
             'DesktopEntraClientId', 'DesktopEntraIssuer', 'DesktopEntraScopes', 'DesktopEntraAudience', 'DesktopEntraResource', 'DeployContentSafety', 'ContentSafetyMode', 'ModelOrganizationName', 'ModelIndustry', 'ModelCountryCode',
             'RevocationWindowSeconds', 'TeamBudgetBehaviour', 'UnassignedDevelopers', 'DeveloperEstimate', 'PendingClaudeDeployment'

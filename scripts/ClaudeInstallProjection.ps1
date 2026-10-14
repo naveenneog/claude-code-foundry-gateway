@@ -107,7 +107,7 @@ function Resolve-ClaudeInstallerResolverInboundAccess {
     if ($EntitlementStore -ne 'projection') {
         return [pscustomobject]@{ Access = $(if ($Requested) { $Requested } else { 'private' }); Message = '' }
     }
-    $access = if ($Requested) { $Requested } else { 'public' }
+    $access = if ($Requested) { $Requested } elseif ($Sku -eq 'BasicV2') { 'public' } else { 'private' }
     if ($Sku -eq 'BasicV2' -and $access -eq 'private') {
         throw 'BasicV2 cannot use a private resolver because Basic v2 has no outbound VNet integration. Use -ResolverInboundAccess public or choose StandardV2/PremiumV2. Nothing was created.'
     }
@@ -231,6 +231,13 @@ function Invoke-ClaudeInstallerProjectionDeployment {
         [Parameter(Mandatory)][string]$Location,
         [Parameter(Mandatory)][ValidateSet('BasicV2','StandardV2','PremiumV2')][string]$Sku,
         [Parameter(Mandatory)][ValidateSet('private','public')][string]$ResolverInboundAccess,
+        [ValidateSet('managed','existing')][string]$ProjectionNetworkMode = 'managed',
+        [string]$ProjectionVnetId,
+        [string]$ProjectionEndpointsSubnetId,
+        [string]$ProjectionRunnerSubnetId,
+        [string]$ProjectionResolverSubnetId,
+        [string]$ProjectionRenewalSubnetId,
+        [string]$ProjectionApimSubnetId,
         [Parameter(Mandatory)][string]$StandardGroup,
         [Parameter(Mandatory)][string]$PremiumGroup,
         [string]$SubscriptionId,
@@ -248,6 +255,11 @@ function Invoke-ClaudeInstallerProjectionDeployment {
     if ($SubscriptionId) { $common['SubscriptionId'] = $SubscriptionId }
     $deployParameters = [ordered]@{} + $common
     $deployParameters['Location'] = $Location; $deployParameters['Sku'] = $Sku; $deployParameters['ResolverInboundAccess'] = $ResolverInboundAccess
+    $deployParameters['ProjectionNetworkMode'] = $ProjectionNetworkMode
+    foreach ($networkParameter in 'ProjectionVnetId','ProjectionEndpointsSubnetId','ProjectionRunnerSubnetId','ProjectionResolverSubnetId','ProjectionRenewalSubnetId','ProjectionApimSubnetId') {
+        $value = Get-Variable -Name $networkParameter -ValueOnly
+        if ($value) { $deployParameters[$networkParameter] = $value }
+    }
     if ($ProjectionResolverAppId) { $deployParameters['ResolverAppId'] = $ProjectionResolverAppId }
     if ($ResolverPublicByDefault) { $deployParameters['ResolverPublicByDefault'] = $true }
     $switchParameters = [ordered]@{} + $common

@@ -100,7 +100,7 @@ function az {
         $identity = if ($FixtureCase -eq 'no-identity') { @{} } else { @{ principalId = $FixtureGroupId; tenantId = $FixtureTenant } }
         if ($FixtureCase -eq 'wrong-tenant') { $identity.tenantId = $FixtureSubscription }
         $sku = if ($FixtureCase -eq 'wrong-sku') { 'PremiumV2' } else { 'BasicV2' }
-        return (@{ id = $id; identity = $identity; sku = @{ name = $sku } } | ConvertTo-Json -Depth 5 -Compress)
+        return (@{ id = $id; location = 'eastus2'; identity = $identity; sku = @{ name = $sku } } | ConvertTo-Json -Depth 5 -Compress)
     }
     if ($line -like 'apim nv show*') {
         if ($FixtureCase -eq 'nv-read-error') { $global:LASTEXITCODE = 1; return 'ERROR: (AuthorizationFailed) The client does not have authorization to perform action Microsoft.ApiManagement/service/namedValues/read.' }

@@ -67,6 +67,7 @@ function Add-ClaudeProjectionBaseResources {
     [void]$Resources.Add((New-ClaudeProjectionInventoryResource 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers' "$cosmos/claude/entitlement" 'partition key /oid; defaultTtl -1; index includes /oid/? only' $Location $projection 'Entitlement records container'))
 
     [void]$Resources.Add((New-ClaudeProjectionInventoryResource 'Microsoft.Network/virtualNetworks' $vnet 'address space 10.10.0.0/16' $Location $network 'Projection private network when no existing VNet is supplied'))
+    [void]$Resources.Add((New-ClaudeProjectionInventoryResource 'Microsoft.Network/networkSecurityGroups' "nsg-apim-$NamePrefix" 'Outbound TCP 443 to AzureKeyVault service tag' $Location $network 'NSG for the managed APIM Standard v2/Premium v2 outbound integration subnet'))
     [void]$Resources.Add((New-ClaudeProjectionInventoryResource 'Microsoft.Network/privateEndpoints' $cosmosPe 'groupIds Sql' $Location $network 'Private endpoint for the Cosmos SQL data plane'))
     [void]$Resources.Add((New-ClaudeProjectionInventoryResource 'Microsoft.Network/privateDnsZones' 'privatelink.documents.azure.com' 'n/a' 'global' $network 'Private DNS zone for Cosmos SQL'))
     [void]$Resources.Add((New-ClaudeProjectionInventoryResource 'Microsoft.Network/privateDnsZones/virtualNetworkLinks' "privatelink.documents.azure.com/$NamePrefix-link" 'registration disabled' 'global' $network 'Links the Cosmos private DNS zone to the projection VNet'))
@@ -199,6 +200,7 @@ function Get-ClaudeProjectionResourcePlan {
                 [pscustomobject]@{ Name = 'runner'; Prefix = '10.10.2.0/24'; Delegation = 'Microsoft.ContainerInstance/containerGroups'; Purpose = 'ACI projection runner' }
                 [pscustomobject]@{ Name = 'resolver'; Prefix = '10.10.3.0/26'; Delegation = 'Microsoft.App/environments'; Purpose = 'Resolver Flex Consumption outbound integration' }
                 [pscustomobject]@{ Name = 'renewal'; Prefix = '10.10.3.64/27'; Delegation = 'Microsoft.App/environments'; Purpose = 'Optional sync job Container Apps environment' }
+                [pscustomobject]@{ Name = 'apim'; Prefix = '10.10.4.0/24'; Delegation = 'Microsoft.Web/serverFarms'; Purpose = 'APIM Standard v2/Premium v2 outbound integration; nsg-apim prefix allows AzureKeyVault TCP 443' }
             )
             PrivateEndpoints = @($privateEndpoints)
             PrivateDnsZones = @('privatelink.documents.azure.com', 'privatelink.azurewebsites.net', 'privatelink.blob.core.windows.net', 'privatelink.queue.core.windows.net', 'privatelink.table.core.windows.net')

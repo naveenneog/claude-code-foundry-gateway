@@ -25,7 +25,7 @@ function New-P91Template([string]$Scratch) {
     Copy-Item -LiteralPath (Join-Path $script:P91Root 'Install-ClaudeGateway.ps1') -Destination $template
     # The answers schema the installer reads for -AnswersPath and -Preflight (P92).
     Copy-Item -LiteralPath (Join-Path $script:P91Root 'schemas\claude-gateway.answers.schema.json') -Destination (Join-Path $template 'schemas')
-    Get-ChildItem -LiteralPath (Join-Path $script:P91Root 'scripts') -File | Where-Object { $_.Extension -in '.ps1', '.sh' } |
+    Get-ChildItem -LiteralPath (Join-Path $script:P91Root 'scripts') -File | Where-Object { $_.Extension -in '.ps1', '.psm1', '.sh' } |
         ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $template 'scripts') }
     Copy-Item -Path (Join-Path $script:P91Root 'scripts\flow\*.ps1') -Destination (Join-Path $template 'scripts\flow')
     Copy-Item -Path (Join-Path $script:P91Root 'scripts\flow\lib\*.ps1') -Destination (Join-Path $template 'scripts\flow\lib')

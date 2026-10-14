@@ -29,6 +29,14 @@ param(
     [string]$Sku = 'BasicV2',
     [ValidateSet('private','public')]
     [string]$ResolverInboundAccess,
+    [ValidateSet('managed','existing')]
+    [string]$ProjectionNetworkMode = 'managed',
+    [string]$ProjectionVnetId,
+    [string]$ProjectionEndpointsSubnetId,
+    [string]$ProjectionRunnerSubnetId,
+    [string]$ProjectionResolverSubnetId,
+    [string]$ProjectionRenewalSubnetId,
+    [string]$ProjectionApimSubnetId,
     [string]$ResolverAppId,
     [string]$StandardGroup = 'claude-code-standard',
     [string]$PremiumGroup = 'claude-code-premium',
@@ -47,6 +55,7 @@ $root = Split-Path $PSScriptRoot -Parent
 . (Join-Path $PSScriptRoot 'ClaudeProjectionChecks.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeProjectionPackage.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeProjectionSwitch.ps1')
+Import-Module (Join-Path $PSScriptRoot 'ClaudeProjectionNetwork.psm1') -Force
 function Step($m) { Write-Host "`n==> $m" -ForegroundColor Cyan }
 function Note($m) { Write-Host "    $m" -ForegroundColor DarkGray }
 function Ok($m) { Write-Host "    [OK]   $m" -ForegroundColor Green }
@@ -91,9 +100,17 @@ $preflight = Invoke-ClaudeProjectionPreflight -ResourceGroup $ResourceGroup -Api
 # Before any write, and for -PreflightOnly and -WhatIf too: on a gateway that serves from the projection, this run
 # continues only when it redeploys the resolver the gateway calls, with the app its tokens are for.
 Assert-ClaudeProjectionResolverRedeploy -ResourceGroup $ResourceGroup -ApimName $ApimName -NamePrefix $NamePrefix -SubscriptionId ([string]$preflight.SubscriptionId) -ResolverAppId ([string]$preflight.ResolverAppId)
+$networkPlan = Resolve-ClaudeProjectionNetworkSelection -Mode $ProjectionNetworkMode -VnetId $ProjectionVnetId `
+    -EndpointsSubnetId $ProjectionEndpointsSubnetId -RunnerSubnetId $ProjectionRunnerSubnetId `
+    -ResolverSubnetId $ProjectionResolverSubnetId -RenewalSubnetId $ProjectionRenewalSubnetId `
+    -ApimSubnetId $ProjectionApimSubnetId -NonInteractive
+$networkPreflight = Invoke-ClaudeProjectionNetworkPreflight -Plan $networkPlan -Apim $preflight.Apim `
+    -ProjectionResourceGroupId ([string]$preflight.ResourceGroupId) -NamePrefix $NamePrefix -DeploymentLocation ([string]$preflight.Location)
+Note "Network: $($networkPreflight.Summary)"
+Note "Private DNS zones owned by this projection: $($networkPreflight.RequiredPrivateDnsZones -join ', ')"
 if ($PreflightOnly) { return }
 if ($WhatIfPreference) {
-    Note 'WhatIf: app registration if needed; private Cosmos/network; resolver publish; gateway resolver named values; fresh snapshot/apply/compare. No Azure writes or projection switch.'
+    Note 'WhatIf: app registration if needed; selected private network and DNS; APIM outbound integration when required; resolver publish; gateway resolver named values; fresh snapshot/apply/compare. No Azure writes or projection switch.'
     return
 }
 $Location = $preflight.Location
@@ -130,13 +147,52 @@ $accountResourceId = "/subscriptions/$(([string]$apim.id -split '/')[2])/resourc
 Step 'Deploy projection network'
 $networkName = "projection-network-$NamePrefix"
 if ($PSCmdlet.ShouldProcess($networkName, 'deploy private endpoints and DNS')) {
-    Invoke-WithRetry -Name 'projection network deployment' -Action {
-        az deployment group create -g $ResourceGroup -n $networkName --template-file (Join-Path $root 'infra/projection-network.bicep') `
-            --parameters namePrefix=$NamePrefix location=$Location cosmosAccountName=$cosmosAccount runnerEnabled=true -o none
-        if ($LASTEXITCODE -ne 0) { throw 'projection network deployment failed' }
+    $networkParamFile = Join-Path ([IO.Path]::GetTempPath()) ("claude-network-params-" + [guid]::NewGuid().ToString('N') + '.json')
+    $networkParams = @{
+        '$schema' = 'https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#'
+        contentVersion = '1.0.0.0'
+        parameters = @{
+            namePrefix = @{ value = $NamePrefix }
+            location = @{ value = $Location }
+            cosmosAccountName = @{ value = $cosmosAccount }
+            vnetId = @{ value = $networkPlan.VnetId }
+            endpointsSubnetId = @{ value = $networkPlan.EndpointsSubnetId }
+            runnerSubnetId = @{ value = $networkPlan.RunnerSubnetId }
+            resolverSubnetId = @{ value = $networkPlan.ResolverSubnetId }
+            renewalSubnetId = @{ value = $networkPlan.RenewalSubnetId }
+            apimSubnetId = @{ value = $networkPlan.ApimSubnetId }
+            runnerEnabled = @{ value = $true }
+        }
+    }
+    [IO.File]::WriteAllText($networkParamFile, ($networkParams | ConvertTo-Json -Depth 8), (New-Object System.Text.UTF8Encoding($false)))
+    try {
+        Invoke-WithRetry -Name 'projection network deployment' -Action {
+            az deployment group create -g $ResourceGroup -n $networkName --template-file (Join-Path $root 'infra/projection-network.bicep') `
+                --parameters "@$networkParamFile" -o none
+            if ($LASTEXITCODE -ne 0) { throw 'projection network deployment failed' }
+        }
+    }
+    finally {
+        Remove-Item -LiteralPath $networkParamFile -Force -ErrorAction SilentlyContinue
     }
 } else { throw 'Projection network deployment was declined; no further steps run.' }
 $network = Get-DeploymentOutput $networkName
+
+if ($Sku -in @('StandardV2','PremiumV2') -and $ResolverInboundAccess -eq 'private') {
+    Step 'Integrate API Management with the projection network'
+    $integrationState = Join-Path ([IO.Path]::GetTempPath()) ("claude-apim-network-" + [guid]::NewGuid().ToString('N'))
+    $null = New-Item -ItemType Directory -Path $integrationState
+    try {
+        if ($PSCmdlet.ShouldProcess($ApimName, "integrate outbound traffic with $($network.apimSubnetId)")) {
+            $integration = Set-ClaudeProjectionApimOutboundIntegration -Apim $apim -SubnetId ([string]$network.apimSubnetId) -StateDirectory $integrationState
+            Ok $(if ($integration.Changed) { "APIM outbound integration uses $($network.apimSubnetId)" } else { "APIM already uses $($network.apimSubnetId)" })
+        }
+        else { throw 'API Management outbound VNet integration was declined; no resolver deployment was attempted.' }
+    }
+    finally {
+        Remove-Item -LiteralPath $integrationState -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
 
 Step 'Deploy resolver'
 $resolverName = "projection-resolver-$NamePrefix"
