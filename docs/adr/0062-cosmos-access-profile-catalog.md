@@ -30,6 +30,7 @@ The owner requires the Cosmos path, automatic scheduled group synchronization, l
 7. The catalog writer changes no Entra membership. Once the scheduled job holds `GroupMember.Read.All`, adding or removing a user in an access-profile group is sufficient; the next successful run publishes the entitlement. The existing removal ceiling, apply lock, changed-only writes and alerts remain.
 8. Existing P108 explicit organization, business-unit and user USD budgets and their caching/freshness semantics remain unchanged and must still apply to profile-backed requests. Automatic dollar defaults derived from a plan are not claimed in P116: the current reconciler emits user state only for explicit `usd-budgets` items, and implementing plan scopes would change the excluded reconciler/AUM surface.
 9. AUM and Turnstile code are out of scope. P116 adds a script/JSON administration surface and records a future packet for automatic plan-dollar defaults.
+10. A private resolver on Standard v2 or Premium v2 has an explicit network selection before deployment. The managed option creates the dedicated projection VNet and private DNS zones. The customer-VNet option requires explicit IDs for the VNet and dedicated endpoint, runner, resolver, renewal-job and APIM outbound-integration subnets; it does not infer subnets by name. The projection owns and links its private DNS zones in P116. Preflight refuses a different subscription or region, wrong/missing delegation, shared subnet roles, undersized APIM or Microsoft.App subnets, or a conflicting private-DNS namespace link before any write. APIM's integration subnet is delegated to `Microsoft.Web/serverFarms`; resolver and renewal subnets are separate and delegated to `Microsoft.App/environments`; the runner is delegated to `Microsoft.ContainerInstance/containerGroups`; the private-endpoint subnet is not delegated.
 
 ## Consequences
 
@@ -37,9 +38,11 @@ The owner requires the Cosmos path, automatic scheduled group synchronization, l
 + The resolver's one-point-read availability and cache contract remains intact.
 + Model access is a gateway control; client capabilities remain accurately described as management controls.
 + Existing named-value rollback, BU logic, P108 dollar controls and scheduled-job safety remain available.
++ Standard v2 private projection deployment no longer depends on an undocumented VNet prepared outside the setup path.
 − The first packet still uses `standard` or `premium` as the compatibility TPM/token enforcement bucket.
 − Exact automatic per-plan dollar defaults require a later reconciler/query/state packet; catalog credit values are metadata until that packet.
 − A scheduled positive live proof needs tenant-admin `GroupMember.Read.All`; without it the live proof is attended sync plus the existing fail-closed scheduled Graph denial.
+− P116 creates and owns the required private DNS zones even when it links them to a customer VNet. Reusing central private DNS zones is a separate architecture decision because duplicate namespace links can change resolution for existing consumers.
 
 ## How we'd know this was wrong
 
