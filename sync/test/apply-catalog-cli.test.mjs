@@ -5,6 +5,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { prepareAccessCatalogDocument } from '../src/access-catalog-administration.mjs';
+import { canonicalizeAccessCatalog } from '../src/access-catalog.mjs';
 
 const script = fileURLToPath(new URL('../src/apply-projection.mjs', import.meta.url));
 const loaderUrl = pathToFileURL(fileURLToPath(new URL('./fake-azure-loader.mjs', import.meta.url))).href;
@@ -45,7 +47,7 @@ function makeCatalog() {
 function runCatalog({ name, catalog = makeCatalog(), memberships, absentGroup = '' }) {
   const storePath = join(work, `${name}-store.json`);
   const logPath = join(work, `${name}-cosmos.log`);
-  const catalogDocument = { id: catalogKey, oid: catalogKey, type: 'access-catalog', ...catalog };
+  const catalogDocument = prepareAccessCatalogDocument(catalog, { tenantId: tenant });
   writeFileSync(storePath, JSON.stringify({ docs: { [`${catalogKey}|${catalogKey}`]: catalogDocument } }));
   writeFileSync(logPath, '');
   const result = spawnSync(process.execPath, [
@@ -80,6 +82,57 @@ function runCatalog({ name, catalog = makeCatalog(), memberships, absentGroup = 
     log: readFileSync(logPath, 'utf8'),
   };
 }
+
+function runCatalogRead({ name, document }) {
+  const storePath = join(work, `${name}-store.json`);
+  const logPath = join(work, `${name}-cosmos.log`);
+  writeFileSync(storePath, JSON.stringify({
+    docs: document ? { [`${catalogKey}|${catalogKey}`]: document } : {},
+  }));
+  writeFileSync(logPath, '');
+  const result = spawnSync(process.execPath, [
+    '--loader', loaderUrl,
+    script,
+    '--cosmos', cosmos,
+    '--tenant', tenant,
+    '--read-access-catalog',
+  ], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      FAKE_COSMOS_STORE: storePath,
+      FAKE_COSMOS_LOG: logPath,
+      PROJECTION_ACCOUNT_RESOURCE_ID: '',
+    },
+  });
+  const jsonLine = result.stdout.trim().split(/\r?\n/).filter((line) => line.startsWith('{')).at(-1);
+  return {
+    result,
+    summary: JSON.parse(jsonLine),
+    log: readFileSync(logPath, 'utf8'),
+  };
+}
+
+test('catalog discovery is one read-only point read and returns the validated non-secret catalog', () => {
+  const catalog = makeCatalog();
+  const document = prepareAccessCatalogDocument(catalog, { tenantId: tenant });
+  const found = runCatalogRead({ name: 'read-published-catalog', document });
+  assert.equal(found.result.status, 0, found.result.stdout + found.result.stderr);
+  assert.equal(found.summary.mode, 'access-catalog');
+  assert.equal(found.summary.found, true);
+  assert.deepEqual(found.summary.catalog, canonicalizeAccessCatalog(catalog));
+  assert.match(found.log, new RegExp(`^point-read ${catalogKey}\\|${catalogKey}`, 'm'));
+  assert.doesNotMatch(found.log, /query |bulk |create |replace |delete /);
+
+  const missing = runCatalogRead({ name: 'read-missing-catalog', document: null });
+  assert.equal(missing.result.status, 0, missing.result.stdout + missing.result.stderr);
+  assert.deepEqual(missing.summary, {
+    ok: true,
+    mode: 'access-catalog',
+    found: false,
+    catalog: null,
+  });
+});
 
 test('catalog graph mode point-reads nine plans and 47 profiles and writes one whole highest-priority profile', () => {
   const catalog = makeCatalog();

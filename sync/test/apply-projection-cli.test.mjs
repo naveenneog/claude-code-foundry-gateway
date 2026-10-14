@@ -88,8 +88,8 @@ test('mutating applies require an account resource id, while what-if remains rea
 test('a snapshot whose apply-by time passes while it waits for the lock is refused before any write', () => {
   const target = '33333333-3333-4333-8333-333333333333';
   const nowMs = Date.now();
-  const lock = { id: 'projection-apply-lock', oid: 'projection-apply-lock', type: 'projection-apply-lock', holder: 'other-run', mode: 'user', acquiredAt: new Date(nowMs).toISOString(), leaseExpiresAt: new Date(nowMs + 4_000).toISOString() };
-  const snap = { ...fullSnapshot({ verifiedAt: new Date(nowMs - 60_000).toISOString(), records: [{ oid: target, tier: 'standard', businessUnit: '' }] }), expiresAt: Math.floor((nowMs + 2_000) / 1000) };
+  const lock = { id: 'projection-apply-lock', oid: 'projection-apply-lock', type: 'projection-apply-lock', holder: 'other-run', mode: 'user', acquiredAt: new Date(nowMs).toISOString(), leaseExpiresAt: new Date(nowMs + 6_000).toISOString() };
+  const snap = { ...fullSnapshot({ verifiedAt: new Date(nowMs - 60_000).toISOString(), records: [{ oid: target, tier: 'standard', businessUnit: '' }] }), expiresAt: Math.floor((nowMs + 4_000) / 1000) };
   const { result, summary, store } = runApplyWithFake({ name: 'apply-by passes during the lock wait', docs: { [`${lock.id}|${lock.oid}`]: lock }, snapshot: snap, args: ['--lock-wait-seconds', '30'] });
   assert.equal(result.status, 2, result.stdout + result.stderr);
   assert.match(summary.error, /snapshot expired; resolve the directory again/);

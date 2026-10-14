@@ -34,7 +34,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { mergeCatalogMembership, mergeMembership, planChanges, removalLimitExceeded, toDocument, toStatusDocument, validateSnapshot, validateTargetedSnapshot, compareWithGateway, compareWithSnapshot, createReconciliation, normalizeJobSettings, validateJobSettings, statusPartitionKey, STATUS_RECORD_TYPE } from './plan.mjs';
-import { canonicalizeAccessCatalog } from './access-catalog.mjs';
+import { normalizeAccessCatalogDocument } from './access-catalog.mjs';
 import { acquireApplyLock, validateLockWait } from './apply-lock.mjs';
 import { resolveGroupId, getTransitiveMembers } from './graph.mjs';
 import { readGatewayUnits, sortUnitsByDepth } from './business-units.mjs';
@@ -55,7 +55,8 @@ const whatIf = flag('--whatif');
 const renewal = flag('--graph');
 const userOid = opt('--user');
 const compareMode = Boolean(opt('--compare') || opt('--compare-snapshot'));
-const mutatingApply = !whatIf && !compareMode;
+const catalogReadMode = flag('--read-access-catalog');
+const mutatingApply = !whatIf && !compareMode && !catalogReadMode;
 const lockWaitSeconds = Number(opt('--lock-wait-seconds', '900'));
 const GUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 const COSMOS_ACCOUNT_RESOURCE_ID = /^\/subscriptions\/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\/resourceGroups\/([^/]+)\/providers\/Microsoft\.DocumentDB\/databaseAccounts\/([^/]+)$/i;
@@ -124,6 +125,17 @@ const { DefaultAzureCredential } = await import('@azure/identity');
 const { CosmosClient } = await import('@azure/cosmos');
 const credential = new DefaultAzureCredential();
 const containerRef = () => new CosmosClient({ endpoint, aadCredentials: credential }).database(databaseName).container(containerName);
+
+if (catalogReadMode) {
+  const catalog = await step('catalog', () => readAccessCatalog(containerRef()));
+  console.log(JSON.stringify({
+    ok: true,
+    mode: 'access-catalog',
+    found: Boolean(catalog),
+    catalog,
+  }));
+  process.exit(0);
+}
 
 // Tier groups: --standard/--premium for a manual graph run, else the job's PROJECTION_*_GROUP_ID
 // settings (object ids, checked here before any read).
@@ -248,13 +260,7 @@ async function readAccessCatalog(container) {
 }
 
 function normalizeAccessCatalog(document) {
-  const catalog = { ...document };
-  for (const field of ['id', 'oid', 'type', '_etag', '_rid', '_self', '_attachments', '_ts']) delete catalog[field];
-  const canonical = canonicalizeAccessCatalog(catalog);
-  if (canonical.tenantId !== tenantId) {
-    throw new Error(`access catalog is for tenant ${canonical.tenantId}, not ${tenantId}`);
-  }
-  return canonical;
+  return normalizeAccessCatalogDocument(document, { tenantId });
 }
 
 // The container indexes only /oid (infra/projection.bicep), so no query here has a WHERE clause: a

@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import {
   canonicalizeAccessCatalog,
   hashAccessCatalog,
+  normalizeAccessCatalogDocument,
   selectProfileForMemberships,
   validateAccessCatalog,
 } from '../src/access-catalog.mjs';
+import { prepareAccessCatalogDocument } from '../src/access-catalog-administration.mjs';
 
 const TENANT = '11111111-2222-4333-8444-555555555555';
 
@@ -320,5 +322,25 @@ test('membership selection rejects malformed membership ids and an ambiguous hig
   assert.throws(
     () => selectProfileForMemberships(catalog, catalog.profiles.map((profile) => profile.groupObjectId)),
     /ambiguous.*priority|priority.*unique/i,
+  );
+});
+
+test('a published control document normalizes to its validated tenant catalog and verifies its hash', () => {
+  const catalog = makeCatalog({ planCount: 2, profileCount: 3 });
+  const document = prepareAccessCatalogDocument(catalog, {
+    tenantId: TENANT,
+    now: () => new Date('2026-10-14T12:00:00.000Z'),
+  });
+  assert.deepEqual(normalizeAccessCatalogDocument(document, { tenantId: TENANT }), canonicalizeAccessCatalog(catalog));
+
+  const tampered = structuredClone(document);
+  tampered.catalogVersion = `sha256:${'0'.repeat(64)}`;
+  assert.throws(
+    () => normalizeAccessCatalogDocument(tampered, { tenantId: TENANT }),
+    /catalogVersion|hash/i,
+  );
+  assert.throws(
+    () => normalizeAccessCatalogDocument(document, { tenantId: '00000000-0000-4000-8000-000000000000' }),
+    /tenant/i,
   );
 });

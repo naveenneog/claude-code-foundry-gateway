@@ -56,6 +56,8 @@ function Reset-ProjectionFixture {
     } | ConvertTo-Json -Depth 20 | ConvertFrom-Json
     $global:FixtureExecutions = @($FixtureExecution)
     $global:FixtureRunnerFiles = @{}
+    $global:FixtureExportedSnapshot = $null
+    $global:FixtureExportCatalogText = ''
     # The resolver the gateway calls (entitlement-resolver-url/-audience) and the one deployed with the projection.
     $global:FixtureResolverUrl = switch ($Case) {
         'resolver-placeholder' { 'https://resolver-not-deployed.invalid' }
@@ -261,6 +263,16 @@ function az {
         if ($command -match "^node -e require\('fs'\)\.rmSync\('([^']+)',") { $null = $global:FixtureRunnerFiles.Remove($Matches[1]); return '' }
         if ($command -match "existsSync\('/work/sync/node_modules'\)") {
             return $(if ($FixtureCase -eq 'node-modules-present') { 'present' } else { 'absent' })
+        }
+        if ($command -match 'apply-projection\.mjs .*--read-access-catalog') {
+            if ($FixtureCase -eq 'source-projection-catalog-malformed') {
+                return '{"ok":false,"stage":"catalog","remedy":"Remedy: correct or republish the tenant access catalog, then rerun scripts/Sync-ClaudeAccess.ps1."}'
+            }
+            if ($FixtureCase -like 'source-projection-catalog*') {
+                return ('{"ok":true,"mode":"access-catalog","found":true,"catalog":' +
+                    '{"schemaVersion":1,"tenantId":"' + $FixtureTenant + '","plans":[{"id":"plan-standard","name":"Standard","enabled":true,"nominalCredit":{"amount":20,"currency":"USD","period":"month","scope":"user"},"compatibilityTier":"standard"},{"id":"plan-premium","name":"Premium","enabled":true,"nominalCredit":{"amount":200,"currency":"USD","period":"month","scope":"user"},"compatibilityTier":"premium"}],"profiles":[{"id":"profile-standard","name":"Standard profile","planId":"plan-standard","groupObjectId":"' + $FixtureGroupId + '","priority":10,"capabilities":["code"],"modelFamilies":["haiku"],"connectors":[],"enabled":true},{"id":"profile-premium","name":"Premium profile","planId":"plan-premium","groupObjectId":"' + $FixturePremiumGroupId + '","priority":20,"capabilities":["design"],"modelFamilies":["opus"],"connectors":["m365"],"enabled":true}]}}')
+            }
+            return '{"ok":true,"mode":"access-catalog","found":false,"catalog":null}'
         }
         # apply-projection.mjs --compare prints ok:false with the differences when the projection and the gateway disagree.
         if ($FixtureCase -eq 'compare-differs' -and $command -match 'apply-projection\.mjs .*--compare ') { return '{"ok":false,"mode":"compare","compared":2,"differences":1,"byKind":{"missing":1}}' }

@@ -76,11 +76,12 @@ function Resolve-ClaudeGraphUserObjectId {
 }
 
 function Get-GroupMemberOids {
-    param([string]$GroupName, [string]$Token)
+    param([string]$GroupName, [string]$Token, [switch]$FailIfMissing)
 
     if ([string]$GroupName -and ([string]$GroupName).Trim() -eq 'none') { return @() }
     $group = Get-ClaudeGraphGroup -GroupName $GroupName -Token $Token
     if (-not $group) {
+        if ($FailIfMissing) { throw "Configured access group '$GroupName' was not found." }
         Write-Warning "Group '$GroupName' not found - treating as empty."
         return @()
     }

@@ -81,6 +81,38 @@ export function hashAccessCatalog(catalog) {
   return createHash('sha256').update(JSON.stringify(canonical)).digest('hex');
 }
 
+export function normalizeAccessCatalogDocument(document, { tenantId } = {}) {
+  if (!isRecord(document)) throw new Error('access catalog must be one object');
+  const expectedTenant = typeof tenantId === 'string' ? tenantId.toLowerCase() : '';
+  if (expectedTenant) requireGuid(expectedTenant, 'expected tenantId');
+  const expectedId = expectedTenant ? `access-catalog::${expectedTenant}` : '';
+  if (document.type !== undefined && document.type !== 'access-catalog') {
+    throw new Error(`access catalog control document type must be 'access-catalog'`);
+  }
+  if (expectedId && document.id !== undefined && document.id !== expectedId) {
+    throw new Error(`access catalog id does not match tenant ${expectedTenant}`);
+  }
+  if (expectedId && document.oid !== undefined && document.oid !== expectedId) {
+    throw new Error(`access catalog partition does not match tenant ${expectedTenant}`);
+  }
+
+  const publishedVersion = document.catalogVersion;
+  const catalog = { ...document };
+  for (const field of [
+    'id', 'oid', 'type', 'catalogVersion', 'generatedAt',
+    '_etag', '_rid', '_self', '_attachments', '_ts',
+  ]) delete catalog[field];
+  const canonical = canonicalizeAccessCatalog(catalog);
+  if (expectedTenant && canonical.tenantId !== expectedTenant) {
+    throw new Error(`access catalog is for tenant ${canonical.tenantId}, not ${expectedTenant}`);
+  }
+  const expectedVersion = `sha256:${hashAccessCatalog(canonical)}`;
+  if (publishedVersion !== undefined && publishedVersion !== expectedVersion) {
+    throw new Error('access catalog catalogVersion does not match its canonical hash');
+  }
+  return canonical;
+}
+
 export function hashAccessProfile(profile) {
   if (!isRecord(profile)) throw new Error('access profile must be one object');
   const canonical = canonicalizeProfiles([profile])[0];

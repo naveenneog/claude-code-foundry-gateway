@@ -41,7 +41,7 @@ Capture { Confirm-ClaudeProjectionResolverServicePrincipal -AppId 'not-a-guid' }
 Assert 'invalid resolver app id is rejected before az' ($CapturedError -match 'GUID' -and $calls.Count -eq 0) $CapturedError
 
 function Invoke-TargetedExportFixture {
-    param([string]$User, [string[]]$BusinessUnitGroups = @(), [switch]$WhatIf)
+    param([string]$User, [string[]]$BusinessUnitGroups = @(), [switch]$WhatIf, [string]$AccessCatalogPath, [switch]$MissingCatalogGroup)
     $work = $script:p97SyncWork
     New-Item -ItemType Directory -Force -Path $work | Out-Null
     $snapshot = Join-Path $work ("snapshot-$([guid]::NewGuid().ToString('N')).json")
@@ -64,6 +64,10 @@ function Invoke-TargetedExportFixture {
             $text = [uri]::UnescapeDataString([string]$Uri)
             $id = if ($text -match "displayName eq 'claude-code-premium'") { '10000000-0000-4000-8000-000000000002' }
             elseif ($text -match "displayName eq 'claude-code-standard'") { '10000000-0000-4000-8000-000000000001' }
+            elseif ($text -match "id eq '10000000-0000-4000-8000-000000000002'") {
+                if ($MissingCatalogGroup) { '' } else { '10000000-0000-4000-8000-000000000002' }
+            }
+            elseif ($text -match "id eq '10000000-0000-4000-8000-000000000001'") { '10000000-0000-4000-8000-000000000001' }
             elseif ($text -match "displayName eq 'Unit") { ('20000000-0000-4000-8000-' + ([regex]::Match($text, 'Unit(\d+)').Groups[1].Value.PadLeft(12, '0'))) }
             else { '' }
             if ($id) { return [pscustomobject]@{ value = @([pscustomobject]@{ id = $id }) } }
@@ -73,12 +77,23 @@ function Invoke-TargetedExportFixture {
             $data = $Body | ConvertFrom-Json
             $global:P97SyncFixtureBatches.Add(@($data.groupIds).Count)
             $matches = @()
-            if ($User -eq 'both@contoso.com') { $matches = @('10000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002') }
+            if ($User -eq 'both@contoso.com') { $matches = @('10000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002','20000000-0000-4000-8000-000000000001') }
             return [pscustomobject]@{ value = $matches }
         }
         throw "unexpected HTTP $Method $Uri"
     }
-    & (Join-Path $root 'scripts\Sync-ClaudeProjection.ps1') -Account cosmos-p97 -TenantId '00000000-0000-4000-8000-000000000085' -StandardGroup claude-code-standard -PremiumGroup claude-code-premium -BusinessUnitGroups $BusinessUnitGroups -ExportPath $snapshot -User $User -WhatIf:$WhatIf | Out-Null
+    $arguments = @{
+        Account = 'cosmos-p97'
+        TenantId = '00000000-0000-4000-8000-000000000085'
+        StandardGroup = 'claude-code-standard'
+        PremiumGroup = 'claude-code-premium'
+        BusinessUnitGroups = $BusinessUnitGroups
+        ExportPath = $snapshot
+        User = $User
+        WhatIf = $WhatIf
+    }
+    if ($AccessCatalogPath) { $arguments.AccessCatalogPath = $AccessCatalogPath }
+    & (Join-Path $root 'scripts\Sync-ClaudeProjection.ps1') @arguments | Out-Null
     $written = Test-Path -LiteralPath $snapshot
     $json = if ($written) { Get-Content -LiteralPath $snapshot -Raw | ConvertFrom-Json } else { $null }
     [pscustomobject]@{ Calls = @($global:P97SyncFixtureCalls); Batches = @($global:P97SyncFixtureBatches); Snapshot = $json; Written = $written; LastExitCode = $global:LASTEXITCODE }
@@ -121,6 +136,35 @@ Assert 'targeted export uses Graph checkMemberGroups batches' (@($batched.Batche
 $both = Invoke-TargetedExportFixture -User 'both@contoso.com'
 Assert 'targeted export writes user-scoped snapshots' (@($both.Snapshot.records).Count -eq 1 -and $both.Snapshot.records[0].tier -eq 'premium' -and $both.Snapshot.scope -eq 'user') ($both.Snapshot | ConvertTo-Json -Compress)
 
+$catalogPath = Join-Path $script:p97SyncWork 'access-catalog.json'
+$catalog = [ordered]@{
+    schemaVersion = 1
+    tenantId = '00000000-0000-4000-8000-000000000085'
+    plans = @(
+        [ordered]@{ id='plan-standard'; name='Standard'; enabled=$true; nominalCredit=[ordered]@{ amount=20; currency='USD'; period='month'; scope='user' }; compatibilityTier='standard' }
+        [ordered]@{ id='plan-premium'; name='Premium'; enabled=$true; nominalCredit=[ordered]@{ amount=200; currency='USD'; period='month'; scope='user' }; compatibilityTier='premium' }
+    )
+    profiles = @(
+        [ordered]@{ id='profile-standard'; name='Standard profile'; planId='plan-standard'; groupObjectId='10000000-0000-4000-8000-000000000001'; priority=10; capabilities=@('code'); modelFamilies=@('haiku'); connectors=@(); enabled=$true }
+        [ordered]@{ id='profile-premium'; name='Premium profile'; planId='plan-premium'; groupObjectId='10000000-0000-4000-8000-000000000002'; priority=20; capabilities=@('design'); modelFamilies=@('opus'); connectors=@('m365'); enabled=$true }
+    )
+}
+[IO.File]::WriteAllText($catalogPath, ($catalog | ConvertTo-Json -Depth 10))
+$catalogTarget = Invoke-TargetedExportFixture -User 'both@contoso.com' -BusinessUnitGroups @('sales=Unit1') -AccessCatalogPath $catalogPath
+Assert 'attended targeted catalog export writes one complete highest-priority schema-v3 profile with independent BU' (
+    @($catalogTarget.Snapshot.records).Count -eq 1 -and
+    $catalogTarget.Snapshot.records[0].schemaVersion -eq 3 -and
+    $catalogTarget.Snapshot.records[0].profileId -eq 'profile-premium' -and
+    $catalogTarget.Snapshot.records[0].planId -eq 'plan-premium' -and
+    $catalogTarget.Snapshot.records[0].tier -eq 'premium' -and
+    $catalogTarget.Snapshot.records[0].businessUnit -eq 'sales' -and
+    $catalogTarget.Snapshot.records[0].modelFamilies[0] -eq 'opus' -and
+    $catalogTarget.Snapshot.records[0].connectors[0] -eq 'm365') ($catalogTarget.Snapshot | ConvertTo-Json -Depth 10 -Compress)
+$catalogAbsent = $null
+Capture { $catalogAbsent = Invoke-TargetedExportFixture -User 'both@contoso.com' -AccessCatalogPath $catalogPath -MissingCatalogGroup }
+Assert 'an absent configured catalog profile group stops snapshot export before any write' (
+    $CapturedError -match 'configured access group|profile-premium' -and -not $catalogAbsent) $CapturedError
+
 . (Join-Path $PSScriptRoot 'TestProjectionFixture.ps1')
 function pwsh {
     $words = @($args)
@@ -128,6 +172,9 @@ function pwsh {
     $exportIndex = [array]::IndexOf($words, '-ExportPath')
     if ($exportIndex -lt 0) { $global:LASTEXITCODE = 1; return 'missing export path' }
     $path = [string]$words[$exportIndex + 1]
+    $catalogIndex = [array]::IndexOf($words, '-AccessCatalogPath')
+    $catalogPath = if ($catalogIndex -ge 0) { [string]$words[$catalogIndex + 1] } else { '' }
+    if ($catalogPath) { $global:FixtureExportCatalogText = Get-Content -LiteralPath $catalogPath -Raw }
     $userIndex = [array]::IndexOf($words, '-User')
     $user = if ($userIndex -ge 0) { '30000000-0000-4000-8000-000000000001' } else { $null }
     # Times relative to now, as the exporter writes them: a fixed time has passed by the next day, and the
@@ -143,7 +190,23 @@ function pwsh {
         mappingVersion = $scanned.ToUnixTimeSeconds()
         records = @()
     }
+    if ($catalogPath) {
+        $snapshot.records = @([ordered]@{
+            oid = $(if ($user) { $user } else { $global:FixtureApp })
+            schemaVersion = 3
+            tier = 'premium'
+            planId = 'plan-premium'
+            profileId = 'profile-premium'
+            capabilities = @('design')
+            modelFamilies = @('opus')
+            connectors = @('m365')
+            catalogVersion = ('sha256:' + ('a' * 64))
+            profileHash = ('sha256:' + ('b' * 64))
+            businessUnit = ''
+        })
+    }
     if ($user) { $snapshot.scope = 'user'; $snapshot.user = $user }
+    $global:FixtureExportedSnapshot = $snapshot
     [IO.File]::WriteAllText($path, ($snapshot | ConvertTo-Json -Depth 6))
     $global:LASTEXITCODE = 0
     return 'snapshot exported'
@@ -164,6 +227,37 @@ $runSnapshot = [regex]::Match($accessCalls, 'apply-projection\.mjs .*--snapshot 
 Assert 'projection access path starts runner and applies contract CLI from its own per-run snapshot path' (-not $CapturedError -and $accessCalls -match 'container show .*aci-projtest-p84fixture' -and $accessCalls -match 'npm --prefix /work/sync ci --omit=dev --ignore-scripts --no-audit --fund=false' -and $runSnapshot) "$CapturedError | $accessCalls"
 Assert 'projection access uses a temp per-run snapshot directory, not a repo .claude-projection-sync directory' (-not $CapturedError -and $accessCalls -match [regex]::Escape([IO.Path]::GetTempPath()) -and $accessCalls -notmatch '\.claude-projection-sync') "$CapturedError | $accessCalls"
 Assert 'projection access removes its own runner snapshot after apply' (-not $CapturedError -and $runSnapshot -and $accessCalls.Contains("rmSync('$runSnapshot'")) "$CapturedError | $accessCalls"
+
+Reset-ProjectionFixture 'source-projection-catalog'
+Capture { & (Join-Path $root 'scripts\Sync-ClaudeAccess.ps1') -ApimName apim-p84 -ResourceGroup rg-p84 -Store projection }
+$catalogCalls = $FixtureCalls -join "`n"
+$catalogReadIndex = [array]::FindIndex([string[]]@($FixtureCalls), [Predicate[string]]{ param($line) $line -match 'apply-projection\.mjs .*--read-access-catalog' })
+$catalogExportIndex = [array]::FindIndex([string[]]@($FixtureCalls), [Predicate[string]]{ param($line) $line -like 'pwsh *Sync-ClaudeProjection.ps1*' })
+$catalogApplyIndex = [array]::FindIndex([string[]]@($FixtureCalls), [Predicate[string]]{ param($line) $line -match 'apply-projection\.mjs .*--snapshot' })
+Assert 'attended full sync starts and packages the runner, discovers the catalog, exports v3, then reuses the runner to apply' (
+    -not $CapturedError -and $catalogReadIndex -ge 0 -and $catalogReadIndex -lt $catalogExportIndex -and
+    $catalogExportIndex -lt $catalogApplyIndex -and $FixtureExportedSnapshot.records[0].schemaVersion -eq 3) "$CapturedError | $catalogCalls"
+Assert 'catalog discovery sends no Graph token to runner commands, files or output' (
+    $catalogCalls -notmatch 'offline-token' -and $FixtureExportCatalogText -notmatch 'offline-token|accessToken|Authorization') "$catalogCalls | $FixtureExportCatalogText"
+
+Reset-ProjectionFixture 'source-projection-catalog'
+Capture { & (Join-Path $root 'scripts\Sync-ClaudeAccess.ps1') -ApimName apim-p84 -ResourceGroup rg-p84 -Store projection -User user@example.invalid }
+Assert 'attended targeted sync passes discovered catalog to a user-scoped schema-v3 export' (
+    -not $CapturedError -and $FixtureExportedSnapshot.scope -eq 'user' -and
+    $FixtureExportedSnapshot.records[0].schemaVersion -eq 3 -and
+    ($FixtureCalls -join "`n") -match '--read-access-catalog') "$CapturedError | $($FixtureCalls -join ' | ')"
+
+Reset-ProjectionFixture 'source-projection-catalog-malformed'
+Capture { & (Join-Path $root 'scripts\Sync-ClaudeAccess.ps1') -ApimName apim-p84 -ResourceGroup rg-p84 -Store projection }
+Assert 'a published malformed catalog cannot silently fall back to legacy or apply a snapshot' (
+    $CapturedError -match 'catalog' -and
+    @($FixtureCalls | Where-Object { $_ -like 'pwsh *Sync-ClaudeProjection.ps1*' -or $_ -match 'apply-projection\.mjs .*--snapshot' }).Count -eq 0) "$CapturedError | $($FixtureCalls -join ' | ')"
+
+Reset-ProjectionFixture 'source-projection-catalog'
+Capture { & (Join-Path $root 'scripts\Sync-ClaudeAccess.ps1') -ApimName apim-p84 -ResourceGroup rg-p84 -Store projection -WhatIf }
+Assert 'catalog WhatIf discovers and resolves through the runner but performs no entitlement apply' (
+    -not $CapturedError -and ($FixtureCalls -join "`n") -match '--read-access-catalog' -and
+    ($FixtureCalls -join "`n") -notmatch 'apply-projection\.mjs .*--snapshot') "$CapturedError | $($FixtureCalls -join ' | ')"
 
 Reset-ProjectionFixture 'apply-excluded'
 Capture { & (Join-Path $root 'scripts\Sync-ClaudeAccess.ps1') -ApimName apim-p84 -ResourceGroup rg-p84 -Store projection 6>&1 }

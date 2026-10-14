@@ -35,6 +35,7 @@ param(
     [string]$PremiumGroup = 'claude-code-premium',
 
     [string]$ConfigPath,
+    [string]$AccessCatalogPath,
 
     # Business unit groups, as bu-registry records them: id=group-name, in
     # precedence order. Prefer -ApimName and -ResourceGroup instead, which read
@@ -135,6 +136,7 @@ function Resolve-ClaudeProjectionTargetRecord {
         $group = Get-ClaudeGraphGroup -GroupName $spec.Group -Token $Token
         if ($group) { $groupSpecs.Add([pscustomobject]@{ Kind=$spec.Kind; Id=$spec.Id; GroupId=[string]$group.id }) }
     }
+
     foreach ($u in @($Units)) {
         $group = Get-ClaudeGraphGroup -GroupName $u.Group -Token $Token
         if ($group) { $groupSpecs.Add([pscustomobject]@{ Kind='bu'; Id=$u.Id; GroupId=[string]$group.id }) }
@@ -153,6 +155,48 @@ function Resolve-ClaudeProjectionTargetRecord {
         if ($spec.Count -and $memberships.Contains($spec[0].GroupId)) { $businessUnit = [string]$u.Id; break }
     }
     return [pscustomobject]@{ Oid = $UserObjectId; Name = $UserObjectId; Tier = $tier; BusinessUnit = $businessUnit }
+}
+
+function Invoke-ClaudeProjectionCatalogValidation {
+    param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$TenantId)
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw 'Access catalog discovery returned no readable catalog file.'
+    }
+    $cli = Join-Path (Split-Path $PSScriptRoot -Parent) 'sync\src\administer-access-catalog.mjs'
+    $raw = @(& node $cli --catalog $Path --tenant $TenantId --validate-only 2>&1)
+    $code = $LASTEXITCODE
+    $line = @($raw | ForEach-Object { [string]$_ } | Where-Object { $_.TrimStart().StartsWith('{') }) | Select-Object -Last 1
+    $result = if ($line) { $line | ConvertFrom-Json } else { $null }
+    if ($code -ne 0 -or -not $result -or $result.ok -ne $true) {
+        throw 'The discovered access catalog is malformed or belongs to another tenant. Nothing was exported.'
+    }
+}
+
+function Invoke-ClaudeProjectionCatalogMaterializer {
+    param(
+        [Parameter(Mandatory)][string]$CatalogPath,
+        [Parameter(Mandatory)][string]$TenantId,
+        [Parameter(Mandatory)][object[]]$ProfileGroups,
+        [Parameter(Mandatory)][object[]]$BusinessUnits
+    )
+    $resolutionPath = Join-Path ([IO.Path]::GetTempPath()) ('claude-catalog-resolution-' + [guid]::NewGuid().ToString('N') + '.json')
+    try {
+        $resolution = [ordered]@{ profileGroups = @($ProfileGroups); businessUnits = @($BusinessUnits) }
+        [IO.File]::WriteAllText($resolutionPath, ($resolution | ConvertTo-Json -Depth 10), (New-Object Text.UTF8Encoding($false)))
+        $cli = Join-Path (Split-Path $PSScriptRoot -Parent) 'sync\src\materialize-access-catalog.mjs'
+        $raw = @(& node $cli --catalog $CatalogPath --resolution $resolutionPath --tenant $TenantId 2>&1)
+        $code = $LASTEXITCODE
+        $line = @($raw | ForEach-Object { [string]$_ } | Where-Object { $_.TrimStart().StartsWith('{') }) | Select-Object -Last 1
+        $result = if ($line) { $line | ConvertFrom-Json } else { $null }
+        if ($code -ne 0 -or -not $result -or $result.ok -ne $true) {
+            $detail = if ($result -and $result.error) { [string]$result.error } else { 'materializer returned no valid summary' }
+            throw "Access catalog snapshot materialization failed: $detail"
+        }
+        return @($result.records)
+    }
+    finally {
+        Remove-Item -LiteralPath $resolutionPath -Force -ErrorAction SilentlyContinue
+    }
 }
 
 # ---------------------------------------------------------------- config file
@@ -199,12 +243,72 @@ Ok 'Graph token acquired (export only - Cosmos is not contacted)'
 
 # ---------------------------------------------------------------- 2. resolve
 $units = @(Get-ClaudeProjectionUnitRegistry -BusinessUnitGroups $BusinessUnitGroups -ApimName $ApimName -ResourceGroup $ResourceGroup)
+$accessCatalog = $null
+if ($AccessCatalogPath) {
+    Invoke-ClaudeProjectionCatalogValidation -Path $AccessCatalogPath -TenantId $TenantId
+    $accessCatalog = Get-Content -LiteralPath $AccessCatalogPath -Raw | ConvertFrom-Json
+    Ok 'validated the published access catalog returned by the private runner'
+}
 Step 'Reading group membership'
 $scanStarted = [DateTimeOffset]::UtcNow
 $byOid = @{}
 $targetUserOid = $null
 
-if ($User) {
+if ($accessCatalog -and $User) {
+    $targetUserOid = Resolve-ClaudeProjectionUserObjectId -Identity $User -Token $graphToken
+    $profileSpecs = [Collections.Generic.List[object]]::new()
+    foreach ($profile in @($accessCatalog.profiles | Where-Object { $_.enabled -eq $true })) {
+        $group = Get-ClaudeGraphGroup -GroupName ([string]$profile.groupObjectId) -Token $graphToken
+        if (-not $group) { throw "Configured access group '$($profile.groupObjectId)' for profile '$($profile.id)' was not found." }
+        $profileSpecs.Add([pscustomobject]@{ Profile=$profile; GroupId=[string]$group.id })
+    }
+    $unitSpecs = [Collections.Generic.List[object]]::new()
+    foreach ($unit in $units) {
+        $group = Get-ClaudeGraphGroup -GroupName $unit.Group -Token $graphToken
+        if ($group) { $unitSpecs.Add([pscustomobject]@{ Unit=$unit; GroupId=[string]$group.id }) }
+    }
+    $memberships = Invoke-ClaudeProjectionCheckMemberGroups -UserObjectId $targetUserOid `
+        -GroupIds @($profileSpecs.GroupId + $unitSpecs.GroupId) -Token $graphToken
+    $profileGroups = @($profileSpecs | ForEach-Object {
+        [ordered]@{
+            groupObjectId = $_.GroupId
+            members = @($(if ($memberships.Contains($_.GroupId)) { [ordered]@{ oid=$targetUserOid; name=$targetUserOid } }))
+        }
+    })
+    $businessUnits = @($unitSpecs | ForEach-Object {
+        [ordered]@{
+            id = [string]$_.Unit.Id
+            members = @($(if ($memberships.Contains($_.GroupId)) { [ordered]@{ oid=$targetUserOid; name=$targetUserOid } }))
+        }
+    })
+    $resolved = @(Invoke-ClaudeProjectionCatalogMaterializer -CatalogPath $AccessCatalogPath -TenantId $TenantId -ProfileGroups $profileGroups -BusinessUnits $businessUnits)
+    Write-Host ("  {0,-10} {1,-32} {2} record(s)" -f 'user', $targetUserOid, $resolved.Count)
+}
+elseif ($accessCatalog) {
+    $profileGroups = @()
+    foreach ($profile in @($accessCatalog.profiles | Where-Object { $_.enabled -eq $true })) {
+        $members = @(Get-GroupMemberOids -GroupName ([string]$profile.groupObjectId) -Token $graphToken -FailIfMissing)
+        Write-Host ("  {0,-22} {1,-36} {2} member(s)" -f $profile.id, $profile.groupObjectId, $members.Count)
+        $profileGroups += [ordered]@{
+            groupObjectId = [string]$profile.groupObjectId
+            members = @($members | ForEach-Object { [ordered]@{ oid=[string]$_.Oid; name=[string]$_.Name } })
+        }
+    }
+    $businessUnits = @()
+    if ($units.Count) {
+        Step 'Reading business unit membership'
+        foreach ($unit in $units) {
+            $members = @(Get-GroupMemberOids -GroupName $unit.Group -Token $graphToken)
+            Write-Host ("  {0,-22} {1,-30} {2} member(s)" -f $unit.Id, $unit.Group, $members.Count)
+            $businessUnits += [ordered]@{
+                id = [string]$unit.Id
+                members = @($members | ForEach-Object { [ordered]@{ oid=[string]$_.Oid; name=[string]$_.Name } })
+            }
+        }
+    }
+    $resolved = @(Invoke-ClaudeProjectionCatalogMaterializer -CatalogPath $AccessCatalogPath -TenantId $TenantId -ProfileGroups $profileGroups -BusinessUnits $businessUnits)
+}
+elseif ($User) {
     $targetUserOid = Resolve-ClaudeProjectionUserObjectId -Identity $User -Token $graphToken
     $targetRecord = Resolve-ClaudeProjectionTargetRecord -UserObjectId $targetUserOid -Token $graphToken -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -Units $units
     if ($targetRecord) { $byOid[$targetRecord.Oid] = $targetRecord }
@@ -239,7 +343,7 @@ if ($User) {
     }
 }
 
-$resolved = @($byOid.Values)
+if (-not $accessCatalog) { $resolved = @($byOid.Values) }
 Write-Host ''
 Ok "$($resolved.Count) entitled identity(ies) resolved"
 $generation = [guid]::NewGuid().ToString()
@@ -249,6 +353,11 @@ if ($expiresAt -le [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) {
     throw 'Directory scan outlived the snapshot apply-by limit. Nothing exported; resolve again. Remedy: rerun this command; a directory whose scan takes longer than -MaxAgeSeconds (at most 7200) is synced by the optional job, scripts/Deploy-ClaudeProjectionRenewal.ps1.'
 }
 Step 'Writing the snapshot'
+$snapshotRecords = if ($accessCatalog) {
+    @($resolved)
+} else {
+    @($resolved | ForEach-Object { [ordered]@{ oid = $_.Oid; tier = $_.Tier; businessUnit = $_.BusinessUnit } })
+}
 $snapshot = [ordered]@{
     kind           = 'claude-entitlement-snapshot'
     tenantId       = $TenantId
@@ -258,7 +367,7 @@ $snapshot = [ordered]@{
     expiresAt      = $expiresAt
     mappingVersion = [int][double]::Parse((Get-Date -UFormat %s))
     groups         = [ordered]@{ standard = $StandardGroup; premium = $PremiumGroup; businessUnits = @($BusinessUnitGroups) }
-    records        = @($resolved | ForEach-Object { [ordered]@{ oid = $_.Oid; tier = $_.Tier; businessUnit = $_.BusinessUnit } })
+    records        = @($snapshotRecords)
 }
 if ($targetUserOid) {
     $snapshot.scope = 'user'

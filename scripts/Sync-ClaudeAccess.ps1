@@ -79,9 +79,34 @@ function Invoke-ClaudeProjectionAccessSync {
     $null = New-Item -ItemType Directory -Path $work -Force
     try {
         $snapshot = Join-Path $work 'projection-snapshot.json'
+        $catalogPath = Join-Path $work 'access-catalog.json'
+        $runner = "aci-projtest-$prefix"
+        $null = Start-ClaudeProjectionRunner -ResourceGroup $ResourceGroup -Name $runner
+        $archive = Join-Path $work 'sync-package.tgz'
+        $null = New-ClaudeProjectionSyncArchive -Path $archive -Root (Split-Path $PSScriptRoot -Parent)
+        $null = Send-RunnerFile -ResourceGroup $ResourceGroup -Name $runner -Path $archive -Destination '/work/sync-package.tgz'
+        $null = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $runner -Command 'tar -xzf /work/sync-package.tgz -C /work'
+        $nodeModules = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $runner -Command "node -e console.log(require('fs').existsSync('/work/sync/node_modules')?'present':'absent')"
+        if (($nodeModules -split '\r?\n' | Select-Object -Last 1).Trim() -ne 'present') {
+            $null = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $runner -Command 'npm --prefix /work/sync ci --omit=dev --ignore-scripts --no-audit --fund=false'
+        }
+        $catalogRaw = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $runner -Command (
+            "node /work/sync/src/apply-projection.mjs --cosmos https://cosmos-$prefix.documents.azure.com:443/ --tenant $tenantId --read-access-catalog"
+        )
+        $catalogResult = ConvertFrom-ClaudeRunnerResult -RawOutput $catalogRaw -Step 'access catalog discovery'
+        if ($catalogResult.mode -ne 'access-catalog' -or $catalogResult.found -isnot [bool]) {
+            throw 'Access catalog discovery returned an invalid summary; legacy fallback was refused.'
+        }
+        if ($catalogResult.found) {
+            if (-not $catalogResult.PSObject.Properties['catalog'] -or -not $catalogResult.catalog) {
+                throw 'Access catalog discovery reported a catalog without returning it; legacy fallback was refused.'
+            }
+            [IO.File]::WriteAllText($catalogPath, ($catalogResult.catalog | ConvertTo-Json -Depth 12), (New-Object Text.UTF8Encoding($false)))
+        }
         $exportArgs = @('-NoProfile','-File',(Join-Path $PSScriptRoot 'Sync-ClaudeProjection.ps1'),
             '-Account',"cosmos-$prefix",'-TenantId',$tenantId,'-StandardGroup',$StandardGroup,'-PremiumGroup',$PremiumGroup,
             '-ApimName',$ApimName,'-ResourceGroup',$ResourceGroup,'-ExportPath',$snapshot)
+        if ($catalogResult.found) { $exportArgs += @('-AccessCatalogPath',$catalogPath) }
         if ($User) { $exportArgs += @('-User',$User) }
         $exportOutput = & pwsh @exportArgs 2>&1
         if ($LASTEXITCODE -ne 0) { throw "Projection snapshot export failed (exit $LASTEXITCODE): $(($exportOutput | Select-Object -Last 12) -join "`n")" }
@@ -94,7 +119,7 @@ function Invoke-ClaudeProjectionAccessSync {
             $targetSnapshotRecord = @($snap.records | Where-Object { [string]$_.oid -eq $targetUserOid } | Select-Object -First 1)
         }
         if ($WhatIf) {
-            Write-Host "  [WhatIf] Projection snapshot exported to $snapshot; runner was not started and Cosmos was not changed." -ForegroundColor DarkGray
+            Write-Host "  [WhatIf] Projection catalog discovery and snapshot export completed; no entitlement write was applied." -ForegroundColor DarkGray
             if ($targetUserOid) {
                 $publishedTier = if ($targetSnapshotRecord -and $targetSnapshotRecord.tier) { [string]$targetSnapshotRecord.tier } else { 'none' }
                 Write-Host "Developer tier as written: $publishedTier" -ForegroundColor Green
@@ -103,17 +128,7 @@ function Invoke-ClaudeProjectionAccessSync {
             }
             return
         }
-        $runner = "aci-projtest-$prefix"
-        $null = Start-ClaudeProjectionRunner -ResourceGroup $ResourceGroup -Name $runner
-        $archive = Join-Path $work 'sync-package.tgz'
-        $null = New-ClaudeProjectionSyncArchive -Path $archive -Root (Split-Path $PSScriptRoot -Parent)
-        $null = Send-RunnerFile -ResourceGroup $ResourceGroup -Name $runner -Path $archive -Destination '/work/sync-package.tgz'
-        $null = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $runner -Command 'tar -xzf /work/sync-package.tgz -C /work'
         $null = Send-RunnerFile -ResourceGroup $ResourceGroup -Name $runner -Path $snapshot -Destination $remoteSnapshot -Deadline (Get-RunnerFileDeadline -Path $snapshot)
-        $nodeModules = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $runner -Command "node -e console.log(require('fs').existsSync('/work/sync/node_modules')?'present':'absent')"
-        if (($nodeModules -split '\r?\n' | Select-Object -Last 1).Trim() -ne 'present') {
-            $null = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $runner -Command 'npm --prefix /work/sync ci --omit=dev --ignore-scripts --no-audit --fund=false'
-        }
         $command = "node /work/sync/src/apply-projection.mjs --cosmos https://cosmos-$prefix.documents.azure.com:443/ --tenant $tenantId --account-resource-id $accountResourceId --snapshot $remoteSnapshot"
         if ($targetUserOid) { $command += " --user $targetUserOid" }
         if ($AllowEmpty) { $command += ' --allow-empty' }
