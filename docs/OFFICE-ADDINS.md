@@ -75,5 +75,5 @@ are not production manifests:
 
 - [Anthropic: third-party platforms](https://claude.com/docs/office-agents/third-party-platforms)
 - [Microsoft Learn: APIM CORS policy](https://learn.microsoft.com/en-us/azure/api-management/cors-policy)
-- [Microsoft Learn: nested app authentication](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-on-behalf-of-flow)
+- [Microsoft Learn: nested app authentication](https://learn.microsoft.com/en-us/office/dev/add-ins/develop/enable-nested-app-authentication-in-your-add-in)
 - [ADR-0061](adr/0061-office-add-in-gateway-cors.md)

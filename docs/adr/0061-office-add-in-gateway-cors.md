@@ -56,3 +56,9 @@ app client ID. Outlook remains a separate manifest and still requires the
 Microsoft Graph delegated permissions and tenant-wide consent documented by
 Anthropic. The browser origin is intentionally narrow; other browser clients
 are not admitted by this packet.
+
+The disposable BasicV2 gateway proof on 2026-10-14 answered the Office
+preflight with the requested method and headers, added the Office origin to a
+401 token-validation error and a policy-generated 403 model refusal, and kept
+the origin on non-streaming and SSE 200 responses. No explicit outbound or
+`on-error` CORS header is required.

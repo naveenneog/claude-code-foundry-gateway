@@ -2,6 +2,7 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $policyPath = Join-Path $root 'infra\policy.xml'
 $text = Get-Content -LiteralPath $policyPath -Raw
+$probeText = Get-Content -LiteralPath (Join-Path $root 'scripts\Test-ClaudeOfficeGateway.ps1') -Raw
 $fail = 0
 
 function Assert($label, $condition, $detail = '') {
@@ -42,6 +43,11 @@ Assert 'gateway response headers are explicitly exposed' ($missingExposed.Count 
 Assert 'the existing messages operation remains POST /v1/messages' ((Get-Content (Join-Path $root 'infra\main.bicep') -Raw) -match "urlTemplate:\s+'/v1/messages'")
 Assert 'the policy still validates Entra tokens' ($text -match 'validate-azure-ad-token')
 Assert 'the policy still forwards with managed identity' ($text -match 'authentication-managed-identity')
+Assert 'the live probe checks the allowed method response' ($probeText -match "Access-Control-Allow-Methods")
+Assert 'the live probe checks every requested header response' (
+    $probeText -match "Access-Control-Allow-Headers" -and
+    $probeText -match "preflight did not allow requested header"
+)
 
 Write-Host ''
 if ($fail) { Write-Host "$fail check(s) failed." -ForegroundColor Red; exit 1 }
