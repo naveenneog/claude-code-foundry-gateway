@@ -65,7 +65,7 @@ function Run-Suite($suite) {
             # Unit tests keep the short timeout that catches a mutant that hangs. These files start a process per
             # case; Node 22 (the hosted runner) applies the timeout to a whole file, so they run second with room
             # for that, and --test-force-exit still stops a mutant that leaves a handle open.
-            $cli = @('apply-catalog-cli.test.mjs', 'apply-projection-cli.test.mjs', 'check-admission-cli.test.mjs', 'job-settings.test.mjs', 'load.test.mjs')
+            $cli = @('access-catalog-administration.test.mjs', 'apply-catalog-cli.test.mjs', 'apply-projection-cli.test.mjs', 'check-admission-cli.test.mjs', 'job-settings.test.mjs', 'load.test.mjs')
             $tests = @(Get-ChildItem -LiteralPath 'resolver/test', 'sync/test' -Filter '*.test.mjs' -File)
             $misplaced = @($tests | Where-Object {
                 ($_.Name -in $cli) -ne ([IO.File]::ReadAllText($_.FullName) -match "from\s+['""](?:node:)?child_process['""]")
