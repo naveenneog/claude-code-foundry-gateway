@@ -125,6 +125,31 @@ in `claude-desktop.managed-settings.json`, `claude-desktop.reg` and
 [ADR-0027](adr/0027-claude-desktop-sign-in-choice.md) records what each choice
 needs: an Entra public-client app, consent, and the audience the gateway accepts.
 
+For a P116 access-catalog profile, generate one platform's complete Desktop
+policy and its catalog-linked manifest:
+
+```powershell
+.\scripts\New-ClaudeDesktopAccessProfile.ps1 `
+  -CatalogPath .\access-catalog.json `
+  -ProfileId developer-code `
+  -Platform Windows `
+  -ConfigPath .\onboarding\claude-gateway.json `
+  -OutputPath .\policy-developer-code
+```
+
+The command validates through `sync/src/access-catalog.mjs`, then reuses
+`New-ClaudeCodePolicy.ps1` and its existing Desktop serializers. `chat`, `cowork`
+and `code` become explicit `chatTabEnabled`, `coworkTabEnabled` and
+`isClaudeCodeForDesktopEnabled` booleans. `design`, model families and
+connectors remain in `claude-desktop.profile.json`: Design has no dedicated
+documented 3P setting, M365 continues through its connector/admin deployment
+path, and model families remain enforced by the gateway rather than by an
+invented client key. `-WhatIf` validates and names both outputs without writing.
+
+Sources retrieved 2026-10-14:
+[Claude Desktop 3P configuration reference](https://claude.com/docs/third-party/claude-desktop/configuration)
+and [Claude Desktop 3P feature matrix](https://claude.com/docs/third-party/claude-desktop/feature-matrix).
+
 A fleet runs mixed Desktop releases, so the generator writes the Entra sign-in in
 the original spelling by default: `inferenceCredentialKind: interactive`,
 `inferenceGatewayOidc`, and `inferenceGatewayOidcAuthFlow: broker` for the broker

@@ -78,6 +78,9 @@ param(
     # Left unset, a tier gets everything its plan allows.
     [ValidateSet('default', 'chat-only', 'no-cowork')]
     [string]$DesktopTabs = 'default',
+    [Nullable[bool]]$DesktopChatEnabled,
+    [Nullable[bool]]$DesktopCoworkEnabled,
+    [Nullable[bool]]$DesktopCodeEnabled,
     [ValidateSet('none', 'basic', 'strict')]
     [string]$Hardening = 'basic',
 
@@ -307,8 +310,24 @@ else {
 $desktopSignIn = Get-ClaudeDesktopSignIn -Config $cfg
 $desktop = New-ClaudeDesktopSettings -GatewayUrl $GatewayUrl -Models $AvailableModels `
     -HelperPath $DesktopCredentialHelper -DesktopSignIn $desktopSignIn -NoCowork:($DesktopTabs -ne 'default') -KeySpelling $DesktopKeySpelling
-$desktop['chatTabEnabled'] = $true
-$desktop['isClaudeCodeForDesktopEnabled'] = ($DesktopTabs -ne 'chat-only')
+$explicitDesktopControls = @(
+    'DesktopChatEnabled',
+    'DesktopCoworkEnabled',
+    'DesktopCodeEnabled'
+)
+$boundDesktopControls = @($explicitDesktopControls | Where-Object { $PSBoundParameters.ContainsKey($_) })
+if ($boundDesktopControls.Count -and $boundDesktopControls.Count -ne $explicitDesktopControls.Count) {
+    throw 'DesktopChatEnabled, DesktopCoworkEnabled and DesktopCodeEnabled must be supplied together.'
+}
+if ($boundDesktopControls.Count) {
+    $desktop['chatTabEnabled'] = [bool]$DesktopChatEnabled
+    $desktop['coworkTabEnabled'] = [bool]$DesktopCoworkEnabled
+    $desktop['isClaudeCodeForDesktopEnabled'] = [bool]$DesktopCodeEnabled
+}
+else {
+    $desktop['chatTabEnabled'] = $true
+    $desktop['isClaudeCodeForDesktopEnabled'] = ($DesktopTabs -ne 'chat-only')
+}
 if ($desktopSignIn.kind -eq 'helper-script') {
     $desktop['inferenceCredentialHelperWindows'] = $DesktopCredentialHelperWindows
 }
