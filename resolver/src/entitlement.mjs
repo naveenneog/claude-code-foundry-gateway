@@ -17,6 +17,11 @@
  * be silently unenforced, so it is refused here where it is visible.
  */
 export const KNOWN_TIERS = ['standard', 'premium'];
+const KNOWN_CAPABILITIES = ['code', 'cowork', 'chat', 'design'];
+const KNOWN_MODEL_FAMILIES = ['haiku', 'sonnet', 'opus', 'fable', 'mythos'];
+const KNOWN_CONNECTORS = ['m365'];
+const CANONICAL_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const SHA256_ID = /^sha256:[0-9a-f]{64}$/;
 
 /**
  * Turn a stored document into the record the gateway caches.
@@ -77,10 +82,33 @@ export function toEntitlement(doc, { tenantId, now = new Date() } = {}) {
     }
   }
 
+  if (doc.schemaVersion === 3) {
+    const invalidField = invalidExpandedField(doc);
+    if (invalidField) {
+      return {
+        ok: false,
+        status: 409,
+        reason: `schema version 3 record is invalid: ${invalidField}`,
+      };
+    }
+  }
+
+  const expanded = doc.schemaVersion === 3 ? {
+    schemaVersion: 3,
+    planId: doc.planId,
+    profileId: doc.profileId,
+    capabilities: doc.capabilities,
+    modelFamilies: doc.modelFamilies,
+    connectors: doc.connectors,
+    catalogVersion: doc.catalogVersion,
+    profileHash: doc.profileHash,
+  } : {};
+
   return {
     ok: true,
     record: {
       oid: doc.oid ?? doc.id,
+      ...expanded,
       tier: doc.tier,
       // Empty rather than absent, so an unassigned developer reads the same
       // from either entitlement source and the policy's coalesce has something
@@ -93,6 +121,27 @@ export function toEntitlement(doc, { tenantId, now = new Date() } = {}) {
       reconciliationGeneration: doc.reconciliationGeneration,
     },
   };
+}
+
+function invalidExpandedField(doc) {
+  if (!isCanonicalId(doc.planId)) return 'planId';
+  if (!isCanonicalId(doc.profileId)) return 'profileId';
+  if (!isUniqueSubset(doc.capabilities, KNOWN_CAPABILITIES)) return 'capabilities';
+  if (!isUniqueSubset(doc.modelFamilies, KNOWN_MODEL_FAMILIES)) return 'modelFamilies';
+  if (!isUniqueSubset(doc.connectors, KNOWN_CONNECTORS)) return 'connectors';
+  if (!SHA256_ID.test(doc.catalogVersion)) return 'catalogVersion';
+  if (!SHA256_ID.test(doc.profileHash)) return 'profileHash';
+  return '';
+}
+
+function isCanonicalId(value) {
+  return typeof value === 'string' && CANONICAL_ID.test(value);
+}
+
+function isUniqueSubset(value, knownValues) {
+  return Array.isArray(value) &&
+    new Set(value).size === value.length &&
+    value.every(item => knownValues.includes(item));
 }
 
 /**
