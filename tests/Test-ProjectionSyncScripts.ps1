@@ -41,7 +41,7 @@ Capture { Confirm-ClaudeProjectionResolverServicePrincipal -AppId 'not-a-guid' }
 Assert 'invalid resolver app id is rejected before az' ($CapturedError -match 'GUID' -and $calls.Count -eq 0) $CapturedError
 
 function Invoke-TargetedExportFixture {
-    param([string]$User, [string[]]$BusinessUnitGroups = @(), [switch]$WhatIf, [string]$AccessCatalogPath, [switch]$MissingCatalogGroup)
+    param([AllowEmptyString()][string]$User, [string[]]$BusinessUnitGroups = @(), [switch]$WhatIf, [string]$AccessCatalogPath, [switch]$MissingCatalogGroup)
     $work = $script:p97SyncWork
     New-Item -ItemType Directory -Force -Path $work | Out-Null
     $snapshot = Join-Path $work ("snapshot-$([guid]::NewGuid().ToString('N')).json")
@@ -80,6 +80,12 @@ function Invoke-TargetedExportFixture {
             if ($User -eq 'both@contoso.com') { $matches = @('10000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002','20000000-0000-4000-8000-000000000001') }
             return [pscustomobject]@{ value = $matches }
         }
+        if ([string]$Uri -match '/groups/(10000000-0000-4000-8000-00000000000[12])/transitiveMembers/microsoft\.graph\.user') {
+            return [pscustomobject]@{ value = [object[]]@([pscustomobject]@{ id='30000000-0000-4000-8000-000000000001'; displayName='Fixture User'; userPrincipalName='fixture@example.invalid' }) }
+        }
+        if ([string]$Uri -match '/groups/(10000000-0000-4000-8000-00000000000[12])/transitiveMembers/microsoft\.graph\.servicePrincipal') {
+            return [pscustomobject]@{ value = @() }
+        }
         throw "unexpected HTTP $Method $Uri"
     }
     $arguments = @{
@@ -89,9 +95,9 @@ function Invoke-TargetedExportFixture {
         PremiumGroup = 'claude-code-premium'
         BusinessUnitGroups = $BusinessUnitGroups
         ExportPath = $snapshot
-        User = $User
         WhatIf = $WhatIf
     }
+    if ($User) { $arguments.User = $User }
     if ($AccessCatalogPath) { $arguments.AccessCatalogPath = $AccessCatalogPath }
     & (Join-Path $root 'scripts\Sync-ClaudeProjection.ps1') @arguments | Out-Null
     $written = Test-Path -LiteralPath $snapshot
@@ -160,6 +166,43 @@ Assert 'attended targeted catalog export writes one complete highest-priority sc
     $catalogTarget.Snapshot.records[0].businessUnit -eq 'sales' -and
     $catalogTarget.Snapshot.records[0].modelFamilies[0] -eq 'opus' -and
     $catalogTarget.Snapshot.records[0].connectors[0] -eq 'm365') ($catalogTarget.Snapshot | ConvertTo-Json -Depth 10 -Compress)
+
+$singleCatalogPath = Join-Path $script:p97SyncWork 'access-catalog-single.json'
+$singleCatalog = $catalog | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+$singleCatalog.profiles = @($singleCatalog.profiles[0])
+[IO.File]::WriteAllText($singleCatalogPath, ($singleCatalog | ConvertTo-Json -Depth 10))
+Capture { Invoke-TargetedExportFixture -User 'both@contoso.com' -BusinessUnitGroups @('sales=Unit1') -AccessCatalogPath $singleCatalogPath }
+$singleTarget = $CapturedResult
+Assert 'one enabled profile and one BU send two distinct group ids in targeted catalog sync' (
+    -not $CapturedError -and $singleTarget -and
+    (@($singleTarget.Batches) | Measure-Object -Sum).Sum -eq 2 -and
+    $singleTarget.Snapshot.records[0].profileId -eq 'profile-standard' -and
+    $singleTarget.Snapshot.records[0].businessUnit -eq 'sales') "$CapturedError | batches $($singleTarget.Batches -join ',')"
+
+Capture { Invoke-TargetedExportFixture -User 'both@contoso.com' -AccessCatalogPath $singleCatalogPath }
+$targetNoUnits = $CapturedResult
+Assert 'targeted catalog sync accepts no business-unit groups' (
+    -not $CapturedError -and $targetNoUnits -and
+    $targetNoUnits.Snapshot.records[0].profileId -eq 'profile-standard' -and
+    -not $targetNoUnits.Snapshot.records[0].businessUnit) "$CapturedError | $($targetNoUnits.Snapshot | ConvertTo-Json -Depth 10 -Compress)"
+
+Capture { Invoke-TargetedExportFixture -User '' -AccessCatalogPath $catalogPath }
+$fullNoUnits = $CapturedResult
+Assert 'full catalog sync accepts no business-unit groups' (
+    -not $CapturedError -and $fullNoUnits -and
+    -not $fullNoUnits.Snapshot.PSObject.Properties['scope'] -and
+    $fullNoUnits.Snapshot.groups.businessUnits.Count -eq 0) "$CapturedError | calls $($fullNoUnits.Calls -join ' || ') | $($fullNoUnits.Snapshot | ConvertTo-Json -Depth 10 -Compress)"
+
+$disabledCatalogPath = Join-Path $script:p97SyncWork 'access-catalog-disabled.json'
+$disabledCatalog = $catalog | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+foreach ($profile in @($disabledCatalog.profiles)) { $profile.enabled = $false }
+[IO.File]::WriteAllText($disabledCatalogPath, ($disabledCatalog | ConvertTo-Json -Depth 10))
+Capture { Invoke-TargetedExportFixture -User '' -AccessCatalogPath $disabledCatalogPath }
+$disabledFull = $CapturedResult
+Assert 'full catalog sync accepts zero enabled profiles and zero business units' (
+    -not $CapturedError -and $disabledFull -and
+    -not $disabledFull.Snapshot.PSObject.Properties['scope'] -and @($disabledFull.Snapshot.records).Count -eq 0) "$CapturedError | $($disabledFull.Snapshot | ConvertTo-Json -Depth 10 -Compress)"
+
 $catalogAbsent = $null
 Capture { $catalogAbsent = Invoke-TargetedExportFixture -User 'both@contoso.com' -AccessCatalogPath $catalogPath -MissingCatalogGroup }
 Assert 'an absent configured catalog profile group stops snapshot export before any write' (

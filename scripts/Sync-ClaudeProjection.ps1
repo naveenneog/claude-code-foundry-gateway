@@ -176,8 +176,8 @@ function Invoke-ClaudeProjectionCatalogMaterializer {
     param(
         [Parameter(Mandatory)][string]$CatalogPath,
         [Parameter(Mandatory)][string]$TenantId,
-        [Parameter(Mandatory)][object[]]$ProfileGroups,
-        [Parameter(Mandatory)][object[]]$BusinessUnits
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$ProfileGroups,
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$BusinessUnits
     )
     $resolutionPath = Join-Path ([IO.Path]::GetTempPath()) ('claude-catalog-resolution-' + [guid]::NewGuid().ToString('N') + '.json')
     try {
@@ -267,8 +267,11 @@ if ($accessCatalog -and $User) {
         $group = Get-ClaudeGraphGroup -GroupName $unit.Group -Token $graphToken
         if ($group) { $unitSpecs.Add([pscustomobject]@{ Unit=$unit; GroupId=[string]$group.id }) }
     }
-    $memberships = Invoke-ClaudeProjectionCheckMemberGroups -UserObjectId $targetUserOid `
-        -GroupIds @($profileSpecs.GroupId + $unitSpecs.GroupId) -Token $graphToken
+    $targetGroupIds = @(@($profileSpecs.GroupId) + @($unitSpecs.GroupId) | Where-Object { $_ })
+    $memberships = if ($targetGroupIds.Count) {
+        Invoke-ClaudeProjectionCheckMemberGroups -UserObjectId $targetUserOid -GroupIds $targetGroupIds -Token $graphToken
+    }
+    else { [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase) }
     $profileGroups = @($profileSpecs | ForEach-Object {
         [ordered]@{
             groupObjectId = $_.GroupId
