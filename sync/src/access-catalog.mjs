@@ -8,6 +8,10 @@ const CONNECTORS = ['m365'];
 const COMPATIBILITY_TIERS = ['standard', 'premium'];
 
 const CATALOG_FIELDS = ['schemaVersion', 'tenantId', 'plans', 'profiles'];
+const CATALOG_DOCUMENT_FIELDS = [
+  'id', 'oid', 'type', ...CATALOG_FIELDS, 'catalogVersion', 'generatedAt',
+  '_etag', '_rid', '_self', '_attachments', '_ts',
+];
 const PLAN_FIELDS = ['id', 'name', 'enabled', 'nominalCredit', 'compatibilityTier'];
 const CREDIT_FIELDS = ['amount', 'currency', 'period', 'scope'];
 const PROFILE_FIELDS = [
@@ -82,32 +86,35 @@ export function hashAccessCatalog(catalog) {
 }
 
 export function normalizeAccessCatalogDocument(document, { tenantId } = {}) {
-  if (!isRecord(document)) throw new Error('access catalog must be one object');
+  if (!isRecord(document)) throw new Error('access catalog control document must be one object');
+  rejectUnknownFields(document, CATALOG_DOCUMENT_FIELDS, 'access catalog control document');
   const expectedTenant = typeof tenantId === 'string' ? tenantId.toLowerCase() : '';
-  if (expectedTenant) requireGuid(expectedTenant, 'expected tenantId');
-  const expectedId = expectedTenant ? `access-catalog::${expectedTenant}` : '';
-  if (document.type !== undefined && document.type !== 'access-catalog') {
+  requireGuid(expectedTenant, 'expected tenantId');
+  const expectedId = `access-catalog::${expectedTenant}`;
+  if (document.type !== 'access-catalog') {
     throw new Error(`access catalog control document type must be 'access-catalog'`);
   }
-  if (expectedId && document.id !== undefined && document.id !== expectedId) {
+  if (document.id !== expectedId) {
     throw new Error(`access catalog id does not match tenant ${expectedTenant}`);
   }
-  if (expectedId && document.oid !== undefined && document.oid !== expectedId) {
-    throw new Error(`access catalog partition does not match tenant ${expectedTenant}`);
+  if (document.oid !== expectedId) {
+    throw new Error(`access catalog oid partition does not match tenant ${expectedTenant}`);
+  }
+  if (typeof document.catalogVersion !== 'string') {
+    throw new Error('access catalog control document catalogVersion is required');
+  }
+  if (typeof document.generatedAt !== 'string' || !Number.isFinite(Date.parse(document.generatedAt))) {
+    throw new Error('access catalog control document generatedAt must be an ISO timestamp');
   }
 
   const publishedVersion = document.catalogVersion;
-  const catalog = { ...document };
-  for (const field of [
-    'id', 'oid', 'type', 'catalogVersion', 'generatedAt',
-    '_etag', '_rid', '_self', '_attachments', '_ts',
-  ]) delete catalog[field];
+  const catalog = Object.fromEntries(CATALOG_FIELDS.map((field) => [field, document[field]]));
   const canonical = canonicalizeAccessCatalog(catalog);
-  if (expectedTenant && canonical.tenantId !== expectedTenant) {
+  if (canonical.tenantId !== expectedTenant) {
     throw new Error(`access catalog is for tenant ${canonical.tenantId}, not ${expectedTenant}`);
   }
   const expectedVersion = `sha256:${hashAccessCatalog(canonical)}`;
-  if (publishedVersion !== undefined && publishedVersion !== expectedVersion) {
+  if (publishedVersion !== expectedVersion) {
     throw new Error('access catalog catalogVersion does not match its canonical hash');
   }
   return canonical;

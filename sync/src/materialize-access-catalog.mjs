@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { normalizeAccessCatalogDocument } from './access-catalog.mjs';
+import { canonicalizeAccessCatalog } from './access-catalog.mjs';
 import { mergeCatalogMembership } from './plan.mjs';
 
 const args = process.argv.slice(2);
@@ -15,7 +15,10 @@ try {
   if (!catalogPath || !resolutionPath || !tenantId) {
     throw new Error('--catalog, --resolution and --tenant are required');
   }
-  const catalog = normalizeAccessCatalogDocument(readJson(catalogPath), { tenantId });
+  const catalog = canonicalizeAccessCatalog(readJson(catalogPath));
+  if (catalog.tenantId !== tenantId) {
+    throw new Error('access catalog tenant does not match the requested tenant');
+  }
   const resolution = readJson(resolutionPath);
   if (!resolution || !Array.isArray(resolution.profileGroups) || !Array.isArray(resolution.businessUnits)) {
     throw new Error('catalog resolution must contain profileGroups and businessUnits arrays');

@@ -16,6 +16,7 @@ $mutations = @(
     @{ Name='Node status failures report success'; File='sync\src\apply-projection.mjs'; From='summary.ok = statusWrite.failed === 0;'; To='summary.ok = true;'; Suite=$rules }
     @{ Name='Node failed summary exits zero'; File='sync\src\apply-projection.mjs'; From='if (!summary.ok) process.exit(3);'; To=''; Suite=$rules }
     @{ Name='Node operation failures report success'; File='sync\src\apply-projection.mjs'; From='ok: !(writes.failed || deletes.failed), '; To=''; Suite=$rules }
+    @{ Name='catalog control envelope reaches raw catalog validation'; File='sync\src\access-catalog.mjs'; From='const catalog = Object.fromEntries(CATALOG_FIELDS.map((field) => [field, document[field]]));'; To='const catalog = { ...document };'; Suite=$node }
     @{ Name='generation is omitted from documents'; File='sync\src\plan.mjs'; From='reconciliationGeneration: reconciliation?.reconciliationGeneration,'; To=''; Suite=$node }
     @{ Name='renewal skips unchanged members'; File='sync\src\plan.mjs'; From='if (!refresh) continue;'; To='continue;'; Suite=$node }
     @{ Name='lease starts at apply instead of scan'; File='sync\src\plan.mjs'; From='Math.floor(start / 1000) + maxAgeSeconds'; To='Math.floor(now.getTime() / 1000) + maxAgeSeconds'; Suite=$node }

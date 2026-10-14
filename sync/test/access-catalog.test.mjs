@@ -343,4 +343,27 @@ test('a published control document normalizes to its validated tenant catalog an
     () => normalizeAccessCatalogDocument(document, { tenantId: '00000000-0000-4000-8000-000000000000' }),
     /tenant/i,
   );
+
+  for (const field of ['id', 'oid', 'type', 'catalogVersion', 'generatedAt']) {
+    const malformed = structuredClone(document);
+    delete malformed[field];
+    assert.throws(
+      () => normalizeAccessCatalogDocument(malformed, { tenantId: TENANT }),
+      new RegExp(`${field}|control document|envelope`, 'i'),
+      `missing ${field} must fail closed`,
+    );
+  }
+
+  const invalidTimestamp = structuredClone(document);
+  invalidTimestamp.generatedAt = 'not-a-timestamp';
+  assert.throws(
+    () => normalizeAccessCatalogDocument(invalidTimestamp, { tenantId: TENANT }),
+    /generatedAt|timestamp/i,
+  );
+
+  const unknownEnvelopeField = { ...document, unexpected: true };
+  assert.throws(
+    () => normalizeAccessCatalogDocument(unknownEnvelopeField, { tenantId: TENANT }),
+    /unknown field.*unexpected/i,
+  );
 });
