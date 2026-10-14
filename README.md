@@ -91,6 +91,40 @@ explains created, reused and optional resources.
 
 </details>
 
+## Example access catalog
+
+<details>
+
+<summary>Preview and publish the nine-plan, 47-profile catalog</summary>
+
+[`config/access-catalog.example.json`](config/access-catalog.example.json) is a
+deployable-format example. Its tenant ID and all 47 profile-group IDs are
+deliberately fake, valid GUIDs; replace every tenant and group ID before use.
+Publication is tenant-bound, so a real gateway refuses the fake tenant ID
+because it does not match the API Management managed-identity tenant.
+
+Priorities encode predictable precedence: the hundreds digit rises from
+Standard L1 through Power L3, and the remaining digits follow the documented
+profile order within a plan. The highest priority wins if memberships overlap,
+but profile-group membership should not normally overlap.
+
+```powershell
+$gateway = Get-Content .\onboarding\claude-gateway.json -Raw | ConvertFrom-Json
+.\scripts\Set-ClaudeAccessCatalog.ps1 -ResourceGroup $gateway.resourceGroup -ApimName $gateway.apimName -Path .\config\access-catalog.example.json -WhatIf
+.\scripts\Set-ClaudeAccessCatalog.ps1 -ResourceGroup $gateway.resourceGroup -ApimName $gateway.apimName -Path .\config\access-catalog.example.json
+```
+
+After publication, a successful scheduled sync automatically grants or removes
+the selected whole profile when Entra group membership changes. The optional
+scheduled job requires the U17 tenant-admin grant of Microsoft Graph
+application permission `GroupMember.Read.All`; without it, scheduled Graph
+reads remain blocked.
+
+`nominalCredit` is metadata; existing explicit P108 USD budgets remain the
+enforcement mechanism in P116.
+
+</details>
+
 ## Capacity and cost today
 
 <details>

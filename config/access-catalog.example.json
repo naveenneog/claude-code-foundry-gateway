@@ -1,0 +1,633 @@
+{
+  "schemaVersion": 1,
+  "tenantId": "00000000-0000-4000-8000-000000000116",
+  "plans": [
+    {
+      "id": "standard-l1",
+      "name": "Standard L1 - $50 nominal monthly credit",
+      "enabled": true,
+      "nominalCredit": {
+        "amount": 50,
+        "currency": "USD",
+        "period": "month",
+        "scope": "user"
+      },
+      "compatibilityTier": "standard"
+    },
+    {
+      "id": "standard-l2",
+      "name": "Standard L2 - $100 nominal monthly credit",
+      "enabled": true,
+      "nominalCredit": {
+        "amount": 100,
+        "currency": "USD",
+        "period": "month",
+        "scope": "user"
+      },
+      "compatibilityTier": "standard"
+    },
+    {
+      "id": "standard-l3",
+      "name": "Standard L3 - $150 nominal monthly credit",
+      "enabled": true,
+      "nominalCredit": {
+        "amount": 150,
+        "currency": "USD",
+        "period": "month",
+        "scope": "user"
+      },
+      "compatibilityTier": "standard"
+    },
+    {
+      "id": "advanced-l1",
+      "name": "Advanced L1 - $200 nominal monthly credit",
+      "enabled": true,
+      "nominalCredit": {
+        "amount": 200,
+        "currency": "USD",
+        "period": "month",
+        "scope": "user"
+      },
+      "compatibilityTier": "premium"
+    },
+    {
+      "id": "advanced-l2",
+      "name": "Advanced L2 - $300 nominal monthly credit",
+      "enabled": true,
+      "nominalCredit": {
+        "amount": 300,
+        "currency": "USD",
+        "period": "month",
+        "scope": "user"
+      },
+      "compatibilityTier": "premium"
+    },
+    {
+      "id": "advanced-l3",
+      "name": "Advanced L3 - $500 nominal monthly credit",
+      "enabled": true,
+      "nominalCredit": {
+        "amount": 500,
+        "currency": "USD",
+        "period": "month",
+        "scope": "user"
+      },
+      "compatibilityTier": "premium"
+    },
+    {
+      "id": "power-l1",
+      "name": "Power L1 - $1000 nominal monthly credit",
+      "enabled": true,
+      "nominalCredit": {
+        "amount": 1000,
+        "currency": "USD",
+        "period": "month",
+        "scope": "user"
+      },
+      "compatibilityTier": "premium"
+    },
+    {
+      "id": "power-l2",
+      "name": "Power L2 - $2000 nominal monthly credit",
+      "enabled": true,
+      "nominalCredit": {
+        "amount": 2000,
+        "currency": "USD",
+        "period": "month",
+        "scope": "user"
+      },
+      "compatibilityTier": "premium"
+    },
+    {
+      "id": "power-l3",
+      "name": "Power L3 - $5000 nominal monthly credit",
+      "enabled": true,
+      "nominalCredit": {
+        "amount": 5000,
+        "currency": "USD",
+        "period": "month",
+        "scope": "user"
+      },
+      "compatibilityTier": "premium"
+    }
+  ],
+  "profiles": [
+    {
+      "id": "standard-l1-code",
+      "name": "Standard L1 - Code - Haiku and Sonnet",
+      "planId": "standard-l1",
+      "groupObjectId": "00000000-0000-4000-8000-000000000001",
+      "priority": 101,
+      "capabilities": ["code"],
+      "modelFamilies": ["haiku", "sonnet"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "standard-l2-chat-design",
+      "name": "Standard L2 - Chat and Design - Haiku and Sonnet",
+      "planId": "standard-l2",
+      "groupObjectId": "00000000-0000-4000-8000-000000000002",
+      "priority": 201,
+      "capabilities": ["chat", "design"],
+      "modelFamilies": ["haiku", "sonnet"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "standard-l2-code-chat",
+      "name": "Standard L2 - Code and Chat - Haiku and Sonnet",
+      "planId": "standard-l2",
+      "groupObjectId": "00000000-0000-4000-8000-000000000003",
+      "priority": 202,
+      "capabilities": ["code", "chat"],
+      "modelFamilies": ["haiku", "sonnet"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "standard-l2-code-design",
+      "name": "Standard L2 - Code and Design - Haiku and Sonnet",
+      "planId": "standard-l2",
+      "groupObjectId": "00000000-0000-4000-8000-000000000004",
+      "priority": 203,
+      "capabilities": ["code", "design"],
+      "modelFamilies": ["haiku", "sonnet"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "standard-l2-cowork",
+      "name": "Standard L2 - Cowork - Haiku and Sonnet",
+      "planId": "standard-l2",
+      "groupObjectId": "00000000-0000-4000-8000-000000000005",
+      "priority": 204,
+      "capabilities": ["cowork"],
+      "modelFamilies": ["haiku", "sonnet"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "standard-l2-cowork-chat",
+      "name": "Standard L2 - Cowork and Chat - Haiku and Sonnet",
+      "planId": "standard-l2",
+      "groupObjectId": "00000000-0000-4000-8000-000000000006",
+      "priority": 205,
+      "capabilities": ["cowork", "chat"],
+      "modelFamilies": ["haiku", "sonnet"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "standard-l2-cowork-design",
+      "name": "Standard L2 - Cowork and Design - Haiku and Sonnet",
+      "planId": "standard-l2",
+      "groupObjectId": "00000000-0000-4000-8000-000000000007",
+      "priority": 206,
+      "capabilities": ["cowork", "design"],
+      "modelFamilies": ["haiku", "sonnet"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "standard-l2-design",
+      "name": "Standard L2 - Design - Haiku and Sonnet",
+      "planId": "standard-l2",
+      "groupObjectId": "00000000-0000-4000-8000-000000000008",
+      "priority": 207,
+      "capabilities": ["design"],
+      "modelFamilies": ["haiku", "sonnet"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "standard-l3-code-chat-opus",
+      "name": "Standard L3 - Code and Chat - Haiku, Sonnet and Opus",
+      "planId": "standard-l3",
+      "groupObjectId": "00000000-0000-4000-8000-000000000009",
+      "priority": 301,
+      "capabilities": ["code", "chat"],
+      "modelFamilies": ["haiku", "sonnet", "opus"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "standard-l3-code-chat-design",
+      "name": "Standard L3 - Code, Chat and Design - Haiku and Sonnet",
+      "planId": "standard-l3",
+      "groupObjectId": "00000000-0000-4000-8000-000000000010",
+      "priority": 302,
+      "capabilities": ["code", "chat", "design"],
+      "modelFamilies": ["haiku", "sonnet"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "standard-l3-code-cowork",
+      "name": "Standard L3 - Code and Cowork - Haiku and Sonnet",
+      "planId": "standard-l3",
+      "groupObjectId": "00000000-0000-4000-8000-000000000011",
+      "priority": 303,
+      "capabilities": ["code", "cowork"],
+      "modelFamilies": ["haiku", "sonnet"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "standard-l3-code-cowork-chat",
+      "name": "Standard L3 - Code, Cowork and Chat - Haiku and Sonnet",
+      "planId": "standard-l3",
+      "groupObjectId": "00000000-0000-4000-8000-000000000012",
+      "priority": 304,
+      "capabilities": ["code", "cowork", "chat"],
+      "modelFamilies": ["haiku", "sonnet"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "standard-l3-code-cowork-design",
+      "name": "Standard L3 - Code, Cowork and Design - Haiku and Sonnet",
+      "planId": "standard-l3",
+      "groupObjectId": "00000000-0000-4000-8000-000000000013",
+      "priority": 305,
+      "capabilities": ["code", "cowork", "design"],
+      "modelFamilies": ["haiku", "sonnet"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "standard-l3-code-design-opus",
+      "name": "Standard L3 - Code and Design - Haiku, Sonnet and Opus",
+      "planId": "standard-l3",
+      "groupObjectId": "00000000-0000-4000-8000-000000000014",
+      "priority": 306,
+      "capabilities": ["code", "design"],
+      "modelFamilies": ["haiku", "sonnet", "opus"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "standard-l3-cowork-chat-opus",
+      "name": "Standard L3 - Cowork and Chat - Haiku, Sonnet and Opus",
+      "planId": "standard-l3",
+      "groupObjectId": "00000000-0000-4000-8000-000000000015",
+      "priority": 307,
+      "capabilities": ["cowork", "chat"],
+      "modelFamilies": ["haiku", "sonnet", "opus"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "standard-l3-cowork-chat-design",
+      "name": "Standard L3 - Cowork, Chat and Design - Haiku and Sonnet",
+      "planId": "standard-l3",
+      "groupObjectId": "00000000-0000-4000-8000-000000000016",
+      "priority": 308,
+      "capabilities": ["cowork", "chat", "design"],
+      "modelFamilies": ["haiku", "sonnet"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "standard-l3-cowork-design-opus",
+      "name": "Standard L3 - Cowork and Design - Haiku, Sonnet and Opus",
+      "planId": "standard-l3",
+      "groupObjectId": "00000000-0000-4000-8000-000000000017",
+      "priority": 309,
+      "capabilities": ["cowork", "design"],
+      "modelFamilies": ["haiku", "sonnet", "opus"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "advanced-l1-chat-design",
+      "name": "Advanced L1 - Chat and Design - Haiku, Sonnet and Opus",
+      "planId": "advanced-l1",
+      "groupObjectId": "00000000-0000-4000-8000-000000000018",
+      "priority": 401,
+      "capabilities": ["chat", "design"],
+      "modelFamilies": ["haiku", "sonnet", "opus"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "advanced-l1-all-capabilities",
+      "name": "Advanced L1 - Code, Cowork, Chat and Design - Haiku and Sonnet",
+      "planId": "advanced-l1",
+      "groupObjectId": "00000000-0000-4000-8000-000000000019",
+      "priority": 402,
+      "capabilities": ["code", "cowork", "chat", "design"],
+      "modelFamilies": ["haiku", "sonnet"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "advanced-l1-cowork",
+      "name": "Advanced L1 - Cowork - Haiku, Sonnet and Opus",
+      "planId": "advanced-l1",
+      "groupObjectId": "00000000-0000-4000-8000-000000000020",
+      "priority": 403,
+      "capabilities": ["cowork"],
+      "modelFamilies": ["haiku", "sonnet", "opus"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "advanced-l1-design",
+      "name": "Advanced L1 - Design - Haiku, Sonnet and Opus",
+      "planId": "advanced-l1",
+      "groupObjectId": "00000000-0000-4000-8000-000000000021",
+      "priority": 404,
+      "capabilities": ["design"],
+      "modelFamilies": ["haiku", "sonnet", "opus"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "advanced-l2-code",
+      "name": "Advanced L2 - Code - Haiku, Sonnet and Opus",
+      "planId": "advanced-l2",
+      "groupObjectId": "00000000-0000-4000-8000-000000000022",
+      "priority": 501,
+      "capabilities": ["code"],
+      "modelFamilies": ["haiku", "sonnet", "opus"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "advanced-l2-code-chat",
+      "name": "Advanced L2 - Code and Chat - Haiku, Sonnet and Opus",
+      "planId": "advanced-l2",
+      "groupObjectId": "00000000-0000-4000-8000-000000000023",
+      "priority": 502,
+      "capabilities": ["code", "chat"],
+      "modelFamilies": ["haiku", "sonnet", "opus"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "advanced-l2-code-chat-design",
+      "name": "Advanced L2 - Code, Chat and Design - Haiku, Sonnet and Opus",
+      "planId": "advanced-l2",
+      "groupObjectId": "00000000-0000-4000-8000-000000000024",
+      "priority": 503,
+      "capabilities": ["code", "chat", "design"],
+      "modelFamilies": ["haiku", "sonnet", "opus"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "advanced-l2-code-cowork",
+      "name": "Advanced L2 - Code and Cowork - Haiku, Sonnet and Opus",
+      "planId": "advanced-l2",
+      "groupObjectId": "00000000-0000-4000-8000-000000000025",
+      "priority": 504,
+      "capabilities": ["code", "cowork"],
+      "modelFamilies": ["haiku", "sonnet", "opus"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "advanced-l2-code-cowork-chat",
+      "name": "Advanced L2 - Code, Cowork and Chat - Haiku, Sonnet and Opus",
+      "planId": "advanced-l2",
+      "groupObjectId": "00000000-0000-4000-8000-000000000026",
+      "priority": 505,
+      "capabilities": ["code", "cowork", "chat"],
+      "modelFamilies": ["haiku", "sonnet", "opus"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "advanced-l2-all-capabilities",
+      "name": "Advanced L2 - Code, Cowork, Chat and Design - Haiku, Sonnet and Opus",
+      "planId": "advanced-l2",
+      "groupObjectId": "00000000-0000-4000-8000-000000000027",
+      "priority": 506,
+      "capabilities": ["code", "cowork", "chat", "design"],
+      "modelFamilies": ["haiku", "sonnet", "opus"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "advanced-l2-code-cowork-design",
+      "name": "Advanced L2 - Code, Cowork and Design - Haiku, Sonnet and Opus",
+      "planId": "advanced-l2",
+      "groupObjectId": "00000000-0000-4000-8000-000000000028",
+      "priority": 507,
+      "capabilities": ["code", "cowork", "design"],
+      "modelFamilies": ["haiku", "sonnet", "opus"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "advanced-l2-code-design",
+      "name": "Advanced L2 - Code and Design - Haiku, Sonnet and Opus",
+      "planId": "advanced-l2",
+      "groupObjectId": "00000000-0000-4000-8000-000000000029",
+      "priority": 508,
+      "capabilities": ["code", "design"],
+      "modelFamilies": ["haiku", "sonnet", "opus"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "advanced-l2-cowork-chat",
+      "name": "Advanced L2 - Cowork and Chat - Haiku, Sonnet and Opus",
+      "planId": "advanced-l2",
+      "groupObjectId": "00000000-0000-4000-8000-000000000030",
+      "priority": 509,
+      "capabilities": ["cowork", "chat"],
+      "modelFamilies": ["haiku", "sonnet", "opus"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "advanced-l2-cowork-chat-design",
+      "name": "Advanced L2 - Cowork, Chat and Design - Haiku, Sonnet and Opus",
+      "planId": "advanced-l2",
+      "groupObjectId": "00000000-0000-4000-8000-000000000031",
+      "priority": 510,
+      "capabilities": ["cowork", "chat", "design"],
+      "modelFamilies": ["haiku", "sonnet", "opus"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "advanced-l2-cowork-design",
+      "name": "Advanced L2 - Cowork and Design - Haiku, Sonnet and Opus",
+      "planId": "advanced-l2",
+      "groupObjectId": "00000000-0000-4000-8000-000000000032",
+      "priority": 511,
+      "capabilities": ["cowork", "design"],
+      "modelFamilies": ["haiku", "sonnet", "opus"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "advanced-l3-chat-design",
+      "name": "Advanced L3 - Chat and Design - Haiku, Sonnet and Opus",
+      "planId": "advanced-l3",
+      "groupObjectId": "00000000-0000-4000-8000-000000000033",
+      "priority": 601,
+      "capabilities": ["chat", "design"],
+      "modelFamilies": ["haiku", "sonnet", "opus"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "advanced-l3-code",
+      "name": "Advanced L3 - Code - Haiku, Sonnet and Opus",
+      "planId": "advanced-l3",
+      "groupObjectId": "00000000-0000-4000-8000-000000000034",
+      "priority": 602,
+      "capabilities": ["code"],
+      "modelFamilies": ["haiku", "sonnet", "opus"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "advanced-l3-code-chat-design",
+      "name": "Advanced L3 - Code, Chat and Design - Haiku, Sonnet and Opus",
+      "planId": "advanced-l3",
+      "groupObjectId": "00000000-0000-4000-8000-000000000035",
+      "priority": 603,
+      "capabilities": ["code", "chat", "design"],
+      "modelFamilies": ["haiku", "sonnet", "opus"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "advanced-l3-code-cowork",
+      "name": "Advanced L3 - Code and Cowork - Haiku, Sonnet and Opus",
+      "planId": "advanced-l3",
+      "groupObjectId": "00000000-0000-4000-8000-000000000036",
+      "priority": 604,
+      "capabilities": ["code", "cowork"],
+      "modelFamilies": ["haiku", "sonnet", "opus"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "advanced-l3-code-cowork-chat",
+      "name": "Advanced L3 - Code, Cowork and Chat - Haiku, Sonnet and Opus",
+      "planId": "advanced-l3",
+      "groupObjectId": "00000000-0000-4000-8000-000000000037",
+      "priority": 605,
+      "capabilities": ["code", "cowork", "chat"],
+      "modelFamilies": ["haiku", "sonnet", "opus"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "advanced-l3-all-capabilities",
+      "name": "Advanced L3 - Code, Cowork, Chat and Design - Haiku, Sonnet and Opus",
+      "planId": "advanced-l3",
+      "groupObjectId": "00000000-0000-4000-8000-000000000038",
+      "priority": 606,
+      "capabilities": ["code", "cowork", "chat", "design"],
+      "modelFamilies": ["haiku", "sonnet", "opus"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "advanced-l3-code-cowork-design",
+      "name": "Advanced L3 - Code, Cowork and Design - Haiku, Sonnet and Opus",
+      "planId": "advanced-l3",
+      "groupObjectId": "00000000-0000-4000-8000-000000000039",
+      "priority": 607,
+      "capabilities": ["code", "cowork", "design"],
+      "modelFamilies": ["haiku", "sonnet", "opus"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "advanced-l3-cowork",
+      "name": "Advanced L3 - Cowork - Haiku, Sonnet and Opus",
+      "planId": "advanced-l3",
+      "groupObjectId": "00000000-0000-4000-8000-000000000040",
+      "priority": 608,
+      "capabilities": ["cowork"],
+      "modelFamilies": ["haiku", "sonnet", "opus"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "advanced-l3-cowork-chat-design",
+      "name": "Advanced L3 - Cowork, Chat and Design - Haiku, Sonnet and Opus",
+      "planId": "advanced-l3",
+      "groupObjectId": "00000000-0000-4000-8000-000000000041",
+      "priority": 609,
+      "capabilities": ["cowork", "chat", "design"],
+      "modelFamilies": ["haiku", "sonnet", "opus"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "advanced-l3-design",
+      "name": "Advanced L3 - Design - Haiku, Sonnet and Opus",
+      "planId": "advanced-l3",
+      "groupObjectId": "00000000-0000-4000-8000-000000000042",
+      "priority": 610,
+      "capabilities": ["design"],
+      "modelFamilies": ["haiku", "sonnet", "opus"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "power-l1-all-capabilities",
+      "name": "Power L1 - Code, Cowork, Chat and Design - Haiku, Sonnet and Opus",
+      "planId": "power-l1",
+      "groupObjectId": "00000000-0000-4000-8000-000000000043",
+      "priority": 701,
+      "capabilities": ["code", "cowork", "chat", "design"],
+      "modelFamilies": ["haiku", "sonnet", "opus"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "power-l1-all-capabilities-m365",
+      "name": "Power L1 - Code, Cowork, Chat and Design - Haiku, Sonnet, Opus and M365",
+      "planId": "power-l1",
+      "groupObjectId": "00000000-0000-4000-8000-000000000044",
+      "priority": 702,
+      "capabilities": ["code", "cowork", "chat", "design"],
+      "modelFamilies": ["haiku", "sonnet", "opus"],
+      "connectors": ["m365"],
+      "enabled": true
+    },
+    {
+      "id": "power-l2-all-capabilities",
+      "name": "Power L2 - Code, Cowork, Chat and Design - Haiku, Sonnet, Opus and Fable",
+      "planId": "power-l2",
+      "groupObjectId": "00000000-0000-4000-8000-000000000045",
+      "priority": 801,
+      "capabilities": ["code", "cowork", "chat", "design"],
+      "modelFamilies": ["haiku", "sonnet", "opus", "fable"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "power-l3-all-capabilities",
+      "name": "Power L3 - Code, Cowork, Chat and Design - Haiku, Sonnet, Opus and Fable",
+      "planId": "power-l3",
+      "groupObjectId": "00000000-0000-4000-8000-000000000046",
+      "priority": 901,
+      "capabilities": ["code", "cowork", "chat", "design"],
+      "modelFamilies": ["haiku", "sonnet", "opus", "fable"],
+      "connectors": [],
+      "enabled": true
+    },
+    {
+      "id": "power-l3-all-capabilities-m365",
+      "name": "Power L3 - Code, Cowork, Chat and Design - Haiku, Sonnet, Opus, Fable and M365",
+      "planId": "power-l3",
+      "groupObjectId": "00000000-0000-4000-8000-000000000047",
+      "priority": 902,
+      "capabilities": ["code", "cowork", "chat", "design"],
+      "modelFamilies": ["haiku", "sonnet", "opus", "fable"],
+      "connectors": ["m365"],
+      "enabled": true
+    }
+  ]
+}
