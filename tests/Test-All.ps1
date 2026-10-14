@@ -406,6 +406,7 @@ Invoke-Check 'Azure CLI guide renewal block runs in order' 'Test-AzCommandsRenew
     Invoke-Check 'Projection readiness checks before a migration' 'Test-ProjectionReadiness.ps1'
     Invoke-Check 'Projection resource inventory matches the templates' 'Test-ProjectionInventory.ps1'
     Invoke-Check 'Projection council corrections'           'Test-ProjectionCouncil.ps1'
+Invoke-Check 'Access catalog administration and publish' 'Test-AccessCatalogAdministration.ps1'
 Invoke-Check 'Projection runner lifecycle' 'Test-ProjectionRunnerLifecycle.ps1'
 Invoke-Check 'Projection runner transfer, compressed and parallel' 'Test-RunnerTransfer.ps1'
 Invoke-Check 'Projection sync scripts' 'Test-ProjectionSyncScripts.ps1'
