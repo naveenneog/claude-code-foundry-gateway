@@ -29,6 +29,8 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **Configurable Cosmos access profiles (P116, in progress).** Defines a versioned tenant access catalog for commercial plans and Entra-backed profiles across Code, Cowork, Chat, Design, Haiku, Sonnet, Opus, Fable, Mythos and M365. Profile resolution occurs during projection sync so the resolver keeps one identity point read; business units, named-value rollback and explicit P108 dollar budgets remain independent. AUM and Turnstile changes are outside this packet.
+
 - **Live onboarding-record sync (P115).** Added
   `Sync-ClaudeGatewayRecord.ps1`, a read-only Azure discovery command that
   regenerates `onboarding/claude-gateway.json`, preserves local-only choices,
