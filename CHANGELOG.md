@@ -29,7 +29,7 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
-- **Configurable Cosmos access profiles (P116, in progress).** Defines a versioned tenant access catalog for commercial plans and Entra-backed profiles across Code, Cowork, Chat, Design, Haiku, Sonnet, Opus, Fable, Mythos and M365. Profile resolution occurs during projection sync so the resolver keeps one identity point read; business units, named-value rollback and explicit P108 dollar budgets remain independent. AUM and Turnstile changes are outside this packet.
+- **Configurable Cosmos access profiles (P116, in progress).** Adds a versioned tenant catalog for up to 16 plans and 64 Entra-backed profiles, including the supplied nine-plan/47-profile example. Attended and scheduled sync select one whole highest-priority profile, materialize schema-v3 capabilities, model families and connectors, and keep the resolver at one identity point read. APIM enforces Haiku, Sonnet, Opus, Fable and Mythos families; Desktop policy generation maps documented Chat, Cowork and Code settings while retaining Design and M365 as metadata. Standard/Premium v2 private setup selects a managed or explicit customer VNet and validates five dedicated subnets before ARM-based APIM integration. Live proof covered profile movement, cache transition and explicit P108 USD refusal; the scheduled job reached the existing U17 Graph-permission boundary and remains manual. Business units and named-value rollback remain independent; AUM, Turnstile and automatic plan-dollar defaults remain outside this packet.
 
 - **Live onboarding-record sync (P115).** Added
   `Sync-ClaudeGatewayRecord.ps1`, a read-only Azure discovery command that
