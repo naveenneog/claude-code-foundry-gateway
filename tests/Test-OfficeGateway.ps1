@@ -49,6 +49,38 @@ Assert 'the live probe checks every requested header response' (
     $probeText -match "preflight did not allow requested header"
 )
 
+$wildcardPolicy = $text.Replace(
+    '<origin>https://pivot.claude.ai</origin>',
+    '<origin>*</origin>'
+)
+$wildcardInbound = [regex]::Match($wildcardPolicy, '(?s)<inbound>(.*?)</inbound>').Groups[1].Value
+$wildcardCors = [regex]::Match($wildcardInbound, '(?s)<cors\b[^>]*>(.*?)</cors>').Groups[1].Value
+$wildcardOrigins = @(Get-PolicyValues $wildcardCors 'allowed-origins')
+Assert 'mutation applied: wildcard origin' ($wildcardPolicy -ne $text)
+Assert 'detected: wildcard origin' (
+    $wildcardOrigins -contains '*' -and
+    -not (($wildcardOrigins.Count -eq 1) -and ($wildcardOrigins[0] -eq 'https://pivot.claude.ai'))
+)
+
+$missingHeaderPolicy = $text.Replace(
+    '                <header>anthropic-beta</header>' + [Environment]::NewLine,
+    ''
+)
+$missingHeaderInbound = [regex]::Match($missingHeaderPolicy, '(?s)<inbound>(.*?)</inbound>').Groups[1].Value
+$missingHeaderCors = [regex]::Match($missingHeaderInbound, '(?s)<cors\b[^>]*>(.*?)</cors>').Groups[1].Value
+$missingHeaderValues = @(Get-PolicyValues $missingHeaderCors 'allowed-headers')
+Assert 'mutation applied: required header removed' ($missingHeaderPolicy -ne $text)
+Assert 'detected: required header removed' ($missingHeaderValues -notcontains 'anthropic-beta')
+
+$missingProbeMethod = $probeText.Replace(
+    "`$preflightMethods = @(Get-HeaderTokens `$preflight 'Access-Control-Allow-Methods')",
+    "`$preflightMethods = @()"
+)
+Assert 'mutation applied: live method check disconnected' ($missingProbeMethod -ne $probeText)
+Assert 'detected: live method check disconnected' (
+    $missingProbeMethod -notmatch "Get-HeaderTokens\s+\`$preflight\s+'Access-Control-Allow-Methods'"
+)
+
 Write-Host ''
 if ($fail) { Write-Host "$fail check(s) failed." -ForegroundColor Red; exit 1 }
 Write-Host 'Office gateway policy contract holds.' -ForegroundColor Green

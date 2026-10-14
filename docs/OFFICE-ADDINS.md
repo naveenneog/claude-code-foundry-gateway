@@ -54,6 +54,44 @@ Graph permissions required by the selected mailbox and calendar features.
 Anthropic's current setup and permission requirements are documented at
 [Claude for Microsoft 365 on third-party platforms](https://claude.com/docs/office-agents/third-party-platforms).
 
+Install Anthropic's manifest generator:
+
+```powershell
+claude plugin marketplace add anthropics/financial-services
+claude plugin install claude-for-msft-365-install@claude-for-financial-services
+```
+
+Start Claude and run:
+
+```text
+/claude-for-msft-365-install:setup
+```
+
+Select **Foundry direct** and generate the Office manifest. Generate the
+separate Outlook manifest only when Outlook is in the pilot. The generated
+configuration uses these tenant values:
+
+| Setting | Value |
+|---|---|
+| `azure_resource_name` | Foundry account behind this gateway |
+| `azure_base_url` | Gateway URL, including `/claude` |
+| `entra_sso` | `1` |
+| `graph_client_id` | NAA application client ID |
+| `entra_scope` | `https://cognitiveservices.azure.com/.default` |
+| `gateway_auth_source` | `entra` |
+
+The plugin's setup wizard does not currently ask for `azure_base_url`.
+Add it to both generated task-pane URLs, beside `azure_resource_name`, and
+write query separators as `&amp;` in XML. No `azure_api_key` or
+`gateway_token` is used on this path.
+
+Validate each generated file before upload:
+
+```powershell
+npx --yes office-addin-manifest validate .\manifest.xml
+npx --yes office-addin-manifest validate .\manifest-outlook.xml
+```
+
 The pilot order is:
 
 1. Deploy and probe the gateway CORS policy.
