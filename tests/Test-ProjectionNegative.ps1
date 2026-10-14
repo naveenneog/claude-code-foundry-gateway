@@ -86,7 +86,7 @@ function Run-Suite($suite) {
 }
 $caught = 0
 try {
-    foreach ($dir in 'resolver', 'sync', 'scripts', 'infra', 'tests', 'guide') {
+    foreach ($dir in 'resolver', 'sync', 'scripts', 'infra', 'tests', 'guide', 'config') {
         Get-ChildItem (Join-Path $root $dir) -Recurse -File |
             Where-Object { $_.FullName -notmatch '[\\/]node_modules[\\/]' -and $_.Extension -in '.mjs', '.ps1', '.xml', '.bicep', '.json' } |
             ForEach-Object {
