@@ -854,15 +854,12 @@ Assert 'and the Desktop backup'                   ($mig_doc -match 'Backup-Claud
 $setup = Get-Content (Join-Path $root 'docs/SETUP.md') -Raw
 Assert 'setup documents SKU sizing'               ($setup -match '(?i)how many developers')
 
-# Only Install-ClaudeGateway.ps1 writes onboarding/claude-gateway.json - grep
-# the repository and it is the single writer. deploy.ps1 and the portal button
-# both leave the reader without the file their developers' setup script reads,
-# and neither said so. Asserted on the sentence, not on the filename, which
-# appears throughout the page.
+# deploy.ps1 and the portal button leave the reader without the local record.
+# The narrow sync command now generates it without rerunning the installer.
 Assert 'setup says the script route skips the handover file' `
     ($setup -match 'does \*\*not\*\* write `onboarding/claude-gateway\.json`')
-Assert 'and that only the wizard writes it' `
-    ($setup -match 'Only the wizard writes that')
+Assert 'and names the local-only record sync' `
+    ($setup -match 'Sync-ClaudeGatewayRecord\.ps1')
 Assert 'the portal route lists what it leaves undone' `
     ($setup -match 'Three things the wizard does are left to')
 $onb = Get-Content (Join-Path $root 'docs/ONBOARDING.md') -Raw

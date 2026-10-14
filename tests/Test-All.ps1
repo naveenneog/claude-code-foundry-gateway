@@ -348,6 +348,7 @@ Invoke-Check 'Azure CLI guide renewal block runs in order' 'Test-AzCommandsRenew
     Invoke-Check 'Content Safety live-script contract'     'Test-ContentSafetyLiveScript.ps1'
     Invoke-Check 'Set gateway policy drift repair'         'Test-SetGatewayPolicy.ps1'
     Invoke-Check 'Claude Office gateway CORS contract'     'Test-OfficeGateway.ps1'
+    Invoke-Check 'Gateway onboarding record sync'          'Test-GatewayRecordSync.ps1'
     Invoke-Check 'Content Safety negative detectors'       'Test-ContentSafetyNegative.ps1' -SerialLane
     Invoke-Check 'Org spend ceiling'                       'Test-OrgCeiling.ps1' @{ SkipLive = $true }
     Invoke-Check 'Per-user budget control'                 'Test-BudgetControl.ps1' @{ SkipLive = $true }

@@ -29,6 +29,12 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **Live onboarding-record sync (P115).** Added
+  `Sync-ClaudeGatewayRecord.ps1`, a read-only Azure discovery command that
+  regenerates `onboarding/claude-gateway.json`, preserves local-only choices,
+  backs up an existing record and performs no gateway deployment or policy
+  write.
+
 - **Office add-in gateway compatibility (P114).** Added an explicit
   `https://pivot.claude.ai` APIM CORS policy, an offline policy contract test,
   a disposable live preflight/error probe and an Office/Outlook setup guide.

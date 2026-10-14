@@ -949,12 +949,19 @@ you are scripting against the accelerator; use `Get-Help .\deploy.ps1 -Full`
 for this script's parameters rather than assuming every wizard option exists.
 
 It does **not** write `onboarding/claude-gateway.json`, the file your developers'
-setup script reads. Only the wizard writes that. Run the wizard once afterwards
-to produce it; it is re-runnable and will reuse what `deploy.ps1` created:
+setup script reads. Generate that file from the deployed gateway without
+rerunning the installer:
 
 ```powershell
-./Install-ClaudeGateway.ps1 -FoundryAccount <account> -Yes
+./scripts/Sync-ClaudeGatewayRecord.ps1 `
+  -ResourceGroup <rg> -ApimName <apim> `
+  -StandardGroup claude-code-standard -PremiumGroup claude-code-premium
 ```
+
+The script reads APIM, its non-secret named values and its Foundry backend. It
+writes only the local record and backs up an existing record before replacing
+it. The group parameters are unnecessary when `entitlement-groups` exists on
+the gateway or the existing record already names the groups.
 
 ### Option C — portal
 
@@ -973,11 +980,13 @@ az ad group create --display-name claude-code-premium  --mail-nickname claude-co
 ./scripts/Sync-ClaudeAccess.ps1 -ApimName <apim> -ResourceGroup <rg>
 
 # 3. write the developer handover file
-./Install-ClaudeGateway.ps1 -FoundryAccount <account> -Yes
+./scripts/Sync-ClaudeGatewayRecord.ps1 `
+  -ResourceGroup <rg> -ApimName <apim> `
+  -StandardGroup claude-code-standard -PremiumGroup claude-code-premium
 ```
 
-Step 3 is the wizard again. Explicitly select the existing instance and review
-its plan rather than assuming unattended discovery chose the intended gateway.
+Step 3 reads the explicitly named gateway and writes only the local handover
+record. It does not deploy or update Azure resources.
 
 **Without the scripts, finish the same three tasks in the portal/manual path:**
 

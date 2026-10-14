@@ -52,6 +52,23 @@ model); the workstation setup pins the Claude Code aliases from that list, and
 a record without it falls back to `models` and then to the setup's defaults, as
 described in [Developer setup](../DEVELOPER.md#one-command).
 
+An existing deployment can regenerate the same local artifact without running
+the installer:
+
+```powershell
+.\scripts\Sync-ClaudeGatewayRecord.ps1 `
+  -ResourceGroup <rg> -ApimName <apim>
+```
+
+The command reads the gateway, non-secret named values, Foundry backend and
+Claude deployments. It preserves workstation-only choices from an existing
+record and backs that record up before replacement. When neither the gateway's
+`entitlement-groups` value nor an existing record names the standard tier
+group, pass `-StandardGroup <group>` and optionally
+`-PremiumGroup <group-or-none>`.
+An existing record for another resource group or gateway is refused; use a
+different `-RecordPath` rather than merging choices from two deployments.
+
 `New-OnboardingEmail.ps1` then adds one HTML, text and `.eml` file per developer
 you onboard.
 
