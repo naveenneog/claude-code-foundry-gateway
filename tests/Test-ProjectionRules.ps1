@@ -25,7 +25,7 @@ Assert 'Node operation failures keep summary false' ($apply.Contains('ok: !(writ
 Assert 'Node status failures keep summary false' ($apply.Contains('summary.ok = statusWrite.failed === 0;'))
 Assert 'Node exits nonzero when summary is false' ($apply.Contains('if (!summary.ok) process.exit(3);'))
 Assert 'Node keeps the snapshot apply-by check but removes record expiry failure' ($apply -match 'validateSnapshot\(snap, \{ tenantId \}\)' -and $apply -notmatch 'const expired = reconciliation.expiresAt <= Math.floor\(Date.now\(\) / 1000\)' -and $apply -match 'process.exit\(writes.failed \|\| deletes.failed \? 3 : 0\)')
-Assert 'gateway cache keys include tenant and schema version' (([regex]::Matches($policy, 'ent:v2:\{\{tenant-id\}\}:')).Count -eq 3)
+Assert 'gateway cache keys include tenant and schema version' (([regex]::Matches($policy, 'ent:v3:\{\{tenant-id\}\}:')).Count -eq 3)
 Assert 'gateway caches a positive answer for the configured window without an expiry clip' ($policy -match 'duration="@\(int.Parse\("\{\{entitlement-cache-seconds\}\}"\)\)"' -and $policy -notmatch 'expires - now')
 Assert 'gateway uses a cached or fresh answer until sync changes the record' ($policy -match 'records persist until a sync changes or removes them' -and $policy -notmatch 'rec\["expiresAt"\]')
 Assert 'APIM Razor conditionals use braced blocks' ($policy -match 'if \(!context.Variables.ContainsKey\("entRecord"\)\) \{ return false; \}' -and $policy -match 'if \(\(string\)rec\["tier"\] == "none"\) \{ return true; \}')

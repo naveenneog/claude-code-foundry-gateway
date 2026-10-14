@@ -110,6 +110,10 @@
              deployment and the list path below runs exactly as it always has. -->
         <set-variable name="entResolved" value="@(false)" />
         <set-variable name="entResolving" value="@(false)" />
+        <set-variable name="entSchemaVersion" value="@(0)" />
+        <set-variable name="entPlanId" value="@("")" />
+        <set-variable name="entProfileId" value="@("")" />
+        <set-variable name="entModelFamilies" value="@(",,")" />
         <choose>
             <when condition="@("{{entitlement-source}}" == "projection")">
                 <choose>
@@ -145,7 +149,7 @@
                              failure but not a managed-identity token failure,
                              which throws out of the whole block. -->
                         <set-variable name="entResolving" value="@(true)" />
-                        <cache-lookup-value key="@("ent:v2:{{tenant-id}}:" + (string)context.Variables["userId"])" variable-name="entRecord" />
+                        <cache-lookup-value key="@("ent:v3:{{tenant-id}}:" + (string)context.Variables["userId"])" variable-name="entRecord" />
                         <choose>
                             <when condition="@(!context.Variables.ContainsKey("entRecord"))">
                                 <rate-limit-by-key calls="200" renewal-period="1" counter-key="entitlement-misses" />
@@ -159,7 +163,7 @@
                                 <choose>
                                     <when condition="@(context.Variables.ContainsKey("entResponse") &amp;&amp; ((IResponse)context.Variables["entResponse"]).StatusCode == 200)">
                                         <set-variable name="entRecord" value="@(((IResponse)context.Variables["entResponse"]).Body.As&lt;string&gt;(preserveContent: true))" />
-                                        <cache-store-value key="@("ent:v2:{{tenant-id}}:" + (string)context.Variables["userId"])" value="@((string)context.Variables["entRecord"])" duration="@(int.Parse("{{entitlement-cache-seconds}}"))" />
+                                        <cache-store-value key="@("ent:v3:{{tenant-id}}:" + (string)context.Variables["userId"])" value="@((string)context.Variables["entRecord"])" duration="@(int.Parse("{{entitlement-cache-seconds}}"))" />
                                     </when>
                                     <!-- 404 is the resolver's answer for an identity with no
                                          record: not entitled, the same as being in neither
@@ -181,7 +185,7 @@
                                          just added to a group is let in promptly. -->
                                     <when condition="@(context.Variables.ContainsKey("entResponse") &amp;&amp; ((IResponse)context.Variables["entResponse"]).StatusCode == 404)">
                                         <set-variable name="entRecord" value="@("{'tier':'none','businessUnit':''}")" />
-                                        <cache-store-value key="@("ent:v2:{{tenant-id}}:" + (string)context.Variables["userId"])" value="@((string)context.Variables["entRecord"])" duration="@(Math.Min(60, int.Parse("{{entitlement-cache-seconds}}")))" />
+                                        <cache-store-value key="@("ent:v3:{{tenant-id}}:" + (string)context.Variables["userId"])" value="@((string)context.Variables["entRecord"])" duration="@(Math.Min(60, int.Parse("{{entitlement-cache-seconds}}")))" />
                                     </when>
                                 </choose>
                             </when>
@@ -204,6 +208,29 @@
                                     var rec = JObject.Parse((string)context.Variables["entRecord"]);
                                     var u = (string)rec["businessUnit"];
                                     return string.IsNullOrEmpty(u) ? "unassigned" : u;
+                                }" />
+                                <set-variable name="entSchemaVersion" value="@{
+                                    var rec = JObject.Parse((string)context.Variables["entRecord"]);
+                                    return (int?)rec["schemaVersion"] ?? 0;
+                                }" />
+                                <set-variable name="entPlanId" value="@{
+                                    var rec = JObject.Parse((string)context.Variables["entRecord"]);
+                                    return (string)rec["planId"] ?? "";
+                                }" />
+                                <set-variable name="entProfileId" value="@{
+                                    var rec = JObject.Parse((string)context.Variables["entRecord"]);
+                                    return (string)rec["profileId"] ?? "";
+                                }" />
+                                <set-variable name="entModelFamilies" value="@{
+                                    var rec = JObject.Parse((string)context.Variables["entRecord"]);
+                                    if (((int?)rec["schemaVersion"] ?? 0) != 3) { return ",,"; }
+                                    var families = rec["modelFamilies"] as JArray;
+                                    if (families == null) { return ",,"; }
+                                    var result = ",";
+                                    foreach (var family in families) {
+                                        result += (string)family + ",";
+                                    }
+                                    return result;
                                 }" />
                                 <set-variable name="entResolved" value="@(true)" />
                                 <set-variable name="entResolving" value="@(false)" />
@@ -296,7 +323,21 @@
              An empty list, ",,", allows every model. That is the shipped
              default: tiers differ by budget until an operator decides they
              should differ by model. -->
+        <set-variable name="modelFamily" value="@{
+            var model = (string)context.Variables["modelName"];
+            if (model.StartsWith("claude-haiku-", StringComparison.Ordinal)) { return "haiku"; }
+            if (model.StartsWith("claude-sonnet-", StringComparison.Ordinal)) { return "sonnet"; }
+            if (model.StartsWith("claude-opus-", StringComparison.Ordinal)) { return "opus"; }
+            if (model.StartsWith("claude-fable-", StringComparison.Ordinal)) { return "fable"; }
+            if (model.StartsWith("claude-mythos-", StringComparison.Ordinal)) { return "mythos"; }
+            return "";
+        }" />
         <set-variable name="modelAllowed" value="@{
+            if ((int)context.Variables["entSchemaVersion"] == 3) {
+                var family = (string)context.Variables["modelFamily"];
+                var families = (string)context.Variables["entModelFamilies"];
+                return !string.IsNullOrEmpty(family) &amp;&amp; families.Contains("," + family + ",");
+            }
             var allowed = (string)context.Variables["tier"] == "premium"
                 ? "{{models-premium}}" : "{{models-standard}}";
             if (allowed == null || allowed.Trim(',').Length == 0) { return true; }
