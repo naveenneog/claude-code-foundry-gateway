@@ -3,7 +3,7 @@
   "id": "request-path",
   "kind": "flow",
   "title": "One request, seven governed hops",
-  "subtitle": "Claude Code, the VS Code extension and Claude Desktop share the gateway policy. The numbered hops explain the flow; telemetry arrives asynchronously after the request.",
+  "subtitle": "Claude Code, the VS Code extension, Claude Desktop and the Claude for Microsoft 365 Office add-in share the gateway policy. The browser add-in reaches APIM through the explicit pivot.claude.ai CORS boundary; telemetry arrives asynchronously after the request.",
   "width": 1280,
   "height": 1260,
   "outputs": ["docs/images/architecture/request-path.png", "docs/images/request-flow.png"],
@@ -30,16 +30,17 @@
     "cs-account": { "label": "ContentSafety", "source": "infra/content-safety.bicep", "match": "kind: 'ContentSafety'" },
     "cs-fragment": { "label": "Microsoft.ApiManagement/service/policyFragments", "source": "infra/main.bicep", "match": "Microsoft.ApiManagement/service/policyFragments", "kind": "resource" },
     "tpm-standard": { "label": "tpm-standard", "source": "infra/policy.xml", "match": "{{tpm-standard}}" },
-    "tpm-premium": { "label": "tpm-premium", "source": "infra/policy.xml", "match": "{{tpm-premium}}" }
+    "tpm-premium": { "label": "tpm-premium", "source": "infra/policy.xml", "match": "{{tpm-premium}}" },
+    "office-cors": { "label": "pivot.claude.ai CORS", "source": "infra/policy.xml", "match": "<cors allow-credentials=\"false\"" }
   },
   "groups": [
     { "x": 0, "y": 354, "w": 1280, "h": 230, "tone": "blue", "title": "Four budget layers, in policy order · up to four quotas for a team member" }
   ],
   "nodes": [
     { "id": "signin", "x": 0, "y": 0, "w": 164, "h": 344, "tone": "teal", "compact": true, "eyebrow": "01 · caller", "title": "Sign in", "lines": [
-      "Azure CLI sign-in for people",
-      "Desktop: [[helper]]",
-      "Managed identity for automation",
+      "CLI + Desktop [[helper]]",
+      "Office CORS [[office-cors]]",
+      "Managed identity",
       "Entra token; signed oid"
     ] },
     { "id": "admit", "x": 186, "y": 0, "w": 164, "h": 344, "tone": "blue", "compact": true, "eyebrow": "02 · gateway", "title": "Admit", "lines": [
@@ -104,5 +105,3 @@
   ],
   "notice": "Unit/team modes in [[modes]] can extend or skip that scope's limiter, not the other controls. Budgets remain approximate: the quota scalar omits cache; the recorded sample attributed 38.7% of cost weight to cache reads. Streaming and concurrency add uncertainty; no invoice ceiling or exact crossing is promised."
 }
-
-

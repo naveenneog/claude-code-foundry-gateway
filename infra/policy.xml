@@ -20,6 +20,28 @@
 -->
 <policies>
     <inbound>
+        <cors allow-credentials="false" terminate-unmatched-request="true">
+            <allowed-origins>
+                <origin>https://pivot.claude.ai</origin>
+            </allowed-origins>
+            <allowed-methods>
+                <method>GET</method>
+                <method>POST</method>
+            </allowed-methods>
+            <allowed-headers>
+                <header>authorization</header>
+                <header>content-type</header>
+                <header>accept</header>
+                <header>anthropic-version</header>
+                <header>anthropic-beta</header>
+                <header>x-api-key</header>
+                <header>x-claude-code-session-id</header>
+            </allowed-headers>
+            <expose-headers>
+                <header>x-claude-gateway-request-id</header>
+                <header>x-claude-tier</header>
+            </expose-headers>
+        </cors>
         <base />
 
         <!-- 1. Authenticate the caller. The standard helper path requests a

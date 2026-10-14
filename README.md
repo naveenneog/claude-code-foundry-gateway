@@ -280,6 +280,19 @@ throttle tests temporarily change live limits and send billable model requests.
 
 </details>
 
+## Microsoft 365 Office add-ins
+
+<details>
+
+<summary>Office and Outlook add-ins through the Foundry gateway</summary>
+
+[Office add-in gateway setup](docs/OFFICE-ADDINS.md) describes the APIM CORS
+boundary, Entra application requirements, manifests and the disposable live
+probe. The add-in uses the existing `/v1/messages` gateway route; it does not
+receive a Foundry key.
+
+</details>
+
 ## Close the bypass
 
 <details>
@@ -436,4 +449,3 @@ tests, the packet gate, PowerShell encoding and Windows Azure CLI quoting.
 ## License
 
 MIT — see [LICENSE](LICENSE).
-

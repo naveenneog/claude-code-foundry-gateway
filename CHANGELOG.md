@@ -29,6 +29,12 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **Office add-in gateway compatibility (P114).** Added an explicit
+  `https://pivot.claude.ai` APIM CORS policy, an offline policy contract test,
+  a disposable live preflight/error probe and an Office/Outlook setup guide.
+  The existing Entra, entitlement, budget, content-safety and managed-identity
+  path remains the request boundary.
+
 - **Preflight proves group-creation privilege (P113).** `Install-ClaudeGateway.ps1 -Preflight` (and
   `-PlanOnly`/the guided flow) no longer assumes an absent tier or business-unit group will be
   created: it reads the tenant's Microsoft Graph `authorizationPolicy.defaultUserRolePermissions
