@@ -426,6 +426,7 @@ Invoke-Check 'Projection guided flow switch wiring' 'Test-ProjectionFlowSwitch.p
 Invoke-Check 'Projection installer contract' 'Test-ProjectionInstaller.ps1'
 Invoke-Check 'Projection network selection and preflight' 'Test-ProjectionNetworkSelection.ps1'
 Invoke-Check 'Cross-tenant production contracts'          'Test-CrossTenantProduction.ps1'
+Invoke-Check 'Production deployment configuration'        'Test-ProductionDeploymentConfig.ps1'
 Invoke-Check 'Installer projection defaults and live verifier' 'Test-ClaudeInstallProjection.ps1'
 Invoke-Check 'Live projection verifier validation and order' 'Test-ClaudeLiveProjection.ps1'
     Invoke-Check 'Claude Desktop sign-in choice'             'Test-DesktopSignIn.ps1'
