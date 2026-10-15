@@ -46,6 +46,21 @@ param renewalSubnetId string = ''
 @description('Existing subnet delegated only to Microsoft.Web/serverFarms for Standard v2 or Premium v2 outbound integration: at least a /27. Required with vnetId.')
 param apimSubnetId string = ''
 
+@description('Existing Cosmos SQL private DNS zone resource ID. Empty creates and links a projection-owned zone.')
+param cosmosDnsZoneId string = ''
+
+@description('Existing App Service private DNS zone resource ID. Empty creates and links a projection-owned zone.')
+param sitesDnsZoneId string = ''
+
+@description('Existing Blob private DNS zone resource ID. Empty creates and links a projection-owned zone.')
+param blobDnsZoneId string = ''
+
+@description('Existing Queue private DNS zone resource ID. Empty creates and links a projection-owned zone.')
+param queueDnsZoneId string = ''
+
+@description('Existing Table private DNS zone resource ID. Empty creates and links a projection-owned zone.')
+param tableDnsZoneId string = ''
+
 @description('Address space when creating a VNet.')
 param vnetAddressPrefix string = '10.10.0.0/16'
 
@@ -217,12 +232,12 @@ resource privateEndpoint 'Microsoft.Network/privateEndpoints@2023-11-01' = {
   }
 }
 
-resource dnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' = {
+resource dnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' = if (empty(cosmosDnsZoneId)) {
   name: dnsZoneName
   location: 'global'
 }
 
-resource dnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = {
+resource dnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = if (empty(cosmosDnsZoneId)) {
   parent: dnsZone
   name: '${namePrefix}-link'
   location: 'global'
@@ -236,12 +251,12 @@ resource dnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-
 
 // For the resolver's own private endpoint. Created here so the zone and its
 // link belong to the network, and resolver.bicep only has to point at it.
-resource sitesZone 'Microsoft.Network/privateDnsZones@2020-06-01' = {
+resource sitesZone 'Microsoft.Network/privateDnsZones@2020-06-01' = if (empty(sitesDnsZoneId)) {
   name: sitesZoneName
   location: 'global'
 }
 
-resource sitesLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = {
+resource sitesLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = if (empty(sitesDnsZoneId)) {
   parent: sitesZone
   name: '${namePrefix}-link'
   location: 'global'
@@ -261,19 +276,13 @@ resource sitesLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-0
 // through the VNet. Blob, queue and table because the Functions host requires
 // all three (Learn, functions-networking-options, "Restrict your storage
 // account to a virtual network").
-var storageZoneNames = [
-  'privatelink.blob.${environment().suffixes.storage}'
-  'privatelink.queue.${environment().suffixes.storage}'
-  'privatelink.table.${environment().suffixes.storage}'
-]
-
-resource storageZones 'Microsoft.Network/privateDnsZones@2020-06-01' = [for z in storageZoneNames: {
-  name: z
+resource blobZone 'Microsoft.Network/privateDnsZones@2020-06-01' = if (empty(blobDnsZoneId)) {
+  name: 'privatelink.blob.${environment().suffixes.storage}'
   location: 'global'
-}]
+}
 
-resource storageLinks 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = [for (z, i) in storageZoneNames: {
-  parent: storageZones[i]
+resource blobLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = if (empty(blobDnsZoneId)) {
+  parent: blobZone
   name: '${namePrefix}-link'
   location: 'global'
   properties: {
@@ -282,7 +291,47 @@ resource storageLinks 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@202
       id: linkedVnetId
     }
   }
-}]
+}
+
+resource queueZone 'Microsoft.Network/privateDnsZones@2020-06-01' = if (empty(queueDnsZoneId)) {
+  name: 'privatelink.queue.${environment().suffixes.storage}'
+  location: 'global'
+}
+
+resource queueLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = if (empty(queueDnsZoneId)) {
+  parent: queueZone
+  name: '${namePrefix}-link'
+  location: 'global'
+  properties: {
+    registrationEnabled: false
+    virtualNetwork: {
+      id: linkedVnetId
+    }
+  }
+}
+
+resource tableZone 'Microsoft.Network/privateDnsZones@2020-06-01' = if (empty(tableDnsZoneId)) {
+  name: 'privatelink.table.${environment().suffixes.storage}'
+  location: 'global'
+}
+
+resource tableLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = if (empty(tableDnsZoneId)) {
+  parent: tableZone
+  name: '${namePrefix}-link'
+  location: 'global'
+  properties: {
+    registrationEnabled: false
+    virtualNetwork: {
+      id: linkedVnetId
+    }
+  }
+}
+
+var effectiveCosmosDnsZoneId = empty(cosmosDnsZoneId) ? dnsZone!.id : cosmosDnsZoneId
+var effectiveSitesDnsZoneId = empty(sitesDnsZoneId) ? sitesZone!.id : sitesDnsZoneId
+var effectiveBlobDnsZoneId = empty(blobDnsZoneId) ? blobZone!.id : blobDnsZoneId
+var effectiveQueueDnsZoneId = empty(queueDnsZoneId) ? queueZone!.id : queueDnsZoneId
+var effectiveTableDnsZoneId = empty(tableDnsZoneId) ? tableZone!.id : tableDnsZoneId
 
 // Without this the endpoint exists and nothing resolves to it. The A records
 // are written by Azure from the endpoint's own IP configuration, so this is the
@@ -295,7 +344,7 @@ resource dnsGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2023-
       {
         name: 'cosmos'
         properties: {
-          privateDnsZoneId: dnsZone.id
+          privateDnsZoneId: effectiveCosmosDnsZoneId
         }
       }
     ]
@@ -357,10 +406,10 @@ output runnerSubnetId string = runnerSubnet
 output resolverSubnetId string = createVnet ? '${vnet.id}/subnets/resolver' : resolverSubnetId
 output renewalSubnetId string = createVnet ? '${vnet.id}/subnets/renewal' : renewalSubnetId
 output apimSubnetId string = createVnet ? '${vnet.id}/subnets/apim' : apimSubnetId
-output sitesDnsZoneId string = sitesZone.id
-output blobDnsZoneId string = storageZones[0].id
-output queueDnsZoneId string = storageZones[1].id
-output tableDnsZoneId string = storageZones[2].id
+output sitesDnsZoneId string = effectiveSitesDnsZoneId
+output blobDnsZoneId string = effectiveBlobDnsZoneId
+output queueDnsZoneId string = effectiveQueueDnsZoneId
+output tableDnsZoneId string = effectiveTableDnsZoneId
 output privateEndpointName string = privateEndpoint.name
 output runnerName string = runnerEnabled ? runnerName : ''
 output runnerPrincipalId string = runnerEnabled ? runner!.identity.principalId : ''

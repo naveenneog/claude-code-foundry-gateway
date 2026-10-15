@@ -1,0 +1,7 @@
+<authentication-managed-identity
+    resource="https://cognitiveservices.azure.com"
+    output-token-variable-name="foundry-token"
+    ignore-error="false" />
+<set-header name="Authorization" exists-action="override">
+    <value>@("Bearer " + (string)context.Variables["foundry-token"])</value>
+</set-header>

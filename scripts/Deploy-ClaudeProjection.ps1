@@ -37,6 +37,11 @@ param(
     [string]$ProjectionResolverSubnetId,
     [string]$ProjectionRenewalSubnetId,
     [string]$ProjectionApimSubnetId,
+    [string]$ProjectionCosmosDnsZoneId,
+    [string]$ProjectionSitesDnsZoneId,
+    [string]$ProjectionBlobDnsZoneId,
+    [string]$ProjectionQueueDnsZoneId,
+    [string]$ProjectionTableDnsZoneId,
     [string]$ResolverAppId,
     [string]$StandardGroup = 'claude-code-standard',
     [string]$PremiumGroup = 'claude-code-premium',
@@ -103,11 +108,14 @@ Assert-ClaudeProjectionResolverRedeploy -ResourceGroup $ResourceGroup -ApimName 
 $networkPlan = Resolve-ClaudeProjectionNetworkSelection -Mode $ProjectionNetworkMode -VnetId $ProjectionVnetId `
     -EndpointsSubnetId $ProjectionEndpointsSubnetId -RunnerSubnetId $ProjectionRunnerSubnetId `
     -ResolverSubnetId $ProjectionResolverSubnetId -RenewalSubnetId $ProjectionRenewalSubnetId `
-    -ApimSubnetId $ProjectionApimSubnetId -NonInteractive
+    -ApimSubnetId $ProjectionApimSubnetId -CosmosDnsZoneId $ProjectionCosmosDnsZoneId `
+    -SitesDnsZoneId $ProjectionSitesDnsZoneId -BlobDnsZoneId $ProjectionBlobDnsZoneId `
+    -QueueDnsZoneId $ProjectionQueueDnsZoneId -TableDnsZoneId $ProjectionTableDnsZoneId -NonInteractive
 $networkPreflight = Invoke-ClaudeProjectionNetworkPreflight -Plan $networkPlan -Apim $preflight.Apim `
     -ProjectionResourceGroupId ([string]$preflight.ResourceGroupId) -NamePrefix $NamePrefix -DeploymentLocation ([string]$preflight.Location)
 Note "Network: $($networkPreflight.Summary)"
-Note "Private DNS zones owned by this projection: $($networkPreflight.RequiredPrivateDnsZones -join ', ')"
+Note "Private DNS zones reused: $(if ($networkPreflight.ReusedPrivateDnsZones.Count) { $networkPreflight.ReusedPrivateDnsZones -join ', ' } else { 'none' })"
+Note "Private DNS zones created by this projection: $(if ($networkPreflight.CreatedPrivateDnsZones.Count) { $networkPreflight.CreatedPrivateDnsZones -join ', ' } else { 'none' })"
 if ($PreflightOnly) { return }
 if ($WhatIfPreference) {
     Note 'WhatIf: app registration if needed; selected private network and DNS; APIM outbound integration when required; resolver publish; gateway resolver named values; fresh snapshot/apply/compare. No Azure writes or projection switch.'
@@ -161,6 +169,11 @@ if ($PSCmdlet.ShouldProcess($networkName, 'deploy private endpoints and DNS')) {
             resolverSubnetId = @{ value = $networkPlan.ResolverSubnetId }
             renewalSubnetId = @{ value = $networkPlan.RenewalSubnetId }
             apimSubnetId = @{ value = $networkPlan.ApimSubnetId }
+            cosmosDnsZoneId = @{ value = $ProjectionCosmosDnsZoneId }
+            sitesDnsZoneId = @{ value = $ProjectionSitesDnsZoneId }
+            blobDnsZoneId = @{ value = $ProjectionBlobDnsZoneId }
+            queueDnsZoneId = @{ value = $ProjectionQueueDnsZoneId }
+            tableDnsZoneId = @{ value = $ProjectionTableDnsZoneId }
             runnerEnabled = @{ value = $true }
         }
     }

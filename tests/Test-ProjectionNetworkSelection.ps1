@@ -116,6 +116,55 @@ Assert 'existing selection keeps every explicit id without name inference' (
     @($ids.Keys | Where-Object { $plan.$_ -ne $ids[$_] }).Count -eq 0
 ) ($plan | ConvertTo-Json -Depth 4)
 
+$centralDnsResourceGroup = 'rg-central-dns'
+$centralZoneIds = [ordered]@{
+    CosmosDnsZoneId = "/subscriptions/$subscription/resourceGroups/$centralDnsResourceGroup/providers/Microsoft.Network/privateDnsZones/privatelink.documents.azure.com"
+    SitesDnsZoneId = "/subscriptions/$subscription/resourceGroups/$centralDnsResourceGroup/providers/Microsoft.Network/privateDnsZones/privatelink.azurewebsites.net"
+    BlobDnsZoneId = "/subscriptions/$subscription/resourceGroups/$centralDnsResourceGroup/providers/Microsoft.Network/privateDnsZones/privatelink.blob.core.windows.net"
+    QueueDnsZoneId = "/subscriptions/$subscription/resourceGroups/$centralDnsResourceGroup/providers/Microsoft.Network/privateDnsZones/privatelink.queue.core.windows.net"
+    TableDnsZoneId = "/subscriptions/$subscription/resourceGroups/$centralDnsResourceGroup/providers/Microsoft.Network/privateDnsZones/privatelink.table.core.windows.net"
+}
+Capture {
+    Resolve-ClaudeProjectionNetworkSelection -Mode existing -VnetId $vnetId `
+        -EndpointsSubnetId $ids.EndpointsSubnetId -RunnerSubnetId $ids.RunnerSubnetId `
+        -ResolverSubnetId $ids.ResolverSubnetId -RenewalSubnetId $ids.RenewalSubnetId `
+        -ApimSubnetId $ids.ApimSubnetId @centralZoneIds -NonInteractive
+}
+Assert 'existing selection accepts explicit customer-owned private DNS zone ids' (
+    -not $Failure -and
+    @($centralZoneIds.Keys | Where-Object { $Result.$_ -ne $centralZoneIds[$_] }).Count -eq 0
+) $Failure
+if (-not $Failure) {
+    $centralPlan = $Result
+    $centralZones = @(
+        foreach ($entry in $centralZoneIds.GetEnumerator()) {
+            [pscustomobject]@{
+                Name = ([string]$entry.Value -split '/')[-1]
+                Id = $entry.Value
+                Links = @([pscustomobject]@{ Name = 'customer-link'; VirtualNetworkId = $vnetId })
+            }
+        }
+    )
+    Capture {
+        Test-ClaudeProjectionNetworkPlan -Plan $centralPlan -Apim $apim -VirtualNetwork $vnet `
+            -Subnets (New-SubnetMap) -ApimNetworkSecurityGroup (New-ApimNsg) -DnsZones $centralZones `
+            -ProjectionResourceGroupId $rgId -NamePrefix p116
+    }
+    Assert 'supplied central zones already linked to the customer VNet pass without projection ownership' (
+        -not $Failure -and $Result.Valid -and $Result.ReusedPrivateDnsZones.Count -eq 5
+    ) $Failure
+}
+Capture {
+    Resolve-ClaudeProjectionNetworkSelection -Mode existing -VnetId $vnetId `
+        -EndpointsSubnetId $ids.EndpointsSubnetId -RunnerSubnetId $ids.RunnerSubnetId `
+        -ResolverSubnetId $ids.ResolverSubnetId -RenewalSubnetId $ids.RenewalSubnetId `
+        -ApimSubnetId $ids.ApimSubnetId `
+        -CosmosDnsZoneId $centralZoneIds.BlobDnsZoneId -NonInteractive
+}
+Assert 'a reused zone id whose namespace does not match its role is refused' (
+    $Failure -match 'CosmosDnsZoneId' -and $Failure -match 'privatelink.documents.azure.com' -and $Failure -match 'Nothing was changed'
+) $Failure
+
 $result = Test-ClaudeProjectionNetworkPlan -Plan $plan -Apim $apim -VirtualNetwork $vnet `
     -Subnets (New-SubnetMap) -ApimNetworkSecurityGroup (New-ApimNsg) -DnsZones @() -ProjectionResourceGroupId $rgId -NamePrefix p116
 Assert 'a valid customer network passes and reports every owned DNS namespace' (

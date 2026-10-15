@@ -27,6 +27,7 @@ function Assert($label, $condition, $detail = '') {
 
 $policy = if (Test-Path $policyPath) { Get-Content $policyPath -Raw } else { '' }
 $bicep = if (Test-Path $bicepPath) { Get-Content $bicepPath -Raw } else { '' }
+$managedFoundryAuth = Get-Content (Join-Path $root 'infra/foundry-auth-managed-identity.xml') -Raw
 
 Write-Host ''
 Write-Host 'P13 capability scoping - models, enforced at the gateway' -ForegroundColor Cyan
@@ -60,8 +61,12 @@ Assert 'the refusal is in Anthropic shape'   ($refusal -match '"type", "error"')
 # had nothing to do with model scoping. The Foundry one is identified by its
 # audience rather than by position.
 $gateAt = $policy.IndexOf('modelAllowed')
-$msiAt = $policy.IndexOf('output-token-variable-name="msi-token"')
-Assert 'the model is checked before Foundry is called' (($gateAt -ge 0) -and ($msiAt -ge 0) -and ($gateAt -lt $msiAt)) "gate at $gateAt, Foundry managed identity at $msiAt"
+$foundryAuthAt = $policy.IndexOf('<!-- FOUNDRY_AUTHENTICATION -->')
+Assert 'the model is checked before Foundry is called' (
+    ($gateAt -ge 0) -and ($foundryAuthAt -ge 0) -and ($gateAt -lt $foundryAuthAt) -and
+    $managedFoundryAuth -match 'authentication-managed-identity' -and
+    $managedFoundryAuth -match 'resource="https://cognitiveservices.azure.com"'
+) "gate at $gateAt, Foundry authentication insertion at $foundryAuthAt"
 
 Write-Host ''
 Write-Host 'P13 capability scoping - settings, delivered per tier' -ForegroundColor Cyan

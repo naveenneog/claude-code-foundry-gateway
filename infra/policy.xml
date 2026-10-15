@@ -804,16 +804,10 @@
             <dimension name="SessionId" value="@((string)context.Variables["sessionId"])" />
         </llm-emit-token-metric>
 
-        <!-- 10. Swap the caller's token for the gateway's own identity. The
-             developer token is deliberately not forwarded: Foundry trusts only
-             the gateway's managed identity. -->
-        <authentication-managed-identity
-            resource="https://cognitiveservices.azure.com"
-            output-token-variable-name="msi-token"
-            ignore-error="false" />
-        <set-header name="Authorization" exists-action="override">
-            <value>@("Bearer " + (string)context.Variables["msi-token"])</value>
-        </set-header>
+        <!-- 10. Swap the caller's token for the gateway's Foundry credential.
+             main.bicep inserts either the default managed-identity statements
+             or the explicit cross-tenant client-credential statements here. -->
+        <!-- FOUNDRY_AUTHENTICATION -->
         <set-header name="x-api-key" exists-action="delete" />
 
         <!-- 11. Attribution for Foundry-side logs. -->

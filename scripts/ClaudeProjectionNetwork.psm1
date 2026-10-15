@@ -27,6 +27,11 @@ function Resolve-ClaudeProjectionNetworkSelection {
         [string]$ResolverSubnetId,
         [string]$RenewalSubnetId,
         [string]$ApimSubnetId,
+        [string]$CosmosDnsZoneId,
+        [string]$SitesDnsZoneId,
+        [string]$BlobDnsZoneId,
+        [string]$QueueDnsZoneId,
+        [string]$TableDnsZoneId,
         [switch]$NonInteractive,
         [scriptblock]$Selector
     )
@@ -38,7 +43,14 @@ function Resolve-ClaudeProjectionNetworkSelection {
         RenewalSubnetId = $RenewalSubnetId
         ApimSubnetId = $ApimSubnetId
     }
-    $hasIds = @($ids.Values | Where-Object { $_ }).Count -gt 0
+    $zoneIds = [ordered]@{
+        CosmosDnsZoneId = @{ Value = $CosmosDnsZoneId; Namespace = 'privatelink.documents.azure.com' }
+        SitesDnsZoneId = @{ Value = $SitesDnsZoneId; Namespace = 'privatelink.azurewebsites.net' }
+        BlobDnsZoneId = @{ Value = $BlobDnsZoneId; Namespace = 'privatelink.blob.core.windows.net' }
+        QueueDnsZoneId = @{ Value = $QueueDnsZoneId; Namespace = 'privatelink.queue.core.windows.net' }
+        TableDnsZoneId = @{ Value = $TableDnsZoneId; Namespace = 'privatelink.table.core.windows.net' }
+    }
+    $hasIds = @($ids.Values | Where-Object { $_ }).Count -gt 0 -or @($zoneIds.Values | Where-Object { $_.Value }).Count -gt 0
     if (-not $Mode) {
         if ($hasIds) { $Mode = 'existing' }
         elseif ($NonInteractive -or -not $Selector) { $Mode = 'managed' }
@@ -57,6 +69,11 @@ function Resolve-ClaudeProjectionNetworkSelection {
             ResolverSubnetId = ''
             RenewalSubnetId = ''
             ApimSubnetId = ''
+            CosmosDnsZoneId = ''
+            SitesDnsZoneId = ''
+            BlobDnsZoneId = ''
+            QueueDnsZoneId = ''
+            TableDnsZoneId = ''
         }
     }
     $missing = @($ids.GetEnumerator() | Where-Object { -not $_.Value } | ForEach-Object Key)
@@ -69,6 +86,17 @@ function Resolve-ClaudeProjectionNetworkSelection {
             throw "$($entry.Key) is not a complete Azure resource ID. Nothing was changed."
         }
     }
+    $vnetSubscription = Get-ClaudeProjectionNetworkSubscription $VnetId
+    foreach ($entry in $zoneIds.GetEnumerator()) {
+        if (-not $entry.Value.Value) { continue }
+        $expected = [regex]::Escape([string]$entry.Value.Namespace)
+        if ([string]$entry.Value.Value -notmatch "^/subscriptions/([^/]+)/resourceGroups/[^/]+/providers/Microsoft\.Network/privateDnsZones/$expected$") {
+            throw "$($entry.Key) must be the complete resource ID of $($entry.Value.Namespace). Nothing was changed."
+        }
+        if (-not [string]::Equals([string]$Matches[1], $vnetSubscription, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "$($entry.Key) must be in the selected VNet subscription $vnetSubscription. Nothing was changed."
+        }
+    }
     [pscustomobject]@{
         Mode = 'existing'
         VnetId = $VnetId
@@ -77,6 +105,11 @@ function Resolve-ClaudeProjectionNetworkSelection {
         ResolverSubnetId = $ResolverSubnetId
         RenewalSubnetId = $RenewalSubnetId
         ApimSubnetId = $ApimSubnetId
+        CosmosDnsZoneId = $CosmosDnsZoneId
+        SitesDnsZoneId = $SitesDnsZoneId
+        BlobDnsZoneId = $BlobDnsZoneId
+        QueueDnsZoneId = $QueueDnsZoneId
+        TableDnsZoneId = $TableDnsZoneId
     }
 }
 
@@ -152,6 +185,8 @@ function Test-ClaudeProjectionNetworkPlan {
             Valid = $true
             Mode = 'managed'
             RequiredPrivateDnsZones = $requiredZones
+            ReusedPrivateDnsZones = @()
+            CreatedPrivateDnsZones = $requiredZones
             Summary = 'Create a managed projection VNet with five dedicated subnets; projection-network.bicep creates and owns the private DNS zones.'
         }
     }
@@ -213,10 +248,38 @@ function Test-ClaudeProjectionNetworkPlan {
             $prefix = Get-ClaudeProjectionSubnetPrefix $Subnets[$role]
             if ($prefix.Length -gt 27) { throw "$role subnet $($prefix.Cidr) is smaller than /27." }
         }
+        $zoneSelections = [ordered]@{
+            'privatelink.documents.azure.com' = [string]$Plan.CosmosDnsZoneId
+            'privatelink.azurewebsites.net' = [string]$Plan.SitesDnsZoneId
+            'privatelink.blob.core.windows.net' = [string]$Plan.BlobDnsZoneId
+            'privatelink.queue.core.windows.net' = [string]$Plan.QueueDnsZoneId
+            'privatelink.table.core.windows.net' = [string]$Plan.TableDnsZoneId
+        }
+        $reusedZones = [Collections.Generic.List[string]]::new()
+        foreach ($selection in $zoneSelections.GetEnumerator()) {
+            if (-not $selection.Value) { continue }
+            $discoveredZone = @($DnsZones | Where-Object {
+                [string]::Equals([string]$_.Id, $selection.Value, [StringComparison]::OrdinalIgnoreCase)
+            })
+            if ($discoveredZone.Count -ne 1) {
+                throw "$($selection.Key) was selected for reuse but its resource ID was not discovered exactly once."
+            }
+            $selectedLinks = @($discoveredZone[0].Links | Where-Object {
+                [string]::Equals([string]$_.VirtualNetworkId, [string]$Plan.VnetId, [StringComparison]::OrdinalIgnoreCase)
+            })
+            if (-not $selectedLinks.Count) {
+                throw "$($selection.Key) was selected for reuse but is not linked to the selected VNet."
+            }
+            $reusedZones.Add($selection.Key)
+        }
         foreach ($zone in @($DnsZones)) {
             if ($requiredZones -notcontains [string]$zone.Name) { continue }
             foreach ($link in @($zone.Links)) {
                 if (-not [string]::Equals([string]$link.VirtualNetworkId, [string]$Plan.VnetId, [StringComparison]::OrdinalIgnoreCase)) { continue }
+                if ($zoneSelections[[string]$zone.Name] -and
+                    [string]::Equals([string]$zone.Id, [string]$zoneSelections[[string]$zone.Name], [StringComparison]::OrdinalIgnoreCase)) {
+                    continue
+                }
                 $ownedZoneId = "$ProjectionResourceGroupId/providers/Microsoft.Network/privateDnsZones/$($zone.Name)"
                 $ownedLink = ([string]::Equals([string]$zone.Id, $ownedZoneId, [StringComparison]::OrdinalIgnoreCase) -and
                     [string]::Equals([string]$link.Name, "$NamePrefix-link", [StringComparison]::OrdinalIgnoreCase))
@@ -229,7 +292,9 @@ function Test-ClaudeProjectionNetworkPlan {
             Valid = $true
             Mode = 'existing'
             RequiredPrivateDnsZones = $requiredZones
-            Summary = "Use customer VNet $($Plan.VnetId) with five validated dedicated subnets; projection-network.bicep creates and owns the private DNS zones."
+            ReusedPrivateDnsZones = $reusedZones.ToArray()
+            CreatedPrivateDnsZones = @($requiredZones | Where-Object { $reusedZones -notcontains $_ })
+            Summary = "Use customer VNet $($Plan.VnetId) with five validated dedicated subnets; reuse $($reusedZones.Count) customer private DNS zone(s) and create $($requiredZones.Count - $reusedZones.Count)."
         }
     }
     catch {

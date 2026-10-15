@@ -16,6 +16,25 @@ param foundryAccountName string
 @description('Resource group of the Foundry account. Defaults to this resource group.')
 param foundryResourceGroup string = resourceGroup().name
 
+@description('How APIM authenticates to Foundry. Client credentials is for an explicitly configured account in another Entra tenant.')
+@allowed([
+  'managed-identity'
+  'client-credentials'
+])
+param foundryAuthenticationMode string = 'managed-identity'
+
+@description('Explicit Foundry endpoint for client-credentials mode. Empty discovers the endpoint from foundryAccountName in managed-identity mode.')
+param foundryEndpoint string = ''
+
+@description('Entra tenant that issues the Foundry client-credential token.')
+param foundryTenantId string = ''
+
+@description('Application client id used for cross-tenant Foundry access.')
+param foundryClientId string = ''
+
+@description('Existing APIM secret named value that holds the cross-tenant application credential. The template references it and never reads or writes its value.')
+param foundryClientSecretNamedValue string = 'foundry-crosstenant-client-secret'
+
 @description('Publisher email shown on the API Management instance.')
 param publisherEmail string
 
@@ -239,10 +258,36 @@ var buModesValue = empty(buModesExisting) ? ',,' : buModesExisting
 var usdBudgetsValue = empty(usdBudgetsExisting) ? 'e30=' : usdBudgetsExisting
 var usdBudgetStateValue = empty(usdBudgetStateExisting) ? 'e30=' : usdBudgetStateExisting
 
-resource foundry 'Microsoft.CognitiveServices/accounts@2024-10-01' existing = {
+resource foundry 'Microsoft.CognitiveServices/accounts@2024-10-01' existing = if (foundryAuthenticationMode == 'managed-identity') {
   name: foundryAccountName
   scope: resourceGroup(foundryResourceGroup)
 }
+
+var managedFoundryAuthenticationPolicy = loadTextContent('foundry-auth-managed-identity.xml')
+var clientCredentialFoundryAuthenticationPolicy = replace(
+  replace(
+    replace(
+      loadTextContent('foundry-auth-client-credentials.xml'),
+      '__FOUNDRY_TENANT_ID__',
+      foundryTenantId
+    ),
+    '__FOUNDRY_CLIENT_ID__',
+    foundryClientId
+  ),
+  '__FOUNDRY_CLIENT_SECRET_NAMED_VALUE__',
+  '{{${foundryClientSecretNamedValue}}}'
+)
+var foundryAuthenticationPolicy = foundryAuthenticationMode == 'client-credentials'
+  ? clientCredentialFoundryAuthenticationPolicy
+  : managedFoundryAuthenticationPolicy
+var apiPolicyContent = replace(
+  loadTextContent('policy.xml'),
+  '<!-- FOUNDRY_AUTHENTICATION -->',
+  foundryAuthenticationPolicy
+)
+var effectiveFoundryEndpoint = foundryAuthenticationMode == 'client-credentials'
+  ? (endsWith(foundryEndpoint, '/') ? foundryEndpoint : '${foundryEndpoint}/')
+  : foundry!.properties.endpoints['AI Foundry API']
 
 // ---------------------------------------------------------------------------
 // Observability
@@ -359,7 +404,7 @@ resource api 'Microsoft.ApiManagement/service/apis@2024-05-01' = {
     protocols: [
       'https'
     ]
-    serviceUrl: '${foundry.properties.endpoints['AI Foundry API']}anthropic'
+    serviceUrl: '${effectiveFoundryEndpoint}anthropic'
     // Authorization comes from the caller's Entra ID token, not an APIM
     // subscription key: Claude Code cannot reliably send a custom key header,
     // and a shared key would destroy per-person attribution.
@@ -485,7 +530,7 @@ resource apiPolicy 'Microsoft.ApiManagement/service/apis/policies@2024-05-01' = 
   name: 'policy'
   properties: {
     format: 'rawxml'
-    value: loadTextContent('policy.xml')
+    value: apiPolicyContent
   }
   dependsOn: [
     apimNamedValues
@@ -565,7 +610,7 @@ resource llmLogs 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
 //
 // Install-ClaudeGateway.ps1 checks for an equivalent assignment and passes
 // false when one is already in place.
-module foundryRole 'foundry-role.bicep' = if (grantFoundryRole) {
+module foundryRole 'foundry-role.bicep' = if (grantFoundryRole && foundryAuthenticationMode == 'managed-identity') {
   name: 'grant-apim-cognitive-services-user'
   scope: resourceGroup(foundryResourceGroup)
   params: {
@@ -578,7 +623,7 @@ output apimName string = apim.name
 output gatewayUrl string = '${apim.properties.gatewayUrl}/${apiPath}'
 output apimPrincipalId string = apim.identity.principalId
 output appInsightsName string = appInsights.name
-output foundryEndpoint string = foundry.properties.endpoints['AI Foundry API']
+output foundryEndpoint string = effectiveFoundryEndpoint
 output claudeCodeSettings object = {
   env: {
     CLAUDE_CODE_USE_FOUNDRY: '1'

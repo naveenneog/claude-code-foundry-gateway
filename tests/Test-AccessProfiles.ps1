@@ -4,6 +4,7 @@ trap { Write-Host "  [FAIL] unexpected access-profile policy error: $($_.Excepti
 
 $root = Split-Path $PSScriptRoot -Parent
 $policy = Get-Content (Join-Path $root 'infra\policy.xml') -Raw
+$managedFoundryAuth = Get-Content (Join-Path $root 'infra\foundry-auth-managed-identity.xml') -Raw
 $fail = 0
 
 function Assert($label, $condition, $detail = '') {
@@ -38,9 +39,11 @@ Assert 'expanded projection fields are resolved only on the projection path' (
 )
 
 $modelGateAt = $policy.IndexOf('<set-variable name="modelAllowed"')
-$foundryIdentityAt = $policy.IndexOf('output-token-variable-name="msi-token"')
+$foundryIdentityAt = $policy.IndexOf('<!-- FOUNDRY_AUTHENTICATION -->')
 Assert 'model refusal remains before Foundry forwarding' (
-    $modelGateAt -ge 0 -and $foundryIdentityAt -gt $modelGateAt
+    $modelGateAt -ge 0 -and $foundryIdentityAt -gt $modelGateAt -and
+    $managedFoundryAuth -match 'authentication-managed-identity' -and
+    $managedFoundryAuth -match 'resource="https://cognitiveservices.azure.com"'
 )
 $refusal = if ($modelGateAt -ge 0) { $policy.Substring($modelGateAt, [Math]::Min(3000, $policy.Length - $modelGateAt)) } else { '' }
 Assert 'model refusal keeps the current Anthropic error shape' (
