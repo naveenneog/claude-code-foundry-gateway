@@ -348,8 +348,8 @@ $mutations = @(
     @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'the script route stops warning about the handover file'
        File  = 'docs/SETUP.md'
-       From  = 'Only the wizard writes that'
-       To    = 'Every route writes that' }
+       From  = 'It does **not** write `onboarding/claude-gateway.json`'
+       To    = 'It writes `onboarding/claude-gateway.json`' }
 
     @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'the portal route stops listing what it skips'
