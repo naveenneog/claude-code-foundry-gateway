@@ -296,6 +296,7 @@ try {
     Invoke-Check 'Documentation links and commands'        'Test-DocReferences.ps1'
     Invoke-Check 'Documentation structure and disclosures' 'Test-DocStructure.ps1'
     Invoke-Check 'Markdown commands and tables'            'Test-DocMarkdown.ps1'
+    Invoke-Check 'Production access-profile runbook'        'Test-ProductionAccessRunbook.ps1'
     Invoke-Check 'Azure CLI setup guide mirrors scripts [0/4]' 'Test-AzCommandsGuide.ps1' @{ Shard = '0/4' }
     Invoke-Check 'Azure CLI setup guide mirrors scripts [1/4]' 'Test-AzCommandsGuide.ps1' @{ Shard = '1/4' }
     Invoke-Check 'Azure CLI setup guide mirrors scripts [2/4]' 'Test-AzCommandsGuide.ps1' @{ Shard = '2/4' }

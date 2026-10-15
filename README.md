@@ -123,6 +123,11 @@ reads remain blocked.
 `nominalCredit` is metadata; existing explicit P108 USD budgets remain the
 enforcement mechanism in P116.
 
+The production sequence, including 47-group preparation, one-command resource
+deployment, customer-provided VNet inputs, the scheduled-sync grant and
+screenshots, is in
+[`docs/PRODUCTION-ACCESS-PROFILES.md`](docs/PRODUCTION-ACCESS-PROFILES.md).
+
 </details>
 
 ## Capacity and cost today

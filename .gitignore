@@ -34,6 +34,7 @@ onboarding/claude-gateway.json
 onboarding/aum-service.json
 onboarding/projection-renewal-*.json
 onboarding/projection-switch-*.json
+onboarding/access-catalog*.json
 onboarding/profiles/
 onboarding/model-snapshots/
 onboarding/**/claude-gateway.json
