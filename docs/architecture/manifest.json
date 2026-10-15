@@ -612,7 +612,7 @@
         "tools/installer-ui/azure-lease.mjs": "02472d0ac394b998ffdb65b690b8a663bad29d54c11a7b899db1572c845fb2de",
         "tools/installer-ui/child-output.mjs": "a4edf50ab05eb00b84a94bae38bf680e55a4b928529a1a928ba82c0200f3f764",
         "tools/installer-ui/http-helpers.mjs": "1fbb9ceddf61ee47fa5afbb03f8e52efd38f7ac943832de5fc41b135d17d3c1b",
-        "tools/installer-ui/index.html": "9b3f395cec1285f2b0fa4d5a186538b24bf2f1687ea43d40254b594e07d66642",
+        "tools/installer-ui/index.html": "74dd9f151d27bfaae5911171b1880ca05ec077ad3df698b3ed5eedfdeb5f6540",
         "tools/installer-ui/installer-contract.mjs": "ade7f4d67c43f2f25293a8710896404309e489800e783879fec3c776609f8948",
         "tools/installer-ui/installer-stream.mjs": "3999699667bbcbd8248771d3fdef05816ba785910b6a49f90bb40ddcb6a852ad",
         "tools/installer-ui/installer-ui-actions.js": "98b8c655b51167c0d6e9d6b39efd54f37682df2511a50e4a9acf0ef7a04ab88b",
@@ -630,7 +630,7 @@
         "tools/installer-ui/server.mjs": "63d62f6fcb49edd3bb5d5a9091ec7f4a5b1dbcf44ceb2087f31ad94991dc3e96",
         "tools/installer-ui/session-auth.mjs": "8772b05264d7baed857672c6934c9f149e16470288b9fb2e90e4159f31aac7c9",
         "tools/installer-ui/step-scope.mjs": "2e06c641c5d9292232d75bc38b877da0e883dc238785eb354e09e95790b0e7fd",
-        "tools/installer-ui/ui-model.js": "69e2ef29b6568f5e5da314a23c269e1aeeceb68529bd0ea91d4e52acdd8da539"
+        "tools/installer-ui/ui-model.js": "a296774606bd507ec06f60d1eee16edfa55049da86f7d7974e6bad11f2f9ee0c"
       },
       "outputs": [
         {
