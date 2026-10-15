@@ -387,10 +387,10 @@ if (-not (Test-ClaudePrerequisites -Mode Admin)) { return }
 if ($AnswersPath) {
     . (Join-Path $root 'scripts/ClaudeInstallerAnswers.ps1')
     $fromAnswers = Import-ClaudeInstallerAnswers -Path $AnswersPath -Bound $PSBoundParameters
-    foreach ($name in @($fromAnswers.Keys)) { Set-Variable -Name $name -Value $fromAnswers[$name]; $PSBoundParameters[$name] = $fromAnswers[$name] }
+    foreach ($name in @($fromAnswers.Keys)) { Set-Variable -Name $name -Value $fromAnswers[$name] -WhatIf:$false; $PSBoundParameters[$name] = $fromAnswers[$name] }
 }
 $recordedAnswers = Open-ClaudeInstallCheckpoint -Root $root -Bound $PSBoundParameters -Restart:$Restart -WhatIfRun:$WhatIfPreference -AnswersPath $AnswersPath
-foreach ($name in @($recordedAnswers.Keys)) { if (-not $PSBoundParameters.ContainsKey($name)) { Set-Variable -Name $name -Value $recordedAnswers[$name]; $PSBoundParameters[$name] = $recordedAnswers[$name] } }
+foreach ($name in @($recordedAnswers.Keys)) { if (-not $PSBoundParameters.ContainsKey($name)) { Set-Variable -Name $name -Value $recordedAnswers[$name] -WhatIf:$false; $PSBoundParameters[$name] = $recordedAnswers[$name] } }
 if (-not $PSBoundParameters.ContainsKey('DeveloperEstimate') -and $null -ne ($recordedEstimate = Get-ClaudeInstallAnswer 'DeveloperEstimate')) { $script:DeveloperEstimate = [int]$recordedEstimate }
 . (Join-Path $root 'scripts/ClaudeFoundryAuthentication.ps1')
 $foundrySubscriptionArgs = if ($FoundrySubscriptionId) { @('--subscription',$FoundrySubscriptionId) } elseif ($SubscriptionId) { @('--subscription',$SubscriptionId) } else { @() }
@@ -627,7 +627,7 @@ Write-Ok "$FoundryAccount (rg $FoundryResourceGroup)"
 # model that looks correct.
 # A resumed run that recorded a Claude deployment still to create creates it after its summary.
 if (-not $pendingDeployment -and ($restored = Get-ClaudeInstallPendingDeployment)) { $pendingDeployment = $restored.Deployment; $providerData = $restored.ProviderData }
-$deployed = @(Get-ClaudeDeployment -Account $FoundryAccount -ResourceGroup $FoundryResourceGroup)
+$deployed = @(Get-ClaudeDeployment -Account $FoundryAccount -ResourceGroup $FoundryResourceGroup -SubscriptionId $FoundrySubscriptionId)
 if ($pendingDeployment -and $pendingDeployment.account -eq $FoundryAccount) { $deployed += $pendingDeployment }
 $modelsStd = ''
 $modelsPrm = ''

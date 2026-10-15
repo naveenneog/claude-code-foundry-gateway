@@ -127,16 +127,19 @@ function Get-ClaudeDeployment {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)][string]$Account,
-        [Parameter(Mandatory = $true)][string]$ResourceGroup
+        [Parameter(Mandatory = $true)][string]$ResourceGroup,
+        [string]$SubscriptionId
     )
 
     # No --query: a JMESPath with parentheses reaches cmd.exe bare through the
     # az .cmd shim on Windows PowerShell and dies there. Filter in PowerShell.
+    $azArgs = @('cognitiveservices', 'account', 'deployment', 'list', '-n', $Account, '-g', $ResourceGroup, '-o', 'json', '--only-show-errors')
+    if ($SubscriptionId) { $azArgs += '--subscription', $SubscriptionId }
     $saved = $ErrorActionPreference
     try {
         $ErrorActionPreference = 'Continue'
         $global:LASTEXITCODE = 0
-        $output = @(az cognitiveservices account deployment list -n $Account -g $ResourceGroup -o json --only-show-errors 2>&1)
+        $output = @(& az @azArgs 2>&1)
         $code = $LASTEXITCODE
     }
     finally { $ErrorActionPreference = $saved }

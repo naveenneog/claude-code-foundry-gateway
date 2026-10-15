@@ -3,6 +3,8 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $catalogPath = Join-Path $root 'config\access-catalog.example.json'
 $deploymentPath = Join-Path $root 'config\production-deployment.example.json'
+$installerPath = Join-Path $root 'Install-ClaudeGateway.ps1'
+$modelDeploymentPath = Join-Path $root 'scripts\ClaudeModelDeployment.ps1'
 $fail = 0
 $count = 0
 
@@ -80,6 +82,17 @@ if ($deployment) {
         $serialized -notmatch 'd2885cb9-fed7-44e5-bf35-834991ed5eb0|66db7d6e-9810-4e77-853a-164a7dbde561|ccof-poc-|32db3f22-0cbb-4806-9b12-36bcb0d3c625'
     )
 }
+
+$installer = Get-Content -Raw -LiteralPath $installerPath
+Assert-ProductionConfig 'WhatIf still binds answer-file and checkpoint values before previewing the plan' (
+    ([regex]::Matches($installer, 'Set-Variable\s+-Name\s+\$name\s+-Value\s+.+?-WhatIf:\$false')).Count -eq 2
+)
+$modelDeployment = Get-Content -Raw -LiteralPath $modelDeploymentPath
+Assert-ProductionConfig 'deployed-model discovery stays in the separate Foundry subscription' (
+    $installer -match 'Get-ClaudeDeployment\s+-Account\s+\$FoundryAccount\s+-ResourceGroup\s+\$FoundryResourceGroup\s+-SubscriptionId\s+\$FoundrySubscriptionId' -and
+    $modelDeployment -match '\[string\]\$SubscriptionId' -and
+    $modelDeployment -match '''--subscription'',\s*\$SubscriptionId'
+)
 
 Write-Host ''
 if ($fail) {
