@@ -116,7 +116,7 @@ test("F1 drift covers every Install-ClaudeGateway answer and rejects Start-only 
     startOnly: [],
     unknown: [],
   });
-  assert.equal(model.installerFieldNames(schema).length, 53);
+  assert.equal(model.installerFieldNames(schema).length, 60);
   const copied = structuredClone(schema);
   copied.properties.P93Missing = {
     title: "Missing",
