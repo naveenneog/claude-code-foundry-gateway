@@ -125,12 +125,16 @@ Assert 'choosing projection deploys, populates and compares first, then switches
 
 $calls.Clear()
 $vnet = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/network-rg/providers/Microsoft.Network/virtualNetworks/customer'
+$dns = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/network-rg/providers/Microsoft.Network/privateDnsZones'
 $null = Invoke-ClaudeInstallerProjectionDeployment -Root $root -ResourceGroup rg-p98 -ApimName apim-p98 -NamePrefix p98 `
     -Location eastus2 -Sku StandardV2 -ResolverInboundAccess private -StandardGroup std -PremiumGroup prem `
     -ProjectionNetworkMode existing -ProjectionVnetId $vnet -ProjectionEndpointsSubnetId "$vnet/subnets/endpoints" `
     -ProjectionRunnerSubnetId "$vnet/subnets/runner" -ProjectionResolverSubnetId "$vnet/subnets/resolver" `
-    -ProjectionRenewalSubnetId "$vnet/subnets/renewal" -ProjectionApimSubnetId "$vnet/subnets/apim" -InvokeScript $record
-Assert 'existing network selection reaches the deployment run with all five subnet ids' (
+    -ProjectionRenewalSubnetId "$vnet/subnets/renewal" -ProjectionApimSubnetId "$vnet/subnets/apim" `
+    -ProjectionCosmosDnsZoneId "$dns/privatelink.documents.azure.com" -ProjectionSitesDnsZoneId "$dns/privatelink.azurewebsites.net" `
+    -ProjectionBlobDnsZoneId "$dns/privatelink.blob.core.windows.net" -ProjectionQueueDnsZoneId "$dns/privatelink.queue.core.windows.net" `
+    -ProjectionTableDnsZoneId "$dns/privatelink.table.core.windows.net" -InvokeScript $record
+Assert 'existing network selection reaches the deployment run with all five subnet and DNS ids' (
     $calls.Count -eq 2 -and (& $named $calls[0] '-ProjectionNetworkMode') -eq 'existing' -and
     (& $named $calls[0] '-ProjectionVnetId') -eq $vnet -and
     (& $named $calls[0] '-ProjectionEndpointsSubnetId') -eq "$vnet/subnets/endpoints" -and
@@ -138,6 +142,11 @@ Assert 'existing network selection reaches the deployment run with all five subn
     (& $named $calls[0] '-ProjectionResolverSubnetId') -eq "$vnet/subnets/resolver" -and
     (& $named $calls[0] '-ProjectionRenewalSubnetId') -eq "$vnet/subnets/renewal" -and
     (& $named $calls[0] '-ProjectionApimSubnetId') -eq "$vnet/subnets/apim" -and
+    (& $named $calls[0] '-ProjectionCosmosDnsZoneId') -eq "$dns/privatelink.documents.azure.com" -and
+    (& $named $calls[0] '-ProjectionSitesDnsZoneId') -eq "$dns/privatelink.azurewebsites.net" -and
+    (& $named $calls[0] '-ProjectionBlobDnsZoneId') -eq "$dns/privatelink.blob.core.windows.net" -and
+    (& $named $calls[0] '-ProjectionQueueDnsZoneId') -eq "$dns/privatelink.queue.core.windows.net" -and
+    (& $named $calls[0] '-ProjectionTableDnsZoneId') -eq "$dns/privatelink.table.core.windows.net" -and
     -not $calls[1].Args.Contains('ProjectionNetworkMode')
 ) ($calls | ConvertTo-Json -Depth 5)
 

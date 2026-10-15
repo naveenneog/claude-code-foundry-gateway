@@ -31,8 +31,15 @@
 [CmdletBinding(SupportsShouldProcess)]
 param(
     [string]$SubscriptionId,
+    [string]$FoundrySubscriptionId,
     [string]$FoundryAccount,
     [string]$FoundryResourceGroup,
+    [ValidateSet('managed-identity','client-credentials')]
+    [string]$FoundryAuthenticationMode = 'managed-identity',
+    [string]$FoundryEndpoint,
+    [string]$FoundryTenantId,
+    [string]$FoundryClientId,
+    [string]$FoundryCredentialNamedValue = 'foundry-crosstenant-client-secret',
     [string]$ResourceGroup,
     [string]$Location,
     [string]$NamePrefix,
@@ -69,6 +76,11 @@ param(
     [string]$ProjectionResolverSubnetId,
     [string]$ProjectionRenewalSubnetId,
     [string]$ProjectionApimSubnetId,
+    [string]$ProjectionCosmosDnsZoneId,
+    [string]$ProjectionSitesDnsZoneId,
+    [string]$ProjectionBlobDnsZoneId,
+    [string]$ProjectionQueueDnsZoneId,
+    [string]$ProjectionTableDnsZoneId,
     [switch]$DeployProjection,
     [switch]$FlipProjectionAfterCleanCompare,
     [switch]$DeploySyncJob,
@@ -380,6 +392,8 @@ if ($AnswersPath) {
 $recordedAnswers = Open-ClaudeInstallCheckpoint -Root $root -Bound $PSBoundParameters -Restart:$Restart -WhatIfRun:$WhatIfPreference -AnswersPath $AnswersPath
 foreach ($name in @($recordedAnswers.Keys)) { if (-not $PSBoundParameters.ContainsKey($name)) { Set-Variable -Name $name -Value $recordedAnswers[$name]; $PSBoundParameters[$name] = $recordedAnswers[$name] } }
 if (-not $PSBoundParameters.ContainsKey('DeveloperEstimate') -and $null -ne ($recordedEstimate = Get-ClaudeInstallAnswer 'DeveloperEstimate')) { $script:DeveloperEstimate = [int]$recordedEstimate }
+. (Join-Path $root 'scripts/ClaudeFoundryAuthentication.ps1')
+$foundrySubscriptionArgs = if ($FoundrySubscriptionId) { @('--subscription',$FoundrySubscriptionId) } elseif ($SubscriptionId) { @('--subscription',$SubscriptionId) } else { @() }
 if (-not $BusinessUnits -and ($recordedUnits = Get-ClaudeInstallAnswer 'BusinessUnits')) { $BusinessUnits = @($recordedUnits) }
 if ($DeployProjection) { Write-Note '-DeployProjection is accepted for compatibility; since P98, choosing -EntitlementStore projection always deploys and switches the projection.' }
 if ($FlipProjectionAfterCleanCompare) { Write-Note '-FlipProjectionAfterCleanCompare is accepted for compatibility; since P98, the installer switch is part of -EntitlementStore projection.' }
@@ -387,10 +401,16 @@ if ($FlipProjectionAfterCleanCompare) { Write-Note '-FlipProjectionAfterCleanCom
 # The parameters as bound, before the first az call that uses one. A list passed to one of these
 # arrives as text joined by binding, so it is checked here too.
 Assert-AzArgumentsSafe -Values ([ordered]@{
-    SubscriptionId = $SubscriptionId; FoundryAccount = $FoundryAccount; FoundryResourceGroup = $FoundryResourceGroup
+    SubscriptionId = $SubscriptionId; FoundrySubscriptionId = $FoundrySubscriptionId
+    FoundryAccount = $FoundryAccount; FoundryResourceGroup = $FoundryResourceGroup
+    FoundryEndpoint = $FoundryEndpoint; FoundryTenantId = $FoundryTenantId
+    FoundryClientId = $FoundryClientId; FoundryCredentialNamedValue = $FoundryCredentialNamedValue
     ResourceGroup = $ResourceGroup; Location = $Location; NamePrefix = $NamePrefix; ExistingApimName = $ExistingApimName
     PublisherEmail = $PublisherEmail; StandardGroup = $StandardGroup; PremiumGroup = $PremiumGroup
     DesktopEntraClientId = $DesktopEntraClientId; DesktopEntraAudience = $DesktopEntraAudience
+    ProjectionCosmosDnsZoneId = $ProjectionCosmosDnsZoneId; ProjectionSitesDnsZoneId = $ProjectionSitesDnsZoneId
+    ProjectionBlobDnsZoneId = $ProjectionBlobDnsZoneId; ProjectionQueueDnsZoneId = $ProjectionQueueDnsZoneId
+    ProjectionTableDnsZoneId = $ProjectionTableDnsZoneId
 })
 
 Write-Step 'Azure sign-in'
@@ -466,7 +486,7 @@ if (-not $FoundryAccount) {
     #
     # Keep JMESPath here free of ( ) | & < > ^ and filter in PowerShell instead.
     # Brackets and braces alone are fine.
-    $accounts = Invoke-ClaudeInstallAzShown { az cognitiveservices account list --query "[].{name:name, rg:resourceGroup, loc:location, kind:kind}" -o json } |
+    $accounts = Invoke-ClaudeInstallAzShown { az cognitiveservices account list --query "[].{name:name, rg:resourceGroup, loc:location, kind:kind}" -o json @foundrySubscriptionArgs } |
         ConvertFrom-Json
     $accounts = @($accounts | Where-Object { $_.kind -eq 'AIServices' -or $_.kind -eq 'OpenAI' })
 
@@ -483,7 +503,7 @@ if (-not $FoundryAccount) {
     foreach ($a in $accounts) {
         $checked++
         $watch = [Diagnostics.Stopwatch]::StartNew()
-        $names = az cognitiveservices account deployment list -g $a.rg -n $a.name --query "[].name" -o tsv 2>$null
+        $names = az cognitiveservices account deployment list -g $a.rg -n $a.name --query "[].name" -o tsv @foundrySubscriptionArgs 2>$null
         $deps = @($names | Where-Object { $_ -like '*claude*' })
         $found = if ($deps.Count) { "$($deps.Count) Claude deployment(s)" } else { 'no Claude deployment' }
         Write-Note ("  [{0}/{1}] {2}: {3} ({4:N1} s)" -f $checked, $accounts.Count, $a.name, $found, $watch.Elapsed.TotalSeconds)
@@ -586,7 +606,7 @@ if (-not $FoundryResourceGroup) {
     # these empty and the deployment then fails with something far less
     # obvious than "I could not find your account".
     $FoundryResourceGroup = @(
-        Invoke-ClaudeInstallAzShown { az cognitiveservices account list --query "[].{n:name, rg:resourceGroup}" -o json } |
+        Invoke-ClaudeInstallAzShown { az cognitiveservices account list --query "[].{n:name, rg:resourceGroup}" -o json @foundrySubscriptionArgs } |
             ConvertFrom-Json |
             Where-Object { $_.n -eq $FoundryAccount }
     )[0].rg
@@ -695,7 +715,14 @@ if ($ExistingApimName) {
     if (-not $named.resourceGroup) { $named | Add-Member -NotePropertyName resourceGroup -NotePropertyValue $reuse.ResourceGroup -Force }
     . $useExistingGateway $named
 }
-if (-not $Location) { $Location = Invoke-ClaudeInstallAzShown { az cognitiveservices account show -g $FoundryResourceGroup -n $FoundryAccount --query location -o tsv } }
+if ($FoundryAuthenticationMode -eq 'client-credentials') {
+    $secretMetadata = Get-ClaudeApimNamedValueMetadata -ResourceGroup $ResourceGroup -ApimName $ExistingApim `
+        -Id $FoundryCredentialNamedValue -SubscriptionId $SubscriptionId
+    Assert-ClaudeFoundryAuthenticationConfiguration -Mode $FoundryAuthenticationMode -Endpoint $FoundryEndpoint `
+        -TenantId $FoundryTenantId -ClientId $FoundryClientId -ClientSecretNamedValue $FoundryCredentialNamedValue `
+        -ExistingApimName $ExistingApim -ClientSecretMetadata $secretMetadata
+}
+if (-not $Location) { $Location = Invoke-ClaudeInstallAzShown { az cognitiveservices account show -g $FoundryResourceGroup -n $FoundryAccount --query location -o tsv @foundrySubscriptionArgs } }
 if (-not $Location) {
     Write-Bad "Could not resolve the location of '$FoundryAccount'."
     Write-Note 'Pass -Location explicitly.'
@@ -1695,11 +1722,11 @@ if ($liveId) {
 #
 # So check first. Only possible when reusing, because a gateway being created
 # has no identity yet.
-$grantRole = $true
-if ($ExistingApim) {
+$grantRole = $FoundryAuthenticationMode -eq 'managed-identity'
+if ($ExistingApim -and $grantRole) {
     $apimOid = az apim show -g $ResourceGroup -n $apimName --query identity.principalId -o tsv 2>$null
     if ($apimOid) {
-        $foundryId = az cognitiveservices account show -g $FoundryResourceGroup -n $FoundryAccount --query id -o tsv 2>$null
+        $foundryId = az cognitiveservices account show -g $FoundryResourceGroup -n $FoundryAccount --query id -o tsv @foundrySubscriptionArgs 2>$null
         if ($foundryId) {
             # Filtered here rather than in --query: a JMESPath filter needs
             # parentheses, and on Windows az is a .cmd shim that lets cmd.exe
@@ -1746,6 +1773,11 @@ Invoke-ClaudeInstallAzShown { az deployment group create `
         location=$Location `
         foundryAccountName=$FoundryAccount `
         foundryResourceGroup=$FoundryResourceGroup `
+        foundryAuthenticationMode=$FoundryAuthenticationMode `
+        foundryEndpoint=$FoundryEndpoint `
+        foundryTenantId=$FoundryTenantId `
+        foundryClientId=$FoundryClientId `
+        foundryClientSecretNamedValue=$FoundryCredentialNamedValue `
         publisherEmail=$PublisherEmail `
         apimSku=$Sku `
         grantFoundryRole=$($grantRole.ToString().ToLower()) `
@@ -1846,6 +1878,9 @@ if ($EntitlementStore -eq 'projection' -and (Test-ClaudeInstallStepSelected 'pro
         -ProjectionNetworkMode $ProjectionNetworkMode -ProjectionVnetId $ProjectionVnetId -ProjectionEndpointsSubnetId $ProjectionEndpointsSubnetId `
         -ProjectionRunnerSubnetId $ProjectionRunnerSubnetId -ProjectionResolverSubnetId $ProjectionResolverSubnetId `
         -ProjectionRenewalSubnetId $ProjectionRenewalSubnetId -ProjectionApimSubnetId $ProjectionApimSubnetId `
+        -ProjectionCosmosDnsZoneId $ProjectionCosmosDnsZoneId -ProjectionSitesDnsZoneId $ProjectionSitesDnsZoneId `
+        -ProjectionBlobDnsZoneId $ProjectionBlobDnsZoneId -ProjectionQueueDnsZoneId $ProjectionQueueDnsZoneId `
+        -ProjectionTableDnsZoneId $ProjectionTableDnsZoneId `
         -SubscriptionId $SubscriptionId -ProjectionResolverAppId $ProjectionResolverAppId -CompareBaseline $entitlementSync.CompareBaseline -ServingStore $entitlementSync.ServingStore -ResolverPublicByDefault:($ResolverInboundAccess -eq 'public' -and -not $PSBoundParameters.ContainsKey('ResolverInboundAccess')) -WhatIf:$WhatIfPreference | Out-Null
     if ($ProjectionSyncInterval -ne 'none' -and -not $WhatIfPreference) {
         $syncJobStatus = if (Invoke-ClaudeInstallerSyncJobDeployment -Root $root -ResourceGroup $ResourceGroup -ApimName $apimName -NamePrefix $projectionPrefix `

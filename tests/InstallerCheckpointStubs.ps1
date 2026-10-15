@@ -91,11 +91,25 @@ function global:az {
         'account list --query*' { return [string]$w.subscriptionId }
         'account show*' {
             $named = & $value @('--subscription', '-s', '--name', '-n')
-            if ($named -and $named -ne [string]$w.subscriptionId -and $named -ne [string]$w.subscriptionName) { Write-P91Failure "ERROR: Subscription '$named' not found. Check the spelling and casing and try again." 1; return }
+            $foundrySubscriptionId = [string](Get-P91Property $w 'foundrySubscriptionId')
+            if ($named -and $named -ne [string]$w.subscriptionId -and $named -ne [string]$w.subscriptionName -and $named -ne $foundrySubscriptionId) {
+                Write-P91Failure "ERROR: Subscription '$named' not found. Check the spelling and casing and try again." 1
+                return
+            }
             # A named subscription can be in another tenant than the sign-in (subscriptionTenantId) or not Enabled (subscriptionState).
-            $tenant = if ($named -and (Get-P91Property $w 'subscriptionTenantId')) { [string](Get-P91Property $w 'subscriptionTenantId') } else { [string]$w.tenantId }
+            $tenant = if ($named -and $named -eq $foundrySubscriptionId -and (Get-P91Property $w 'foundryTenantId')) {
+                [string](Get-P91Property $w 'foundryTenantId')
+            }
+            elseif ($named -and (Get-P91Property $w 'subscriptionTenantId')) { [string](Get-P91Property $w 'subscriptionTenantId') }
+            else { [string]$w.tenantId }
             $state = if ($named -and (Get-P91Property $w 'subscriptionState')) { [string](Get-P91Property $w 'subscriptionState') } else { 'Enabled' }
-            $account = [pscustomobject]@{ id = $w.subscriptionId; name = $w.subscriptionName; state = $state; tenantId = $tenant; user = [pscustomobject]@{ name = 'admin@contoso.com'; type = 'user' } }
+            $account = [pscustomobject]@{
+                id = $(if ($named -eq $foundrySubscriptionId) { $foundrySubscriptionId } else { $w.subscriptionId })
+                name = $(if ($named -eq $foundrySubscriptionId) { 'p91-foundry-subscription' } else { $w.subscriptionName })
+                state = $state
+                tenantId = $tenant
+                user = [pscustomobject]@{ name = 'admin@contoso.com'; type = 'user' }
+            }
             switch ($query) {
                 'name' { return [string]$account.name }
                 'id' { return [string]$account.id }
@@ -177,7 +191,10 @@ function global:az {
             $apim = Get-P91Property $w.apims $name
             $nv = if ($apim) { Get-P91Property $apim.namedValues $id } else { $null }
             if ($null -eq $nv) { Write-P91Failure "ERROR: (ResourceNotFound) NamedValue not found.`nCode: ResourceNotFound" 3; return }
-            return [string]$nv
+            $isRecord = $nv -isnot [string]
+            $nvValue = if ($isRecord) { [string](Get-P91Property $nv 'value') } else { [string]$nv }
+            if ($query -eq 'value') { return $nvValue }
+            return ([pscustomobject]@{ name = $id; displayName = $id; secret = $(if ($isRecord) { [bool](Get-P91Property $nv 'secret') } else { $false }) } | ConvertTo-Json -Compress)
         }
         'apim nv list*' {
             $name = & $value @('--service-name')

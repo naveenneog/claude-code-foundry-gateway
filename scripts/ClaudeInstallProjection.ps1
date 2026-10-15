@@ -238,6 +238,11 @@ function Invoke-ClaudeInstallerProjectionDeployment {
         [string]$ProjectionResolverSubnetId,
         [string]$ProjectionRenewalSubnetId,
         [string]$ProjectionApimSubnetId,
+        [string]$ProjectionCosmosDnsZoneId,
+        [string]$ProjectionSitesDnsZoneId,
+        [string]$ProjectionBlobDnsZoneId,
+        [string]$ProjectionQueueDnsZoneId,
+        [string]$ProjectionTableDnsZoneId,
         [Parameter(Mandatory)][string]$StandardGroup,
         [Parameter(Mandatory)][string]$PremiumGroup,
         [string]$SubscriptionId,
@@ -256,7 +261,8 @@ function Invoke-ClaudeInstallerProjectionDeployment {
     $deployParameters = [ordered]@{} + $common
     $deployParameters['Location'] = $Location; $deployParameters['Sku'] = $Sku; $deployParameters['ResolverInboundAccess'] = $ResolverInboundAccess
     $deployParameters['ProjectionNetworkMode'] = $ProjectionNetworkMode
-    foreach ($networkParameter in 'ProjectionVnetId','ProjectionEndpointsSubnetId','ProjectionRunnerSubnetId','ProjectionResolverSubnetId','ProjectionRenewalSubnetId','ProjectionApimSubnetId') {
+    foreach ($networkParameter in 'ProjectionVnetId','ProjectionEndpointsSubnetId','ProjectionRunnerSubnetId','ProjectionResolverSubnetId','ProjectionRenewalSubnetId','ProjectionApimSubnetId',
+        'ProjectionCosmosDnsZoneId','ProjectionSitesDnsZoneId','ProjectionBlobDnsZoneId','ProjectionQueueDnsZoneId','ProjectionTableDnsZoneId') {
         $value = Get-Variable -Name $networkParameter -ValueOnly
         if ($value) { $deployParameters[$networkParameter] = $value }
     }

@@ -11,6 +11,11 @@ function Assert([string]$Label, [bool]$Condition, [string]$Detail = '') {
         $script:fail++
     }
 }
+function Capture([scriptblock]$Block) {
+    $script:Failure = ''
+    try { & $Block }
+    catch { $script:Failure = $_.Exception.Message }
+}
 
 Write-Host ''
 Write-Host 'P117 cross-tenant Foundry and customer DNS contracts' -ForegroundColor Cyan
@@ -21,11 +26,18 @@ $managedAuthPath = Join-Path $root 'infra\foundry-auth-managed-identity.xml'
 $crossAuthPath = Join-Path $root 'infra\foundry-auth-client-credentials.xml'
 $networkPath = Join-Path $root 'infra\projection-network.bicep'
 $deployerPath = Join-Path $root 'scripts\Deploy-ClaudeProjection.ps1'
+$installerPath = Join-Path $root 'Install-ClaudeGateway.ps1'
+$preflightPath = Join-Path $root 'scripts\ClaudeInstallerPreflight.ps1'
+$authHelperPath = Join-Path $root 'scripts\ClaudeFoundryAuthentication.ps1'
+$schemaPath = Join-Path $root 'schemas\claude-gateway.answers.schema.json'
 
 $main = Get-Content -LiteralPath $mainPath -Raw
 $policy = Get-Content -LiteralPath $policyPath -Raw
 $network = Get-Content -LiteralPath $networkPath -Raw
 $deployer = Get-Content -LiteralPath $deployerPath -Raw
+$installer = Get-Content -LiteralPath $installerPath -Raw
+$preflight = Get-Content -LiteralPath $preflightPath -Raw
+$schema = Get-Content -LiteralPath $schemaPath -Raw
 
 Assert 'main declares the opt-in Foundry authentication mode' (
     $main -match "param foundryAuthenticationMode string = 'managed-identity'" -and
@@ -105,6 +117,75 @@ Assert 'Cosmos private endpoint uses the selected existing-or-created zone id' (
 )
 foreach ($zoneParam in $zoneParams) {
     Assert "the projection deployer passes $zoneParam" ($deployer -match $zoneParam)
+}
+
+Assert 'the installer exposes separate target and Foundry subscriptions' (
+    $installer -match '\[string\]\$SubscriptionId' -and
+    $installer -match '\[string\]\$FoundrySubscriptionId'
+)
+foreach ($parameter in @(
+    'FoundryAuthenticationMode',
+    'FoundryEndpoint',
+    'FoundryTenantId',
+    'FoundryClientId',
+    'FoundryCredentialNamedValue',
+    'ProjectionCosmosDnsZoneId',
+    'ProjectionSitesDnsZoneId',
+    'ProjectionBlobDnsZoneId',
+    'ProjectionQueueDnsZoneId',
+    'ProjectionTableDnsZoneId'
+)) {
+    Assert "the installer accepts $parameter" ($installer -match ('\$' + [regex]::Escape($parameter) + '\b'))
+    Assert "the answers schema accepts $parameter" ($schema -match ('"' + [regex]::Escape($parameter) + '"\s*:'))
+}
+Assert 'the installer passes cross-tenant fields to main.bicep' (
+    $installer -match 'foundryAuthenticationMode=\$FoundryAuthenticationMode' -and
+    $installer -match 'foundryEndpoint=\$FoundryEndpoint' -and
+    $installer -match 'foundryTenantId=\$FoundryTenantId' -and
+    $installer -match 'foundryClientId=\$FoundryClientId' -and
+    $installer -match 'foundryClientSecretNamedValue=\$FoundryCredentialNamedValue'
+)
+Assert 'the installer passes customer DNS ids through projection deployment' (
+    $installer -match 'ProjectionCosmosDnsZoneId' -and
+    $installer -match 'ProjectionTableDnsZoneId'
+)
+Assert 'a focused helper verifies secret metadata without a listValue call' (
+    (Test-Path -LiteralPath $authHelperPath) -and
+    $preflight -match 'Get-ClaudeApimNamedValueMetadata' -and
+    $installer -match 'Get-ClaudeApimNamedValueMetadata' -and
+    $installer -notmatch 'foundry-crosstenant-client-secret.+listValue'
+)
+if (Test-Path -LiteralPath $authHelperPath) {
+    . $authHelperPath
+    $seen = [Collections.Generic.List[string]]::new()
+    $metadata = Get-ClaudeApimNamedValueMetadata -ResourceGroup rg-p117 -ApimName apim-p117 `
+        -Id foundry-crosstenant-client-secret -SubscriptionId '11111111-2222-4333-8444-555555555555' `
+        -InvokeRead {
+            param([string[]]$Arguments)
+            $seen.Add(($Arguments -join ' '))
+            '{"name":"foundry-crosstenant-client-secret","secret":true,"value":"must-not-escape"}'
+        }
+    Assert 'metadata lookup returns only the identifier and secret flag' (
+        $metadata.Id -eq 'foundry-crosstenant-client-secret' -and $metadata.Secret -eq $true -and
+        -not $metadata.PSObject.Properties['Value'] -and
+        ($seen -join ' ') -notmatch 'listValue'
+    ) ($metadata | ConvertTo-Json -Depth 3)
+    Capture {
+        Assert-ClaudeFoundryAuthenticationConfiguration -Mode client-credentials `
+            -Endpoint 'https://foundry.example.test/' -TenantId '11111111-2222-4333-8444-555555555555' `
+            -ClientId 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee' -ClientSecretNamedValue $metadata.Id `
+            -ExistingApimName apim-p117 -ClientSecretMetadata $metadata
+    }
+    Assert 'a complete cross-tenant configuration with secret metadata passes' (-not $Failure) $Failure
+    Capture {
+        Assert-ClaudeFoundryAuthenticationConfiguration -Mode client-credentials `
+            -Endpoint 'https://foundry.example.test/' -TenantId '11111111-2222-4333-8444-555555555555' `
+            -ClientId 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee' -ClientSecretNamedValue $metadata.Id `
+            -ExistingApimName apim-p117 -ClientSecretMetadata ([pscustomobject]@{ Id=$metadata.Id; Secret=$false })
+    }
+    Assert 'a non-secret APIM named value is refused before deployment' (
+        $Failure -match 'not marked secret' -and $Failure -match 'Nothing was changed'
+    ) $Failure
 }
 
 Write-Host ''

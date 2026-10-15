@@ -7,6 +7,7 @@
 # is the bash engine. Runs on Windows PowerShell 5.1 and PowerShell 7.
 
 . (Join-Path $PSScriptRoot 'ClaudeInstallerAnswers.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeFoundryAuthentication.ps1')
 if (-not (Get-Command Test-ClaudePrerequisites -ErrorAction SilentlyContinue)) { . (Join-Path $PSScriptRoot 'Test-Prerequisites.ps1') }
 # A NOT-RUN with one of these reasons fails the preflight; not-applicable, not-answered and
 # discovery-skipped do not.
@@ -16,8 +17,10 @@ $script:ClaudePreflightBlocking = @('not-signed-in', 'prerequisite-failed')
 $script:ClaudePreflightUnevaluated = 'not-evaluated'
 # The answers Install-ClaudeGateway.ps1 passes to Assert-AzArgumentsSafe before its first Azure CLI call. On Windows the
 # preflight refuses the same ones (ADR-0047 decision 17); tests/Test-InstallerPreflight.ps1 compares the two lists.
-$script:ClaudePreflightAzBoundAnswers = @('SubscriptionId', 'FoundryAccount', 'FoundryResourceGroup', 'ResourceGroup', 'Location', 'NamePrefix', 'ExistingApimName',
-    'PublisherEmail', 'StandardGroup', 'PremiumGroup', 'DesktopEntraClientId', 'DesktopEntraAudience')
+$script:ClaudePreflightAzBoundAnswers = @('SubscriptionId', 'FoundrySubscriptionId', 'FoundryAccount', 'FoundryResourceGroup', 'FoundryEndpoint', 'FoundryTenantId',
+    'FoundryClientId', 'FoundryCredentialNamedValue', 'ResourceGroup', 'Location', 'NamePrefix', 'ExistingApimName',
+    'PublisherEmail', 'StandardGroup', 'PremiumGroup', 'DesktopEntraClientId', 'DesktopEntraAudience',
+    'ProjectionCosmosDnsZoneId', 'ProjectionSitesDnsZoneId', 'ProjectionBlobDnsZoneId', 'ProjectionQueueDnsZoneId', 'ProjectionTableDnsZoneId')
 
 function Get-ClaudeApimReuseState {
     # The API Management instance to reuse, read once for the preflight and for the run's reuse path:
@@ -230,6 +233,21 @@ function Invoke-ClaudeGatewayPreflightAzure {
     if (-not $subOk) { foreach ($id in $later) { Set-ClaudePreflightNotRun $Checks[$id] 'prerequisite-failed' 'target.subscription failed, so this was not read' 'Correct target.subscription first.' } }
     else {
         $fa = & $get 'FoundryAccount'; $frg = & $get 'FoundryResourceGroup'
+        $foundryMode = [string](& $get 'FoundryAuthenticationMode')
+        if (-not $foundryMode) { $foundryMode = 'managed-identity' }
+        $foundrySubId = [string](& $get 'FoundrySubscriptionId')
+        $foundrySub = if ($foundrySubId) { @('--subscription',$foundrySubId) } else { $sub }
+        if ($foundryMode -eq 'client-credentials' -and $foundrySubId) {
+            $fs = Invoke-ClaudeInstallAzRead @('account','show','--subscription',$foundrySubId,'-o','json')
+            $fsRecord = $null
+            if ($fs.Verdict -eq 'present') { try { $fsRecord = $fs.Output | ConvertFrom-Json -ErrorAction Stop } catch { } }
+            if (-not $fsRecord) {
+                Add-ClaudePreflightProblem $Checks['foundry.account'] "Foundry subscription '$foundrySubId' could not be read ($($fs.Detail))" 'Sign in to the FDPO tenant and confirm the subscription id.'
+            }
+            elseif ([string]$fsRecord.tenantId -ne [string](& $get 'FoundryTenantId')) {
+                Add-ClaudePreflightProblem $Checks['foundry.account'] "Foundry subscription $foundrySubId is in tenant $($fsRecord.tenantId), not FoundryTenantId $(& $get 'FoundryTenantId')" 'Correct FoundryTenantId or FoundrySubscriptionId.'
+            }
+        }
         if (-not $fa) {
             $reason = if ($Bad.ContainsKey('FoundryAccount')) { 'prerequisite-failed' } else { 'not-answered' }
             Set-ClaudePreflightNotRun $Checks['foundry.account'] 'not-answered' 'FoundryAccount is not answered; the run looks for an account with a Claude deployment'
@@ -237,9 +255,9 @@ function Invoke-ClaudeGatewayPreflightAzure {
         }
         else {
             $where = if ($frg) { " in resource group $frg" } else { ' in the subscription' }
-            if ($frg) { $r = Invoke-ClaudeInstallAzRead (@('cognitiveservices', 'account', 'show', '-g', $frg, '-n', $fa, '-o', 'json') + $sub) @('ResourceNotFound') }
+            if ($frg) { $r = Invoke-ClaudeInstallAzRead (@('cognitiveservices', 'account', 'show', '-g', $frg, '-n', $fa, '-o', 'json') + $foundrySub) @('ResourceNotFound') }
             else {
-                $r = Invoke-ClaudeInstallAzRead (@('cognitiveservices', 'account', 'list', '-o', 'json') + $sub)
+                $r = Invoke-ClaudeInstallAzRead (@('cognitiveservices', 'account', 'list', '-o', 'json') + $foundrySub)
                 if ($r.Verdict -eq 'present') {
                     # A list that is not JSON is inconclusive, as an unreadable list is.
                     $parsed = $null
@@ -256,7 +274,7 @@ function Invoke-ClaudeGatewayPreflightAzure {
             else { Add-ClaudePreflightProblem $Checks['foundry.account'] "Foundry account $fa could not be read ($($r.Detail))" 'Check access with az cognitiveservices account show, then run the preflight again.' }
             if ($r.Verdict -ne 'present') { Set-ClaudePreflightNotRun $Checks['foundry.deployments'] 'prerequisite-failed' 'foundry.account failed, so the deployments were not read' 'Correct foundry.account first.' }
             else {
-                $d = Invoke-ClaudeInstallAzRead (@('cognitiveservices', 'account', 'deployment', 'list', '-g', $frg, '-n', $fa, '-o', 'json') + $sub) @('ResourceNotFound')
+                $d = Invoke-ClaudeInstallAzRead (@('cognitiveservices', 'account', 'deployment', 'list', '-g', $frg, '-n', $fa, '-o', 'json') + $foundrySub) @('ResourceNotFound')
                 $list = @()
                 if ($d.Verdict -eq 'present') { try { $parsed = $d.Output | ConvertFrom-Json -ErrorAction Stop; $list = @($parsed | Where-Object { $_ }) } catch { $d = [pscustomobject]@{ Verdict = 'inconclusive'; Detail = 'the deployment list is not JSON' } } }
                 if ($d.Verdict -ne 'present') { Add-ClaudePreflightProblem $Checks['foundry.deployments'] "the deployments of $fa could not be read ($($d.Detail))" 'Check access with az cognitiveservices account deployment list, then run the preflight again.' }
@@ -305,6 +323,24 @@ function Invoke-ClaudeGatewayPreflightAzure {
                 if ($state.SkuProblem) { Add-ClaudePreflightProblem $Checks['apim.existingSku'] $state.SkuProblem.message $state.SkuProblem.remedy }
                 Set-ClaudePreflightPass $Checks['apim.existingSku'] "$existing is $($state.Sku) in resource group $($state.ResourceGroup)"
                 if ($state.IdentityProblem) { Add-ClaudePreflightProblem $Checks['apim.existingIdentity'] $state.IdentityProblem.message $state.IdentityProblem.remedy }
+                if ($foundryMode -eq 'client-credentials') {
+                    $secretId = [string](& $get 'FoundryCredentialNamedValue')
+                    $metadata = Get-ClaudeApimNamedValueMetadata -ResourceGroup $state.ResourceGroup -ApimName $existing -Id $secretId `
+                        -SubscriptionId $(if ($sub.Count) { $sub[1] } else { '' }) -InvokeRead {
+                            param([string[]]$Arguments)
+                            $read = Invoke-ClaudeInstallAzRead $Arguments @('ResourceNotFound')
+                            if ($read.Verdict -eq 'present') { return $read.Output }
+                            return $null
+                        }
+                    try {
+                        Assert-ClaudeFoundryAuthenticationConfiguration -Mode $foundryMode -Endpoint ([string](& $get 'FoundryEndpoint')) `
+                            -TenantId ([string](& $get 'FoundryTenantId')) -ClientId ([string](& $get 'FoundryClientId')) `
+                            -ClientSecretNamedValue $secretId -ExistingApimName $existing -ClientSecretMetadata $metadata
+                    }
+                    catch {
+                        Add-ClaudePreflightProblem $Checks['apim.existingIdentity'] $_.Exception.Message 'Create or correct the secret named value on the reused APIM instance, then rerun preflight.'
+                    }
+                }
                 Set-ClaudePreflightPass $Checks['apim.existingIdentity'] "$existing has a system-assigned managed identity"
             }
         }

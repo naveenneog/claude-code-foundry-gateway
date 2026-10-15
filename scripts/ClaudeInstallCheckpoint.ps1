@@ -10,10 +10,12 @@ $script:ClaudeInstallSteps = [ordered]@{
     'company-address' = 'Company address'; 'entra-groups' = 'Entra groups'; 'sync' = 'Sync entitlement'; 'projection' = 'Projection deployment'
     'business-units' = 'Business units'; 'onboarding-package' = 'Onboarding package'; 'verify' = 'Verification'
 }
-$script:ClaudeInstallParameterAnswers = @('SubscriptionId', 'FoundryAccount', 'FoundryResourceGroup', 'ResourceGroup', 'Location', 'NamePrefix', 'PublisherEmail', 'Sku', 'DeveloperCount',
+$script:ClaudeInstallParameterAnswers = @('SubscriptionId', 'FoundrySubscriptionId', 'FoundryAccount', 'FoundryResourceGroup', 'FoundryAuthenticationMode',
+    'FoundryEndpoint', 'FoundryTenantId', 'FoundryClientId', 'FoundryCredentialNamedValue', 'ResourceGroup', 'Location', 'NamePrefix', 'PublisherEmail', 'Sku', 'DeveloperCount',
     'AddressMode', 'AddressHostname', 'AddressCertificateSource', 'AddressKeyVaultCertificateId', 'AddressPfxPath', 'AddressDnsZoneResourceId', 'AddressDnsMode',
     'AddressReplaceHostname', 'ExistingApimName', 'EntitlementStore', 'ResolverInboundAccess', 'ProjectionNetworkMode', 'ProjectionVnetId',
     'ProjectionEndpointsSubnetId', 'ProjectionRunnerSubnetId', 'ProjectionResolverSubnetId', 'ProjectionRenewalSubnetId', 'ProjectionApimSubnetId',
+    'ProjectionCosmosDnsZoneId', 'ProjectionSitesDnsZoneId', 'ProjectionBlobDnsZoneId', 'ProjectionQueueDnsZoneId', 'ProjectionTableDnsZoneId',
     'DeployProjection', 'DeploySyncJob', 'ProjectionSyncInterval', 'ProjectionResolverAppId',
     'TpmStandard', 'QuotaStandard', 'TpmPremium', 'QuotaPremium', 'QuotaOrg', 'CallsPerMinute', 'StandardGroup', 'PremiumGroup', 'StandardModels', 'PremiumModels',
     'AuthMode', 'DesktopSignInKind', 'DesktopBearerTokenType', 'DesktopEntraClientId', 'DesktopEntraIssuer', 'DesktopEntraScopes', 'DesktopEntraAudience',
@@ -21,7 +23,7 @@ $script:ClaudeInstallParameterAnswers = @('SubscriptionId', 'FoundryAccount', 'F
 $script:ClaudeInstallPromptAnswers = @('RevocationWindowSeconds', 'TeamBudgetBehaviour', 'UnassignedDevelopers', 'DeveloperEstimate', 'PendingClaudeDeployment', 'BusinessUnits')
 $script:ClaudeInstallChoices = @{
     Sku = 'BasicV2', 'StandardV2', 'PremiumV2'; AddressMode = 'azure', 'custom'; AddressCertificateSource = 'KeyVault', 'Pfx'; AddressDnsMode = 'AzureDns', 'External'
-    EntitlementStore = 'named-value', 'projection'; ResolverInboundAccess = 'private', 'public'; ProjectionNetworkMode = 'managed', 'existing'; AuthMode = 'interactive', 'device', 'helper'
+    FoundryAuthenticationMode = 'managed-identity', 'client-credentials'; EntitlementStore = 'named-value', 'projection'; ResolverInboundAccess = 'private', 'public'; ProjectionNetworkMode = 'managed', 'existing'; AuthMode = 'interactive', 'device', 'helper'
     DesktopSignInKind = 'helper-script', 'external-idp-browser', 'external-idp-broker'; DesktopBearerTokenType = 'id_token', 'access_token'
     TeamBudgetBehaviour = 'report', 'stop'; UnassignedDevelopers = 'allow', 'deny'
 }
@@ -547,8 +549,8 @@ function Get-ClaudeInstallInputHash([string]$Id) {
         'company-address' { @($c.Answers.Keys | Where-Object { $_ -like 'Address*' }) }
         # Every answer the step passes to scripts/Deploy-ClaudeProjection.ps1; the binding fields (resource
         # group, subscription, gateway) are compared by the binding itself (ADR-0046 decision 5, ADR-0047 decision 15).
-        'projection' { 'EntitlementStore', 'ResolverInboundAccess', 'ProjectionNetworkMode', 'ProjectionVnetId', 'ProjectionEndpointsSubnetId', 'ProjectionRunnerSubnetId', 'ProjectionResolverSubnetId', 'ProjectionRenewalSubnetId', 'ProjectionApimSubnetId', 'NamePrefix', 'Location', 'Sku', 'ProjectionResolverAppId', 'StandardGroup', 'PremiumGroup', 'DeploySyncJob', 'ProjectionSyncInterval' }
-        'gateway-deployment' { @($c.Answers.Keys | Where-Object { $_ -notin 'StandardGroup', 'PremiumGroup', 'AuthMode', 'TeamBudgetBehaviour', 'DeveloperEstimate', 'DeployProjection', 'ProjectionResolverAppId', 'ProjectionNetworkMode', 'ProjectionVnetId', 'ProjectionEndpointsSubnetId', 'ProjectionRunnerSubnetId', 'ProjectionResolverSubnetId', 'ProjectionRenewalSubnetId', 'ProjectionApimSubnetId', 'DeploySyncJob', 'ProjectionSyncInterval', 'PendingClaudeDeployment', 'ModelOrganizationName', 'ModelIndustry', 'ModelCountryCode' -and $_ -notlike 'Address*' }) }
+        'projection' { 'EntitlementStore', 'ResolverInboundAccess', 'ProjectionNetworkMode', 'ProjectionVnetId', 'ProjectionEndpointsSubnetId', 'ProjectionRunnerSubnetId', 'ProjectionResolverSubnetId', 'ProjectionRenewalSubnetId', 'ProjectionApimSubnetId', 'ProjectionCosmosDnsZoneId', 'ProjectionSitesDnsZoneId', 'ProjectionBlobDnsZoneId', 'ProjectionQueueDnsZoneId', 'ProjectionTableDnsZoneId', 'NamePrefix', 'Location', 'Sku', 'ProjectionResolverAppId', 'StandardGroup', 'PremiumGroup', 'DeploySyncJob', 'ProjectionSyncInterval' }
+        'gateway-deployment' { @($c.Answers.Keys | Where-Object { $_ -notin 'StandardGroup', 'PremiumGroup', 'AuthMode', 'TeamBudgetBehaviour', 'DeveloperEstimate', 'DeployProjection', 'ProjectionResolverAppId', 'ProjectionNetworkMode', 'ProjectionVnetId', 'ProjectionEndpointsSubnetId', 'ProjectionRunnerSubnetId', 'ProjectionResolverSubnetId', 'ProjectionRenewalSubnetId', 'ProjectionApimSubnetId', 'ProjectionCosmosDnsZoneId', 'ProjectionSitesDnsZoneId', 'ProjectionBlobDnsZoneId', 'ProjectionQueueDnsZoneId', 'ProjectionTableDnsZoneId', 'DeploySyncJob', 'ProjectionSyncInterval', 'PendingClaudeDeployment', 'ModelOrganizationName', 'ModelIndustry', 'ModelCountryCode' -and $_ -notlike 'Address*' }) }
         default { @() }
     }
     $inputs = [ordered]@{}

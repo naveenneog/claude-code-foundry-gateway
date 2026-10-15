@@ -236,10 +236,12 @@ try {
         top = 'schema', 'schemaVersion', 'runId', 'installer', 'installerFingerprint', 'installerCommit', 'checkout', 'createdUtc', 'updatedUtc', 'binding', 'answers', 'steps'
         binding = 'tenantId', 'subscriptionId', 'resourceGroup', 'apimName', 'namePrefix', 'reusedApim'
         step = 'id', 'state', 'startedUtc', 'completedUtc', 'inputHash', 'receipt'
-        answers = 'SubscriptionId', 'FoundryAccount', 'FoundryResourceGroup', 'ResourceGroup', 'Location', 'NamePrefix', 'PublisherEmail', 'Sku', 'DeveloperCount', 'AddressMode', 'AddressHostname',
+        answers = 'SubscriptionId', 'FoundrySubscriptionId', 'FoundryAccount', 'FoundryResourceGroup', 'FoundryAuthenticationMode', 'FoundryEndpoint', 'FoundryTenantId', 'FoundryClientId', 'FoundryCredentialNamedValue',
+            'ResourceGroup', 'Location', 'NamePrefix', 'PublisherEmail', 'Sku', 'DeveloperCount', 'AddressMode', 'AddressHostname',
             'AddressCertificateSource', 'AddressKeyVaultCertificateId', 'AddressPfxPath', 'AddressDnsZoneResourceId', 'AddressDnsMode', 'AddressReplaceHostname', 'ExistingApimName',
             'EntitlementStore', 'ResolverInboundAccess', 'ProjectionNetworkMode', 'ProjectionVnetId', 'ProjectionEndpointsSubnetId', 'ProjectionRunnerSubnetId',
-            'ProjectionResolverSubnetId', 'ProjectionRenewalSubnetId', 'ProjectionApimSubnetId', 'DeployProjection', 'DeploySyncJob', 'ProjectionSyncInterval', 'ProjectionResolverAppId', 'TpmStandard', 'QuotaStandard', 'TpmPremium',
+            'ProjectionResolverSubnetId', 'ProjectionRenewalSubnetId', 'ProjectionApimSubnetId', 'ProjectionCosmosDnsZoneId', 'ProjectionSitesDnsZoneId', 'ProjectionBlobDnsZoneId',
+            'ProjectionQueueDnsZoneId', 'ProjectionTableDnsZoneId', 'DeployProjection', 'DeploySyncJob', 'ProjectionSyncInterval', 'ProjectionResolverAppId', 'TpmStandard', 'QuotaStandard', 'TpmPremium',
             'QuotaPremium', 'QuotaOrg', 'CallsPerMinute', 'StandardGroup', 'PremiumGroup', 'StandardModels', 'PremiumModels', 'AuthMode', 'DesktopSignInKind', 'DesktopBearerTokenType',
             'DesktopEntraClientId', 'DesktopEntraIssuer', 'DesktopEntraScopes', 'DesktopEntraAudience', 'DesktopEntraResource', 'DeployContentSafety', 'ContentSafetyMode', 'ModelOrganizationName', 'ModelIndustry', 'ModelCountryCode',
             'RevocationWindowSeconds', 'TeamBudgetBehaviour', 'UnassignedDevelopers', 'DeveloperEstimate', 'PendingClaudeDeployment'

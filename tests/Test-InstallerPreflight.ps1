@@ -124,6 +124,37 @@ exit /b 0
     $w = New-P91World; $w['apimNamesTaken'] = @('apim-p92taken')
     Add-Scenario 'name-taken' $w (New-Answers { param($a) $a.NamePrefix = 'p92taken' })
     $reuse = { param($a) Remove-Answer $a 'NamePrefix'; Remove-Answer $a 'Location'; Remove-Answer $a 'PublisherEmail'; Remove-Answer $a 'Sku'; Set-Answer $a 'ExistingApimName' 'apim-p91reuse' }
+    $foundrySubscription = '00000000-0000-4000-8000-0000000000a2'
+    $foundryTenant = '00000000-0000-4000-8000-0000000000f2'
+    $crossTenant = {
+        param($a)
+        & $reuse $a
+        Set-Answer $a 'FoundrySubscriptionId' $foundrySubscription
+        Set-Answer $a 'FoundryAuthenticationMode' 'client-credentials'
+        Set-Answer $a 'FoundryEndpoint' 'https://ai-p91.services.ai.azure.com/'
+        Set-Answer $a 'FoundryTenantId' $foundryTenant
+        Set-Answer $a 'FoundryClientId' '00000000-0000-4000-8000-0000000000c3'
+        Set-Answer $a 'FoundryCredentialNamedValue' 'foundry-crosstenant-client-secret'
+    }
+    $w = New-P91World -ReusedGateway
+    $w['foundrySubscriptionId'] = $foundrySubscription
+    $w['foundryTenantId'] = $foundryTenant
+    $w.apims['apim-p91reuse'].namedValues['foundry-crosstenant-client-secret'] = [ordered]@{ value = 'not-returned'; secret = $true }
+    Add-Scenario 'cross-tenant-valid' $w (New-Answers $crossTenant)
+    $w = New-P91World -ReusedGateway
+    $w['foundrySubscriptionId'] = $foundrySubscription
+    $w['foundryTenantId'] = '00000000-0000-4000-8000-0000000000f3'
+    $w.apims['apim-p91reuse'].namedValues['foundry-crosstenant-client-secret'] = [ordered]@{ value = 'not-returned'; secret = $true }
+    Add-Scenario 'cross-tenant-mismatch' $w (New-Answers $crossTenant)
+    $w = New-P91World -ReusedGateway
+    $w['foundrySubscriptionId'] = $foundrySubscription
+    $w['foundryTenantId'] = $foundryTenant
+    Add-Scenario 'cross-tenant-secret-missing' $w (New-Answers $crossTenant)
+    $w = New-P91World -ReusedGateway
+    $w['foundrySubscriptionId'] = $foundrySubscription
+    $w['foundryTenantId'] = $foundryTenant
+    $w.apims['apim-p91reuse'].namedValues['foundry-crosstenant-client-secret'] = [ordered]@{ value = 'not-returned'; secret = $false }
+    Add-Scenario 'cross-tenant-secret-not-secret' $w (New-Answers $crossTenant)
     Add-Scenario 'no-identity' (New-P91World -ReusedGateway -IdentityType 'None') (New-Answers $reuse)
     $w = New-P91World -ReusedGateway; $w.apims['apim-p91reuse'].sku = 'Developer'
     Add-Scenario 'classic-sku' $w (New-Answers $reuse)
@@ -252,6 +283,16 @@ exit /b 0
     Assert 'P2 a Foundry account that does not exist is its own FAIL, and the deployment check that needs it is NOT-RUN' ((& $one 'foundry-missing' 'foundry.account' 'ai-missing') -and
         (Get-Check 'foundry-missing' 'foundry.deployments').result -eq 'NOT-RUN' -and (Get-Check 'foundry-missing' 'foundry.deployments').reason -eq 'prerequisite-failed') (Show 'foundry-missing')
     Assert 'P2 a named deployment that the account lacks is a FAIL naming it' (& $one 'deployment-missing' 'foundry.deployments' 'claude-haiku-9') (Show 'deployment-missing')
+    $ct = $scenarios['cross-tenant-valid']
+    $ctSecretCalls = @(Get-P91Calls $ct.Result 'apim nv show*')
+    $ctValueCalls = @($ct.Result.Az | Where-Object { $_ -match 'listValue|list-value|show-secret' })
+    Assert 'P117 a separate-tenant Foundry subscription and secret APIM named-value metadata pass without reading the secret value' ($ct.Result.ExitCode -eq 0 -and
+        (Get-Check 'cross-tenant-valid' 'foundry.account').result -eq 'PASS' -and
+        (Get-Check 'cross-tenant-valid' 'apim.existingIdentity').result -eq 'PASS' -and
+        $ctSecretCalls.Count -eq 1 -and -not $ctValueCalls.Count) "$(Show 'cross-tenant-valid') || metadata: $($ctSecretCalls -join ' | ') || value: $($ctValueCalls -join ' | ')"
+    Assert 'P117 a Foundry subscription tenant that differs from FoundryTenantId is a FAIL before deployment' (& $one 'cross-tenant-mismatch' 'foundry.account' 'not FoundryTenantId') (Show 'cross-tenant-mismatch')
+    Assert 'P117 a missing cross-tenant credential named value is a FAIL before deployment' (& $one 'cross-tenant-secret-missing' 'apim.existingIdentity' 'was not found') (Show 'cross-tenant-secret-missing')
+    Assert 'P117 a cross-tenant credential named value that is not secret is a FAIL before deployment' (& $one 'cross-tenant-secret-not-secret' 'apim.existingIdentity' 'is not marked secret') (Show 'cross-tenant-secret-not-secret')
     Assert 'P2 an API Management name another instance holds is a FAIL' (& $one 'name-taken' 'apim.nameAvailability' 'apim-p92taken') (Show 'name-taken')
     $ni = Get-Check 'no-identity' 'apim.existingIdentity'
     Assert 'P2 a reused API Management instance without a system-assigned identity is a FAIL whose remedy is the portal toggle, then -ExistingApimName' ((& $one 'no-identity' 'apim.existingIdentity' 'apim-p91reuse') -and
