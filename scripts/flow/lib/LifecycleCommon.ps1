@@ -130,7 +130,7 @@ function global:Get-ClaudeFlowLifecycleTemplateNamedValueDefaults {
         $value = switch -Regex ($key) {
             '^usd-budgets$' { 'e30='; break }
             '^usd-budget-state$' { 'e30='; break }
-            '^(allow-standard|allow-premium|quota-overrides|models-standard|models-premium|bu-registry|bu-members|bu-parents|bu-modes)$' { ',,'; break }
+            '^(allow-standard|allow-premium|quota-overrides|models-standard|models-premium|model-family-quotas|bu-registry|bu-members|bu-parents|bu-modes)$' { ',,'; break }
             '^bu-unassigned$' { 'allow'; break }
             '^calls-per-minute$' { '120'; break }
             '^entitlement-source$' { 'named-value'; break }

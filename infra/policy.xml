@@ -325,6 +325,18 @@
              should differ by model. -->
         <set-variable name="modelFamily" value="@{
             var model = (string)context.Variables["modelName"];
+            var map = "{{model-family-quotas}}";
+            var marker = ",deployment:" + model + "=";
+            var start = map.IndexOf(marker, StringComparison.Ordinal);
+            if (start &gt;= 0) {
+                start += marker.Length;
+                var end = map.IndexOf(",", start, StringComparison.Ordinal);
+                if (end &lt; 0 || map.IndexOf(marker, end, StringComparison.Ordinal) &gt;= 0) { return ""; }
+                var mapped = map.Substring(start, end - start);
+                if (mapped == "haiku" || mapped == "sonnet" || mapped == "opus" ||
+                    mapped == "fable" || mapped == "mythos") { return mapped; }
+                return "";
+            }
             if (model.StartsWith("claude-haiku-", StringComparison.Ordinal)) { return "haiku"; }
             if (model.StartsWith("claude-sonnet-", StringComparison.Ordinal)) { return "sonnet"; }
             if (model.StartsWith("claude-opus-", StringComparison.Ordinal)) { return "opus"; }
@@ -366,7 +378,7 @@
             </when>
         </choose>
 
-        <!-- 5b. Optional Azure AI Content Safety request screening. -->
+        <!-- 5a. Optional Azure AI Content Safety request screening. -->
         <include-fragment fragment-id="content-safety-screening" />
 
         <!-- 6. Organisation-wide monthly ceiling.
@@ -402,7 +414,62 @@
             estimate-prompt-tokens="false"
             remaining-quota-tokens-header-name="x-org-quota-remaining" />
 
-        <!-- 6. Business unit, and its budget. ADR-0007.
+        <!-- 6a. Optional monthly quota per developer and model family.
+             The installer derives this approximation from a tier's monthly USD
+             allowance and selected deployments. It is independent of the daily
+             tier quota and the delayed reconciled USD stop.
+
+             Format: deployment mappings followed by tier-family token quotas:
+             ,deployment:fast=haiku,standard:haiku=1000000,   Empty is ,,
+             A tier with no entries is disabled. Once a tier has any entry,
+             a missing, duplicate, malformed or non-positive requested-family
+             entry is a configuration fault, never an unlimited fallback. -->
+        <set-variable name="modelFamilyQuota" value="@{
+            var tier = (string)context.Variables["tier"];
+            var family = (string)context.Variables["modelFamily"];
+            var map = "{{model-family-quotas}}";
+            var tierEnabled = map.IndexOf("," + tier + ":", StringComparison.Ordinal) &gt;= 0;
+            if (!tierEnabled) { return (long)0; }
+            if (string.IsNullOrEmpty(family)) { return (long)-1; }
+            var marker = "," + tier + ":" + family + "=";
+            var start = map.IndexOf(marker, StringComparison.Ordinal);
+            if (start &lt; 0) { return (long)-1; }
+            start += marker.Length;
+            var end = map.IndexOf(",", start, StringComparison.Ordinal);
+            if (end &lt; 0 || map.IndexOf(marker, end, StringComparison.Ordinal) &gt;= 0) { return (long)-1; }
+            long parsed;
+            return long.TryParse(map.Substring(start, end - start), out parsed) &amp;&amp; parsed &gt; 0
+                ? parsed : (long)-1;
+        }" />
+        <choose>
+            <when condition="@((long)context.Variables["modelFamilyQuota"] &lt; 0)">
+                <return-response>
+                    <set-status code="503" reason="Service Unavailable" />
+                    <set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header>
+                    <set-body>@{
+                        return new JObject(
+                            new JProperty("type", "error"),
+                            new JProperty("error", new JObject(
+                                new JProperty("type", "api_error"),
+                                new JProperty("code", "model_family_quota_config_invalid"),
+                                new JProperty("message", "The model-family quota configuration does not cover this allowed model. Retry after the platform team recalculates model-family quotas with the installer.")))
+                        ).ToString();
+                    }</set-body>
+                </return-response>
+            </when>
+            <when condition="@((long)context.Variables["modelFamilyQuota"] &gt; 0)">
+                <set-variable name="budget" value="model family" />
+                <set-variable name="budgetUnit" value="@((string)context.Variables["modelFamily"])" />
+                <llm-token-limit
+                    counter-key="@((string)context.Variables["userId"] + ":family:" + (string)context.Variables["tier"] + ":" + (string)context.Variables["modelFamily"])"
+                    token-quota="@((long)context.Variables["modelFamilyQuota"])"
+                    token-quota-period="Monthly"
+                    estimate-prompt-tokens="false"
+                    remaining-quota-tokens-header-name="x-model-family-quota-remaining" />
+            </when>
+        </choose>
+
+        <!-- 6b. Business unit, and its budget. ADR-0007.
              ==========================================================
              A business unit is an Entra group registered with a budget. The
              registry key is the stable identifier - it is what this counter,
@@ -1019,6 +1086,8 @@
                         var which = (string)(context.Variables.GetValueOrDefault("budget", "personal"));
                         var msg = which == "organisation"
                             ? "The organisation's Claude budget for this period is spent. Your access is unaffected - this limit is shared, so it applies to everyone until the budget resets or your platform team raises quota-org."
+                            : which == "model family"
+                                ? "Your Claude budget for the " + (string)(context.Variables.GetValueOrDefault("budgetUnit", "unknown")) + " model family is spent for this month. Your access is unaffected; choose another allowed model family with quota remaining, or ask your platform team to rerun the installer with a higher tier monthly allowance or revised output-share assumption."
                             : which == "business unit"
                                 ? "The Claude budget for your business unit (" + (string)(context.Variables.GetValueOrDefault("budgetUnit", "unknown")) + ") is spent for this period. Your access is unaffected - this budget is shared with your colleagues in that unit, and your platform team can raise it."
                                 : "Your Claude budget for this period is spent. Your access is unaffected; the budget resets at the start of the next period. Ask your platform team if you need a larger tier.";

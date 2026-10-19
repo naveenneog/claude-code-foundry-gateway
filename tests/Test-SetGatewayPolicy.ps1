@@ -98,6 +98,16 @@ try {
     Assert 'all present values cause zero named-value writes' (-not $thrown -and $nvWrites.Count -eq 0) "$thrown | $($nvWrites -join '; ')"
     Assert 'all present values still PUT the fragment before the policy' ($global:P102SetPolicyPutTargets.Count -eq 2 -and $global:P102SetPolicyPutTargets[0] -match '/policyFragments/content-safety-screening\?' -and $global:P102SetPolicyPutTargets[1] -match '/apis/claude-foundry/policies/policy\?') ($global:P102SetPolicyPutTargets -join '; ')
 
+    Reset-Fixture -Present @($allReferences | Where-Object { $_ -ne 'model-family-quotas' }) -ExistingUpdatesForbidden @($allReferences | Where-Object { $_ -ne 'model-family-quotas' })
+    $thrown = Get-Thrown { & (Join-Path $root 'scripts\Set-GatewayPolicy.ps1') -ApimName apim-contoso -ResourceGroup rg-contoso -PolicyFile $policyPath -SubscriptionId '00000000-0000-4000-8000-0000000000a1' }
+    $creates = @($global:P102SetPolicyCalls | Where-Object { $_ -match '^apim nv create' })
+    Assert 'an older gateway receives only the disabled model-family quota default' (
+        -not $thrown -and
+        $creates.Count -eq 1 -and
+        $creates[0] -match '--named-value-id model-family-quotas(?:\s|$)' -and
+        $global:P102SetPolicyLiveNamedValues['model-family-quotas'] -eq ',,'
+    ) "$thrown | creates=$($creates -join '; ') | values=$($global:P102SetPolicyLiveNamedValues | ConvertTo-Json -Compress)"
+
     Reset-Fixture -Present @($allReferences | Where-Object { $_ -notin $contentSafetyNames }) -ExistingUpdatesForbidden @($allReferences | Where-Object { $_ -notin $contentSafetyNames })
     $thrown = Get-Thrown { & (Join-Path $root 'scripts\Set-GatewayPolicy.ps1') -ApimName apim-contoso -ResourceGroup rg-contoso -PolicyFile $policyPath -SubscriptionId '00000000-0000-4000-8000-0000000000a1' }
     $creates = @($global:P102SetPolicyCalls | Where-Object { $_ -match '^apim nv create' })

@@ -19,6 +19,7 @@
     "standard": { "label": "quota-standard", "source": "infra/policy.xml", "match": "{{quota-standard}}" },
     "premium": { "label": "quota-premium", "source": "infra/policy.xml", "match": "{{quota-premium}}" },
     "override": { "label": "quota-overrides", "source": "infra/policy.xml", "match": "{{quota-overrides}}" },
+    "family": { "label": "model-family-quotas", "source": "infra/policy.xml", "match": "{{model-family-quotas}}" },
     "llm-log": { "label": "ApiManagementGatewayLlmLog", "source": "analytics/chargeback-ledger.kql", "match": "\nApiManagementGatewayLlmLog\n" },
     "traces": { "label": "AppTraces", "source": "analytics/chargeback-ledger.kql", "match": "    AppTraces\n" },
     "chargeback": { "label": "ClaudeChargeback()", "source": "scripts/Publish-ClaudeQueries.ps1", "match": "Alias   = 'ClaudeChargeback'" },
@@ -34,7 +35,7 @@
     "office-cors": { "label": "pivot.claude.ai CORS", "source": "infra/policy.xml", "match": "<cors allow-credentials=\"false\"" }
   },
   "groups": [
-    { "x": 0, "y": 354, "w": 1280, "h": 230, "tone": "blue", "title": "Four budget layers, in policy order · up to four quotas for a team member" }
+    { "x": 0, "y": 354, "w": 1280, "h": 230, "tone": "blue", "title": "Five budget layers, in policy order · up to five quotas for a team member" }
   ],
   "nodes": [
     { "id": "signin", "x": 0, "y": 0, "w": 164, "h": 344, "tone": "teal", "compact": true, "eyebrow": "01 · caller", "title": "Sign in", "lines": [
@@ -46,7 +47,7 @@
     { "id": "admit", "x": 186, "y": 0, "w": 164, "h": 344, "tone": "blue", "compact": true, "eyebrow": "02 · gateway", "title": "Admit", "lines": [
       "Validate token and model",
       "[[source]] selects lists or projection.",
-      "Tier, assigned unit or team; four budget layers",
+      "Tier, assigned unit or team; five budget layers",
       "Rate ceilings also apply."
     ] },
     { "id": "screen", "x": 372, "y": 0, "w": 164, "h": 344, "tone": "blue", "compact": true, "eyebrow": "03 · gateway", "title": "Screen", "lines": [
@@ -76,10 +77,11 @@
       "Workbook and saved functions",
       "Optional Grafana, Turnstile or AUM"
     ] },
-    { "id": "org", "x": 16, "y": 408, "w": 290, "h": 154, "tone": "blue", "compact": true, "title": "1 · Organisation / month", "lines": ["[[org]]", "One shared counter on this gateway"] },
-    { "id": "team", "x": 336, "y": 408, "w": 290, "h": 154, "tone": "blue", "compact": true, "title": "2 · Assigned team / month", "lines": ["Budget in [[bu-registry]]", "[[bu-members]] or projection selects the team or direct unit."] },
-    { "id": "unit", "x": 656, "y": 408, "w": 290, "h": 154, "tone": "blue", "compact": true, "title": "3 · Parent unit / month", "lines": ["[[parents]] + [[bu-registry]]", "A direct unit member is charged once, not twice."] },
-    { "id": "person", "x": 976, "y": 408, "w": 288, "h": 154, "tone": "blue", "compact": true, "title": "4 · Person / day", "lines": ["[[standard]] / [[premium]]", "[[override]] replaces the tier's daily value."] },
+    { "id": "org", "x": 16, "y": 408, "w": 224, "h": 154, "tone": "blue", "compact": true, "title": "1 · Organisation / month", "lines": ["[[org]]", "One shared counter on this gateway"] },
+    { "id": "family", "x": 256, "y": 408, "w": 224, "h": 154, "tone": "blue", "compact": true, "title": "2 · Model family / month", "lines": ["[[family]]", "One counter per person, tier and family"] },
+    { "id": "team", "x": 496, "y": 408, "w": 224, "h": 154, "tone": "blue", "compact": true, "title": "3 · Assigned team / month", "lines": ["Budget in [[bu-registry]]", "[[bu-members]] or projection selects the assignment."] },
+    { "id": "unit", "x": 736, "y": 408, "w": 224, "h": 154, "tone": "blue", "compact": true, "title": "4 · Parent / month", "lines": ["[[parents]] + [[bu-registry]]", "Direct members are charged once."] },
+    { "id": "person", "x": 976, "y": 408, "w": 288, "h": 154, "tone": "blue", "compact": true, "title": "5 · Person / day", "lines": ["[[standard]] / [[premium]]", "[[override]] replaces the tier's daily value."] },
     { "id": "within", "x": 0, "y": 626, "w": 404, "h": 158, "tone": "teal", "compact": true, "title": "Projection miss · admitted", "lines": ["Within 100 concurrent and 200 misses/s: call the resolver, then admit only a valid entitlement.", "No record: ordinary 403, not an outage."] },
     { "id": "busy", "x": 438, "y": 626, "w": 404, "h": 158, "tone": "amber", "compact": true, "title": "Admission exceeded · 429", "lines": ["Refuse before the resolver.", "[[retry]]: 1", "Retryable overload; access has not changed."] },
     { "id": "expired", "x": 876, "y": 626, "w": 404, "h": 158, "tone": "amber", "compact": true, "title": "Expired record / fault · 503", "lines": ["No unexpired answer: fail closed.", "[[retry]]: 5", "Do not fall back to old membership lists."] },

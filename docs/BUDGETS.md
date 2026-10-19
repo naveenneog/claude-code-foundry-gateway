@@ -452,6 +452,7 @@ may have different values.
 | `quota-overrides` | empty | Per-person daily overrides, `,oid=tokens,` |
 | `models-standard` | empty (all) | Standard model allowlist |
 | `models-premium` | empty (all) | Premium model allowlist |
+| `model-family-quotas` | empty | Exact deployment-family mappings and per-person monthly family quotas, for example `,deployment:fast=haiku,standard:haiku=27777777,` |
 | `calls-per-minute` | 120 | Requests per minute per developer |
 
 </details>
@@ -472,7 +473,7 @@ may have different values.
 ```powershell
 az apim nv list --subscription '<selected-subscription-id>' -g $rg --service-name $apim -o json |
     ConvertFrom-Json |
-    Where-Object { $_.name -match '^(tpm|quota)-(standard|premium)$|^quota-org$|^calls-per-minute$' } |
+    Where-Object { $_.name -match '^(tpm|quota)-(standard|premium)$|^quota-org$|^model-family-quotas$|^calls-per-minute$' } |
     Select-Object name, value
 ```
 
@@ -528,6 +529,51 @@ sum of top-level unit allocations and expected daily burn before expanding.
 
 </details>
 
+## Model-family monthly limits
+
+<details>
+
+<summary>Installer calculation, named-value format and limitations</summary>
+
+The Windows installer accepts `StandardMonthlyUsd` and `PremiumMonthlyUsd`
+after model selection. A positive amount is divided equally across the distinct
+families allowed for that tier. Each family uses the highest blended list rate
+among its selected deployments. `ModelQuotaOutputShare` controls the assumed
+output fraction and defaults to `0.2`.
+
+For example, this unattended rerun recalculates both tier values and shows the
+result in the confirmation summary before the deployment:
+
+```powershell
+./Install-ClaudeGateway.ps1 -ExistingApimName $apim -Yes `
+    -StandardMonthlyUsd 100 -PremiumMonthlyUsd 300 `
+    -ModelQuotaOutputShare 0.2
+```
+
+Supply the normal required installer inputs or an answers file used by the
+existing deployment. On a rerun, omitting all three model-family inputs
+preserves the current `model-family-quotas` value. Setting both dollar amounts
+to zero writes the disabled value `,,`.
+
+The conversion uses the dated list prices in
+[`config/price-book.example.json`](../config/price-book.example.json). A selected
+model without a usable price entry stops the calculation; it is not treated as
+free. The policy then applies one monthly counter per Entra object id, tier and
+canonical family (`haiku`, `sonnet`, `opus`, `fable` or `mythos`) after model
+authorization. Exact deployment-to-family entries in the same value keep custom
+Foundry deployment aliases enforceable. If a tier has quota entries but the
+requested allowed family is absent or malformed, the gateway returns 503 until
+the installer recalculates the map; it does not treat that family as unlimited.
+
+This is an approximate token limit, not invoice-accurate USD enforcement.
+API Management counts prompt and completion tokens but not cache reads or
+writes; concurrent calls can overshoot, and counters are local to each gateway.
+The reconciled USD control remains separate. These limits follow the
+[`llm-token-limit` policy contract](https://learn.microsoft.com/azure/api-management/llm-token-limit-policy)
+and [ADR-0064](adr/0064-installer-model-family-token-quotas.md).
+
+</details>
+
 ## 3. Override one person's daily allowance
 
 <details>
@@ -570,6 +616,10 @@ Sentinel commas make matching exact; a name does not allow another name with
 the same prefix. An empty list allows every deployed model, not none.
 
 The gateway enforces the list before forwarding, independent of the client.
+When `model-family-quotas` contains entries for that tier, rerun the installer
+with both tier monthly allowances after adding or renaming a deployment. Until
+the canonical map covers the newly allowed family, the gateway returns 503
+rather than letting that family bypass its monthly counter.
 For deployment, pricing and selectable-client models, follow [Models](MODELS.md).
 Client settings, hooks, tabs and connectors are management controls, not a
 security boundary ([ADR-0004](adr/0004-policy-out-of-band.md)).

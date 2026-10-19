@@ -94,6 +94,9 @@ param(
     [int]$QuotaStandard,
     [int]$TpmPremium,
     [int]$QuotaPremium,
+    [ValidateRange(0,1000000)][decimal]$StandardMonthlyUsd,
+    [ValidateRange(0,1000000)][decimal]$PremiumMonthlyUsd,
+    [ValidateRange(0,1)][decimal]$ModelQuotaOutputShare = 0.2,
     [int]$QuotaOrg,
     [int]$CallsPerMinute,
 
@@ -276,6 +279,20 @@ function Read-Int {
     return [int]$v
 }
 
+function Read-Decimal {
+    param([string]$Prompt, [decimal]$Default, [string]$Help)
+    $shown = $Default.ToString('G29', [Globalization.CultureInfo]::InvariantCulture)
+    $v = Read-Default -Prompt $Prompt -Default $shown -Help $Help -Validate {
+        param($x)
+        $parsed = [decimal]0
+        if ([decimal]::TryParse($x, [Globalization.NumberStyles]::Number,
+                [Globalization.CultureInfo]::InvariantCulture, [ref]$parsed) -and $parsed -ge 0) { return $true }
+        Write-Warn2 'Enter zero or a positive number using a dot as the decimal separator.'
+        return $false
+    }
+    return [decimal]::Parse($v, [Globalization.CultureInfo]::InvariantCulture)
+}
+
 function Read-YesNo {
     param([string]$Prompt, [bool]$Default = $true)
     if ($Yes) { return $Default }
@@ -375,6 +392,7 @@ Write-Host ' Nothing is created until you confirm the summary.' -ForegroundColor
 . (Join-Path $root 'scripts/Test-Prerequisites.ps1')
 . (Join-Path $root 'scripts/flow/FlowContract.ps1')
 . (Join-Path $root 'scripts/ClaudeModelDeployment.ps1')
+. (Join-Path $root 'scripts/ClaudeModelFamilyQuotas.ps1')
 . (Join-Path $root 'scripts/ClaudeChoice.ps1')
 . (Join-Path $root 'scripts/ClaudeInstallProjection.ps1')
 Import-Module (Join-Path $root 'scripts/ClaudeProjectionNetwork.psm1') -Force
@@ -1410,6 +1428,49 @@ Write-Step 'Premium tier'
 $TpmPremium   = if ($TpmPremium)   { $TpmPremium }   else { Read-Int 'Tokens per minute' 80000   'For heavy agentic use - Cowork and long Claude Code runs.' }
 $QuotaPremium = if ($QuotaPremium) { $QuotaPremium } else { Read-Int 'Tokens per day'    5000000 '' }
 
+$modelFamilyQuotaPlan = $null
+$modelFamilyQuotas = ''
+$existingGatewayForModelQuotas = Test-ClaudeModelFamilyQuotaExistingGateway `
+    -ExistingApim $ExistingApim -LiveApimId $liveApimIdForDefaults
+$standardMonthlyUsdSpecified = $PSBoundParameters.ContainsKey('StandardMonthlyUsd')
+$premiumMonthlyUsdSpecified = $PSBoundParameters.ContainsKey('PremiumMonthlyUsd')
+$modelFamilyOutputShareChanged = $PSBoundParameters.ContainsKey('ModelQuotaOutputShare')
+$modelFamilyQuotaIntent = Resolve-ClaudeModelFamilyQuotaIntent -ExistingGateway $existingGatewayForModelQuotas `
+    -StandardMonthlyUsdSpecified $standardMonthlyUsdSpecified `
+    -PremiumMonthlyUsdSpecified $premiumMonthlyUsdSpecified `
+    -OutputShareSpecified $modelFamilyOutputShareChanged -Unattended ([bool]$Yes)
+$modelFamilyBudgetChanged = $modelFamilyQuotaIntent.MonthlyChanged
+$modelFamilyQuotaInputsSpecified = $modelFamilyQuotaIntent.InputsSpecified
+if ($modelFamilyQuotaIntent.Recalculate) {
+    Write-Step 'Approximate monthly limits by model family'
+    Write-Note 'The allowance is divided equally across allowed families and converted at list price.'
+    Write-Note 'APIM counts prompt and completion tokens, not cache tokens; this is a soft cost bound.'
+    if (-not $PSBoundParameters.ContainsKey('StandardMonthlyUsd')) {
+        $StandardMonthlyUsd = Read-Decimal 'Standard monthly USD per developer (0 disables)' 0 'Used only to suggest family token quotas.'
+    }
+    if (-not $PSBoundParameters.ContainsKey('PremiumMonthlyUsd')) {
+        $PremiumMonthlyUsd = Read-Decimal 'Premium monthly USD per developer (0 disables)' 0 'Used only to suggest family token quotas.'
+    }
+    if ($StandardMonthlyUsd -gt 0 -or $PremiumMonthlyUsd -gt 0) {
+        $priceBookPath = Join-Path $root 'config\price-book.example.json'
+        $modelFamilyQuotaPlan = New-ClaudeModelFamilyQuotaPlan `
+            -StandardMonthlyUsd $StandardMonthlyUsd -PremiumMonthlyUsd $PremiumMonthlyUsd `
+            -StandardModels $standardModelNames -PremiumModels $premiumModelNames `
+            -Deployments $deployed -PriceBookPath $priceBookPath -OutputShare $ModelQuotaOutputShare
+        $modelFamilyQuotas = ConvertTo-ClaudeModelFamilyQuotaValue -Entries $modelFamilyQuotaPlan.Entries `
+            -DeploymentFamilies $modelFamilyQuotaPlan.DeploymentFamilies
+        foreach ($entry in $modelFamilyQuotaPlan.Entries) {
+            Write-Ok ("{0} {1}: USD {2:N2}/month at USD {3:N4}/MTok -> {4:N0} tokens/month" -f
+                $entry.Tier, $entry.Family, $entry.AllocatedUsd, $entry.BlendedUsdPerM, $entry.TokensPerMonth)
+        }
+        Write-Note "Price book $($modelFamilyQuotaPlan.PriceBookDate); assumed output share $([math]::Round($ModelQuotaOutputShare * 100, 2))%."
+    }
+    else {
+        $modelFamilyQuotas = ',,'
+        Write-Note 'Model-family monthly quotas disabled.'
+    }
+}
+
 Write-Step 'Organisation ceiling'
 $QuotaOrg = if ($QuotaOrg) { $QuotaOrg } else {
     Read-Int 'Tokens per month, everyone combined' 100000000 'Total across all developers. The default is about one premium developer''s month, so raise it before a wider rollout.'
@@ -1457,6 +1518,7 @@ $rows = [ordered]@{
     ''                      = ''
     'Standard tier'         = "$('{0:n0}' -f $TpmStandard) tokens/min, $('{0:n0}' -f $QuotaStandard) tokens/day"
     'Premium tier'          = "$('{0:n0}' -f $TpmPremium) tokens/min, $('{0:n0}' -f $QuotaPremium) tokens/day"
+    'Model-family ceiling'  = $(if ($modelFamilyQuotaPlan) { "$(@($modelFamilyQuotaPlan.Entries).Count) monthly per-user family quota(s), list-price estimate" } elseif ($modelFamilyBudgetChanged -or -not $existingGatewayForModelQuotas) { 'disabled' } else { 'preserve existing setting' })
     'Organisation ceiling'  = "$('{0:n0}' -f $QuotaOrg) tokens/month, shared - soft cap"
     'Request ceiling'       = "$CallsPerMinute requests/min"
     ' '                     = ''
@@ -1483,6 +1545,16 @@ if ($syncJobChoice) {
 foreach ($k in $rows.Keys) {
     if ([string]::IsNullOrWhiteSpace($k)) { Write-Host '' ; continue }
     Write-Host ("  {0,-24} {1}" -f $k, $rows[$k])
+}
+if ($modelFamilyQuotaPlan) {
+    Write-Host ''
+    Write-Host '  Model-family quota details included in this approval' -ForegroundColor White
+    foreach ($entry in $modelFamilyQuotaPlan.Entries) {
+        Write-Host ("    {0} {1}: USD {2:N2}/month, USD {3:N4}/MTok, {4:N0} tokens/month" -f
+            $entry.Tier, $entry.Family, $entry.AllocatedUsd, $entry.BlendedUsdPerM, $entry.TokensPerMonth) -ForegroundColor DarkGray
+    }
+    Write-Host ("    Price book {0}; assumed output share {1}%." -f
+        $modelFamilyQuotaPlan.PriceBookDate, [math]::Round($ModelQuotaOutputShare * 100, 2)) -ForegroundColor DarkGray
 }
 if ($EntitlementStore -eq 'projection') {
     # Choosing projection deploys and switches it (ADR-0052); the summary is the approval, so it names the steps.
@@ -1590,6 +1662,7 @@ if ($gatewayPlan.Run) {
 $allowStd = ''
 $allowPrm = ''
 $quotaOvr = ''
+$modelFamilyQuotasExisting = ''
 $buReg = ''
 $buMem = ''
 $buPar = ''
@@ -1613,6 +1686,8 @@ if ($ExistingApim -or $liveApimId) {
     $allowStd = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id allow-standard --query value -o tsv 2>$null
     $allowPrm = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id allow-premium  --query value -o tsv 2>$null
     $quotaOvr = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id quota-overrides --query value -o tsv 2>$null
+    $modelFamilyQuotasExisting = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $apimName `
+        -Id 'model-family-quotas' -FailOnError -SubscriptionId $SubscriptionId
     # Business units, their membership and the parent map are owned by
     # Set-ClaudeBusinessUnit.ps1 and Sync-ClaudeAccess.ps1 after the first
     # deployment, exactly like entitlement above. Their template parameters
@@ -1641,6 +1716,7 @@ if ($ExistingApim -or $liveApimId) {
     if (-not $allowStd) { $allowStd = '' }
     if (-not $allowPrm) { $allowPrm = '' }
     if (-not $quotaOvr) { $quotaOvr = '' }
+    if (-not $modelFamilyQuotasExisting) { $modelFamilyQuotasExisting = ',,' }
     if (-not $buReg) { $buReg = '' }
     if (-not $buMem) { $buMem = '' }
     if (-not $buPar) { $buPar = '' }
@@ -1652,6 +1728,10 @@ if ($ExistingApim -or $liveApimId) {
     if ($keptStd.Count -or $keptPrm.Count) {
         Write-Note "preserving entitlement: $($keptStd.Count) standard, $($keptPrm.Count) premium"
     }
+
+    if (-not $modelFamilyQuotas) { $modelFamilyQuotas = $modelFamilyQuotasExisting }
+    if (-not $modelFamilyQuotas) { $modelFamilyQuotas = ',,' }
+    Assert-AzArgumentsSafe -Values ([ordered]@{ ModelFamilyQuotas = $modelFamilyQuotas })
     if ($keptOvr.Count) {
         Write-Note "preserving $($keptOvr.Count) per-user budget override(s)"
     }
@@ -1784,6 +1864,7 @@ Invoke-ClaudeInstallAzShown { az deployment group create `
         allowStandardValueExisting=$allowStd `
         allowPremiumValueExisting=$allowPrm `
         quotaOverridesExisting=$quotaOvr `
+        modelFamilyQuotasExisting=$modelFamilyQuotas `
         buRegistryExisting=$buReg `
         buMembersExisting=$buMem `
         buParentsExisting=$buPar `

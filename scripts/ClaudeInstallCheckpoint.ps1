@@ -17,7 +17,8 @@ $script:ClaudeInstallParameterAnswers = @('SubscriptionId', 'FoundrySubscription
     'ProjectionEndpointsSubnetId', 'ProjectionRunnerSubnetId', 'ProjectionResolverSubnetId', 'ProjectionRenewalSubnetId', 'ProjectionApimSubnetId',
     'ProjectionCosmosDnsZoneId', 'ProjectionSitesDnsZoneId', 'ProjectionBlobDnsZoneId', 'ProjectionQueueDnsZoneId', 'ProjectionTableDnsZoneId',
     'DeployProjection', 'DeploySyncJob', 'ProjectionSyncInterval', 'ProjectionResolverAppId',
-    'TpmStandard', 'QuotaStandard', 'TpmPremium', 'QuotaPremium', 'QuotaOrg', 'CallsPerMinute', 'StandardGroup', 'PremiumGroup', 'StandardModels', 'PremiumModels',
+    'TpmStandard', 'QuotaStandard', 'TpmPremium', 'QuotaPremium', 'StandardMonthlyUsd', 'PremiumMonthlyUsd', 'ModelQuotaOutputShare',
+    'QuotaOrg', 'CallsPerMinute', 'StandardGroup', 'PremiumGroup', 'StandardModels', 'PremiumModels',
     'AuthMode', 'DesktopSignInKind', 'DesktopBearerTokenType', 'DesktopEntraClientId', 'DesktopEntraIssuer', 'DesktopEntraScopes', 'DesktopEntraAudience',
     'DesktopEntraResource', 'DeployContentSafety', 'ContentSafetyMode', 'ModelOrganizationName', 'ModelIndustry', 'ModelCountryCode')
 $script:ClaudeInstallPromptAnswers = @('RevocationWindowSeconds', 'TeamBudgetBehaviour', 'UnassignedDevelopers', 'DeveloperEstimate', 'PendingClaudeDeployment', 'BusinessUnits')
@@ -35,7 +36,9 @@ $script:ClaudeInstallIntegers = @('TpmStandard', 'QuotaStandard', 'TpmPremium', 
 $script:ClaudeInstallODataAnswers = @('StandardGroup', 'PremiumGroup', 'NamePrefix')
 $script:ClaudeInstallTerminal = @('Succeeded', 'Failed', 'Canceled')
 # The files whose hash is the installer version a checkpoint records (shown, not refused: amendment 1).
-$script:ClaudeInstallFiles = @('Install-ClaudeGateway.ps1', 'scripts/ClaudeInstallCheckpoint.ps1', 'scripts/ClaudeInstallStore.ps1', 'scripts/ClaudeInstallResume.ps1')
+$script:ClaudeInstallFiles = @('Install-ClaudeGateway.ps1', 'scripts/ClaudeInstallCheckpoint.ps1', 'scripts/ClaudeInstallStore.ps1',
+    'scripts/ClaudeInstallResume.ps1', 'scripts/ClaudeModelFamilyQuotas.ps1', 'scripts/ClaudeModelPrices.ps1',
+    'config/price-book.example.json')
 $script:ClaudeInstall = $null
 
 # Test-ClaudeInstallWindows and Test-ClaudeInstallCmdText are in ClaudeInstallResume.ps1, which the preflight loads as well.
@@ -517,6 +520,8 @@ function Get-ClaudeInstallAnswers {
     if ($provider) { $values['ModelOrganizationName'] = $provider.organizationName; $values['ModelIndustry'] = $provider.industry; $values['ModelCountryCode'] = $provider.countryCode }
     foreach ($n in $script:ClaudeInstallParameterAnswers) {
         $v = if ($values.ContainsKey($n)) { $values[$n] } else { & $read $n }
+        if ($n -in @('StandardMonthlyUsd', 'PremiumMonthlyUsd', 'ModelQuotaOutputShare') -and
+            -not [bool](& $read 'modelFamilyQuotaInputsSpecified')) { continue }
         if ($v -is [System.Management.Automation.SwitchParameter]) { $v = [bool]$v }
         if ($null -eq $v -or ($v -is [bool] -and -not $v) -or "$v" -eq '' -or ($n -in $script:ClaudeInstallIntegers -and "$v" -eq '0')) { continue }
         # Assigned directly: an if expression would unroll a one-model list into text.

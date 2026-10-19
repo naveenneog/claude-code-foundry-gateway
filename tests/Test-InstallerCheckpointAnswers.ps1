@@ -53,6 +53,27 @@ $script:ClaudeInstall.Answers = $explicitAnswers
 $explicitResume = Format-ClaudeInstallResume -WithAnswers
 Assert 'the printed Resume: command carries -DeveloperCount 25 unquoted, not -DeveloperCount ''25''' ($explicitResume -match '-DeveloperCount 25(?!\S)' -and $explicitResume -notmatch "-DeveloperCount '25'") $explicitResume
 
+# Existing-gateway preservation is intent-sensitive: typed decimal defaults exist
+# as variables even when the operator never supplied them.
+$script:StandardMonthlyUsd = [decimal]0
+$script:PremiumMonthlyUsd = [decimal]0
+$script:ModelQuotaOutputShare = [decimal]0.2
+$script:modelFamilyQuotaInputsSpecified = $false
+$preservingAnswers = Get-ClaudeInstallAnswers
+Assert 'an ordinary existing-gateway run does not checkpoint default family-quota inputs' (
+    -not $preservingAnswers.Contains('StandardMonthlyUsd') -and
+    -not $preservingAnswers.Contains('PremiumMonthlyUsd') -and
+    -not $preservingAnswers.Contains('ModelQuotaOutputShare')
+) ($preservingAnswers | ConvertTo-Json -Compress)
+
+$script:modelFamilyQuotaInputsSpecified = $true
+$disablingAnswers = Get-ClaudeInstallAnswers
+Assert 'an explicit zero-dollar configuration checkpoints both zeros and the output-share assumption' (
+    $disablingAnswers.Contains('StandardMonthlyUsd') -and $disablingAnswers['StandardMonthlyUsd'] -eq '0' -and
+    $disablingAnswers.Contains('PremiumMonthlyUsd') -and $disablingAnswers['PremiumMonthlyUsd'] -eq '0' -and
+    $disablingAnswers.Contains('ModelQuotaOutputShare') -and $disablingAnswers['ModelQuotaOutputShare'] -eq '0.2'
+) ($disablingAnswers | ConvertTo-Json -Compress)
+
 # Control: before the fix (DeveloperCount absent from ClaudeInstallIntegers), the unbound case would
 # have recorded DeveloperCount='0' as a quoted string and the resume line would have carried
 # -DeveloperCount '0' - which Install-ClaudeGateway.ps1's own [ValidateRange(1,10000000)] refuses.

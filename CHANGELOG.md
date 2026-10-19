@@ -29,6 +29,14 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **Installer-generated model-family quotas (P118).** The Windows installer can
+  convert optional Standard and Premium monthly USD allowances into previewed
+  per-user monthly Haiku, Sonnet, Opus, Fable and Mythos token quotas from the
+  dated list-price book. APIM stores one non-secret canonical map, enforces a
+  separate counter by user, tier and family after model authorization, reports
+  the family when that quota is spent, preserves the setting on ordinary
+  reruns, and refuses selected models without a usable price.
+
 - **Configurable Cosmos access profiles (P116, implemented; packet gate blocked by the repository test timeout).** Adds a versioned tenant catalog for up to 16 plans and 64 Entra-backed profiles, including the supplied nine-plan/47-profile example. Attended and scheduled sync select one whole highest-priority profile, materialize schema-v3 capabilities, model families and connectors, and keep the resolver at one identity point read. APIM enforces Haiku, Sonnet, Opus, Fable and Mythos families; Desktop policy generation maps documented Chat, Cowork and Code settings while retaining Design and M365 as metadata. Standard/Premium v2 private setup selects a managed or explicit customer VNet and validates five dedicated subnets before ARM-based APIM integration. Live proof covered profile movement, cache transition and explicit P108 USD refusal; the scheduled job reached the existing U17 Graph-permission boundary and remains manual. The production runbook covers 47-group preparation, one-command resource deployment, customer-VNet and private-endpoint inputs, catalog publication, one-command tenant-admin Graph granting, first-run verification, rollback and screenshots. Business units and named-value rollback remain independent; AUM, Turnstile and automatic plan-dollar defaults remain outside this packet.
 
 - **Live onboarding-record sync (P115).** Added

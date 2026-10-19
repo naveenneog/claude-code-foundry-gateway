@@ -128,6 +128,9 @@ param modelsStandard string = ''
 @description('As modelsStandard, for the premium tier.')
 param modelsPremium string = ''
 
+@description('Exact deployment-family mappings and monthly per-developer family token quotas in sentinel form (",deployment:fast=haiku,standard:haiku=1000000,"). Empty preserves disabled behavior.')
+param modelFamilyQuotasExisting string = ''
+
 @description('Business unit registry to preserve, in sentinel form (",id=Group:tokens,"). Set-ClaudeBusinessUnit.ps1 owns this after the first deployment, so Install-ClaudeGateway.ps1 reads it off the gateway and hands it back rather than resetting it.')
 param buRegistryExisting string = ''
 
@@ -446,6 +449,8 @@ resource countTokensOperation 'Microsoft.ApiManagement/service/apis/operations@2
 // Policy parameters, so budgets are a config change rather than a redeploy
 // ---------------------------------------------------------------------------
 
+var modelFamilyQuotasValue = empty(modelFamilyQuotasExisting) ? ',,' : modelFamilyQuotasExisting
+
 var namedValues = [
   { key: 'tenant-id', value: subscription().tenantId }
   { key: 'tpm-standard', value: string(tpmStandard) }
@@ -456,6 +461,7 @@ var namedValues = [
   { key: 'quota-overrides', value: quotaOverridesValue }
   { key: 'models-standard', value: empty(modelsStandard) ? ',,' : modelsStandard }
   { key: 'models-premium', value: empty(modelsPremium) ? ',,' : modelsPremium }
+  { key: 'model-family-quotas', value: modelFamilyQuotasValue }
   { key: 'bu-registry', value: buRegistryValue }
   { key: 'bu-members', value: buMembersValue }
   { key: 'bu-parents', value: buParentsValue }

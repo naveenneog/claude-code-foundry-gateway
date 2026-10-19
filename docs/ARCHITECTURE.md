@@ -323,7 +323,7 @@ keys or connection strings, and the checkpoint test suites check that
 
 <summary>Sign-in, entitlement, optional screening, budgets, Foundry call and telemetry</summary>
 
-![Seven request hops: sign in, admit, the optional Content Safety screen, serve, meter, attribute and observe. Four budget layers and projection admission, absence and fault outcomes are shown, followed by the components each optional profile adds.](images/architecture/request-path.png)
+![Seven request hops: sign in, admit, the optional Content Safety screen, serve, meter, attribute and observe. Five budget layers and projection admission, absence and fault outcomes are shown, followed by the components each optional profile adds.](images/architecture/request-path.png)
 
 Source: [02-request.json](architecture/02-request.json). The README's
 `images/request-flow.png` is a byte-identical compatibility copy.
@@ -366,20 +366,21 @@ Source: [02-request.json](architecture/02-request.json). The README's
 
 `Sync-ClaudeAccess.ps1` publishes Entra membership to the gateway's active store. The default projection profile writes Cosmos records through the runner; a selected named-value profile writes `allow-standard`, `allow-premium` and `bu-members`. Premium takes precedence over standard. The policy does not call Microsoft Graph for membership on each request ([ADR-0051](adr/0051-persistent-sync-based-cosmos-entitlement.md), [ADR-0052](adr/0052-cosmos-default-installer.md)).
 
-The maximum four budget layers for a team member are, in policy order:
+The maximum five budget layers for a team member are, in policy order:
 
 | Order | Counter | Configuration |
 |---|---|---|
 | 1 | Organisation, monthly | `quota-org`, shared key `claude-org` |
-| 2 | Assigned team or direct unit, monthly | Its budget in `bu-registry` |
-| 3 | Parent business unit, monthly, when the assignment is a team | `bu-parents` plus the parent's budget in `bu-registry` |
-| 4 | Person, daily | `quota-standard` or `quota-premium`, replaced by a valid `quota-overrides` entry |
+| 2 | Model family, monthly, per person | `model-family-quotas`, keyed by object id, tier and canonical family |
+| 3 | Assigned team or direct unit, monthly | Its budget in `bu-registry` |
+| 4 | Parent business unit, monthly, when the assignment is a team | `bu-parents` plus the parent's budget in `bu-registry` |
+| 5 | Person, daily | `quota-standard` or `quota-premium`, replaced by a valid `quota-overrides` entry |
 
 A direct member of a business unit is not charged twice for that unit. Zero at a unit or
 team means its monthly limiter is not set, not a zero-token entitlement. Tier
 `tpm-standard` / `tpm-premium` controls run before the daily quota, and
 `calls-per-minute` also protects against many small requests. These rate controls are
-separate from the four budget layers.
+separate from the five budget layers.
 
 Unit and team limits default to strict. `bu-modes` can add allowance or skip an individual
 scope's monthly limiter in notify mode; it does not disable the other layers. See
