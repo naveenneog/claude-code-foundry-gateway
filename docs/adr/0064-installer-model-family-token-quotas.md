@@ -1,7 +1,7 @@
 # ADR-0064: Installer-generated model-family token quotas
 
-**Status:** Proposed  
-**Date:** 2026-10-19  
+**Status:** Proposed
+**Date:** 2026-10-19
 **Packet:** P118
 
 ## Context
