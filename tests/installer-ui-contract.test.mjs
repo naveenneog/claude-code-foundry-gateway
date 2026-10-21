@@ -110,10 +110,12 @@ async function start(env = {}) {
   };
 }
 
+const realContractRoot = process.env.LOCALAPPDATA || repoRoot;
+
 test('contract adapter accepts real step list and logged-out preflight output', { timeout: 180_000 }, async () => {
-  // The installer trusts a state directory only under a parent that other accounts cannot change (P91), so this
-  // scratch sits in the checkout (ignored by git) rather than the system temporary directory.
-  const scratch = join(repoRoot, '.p93-installer-ui-real-contract', `${process.pid}-${Date.now()}`);
+  // The installer trusts a state directory only inside the user profile under a parent that other accounts cannot
+  // change (P91, ADR-0046), so this scratch sits in LocalApplicationData; a CI checkout on D:\ is outside the profile.
+  const scratch = join(realContractRoot, '.p93-installer-ui-real-contract', `${process.pid}-${Date.now()}`);
   const stateDir = join(scratch, 'state-that-does-not-exist-yet');
   const answersPath = join(scratch, 'answers.json');
   await rm(scratch, { recursive: true, force: true });
@@ -143,7 +145,7 @@ test('contract adapter accepts real step list and logged-out preflight output', 
 });
 
 test('T2 stub step list and preflight stay byte-shape compatible with the real installer', { timeout: 180_000 }, async () => {
-  const scratch = join(repoRoot, '.p93-installer-ui-real-contract', `${process.pid}-${Date.now()}`);
+  const scratch = join(realContractRoot, '.p93-installer-ui-real-contract', `${process.pid}-${Date.now()}`);
   const stateDir = join(scratch, 'state-that-does-not-exist-yet');
   const answersPath = join(scratch, 'answers.json');
   await rm(scratch, { recursive: true, force: true });

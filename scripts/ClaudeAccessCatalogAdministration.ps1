@@ -77,7 +77,8 @@ function Invoke-ClaudeAccessCatalogLocalValidation {
     }
     if ($code -ne 0 -or -not $summary -or $summary.ok -ne $true -or $summary.mode -ne 'validate') {
         $stage = if ($summary -and [string]$summary.stage -cmatch '^[a-z][a-z-]{0,39}$') { [string]$summary.stage } else { 'catalog' }
-        throw "Access catalog validation refused at stage $stage. Correct the JSON and tenant binding; no runner or Cosmos write was started."
+        $detail = if ($stage -eq 'catalog' -and $summary -and $summary.detail) { " Problem: $([string]$summary.detail)." } else { '' }
+        throw "Access catalog validation refused at stage $stage.$detail Correct the JSON and tenant binding; no runner or Cosmos write was started."
     }
     return $summary
 }

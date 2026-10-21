@@ -4,8 +4,8 @@
   "metadata": {
     "_generator": {
       "name": "bicep",
-      "version": "0.48.1.52935",
-      "templateHash": "8787322598748817495"
+      "version": "0.46.1.21595",
+      "templateHash": "10367841640149205543"
     },
     "description": "Governed gateway for Claude Code on Microsoft Foundry: per-developer token budgets, tiering, and chargeback, with no model credential on any developer machine."
   },
@@ -831,8 +831,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.48.1.52935",
-              "templateHash": "9958455008644362733"
+              "version": "0.46.1.21595",
+              "templateHash": "13411957398084075389"
             },
             "description": "Optional Azure AI Content Safety account for Claude request screening."
           },
@@ -936,8 +936,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.48.1.52935",
-              "templateHash": "11029189057176881628"
+              "version": "0.46.1.21595",
+              "templateHash": "1670452134809187047"
             },
             "description": "Grants a principal the Cognitive Services User role on a Foundry account. Split into its own module so the assignment can target the Foundry resource group when it differs from the gateway resource group."
           },

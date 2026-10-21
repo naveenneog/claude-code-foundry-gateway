@@ -65,9 +65,12 @@ try {
   });
 } catch (error) {
   const stage = /^[a-z][a-z-]{0,39}$/.test(error?.stage ?? '') ? error.stage : 'config';
+  // Catalog-stage messages come from the local validator and name only catalog ids and rules.
+  const detail = stage === 'catalog' && typeof error?.message === 'string' ? error.message.slice(0, 300) : undefined;
   print({
     ok: false,
     stage,
+    ...(detail ? { detail } : {}),
     remedy: 'Remedy: correct the catalog or resolve the concurrent publication, then rerun scripts/Set-ClaudeAccessCatalog.ps1.',
   });
   process.exit(3);

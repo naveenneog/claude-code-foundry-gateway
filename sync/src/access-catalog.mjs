@@ -192,6 +192,9 @@ function validateProfile(profile, index) {
   }
   validateDimension(profile.capabilities, CAPABILITIES, `profile '${profile.id}' capabilities`);
   validateDimension(profile.modelFamilies, MODEL_FAMILIES, `profile '${profile.id}' modelFamilies`);
+  if (profile.enabled === true && profile.modelFamilies.length === 0) {
+    throw new Error(`profile '${profile.id}' modelFamilies must contain at least one family when the profile is enabled`);
+  }
   validateDimension(profile.connectors, CONNECTORS, `profile '${profile.id}' connectors`);
   if (typeof profile.enabled !== 'boolean') throw new Error(`profile '${profile.id}' enabled must be boolean`);
 }

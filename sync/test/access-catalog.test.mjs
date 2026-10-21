@@ -177,9 +177,15 @@ test('profile dimensions are arrays of unique canonical allowed values', () => {
 
   const emptyDimensions = makeCatalog({ planCount: 1, profileCount: 1 });
   emptyDimensions.profiles[0].capabilities = [];
-  emptyDimensions.profiles[0].modelFamilies = [];
   emptyDimensions.profiles[0].connectors = [];
   assert.doesNotThrow(() => validateAccessCatalog(emptyDimensions));
+
+  // An enabled profile with no model family would sign people in with nothing callable.
+  const noFamilies = makeCatalog({ planCount: 1, profileCount: 1 });
+  noFamilies.profiles[0].modelFamilies = [];
+  assert.throws(() => validateAccessCatalog(noFamilies), /modelFamilies must contain at least one family/);
+  noFamilies.profiles[0].enabled = false;
+  assert.doesNotThrow(() => validateAccessCatalog(noFamilies));
 });
 
 test('enabled profiles reference enabled plans', () => {

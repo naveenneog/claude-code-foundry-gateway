@@ -40,6 +40,7 @@ The owner requires the Cosmos path, automatic scheduled group synchronization, l
 + Existing named-value rollback, BU logic, P108 dollar controls and scheduled-job safety remain available.
 + Standard v2 private projection deployment no longer depends on an undocumented VNet prepared outside the setup path.
 − The first packet still uses `standard` or `premium` as the compatibility TPM/token enforcement bucket.
+− An enabled profile must allow at least one model family; local validation refuses an empty list and names the profile (P118 follow-up, 2026-10-21).
 − Exact automatic per-plan dollar defaults require a later reconciler/query/state packet; catalog credit values are metadata until that packet.
 − A scheduled positive live proof needs tenant-admin `GroupMember.Read.All`; without it the live proof is attended sync plus the existing fail-closed scheduled Graph denial.
 − P116 creates and owns the required private DNS zones even when it links them to a customer VNet. Reusing central private DNS zones is a separate architecture decision because duplicate namespace links can change resolution for existing consumers.

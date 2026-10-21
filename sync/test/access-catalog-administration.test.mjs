@@ -226,6 +226,24 @@ test('CLI failures expose neither discovered tenant id nor a mismatched catalog 
   assert.doesNotMatch(result.stdout + result.stderr, new RegExp(OTHER_TENANT, 'i'));
 });
 
+test('local validation names the catalog entry and rule that failed', () => {
+  const bad = catalog();
+  bad.profiles[0].modelFamilies = ['haiku', 'sonet'];
+  const result = runCli(bad, ['--tenant', TENANT, '--validate-only']);
+  assert.equal(result.status, 3);
+  const summary = JSON.parse(result.stdout);
+  assert.equal(summary.stage, 'catalog');
+  assert.match(summary.detail, /profile '[a-z0-9-]+' modelFamilies values must be one of/);
+});
+
+test('an enabled profile that allows no model family is refused', () => {
+  const bad = catalog();
+  bad.profiles[0].modelFamilies = [];
+  const result = runCli(bad, ['--tenant', TENANT, '--validate-only']);
+  assert.equal(result.status, 3);
+  assert.match(JSON.parse(result.stdout).detail, /modelFamilies must contain at least one family/);
+});
+
 function runCli(value, extraArguments) {
   const directory = mkdtempSync(join(tmpdir(), 'access-catalog-cli-'));
   const path = join(directory, 'catalog.json');

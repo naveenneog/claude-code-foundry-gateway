@@ -265,7 +265,10 @@ $gateway = Get-Content .\onboarding\claude-gateway.json -Raw | ConvertFrom-Json
 ```
 
 Preview performs local validation and Azure discovery but does not start the
-runner or change Cosmos:
+runner or change Cosmos. A refused catalog names the entry and rule, for
+example `Problem: profile 'standard-l1-code' modelFamilies values must be one of
+haiku, sonnet, opus, fable, mythos`. An enabled profile must allow at least one
+model family:
 
 ```powershell
 .\scripts\Set-ClaudeAccessCatalog.ps1 `
