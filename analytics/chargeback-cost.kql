@@ -43,22 +43,26 @@ let price = datatable(model: string, input_per_m: real, output_per_m: real, cach
 // PRICE-BOOK-END
 // MEMBERSHIP-BEGIN
 let membership_date = "unpublished";
+let membership_gateway = "";
 let membership = datatable(oid: string, unit: string, parent: string) [
     "", "", ""
 ];
 // MEMBERSHIP-END
 // JOB-MEMBERSHIP-BEGIN
 // On a gateway whose entitlement comes from the Cosmos projection, the sync job
-// resolves every member's unit from Entra on each run, and nothing writes
+// resolves every business-unit member from Entra on each run, and nothing writes
 // bu-members, so the table above can be empty or stale. After a successful full
 // run the job prints its membership as numbered JSON lines (ADR-0066,
 // sync/src/membership-lines.mjs), which its diagnostic setting sends to
-// ContainerAppConsoleLogs. Today's mapping is the newest complete run of each
-// job; a run with a missing or unreadable part is not used, and with no
-// complete run the published table above is. The fuzzy union keeps this
-// function valid in a workspace that has never received a job line. Three
-// days covers the longest schedule with failed runs in between, and is read
-// whatever period the report covers, because membership is always today's.
+// ContainerAppConsoleLogs. Only lines naming membership_gateway, the gateway
+// this function was published for, are read, so gateways sharing a workspace
+// keep their mappings apart. Today's mapping is the newest complete run, by
+// ingestion time rather than the time a line states; a run with a missing or
+// unreadable part is not used, and a run with no unit member is not used either.
+// With no usable run the published table above is. The fuzzy union keeps this
+// function valid in a workspace that has never received a job line. Three days
+// covers the longest schedule with failed runs in between, and is read whatever
+// period the report covers, because membership is always today's.
 let job_lines =
     union isfuzzy=true (datatable(TimeGenerated: datetime, JobName: string, Log: string) []), ContainerAppConsoleLogs
     | where TimeGenerated > ago(3d)
@@ -66,25 +70,26 @@ let job_lines =
     | where Log has "projection-membership"
     | extend m = parse_json(substring(Log, indexof(Log, "{")))
     | where tostring(m.event) == "projection-membership"
-    | project TimeGenerated, JobName, run = tostring(m.run), at = todatetime(m.at),
-              part = toint(m.part), parts = toint(m.parts), rows = m.rows;
+    | where isnotempty(membership_gateway) and tostring(m.gateway) == membership_gateway
+    | project TimeGenerated, JobName, run = tostring(m.run),
+              part = toint(m.part), parts = toint(m.parts), rows = m.rows
+    | where isnotnull(part) and isnotnull(parts);
 let job_runs =
     job_lines
-    | summarize at = max(at) by JobName, run, part, parts
-    | summarize got = count(), parts = max(parts), least = min(parts), low = min(part), high = max(part), at = max(at) by JobName, run
-    | where parts > 0 and got == parts and least == parts and low == 1 and high == parts
-    | summarize arg_max(at, *) by JobName;
+    | summarize seen = max(TimeGenerated) by JobName, run, part, parts
+    | summarize got = count(), parts = max(parts), least = min(parts), low = min(part), high = max(part), seen = max(seen) by JobName, run
+    | where parts > 0 and got == parts and least == parts and low == 1 and high == parts;
 let job_membership =
     job_lines
-    | join kind=inner (job_runs | project run, run_at = at) on run
-    | summarize arg_max(TimeGenerated, rows, run_at) by run, part
+    | join kind=inner (job_runs | project JobName, run, run_seen = seen) on JobName, run
+    | summarize arg_max(TimeGenerated, rows, run_seen) by JobName, run, part
     | mv-expand row = rows
-    | project oid = tostring(row[0]), unit = tostring(row[1]), parent = tostring(row[2]), run_at
-    | summarize arg_max(run_at, unit, parent) by oid
-    | project oid, unit, parent;
-let job_at = toscalar(job_runs | summarize max(at));
-let membership_source = iff(isnotnull(job_at), strcat(format_datetime(job_at, "yyyy-MM-dd HH:mm"), " UTC sync job"), membership_date);
-// JOB-MEMBERSHIP-END
+    | where isnotempty(tostring(row[0]))
+    | project oid = tostring(row[0]), unit = tostring(row[1]), parent = tostring(row[2]), run_seen
+    | summarize arg_max(run_seen, unit, parent) by oid
+    | project oid, unit, parent, run_seen;
+let job_at = toscalar(job_membership | summarize max(run_seen));
+let membership_source = iff(isnotnull(job_at), strcat(format_datetime(job_at, "yyyy-MM-dd HH:mm"), " UTC sync job"), membership_date);// JOB-MEMBERSHIP-END
 //
 // Model names on the wire carry a deployment suffix the price book does not
 // have - measured 2026-09-17, the console reports claude-haiku-4-5-20251001
@@ -115,7 +120,7 @@ let priced_dated = priced | project dated_k = k, dated_input_per_m = input_per_m
 // Today's mapping, keyed by object id. A team rolls up to its parent, so a unit
 // owner sees their teams' spend inside their own total the way the console
 // report presents it.
-let unit_now = union (job_membership | where isnotnull(job_at)), (membership | where isnull(job_at))
+let unit_now = union (job_membership | where isnotnull(job_at) | project oid, unit, parent), (membership | where isnull(job_at))
     | where oid != "" | project oid, unit_now = unit, parent_now = parent;
 //
 // Metered tokens. The spine is ClaudeChargeback() rather than a second copy of

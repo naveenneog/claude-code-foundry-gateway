@@ -44,7 +44,7 @@ function makeCatalog() {
   return { schemaVersion: 1, tenantId: tenant, plans, profiles };
 }
 
-function runCatalog({ name, catalog = makeCatalog(), memberships, absentGroup = '' }) {
+function runCatalog({ name, catalog = makeCatalog(), memberships, absentGroup = '', args = [] }) {
   const storePath = join(work, `${name}-store.json`);
   const logPath = join(work, `${name}-cosmos.log`);
   const catalogDocument = prepareAccessCatalogDocument(catalog, { tenantId: tenant });
@@ -60,6 +60,7 @@ function runCatalog({ name, catalog = makeCatalog(), memberships, absentGroup = 
     '--graph',
     '--standard', guid(60),
     '--premium', 'none',
+    ...args,
   ], {
     encoding: 'utf8',
     env: {
@@ -191,4 +192,22 @@ test('an absent configured catalog access group fails before any entitlement or 
   assert.match(summary.error, /configured access group.*absent|absent configured access group/i);
   assert.doesNotMatch(log, /bulk (Upsert|Delete)/);
   assert.equal(Object.values(store.docs).some((doc) => doc.type === 'projection-reconciliation-status'), false);
+});
+
+test('a catalog run prints chargeback membership for every unit member, including one without a profile (ADR-0066)', () => {
+  const unitGroup = guid(70);
+  const holder = guid(101);
+  const noProfile = guid(102);
+  const { result, summary } = runCatalog({
+    name: 'catalog-membership',
+    memberships: { [guid(1)]: [holder], [unitGroup]: [holder, noProfile] },
+    args: ['--bu', `eng=${unitGroup}`],
+  });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(summary.membershipPrinted, true);
+  const lines = result.stdout.split(/\r?\n/).filter((line) => line.includes('"event":"projection-membership"')).map((line) => JSON.parse(line));
+  assert.equal(lines.length, 1);
+  assert.deepEqual(lines[0].rows, [[holder, 'eng', ''], [noProfile, 'eng', '']]);
+  const lastLine = result.stdout.trim().split(/\r?\n/).at(-1);
+  assert.equal(JSON.parse(lastLine).membershipPrinted, true, 'the summary stays last');
 });

@@ -267,8 +267,12 @@ function membershipEvents(stdout) {
 
 test('a successful scheduled run prints its membership for chargeback before the summary line (ADR-0066)', () => {
   const where = scenario('membership lines');
+  // A unit member who holds no tier still belongs to the unit for chargeback, as bu-members records them.
+  const fetch = fixture({ registry: REGISTRY_TEAMS, parents: ',platform=eng,' });
+  const formerDeveloper = '30000000-0000-4000-8000-000000000099';
+  fetch.graph.members[FINANCE].push({ oid: formerDeveloper, upn: 'ex@example.invalid', cast: 'user' });
   const ran = jobRun(where, '2026-10-04T10:30:00.000Z', {
-    fetch: fixture({ registry: REGISTRY_TEAMS, parents: ',platform=eng,' }),
+    fetch,
     env: { CONTAINER_APP_JOB_EXECUTION_NAME: 'caj-renew-p120fixture-x1y2z3' },
   });
   assert.equal(ran.code, 0, ran.stdout + ran.stderr);
@@ -276,6 +280,7 @@ test('a successful scheduled run prints its membership for chargeback before the
   assert.equal(events.length, 1);
   const [line] = events;
   assert.equal(line.run, 'caj-renew-p120fixture-x1y2z3');
+  assert.equal(line.gateway, GATEWAY.toLowerCase());
   assert.equal(line.part, 1);
   assert.equal(line.parts, 1);
   assert.ok(Number.isFinite(Date.parse(line.at)));
@@ -284,8 +289,35 @@ test('a successful scheduled run prints its membership for chargeback before the
     [USERS.ada]: { unit: 'eng', parent: '' },
     [USERS.bo]: { unit: 'platform', parent: 'eng' },
     [USERS.cy]: { unit: 'fin', parent: '' },
+    [formerDeveloper]: { unit: 'fin', parent: '' },
   });
+  assert.equal(records(where)[formerDeveloper], undefined, 'membership alone gives no access');
+  assert.equal(ran.json.membershipPrinted, true);
   assert.equal(ran.json.event, 'projection-renewal-succeeded', 'the summary stays the last line, which the alerts read');
+});
+
+test('a full run that a newer targeted sync overtook prints no membership and says why', () => {
+  const where = scenario('membership after targeted');
+  assert.equal(jobRun(where, '2026-10-04T10:00:00.000Z').code, 0);
+  const target = USERS.ada;
+  const verified = new Date(Date.parse('2026-10-04T10:29:00.000Z') - 60 * 1000);
+  const snapshot = {
+    kind: 'claude-entitlement-snapshot', tenantId: TENANT, generatedAt: '2026-10-04T10:29:00.000Z',
+    reconciliationGeneration: randomUUID(), lastVerifiedAt: verified.toISOString(),
+    expiresAt: Math.floor(verified.getTime() / 1000) + 7200, mappingVersion: Math.floor(verified.getTime() / 1000),
+    scope: 'user', user: target, records: [{ oid: target, tier: 'premium', businessUnit: 'fin' }],
+  };
+  const path = join(where.dir, 'targeted.json');
+  writeFileSync(path, JSON.stringify(snapshot));
+  const targeted = run(where, 'apply-projection.mjs', ['--cosmos', ENDPOINT, '--tenant', TENANT, '--account-resource-id', ACCOUNT, '--snapshot', path, '--user', target], { now: '2026-10-04T10:29:00.000Z' });
+  assert.equal(targeted.code, 0, targeted.stdout + targeted.stderr);
+  const full = jobRun(where, '2026-10-04T10:30:00.000Z');
+  assert.equal(full.code, 0, full.stdout + full.stderr);
+  assert.ok(full.json.excludedByNewerTargetedSync >= 1);
+  assert.deepEqual(membershipEvents(full.stdout), []);
+  assert.equal(full.json.membershipPrinted, false);
+  assert.match(full.json.warnings.join(' '), /newer targeted sync.*Remedy:/);
+  assert.equal(full.json.event, 'projection-renewal-succeeded', 'entitlement still succeeded');
 });
 
 test('snapshot, what-if and failed runs print no membership', () => {

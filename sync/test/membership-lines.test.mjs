@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { membershipLines, MEMBERSHIP_LINE_MAX_CHARS } from '../src/membership-lines.mjs';
+import { membershipLines, unitAssignments, MEMBERSHIP_LINE_MAX_CHARS } from '../src/membership-lines.mjs';
 import { MEMBERSHIP_EVENT } from '../src/events.mjs';
 
 const at = '2026-10-21T10:00:00.000Z';
@@ -10,6 +10,7 @@ const parse = (lines) => lines.map((line) => JSON.parse(line));
 test('membership lines carry the event, run, time, part numbers and [oid, unit, parent] rows', () => {
   const lines = membershipLines({
     runId: 'caj-renew-abc-1',
+    gateway: '/subscriptions/S/resourceGroups/RG/providers/Microsoft.ApiManagement/service/APIM',
     at,
     records: [
       { oid: oid(1), businessUnit: 'platform' },
@@ -19,6 +20,7 @@ test('membership lines carry the event, run, time, part numbers and [oid, unit, 
   });
   assert.deepEqual(parse(lines), [{
     event: MEMBERSHIP_EVENT,
+    gateway: '/subscriptions/s/resourcegroups/rg/providers/microsoft.apimanagement/service/apim',
     run: 'caj-renew-abc-1',
     at,
     part: 1,
@@ -56,4 +58,26 @@ test('a unit name that alone would not fit in a line is refused rather than cut'
     () => membershipLines({ runId: 'r', at, records: [{ oid: oid(1), businessUnit: 'u'.repeat(4000) }], parents: new Map() }),
     /does not fit in one membership line/,
   );
+});
+
+test('every unit member is assigned, access or not, deepest unit first and first match winning', () => {
+  const assigned = unitAssignments([
+    { id: 'platform', members: [{ oid: oid(2) }] },
+    { id: 'eng', members: [{ oid: oid(1) }, { oid: oid(2) }, { oid: oid(3) }] },
+  ]);
+  assert.deepEqual(assigned, [
+    { oid: oid(2), businessUnit: 'platform' },
+    { oid: oid(1), businessUnit: 'eng' },
+    { oid: oid(3), businessUnit: 'eng' },
+  ]);
+});
+
+test('unit names with quotes, backslashes and non-ASCII survive the line and its bound', () => {
+  const unit = 'q"\\u\u00e9\n' + 'x'.repeat(300);
+  const records = Array.from({ length: 200 }, (_, i) => ({ oid: oid(i + 1), businessUnit: unit }));
+  const lines = membershipLines({ runId: 'r', at, records, parents: new Map([[unit.toLowerCase(), 'p"\\']]) });
+  for (const line of lines) assert.ok(line.length <= MEMBERSHIP_LINE_MAX_CHARS, `line of ${line.length} characters`);
+  const rows = parse(lines).flatMap((p) => p.rows);
+  assert.equal(rows.length, 200);
+  assert.deepEqual(rows[0], [oid(1), unit, 'p"\\']);
 });

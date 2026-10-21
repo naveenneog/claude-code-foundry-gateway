@@ -40,25 +40,34 @@ Options considered:
 
 Option 3.
 
-1. After a successful full `--graph` run, the job prints its resolved
-   membership before the final summary line, as JSON lines with
-   `"event":"projection-membership"`, the run id, the run time, `part`,
-   `parts` and `rows` of `[oid, unit, parent]`. Members without a unit are
-   omitted. A run that resolves no unit prints one line with no rows, so "no
-   units today" is also current.
+1. After a successful full `--graph` run, the job prints the membership of
+   every business-unit group, whether or not the member holds access: the
+   mapping `Sync-ClaudeAccess.ps1` writes to `bu-members` on a named-value
+   gateway. Units apply deepest first, then in registry order, and the first
+   match wins. The lines are JSON with `"event":"projection-membership"`, the
+   gateway resource id (lower case), the run id, `part`, `parts` and rows of
+   `[oid, unit, parent]`.
 2. Each line is at most 3,500 characters (U200).
-3. `ClaudeCost()` reads `ContainerAppConsoleLogs` for the last three days, keeps
-   lines from jobs whose name starts with `caj-renew-`, and uses the newest run
-   whose parts are all present. When there is none, it uses the published
-   `bu-members` table as before. `membership_date` names the source.
-4. Snapshot, targeted (`--user`), what-if and failed runs print no membership.
+3. `ClaudeCost()` reads `ContainerAppConsoleLogs` for the last three days and
+   keeps lines from jobs named `caj-renew-*` whose gateway equals
+   `membership_gateway`, which `Publish-ClaudeQueries.ps1` writes into the
+   function. It uses the newest run, by ingestion time, whose parts are all
+   present, keyed by job name and run id. A run with no unit member, or no such
+   run, leaves the published `bu-members` table in use. `membership_date` names
+   the source.
+4. A full run that a newer targeted sync overtook (`excludedByNewerTargetedSync`
+   above zero) prints no membership, because its view of those people is older
+   than the projection. Snapshot, targeted, what-if and failed runs print none.
+   The summary reports `membershipPrinted` and, when false, a warning with a
+   remedy.
 5. The summary line stays last, so the job's alerts are unchanged.
 
 ## Consequences
 
-- Moving a person between units reaches chargeback on the next sync run,
-  without `Publish-ClaudeQueries.ps1`. Publishing is still needed after a price
-  book change and on named-value gateways.
+- Moving a person between units reaches chargeback on the next successful full
+  run, without `Publish-ClaudeQueries.ps1`. Publishing is still needed after a
+  price-book change, on named-value gateways, and once after this change so the
+  function carries `membership_gateway`.
 - The job gains no permission and no Azure resource.
 - Log Analytics ingestion grows with membership: about 70 bytes per member per
   run, or about 21 MB a day for 25,000 members on the default two-hour
@@ -68,6 +77,15 @@ Option 3.
   and `BusinessUnit` per request.
 - A line that is lost or cut makes that run incomplete; `ClaudeCost()` then
   uses the previous complete run or the published table, never a partial one.
-- A job in another Container Apps environment that logs to the same workspace
-  with a `caj-renew-` name could supply membership. Creating one needs write
-  access to the subscription.
+- Trust boundary: a container job named `caj-renew-*` in any Container Apps
+  environment that sends console logs to this workspace can print lines naming
+  this gateway. Such lines replace the mapping until the real job's next
+  complete run, at most one sync interval later, because runs are ordered by
+  ingestion time. Creating or changing such a job needs write access to a
+  Container Apps environment and its diagnostic setting.
+- Not observed live: `ClaudeCost()` is checked by Kusto.Language for syntax and
+  types and by a static contract test, not executed against a workspace. The
+  P120 live check (U200, U201) executes it.
+- `scripts/ClaudeChargebackQuery.ps1` records the published `membership_date`
+  from the saved function text in report manifests, not the source a report
+  used (roadmap follow-up).

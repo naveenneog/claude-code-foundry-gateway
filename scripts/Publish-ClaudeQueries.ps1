@@ -250,7 +250,12 @@ function New-MembershipBlock {
     # answer being none.
     $body = if ($rows.Count) { ($rows -join ",`n") } else { '    "", "", ""' }
 
+    # The sync job prints membership lines tagged with this gateway's resource id; ClaudeCost() reads only
+    # those (ADR-0066), so a workspace shared by several gateways keeps their mappings apart.
+    $sub = if ($SubscriptionId) { $SubscriptionId } else { (az account show --query id -o tsv) }
+    $gatewayId = ("/subscriptions/$sub/resourceGroups/$ResourceGroup/providers/Microsoft.ApiManagement/service/$Apim").ToLowerInvariant()
     return ("let membership_date = `"{0}`";`n" -f (Get-Date -Format 'yyyy-MM-dd')) +
+           ("let membership_gateway = `"{0}`";`n" -f $gatewayId) +
            "let membership = datatable(oid: string, unit: string, parent: string) [`n$body`n];"
 }
 

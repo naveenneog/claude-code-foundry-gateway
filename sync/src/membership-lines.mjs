@@ -11,15 +11,34 @@ import { MEMBERSHIP_EVENT } from './events.mjs';
 export const MEMBERSHIP_LINE_MAX_CHARS = 3500;
 
 /**
- * @param {{ runId: string, at: string, records: Array<{ oid: string, businessUnit?: string }>, parents: Map<string, string> }} input
+ * Every member of a business-unit group, whether or not they hold access: the same mapping
+ * Sync-ClaudeAccess.ps1 writes to bu-members. Units arrive deepest first, then in registry order, and
+ * the first match wins, as mergeMembership assigns them.
+ * @param {Array<{ id: string, members: Array<{ oid: string }> }>} businessUnits
+ * @returns {Array<{ oid: string, businessUnit: string }>}
+ */
+export function unitAssignments(businessUnits) {
+  const byOid = new Map();
+  for (const unit of businessUnits) {
+    for (const member of unit.members ?? []) {
+      if (!byOid.has(member.oid)) byOid.set(member.oid, { oid: member.oid, businessUnit: unit.id });
+    }
+  }
+  return [...byOid.values()];
+}
+
+/**
+ * @param {{ runId: string, gateway: string, at: string, records: Array<{ oid: string, businessUnit?: string }>, parents: Map<string, string> }} input
  *   parents: bu-parents keyed by lower-case team id, as parseBuParents returns it.
  * @returns {string[]} JSON lines; at least one, so a run with no unit still states that.
  */
-export function membershipLines({ runId, at, records, parents }) {
+export function membershipLines({ runId, gateway = '', at, records, parents }) {
   const rows = records
     .filter((record) => record.businessUnit)
     .map((record) => [record.oid, record.businessUnit, parents.get(record.businessUnit.toLowerCase()) ?? '']);
-  const head = { event: MEMBERSHIP_EVENT, run: runId, at };
+  // gateway is the API Management resource id ClaudeCost() is published for, so a workspace shared by
+  // several gateways keeps their mappings apart.
+  const head = { event: MEMBERSHIP_EVENT, gateway: gateway.toLowerCase(), run: runId, at };
   // Part numbers are written as the largest the run could need, so a chunk measured here never grows
   // when its real numbers are filled in.
   const reserve = Math.max(rows.length, 1);

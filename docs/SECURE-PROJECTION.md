@@ -307,19 +307,38 @@ which other Container Apps workloads share ([Billing in Azure Container Apps](ht
 
 ### Membership for chargeback (P120)
 
-After a successful full run, the job prints each member's business unit and its parent unit as JSON lines with
-`"event":"projection-membership"`, before its final summary line
-([ADR-0066](adr/0066-chargeback-membership-from-sync-job.md), `sync/src/membership-lines.mjs`). The diagnostic
-setting sends them to `ContainerAppConsoleLogs` in the job's workspace. `ClaudeCost()` uses the newest run whose
-parts are all present, from jobs named `caj-renew-*` in the last three days, so a move between units reaches the
-chargeback workbook on the next run without `Publish-ClaudeQueries.ps1`. Without such a run, for example when
-the job logs to another workspace than the one holding `ClaudeCost()`, it uses the membership baked in at
-publish time. The workbook's **Membership read** tile shows which source it used.
+After a successful full run, the job prints the members of every business-unit group, with their unit and parent
+unit, as JSON lines with `"event":"projection-membership"` and the gateway's resource id, before its final summary
+line ([ADR-0066](adr/0066-chargeback-membership-from-sync-job.md), `sync/src/membership-lines.mjs`). Membership
+gives no access; these are the same people `bu-members` lists on a named-value gateway. The diagnostic setting sends
+the lines to `ContainerAppConsoleLogs` in the job's workspace.
+
+`ClaudeCost()` reads lines for the gateway it was published for and uses the newest run whose parts are all present,
+from the last three days. A move between units then reaches the chargeback workbook after the next successful run.
+Run `Publish-ClaudeQueries.ps1` once after upgrading, so the function carries the gateway id. The workbook's
+**Membership read** tile shows `<time> UTC sync job` when it uses a job run, and the publish date otherwise.
+
+| Membership read shows | Meaning | Action |
+|---|---|---|
+| `<time> UTC sync job` | The newest complete job run | none |
+| A date | No usable job run in three days | Check the job logs to the workspace that holds `ClaudeCost()`, that its last run succeeded, and that its summary has `"membershipPrinted":true`; start the job again |
+| `no spend in this period` | No cost rows in the selected range | Widen the range |
+
+A run's summary has `"membershipPrinted":false` and a warning with a remedy when it printed no membership: a newer
+targeted sync (`Sync-ClaudeAccess.ps1 -User`) changed someone after the run read Entra, or a unit id did not fit in
+one line. `ClaudeCost()` then keeps the previous complete run or the published table. To find such runs:
+
+```kusto
+ContainerAppConsoleLogs
+| where JobName startswith "caj-renew-" and Log has "membershipPrinted\":false"
+| project TimeGenerated, JobName, Log
+```
 
 Each line holds at most 3,500 characters ([U200](UNKNOWNS.md)). At about 70 bytes per member, 25,000 members
-add about 1.75 MB per run, or about 21 MB a day on the default `2h` schedule. Snapshot, targeted, what-if and
-failed runs print no membership. The lines carry object ids and unit names, which the same workspace already
-holds in the gateway trace (`UserId`, `BusinessUnit`).
+add about 1.75 MB per run, or about 21 MB a day on the default `2h` schedule. The lines carry object ids and unit
+names, which the same workspace already holds in the gateway trace (`UserId`, `BusinessUnit`). A job named
+`caj-renew-*` in another Container Apps environment that logs to the same workspace can print lines naming this
+gateway; they apply until the real job's next complete run (ADR-0066, Consequences).
 
 ### Switch to the projection (P95)
 

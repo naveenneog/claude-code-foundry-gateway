@@ -40,7 +40,7 @@ import { acquireApplyLock, validateLockWait } from './apply-lock.mjs';
 import { resolveGroupId, getTransitiveMembers } from './graph.mjs';
 import { readGatewayUnits, sortUnitsByDepth } from './business-units.mjs';
 import { RENEWAL_SUCCEEDED, RENEWAL_FAILED } from './events.mjs';
-import { membershipLines } from './membership-lines.mjs';
+import { membershipLines, unitAssignments } from './membership-lines.mjs';
 
 const argv = process.argv.slice(2);
 const flag = (n) => argv.includes(n);
@@ -206,7 +206,7 @@ async function resolveMembership() {
     const { records, unitWithoutProfile } = mergeCatalogMembership({ catalog, profileGroups, businessUnits });
     for (const unit of unitWithoutProfile.slice(0, 10)) log(`note: ${unit.oid} is in ${unit.unit} but holds no access profile - not projected`);
     const reconciliation = await step('lease', async () => createReconciliation({ verifiedAt, maxAgeSeconds: Number(opt('--max-age-seconds', 7200)) }));
-    return { records, mappingVersion: Math.floor(Date.now() / 1000), source: 'graph access catalog', reconciliation };
+    return { records, mappingVersion: Math.floor(Date.now() / 1000), source: 'graph access catalog', reconciliation, businessUnits };
   }
 
   const groups = tierGroups();
@@ -225,7 +225,7 @@ async function resolveMembership() {
   const { records, unitWithoutTier } = mergeMembership({ tiers, businessUnits });
   for (const u of unitWithoutTier.slice(0, 10)) log(`note: ${u.oid} is in ${u.unit} but holds no tier - not projected`);
   const reconciliation = await step('lease', async () => createReconciliation({ verifiedAt, maxAgeSeconds: Number(opt('--max-age-seconds', 7200)) }));
-  return { records, mappingVersion: Math.floor(Date.now() / 1000), source: 'graph', reconciliation };
+  return { records, mappingVersion: Math.floor(Date.now() / 1000), source: 'graph', reconciliation, businessUnits };
 }
 
 async function resolveBusinessUnitMemberships(units, token) {
@@ -375,9 +375,7 @@ if (opt('--compare-snapshot')) {
   process.exit(comparison.differences.length ? 4 : 0);
 }
 
-let { records, mappingVersion, source, reconciliation, scope = 'full' } = await resolveMembership();
-// Everyone the directory placed, before a newer targeted sync narrows the plan: chargeback wants the whole mapping.
-const resolvedRecords = records;
+let { records, mappingVersion, source, reconciliation, scope = 'full', businessUnits: resolvedUnits = [] } = await resolveMembership();
 const container = containerRef();
 const runId = process.env.CONTAINER_APP_JOB_EXECUTION_NAME ?? process.env.PROJECTION_RUN_ID ?? `local-${started}`;
 const lockClock = createLockClock();
@@ -495,10 +493,21 @@ try {
   if (renewal && scope === 'full' && summary.ok) {
     // Chargeback reporting must not fail an entitlement run: a mapping that cannot be printed is a
     // warning, and ClaudeCost() keeps the previous complete run or the published table.
-    try {
-      for (const line of membershipLines({ runId, at: new Date().toISOString(), records: resolvedRecords, parents: unitParents })) log(line);
-    } catch (error) {
-      summary.warnings = [...(summary.warnings ?? []), `membership for chargeback not printed: ${error?.message ?? error}`];
+    const chargebackRemedy = 'ClaudeCost() keeps the previous complete membership run or the published table. Remedy: start the sync job again once no targeted sync is running, or correct the named unit in bu-registry; see docs/SECURE-PROJECTION.md#membership-for-chargeback-p120.';
+    // A newer targeted sync observed some people after this run did, so this run's view of them is older
+    // than the projection; printing it would call stale membership current (ADR-0066 decision 4).
+    if (excludedByNewerTargetedSync) {
+      summary.membershipPrinted = false;
+      summary.warnings = [...(summary.warnings ?? []), `membership for chargeback not printed: ${excludedByNewerTargetedSync} identity(ies) changed by a newer targeted sync. ${chargebackRemedy}`];
+    } else {
+      try {
+        const lines = membershipLines({ runId, gateway: process.env.PROJECTION_GATEWAY_RESOURCE_ID ?? '', at: new Date().toISOString(), records: unitAssignments(resolvedUnits), parents: unitParents });
+        for (const line of lines) log(line);
+        summary.membershipPrinted = true;
+      } catch (error) {
+        summary.membershipPrinted = false;
+        summary.warnings = [...(summary.warnings ?? []), `membership for chargeback not printed: ${error?.message ?? error}. ${chargebackRemedy}`];
+      }
     }
   }
   console.log(JSON.stringify(summary));

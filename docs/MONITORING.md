@@ -584,7 +584,8 @@ On a named-value gateway, membership is baked in when the function is
 published, so **re-run `Publish-ClaudeQueries.ps1` after moving people between
 units**, or the workbook answers with yesterday's org chart. On a projection
 gateway with the sync job, `ClaudeCost()` reads the membership the job printed
-on its newest complete run, so a move appears after the next run
+on its newest complete run, so a move appears after the next successful run;
+republishing there does not pick up a move, because nothing writes `bu-members`
 ([ADR-0066](adr/0066-chargeback-membership-from-sync-job.md),
 [Membership for chargeback](SECURE-PROJECTION.md#membership-for-chargeback-p120)).
 The **Membership read** tile shows the date and source it is working from.
