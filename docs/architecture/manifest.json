@@ -6,7 +6,7 @@
       "source": "docs/architecture/01-system.json",
       "inputs": {
         "Start-ClaudeGateway.ps1": "22acc30a8feed7b0101dd98bb90fac93abb605aef77bf800f585e881939d8479",
-        "analytics/chargeback-cost.kql": "ed0c8f0a18a3e9c8fc038723a4e69e5ae2d7da595f500ba478b28bd546b55b15",
+        "analytics/chargeback-cost.kql": "59cba71caa30e90d6ccdfb40c194d9c152d7d49edd93ad4d043b4b73cd05b8b0",
         "analytics/chargeback-ledger.kql": "80f6f111fbff91ecce7c6bb3eecd6811d519bc99ac56d264c17851097429d2e7",
         "docs/architecture/01-system.json": "104e5c44f8fb3e219304e235f37e9064ff08a8ff4b923b835de82f20ec865f8f",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
@@ -35,7 +35,7 @@
         "scripts/flow/Foundation.ps1": "1321489586427a88ae568bfc220576487a6b6ee2736e9bab018b98e7b8bebbbb",
         "scripts/flow/Guide.ps1": "73bb63882ee1726fd8528e5e3045ecf6fd57a89dfa82a32f6e190cd2494461db",
         "scripts/flow/Verify.ps1": "7a8b05c6848499a8fbc26d87c90f4f3bfaa899538eeb1e6c068dd7bedda847fa",
-        "sync/src/apply-projection.mjs": "ca957f19095818f74db6ab00d7c2c8ca4852a18d68a1a17d95d822bd88c87027"
+        "sync/src/apply-projection.mjs": "115c27c54b6e768277df90ae1b34112eabdba80ba5b2ed5062e503ad1f399637"
       },
       "outputs": [
         {
@@ -129,7 +129,8 @@
       "id": "projection-freshness",
       "source": "docs/architecture/05-projection.json",
       "inputs": {
-        "docs/architecture/05-projection.json": "cb61aa7ca45af257462aab80e9a245c0503119e42b6a5c7a66e99223a6f08952",
+        "analytics/chargeback-cost.kql": "59cba71caa30e90d6ccdfb40c194d9c152d7d49edd93ad4d043b4b73cd05b8b0",
+        "docs/architecture/05-projection.json": "c8c5d75b5de8d041a29a0744dd48faec34e75ba509d6c7c3a828a7af41126ed9",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
@@ -153,17 +154,18 @@
         "scripts/Sync-ClaudeProjection.ps1": "471a5414f496a257c5b6d35d109f43ec650c8e0a726adbe3a4b358b39663f8af",
         "sync/Dockerfile": "80ab80a331c8b97f903c30cf714cedfcc9969b8d8c24be0c58777ac7c7f3b382",
         "sync/src/apply-lock.mjs": "c477f98ab719567b04b6981017dd4dc4c0a40b8b4a6d98145d320d958d73e9b0",
-        "sync/src/apply-projection.mjs": "ca957f19095818f74db6ab00d7c2c8ca4852a18d68a1a17d95d822bd88c87027",
+        "sync/src/apply-projection.mjs": "115c27c54b6e768277df90ae1b34112eabdba80ba5b2ed5062e503ad1f399637",
         "sync/src/business-units.mjs": "45df91c836676e6ad32a2d1b7f730c51b01e4210a22b716ce118c8bc6298ff31",
         "sync/src/check-admission.mjs": "260384604cc5f6a77a5178fde7b76d9ab4c31e0e31a0629fa4435edc7457f06e",
-        "sync/src/events.mjs": "4e2fae2fb8370d83c3bb798d8bd6f22d9db501c3a8730f8283bdab30bcb9db3f",
+        "sync/src/events.mjs": "b08663c394b45a80b28d45d993442785c0a8242781a6dfc08fd3d3b480804f9f",
         "sync/src/graph.mjs": "de6c2dc421d1882a26d456dcfc1e6d908b32d17c3435663ebb513892b7c1f8ab",
+        "sync/src/membership-lines.mjs": "c9d3bc3ab56d424d618770e0e44b5e3b9b71919e817673476f60f2686e9f2719",
         "sync/src/plan.mjs": "88592f5b6e388cb45fb9b2a3e82bf463a1fac9be03bf1d65804f108e849a1f52"
       },
       "outputs": [
         {
           "path": "docs/images/architecture/projection-freshness.png",
-          "sha256": "f31f86029d949dc82aa53818f56f2d636a30d26697fc490040e8756768eb5f2d"
+          "sha256": "4793d3eafc02e649383588c46c61e02096764e7b62e146787970dd04f9aa74e0"
         }
       ]
     },
@@ -252,7 +254,7 @@
       "id": "chargeback-reports",
       "source": "docs/architecture/08-chargeback-reports.json",
       "inputs": {
-        "analytics/chargeback-cost.kql": "ed0c8f0a18a3e9c8fc038723a4e69e5ae2d7da595f500ba478b28bd546b55b15",
+        "analytics/chargeback-cost.kql": "59cba71caa30e90d6ccdfb40c194d9c152d7d49edd93ad4d043b4b73cd05b8b0",
         "analytics/chargeback-ledger.kql": "80f6f111fbff91ecce7c6bb3eecd6811d519bc99ac56d264c17851097429d2e7",
         "docs/architecture/08-chargeback-reports.json": "6081e4f195e619c67b888221f5e88894c923aeb8306107fe4b97f99bedb1d358",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",

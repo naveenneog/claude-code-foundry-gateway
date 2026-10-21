@@ -712,7 +712,9 @@ default (`-SyncInterval` sets 30 minutes to 12 hours, or manual; [ADR-0058](adr/
 container-scoped Cosmos SQL data-plane writer role, an email-backed action group and alerts. A
 scheduled job adds the no-success alert, which fires after 2 x the interval + 15 minutes without a successful run; failed-run and Graph-denied alerts remain.
 The job writes destination-bound status records in the entitlement container. It is not required for
-switching.
+switching. After a successful full run it also prints each member's business unit to its console log, which
+`ClaudeCost()` reads as today's chargeback membership
+([ADR-0066](adr/0066-chargeback-membership-from-sync-job.md)).
 
 For a Standard v2 or Premium v2 private resolver, the installer selects a managed projection VNet
 or an explicit customer VNet plus five dedicated subnet IDs before any write. The managed shape

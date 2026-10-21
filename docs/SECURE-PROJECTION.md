@@ -305,6 +305,22 @@ Cost: USD 0.00003 per run-second for the job's 1 vCPU and 2 GiB (`eastus2` retai
 above the subscription's monthly Container Apps free grant of 180,000 vCPU-seconds and 360,000 GiB-seconds,
 which other Container Apps workloads share ([Billing in Azure Container Apps](https://learn.microsoft.com/azure/container-apps/billing), updated 2026-03-25).
 
+### Membership for chargeback (P120)
+
+After a successful full run, the job prints each member's business unit and its parent unit as JSON lines with
+`"event":"projection-membership"`, before its final summary line
+([ADR-0066](adr/0066-chargeback-membership-from-sync-job.md), `sync/src/membership-lines.mjs`). The diagnostic
+setting sends them to `ContainerAppConsoleLogs` in the job's workspace. `ClaudeCost()` uses the newest run whose
+parts are all present, from jobs named `caj-renew-*` in the last three days, so a move between units reaches the
+chargeback workbook on the next run without `Publish-ClaudeQueries.ps1`. Without such a run, for example when
+the job logs to another workspace than the one holding `ClaudeCost()`, it uses the membership baked in at
+publish time. The workbook's **Membership read** tile shows which source it used.
+
+Each line holds at most 3,500 characters ([U200](UNKNOWNS.md)). At about 70 bytes per member, 25,000 members
+add about 1.75 MB per run, or about 21 MB a day on the default `2h` schedule. Snapshot, targeted, what-if and
+failed runs print no membership. The lines carry object ids and unit names, which the same workspace already
+holds in the gateway trace (`UserId`, `BusinessUnit`).
+
 ### Switch to the projection (P95)
 
 An attended change window that moves Claude Desktop to interactive sign-in at the same time has a

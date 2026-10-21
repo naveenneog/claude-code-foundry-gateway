@@ -5,7 +5,7 @@
   "title": "Projection records persist until sync changes them",
   "subtitle": "A complete directory observation writes persistent entitlement records. Snapshots have an apply-by limit, the gateway bounds cache misses, and switching requires recent full-sync evidence plus resolver validation.",
   "width": 1280,
-  "height": 1700,
+  "height": 1740,
   "outputs": [
     "docs/images/architecture/projection-freshness.png"
   ],
@@ -28,6 +28,8 @@
     "infra/projection-renewal-gateway-reader.bicep",
     "sync/src/business-units.mjs",
     "sync/src/events.mjs",
+    "sync/src/membership-lines.mjs",
+    "analytics/chargeback-cost.kql",
     "scripts/Deploy-ClaudeProjectionRenewal.ps1",
     "scripts/Deploy-ClaudeProjection.ps1",
     "scripts/ClaudeProjectionNetwork.psm1",
@@ -226,6 +228,16 @@
       "source": "sync/src/apply-projection.mjs",
       "match": "--compare-snapshot"
     },
+    "membership-lines": {
+      "label": "membership lines",
+      "source": "sync/src/membership-lines.mjs",
+      "match": "export function membershipLines("
+    },
+    "cost-membership": {
+      "label": "ClaudeCost()",
+      "source": "analytics/chargeback-cost.kql",
+      "match": "// JOB-MEMBERSHIP-BEGIN"
+    },
     "entitlement-source": {
       "label": "entitlement-source",
       "source": "infra/policy.xml",
@@ -269,7 +281,7 @@
       "x": 430,
       "y": 1320,
       "w": 850,
-      "h": 376,
+      "h": 412,
       "tone": "amber",
       "title": "P97 optional sync job and switch evidence"
     }
@@ -421,7 +433,7 @@
       "x": 446,
       "y": 1364,
       "w": 818,
-      "h": 320,
+      "h": 356,
       "tone": "amber",
       "title": "10 · Optional sync job and switch evidence",
       "lines": [
@@ -432,7 +444,8 @@
         "Unit reads: [[unit-reader]], [[unit-read]].",
         "Switch compare: runner or [[compare-snapshot]].",
         "[[admission-check]]: full sync <24h; no invalid record.",
-        "[[switch]]: backup, one [[entitlement-source]] write."
+        "[[switch]]: backup, one [[entitlement-source]] write.",
+        "Chargeback: [[membership-lines]] to the workspace; [[cost-membership]] reads them."
       ]
     }
   ],

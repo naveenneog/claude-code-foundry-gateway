@@ -29,6 +29,14 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **Chargeback membership from the sync job (P120).** After a successful full
+  run, the projection sync job prints each member's business unit and parent
+  unit to its console log, and `ClaudeCost()` uses the newest complete run from
+  `ContainerAppConsoleLogs` before the membership baked in by
+  `Publish-ClaudeQueries.ps1`. A move between units reaches the chargeback
+  workbook on the next run; the **Membership read** tile names the source
+  ([ADR-0066](docs/adr/0066-chargeback-membership-from-sync-job.md)).
+
 - **Project identifier in chargeback (P119).** Claude Code can send
   `x-claude-project` through `ANTHROPIC_CUSTOM_HEADERS`. The gateway records a
   lower-cased valid value (or `unspecified` / `invalid`), removes the header
