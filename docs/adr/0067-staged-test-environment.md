@@ -25,12 +25,15 @@ preview Microsoft Graph extension.
 
 1. `infra/test-environment/resources.bicep` deploys the resources, composing
    the existing modules: `main.bicep` (Basic v2, client-credentials Foundry),
-   `projection.bicep`, `projection-network.bicep` (managed VNet, no runner),
-   `resolver.bicep` (public inbound, Easy Auth) and
-   `projection-registry.bicep`.
-2. `infra/test-environment/configuration.bicep` configures them: the sync job
-   (`projection-renewal.bicep`) on a test cron, and the gateway named values
-   that point it at the resolver and name the business units.
+   `projection.bicep`, `projection-network.bicep` (managed VNet, no runner)
+   and `projection-registry.bicep`.
+2. `infra/test-environment/configuration.bicep` configures them: the
+   resolver (`resolver.bicep`, public inbound with Easy Auth, storage behind
+   private endpoints), the gateway named values that point at it and name the
+   business units, and the sync job (`projection-renewal.bicep`) on a test
+   cron. The resolver is here, not in stage 1, because its only allowed caller
+   is the gateway identity's application id, which Bicep cannot read; the
+   script reads it from Microsoft Graph between the stages.
 3. `main.bicep` gains `@secure() param foundryClientSecret`. When it is set in
    client-credentials mode, the deployment writes the secret named value the
    policy references. Empty keeps today's behaviour, where the installer
@@ -46,8 +49,13 @@ preview Microsoft Graph extension.
    to `projection-renewal.bicep` directly; the production interval table and
    its 30-minute minimum are unchanged.
 6. The Foundry secret is read from a named value on an existing gateway
-   (`-FoundrySecretSourceApim`) into memory and passed to the deployment as a
-   secure parameter. It is never written to disk or printed.
+   (`-FoundrySecretSourceApim`), or added to the Foundry app for 7 days
+   through Microsoft Graph (`-CreateFoundrySecret`), into memory and passed
+   to the deployment as a secure parameter. It is never written to disk or
+   printed.
+8. Resource-group tags hold the run's state. Every tag value is checked for
+   form before use, and Teardown deletes a group, app or Foundry key only when
+   its name is the one this run gave it.
 7. The smoke stage, as the signed-in user: a request with a standard model
    returns 200 and a premium-only model returns 403; the user is moved to the
    premium group and to another business unit; after the next scheduled run
@@ -63,5 +71,8 @@ preview Microsoft Graph extension.
   Administrator in the test tenant (U17, U202). Without it the grant stage
   stops with the command an administrator runs, and the scheduled runs fail
   at the Graph stage.
+- The nested deployments are named `test-*`, not `projection-renewal-<prefix>`,
+  so `Set-ClaudeProjectionSyncSchedule.ps1` and the installer do not manage
+  this job; only the `Configure` stage does.
 - A job manually started and a scheduled run can overlap at 5 minutes; the
   apply lock makes the later one wait or stop (U165).

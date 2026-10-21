@@ -13,7 +13,7 @@
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
         "infra/foundry-role.bicep": "96a1602ea171dfcd975bb5b7e0f18a1b32f1e9e6d74e306298836b518db72d50",
-        "infra/main.bicep": "1b142253ce969b1a692e0944125d007031a95b668b9b40d72488b47fc24e6470",
+        "infra/main.bicep": "63cbb1132bcdbddef9644a8b10232f524f85eb36fb2c1785bd34a27d17add61f",
         "infra/policy.xml": "f1790e279a67346fae85251f0893faca37742843de83d5386392b8d357599988",
         "infra/projection-network.bicep": "bf0ff51aa2ec23eedcb15edf56e4db5007bc388dedf8dcc7162db8c0e49dd263",
         "infra/projection.bicep": "dc9f8a58ca7e0b462cde24a88cc670d78b2a60d0321f3f31ccdb505429d08465",
@@ -35,7 +35,7 @@
         "scripts/flow/Foundation.ps1": "1321489586427a88ae568bfc220576487a6b6ee2736e9bab018b98e7b8bebbbb",
         "scripts/flow/Guide.ps1": "73bb63882ee1726fd8528e5e3045ecf6fd57a89dfa82a32f6e190cd2494461db",
         "scripts/flow/Verify.ps1": "7a8b05c6848499a8fbc26d87c90f4f3bfaa899538eeb1e6c068dd7bedda847fa",
-        "sync/src/apply-projection.mjs": "3660d2de218c38465dc7bb3c0092f25a57a0b17dfa8aca33712f2741dcbbb280"
+        "sync/src/apply-projection.mjs": "1358605710df3caa6b978f9d0140e80ac077585ec206b04f89acce3da1586e67"
       },
       "outputs": [
         {
@@ -59,7 +59,7 @@
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
         "infra/content-safety-screening.xml": "5a244e2ea4f830a21cf7ea7da308058bcfac6fe478c534e341bcf99bef52513c",
         "infra/content-safety.bicep": "a07ff9a769ab433bf82b0dc5c372ac1b4a38312b14423290da62e483a1130ea4",
-        "infra/main.bicep": "1b142253ce969b1a692e0944125d007031a95b668b9b40d72488b47fc24e6470",
+        "infra/main.bicep": "63cbb1132bcdbddef9644a8b10232f524f85eb36fb2c1785bd34a27d17add61f",
         "infra/policy.xml": "f1790e279a67346fae85251f0893faca37742843de83d5386392b8d357599988",
         "infra/projection.bicep": "dc9f8a58ca7e0b462cde24a88cc670d78b2a60d0321f3f31ccdb505429d08465",
         "infra/resolver.bicep": "d90c34a0d2b77bfaf0a7589f093ef9e32de1356d4f2cafb1a6180f6966c01f6f",
@@ -154,7 +154,7 @@
         "scripts/Sync-ClaudeProjection.ps1": "471a5414f496a257c5b6d35d109f43ec650c8e0a726adbe3a4b358b39663f8af",
         "sync/Dockerfile": "80ab80a331c8b97f903c30cf714cedfcc9969b8d8c24be0c58777ac7c7f3b382",
         "sync/src/apply-lock.mjs": "c477f98ab719567b04b6981017dd4dc4c0a40b8b4a6d98145d320d958d73e9b0",
-        "sync/src/apply-projection.mjs": "3660d2de218c38465dc7bb3c0092f25a57a0b17dfa8aca33712f2741dcbbb280",
+        "sync/src/apply-projection.mjs": "1358605710df3caa6b978f9d0140e80ac077585ec206b04f89acce3da1586e67",
         "sync/src/business-units.mjs": "45df91c836676e6ad32a2d1b7f730c51b01e4210a22b716ce118c8bc6298ff31",
         "sync/src/check-admission.mjs": "260384604cc5f6a77a5178fde7b76d9ab4c31e0e31a0629fa4435edc7457f06e",
         "sync/src/events.mjs": "b08663c394b45a80b28d45d993442785c0a8242781a6dfc08fd3d3b480804f9f",
@@ -233,7 +233,7 @@
         "infra/chargeback-dns.bicep": "00f796c7ff57e7e81a7e7c41391cb083e1cace89933f8fc1b8018c02a210bcbf",
         "infra/chargeback-reports.bicep": "8a3f09f34cbb332496d41f116ab450c7fa8f3892d788a489ffbb2d9334e7659d",
         "infra/foundry-role.bicep": "96a1602ea171dfcd975bb5b7e0f18a1b32f1e9e6d74e306298836b518db72d50",
-        "infra/main.bicep": "1b142253ce969b1a692e0944125d007031a95b668b9b40d72488b47fc24e6470",
+        "infra/main.bicep": "63cbb1132bcdbddef9644a8b10232f524f85eb36fb2c1785bd34a27d17add61f",
         "infra/projection-network.bicep": "bf0ff51aa2ec23eedcb15edf56e4db5007bc388dedf8dcc7162db8c0e49dd263",
         "infra/projection-registry.bicep": "2016f5efb639ca2b9a227345c7bfc096a467d251f678137cff567034cfde2561",
         "infra/projection-renewal-gateway-reader.bicep": "638f32d2069747182f4f8bf166bc6f15edca388d14d6a7928a357e192c1635da",
@@ -285,7 +285,7 @@
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
-        "infra/main.bicep": "1b142253ce969b1a692e0944125d007031a95b668b9b40d72488b47fc24e6470",
+        "infra/main.bicep": "63cbb1132bcdbddef9644a8b10232f524f85eb36fb2c1785bd34a27d17add61f",
         "infra/policy.xml": "f1790e279a67346fae85251f0893faca37742843de83d5386392b8d357599988",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "scripts/ClaudeBudgetModes.ps1": "fd119b3732c78f565ffd22126693f653c939330e4754f33b6c0769dec99cc231",
@@ -414,7 +414,7 @@
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
-        "infra/main.bicep": "1b142253ce969b1a692e0944125d007031a95b668b9b40d72488b47fc24e6470",
+        "infra/main.bicep": "63cbb1132bcdbddef9644a8b10232f524f85eb36fb2c1785bd34a27d17add61f",
         "infra/policy.xml": "f1790e279a67346fae85251f0893faca37742843de83d5386392b8d357599988",
         "infra/usd-reconciler-job.bicep": "6e89879ee3c380600f61e15bf5faeff75ceaba27ffee07605a2e59519db3b186",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
@@ -481,7 +481,7 @@
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
-        "infra/main.bicep": "1b142253ce969b1a692e0944125d007031a95b668b9b40d72488b47fc24e6470",
+        "infra/main.bicep": "63cbb1132bcdbddef9644a8b10232f524f85eb36fb2c1785bd34a27d17add61f",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "scripts/AzureRetailPrice.ps1": "757e244c11b7161ab22d3f0419e3c89bf54b405814ce0e7bbbf8e91122fbe9b8",
         "scripts/ClaudeGatewayAddress.ps1": "b57ccbe80a4bdc5ff7d577ad7a105d5cd73e5fa890a92db8a7cafdc6e3419383",
@@ -546,7 +546,7 @@
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
-        "infra/main.bicep": "1b142253ce969b1a692e0944125d007031a95b668b9b40d72488b47fc24e6470",
+        "infra/main.bicep": "63cbb1132bcdbddef9644a8b10232f524f85eb36fb2c1785bd34a27d17add61f",
         "install-claude-gateway.sh": "7da93aa0877dd2cd45e064765a60dd62a48a262a82fd82dacc537c6f5a4c4b61",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "scripts/ClaudeInstallCheckpoint.ps1": "c30cc40d67b7bdce01100e5463ba325e93663bd9e410cefc1aaefe3c185fe014",
@@ -638,6 +638,29 @@
         {
           "path": "docs/images/architecture/installer-ui.png",
           "sha256": "357a9d0dc9523ac44f871ed0547b512457ab189ae02e90297828d8492987bc76"
+        }
+      ]
+    },
+    {
+      "id": "test-environment",
+      "source": "docs/architecture/19-test-environment.json",
+      "inputs": {
+        "docs/architecture/19-test-environment.json": "328196300858464e6c86c4e5d762db58c8cf075c2920abeadb1315b969688425",
+        "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
+        "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
+        "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
+        "infra/foundry-auth-client-credentials.xml": "181695089573f54838285b5ed65abaf9261d5f5aae6aaee5f6092e7996818b54",
+        "infra/main.bicep": "63cbb1132bcdbddef9644a8b10232f524f85eb36fb2c1785bd34a27d17add61f",
+        "infra/test-environment/configuration.bicep": "9a54c9ec3ce04f5efc061cf4ac550da3c4e3ec3520e84c2aff23c9ee8324a52c",
+        "infra/test-environment/resources.bicep": "21abf67672c7ce6609fc801d6cf07db0c37ef26923bd31bcf4157a901a391ff6",
+        "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
+        "scripts/Deploy-ClaudeTestEnvironment.ps1": "13f695c81e4c47e26b1671bad6a1e32a2640db8913eabed7f4603b01e5e19f1b",
+        "scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1": "5a93159b60adaf03d3091910cdd34ccb96bd27fc3891752b805417a4bfb6fb38"
+      },
+      "outputs": [
+        {
+          "path": "docs/images/architecture/test-environment.png",
+          "sha256": "2980098639442f6eab33bd719c02852c690b6c27ef7b74e74e0fab7ce89f0fc1"
         }
       ]
     }

@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "id": "test-environment",
+  "kind": "flow",
+  "title": "The test environment deploys resources, then configuration, then proves a move",
+  "subtitle": "P121 · disposable. The gateway and Entra groups live in the test tenant; Claude runs in a Foundry account in another tenant. The sync job runs on a test cron.",
+  "width": 1280,
+  "height": 1150,
+  "outputs": ["docs/images/architecture/test-environment.png"],
+  "sources": ["scripts/Deploy-ClaudeTestEnvironment.ps1", "infra/test-environment/resources.bicep", "infra/test-environment/configuration.bicep", "infra/main.bicep", "infra/foundry-auth-client-credentials.xml", "scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1"],
+  "identifiers": {
+    "script": { "label": "Deploy-ClaudeTestEnvironment.ps1", "source": "scripts/Deploy-ClaudeTestEnvironment.ps1", "kind": "file" },
+    "tag": { "label": "claude-test-environment", "source": "scripts/Deploy-ClaudeTestEnvironment.ps1", "match": "$tagKey = 'claude-test-environment'" },
+    "resources": { "label": "resources.bicep", "source": "infra/test-environment/resources.bicep", "kind": "file" },
+    "configuration": { "label": "configuration.bicep", "source": "infra/test-environment/configuration.bicep", "kind": "file" },
+    "secret": { "label": "foundryClientSecret", "source": "infra/main.bicep", "match": "param foundryClientSecret string = ''" },
+    "add-password": { "label": "addPassword", "source": "scripts/Deploy-ClaudeTestEnvironment.ps1", "match": "/addPassword" },
+    "client-credentials": { "label": "foundry-auth-client-credentials.xml", "source": "infra/foundry-auth-client-credentials.xml", "kind": "file" },
+    "cron": { "label": "*/syncMinutes", "source": "infra/test-environment/configuration.bicep", "match": "cronExpression: '*/${syncMinutes} * * * *'" },
+    "app-id": { "label": "gateway appId", "source": "scripts/Deploy-ClaudeTestEnvironment.ps1", "match": "'--query', 'appId'" },
+    "names": { "label": "name check", "source": "scripts/Deploy-ClaudeTestEnvironment.ps1", "match": "function Get-GroupName" }
+  },
+  "groups": [
+    { "x": 0, "y": 0, "w": 1280, "h": 300, "tone": "purple", "title": "Operator · stages run in order; each reads earlier outputs" },
+    { "x": 0, "y": 340, "w": 860, "h": 470, "tone": "blue", "title": "Test tenant · resource group tagged by the run" },
+    { "x": 900, "y": 340, "w": 380, "h": 470, "tone": "amber", "title": "Foundry tenant" },
+    { "x": 0, "y": 850, "w": 1280, "h": 280, "tone": "teal", "title": "Smoke and teardown" }
+  ],
+  "nodes": [
+    { "id": "identity", "x": 16, "y": 62, "w": 400, "h": 214, "tone": "purple", "title": "1 · Identity", "lines": [
+      "[[script]] tags the resource group [[tag]].",
+      "Four groups and the resolver app, named with the prefix.",
+      "State is kept on its tags."
+    ] },
+    { "id": "resources", "x": 440, "y": 62, "w": 400, "h": 214, "tone": "purple", "title": "2 · Resources", "lines": [
+      "[[resources]]: gateway, Cosmos, network, registry.",
+      "[[secret]] arrives in the ARM request body only.",
+      "Or a 7-day [[add-password]] secret."
+    ] },
+    { "id": "configure", "x": 864, "y": 62, "w": 400, "h": 214, "tone": "purple", "title": "3 · Configure and grant", "lines": [
+      "The resolver needs the [[app-id]] from Graph.",
+      "[[configuration]]: resolver, values, job on [[cron]].",
+      "Graph grant: an Entra administrator."
+    ] },
+    { "id": "gateway", "x": 16, "y": 400, "w": 400, "h": 190, "tone": "blue", "title": "Gateway", "lines": [
+      "Validates the developer token and reads access from the projection.",
+      "Calls the resolver with its identity."
+    ] },
+    { "id": "projection", "x": 440, "y": 400, "w": 400, "h": 190, "tone": "blue", "title": "Resolver and Cosmos", "lines": [
+      "Public resolver, Easy Auth, gateway is the only caller.",
+      "Private Cosmos and resolver storage endpoints."
+    ] },
+    { "id": "job", "x": 16, "y": 610, "w": 824, "h": 180, "tone": "blue", "title": "Sync job", "lines": [
+      "Reads the tier and unit groups through Graph on each run; writes Cosmos; prints membership lines.",
+      "Console lines reach the gateway's workspace through a diagnostic setting."
+    ] },
+    { "id": "foundry", "x": 916, "y": 400, "w": 348, "h": 390, "tone": "amber", "title": "Foundry account", "lines": [
+      "The gateway gets a token with [[client-credentials]] for an app in this tenant.",
+      "No managed identity crosses the tenant boundary."
+    ] },
+    { "id": "smoke", "x": 16, "y": 912, "w": 820, "h": 194, "tone": "teal", "title": "Smoke", "lines": [
+      "Standard model 200, premium 403. The user moves group and unit in Entra.",
+      "After the next scheduled run: premium 200; membership lines place the user in unit b."
+    ] },
+    { "id": "teardown", "x": 860, "y": 912, "w": 404, "h": 194, "tone": "teal", "title": "Teardown", "lines": [
+      "Deletes only objects whose names pass the [[names]].",
+      "Keeps the resource group while anything is left."
+    ] }
+  ],
+  "edges": [
+    { "from": "identity", "to": "resources", "kind": "control", "points": [[416, 169], [440, 169]] },
+    { "from": "resources", "to": "configure", "kind": "control", "points": [[840, 169], [864, 169]] },
+    { "from": "gateway", "to": "projection", "kind": "identity", "points": [[416, 495], [440, 495]] },
+    { "from": "gateway", "to": "foundry", "kind": "data", "points": [[216, 400], [216, 380], [1090, 380], [1090, 400]] },
+    { "from": "job", "to": "projection", "kind": "data", "points": [[640, 610], [640, 590]] },
+    { "from": "smoke", "to": "gateway", "kind": "data", "points": [[16, 1009], [6, 1009], [6, 495], [16, 495]] }
+  ],
+  "notice": "Without the Graph grant the scheduled runs stop at the Graph stage; the smoke steps that need a scheduled run wait for an administrator. The test cron is not one of the production intervals (ADR-0058)."
+}

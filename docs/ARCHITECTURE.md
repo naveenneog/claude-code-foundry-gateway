@@ -1029,6 +1029,21 @@ it does not claim an additional live mode mutation run.
 
 </details>
 
+## Test environment
+
+<details>
+<summary>Resources, then configuration, then a smoke test (P121)</summary>
+
+![Test environment: the operator script creates a tagged resource group, Entra groups and the resolver app, deploys resources.bicep (gateway, Cosmos, network, registry) and configuration.bicep (resolver, named values, sync job on a test cron), grants Graph, then checks a move applied by the scheduled job; the gateway reaches a Foundry account in another tenant with client credentials.](images/architecture/test-environment.png)
+
+Source: [19-test-environment.json](architecture/19-test-environment.json).
+[ADR-0067](adr/0067-staged-test-environment.md) records the stage split: the resolver
+is in the configuration stage because its allowed caller is the gateway identity's
+application id, which only Microsoft Graph returns. [TEST-ENVIRONMENT.md](TEST-ENVIRONMENT.md)
+has the commands and the rights each stage needs.
+
+</details>
+
 ## Azure resource inventory
 
 <details>

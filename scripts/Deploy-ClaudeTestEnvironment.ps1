@@ -34,6 +34,7 @@
         -FoundryAccountName <account> -FoundryEndpoint https://<account>.services.ai.azure.com/ -FoundryTenantId <tenant> `
         -FoundryClientId <app id> -FoundrySecretSourceApim <APIM resource id> -UseCurrentAzLogin
 #>
+#Requires -Version 7.0
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$SubscriptionId,
@@ -157,11 +158,50 @@ function Get-DeploymentOutputs([string]$Name) {
     return $outputs
 }
 
+# Tags are state, not trust: anyone with tag write on the resource group can change them. Every value is
+# checked for form before it reaches az (az.cmd passes arguments through cmd.exe), and Teardown also checks
+# each Entra object's name before deleting it.
 function Get-GroupIds {
     $tags = Get-EnvironmentTags
     if (-not $tags -or -not $tags['claude-test-groups']) { throw 'The Identity stage has not run for this resource group.' }
-    $ids = $tags['claude-test-groups'] -split ','
-    return @{ standard = $ids[0]; premium = $ids[1]; unitA = $ids[2]; unitB = $ids[3]; resolverApp = $tags['claude-test-resolver-app']; image = $tags['claude-test-image'] }
+    $ids = @($tags['claude-test-groups'] -split ',')
+    if ($ids.Count -ne 4 -or @($ids | Where-Object { $_ -notmatch $guid }).Count) { throw "Tag claude-test-groups on $ResourceGroup is not four object ids; nothing was changed." }
+    $app = [string]$tags['claude-test-resolver-app']
+    if ($app -and $app -notmatch $guid) { throw "Tag claude-test-resolver-app on $ResourceGroup is not an application id; nothing was changed." }
+    $image = [string]$tags['claude-test-image']
+    if ($image -and $image -cnotmatch '^sha256:[0-9a-f]{64}$') { throw "Tag claude-test-image on $ResourceGroup is not a sha256 digest; nothing was changed." }
+    return @{ standard = $ids[0]; premium = $ids[1]; unitA = $ids[2]; unitB = $ids[3]; resolverApp = $app; image = $image }
+}
+
+$groupRoles = @('standard', 'premium', 'unit-a', 'unit-b')
+function Get-GroupName([int]$Index) { "claude-test-$NamePrefix-$($groupRoles[$Index])" }
+
+# Foundry key tag: <foundry subscription>/<app id>/<key id>.
+function Get-FoundryKeyTag($Tags) {
+    $value = [string]$Tags['claude-test-foundry-key']
+    if (-not $value) { return $null }
+    if ($value -notmatch "^([0-9a-fA-F-]{36})/([0-9a-fA-F-]{36})/([0-9a-fA-F-]{36})$") { throw "Tag claude-test-foundry-key on $ResourceGroup is not <subscription>/<app id>/<key id>; nothing was changed." }
+    return @{ subscription = $Matches[1]; app = $Matches[2]; key = $Matches[3] }
+}
+
+function Remove-FoundryKey($Key) {
+    $graph = Invoke-Az @('account', 'get-access-token', '--subscription', $Key.subscription, '--resource-type', 'ms-graph', '--query', 'accessToken', '-o', 'tsv')
+    $headers = @{ Authorization = 'Bearer ' + $graph }
+    $app = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/applications(appId='$($Key.app)')?`$select=passwordCredentials" -Headers $headers
+    $credential = @($app.passwordCredentials | Where-Object { $_.keyId -eq $Key.key })
+    if (-not $credential.Count) { return 'already gone' }
+    if ($credential[0].displayName -cne "claude-test-$NamePrefix") { throw "Foundry key $($Key.key) is named '$($credential[0].displayName)', not claude-test-$NamePrefix; it was not removed." }
+    $null = Invoke-RestMethod -Method Post -Uri "https://graph.microsoft.com/v1.0/applications(appId='$($Key.app)')/removePassword" -Headers $headers -ContentType 'application/json' -Body (@{ keyId = $Key.key } | ConvertTo-Json -Compress)
+    return 'removed'
+}
+
+function Set-AlertRules([bool]$Enabled) {
+    $base = "https://management.azure.com/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroup/providers/Microsoft.Insights/scheduledQueryRules"
+    $headers = @{ Authorization = 'Bearer ' + (Get-ArmToken) }
+    foreach ($rule in @((Invoke-RestMethod -Uri "$base`?api-version=2023-12-01" -Headers $headers).value)) {
+        $null = Invoke-RestMethod -Method Patch -Uri "$base/$($rule.name)?api-version=2023-12-01" -Headers $headers -ContentType 'application/json' -Body (@{ properties = @{ enabled = $Enabled } } | ConvertTo-Json -Compress)
+        Note "$($rule.name) enabled=$Enabled"
+    }
 }
 
 function Get-SignedInUser { Invoke-Az @('ad', 'signed-in-user', 'show', '--query', 'id', '-o', 'tsv') }
@@ -195,9 +235,9 @@ if ('Identity' -in $run) {
         $tags = @{}
     }
     $me = Get-SignedInUser
-    $ids = if ($tags['claude-test-groups']) { $tags['claude-test-groups'] -split ',' } else {
-        @(foreach ($role in 'standard', 'premium', 'unit-a', 'unit-b') {
-            $name = "claude-test-$NamePrefix-$role"
+    $ids = if ($tags['claude-test-groups']) { $g = Get-GroupIds; @($g.standard, $g.premium, $g.unitA, $g.unitB) } else {
+        @(for ($i = 0; $i -lt 4; $i++) {
+            $name = Get-GroupName $i
             Invoke-Az @('ad', 'group', 'create', '--display-name', $name, '--mail-nickname', $name, '--query', 'id', '-o', 'tsv')
         })
     }
@@ -205,7 +245,7 @@ if ('Identity' -in $run) {
     Set-Membership $ids[0] $me $true
     Set-Membership $ids[2] $me $true
     Add-Result 'groups ready; the signed-in user is in standard and unit a' $true ($ids -join ', ')
-    $appId = $tags['claude-test-resolver-app']
+    $appId = if ($tags['claude-test-groups']) { (Get-GroupIds).resolverApp } else { '' }
     if (-not $appId) {
         $appId = Invoke-Az @('ad', 'app', 'create', '--display-name', "claude-test-resolver-$NamePrefix", '--sign-in-audience', 'AzureADMyOrg', '--query', 'appId', '-o', 'tsv')
         Set-EnvironmentTag 'claude-test-resolver-app' $appId
@@ -223,11 +263,12 @@ if ('Resources' -in $run) {
     }
     if ($CreateFoundrySecret) {
         $graph = Invoke-Az @('account', 'get-access-token', '--subscription', $FoundrySubscriptionId, '--resource-type', 'ms-graph', '--query', 'accessToken', '-o', 'tsv')
-        $tags = Get-EnvironmentTags
-        if ($tags['claude-test-foundry-key']) { throw 'This environment already added a Foundry secret; run Teardown first, or pass -FoundrySecretSourceApim.' }
+        # A secret added by an earlier run cannot be read back; replace it.
+        $previous = Get-FoundryKeyTag (Get-EnvironmentTags)
+        if ($previous) { Note "earlier Foundry key $($previous.key): $(Remove-FoundryKey $previous)" }
         $added = Invoke-RestMethod -Method Post -Uri "https://graph.microsoft.com/v1.0/applications(appId='$FoundryClientId')/addPassword" -Headers @{ Authorization = 'Bearer ' + $graph } -ContentType 'application/json' -Body (@{ passwordCredential = @{ displayName = "claude-test-$NamePrefix"; endDateTime = (Get-Date).ToUniversalTime().AddDays(7).ToString('o') } } | ConvertTo-Json -Compress)
         $keyId = [string]$added.keyId
-        Set-EnvironmentTag 'claude-test-foundry-key' "$FoundrySubscriptionId/$keyId"
+        Set-EnvironmentTag 'claude-test-foundry-key' "$FoundrySubscriptionId/$FoundryClientId/$keyId"
         $foundrySecret = $added.secretText
         $added = $null
         Add-Result 'Foundry secret added for 7 days' $true "key $keyId"
@@ -304,12 +345,16 @@ if ('Grant' -in $run) {
     Step 'Grant: Microsoft Graph GroupMember.Read.All for the job identity'
     $res = Get-DeploymentOutputs 'test-resources'
     try {
-        $null = & (Join-Path $PSScriptRoot 'Grant-ClaudeProjectionRenewalGraphAccess.ps1') -PrincipalId $res.jobIdentityPrincipalId 2>&1
+        $grantOutput = & (Join-Path $PSScriptRoot 'Grant-ClaudeProjectionRenewalGraphAccess.ps1') -PrincipalId $res.jobIdentityPrincipalId 2>&1 | Out-String
         $granted = $true; $why = ''
+        foreach ($line in @($grantOutput -split "`r?`n" | Where-Object { $_ -match 'hours|token|already' })) { Note $line.Trim() }
     }
     catch { $granted = $false; $why = $_.Exception.Message }
-    Add-Result 'Graph grant' $granted $(if ($granted) { 'held' } else { "not granted: $why A Privileged Role Administrator or Global Administrator runs: ./scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1 -PrincipalId $($res.jobIdentityPrincipalId), then this script with -Phase Configure,Populate,Smoke." })
-    if (-not $granted) { throw 'The job identity has no Graph grant; its runs stop at the Graph stage. Rerun from -Phase Grant once an administrator has granted it.' }
+    Add-Result 'Graph grant' $granted $(if ($granted) { 'held' } else { "not granted: $why A Privileged Role Administrator or Global Administrator runs: ./scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1 -PrincipalId $($res.jobIdentityPrincipalId), then this script with -Phase Configure,Populate,Smoke (Configure re-enables the job's alert rules)." })
+    if (-not $granted) {
+        Set-AlertRules -Enabled $false
+        throw 'The job identity has no Graph grant; its runs stop at the Graph stage, so its alert rules are now disabled. After an administrator grants it, run -Phase Configure,Populate,Smoke.'
+    }
 }
 
 function Wait-JobExecution([string]$JobName, [string]$Execution, [int]$Seconds) {
@@ -328,7 +373,14 @@ if ('Populate' -in $run) {
     $execution = AzS @('containerapp', 'job', 'start', '-g', $ResourceGroup, '-n', $cfg.jobName, '--query', 'name', '-o', 'tsv')
     $status = Wait-JobExecution $cfg.jobName $execution 900
     Add-Result 'first sync run' ($status -eq 'Succeeded') "$execution $status"
-    if ($status -ne 'Succeeded') { throw "The first sync run ended $status; see ContainerAppConsoleLogs for $($cfg.jobName)." }
+    if ($status -ne 'Succeeded') {
+        $res = Get-DeploymentOutputs 'test-resources'
+        $last = @(Invoke-WorkspaceQuery $res.workspaceId "ContainerAppConsoleLogs | where JobName == `"$($cfg.jobName)`" and Log has `"projection-renewal-failed`" | top 1 by TimeGenerated desc | project Log") | Select-Object -First 1
+        if ($last -and $last.Log -match 'Authorization_RequestDenied') {
+            throw "The first sync run was refused by Microsoft Graph. A grant made in the last hours may not have reached the job identity's tokens yet (Grant-ClaudeProjectionRenewalGraphAccess.ps1 warns it can take up to 24 hours); rerun -Phase Populate,Smoke later."
+        }
+        throw "The first sync run ended $status. Last failure: $(if ($last) { $last.Log } else { 'none in the workspace yet' })"
+    }
 }
 
 if ('Smoke' -in $run) {
@@ -338,8 +390,12 @@ if ('Smoke' -in $run) {
     $ids = Get-GroupIds
     $me = Get-SignedInUser
     $url = "$($res.gatewayUrl.TrimEnd('/'))/v1/messages"
+    # Start from the Identity state, so Smoke can run again after an earlier Smoke.
+    Set-Membership $ids.standard $me $true
+    Set-Membership $ids.unitA $me $true
     Set-Membership $ids.premium $me $false
     Set-Membership $ids.unitB $me $false
+    Note "waiting for a scheduled run (every $SyncMinutes minutes) to apply the start state; polling every $PollSeconds s for up to $ChangeWaitSeconds s"
     Wait-GatewayStatus -Url $url -ModelName $StandardModel -Expected 200 -Step 'standard model as a standard developer'
     Wait-GatewayStatus -Url $url -ModelName $PremiumModel -Expected 403 -Step 'premium model refused to a standard developer'
 
@@ -384,22 +440,30 @@ if ($teardown) {
     if (-not $tags) { Add-Result 'nothing to delete' $true $ResourceGroup }
     else {
         $left = [System.Collections.Generic.List[string]]::new()
-        foreach ($id in @(($tags['claude-test-groups'] ?? '') -split ',' | Where-Object { $_ -match $guid })) {
-            $null = Invoke-TeardownAz "group $id" @('ad', 'group', 'delete', '--group', $id) "az ad group delete --group $id" $left
-        }
-        if ($tags['claude-test-resolver-app'] -match $guid) {
-            $null = Invoke-TeardownAz "app $($tags['claude-test-resolver-app'])" @('ad', 'app', 'delete', '--id', $tags['claude-test-resolver-app']) "az ad app delete --id $($tags['claude-test-resolver-app'])" $left
-        }
-        if ($tags['claude-test-foundry-key'] -match '^([0-9a-fA-F-]{36})/([0-9a-fA-F-]{36})$') {
-            $keySub = $Matches[1]; $keyId = $Matches[2]
-            try {
-                $graph = Invoke-Az @('account', 'get-access-token', '--subscription', $keySub, '--resource-type', 'ms-graph', '--query', 'accessToken', '-o', 'tsv')
-                $null = Invoke-RestMethod -Method Post -Uri "https://graph.microsoft.com/v1.0/applications(appId='$FoundryClientId')/removePassword" -Headers @{ Authorization = 'Bearer ' + $graph } -ContentType 'application/json' -Body (@{ keyId = $keyId } | ConvertTo-Json -Compress)
+        $ids = if ($tags['claude-test-groups']) { Get-GroupIds } else { $null }
+        if ($ids) {
+            $groupIds = @($ids.standard, $ids.premium, $ids.unitA, $ids.unitB)
+            for ($i = 0; $i -lt 4; $i++) {
+                $name = Invoke-Az @('ad', 'group', 'show', '--group', $groupIds[$i], '--query', 'displayName', '-o', 'tsv') -AllowFailure
+                if (-not $name) { continue }
+                if ($name -cne (Get-GroupName $i)) { $left.Add("group $($groupIds[$i]) is named '$name', not $(Get-GroupName $i); not deleted"); continue }
+                $null = Invoke-TeardownAz "group $($groupIds[$i])" @('ad', 'group', 'delete', '--group', $groupIds[$i]) "az ad group delete --group $($groupIds[$i])" $left
             }
-            catch { $left.Add("Foundry secret $keyId was not removed (pass -FoundryClientId): $($_.Exception.Message)") }
+            if ($ids.resolverApp) {
+                $name = Invoke-Az @('ad', 'app', 'show', '--id', $ids.resolverApp, '--query', 'displayName', '-o', 'tsv') -AllowFailure
+                if ($name -and $name -cne "claude-test-resolver-$NamePrefix") { $left.Add("app $($ids.resolverApp) is named '$name', not claude-test-resolver-$NamePrefix; not deleted") }
+                elseif ($name) { $null = Invoke-TeardownAz "app $($ids.resolverApp)" @('ad', 'app', 'delete', '--id', $ids.resolverApp) "az ad app delete --id $($ids.resolverApp)" $left }
+            }
         }
-        $null = Invoke-TeardownAz "resource group $ResourceGroup" @('group', 'delete', '-n', $ResourceGroup, '--yes', '--subscription', $SubscriptionId) "az group delete -n $ResourceGroup --subscription $SubscriptionId" $left
-        Add-Result 'teardown' (-not $left.Count) ($left -join ' | ')
+        $key = Get-FoundryKeyTag $tags
+        if ($key) {
+            try { Note "Foundry key $($key.key): $(Remove-FoundryKey $key)" }
+            catch { $left.Add("Foundry key $($key.key) on app $($key.app): $($_.Exception.Message)") }
+        }
+        # The resource group's tags are the only record of what is left; keep it until everything else is gone.
+        if ($left.Count) { Add-Result 'teardown' $false (($left -join ' | ') + ". The resource group $ResourceGroup was kept so Teardown can run again."); $tags = $null }
+        if ($tags) { $null = Invoke-TeardownAz "resource group $ResourceGroup" @('group', 'delete', '-n', $ResourceGroup, '--yes', '--subscription', $SubscriptionId) "az group delete -n $ResourceGroup --subscription $SubscriptionId" $left
+        Add-Result 'teardown' (-not $left.Count) ($left -join ' | ') }
     }
 }
 

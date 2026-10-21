@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $script:fail = 0
 $script:count = 0
-$expected = 18
+$expected = 24
 function Assert([string]$Label, [bool]$Condition, [string]$Detail = '') {
     $script:count++
     if ($Condition) { Write-Host "  [OK]   $Label" -ForegroundColor Green }
@@ -80,6 +80,71 @@ else {
     Assert 'a subscription that is not a GUID is refused before any Azure call' $false 'no script'
 }
 
+# Behaviour, against a stand-in az that records each call (tests/test-environment-stub/az.ps1).
+$stubDir = Join-Path $PSScriptRoot 'test-environment-stub'
+$work = Join-Path ([IO.Path]::GetTempPath()) ('claude-testenv-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Force -Path $work | Out-Null
+$rg = 'rg-claude-test-x'
+$prefix = 'tstub0001'
+$g = @('11111111-1111-4111-8111-000000000001', '11111111-1111-4111-8111-000000000002', '11111111-1111-4111-8111-000000000003', '11111111-1111-4111-8111-000000000004')
+$app = '22222222-2222-4222-8222-000000000001'
+function Invoke-Stubbed([hashtable]$Fixture, [string[]]$Arguments) {
+    $fixturePath = Join-Path $work ([guid]::NewGuid().ToString('N') + '.json')
+    $logPath = Join-Path $work ([guid]::NewGuid().ToString('N') + '.log')
+    [IO.File]::WriteAllText($fixturePath, ($Fixture | ConvertTo-Json -Depth 6))
+    [IO.File]::WriteAllText($logPath, '')
+    $saved = @{ PATH = $env:PATH; F = $env:STUB_AZ_FIXTURE; L = $env:STUB_AZ_LOG }
+    $env:PATH = $stubDir + [IO.Path]::PathSeparator + $env:PATH; $env:STUB_AZ_FIXTURE = $fixturePath; $env:STUB_AZ_LOG = $logPath
+    try { $out = & pwsh -NoProfile -File (Join-Path $root 'scripts\Deploy-ClaudeTestEnvironment.ps1') -SubscriptionId '00000000-0000-4000-8000-000000000001' -ResourceGroup $rg -NamePrefix $prefix -UseCurrentAzLogin @Arguments 2>&1 | Out-String; $code = $LASTEXITCODE }
+    finally { $env:PATH = $saved.PATH; $env:STUB_AZ_FIXTURE = $saved.F; $env:STUB_AZ_LOG = $saved.L }
+    [pscustomobject]@{ Code = $code; Out = $out; Calls = @(Get-Content $logPath) }
+}
+$mutating = '^(group create|group delete|tag update|ad group (create|delete|member)|ad app (create|delete|update)|ad sp create)'
+$names = @{ $g[0] = "claude-test-$prefix-standard"; $g[1] = "claude-test-$prefix-premium"; $g[2] = "claude-test-$prefix-unit-a"; $g[3] = "claude-test-$prefix-unit-b" }
+$owned = @{ 'claude-test-environment' = $prefix; 'claude-test-groups' = ($g -join ','); 'claude-test-resolver-app' = $app }
+
+$r = Invoke-Stubbed @{ tags = @{ purpose = 'someone-else' } } @('-Phase', 'Identity')
+Assert 'a resource group without the environment tag is refused with no Azure or Entra write' (
+    $r.Code -ne 0 -and $r.Out -match 'was not created by Deploy-ClaudeTestEnvironment' -and -not @($r.Calls | Where-Object { $_ -match $mutating }).Count) ($r.Calls -join ' ; ')
+
+$injected = $owned.Clone(); $injected['claude-test-groups'] = "x&calc,$($g[1]),$($g[2]),$($g[3])"
+$r = Invoke-Stubbed @{ tags = $injected; groupNames = $names; appNames = @{ $app = "claude-test-resolver-$prefix" } } @('-Phase', 'Teardown')
+Assert 'a tag value that is not an object id is refused before it reaches az' (
+    $r.Code -ne 0 -and $r.Out -match 'not four object ids' -and -not @($r.Calls | Where-Object { $_ -match '&|delete' }).Count) ($r.Calls -join ' ; ')
+
+$foreign = $names.Clone(); $foreign[$g[1]] = 'production-entitlement-group'
+$r = Invoke-Stubbed @{ tags = $owned; groupNames = $foreign; appNames = @{ $app = "claude-test-resolver-$prefix" } } @('-Phase', 'Teardown')
+$deleted = @($r.Calls | Where-Object { $_ -match '^ad group delete --group (\S+)' } | ForEach-Object { ($_ -split ' ')[4] })
+Assert 'Teardown deletes only groups whose names it gave them, and keeps the resource group while one is left' (
+    $r.Code -ne 0 -and $deleted.Count -eq 3 -and $deleted -notcontains $g[1] -and
+    -not @($r.Calls | Where-Object { $_ -match '^group delete' }).Count -and $r.Out -match 'production-entitlement-group') ($r.Calls -join ' ; ')
+
+$r = Invoke-Stubbed @{ tags = $owned; groupNames = $names; appNames = @{ $app = "claude-test-resolver-$prefix" } } @('-Phase', 'Teardown')
+Assert 'Teardown of an intact environment deletes its four groups, its app, then its resource group' (
+    $r.Code -eq 0 -and @($r.Calls | Where-Object { $_ -match '^ad group delete' }).Count -eq 4 -and
+    @($r.Calls | Where-Object { $_ -match "^ad app delete --id $app" }).Count -eq 1 -and $r.Calls[-1] -match "^group delete -n $rg ") ($r.Calls -join ' ; ')
+Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+
+# The compiled templates, not the source text: each named value and module input is wired to what it must carry.
+if ($bicepExe -and (Test-Path (Join-Path $root 'infra\test-environment\configuration.bicep'))) {
+    $arm = & $bicepExe build (Join-Path $root 'infra\test-environment\configuration.bicep') --stdout 2>$null | ConvertFrom-Json -AsHashtable
+    $nv = @($arm.resources | Where-Object { $_.type -eq 'Microsoft.ApiManagement/service/namedValues' })[0]
+    $value = [string]$nv.properties.value
+    $resolverOut = "reference\(resourceId\('Microsoft\.Resources/deployments', 'test-resolver'\), '[0-9-]+'\)\.outputs"
+    Assert 'the compiled named values loop over every key and take the resolver outputs' (
+        $nv.copy.count -eq "[length(variables('gatewayValueKeys'))]" -and @($arm.variables.gatewayValueKeys).Count -eq 6 -and
+        $value -match "'entitlement-source', 'projection'" -and
+        $value -match "'entitlement-resolver-url', $resolverOut\.resolverUrl\.value" -and
+        $value -match "'entitlement-resolver-audience', $resolverOut\.resolverAudience\.value" -and
+        $value -match "'bu-registry', parameters\('buRegistry'\)" -and $value.EndsWith("[variables('gatewayValueKeys')[copyIndex()]]]")) $value
+    $rp = @($arm.resources | Where-Object { $_.name -eq 'test-resolver' })[0].properties.parameters
+    Assert 'the compiled resolver gets all four storage endpoint inputs' (
+        $rp.privateEndpointSubnetId.value -eq "[parameters('endpointsSubnetId')]" -and $rp.blobDnsZoneId.value -eq "[parameters('blobDnsZoneId')]" -and
+        $rp.queueDnsZoneId.value -eq "[parameters('queueDnsZoneId')]" -and $rp.tableDnsZoneId.value -eq "[parameters('tableDnsZoneId')]")}
+else {
+    Assert 'the compiled named values loop over every key and take the resolver outputs' $false 'no bicep executable'
+    Assert 'the compiled resolver gets all four storage endpoint inputs' $false 'no bicep executable'
+}
 Assert 'Test-All registers this suite' ($testAll -match "Invoke-Check\s+'[^']+'\s+'Test-TestEnvironment\.ps1'")
 
 Write-Host ''

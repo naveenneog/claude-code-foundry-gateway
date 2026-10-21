@@ -16,9 +16,18 @@ Cosmos projection in two Bicep stages, then checks it with a live smoke test
 | `Teardown` | Deletes the resource group, the groups, the resolver app and an added Foundry secret, as recorded on the resource group's tags |
 
 `-Phase All` runs every stage except `Teardown`. A stage reads earlier stages'
-outputs from the resource group's deployments, so it can be rerun alone.
-Rerunning `Resources` redeploys `main.bicep`, which resets the entitlement
-named values; rerun `Configure` after it.
+outputs from the resource group's deployments and tags.
+
+| Rerun | Needs |
+|---|---|
+| `Identity` | Nothing; existing groups and app are reused |
+| `Resources` | The Foundry parameters again. With `-CreateFoundrySecret` the earlier secret is removed and a new one added. Run `Configure` after it: redeploying `main.bicep` resets the entitlement named values |
+| `Publish`, `Configure` | `Resources` has run |
+| `Populate` | `Configure` and `Grant` have run |
+| `Smoke` | `Populate` has run; it first puts the user back in standard and unit a |
+
+The nested deployments are named `test-*`, so `Set-ClaudeProjectionSyncSchedule.ps1`
+and the installer do not manage this job; only `Configure` does.
 
 ## Run
 
@@ -45,15 +54,30 @@ Manager deployment request body.
 
 ## Rights
 
-| Stage | Right |
-|---|---|
-| `Identity` | Create groups and app registrations in the gateway tenant (a default member user can, unless the tenant restricts it) |
-| `Resources` to `Populate` | Owner on the subscription or resource group: the templates create role assignments |
-| `Grant` | Privileged Role Administrator or Global Administrator in the gateway tenant. Azure subscription Owner is not enough |
+| Stage | Gateway tenant and subscription | Foundry tenant |
+|---|---|---|
+| `Identity` | Create a resource group; create groups and app registrations (a default member can, unless the tenant restricts it) | none |
+| `Resources` | Owner on the subscription (the templates create role assignments); with `-FoundrySecretSourceApim`, read the source gateway's secret named value | with `-CreateFoundrySecret`: owner of the Foundry app |
+| `Publish` | Run ACR builds on the registry (Owner covers it) | none |
+| `Configure` | Owner; read the gateway identity's service principal | none |
+| `Grant` | Privileged Role Administrator or Global Administrator. Azure subscription Owner is not enough | none |
+| `Populate` | Start and read Container Apps job executions; query the workspace | none |
+| `Smoke` | Change the four groups' membership (their creator owns them); call the gateway; query the workspace | none |
+| `Teardown` | Delete the resource group, groups and app | owner of the Foundry app, when a key was added |
 
-Without the Graph grant, every scheduled run stops at the Graph stage and the
-Graph-denied alert fires. The `Grant` stage then reports the command an
-administrator runs; afterwards rerun `-Phase Grant,Populate,Smoke`.
+## When the Graph grant is refused
+
+`Grant` records the refusal, disables the job's three alert rules (otherwise
+a failure email arrives every run), and stops. Then:
+
+1. A Privileged Role Administrator or Global Administrator runs
+   `./scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1 -PrincipalId <job identity>`,
+   the command `Grant` printed.
+2. Run `-Phase Configure,Populate,Smoke`. `Configure` redeploys the job and
+   re-enables its alert rules.
+3. A grant can take hours to reach the job identity's tokens. When
+   `Populate` reports a Graph refusal after a grant, run
+   `-Phase Populate,Smoke` later.
 
 ## The test cron
 
@@ -66,6 +90,11 @@ one waits for the apply lock or stops (U165).
 
 ## Cost
 
-The environment bills while it exists: API Management Basic v2, a 400 RU/s
-Cosmos container, one always-ready resolver instance, a Basic registry, private
-endpoints and DNS zones, and the job's run-seconds. Delete it with `Teardown`.
+The environment bills while it exists. Fixed charges: API Management Basic v2
+and the always-ready resolver instance are the largest, then the 400 RU/s
+Cosmos container, the Basic registry, and the private endpoints and DNS zones.
+Usage charges: Log Analytics ingestion (each 5-minute run adds console lines),
+the job's run-seconds, Functions storage and executions, and the alert rule
+evaluations. Price the deployed SKUs in the
+[Azure pricing calculator](https://azure.microsoft.com/pricing/calculator/), and
+delete the environment with `Teardown` when the check is done.
