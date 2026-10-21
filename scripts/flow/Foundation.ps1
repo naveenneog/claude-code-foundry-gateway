@@ -13,7 +13,7 @@ $script:ClaudeFlowInstallerTopics = @(
     'the name prefix and publisher email'
     'the entitlement store, revocation window, team budget behaviour, developers with no team, developer address, developer sign-in and Claude Desktop sign-in'
     'the company hostname, certificate source and DNS hosting with their component costs, when custom is chosen'
-    'the token budgets for each tier, the organisation ceiling and the request ceiling'
+    'the token budgets for each tier, model-family quota estimates, the organisation ceiling and the request ceiling'
     'the Entra groups for each tier'
     'business units, after it deploys'
 )
@@ -25,7 +25,7 @@ $script:ClaudeFlowInstallerUpdateTopics = @(
     'the models each tier may call'
     'the entitlement store, revocation window, team budget behaviour, developers with no team, developer address, developer sign-in and Claude Desktop sign-in'
     'the company hostname, certificate source and DNS hosting with their component costs, when custom is chosen'
-    'the token budgets for each tier, the organisation ceiling and the request ceiling'
+    'the token budgets for each tier, model-family quota estimates, the organisation ceiling and the request ceiling'
     'the Entra groups for each tier'
     'business units, after it deploys'
 )
@@ -135,6 +135,9 @@ function Get-ClaudeFlowFoundationInstallerMap {
         QuotaStandard = 'quotaStandard'
         TpmPremium = 'tpmPremium'
         QuotaPremium = 'quotaPremium'
+        StandardMonthlyUsd = 'standardMonthlyUsd'
+        PremiumMonthlyUsd = 'premiumMonthlyUsd'
+        ModelQuotaOutputShare = 'modelQuotaOutputShare'
         QuotaOrg = 'quotaOrg'
         CallsPerMinute = 'callsPerMinute'
         StandardGroup = 'standardGroup'

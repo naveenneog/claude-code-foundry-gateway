@@ -445,7 +445,7 @@ The proof command sends a tiny prompt through Claude Code with an empty
 <summary>Generated profile proof and Intune capture gaps</summary>
 
 Validation ran on 2026-09-26 UTC against the read-only reference gateway
-`apim-claude-gw-fzgql9` in `rg-contosohub`.
+`the customer API Management gateway` in `the customer resource group`.
 
 | Check | Result |
 |---|---|

@@ -38,6 +38,10 @@ fresh reconciliation state.
 8. A tier with no quota entry is disabled. Once a tier has an entry, an allowed
    family that is absent, duplicated, malformed or non-positive returns 503
    until the installer recalculates the canonical map.
+9. The PowerShell installer answers schema, guided flow and browser installer
+   expose both tier allowances and the output-share assumption; guided-flow
+   answers preserve them through installer launch. Bash installer parity is
+   outside P118; the answer schema marks these fields as unsupported by Bash.
 
 ## Consequences
 
@@ -45,6 +49,7 @@ fresh reconciliation state.
 + The approximation is visible before deployment.
 - The limits remain soft token caps and do not count cache tokens.
 - Equal family allocation may not match the customer's actual traffic mix.
+- The quota inputs are not available through the Bash installer in P118.
 
 ## Alternatives considered
 

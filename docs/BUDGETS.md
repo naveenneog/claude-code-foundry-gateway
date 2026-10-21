@@ -541,6 +541,12 @@ families allowed for that tier. Each family uses the highest blended list rate
 among its selected deployments. `ModelQuotaOutputShare` controls the assumed
 output fraction and defaults to `0.2`.
 
+The guided flow accepts `foundation.standardMonthlyUsd`,
+`foundation.premiumMonthlyUsd` and `foundation.modelQuotaOutputShare` in its
+answers file. The browser installer presents the same inputs. These fields are
+PowerShell-only in P118; the schema and browser installer do not emit a Bash
+command when they are set.
+
 For example, this unattended rerun recalculates both tier values and shows the
 result in the confirmation summary before the deployment:
 

@@ -197,7 +197,7 @@ try {
         ($runNoDrive = New-P91Run $noDrive -Arguments ($newGateway + '-Yes') -Environment ($shellEnv + @{ HOME = $homeA }))
         ($runDrive = New-P91Run $drive -Arguments ($newGateway + '-Yes') -Environment ($shellEnv + @{ HOME = $homeB }))
         ($runWhatIf = New-P91Run $whatIf -Arguments ($newGateway + '-Yes', '-WhatIf'))
-        ($runCancel = New-P91Run $cancel -Arguments ($newGateway + $quiet) -Attended -Answers @('', '', '', '', '', '', 'n'))
+        ($runCancel = New-P91Run $cancel -Arguments ($newGateway + $quiet) -Attended -Answers @('', '', '', '', '', '', '', '', 'n'))
         ($runGraphPrefix = New-P91Run $graphPrefix -Arguments ($newGateway + '-Yes'))
         ($runGraphRead = New-P91Run $graphRead -Arguments ($newGateway + '-Yes'))
         ($runGraphTwins = New-P91Run $graphTwins -Arguments ($newGateway + '-Yes'))
@@ -242,7 +242,7 @@ try {
             'EntitlementStore', 'ResolverInboundAccess', 'ProjectionNetworkMode', 'ProjectionVnetId', 'ProjectionEndpointsSubnetId', 'ProjectionRunnerSubnetId',
             'ProjectionResolverSubnetId', 'ProjectionRenewalSubnetId', 'ProjectionApimSubnetId', 'ProjectionCosmosDnsZoneId', 'ProjectionSitesDnsZoneId', 'ProjectionBlobDnsZoneId',
             'ProjectionQueueDnsZoneId', 'ProjectionTableDnsZoneId', 'DeployProjection', 'DeploySyncJob', 'ProjectionSyncInterval', 'ProjectionResolverAppId', 'TpmStandard', 'QuotaStandard', 'TpmPremium',
-            'QuotaPremium', 'QuotaOrg', 'CallsPerMinute', 'StandardGroup', 'PremiumGroup', 'StandardModels', 'PremiumModels', 'AuthMode', 'DesktopSignInKind', 'DesktopBearerTokenType',
+            'QuotaPremium', 'StandardMonthlyUsd', 'PremiumMonthlyUsd', 'ModelQuotaOutputShare', 'QuotaOrg', 'CallsPerMinute', 'StandardGroup', 'PremiumGroup', 'StandardModels', 'PremiumModels', 'AuthMode', 'DesktopSignInKind', 'DesktopBearerTokenType',
             'DesktopEntraClientId', 'DesktopEntraIssuer', 'DesktopEntraScopes', 'DesktopEntraAudience', 'DesktopEntraResource', 'DeployContentSafety', 'ContentSafetyMode', 'ModelOrganizationName', 'ModelIndustry', 'ModelCountryCode',
             'RevocationWindowSeconds', 'TeamBudgetBehaviour', 'UnassignedDevelopers', 'DeveloperEstimate', 'PendingClaudeDeployment'
     }

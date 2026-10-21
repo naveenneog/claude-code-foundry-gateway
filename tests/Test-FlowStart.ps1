@@ -124,7 +124,7 @@ try {
     $shadow = Join-Path $scratch 'shadow'
     foreach ($d in 'scripts\flow\lib', 'onboarding', 'schemas') { New-Item -ItemType Directory -Force -Path (Join-Path $shadow $d) | Out-Null }
     Copy-Item -LiteralPath (Join-Path $root 'Start-ClaudeGateway.ps1') -Destination $shadow
-    foreach ($f in 'scripts\ClaudeChoice.ps1', 'scripts\ClaudeGatewayAddressInput.ps1', 'scripts\AzureRetailPrice.ps1', 'scripts\ClaudeGatewayRegion.ps1', 'scripts\flow\FlowContract.ps1', 'scripts\flow\Discovery.ps1', 'scripts\flow\Foundation.ps1', 'scripts\flow\lib\LifecycleCommon.ps1',
+    foreach ($f in 'scripts\ClaudeChoice.ps1', 'scripts\ClaudeGatewayAddressInput.ps1', 'scripts\ClaudeFoundryAuthentication.ps1', 'scripts\AzureRetailPrice.ps1', 'scripts\ClaudeGatewayRegion.ps1', 'scripts\flow\FlowContract.ps1', 'scripts\flow\Discovery.ps1', 'scripts\flow\Foundation.ps1', 'scripts\flow\lib\LifecycleCommon.ps1',
         # The installer's answers schema and preflight, which the flow runs for a plan that runs the installer unattended (ADR-0047).
         'scripts\ClaudeInstallerAnswers.ps1', 'scripts\ClaudeInstallerPreflight.ps1', 'scripts\ClaudeInstallResume.ps1', 'scripts\Test-Prerequisites.ps1', 'schemas\claude-gateway.answers.schema.json') {
         if (Test-Path -LiteralPath (Join-Path $root $f)) { Copy-Item -LiteralPath (Join-Path $root $f) -Destination (Join-Path $shadow $f) }
@@ -142,7 +142,7 @@ function Get-AzureRetailPrice {
 function Get-AzureRetailPriceUnavailableReason { '' }
 function ConvertTo-MonthlyPrice { param([decimal]$HourlyPrice, [int]$Units = 1) [math]::Round($HourlyPrice * 730 * $Units, 2) }
 '@
-    $installerParams = @('SubscriptionId', 'FoundryAccount', 'FoundryResourceGroup', 'ResourceGroup', 'Location', 'NamePrefix', 'PublisherEmail', 'Sku', 'ExistingApimName', 'EntitlementStore', 'AuthMode', 'DesktopSignInKind', 'DesktopEntraClientId', 'DesktopEntraIssuer', 'DesktopEntraScopes', 'DesktopEntraAudience', 'DesktopEntraResource', 'ModelOrganizationName', 'ModelIndustry', 'ModelCountryCode', 'TpmStandard', 'QuotaStandard', 'TpmPremium', 'QuotaPremium', 'QuotaOrg', 'CallsPerMinute', 'StandardGroup', 'PremiumGroup', 'AddressMode')
+    $installerParams = @('SubscriptionId', 'FoundryAccount', 'FoundryResourceGroup', 'ResourceGroup', 'Location', 'NamePrefix', 'PublisherEmail', 'Sku', 'ExistingApimName', 'EntitlementStore', 'AuthMode', 'DesktopSignInKind', 'DesktopEntraClientId', 'DesktopEntraIssuer', 'DesktopEntraScopes', 'DesktopEntraAudience', 'DesktopEntraResource', 'ModelOrganizationName', 'ModelIndustry', 'ModelCountryCode', 'TpmStandard', 'QuotaStandard', 'TpmPremium', 'QuotaPremium', 'StandardMonthlyUsd', 'PremiumMonthlyUsd', 'ModelQuotaOutputShare', 'QuotaOrg', 'CallsPerMinute', 'StandardGroup', 'PremiumGroup', 'AddressMode')
     $stubInstaller = @(
         '[CmdletBinding(SupportsShouldProcess)]'
         'param('
@@ -364,7 +364,7 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'Budgets
     # ------------------------------------------------------------------ unattended runs
     Reset-Shadow
     $projectionAnswers = Join-Path $scratch 'projection-answers.json'
-    @{ 'foundation.sku' = 'BasicV2'; 'foundation.entitlementStore' = 'projection'; 'foundation.authMode' = 'interactive'; 'foundation.desktopSignInKind' = 'helper-script' } | ConvertTo-Json | Set-Content -LiteralPath $projectionAnswers -Encoding UTF8
+    @{ 'foundation.sku' = 'BasicV2'; 'foundation.entitlementStore' = 'projection'; 'foundation.authMode' = 'interactive'; 'foundation.desktopSignInKind' = 'helper-script'; 'foundation.standardMonthlyUsd' = 100; 'foundation.premiumMonthlyUsd' = 300; 'foundation.modelQuotaOutputShare' = 0.25 } | ConvertTo-Json | Set-Content -LiteralPath $projectionAnswers -Encoding UTF8
     $uRecord = Join-Path $scratch 'unattended-record.json'
     $uPlan = Invoke-Child -Script $shadowStart -Arguments @('-Action', 'Setup', '-PlanOnly', '-RecordPath', $uRecord, '-AnswersPath', $projectionAnswers) -Environment @{ P68_INSTALLER_LOG = $installerLog }
     $uFp = Get-Fingerprint $uPlan.Text
@@ -372,6 +372,7 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'Budgets
     $uRun = if (Test-Path -LiteralPath $installerLog) { Read-Json $installerLog } else { $null }
     Assert 'without a console Setup passes -Yes' ($uApply.ExitCode -eq 0 -and $uRun -and $uRun.bound.Yes -eq 'True') ($uApply.All | Select-Object -Last 3)
     Assert 'without a console the Cosmos store adds -DeployProjection, so the installer deploys it' ($uRun -and $uRun.bound.DeployProjection -eq 'True' -and $uRun.bound.EntitlementStore -eq 'projection')
+    Assert 'guided answers preserve monthly family allowances and output share on the installer command' ($uRun -and $uRun.bound.StandardMonthlyUsd -eq '100' -and $uRun.bound.PremiumMonthlyUsd -eq '300' -and $uRun.bound.ModelQuotaOutputShare -eq '0.25') ($uRun.bound | ConvertTo-Json -Compress)
 
     Reset-Shadow
     $rRecord = New-RecordedGateway 'recorded-apply.json'
@@ -408,6 +409,8 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'Budgets
         $unsafeRecord = [pscustomobject]@{ schemaVersion = 2; apimName = 'apim-p68'; resourceGroup = 'rg-p68&calc'; gatewayUrl = 'https://apim-p68.azure-api.net'; decisions = [pscustomobject]@{ foundation = [pscustomobject]@{ sku = 'BasicV2' } }; history = @() }
         $withFoundation = { param($values) $d = [ordered]@{ sku = 'BasicV2'; entitlementStore = 'named-value' }; foreach ($k in $values.Keys) { $d[$k] = $values[$k] }; [pscustomobject]@{ schemaVersion = 2; decisions = [pscustomobject]@{ foundation = [pscustomobject]$d }; history = @() } }
         $orgDecision = & $withFoundation @{ modelOrganizationName = 'AT&T' }
+        $quotaDecision = & $withFoundation @{ standardMonthlyUsd = 100; premiumMonthlyUsd = 300; modelQuotaOutputShare = 0.25 }
+        $quotaArgs = Get-ClaudeFlowFoundationInstallerArgs -Decision $quotaDecision.decisions.foundation -Attended $false
         $unsafeAccount = & $withFoundation @{ foundryAccount = 'ai&calc' }
         $arrayAccount = & $withFoundation @{ foundryAccount = @('ai&echo.P68_ARRAY_MARKER') }
         $withSubscription = { param($sub) [pscustomobject]@{ schemaVersion = 2; subscriptionId = $sub; apimName = 'apim-p68'; resourceGroup = 'rg-p68'; gatewayUrl = 'https://apim-p68.azure-api.net'; decisions = [pscustomobject]@{ foundation = [pscustomobject]@{ sku = 'BasicV2' } }; history = @() } }
@@ -435,6 +438,7 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'Budgets
             Odd = Get-ClaudeFlowStepPlan -Record $oddRecord -Discovery (& $ctx 'Change' $false $null)
             UnsafeThrown = & $thrown $unsafeRecord (& $ctx 'Change' $false $null)
             OrgPlan = & { try { Get-ClaudeFlowStepPlan -Record $orgDecision -Discovery (& $ctx 'Setup' $false $null) } catch { $_.Exception.Message } }
+            QuotaArgs = $quotaArgs
             UnsafeAccountUnattended = & $thrown $unsafeAccount (& $ctx 'Setup' $false $null)
             UnsafeAccountAttended = & $thrown $unsafeAccount (& $ctx 'Setup' $true $null)
             ArrayAccountUnattended = & $thrown $arrayAccount (& $ctx 'Setup' $false $null)
@@ -471,6 +475,7 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'Budgets
     Assert 'unattended -Change foundation refuses a recorded name with cmd.exe metacharacters' ($f.UnsafeThrown -match 'cmd\.exe' -and $f.UnsafeThrown -match 'rg-p68&calc') $f.UnsafeThrown
     Assert 'a value that reaches az with a cmd.exe metacharacter is refused before the installer, attended or not' ($f.UnsafeAccountUnattended -match 'FoundryAccount' -and $f.UnsafeAccountUnattended -match 'cmd\.exe' -and $f.UnsafeAccountAttended -match 'FoundryAccount') "unattended: $($f.UnsafeAccountUnattended) | attended: $($f.UnsafeAccountAttended)"
     Assert 'an organisation name with & is passed: it goes to Azure in a JSON body, not to az' ($f.OrgPlan -isnot [string] -and $f.OrgPlan.Data.installerArgs['ModelOrganizationName'] -eq 'AT&T') $(if ($f.OrgPlan -is [string]) { $f.OrgPlan } else { $f.OrgPlan.Data.installerArgs | ConvertTo-Json -Compress })
+    Assert 'Foundation forwards monthly family allowances and output share to the installer' ($f.QuotaArgs.StandardMonthlyUsd -eq 100 -and $f.QuotaArgs.PremiumMonthlyUsd -eq 300 -and $f.QuotaArgs.ModelQuotaOutputShare -eq 0.25) ($f.QuotaArgs | ConvertTo-Json -Compress)
     Assert 'a list where the installer takes one value is refused, attended or not, whatever its parts hold' ($f.ArrayAccountUnattended -match 'FoundryAccount' -and $f.ArrayAccountUnattended -match 'list or an object' -and $f.ArrayAccountAttended -match 'list or an object') "unattended: $($f.ArrayAccountUnattended) | attended: $($f.ArrayAccountAttended)"
     Assert 'the recorded subscription id reaches the installer, so discovery and the install use one subscription' ($f.SubA.Data.installerArgs['SubscriptionId'] -eq '00000000-0000-0000-0000-00000000000a' -and $f.SubSetupAttended.Data.installerArgs['SubscriptionId'] -eq '00000000-0000-0000-0000-00000000000a') "change: $($f.SubA.Data.installerArgs['SubscriptionId']) setup: $($f.SubSetupAttended.Data.installerArgs['SubscriptionId'])"
     Assert 'a different recorded subscription gives a different fingerprint' ($f.SubFingerprints[0] -ne $f.SubFingerprints[1])
@@ -489,6 +494,7 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'Budgets
         'Premium tier' = 'token budgets for each tier'; 'Organisation ceiling' = 'organisation ceiling'; 'Safety valve' = 'request ceiling'
         'Entitlement groups' = 'Entra groups'; 'Business units (optional)' = 'business units'
         'Company address, certificate and DNS' = 'certificate source and DNS hosting'
+        'Approximate monthly limits by model family' = 'model-family quota estimates'
     }
     $headings = @([regex]::Matches($installerText, "(?m)Write-(?:Step|Head)\s+'([^']+)'") | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique)
     $unnamed = @($headings | Where-Object { $_ -notin $asksNothing -and -not $named.Contains($_) })

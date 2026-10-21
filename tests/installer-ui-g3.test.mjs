@@ -116,7 +116,7 @@ test("F1 drift covers every Install-ClaudeGateway answer and rejects Start-only 
     startOnly: [],
     unknown: [],
   });
-  assert.equal(model.installerFieldNames(schema).length, 60);
+  assert.equal(model.installerFieldNames(schema).length, 74);
   const copied = structuredClone(schema);
   copied.properties.P93Missing = {
     title: "Missing",
@@ -140,6 +140,12 @@ test("F1 browser collects Azure DNS, existing APIM, Desktop access token and pen
   const { browser, page } = await browserPage(new URL("../tools/installer-ui/index.html", import.meta.url).href);
   try {
     await page.locator('[name="SubscriptionId"]').fill("00000000-0000-4000-8000-000000000093");
+    await page.locator('[name="FoundryAuthenticationMode"]').selectOption("client-credentials");
+    await page.locator('[name="FoundrySubscriptionId"]').fill("00000000-0000-4000-8000-000000000094");
+    await page.locator('[name="FoundryEndpoint"]').fill("https://fdpo.example.test");
+    await page.locator('[name="FoundryTenantId"]').fill("00000000-0000-4000-8000-000000000095");
+    await page.locator('[name="FoundryClientId"]').fill("00000000-0000-4000-8000-0000000000f1");
+    await page.locator('[name="FoundryCredentialNamedValue"]').fill("foundry-client-secret");
     await page.locator('[name="AddressMode"]').selectOption("custom");
     await page.locator('[name="AddressHostname"]').fill("claude.contoso.com");
     await page.locator('[name="AddressCertificateSource"]').selectOption("Pfx");
@@ -154,6 +160,9 @@ test("F1 browser collects Azure DNS, existing APIM, Desktop access token and pen
     await page.locator('[name="DesktopEntraAudience"]').fill("api://gateway");
     await page.locator('[name="StandardModels"]').fill("claude-sonnet-5");
     await page.locator('[name="PremiumModels"]').fill("claude-opus-5");
+    await page.locator('[name="StandardMonthlyUsd"]').fill("100");
+    await page.locator('[name="PremiumMonthlyUsd"]').fill("300");
+    await page.locator('[name="ModelQuotaOutputShare"]').fill("0.25");
     await page.locator("#pending-deployment-enabled").check();
     await page.locator('[name="PendingClaudeDeployment.name"]').fill("claude-new");
     await page.locator('[name="PendingClaudeDeployment.model"]').fill("claude");
@@ -169,6 +178,12 @@ test("F1 browser collects Azure DNS, existing APIM, Desktop access token and pen
     assert.deepEqual(answers, {
       schemaVersion: 1,
       SubscriptionId: "00000000-0000-4000-8000-000000000093",
+      FoundryAuthenticationMode: "client-credentials",
+      FoundrySubscriptionId: "00000000-0000-4000-8000-000000000094",
+      FoundryEndpoint: "https://fdpo.example.test",
+      FoundryTenantId: "00000000-0000-4000-8000-000000000095",
+      FoundryClientId: "00000000-0000-4000-8000-0000000000f1",
+      FoundryCredentialNamedValue: "foundry-client-secret",
       AddressMode: "custom",
       AddressHostname: "claude.contoso.com",
       AddressCertificateSource: "Pfx",
@@ -178,6 +193,9 @@ test("F1 browser collects Azure DNS, existing APIM, Desktop access token and pen
       ExistingApimName: "apimreuse",
       StandardModels: ["claude-sonnet-5"],
       PremiumModels: ["claude-opus-5"],
+      StandardMonthlyUsd: 100,
+      PremiumMonthlyUsd: 300,
+      ModelQuotaOutputShare: 0.25,
       DesktopSignInKind: "external-idp-browser",
       DesktopBearerTokenType: "access_token",
       DesktopEntraClientId: "00000000-0000-4000-8000-0000000000d3",

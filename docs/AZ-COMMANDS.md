@@ -290,7 +290,7 @@ p89_deploy_reused_apim() {
     echo "Refused: could not read APIM named values; no deployment command ran." >&2
     return 1
   fi
-  installed_count="$(printf '%s' "$nv_json" | jq '[.[] | select(.name as $n | ["allow-standard","allow-premium","quota-overrides","bu-registry","bu-members","bu-parents","bu-modes","usd-budgets","usd-budget-state","entitlement-source"] | index($n))] | length')"
+  installed_count="$(printf '%s' "$nv_json" | jq '[.[] | select(.name as $n | ["allow-standard","allow-premium","quota-overrides","model-family-quotas","bu-registry","bu-members","bu-parents","bu-modes","usd-budgets","usd-budget-state","entitlement-source"] | index($n))] | length')"
   if [ -z "$installed_count" ] || [ "$installed_count" != "0" ]; then
     echo "Refused: APIM '$APIM_NAME' already has gateway-owned named values. Use Install-ClaudeGateway.ps1 -ExistingApimName so values are read back and preserved." >&2
     return 1
@@ -367,7 +367,7 @@ Capture id: `gateway-overview`.
 
 Capture id: `p54-apim-network`.
 
-5. **Reuse an existing APIM instance that has never hosted this gateway.** API Management services > `$APIM_NAME` > Overview or Pricing tier: SKU is `Basic v2`, `Standard v2` or `Premium v2`; Security > Managed identities > System assigned: Status **On**; APIs > Named values: none of `allow-standard`, `allow-premium`, `quota-overrides`, `bu-registry`, `bu-members`, `bu-parents`, `bu-modes`, `usd-budgets`, `usd-budget-state` or `entitlement-source` exists; Foundry account > Access control (IAM) > Role assignments: check whether the gateway identity already has `Cognitive Services User`. The portal custom-template pane runs the `existingApimName=$APIM_NAME` deployment after the what-if output review; `infra/main.bicep:178-181` reads the existing service name and `infra/main.bicep:250-296` does not write the service resource. This mirrors `p89_deploy_reused_apim` and the create block `The create follows review of the what-if output.`
+5. **Reuse an existing APIM instance that has never hosted this gateway.** API Management services > `$APIM_NAME` > Overview or Pricing tier: SKU is `Basic v2`, `Standard v2` or `Premium v2`; Security > Managed identities > System assigned: Status **On**; APIs > Named values: none of `allow-standard`, `allow-premium`, `quota-overrides`, `model-family-quotas`, `bu-registry`, `bu-members`, `bu-parents`, `bu-modes`, `usd-budgets`, `usd-budget-state` or `entitlement-source` exists; Foundry account > Access control (IAM) > Role assignments: check whether the gateway identity already has `Cognitive Services User`. The portal custom-template pane runs the `existingApimName=$APIM_NAME` deployment after the what-if output review; `infra/main.bicep:178-181` reads the existing service name and `infra/main.bicep:250-296` does not write the service resource. This mirrors `p89_deploy_reused_apim` and the create block `The create follows review of the what-if output.`
 6. **Read policy deployment state.** API Management services > `$APIM_NAME` > APIs > `claude-foundry` > Settings: confirm API URL suffix `claude`, HTTPS and subscription setting; APIs > `claude-foundry` > Design > All operations: confirm operations and policy sections. The fields are template output, not portal-create fields.
 
 ![API Management API Settings tab for the Claude API showing API URL suffix and subscription state](guide/docs-review-api-settings.png)

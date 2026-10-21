@@ -81,6 +81,12 @@ confirmed, and the summary states the monthly price. That includes the Claude
 deployment it creates when the subscription has none: the summary lists it, and
 it is created first, after the confirmation.
 
+The optional `foundation.standardMonthlyUsd` and
+`foundation.premiumMonthlyUsd` answers, plus `foundation.modelQuotaOutputShare`,
+are passed through when present. The installer displays the resulting
+model-family token estimates before deployment; the calculation and its
+limitations are described in [Budgets](BUDGETS.md#model-family-monthly-limits).
+
 ![Attended Setup with an empty record: the first line says nothing is read from Azure, then the Foundation review names the questions Install-ClaudeGateway.ps1 asks next and says it creates nothing until its summary is confirmed.](guide/30-attended-setup-start.png)
 
 The installer's region prompt lists the Foundry account's region and the other
@@ -192,6 +198,9 @@ used from another PowerShell script, override the file.
   "foundation.entitlementStore": "named-value",
   "foundation.authMode": "interactive",
   "foundation.desktopSignInKind": "helper-script",
+  "foundation.standardMonthlyUsd": 100,
+  "foundation.premiumMonthlyUsd": 300,
+  "foundation.modelQuotaOutputShare": 0.2,
   "deviceProfiles.conversationStorage": "local"
 }
 ```

@@ -32,7 +32,7 @@
         "scripts/Sync-ClaudeAccess.ps1": "730b99728e543e1b03de1d4a260ad1565400ce220a9e4a8f9054b0f650e402ba",
         "scripts/Sync-ClaudeProjection.ps1": "471a5414f496a257c5b6d35d109f43ec650c8e0a726adbe3a4b358b39663f8af",
         "scripts/flow/DeviceProfiles.ps1": "7f3925af5eab6f23599031b118834d1faeb657a960b20af505788ceb6097fbc4",
-        "scripts/flow/Foundation.ps1": "b7c2a9dadb4edfbe131e43a242af710567a59daed83c37884cea1dfa7edfd1f4",
+        "scripts/flow/Foundation.ps1": "1321489586427a88ae568bfc220576487a6b6ee2736e9bab018b98e7b8bebbbb",
         "scripts/flow/Guide.ps1": "73bb63882ee1726fd8528e5e3045ecf6fd57a89dfa82a32f6e190cd2494461db",
         "scripts/flow/Verify.ps1": "7a8b05c6848499a8fbc26d87c90f4f3bfaa899538eeb1e6c068dd7bedda847fa",
         "sync/src/apply-projection.mjs": "ca957f19095818f74db6ab00d7c2c8ca4852a18d68a1a17d95d822bd88c87027"
@@ -491,7 +491,7 @@
         "scripts/flow/Address.ps1": "88b0499d3eaf5423f98f4e6cb1ca1b2f221c4a44d4b8677a790ada807e495869",
         "scripts/flow/Discovery.ps1": "38f61dcfaed296dff96017dc5b3b0a58b2777977212e8d0b6a15f895ad424551",
         "scripts/flow/FlowContract.ps1": "548dd10f00884248ccb70a37529b2050f15a7870803e7fd2130e1479e1c65bf3",
-        "scripts/flow/Foundation.ps1": "b7c2a9dadb4edfbe131e43a242af710567a59daed83c37884cea1dfa7edfd1f4"
+        "scripts/flow/Foundation.ps1": "1321489586427a88ae568bfc220576487a6b6ee2736e9bab018b98e7b8bebbbb"
       },
       "outputs": [
         {
@@ -550,7 +550,7 @@
         "scripts/ClaudeInstallCheckpoint.ps1": "c30cc40d67b7bdce01100e5463ba325e93663bd9e410cefc1aaefe3c185fe014",
         "scripts/ClaudeInstallResume.ps1": "03a7e6a3752414097c9ce7b68f607e3ed9ed23a6814776e1f915469693314e69",
         "scripts/ClaudeInstallStore.ps1": "37624fb3c330fa346a3ed131ef422380eebe8e54c8f04823b6a1aaa34fdd10f3",
-        "scripts/flow/Foundation.ps1": "b7c2a9dadb4edfbe131e43a242af710567a59daed83c37884cea1dfa7edfd1f4",
+        "scripts/flow/Foundation.ps1": "1321489586427a88ae568bfc220576487a6b6ee2736e9bab018b98e7b8bebbbb",
         "scripts/install-checkpoint.sh": "8d080e3b53de94b1a123fbf9f591feaeae1526b6686623e066fc8d09a7e5859e",
         "scripts/install-resume.sh": "19f52d8c00cb23ebe5237185e9589d3a053099aa2bd61613d1c88f13e9d95fc8",
         "scripts/install-store.sh": "025765d841de25acd19346a72c41bfe4fc58a48a262c2d7ab2e5ecc8d019d629"
@@ -574,7 +574,7 @@
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
         "install-claude-gateway.sh": "7da93aa0877dd2cd45e064765a60dd62a48a262a82fd82dacc537c6f5a4c4b61",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
-        "schemas/claude-gateway.answers.schema.json": "f5b00c1346ed12abe05b572793f183078dd2df1a18f8e1c928c9a797e033b39b",
+        "schemas/claude-gateway.answers.schema.json": "d4161a4f8266d5f21ffe1b5cd259c2f15184149b40e69add322d3c882dde8446",
         "scripts/ClaudeInstallResume.ps1": "03a7e6a3752414097c9ce7b68f607e3ed9ed23a6814776e1f915469693314e69",
         "scripts/ClaudeInstallSteps.ps1": "ca5971a6c1b42c54c7e01dec284a4c6f6e2ecd7bb7f0720c61f41c7243d80d36",
         "scripts/ClaudeInstallerAnswers.ps1": "b0350cf38059f20690b04ee1635f100d225a79243d5e4af84f3bbec04189b404",
@@ -602,7 +602,7 @@
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
-        "schemas/claude-gateway.answers.schema.json": "f5b00c1346ed12abe05b572793f183078dd2df1a18f8e1c928c9a797e033b39b",
+        "schemas/claude-gateway.answers.schema.json": "d4161a4f8266d5f21ffe1b5cd259c2f15184149b40e69add322d3c882dde8446",
         "scripts/ClaudeGatewayAddressInput.ps1": "29a81ff4a6c08ddc36173b02845cfbb69de4b0691a4b90263b392590fab423a3",
         "scripts/ClaudeInstallResume.ps1": "03a7e6a3752414097c9ce7b68f607e3ed9ed23a6814776e1f915469693314e69",
         "scripts/ClaudeInstallSteps.ps1": "ca5971a6c1b42c54c7e01dec284a4c6f6e2ecd7bb7f0720c61f41c7243d80d36",
@@ -612,7 +612,7 @@
         "tools/installer-ui/azure-lease.mjs": "02472d0ac394b998ffdb65b690b8a663bad29d54c11a7b899db1572c845fb2de",
         "tools/installer-ui/child-output.mjs": "a4edf50ab05eb00b84a94bae38bf680e55a4b928529a1a928ba82c0200f3f764",
         "tools/installer-ui/http-helpers.mjs": "1fbb9ceddf61ee47fa5afbb03f8e52efd38f7ac943832de5fc41b135d17d3c1b",
-        "tools/installer-ui/index.html": "74dd9f151d27bfaae5911171b1880ca05ec077ad3df698b3ed5eedfdeb5f6540",
+        "tools/installer-ui/index.html": "c752d238171f2594fefb4dfc3ba94c589b2a9df63c6f634a18d984cd442a4e43",
         "tools/installer-ui/installer-contract.mjs": "ade7f4d67c43f2f25293a8710896404309e489800e783879fec3c776609f8948",
         "tools/installer-ui/installer-stream.mjs": "3999699667bbcbd8248771d3fdef05816ba785910b6a49f90bb40ddcb6a852ad",
         "tools/installer-ui/installer-ui-actions.js": "98b8c655b51167c0d6e9d6b39efd54f37682df2511a50e4a9acf0ef7a04ab88b",
@@ -630,7 +630,7 @@
         "tools/installer-ui/server.mjs": "63d62f6fcb49edd3bb5d5a9091ec7f4a5b1dbcf44ceb2087f31ad94991dc3e96",
         "tools/installer-ui/session-auth.mjs": "8772b05264d7baed857672c6934c9f149e16470288b9fb2e90e4159f31aac7c9",
         "tools/installer-ui/step-scope.mjs": "2e06c641c5d9292232d75bc38b877da0e883dc238785eb354e09e95790b0e7fd",
-        "tools/installer-ui/ui-model.js": "a296774606bd507ec06f60d1eee16edfa55049da86f7d7974e6bad11f2f9ee0c"
+        "tools/installer-ui/ui-model.js": "e2362539a5cd659f99222461c7936a46fc5c0a4adb1a12d2e037d325dd7f39d1"
       },
       "outputs": [
         {

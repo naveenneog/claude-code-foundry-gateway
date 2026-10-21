@@ -3,8 +3,9 @@
 **Current packet (2026-10-19):** P118 adds installer-generated monthly
 model-family token quotas for named-value Basic v2 gateways. The administrator
 supplies a per-developer monthly USD allowance after selecting each tier's
-models; the installer previews list-price family quotas and APIM enforces
-them independently of the existing daily and reconciled USD controls.
+models, through either the installer or guided-flow answers; the installer and
+browser UI preview list-price family quotas and APIM enforces them independently
+of the existing daily and reconciled USD controls.
 [ADR-0064](adr/0064-installer-model-family-token-quotas.md) is Proposed. Three
 packet-gate attempts passed every audit and build check but reached the
 repository-wide 3,600-second Test-All limit; P118 remains implemented but not
