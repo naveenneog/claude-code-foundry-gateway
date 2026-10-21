@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.46.1.21595",
-      "templateHash": "11819552812384709121"
+      "templateHash": "2194848927237474887"
     },
     "description": "Governed gateway for Claude Code on Microsoft Foundry: per-developer token budgets, tiering, and chargeback, with no model credential on any developer machine."
   },
@@ -76,6 +76,13 @@
       "defaultValue": "foundry-crosstenant-client-secret",
       "metadata": {
         "description": "Existing APIM secret named value that holds the cross-tenant application credential. The template references it and never reads or writes its value."
+      }
+    },
+    "foundryClientSecret": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Client secret for client-credentials mode. Empty means the named value already exists, written before the deployment (Install-ClaudeGateway.ps1). Set by the test environment (ADR-0067)."
       }
     },
     "publisherEmail": {
@@ -731,6 +738,20 @@
       ]
     },
     {
+      "condition": "[and(equals(parameters('foundryAuthenticationMode'), 'client-credentials'), not(empty(parameters('foundryClientSecret'))))]",
+      "type": "Microsoft.ApiManagement/service/namedValues",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', variables('apimName'), parameters('foundryClientSecretNamedValue'))]",
+      "properties": {
+        "displayName": "[parameters('foundryClientSecretNamedValue')]",
+        "value": "[parameters('foundryClientSecret')]",
+        "secret": true
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service', variables('apimName'))]"
+      ]
+    },
+    {
       "type": "Microsoft.ApiManagement/service/policyFragments",
       "apiVersion": "2024-05-01",
       "name": "[format('{0}/{1}', variables('apimName'), 'content-safety-screening')]",
@@ -756,6 +777,7 @@
         "apimNamedValues",
         "[resourceId('Microsoft.ApiManagement/service/policyFragments', variables('apimName'), 'content-safety-screening')]",
         "[resourceId('Microsoft.ApiManagement/service/apis/operations', variables('apimName'), variables('apiId'), 'count-tokens')]",
+        "[resourceId('Microsoft.ApiManagement/service/namedValues', variables('apimName'), parameters('foundryClientSecretNamedValue'))]",
         "[resourceId('Microsoft.ApiManagement/service/apis/operations', variables('apimName'), variables('apiId'), 'messages')]"
       ]
     },
@@ -997,6 +1019,10 @@
     "appInsightsName": {
       "type": "string",
       "value": "[variables('appInsightsName')]"
+    },
+    "workspaceId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('workspaceName'))]"
     },
     "foundryEndpoint": {
       "type": "string",

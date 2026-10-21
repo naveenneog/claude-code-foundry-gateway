@@ -35,6 +35,10 @@ param foundryClientId string = ''
 @description('Existing APIM secret named value that holds the cross-tenant application credential. The template references it and never reads or writes its value.')
 param foundryClientSecretNamedValue string = 'foundry-crosstenant-client-secret'
 
+@description('Client secret for client-credentials mode. Empty means the named value already exists, written before the deployment (Install-ClaudeGateway.ps1). Set by the test environment (ADR-0067).')
+@secure()
+param foundryClientSecret string = ''
+
 @description('Publisher email shown on the API Management instance.')
 param publisherEmail string
 
@@ -518,6 +522,18 @@ module contentSafety 'content-safety.bicep' = if (deployContentSafety) {
   }
 }
 
+resource foundryClientSecretValue 'Microsoft.ApiManagement/service/namedValues@2024-05-01' = if (foundryAuthenticationMode == 'client-credentials' && !empty(foundryClientSecret)) {
+  parent: apim
+  name: foundryClientSecretNamedValue
+  dependsOn: [
+    apimNew
+  ]
+  properties: {
+    displayName: foundryClientSecretNamedValue
+    value: foundryClientSecret
+    secret: true
+  }
+}
 resource contentSafetyFragment 'Microsoft.ApiManagement/service/policyFragments@2024-05-01' = {
   parent: apim
   name: 'content-safety-screening'
@@ -540,6 +556,7 @@ resource apiPolicy 'Microsoft.ApiManagement/service/apis/policies@2024-05-01' = 
   }
   dependsOn: [
     apimNamedValues
+    foundryClientSecretValue
     contentSafetyFragment
     messagesOperation
     countTokensOperation
@@ -629,6 +646,7 @@ output apimName string = apim.name
 output gatewayUrl string = '${apim.properties.gatewayUrl}/${apiPath}'
 output apimPrincipalId string = apim.identity.principalId
 output appInsightsName string = appInsights.name
+output workspaceId string = workspace.id
 output foundryEndpoint string = effectiveFoundryEndpoint
 output claudeCodeSettings object = {
   env: {
