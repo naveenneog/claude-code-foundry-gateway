@@ -261,6 +261,53 @@ test('a business unit added at the gateway reaches the records on the next run, 
   assert.equal(after[USERS.ada].businessUnit, 'eng');
 });
 
+function membershipEvents(stdout) {
+  return stdout.split(/\r?\n/).filter((line) => line.includes('"event":"projection-membership"')).map((line) => JSON.parse(line));
+}
+
+test('a successful scheduled run prints its membership for chargeback before the summary line (ADR-0066)', () => {
+  const where = scenario('membership lines');
+  const ran = jobRun(where, '2026-10-04T10:30:00.000Z', {
+    fetch: fixture({ registry: REGISTRY_TEAMS, parents: ',platform=eng,' }),
+    env: { CONTAINER_APP_JOB_EXECUTION_NAME: 'caj-renew-p120fixture-x1y2z3' },
+  });
+  assert.equal(ran.code, 0, ran.stdout + ran.stderr);
+  const events = membershipEvents(ran.stdout);
+  assert.equal(events.length, 1);
+  const [line] = events;
+  assert.equal(line.run, 'caj-renew-p120fixture-x1y2z3');
+  assert.equal(line.part, 1);
+  assert.equal(line.parts, 1);
+  assert.ok(Number.isFinite(Date.parse(line.at)));
+  const rows = Object.fromEntries(line.rows.map(([oid, unit, parent]) => [oid, { unit, parent }]));
+  assert.deepEqual(rows, {
+    [USERS.ada]: { unit: 'eng', parent: '' },
+    [USERS.bo]: { unit: 'platform', parent: 'eng' },
+    [USERS.cy]: { unit: 'fin', parent: '' },
+  });
+  assert.equal(ran.json.event, 'projection-renewal-succeeded', 'the summary stays the last line, which the alerts read');
+});
+
+test('snapshot, what-if and failed runs print no membership', () => {
+  const where = scenario('no membership lines');
+  const snapshot = snapshotRun(where, '2026-10-04T09:50:00.000Z', SNAPSHOT_RECORDS, { args: ['--account-resource-id', ACCOUNT] });
+  assert.equal(snapshot.code, 0, snapshot.stdout + snapshot.stderr);
+  assert.deepEqual(membershipEvents(snapshot.stdout), []);
+  const denied = jobRun(where, '2026-10-04T10:30:00.000Z', { fetch: fixture({ deny: [STANDARD] }) });
+  assert.notEqual(denied.code, 0);
+  assert.deepEqual(membershipEvents(denied.stdout), []);
+  const whatIf = run(where, 'apply-projection.mjs', ['--graph', '--whatif'], {
+    now: '2026-10-04T10:40:00.000Z',
+    env: {
+      COSMOS_ENDPOINT: ENDPOINT, PROJECTION_TENANT_ID: TENANT, PROJECTION_ACCOUNT_RESOURCE_ID: ACCOUNT,
+      PROJECTION_STANDARD_GROUP_ID: STANDARD, PROJECTION_PREMIUM_GROUP_ID: PREMIUM, PROJECTION_GATEWAY_RESOURCE_ID: GATEWAY,
+      AZURE_CLIENT_ID: '40000000-0000-4000-8000-000000000001',
+    },
+  });
+  assert.equal(whatIf.code, 0, whatIf.stdout + whatIf.stderr);
+  assert.deepEqual(membershipEvents(whatIf.stdout), []);
+});
+
 test('a Graph refusal writes no record and no status, and prints the failure event', () => {
   const where = scenario('graph denied');
   assert.equal(jobRun(where, '2026-10-04T10:00:00.000Z').code, 0);

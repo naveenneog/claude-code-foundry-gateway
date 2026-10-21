@@ -25,7 +25,8 @@
  * and reads PROJECTION_STANDARD_GROUP_ID and PROJECTION_PREMIUM_GROUP_ID (object
  * ids; the premium one may be `none`) and PROJECTION_GATEWAY_RESOURCE_ID, whose
  * bu-registry and bu-parents give the business units on every run (ADR-0049).
- * Its last line carries an event that the renewal alerts match.
+ * Its last line carries an event that the renewal alerts match. Before it, a successful full run
+ * prints its membership for chargeback (sync/src/membership-lines.mjs, ADR-0066).
  *
  * Usage:
  *   node src/apply-projection.mjs --cosmos https://<acct>.documents.azure.com:443/
@@ -39,6 +40,7 @@ import { acquireApplyLock, validateLockWait } from './apply-lock.mjs';
 import { resolveGroupId, getTransitiveMembers } from './graph.mjs';
 import { readGatewayUnits, sortUnitsByDepth } from './business-units.mjs';
 import { RENEWAL_SUCCEEDED, RENEWAL_FAILED } from './events.mjs';
+import { membershipLines } from './membership-lines.mjs';
 
 const argv = process.argv.slice(2);
 const flag = (n) => argv.includes(n);
@@ -150,11 +152,14 @@ function tierGroups() {
 
 // Business units: --bu id=group in precedence order, else the gateway's bu-registry and bu-parents,
 // read on this run and ordered deepest first as scripts/ClaudeBusinessUnit.ps1 orders them.
+// bu-parents is kept for the membership lines chargeback reads (ADR-0066).
+let unitParents = new Map();
 async function unitGroups() {
   const given = opts('--bu').map((spec) => { const [id, group] = spec.split('='); return { id, group }; });
   if (given.length || !process.env.PROJECTION_GATEWAY_RESOURCE_ID) return given;
   const token = (await credential.getToken('https://management.azure.com/.default')).token;
   const { registry, parents } = await readGatewayUnits(process.env.PROJECTION_GATEWAY_RESOURCE_ID, token);
+  unitParents = parents;
   const ordered = sortUnitsByDepth(registry, parents);
   log(`units     ${ordered.length} from the gateway's bu-registry`);
   return ordered.map((u) => ({ id: u.id, group: u.group }));
@@ -371,6 +376,8 @@ if (opt('--compare-snapshot')) {
 }
 
 let { records, mappingVersion, source, reconciliation, scope = 'full' } = await resolveMembership();
+// Everyone the directory placed, before a newer targeted sync narrows the plan: chargeback wants the whole mapping.
+const resolvedRecords = records;
 const container = containerRef();
 const runId = process.env.CONTAINER_APP_JOB_EXECUTION_NAME ?? process.env.PROJECTION_RUN_ID ?? `local-${started}`;
 const lockClock = createLockClock();
@@ -485,6 +492,15 @@ try {
   }
   await releaseActiveLock();
   if (lock?.warnings?.length) summary.warnings = lock.warnings;
+  if (renewal && scope === 'full' && summary.ok) {
+    // Chargeback reporting must not fail an entitlement run: a mapping that cannot be printed is a
+    // warning, and ClaudeCost() keeps the previous complete run or the published table.
+    try {
+      for (const line of membershipLines({ runId, at: new Date().toISOString(), records: resolvedRecords, parents: unitParents })) log(line);
+    } catch (error) {
+      summary.warnings = [...(summary.warnings ?? []), `membership for chargeback not printed: ${error?.message ?? error}`];
+    }
+  }
   console.log(JSON.stringify(summary));
   if (!summary.ok) process.exit(3);
   process.exit(writes.failed || deletes.failed ? 3 : 0);
