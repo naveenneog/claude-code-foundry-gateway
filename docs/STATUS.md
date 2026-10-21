@@ -1,6 +1,8 @@
 # Status
 
-**Current packet (2026-10-21):** P120 keeps chargeback membership current on projection gateways: after a successful full run the sync job prints each member's business unit to its console log, and `ClaudeCost()` uses the newest complete set instead of the membership baked in by `Publish-ClaudeQueries.ps1` ([ADR-0066](adr/0066-chargeback-membership-from-sync-job.md), Proposed). In progress.
+**Current packet (2026-10-21):** P121 adds a staged test environment (resources Bicep, then configuration Bicep) with a short test sync cron and a live smoke test in the Contoso tenant, with Claude in the FDPO tenant ([ADR-0067](adr/0067-staged-test-environment.md), Proposed). In progress.
+
+**Previous packet (2026-10-21):** P120 keeps chargeback membership current on projection gateways: after a successful full run the sync job prints each member's business unit to its console log, and `ClaudeCost()` uses the newest complete set instead of the membership baked in by `Publish-ClaudeQueries.ps1` ([ADR-0066](adr/0066-chargeback-membership-from-sync-job.md), Proposed). In progress.
 
 **Previous packet (2026-10-21):** P119 records a client-declared project identifier: Claude Code sends `x-claude-project`, the gateway validates and records it on the chargeback trace, removes it before Foundry and echoes it back, and the chargeback workbook filters and groups spend by business unit and project ([ADR-0065](adr/0065-client-project-identifier.md), Proposed). Council complete with no open BLOCK.
 
@@ -21,6 +23,7 @@ Merged packet sections live under [`docs/status/`](status/), one file per packet
 
 | Packet | Section heading | Date |
 |---|---|---|
+| P121 | [P121 Staged test environment and smoke test, 2026-10-21](status/P121.md#p121-staged-test-environment-and-smoke-test-2026-10-21) | 2026-10-21 |
 | P120 | [P120 Chargeback membership from the projection sync job, 2026-10-21](status/P120.md#p120-chargeback-membership-from-the-projection-sync-job-2026-10-21) | 2026-10-21 |
 | P119 | [P119 Client-declared project identifier in chargeback, 2026-10-21](status/P119.md#p119-client-declared-project-identifier-in-chargeback-2026-10-21) | 2026-10-21 |
 | P118 | [P118 Installer model-family token quotas, 2026-10-19](status/P118.md#p118-installer-model-family-token-quotas-2026-10-19) | 2026-10-19 |
