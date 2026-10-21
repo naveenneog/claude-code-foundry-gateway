@@ -79,10 +79,8 @@ export class CosmosClient {
             log(`point-read ${id}|${partitionKey}`);
             const resource = load().docs[`${id}|${partitionKey}`];
             if (!resource) {
-              const error = new Error('not found');
-              error.code = 404;
-              error.statusCode = 404;
-              throw error;
+            // @azure/cosmos 4.x Item.read() returns a 404 response instead of throwing (Item.js: "if (error.code !== StatusCodes.NotFound) throw error; response = error").
+            return { resource: undefined, statusCode: 404 };
             }
             return { resource, etag: resource._etag };
           },

@@ -256,7 +256,9 @@ async function readAccessCatalog(container) {
   }
   const key = `access-catalog::${tenantId}`;
   try {
-    const { resource } = await container.item(key, key).read();
+    // @azure/cosmos 4.x returns a 404 response from Item.read() rather than throwing; both mean no catalog.
+    const { resource, statusCode } = await container.item(key, key).read();
+    if (statusCode === 404 || resource === undefined || resource === null) return null;
     return normalizeAccessCatalog(resource);
   } catch (error) {
     if (error?.code === 404 || error?.statusCode === 404) return null;
