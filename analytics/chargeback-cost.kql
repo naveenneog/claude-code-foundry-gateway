@@ -87,7 +87,7 @@ let metered =
         prompt_tokens = sum(prompt_tokens),
         completion_tokens = sum(completion_tokens),
         requests = count()
-        by day = startofday(timestamp), user_id, actor, business_unit_at_time = business_unit, tier, model, client_surface
+        by day = startofday(timestamp), user_id, actor, business_unit_at_time = business_unit, project_id, tier, model, client_surface
     | extend k = norm(model)
     | extend dated_k = iff(strlen(k) > 8 and substring(k, strlen(k) - 8, 8) matches regex @"^\d{8}$", substring(k, 0, strlen(k) - 8), "")
     | join kind=leftouter priced_exact on $left.k == $right.exact_k
@@ -105,7 +105,7 @@ let metered =
         // A rate the per-key reduction left null (conflicting book entries) prices its category as
         // null, which the final usd sum treats as 0; priced_ok is what reports count as unpriced.
         priced_ok = isnotnull(input_per_m) and isnotnull(output_per_m)
-    | project day, user_id, actor, business_unit_at_time, tier, model, client_surface,
+    | project day, user_id, actor, business_unit_at_time, project_id, tier, model, client_surface,
               requests, prompt_tokens, completion_tokens, cache_read_tokens,
               prompt_usd, completion_usd, cache_read_usd, category, priced_ok;
 //
@@ -152,6 +152,8 @@ let cached =
         business_unit_at_time = coalesce(business_unit_at_time, "unassigned"),
         actor = coalesce(actor, "unattributed"),
         client_surface = "cache (no surface)",
+        // The cache metric has no request identity, so no project either (ADR-0065).
+        project_id = "cache (no project)",
         requests = 0,
         prompt_tokens = 0.0,
         completion_tokens = 0.0,
@@ -159,7 +161,7 @@ let cached =
         completion_usd = 0.0,
         category = "cache_read",
         priced_ok = isnotnull(cache_read_per_m)
-    | project day, user_id, actor, business_unit_at_time, tier, model, client_surface,
+    | project day, user_id, actor, business_unit_at_time, project_id, tier, model, client_surface,
               requests, prompt_tokens, completion_tokens, cache_read_tokens,
               prompt_usd, completion_usd, cache_read_usd, category, priced_ok;
 //
@@ -191,7 +193,7 @@ union metered, cached
     // quietly drop the caveat.
     cache_write_known = false
 | project day, actor, user_id, business_unit, business_unit_parent, business_unit_at_time,
-          attribution, tier, model, client_surface, category,
+          project_id, attribution, tier, model, client_surface, category,
           requests, prompt_tokens, completion_tokens, cache_read_tokens,
           prompt_usd, completion_usd, cache_read_usd, usd,
           priced_ok, price_book_date, membership_date, cache_write_known

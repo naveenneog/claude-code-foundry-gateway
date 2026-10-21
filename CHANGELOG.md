@@ -29,6 +29,14 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **Project identifier in chargeback (P119).** Claude Code can send
+  `x-claude-project` through `ANTHROPIC_CUSTOM_HEADERS`. The gateway records a
+  lower-cased valid value (or `unspecified` / `invalid`), removes the header
+  before Foundry and returns the recorded value in the response.
+  `ClaudeChargeback()` and `ClaudeCost()` expose `project_id`; the chargeback
+  workbook adds a Project filter and spend by business unit and project.
+  Showback only.
+
 - **Installer-generated model-family quotas (P118).** The Windows installer can
   convert optional Standard and Premium monthly USD allowances into previewed
   per-user monthly Haiku, Sonnet, Opus, Fable and Mythos token quotas from the

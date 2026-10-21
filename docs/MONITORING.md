@@ -585,6 +585,27 @@ Because membership is baked in when the function is published, **re-run
 answers with yesterday's org chart. The **Membership read** tile shows the date
 it is working from.
 
+#### Spend by project
+
+A project is declared by the client, not by membership. Claude Code sends it as
+the `x-claude-project` header through `ANTHROPIC_CUSTOM_HEADERS` (Claude Code
+v2.1.227 or later), set per repository in `.claude/settings.json`:
+
+```json
+{ "env": { "ANTHROPIC_CUSTOM_HEADERS": "x-claude-project: prj-1042" } }
+```
+
+The gateway lower-cases the value, records it as `project_id` on the
+chargeback trace, and removes the header before the request reaches Foundry.
+The response carries the recorded value back in `x-claude-project`.
+A value that does not match `^[a-z0-9][a-z0-9._-]{0,63}$` is recorded as
+`invalid`; a missing header is `unspecified`. Cache-read spend has no
+per-request identity and is reported as `cache (no project)`. The workbook's
+**Project** filter applies to every table that the business-unit filter
+applies to, and **Spend by business unit and project** shows both. The value
+is client-supplied showback data, not an enforced budget
+([ADR-0065](adr/0065-client-project-identifier.md)).
+
 #### What it still cannot tell you
 
 Cache *writes* are not counted at all. The 5-minute and 1-hour categories exist

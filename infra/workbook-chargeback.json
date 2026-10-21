@@ -44,6 +44,20 @@
             "queryType": 0,
             "resourceType": "microsoft.operationalinsights/workspaces",
             "typeSettings": { "additionalResourceOptions": [] }
+          },
+          {
+            "id": "project",
+            "version": "KqlParameterItem/1.0",
+            "name": "Project",
+            "label": "Project",
+            "type": 2,
+            "isRequired": true,
+            "value": "All",
+            "description": "Client-declared x-claude-project header (ADR-0065). unspecified means no header was sent.",
+            "query": "datatable(x: string) ['All']\n| union (ClaudeCost(datetime({TimeRange:startISO}), datetime({TimeRange:endISO})) | distinct x = project_id)\n| order by x asc",
+            "queryType": 0,
+            "resourceType": "microsoft.operationalinsights/workspaces",
+            "typeSettings": { "additionalResourceOptions": [] }
           }
         ],
         "style": "pills"
@@ -54,7 +68,7 @@
       "name": "kpi",
       "content": {
         "version": "KqlItem/1.0",
-        "query": "let t = ClaudeCost(datetime({TimeRange:startISO}), datetime({TimeRange:endISO}))\n| where '{BusinessUnit}' == 'All' or business_unit == '{BusinessUnit}'\n| summarize spend = round(sum(usd), 2), inp = sum(prompt_tokens), outp = sum(completion_tokens), cache = sum(cache_read_tokens), devs = todouble(dcountif(user_id, user_id != ''));\nt | project Metric = 'Estimated spend (USD)', Value = spend\n| union (t | project Metric = 'Input tokens', Value = inp)\n| union (t | project Metric = 'Output tokens', Value = outp)\n| union (t | project Metric = 'Cache read tokens', Value = cache)\n| union (t | project Metric = 'Developers', Value = devs)",
+        "query": "let t = ClaudeCost(datetime({TimeRange:startISO}), datetime({TimeRange:endISO}))\n| where '{BusinessUnit}' == 'All' or business_unit == '{BusinessUnit}'\n| where '{Project}' == 'All' or project_id == '{Project}'\n| summarize spend = round(sum(usd), 2), inp = sum(prompt_tokens), outp = sum(completion_tokens), cache = sum(cache_read_tokens), devs = todouble(dcountif(user_id, user_id != ''));\nt | project Metric = 'Estimated spend (USD)', Value = spend\n| union (t | project Metric = 'Input tokens', Value = inp)\n| union (t | project Metric = 'Output tokens', Value = outp)\n| union (t | project Metric = 'Cache read tokens', Value = cache)\n| union (t | project Metric = 'Developers', Value = devs)",
         "size": 4,
         "title": "Totals for the period",
         "queryType": 0,
@@ -89,7 +103,7 @@
       "name": "spend-over-time",
       "content": {
         "version": "KqlItem/1.0",
-        "query": "ClaudeCost(datetime({TimeRange:startISO}), datetime({TimeRange:endISO}))\n| where '{BusinessUnit}' == 'All' or business_unit == '{BusinessUnit}'\n| summarize USD = round(sum(usd), 4) by day, business_unit\n| order by day asc\n| render areachart",
+        "query": "ClaudeCost(datetime({TimeRange:startISO}), datetime({TimeRange:endISO}))\n| where '{BusinessUnit}' == 'All' or business_unit == '{BusinessUnit}'\n| where '{Project}' == 'All' or project_id == '{Project}'\n| summarize USD = round(sum(usd), 4) by day, business_unit\n| order by day asc\n| render areachart",
         "size": 0,
         "title": "Estimated spend by day, stacked by business unit",
         "queryType": 0,
@@ -107,7 +121,7 @@
       "name": "spend-by-bu-chart",
       "content": {
         "version": "KqlItem/1.0",
-        "query": "ClaudeCost(datetime({TimeRange:startISO}), datetime({TimeRange:endISO}))\n| where '{BusinessUnit}' == 'All' or business_unit == '{BusinessUnit}'\n| summarize USD = round(sum(usd), 2) by ['Business unit'] = business_unit\n| order by USD desc",
+        "query": "ClaudeCost(datetime({TimeRange:startISO}), datetime({TimeRange:endISO}))\n| where '{BusinessUnit}' == 'All' or business_unit == '{BusinessUnit}'\n| where '{Project}' == 'All' or project_id == '{Project}'\n| summarize USD = round(sum(usd), 2) by ['Business unit'] = business_unit\n| order by USD desc",
         "size": 1,
         "title": "Estimated spend by business unit",
         "queryType": 0,
@@ -120,7 +134,7 @@
       "name": "spend-by-bu-table",
       "content": {
         "version": "KqlItem/1.0",
-        "query": "ClaudeCost(datetime({TimeRange:startISO}), datetime({TimeRange:endISO}))\n| where '{BusinessUnit}' == 'All' or business_unit == '{BusinessUnit}'\n| summarize\n    ['Estimated spend (USD)'] = round(sum(usd), 2),\n    ['Metered (USD)'] = round(sum(prompt_usd) + sum(completion_usd), 2),\n    ['Cache read (USD)'] = round(sum(cache_read_usd), 2),\n    ['Input tokens'] = tolong(sum(prompt_tokens)),\n    ['Output tokens'] = tolong(sum(completion_tokens)),\n    ['Cache read tokens'] = tolong(sum(cache_read_tokens)),\n    ['Developers'] = dcountif(user_id, user_id != ''),\n    ['Requests'] = tolong(sum(requests))\n    by ['Business unit'] = business_unit, ['Parent'] = business_unit_parent\n| order by ['Estimated spend (USD)'] desc",
+        "query": "ClaudeCost(datetime({TimeRange:startISO}), datetime({TimeRange:endISO}))\n| where '{BusinessUnit}' == 'All' or business_unit == '{BusinessUnit}'\n| where '{Project}' == 'All' or project_id == '{Project}'\n| summarize\n    ['Estimated spend (USD)'] = round(sum(usd), 2),\n    ['Metered (USD)'] = round(sum(prompt_usd) + sum(completion_usd), 2),\n    ['Cache read (USD)'] = round(sum(cache_read_usd), 2),\n    ['Input tokens'] = tolong(sum(prompt_tokens)),\n    ['Output tokens'] = tolong(sum(completion_tokens)),\n    ['Cache read tokens'] = tolong(sum(cache_read_tokens)),\n    ['Developers'] = dcountif(user_id, user_id != ''),\n    ['Requests'] = tolong(sum(requests))\n    by ['Business unit'] = business_unit, ['Parent'] = business_unit_parent\n| order by ['Estimated spend (USD)'] desc",
         "size": 0,
         "title": "Business units, with the parent each rolls up to",
         "queryType": 0,
@@ -136,6 +150,30 @@
     },
     {
       "type": 1,
+      "name": "project-heading",
+      "content": {
+        "json": "### Spend by project\n\nThe project is what the client sends in the `x-claude-project` header (ADR-0065); the business unit is who pays, from Entra membership. `unspecified` means no header was sent, `invalid` means the value did not match `^[a-z0-9][a-z0-9._-]{0,63}$`, and `cache (no project)` is cache-read spend, which has no per-request identity to split by project."
+      }
+    },
+    {
+      "type": 3,
+      "name": "spend-by-project",
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "ClaudeCost(datetime({TimeRange:startISO}), datetime({TimeRange:endISO}))\n| where '{BusinessUnit}' == 'All' or business_unit == '{BusinessUnit}'\n| where '{Project}' == 'All' or project_id == '{Project}'\n| summarize\n    ['Estimated spend (USD)'] = round(sum(usd), 2),\n    ['Input tokens'] = tolong(sum(prompt_tokens)),\n    ['Output tokens'] = tolong(sum(completion_tokens)),\n    ['Developers'] = dcountif(user_id, user_id != ''),\n    ['Requests'] = tolong(sum(requests))\n    by ['Business unit'] = business_unit, Project = project_id\n| order by ['Estimated spend (USD)'] desc",
+        "size": 0,
+        "title": "Spend by business unit and project",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "Estimated spend (USD)", "formatter": 4, "formatOptions": { "palette": "green" } }
+          ]
+        }
+      }
+    },    {
+      "type": 1,
       "name": "people-heading",
       "content": { "json": "### Spend by developer" }
     },
@@ -144,7 +182,7 @@
       "name": "spend-by-person",
       "content": {
         "version": "KqlItem/1.0",
-        "query": "ClaudeCost(datetime({TimeRange:startISO}), datetime({TimeRange:endISO}))\n| where '{BusinessUnit}' == 'All' or business_unit == '{BusinessUnit}'\n| summarize\n    ['Estimated spend (USD)'] = round(sum(usd), 2),\n    ['Cache read (USD)'] = round(sum(cache_read_usd), 2),\n    ['Input tokens'] = tolong(sum(prompt_tokens)),\n    ['Output tokens'] = tolong(sum(completion_tokens)),\n    ['Cache read tokens'] = tolong(sum(cache_read_tokens)),\n    ['Requests'] = tolong(sum(requests)),\n    ['Models'] = make_set(model, 4)\n    by Developer = actor, ['Business unit'] = business_unit, Tier = tier\n| order by ['Estimated spend (USD)'] desc\n| take 100",
+        "query": "ClaudeCost(datetime({TimeRange:startISO}), datetime({TimeRange:endISO}))\n| where '{BusinessUnit}' == 'All' or business_unit == '{BusinessUnit}'\n| where '{Project}' == 'All' or project_id == '{Project}'\n| summarize\n    ['Estimated spend (USD)'] = round(sum(usd), 2),\n    ['Cache read (USD)'] = round(sum(cache_read_usd), 2),\n    ['Input tokens'] = tolong(sum(prompt_tokens)),\n    ['Output tokens'] = tolong(sum(completion_tokens)),\n    ['Cache read tokens'] = tolong(sum(cache_read_tokens)),\n    ['Requests'] = tolong(sum(requests)),\n    ['Models'] = make_set(model, 4)\n    by Developer = actor, ['Business unit'] = business_unit, Tier = tier\n| order by ['Estimated spend (USD)'] desc\n| take 100",
         "size": 0,
         "title": "Developers, most expensive first",
         "queryType": 0,
@@ -167,7 +205,7 @@
       "name": "spend-by-model",
       "content": {
         "version": "KqlItem/1.0",
-        "query": "ClaudeCost(datetime({TimeRange:startISO}), datetime({TimeRange:endISO}))\n| where '{BusinessUnit}' == 'All' or business_unit == '{BusinessUnit}'\n| summarize\n    ['Estimated spend (USD)'] = round(sum(usd), 2),\n    ['Input tokens'] = tolong(sum(prompt_tokens)),\n    ['Output tokens'] = tolong(sum(completion_tokens)),\n    ['Cache read tokens'] = tolong(sum(cache_read_tokens)),\n    ['Priced'] = iff(countif(not(priced_ok)) == 0, 'yes', 'NO — not in price book')\n    by Model = model\n| order by ['Estimated spend (USD)'] desc",
+        "query": "ClaudeCost(datetime({TimeRange:startISO}), datetime({TimeRange:endISO}))\n| where '{BusinessUnit}' == 'All' or business_unit == '{BusinessUnit}'\n| where '{Project}' == 'All' or project_id == '{Project}'\n| summarize\n    ['Estimated spend (USD)'] = round(sum(usd), 2),\n    ['Input tokens'] = tolong(sum(prompt_tokens)),\n    ['Output tokens'] = tolong(sum(completion_tokens)),\n    ['Cache read tokens'] = tolong(sum(cache_read_tokens)),\n    ['Priced'] = iff(countif(not(priced_ok)) == 0, 'yes', 'NO — not in price book')\n    by Model = model\n| order by ['Estimated spend (USD)'] desc",
         "size": 0,
         "title": "Models, most expensive first",
         "queryType": 0,
@@ -190,7 +228,7 @@
       "name": "spend-by-surface",
       "content": {
         "version": "KqlItem/1.0",
-        "query": "ClaudeCost(datetime({TimeRange:startISO}), datetime({TimeRange:endISO}))\n| where '{BusinessUnit}' == 'All' or business_unit == '{BusinessUnit}'\n| summarize USD = round(sum(usd), 2) by ['Client surface'] = client_surface\n| order by USD desc",
+        "query": "ClaudeCost(datetime({TimeRange:startISO}), datetime({TimeRange:endISO}))\n| where '{BusinessUnit}' == 'All' or business_unit == '{BusinessUnit}'\n| where '{Project}' == 'All' or project_id == '{Project}'\n| summarize USD = round(sum(usd), 2) by ['Client surface'] = client_surface\n| order by USD desc",
         "size": 1,
         "title": "Estimated spend by client surface",
         "queryType": 0,

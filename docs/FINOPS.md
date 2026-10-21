@@ -135,6 +135,7 @@ as independent charges.
 | Membership | The function embeds membership at publication. `business_unit_at_time` keeps the request stamp; `business_unit` prefers the current published map. Transfers can reallocate past usage |
 | Rates | Publication embeds the current book, not an automatic historical tariff series. Preserve the month's book and exported rows before later price changes |
 | Client surface | Derived from a client-supplied User-Agent, useful for reporting, not a security identity. Cache reads have no client surface |
+| Project | `project_id` comes from the client's `x-claude-project` header ([ADR-0065](adr/0065-client-project-identifier.md)). It is showback data that a person can mislabel; `unspecified`, `invalid` and `cache (no project)` are reported, not allocated |
 | Invoice | U2 remains open: no measured reconciliation to the Azure invoice. Discounts, hosting terms, missing categories and gateway infrastructure can change the comparison |
 
 Keep each token category separate when pricing. `Total Tokens` is neither a

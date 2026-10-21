@@ -881,6 +881,23 @@
         <set-header name="x-gateway-user" exists-action="override">
             <value>@((string)context.Variables["userUpn"])</value>
         </set-header>
+
+        <!-- 12. Client-declared project for chargeback (ADR-0065). Reporting data,
+             never an authorization input, so a bad value is recorded, not refused.
+             Removed before Foundry: the identifier is the customer's, not the provider's. -->
+        <set-variable name="projectId" value="@{
+            var raw = context.Request.Headers.GetValueOrDefault("x-claude-project", "");
+            var value = (raw ?? "").Trim().ToLowerInvariant();
+            if (value.Length == 0) { return "unspecified"; }
+            if (value.Length > 64) { return "invalid"; }
+            for (var i = 0; i < value.Length; i++) {
+                var c = value[i];
+                var ok = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || (i > 0 && (c == '.' || c == '_' || c == '-'));
+                if (!ok) { return "invalid"; }
+            }
+            return value;
+        }" />
+        <set-header name="x-claude-project" exists-action="delete" />
     </inbound>
 
     <backend>
@@ -970,6 +987,7 @@
             <metadata name="User" value="@((string)context.Variables["userUpn"])" />
             <metadata name="Tier" value="@((string)context.Variables["tier"])" />
             <metadata name="BusinessUnit" value="@((string)context.Variables["businessUnit"])" />
+            <metadata name="ProjectId" value="@((string)context.Variables["projectId"])" />
             <metadata name="Model" value="@((string)context.Variables["modelName"])" />
             <metadata name="UsageJson" value="@((string)context.Variables["usdUsageJson"])" />
             <metadata name="ClientIp" value="@(context.Variables.GetValueOrDefault<string>("claude-edge-client-ip", context.Request.IpAddress))" />
@@ -1014,6 +1032,10 @@
         </set-header>
         <set-header name="x-claude-tier" exists-action="override">
             <value>@((string)context.Variables["tier"])</value>
+        </set-header>
+        <!-- The project the ledger recorded, so a client sees unspecified or invalid (ADR-0065). -->
+        <set-header name="x-claude-project" exists-action="override">
+            <value>@((string)context.Variables["projectId"])</value>
         </set-header>
     </outbound>
 

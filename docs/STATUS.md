@@ -1,6 +1,8 @@
 # Status
 
-**Current packet (2026-10-19):** P118 adds installer-generated monthly
+**Current packet (2026-10-21):** P119 records a client-declared project identifier: Claude Code sends `x-claude-project`, the gateway validates and records it on the chargeback trace, removes it before Foundry and echoes it back, and the chargeback workbook filters and groups spend by business unit and project ([ADR-0065](adr/0065-client-project-identifier.md), Proposed). Council complete with no open BLOCK.
+
+**Previous packet (2026-10-19):** P118 adds installer-generated monthly
 model-family token quotas for named-value Basic v2 gateways. The administrator
 supplies a per-developer monthly USD allowance after selecting each tier's
 models, through either the installer or guided-flow answers; the installer and
@@ -17,6 +19,7 @@ Merged packet sections live under [`docs/status/`](status/), one file per packet
 
 | Packet | Section heading | Date |
 |---|---|---|
+| P119 | [P119 Client-declared project identifier in chargeback, 2026-10-21](status/P119.md#p119-client-declared-project-identifier-in-chargeback-2026-10-21) | 2026-10-21 |
 | P118 | [P118 Installer model-family token quotas, 2026-10-19](status/P118.md#p118-installer-model-family-token-quotas-2026-10-19) | 2026-10-19 |
 | P117 | [P117 Cross-tenant production pilot on the customer Cosmos estate, 2026-10-15](status/P117.md#p117-cross-tenant-production-pilot-on-the-customer-cosmos-estate-2026-10-15) | 2026-10-15 |
 | P116 | [P116 Configurable Cosmos access profiles, 2026-10-14](status/P116.md#p116-configurable-cosmos-access-profiles-2026-10-14) | 2026-10-14 |

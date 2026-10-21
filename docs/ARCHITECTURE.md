@@ -463,7 +463,9 @@ workspace access and retention controls.
 publishes the workbook; [`Publish-ClaudeGrafana.ps1`](../scripts/Publish-ClaudeGrafana.ps1)
 targets an existing Grafana instance.
 
-The request ledger joins usage to identity. Cache reads available through `AppMetrics`
+The request ledger joins usage to identity. The identity trace also carries the
+client-declared `x-claude-project` value as `project_id`, which the gateway removes
+before Foundry ([ADR-0065](adr/0065-client-project-identifier.md)). Cache reads available through `AppMetrics`
 are aggregates, not a per-request cache breakdown; missing per-request cache categories
 remain unknown, not zero. Price-based costs remain estimates, not a reconciled Azure
 invoice. An unjoined row remains visible as unattributed rather than being silently
