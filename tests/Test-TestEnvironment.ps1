@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $script:fail = 0
 $script:count = 0
-$expected = 17
+$expected = 18
 function Assert([string]$Label, [bool]$Condition, [string]$Detail = '') {
     $script:count++
     if ($Condition) { Write-Host "  [OK]   $Label" -ForegroundColor Green }
@@ -44,6 +44,8 @@ Assert 'configuration.bicep deploys the sync job module on the test cron' (
     $configuration -match "module syncJob '\.\./projection-renewal\.bicep'" -and
     $configuration -match "cronExpression: '\*/\$\{syncMinutes\} \* \* \* \*'" -and
     $configuration -match '@minValue\(5\)\s*\r?\n@maxValue\(30\)\s*\r?\nparam syncMinutes int = 5')
+Assert 'the resolver storage is reached through private endpoints, whatever a policy sets its public access to' (
+    $configuration -match 'privateEndpointSubnetId: endpointsSubnetId' -and $configuration -match 'blobDnsZoneId: blobDnsZoneId')
 Assert 'the no-success alert reads 2 x the interval + 15 minutes' ($configuration -match 'noSuccessMinutes: 2 \* syncMinutes \+ 15')
 Assert 'configuration points the gateway at the resolver and names the business units' (
     $configuration -match "'entitlement-source'" -and $configuration -match "'entitlement-resolver-url'" -and

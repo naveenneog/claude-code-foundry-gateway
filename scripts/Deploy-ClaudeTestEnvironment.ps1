@@ -23,9 +23,11 @@
 
     Teardown (not part of All) deletes the resource group and the Entra objects recorded on its tags.
 
-    The Foundry client secret is read from -FoundrySecretSourceApim's named value into memory and sent
-    to Azure Resource Manager in the deployment request body. It is never written to disk, printed, or
-    put on a command line.
+    The Foundry client secret is read from -FoundrySecretSourceApim's named value, or, with
+    -CreateFoundrySecret, added to the Foundry app for 7 days through Microsoft Graph in the Foundry tenant
+    (its key id is recorded on the resource group, and Teardown removes it). Either way it is held in memory
+    and sent to Azure Resource Manager in the deployment request body; it is never written to disk,
+    printed, or put on a command line.
 
 .EXAMPLE
     ./scripts/Deploy-ClaudeTestEnvironment.ps1 -SubscriptionId <id> -ResourceGroup rg-claude-test -PublisherEmail you@example.com `
@@ -47,6 +49,10 @@ param(
     [string]$FoundryClientId,
     [string]$FoundrySecretSourceApim,
     [string]$FoundrySecretNamedValue = 'foundry-crosstenant-client-secret',
+    # Instead of -FoundrySecretSourceApim: add a 7-day secret to -FoundryClientId's app through Microsoft Graph in
+    # the Foundry tenant, reached through a subscription there. Teardown removes it.
+    [string]$FoundrySubscriptionId,
+    [switch]$CreateFoundrySecret,
     [string]$StandardModels = 'claude-haiku-4-5,claude-sonnet-5',
     [string]$PremiumModels = 'claude-haiku-4-5,claude-sonnet-5,claude-opus-5',
     [string]$StandardModel = 'claude-haiku-4-5',
@@ -63,12 +69,16 @@ $guid = '^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$'
 $results = [System.Collections.Generic.List[object]]::new()
 $tagKey = 'claude-test-environment'
 
+# pwsh -File passes -Phase A,B as one string.
+$Phase = @($Phase | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 # Every input is checked before any Azure call.
 $problems = [System.Collections.Generic.List[string]]::new()
 if ($SubscriptionId -notmatch $guid) { $problems.Add('-SubscriptionId must be a subscription GUID.') }
 if ($ResourceGroup -notmatch '^[A-Za-z0-9._()-]{1,90}$' -or $ResourceGroup.EndsWith('.')) { $problems.Add('-ResourceGroup is not a valid resource group name.') }
 if ($SyncMinutes -lt 5 -or $SyncMinutes -gt 30) { $problems.Add('-SyncMinutes must be 5 to 30; the production intervals start at 30 minutes (ADR-0058).') }
 foreach ($p in $Phase) { if ($p -notin ($stages + 'All', 'Teardown')) { $problems.Add("-Phase '$p' is not one of: $(($stages + 'All', 'Teardown') -join ', ').") } }
+if ($CreateFoundrySecret -and $FoundrySubscriptionId -notmatch $guid) { $problems.Add('-CreateFoundrySecret needs -FoundrySubscriptionId, a subscription GUID in the Foundry tenant.') }
+if ($CreateFoundrySecret -and $FoundrySecretSourceApim) { $problems.Add('Pass -CreateFoundrySecret or -FoundrySecretSourceApim, not both.') }
 if ($NamePrefix -and $NamePrefix -cnotmatch '^[a-z][a-z0-9]{0,19}$') { $problems.Add('-NamePrefix must be 1-20 lower-case letters and digits, starting with a letter.') }
 foreach ($m in @($StandardModels -split ',') + @($PremiumModels -split ',') + $StandardModel + $PremiumModel) {
     if ($m -and $m -cnotmatch '^[a-z0-9][a-z0-9.-]{0,63}$') { $problems.Add("Model '$m' is not a deployment name.") }
@@ -208,11 +218,25 @@ if ('Identity' -in $run) {
 if ('Resources' -in $run) {
     Step 'Resources: infra/test-environment/resources.bicep'
     $null = Get-GroupIds
-    foreach ($required in 'PublisherEmail', 'FoundryAccountName', 'FoundryEndpoint', 'FoundryTenantId', 'FoundryClientId', 'FoundrySecretSourceApim') {
+    foreach ($required in 'PublisherEmail', 'FoundryAccountName', 'FoundryEndpoint', 'FoundryTenantId', 'FoundryClientId') {
         if (-not (Get-Variable -Name $required -ValueOnly)) { throw "-$required is required for the Resources stage." }
     }
-    if ($FoundrySecretSourceApim -notmatch '^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\.ApiManagement/service/[^/]+$') { throw '-FoundrySecretSourceApim must be an API Management resource id.' }
-    $foundrySecret = Invoke-Az @('rest', '--method', 'post', '--url', "https://management.azure.com$FoundrySecretSourceApim/namedValues/$FoundrySecretNamedValue/listValue?api-version=2024-05-01", '--query', 'value', '-o', 'tsv')
+    if ($CreateFoundrySecret) {
+        $graph = Invoke-Az @('account', 'get-access-token', '--subscription', $FoundrySubscriptionId, '--resource-type', 'ms-graph', '--query', 'accessToken', '-o', 'tsv')
+        $tags = Get-EnvironmentTags
+        if ($tags['claude-test-foundry-key']) { throw 'This environment already added a Foundry secret; run Teardown first, or pass -FoundrySecretSourceApim.' }
+        $added = Invoke-RestMethod -Method Post -Uri "https://graph.microsoft.com/v1.0/applications(appId='$FoundryClientId')/addPassword" -Headers @{ Authorization = 'Bearer ' + $graph } -ContentType 'application/json' -Body (@{ passwordCredential = @{ displayName = "claude-test-$NamePrefix"; endDateTime = (Get-Date).ToUniversalTime().AddDays(7).ToString('o') } } | ConvertTo-Json -Compress)
+        $keyId = [string]$added.keyId
+        Set-EnvironmentTag 'claude-test-foundry-key' "$FoundrySubscriptionId/$keyId"
+        $foundrySecret = $added.secretText
+        $added = $null
+        Add-Result 'Foundry secret added for 7 days' $true "key $keyId"
+        Note 'A new secret can take a minute to be accepted by Microsoft Entra ID.'
+    }
+    else {
+        if ($FoundrySecretSourceApim -notmatch '^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\.ApiManagement/service/[^/]+$') { throw 'Pass -FoundrySecretSourceApim (an API Management resource id) or -CreateFoundrySecret.' }
+        $foundrySecret = Invoke-Az @('rest', '--method', 'post', '--url', "https://management.azure.com$FoundrySecretSourceApim/namedValues/$FoundrySecretNamedValue/listValue?api-version=2024-05-01", '--query', 'value', '-o', 'tsv')
+    }
     if (-not $foundrySecret) { throw "Named value $FoundrySecretNamedValue on the source gateway returned no value." }
     try {
         $out = Invoke-TestDeployment 'test-resources' 'infra/test-environment/resources.bicep' @{
@@ -248,7 +272,8 @@ if ('Configure' -in $run) {
     if (-not $PublisherEmail) { $PublisherEmail = AzS @('apim', 'show', '-g', $ResourceGroup, '-n', $res.apimName, '--query', 'publisherEmail', '-o', 'tsv') }
     $cfg = Invoke-TestDeployment 'test-configuration' 'infra/test-environment/configuration.bicep' @{
         namePrefix = $NamePrefix; location = $Location; apimName = $res.apimName; cosmosAccountName = $res.cosmosAccountName
-        workspaceId = $res.workspaceId; resolverSubnetId = $res.resolverSubnetId; renewalSubnetId = $res.renewalSubnetId
+        workspaceId = $res.workspaceId; resolverSubnetId = $res.resolverSubnetId; endpointsSubnetId = $res.endpointsSubnetId
+        blobDnsZoneId = $res.blobDnsZoneId; queueDnsZoneId = $res.queueDnsZoneId; tableDnsZoneId = $res.tableDnsZoneId; renewalSubnetId = $res.renewalSubnetId
         acrName = $res.acrName; jobIdentityName = $res.jobIdentityName; resolverAppId = $ids.resolverApp
         gatewayAppId = $gatewayAppId; gatewayPrincipalId = $res.apimPrincipalId; syncImageDigest = $ids.image
         standardGroupId = $ids.standard; premiumGroupId = $ids.premium
@@ -278,11 +303,12 @@ if ('Configure' -in $run) {
 if ('Grant' -in $run) {
     Step 'Grant: Microsoft Graph GroupMember.Read.All for the job identity'
     $res = Get-DeploymentOutputs 'test-resources'
-    $saved = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-    $out = & (Join-Path $PSScriptRoot 'Grant-ClaudeProjectionRenewalGraphAccess.ps1') -PrincipalId $res.jobIdentityPrincipalId 2>&1 | Out-String
-    $code = $LASTEXITCODE; $ErrorActionPreference = $saved
-    $granted = ($code -eq 0)
-    Add-Result 'Graph grant' $granted $(if ($granted) { 'held' } else { "not granted. A Privileged Role Administrator or Global Administrator runs: ./scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1 -PrincipalId $($res.jobIdentityPrincipalId). $(($out -split "`n" | Where-Object { $_ -match 'Authorization|Forbidden|denied|privilege' } | Select-Object -First 1).Trim())" })
+    try {
+        $null = & (Join-Path $PSScriptRoot 'Grant-ClaudeProjectionRenewalGraphAccess.ps1') -PrincipalId $res.jobIdentityPrincipalId 2>&1
+        $granted = $true; $why = ''
+    }
+    catch { $granted = $false; $why = $_.Exception.Message }
+    Add-Result 'Graph grant' $granted $(if ($granted) { 'held' } else { "not granted: $why A Privileged Role Administrator or Global Administrator runs: ./scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1 -PrincipalId $($res.jobIdentityPrincipalId), then this script with -Phase Configure,Populate,Smoke." })
     if (-not $granted) { throw 'The job identity has no Graph grant; its runs stop at the Graph stage. Rerun from -Phase Grant once an administrator has granted it.' }
 }
 
@@ -363,6 +389,14 @@ if ($teardown) {
         }
         if ($tags['claude-test-resolver-app'] -match $guid) {
             $null = Invoke-TeardownAz "app $($tags['claude-test-resolver-app'])" @('ad', 'app', 'delete', '--id', $tags['claude-test-resolver-app']) "az ad app delete --id $($tags['claude-test-resolver-app'])" $left
+        }
+        if ($tags['claude-test-foundry-key'] -match '^([0-9a-fA-F-]{36})/([0-9a-fA-F-]{36})$') {
+            $keySub = $Matches[1]; $keyId = $Matches[2]
+            try {
+                $graph = Invoke-Az @('account', 'get-access-token', '--subscription', $keySub, '--resource-type', 'ms-graph', '--query', 'accessToken', '-o', 'tsv')
+                $null = Invoke-RestMethod -Method Post -Uri "https://graph.microsoft.com/v1.0/applications(appId='$FoundryClientId')/removePassword" -Headers @{ Authorization = 'Bearer ' + $graph } -ContentType 'application/json' -Body (@{ keyId = $keyId } | ConvertTo-Json -Compress)
+            }
+            catch { $left.Add("Foundry secret $keyId was not removed (pass -FoundryClientId): $($_.Exception.Message)") }
         }
         $null = Invoke-TeardownAz "resource group $ResourceGroup" @('group', 'delete', '-n', $ResourceGroup, '--yes', '--subscription', $SubscriptionId) "az group delete -n $ResourceGroup --subscription $SubscriptionId" $left
         Add-Result 'teardown' (-not $left.Count) ($left -join ' | ')

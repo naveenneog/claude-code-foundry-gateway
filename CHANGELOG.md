@@ -29,6 +29,13 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **Staged test environment (P121).** `scripts/Deploy-ClaudeTestEnvironment.ps1` deploys
+  `infra/test-environment/resources.bicep` then `configuration.bicep` (resolver,
+  entitlement named values, sync job on a 5-30 minute test cron), grants Graph,
+  and runs a smoke test of moves applied by the scheduled job
+  ([docs/TEST-ENVIRONMENT.md](docs/TEST-ENVIRONMENT.md), ADR-0067). `main.bicep`
+  takes an optional secure `foundryClientSecret`.
+
 - **Chargeback membership from the sync job (P120).** After a successful full
   run, the projection sync job prints each member's business unit and parent
   unit to its console log, and `ClaudeCost()` uses the newest complete run from
@@ -1599,6 +1606,10 @@ exact streaming cache-creation detail remains **U13**.
   converts to 1,388,888,888 tokens and back to exactly $5000.00.
 
 ### Fixed
+
+- **Scheduled sync on a projection without an access catalog (P121).** Every run
+  failed at the catalog stage: `@azure/cosmos` 4.x returns a 404 from
+  `Item.read()` rather than throwing. The job now treats it as no catalog.
 
 - **Resolver zip-deploy failed with "End of Central Directory record could not be found" on
   Linux (GNU tar).** `Deploy-ClaudeProjection.ps1`'s "Publish resolver code" step packaged the

@@ -13,6 +13,12 @@ param apimName string
 param cosmosAccountName string
 param workspaceId string
 param resolverSubnetId string
+
+@description('Private endpoint subnet and DNS zones for the resolver storage. A subscription policy can turn off public access to the storage account; the endpoints keep the deployment package reachable.')
+param endpointsSubnetId string
+param blobDnsZoneId string
+param queueDnsZoneId string
+param tableDnsZoneId string
 param renewalSubnetId string
 param acrName string
 param jobIdentityName string
@@ -64,6 +70,10 @@ module resolver '../resolver.bicep' = {
       gatewayPrincipalId
     ]
     inboundAccess: 'public'
+    privateEndpointSubnetId: endpointsSubnetId
+    blobDnsZoneId: blobDnsZoneId
+    queueDnsZoneId: queueDnsZoneId
+    tableDnsZoneId: tableDnsZoneId
     alwaysReadyInstances: 1
     logAnalyticsWorkspaceId: workspaceId
   }
