@@ -35,7 +35,7 @@ $code
 "@ -ErrorAction Stop
     $cases = [ordered]@{
         'PRJ-1042' = 'prj-1042'; '  alpha.web_2  ' = 'alpha.web_2'; '' = 'unspecified'; '   ' = 'unspecified'
-        'has space' = 'invalid'; '-leading' = 'invalid'; ('a' * 65) = 'invalid'; 'x,y' = 'invalid'; 'é' = 'invalid'
+        'has space' = 'invalid'; '-leading' = 'invalid'; ('a' * 65) = 'invalid'; 'x,y' = 'invalid'; ([string][char]0xE9) = 'invalid'
     }
     $wrong = @(foreach ($k in $cases.Keys) { $got = [P119ProjectContract]::Project($k); if ($got -cne $cases[$k]) { "'$k' -> '$got' (want '$($cases[$k])')" } })
     Assert 'a valid header is lower-cased; missing reads unspecified; malformed reads invalid' (-not $wrong.Count) ($wrong -join '; ')
