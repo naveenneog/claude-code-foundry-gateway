@@ -652,9 +652,9 @@
         "infra/foundry-auth-client-credentials.xml": "181695089573f54838285b5ed65abaf9261d5f5aae6aaee5f6092e7996818b54",
         "infra/main.bicep": "63cbb1132bcdbddef9644a8b10232f524f85eb36fb2c1785bd34a27d17add61f",
         "infra/test-environment/configuration.bicep": "9a54c9ec3ce04f5efc061cf4ac550da3c4e3ec3520e84c2aff23c9ee8324a52c",
-        "infra/test-environment/resources.bicep": "21abf67672c7ce6609fc801d6cf07db0c37ef26923bd31bcf4157a901a391ff6",
+        "infra/test-environment/resources.bicep": "8468b6f54c944520e28effb405a48325ef9e56a12342a5be37c8e1bab1e0ef14",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
-        "scripts/Deploy-ClaudeTestEnvironment.ps1": "bef30cddef91f9c6b9e64907891ddc90dd6c90e9f35a3794136d40c27e594c2f",
+        "scripts/Deploy-ClaudeTestEnvironment.ps1": "15445a7e7fa50aacf2ec744ad900b88275a738549991cbe2cb82e9f2d23188f2",
         "scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1": "5a93159b60adaf03d3091910cdd34ccb96bd27fc3891752b805417a4bfb6fb38"
       },
       "outputs": [

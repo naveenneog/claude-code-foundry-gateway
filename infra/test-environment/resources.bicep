@@ -1,6 +1,7 @@
 // P121 test environment, stage 1 of 2: resources (ADR-0067).
 // Composes the existing modules: the gateway on Basic v2 with Foundry in another tenant (client credentials),
-// the private Cosmos projection, its managed network (no runner) and the sync job's registry and identity.
+// the private Cosmos projection, its network (managed, or the customer's VNet, subnets and DNS zones; no runner)
+// and the sync job's registry and identity.
 // configuration.bicep then deploys the resolver, which needs the gateway identity's application id that only
 // Microsoft Graph returns, the gateway's entitlement named values and the sync job.
 
@@ -37,6 +38,22 @@ param modelsPremium string
 param sonnetDeployment string = 'claude-sonnet-5'
 param opusDeployment string = 'claude-opus-5'
 param haikuDeployment string = 'claude-haiku-4-5'
+
+// Customer networking (optional). Empty creates a managed VNet. With vnetId, all five subnet ids are required and the
+// network team's address plan, delegations and NSGs are used unchanged (infra/projection-network.bicep); the script
+// validates them first with the installer's preflight (scripts/ClaudeProjectionNetwork.psm1). A DNS zone id reuses a
+// customer zone that is already linked to the VNet; empty creates and links a test-owned zone.
+param vnetId string = ''
+param endpointsSubnetId string = ''
+param runnerSubnetId string = ''
+param resolverSubnetId string = ''
+param renewalSubnetId string = ''
+param apimSubnetId string = ''
+param cosmosDnsZoneId string = ''
+param sitesDnsZoneId string = ''
+param blobDnsZoneId string = ''
+param queueDnsZoneId string = ''
+param tableDnsZoneId string = ''
 
 module gateway '../main.bicep' = {
   name: 'test-gateway'
@@ -78,6 +95,17 @@ module network '../projection-network.bicep' = {
     location: location
     cosmosAccountName: projection.outputs.accountName
     runnerEnabled: false
+    vnetId: vnetId
+    endpointsSubnetId: endpointsSubnetId
+    runnerSubnetId: runnerSubnetId
+    resolverSubnetId: resolverSubnetId
+    renewalSubnetId: renewalSubnetId
+    apimSubnetId: apimSubnetId
+    cosmosDnsZoneId: cosmosDnsZoneId
+    sitesDnsZoneId: sitesDnsZoneId
+    blobDnsZoneId: blobDnsZoneId
+    queueDnsZoneId: queueDnsZoneId
+    tableDnsZoneId: tableDnsZoneId
   }
 }
 
@@ -95,6 +123,7 @@ output apimPrincipalId string = gateway.outputs.apimPrincipalId
 output workspaceId string = gateway.outputs.workspaceId
 output cosmosAccountName string = projection.outputs.accountName
 output cosmosEndpoint string = projection.outputs.documentEndpoint
+output vnetId string = network.outputs.vnetId
 output resolverSubnetId string = network.outputs.resolverSubnetId
 output renewalSubnetId string = network.outputs.renewalSubnetId
 output endpointsSubnetId string = network.outputs.endpointsSubnetId

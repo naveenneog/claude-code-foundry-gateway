@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $script:fail = 0
 $script:count = 0
-$expected = 27
+$expected = 33
 function Assert([string]$Label, [bool]$Condition, [string]$Detail = '') {
     $script:count++
     if ($Condition) { Write-Host "  [OK]   $Label" -ForegroundColor Green }
@@ -123,7 +123,6 @@ $r = Invoke-Stubbed @{ tags = $owned; groupNames = $names; appNames = @{ $app = 
 Assert 'Teardown of an intact environment deletes its four groups, its app, then its resource group' (
     $r.Code -eq 0 -and @($r.Calls | Where-Object { $_ -match '^ad group delete' }).Count -eq 4 -and
     @($r.Calls | Where-Object { $_ -match "^ad app delete --id $app" }).Count -eq 1 -and $r.Calls[-1] -match "^group delete -n $rg ") ($r.Calls -join ' ; ')
-Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
 
 # The compiled templates, not the source text: each named value and module input is wired to what it must carry.
 if ($bicepExe -and (Test-Path (Join-Path $root 'infra\test-environment\configuration.bicep'))) {
@@ -172,6 +171,60 @@ $probeJson = try { $probeOut | ConvertFrom-Json } catch { $null }
 Assert 'the sync code gives premium and the deeper unit b, with parent unit a, to a user in all four groups' (
     $probeJson -and $probeJson.tier -eq 'premium' -and $probeJson.unit -eq 'unit-b' -and
     ($probeJson.row -join ',') -eq '33333333-3333-4333-8333-333333333333,unit-b,unit-a') $probeOut.Trim()
+# Customer networking: the installer's contract (all five subnets, optional linked DNS zones) and its preflight.
+$sub = '00000000-0000-4000-8000-000000000001'
+$vnet = "/subscriptions/$sub/resourceGroups/rg-network/providers/Microsoft.Network/virtualNetworks/vnet-customer"
+$sn = [ordered]@{ Endpoints = "$vnet/subnets/pe"; Runner = "$vnet/subnets/runner"; Resolver = "$vnet/subnets/resolver"; Renewal = "$vnet/subnets/renewal"; Apim = "$vnet/subnets/apim" }
+$nsg = "/subscriptions/$sub/resourceGroups/rg-network/providers/Microsoft.Network/networkSecurityGroups/nsg-apim"
+$networkArgs = @('-ProjectionVnetId', $vnet, '-ProjectionEndpointsSubnetId', $sn.Endpoints, '-ProjectionRunnerSubnetId', $sn.Runner,
+    '-ProjectionResolverSubnetId', $sn.Resolver, '-ProjectionRenewalSubnetId', $sn.Renewal, '-ProjectionApimSubnetId', $sn.Apim)
+function New-Subnet([string]$Id, [string]$Delegation, [string]$Prefix, [string]$Nsg = '') {
+    $props = @{ addressPrefix = $Prefix; privateEndpointNetworkPolicies = 'Disabled'; delegations = @(if ($Delegation) { @{ properties = @{ serviceName = $Delegation } } }) }
+    if ($Nsg) { $props.networkSecurityGroup = @{ id = $Nsg } }
+    @{ id = $Id; properties = $props }
+}
+$networkResources = @{
+    $vnet = @{ id = $vnet; location = 'eastus2' }
+    $sn.Endpoints = New-Subnet $sn.Endpoints '' '10.20.1.0/24'
+    $sn.Runner = New-Subnet $sn.Runner 'Microsoft.ContainerInstance/containerGroups' '10.20.2.0/24'
+    $sn.Resolver = New-Subnet $sn.Resolver 'Microsoft.App/environments' '10.20.3.0/26'
+    $sn.Renewal = New-Subnet $sn.Renewal 'Microsoft.App/environments' '10.20.4.0/27'
+    $sn.Apim = New-Subnet $sn.Apim 'Microsoft.Web/serverFarms' '10.20.5.0/24' $nsg
+    $nsg = @{ id = $nsg; properties = @{ securityRules = @(@{ properties = @{ direction = 'Outbound'; access = 'Allow'; protocol = 'Tcp'; destinationAddressPrefix = 'AzureKeyVault'; destinationPortRange = '443' } }) } }
+}
+$foundryArgs = @('-PublisherEmail', 'ops@example.invalid', '-FoundryAccountName', 'ai-x', '-FoundryEndpoint', 'https://ai-x.services.ai.azure.com/',
+    '-FoundryTenantId', '00000000-0000-4000-8000-0000000000cc', '-FoundryClientId', '00000000-0000-4000-8000-0000000000dd',
+    '-FoundrySecretSourceApim', "/subscriptions/$sub/resourceGroups/rg-src/providers/Microsoft.ApiManagement/service/apim-src")
+
+$r = Invoke-Stubbed @{ tags = $owned } (@('-Phase', 'Resources', '-ProjectionVnetId', $vnet, '-ProjectionEndpointsSubnetId', $sn.Endpoints) + $foundryArgs)
+Assert 'a customer VNet without all five subnet ids is refused before any Azure call' (
+    $r.Code -eq 2 -and $r.Out -match 'requires explicit IDs for: RunnerSubnetId, ResolverSubnetId, RenewalSubnetId, ApimSubnetId' -and -not $r.Calls.Count) ($r.Out.Trim())
+$r = Invoke-Stubbed @{ tags = $owned } (@('-Phase', 'Resources') + $networkArgs + @('-ProjectionCosmosDnsZoneId', "/subscriptions/$sub/resourceGroups/rg-dns/providers/Microsoft.Network/privateDnsZones/privatelink.blob.core.windows.net") + $foundryArgs)
+Assert 'a DNS zone id for the wrong namespace is refused before any Azure call' ($r.Code -eq 2 -and $r.Out -match 'CosmosDnsZoneId must be the complete resource ID of privatelink.documents.azure.com' -and -not $r.Calls.Count) ($r.Out.Trim())
+$other = $networkArgs | ForEach-Object { $_ -replace '00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000009' }
+$r = Invoke-Stubbed @{ tags = $owned } (@('-Phase', 'Resources') + $other + $foundryArgs)
+Assert 'a customer VNet in another subscription is refused before any Azure call' ($r.Code -eq 2 -and $r.Out -match 'must be in -SubscriptionId' -and -not $r.Calls.Count) ($r.Out.Trim())
+
+$broken = $networkResources.Clone(); $broken[$sn.Renewal] = New-Subnet $sn.Renewal '' '10.20.4.0/27'
+$r = Invoke-Stubbed @{ tags = $owned; resources = $broken } (@('-Phase', 'Resources') + $networkArgs + $foundryArgs)
+Assert 'an undelegated renewal subnet stops Resources before the Foundry secret is read or anything is deployed' (
+    $r.Code -ne 0 -and $r.Out -match 'Renewal subnet must be delegated only to Microsoft.App/environments' -and
+    -not @($r.Calls | Where-Object { $_ -match '^(rest|bicep)' }).Count) (($r.Calls -join ' ; ') + ' | ' + $r.Out.Trim())
+$r = Invoke-Stubbed @{ tags = $owned; resources = $networkResources } (@('-Phase', 'Resources') + $networkArgs + $foundryArgs)
+$firstRest = [array]::FindIndex([string[]]$r.Calls, [Predicate[string]]{ param($c) $c -match '^rest ' })
+$lastShow = [array]::FindLastIndex([string[]]$r.Calls, [Predicate[string]]{ param($c) $c -match '^resource show' })
+Assert 'a valid customer network passes the installer preflight, and only then is the secret read' (
+    $r.Out -match 'customer network passed the installer preflight' -and $lastShow -ge 0 -and $firstRest -gt $lastShow) (($r.Calls -join ' ; ') + ' | ' + $r.Out.Trim())
+
+if ($bicepExe) {
+    $armResources = & $bicepExe build (Join-Path $root 'infra\test-environment\resources.bicep') --stdout 2>$null | ConvertFrom-Json -AsHashtable
+    $np = @($armResources.resources | Where-Object { $_.name -eq 'test-projection-network' })[0].properties.parameters
+    $wired = @('vnetId', 'endpointsSubnetId', 'runnerSubnetId', 'resolverSubnetId', 'renewalSubnetId', 'apimSubnetId',
+        'cosmosDnsZoneId', 'sitesDnsZoneId', 'blobDnsZoneId', 'queueDnsZoneId', 'tableDnsZoneId') | Where-Object { $np[$_].value -ne "[parameters('$_')]" }
+    Assert 'the compiled resources stage passes every customer network id to the network module' (-not $wired.Count) ($wired -join ', ')
+}
+else { Assert 'the compiled resources stage passes every customer network id to the network module' $false 'no bicep executable' }
+Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
 Assert 'Test-All registers this suite' ($testAll -match "Invoke-Check\s+'[^']+'\s+'Test-TestEnvironment\.ps1'")
 
 Write-Host ''

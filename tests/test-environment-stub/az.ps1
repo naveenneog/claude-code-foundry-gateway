@@ -9,6 +9,9 @@ switch -Regex ($line) {
     '^ad group show --group (\S+) --query displayName' { $n = $fixture.groupNames[$Matches[1]]; if ($n) { Answer $n } else { exit 3 } }
     '^ad app show --id (\S+) --query displayName' { $n = $fixture.appNames[$Matches[1]]; if ($n) { Answer $n } else { exit 3 } }
     '^ad signed-in-user show' { Answer '00000000-0000-4000-8000-0000000000bb' }
+    '^resource show --ids (\S+)' { $r = $fixture.resources[$Matches[1]]; if ($r) { Answer ($r | ConvertTo-Json -Depth 10 -Compress) } else { [Console]::Error.WriteLine('ResourceNotFound'); exit 3 } }
+    '^network private-dns zone list' { Answer '[]' }
+    '^rest --method post --url \S+/listValue' { Answer 'stub-secret-not-real' }
     '^(ad group delete|ad app delete|group delete|group create|tag update|ad group create|ad app create)' { Answer '' }
     default { [Console]::Error.WriteLine("stub az: no answer for: $line"); exit 9 }
 }

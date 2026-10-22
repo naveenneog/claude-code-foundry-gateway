@@ -54,6 +54,19 @@ param(
     # the Foundry tenant, reached through a subscription there. Teardown removes it.
     [string]$FoundrySubscriptionId,
     [switch]$CreateFoundrySecret,
+    # Customer networking, the same contract as Install-ClaudeGateway.ps1 -ProjectionNetworkMode existing: the VNet and
+    # all five subnet ids, and optionally central private DNS zones already linked to that VNet. Empty creates a VNet.
+    [string]$ProjectionVnetId,
+    [string]$ProjectionEndpointsSubnetId,
+    [string]$ProjectionRunnerSubnetId,
+    [string]$ProjectionResolverSubnetId,
+    [string]$ProjectionRenewalSubnetId,
+    [string]$ProjectionApimSubnetId,
+    [string]$ProjectionCosmosDnsZoneId,
+    [string]$ProjectionSitesDnsZoneId,
+    [string]$ProjectionBlobDnsZoneId,
+    [string]$ProjectionQueueDnsZoneId,
+    [string]$ProjectionTableDnsZoneId,
     [string]$StandardModels = 'claude-haiku-4-5,claude-sonnet-5',
     [string]$PremiumModels = 'claude-haiku-4-5,claude-sonnet-5,claude-opus-5',
     [string]$StandardModel = 'claude-haiku-4-5',
@@ -84,6 +97,18 @@ if ($NamePrefix -and $NamePrefix -cnotmatch '^[a-z][a-z0-9]{0,19}$') { $problems
 foreach ($m in @($StandardModels -split ',') + @($PremiumModels -split ',') + $StandardModel + $PremiumModel) {
     if ($m -and $m -cnotmatch '^[a-z0-9][a-z0-9.-]{0,63}$') { $problems.Add("Model '$m' is not a deployment name.") }
 }
+Import-Module (Join-Path $PSScriptRoot 'ClaudeProjectionNetwork.psm1') -Force
+$networkPlan = $null
+try {
+    $networkPlan = Resolve-ClaudeProjectionNetworkSelection -VnetId $ProjectionVnetId -EndpointsSubnetId $ProjectionEndpointsSubnetId `
+        -RunnerSubnetId $ProjectionRunnerSubnetId -ResolverSubnetId $ProjectionResolverSubnetId -RenewalSubnetId $ProjectionRenewalSubnetId `
+        -ApimSubnetId $ProjectionApimSubnetId -CosmosDnsZoneId $ProjectionCosmosDnsZoneId -SitesDnsZoneId $ProjectionSitesDnsZoneId `
+        -BlobDnsZoneId $ProjectionBlobDnsZoneId -QueueDnsZoneId $ProjectionQueueDnsZoneId -TableDnsZoneId $ProjectionTableDnsZoneId -NonInteractive
+    if ($networkPlan.Mode -eq 'existing' -and -not [string]::Equals(([string]$networkPlan.VnetId -split '/')[2], $SubscriptionId, [StringComparison]::OrdinalIgnoreCase)) {
+        $problems.Add('-ProjectionVnetId must be in -SubscriptionId, where the gateway and projection are deployed.')
+    }
+}
+catch { $problems.Add($_.Exception.Message) }
 if ($problems.Count) { $problems | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }; exit 2 }
 
 $run = if ($Phase -contains 'All') { $stages } else { @($stages | Where-Object { $_ -in $Phase }) }
@@ -258,6 +283,21 @@ if ('Identity' -in $run) {
 if ('Resources' -in $run) {
     Step 'Resources: infra/test-environment/resources.bicep'
     $null = Get-GroupIds
+    $networkParameters = @{}
+    if ($networkPlan.Mode -eq 'existing') {
+        # The installer's preflight: same subscription and region, five distinct subnets of the VNet, their delegations,
+        # the APIM subnet NSG rule, /27 sizes, and that each reused DNS zone is linked to the VNet. Read-only.
+        $apimStandIn = [pscustomobject]@{ id = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroup/providers/Microsoft.ApiManagement/service/test"; location = $Location }
+        $check = Invoke-ClaudeProjectionNetworkPreflight -Plan $networkPlan -Apim $apimStandIn -NamePrefix $NamePrefix -DeploymentLocation $Location `
+            -ProjectionResourceGroupId "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroup"
+        Add-Result 'customer network passed the installer preflight' $true $check.Summary
+        $networkParameters = @{
+            vnetId = $networkPlan.VnetId; endpointsSubnetId = $networkPlan.EndpointsSubnetId; runnerSubnetId = $networkPlan.RunnerSubnetId
+            resolverSubnetId = $networkPlan.ResolverSubnetId; renewalSubnetId = $networkPlan.RenewalSubnetId; apimSubnetId = $networkPlan.ApimSubnetId
+            cosmosDnsZoneId = $networkPlan.CosmosDnsZoneId; sitesDnsZoneId = $networkPlan.SitesDnsZoneId; blobDnsZoneId = $networkPlan.BlobDnsZoneId
+            queueDnsZoneId = $networkPlan.QueueDnsZoneId; tableDnsZoneId = $networkPlan.TableDnsZoneId
+        }
+    }
     foreach ($required in 'PublisherEmail', 'FoundryAccountName', 'FoundryEndpoint', 'FoundryTenantId', 'FoundryClientId') {
         if (-not (Get-Variable -Name $required -ValueOnly)) { throw "-$required is required for the Resources stage." }
     }
@@ -280,15 +320,15 @@ if ('Resources' -in $run) {
     }
     if (-not $foundrySecret) { throw "Named value $FoundrySecretNamedValue on the source gateway returned no value." }
     try {
-        $out = Invoke-TestDeployment 'test-resources' 'infra/test-environment/resources.bicep' @{
+        $out = Invoke-TestDeployment 'test-resources' 'infra/test-environment/resources.bicep' ($networkParameters + @{
             namePrefix = $NamePrefix; location = $Location; publisherEmail = $PublisherEmail
             foundryAccountName = $FoundryAccountName; foundryEndpoint = $FoundryEndpoint; foundryTenantId = $FoundryTenantId
             foundryClientId = $FoundryClientId; foundryClientSecret = $foundrySecret
             modelsStandard = ",$StandardModels,"; modelsPremium = ",$PremiumModels,"
-        }
+        })
     }
     finally { $foundrySecret = $null }
-    Add-Result 'resources deployed' $true "$($out.apimName), $($out.cosmosAccountName), $($out.acrName)"
+    Add-Result 'resources deployed' $true "$($out.apimName), $($out.cosmosAccountName), $($out.acrName), VNet $($out.vnetId)"
 }
 
 if ('Publish' -in $run) {

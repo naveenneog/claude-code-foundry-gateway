@@ -52,6 +52,29 @@ The Foundry client secret comes from one of two places:
 Either way the secret is held in memory and sent only in the Azure Resource
 Manager deployment request body.
 
+## Customer networking
+
+By default `Resources` creates a VNet. To use a customer's network instead, pass
+the same parameters as `Install-ClaudeGateway.ps1 -ProjectionNetworkMode existing`:
+
+```powershell
+./scripts/Deploy-ClaudeTestEnvironment.ps1 <the parameters above> `
+    -ProjectionVnetId <vnet id> -ProjectionEndpointsSubnetId <id> -ProjectionRunnerSubnetId <id> `
+    -ProjectionResolverSubnetId <id> -ProjectionRenewalSubnetId <id> -ProjectionApimSubnetId <id> `
+    -ProjectionCosmosDnsZoneId <id> -ProjectionSitesDnsZoneId <id> -ProjectionBlobDnsZoneId <id> `
+    -ProjectionQueueDnsZoneId <id> -ProjectionTableDnsZoneId <id>
+```
+
+- The VNet and all five subnet ids are required; the VNet must be in `-SubscriptionId` and `-Location`.
+- DNS zone ids are optional. A given zone must be that `privatelink.*` namespace and already linked to the VNet; an omitted zone is created and linked by the test.
+- Before the Foundry secret is read or anything is deployed, the installer's preflight
+  (`Invoke-ClaudeProjectionNetworkPreflight`, `scripts/ClaudeProjectionNetwork.psm1`) checks five distinct
+  subnets of the VNet, their delegations (resolver and renewal `Microsoft.App/environments`, runner
+  `Microsoft.ContainerInstance/containerGroups`, apim `Microsoft.Web/serverFarms`, endpoints none), `/27` or
+  larger, the apim subnet NSG rule to `AzureKeyVault` on 443, and the DNS links. Nothing in the customer VNet or
+  its subnets is changed; private endpoints are added to the endpoints subnet.
+- Extra right: read the VNet, subnets, NSG and DNS zones, and join the endpoints subnet (`Microsoft.Network/virtualNetworks/subnets/join/action`), for example Network Contributor on the VNet.
+- Basic v2 API Management does not join the VNet, so the apim subnet is validated but unused in the test.
 ## Rights
 
 | Stage | Gateway tenant and subscription | Foundry tenant |
