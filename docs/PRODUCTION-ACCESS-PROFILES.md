@@ -141,6 +141,10 @@ This block does not add users. Membership remains customer-managed through
 Entra ID, identity governance or another approved provisioning system.
 Environment-specific catalog files under `onboarding/` are ignored by Git.
 
+### From a customer group sheet
+ customer sheet that lists each group's display name, level, credit, model set, capabilities (`Co`, `Cw`, `Ch`, `De`) and M365 flag converts to this catalog with`
+`.\scripts\ConvertTo-ClaudeAccessCatalog.ps1 -InputPath <sheet.json> -OutputPath .\onboarding\access-catalog.production.json`. become plans (Standard to the standard tier, Advanced and Power to premium); each row becomes one profile. Empty object ids are read from Microsoft Graph by exact display name through REST, because such names contain `$ ( ) ,`. Priorities follow highest monthly credit, then more model families, then more capabilities, then M365, so a person in several groups gets one whole profile. Per-profile token figures in the sheet are not enforced per plan. `tests/Test-CustomerAccessSheet.ps1` checks a 47-row example.
+
 ## 3. Prepare the production answers file
 
 The answers file follows

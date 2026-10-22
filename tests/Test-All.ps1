@@ -376,6 +376,7 @@ Invoke-Check 'Azure CLI guide renewal block runs in order' 'Test-AzCommandsRenew
     Invoke-Check 'Project identifier negative mutations'     'Test-ProjectAttributionMutations.ps1'
     Invoke-Check 'Chargeback membership from the sync job'  'Test-ChargebackMembership.ps1'
     Invoke-Check 'Staged test environment'                  'Test-TestEnvironment.ps1'
+    Invoke-Check 'Customer access sheet conversion'        'Test-CustomerAccessSheet.ps1'
     Invoke-Check 'Client attribution and the workbook'     'Test-Observability.ps1'
     Invoke-Check 'Scripts ask for what they were not given' 'Test-ClaudeChoice.ps1'
     Invoke-Check 'USD budget scripts and gateway contracts' 'Test-UsdBudgets.ps1'

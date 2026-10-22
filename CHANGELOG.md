@@ -29,6 +29,11 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **Customer group sheet to access catalog.** `scripts/ConvertTo-ClaudeAccessCatalog.ps1`
+  converts a 47-row customer sheet (levels, credits, model sets, capabilities,
+  M365) into the nine-plan, 47-profile catalog, resolving group object ids
+  from Graph by exact name and ranking profiles by highest monthly credit.
+
 - **Staged test environment (P121).** `scripts/Deploy-ClaudeTestEnvironment.ps1` deploys
   `infra/test-environment/resources.bicep` then `configuration.bicep` (resolver,
   entitlement named values, sync job on a 5-30 minute test cron), grants Graph,
