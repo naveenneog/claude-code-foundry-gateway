@@ -12,7 +12,7 @@ Cosmos projection in two Bicep stages, then checks it with a live smoke test
 | `Configure` | Deploys [`infra/test-environment/configuration.bicep`](../infra/test-environment/configuration.bicep): the resolver, the gateway's entitlement named values and the sync job every `-SyncMinutes` (5 to 30, default 5); publishes the resolver code |
 | `Grant` | Grants Microsoft Graph `GroupMember.Read.All` to the job identity |
 | `Populate` | Starts the job once and waits for success |
-| `Smoke` | Standard model 200 and premium model 403; moves the user to premium and unit b; after the next scheduled run, the premium model returns 200 and the membership lines place the user in unit b |
+| `Smoke` | Standard model 200 and premium model 403. Then the user is in several groups at once: still in standard and unit a, and added to premium and to unit b, a team under unit a. After the next scheduled run the premium model returns 200 (premium wins over standard) and the membership lines place the user in unit b with parent unit a (the deeper unit wins). Removing premium makes the premium model return 403 again after the next run, while the standard model stays allowed. No step starts a sync by hand |
 | `Teardown` | Deletes the resource group, the groups, the resolver app and an added Foundry secret, as recorded on the resource group's tags |
 
 `-Phase All` runs every stage except `Teardown`. A stage reads earlier stages'

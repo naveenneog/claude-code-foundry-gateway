@@ -318,7 +318,7 @@ if ('Configure' -in $run) {
         acrName = $res.acrName; jobIdentityName = $res.jobIdentityName; resolverAppId = $ids.resolverApp
         gatewayAppId = $gatewayAppId; gatewayPrincipalId = $res.apimPrincipalId; syncImageDigest = $ids.image
         standardGroupId = $ids.standard; premiumGroupId = $ids.premium
-        buRegistry = ",unit-a=$($ids.unitA):100000000,unit-b=$($ids.unitB):100000000,"; buParents = ',,'
+        buRegistry = ",unit-a=$($ids.unitA):100000000,unit-b=$($ids.unitB):100000000,"; buParents = ',unit-b=unit-a,'
         syncMinutes = $SyncMinutes; alertEmails = @($PublisherEmail)
     }
     Add-Result 'configuration deployed' $true "job $($cfg.jobName) on $($cfg.cronExpression); resolver $($cfg.resolverUrl)"
@@ -399,13 +399,13 @@ if ('Smoke' -in $run) {
     Wait-GatewayStatus -Url $url -ModelName $StandardModel -Expected 200 -Step 'standard model as a standard developer'
     Wait-GatewayStatus -Url $url -ModelName $PremiumModel -Expected 403 -Step 'premium model refused to a standard developer'
 
+    # Several groups at once: the user stays in standard and unit a and is added to premium and to unit b, a team
+    # under unit a (bu-parents ,unit-b=unit-a,). Premium wins over standard, and the deeper unit b wins over unit a.
     $moved = (Get-Date).ToUniversalTime()
-    Set-Membership $ids.standard $me $false
     Set-Membership $ids.premium $me $true
-    Set-Membership $ids.unitA $me $false
     Set-Membership $ids.unitB $me $true
-    Add-Result 'moved to premium and unit b in Entra; no sync started by hand' $true $moved.ToString('o')
-    Wait-GatewayStatus -Url $url -ModelName $PremiumModel -Expected 200 -Step 'premium model after the scheduled run'
+    Add-Result 'added to premium and unit b while still in standard and unit a; no sync started by hand' $true $moved.ToString('o')
+    Wait-GatewayStatus -Url $url -ModelName $PremiumModel -Expected 200 -Step 'premium wins over standard after the scheduled run'
 
     $query = @"
 ContainerAppConsoleLogs
@@ -414,16 +414,16 @@ ContainerAppConsoleLogs
 | extend m = parse_json(substring(Log, indexof(Log, "{")))
 | mv-expand row = m.rows
 | where tostring(row[0]) == "$me"
-| project TimeGenerated, unit = tostring(row[1]), run = tostring(m.run)
+| project TimeGenerated, unit = tostring(row[1]), parent = tostring(row[2]), run = tostring(m.run)
 | top 1 by TimeGenerated desc
 "@
     $deadline = (Get-Date).AddSeconds($ChangeWaitSeconds)
     $line = $null
     do {
-        $line = @(Invoke-WorkspaceQuery $res.workspaceId $query | Where-Object unit -eq 'unit-b') | Select-Object -First 1
+        $line = @(Invoke-WorkspaceQuery $res.workspaceId $query | Where-Object { $_.unit -eq 'unit-b' -and $_.parent -eq 'unit-a' }) | Select-Object -First 1
         if (-not $line) { Start-Sleep -Seconds $PollSeconds }
     } while (-not $line -and (Get-Date) -lt $deadline)
-    Add-Result 'membership lines place the user in unit b (P120)' ([bool]$line) $(if ($line) { "run $($line.run) at $($line.TimeGenerated)" } else { "no line within $ChangeWaitSeconds s" })
+    Add-Result 'membership lines place the user in team unit b under unit a, the deeper of two units (P120)' ([bool]$line) $(if ($line) { "run $($line.run) at $($line.TimeGenerated)" } else { "no line within $ChangeWaitSeconds s" })
 
     $runs = Invoke-WorkspaceQuery $res.workspaceId @"
 ContainerAppConsoleLogs
@@ -432,6 +432,12 @@ ContainerAppConsoleLogs
 | summarize runs = count(), first = min(TimeGenerated)
 "@
     Add-Result 'a scheduled run succeeded after the move' ([int]$runs[0].runs -ge 1) "runs $($runs[0].runs), first $($runs[0].first)"
+
+    # Removal is automatic too: leaving premium (still in standard) refuses the premium model after the next run.
+    Set-Membership $ids.premium $me $false
+    Add-Result 'removed from premium, still in standard; no sync started by hand' $true ((Get-Date).ToUniversalTime().ToString('o'))
+    Wait-GatewayStatus -Url $url -ModelName $PremiumModel -Expected 403 -Step 'premium model refused again after the scheduled run'
+    Wait-GatewayStatus -Url $url -ModelName $StandardModel -Expected 200 -Step 'standard model still allowed from the remaining group'
 }
 
 if ($teardown) {

@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $script:fail = 0
 $script:count = 0
-$expected = 24
+$expected = 27
 function Assert([string]$Label, [bool]$Condition, [string]$Detail = '') {
     $script:count++
     if ($Condition) { Write-Host "  [OK]   $Label" -ForegroundColor Green }
@@ -145,6 +145,33 @@ else {
     Assert 'the compiled named values loop over every key and take the resolver outputs' $false 'no bicep executable'
     Assert 'the compiled resolver gets all four storage endpoint inputs' $false 'no bicep executable'
 }
+# The smoke stage's multiple-group case, through the sync job's own code: a user in standard and premium, and in
+# unit a and its team unit b, gets premium and unit b with parent unit a.
+$configurationText = Read-Text 'infra\test-environment\configuration.bicep'
+Assert 'the configure stage makes unit b a team under unit a' ($deploy -match "buParents = ',unit-b=unit-a,'")
+Assert 'the smoke stage adds premium and unit b without leaving standard or unit a, then removes premium' (
+    $deploy -match 'Set-Membership \$ids\.premium \$me \$true\n\s*Set-Membership \$ids\.unitB \$me \$true\n' -and
+    $deploy -match "premium wins over standard after the scheduled run" -and
+    $deploy -match "\`$_\.unit -eq 'unit-b' -and \`$_\.parent -eq 'unit-a'" -and
+    $deploy -match "premium model refused again after the scheduled run")
+$sync = ([Uri](Join-Path $root 'sync\src')).AbsoluteUri
+$probe = @"
+import { mergeMembership } from '$sync/plan.mjs';
+import { parseBuRegistry, parseBuParents, sortUnitsByDepth } from '$sync/business-units.mjs';
+import { unitAssignments, membershipLines } from '$sync/membership-lines.mjs';
+const me = '33333333-3333-4333-8333-333333333333';
+const registry = parseBuRegistry(',unit-a=11111111-1111-4111-8111-000000000003:100000000,unit-b=11111111-1111-4111-8111-000000000004:100000000,');
+const parents = parseBuParents(',unit-b=unit-a,');
+const units = sortUnitsByDepth(registry, parents).map((u) => ({ id: u.id, members: [{ oid: me }] }));
+const { records } = mergeMembership({ tiers: { standard: [{ oid: me }], premium: [{ oid: me }] }, businessUnits: units });
+const [line] = membershipLines({ runId: 'r', at: 'now', records: unitAssignments(units), parents }).map((l) => JSON.parse(l));
+console.log(JSON.stringify({ tier: records[0].tier, unit: records[0].businessUnit, row: line.rows[0] }));
+"@
+$probeOut = & node --input-type=module -e $probe 2>&1 | Out-String
+$probeJson = try { $probeOut | ConvertFrom-Json } catch { $null }
+Assert 'the sync code gives premium and the deeper unit b, with parent unit a, to a user in all four groups' (
+    $probeJson -and $probeJson.tier -eq 'premium' -and $probeJson.unit -eq 'unit-b' -and
+    ($probeJson.row -join ',') -eq '33333333-3333-4333-8333-333333333333,unit-b,unit-a') $probeOut.Trim()
 Assert 'Test-All registers this suite' ($testAll -match "Invoke-Check\s+'[^']+'\s+'Test-TestEnvironment\.ps1'")
 
 Write-Host ''

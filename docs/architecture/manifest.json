@@ -654,7 +654,7 @@
         "infra/test-environment/configuration.bicep": "9a54c9ec3ce04f5efc061cf4ac550da3c4e3ec3520e84c2aff23c9ee8324a52c",
         "infra/test-environment/resources.bicep": "21abf67672c7ce6609fc801d6cf07db0c37ef26923bd31bcf4157a901a391ff6",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
-        "scripts/Deploy-ClaudeTestEnvironment.ps1": "13f695c81e4c47e26b1671bad6a1e32a2640db8913eabed7f4603b01e5e19f1b",
+        "scripts/Deploy-ClaudeTestEnvironment.ps1": "bef30cddef91f9c6b9e64907891ddc90dd6c90e9f35a3794136d40c27e594c2f",
         "scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1": "5a93159b60adaf03d3091910cdd34ccb96bd27fc3891752b805417a4bfb6fb38"
       },
       "outputs": [
