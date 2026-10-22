@@ -1,0 +1,684 @@
+{
+  "schemaVersion": 1,
+  "catalogVersion": "2026-10-22.1",
+  "gateway": {
+    "tenantId": "<tenant-guid>",
+    "subscriptionId": "<subscription-guid>",
+    "resourceGroup": "<existing-gateway-resource-group>",
+    "apimName": "<existing-apim-name>",
+    "location": "<apim-region>",
+    "publisherEmail": "<operations-email-address>",
+    "apimSku": "StandardV2",
+    "foundryAccount": "<foundry-account-name>",
+    "foundryResourceGroup": "<foundry-resource-group>",
+    "foundryAuthentication": "client-credentials",
+    "foundrySubscriptionId": "<foundry-subscription-guid>",
+    "foundryEndpoint": "https://<foundry-account-name>.services.ai.azure.com/",
+    "foundryTenantId": "<foundry-tenant-guid>",
+    "foundryClientId": "<foundry-app-client-id>",
+    "foundryCredentialNamedValue": "foundry-crosstenant-client-secret",
+    "compatibilityGroups": {
+      "standard": "<existing-standard-compatibility-group>",
+      "premium": "<existing-premium-compatibility-group>"
+    }
+  },
+  "network": {
+    "vnetId": "/subscriptions/<subscription-guid>/resourceGroups/<network-rg>/providers/Microsoft.Network/virtualNetworks/<vnet>",
+    "subnets": {
+      "endpoints": "<vnetId>/subnets/<private-endpoints-subnet>",
+      "runner": "<vnetId>/subnets/<runner-subnet>",
+      "resolver": "<vnetId>/subnets/<resolver-subnet>",
+      "renewal": "<vnetId>/subnets/<sync-job-subnet>",
+      "apim": "<vnetId>/subnets/<apim-outbound-subnet>"
+    },
+    "privateDnsZones": {
+      "cosmos": "/subscriptions/<subscription-guid>/resourceGroups/<dns-rg>/providers/Microsoft.Network/privateDnsZones/privatelink.documents.azure.com",
+      "sites": ".../privatelink.azurewebsites.net",
+      "blob": ".../privatelink.blob.core.windows.net",
+      "queue": ".../privatelink.queue.core.windows.net",
+      "table": ".../privatelink.table.core.windows.net"
+    }
+  },
+  "projection": {
+    "namePrefix": "<short-lowercase-prefix>",
+    "resolverInboundAccess": "private",
+    "syncInterval": "15m",
+    "alertEmail": [
+      "<operations-email-address>"
+    ],
+    "revocationWindowSeconds": 3600
+  },
+  "organisation": {
+    "requestsPerMinutePerUser": 120,
+    "multipleGroupRule": "highest-monthly"
+  },
+  "deployments": {
+    "haiku": "claude-haiku-5-5",
+    "sonnet": "claude-sonnet-5-5",
+    "opus": "claude-opus-5-5",
+    "fable": "claude-fable-5-1"
+  },
+  "modelSets": {
+    "Ha-So": [
+      "haiku",
+      "sonnet"
+    ],
+    "Ha-So-Op": [
+      "haiku",
+      "sonnet",
+      "opus"
+    ],
+    "Ha-So-Op-Fa": [
+      "haiku",
+      "sonnet",
+      "opus",
+      "fable"
+    ]
+  },
+  "profiles": [
+    {
+      "id": "standard-l1-ha-so",
+      "level": "Standard-L1",
+      "creditUsd": 50,
+      "modelSet": "Ha-So"
+    },
+    {
+      "id": "standard-l2-ha-so",
+      "level": "Standard-L2",
+      "creditUsd": 100,
+      "modelSet": "Ha-So"
+    },
+    {
+      "id": "standard-l3-ha-so",
+      "level": "Standard-L3",
+      "creditUsd": 150,
+      "modelSet": "Ha-So"
+    },
+    {
+      "id": "standard-l3-ha-so-op",
+      "level": "Standard-L3",
+      "creditUsd": 150,
+      "modelSet": "Ha-So-Op"
+    },
+    {
+      "id": "advanced-l1-ha-so",
+      "level": "Advanced-L1",
+      "creditUsd": 200,
+      "modelSet": "Ha-So"
+    },
+    {
+      "id": "advanced-l1-ha-so-op",
+      "level": "Advanced-L1",
+      "creditUsd": 200,
+      "modelSet": "Ha-So-Op"
+    },
+    {
+      "id": "advanced-l2-ha-so-op",
+      "level": "Advanced-L2",
+      "creditUsd": 300,
+      "modelSet": "Ha-So-Op"
+    },
+    {
+      "id": "advanced-l3-ha-so-op",
+      "level": "Advanced-L3",
+      "creditUsd": 500,
+      "modelSet": "Ha-So-Op"
+    },
+    {
+      "id": "power-l1-ha-so-op",
+      "level": "Power-L1",
+      "creditUsd": 1000,
+      "modelSet": "Ha-So-Op"
+    },
+    {
+      "id": "power-l2-ha-so-op-fa",
+      "level": "Power-L2",
+      "creditUsd": 2000,
+      "modelSet": "Ha-So-Op-Fa"
+    },
+    {
+      "id": "power-l3-ha-so-op-fa",
+      "level": "Power-L3",
+      "creditUsd": 5000,
+      "modelSet": "Ha-So-Op-Fa"
+    }
+  ],
+  "groups": [
+    {
+      "row": 1,
+      "displayName": "LTM-Claude-row1-(standard-l1-ha-so)",
+      "objectId": "",
+      "profile": "standard-l1-ha-so",
+      "capabilities": [
+        "Co"
+      ],
+      "m365": false
+    },
+    {
+      "row": 2,
+      "displayName": "LTM-Claude-row2-(standard-l2-ha-so)",
+      "objectId": "",
+      "profile": "standard-l2-ha-so",
+      "capabilities": [
+        "Co",
+        "Ch"
+      ],
+      "m365": false
+    },
+    {
+      "row": 3,
+      "displayName": "LTM-Claude-row3-(standard-l2-ha-so)",
+      "objectId": "",
+      "profile": "standard-l2-ha-so",
+      "capabilities": [
+        "Co",
+        "De"
+      ],
+      "m365": false
+    },
+    {
+      "row": 4,
+      "displayName": "LTM-Claude-row4-(standard-l2-ha-so)",
+      "objectId": "",
+      "profile": "standard-l2-ha-so",
+      "capabilities": [
+        "Cw",
+        "Ch"
+      ],
+      "m365": false
+    },
+    {
+      "row": 5,
+      "displayName": "LTM-Claude-row5-(standard-l2-ha-so)",
+      "objectId": "",
+      "profile": "standard-l2-ha-so",
+      "capabilities": [
+        "Cw",
+        "De"
+      ],
+      "m365": false
+    },
+    {
+      "row": 6,
+      "displayName": "LTM-Claude-row6-(standard-l2-ha-so)",
+      "objectId": "",
+      "profile": "standard-l2-ha-so",
+      "capabilities": [
+        "Cw"
+      ],
+      "m365": false
+    },
+    {
+      "row": 7,
+      "displayName": "LTM-Claude-row7-(standard-l2-ha-so)",
+      "objectId": "",
+      "profile": "standard-l2-ha-so",
+      "capabilities": [
+        "Ch",
+        "De"
+      ],
+      "m365": false
+    },
+    {
+      "row": 8,
+      "displayName": "LTM-Claude-row8-(standard-l2-ha-so)",
+      "objectId": "",
+      "profile": "standard-l2-ha-so",
+      "capabilities": [
+        "De"
+      ],
+      "m365": false
+    },
+    {
+      "row": 9,
+      "displayName": "LTM-Claude-row9-(standard-l3-ha-so)",
+      "objectId": "",
+      "profile": "standard-l3-ha-so",
+      "capabilities": [
+        "Co",
+        "Cw",
+        "Ch"
+      ],
+      "m365": false
+    },
+    {
+      "row": 10,
+      "displayName": "LTM-Claude-row10-(standard-l3-ha-so)",
+      "objectId": "",
+      "profile": "standard-l3-ha-so",
+      "capabilities": [
+        "Co",
+        "Cw",
+        "De"
+      ],
+      "m365": false
+    },
+    {
+      "row": 11,
+      "displayName": "LTM-Claude-row11-(standard-l3-ha-so)",
+      "objectId": "",
+      "profile": "standard-l3-ha-so",
+      "capabilities": [
+        "Co",
+        "Cw"
+      ],
+      "m365": false
+    },
+    {
+      "row": 12,
+      "displayName": "LTM-Claude-row12-(standard-l3-ha-so)",
+      "objectId": "",
+      "profile": "standard-l3-ha-so",
+      "capabilities": [
+        "Co",
+        "Ch",
+        "De"
+      ],
+      "m365": false
+    },
+    {
+      "row": 13,
+      "displayName": "LTM-Claude-row13-(standard-l3-ha-so)",
+      "objectId": "",
+      "profile": "standard-l3-ha-so",
+      "capabilities": [
+        "Cw",
+        "Ch",
+        "De"
+      ],
+      "m365": false
+    },
+    {
+      "row": 14,
+      "displayName": "LTM-Claude-row14-(standard-l3-ha-so-op)",
+      "objectId": "",
+      "profile": "standard-l3-ha-so-op",
+      "capabilities": [
+        "Co",
+        "Ch"
+      ],
+      "m365": false
+    },
+    {
+      "row": 15,
+      "displayName": "LTM-Claude-row15-(standard-l3-ha-so-op)",
+      "objectId": "",
+      "profile": "standard-l3-ha-so-op",
+      "capabilities": [
+        "Co",
+        "De"
+      ],
+      "m365": false
+    },
+    {
+      "row": 16,
+      "displayName": "LTM-Claude-row16-(standard-l3-ha-so-op)",
+      "objectId": "",
+      "profile": "standard-l3-ha-so-op",
+      "capabilities": [
+        "Cw",
+        "Ch"
+      ],
+      "m365": false
+    },
+    {
+      "row": 17,
+      "displayName": "LTM-Claude-row17-(standard-l3-ha-so-op)",
+      "objectId": "",
+      "profile": "standard-l3-ha-so-op",
+      "capabilities": [
+        "Cw",
+        "De"
+      ],
+      "m365": false
+    },
+    {
+      "row": 18,
+      "displayName": "LTM-Claude-row18-(advanced-l1-ha-so)",
+      "objectId": "",
+      "profile": "advanced-l1-ha-so",
+      "capabilities": [
+        "Co",
+        "Cw",
+        "Ch",
+        "De"
+      ],
+      "m365": false
+    },
+    {
+      "row": 19,
+      "displayName": "LTM-Claude-row19-(advanced-l1-ha-so-op)",
+      "objectId": "",
+      "profile": "advanced-l1-ha-so-op",
+      "capabilities": [
+        "Cw"
+      ],
+      "m365": false
+    },
+    {
+      "row": 20,
+      "displayName": "LTM-Claude-row20-(advanced-l1-ha-so-op)",
+      "objectId": "",
+      "profile": "advanced-l1-ha-so-op",
+      "capabilities": [
+        "Ch",
+        "De"
+      ],
+      "m365": false
+    },
+    {
+      "row": 21,
+      "displayName": "LTM-Claude-row21-(advanced-l1-ha-so-op)",
+      "objectId": "",
+      "profile": "advanced-l1-ha-so-op",
+      "capabilities": [
+        "De"
+      ],
+      "m365": false
+    },
+    {
+      "row": 22,
+      "displayName": "LTM-Claude-row22-(advanced-l2-ha-so-op)",
+      "objectId": "",
+      "profile": "advanced-l2-ha-so-op",
+      "capabilities": [
+        "Co",
+        "Cw",
+        "Ch",
+        "De"
+      ],
+      "m365": false
+    },
+    {
+      "row": 23,
+      "displayName": "LTM-Claude-row23-(advanced-l2-ha-so-op)",
+      "objectId": "",
+      "profile": "advanced-l2-ha-so-op",
+      "capabilities": [
+        "Co",
+        "Cw",
+        "Ch"
+      ],
+      "m365": false
+    },
+    {
+      "row": 24,
+      "displayName": "LTM-Claude-row24-(advanced-l2-ha-so-op)",
+      "objectId": "",
+      "profile": "advanced-l2-ha-so-op",
+      "capabilities": [
+        "Co",
+        "Cw",
+        "De"
+      ],
+      "m365": false
+    },
+    {
+      "row": 25,
+      "displayName": "LTM-Claude-row25-(advanced-l2-ha-so-op)",
+      "objectId": "",
+      "profile": "advanced-l2-ha-so-op",
+      "capabilities": [
+        "Co",
+        "Cw"
+      ],
+      "m365": false
+    },
+    {
+      "row": 26,
+      "displayName": "LTM-Claude-row26-(advanced-l2-ha-so-op)",
+      "objectId": "",
+      "profile": "advanced-l2-ha-so-op",
+      "capabilities": [
+        "Co",
+        "Ch",
+        "De"
+      ],
+      "m365": false
+    },
+    {
+      "row": 27,
+      "displayName": "LTM-Claude-row27-(advanced-l2-ha-so-op)",
+      "objectId": "",
+      "profile": "advanced-l2-ha-so-op",
+      "capabilities": [
+        "Co"
+      ],
+      "m365": false
+    },
+    {
+      "row": 28,
+      "displayName": "LTM-Claude-row28-(advanced-l2-ha-so-op)",
+      "objectId": "",
+      "profile": "advanced-l2-ha-so-op",
+      "capabilities": [
+        "Cw",
+        "Ch",
+        "De"
+      ],
+      "m365": false
+    },
+    {
+      "row": 29,
+      "displayName": "LTM-Claude-row29-(advanced-l2-ha-so-op)",
+      "objectId": "",
+      "profile": "advanced-l2-ha-so-op",
+      "capabilities": [
+        "Co",
+        "Ch"
+      ],
+      "m365": false
+    },
+    {
+      "row": 30,
+      "displayName": "LTM-Claude-row30-(advanced-l2-ha-so-op)",
+      "objectId": "",
+      "profile": "advanced-l2-ha-so-op",
+      "capabilities": [
+        "Co",
+        "De"
+      ],
+      "m365": false
+    },
+    {
+      "row": 31,
+      "displayName": "LTM-Claude-row31-(advanced-l2-ha-so-op)",
+      "objectId": "",
+      "profile": "advanced-l2-ha-so-op",
+      "capabilities": [
+        "Cw",
+        "Ch"
+      ],
+      "m365": false
+    },
+    {
+      "row": 32,
+      "displayName": "LTM-Claude-row32-(advanced-l2-ha-so-op)",
+      "objectId": "",
+      "profile": "advanced-l2-ha-so-op",
+      "capabilities": [
+        "Cw",
+        "De"
+      ],
+      "m365": false
+    },
+    {
+      "row": 33,
+      "displayName": "LTM-Claude-row33-(advanced-l3-ha-so-op)",
+      "objectId": "",
+      "profile": "advanced-l3-ha-so-op",
+      "capabilities": [
+        "Co",
+        "Cw",
+        "Ch",
+        "De"
+      ],
+      "m365": false
+    },
+    {
+      "row": 34,
+      "displayName": "LTM-Claude-row34-(advanced-l3-ha-so-op)",
+      "objectId": "",
+      "profile": "advanced-l3-ha-so-op",
+      "capabilities": [
+        "Co",
+        "Cw",
+        "Ch"
+      ],
+      "m365": false
+    },
+    {
+      "row": 35,
+      "displayName": "LTM-Claude-row35-(advanced-l3-ha-so-op)",
+      "objectId": "",
+      "profile": "advanced-l3-ha-so-op",
+      "capabilities": [
+        "Co",
+        "Cw",
+        "De"
+      ],
+      "m365": false
+    },
+    {
+      "row": 36,
+      "displayName": "LTM-Claude-row36-(advanced-l3-ha-so-op)",
+      "objectId": "",
+      "profile": "advanced-l3-ha-so-op",
+      "capabilities": [
+        "Co",
+        "Cw"
+      ],
+      "m365": false
+    },
+    {
+      "row": 37,
+      "displayName": "LTM-Claude-row37-(advanced-l3-ha-so-op)",
+      "objectId": "",
+      "profile": "advanced-l3-ha-so-op",
+      "capabilities": [
+        "Co",
+        "Ch",
+        "De"
+      ],
+      "m365": false
+    },
+    {
+      "row": 38,
+      "displayName": "LTM-Claude-row38-(advanced-l3-ha-so-op)",
+      "objectId": "",
+      "profile": "advanced-l3-ha-so-op",
+      "capabilities": [
+        "Co"
+      ],
+      "m365": false
+    },
+    {
+      "row": 39,
+      "displayName": "LTM-Claude-row39-(advanced-l3-ha-so-op)",
+      "objectId": "",
+      "profile": "advanced-l3-ha-so-op",
+      "capabilities": [
+        "Cw",
+        "Ch",
+        "De"
+      ],
+      "m365": false
+    },
+    {
+      "row": 40,
+      "displayName": "LTM-Claude-row40-(advanced-l3-ha-so-op)",
+      "objectId": "",
+      "profile": "advanced-l3-ha-so-op",
+      "capabilities": [
+        "Cw"
+      ],
+      "m365": false
+    },
+    {
+      "row": 41,
+      "displayName": "LTM-Claude-row41-(advanced-l3-ha-so-op)",
+      "objectId": "",
+      "profile": "advanced-l3-ha-so-op",
+      "capabilities": [
+        "Ch",
+        "De"
+      ],
+      "m365": false
+    },
+    {
+      "row": 42,
+      "displayName": "LTM-Claude-row42-(advanced-l3-ha-so-op)",
+      "objectId": "",
+      "profile": "advanced-l3-ha-so-op",
+      "capabilities": [
+        "De"
+      ],
+      "m365": false
+    },
+    {
+      "row": 43,
+      "displayName": "LTM-Claude-row43-(power-l1-ha-so-op)",
+      "objectId": "",
+      "profile": "power-l1-ha-so-op",
+      "capabilities": [
+        "Co",
+        "Cw",
+        "Ch",
+        "De"
+      ],
+      "m365": false
+    },
+    {
+      "row": 44,
+      "displayName": "LTM-Claude-row44-(power-l2-ha-so-op-fa)",
+      "objectId": "",
+      "profile": "power-l2-ha-so-op-fa",
+      "capabilities": [
+        "Co",
+        "Cw",
+        "Ch",
+        "De"
+      ],
+      "m365": false
+    },
+    {
+      "row": 45,
+      "displayName": "LTM-Claude-row45-(power-l3-ha-so-op-fa)",
+      "objectId": "",
+      "profile": "power-l3-ha-so-op-fa",
+      "capabilities": [
+        "Co",
+        "Cw",
+        "Ch",
+        "De"
+      ],
+      "m365": false
+    },
+    {
+      "row": 46,
+      "displayName": "LTM-Claude-row46-(power-l1-ha-so-op)",
+      "objectId": "",
+      "profile": "power-l1-ha-so-op",
+      "capabilities": [
+        "Co",
+        "Cw",
+        "Ch",
+        "De"
+      ],
+      "m365": true
+    },
+    {
+      "row": 47,
+      "displayName": "LTM-Claude-row47-(power-l3-ha-so-op-fa)",
+      "objectId": "",
+      "profile": "power-l3-ha-so-op-fa",
+      "capabilities": [
+        "Co",
+        "Cw",
+        "Ch",
+        "De"
+      ],
+      "m365": true
+    }
+  ]
+}

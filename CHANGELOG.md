@@ -29,6 +29,10 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **Customer setup from one sheet (P124).** `Deploy-ClaudeCustomerEnvironment.ps1 -SheetPath`
+  runs the whole setup on the existing APIM, Foundry, network and Entra groups
+  from one JSON file ([docs/CUSTOMER-SETUP.md](docs/CUSTOMER-SETUP.md), ADR-0070).
+
 - **Token limits per access plan (P123).** `Set-ClaudePlanTokenQuotas.ps1`
   turns each plan's nominal dollar credit into monthly token limits per model
   family, with cache reads estimated; the gateway applies a person's plan limits,

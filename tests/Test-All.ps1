@@ -373,6 +373,7 @@ Invoke-Check 'Azure CLI guide renewal block runs in order' 'Test-AzCommandsRenew
     Invoke-Check 'Model-family quota calculation and policy' 'Test-ModelFamilyQuotas.ps1'
     Invoke-Check 'Model-family quota negative mutations'     'Test-ModelFamilyQuotaMutations.ps1'
     Invoke-Check 'Token limits per access plan'              'Test-PlanTokenQuotas.ps1'
+    Invoke-Check 'Customer setup from one sheet'             'Test-CustomerEnvironment.ps1'
     Invoke-Check 'Client project identifier in chargeback'   'Test-ProjectAttribution.ps1'
     Invoke-Check 'Project identifier negative mutations'     'Test-ProjectAttributionMutations.ps1'
     Invoke-Check 'Chargeback membership from the sync job'  'Test-ChargebackMembership.ps1'
