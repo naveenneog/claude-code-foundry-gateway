@@ -35,6 +35,9 @@ onboarding/aum-service.json
 onboarding/projection-renewal-*.json
 onboarding/projection-switch-*.json
 onboarding/access-catalog*.json
+# Customer inputs hold tenant, subscription and network ids; this repository is public.
+onboarding/customer-sheet*.json
+onboarding/answers*.json
 onboarding/profiles/
 onboarding/model-snapshots/
 onboarding/**/claude-gateway.json
