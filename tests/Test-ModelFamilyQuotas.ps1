@@ -212,7 +212,7 @@ if ($familyExpression.Success -and $quotaExpression.Success) {
         Replace('var model = (string)context.Variables["modelName"];', '').
         Replace('var map = "{{model-family-quotas}}";', '')
     $quotaCode = [Net.WebUtility]::HtmlDecode($quotaExpression.Groups['code'].Value).
-        Replace('var tier = (string)context.Variables["tier"];', '').
+        Replace('var tier = (string)context.Variables["modelFamilyQuotaScope"];', '').
         Replace('var family = (string)context.Variables["modelFamily"];', '').
         Replace('var map = "{{model-family-quotas}}";', '')
     Add-Type -TypeDefinition @"
@@ -257,7 +257,7 @@ Assert 'the policy enforces a monthly user-tier-family quota after model authori
     $policy.IndexOf('<set-variable name="budget" value="organisation" />') -lt $policy.IndexOf('<set-variable name="budget" value="model family" />') -and
     $policy -match 'deployment:" \+ model \+ "="' -and
     $policy -match 'marker = "," \+ tier \+ ":" \+ family \+ "="' -and
-    $policy -match 'userId"\] \+ ":family:" \+ \(string\)context\.Variables\["tier"\] \+ ":" \+ \(string\)context\.Variables\["modelFamily"\]'
+    $policy -match 'userId"\] \+ ":family:" \+ \(string\)context\.Variables\["modelFamilyQuotaScope"\] \+ ":" \+ \(string\)context\.Variables\["modelFamily"\]'
 )
 Assert 'an enabled tier with a missing or malformed family quota fails closed' (
     $policy -match 'tierEnabled' -and

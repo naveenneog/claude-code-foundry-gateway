@@ -14,19 +14,18 @@ $src = Get-Content -Raw -LiteralPath $InputPath | ConvertFrom-Json
 $capability = @{ Co = 'code'; Cw = 'cowork'; Ch = 'chat'; De = 'design' }
 $byProfile = @{}; foreach ($p in $src.profiles) { $byProfile[$p.id] = $p }
 
-# Plans: one per level (Standard-L1 .. Power-L3), credit from the sheet. Standard levels map to the standard
-# compatibility tier, Advanced and Power to premium (the shipped example's split).
+# Plans (tiers): one per sheet profile - level, model set and credit - so each gets its own limits (ADR-0069).
+# Standard levels map to the standard compatibility tier, Advanced and Power to premium.
 $plans = [ordered]@{}
 foreach ($p in $src.profiles) {
-    $id = $p.level.ToLowerInvariant()
-    if (-not $plans.Contains($id)) {
-        $plans[$id] = [ordered]@{ id = $id; name = "$($p.level) - `$$($p.creditUsd) nominal monthly credit"; enabled = $true
-            nominalCredit = [ordered]@{ amount = [int]$p.creditUsd; currency = 'USD'; period = 'month'; scope = 'user' }
-            compatibilityTier = $(if ($id -like 'standard-*') { 'standard' } else { 'premium' }) }
-    }
-    elseif ($plans[$id].nominalCredit.amount -ne [int]$p.creditUsd) { throw "Level $($p.level) has two credits." }
+    $id = ([string]$p.id).ToLowerInvariant()
+    if ($id -cnotmatch '^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$') { throw "Profile id '$($p.id)' is not a lowercase id of letters, digits and hyphens." }
+    if ($plans.Contains($id)) { throw "Profile id '$id' appears twice." }
+    if (-not ([decimal]$p.creditUsd -gt 0)) { throw "Profile '$id' needs a positive creditUsd." }
+    $plans[$id] = [ordered]@{ id = $id; name = "$($p.level) $($p.modelSet) - `$$($p.creditUsd) nominal monthly credit"; enabled = $true
+        nominalCredit = [ordered]@{ amount = [int]$p.creditUsd; currency = 'USD'; period = 'month'; scope = 'user' }
+        compatibilityTier = $(if ([string]$p.level -like 'Standard-*') { 'standard' } else { 'premium' }) }
 }
-
 $token = $null
 if (-not $Offline) { $token = az account get-access-token --resource-type ms-graph --query accessToken -o tsv; if (-not $token) { throw 'No Graph token; run az login.' } }
 function Resolve-Group([string]$Name) {
@@ -55,7 +54,7 @@ $profiles = foreach ($r in @($rows | Sort-Object Rank, { $_.Group.row })) {
     if ($oid -notmatch $guid) { throw "Row $($g.row): objectId '$oid' is not a GUID." }
     $suffix = (($g.capabilities -join '-') + $(if ($g.m365) { '-m365' } else { '' })).ToLowerInvariant()
     [ordered]@{
-        id = "$($r.Profile.id)-$suffix-r$($g.row)"; name = $g.displayName; planId = $r.Profile.level.ToLowerInvariant()
+        id = "$($r.Profile.id)-$suffix-r$($g.row)"; name = $g.displayName; planId = ([string]$r.Profile.id).ToLowerInvariant()
         groupObjectId = $oid.ToLowerInvariant(); priority = $priority; capabilities = @($r.Caps); modelFamilies = @($r.Families)
         connectors = @(if ($g.m365) { 'm365' }); enabled = $true
     }

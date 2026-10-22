@@ -1729,6 +1729,13 @@ if ($ExistingApim -or $liveApimId) {
         Write-Note "preserving entitlement: $($keptStd.Count) standard, $($keptPrm.Count) premium"
     }
 
+    # P123: plan limits written by Set-ClaudePlanTokenQuotas.ps1 survive a recalculation of the tier limits.
+    if ($modelFamilyQuotas -and $modelFamilyQuotasExisting -match ',plan:') {
+        $keptPlans = @(foreach ($part in (([string]$modelFamilyQuotasExisting).Trim(',') -split ',')) {
+            if ($part -match '^plan:([a-z0-9-]+):(haiku|sonnet|opus|fable|mythos)=([1-9][0-9]*)$') { [pscustomobject]@{ Plan = $Matches[1]; Family = $Matches[2]; TokensPerMonth = [long]$Matches[3] } }
+        })
+        $modelFamilyQuotas = Merge-ClaudePlanModelFamilyQuotaValue -Existing $modelFamilyQuotas -PlanEntries $keptPlans
+    }
     if (-not $modelFamilyQuotas) { $modelFamilyQuotas = $modelFamilyQuotasExisting }
     if (-not $modelFamilyQuotas) { $modelFamilyQuotas = ',,' }
     Assert-AzArgumentsSafe -Values ([ordered]@{ ModelFamilyQuotas = $modelFamilyQuotas })

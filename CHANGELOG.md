@@ -29,6 +29,12 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **Token limits per access plan (P123).** `Set-ClaudePlanTokenQuotas.ps1`
+  turns each plan's nominal dollar credit into monthly token limits per model
+  family, with cache reads estimated; the gateway applies a person's plan limits,
+  and the tier limits when the plan has none
+  ([ADR-0069](docs/adr/0069-token-limits-per-access-plan.md)).
+
 - **5- and 15-minute sync intervals (P122).** The projection sync job accepts
   `5m` (test) and `15m` (production) in the installer, the answers file,
   `Deploy-ClaudeProjectionRenewal.ps1`, `Set-ClaudeProjectionSyncSchedule.ps1`

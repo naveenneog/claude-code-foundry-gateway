@@ -52,8 +52,8 @@ try {
         @{ Name = 'exact alias precedence removed'; File = 'infra\policy.xml'
             Old = 'var marker = ",deployment:" + model + "=";'
             New = 'var marker = ",missing-deployment:" + model + "=";' },
-        @{ Name = 'counter tier omitted'; File = 'infra\policy.xml'
-            Old = ' + ":family:" + (string)context.Variables["tier"] + ":" + (string)context.Variables["modelFamily"]'
+        @{ Name = 'counter scope omitted'; File = 'infra\policy.xml'
+            Old = ' + ":family:" + (string)context.Variables["modelFamilyQuotaScope"] + ":" + (string)context.Variables["modelFamily"]'
             New = ' + ":family:" + (string)context.Variables["modelFamily"]' },
         @{ Name = 'quota lookup tier omitted'; File = 'infra\policy.xml'
             Old = 'var marker = "," + tier + ":" + family + "=";'

@@ -424,8 +424,16 @@
              A tier with no entries is disabled. Once a tier has any entry,
              a missing, duplicate, malformed or non-positive requested-family
              entry is a configuration fault, never an unlimited fallback. -->
+        <!-- P123 (ADR-0069): a person whose access plan has entries (,plan:<planId>:<family>=N,) is limited by
+             the plan's figures, derived from its nominal dollar credit; anyone else by their tier's, as before. -->
+        <set-variable name="modelFamilyQuotaScope" value="@{
+            var plan = (string)context.Variables["entPlanId"];
+            var map = "{{model-family-quotas}}";
+            if (!string.IsNullOrEmpty(plan) &amp;&amp; map.IndexOf(",plan:" + plan + ":", StringComparison.Ordinal) &gt;= 0) { return "plan:" + plan; }
+            return (string)context.Variables["tier"];
+        }" />
         <set-variable name="modelFamilyQuota" value="@{
-            var tier = (string)context.Variables["tier"];
+            var tier = (string)context.Variables["modelFamilyQuotaScope"];
             var family = (string)context.Variables["modelFamily"];
             var map = "{{model-family-quotas}}";
             var tierEnabled = map.IndexOf("," + tier + ":", StringComparison.Ordinal) &gt;= 0;
@@ -461,7 +469,7 @@
                 <set-variable name="budget" value="model family" />
                 <set-variable name="budgetUnit" value="@((string)context.Variables["modelFamily"])" />
                 <llm-token-limit
-                    counter-key="@((string)context.Variables["userId"] + ":family:" + (string)context.Variables["tier"] + ":" + (string)context.Variables["modelFamily"])"
+                    counter-key="@((string)context.Variables["userId"] + ":family:" + (string)context.Variables["modelFamilyQuotaScope"] + ":" + (string)context.Variables["modelFamily"])"
                     token-quota="@((long)context.Variables["modelFamilyQuota"])"
                     token-quota-period="Monthly"
                     estimate-prompt-tokens="false"

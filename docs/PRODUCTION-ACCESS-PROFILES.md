@@ -143,7 +143,7 @@ Environment-specific catalog files under `onboarding/` are ignored by Git.
 
 ### From a customer group sheet
  customer sheet that lists each group's display name, level, credit, model set, capabilities (`Co`, `Cw`, `Ch`, `De`) and M365 flag converts to this catalog with`
-`.\scripts\ConvertTo-ClaudeAccessCatalog.ps1 -InputPath <sheet.json> -OutputPath .\onboarding\access-catalog.production.json`. become plans (Standard to the standard tier, Advanced and Power to premium); each row becomes one profile. Empty object ids are read from Microsoft Graph by exact display name through REST, because such names contain `$ ( ) ,`. Priorities follow highest monthly credit, then more model families, then more capabilities, then M365, so a person in several groups gets one whole profile. Per-profile token figures in the sheet are not enforced per plan. `tests/Test-CustomerAccessSheet.ps1` checks a 47-row example.
+`.\scripts\ConvertTo-ClaudeAccessCatalog.ps1 -InputPath <sheet.json> -OutputPath .\onboarding\access-catalog.production.json`. The sheet's profiles (level, model set and credit) become one plan each, the tiers (Standard to the standard compatibility tier, Advanced and Power to premium); each row becomes one profile. Empty object ids are read from Microsoft Graph by exact display name through REST, because such names contain `$ ( ) ,`. Priorities follow highest monthly credit, then more model families, then more capabilities, then M365, so a person in several groups gets one whole profile. Per-profile token figures in the sheet are not enforced per plan. `tests/Test-CustomerAccessSheet.ps1` checks a 47-row example.
 
 ## 3. Prepare the production answers file
 
@@ -296,6 +296,32 @@ Expected output includes `plans=9`, `profiles=47` and one `sha256:` catalog
 version. `Set-ClaudeAccessCatalog.ps1` does not create Entra groups and does
 not change membership.
 
+### Token limits per plan
+
+Each tier - one profile of the customer sheet, with its credit and model set -
+gets monthly token limits per model family from its credit, so a USD 50 tier
+and a USD 100 tier get different limits
+([ADR-0069](adr/0069-token-limits-per-access-plan.md)). Preview, then write:
+
+```powershell
+.\scripts\Set-ClaudePlanTokenQuotas.ps1 -ResourceGroup $gateway.resourceGroup -ApimName $gateway.apimName `
+  -CatalogPath .\onboarding\access-catalog.production.json `
+  -FoundryAccount <foundry-account> -FoundryResourceGroup <foundry-resource-group> 
+  -SheetPath .\onboarding\customer-sheet.json -CacheReadShare 0.5 -WhatIf
+.\scripts\Set-ClaudePlanTokenQuotas.ps1 -ResourceGroup $gateway.resourceGroup -ApimName $gateway.apimName `
+  -CatalogPath .\onboarding\access-catalog.production.json `
+  -FoundryAccount <foundry-account> -FoundryResourceGroup <foundry-resource-group>
+```
+
+The credit is split equally across the tier's model families and converted at
+the list price of Haiku 5.5, Sonnet 5.5, Opus 5.5 and Fable 5.1 (`-PriceModels`
+changes them; Haiku 5.5 uses its over-100,000-token rate unless `-Haiku55PromptTier standard`). A sheet profile's `tokensPerMonth` replaces the derived figure.
+Cache reads are estimated at `-CacheReadShare` (default 0.5) of
+input tokens and output at `-OutputShare` (default 0.2) of tokens. The figures
+approximate the dollar value; they are not a dollar cap. A person on a plan
+with limits is refused for that family when the month's tokens are used, and
+`x-model-family-quota-remaining` shows what is left. Run it again after
+changing the catalog, the deployments or the price book.
 ## 8. Run the first attended full sync
 
 ```powershell
