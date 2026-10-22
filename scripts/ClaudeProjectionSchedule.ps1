@@ -1,10 +1,12 @@
 # The projection sync job's schedule (ADR-0058). Each interval maps to one cron expression, which Container Apps
 # evaluates in UTC (U166), to the range the no-success alert reads (2 x interval + 15 minutes) and to the runs in a
 # 730-hour month, the Azure convention for an average month (scripts/AzureRetailPrice.ps1). The shortest interval
-# is 30 minutes.
+# is 5 minutes (ADR-0068): 5m suits small directories and test runs, 15m production.
 
 function Get-ClaudeProjectionSyncIntervalTable {
     [ordered]@{
+        '5m'  = @{ Cron = '*/5 * * * *'; Minutes = 5 }
+        '15m' = @{ Cron = '*/15 * * * *'; Minutes = 15 }
         '30m' = @{ Cron = '*/30 * * * *'; Minutes = 30 }
         '1h'  = @{ Cron = '0 * * * *'; Minutes = 60 }
         '2h'  = @{ Cron = '0 */2 * * *'; Minutes = 120 }
@@ -30,7 +32,7 @@ function ConvertTo-ClaudeProjectionSyncSchedule {
     }
     $table = Get-ClaudeProjectionSyncIntervalTable
     if (-not $table.Contains($key)) {
-        throw ("Sync interval '{0}' is not one of: {1}. The shortest interval is 30 minutes." -f $Interval, ((Get-ClaudeProjectionSyncIntervals) -join ', '))
+        throw ("Sync interval '{0}' is not one of: {1}. The shortest interval is 5 minutes." -f $Interval, ((Get-ClaudeProjectionSyncIntervals) -join ', '))
     }
     $minutes = [int]$table[$key].Minutes
     [pscustomobject]@{
@@ -47,9 +49,9 @@ function Format-ClaudeProjectionSyncInterval {
     param([Parameter(Mandatory = $true)][AllowEmptyString()][string]$Interval)
     $schedule = ConvertTo-ClaudeProjectionSyncSchedule -Interval $Interval
     switch ($schedule.Minutes) {
-        0 { 'only when started' }
-        30 { 'every 30 minutes' }
-        60 { 'every hour' }
+        0 { 'only when started'; break }
+        { $_ -lt 60 } { 'every {0} minutes' -f $schedule.Minutes; break }
+        60 { 'every hour'; break }
         default { 'every {0} hours' -f ($schedule.Minutes / 60) }
     }
 }

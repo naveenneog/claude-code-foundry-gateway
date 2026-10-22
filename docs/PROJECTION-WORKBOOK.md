@@ -330,7 +330,7 @@ Sources: `scripts/Sync-ClaudeAccess.ps1`, `sync/src/plan.mjs`.
 
 ## Day-2 operation. Optional sync job for very large directories
 
-What it does: The job reads Graph inside the network and runs a full sync with the same write rules. It runs every 2 hours by default; `-SyncInterval` sets `30m` to `12h`, or `manual` ([ADR-0058](adr/0058-scheduled-projection-sync.md)).
+What it does: The job reads Graph inside the network and runs a full sync with the same write rules. It runs every 2 hours by default; `-SyncInterval` sets `5m` to `12h`, or `manual` ([ADR-0058](adr/0058-scheduled-projection-sync.md)).
 
 Who: Operator deploys the job; Privileged Role Administrator or Global Administrator grants Graph permission.
 
@@ -340,7 +340,7 @@ Who: Operator deploys the job; Privileged Role Administrator or Global Administr
 az containerapp job start -g <rg> -n <job-name>
 ```
 
-Another interval (`30m`, `1h`, `2h`, `3h`, `4h`, `6h`, `8h`, `12h`) or `manual`:
+Another interval (`5m`, `15m`, `30m`, `1h`, `2h`, `3h`, `4h`, `6h`, `8h`, `12h`) or `manual`:
 
 ```powershell
 .\scripts\Deploy-ClaudeProjectionRenewal.ps1 -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> -AlertEmail <address> -SyncInterval 30m

@@ -365,7 +365,7 @@ Keep the job manual until one execution succeeds. Then set the interval:
   -Interval 2h
 ```
 
-Supported values are `30m`, `1h`, `2h`, `3h`, `4h`, `6h`, `8h`, `12h` and
+Supported values are `5m`, `15m`, `30m`, `1h`, `2h`, `3h`, `4h`, `6h`, `8h`, `12h` and
 `manual`.
 
 ## 11. Verify one profile movement

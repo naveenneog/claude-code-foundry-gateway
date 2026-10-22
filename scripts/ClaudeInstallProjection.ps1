@@ -161,7 +161,7 @@ function Resolve-ClaudeInstallerSyncInterval {
     if ($Requested) {
         $interval = $Requested.ToLowerInvariant()
         if (-not @($accepted | Where-Object { [string]::Equals($_, $interval, [StringComparison]::Ordinal) }).Count) {
-            throw ("-ProjectionSyncInterval '{0}' is not one of: {1}. The shortest interval is 30 minutes." -f $Requested, ($accepted -join ', '))
+            throw ("-ProjectionSyncInterval '{0}' is not one of: {1}. The shortest interval is 5 minutes." -f $Requested, ($accepted -join ', '))
         }
         $source = 'parameter'
     }
@@ -496,7 +496,7 @@ function Get-ClaudeInstallerProjectionNextSteps {
                     '        A Privileged Role Administrator or Global Administrator grants its identity Microsoft Graph GroupMember.Read.All once,'
                     '        with the command the deployment printed. Until then each run stops at the Graph stage and writes nothing.') }
             [pscustomobject]@{ Title = $title; Warn = ($GraphGrant -cne 'held'); Detail = @($grant) + @(
-                    '        Change the interval (30m, 1h, 2h, 3h, 4h, 6h, 8h, 12h or manual):'
+                    '        Change the interval (5m, 15m, 30m, 1h, 2h, 3h, 4h, 6h, 8h, 12h or manual):'
                     "        $scheduleCommand"
                     '        Start a run now with az containerapp job start; the deployment printed the job name.'
                 ) }
@@ -510,7 +510,7 @@ function Get-ClaudeInstallerProjectionNextSteps {
         default {
             if ($DeployedJobSchedule) {
                 [pscustomobject]@{ Title = 'The deployed sync job was left as it is (-ProjectionSyncInterval none)'; Warn = $false; Detail = @(
-                    "        It runs $DeployedJobSchedule. Change or stop its schedule (30m, 1h, 2h, 3h, 4h, 6h, 8h, 12h or manual):"
+                    "        It runs $DeployedJobSchedule. Change or stop its schedule (5m, 15m, 30m, 1h, 2h, 3h, 4h, 6h, 8h, 12h or manual):"
                     "        $scheduleCommand"
                 ) }
             }

@@ -233,7 +233,7 @@ try {
             $minutes = (ConvertTo-ClaudeProjectionSyncSchedule -Interval $interval).NoSuccessMinutes
             "$interval=" + [string](@($templateRanges | Where-Object { $_ -ge $minutes }) | Select-Object -First 1)
         }
-        Assert 'every interval gets an accepted range that covers its no-success minutes' (($chosenRanges -join ',') -ceq '30m=120,1h=180,2h=300,3h=720,4h=720,6h=1440,8h=1440,12h=2880') ($chosenRanges -join ',')
+        Assert 'every interval gets an accepted range that covers its no-success minutes' (($chosenRanges -join ',') -ceq '5m=30,15m=45,30m=120,1h=180,2h=300,3h=720,4h=720,6h=1440,8h=1440,12h=2880') ($chosenRanges -join ',')
         Assert 'the stale-success rule reads the accepted range and alerts on the no-success minutes' (
             $rangeQuery -match "'\{window\}', string\(variables\('noSuccessRangeMinutes'\)\)" -and
             $rangeQuery -match "'\{threshold\}', string\(parameters\('noSuccessMinutes'\)\)" -and
@@ -442,7 +442,7 @@ try {
             @{ Name = 'a prefix the projection deployer refuses'; Change = @{ NamePrefix = 'P94_Fixture' }; Expect = 'NamePrefix' }
             @{ Name = 'a malformed digest'; Change = @{ ImageDigest = 'sha256:abc' }; Expect = 'ImageDigest' }
             @{ Name = 'an interval with a separator'; Change = @{ SyncInterval = '2h;' }; Expect = 'SyncInterval' }
-            @{ Name = 'an interval shorter than 30 minutes'; Change = @{ SyncInterval = '15m' }; Expect = 'SyncInterval' }
+            @{ Name = 'an interval shorter than 5 minutes'; Change = @{ SyncInterval = '1m' }; Expect = 'SyncInterval' }
             @{ Name = 'a 24-hour interval'; Change = @{ SyncInterval = '24h' }; Expect = 'SyncInterval' }
             @{ Name = 'the replaced -CronExpression, naming the interval it maps to'; Change = @{ CronExpression = '*/30 * * * *' }; Expect = '-CronExpression is replaced by -SyncInterval.*-SyncInterval 30m' }
             @{ Name = '-KeepRegistry without -ImageDigest'; Change = @{ KeepRegistry = $true }; Expect = '-KeepRegistry needs -ImageDigest' }
@@ -490,6 +490,8 @@ try {
     Assert 'a scheduled redeploy keeps the no-success rule its template deploys' (-not $stillScheduled.Failure -and $deletedStill.Count -eq 0) "$($stillScheduled.Failure) | $($deletedStill -join ' | ')"
     foreach ($case in @(
             @{ Interval = 'manual'; Cron = ''; Range = 0; Trigger = 'Manual' }
+            @{ Interval = '5m'; Cron = '*/5 * * * *'; Range = 25; Trigger = 'Schedule' }
+            @{ Interval = '15m'; Cron = '*/15 * * * *'; Range = 45; Trigger = 'Schedule' }
             @{ Interval = '30m'; Cron = '*/30 * * * *'; Range = 75; Trigger = 'Schedule' }
             @{ Interval = '12h'; Cron = '0 */12 * * *'; Range = 1455; Trigger = 'Schedule' }
         )) {

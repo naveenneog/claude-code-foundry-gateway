@@ -119,7 +119,7 @@ Assert-Form Location $Location '\A[a-z0-9]{2,40}\z'
 Assert-Form FoundryAccount $FoundryAccount '\A[A-Za-z0-9][A-Za-z0-9-]{1,62}\z'
 Assert-Form FoundryResourceGroup $FoundryResourceGroup '\A[A-Za-z0-9._-]{1,90}\z'
 if ($Model) { Assert-Form Model $Model '\A[A-Za-z0-9._-]{1,64}\z' }
-if ($ProjectionSyncInterval) { Assert-Form ProjectionSyncInterval $ProjectionSyncInterval '\A(30m|1h|2h|3h|4h|6h|8h|12h|manual|none)\z' }
+if ($ProjectionSyncInterval) { Assert-Form ProjectionSyncInterval $ProjectionSyncInterval '\A(5m|15m|30m|1h|2h|3h|4h|6h|8h|12h|manual|none)\z' }
 if (-not $ResourceGroup) { $ResourceGroup = 'rg-claude-live-' + [guid]::NewGuid().ToString('N').Substring(0, 10) }
 if (-not $NamePrefix) { $NamePrefix = 'clive' + [guid]::NewGuid().ToString('N').Substring(0, 10) }
 Assert-Form ResourceGroup $ResourceGroup '\A[A-Za-z0-9._-]{1,90}\z'

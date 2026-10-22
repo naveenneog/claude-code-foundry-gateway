@@ -5,8 +5,8 @@
 .DESCRIPTION
     Runs after scripts/Deploy-ClaudeProjection.ps1, in the same resource group, and reads that
     deployment's outputs: the Cosmos account and the projection network with its renewal subnet.
-    The job runs every 2 hours by default. -SyncInterval sets 30m, 1h, 2h, 3h, 4h, 6h, 8h, 12h or
-    manual; anything shorter than 30 minutes is refused (ADR-0058). Each run reads the tier and
+    The job runs every 2 hours by default. -SyncInterval sets 5m, 15m, 30m, 1h, 2h, 3h, 4h, 6h, 8h, 12h or
+    manual; anything shorter than 5 minutes is refused (ADR-0058, ADR-0068). Each run reads the tier and
     business-unit groups through Microsoft Graph, which needs GroupMember.Read.All granted to the job
     identity by a tenant administrator. az containerapp job start runs it on demand.
     Three phases, each safe to rerun:
@@ -27,7 +27,7 @@
     Email addresses for the renewal alerts. Each one receives a confirmation from Azure Monitor.
 
 .PARAMETER SyncInterval
-    How often the job runs: 30m, 1h, 2h (default), 3h, 4h, 6h, 8h, 12h, or manual for on-demand runs
+    How often the job runs: 5m, 15m, 30m, 1h, 2h (default), 3h, 4h, 6h, 8h, 12h, or manual for on-demand runs
     only. The no-success alert reads 2 x the interval + 15 minutes; a manual job has none. Replaces
     -CronExpression, which is refused with the interval it maps to.
 

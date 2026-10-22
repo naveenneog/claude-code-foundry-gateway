@@ -914,7 +914,7 @@ installer runs, or typed at its prompt, and a file that names it is refused
 
 The interactive installer's projection flags are separate from `deploy.ps1`:
 `-DeployProjection` and `-FlipProjectionAfterCleanCompare` remain accepted for existing scripts. Since P98, they do not change installer behavior: choosing `-EntitlementStore projection` deploys the projection, compares it, and switches through the shared switch.
-Since P104 the sync job deploys with the projection: `-ProjectionSyncInterval` takes `30m`, `1h`, `2h` (default), `3h`, `4h`, `6h`, `8h`, `12h`, `manual` or `none`, a re-run keeps the deployed job's interval, and `-DeploySyncJob` is accepted and has no effect ([ADR-0058](adr/0058-scheduled-projection-sync.md)).
+Since P104 the sync job deploys with the projection: `-ProjectionSyncInterval` takes `5m`, `15m`, `30m`, `1h`, `2h` (default), `3h`, `4h`, `6h`, `8h`, `12h`, `manual` or `none`, a re-run keeps the deployed job's interval, and `-DeploySyncJob` is accepted and has no effect ([ADR-0058](adr/0058-scheduled-projection-sync.md)).
 
 A staged deployment without switching uses the deployer directly, not the installer:
 

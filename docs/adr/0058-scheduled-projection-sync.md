@@ -55,7 +55,7 @@ USD 0.00003 per run-second above the subscription's monthly free grant.
 
 1. **Intervals.** `30m`, `1h`, `2h` (default), `3h`, `4h`, `6h`, `8h`, `12h` or `manual`, mapped to
    `*/30 * * * *`, `0 * * * *`, `0 */2 * * *`, `0 */3 * * *`, `0 */4 * * *`, `0 */6 * * *`, `0 */8 * * *` and
-   `0 */12 * * *` (UTC). Anything shorter than 30 minutes is refused. `-CronExpression` is replaced by
+   `0 */12 * * *` (UTC). Anything shorter than 30 minutes is refused (amended by [ADR-0068](0068-five-and-fifteen-minute-sync-intervals.md): `5m` and `15m` are accepted). `-CronExpression` is replaced by
    `-SyncInterval` in the deploy script; it is refused before any Azure call with the interval it maps to.
 2. **The installer deploys the job with the projection.** `-ProjectionSyncInterval` (default `2h`) replaces the
    opt-in `-DeploySyncJob`, which is still accepted and changes nothing. `none` skips the job. Without the

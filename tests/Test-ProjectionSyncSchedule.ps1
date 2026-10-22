@@ -1,4 +1,4 @@
-# P104: each sync job interval maps to one cron expression, one no-success range and one run count (ADR-0058).
+# P104, P122: each sync job interval maps to one cron expression, one no-success range and one run count (ADR-0058).
 $ErrorActionPreference = 'Stop'
 $fail = 0
 $count = 0
@@ -19,6 +19,8 @@ Assert 'it defines ConvertTo-ClaudeProjectionSyncSchedule' $loaded
 
 # Interval, cron (UTC), no-success minutes (2 x interval + 15), runs in a 730-hour month (midpoint away from zero).
 $expected = @(
+    , @('5m', '*/5 * * * *', 5, 25, 8760)
+    , @('15m', '*/15 * * * *', 15, 45, 2920)
     , @('30m', '*/30 * * * *', 30, 75, 1460)
     , @('1h', '0 * * * *', 60, 135, 730)
     , @('2h', '0 */2 * * *', 120, 255, 365)
@@ -28,7 +30,7 @@ $expected = @(
     , @('8h', '0 */8 * * *', 480, 975, 91)
     , @('12h', '0 */12 * * *', 720, 1455, 61)
 )
-Assert 'the expected table has eight rows of five values' ($expected.Count -eq 8 -and @($expected | Where-Object { $_.Count -ne 5 }).Count -eq 0)
+Assert 'the expected table has ten rows of five values' ($expected.Count -eq 10 -and @($expected | Where-Object { $_.Count -ne 5 }).Count -eq 0)
 if ($loaded) {
     foreach ($row in $expected) {
         $s = ConvertTo-ClaudeProjectionSyncSchedule -Interval $row[0]
@@ -41,16 +43,16 @@ if ($loaded) {
     Assert 'manual has no cron expression, no no-success range and no scheduled runs' (
         $manual.Interval -ceq 'manual' -and $manual.Cron -ceq '' -and $manual.Minutes -eq 0 -and $manual.NoSuccessMinutes -eq 0 -and $manual.RunsPerMonth -eq 0)
     Assert 'an empty cron expression reads back as manual' ((ConvertFrom-ClaudeProjectionSyncCron -Cron '') -ceq 'manual')
-    Assert 'a cron expression outside the list reads back as nothing' ($null -eq (ConvertFrom-ClaudeProjectionSyncCron -Cron '*/15 * * * *'))
+    Assert 'a cron expression outside the list reads back as nothing' ($null -eq (ConvertFrom-ClaudeProjectionSyncCron -Cron '*/20 * * * *'))
     Assert 'an upper-case interval is accepted and written in lower case' ((ConvertTo-ClaudeProjectionSyncSchedule -Interval '2H').Interval -ceq '2h')
     Assert 'the default interval is 2h' ((Get-ClaudeProjectionSyncDefaultInterval) -ceq '2h')
-    Assert 'the accepted values are the eight intervals and manual, in order' (
-        ((Get-ClaudeProjectionSyncIntervals) -join ',') -ceq '30m,1h,2h,3h,4h,6h,8h,12h,manual')
+    Assert 'the accepted values are the ten intervals and manual, in order' (
+        ((Get-ClaudeProjectionSyncIntervals) -join ',') -ceq '5m,15m,30m,1h,2h,3h,4h,6h,8h,12h,manual')
 
-    foreach ($bad in @('15m', '0m', '24h', '2 h', 'abc', '', ' 2h', '2h;', '90m')) {
+    foreach ($bad in @('1m', '10m', '0m', '24h', '2 h', 'abc', '', ' 2h', '2h;', '90m')) {
         $message = Get-Refusal { ConvertTo-ClaudeProjectionSyncSchedule -Interval $bad }
         Assert "'$bad' is refused with the accepted values" (
-            $message -match [regex]::Escape("'$bad'") -and $message -match '30m, 1h, 2h, 3h, 4h, 6h, 8h, 12h, manual' -and $message -match '30 minutes') $message
+            $message -match [regex]::Escape("'$bad'") -and $message -match '5m, 15m, 30m, 1h, 2h, 3h, 4h, 6h, 8h, 12h, manual' -and $message -match '5 minutes') $message
     }
 
     # The words an operator reads in the deploy output, the installer review and the schedule script.
@@ -58,18 +60,19 @@ if ($loaded) {
     Assert 'it defines Format-ClaudeProjectionSyncInterval' $hasWords
     if ($hasWords) {
         $wordCases = @(
+            @{ Interval = '5m'; Words = 'every 5 minutes' }, @{ Interval = '15m'; Words = 'every 15 minutes' }
             @{ Interval = '30m'; Words = 'every 30 minutes' }, @{ Interval = '1h'; Words = 'every hour' }, @{ Interval = '2h'; Words = 'every 2 hours' }
             @{ Interval = '3h'; Words = 'every 3 hours' }, @{ Interval = '4h'; Words = 'every 4 hours' }, @{ Interval = '6h'; Words = 'every 6 hours' }
             @{ Interval = '8h'; Words = 'every 8 hours' }, @{ Interval = '12h'; Words = 'every 12 hours' }, @{ Interval = 'manual'; Words = 'only when started' }
             @{ Interval = '2H'; Words = 'every 2 hours' }
         )
-        Assert 'the word cases are ten interval and wording pairs' ($wordCases.Count -eq 10 -and @($wordCases | Where-Object { $_ -isnot [hashtable] }).Count -eq 0)
+        Assert 'the word cases are twelve interval and wording pairs' ($wordCases.Count -eq 12 -and @($wordCases | Where-Object { $_ -isnot [hashtable] }).Count -eq 0)
         foreach ($case in $wordCases) {
             $words = Format-ClaudeProjectionSyncInterval -Interval $case.Interval
             Assert "$($case.Interval) reads '$($case.Words)'" ($words -ceq $case.Words) "got '$words'"
         }
-        $message = Get-Refusal { Format-ClaudeProjectionSyncInterval -Interval '15m' }
-        Assert 'an interval that is not listed has no words' ($message -match "'15m'" -and $message -match '30 minutes') $message
+        $message = Get-Refusal { Format-ClaudeProjectionSyncInterval -Interval '10m' }
+        Assert 'an interval that is not listed has no words' ($message -match "'10m'" -and $message -match '5 minutes') $message
     }
 }
 

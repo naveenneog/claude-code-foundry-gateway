@@ -16,7 +16,7 @@
     the job.
 
 .PARAMETER Interval
-    New sync interval: 30m, 1h, 2h, 3h, 4h, 6h, 8h, 12h, or manual.
+    New sync interval: 5m, 15m, 30m, 1h, 2h, 3h, 4h, 6h, 8h, 12h, or manual.
 
 .PARAMETER NamePrefix
     Projection prefix. When omitted, the script reads the entitlement-projection-prefix named value

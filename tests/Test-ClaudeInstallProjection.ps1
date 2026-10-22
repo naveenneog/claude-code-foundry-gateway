@@ -104,8 +104,8 @@ Assert 'manual deploys the job with no schedule' (-not $manualChoice.Failure -an
 $noneChoice = Get-SyncChoice 'NONE' $null
 Assert 'none skips the job, in any case, and says how group changes are published' (-not $noneChoice.Failure -and $noneChoice.Choice.Interval -ceq 'none' -and
     $noneChoice.Choice.Summary -match 'not deployed' -and $noneChoice.Choice.Summary -match 'Sync-ClaudeAccess\.ps1') "$($noneChoice.Failure) | $($noneChoice.Choice | ConvertTo-Json -Compress)"
-$tooShort = Get-SyncChoice '15m' $null
-Assert 'an interval under 30 minutes is refused with the accepted values, none included' ($tooShort.Failure -match "'15m'" -and $tooShort.Failure -match '30m, 1h, 2h, 3h, 4h, 6h, 8h, 12h, manual, none') $tooShort.Failure
+$tooShort = Get-SyncChoice '10m' $null
+Assert 'an interval that is not listed is refused with the accepted values, none included' ($tooShort.Failure -match "'10m'" -and $tooShort.Failure -match '5m, 15m, 30m, 1h, 2h, 3h, 4h, 6h, 8h, 12h, manual, none') $tooShort.Failure
 
 $calls = [System.Collections.Generic.List[object]]::new()
 $everyCall = [System.Collections.Generic.List[object]]::new()

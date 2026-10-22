@@ -149,12 +149,16 @@ Assert 'the tier group ids come from the group receipts, with no directory looku
 $intervalLines = [regex]::Matches($block, "(?m)^\s+([0-9a-z]+)\) SYNC_CRON='([^']*)'; NO_SUCCESS_MINUTES=(\d+) ;;")
 $fromBlock = @($intervalLines | ForEach-Object { "$($_.Groups[1].Value)|$($_.Groups[2].Value)|$($_.Groups[3].Value)" }) -join ','
 $fromModule = @(Get-ClaudeProjectionSyncIntervals | ForEach-Object { $s = ConvertTo-ClaudeProjectionSyncSchedule -Interval $_; "$($s.Interval)|$($s.Cron)|$($s.NoSuccessMinutes)" }) -join ','
-Assert 'the block maps each interval to the cron and range of scripts/ClaudeProjectionSchedule.ps1' ($intervalLines.Count -eq 9 -and $fromBlock -ceq $fromModule) "$fromBlock <> $fromModule"
+Assert 'the block maps each interval to the cron and range of scripts/ClaudeProjectionSchedule.ps1' ($intervalLines.Count -eq 11 -and $fromBlock -ceq $fromModule) "$fromBlock <> $fromModule"
 Assert 'the job runs every 2 hours by default, with its no-success range' ((& $value 'cronExpression') -ceq '0 */2 * * *' -and (& $value 'noSuccessMinutes') -eq 255) "$(& $value 'cronExpression') / $(& $value 'noSuccessMinutes')"
 $deleteAt = $healthy.Writes.IndexOf('delete resource delete -g rg -n sqr-projection-prefix-no-success-45m --resource-type Microsoft.Insights/scheduledQueryRules')
 Assert 'the retired 45-minute rule is removed after the job deploys' ($deleteAt -gt $healthy.Writes.IndexOf('projection-renewal-prefix') -and $healthy.Writes.IndexOf('projection-renewal-prefix') -ge 0) $healthy.Writes
 $thirty = Invoke-RenewalBlock 'healthy' @{ SYNC_INTERVAL = '30m' }
 Assert 'SYNC_INTERVAL=30m deploys its cron and a 75-minute range' ($thirty.Exit -eq 0 -and $thirty.Params.parameters.cronExpression.value -ceq '*/30 * * * *' -and $thirty.Params.parameters.noSuccessMinutes.value -eq 75) $thirty.Output.Trim()
+$five = Invoke-RenewalBlock 'healthy' @{ SYNC_INTERVAL = '5m' }
+Assert 'SYNC_INTERVAL=5m deploys its cron and a 25-minute range' ($five.Exit -eq 0 -and $five.Params.parameters.cronExpression.value -ceq '*/5 * * * *' -and $five.Params.parameters.noSuccessMinutes.value -eq 25) $five.Output.Trim()
+$fifteen = Invoke-RenewalBlock 'healthy' @{ SYNC_INTERVAL = '15m' }
+Assert 'SYNC_INTERVAL=15m deploys its cron and a 45-minute range' ($fifteen.Exit -eq 0 -and $fifteen.Params.parameters.cronExpression.value -ceq '*/15 * * * *' -and $fifteen.Params.parameters.noSuccessMinutes.value -eq 45) $fifteen.Output.Trim()
 $keepRule = Invoke-RenewalBlock 'p104-rule' @{ SYNC_INTERVAL = '4h' }
 Assert 'a scheduled run keeps the no-success rule its template deploys' ($keepRule.Exit -eq 0 -and $keepRule.Writes -notmatch 'sqr-projection-prefix-no-success ') $keepRule.Writes
 $toManual = Invoke-RenewalBlock 'p104-rule' @{ SYNC_INTERVAL = 'manual' }
@@ -163,7 +167,7 @@ Assert 'SYNC_INTERVAL=manual deploys no schedule and removes the no-success rule
 
 foreach ($case in @(
         @{ Name = 'an alert address with a command separator'; Scenario = 'healthy'; Environment = @{ ALERT_EMAIL = 'ops@example.invalid&calc' }; Expect = 'ALERT_EMAIL' }
-        @{ Name = 'an interval shorter than 30 minutes'; Scenario = 'healthy'; Environment = @{ SYNC_INTERVAL = '15m' }; Expect = "SYNC_INTERVAL '15m'" }
+        @{ Name = 'an interval shorter than 5 minutes'; Scenario = 'healthy'; Environment = @{ SYNC_INTERVAL = '1m' }; Expect = "SYNC_INTERVAL '1m'" }
         @{ Name = 'the alert address placeholder'; Scenario = 'healthy'; Environment = @{ ALERT_EMAIL = '<alert-email>' }; Expect = 'ALERT_EMAIL' }
         @{ Name = 'a network without the renewal subnet'; Scenario = 'no-subnet'; Environment = @{}; Expect = 'renewal subnet' }
         @{ Name = 'two workspaces in the gateway resource group'; Scenario = 'two-workspaces'; Environment = @{}; Expect = 'WORKSPACE_ID' }

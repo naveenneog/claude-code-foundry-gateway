@@ -17,7 +17,7 @@ An existing gateway, from PowerShell 7 at the repository root, in order:
 | Switch, after the resolver checks, the compare and switch evidence | `./scripts/Deploy-ClaudeProjection.ps1 -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> -FlipAfterCleanCompare` |
 | Publish one developer's change at once, after the Entra group change | `./scripts/Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim> -User <upn-or-object-id>` |
 | The sync job, which applies group changes every 2 hours by default ([below](#scheduled-sync-job-p104)) | `./scripts/Deploy-ClaudeProjectionRenewal.ps1 -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> -AlertEmail <address>` |
-| Change the sync job's interval | `./scripts/Set-ClaudeProjectionSyncSchedule.ps1 -ResourceGroup <rg> -ApimName <apim> -Interval <30m-12h or manual>` |
+| Change the sync job's interval | `./scripts/Set-ClaudeProjectionSyncSchedule.ps1 -ResourceGroup <rg> -ApimName <apim> -Interval <5m-12h or manual>` |
 
 Rollback refreshes and compares the named values, then sets `entitlement-source` back to `named-value`
 ([switch](#switch-to-the-projection-p95)). A rollback to named values holds only a population within their
@@ -170,7 +170,7 @@ It deploys the registry and the job's identity, builds the image with `az acr bu
 holds `sync/` and `resolver/src/entitlement.mjs` at their repository paths, reads the image digest back
 with `az acr manifest show-metadata`, then deploys the job with that digest
 ([ADR-0049](adr/0049-projection-renewal-deployment.md)). It runs every 2 hours by default; `-SyncInterval` sets
-`30m`, `1h`, `2h`, `3h`, `4h`, `6h`, `8h`, `12h` or `manual` ([ADR-0058](adr/0058-scheduled-projection-sync.md)). A run on demand starts with `az containerapp job start`. The job needs Microsoft Graph application
+`5m`, `15m`, `30m`, `1h`, `2h`, `3h`, `4h`, `6h`, `8h`, `12h` or `manual` ([ADR-0058](adr/0058-scheduled-projection-sync.md)). A run on demand starts with `az containerapp job start`. The job needs Microsoft Graph application
 permission `GroupMember.Read.All`, granted by a Privileged Role Administrator or Global Administrator
 through `scripts/Grant-ClaudeProjectionRenewalGraphAccess.ps1`. A full sync through the runner sends its
 snapshot with `Send-RunnerFile` (`scripts/ClaudeRunner.ps1`): gzip-compressed, in base64url parts of one
@@ -219,6 +219,8 @@ entitlement container and writes only the developers who were added, removed or 
 
 | `-SyncInterval` | Cron (UTC) | Runs a month | No-success alert range |
 |---|---|---|---|
+| `5m` (test) | `*/5 * * * *` | 8,760 | 25 minutes |
+| `15m` (production) | `*/15 * * * *` | 2,920 | 45 minutes |
 | `30m` | `*/30 * * * *` | 1,460 | 75 minutes |
 | `1h` | `0 * * * *` | 730 | 135 minutes |
 | `2h` (default) | `0 */2 * * *` | 365 | 255 minutes |
@@ -231,13 +233,13 @@ entitlement container and writes only the developers who were added, removed or 
 
 Runs a month use 730 hours (`scripts/AzureRetailPrice.ps1`). Container Apps evaluates cron expressions in UTC
 ([Jobs in Azure Container Apps](https://learn.microsoft.com/azure/container-apps/jobs), updated 2026-09-16).
-Intervals shorter than 30 minutes are refused. 24 hours is not offered: its no-success range, 2 x 1,440 + 15
+Intervals shorter than 5 minutes are refused ([ADR-0068](adr/0068-five-and-fifteen-minute-sync-intervals.md)); a run longer than the interval makes the next one wait up to 900 seconds for the apply lock, then stop with a failed-run alert. 24 hours is not offered: its no-success range, 2 x 1,440 + 15
 minutes, is longer than the 2 days a log search alert can read.
 
 The no-success alert fires when the newest successful run is older than the range in the table. Azure Monitor
 accepts only some query ranges: the P104 live run's 75-minute range was refused with "Supported granularities
 are: 5, 10, 15, 30, 45, 60, 120, 180, 240, 300, 360, 720, 1440, 2880" (2026-10-08, U167). The rule therefore
-queries the smallest of them that covers the range: 120 minutes for `30m`, 180 for `1h`, 300 for `2h`, 720 for
+queries the smallest of them that covers the range: 30 minutes for `5m`, 45 for `15m`, 120 minutes for `30m`, 180 for `1h`, 300 for `2h`, 720 for
 `3h` and `4h`, 1,440 for `6h` and `8h`, and 2,880 for `12h`.
 
 Timing:

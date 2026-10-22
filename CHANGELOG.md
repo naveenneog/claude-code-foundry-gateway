@@ -29,6 +29,12 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **5- and 15-minute sync intervals (P122).** The projection sync job accepts
+  `5m` (test) and `15m` (production) in the installer, the answers file,
+  `Deploy-ClaudeProjectionRenewal.ps1`, `Set-ClaudeProjectionSyncSchedule.ps1`
+  and the Azure CLI guide; the default stays `2h`
+  ([ADR-0068](docs/adr/0068-five-and-fifteen-minute-sync-intervals.md)).
+
 - **Customer group sheet to access catalog.** `scripts/ConvertTo-ClaudeAccessCatalog.ps1`
   converts a 47-row customer sheet (levels, credits, model sets, capabilities,
   M365) into the nine-plan, 47-profile catalog, resolving group object ids

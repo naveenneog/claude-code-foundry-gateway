@@ -256,7 +256,7 @@ $calls += [pscustomobject]$record
         $manualClean = Invoke-ScheduleScenario -Scenario @{ Jobs = @(New-Job -Cron ''); Rules = @('sqr-projection-p104fixture-renewal-failed'); RecordedCron = ''; RecordedMinutes = 0 } -Overrides @{ Interval = 'manual' }
         Assert 'a manual job without a no-success rule is already in place' (-not $manualClean.Failure -and $manualClean.Deploy.Count -eq 0 -and $manualClean.Output -match 'already runs only when started') "$($manualClean.Failure) | $($manualClean.Output)"
 
-        foreach ($bad in @('15m', '24h', '2h;')) {
+        foreach ($bad in @('10m', '24h', '2h;')) {
             $refused = Invoke-ScheduleScenario -Scenario @{} -Overrides @{ Interval = $bad }
             Assert "$bad is refused before any az call" ($refused.Failure -match 'refused before any Azure call' -and $refused.Calls.Count -eq 0 -and $refused.Deploy.Count -eq 0) "$($refused.Failure) | calls $($refused.Calls.Count)"
         }
