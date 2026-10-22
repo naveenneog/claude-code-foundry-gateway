@@ -1,4 +1,10 @@
 {
+  "_instructions": [
+    "Customer fills this file, saves it as onboarding/customer-sheet.json (git-ignored), then runs: ./scripts/Deploy-ClaudeCustomerEnvironment.ps1 -SheetPath ./onboarding/customer-sheet.json",
+    "Replace every <...> value. groups[].objectId: the Entra object id of that existing group (Entra admin center > Groups > the group > Object ID). Nothing in Entra is created or changed.",
+    "gateway: existing APIM and Foundry. network: existing VNet, five subnet ids and private DNS zone ids. projection.syncInterval defaults to 15m; change it to 30m or another supported value in the JSON.",
+    "Do not commit the filled file: it holds tenant, subscription and network ids. See docs/CUSTOMER-SETUP.md."
+  ],
   "schemaVersion": 1,
   "catalogVersion": "2026-10-22.1",
   "gateway": {
@@ -147,7 +153,7 @@
     {
       "row": 1,
       "displayName": "LTM-Claude-(Standard-L1-$50), Cap(Co), Mod(Ha-So)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-1>",
       "profile": "standard-l1-ha-so",
       "capabilities": [
         "Co"
@@ -157,7 +163,7 @@
     {
       "row": 2,
       "displayName": "LTM-Claude-(Standard-L2-$100), Cap(Co-Ch), Mod(Ha-So)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-2>",
       "profile": "standard-l2-ha-so",
       "capabilities": [
         "Co",
@@ -168,7 +174,7 @@
     {
       "row": 3,
       "displayName": "LTM-Claude-(Standard-L2-$100), Cap(Co-De), Mod(Ha-So)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-3>",
       "profile": "standard-l2-ha-so",
       "capabilities": [
         "Co",
@@ -179,7 +185,7 @@
     {
       "row": 4,
       "displayName": "LTM-Claude-(Standard-L2-$100), Cap(Cw-Ch), Mod(Ha-So)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-4>",
       "profile": "standard-l2-ha-so",
       "capabilities": [
         "Cw",
@@ -190,7 +196,7 @@
     {
       "row": 5,
       "displayName": "LTM-Claude-(Standard-L2-$100), Cap(Cw-De), Mod(Ha-So)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-5>",
       "profile": "standard-l2-ha-so",
       "capabilities": [
         "Cw",
@@ -201,7 +207,7 @@
     {
       "row": 6,
       "displayName": "LTM-Claude-(Standard-L2-$100), Cap(Cw), Mod(Ha-So)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-6>",
       "profile": "standard-l2-ha-so",
       "capabilities": [
         "Cw"
@@ -211,7 +217,7 @@
     {
       "row": 7,
       "displayName": "LTM-Claude-(Standard-L2-$100), Cap(Ch-De), Mod(Ha-So)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-7>",
       "profile": "standard-l2-ha-so",
       "capabilities": [
         "Ch",
@@ -222,7 +228,7 @@
     {
       "row": 8,
       "displayName": "LTM-Claude-(Standard-L2-$100), Cap(De), Mod(Ha-So)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-8>",
       "profile": "standard-l2-ha-so",
       "capabilities": [
         "De"
@@ -232,7 +238,7 @@
     {
       "row": 9,
       "displayName": "LTM-Claude-(Standard-L3-$150), Cap(Co-Cw-Ch), Mod(Ha-So)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-9>",
       "profile": "standard-l3-ha-so",
       "capabilities": [
         "Co",
@@ -244,7 +250,7 @@
     {
       "row": 10,
       "displayName": "LTM-Claude-(Standard-L3-$150), Cap(Co-Cw-De), Mod(Ha-So)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-10>",
       "profile": "standard-l3-ha-so",
       "capabilities": [
         "Co",
@@ -256,7 +262,7 @@
     {
       "row": 11,
       "displayName": "LTM-Claude-(Standard-L3-$150), Cap(Co-Cw), Mod(Ha-So)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-11>",
       "profile": "standard-l3-ha-so",
       "capabilities": [
         "Co",
@@ -267,7 +273,7 @@
     {
       "row": 12,
       "displayName": "LTM-Claude-(Standard-L3-$150), Cap(Co-Ch-De), Mod(Ha-So)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-12>",
       "profile": "standard-l3-ha-so",
       "capabilities": [
         "Co",
@@ -279,7 +285,7 @@
     {
       "row": 13,
       "displayName": "LTM-Claude-(Standard-L3-$150), Cap(Cw-Ch-De), Mod(Ha-So)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-13>",
       "profile": "standard-l3-ha-so",
       "capabilities": [
         "Cw",
@@ -291,7 +297,7 @@
     {
       "row": 14,
       "displayName": "LTM-Claude-(Standard-L3-$150), Cap(Co-Ch), Mod(Ha-So-Op)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-14>",
       "profile": "standard-l3-ha-so-op",
       "capabilities": [
         "Co",
@@ -302,7 +308,7 @@
     {
       "row": 15,
       "displayName": "LTM-Claude-(Standard-L3-$150), Cap(Co-De), Mod(Ha-So-Op)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-15>",
       "profile": "standard-l3-ha-so-op",
       "capabilities": [
         "Co",
@@ -313,7 +319,7 @@
     {
       "row": 16,
       "displayName": "LTM-Claude-(Standard-L3-$150), Cap(Cw-Ch), Mod(Ha-So-Op)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-16>",
       "profile": "standard-l3-ha-so-op",
       "capabilities": [
         "Cw",
@@ -324,7 +330,7 @@
     {
       "row": 17,
       "displayName": "LTM-Claude-(Standard-L3-$150), Cap(Cw-De), Mod(Ha-So-Op)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-17>",
       "profile": "standard-l3-ha-so-op",
       "capabilities": [
         "Cw",
@@ -335,7 +341,7 @@
     {
       "row": 18,
       "displayName": "LTM-Claude-(Advanced-L1-$200), Cap(Co-Cw-Ch-De), Mod(Ha-So)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-18>",
       "profile": "advanced-l1-ha-so",
       "capabilities": [
         "Co",
@@ -348,7 +354,7 @@
     {
       "row": 19,
       "displayName": "LTM-Claude-(Advanced-L1-$200), Cap(Cw), Mod(Ha-So-Op)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-19>",
       "profile": "advanced-l1-ha-so-op",
       "capabilities": [
         "Cw"
@@ -358,7 +364,7 @@
     {
       "row": 20,
       "displayName": "LTM-Claude-(Advanced-L1-$200), Cap(Ch-De), Mod(Ha-So-Op)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-20>",
       "profile": "advanced-l1-ha-so-op",
       "capabilities": [
         "Ch",
@@ -369,7 +375,7 @@
     {
       "row": 21,
       "displayName": "LTM-Claude-(Advanced-L1-$200), Cap(De), Mod(Ha-So-Op)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-21>",
       "profile": "advanced-l1-ha-so-op",
       "capabilities": [
         "De"
@@ -379,7 +385,7 @@
     {
       "row": 22,
       "displayName": "LTM-Claude-(Advanced-L2-$300), Cap(Co-Cw-Ch-De), Mod(Ha-So-Op)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-22>",
       "profile": "advanced-l2-ha-so-op",
       "capabilities": [
         "Co",
@@ -392,7 +398,7 @@
     {
       "row": 23,
       "displayName": "LTM-Claude-(Advanced-L2-$300), Cap(Co-Cw-Ch), Mod(Ha-So-Op)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-23>",
       "profile": "advanced-l2-ha-so-op",
       "capabilities": [
         "Co",
@@ -404,7 +410,7 @@
     {
       "row": 24,
       "displayName": "LTM-Claude-(Advanced-L2-$300), Cap(Co-Cw-De), Mod(Ha-So-Op)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-24>",
       "profile": "advanced-l2-ha-so-op",
       "capabilities": [
         "Co",
@@ -416,7 +422,7 @@
     {
       "row": 25,
       "displayName": "LTM-Claude-(Advanced-L2-$300), Cap(Co-Cw), Mod(Ha-So-Op)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-25>",
       "profile": "advanced-l2-ha-so-op",
       "capabilities": [
         "Co",
@@ -427,7 +433,7 @@
     {
       "row": 26,
       "displayName": "LTM-Claude-(Advanced-L2-$300), Cap(Co-Ch-De), Mod(Ha-So-Op)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-26>",
       "profile": "advanced-l2-ha-so-op",
       "capabilities": [
         "Co",
@@ -439,7 +445,7 @@
     {
       "row": 27,
       "displayName": "LTM-Claude-(Advanced-L2-$300), Cap(Co), Mod(Ha-So-Op)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-27>",
       "profile": "advanced-l2-ha-so-op",
       "capabilities": [
         "Co"
@@ -449,7 +455,7 @@
     {
       "row": 28,
       "displayName": "LTM-Claude-(Advanced-L2-$300), Cap(Cw-Ch-De), Mod(Ha-So-Op)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-28>",
       "profile": "advanced-l2-ha-so-op",
       "capabilities": [
         "Cw",
@@ -461,7 +467,7 @@
     {
       "row": 29,
       "displayName": "LTM-Claude-(Advanced-L2-$300), Cap(Co-Ch), Mod(Ha-So-Op)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-29>",
       "profile": "advanced-l2-ha-so-op",
       "capabilities": [
         "Co",
@@ -472,7 +478,7 @@
     {
       "row": 30,
       "displayName": "LTM-Claude-(Advanced-L2-$300), Cap(Co-De), Mod(Ha-So-Op)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-30>",
       "profile": "advanced-l2-ha-so-op",
       "capabilities": [
         "Co",
@@ -483,7 +489,7 @@
     {
       "row": 31,
       "displayName": "LTM-Claude-(Advanced-L2-$300), Cap(Cw-Ch), Mod(Ha-So-Op)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-31>",
       "profile": "advanced-l2-ha-so-op",
       "capabilities": [
         "Cw",
@@ -494,7 +500,7 @@
     {
       "row": 32,
       "displayName": "LTM-Claude-(Advanced-L2-$300), Cap(Cw-De), Mod(Ha-So-Op)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-32>",
       "profile": "advanced-l2-ha-so-op",
       "capabilities": [
         "Cw",
@@ -505,7 +511,7 @@
     {
       "row": 33,
       "displayName": "LTM-Claude-(Advanced-L3-$500), Cap(Co-Cw-Ch-De), Mod(Ha-So-Op)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-33>",
       "profile": "advanced-l3-ha-so-op",
       "capabilities": [
         "Co",
@@ -518,7 +524,7 @@
     {
       "row": 34,
       "displayName": "LTM-Claude-(Advanced-L3-$500), Cap(Co-Cw-Ch), Mod(Ha-So-Op)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-34>",
       "profile": "advanced-l3-ha-so-op",
       "capabilities": [
         "Co",
@@ -530,7 +536,7 @@
     {
       "row": 35,
       "displayName": "LTM-Claude-(Advanced-L3-$500), Cap(Co-Cw-De), Mod(Ha-So-Op)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-35>",
       "profile": "advanced-l3-ha-so-op",
       "capabilities": [
         "Co",
@@ -542,7 +548,7 @@
     {
       "row": 36,
       "displayName": "LTM-Claude-(Advanced-L3-$500), Cap(Co-Cw), Mod(Ha-So-Op)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-36>",
       "profile": "advanced-l3-ha-so-op",
       "capabilities": [
         "Co",
@@ -553,7 +559,7 @@
     {
       "row": 37,
       "displayName": "LTM-Claude-(Advanced-L3-$500), Cap(Co-Ch-De), Mod(Ha-So-Op)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-37>",
       "profile": "advanced-l3-ha-so-op",
       "capabilities": [
         "Co",
@@ -565,7 +571,7 @@
     {
       "row": 38,
       "displayName": "LTM-Claude-(Advanced-L3-$500), Cap(Co), Mod(Ha-So-Op)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-38>",
       "profile": "advanced-l3-ha-so-op",
       "capabilities": [
         "Co"
@@ -575,7 +581,7 @@
     {
       "row": 39,
       "displayName": "LTM-Claude-(Advanced-L3-$500), Cap(Cw-Ch-De), Mod(Ha-So-Op)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-39>",
       "profile": "advanced-l3-ha-so-op",
       "capabilities": [
         "Cw",
@@ -587,7 +593,7 @@
     {
       "row": 40,
       "displayName": "LTM-Claude-(Advanced-L3-$500), Cap(Cw), Mod(Ha-So-Op)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-40>",
       "profile": "advanced-l3-ha-so-op",
       "capabilities": [
         "Cw"
@@ -597,7 +603,7 @@
     {
       "row": 41,
       "displayName": "LTM-Claude-(Advanced-L3-$500), Cap(Ch-De), Mod(Ha-So-Op)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-41>",
       "profile": "advanced-l3-ha-so-op",
       "capabilities": [
         "Ch",
@@ -608,7 +614,7 @@
     {
       "row": 42,
       "displayName": "LTM-Claude-(Advanced-L3-$500), Cap(De), Mod(Ha-So-Op)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-42>",
       "profile": "advanced-l3-ha-so-op",
       "capabilities": [
         "De"
@@ -618,7 +624,7 @@
     {
       "row": 43,
       "displayName": "LTM-Claude-(Power-L1-$1000), Cap(Co-Cw-Ch-De), Mod(Ha-So-Op)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-43>",
       "profile": "power-l1-ha-so-op",
       "capabilities": [
         "Co",
@@ -631,7 +637,7 @@
     {
       "row": 44,
       "displayName": "LTM-Claude-(Power-L2-$2000), Cap(Co-Cw-Ch-De), Mod(Ha-So-Op-Fa)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-44>",
       "profile": "power-l2-ha-so-op-fa",
       "capabilities": [
         "Co",
@@ -644,7 +650,7 @@
     {
       "row": 45,
       "displayName": "LTM-Claude-(Power-L3-$5000), Cap(Co-Cw-Ch-De), Mod(Ha-So-Op-Fa)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-45>",
       "profile": "power-l3-ha-so-op-fa",
       "capabilities": [
         "Co",
@@ -657,7 +663,7 @@
     {
       "row": 46,
       "displayName": "LTM-Claude-(Power-L1-$1000), Cap(Co-Cw-Ch-De), Mod(Ha-So-Op), Con(M365)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-46>",
       "profile": "power-l1-ha-so-op",
       "capabilities": [
         "Co",
@@ -671,7 +677,7 @@
     {
       "row": 47,
       "displayName": "LTM-Claude-(Power-L3-$5000), Cap(Co-Cw-Ch-De), Mod(Ha-So-Op-Fa), Con(M365)",
-      "objectId": "",
+      "objectId": "<entra-object-id-of-group-row-47>",
       "profile": "power-l3-ha-so-op-fa",
       "capabilities": [
         "Co",

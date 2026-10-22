@@ -27,7 +27,7 @@ checks the files without touching Azure.
 |---|---|
 | `gateway` | Tenant, subscription, resource group and name of the existing APIM, region, publisher email; the Foundry account and resource group; `foundryAuthentication` (`client-credentials` when Foundry is in another subscription, with its subscription, endpoint, tenant, client id and the APIM named value that holds the secret; else `managed-identity`); `compatibilityGroups` (the existing standard and premium groups) |
 | `network` | The existing VNet, its five subnets (`endpoints`, `runner`, `resolver`, `renewal`, `apim`) and optional private DNS zone ids. Omit the section to create a VNet |
-| `projection` | Name prefix, resolver access, `syncInterval` (`5m`, `15m` and up), alert email, revocation window |
+| `projection` | Name prefix, resolver access, `syncInterval` (default `15m`; set `30m` or another supported value in this JSON), alert email, revocation window |
 | `deployments` | Foundry deployment name per model family: `haiku`, `sonnet`, `opus`, `fable` |
 | `modelSets`, `profiles` | The tiers: level, dollar credit, model set (`Ha` Haiku, `So` Sonnet, `Op` Opus, `Fa` Fable), optional `tokensPerMonth` |
 | `groups` | The existing Entra groups: display name, optional object id, tier (`profile`), capabilities (`Co`, `Cw`, `Ch`, `De`), M365 |

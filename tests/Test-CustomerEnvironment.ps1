@@ -32,7 +32,8 @@ try {
     $sheet.network.privateDnsZones.cosmos = "$dns/privatelink.documents.azure.com"; $sheet.network.privateDnsZones.sites = "$dns/privatelink.azurewebsites.net"
     $sheet.network.privateDnsZones.blob = "$dns/privatelink.blob.core.windows.net"; $sheet.network.privateDnsZones.queue = "$dns/privatelink.queue.core.windows.net"
     $sheet.network.privateDnsZones.table = "$dns/privatelink.table.core.windows.net"
-    $sheet.projection.namePrefix = 'claudeprod'; $sheet.projection.alertEmail = @('ops@contoso.example')
+    foreach ($grp in $sheet.groups) { $grp.objectId = '00000000-0000-4000-8000-{0:d12}' -f [int]$grp.row }
+$sheet.projection.namePrefix = 'claudeprod'; $sheet.projection.alertEmail = @('ops@contoso.example')
     $sheetPath = Join-Path $work 'sheet.json'
     $sheet | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $sheetPath -Encoding utf8
 
@@ -92,7 +93,7 @@ exit 9
     Assert 'preflight runs before the deployment, and the grant goes to the sync job identity' (
         $calls[0] -match '-Preflight' -and $calls[1] -match '-Yes' -and @($calls | Where-Object { $_ -match '^Grant-.*55555555-5555-4555-8555-555555555555' }).Count -eq 1) ($calls -join ' ; ')
     Assert 'the schedule is set to the sheet interval only after a proven job run' (
-        @($calls | Where-Object { $_ -match '^Set-ClaudeProjectionSyncSchedule\.ps1 .*15m' }).Count -eq 1 -and
+        @($calls | Where-Object { $_ -match '^Set-ClaudeProjectionSyncSchedule\.ps1 .*-Interval: 15m' }).Count -eq 1 -and
         [array]::IndexOf([string[]]$calls, @($calls | Where-Object { $_ -match '^az containerapp job execution show' })[0]) -lt
         [array]::IndexOf([string[]]$calls, @($calls | Where-Object { $_ -match '^Set-ClaudeProjectionSyncSchedule' })[0])) ($calls -join ' ; ')
 }
